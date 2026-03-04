@@ -5,7 +5,7 @@ use tokio::process::Command;
 
 use crate::app::Workspace;
 
-const BRANCH_PREFIX: &str = "piki-multi/";
+// No branch prefix — branch name matches the workspace name exactly.
 
 /// Returns the base directory for worktrees:
 /// `$HOME/.local/share/piki-multi/worktrees/<project_dir_name>`
@@ -57,7 +57,7 @@ impl WorkspaceManager {
         let git_root = Self::git_root(source_dir).await?;
         let worktrees_dir = worktrees_base(&git_root);
         let worktree_path = worktrees_dir.join(name);
-        let branch_name = format!("{}{}", BRANCH_PREFIX, name);
+        let branch_name = name.to_string();
 
         if worktree_path.exists() {
             bail!("workspace '{}' already exists", name);
@@ -101,7 +101,7 @@ impl WorkspaceManager {
     /// Uses the workspace's `source_repo` to locate the git root.
     pub async fn remove(&self, name: &str, source_repo: &PathBuf) -> anyhow::Result<()> {
         let worktree_path = worktrees_base(source_repo).join(name);
-        let branch_name = format!("{}{}", BRANCH_PREFIX, name);
+        let branch_name = name.to_string();
 
         // git worktree remove --force <path>
         let output = Command::new("git")
