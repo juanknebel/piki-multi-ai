@@ -1,0 +1,35 @@
+[package]
+name = "agent-multi"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# TUI
+ratatui = { version = "0.30", features = ["crossterm"] }
+crossterm = "0.28"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# PTY
+portable-pty = "0.9"
+
+# Terminal emulation
+vt100 = "0.16"
+tui-term = "0.3"
+
+# ANSI to ratatui conversion (for delta output)
+ansi-to-tui = "8"
+
+# File watching
+notify = "8"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Home directory resolution
+dirs = "6"
+
+# Error handling
+anyhow = "1"
