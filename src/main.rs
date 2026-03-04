@@ -127,6 +127,8 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
 enum Action {
     CreateWorkspace(String, String, PathBuf),
     DeleteWorkspace(usize),
+    /// Remove workspace from app list but keep worktree on disk
+    RemoveFromList(usize),
     /// Open diff for the file at the given index in the active workspace
     OpenDiff(usize),
 }
@@ -202,6 +204,34 @@ async fn execute_action(
                         app.status_message = Some(format!("Error: {}", e));
                     }
                 }
+            }
+        }
+        Action::RemoveFromList(idx) => {
+            if idx < app.workspaces.len() {
+                // Kill all PTY sessions
+                for (_, pty) in app.workspaces[idx].pty_sessions.iter_mut() {
+                    let _ = pty.kill();
+                }
+                app.workspaces[idx].watcher = None;
+
+                let source_repo = app.workspaces[idx].source_repo.clone();
+                app.workspaces.remove(idx);
+
+                // Adjust indices
+                if app.workspaces.is_empty() {
+                    app.active_workspace = 0;
+                    app.selected_workspace = 0;
+                } else {
+                    if app.active_workspace >= app.workspaces.len() {
+                        app.active_workspace = app.workspaces.len() - 1;
+                    }
+                    if app.selected_workspace >= app.workspaces.len() {
+                        app.selected_workspace = app.workspaces.len() - 1;
+                    }
+                }
+
+                // Persist config
+                let _ = ws_config::save(&source_repo, &app.workspaces);
             }
         }
         Action::OpenDiff(file_idx) => {
@@ -285,6 +315,11 @@ fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         return handle_new_workspace_input(app, key);
     }
 
+    // Confirm delete dialog captures all input
+    if app.mode == AppMode::ConfirmDelete {
+        return handle_confirm_delete_input(app, key);
+    }
+
     // Clear status message on any key
     app.status_message = None;
 
@@ -343,7 +378,8 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
         }
         KeyCode::Char('d') => {
             if !app.workspaces.is_empty() {
-                return Some(Action::DeleteWorkspace(app.selected_workspace));
+                app.delete_target = Some(app.selected_workspace);
+                app.mode = AppMode::ConfirmDelete;
             }
         }
         KeyCode::Tab => {
@@ -453,7 +489,8 @@ fn handle_workspace_interaction(app: &mut App, key: KeyEvent) -> Option<Action> 
         }
         KeyCode::Char('d') => {
             if !app.workspaces.is_empty() {
-                return Some(Action::DeleteWorkspace(app.selected_workspace));
+                app.delete_target = Some(app.selected_workspace);
+                app.mode = AppMode::ConfirmDelete;
             }
         }
         _ => {}
@@ -560,4 +597,25 @@ fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
         _ => {}
     }
     None
+}
+
+fn handle_confirm_delete_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    match key.code {
+        KeyCode::Char('y') | KeyCode::Char('Y') => {
+            let target = app.delete_target.take();
+            app.mode = AppMode::Normal;
+            target.map(Action::DeleteWorkspace)
+        }
+        KeyCode::Char('n') | KeyCode::Char('N') => {
+            let target = app.delete_target.take();
+            app.mode = AppMode::Normal;
+            target.map(Action::RemoveFromList)
+        }
+        KeyCode::Esc => {
+            app.delete_target = None;
+            app.mode = AppMode::Normal;
+            None
+        }
+        _ => None,
+    }
 }

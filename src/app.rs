@@ -50,6 +50,8 @@ pub enum AppMode {
     Diff,
     /// Input dialog for creating a new workspace
     NewWorkspace,
+    /// Confirmation dialog for deleting a workspace
+    ConfirmDelete,
     /// Help overlay
     Help,
 }
@@ -123,7 +125,13 @@ pub struct Workspace {
 }
 
 impl Workspace {
-    pub fn new(name: String, description: String, branch: String, path: PathBuf, source_repo: PathBuf) -> Self {
+    pub fn new(
+        name: String,
+        description: String,
+        branch: String,
+        path: PathBuf,
+        source_repo: PathBuf,
+    ) -> Self {
         Self {
             name,
             description,
@@ -383,6 +391,8 @@ pub struct App {
     pub desc_input_buffer: String,
     pub active_dialog_field: DialogField,
     pub status_message: Option<String>,
+    /// Index of workspace targeted for deletion (used by ConfirmDelete dialog)
+    pub delete_target: Option<usize>,
 }
 
 impl App {
@@ -404,6 +414,7 @@ impl App {
             desc_input_buffer: String::new(),
             active_dialog_field: DialogField::Name,
             status_message: None,
+            delete_target: None,
         }
     }
 

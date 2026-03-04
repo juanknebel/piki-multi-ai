@@ -78,6 +78,9 @@ pub fn render(frame: &mut Frame, app: &App) {
     if app.mode == AppMode::Help {
         render_help_overlay(frame, area);
     }
+    if app.mode == AppMode::ConfirmDelete {
+        render_confirm_delete_dialog(frame, area, app);
+    }
 }
 
 fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
@@ -568,4 +571,51 @@ fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
     let x = area.x + area.width.saturating_sub(width) / 2;
     let y = area.y + area.height.saturating_sub(height) / 2;
     Rect::new(x, y, width.min(area.width), height.min(area.height))
+}
+
+fn render_confirm_delete_dialog(frame: &mut Frame, area: Rect, app: &App) {
+    let popup = centered_rect(50, 9, area);
+    frame.render_widget(ratatui::widgets::Clear, popup);
+
+    let ws_name = app
+        .delete_target
+        .and_then(|idx| app.workspaces.get(idx))
+        .map(|ws| ws.name.as_str())
+        .unwrap_or("?");
+
+    let block = Block::default()
+        .title(" Delete Workspace ")
+        .title_style(Style::default().fg(Color::Red))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Red));
+
+    let lines = vec![
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  Delete ", Style::default().fg(Color::White)),
+            Span::styled(
+                ws_name,
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" ?", Style::default().fg(Color::White)),
+        ]),
+        Line::from(""),
+        Line::from(Span::styled(
+            "  [y] Yes, delete worktree and branch",
+            Style::default().fg(Color::Red),
+        )),
+        Line::from(Span::styled(
+            "  [n] No, keep worktree on disk",
+            Style::default().fg(Color::Green),
+        )),
+        Line::from(Span::styled(
+            "  [Esc] Cancel",
+            Style::default().fg(Color::DarkGray),
+        )),
+    ];
+
+    let text = Paragraph::new(lines).block(block);
+    frame.render_widget(text, popup);
 }

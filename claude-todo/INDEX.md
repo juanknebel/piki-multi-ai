@@ -4,7 +4,7 @@
 
 | Total | OPEN | IN_PROGRESS | DONE | CANCEL |
 |-------|------|-------------|------|--------|
-| 42    | 2    | 0           | 40   | 0      |
+| 42    | 1    | 0           | 41   | 0      |
 
 ## Fase 0 — Setup
 
@@ -126,7 +126,7 @@
 
 | ID  | Tarea                              | Status | Bloqueada por |
 |-----|------------------------------------|--------|---------------|
-| T42 | Confirmar borrado, mantener worktree| OPEN  | —             |
+| T42 | Confirmar borrado, mantener worktree| DONE  | —             |
 
 ## Grafo de Dependencias
 

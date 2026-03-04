@@ -1,6 +1,6 @@
 # T42 — Confirmar borrado de workspace y opción de mantener worktree
 
-**Status:** OPEN
+**Status:** DONE
 **Phase:** 15 — UX Improvements
 **Blocks:** —
 **Blocked by:** —
