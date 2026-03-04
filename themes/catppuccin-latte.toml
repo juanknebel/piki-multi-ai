@@ -1,0 +1,71 @@
+# Catppuccin Latte theme — pastel light palette
+# Based on https://github.com/catppuccin/catppuccin
+
+[border]
+active_interact = "#40a02b"   # green
+active_navigate = "#df8e1d"   # yellow
+inactive = "#9ca0b0"          # overlay0
+
+[workspace_list]
+empty_text = "#9ca0b0"
+name_active = "#4c4f69"       # text
+name_inactive = "#6c6f85"     # subtext0
+detail_selected = "#6c6f85"
+detail_normal = "#9ca0b0"
+selected_bg = "#e6e9ef"       # mantle
+
+[file_list]
+empty_text = "#9ca0b0"
+modified = "#df8e1d"          # yellow
+added = "#40a02b"             # green
+deleted = "#d20f39"           # red
+renamed = "#04a5e5"           # sky
+untracked = "#9ca0b0"
+conflicted = "#ea76cb"        # pink
+staged = "#40a02b"
+staged_modified = "#df8e1d"
+file_path = "#4c4f69"
+selected_bg = "#e6e9ef"
+
+[tabs]
+active = "#df8e1d"
+inactive = "#9ca0b0"
+
+[subtabs]
+active = "#04a5e5"
+inactive = "#9ca0b0"
+
+[status_bar]
+error_bg = "#d20f39"
+error_fg = "#eff1f5"          # base
+diff_bg = "#e6e9ef"
+diff_fg = "#4c4f69"
+interact_bg = "#40a02b"
+navigate_bg = "#df8e1d"
+mode_fg = "#eff1f5"
+
+[footer]
+key = "#df8e1d"
+description = "#6c6f85"
+
+[diff]
+border = "#04a5e5"
+empty_text = "#9ca0b0"
+
+[dialog]
+new_ws_border = "#df8e1d"
+new_ws_active = "#df8e1d"
+new_ws_inactive = "#9ca0b0"
+delete_border = "#d20f39"
+delete_text = "#4c4f69"
+delete_name = "#df8e1d"
+delete_yes = "#d20f39"
+delete_no = "#40a02b"
+delete_cancel = "#9ca0b0"
+
+[help]
+border = "#04a5e5"
+
+[general]
+welcome_text = "#6c6f85"
+muted_text = "#9ca0b0"

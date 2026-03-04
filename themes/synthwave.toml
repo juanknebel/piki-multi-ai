@@ -1,0 +1,70 @@
+# Synthwave theme — neon retro-futuristic palette
+
+[border]
+active_interact = "#ff7edb"   # hot pink
+active_navigate = "#fede5d"   # neon yellow
+inactive = "#495495"          # muted indigo
+
+[workspace_list]
+empty_text = "#495495"
+name_active = "#ffffff"
+name_inactive = "#bbbbbb"
+detail_selected = "#bbbbbb"
+detail_normal = "#495495"
+selected_bg = "#34294f"
+
+[file_list]
+empty_text = "#495495"
+modified = "#fede5d"          # neon yellow
+added = "#72f1b8"             # neon green
+deleted = "#fe4450"           # neon red
+renamed = "#36f9f6"           # neon cyan
+untracked = "#495495"
+conflicted = "#ff7edb"        # hot pink
+staged = "#72f1b8"
+staged_modified = "#fede5d"
+file_path = "#ffffff"
+selected_bg = "#34294f"
+
+[tabs]
+active = "#fede5d"
+inactive = "#495495"
+
+[subtabs]
+active = "#36f9f6"            # neon cyan
+inactive = "#495495"
+
+[status_bar]
+error_bg = "#fe4450"
+error_fg = "#ffffff"
+diff_bg = "#34294f"
+diff_fg = "#ffffff"
+interact_bg = "#ff7edb"
+navigate_bg = "#fede5d"
+mode_fg = "#261b2e"
+
+[footer]
+key = "#fede5d"
+description = "#bbbbbb"
+
+[diff]
+border = "#36f9f6"
+empty_text = "#495495"
+
+[dialog]
+new_ws_border = "#fede5d"
+new_ws_active = "#fede5d"
+new_ws_inactive = "#495495"
+delete_border = "#fe4450"
+delete_text = "#ffffff"
+delete_name = "#fede5d"
+delete_yes = "#fe4450"
+delete_no = "#72f1b8"
+delete_cancel = "#495495"
+
+[help]
+border = "#36f9f6"
+
+[general]
+welcome_text = "#bbbbbb"
+muted_text = "#495495"

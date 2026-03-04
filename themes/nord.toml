@@ -1,0 +1,71 @@
+# Nord theme — dark, muted Arctic palette
+# Based on https://www.nordtheme.com/
+
+[border]
+active_interact = "#a3be8c"   # nord14 green
+active_navigate = "#ebcb8b"   # nord13 yellow
+inactive = "#4c566a"          # nord3
+
+[workspace_list]
+empty_text = "#4c566a"
+name_active = "#eceff4"       # nord6
+name_inactive = "#d8dee9"     # nord4
+detail_selected = "#d8dee9"
+detail_normal = "#4c566a"
+selected_bg = "#3b4252"       # nord1
+
+[file_list]
+empty_text = "#4c566a"
+modified = "#ebcb8b"          # nord13
+added = "#a3be8c"             # nord14
+deleted = "#bf616a"           # nord11
+renamed = "#88c0d0"           # nord8
+untracked = "#4c566a"
+conflicted = "#b48ead"        # nord15
+staged = "#a3be8c"
+staged_modified = "#ebcb8b"
+file_path = "#eceff4"
+selected_bg = "#3b4252"
+
+[tabs]
+active = "#ebcb8b"
+inactive = "#4c566a"
+
+[subtabs]
+active = "#88c0d0"            # nord8
+inactive = "#4c566a"
+
+[status_bar]
+error_bg = "#bf616a"
+error_fg = "#eceff4"
+diff_bg = "#3b4252"
+diff_fg = "#eceff4"
+interact_bg = "#a3be8c"
+navigate_bg = "#ebcb8b"
+mode_fg = "#2e3440"           # nord0
+
+[footer]
+key = "#ebcb8b"
+description = "#d8dee9"
+
+[diff]
+border = "#88c0d0"
+empty_text = "#4c566a"
+
+[dialog]
+new_ws_border = "#ebcb8b"
+new_ws_active = "#ebcb8b"
+new_ws_inactive = "#4c566a"
+delete_border = "#bf616a"
+delete_text = "#eceff4"
+delete_name = "#ebcb8b"
+delete_yes = "#bf616a"
+delete_no = "#a3be8c"
+delete_cancel = "#4c566a"
+
+[help]
+border = "#88c0d0"
+
+[general]
+welcome_text = "#d8dee9"
+muted_text = "#4c566a"

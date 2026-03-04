@@ -1,0 +1,71 @@
+# Solarized Light theme — warm light background palette
+# Based on https://ethanschoonover.com/solarized/
+
+[border]
+active_interact = "#859900"   # green
+active_navigate = "#b58900"   # yellow
+inactive = "#93a1a1"          # base1
+
+[workspace_list]
+empty_text = "#93a1a1"
+name_active = "#073642"       # base02
+name_inactive = "#586e75"     # base01
+detail_selected = "#586e75"
+detail_normal = "#93a1a1"
+selected_bg = "#eee8d5"       # base2
+
+[file_list]
+empty_text = "#93a1a1"
+modified = "#b58900"          # yellow
+added = "#859900"             # green
+deleted = "#dc322f"           # red
+renamed = "#2aa198"           # cyan
+untracked = "#93a1a1"
+conflicted = "#d33682"        # magenta
+staged = "#859900"
+staged_modified = "#b58900"
+file_path = "#073642"
+selected_bg = "#eee8d5"
+
+[tabs]
+active = "#b58900"
+inactive = "#93a1a1"
+
+[subtabs]
+active = "#2aa198"
+inactive = "#93a1a1"
+
+[status_bar]
+error_bg = "#dc322f"
+error_fg = "#fdf6e3"          # base3
+diff_bg = "#eee8d5"
+diff_fg = "#073642"
+interact_bg = "#859900"
+navigate_bg = "#b58900"
+mode_fg = "#fdf6e3"
+
+[footer]
+key = "#b58900"
+description = "#586e75"
+
+[diff]
+border = "#2aa198"
+empty_text = "#93a1a1"
+
+[dialog]
+new_ws_border = "#b58900"
+new_ws_active = "#b58900"
+new_ws_inactive = "#93a1a1"
+delete_border = "#dc322f"
+delete_text = "#073642"
+delete_name = "#b58900"
+delete_yes = "#dc322f"
+delete_no = "#859900"
+delete_cancel = "#93a1a1"
+
+[help]
+border = "#2aa198"
+
+[general]
+welcome_text = "#586e75"
+muted_text = "#93a1a1"

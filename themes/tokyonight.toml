@@ -1,0 +1,71 @@
+# Tokyo Night theme — dark blue-tinted palette
+# Based on https://github.com/folke/tokyonight.nvim
+
+[border]
+active_interact = "#9ece6a"   # green
+active_navigate = "#e0af68"   # yellow
+inactive = "#3b4261"          # comment
+
+[workspace_list]
+empty_text = "#3b4261"
+name_active = "#c0caf5"       # fg
+name_inactive = "#a9b1d6"     # fg_dark
+detail_selected = "#a9b1d6"
+detail_normal = "#3b4261"
+selected_bg = "#292e42"       # bg_highlight
+
+[file_list]
+empty_text = "#3b4261"
+modified = "#e0af68"          # yellow
+added = "#9ece6a"             # green
+deleted = "#f7768e"           # red
+renamed = "#7dcfff"           # cyan
+untracked = "#3b4261"
+conflicted = "#bb9af7"        # magenta
+staged = "#9ece6a"
+staged_modified = "#e0af68"
+file_path = "#c0caf5"
+selected_bg = "#292e42"
+
+[tabs]
+active = "#e0af68"
+inactive = "#3b4261"
+
+[subtabs]
+active = "#7dcfff"
+inactive = "#3b4261"
+
+[status_bar]
+error_bg = "#f7768e"
+error_fg = "#c0caf5"
+diff_bg = "#292e42"
+diff_fg = "#c0caf5"
+interact_bg = "#9ece6a"
+navigate_bg = "#e0af68"
+mode_fg = "#1a1b26"           # bg
+
+[footer]
+key = "#e0af68"
+description = "#a9b1d6"
+
+[diff]
+border = "#7dcfff"
+empty_text = "#3b4261"
+
+[dialog]
+new_ws_border = "#e0af68"
+new_ws_active = "#e0af68"
+new_ws_inactive = "#3b4261"
+delete_border = "#f7768e"
+delete_text = "#c0caf5"
+delete_name = "#e0af68"
+delete_yes = "#f7768e"
+delete_no = "#9ece6a"
+delete_cancel = "#3b4261"
+
+[help]
+border = "#7dcfff"
+
+[general]
+welcome_text = "#a9b1d6"
+muted_text = "#3b4261"

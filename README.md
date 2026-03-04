@@ -165,6 +165,19 @@ deleted = "#bf616a"
 
 See `themes/default.toml` in the repo for all available color keys. Colors can be named (`"Red"`, `"DarkGray"`, `"LightCyan"`, etc.) or hex (`"#rrggbb"`).
 
+### Included themes
+
+| Theme | Description |
+|-------|-------------|
+| `default` | Standard terminal colors (named colors) |
+| `nord` | Arctic, muted dark palette |
+| `tokyonight` | Dark blue-tinted palette |
+| `synthwave` | Neon retro-futuristic |
+| `solarized-light` | Warm light background |
+| `catppuccin-latte` | Pastel light palette |
+
+The `install.sh` script copies all themes to `~/.config/piki-multi/themes/` (existing files are not overwritten).
+
 ## Architecture
 
 ```
