@@ -34,8 +34,7 @@ pub fn render(frame: &mut Frame, app: &App) {
 
     // Left panel: workspaces (top) + files (bottom)
     let [ws_area, files_area] =
-        Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)])
-            .areas(left_area);
+        Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(left_area);
 
     // Right panel: tabs + sub-tabs + content + status bar
     let [tabs_area, subtabs_area, main_area, status_area] = Layout::vertical([
@@ -104,7 +103,11 @@ fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
         .iter()
         .enumerate()
         .map(|(i, ws)| {
-            let marker = if i == app.active_workspace { "▶" } else { " " };
+            let marker = if i == app.active_workspace {
+                "▶"
+            } else {
+                " "
+            };
             let status_icon = match ws.status {
                 crate::app::WorkspaceStatus::Idle => "●",
                 crate::app::WorkspaceStatus::Busy => "◐",
@@ -116,7 +119,9 @@ fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                 Span::styled(
                     ws.name.clone(),
                     if i == app.active_workspace {
-                        Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+                        Style::default()
+                            .fg(Color::White)
+                            .add_modifier(Modifier::BOLD)
                     } else {
                         Style::default().fg(Color::Gray)
                     },
@@ -125,23 +130,50 @@ fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
             let line2 = Line::from(vec![
                 Span::raw("   "),
                 Span::styled(
-                    format!("{} {} | {} files", status_icon, ws.status_label(), ws.file_count()),
+                    format!(
+                        "{} {} | {} files",
+                        status_icon,
+                        ws.status_label(),
+                        ws.file_count()
+                    ),
                     Style::default().fg(Color::DarkGray),
                 ),
             ]);
 
             let mut lines = vec![line1, line2];
             if !ws.description.is_empty() {
-                let desc = if ws.description.len() > 30 {
-                    format!("{}…", &ws.description[..29])
+                let max_desc = area.width.saturating_sub(6) as usize;
+                let desc = if ws.description.len() > max_desc {
+                    format!("{}…", &ws.description[..max_desc.saturating_sub(1)])
                 } else {
                     ws.description.clone()
                 };
                 lines.push(Line::from(vec![
                     Span::raw("   "),
-                    Span::styled(desc, Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+                    Span::styled(
+                        desc,
+                        Style::default()
+                            .fg(Color::DarkGray)
+                            .add_modifier(Modifier::ITALIC),
+                    ),
                 ]));
             }
+
+            // Show worktree path
+            let path_str = ws.path.to_string_lossy();
+            let max_path = area.width.saturating_sub(6) as usize;
+            let path_display = if path_str.len() > max_path {
+                format!(
+                    "…{}",
+                    &path_str[path_str.len() - max_path.saturating_sub(1)..]
+                )
+            } else {
+                path_str.to_string()
+            };
+            lines.push(Line::from(vec![
+                Span::raw("   "),
+                Span::styled(path_display, Style::default().fg(Color::DarkGray)),
+            ]));
 
             let style = if i == app.selected_workspace && is_active {
                 Style::default().bg(Color::DarkGray)
@@ -318,8 +350,16 @@ fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
                 Style::default().bg(Color::DarkGray).fg(Color::White),
             ),
             _ => {
-                let mode_label = if app.interacting { "INTERACT" } else { "NAVIGATE" };
-                let mode_color = if app.interacting { Color::Green } else { Color::Yellow };
+                let mode_label = if app.interacting {
+                    "INTERACT"
+                } else {
+                    "NAVIGATE"
+                };
+                let mode_color = if app.interacting {
+                    Color::Green
+                } else {
+                    Color::Yellow
+                };
                 if let Some(ws) = app.current_workspace() {
                     Span::styled(
                         format!(
@@ -355,9 +395,7 @@ fn render_footer(frame: &mut Frame, area: Rect, app: &App) {
             ("Enter", "create"),
             ("Esc", "cancel"),
         ],
-        _ if app.interacting => vec![
-            ("Esc", "navigation mode"),
-        ],
+        _ if app.interacting => vec![("Esc", "navigation mode")],
         _ => vec![
             ("hjkl", "navigate"),
             ("Enter", "interact"),
@@ -374,10 +412,7 @@ fn render_footer(frame: &mut Frame, area: Rect, app: &App) {
         .iter()
         .flat_map(|(key, desc)| {
             vec![
-                Span::styled(
-                    format!(" [{}] ", key),
-                    Style::default().fg(Color::Yellow),
-                ),
+                Span::styled(format!(" [{}] ", key), Style::default().fg(Color::Yellow)),
                 Span::styled(format!("{} ", desc), Style::default().fg(Color::Gray)),
             ]
         })
@@ -396,7 +431,14 @@ fn render_diff_overlay(frame: &mut Frame, area: Rect, app: &App) {
 
     let file_path = app.diff_file_path.as_deref().unwrap_or("?");
     let border_style = Style::default().fg(Color::Cyan);
-    super::diff::render(frame, popup, &app.diff_content, app.diff_scroll, file_path, border_style);
+    super::diff::render(
+        frame,
+        popup,
+        &app.diff_content,
+        app.diff_scroll,
+        file_path,
+        border_style,
+    );
 }
 
 fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
@@ -427,17 +469,26 @@ fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
     let lines = vec![
         Line::from(vec![
             Span::styled("  Name: ", field_style(name_active)),
-            Span::styled(format!("{}{}", app.input_buffer, cursor(name_active)), field_style(name_active)),
+            Span::styled(
+                format!("{}{}", app.input_buffer, cursor(name_active)),
+                field_style(name_active),
+            ),
         ]),
         Line::from(""),
         Line::from(vec![
             Span::styled("  Dir:  ", field_style(dir_active)),
-            Span::styled(format!("{}{}", app.dir_input_buffer, cursor(dir_active)), field_style(dir_active)),
+            Span::styled(
+                format!("{}{}", app.dir_input_buffer, cursor(dir_active)),
+                field_style(dir_active),
+            ),
         ]),
         Line::from(""),
         Line::from(vec![
             Span::styled("  Desc: ", field_style(desc_active)),
-            Span::styled(format!("{}{}", app.desc_input_buffer, cursor(desc_active)), field_style(desc_active)),
+            Span::styled(
+                format!("{}{}", app.desc_input_buffer, cursor(desc_active)),
+                field_style(desc_active),
+            ),
         ]),
     ];
 
@@ -494,10 +545,5 @@ fn render_help_overlay(frame: &mut Frame, area: Rect) {
 fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
     let x = area.x + area.width.saturating_sub(width) / 2;
     let y = area.y + area.height.saturating_sub(height) / 2;
-    Rect::new(
-        x,
-        y,
-        width.min(area.width),
-        height.min(area.height),
-    )
+    Rect::new(x, y, width.min(area.width), height.min(area.height))
 }

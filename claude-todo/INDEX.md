@@ -4,7 +4,7 @@
 
 | Total | OPEN | IN_PROGRESS | DONE | CANCEL |
 |-------|------|-------------|------|--------|
-| 38    | 0    | 0           | 38   | 0      |
+| 39    | 0    | 0           | 39   | 0      |
 
 ## Fase 0 — Setup
 
@@ -118,6 +118,7 @@
 | ID  | Tarea                              | Status | Bloqueada por |
 |-----|------------------------------------|--------|---------------|
 | T38 | Diff view hides provider shell pane| DONE   | —             |
+| T39 | WS list: desc+path, branch chars   | DONE   | —             |
 
 ## Grafo de Dependencias
 

@@ -13,7 +13,7 @@ use ratatui::DefaultTerminal;
 
 use app::{AIProvider, ActivePane, App, AppMode, DialogField};
 use pty::PtySession;
-use workspace::{config as ws_config, FileWatcher, WorkspaceManager};
+use workspace::{FileWatcher, WorkspaceManager, config as ws_config};
 
 const TICK_RATE: Duration = Duration::from_millis(50);
 const DEBOUNCE: Duration = Duration::from_millis(500);
@@ -212,7 +212,9 @@ async fn execute_action(
                     let file_status = file.status.clone();
                     // Use a reasonable width; TODO: pass actual panel width
                     let width = 120;
-                    match diff::runner::run_diff(&worktree_path, &file_path, width, &file_status).await {
+                    match diff::runner::run_diff(&worktree_path, &file_path, width, &file_status)
+                        .await
+                    {
                         Ok(ansi_bytes) => {
                             use ansi_to_tui::IntoText;
                             match ansi_bytes.into_text() {
@@ -257,7 +259,8 @@ async fn spawn_all_providers(ws: &mut app::Workspace) {
     for provider in AIProvider::all() {
         match PtySession::spawn(&ws.path, 24, 80, provider.command()).await {
             Ok(session) => {
-                ws.pty_parsers.insert(*provider, Arc::clone(session.parser()));
+                ws.pty_parsers
+                    .insert(*provider, Arc::clone(session.parser()));
                 ws.pty_sessions.insert(*provider, session);
             }
             Err(_) => {
@@ -358,7 +361,10 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
         KeyCode::Char('g') => {
             if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
                 let providers = AIProvider::all();
-                let current_idx = providers.iter().position(|p| *p == ws.active_provider).unwrap_or(0);
+                let current_idx = providers
+                    .iter()
+                    .position(|p| *p == ws.active_provider)
+                    .unwrap_or(0);
                 ws.active_provider = providers[(current_idx + 1) % providers.len()];
             }
         }
@@ -485,7 +491,8 @@ fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
         }
         KeyCode::Char(c) => match app.active_dialog_field {
             DialogField::Name => {
-                if c.is_alphanumeric() || c == '-' || c == '_' {
+                // Allow characters valid in git branch names: alphanumeric, '-', '_', '.', '/'
+                if c.is_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '/' {
                     app.input_buffer.push(c);
                 }
             }

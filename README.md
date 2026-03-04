@@ -6,9 +6,12 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 
 ## Features
 
-- **Parallel workspaces** — Run multiple Claude Code sessions simultaneously, each in an isolated git worktree
-- **Live terminal rendering** — See Claude Code output in real-time with full ANSI color support via `tui-term`
-- **Interactive input** — Type directly into any Claude Code session (Ctrl+\\ to toggle focus)
+- **Parallel workspaces** — Run multiple AI coding sessions simultaneously, each in an isolated git worktree
+- **Multi-AI provider** — Sub-tabs for Claude Code, Gemini CLI, and Codex per workspace; cycle with `g`
+- **Live terminal rendering** — See AI assistant output in real-time with full ANSI color support via `tui-term`
+- **Interactive input** — Type directly into any AI session (Enter on the terminal pane to interact)
+- **Git branch-style naming** — Workspace names support `/`, `.`, `-`, `_` (e.g. `feature/login`, `bugfix/issue-42`)
+- **Rich workspace list** — Each workspace shows name, description, worktree path, status, and file count
 - **File watching** — Automatically detects file changes in each worktree using `notify`
 - **Full git status** — STATUS panel shows all file states: modified, staged, untracked, conflicted, renamed, and more via `git status --porcelain=v1`
 - **Side-by-side diffs** — View diffs as a floating overlay rendered by [delta](https://github.com/dandavison/delta) with ANSI colors preserved (terminal stays visible behind)
@@ -45,7 +48,7 @@ Or use the install script:
 piki-multi-ai
 ```
 
-On startup, all previously created workspaces are restored automatically regardless of the current directory. To create new workspaces, press `n` and provide a name and the path to a git repository.
+On startup, all previously created workspaces are restored automatically regardless of the current directory. To create new workspaces, press `n` and provide a name (supports git branch characters like `/`), a git repository path, and an optional description.
 
 ### Persistence
 
@@ -57,26 +60,28 @@ Workspace configurations are saved automatically and restored on startup. You ca
   workspaces/<project-name>.json               # workspace config per project
 ```
 
-Branches are named `piki-multi/<workspace-name>`. Stale entries (worktrees deleted manually) are cleaned up automatically on load.
+Branch names match the workspace name exactly (e.g. workspace `feature/login` creates branch `feature/login`). Stale entries (worktrees deleted manually) are cleaned up automatically on load.
 
 ### Layout
 
 ```
 +------------------+-------------------------------------------------------+
 | WORKSPACES       |  [ ws-1 ]  [ ws-2 ]  [ ws-3 ]   (tabs)               |
-|                  |-------------------------------------------------------|
-|  > ws-1 (active) |                                                       |
-|    ws-2          |  Claude Code live terminal output                     |
-|    ws-3          |  (diff opens as floating overlay)                     |
+|                  |  [ Claude Code ] [ Gemini ] [ Codex ]  (sub-tabs)     |
+|  ▶ ws-1 (active) |-------------------------------------------------------|
+|    ● busy | 3    |                                                       |
+|    Fix login bug |  AI assistant live terminal output                    |
+|    ~/.local/...  |  (diff opens as floating overlay)                     |
 |                  |                                                       |
+|    ws-2          |                                                       |
 |------------------+                                                       |
 | STATUS           |                                                       |
 |                  |-------------------------------------------------------|
-|  M src/auth.rs   |  branch: piki-multi/ws-1 | 3 files | claude: busy    |
+|  M src/auth.rs   |  branch: feature/ws-1 | 3 files | Claude Code: busy  |
 |  A src/new.rs    +-------------------------------------------------------+
 |  ? untracked.txt |
 +------------------+--------------------------------------------------------+
-  [n] new  [d] delete  [Tab] switch  [Enter] diff  [Ctrl+\] terminal  [q] quit
+  [n] new  [d] delete  [Tab] switch  [g] switch AI  [?] help  [q] quit
 ```
 
 ### File status indicators
@@ -108,6 +113,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `d` | Delete selected workspace |
 | `Tab` / `Shift+Tab` | Next / previous workspace |
 | `1`-`9` | Jump to workspace N |
+| `g` | Cycle AI provider (Claude → Gemini → Codex) |
 | `?` | Help overlay |
 | `q` | Quit |
 
@@ -237,7 +243,7 @@ sequenceDiagram
 - **vt100** parser accumulates terminal state; **tui-term** renders it as a ratatui widget
 - **ansi-to-tui** converts delta's ANSI output to `ratatui::text::Text` for the diff view
 - Each workspace gets its own PTY session and file watcher, running independently
-- Worktrees are stored in `~/.local/share/piki-multi/worktrees/<project>/<name>` with branches named `piki-multi/<name>`
+- Worktrees are stored in `~/.local/share/piki-multi/worktrees/<project>/<name>` with branch names matching the workspace name exactly
 - Event-driven architecture: key handlers return `Option<Action>`, main loop executes actions asynchronously
 - STATUS panel uses `git status --porcelain=v1` for full coverage of untracked, staged, conflicted, and renamed files
 - Diff runner uses `git diff --no-index /dev/null <file>` for untracked files
