@@ -450,7 +450,8 @@ fn render_diff_overlay(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
-    let popup = centered_rect(50, 9, area);
+    let popup_width = area.width * 70 / 100;
+    let popup = centered_rect(popup_width.max(40), 11, area);
 
     // Clear background
     frame.render_widget(ratatui::widgets::Clear, popup);
@@ -468,7 +469,20 @@ fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
             Style::default().fg(Color::DarkGray)
         }
     };
-    let cursor = |active: bool| if active { "█" } else { "" };
+    let cursor_char = |active: bool| if active { "█" } else { "" };
+
+    // Auto-scroll: show the tail of text when it exceeds available width
+    let label_width = 10_u16; // "  Name: " = 8 + some padding
+    let field_max = popup.width.saturating_sub(label_width + 2) as usize; // borders
+    let visible_field = |text: &str, active: bool| -> String {
+        let suffix = cursor_char(active);
+        let full = format!("{}{}", text, suffix);
+        if full.len() > field_max && field_max > 2 {
+            format!("…{}", &full[full.len() - (field_max - 1)..])
+        } else {
+            full
+        }
+    };
 
     let name_active = app.active_dialog_field == DialogField::Name;
     let dir_active = app.active_dialog_field == DialogField::Directory;
@@ -478,7 +492,7 @@ fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
         Line::from(vec![
             Span::styled("  Name: ", field_style(name_active)),
             Span::styled(
-                format!("{}{}", app.input_buffer, cursor(name_active)),
+                visible_field(&app.input_buffer, name_active),
                 field_style(name_active),
             ),
         ]),
@@ -486,7 +500,7 @@ fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
         Line::from(vec![
             Span::styled("  Dir:  ", field_style(dir_active)),
             Span::styled(
-                format!("{}{}", app.dir_input_buffer, cursor(dir_active)),
+                visible_field(&app.dir_input_buffer, dir_active),
                 field_style(dir_active),
             ),
         ]),
@@ -494,7 +508,7 @@ fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
         Line::from(vec![
             Span::styled("  Desc: ", field_style(desc_active)),
             Span::styled(
-                format!("{}{}", app.desc_input_buffer, cursor(desc_active)),
+                visible_field(&app.desc_input_buffer, desc_active),
                 field_style(desc_active),
             ),
         ]),

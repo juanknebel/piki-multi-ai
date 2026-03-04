@@ -1,6 +1,6 @@
 # T41 — Bug: popup de nuevo workspace es muy pequeño y no tiene scroll horizontal
 
-**Status:** OPEN
+**Status:** DONE
 **Phase:** 14 — Bug Fixes
 **Blocks:** —
 **Blocked by:** —
