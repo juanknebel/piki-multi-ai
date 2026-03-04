@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BINARY_NAME="agent-multi"
+BINARY_NAME="piki-multi-ai"
 DEFAULT_DEST="$HOME/.local/bin"
 
 usage() {
     echo "Usage: $0 [-d DEST_DIR] [-h]"
     echo ""
-    echo "Build agent-multi in release mode and install the binary."
+    echo "Build piki-multi-ai in release mode and install the binary."
     echo ""
     echo "Options:"
     echo "  -d DEST_DIR   Install directory (default: $DEFAULT_DEST)"

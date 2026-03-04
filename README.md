@@ -30,19 +30,26 @@ cd agent-multi
 cargo build --release
 ```
 
-The binary will be at `target/release/agent-multi`.
+The binary will be at `target/release/piki-multi-ai`.
+
+Or use the install script:
+
+```bash
+./install.sh              # installs to ~/.local/bin
+./install.sh -d /usr/local/bin  # custom directory
+```
 
 ## Usage
 
 ```bash
-agent-multi
+piki-multi-ai
 ```
 
 On startup, all previously created workspaces are restored automatically regardless of the current directory. To create new workspaces, press `n` and provide a name and the path to a git repository.
 
 ### Persistence
 
-Workspace configurations are saved automatically and restored on startup. You can run `agent-multi` from any directory — it will discover and restore all previously created workspaces.
+Workspace configurations are saved automatically and restored on startup. You can run `piki-multi-ai` from any directory — it will discover and restore all previously created workspaces.
 
 ```
 ~/.local/share/piki-multi/

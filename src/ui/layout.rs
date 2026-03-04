@@ -279,12 +279,12 @@ fn render_main_content(frame: &mut Frame, area: Rect, app: &App) {
                 }
             } else {
                 let block = Block::default()
-                    .title(" agent-multi ")
+                    .title(" piki-multi-ai ")
                     .title_style(border_style)
                     .borders(Borders::ALL)
                     .border_style(border_style);
                 let text = Paragraph::new(
-                    "  Welcome to agent-multi\n\n  Press [n] to create a new workspace\n  Press [?] for help\n  Press [q] to quit",
+                    "  Welcome to piki-multi-ai\n\n  Press [n] to create a new workspace\n  Press [?] for help\n  Press [q] to quit",
                 )
                 .style(Style::default().fg(Color::Gray))
                 .block(block);
