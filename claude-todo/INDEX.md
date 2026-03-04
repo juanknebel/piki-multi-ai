@@ -148,6 +148,12 @@
 |-----|------------------------------------|--------|---------------|
 | T47 | Externalize colors to TOML themes  | DONE   | —             |
 
+## Phase 19 — UX Keybindings
+
+| ID  | Tarea                              | Status | Bloqueada por |
+|-----|------------------------------------|--------|---------------|
+| T48 | Change navigation mode to Ctrl+g    | DONE   | —             |
+
 ## Grafo de Dependencias
 
 ```

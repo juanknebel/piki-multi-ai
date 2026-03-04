@@ -388,7 +388,7 @@ fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
         match app.mode {
             AppMode::Diff => Span::styled(
                 format!(
-                    " DIFF: {} | [Esc] back | [↑↓] scroll | [n/p] file",
+                    " DIFF: {} | [C-g] back | [↑↓] scroll | [n/p] file",
                     app.diff_file_path.as_deref().unwrap_or("?")
                 ),
                 Style::default().bg(theme.diff_bg).fg(theme.diff_fg),
@@ -443,9 +443,9 @@ fn render_footer(frame: &mut Frame, area: Rect, app: &App) {
         AppMode::NewWorkspace => vec![
             ("Tab", "switch field"),
             ("Enter", "create"),
-            ("Esc", "cancel"),
+            ("C-g", "cancel"),
         ],
-        _ if app.interacting => vec![("Esc", "navigation mode")],
+        _ if app.interacting => vec![("C-g", "navigation mode")],
         _ => vec![
             ("hjkl", "navigate"),
             ("Enter", "interact"),
@@ -580,7 +580,7 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, theme: &Theme) {
         "    q             Quit",
         "",
         "  Interaction mode (green border)",
-        "    Esc           Back to navigation",
+        "    Ctrl+g        Back to navigation",
         "",
         "  Terminal pane (navigation mode)",
         "    Shift+K/J     Scroll up/down (3 lines)",
@@ -599,7 +599,7 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, theme: &Theme) {
         "    Ctrl+d/u      Page down/up",
         "    g/G           Top/Bottom",
         "    n/p           Next/Prev file",
-        "    Esc           Close diff",
+        "    Ctrl+g        Close diff",
     ];
 
     let block = Block::default()
@@ -658,7 +658,7 @@ fn render_confirm_delete_dialog(frame: &mut Frame, area: Rect, app: &App) {
             Style::default().fg(theme.delete_no),
         )),
         Line::from(Span::styled(
-            "  [Esc] Cancel",
+            "  [C-g] Cancel",
             Style::default().fg(theme.delete_cancel),
         )),
     ];

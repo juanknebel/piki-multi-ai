@@ -122,8 +122,8 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 
 | Key | Action |
 |-----|--------|
-| `Esc` | Back to navigation mode |
-| *Terminal pane* | All keys forwarded to Claude Code |
+| `Ctrl+g` | Back to navigation mode |
+| *Terminal pane* | All keys forwarded to AI provider |
 | *Workspace list* | `j`/`k` select, `Enter` activate |
 | *File list* | `j`/`k` select, `Enter` open diff |
 
@@ -135,7 +135,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `Ctrl+d` / `Ctrl+u` | Page down/up |
 | `g` / `G` | Top / bottom |
 | `n` / `p` | Next / previous file |
-| `Esc` | Close diff |
+| `Ctrl+g` | Close diff |
 
 ## Theming
 

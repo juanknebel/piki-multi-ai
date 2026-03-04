@@ -514,7 +514,7 @@ fn handle_interaction_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
 }
 
 fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    if key.code == KeyCode::Esc {
+    if key.code == KeyCode::Char('g') && key.modifiers.contains(KeyModifiers::CONTROL) {
         app.interacting = false;
         return None;
     }
@@ -531,13 +531,14 @@ fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
 }
 
 fn handle_diff_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
+    if key.code == KeyCode::Char('g') && key.modifiers.contains(KeyModifiers::CONTROL) {
+        app.mode = AppMode::Normal;
+        app.diff_content = None;
+        app.diff_file_path = None;
+        app.interacting = false;
+        return None;
+    }
     match key.code {
-        KeyCode::Esc => {
-            app.mode = AppMode::Normal;
-            app.diff_content = None;
-            app.diff_file_path = None;
-            app.interacting = false;
-        }
         KeyCode::Char('j') | KeyCode::Down => {
             app.diff_scroll = app.diff_scroll.saturating_add(1);
         }
@@ -566,10 +567,11 @@ fn handle_diff_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
 }
 
 fn handle_workspace_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
+    if key.code == KeyCode::Char('g') && key.modifiers.contains(KeyModifiers::CONTROL) {
+        app.interacting = false;
+        return None;
+    }
     match key.code {
-        KeyCode::Esc => {
-            app.interacting = false;
-        }
         KeyCode::Char('j') | KeyCode::Down => app.select_next_workspace(),
         KeyCode::Char('k') | KeyCode::Up => app.select_prev_workspace(),
         KeyCode::Enter => {
@@ -587,10 +589,11 @@ fn handle_workspace_interaction(app: &mut App, key: KeyEvent) -> Option<Action> 
 }
 
 fn handle_filelist_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
+    if key.code == KeyCode::Char('g') && key.modifiers.contains(KeyModifiers::CONTROL) {
+        app.interacting = false;
+        return None;
+    }
     match key.code {
-        KeyCode::Esc => {
-            app.interacting = false;
-        }
         KeyCode::Char('j') | KeyCode::Down => app.next_file(),
         KeyCode::Char('k') | KeyCode::Up => app.prev_file(),
         KeyCode::Enter => {
@@ -676,7 +679,7 @@ fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
             app.mode = AppMode::Normal;
             return Some(Action::CreateWorkspace(name, description, dir));
         }
-        KeyCode::Esc => {
+        _ if key.code == KeyCode::Char('g') && key.modifiers.contains(KeyModifiers::CONTROL) => {
             app.input_buffer.clear();
             app.dir_input_buffer.clear();
             app.desc_input_buffer.clear();
@@ -699,7 +702,7 @@ fn handle_confirm_delete_input(app: &mut App, key: KeyEvent) -> Option<Action> {
             app.mode = AppMode::Normal;
             target.map(Action::RemoveFromList)
         }
-        KeyCode::Esc => {
+        _ if key.code == KeyCode::Char('g') && key.modifiers.contains(KeyModifiers::CONTROL) => {
             app.delete_target = None;
             app.mode = AppMode::Normal;
             None
