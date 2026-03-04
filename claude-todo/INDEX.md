@@ -4,7 +4,7 @@
 
 | Total | OPEN | IN_PROGRESS | DONE | CANCEL |
 |-------|------|-------------|------|--------|
-| 45    | 0    | 0           | 45   | 0      |
+| 46    | 0    | 0           | 46   | 0      |
 
 ## Fase 0 — Setup
 
@@ -140,6 +140,7 @@
 | ID  | Tarea                              | Status | Bloqueada por |
 |-----|------------------------------------|--------|---------------|
 | T45 | Diff popup doesn't get focus       | DONE   | —             |
+| T46 | File status not populated on startup| DONE  | —             |
 
 ## Grafo de Dependencias
 

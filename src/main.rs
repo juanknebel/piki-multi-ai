@@ -74,6 +74,9 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
             }
         }
 
+        // Initial file status refresh so pre-existing changes show up
+        let _ = ws.refresh_changed_files().await;
+
         app.workspaces.push(ws);
     }
     if !app.workspaces.is_empty() {
