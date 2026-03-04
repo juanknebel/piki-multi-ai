@@ -1,10 +1,11 @@
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph, Tabs};
 
 use crate::app::{ActivePane, App, AppMode, DialogField, FileStatus};
+use crate::theme::Theme;
 
 /// Compute the inner terminal area (minus borders) for a given total terminal size.
 /// Replicates layout math to find the main content area dimensions.
@@ -40,12 +41,12 @@ pub fn compute_terminal_area(total: Rect) -> Rect {
 fn pane_border_style(app: &App, pane: ActivePane) -> Style {
     if app.active_pane == pane {
         if app.interacting {
-            Style::default().fg(Color::Green)
+            Style::default().fg(app.theme.border.active_interact)
         } else {
-            Style::default().fg(Color::Yellow)
+            Style::default().fg(app.theme.border.active_navigate)
         }
     } else {
-        Style::default().fg(Color::DarkGray)
+        Style::default().fg(app.theme.border.inactive)
     }
 }
 
@@ -106,7 +107,7 @@ pub fn render(frame: &mut Frame, app: &App) {
         render_new_workspace_dialog(frame, area, app);
     }
     if app.mode == AppMode::Help {
-        render_help_overlay(frame, area);
+        render_help_overlay(frame, area, &app.theme);
     }
     if app.mode == AppMode::ConfirmDelete {
         render_confirm_delete_dialog(frame, area, app);
@@ -116,6 +117,7 @@ pub fn render(frame: &mut Frame, app: &App) {
 fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
     let is_active = app.active_pane == ActivePane::WorkspaceList;
     let border_style = pane_border_style(app, ActivePane::WorkspaceList);
+    let theme = &app.theme.workspace_list;
 
     let block = Block::default()
         .title(" WORKSPACES ")
@@ -125,7 +127,7 @@ fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
 
     if app.workspaces.is_empty() {
         let text = Paragraph::new("  Press [n] to create")
-            .style(Style::default().fg(Color::DarkGray))
+            .style(Style::default().fg(theme.empty_text))
             .block(block);
         frame.render_widget(text, area);
         return;
@@ -137,11 +139,10 @@ fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
         .enumerate()
         .map(|(i, ws)| {
             let is_selected = i == app.selected_workspace && is_active;
-            // Use lighter color for details when selected, since bg is DarkGray
             let detail_color = if is_selected {
-                Color::Gray
+                theme.detail_selected
             } else {
-                Color::DarkGray
+                theme.detail_normal
             };
 
             let marker = if i == app.active_workspace {
@@ -161,10 +162,10 @@ fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                     ws.name.clone(),
                     if i == app.active_workspace {
                         Style::default()
-                            .fg(Color::White)
+                            .fg(theme.name_active)
                             .add_modifier(Modifier::BOLD)
                     } else {
-                        Style::default().fg(Color::Gray)
+                        Style::default().fg(theme.name_inactive)
                     },
                 ),
             ]);
@@ -217,7 +218,7 @@ fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
             ]));
 
             let style = if is_selected {
-                Style::default().bg(Color::DarkGray)
+                Style::default().bg(theme.selected_bg)
             } else {
                 Style::default()
             };
@@ -233,6 +234,7 @@ fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
 fn render_file_list(frame: &mut Frame, area: Rect, app: &App) {
     let is_active = app.active_pane == ActivePane::FileList;
     let border_style = pane_border_style(app, ActivePane::FileList);
+    let theme = &app.theme.file_list;
 
     let block = Block::default()
         .title(" STATUS ")
@@ -247,7 +249,7 @@ fn render_file_list(frame: &mut Frame, area: Rect, app: &App) {
 
     if files.is_empty() {
         let text = Paragraph::new("  No files changed")
-            .style(Style::default().fg(Color::DarkGray))
+            .style(Style::default().fg(theme.empty_text))
             .block(block);
         frame.render_widget(text, area);
         return;
@@ -258,21 +260,21 @@ fn render_file_list(frame: &mut Frame, area: Rect, app: &App) {
         .enumerate()
         .map(|(i, f)| {
             let (label, color) = match f.status {
-                FileStatus::Modified => ("M", Color::Yellow),
-                FileStatus::Added => ("A", Color::Green),
-                FileStatus::Deleted => ("D", Color::Red),
-                FileStatus::Renamed => ("R", Color::Cyan),
-                FileStatus::Untracked => ("?", Color::DarkGray),
-                FileStatus::Conflicted => ("C", Color::Magenta),
-                FileStatus::Staged => ("S", Color::Green),
-                FileStatus::StagedModified => ("SM", Color::Yellow),
+                FileStatus::Modified => ("M", theme.modified),
+                FileStatus::Added => ("A", theme.added),
+                FileStatus::Deleted => ("D", theme.deleted),
+                FileStatus::Renamed => ("R", theme.renamed),
+                FileStatus::Untracked => ("?", theme.untracked),
+                FileStatus::Conflicted => ("C", theme.conflicted),
+                FileStatus::Staged => ("S", theme.staged),
+                FileStatus::StagedModified => ("SM", theme.staged_modified),
             };
             let line = Line::from(vec![
                 Span::styled(format!("  {} ", label), Style::default().fg(color)),
-                Span::styled(&f.path, Style::default().fg(Color::White)),
+                Span::styled(&f.path, Style::default().fg(theme.file_path)),
             ]);
             let style = if i == app.selected_file && is_active {
-                Style::default().bg(Color::DarkGray)
+                Style::default().bg(theme.selected_bg)
             } else {
                 Style::default()
             };
@@ -304,10 +306,10 @@ fn render_tab_bar(frame: &mut Frame, area: Rect, app: &App) {
         .select(app.active_workspace)
         .highlight_style(
             Style::default()
-                .fg(Color::Yellow)
+                .fg(app.theme.tabs.active)
                 .add_modifier(Modifier::BOLD),
         )
-        .style(Style::default().fg(Color::DarkGray))
+        .style(Style::default().fg(app.theme.tabs.inactive))
         .divider("|");
 
     frame.render_widget(tabs, area);
@@ -315,7 +317,7 @@ fn render_tab_bar(frame: &mut Frame, area: Rect, app: &App) {
 
 fn render_subtabs(frame: &mut Frame, area: Rect, app: &App) {
     if let Some(ws) = app.current_workspace() {
-        super::subtabs::render(frame, area, ws.active_provider);
+        super::subtabs::render(frame, area, ws.active_provider, &app.theme);
     } else {
         let block = Block::default().borders(Borders::BOTTOM);
         frame.render_widget(block, area);
@@ -356,7 +358,7 @@ fn render_main_content(frame: &mut Frame, area: Rect, app: &App) {
     then press [g] to switch providers."#
             );
             let text = Paragraph::new(ascii_art)
-                .style(Style::default().fg(Color::DarkGray))
+                .style(Style::default().fg(app.theme.general.muted_text))
                 .block(block);
             frame.render_widget(text, area);
         }
@@ -369,17 +371,18 @@ fn render_main_content(frame: &mut Frame, area: Rect, app: &App) {
         let text = Paragraph::new(
             "  Welcome to piki-multi-ai\n\n  Press [n] to create a new workspace\n  Press [?] for help\n  Press [q] to quit",
         )
-        .style(Style::default().fg(Color::Gray))
+        .style(Style::default().fg(app.theme.general.welcome_text))
         .block(block);
         frame.render_widget(text, area);
     }
 }
 
 fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
+    let theme = &app.theme.status_bar;
     let content = if let Some(msg) = &app.status_message {
         Span::styled(
             format!(" {} ", msg),
-            Style::default().bg(Color::Red).fg(Color::White),
+            Style::default().bg(theme.error_bg).fg(theme.error_fg),
         )
     } else {
         match app.mode {
@@ -388,7 +391,7 @@ fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
                     " DIFF: {} | [Esc] back | [↑↓] scroll | [n/p] file",
                     app.diff_file_path.as_deref().unwrap_or("?")
                 ),
-                Style::default().bg(Color::DarkGray).fg(Color::White),
+                Style::default().bg(theme.diff_bg).fg(theme.diff_fg),
             ),
             _ => {
                 let mode_label = if app.interacting {
@@ -397,9 +400,9 @@ fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
                     "NAVIGATE"
                 };
                 let mode_color = if app.interacting {
-                    Color::Green
+                    theme.interact_bg
                 } else {
-                    Color::Yellow
+                    theme.navigate_bg
                 };
                 if let Some(ws) = app.current_workspace() {
                     let scroll_info = if ws.term_scroll > 0 {
@@ -419,12 +422,12 @@ fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
                             app.workspaces.len(),
                             scroll_info,
                         ),
-                        Style::default().bg(mode_color).fg(Color::Black),
+                        Style::default().bg(mode_color).fg(theme.mode_fg),
                     )
                 } else {
                     Span::styled(
                         format!(" [{}] No active workspace", mode_label),
-                        Style::default().bg(mode_color).fg(Color::Black),
+                        Style::default().bg(mode_color).fg(theme.mode_fg),
                     )
                 }
             }
@@ -459,8 +462,8 @@ fn render_footer(frame: &mut Frame, area: Rect, app: &App) {
         .iter()
         .flat_map(|(key, desc)| {
             vec![
-                Span::styled(format!(" [{}] ", key), Style::default().fg(Color::Yellow)),
-                Span::styled(format!("{} ", desc), Style::default().fg(Color::Gray)),
+                Span::styled(format!(" [{}] ", key), Style::default().fg(app.theme.footer.key)),
+                Span::styled(format!("{} ", desc), Style::default().fg(app.theme.footer.description)),
             ]
         })
         .collect();
@@ -477,7 +480,7 @@ fn render_diff_overlay(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(ratatui::widgets::Clear, popup);
 
     let file_path = app.diff_file_path.as_deref().unwrap_or("?");
-    let border_style = Style::default().fg(Color::Cyan);
+    let border_style = Style::default().fg(app.theme.diff.border);
     super::diff::render(
         frame,
         popup,
@@ -485,27 +488,29 @@ fn render_diff_overlay(frame: &mut Frame, area: Rect, app: &App) {
         app.diff_scroll,
         file_path,
         border_style,
+        app.theme.diff.empty_text,
     );
 }
 
 fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
     let popup_width = area.width * 70 / 100;
     let popup = centered_rect(popup_width.max(40), 11, area);
+    let theme = &app.theme.dialog;
 
     // Clear background
     frame.render_widget(ratatui::widgets::Clear, popup);
 
     let block = Block::default()
         .title(" New Workspace ")
-        .title_style(Style::default().fg(Color::Yellow))
+        .title_style(Style::default().fg(theme.new_ws_border))
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Yellow));
+        .border_style(Style::default().fg(theme.new_ws_border));
 
     let field_style = |active: bool| {
         if active {
-            Style::default().fg(Color::Yellow)
+            Style::default().fg(theme.new_ws_active)
         } else {
-            Style::default().fg(Color::DarkGray)
+            Style::default().fg(theme.new_ws_inactive)
         }
     };
     let cursor_char = |active: bool| if active { "█" } else { "" };
@@ -557,7 +562,7 @@ fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(text, popup);
 }
 
-fn render_help_overlay(frame: &mut Frame, area: Rect) {
+fn render_help_overlay(frame: &mut Frame, area: Rect, theme: &Theme) {
     let popup = centered_rect(50, 30, area);
     frame.render_widget(ratatui::widgets::Clear, popup);
 
@@ -599,9 +604,9 @@ fn render_help_overlay(frame: &mut Frame, area: Rect) {
 
     let block = Block::default()
         .title(" Help ")
-        .title_style(Style::default().fg(Color::Cyan))
+        .title_style(Style::default().fg(theme.help.border))
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan));
+        .border_style(Style::default().fg(theme.help.border));
 
     let text = Paragraph::new(help_text.join("\n")).block(block);
     frame.render_widget(text, popup);
@@ -617,6 +622,7 @@ fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
 fn render_confirm_delete_dialog(frame: &mut Frame, area: Rect, app: &App) {
     let popup = centered_rect(50, 9, area);
     frame.render_widget(ratatui::widgets::Clear, popup);
+    let theme = &app.theme.dialog;
 
     let ws_name = app
         .delete_target
@@ -626,34 +632,34 @@ fn render_confirm_delete_dialog(frame: &mut Frame, area: Rect, app: &App) {
 
     let block = Block::default()
         .title(" Delete Workspace ")
-        .title_style(Style::default().fg(Color::Red))
+        .title_style(Style::default().fg(theme.delete_border))
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Red));
+        .border_style(Style::default().fg(theme.delete_border));
 
     let lines = vec![
         Line::from(""),
         Line::from(vec![
-            Span::styled("  Delete ", Style::default().fg(Color::White)),
+            Span::styled("  Delete ", Style::default().fg(theme.delete_text)),
             Span::styled(
                 ws_name,
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(theme.delete_name)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::styled(" ?", Style::default().fg(Color::White)),
+            Span::styled(" ?", Style::default().fg(theme.delete_text)),
         ]),
         Line::from(""),
         Line::from(Span::styled(
             "  [y] Yes, delete worktree and branch",
-            Style::default().fg(Color::Red),
+            Style::default().fg(theme.delete_yes),
         )),
         Line::from(Span::styled(
             "  [n] No, keep worktree on disk",
-            Style::default().fg(Color::Green),
+            Style::default().fg(theme.delete_no),
         )),
         Line::from(Span::styled(
             "  [Esc] Cancel",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(theme.delete_cancel),
         )),
     ];
 

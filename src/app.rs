@@ -6,6 +6,7 @@ use std::time::Instant;
 use ratatui::text::Text;
 
 use crate::pty::PtySession;
+use crate::theme::Theme;
 use crate::workspace::FileWatcher;
 
 /// An AI assistant that can be run in a PTY
@@ -413,6 +414,7 @@ pub struct App {
     /// Current PTY dimensions (rows, cols) — updated on terminal resize
     pub pty_rows: u16,
     pub pty_cols: u16,
+    pub theme: Theme,
 }
 
 impl App {
@@ -437,6 +439,7 @@ impl App {
             delete_target: None,
             pty_rows: 24,
             pty_cols: 80,
+            theme: Theme::default(),
         }
     }
 

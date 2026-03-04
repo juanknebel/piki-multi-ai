@@ -1,0 +1,77 @@
+# piki-multi-ai default theme
+#
+# Copy this file to ~/.config/piki-multi/themes/default.toml
+# and set theme = "default" in ~/.config/piki-multi/config.toml
+#
+# Colors can be named (Red, Green, Yellow, Blue, Cyan, Magenta, White, Black,
+# Gray, DarkGray, LightRed, LightGreen, LightYellow, LightBlue, LightCyan,
+# LightMagenta) or hex (#rrggbb).
+
+[border]
+active_interact = "Green"
+active_navigate = "Yellow"
+inactive = "DarkGray"
+
+[workspace_list]
+empty_text = "DarkGray"
+name_active = "White"
+name_inactive = "Gray"
+detail_selected = "Gray"
+detail_normal = "DarkGray"
+selected_bg = "DarkGray"
+
+[file_list]
+empty_text = "DarkGray"
+modified = "Yellow"
+added = "Green"
+deleted = "Red"
+renamed = "Cyan"
+untracked = "DarkGray"
+conflicted = "Magenta"
+staged = "Green"
+staged_modified = "Yellow"
+file_path = "White"
+selected_bg = "DarkGray"
+
+[tabs]
+active = "Yellow"
+inactive = "DarkGray"
+
+[subtabs]
+active = "Cyan"
+inactive = "DarkGray"
+
+[status_bar]
+error_bg = "Red"
+error_fg = "White"
+diff_bg = "DarkGray"
+diff_fg = "White"
+interact_bg = "Green"
+navigate_bg = "Yellow"
+mode_fg = "Black"
+
+[footer]
+key = "Yellow"
+description = "Gray"
+
+[diff]
+border = "Cyan"
+empty_text = "DarkGray"
+
+[dialog]
+new_ws_border = "Yellow"
+new_ws_active = "Yellow"
+new_ws_inactive = "DarkGray"
+delete_border = "Red"
+delete_text = "White"
+delete_name = "Yellow"
+delete_yes = "Red"
+delete_no = "Green"
+delete_cancel = "DarkGray"
+
+[help]
+border = "Cyan"
+
+[general]
+welcome_text = "Gray"
+muted_text = "DarkGray"

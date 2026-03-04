@@ -12,6 +12,7 @@ pub fn render(
     scroll: u16,
     file_path: &str,
     border_style: Style,
+    empty_text_color: Color,
 ) {
     if let Some(text) = content {
         let title = format!(" DIFF: {} ", file_path);
@@ -27,7 +28,7 @@ pub fn render(
         frame.render_widget(paragraph, area);
     } else {
         let paragraph = Paragraph::new("  Select a file and press Enter to view diff")
-            .style(Style::default().fg(Color::DarkGray))
+            .style(Style::default().fg(empty_text_color))
             .block(
                 Block::default()
                     .title(" DIFF ")

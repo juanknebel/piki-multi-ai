@@ -1,13 +1,14 @@
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::Line;
 use ratatui::widgets::{Block, Borders, Tabs};
 
 use crate::app::AIProvider;
+use crate::theme::Theme;
 
 /// Render the AI provider sub-tabs below the workspace tabs.
-pub fn render(frame: &mut Frame, area: Rect, active_provider: AIProvider) {
+pub fn render(frame: &mut Frame, area: Rect, active_provider: AIProvider, theme: &Theme) {
     let titles: Vec<Line> = AIProvider::all()
         .iter()
         .map(|p| Line::from(format!(" {} ", p.label())))
@@ -23,10 +24,10 @@ pub fn render(frame: &mut Frame, area: Rect, active_provider: AIProvider) {
         .select(active_idx)
         .highlight_style(
             Style::default()
-                .fg(Color::Cyan)
+                .fg(theme.subtabs.active)
                 .add_modifier(Modifier::BOLD),
         )
-        .style(Style::default().fg(Color::DarkGray))
+        .style(Style::default().fg(theme.subtabs.inactive))
         .divider("|");
 
     frame.render_widget(tabs, area);

@@ -17,6 +17,7 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 - **Side-by-side diffs** — View diffs as a floating overlay rendered by [delta](https://github.com/dandavison/delta) with ANSI colors preserved (terminal stays visible behind)
 - **Tab navigation** — Switch between workspaces with Tab, Shift+Tab, or number keys 1-9
 - **Vim-style navigation** — j/k for movement, Enter to activate, Esc to go back
+- **Customizable themes** — Colors loaded from TOML files in `~/.config/piki-multi/themes/`; supports named colors and hex `#rrggbb`
 
 ## Prerequisites
 
@@ -136,12 +137,41 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `n` / `p` | Next / previous file |
 | `Esc` | Close diff |
 
+## Theming
+
+All UI colors are customizable via TOML theme files. Without configuration, the built-in defaults are used.
+
+### Setup
+
+1. Create the config directory and select a theme:
+
+```bash
+mkdir -p ~/.config/piki-multi/themes
+echo 'theme = "my-theme"' > ~/.config/piki-multi/config.toml
+```
+
+2. Create your theme file at `~/.config/piki-multi/themes/my-theme.toml`. You only need to specify the colors you want to override — everything else falls back to defaults:
+
+```toml
+[border]
+active_interact = "#88c0d0"
+active_navigate = "#ebcb8b"
+
+[file_list]
+modified = "#ebcb8b"
+added = "#a3be8c"
+deleted = "#bf616a"
+```
+
+See `themes/default.toml` in the repo for all available color keys. Colors can be named (`"Red"`, `"DarkGray"`, `"LightCyan"`, etc.) or hex (`"#rrggbb"`).
+
 ## Architecture
 
 ```
 src/
   main.rs              # Tokio main loop, event handling, action dispatch
   app.rs               # App state, Workspace model, git status parsing
+  theme.rs             # Theme loading from TOML, color parsing
   pty/
     session.rs         # PTY management (portable-pty + vt100 parser)
     input.rs           # Crossterm key events -> PTY bytes

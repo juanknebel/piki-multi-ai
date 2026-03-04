@@ -4,7 +4,7 @@
 
 | Total | OPEN | IN_PROGRESS | DONE | CANCEL |
 |-------|------|-------------|------|--------|
-| 46    | 0    | 0           | 46   | 0      |
+| 47    | 0    | 0           | 47   | 0      |
 
 ## Fase 0 — Setup
 
@@ -141,6 +141,12 @@
 |-----|------------------------------------|--------|---------------|
 | T45 | Diff popup doesn't get focus       | DONE   | —             |
 | T46 | File status not populated on startup| DONE  | —             |
+
+## Phase 18 — Theming
+
+| ID  | Tarea                              | Status | Bloqueada por |
+|-----|------------------------------------|--------|---------------|
+| T47 | Externalize colors to TOML themes  | DONE   | —             |
 
 ## Grafo de Dependencias
 

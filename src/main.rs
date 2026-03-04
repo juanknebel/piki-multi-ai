@@ -1,6 +1,7 @@
 mod app;
 mod diff;
 mod pty;
+mod theme;
 mod ui;
 mod workspace;
 
@@ -43,6 +44,7 @@ async fn main() -> anyhow::Result<()> {
 async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
     let manager = WorkspaceManager::new();
     let mut app = App::new();
+    app.theme = theme::load();
 
     // Compute real terminal dimensions for PTY spawning
     let term_size = terminal.size()?;
