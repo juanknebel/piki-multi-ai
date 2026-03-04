@@ -4,7 +4,7 @@
 
 | Total | OPEN | IN_PROGRESS | DONE | CANCEL |
 |-------|------|-------------|------|--------|
-| 37    | 0    | 0           | 37   | 0      |
+| 38    | 0    | 0           | 38   | 0      |
 
 ## Fase 0 — Setup
 
@@ -112,6 +112,12 @@
 |-----|------------------------------------|--------|---------------|
 | T36 | Add description field to workspaces| DONE   | —             |
 | T37 | Checkout remote branch en worktree | DONE   | —             |
+
+## Phase 14 — Bug Fixes
+
+| ID  | Tarea                              | Status | Bloqueada por |
+|-----|------------------------------------|--------|---------------|
+| T38 | Diff view hides provider shell pane| DONE   | —             |
 
 ## Grafo de Dependencias
 

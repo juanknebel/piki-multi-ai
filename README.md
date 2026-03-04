@@ -11,7 +11,7 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 - **Interactive input** — Type directly into any Claude Code session (Ctrl+\\ to toggle focus)
 - **File watching** — Automatically detects file changes in each worktree using `notify`
 - **Full git status** — STATUS panel shows all file states: modified, staged, untracked, conflicted, renamed, and more via `git status --porcelain=v1`
-- **Side-by-side diffs** — View diffs rendered by [delta](https://github.com/dandavison/delta) with ANSI colors preserved (including untracked files)
+- **Side-by-side diffs** — View diffs as a floating overlay rendered by [delta](https://github.com/dandavison/delta) with ANSI colors preserved (terminal stays visible behind)
 - **Tab navigation** — Switch between workspaces with Tab, Shift+Tab, or number keys 1-9
 - **Vim-style navigation** — j/k for movement, Enter to activate, Esc to go back
 
@@ -67,7 +67,7 @@ Branches are named `piki-multi/<workspace-name>`. Stale entries (worktrees delet
 |                  |-------------------------------------------------------|
 |  > ws-1 (active) |                                                       |
 |    ws-2          |  Claude Code live terminal output                     |
-|    ws-3          |  (or side-by-side diff view)                          |
+|    ws-3          |  (diff opens as floating overlay)                     |
 |                  |                                                       |
 |------------------+                                                       |
 | STATUS           |                                                       |

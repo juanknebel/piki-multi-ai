@@ -70,6 +70,9 @@ pub fn render(frame: &mut Frame, app: &App) {
     render_footer(frame, footer_area, app);
 
     // Overlays
+    if app.mode == AppMode::Diff {
+        render_diff_overlay(frame, area, app);
+    }
     if app.mode == AppMode::NewWorkspace {
         render_new_workspace_dialog(frame, area, app);
     }
@@ -249,26 +252,20 @@ fn render_subtabs(frame: &mut Frame, area: Rect, app: &App) {
 fn render_main_content(frame: &mut Frame, area: Rect, app: &App) {
     let border_style = pane_border_style(app, ActivePane::MainPanel);
 
-    match app.mode {
-        AppMode::Diff => {
-            let file_path = app.diff_file_path.as_deref().unwrap_or("?");
-            super::diff::render(frame, area, &app.diff_content, app.diff_scroll, file_path, border_style);
-        }
-        _ => {
-            if let Some(ws) = app.current_workspace() {
-                let provider = ws.active_provider;
-                if let Some(parser) = ws.pty_parsers.get(&provider) {
-                    super::terminal::render(frame, area, parser, border_style, provider.label());
-                } else {
-                    // Provider CLI not found — show fun ASCII art
-                    let block = Block::default()
-                        .title(format!(" {} ", provider.label()))
-                        .title_style(border_style)
-                        .borders(Borders::ALL)
-                        .border_style(border_style);
-                    let cmd = provider.command();
-                    let ascii_art = format!(
-                        r#"
+    if let Some(ws) = app.current_workspace() {
+        let provider = ws.active_provider;
+        if let Some(parser) = ws.pty_parsers.get(&provider) {
+            super::terminal::render(frame, area, parser, border_style, provider.label());
+        } else {
+            // Provider CLI not found — show fun ASCII art
+            let block = Block::default()
+                .title(format!(" {} ", provider.label()))
+                .title_style(border_style)
+                .borders(Borders::ALL)
+                .border_style(border_style);
+            let cmd = provider.command();
+            let ascii_art = format!(
+                r#"
         ___________________
        /                   \
       |   Command not found |
@@ -284,26 +281,24 @@ fn render_main_content(frame: &mut Frame, area: Rect, app: &App) {
 
     Install `{cmd}` and add it to your PATH
     then press [g] to switch providers."#
-                    );
-                    let text = Paragraph::new(ascii_art)
-                        .style(Style::default().fg(Color::DarkGray))
-                        .block(block);
-                    frame.render_widget(text, area);
-                }
-            } else {
-                let block = Block::default()
-                    .title(" piki-multi-ai ")
-                    .title_style(border_style)
-                    .borders(Borders::ALL)
-                    .border_style(border_style);
-                let text = Paragraph::new(
-                    "  Welcome to piki-multi-ai\n\n  Press [n] to create a new workspace\n  Press [?] for help\n  Press [q] to quit",
-                )
-                .style(Style::default().fg(Color::Gray))
+            );
+            let text = Paragraph::new(ascii_art)
+                .style(Style::default().fg(Color::DarkGray))
                 .block(block);
-                frame.render_widget(text, area);
-            }
+            frame.render_widget(text, area);
         }
+    } else {
+        let block = Block::default()
+            .title(" piki-multi-ai ")
+            .title_style(border_style)
+            .borders(Borders::ALL)
+            .border_style(border_style);
+        let text = Paragraph::new(
+            "  Welcome to piki-multi-ai\n\n  Press [n] to create a new workspace\n  Press [?] for help\n  Press [q] to quit",
+        )
+        .style(Style::default().fg(Color::Gray))
+        .block(block);
+        frame.render_widget(text, area);
     }
 }
 
@@ -390,6 +385,18 @@ fn render_footer(frame: &mut Frame, area: Rect, app: &App) {
 
     let footer = Paragraph::new(Line::from(spans));
     frame.render_widget(footer, area);
+}
+
+fn render_diff_overlay(frame: &mut Frame, area: Rect, app: &App) {
+    let width = area.width * 90 / 100;
+    let height = area.height * 85 / 100;
+    let popup = centered_rect(width, height, area);
+
+    frame.render_widget(ratatui::widgets::Clear, popup);
+
+    let file_path = app.diff_file_path.as_deref().unwrap_or("?");
+    let border_style = Style::default().fg(Color::Cyan);
+    super::diff::render(frame, popup, &app.diff_content, app.diff_scroll, file_path, border_style);
 }
 
 fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
