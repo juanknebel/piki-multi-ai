@@ -300,6 +300,8 @@ async fn execute_action(
                                     app.diff_file_path = Some(file_path);
                                     app.diff_scroll = 0;
                                     app.mode = AppMode::Diff;
+                                    app.active_pane = ActivePane::MainPanel;
+                                    app.interacting = true;
                                 }
                                 Err(e) => {
                                     app.status_message =

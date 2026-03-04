@@ -4,7 +4,7 @@
 
 | Total | OPEN | IN_PROGRESS | DONE | CANCEL |
 |-------|------|-------------|------|--------|
-| 44    | 1    | 0           | 43   | 0      |
+| 45    | 0    | 0           | 45   | 0      |
 
 ## Fase 0 — Setup
 
@@ -134,6 +134,12 @@
 |-----|------------------------------------|--------|---------------|
 | T43 | Dynamic PTY width + scrollback     | DONE   | —             |
 | T44 | Shell tab in provider sub-tabs     | DONE   | —             |
+
+## Phase 17 — Bug Fixes
+
+| ID  | Tarea                              | Status | Bloqueada por |
+|-----|------------------------------------|--------|---------------|
+| T45 | Diff popup doesn't get focus       | DONE   | —             |
 
 ## Grafo de Dependencias
 
