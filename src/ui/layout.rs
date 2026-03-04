@@ -103,6 +103,14 @@ fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
         .iter()
         .enumerate()
         .map(|(i, ws)| {
+            let is_selected = i == app.selected_workspace && is_active;
+            // Use lighter color for details when selected, since bg is DarkGray
+            let detail_color = if is_selected {
+                Color::Gray
+            } else {
+                Color::DarkGray
+            };
+
             let marker = if i == app.active_workspace {
                 "▶"
             } else {
@@ -136,7 +144,7 @@ fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                         ws.status_label(),
                         ws.file_count()
                     ),
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(detail_color),
                 ),
             ]);
 
@@ -153,7 +161,7 @@ fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                     Span::styled(
                         desc,
                         Style::default()
-                            .fg(Color::DarkGray)
+                            .fg(detail_color)
                             .add_modifier(Modifier::ITALIC),
                     ),
                 ]));
@@ -172,10 +180,10 @@ fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
             };
             lines.push(Line::from(vec![
                 Span::raw("   "),
-                Span::styled(path_display, Style::default().fg(Color::DarkGray)),
+                Span::styled(path_display, Style::default().fg(detail_color)),
             ]));
 
-            let style = if i == app.selected_workspace && is_active {
+            let style = if is_selected {
                 Style::default().bg(Color::DarkGray)
             } else {
                 Style::default()

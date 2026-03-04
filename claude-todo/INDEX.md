@@ -4,7 +4,7 @@
 
 | Total | OPEN | IN_PROGRESS | DONE | CANCEL |
 |-------|------|-------------|------|--------|
-| 39    | 0    | 0           | 39   | 0      |
+| 42    | 3    | 0           | 39   | 0      |
 
 ## Fase 0 — Setup
 
@@ -119,6 +119,14 @@
 |-----|------------------------------------|--------|---------------|
 | T38 | Diff view hides provider shell pane| DONE   | —             |
 | T39 | WS list: desc+path, branch chars   | DONE   | —             |
+| T40 | Bug: WS pane foco oculta detalles  | DONE   | —             |
+| T41 | Bug: popup nuevo WS muy pequeño    | OPEN   | —             |
+
+## Phase 15 — UX Improvements
+
+| ID  | Tarea                              | Status | Bloqueada por |
+|-----|------------------------------------|--------|---------------|
+| T42 | Confirmar borrado, mantener worktree| OPEN  | —             |
 
 ## Grafo de Dependencias
 
