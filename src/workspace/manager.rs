@@ -68,19 +68,55 @@ impl WorkspaceManager {
             .await
             .context("failed to create worktrees directory")?;
 
-        // git worktree add <path> -b <branch>
-        let output = Command::new("git")
-            .args([
-                "worktree",
-                "add",
-                worktree_path.to_str().unwrap(),
-                "-b",
-                &branch_name,
-            ])
+        // Check if branch exists on remote
+        let ls_remote = Command::new("git")
+            .args(["ls-remote", "--heads", "origin", &branch_name])
             .current_dir(&git_root)
             .output()
             .await
-            .context("failed to create worktree")?;
+            .context("failed to check remote branches")?;
+
+        let remote_exists = ls_remote.status.success()
+            && !ls_remote.stdout.is_empty();
+
+        let output = if remote_exists {
+            // Fetch the remote branch first
+            let fetch = Command::new("git")
+                .args(["fetch", "origin", &branch_name])
+                .current_dir(&git_root)
+                .output()
+                .await
+                .context("failed to fetch remote branch")?;
+
+            if !fetch.status.success() {
+                bail!(
+                    "git fetch failed: {}",
+                    String::from_utf8_lossy(&fetch.stderr).trim()
+                );
+            }
+
+            // Create worktree from remote branch (auto-creates local tracking branch)
+            Command::new("git")
+                .args(["worktree", "add", worktree_path.to_str().unwrap(), &branch_name])
+                .current_dir(&git_root)
+                .output()
+                .await
+                .context("failed to create worktree")?
+        } else {
+            // Create worktree with new branch
+            Command::new("git")
+                .args([
+                    "worktree",
+                    "add",
+                    worktree_path.to_str().unwrap(),
+                    "-b",
+                    &branch_name,
+                ])
+                .current_dir(&git_root)
+                .output()
+                .await
+                .context("failed to create worktree")?
+        };
 
         if !output.status.success() {
             bail!(

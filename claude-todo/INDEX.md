@@ -4,7 +4,7 @@
 
 | Total | OPEN | IN_PROGRESS | DONE | CANCEL |
 |-------|------|-------------|------|--------|
-| 34    | 0    | 0           | 34   | 0      |
+| 37    | 0    | 0           | 37   | 0      |
 
 ## Fase 0 — Setup
 
@@ -99,6 +99,19 @@
 |-----|------------------------------------|--------|---------------|
 | T33 | Sub-tabs asistentes AI en panel    | DONE        | —             |
 | T34 | Add Codex provider                 | DONE        | T33           |
+
+## Phase 12 — Naming
+
+| ID  | Tarea                              | Status | Bloqueada por |
+|-----|------------------------------------|--------|---------------|
+| T35 | Branch name matches workspace name | DONE   | —             |
+
+## Phase 13 — UX Enhancements
+
+| ID  | Tarea                              | Status | Bloqueada por |
+|-----|------------------------------------|--------|---------------|
+| T36 | Add description field to workspaces| DONE   | —             |
+| T37 | Checkout remote branch en worktree | DONE   | —             |
 
 ## Grafo de Dependencias
 
