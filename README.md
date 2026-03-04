@@ -4,6 +4,9 @@ A terminal UI for orchestrating multiple [Claude Code](https://docs.anthropic.co
 
 Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](https://github.com/supermaven-inc/superset.sh).
 
+![Main Layout](screenshots/screenshot_1.png)
+![Diff View](screenshots/screenshot_2.png)
+
 ## Features
 
 - **Parallel workspaces** — Run multiple AI coding sessions simultaneously, each in an isolated git worktree
