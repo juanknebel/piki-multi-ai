@@ -8,6 +8,8 @@ use crate::app::Workspace;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WorkspaceEntry {
     pub name: String,
+    #[serde(default)]
+    pub description: String,
     pub branch: String,
     pub worktree_path: PathBuf,
     pub source_repo: PathBuf,
@@ -40,6 +42,7 @@ pub fn save(git_root: &Path, workspaces: &[Workspace]) -> anyhow::Result<()> {
         .iter()
         .map(|ws| WorkspaceEntry {
             name: ws.name.clone(),
+            description: ws.description.clone(),
             branch: ws.branch.clone(),
             worktree_path: ws.path.clone(),
             source_repo: ws.source_repo.clone(),

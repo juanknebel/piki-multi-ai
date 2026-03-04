@@ -127,13 +127,26 @@ fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                 ),
             ]);
 
+            let mut lines = vec![line1, line2];
+            if !ws.description.is_empty() {
+                let desc = if ws.description.len() > 30 {
+                    format!("{}…", &ws.description[..29])
+                } else {
+                    ws.description.clone()
+                };
+                lines.push(Line::from(vec![
+                    Span::raw("   "),
+                    Span::styled(desc, Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+                ]));
+            }
+
             let style = if i == app.selected_workspace && is_active {
                 Style::default().bg(Color::DarkGray)
             } else {
                 Style::default()
             };
 
-            ListItem::new(vec![line1, line2]).style(style)
+            ListItem::new(lines).style(style)
         })
         .collect();
 
@@ -380,7 +393,7 @@ fn render_footer(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
-    let popup = centered_rect(50, 7, area);
+    let popup = centered_rect(50, 9, area);
 
     // Clear background
     frame.render_widget(ratatui::widgets::Clear, popup);
@@ -391,32 +404,33 @@ fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Yellow));
 
+    let field_style = |active: bool| {
+        if active {
+            Style::default().fg(Color::Yellow)
+        } else {
+            Style::default().fg(Color::DarkGray)
+        }
+    };
+    let cursor = |active: bool| if active { "█" } else { "" };
+
     let name_active = app.active_dialog_field == DialogField::Name;
     let dir_active = app.active_dialog_field == DialogField::Directory;
-
-    let name_style = if name_active {
-        Style::default().fg(Color::Yellow)
-    } else {
-        Style::default().fg(Color::DarkGray)
-    };
-    let dir_style = if dir_active {
-        Style::default().fg(Color::Yellow)
-    } else {
-        Style::default().fg(Color::DarkGray)
-    };
-
-    let name_cursor = if name_active { "█" } else { "" };
-    let dir_cursor = if dir_active { "█" } else { "" };
+    let desc_active = app.active_dialog_field == DialogField::Description;
 
     let lines = vec![
         Line::from(vec![
-            Span::styled("  Name: ", name_style),
-            Span::styled(format!("{}{}", app.input_buffer, name_cursor), name_style),
+            Span::styled("  Name: ", field_style(name_active)),
+            Span::styled(format!("{}{}", app.input_buffer, cursor(name_active)), field_style(name_active)),
         ]),
         Line::from(""),
         Line::from(vec![
-            Span::styled("  Dir:  ", dir_style),
-            Span::styled(format!("{}{}", app.dir_input_buffer, dir_cursor), dir_style),
+            Span::styled("  Dir:  ", field_style(dir_active)),
+            Span::styled(format!("{}{}", app.dir_input_buffer, cursor(dir_active)), field_style(dir_active)),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  Desc: ", field_style(desc_active)),
+            Span::styled(format!("{}{}", app.desc_input_buffer, cursor(desc_active)), field_style(desc_active)),
         ]),
     ];
 

@@ -53,7 +53,7 @@ impl WorkspaceManager {
 
     /// Create a new workspace with its own git worktree and branch.
     /// `source_dir` is any directory inside the target git repository.
-    pub async fn create(&self, name: &str, source_dir: &PathBuf) -> anyhow::Result<Workspace> {
+    pub async fn create(&self, name: &str, description: &str, source_dir: &PathBuf) -> anyhow::Result<Workspace> {
         let git_root = Self::git_root(source_dir).await?;
         let worktrees_dir = worktrees_base(&git_root);
         let worktree_path = worktrees_dir.join(name);
@@ -91,6 +91,7 @@ impl WorkspaceManager {
 
         Ok(Workspace::new(
             name.to_string(),
+            description.to_string(),
             branch_name,
             worktree_path,
             git_root,

@@ -67,6 +67,7 @@ pub enum ActivePane {
 pub enum DialogField {
     Name,
     Directory,
+    Description,
 }
 
 /// Status of the Claude Code process in a workspace
@@ -101,6 +102,7 @@ pub struct ChangedFile {
 /// A single workspace backed by a git worktree
 pub struct Workspace {
     pub name: String,
+    pub description: String,
     pub branch: String,
     pub path: PathBuf,
     /// Git root of the source repository this workspace was created from
@@ -121,9 +123,10 @@ pub struct Workspace {
 }
 
 impl Workspace {
-    pub fn new(name: String, branch: String, path: PathBuf, source_repo: PathBuf) -> Self {
+    pub fn new(name: String, description: String, branch: String, path: PathBuf, source_repo: PathBuf) -> Self {
         Self {
             name,
+            description,
             branch,
             path,
             source_repo,
@@ -377,6 +380,7 @@ pub struct App {
     pub diff_file_path: Option<String>,
     pub input_buffer: String,
     pub dir_input_buffer: String,
+    pub desc_input_buffer: String,
     pub active_dialog_field: DialogField,
     pub status_message: Option<String>,
 }
@@ -397,6 +401,7 @@ impl App {
             diff_file_path: None,
             input_buffer: String::new(),
             dir_input_buffer: String::new(),
+            desc_input_buffer: String::new(),
             active_dialog_field: DialogField::Name,
             status_message: None,
         }

@@ -42,6 +42,7 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
     for entry in entries {
         let mut ws = app::Workspace::new(
             entry.name,
+            entry.description,
             entry.branch,
             entry.worktree_path,
             entry.source_repo,
@@ -124,7 +125,7 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
 
 /// Async actions triggered by key events
 enum Action {
-    CreateWorkspace(String, PathBuf),
+    CreateWorkspace(String, String, PathBuf),
     DeleteWorkspace(usize),
     /// Open diff for the file at the given index in the active workspace
     OpenDiff(usize),
@@ -136,8 +137,8 @@ async fn execute_action(
     action: Action,
 ) -> anyhow::Result<()> {
     match action {
-        Action::CreateWorkspace(name, dir) => {
-            match manager.create(&name, &dir).await {
+        Action::CreateWorkspace(name, description, dir) => {
+            match manager.create(&name, &description, &dir).await {
                 Ok(ws) => {
                     app.workspaces.push(ws);
                     let new_idx = app.workspaces.len() - 1;
@@ -334,6 +335,7 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
             app.mode = AppMode::NewWorkspace;
             app.input_buffer.clear();
             app.dir_input_buffer.clear();
+            app.desc_input_buffer.clear();
             app.active_dialog_field = DialogField::Name;
         }
         KeyCode::Char('d') => {
@@ -477,7 +479,8 @@ fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
         KeyCode::Tab | KeyCode::BackTab => {
             app.active_dialog_field = match app.active_dialog_field {
                 DialogField::Name => DialogField::Directory,
-                DialogField::Directory => DialogField::Name,
+                DialogField::Directory => DialogField::Description,
+                DialogField::Description => DialogField::Name,
             };
         }
         KeyCode::Char(c) => match app.active_dialog_field {
@@ -491,6 +494,11 @@ fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
                     app.dir_input_buffer.push(c);
                 }
             }
+            DialogField::Description => {
+                if !c.is_control() {
+                    app.desc_input_buffer.push(c);
+                }
+            }
         },
         KeyCode::Backspace => match app.active_dialog_field {
             DialogField::Name => {
@@ -499,10 +507,14 @@ fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
             DialogField::Directory => {
                 app.dir_input_buffer.pop();
             }
+            DialogField::Description => {
+                app.desc_input_buffer.pop();
+            }
         },
         KeyCode::Enter => {
             let name = app.input_buffer.clone();
             let dir_raw = app.dir_input_buffer.clone();
+            let description = app.desc_input_buffer.clone();
 
             if name.is_empty() || dir_raw.is_empty() {
                 app.status_message = Some("Name and directory are required".into());
@@ -528,12 +540,14 @@ fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
 
             app.input_buffer.clear();
             app.dir_input_buffer.clear();
+            app.desc_input_buffer.clear();
             app.mode = AppMode::Normal;
-            return Some(Action::CreateWorkspace(name, dir));
+            return Some(Action::CreateWorkspace(name, description, dir));
         }
         KeyCode::Esc => {
             app.input_buffer.clear();
             app.dir_input_buffer.clear();
+            app.desc_input_buffer.clear();
             app.mode = AppMode::Normal;
         }
         _ => {}
