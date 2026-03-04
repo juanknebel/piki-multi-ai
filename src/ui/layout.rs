@@ -37,9 +37,10 @@ pub fn render(frame: &mut Frame, app: &App) {
         Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)])
             .areas(left_area);
 
-    // Right panel: tabs + content + status bar
-    let [tabs_area, main_area, status_area] = Layout::vertical([
+    // Right panel: tabs + sub-tabs + content + status bar
+    let [tabs_area, subtabs_area, main_area, status_area] = Layout::vertical([
         Constraint::Length(3),
+        Constraint::Length(2),
         Constraint::Min(0),
         Constraint::Length(1),
     ])
@@ -53,8 +54,11 @@ pub fn render(frame: &mut Frame, app: &App) {
     // Left bottom: changed files
     render_file_list(frame, files_area, app);
 
-    // Right top: tabs
+    // Right top: workspace tabs
     render_tab_bar(frame, tabs_area, app);
+
+    // Right: AI provider sub-tabs
+    render_subtabs(frame, subtabs_area, app);
 
     // Right center: main content (PTY or Diff)
     render_main_content(frame, main_area, app);
@@ -220,6 +224,15 @@ fn render_tab_bar(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(tabs, area);
 }
 
+fn render_subtabs(frame: &mut Frame, area: Rect, app: &App) {
+    if let Some(ws) = app.current_workspace() {
+        super::subtabs::render(frame, area, ws.active_provider);
+    } else {
+        let block = Block::default().borders(Borders::BOTTOM);
+        frame.render_widget(block, area);
+    }
+}
+
 fn render_main_content(frame: &mut Frame, area: Rect, app: &App) {
     let border_style = pane_border_style(app, ActivePane::MainPanel);
 
@@ -230,8 +243,40 @@ fn render_main_content(frame: &mut Frame, area: Rect, app: &App) {
         }
         _ => {
             if let Some(ws) = app.current_workspace() {
-                // Render live PTY output
-                super::terminal::render(frame, area, &ws.pty_parser, border_style);
+                let provider = ws.active_provider;
+                if let Some(parser) = ws.pty_parsers.get(&provider) {
+                    super::terminal::render(frame, area, parser, border_style, provider.label());
+                } else {
+                    // Provider CLI not found — show fun ASCII art
+                    let block = Block::default()
+                        .title(format!(" {} ", provider.label()))
+                        .title_style(border_style)
+                        .borders(Borders::ALL)
+                        .border_style(border_style);
+                    let cmd = provider.command();
+                    let ascii_art = format!(
+                        r#"
+        ___________________
+       /                   \
+      |   Command not found |
+      |   `{cmd}` is not    |
+      |   installed :-(     |
+       \___________________/
+              \
+               \    _(o o)_
+                \  / \.-./ \
+                  ##  | |  ##
+                     _| |_
+                    (_____)
+
+    Install `{cmd}` and add it to your PATH
+    then press [g] to switch providers."#
+                    );
+                    let text = Paragraph::new(ascii_art)
+                        .style(Style::default().fg(Color::DarkGray))
+                        .block(block);
+                    frame.render_widget(text, area);
+                }
             } else {
                 let block = Block::default()
                     .title(" agent-multi ")
@@ -270,10 +315,11 @@ fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
                 if let Some(ws) = app.current_workspace() {
                     Span::styled(
                         format!(
-                            " [{}] branch: {} | {} files | claude: {} | ws {}/{}",
+                            " [{}] branch: {} | {} files | {}: {} | ws {}/{}",
                             mode_label,
                             ws.branch,
                             ws.file_count(),
+                            ws.active_provider.label(),
                             ws.status_label(),
                             app.active_workspace + 1,
                             app.workspaces.len(),
@@ -310,6 +356,7 @@ fn render_footer(frame: &mut Frame, area: Rect, app: &App) {
             ("n", "new"),
             ("d", "delete"),
             ("Tab", "switch ws"),
+            ("g", "switch AI"),
             ("?", "help"),
             ("q", "quit"),
         ],
@@ -390,6 +437,7 @@ fn render_help_overlay(frame: &mut Frame, area: Rect) {
         "    d             Delete workspace",
         "    Tab/S-Tab     Next/Prev workspace",
         "    1-9           Go to workspace N",
+        "    g             Cycle AI provider",
         "    ?             Toggle help",
         "    q             Quit",
         "",

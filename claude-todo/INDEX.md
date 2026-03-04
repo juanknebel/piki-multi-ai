@@ -4,7 +4,7 @@
 
 | Total | OPEN | IN_PROGRESS | DONE | CANCEL |
 |-------|------|-------------|------|--------|
-| 33    | 2    | 0           | 31   | 0      |
+| 34    | 0    | 0           | 34   | 0      |
 
 ## Fase 0 — Setup
 
@@ -90,14 +90,15 @@
 
 | ID  | Tarea                              | Status | Bloqueada por |
 |-----|------------------------------------|--------|---------------|
-| T31 | Persist workspace config to disk   | OPEN   | T30           |
+| T31 | Persist workspace config to disk   | DONE   | T30           |
 | T32 | Fix config not loading on startup  | DONE   | T31           |
 
 ## Phase 11 — Multi-Assistant Support
 
 | ID  | Tarea                              | Status | Bloqueada por |
 |-----|------------------------------------|--------|---------------|
-| T33 | Sub-tabs asistentes AI en panel    | OPEN   | —             |
+| T33 | Sub-tabs asistentes AI en panel    | DONE        | —             |
+| T34 | Add Codex provider                 | DONE        | T33           |
 
 ## Grafo de Dependencias
 

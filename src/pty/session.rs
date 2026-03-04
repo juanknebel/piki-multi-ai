@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 
-/// Manages a Claude Code process running in a pseudo-terminal
+/// Manages an AI assistant process running in a pseudo-terminal
 pub struct PtySession {
     child: Box<dyn portable_pty::Child + Send>,
     writer: Box<dyn Write + Send>,
@@ -14,11 +14,12 @@ pub struct PtySession {
 }
 
 impl PtySession {
-    /// Spawn Claude Code in a PTY inside the given worktree directory
+    /// Spawn an AI assistant in a PTY inside the given worktree directory
     pub async fn spawn(
         worktree_path: &Path,
         rows: u16,
         cols: u16,
+        command: &str,
     ) -> anyhow::Result<Self> {
         let pty_system = native_pty_system();
 
@@ -31,7 +32,7 @@ impl PtySession {
 
         let pair = pty_system.openpty(size)?;
 
-        let mut cmd = CommandBuilder::new("claude");
+        let mut cmd = CommandBuilder::new(command);
         cmd.cwd(worktree_path);
 
         let child = pair.slave.spawn_command(cmd)?;

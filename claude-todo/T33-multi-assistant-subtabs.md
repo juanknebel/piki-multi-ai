@@ -1,6 +1,6 @@
 # T33 — Sub-tabs de asistentes AI en el panel principal
 
-**Status:** OPEN
+**Status:** DONE
 **Phase:** 11 — Multi-Assistant Support
 **Blocks:** —
 **Blocked by:** —

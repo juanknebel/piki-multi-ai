@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -6,6 +7,39 @@ use ratatui::text::Text;
 
 use crate::pty::PtySession;
 use crate::workspace::FileWatcher;
+
+/// An AI assistant that can be run in a PTY
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AIProvider {
+    Claude,
+    Gemini,
+    Codex,
+}
+
+impl AIProvider {
+    /// CLI command to execute
+    pub fn command(&self) -> &str {
+        match self {
+            AIProvider::Claude => "claude",
+            AIProvider::Gemini => "gemini",
+            AIProvider::Codex => "codex",
+        }
+    }
+
+    /// Label for the sub-tab
+    pub fn label(&self) -> &str {
+        match self {
+            AIProvider::Claude => "Claude Code",
+            AIProvider::Gemini => "Gemini",
+            AIProvider::Codex => "Codex",
+        }
+    }
+
+    /// All available providers in display order
+    pub fn all() -> &'static [AIProvider] {
+        &[AIProvider::Claude, AIProvider::Gemini, AIProvider::Codex]
+    }
+}
 
 /// Main application mode
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -73,8 +107,12 @@ pub struct Workspace {
     pub source_repo: PathBuf,
     pub status: WorkspaceStatus,
     pub changed_files: Vec<ChangedFile>,
-    pub pty_session: Option<PtySession>,
-    pub pty_parser: Arc<Mutex<vt100::Parser>>,
+    /// PTY sessions keyed by AI provider
+    pub pty_sessions: HashMap<AIProvider, PtySession>,
+    /// vt100 parsers keyed by AI provider
+    pub pty_parsers: HashMap<AIProvider, Arc<Mutex<vt100::Parser>>>,
+    /// Which AI provider sub-tab is currently active
+    pub active_provider: AIProvider,
     pub watcher: Option<FileWatcher>,
     /// Whether the file list needs a refresh from git
     pub dirty: bool,
@@ -84,7 +122,6 @@ pub struct Workspace {
 
 impl Workspace {
     pub fn new(name: String, branch: String, path: PathBuf, source_repo: PathBuf) -> Self {
-        let parser = Arc::new(Mutex::new(vt100::Parser::new(24, 80, 1000)));
         Self {
             name,
             branch,
@@ -92,8 +129,9 @@ impl Workspace {
             source_repo,
             status: WorkspaceStatus::Idle,
             changed_files: Vec::new(),
-            pty_session: None,
-            pty_parser: parser,
+            pty_sessions: HashMap::new(),
+            pty_parsers: HashMap::new(),
+            active_provider: AIProvider::Claude,
             watcher: None,
             dirty: false,
             last_refresh: None,

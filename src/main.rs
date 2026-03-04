@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
 use ratatui::DefaultTerminal;
 
-use app::{ActivePane, App, AppMode, DialogField};
+use app::{AIProvider, ActivePane, App, AppMode, DialogField};
 use pty::PtySession;
 use workspace::{config as ws_config, FileWatcher, WorkspaceManager};
 
@@ -47,17 +47,8 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
             entry.source_repo,
         );
 
-        // Spawn Claude Code PTY
-        match PtySession::spawn(&ws.path, 24, 80).await {
-            Ok(session) => {
-                ws.pty_parser = std::sync::Arc::clone(session.parser());
-                ws.pty_session = Some(session);
-                ws.status = app::WorkspaceStatus::Busy;
-            }
-            Err(e) => {
-                ws.status = app::WorkspaceStatus::Error(format!("PTY: {}", e));
-            }
-        }
+        // Spawn PTY for each AI provider
+        spawn_all_providers(&mut ws).await;
 
         // Start file watcher
         match FileWatcher::new(ws.path.clone(), ws.name.clone()) {
@@ -103,8 +94,8 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
                     ws.dirty = true;
                 }
             }
-            // Check if PTY process has exited
-            if let Some(ref mut pty) = ws.pty_session {
+            // Check if active provider PTY process has exited
+            if let Some(pty) = ws.pty_sessions.get_mut(&ws.active_provider) {
                 if !pty.is_alive() {
                     ws.status = app::WorkspaceStatus::Done;
                 }
@@ -152,20 +143,8 @@ async fn execute_action(
                     let new_idx = app.workspaces.len() - 1;
                     app.switch_workspace(new_idx);
 
-                    let ws = &mut app.workspaces[new_idx];
-
-                    // Spawn Claude Code PTY in the workspace
-                    match PtySession::spawn(&ws.path, 24, 80).await {
-                        Ok(session) => {
-                            ws.pty_parser = Arc::clone(session.parser());
-                            ws.pty_session = Some(session);
-                            ws.status = app::WorkspaceStatus::Busy;
-                        }
-                        Err(e) => {
-                            ws.status = app::WorkspaceStatus::Error(format!("PTY: {}", e));
-                            app.status_message = Some(format!("PTY error: {}", e));
-                        }
-                    }
+                    // Spawn PTY for each AI provider
+                    spawn_all_providers(&mut app.workspaces[new_idx]).await;
 
                     // Start file watcher
                     let ws = &mut app.workspaces[new_idx];
@@ -189,8 +168,8 @@ async fn execute_action(
         }
         Action::DeleteWorkspace(idx) => {
             if idx < app.workspaces.len() {
-                // Kill PTY session before removing
-                if let Some(ref mut pty) = app.workspaces[idx].pty_session {
+                // Kill all PTY sessions before removing
+                for (_, pty) in app.workspaces[idx].pty_sessions.iter_mut() {
                     let _ = pty.kill();
                 }
                 // Drop watcher (stops watching)
@@ -262,13 +241,31 @@ async fn execute_action(
 /// Kill all PTY sessions and drop watchers for a clean exit.
 fn shutdown(app: &mut App) {
     for ws in &mut app.workspaces {
-        // Kill PTY process
-        if let Some(ref mut pty) = ws.pty_session {
+        // Kill all provider PTY processes
+        for (_, pty) in ws.pty_sessions.iter_mut() {
             let _ = pty.kill();
         }
-        ws.pty_session = None;
+        ws.pty_sessions.clear();
         // Drop watcher
         ws.watcher = None;
+    }
+}
+
+/// Spawn a PTY session for each AI provider in a workspace.
+async fn spawn_all_providers(ws: &mut app::Workspace) {
+    for provider in AIProvider::all() {
+        match PtySession::spawn(&ws.path, 24, 80, provider.command()).await {
+            Ok(session) => {
+                ws.pty_parsers.insert(*provider, Arc::clone(session.parser()));
+                ws.pty_sessions.insert(*provider, session);
+            }
+            Err(_) => {
+                // Provider not installed or failed to spawn — skip silently
+            }
+        }
+    }
+    if !ws.pty_sessions.is_empty() {
+        ws.status = app::WorkspaceStatus::Busy;
     }
 }
 
@@ -355,6 +352,14 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
             let idx = (c as usize) - ('1' as usize);
             app.switch_workspace(idx);
         }
+        // Cycle AI provider sub-tab
+        KeyCode::Char('g') => {
+            if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+                let providers = AIProvider::all();
+                let current_idx = providers.iter().position(|p| *p == ws.active_provider).unwrap_or(0);
+                ws.active_provider = providers[(current_idx + 1) % providers.len()];
+            }
+        }
         _ => {}
     }
     None
@@ -381,9 +386,10 @@ fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
         app.interacting = false;
         return None;
     }
-    // Forward all other keys to PTY
+    // Forward all other keys to the active provider's PTY
     if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
-        if let Some(ref mut pty) = ws.pty_session {
+        let provider = ws.active_provider;
+        if let Some(pty) = ws.pty_sessions.get_mut(&provider) {
             if let Some(bytes) = pty::input::key_to_bytes(key) {
                 let _ = pty.write(&bytes);
             }

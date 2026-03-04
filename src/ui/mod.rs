@@ -4,4 +4,5 @@ pub mod files;
 pub mod terminal;
 pub mod diff;
 pub mod tabs;
+pub mod subtabs;
 pub mod statusbar;
