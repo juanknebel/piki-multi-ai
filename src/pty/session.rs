@@ -1,5 +1,6 @@
 use std::io::{Read, Write};
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
@@ -11,6 +12,7 @@ pub struct PtySession {
     pub parser: Arc<Mutex<vt100::Parser>>,
     reader_handle: tokio::task::JoinHandle<()>,
     master: Box<dyn portable_pty::MasterPty + Send>,
+    bytes_processed: Arc<AtomicU64>,
 }
 
 impl PtySession {
@@ -44,6 +46,8 @@ impl PtySession {
 
         let parser = Arc::new(Mutex::new(vt100::Parser::new(rows, cols, 1000)));
         let parser_clone = Arc::clone(&parser);
+        let bytes_processed = Arc::new(AtomicU64::new(0));
+        let bytes_clone = Arc::clone(&bytes_processed);
 
         // Spawn a blocking task to read PTY output and feed the vt100 parser
         let reader_handle = tokio::task::spawn_blocking(move || {
@@ -54,6 +58,7 @@ impl PtySession {
                     Ok(n) => {
                         let mut p = parser_clone.lock().unwrap();
                         p.process(&buf[..n]);
+                        bytes_clone.fetch_add(n as u64, Ordering::Relaxed);
                     }
                     Err(_) => break,
                 }
@@ -66,6 +71,7 @@ impl PtySession {
             parser,
             reader_handle,
             master: pair.master,
+            bytes_processed,
         })
     }
 
@@ -79,6 +85,11 @@ impl PtySession {
     /// Get a reference to the vt100 parser for rendering
     pub fn parser(&self) -> &Arc<Mutex<vt100::Parser>> {
         &self.parser
+    }
+
+    /// Total bytes read from PTY (for auto-scroll detection)
+    pub fn bytes_processed(&self) -> u64 {
+        self.bytes_processed.load(Ordering::Relaxed)
     }
 
     /// Resize the PTY when the terminal panel changes size

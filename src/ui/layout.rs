@@ -6,6 +6,36 @@ use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph, Tabs};
 
 use crate::app::{ActivePane, App, AppMode, DialogField, FileStatus};
 
+/// Compute the inner terminal area (minus borders) for a given total terminal size.
+/// Replicates layout math to find the main content area dimensions.
+pub fn compute_terminal_area(total: Rect) -> Rect {
+    // Main vertical split: content + footer
+    let [content_area, _footer] =
+        Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(total);
+
+    // Horizontal split: left sidebar + right main panel
+    let [_left, right_area] =
+        Layout::horizontal([Constraint::Percentage(20), Constraint::Percentage(80)])
+            .areas(content_area);
+
+    // Right panel: tabs + sub-tabs + content + status bar
+    let [_tabs, _subtabs, main_area, _status] = Layout::vertical([
+        Constraint::Length(3),
+        Constraint::Length(2),
+        Constraint::Min(0),
+        Constraint::Length(1),
+    ])
+    .areas(right_area);
+
+    // Subtract borders (2 for top/bottom, 2 for left/right)
+    Rect::new(
+        main_area.x + 1,
+        main_area.y + 1,
+        main_area.width.saturating_sub(2),
+        main_area.height.saturating_sub(2),
+    )
+}
+
 /// Border style for a pane: green if interacting, yellow if selected, white otherwise
 fn pane_border_style(app: &App, pane: ActivePane) -> Style {
     if app.active_pane == pane {
@@ -298,7 +328,7 @@ fn render_main_content(frame: &mut Frame, area: Rect, app: &App) {
     if let Some(ws) = app.current_workspace() {
         let provider = ws.active_provider;
         if let Some(parser) = ws.pty_parsers.get(&provider) {
-            super::terminal::render(frame, area, parser, border_style, provider.label());
+            super::terminal::render(frame, area, parser, border_style, provider.label(), ws.term_scroll);
         } else {
             // Provider CLI not found — show fun ASCII art
             let block = Block::default()
@@ -372,9 +402,14 @@ fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
                     Color::Yellow
                 };
                 if let Some(ws) = app.current_workspace() {
+                    let scroll_info = if ws.term_scroll > 0 {
+                        format!(" | SCROLL -{}", ws.term_scroll)
+                    } else {
+                        String::new()
+                    };
                     Span::styled(
                         format!(
-                            " [{}] branch: {} | {} files | {}: {} | ws {}/{}",
+                            " [{}] branch: {} | {} files | {}: {} | ws {}/{}{}",
                             mode_label,
                             ws.branch,
                             ws.file_count(),
@@ -382,6 +417,7 @@ fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
                             ws.status_label(),
                             app.active_workspace + 1,
                             app.workspaces.len(),
+                            scroll_info,
                         ),
                         Style::default().bg(mode_color).fg(Color::Black),
                     )
@@ -541,8 +577,13 @@ fn render_help_overlay(frame: &mut Frame, area: Rect) {
         "  Interaction mode (green border)",
         "    Esc           Back to navigation",
         "",
-        "  Terminal pane",
-        "    All keys sent to Claude Code",
+        "  Terminal pane (navigation mode)",
+        "    Shift+K/J     Scroll up/down (3 lines)",
+        "    PageUp/Down   Scroll by page",
+        "    Mouse scroll  Scroll up/down",
+        "",
+        "  Terminal pane (interaction mode)",
+        "    All keys sent to active provider",
         "",
         "  File list pane",
         "    j/k           Select file",

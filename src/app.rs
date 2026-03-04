@@ -14,6 +14,7 @@ pub enum AIProvider {
     Claude,
     Gemini,
     Codex,
+    Shell,
 }
 
 impl AIProvider {
@@ -23,6 +24,15 @@ impl AIProvider {
             AIProvider::Claude => "claude",
             AIProvider::Gemini => "gemini",
             AIProvider::Codex => "codex",
+            AIProvider::Shell => "/bin/sh",
+        }
+    }
+
+    /// Resolved command: for Shell, use $SHELL env var with fallback
+    pub fn resolved_command(&self) -> String {
+        match self {
+            AIProvider::Shell => std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string()),
+            other => other.command().to_string(),
         }
     }
 
@@ -32,12 +42,13 @@ impl AIProvider {
             AIProvider::Claude => "Claude Code",
             AIProvider::Gemini => "Gemini",
             AIProvider::Codex => "Codex",
+            AIProvider::Shell => "Shell",
         }
     }
 
     /// All available providers in display order
     pub fn all() -> &'static [AIProvider] {
-        &[AIProvider::Claude, AIProvider::Gemini, AIProvider::Codex]
+        &[AIProvider::Claude, AIProvider::Gemini, AIProvider::Codex, AIProvider::Shell]
     }
 }
 
@@ -122,6 +133,10 @@ pub struct Workspace {
     pub dirty: bool,
     /// Last time the file list was refreshed (for debounce)
     pub last_refresh: Option<Instant>,
+    /// Scrollback offset: 0 = live view, N = N lines back from bottom
+    pub term_scroll: usize,
+    /// Last byte count from PTY for auto-scroll detection
+    pub last_bytes_processed: u64,
 }
 
 impl Workspace {
@@ -146,6 +161,8 @@ impl Workspace {
             watcher: None,
             dirty: false,
             last_refresh: None,
+            term_scroll: 0,
+            last_bytes_processed: 0,
         }
     }
 
@@ -393,6 +410,9 @@ pub struct App {
     pub status_message: Option<String>,
     /// Index of workspace targeted for deletion (used by ConfirmDelete dialog)
     pub delete_target: Option<usize>,
+    /// Current PTY dimensions (rows, cols) — updated on terminal resize
+    pub pty_rows: u16,
+    pub pty_cols: u16,
 }
 
 impl App {
@@ -415,6 +435,8 @@ impl App {
             active_dialog_field: DialogField::Name,
             status_message: None,
             delete_target: None,
+            pty_rows: 24,
+            pty_cols: 80,
         }
     }
 
@@ -447,6 +469,7 @@ impl App {
             self.mode = AppMode::Normal;
             self.diff_content = None;
             self.diff_file_path = None;
+            self.workspaces[index].term_scroll = 0;
         }
     }
 

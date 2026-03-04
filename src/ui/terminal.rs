@@ -8,8 +8,13 @@ use tui_term::widget::PseudoTerminal;
 
 /// Render the PTY terminal output in the given area.
 /// Locks the parser briefly to read the vt100 screen state.
-pub fn render(frame: &mut Frame, area: Rect, parser: &Arc<Mutex<vt100::Parser>>, border_style: Style, title: &str) {
-    let parser_guard = parser.lock().unwrap();
+/// When `scroll_offset > 0`, shows scrollback history.
+pub fn render(frame: &mut Frame, area: Rect, parser: &Arc<Mutex<vt100::Parser>>, border_style: Style, title: &str, scroll_offset: usize) {
+    let mut parser_guard = parser.lock().unwrap();
+
+    // Apply scrollback offset
+    parser_guard.screen_mut().set_scrollback(scroll_offset);
+
     let pseudo_term = PseudoTerminal::new(parser_guard.screen())
         .block(
             Block::default()
@@ -19,4 +24,7 @@ pub fn render(frame: &mut Frame, area: Rect, parser: &Arc<Mutex<vt100::Parser>>,
                 .border_style(border_style),
         );
     frame.render_widget(pseudo_term, area);
+
+    // Reset scrollback so the parser tracks live output correctly
+    parser_guard.screen_mut().set_scrollback(0);
 }

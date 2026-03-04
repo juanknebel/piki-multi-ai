@@ -4,7 +4,7 @@
 
 | Total | OPEN | IN_PROGRESS | DONE | CANCEL |
 |-------|------|-------------|------|--------|
-| 42    | 1    | 0           | 41   | 0      |
+| 44    | 1    | 0           | 43   | 0      |
 
 ## Fase 0 — Setup
 
@@ -127,6 +127,13 @@
 | ID  | Tarea                              | Status | Bloqueada por |
 |-----|------------------------------------|--------|---------------|
 | T42 | Confirmar borrado, mantener worktree| DONE  | —             |
+
+## Phase 16 — Terminal Panel Improvements
+
+| ID  | Tarea                              | Status | Bloqueada por |
+|-----|------------------------------------|--------|---------------|
+| T43 | Dynamic PTY width + scrollback     | DONE   | —             |
+| T44 | Shell tab in provider sub-tabs     | DONE   | —             |
 
 ## Grafo de Dependencias
 

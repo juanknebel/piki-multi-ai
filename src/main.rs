@@ -8,8 +8,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers, MouseEventKind};
 use ratatui::DefaultTerminal;
+use ratatui::layout::Rect;
 
 use app::{AIProvider, ActivePane, App, AppMode, DialogField};
 use pty::PtySession;
@@ -23,12 +24,18 @@ async fn main() -> anyhow::Result<()> {
     // Install panic hook that restores terminal before printing panic
     let original_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |panic_info| {
+        let _ = crossterm::execute!(
+            std::io::stderr(),
+            crossterm::event::DisableMouseCapture
+        );
         let _ = ratatui::restore();
         original_hook(panic_info);
     }));
 
     let terminal = ratatui::init();
+    crossterm::execute!(std::io::stderr(), crossterm::event::EnableMouseCapture)?;
     let result = run(terminal).await;
+    crossterm::execute!(std::io::stderr(), crossterm::event::DisableMouseCapture)?;
     ratatui::restore();
     result
 }
@@ -36,6 +43,12 @@ async fn main() -> anyhow::Result<()> {
 async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
     let manager = WorkspaceManager::new();
     let mut app = App::new();
+
+    // Compute real terminal dimensions for PTY spawning
+    let term_size = terminal.size()?;
+    let pty_area = ui::layout::compute_terminal_area(Rect::new(0, 0, term_size.width, term_size.height));
+    app.pty_rows = pty_area.height;
+    app.pty_cols = pty_area.width;
 
     // Restore persisted workspaces from all project configs
     let entries = ws_config::load_all();
@@ -49,7 +62,7 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
         );
 
         // Spawn PTY for each AI provider
-        spawn_all_providers(&mut ws).await;
+        spawn_all_providers(&mut ws, app.pty_rows, app.pty_cols).await;
 
         // Start file watcher
         match FileWatcher::new(ws.path.clone(), ws.name.clone()) {
@@ -81,7 +94,35 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
                         execute_action(&mut app, &manager, action).await?;
                     }
                 }
-                Event::Resize(_, _) => {} // ratatui handles resize automatically
+                Event::Mouse(mouse) => {
+                    match mouse.kind {
+                        MouseEventKind::ScrollUp => {
+                            if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+                                && let Some(parser) = ws.pty_parsers.get(&ws.active_provider)
+                            {
+                                let max = parser.lock().unwrap().screen().scrollback();
+                                ws.term_scroll = (ws.term_scroll + 3).min(max);
+                            }
+                        }
+                        MouseEventKind::ScrollDown => {
+                            if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+                                ws.term_scroll = ws.term_scroll.saturating_sub(3);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                Event::Resize(cols, rows) => {
+                    let new_area = ui::layout::compute_terminal_area(Rect::new(0, 0, cols, rows));
+                    app.pty_rows = new_area.height;
+                    app.pty_cols = new_area.width;
+                    // Resize all PTY sessions in all workspaces
+                    for ws in &mut app.workspaces {
+                        for (_, pty) in ws.pty_sessions.iter_mut() {
+                            let _ = pty.resize(new_area.height, new_area.width);
+                        }
+                    }
+                }
                 _ => {}
             }
         }
@@ -99,6 +140,12 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
             if let Some(pty) = ws.pty_sessions.get_mut(&ws.active_provider) {
                 if !pty.is_alive() {
                     ws.status = app::WorkspaceStatus::Done;
+                }
+                // Auto-scroll to bottom on new output
+                let current_bytes = pty.bytes_processed();
+                if current_bytes != ws.last_bytes_processed {
+                    ws.last_bytes_processed = current_bytes;
+                    ws.term_scroll = 0;
                 }
             }
             // Debounced refresh of changed files list via git diff
@@ -147,7 +194,7 @@ async fn execute_action(
                     app.switch_workspace(new_idx);
 
                     // Spawn PTY for each AI provider
-                    spawn_all_providers(&mut app.workspaces[new_idx]).await;
+                    spawn_all_providers(&mut app.workspaces[new_idx], app.pty_rows, app.pty_cols).await;
 
                     // Start file watcher
                     let ws = &mut app.workspaces[new_idx];
@@ -285,9 +332,10 @@ fn shutdown(app: &mut App) {
 }
 
 /// Spawn a PTY session for each AI provider in a workspace.
-async fn spawn_all_providers(ws: &mut app::Workspace) {
+async fn spawn_all_providers(ws: &mut app::Workspace, rows: u16, cols: u16) {
     for provider in AIProvider::all() {
-        match PtySession::spawn(&ws.path, 24, 80, provider.command()).await {
+        let cmd = provider.resolved_command();
+        match PtySession::spawn(&ws.path, rows, cols, &cmd).await {
             Ok(session) => {
                 ws.pty_parsers
                     .insert(*provider, Arc::clone(session.parser()));
@@ -393,6 +441,38 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
             let idx = (c as usize) - ('1' as usize);
             app.switch_workspace(idx);
         }
+        // Scrollback: Shift+K / PageUp = scroll up, Shift+J / PageDown = scroll down
+        KeyCode::Char('K') => {
+            if app.active_pane == ActivePane::MainPanel && app.mode == AppMode::Normal
+                && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+                && let Some(parser) = ws.pty_parsers.get(&ws.active_provider)
+            {
+                let max = parser.lock().unwrap().screen().scrollback();
+                ws.term_scroll = (ws.term_scroll + 3).min(max);
+            }
+        }
+        KeyCode::Char('J') => {
+            if app.active_pane == ActivePane::MainPanel && app.mode == AppMode::Normal
+                && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+            {
+                ws.term_scroll = ws.term_scroll.saturating_sub(3);
+            }
+        }
+        KeyCode::PageUp => {
+            if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+                && let Some(parser) = ws.pty_parsers.get(&ws.active_provider)
+            {
+                let screen_height = app.pty_rows as usize;
+                let max = parser.lock().unwrap().screen().scrollback();
+                ws.term_scroll = (ws.term_scroll + screen_height).min(max);
+            }
+        }
+        KeyCode::PageDown => {
+            if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+                let screen_height = app.pty_rows as usize;
+                ws.term_scroll = ws.term_scroll.saturating_sub(screen_height);
+            }
+        }
         // Cycle AI provider sub-tab
         KeyCode::Char('g') => {
             if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
@@ -402,6 +482,7 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
                     .position(|p| *p == ws.active_provider)
                     .unwrap_or(0);
                 ws.active_provider = providers[(current_idx + 1) % providers.len()];
+                ws.term_scroll = 0;
             }
         }
         _ => {}
