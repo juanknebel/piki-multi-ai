@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use tokio::process::Command;
 
 use crate::app::Workspace;
@@ -53,7 +53,12 @@ impl WorkspaceManager {
 
     /// Create a new workspace with its own git worktree and branch.
     /// `source_dir` is any directory inside the target git repository.
-    pub async fn create(&self, name: &str, description: &str, source_dir: &PathBuf) -> anyhow::Result<Workspace> {
+    pub async fn create(
+        &self,
+        name: &str,
+        description: &str,
+        source_dir: &PathBuf,
+    ) -> anyhow::Result<Workspace> {
         let git_root = Self::git_root(source_dir).await?;
         let worktrees_dir = worktrees_base(&git_root);
         let worktree_path = worktrees_dir.join(name);
@@ -76,8 +81,7 @@ impl WorkspaceManager {
             .await
             .context("failed to check remote branches")?;
 
-        let remote_exists = ls_remote.status.success()
-            && !ls_remote.stdout.is_empty();
+        let remote_exists = ls_remote.status.success() && !ls_remote.stdout.is_empty();
 
         let output = if remote_exists {
             // Fetch the remote branch first
@@ -97,7 +101,12 @@ impl WorkspaceManager {
 
             // Create worktree from remote branch (auto-creates local tracking branch)
             Command::new("git")
-                .args(["worktree", "add", worktree_path.to_str().unwrap(), &branch_name])
+                .args([
+                    "worktree",
+                    "add",
+                    worktree_path.to_str().unwrap(),
+                    &branch_name,
+                ])
                 .current_dir(&git_root)
                 .output()
                 .await

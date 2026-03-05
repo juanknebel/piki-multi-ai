@@ -7,7 +7,9 @@ pub fn key_to_bytes(key: KeyEvent) -> Option<Vec<u8>> {
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         if let KeyCode::Char(c) = key.code {
             // Ctrl+A = 1, Ctrl+B = 2, ..., Ctrl+Z = 26
-            let byte = (c.to_ascii_lowercase() as u8).wrapping_sub(b'a').wrapping_add(1);
+            let byte = (c.to_ascii_lowercase() as u8)
+                .wrapping_sub(b'a')
+                .wrapping_add(1);
             if (1..=26).contains(&byte) {
                 return Some(vec![byte]);
             }
@@ -21,7 +23,7 @@ pub fn key_to_bytes(key: KeyEvent) -> Option<Vec<u8>> {
             Some(s.as_bytes().to_vec())
         }
         KeyCode::Enter => Some(vec![13]),      // CR
-        KeyCode::Backspace => Some(vec![127]),  // DEL
+        KeyCode::Backspace => Some(vec![127]), // DEL
         KeyCode::Tab => Some(vec![9]),
         KeyCode::Esc => Some(vec![27]),
         KeyCode::Up => Some(b"\x1b[A".to_vec()),

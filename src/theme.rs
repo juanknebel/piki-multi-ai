@@ -53,6 +53,7 @@ struct ThemeToml {
     dialog: DialogToml,
     help: HelpToml,
     general: GeneralToml,
+    fuzzy_search: FuzzySearchToml,
 }
 
 #[derive(Deserialize, Default)]
@@ -157,6 +158,17 @@ struct GeneralToml {
     muted_text: Option<String>,
 }
 
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct FuzzySearchToml {
+    border: Option<String>,
+    input_text: Option<String>,
+    match_highlight: Option<String>,
+    result_text: Option<String>,
+    selected_bg: Option<String>,
+    count_text: Option<String>,
+}
+
 // ── Resolved Theme (Color values) ──
 
 pub struct BorderTheme {
@@ -239,6 +251,15 @@ pub struct GeneralTheme {
     pub muted_text: Color,
 }
 
+pub struct FuzzySearchTheme {
+    pub border: Color,
+    pub input_text: Color,
+    pub match_highlight: Color,
+    pub result_text: Color,
+    pub selected_bg: Color,
+    pub count_text: Color,
+}
+
 pub struct Theme {
     pub border: BorderTheme,
     pub workspace_list: WorkspaceListTheme,
@@ -251,6 +272,7 @@ pub struct Theme {
     pub dialog: DialogTheme,
     pub help: HelpTheme,
     pub general: GeneralTheme,
+    pub fuzzy_search: FuzzySearchTheme,
 }
 
 impl Default for Theme {
@@ -325,6 +347,14 @@ impl Default for Theme {
                 welcome_text: Color::Gray,
                 muted_text: Color::DarkGray,
             },
+            fuzzy_search: FuzzySearchTheme {
+                border: Color::Cyan,
+                input_text: Color::White,
+                match_highlight: Color::Yellow,
+                result_text: Color::Gray,
+                selected_bg: Color::DarkGray,
+                count_text: Color::DarkGray,
+            },
         }
     }
 }
@@ -341,9 +371,18 @@ impl Theme {
             workspace_list: WorkspaceListTheme {
                 empty_text: resolve(&t.workspace_list.empty_text, d.workspace_list.empty_text),
                 name_active: resolve(&t.workspace_list.name_active, d.workspace_list.name_active),
-                name_inactive: resolve(&t.workspace_list.name_inactive, d.workspace_list.name_inactive),
-                detail_selected: resolve(&t.workspace_list.detail_selected, d.workspace_list.detail_selected),
-                detail_normal: resolve(&t.workspace_list.detail_normal, d.workspace_list.detail_normal),
+                name_inactive: resolve(
+                    &t.workspace_list.name_inactive,
+                    d.workspace_list.name_inactive,
+                ),
+                detail_selected: resolve(
+                    &t.workspace_list.detail_selected,
+                    d.workspace_list.detail_selected,
+                ),
+                detail_normal: resolve(
+                    &t.workspace_list.detail_normal,
+                    d.workspace_list.detail_normal,
+                ),
                 selected_bg: resolve(&t.workspace_list.selected_bg, d.workspace_list.selected_bg),
             },
             file_list: FileListTheme {
@@ -402,6 +441,17 @@ impl Theme {
                 welcome_text: resolve(&t.general.welcome_text, d.general.welcome_text),
                 muted_text: resolve(&t.general.muted_text, d.general.muted_text),
             },
+            fuzzy_search: FuzzySearchTheme {
+                border: resolve(&t.fuzzy_search.border, d.fuzzy_search.border),
+                input_text: resolve(&t.fuzzy_search.input_text, d.fuzzy_search.input_text),
+                match_highlight: resolve(
+                    &t.fuzzy_search.match_highlight,
+                    d.fuzzy_search.match_highlight,
+                ),
+                result_text: resolve(&t.fuzzy_search.result_text, d.fuzzy_search.result_text),
+                selected_bg: resolve(&t.fuzzy_search.selected_bg, d.fuzzy_search.selected_bg),
+                count_text: resolve(&t.fuzzy_search.count_text, d.fuzzy_search.count_text),
+            },
         }
     }
 }
@@ -425,7 +475,9 @@ pub fn load() -> Theme {
         .and_then(|c| c.theme)
         .unwrap_or_else(|| "default".to_string());
 
-    let theme_path = config_dir.join("themes").join(format!("{}.toml", theme_name));
+    let theme_path = config_dir
+        .join("themes")
+        .join(format!("{}.toml", theme_name));
     let theme_toml = match std::fs::read_to_string(&theme_path) {
         Ok(s) => match toml::from_str::<ThemeToml>(&s) {
             Ok(t) => t,

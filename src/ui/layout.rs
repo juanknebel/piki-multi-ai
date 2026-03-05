@@ -112,6 +112,9 @@ pub fn render(frame: &mut Frame, app: &App) {
     if app.mode == AppMode::ConfirmDelete {
         render_confirm_delete_dialog(frame, area, app);
     }
+    if app.mode == AppMode::FuzzySearch {
+        super::fuzzy::render(frame, area, app);
+    }
 }
 
 fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
@@ -325,12 +328,24 @@ fn render_subtabs(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 fn render_main_content(frame: &mut Frame, area: Rect, app: &App) {
+    if app.mode == AppMode::InlineEdit {
+        super::editor::render(frame, area, app);
+        return;
+    }
+
     let border_style = pane_border_style(app, ActivePane::MainPanel);
 
     if let Some(ws) = app.current_workspace() {
         let provider = ws.active_provider;
         if let Some(parser) = ws.pty_parsers.get(&provider) {
-            super::terminal::render(frame, area, parser, border_style, provider.label(), ws.term_scroll);
+            super::terminal::render(
+                frame,
+                area,
+                parser,
+                border_style,
+                provider.label(),
+                ws.term_scroll,
+            );
         } else {
             // Provider CLI not found — show fun ASCII art
             let block = Block::default()
@@ -393,6 +408,20 @@ fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
                 ),
                 Style::default().bg(theme.diff_bg).fg(theme.diff_fg),
             ),
+            AppMode::FuzzySearch => Span::styled(
+                " SEARCH | type to filter | Enter = diff | C-e = editor | Esc = close",
+                Style::default().bg(theme.navigate_bg).fg(theme.mode_fg),
+            ),
+            AppMode::InlineEdit => Span::styled(
+                format!(
+                    " EDIT: {} | C-s = save | Esc = close",
+                    app.editing_file
+                        .as_ref()
+                        .map(|p| p.to_string_lossy().to_string())
+                        .unwrap_or_else(|| "?".to_string())
+                ),
+                Style::default().bg(theme.interact_bg).fg(theme.mode_fg),
+            ),
             _ => {
                 let mode_label = if app.interacting {
                     "INTERACT"
@@ -440,6 +469,14 @@ fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
 
 fn render_footer(frame: &mut Frame, area: Rect, app: &App) {
     let keys = match app.mode {
+        AppMode::FuzzySearch => vec![
+            ("↑↓", "select"),
+            ("Enter", "diff"),
+            ("C-e", "editor"),
+            ("C-v", "inline edit"),
+            ("Esc", "close"),
+        ],
+        AppMode::InlineEdit => vec![("C-s", "save"), ("Esc", "close")],
         AppMode::NewWorkspace => vec![
             ("Tab", "switch field"),
             ("Enter", "create"),
@@ -452,6 +489,7 @@ fn render_footer(frame: &mut Frame, area: Rect, app: &App) {
             ("n", "new"),
             ("d", "delete"),
             ("Tab", "switch ws"),
+            ("/", "search"),
             ("g", "switch AI"),
             ("?", "help"),
             ("q", "quit"),
@@ -462,8 +500,14 @@ fn render_footer(frame: &mut Frame, area: Rect, app: &App) {
         .iter()
         .flat_map(|(key, desc)| {
             vec![
-                Span::styled(format!(" [{}] ", key), Style::default().fg(app.theme.footer.key)),
-                Span::styled(format!("{} ", desc), Style::default().fg(app.theme.footer.description)),
+                Span::styled(
+                    format!(" [{}] ", key),
+                    Style::default().fg(app.theme.footer.key),
+                ),
+                Span::styled(
+                    format!("{} ", desc),
+                    Style::default().fg(app.theme.footer.description),
+                ),
             ]
         })
         .collect();
@@ -557,9 +601,10 @@ fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
             ),
         ]),
         Line::from(""),
-        Line::from(vec![
-            Span::styled("  [Esc] Cancel", Style::default().fg(theme.new_ws_inactive)),
-        ]),
+        Line::from(vec![Span::styled(
+            "  [Esc] Cancel",
+            Style::default().fg(theme.new_ws_inactive),
+        )]),
     ];
 
     let text = Paragraph::new(lines).block(block);
@@ -567,7 +612,7 @@ fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 fn render_help_overlay(frame: &mut Frame, area: Rect, theme: &Theme) {
-    let popup = centered_rect(50, 30, area);
+    let popup = centered_rect(50, 45, area);
     frame.render_widget(ratatui::widgets::Clear, popup);
 
     let help_text = vec![
@@ -604,6 +649,22 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, theme: &Theme) {
         "    g/G           Top/Bottom",
         "    n/p           Next/Prev file",
         "    Ctrl+g        Close diff",
+        "",
+        "  Fuzzy search (/ or Ctrl+F)",
+        "    Type          Filter files",
+        "    ↑/↓           Select result",
+        "    Enter         Open diff",
+        "    Ctrl+E        Open in $EDITOR",
+        "    Ctrl+V        Inline editor",
+        "    Esc           Close",
+        "",
+        "  File list (interaction mode)",
+        "    e             Open in $EDITOR",
+        "    v             Inline editor",
+        "",
+        "  Inline editor",
+        "    Ctrl+S        Save",
+        "    Esc           Close",
     ];
 
     let block = Block::default()

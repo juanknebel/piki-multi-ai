@@ -57,10 +57,8 @@ pub fn save(git_root: &Path, workspaces: &[Workspace]) -> anyhow::Result<()> {
     };
 
     let path = config_path(git_root);
-    std::fs::create_dir_all(path.parent().unwrap())
-        .context("failed to create config directory")?;
-    let json = serde_json::to_string_pretty(&config)
-        .context("failed to serialize config")?;
+    std::fs::create_dir_all(path.parent().unwrap()).context("failed to create config directory")?;
+    let json = serde_json::to_string_pretty(&config).context("failed to serialize config")?;
     std::fs::write(&path, json).context("failed to write config file")?;
     Ok(())
 }
