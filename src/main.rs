@@ -934,7 +934,7 @@ fn handle_confirm_delete_input(app: &mut App, key: KeyEvent) -> Option<Action> {
             app.mode = AppMode::Normal;
             target.map(Action::RemoveFromList)
         }
-        _ if key.code == KeyCode::Char('g') && key.modifiers.contains(KeyModifiers::CONTROL) => {
+        KeyCode::Esc => {
             app.delete_target = None;
             app.mode = AppMode::Normal;
             None

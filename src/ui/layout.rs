@@ -723,7 +723,7 @@ fn render_confirm_delete_dialog(frame: &mut Frame, area: Rect, app: &App) {
             Style::default().fg(theme.delete_no),
         )),
         Line::from(Span::styled(
-            "  [C-g] Cancel",
+            "  [Esc] Cancel",
             Style::default().fg(theme.delete_cancel),
         )),
     ];
