@@ -20,6 +20,9 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 - **Side-by-side diffs** — View diffs as a floating overlay rendered by [delta](https://github.com/dandavison/delta) with ANSI colors preserved (terminal stays visible behind)
 - **Tab navigation** — Switch between workspaces with Tab, Shift+Tab, or number keys 1-9
 - **Vim-style navigation** — j/k for movement, Enter to activate, Esc to go back
+- **Fuzzy file search** — Search all files in the active worktree with fuzzy matching powered by [nucleo](https://github.com/helix-editor/nucleo) (same engine as Helix editor), respects `.gitignore`
+- **$EDITOR integration** — Open any file in your preferred editor (`$EDITOR` or `vi`); TUI suspends and resumes automatically
+- **Inline editor** — Edit files directly inside the TUI with a built-in text editor (cursor movement, line numbers, scroll)
 - **Customizable themes** — Colors loaded from TOML files; supports named colors and hex `#rrggbb`
 
 ## Prerequisites
@@ -93,7 +96,7 @@ Workspace configurations are saved automatically and restored on startup.
 |  A src/new.rs    +-------------------------------------------------------+
 |  ? untracked.txt |
 +------------------+--------------------------------------------------------+
-  [n] new  [d] delete  [Tab] switch  [g] switch AI  [?] help  [q] quit
+  [n] new  [d] delete  [/] search  [Tab] switch  [g] switch AI  [?] help  [q] quit
 ```
 
 ### File status indicators
@@ -125,6 +128,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `d` | Delete selected workspace |
 | `Tab` / `Shift+Tab` | Next / previous workspace |
 | `1`-`9` | Jump to workspace N |
+| `/` or `Ctrl+f` | Fuzzy file search |
 | `g` | Cycle AI provider (Claude → Gemini → Codex → Shell) |
 | `?` | Help overlay |
 | `q` | Quit |
@@ -136,7 +140,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `Ctrl+g` | Back to navigation mode |
 | *Terminal pane* | All keys forwarded to AI provider |
 | *Workspace list* | `j`/`k` select, `Enter` activate |
-| *File list* | `j`/`k` select, `Enter` open diff |
+| *File list* | `j`/`k` select, `Enter` open diff, `e` open in $EDITOR, `v` inline editor |
 
 **In diff view:**
 
@@ -146,7 +150,27 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `Ctrl+d` / `Ctrl+u` | Page down/up |
 | `g` / `G` | Top / bottom |
 | `n` / `p` | Next / previous file |
-| `Ctrl+g` | Close diff |
+| `Esc` / `Ctrl+g` | Close diff |
+
+**In fuzzy search** (`/` or `Ctrl+f`):
+
+| Key | Action |
+|-----|--------|
+| *type* | Filter files by fuzzy match |
+| `↑` / `↓` | Select result |
+| `Enter` | Open diff of selected file (if it has changes) |
+| `Ctrl+e` | Open in $EDITOR |
+| `Ctrl+v` | Open in inline editor |
+| `Esc` | Close search |
+
+**In inline editor:**
+
+| Key | Action |
+|-----|--------|
+| `Ctrl+s` | Save file |
+| `Esc` | Close editor (discard unsaved changes) |
+| Arrow keys | Move cursor |
+| `Tab` | Insert 4 spaces |
 
 ## Theming
 
@@ -203,6 +227,8 @@ src/
     layout.rs          # Full TUI layout (all panels, overlays)
     terminal.rs        # Live PTY rendering (tui-term)
     diff.rs            # Diff rendering (ansi-to-tui)
+    fuzzy.rs           # Fuzzy search overlay (nucleo matching + ignore walker)
+    editor.rs          # Inline file editor renderer
   workspace/
     manager.rs         # Git worktree CRUD
     config.rs          # Workspace config persistence (JSON)
