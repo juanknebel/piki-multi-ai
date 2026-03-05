@@ -38,8 +38,10 @@ fn config_path(git_root: &Path) -> PathBuf {
 
 /// Save workspace list to disk.
 pub fn save(git_root: &Path, workspaces: &[Workspace]) -> anyhow::Result<()> {
+    // Only save workspaces that belong to this project
     let entries: Vec<WorkspaceEntry> = workspaces
         .iter()
+        .filter(|ws| ws.source_repo == git_root)
         .map(|ws| WorkspaceEntry {
             name: ws.name.clone(),
             description: ws.description.clone(),
@@ -88,6 +90,7 @@ pub fn load(git_root: &Path) -> anyhow::Result<Vec<WorkspaceEntry>> {
 /// Scans `~/.local/share/piki-multi/workspaces/*.json` and returns all valid entries,
 /// filtering out stale worktrees that no longer exist on disk.
 /// Skips corrupted or unreadable config files gracefully.
+/// Ensures each worktree is only loaded once.
 pub fn load_all() -> Vec<WorkspaceEntry> {
     let dir = config_dir();
     if !dir.exists() {
@@ -100,6 +103,7 @@ pub fn load_all() -> Vec<WorkspaceEntry> {
     };
 
     let mut all_entries = Vec::new();
+    let mut seen_paths = std::collections::HashSet::new();
 
     for entry in read_dir.flatten() {
         let path = entry.path();
@@ -117,12 +121,13 @@ pub fn load_all() -> Vec<WorkspaceEntry> {
             Err(_) => continue,
         };
 
-        // Only keep entries whose worktree still exists on disk
-        let valid = config
-            .workspaces
-            .into_iter()
-            .filter(|e| e.worktree_path.exists());
-        all_entries.extend(valid);
+        for e in config.workspaces {
+            // Only keep entries whose worktree still exists and we haven't seen yet
+            if e.worktree_path.exists() && !seen_paths.contains(&e.worktree_path) {
+                seen_paths.insert(e.worktree_path.clone());
+                all_entries.push(e);
+            }
+        }
     }
 
     all_entries

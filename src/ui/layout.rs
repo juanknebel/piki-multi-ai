@@ -443,7 +443,7 @@ fn render_footer(frame: &mut Frame, area: Rect, app: &App) {
         AppMode::NewWorkspace => vec![
             ("Tab", "switch field"),
             ("Enter", "create"),
-            ("C-g", "cancel"),
+            ("Esc", "cancel"),
         ],
         _ if app.interacting => vec![("C-g", "navigation mode")],
         _ => vec![
@@ -494,7 +494,7 @@ fn render_diff_overlay(frame: &mut Frame, area: Rect, app: &App) {
 
 fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
     let popup_width = area.width * 70 / 100;
-    let popup = centered_rect(popup_width.max(40), 11, area);
+    let popup = centered_rect(popup_width.max(40), 12, area);
     let theme = &app.theme.dialog;
 
     // Clear background
@@ -555,6 +555,10 @@ fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
                 visible_field(&app.desc_input_buffer, desc_active),
                 field_style(desc_active),
             ),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  [Esc] Cancel", Style::default().fg(theme.new_ws_inactive)),
         ]),
     ];
 

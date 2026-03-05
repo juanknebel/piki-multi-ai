@@ -4,7 +4,7 @@
 
 | Total | OPEN | IN_PROGRESS | DONE | CANCEL |
 |-------|------|-------------|------|--------|
-| 47    | 0    | 0           | 47   | 0      |
+| 50    | 0    | 0           | 50   | 0      |
 
 ## Fase 0 — Setup
 
@@ -153,6 +153,13 @@
 | ID  | Tarea                              | Status | Bloqueada por |
 |-----|------------------------------------|--------|---------------|
 | T48 | Change navigation mode to Ctrl+g    | DONE   | —             |
+
+## Phase 20 — Bug Fixes
+
+| ID  | Tarea                              | Status | Bloqueada por |
+|-----|------------------------------------|--------|---------------|
+| T49 | Add Cancel option to New WS dialog | DONE   | —             |
+| T50 | Bug: Duplicate workspace on startup| DONE   | —             |
 
 ## Grafo de Dependencias
 

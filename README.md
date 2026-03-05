@@ -1,4 +1,4 @@
-# agent-multi
+# agent-multi (v1.0.0)
 
 A terminal UI for orchestrating multiple [Claude Code](https://docs.anthropic.com/en/docs/claude-code) instances in parallel, each running in its own isolated git worktree.
 
@@ -10,7 +10,7 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 ## Features
 
 - **Parallel workspaces** — Run multiple AI coding sessions simultaneously, each in an isolated git worktree
-- **Multi-AI provider** — Sub-tabs for Claude Code, Gemini CLI, and Codex per workspace; cycle with `g`
+- **Multi-AI provider** — Sub-tabs for Claude Code, Gemini CLI, Codex, and a local Shell per workspace; cycle with `g`
 - **Live terminal rendering** — See AI assistant output in real-time with full ANSI color support via `tui-term`
 - **Interactive input** — Type directly into any AI session (Enter on the terminal pane to interact)
 - **Git branch-style naming** — Workspace names support `/`, `.`, `-`, `_` (e.g. `feature/login`, `bugfix/issue-42`)
@@ -20,7 +20,7 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 - **Side-by-side diffs** — View diffs as a floating overlay rendered by [delta](https://github.com/dandavison/delta) with ANSI colors preserved (terminal stays visible behind)
 - **Tab navigation** — Switch between workspaces with Tab, Shift+Tab, or number keys 1-9
 - **Vim-style navigation** — j/k for movement, Enter to activate, Esc to go back
-- **Customizable themes** — Colors loaded from TOML files in `~/.config/piki-multi/themes/`; supports named colors and hex `#rrggbb`
+- **Customizable themes** — Colors loaded from TOML files; supports named colors and hex `#rrggbb`
 
 ## Prerequisites
 
@@ -52,26 +52,34 @@ Or use the install script:
 piki-multi-ai
 ```
 
-On startup, all previously created workspaces are restored automatically regardless of the current directory. To create new workspaces, press `n` and provide a name (supports git branch characters like `/`), a git repository path, and an optional description.
+### Creating Workspaces
+
+Press `n` to open the New Workspace dialog. Provide:
+- **Name:** The git branch name (supports `/`, `.`, `-`, `_`).
+- **Dir:** The path to the source git repository.
+- **Desc:** (Optional) A brief description of the task.
+
+Press `Enter` to create or `Esc` to cancel.
 
 ### Persistence
 
-Workspace configurations are saved automatically and restored on startup. You can run `piki-multi-ai` from any directory — it will discover and restore all previously created workspaces.
+Workspace configurations are saved automatically and restored on startup.
 
-```
-~/.local/share/piki-multi/
-  worktrees/<project-name>/<workspace-name>/   # git worktrees
-  workspaces/<project-name>.json               # workspace config per project
-```
+- **Storage:**
+  - `~/.local/share/piki-multi/worktrees/<project-name>/<workspace-name>/` (git worktrees)
+  - `~/.local/share/piki-multi/workspaces/<project-name>.json` (workspace config per project)
 
-Branch names match the workspace name exactly (e.g. workspace `feature/login` creates branch `feature/login`). Stale entries (worktrees deleted manually) are cleaned up automatically on load.
+- **Restoration:**
+  - On startup, `piki-multi-ai` scans the config directory and restores all valid workspaces.
+  - Stale entries (worktrees deleted manually) are cleaned up automatically.
+  - Robust de-duplication ensures each workspace is loaded only once.
 
 ### Layout
 
 ```
 +------------------+-------------------------------------------------------+
 | WORKSPACES       |  [ ws-1 ]  [ ws-2 ]  [ ws-3 ]   (tabs)               |
-|                  |  [ Claude Code ] [ Gemini ] [ Codex ]  (sub-tabs)     |
+|                  |  [ Claude Code ] [ Gemini ] [ Codex ] [ Shell ]      |
 |  ▶ ws-1 (active) |-------------------------------------------------------|
 |    ● busy | 3    |                                                       |
 |    Fix login bug |  AI assistant live terminal output                    |
@@ -117,7 +125,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `d` | Delete selected workspace |
 | `Tab` / `Shift+Tab` | Next / previous workspace |
 | `1`-`9` | Jump to workspace N |
-| `g` | Cycle AI provider (Claude → Gemini → Codex) |
+| `g` | Cycle AI provider (Claude → Gemini → Codex → Shell) |
 | `?` | Help overlay |
 | `q` | Quit |
 
@@ -218,10 +226,14 @@ sequenceDiagram
 
     Note over Main: Startup
     Main->>WM: new()
-    WM-->>Main: manager
     Main->>App: new()
     Main->>Main: ws_config::load_all()
-    Main-->>App: restore persisted workspaces
+    loop Each restored workspace
+        Main->>PTY: spawn_all_providers()
+        PTY->>PTY: fork + exec AI providers
+        Main->>Watcher: new()
+        Main->>App: push(workspace)
+    end
 
     loop Event loop (50ms tick)
         Main->>UI: terminal.draw(render(app))
@@ -230,21 +242,19 @@ sequenceDiagram
         alt User presses 'n' (new workspace)
             User->>Main: KeyEvent('n')
             Main->>App: mode = NewWorkspace
-            User->>Main: KeyEvent(Enter) with name
-            Main->>WM: create(name)
+            User->>Main: KeyEvent(Enter) with details
+            Main->>WM: create(name, repo)
             WM->>WM: git worktree add
-            WM-->>App: Workspace { path, branch }
-            Main->>PTY: spawn(path, rows, cols)
-            PTY->>PTY: portable-pty fork + exec claude
-            PTY-->>App: PtySession + vt100 parser
+            WM-->>Main: Workspace { path, branch }
+            Main->>PTY: spawn_all_providers()
+            PTY->>PTY: fork + exec AI providers
             Main->>Watcher: new(path)
-            Watcher->>Watcher: notify::watch(path)
-            Watcher-->>App: FileWatcher (mpsc channel)
+            Main->>App: push(workspace)
 
-        else User types in terminal (Ctrl+\ focused)
+        else User types in terminal (Interaction mode)
             User->>Main: KeyEvent(char)
             Main->>PTY: write(key_to_bytes(key))
-            PTY->>PTY: claude process receives input
+            PTY->>PTY: AI process receives input
             Note over PTY: spawn_blocking reads PTY output
             PTY->>App: vt100 parser accumulates state
             Main->>UI: tui-term renders PseudoTerminal
@@ -268,7 +278,7 @@ sequenceDiagram
             User->>Main: KeyEvent('d')
             Main->>PTY: kill()
             Main->>App: watcher = None
-            Main->>WM: remove(name)
+            Main->>WM: remove(name, source_repo)
             WM->>WM: git worktree remove + branch -D
 
         else User presses 'q' (quit)

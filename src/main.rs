@@ -679,7 +679,7 @@ fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
             app.mode = AppMode::Normal;
             return Some(Action::CreateWorkspace(name, description, dir));
         }
-        _ if key.code == KeyCode::Char('g') && key.modifiers.contains(KeyModifiers::CONTROL) => {
+        _ if key.code == KeyCode::Esc || (key.code == KeyCode::Char('g') && key.modifiers.contains(KeyModifiers::CONTROL)) => {
             app.input_buffer.clear();
             app.dir_input_buffer.clear();
             app.desc_input_buffer.clear();
