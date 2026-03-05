@@ -102,7 +102,7 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
                         if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
                             && let Some(parser) = ws.pty_parsers.get(&ws.active_provider)
                         {
-                            let max = parser.lock().unwrap().screen().scrollback();
+                            let max = scrollback_max(&parser);
                             ws.term_scroll = (ws.term_scroll + 3).min(max);
                         }
                     }
@@ -142,11 +142,10 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
                 if !pty.is_alive() {
                     ws.status = app::WorkspaceStatus::Done;
                 }
-                // Auto-scroll to bottom on new output
+                // Track bytes for status detection
                 let current_bytes = pty.bytes_processed();
                 if current_bytes != ws.last_bytes_processed {
                     ws.last_bytes_processed = current_bytes;
-                    ws.term_scroll = 0;
                 }
             }
             // Debounced refresh of changed files list via git diff
@@ -386,6 +385,17 @@ async fn spawn_all_providers(ws: &mut app::Workspace, rows: u16, cols: u16) {
     }
 }
 
+/// Probe the actual scrollback buffer size by setting a large offset and reading back.
+/// `scrollback()` returns the current offset (which is always 0 after render reset),
+/// so we temporarily set it to MAX, read the clamped value, then restore to 0.
+fn scrollback_max(parser: &Arc<std::sync::Mutex<vt100::Parser>>) -> usize {
+    let mut guard = parser.lock().unwrap();
+    guard.screen_mut().set_scrollback(usize::MAX);
+    let max = guard.screen().scrollback();
+    guard.screen_mut().set_scrollback(0);
+    max
+}
+
 fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
     // Help overlay — any key closes it
     if app.mode == AppMode::Help {
@@ -493,7 +503,7 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
                 && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
                 && let Some(parser) = ws.pty_parsers.get(&ws.active_provider)
             {
-                let max = parser.lock().unwrap().screen().scrollback();
+                let max = scrollback_max(parser);
                 ws.term_scroll = (ws.term_scroll + 3).min(max);
             }
         }
@@ -510,7 +520,7 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
                 && let Some(parser) = ws.pty_parsers.get(&ws.active_provider)
             {
                 let screen_height = app.pty_rows as usize;
-                let max = parser.lock().unwrap().screen().scrollback();
+                let max = scrollback_max(parser);
                 ws.term_scroll = (ws.term_scroll + screen_height).min(max);
             }
         }

@@ -4,7 +4,7 @@
 
 | Total | OPEN | IN_PROGRESS | DONE | CANCEL |
 |-------|------|-------------|------|--------|
-| 51    | 0    | 0           | 51   | 0      |
+| 53    | 1    | 0           | 52   | 0      |
 
 ## Fase 0 — Setup
 
@@ -166,6 +166,13 @@
 | ID  | Tarea                              | Status | Bloqueada por |
 |-----|------------------------------------|--------|---------------|
 | T51 | Fuzzy search + $EDITOR + inline edit| DONE  | —             |
+
+## Phase 22 — Bug Fixes
+
+| ID  | Tarea                              | Status | Bloqueada por |
+|-----|------------------------------------|--------|---------------|
+| T52 | Bug: Scroll del terminal no funciona| DONE  | —             |
+| T53 | Bug: Popup borrar WS usa Ctrl+g, no Esc| OPEN | —            |
 
 ## Grafo de Dependencias
 
