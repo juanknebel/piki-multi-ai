@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers, MouseEventKind};
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEventKind};
 use ratatui::DefaultTerminal;
 use ratatui::layout::Rect;
 
@@ -90,14 +90,16 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
         })?;
 
         // Poll for events with timeout (non-blocking for async tasks)
-        if event::poll(TICK_RATE)? {
-            match event::read()? {
-                Event::Key(key) => {
+        let poll_result = event::poll(TICK_RATE);
+        if matches!(poll_result, Ok(true)) {
+            let read_result = event::read();
+            match read_result {
+                Ok(Event::Key(key)) if key.kind == KeyEventKind::Press => {
                     if let Some(action) = handle_key_event(&mut app, key) {
                         execute_action(&mut app, &manager, action, &mut terminal).await?;
                     }
                 }
-                Event::Mouse(mouse) => match mouse.kind {
+                Ok(Event::Mouse(mouse)) => match mouse.kind {
                     MouseEventKind::ScrollUp => {
                         if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
                             && let Some(parser) = ws.pty_parsers.get(&ws.active_provider)
@@ -113,7 +115,7 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
                     }
                     _ => {}
                 },
-                Event::Resize(cols, rows) => {
+                Ok(Event::Resize(cols, rows)) => {
                     let new_area = ui::layout::compute_terminal_area(Rect::new(0, 0, cols, rows));
                     app.pty_rows = new_area.height;
                     app.pty_cols = new_area.width;
@@ -124,7 +126,8 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
                         }
                     }
                 }
-                _ => {}
+                Ok(_) => {}
+                Err(_) => continue, // Transient crossterm error, skip this tick
             }
         }
 
