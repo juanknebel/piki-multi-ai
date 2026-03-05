@@ -49,7 +49,12 @@ impl AIProvider {
 
     /// All available providers in display order
     pub fn all() -> &'static [AIProvider] {
-        &[AIProvider::Claude, AIProvider::Gemini, AIProvider::Codex, AIProvider::Shell]
+        &[
+            AIProvider::Claude,
+            AIProvider::Gemini,
+            AIProvider::Codex,
+            AIProvider::Shell,
+        ]
     }
 }
 
@@ -66,6 +71,10 @@ pub enum AppMode {
     ConfirmDelete,
     /// Help overlay
     Help,
+    /// Fuzzy file search overlay
+    FuzzySearch,
+    /// Inline file editor
+    InlineEdit,
 }
 
 /// Which pane is currently selected / focused
@@ -390,6 +399,132 @@ mod tests {
     }
 }
 
+/// A fuzzy search match result
+pub struct FuzzyMatch {
+    pub path: String,
+    pub score: u32,
+    pub match_indices: Vec<u32>,
+}
+
+/// State for the fuzzy file search overlay
+pub struct FuzzyState {
+    pub query: String,
+    pub all_files: Vec<String>,
+    pub results: Vec<FuzzyMatch>,
+    pub selected: usize,
+}
+
+/// State for the inline file editor
+pub struct EditorState {
+    pub lines: Vec<String>,
+    pub cursor_row: usize,
+    pub cursor_col: usize,
+    pub scroll_offset: usize,
+}
+
+impl EditorState {
+    pub fn new(content: &str) -> Self {
+        let lines: Vec<String> = content.lines().map(String::from).collect();
+        Self {
+            lines: if lines.is_empty() {
+                vec![String::new()]
+            } else {
+                lines
+            },
+            cursor_row: 0,
+            cursor_col: 0,
+            scroll_offset: 0,
+        }
+    }
+
+    pub fn contents(&self) -> String {
+        let mut s = self.lines.join("\n");
+        s.push('\n');
+        s
+    }
+
+    pub fn insert_char(&mut self, c: char) {
+        let line = &mut self.lines[self.cursor_row];
+        let byte_idx = char_to_byte_idx(line, self.cursor_col);
+        line.insert(byte_idx, c);
+        self.cursor_col += 1;
+    }
+
+    pub fn backspace(&mut self) {
+        if self.cursor_col > 0 {
+            let line = &mut self.lines[self.cursor_row];
+            let byte_idx = char_to_byte_idx(line, self.cursor_col - 1);
+            line.remove(byte_idx);
+            self.cursor_col -= 1;
+        } else if self.cursor_row > 0 {
+            let removed = self.lines.remove(self.cursor_row);
+            self.cursor_row -= 1;
+            self.cursor_col = self.lines[self.cursor_row].chars().count();
+            self.lines[self.cursor_row].push_str(&removed);
+        }
+    }
+
+    pub fn enter(&mut self) {
+        let line = &mut self.lines[self.cursor_row];
+        let byte_idx = char_to_byte_idx(line, self.cursor_col);
+        let rest = line[byte_idx..].to_string();
+        line.truncate(byte_idx);
+        self.cursor_row += 1;
+        self.cursor_col = 0;
+        self.lines.insert(self.cursor_row, rest);
+    }
+
+    pub fn move_up(&mut self) {
+        if self.cursor_row > 0 {
+            self.cursor_row -= 1;
+            self.clamp_col();
+        }
+    }
+
+    pub fn move_down(&mut self) {
+        if self.cursor_row + 1 < self.lines.len() {
+            self.cursor_row += 1;
+            self.clamp_col();
+        }
+    }
+
+    pub fn move_left(&mut self) {
+        if self.cursor_col > 0 {
+            self.cursor_col -= 1;
+        }
+    }
+
+    pub fn move_right(&mut self) {
+        let line_len = self.lines[self.cursor_row].chars().count();
+        if self.cursor_col < line_len {
+            self.cursor_col += 1;
+        }
+    }
+
+    fn clamp_col(&mut self) {
+        let line_len = self.lines[self.cursor_row].chars().count();
+        if self.cursor_col > line_len {
+            self.cursor_col = line_len;
+        }
+    }
+
+    /// Adjust scroll_offset so cursor is visible within `visible_height` lines
+    pub fn adjust_scroll(&mut self, visible_height: usize) {
+        if self.cursor_row < self.scroll_offset {
+            self.scroll_offset = self.cursor_row;
+        } else if self.cursor_row >= self.scroll_offset + visible_height {
+            self.scroll_offset = self.cursor_row - visible_height + 1;
+        }
+    }
+}
+
+fn char_to_byte_idx(s: &str, char_idx: usize) -> usize {
+    s.char_indices()
+        .nth(char_idx)
+        .map(|(i, _)| i)
+        .unwrap_or(s.len())
+}
+
 /// Central application state
 pub struct App {
     pub should_quit: bool,
@@ -411,6 +546,12 @@ pub struct App {
     pub status_message: Option<String>,
     /// Index of workspace targeted for deletion (used by ConfirmDelete dialog)
     pub delete_target: Option<usize>,
+    /// Fuzzy file search state
+    pub fuzzy: Option<FuzzyState>,
+    /// Inline editor state
+    pub editor: Option<EditorState>,
+    /// Path of the file being edited inline
+    pub editing_file: Option<PathBuf>,
     /// Current PTY dimensions (rows, cols) — updated on terminal resize
     pub pty_rows: u16,
     pub pty_cols: u16,
@@ -437,6 +578,9 @@ impl App {
             active_dialog_field: DialogField::Name,
             status_message: None,
             delete_target: None,
+            fuzzy: None,
+            editor: None,
+            editing_file: None,
             pty_rows: 24,
             pty_cols: 80,
             theme: Theme::default(),
@@ -503,6 +647,110 @@ impl App {
         if !self.workspaces.is_empty() {
             let len = self.workspaces.len();
             self.selected_workspace = (self.selected_workspace + len - 1) % len;
+        }
+    }
+
+    /// Open the fuzzy file search overlay by scanning all files in the active worktree
+    pub fn open_fuzzy_search(&mut self) {
+        let worktree_path = match self.current_workspace() {
+            Some(ws) => ws.path.clone(),
+            None => {
+                self.status_message = Some("No active workspace".into());
+                return;
+            }
+        };
+
+        let mut all_files = Vec::new();
+        let walker = ignore::WalkBuilder::new(&worktree_path)
+            .git_ignore(true)
+            .build();
+        for entry in walker.flatten() {
+            if entry.file_type().is_some_and(|ft| ft.is_file())
+                && let Ok(rel) = entry.path().strip_prefix(&worktree_path)
+            {
+                all_files.push(rel.to_string_lossy().to_string());
+            }
+        }
+        all_files.sort();
+
+        let results: Vec<FuzzyMatch> = all_files
+            .iter()
+            .map(|p| FuzzyMatch {
+                path: p.clone(),
+                score: 0,
+                match_indices: Vec::new(),
+            })
+            .collect();
+
+        self.fuzzy = Some(FuzzyState {
+            query: String::new(),
+            all_files,
+            results,
+            selected: 0,
+        });
+        self.mode = AppMode::FuzzySearch;
+    }
+
+    /// Re-filter fuzzy search results based on the current query
+    pub fn update_fuzzy_filter(&mut self) {
+        if let Some(ref mut state) = self.fuzzy {
+            if state.query.is_empty() {
+                state.results = state
+                    .all_files
+                    .iter()
+                    .map(|p| FuzzyMatch {
+                        path: p.clone(),
+                        score: 0,
+                        match_indices: Vec::new(),
+                    })
+                    .collect();
+            } else {
+                use nucleo::pattern::{CaseMatching, Pattern};
+                let pattern = Pattern::parse(&state.query, CaseMatching::Smart);
+                let mut matcher = nucleo::Matcher::default();
+                let mut buf = Vec::new();
+                let mut results: Vec<FuzzyMatch> = state
+                    .all_files
+                    .iter()
+                    .filter_map(|path| {
+                        let haystack = nucleo::Utf32Str::new(path, &mut buf);
+                        let mut indices = Vec::new();
+                        pattern
+                            .indices(haystack, &mut matcher, &mut indices)
+                            .map(|score| {
+                                indices.sort_unstable();
+                                indices.dedup();
+                                FuzzyMatch {
+                                    path: path.clone(),
+                                    score,
+                                    match_indices: indices,
+                                }
+                            })
+                    })
+                    .collect();
+                results.sort_by(|a, b| b.score.cmp(&a.score));
+                state.results = results;
+            }
+            // Clamp selection
+            if state.results.is_empty() {
+                state.selected = 0;
+            } else if state.selected >= state.results.len() {
+                state.selected = state.results.len() - 1;
+            }
+        }
+    }
+
+    /// Open the inline editor for a file
+    pub fn open_inline_editor(&mut self, path: PathBuf) {
+        match std::fs::read_to_string(&path) {
+            Ok(content) => {
+                self.editor = Some(EditorState::new(&content));
+                self.editing_file = Some(path);
+                self.mode = AppMode::InlineEdit;
+            }
+            Err(e) => {
+                self.status_message = Some(format!("Cannot read file: {}", e));
+            }
         }
     }
 }

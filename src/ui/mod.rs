@@ -1,8 +1,10 @@
-pub mod layout;
-pub mod workspaces;
-pub mod files;
-pub mod terminal;
 pub mod diff;
-pub mod tabs;
-pub mod subtabs;
+pub mod editor;
+pub mod files;
+pub mod fuzzy;
+pub mod layout;
 pub mod statusbar;
+pub mod subtabs;
+pub mod tabs;
+pub mod terminal;
+pub mod workspaces;

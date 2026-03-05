@@ -20,7 +20,13 @@ pub async fn run_diff(
             // Fallback: plain git diff with color
             let output = if *file_status == FileStatus::Untracked {
                 tokio::process::Command::new("git")
-                    .args(["diff", "--color=always", "--no-index", "/dev/null", file_path])
+                    .args([
+                        "diff",
+                        "--color=always",
+                        "--no-index",
+                        "/dev/null",
+                        file_path,
+                    ])
                     .current_dir(worktree_path)
                     .output()
                     .await?
@@ -44,7 +50,13 @@ async fn run_diff_with_delta(
 ) -> anyhow::Result<Vec<u8>> {
     let mut cmd = tokio::process::Command::new("git");
     if *file_status == FileStatus::Untracked {
-        cmd.args(["diff", "--color=always", "--no-index", "/dev/null", file_path]);
+        cmd.args([
+            "diff",
+            "--color=always",
+            "--no-index",
+            "/dev/null",
+            file_path,
+        ]);
     } else {
         cmd.args(["diff", "--color=always", "HEAD", "--", file_path]);
     }

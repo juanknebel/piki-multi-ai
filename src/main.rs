@@ -25,10 +25,7 @@ async fn main() -> anyhow::Result<()> {
     // Install panic hook that restores terminal before printing panic
     let original_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |panic_info| {
-        let _ = crossterm::execute!(
-            std::io::stderr(),
-            crossterm::event::DisableMouseCapture
-        );
+        let _ = crossterm::execute!(std::io::stderr(), crossterm::event::DisableMouseCapture);
         let _ = ratatui::restore();
         original_hook(panic_info);
     }));
@@ -48,7 +45,8 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
 
     // Compute real terminal dimensions for PTY spawning
     let term_size = terminal.size()?;
-    let pty_area = ui::layout::compute_terminal_area(Rect::new(0, 0, term_size.width, term_size.height));
+    let pty_area =
+        ui::layout::compute_terminal_area(Rect::new(0, 0, term_size.width, term_size.height));
     app.pty_rows = pty_area.height;
     app.pty_cols = pty_area.width;
 
@@ -96,27 +94,25 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
             match event::read()? {
                 Event::Key(key) => {
                     if let Some(action) = handle_key_event(&mut app, key) {
-                        execute_action(&mut app, &manager, action).await?;
+                        execute_action(&mut app, &manager, action, &mut terminal).await?;
                     }
                 }
-                Event::Mouse(mouse) => {
-                    match mouse.kind {
-                        MouseEventKind::ScrollUp => {
-                            if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-                                && let Some(parser) = ws.pty_parsers.get(&ws.active_provider)
-                            {
-                                let max = parser.lock().unwrap().screen().scrollback();
-                                ws.term_scroll = (ws.term_scroll + 3).min(max);
-                            }
+                Event::Mouse(mouse) => match mouse.kind {
+                    MouseEventKind::ScrollUp => {
+                        if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+                            && let Some(parser) = ws.pty_parsers.get(&ws.active_provider)
+                        {
+                            let max = parser.lock().unwrap().screen().scrollback();
+                            ws.term_scroll = (ws.term_scroll + 3).min(max);
                         }
-                        MouseEventKind::ScrollDown => {
-                            if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
-                                ws.term_scroll = ws.term_scroll.saturating_sub(3);
-                            }
-                        }
-                        _ => {}
                     }
-                }
+                    MouseEventKind::ScrollDown => {
+                        if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+                            ws.term_scroll = ws.term_scroll.saturating_sub(3);
+                        }
+                    }
+                    _ => {}
+                },
                 Event::Resize(cols, rows) => {
                     let new_area = ui::layout::compute_terminal_area(Rect::new(0, 0, cols, rows));
                     app.pty_rows = new_area.height;
@@ -183,12 +179,15 @@ enum Action {
     RemoveFromList(usize),
     /// Open diff for the file at the given index in the active workspace
     OpenDiff(usize),
+    /// Open $EDITOR for a file path
+    OpenEditor(PathBuf),
 }
 
 async fn execute_action(
     app: &mut App,
     manager: &WorkspaceManager,
     action: Action,
+    terminal: &mut DefaultTerminal,
 ) -> anyhow::Result<()> {
     match action {
         Action::CreateWorkspace(name, description, dir) => {
@@ -199,7 +198,8 @@ async fn execute_action(
                     app.switch_workspace(new_idx);
 
                     // Spawn PTY for each AI provider
-                    spawn_all_providers(&mut app.workspaces[new_idx], app.pty_rows, app.pty_cols).await;
+                    spawn_all_providers(&mut app.workspaces[new_idx], app.pty_rows, app.pty_cols)
+                        .await;
 
                     // Start file watcher
                     let ws = &mut app.workspaces[new_idx];
@@ -286,6 +286,34 @@ async fn execute_action(
                 let _ = ws_config::save(&source_repo, &app.workspaces);
             }
         }
+        Action::OpenEditor(path) => {
+            // Suspend TUI, open $EDITOR, restore TUI
+            crossterm::execute!(std::io::stderr(), crossterm::event::DisableMouseCapture)?;
+            ratatui::restore();
+            let editor_cmd = std::env::var("EDITOR").unwrap_or_else(|_| "vi".to_string());
+            let status = std::process::Command::new(&editor_cmd).arg(&path).status();
+            *terminal = ratatui::init();
+            crossterm::execute!(std::io::stderr(), crossterm::event::EnableMouseCapture)?;
+            match status {
+                Ok(s) if s.success() => {
+                    if let Some(ws) = app.current_workspace_mut() {
+                        ws.dirty = true;
+                    }
+                    app.status_message = Some(format!("Edited: {}", path.display()));
+                }
+                Ok(s) => {
+                    app.status_message = Some(format!("Editor exited with: {}", s));
+                }
+                Err(e) => {
+                    app.status_message = Some(format!("Failed to run {}: {}", editor_cmd, e));
+                }
+            }
+            // Close fuzzy search if it was open
+            if app.mode == AppMode::FuzzySearch {
+                app.fuzzy = None;
+                app.mode = AppMode::Normal;
+            }
+        }
         Action::OpenDiff(file_idx) => {
             if let Some(ws) = app.workspaces.get(app.active_workspace) {
                 if let Some(file) = ws.changed_files.get(file_idx) {
@@ -363,6 +391,16 @@ fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
     if app.mode == AppMode::Help {
         app.mode = AppMode::Normal;
         return None;
+    }
+
+    // Fuzzy search overlay captures all input
+    if app.mode == AppMode::FuzzySearch {
+        return handle_fuzzy_search_input(app, key);
+    }
+
+    // Inline editor captures all input
+    if app.mode == AppMode::InlineEdit {
+        return handle_inline_edit_input(app, key);
     }
 
     // New workspace dialog captures all input
@@ -450,7 +488,8 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
         }
         // Scrollback: Shift+K / PageUp = scroll up, Shift+J / PageDown = scroll down
         KeyCode::Char('K') => {
-            if app.active_pane == ActivePane::MainPanel && app.mode == AppMode::Normal
+            if app.active_pane == ActivePane::MainPanel
+                && app.mode == AppMode::Normal
                 && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
                 && let Some(parser) = ws.pty_parsers.get(&ws.active_provider)
             {
@@ -459,7 +498,8 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
             }
         }
         KeyCode::Char('J') => {
-            if app.active_pane == ActivePane::MainPanel && app.mode == AppMode::Normal
+            if app.active_pane == ActivePane::MainPanel
+                && app.mode == AppMode::Normal
                 && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
             {
                 ws.term_scroll = ws.term_scroll.saturating_sub(3);
@@ -479,6 +519,13 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
                 let screen_height = app.pty_rows as usize;
                 ws.term_scroll = ws.term_scroll.saturating_sub(screen_height);
             }
+        }
+        // Fuzzy search (/ like vim, or Ctrl+f)
+        KeyCode::Char('/') => {
+            app.open_fuzzy_search();
+        }
+        KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            app.open_fuzzy_search();
         }
         // Cycle AI provider sub-tab
         KeyCode::Char('g') => {
@@ -531,7 +578,9 @@ fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
 }
 
 fn handle_diff_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    if key.code == KeyCode::Char('g') && key.modifiers.contains(KeyModifiers::CONTROL) {
+    if key.code == KeyCode::Esc
+        || (key.code == KeyCode::Char('g') && key.modifiers.contains(KeyModifiers::CONTROL))
+    {
         app.mode = AppMode::Normal;
         app.diff_content = None;
         app.diff_file_path = None;
@@ -603,7 +652,187 @@ fn handle_filelist_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
                 }
             }
         }
+        KeyCode::Char('e') => {
+            if let Some(ws) = app.current_workspace()
+                && let Some(file) = ws.changed_files.get(app.selected_file)
+            {
+                let full_path = ws.path.join(&file.path);
+                return Some(Action::OpenEditor(full_path));
+            }
+        }
+        KeyCode::Char('v') => {
+            if let Some(ws) = app.current_workspace()
+                && let Some(file) = ws.changed_files.get(app.selected_file)
+            {
+                let full_path = ws.path.join(&file.path);
+                app.open_inline_editor(full_path);
+            }
+        }
         _ => {}
+    }
+    None
+}
+
+fn handle_fuzzy_search_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    match key.code {
+        KeyCode::Esc => {
+            app.fuzzy = None;
+            app.mode = AppMode::Normal;
+        }
+        KeyCode::Up => {
+            if let Some(ref mut state) = app.fuzzy
+                && state.selected > 0
+            {
+                state.selected -= 1;
+            }
+        }
+        KeyCode::Down => {
+            if let Some(ref mut state) = app.fuzzy
+                && !state.results.is_empty()
+                && state.selected + 1 < state.results.len()
+            {
+                state.selected += 1;
+            }
+        }
+        KeyCode::Enter => {
+            let selected_path = app
+                .fuzzy
+                .as_ref()
+                .and_then(|s| s.results.get(s.selected))
+                .map(|m| m.path.clone());
+
+            if let Some(path) = selected_path {
+                // Check if file is in changed_files list; if so, open its diff
+                if let Some(ws) = app.current_workspace() {
+                    if let Some(idx) = ws.changed_files.iter().position(|f| f.path == path) {
+                        app.fuzzy = None;
+                        app.mode = AppMode::Normal;
+                        app.selected_file = idx;
+                        return Some(Action::OpenDiff(idx));
+                    } else {
+                        app.status_message = Some(format!("{} has no changes to diff", path));
+                    }
+                }
+            }
+        }
+        // Ctrl+E: open in $EDITOR
+        KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            let selected_path = app
+                .fuzzy
+                .as_ref()
+                .and_then(|s| s.results.get(s.selected))
+                .map(|m| m.path.clone());
+
+            if let (Some(rel_path), Some(ws)) = (selected_path, app.current_workspace()) {
+                let full_path = ws.path.join(&rel_path);
+                return Some(Action::OpenEditor(full_path));
+            }
+        }
+        // Ctrl+V: open inline editor
+        KeyCode::Char('v') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            let selected_path = app
+                .fuzzy
+                .as_ref()
+                .and_then(|s| s.results.get(s.selected))
+                .map(|m| m.path.clone());
+
+            if let Some(rel_path) = selected_path
+                && let Some(ws) = app.current_workspace()
+            {
+                let full_path = ws.path.join(&rel_path);
+                app.fuzzy = None;
+                app.open_inline_editor(full_path);
+            }
+        }
+        KeyCode::Backspace => {
+            if let Some(ref mut state) = app.fuzzy {
+                state.query.pop();
+            }
+            app.update_fuzzy_filter();
+        }
+        KeyCode::Char(c) => {
+            if let Some(ref mut state) = app.fuzzy {
+                state.query.push(c);
+            }
+            app.update_fuzzy_filter();
+        }
+        _ => {}
+    }
+    None
+}
+
+fn handle_inline_edit_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    match key.code {
+        KeyCode::Esc => {
+            app.editor = None;
+            app.editing_file = None;
+            app.mode = AppMode::Normal;
+        }
+        KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            // Save file
+            if let (Some(editor), Some(path)) = (&app.editor, &app.editing_file) {
+                let content = editor.contents();
+                match std::fs::write(path, &content) {
+                    Ok(()) => {
+                        app.status_message = Some(format!("Saved: {}", path.display()));
+                        if let Some(ws) = app.current_workspace_mut() {
+                            ws.dirty = true;
+                        }
+                    }
+                    Err(e) => {
+                        app.status_message = Some(format!("Save error: {}", e));
+                    }
+                }
+            }
+        }
+        KeyCode::Up => {
+            if let Some(ref mut editor) = app.editor {
+                editor.move_up();
+            }
+        }
+        KeyCode::Down => {
+            if let Some(ref mut editor) = app.editor {
+                editor.move_down();
+            }
+        }
+        KeyCode::Left => {
+            if let Some(ref mut editor) = app.editor {
+                editor.move_left();
+            }
+        }
+        KeyCode::Right => {
+            if let Some(ref mut editor) = app.editor {
+                editor.move_right();
+            }
+        }
+        KeyCode::Enter => {
+            if let Some(ref mut editor) = app.editor {
+                editor.enter();
+            }
+        }
+        KeyCode::Backspace => {
+            if let Some(ref mut editor) = app.editor {
+                editor.backspace();
+            }
+        }
+        KeyCode::Char(c) => {
+            if let Some(ref mut editor) = app.editor {
+                editor.insert_char(c);
+            }
+        }
+        KeyCode::Tab => {
+            if let Some(ref mut editor) = app.editor {
+                // Insert 4 spaces
+                for _ in 0..4 {
+                    editor.insert_char(' ');
+                }
+            }
+        }
+        _ => {}
+    }
+    // Keep cursor visible after any edit
+    if let Some(ref mut editor) = app.editor {
+        editor.adjust_scroll(app.pty_rows.saturating_sub(4) as usize);
     }
     None
 }
@@ -679,7 +908,10 @@ fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
             app.mode = AppMode::Normal;
             return Some(Action::CreateWorkspace(name, description, dir));
         }
-        _ if key.code == KeyCode::Esc || (key.code == KeyCode::Char('g') && key.modifiers.contains(KeyModifiers::CONTROL)) => {
+        _ if key.code == KeyCode::Esc
+            || (key.code == KeyCode::Char('g')
+                && key.modifiers.contains(KeyModifiers::CONTROL)) =>
+        {
             app.input_buffer.clear();
             app.dir_input_buffer.clear();
             app.desc_input_buffer.clear();

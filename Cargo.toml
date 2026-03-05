@@ -36,5 +36,9 @@ toml = "0.8"
 # Home directory resolution
 dirs = "6"
 
+# Fuzzy search
+nucleo = "0.2"
+ignore = "0.4"
+
 # Error handling
 anyhow = "1"

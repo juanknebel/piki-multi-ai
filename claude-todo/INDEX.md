@@ -4,7 +4,7 @@
 
 | Total | OPEN | IN_PROGRESS | DONE | CANCEL |
 |-------|------|-------------|------|--------|
-| 50    | 0    | 0           | 50   | 0      |
+| 51    | 0    | 0           | 51   | 0      |
 
 ## Fase 0 — Setup
 
@@ -160,6 +160,12 @@
 |-----|------------------------------------|--------|---------------|
 | T49 | Add Cancel option to New WS dialog | DONE   | —             |
 | T50 | Bug: Duplicate workspace on startup| DONE   | —             |
+
+## Phase 21 — Fuzzy Search y Navegacion de Archivos
+
+| ID  | Tarea                              | Status | Bloqueada por |
+|-----|------------------------------------|--------|---------------|
+| T51 | Fuzzy search + $EDITOR + inline edit| DONE  | —             |
 
 ## Grafo de Dependencias
 
