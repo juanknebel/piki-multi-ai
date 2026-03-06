@@ -22,6 +22,7 @@ use workspace::{FileWatcher, WorkspaceManager, config as ws_config};
 
 const TICK_RATE: Duration = Duration::from_millis(50);
 const DEBOUNCE: Duration = Duration::from_millis(500);
+const PERIODIC_REFRESH: Duration = Duration::from_secs(3);
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -215,15 +216,16 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
                 }
             }
             // Debounced refresh of changed files list via git diff
-            if ws.dirty {
-                let should_refresh = ws
-                    .last_refresh
-                    .map(|t| now.duration_since(t) >= DEBOUNCE)
-                    .unwrap_or(true);
-                if should_refresh {
-                    let _ = ws.refresh_changed_files().await;
-                    ws.last_refresh = Some(now);
-                }
+            // Refresh when dirty (debounced) or periodically to catch commits/rebases
+            let since_last = ws.last_refresh.map(|t| now.duration_since(t));
+            let should_refresh = if ws.dirty {
+                since_last.map(|d| d >= DEBOUNCE).unwrap_or(true)
+            } else {
+                since_last.map(|d| d >= PERIODIC_REFRESH).unwrap_or(true)
+            };
+            if should_refresh {
+                let _ = ws.refresh_changed_files().await;
+                ws.last_refresh = Some(now);
             }
         }
 
