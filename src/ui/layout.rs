@@ -121,6 +121,9 @@ pub fn render(frame: &mut Frame, app: &mut App) {
     if app.mode == AppMode::ConfirmDelete {
         render_confirm_delete_dialog(frame, area, app);
     }
+    if app.mode == AppMode::CommitMessage {
+        render_commit_dialog(frame, area, app);
+    }
     if app.mode == AppMode::FuzzySearch {
         super::fuzzy::render(frame, area, app);
     }
@@ -498,12 +501,28 @@ fn render_footer(frame: &mut Frame, area: Rect, app: &App) {
             ("Enter", "create"),
             ("Esc", "cancel"),
         ],
-        _ if app.interacting => vec![("C-g", "navigation mode")],
+        AppMode::CommitMessage => vec![("Enter", "commit"), ("Esc", "cancel")],
+        _ if app.interacting => {
+            if app.active_pane == ActivePane::FileList {
+                vec![
+                    ("j/k", "select"),
+                    ("Enter", "diff"),
+                    ("s", "stage"),
+                    ("u", "unstage"),
+                    ("e", "editor"),
+                    ("C-g", "back"),
+                ]
+            } else {
+                vec![("C-g", "navigation mode")]
+            }
+        }
         _ => vec![
             ("hjkl", "navigate"),
             ("Enter", "interact"),
             ("n", "new"),
             ("d", "delete"),
+            ("c", "commit"),
+            ("P", "push"),
             ("Tab", "switch ws"),
             ("/", "search"),
             ("g", "switch AI"),
@@ -686,6 +705,12 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, theme: &Theme) {
         "  File list (interaction mode)",
         "    e             Open in $EDITOR",
         "    v             Inline editor",
+        "    s             Stage file (git add)",
+        "    u             Unstage file (git reset)",
+        "",
+        "  Git operations",
+        "    c             Commit (opens dialog)",
+        "    P             Push",
         "",
         "  Inline editor",
         "    Ctrl+S        Save",
@@ -755,6 +780,45 @@ fn render_confirm_delete_dialog(frame: &mut Frame, area: Rect, app: &App) {
         Line::from(Span::styled(
             "  [Esc] Cancel",
             Style::default().fg(theme.delete_cancel),
+        )),
+    ];
+
+    let text = Paragraph::new(lines).block(block);
+    frame.render_widget(text, popup);
+}
+
+fn render_commit_dialog(frame: &mut Frame, area: Rect, app: &App) {
+    let popup_width = area.width * 60 / 100;
+    let popup = centered_rect(popup_width.max(40), 7, area);
+    let theme = &app.theme.dialog;
+
+    frame.render_widget(ratatui::widgets::Clear, popup);
+
+    let block = Block::default()
+        .title(" Commit ")
+        .title_style(Style::default().fg(theme.new_ws_border))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.new_ws_border));
+
+    let field_max = popup.width.saturating_sub(14) as usize;
+    let cursor = "█";
+    let full = format!("{}{}", app.commit_msg_buffer, cursor);
+    let visible = if full.len() > field_max && field_max > 2 {
+        format!("…{}", &full[full.len() - (field_max - 1)..])
+    } else {
+        full
+    };
+
+    let lines = vec![
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  Message: ", Style::default().fg(theme.new_ws_active)),
+            Span::styled(visible, Style::default().fg(theme.new_ws_active)),
+        ]),
+        Line::from(""),
+        Line::from(Span::styled(
+            "  [Enter] Commit  [Esc] Cancel",
+            Style::default().fg(theme.new_ws_inactive),
         )),
     ];
 

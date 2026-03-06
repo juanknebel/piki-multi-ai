@@ -242,6 +242,14 @@ enum Action {
     OpenDiff(usize),
     /// Open $EDITOR for a file path
     OpenEditor(PathBuf),
+    /// Git: stage a file at the given index
+    GitStage(usize),
+    /// Git: unstage a file at the given index
+    GitUnstage(usize),
+    /// Git: commit with message
+    GitCommit(String),
+    /// Git: push current branch
+    GitPush,
 }
 
 async fn execute_action(
@@ -424,6 +432,84 @@ async fn execute_action(
                 }
             }
         }
+        Action::GitStage(file_idx) => {
+            if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+                if let Some(file) = ws.changed_files.get(file_idx) {
+                    let file_path = file.path.clone();
+                    let worktree = ws.path.clone();
+                    let output = tokio::process::Command::new("git")
+                        .args(["add", &file_path])
+                        .current_dir(&worktree)
+                        .output()
+                        .await?;
+                    if output.status.success() {
+                        app.status_message = Some(format!("Staged: {}", file_path));
+                    } else {
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        app.status_message = Some(format!("Stage failed: {}", stderr.trim()));
+                    }
+                    ws.dirty = true;
+                    let _ = ws.refresh_changed_files().await;
+                }
+            }
+        }
+        Action::GitUnstage(file_idx) => {
+            if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+                if let Some(file) = ws.changed_files.get(file_idx) {
+                    let file_path = file.path.clone();
+                    let worktree = ws.path.clone();
+                    let output = tokio::process::Command::new("git")
+                        .args(["reset", "HEAD", &file_path])
+                        .current_dir(&worktree)
+                        .output()
+                        .await?;
+                    if output.status.success() {
+                        app.status_message = Some(format!("Unstaged: {}", file_path));
+                    } else {
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        app.status_message = Some(format!("Unstage failed: {}", stderr.trim()));
+                    }
+                    ws.dirty = true;
+                    let _ = ws.refresh_changed_files().await;
+                }
+            }
+        }
+        Action::GitCommit(message) => {
+            if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+                let worktree = ws.path.clone();
+                let output = tokio::process::Command::new("git")
+                    .args(["commit", "-m", &message])
+                    .current_dir(&worktree)
+                    .output()
+                    .await?;
+                if output.status.success() {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    let first_line = stdout.lines().next().unwrap_or("Committed");
+                    app.status_message = Some(format!("✓ {}", first_line));
+                } else {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    app.status_message = Some(format!("Commit failed: {}", stderr.trim()));
+                }
+                ws.dirty = true;
+                let _ = ws.refresh_changed_files().await;
+            }
+        }
+        Action::GitPush => {
+            if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+                let worktree = ws.path.clone();
+                let output = tokio::process::Command::new("git")
+                    .args(["push"])
+                    .current_dir(&worktree)
+                    .output()
+                    .await?;
+                if output.status.success() {
+                    app.status_message = Some("✓ Pushed successfully".into());
+                } else {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    app.status_message = Some(format!("Push failed: {}", stderr.trim()));
+                }
+            }
+        }
     }
     Ok(())
 }
@@ -514,6 +600,11 @@ fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         return handle_new_workspace_input(app, key);
     }
 
+    // Commit message dialog captures all input
+    if app.mode == AppMode::CommitMessage {
+        return handle_commit_message_input(app, key);
+    }
+
     // Confirm delete dialog captures all input
     if app.mode == AppMode::ConfirmDelete {
         return handle_confirm_delete_input(app, key);
@@ -581,6 +672,17 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
             if !app.workspaces.is_empty() {
                 app.delete_target = Some(app.selected_workspace);
                 app.mode = AppMode::ConfirmDelete;
+            }
+        }
+        KeyCode::Char('c') => {
+            if app.current_workspace().is_some() {
+                app.commit_msg_buffer.clear();
+                app.mode = AppMode::CommitMessage;
+            }
+        }
+        KeyCode::Char('P') => {
+            if app.current_workspace().is_some() {
+                return Some(Action::GitPush);
             }
         }
         KeyCode::Tab => {
@@ -820,6 +922,20 @@ fn handle_filelist_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
             {
                 let full_path = ws.path.join(&file.path);
                 app.open_inline_editor(full_path);
+            }
+        }
+        KeyCode::Char('s') => {
+            if let Some(ws) = app.current_workspace() {
+                if !ws.changed_files.is_empty() {
+                    return Some(Action::GitStage(app.selected_file));
+                }
+            }
+        }
+        KeyCode::Char('u') => {
+            if let Some(ws) = app.current_workspace() {
+                if !ws.changed_files.is_empty() {
+                    return Some(Action::GitUnstage(app.selected_file));
+                }
             }
         }
         _ => {}
@@ -1112,4 +1228,33 @@ fn handle_confirm_delete_input(app: &mut App, key: KeyEvent) -> Option<Action> {
         }
         _ => None,
     }
+}
+
+fn handle_commit_message_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    match key.code {
+        KeyCode::Char(c) => {
+            if !c.is_control() {
+                app.commit_msg_buffer.push(c);
+            }
+        }
+        KeyCode::Backspace => {
+            app.commit_msg_buffer.pop();
+        }
+        KeyCode::Enter => {
+            let message = app.commit_msg_buffer.clone();
+            if message.is_empty() {
+                app.status_message = Some("Commit message cannot be empty".into());
+                return None;
+            }
+            app.commit_msg_buffer.clear();
+            app.mode = AppMode::Normal;
+            return Some(Action::GitCommit(message));
+        }
+        KeyCode::Esc => {
+            app.commit_msg_buffer.clear();
+            app.mode = AppMode::Normal;
+        }
+        _ => {}
+    }
+    None
 }

@@ -76,6 +76,8 @@ pub enum AppMode {
     FuzzySearch,
     /// Inline file editor
     InlineEdit,
+    /// Commit message input dialog
+    CommitMessage,
 }
 
 /// Which pane is currently selected / focused
@@ -613,6 +615,8 @@ pub struct App {
     pub theme: Theme,
     pub selection: Option<Selection>,
     pub terminal_inner_area: Option<Rect>,
+    /// Commit message buffer (for git commit dialog)
+    pub commit_msg_buffer: String,
 }
 
 impl App {
@@ -644,6 +648,7 @@ impl App {
             theme: Theme::default(),
             selection: None,
             terminal_inner_area: None,
+            commit_msg_buffer: String::new(),
         }
     }
 
