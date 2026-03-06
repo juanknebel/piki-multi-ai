@@ -729,6 +729,7 @@ fn handle_diff_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
         app.diff_content = None;
         app.diff_file_path = None;
         app.interacting = false;
+        app.active_pane = ActivePane::FileList;
         return None;
     }
     match key.code {
@@ -1050,6 +1051,7 @@ fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
             app.dir_input_buffer.clear();
             app.desc_input_buffer.clear();
             app.mode = AppMode::Normal;
+            app.active_pane = ActivePane::WorkspaceList;
             return Some(Action::CreateWorkspace(name, description, dir));
         }
         _ if key.code == KeyCode::Esc
@@ -1060,6 +1062,7 @@ fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
             app.dir_input_buffer.clear();
             app.desc_input_buffer.clear();
             app.mode = AppMode::Normal;
+            app.active_pane = ActivePane::WorkspaceList;
         }
         _ => {}
     }
@@ -1071,16 +1074,19 @@ fn handle_confirm_delete_input(app: &mut App, key: KeyEvent) -> Option<Action> {
         KeyCode::Char('y') | KeyCode::Char('Y') => {
             let target = app.delete_target.take();
             app.mode = AppMode::Normal;
+            app.active_pane = ActivePane::WorkspaceList;
             target.map(Action::DeleteWorkspace)
         }
         KeyCode::Char('n') | KeyCode::Char('N') => {
             let target = app.delete_target.take();
             app.mode = AppMode::Normal;
+            app.active_pane = ActivePane::WorkspaceList;
             target.map(Action::RemoveFromList)
         }
         KeyCode::Esc => {
             app.delete_target = None;
             app.mode = AppMode::Normal;
+            app.active_pane = ActivePane::WorkspaceList;
             None
         }
         _ => None,
