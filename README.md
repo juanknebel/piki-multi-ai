@@ -25,7 +25,8 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 - **Inline editor** — Edit files directly inside the TUI with a built-in text editor (cursor movement, line numbers, scroll)
 - **Clipboard support** — Paste from clipboard (`Ctrl+Shift+V`), copy visible terminal (`Ctrl+Shift+C`), and mouse drag-to-select with auto-copy; cross-platform (Wayland, X11, macOS, Windows)
 - **Workspace prompts** — Optionally provide an initial prompt when creating a workspace; the prompt is auto-sent to the active AI provider on creation, enabling parallel AI orchestration
-- **Git operations** — Stage (`s`), unstage (`u`), commit (`c`), and push (`P`) directly from the TUI; commit dialog with inline message input
+- **Git operations** — Stage (`s`), unstage (`u`), commit (`c`), push (`P`), and merge (`M`) directly from the TUI; commit dialog with inline message input
+- **Merge/Apply changes** — Merge or rebase workspace branches into main directly from the TUI (`M`); supports merge commit and rebase strategies with conflict detection
 - **System status header** — Live CPU%, RAM usage, battery level, and date/time displayed in a top header bar (powered by `systemstat`)
 - **Resizable panes** — Resize sidebar and workspace/file split with keyboard (`<`/`>`, `+`/`-`) or mouse drag on borders
 - **Customizable themes** — Colors loaded from TOML files; supports named colors and hex `#rrggbb`
@@ -139,6 +140,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `+` / `-` | Resize workspace/file split (±10%) |
 | `/` or `Ctrl+f` | Fuzzy file search |
 | `g` | Cycle AI provider (Claude → Gemini → Codex → Shell) |
+| `M` | Merge workspace branch into main |
 | `?` | Help overlay |
 | `q` | Quit |
 

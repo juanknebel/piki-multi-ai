@@ -144,6 +144,37 @@ impl WorkspaceManager {
         ))
     }
 
+    /// Detect the main branch name (main, master, etc.) for a repository.
+    pub async fn detect_main_branch(source_repo: &PathBuf) -> String {
+        // Try symbolic-ref of origin/HEAD
+        if let Ok(output) = Command::new("git")
+            .args(["symbolic-ref", "refs/remotes/origin/HEAD"])
+            .current_dir(source_repo)
+            .output()
+            .await
+        {
+            if output.status.success() {
+                let refname = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                // refs/remotes/origin/main -> main
+                if let Some(branch) = refname.strip_prefix("refs/remotes/origin/") {
+                    return branch.to_string();
+                }
+            }
+        }
+        // Fallback: check if "main" branch exists, otherwise "master"
+        if let Ok(output) = Command::new("git")
+            .args(["rev-parse", "--verify", "refs/heads/main"])
+            .current_dir(source_repo)
+            .output()
+            .await
+        {
+            if output.status.success() {
+                return "main".to_string();
+            }
+        }
+        "master".to_string()
+    }
+
     /// Remove a workspace: remove worktree, delete branch.
     /// Uses the workspace's `source_repo` to locate the git root.
     pub async fn remove(&self, name: &str, source_repo: &PathBuf) -> anyhow::Result<()> {

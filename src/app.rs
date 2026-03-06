@@ -78,6 +78,15 @@ pub enum AppMode {
     InlineEdit,
     /// Commit message input dialog
     CommitMessage,
+    /// Merge confirmation dialog
+    ConfirmMerge,
+}
+
+/// Strategy for merging a workspace branch into main
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MergeStrategy {
+    Merge,
+    Rebase,
 }
 
 /// Which pane is currently selected / focused

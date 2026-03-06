@@ -132,6 +132,9 @@ pub fn render(frame: &mut Frame, app: &mut App) {
     if app.mode == AppMode::CommitMessage {
         render_commit_dialog(frame, area, app);
     }
+    if app.mode == AppMode::ConfirmMerge {
+        render_confirm_merge_dialog(frame, area, app);
+    }
     if app.mode == AppMode::FuzzySearch {
         super::fuzzy::render(frame, area, app);
     }
@@ -544,6 +547,7 @@ fn render_footer(frame: &mut Frame, area: Rect, app: &App) {
             ("Esc", "cancel"),
         ],
         AppMode::CommitMessage => vec![("Enter", "commit"), ("Esc", "cancel")],
+        AppMode::ConfirmMerge => vec![("m", "merge"), ("r", "rebase"), ("Esc", "cancel")],
         _ if app.interacting => {
             if app.active_pane == ActivePane::FileList {
                 vec![
@@ -565,6 +569,7 @@ fn render_footer(frame: &mut Frame, area: Rect, app: &App) {
             ("d", "delete"),
             ("c", "commit"),
             ("P", "push"),
+            ("M", "merge"),
             ("Tab", "switch ws"),
             ("/", "search"),
             ("</>", "resize"),
@@ -872,6 +877,53 @@ fn render_commit_dialog(frame: &mut Frame, area: Rect, app: &App) {
         Line::from(""),
         Line::from(Span::styled(
             "  [Enter] Commit  [Esc] Cancel",
+            Style::default().fg(theme.new_ws_inactive),
+        )),
+    ];
+
+    let text = Paragraph::new(lines).block(block);
+    frame.render_widget(text, popup);
+}
+
+fn render_confirm_merge_dialog(frame: &mut Frame, area: Rect, app: &App) {
+    let popup = centered_rect(50, 9, area);
+    frame.render_widget(ratatui::widgets::Clear, popup);
+    let theme = &app.theme.dialog;
+
+    let branch_name = app
+        .current_workspace()
+        .map(|ws| ws.branch.as_str())
+        .unwrap_or("?");
+
+    let block = Block::default()
+        .title(" Merge ")
+        .title_style(Style::default().fg(theme.new_ws_border))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.new_ws_border));
+
+    let lines = vec![
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  Merge ", Style::default().fg(theme.new_ws_active)),
+            Span::styled(
+                branch_name,
+                Style::default()
+                    .fg(theme.new_ws_active)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" into main?", Style::default().fg(theme.new_ws_active)),
+        ]),
+        Line::from(""),
+        Line::from(Span::styled(
+            "  [m] Merge commit",
+            Style::default().fg(theme.new_ws_inactive),
+        )),
+        Line::from(Span::styled(
+            "  [r] Rebase + fast-forward",
+            Style::default().fg(theme.new_ws_inactive),
+        )),
+        Line::from(Span::styled(
+            "  [Esc] Cancel",
             Style::default().fg(theme.new_ws_inactive),
         )),
     ];

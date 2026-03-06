@@ -17,7 +17,7 @@ use crossterm::event::{
 use ratatui::DefaultTerminal;
 use ratatui::layout::Rect;
 
-use app::{AIProvider, ActivePane, App, AppMode, DialogField};
+use app::{AIProvider, ActivePane, App, AppMode, DialogField, MergeStrategy};
 use pty::PtySession;
 use workspace::{FileWatcher, WorkspaceManager, config as ws_config};
 
@@ -286,6 +286,8 @@ enum Action {
     GitCommit(String),
     /// Git: push current branch
     GitPush,
+    /// Git: merge workspace branch into main
+    GitMerge(MergeStrategy),
 }
 
 async fn execute_action(
@@ -546,6 +548,189 @@ async fn execute_action(
                 }
             }
         }
+        Action::GitMerge(strategy) => {
+            if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+                let source_repo = ws.source_repo.clone();
+                let branch = ws.branch.clone();
+
+                // Check workspace has no uncommitted changes
+                let status_output = tokio::process::Command::new("git")
+                    .args(["status", "--porcelain"])
+                    .current_dir(&ws.path)
+                    .output()
+                    .await?;
+                let status_str = String::from_utf8_lossy(&status_output.stdout);
+                if !status_str.trim().is_empty() {
+                    app.status_message =
+                        Some("Merge aborted: workspace has uncommitted changes".into());
+                    return Ok(());
+                }
+
+                // Detect main branch
+                let main_branch =
+                    WorkspaceManager::detect_main_branch(&source_repo).await;
+
+                match strategy {
+                    MergeStrategy::Merge => {
+                        // Stash source repo if dirty
+                        let src_status = tokio::process::Command::new("git")
+                            .args(["status", "--porcelain"])
+                            .current_dir(&source_repo)
+                            .output()
+                            .await?;
+                        let src_dirty =
+                            !String::from_utf8_lossy(&src_status.stdout).trim().is_empty();
+                        if src_dirty {
+                            tokio::process::Command::new("git")
+                                .args(["stash", "push", "-m", "piki-multi-merge-temp"])
+                                .current_dir(&source_repo)
+                                .output()
+                                .await?;
+                        }
+
+                        // Save current branch to restore later
+                        let prev_branch = tokio::process::Command::new("git")
+                            .args(["rev-parse", "--abbrev-ref", "HEAD"])
+                            .current_dir(&source_repo)
+                            .output()
+                            .await?;
+                        let prev =
+                            String::from_utf8_lossy(&prev_branch.stdout).trim().to_string();
+
+                        // Checkout main
+                        let checkout = tokio::process::Command::new("git")
+                            .args(["checkout", &main_branch])
+                            .current_dir(&source_repo)
+                            .output()
+                            .await?;
+                        if !checkout.status.success() {
+                            let stderr = String::from_utf8_lossy(&checkout.stderr);
+                            app.status_message =
+                                Some(format!("Checkout {} failed: {}", main_branch, stderr.trim()));
+                            if src_dirty {
+                                let _ = tokio::process::Command::new("git")
+                                    .args(["stash", "pop"])
+                                    .current_dir(&source_repo)
+                                    .output()
+                                    .await;
+                            }
+                            return Ok(());
+                        }
+
+                        // Merge
+                        let merge = tokio::process::Command::new("git")
+                            .args(["merge", &branch])
+                            .current_dir(&source_repo)
+                            .output()
+                            .await?;
+
+                        if merge.status.success() {
+                            let stdout = String::from_utf8_lossy(&merge.stdout);
+                            let first = stdout.lines().next().unwrap_or("Merged");
+                            app.status_message =
+                                Some(format!("✓ Merged '{}' into {}: {}", branch, main_branch, first));
+                        } else {
+                            let stderr = String::from_utf8_lossy(&merge.stderr);
+                            // Abort the failed merge to leave repo clean
+                            let _ = tokio::process::Command::new("git")
+                                .args(["merge", "--abort"])
+                                .current_dir(&source_repo)
+                                .output()
+                                .await;
+                            app.status_message = Some(format!(
+                                "Merge conflict: {} — resolve in Shell tab",
+                                stderr.trim()
+                            ));
+                        }
+
+                        // Restore previous branch
+                        if prev != main_branch {
+                            let _ = tokio::process::Command::new("git")
+                                .args(["checkout", &prev])
+                                .current_dir(&source_repo)
+                                .output()
+                                .await;
+                        }
+
+                        // Restore stash if we stashed
+                        if src_dirty {
+                            let _ = tokio::process::Command::new("git")
+                                .args(["stash", "pop"])
+                                .current_dir(&source_repo)
+                                .output()
+                                .await;
+                        }
+                    }
+                    MergeStrategy::Rebase => {
+                        // Rebase workspace branch onto main
+                        let rebase = tokio::process::Command::new("git")
+                            .args(["rebase", &main_branch])
+                            .current_dir(&ws.path)
+                            .output()
+                            .await?;
+
+                        if !rebase.status.success() {
+                            let stderr = String::from_utf8_lossy(&rebase.stderr);
+                            // Abort rebase on conflict
+                            let _ = tokio::process::Command::new("git")
+                                .args(["rebase", "--abort"])
+                                .current_dir(&ws.path)
+                                .output()
+                                .await;
+                            app.status_message = Some(format!(
+                                "Rebase conflict: {} — resolve in Shell tab",
+                                stderr.trim()
+                            ));
+                            return Ok(());
+                        }
+
+                        // Now fast-forward merge in source repo
+                        let prev_branch = tokio::process::Command::new("git")
+                            .args(["rev-parse", "--abbrev-ref", "HEAD"])
+                            .current_dir(&source_repo)
+                            .output()
+                            .await?;
+                        let prev =
+                            String::from_utf8_lossy(&prev_branch.stdout).trim().to_string();
+
+                        let _ = tokio::process::Command::new("git")
+                            .args(["checkout", &main_branch])
+                            .current_dir(&source_repo)
+                            .output()
+                            .await;
+
+                        let ff = tokio::process::Command::new("git")
+                            .args(["merge", "--ff-only", &branch])
+                            .current_dir(&source_repo)
+                            .output()
+                            .await?;
+
+                        if ff.status.success() {
+                            app.status_message = Some(format!(
+                                "✓ Rebased and merged '{}' into {}",
+                                branch, main_branch
+                            ));
+                        } else {
+                            let stderr = String::from_utf8_lossy(&ff.stderr);
+                            app.status_message =
+                                Some(format!("Fast-forward failed: {}", stderr.trim()));
+                        }
+
+                        // Restore previous branch
+                        if prev != main_branch {
+                            let _ = tokio::process::Command::new("git")
+                                .args(["checkout", &prev])
+                                .current_dir(&source_repo)
+                                .output()
+                                .await;
+                        }
+                    }
+                }
+
+                ws.dirty = true;
+                let _ = ws.refresh_changed_files().await;
+            }
+        }
     }
     Ok(())
 }
@@ -665,6 +850,11 @@ fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         return handle_commit_message_input(app, key);
     }
 
+    // Confirm merge dialog captures all input
+    if app.mode == AppMode::ConfirmMerge {
+        return handle_confirm_merge_input(app, key);
+    }
+
     // Confirm delete dialog captures all input
     if app.mode == AppMode::ConfirmDelete {
         return handle_confirm_delete_input(app, key);
@@ -738,6 +928,11 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
             if app.current_workspace().is_some() {
                 app.commit_msg_buffer.clear();
                 app.mode = AppMode::CommitMessage;
+            }
+        }
+        KeyCode::Char('M') => {
+            if app.current_workspace().is_some() {
+                app.mode = AppMode::ConfirmMerge;
             }
         }
         KeyCode::Char('P') => {
@@ -1332,4 +1527,22 @@ fn handle_commit_message_input(app: &mut App, key: KeyEvent) -> Option<Action> {
         _ => {}
     }
     None
+}
+
+fn handle_confirm_merge_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    match key.code {
+        KeyCode::Char('m') => {
+            app.mode = AppMode::Normal;
+            Some(Action::GitMerge(MergeStrategy::Merge))
+        }
+        KeyCode::Char('r') => {
+            app.mode = AppMode::Normal;
+            Some(Action::GitMerge(MergeStrategy::Rebase))
+        }
+        KeyCode::Esc => {
+            app.mode = AppMode::Normal;
+            None
+        }
+        _ => None,
+    }
 }
