@@ -6,6 +6,8 @@ use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders};
 use tui_term::widget::{Cursor as PtyCursor, PseudoTerminal};
 
+use crate::app::Selection;
+
 /// Render the PTY terminal output in the given area.
 /// Locks the parser briefly to read the vt100 screen state.
 /// When `scroll_offset > 0`, shows scrollback history.
@@ -16,6 +18,8 @@ pub fn render(
     border_style: Style,
     title: &str,
     scroll_offset: usize,
+    selection: Option<&Selection>,
+    selection_style: Style,
 ) {
     let mut parser_guard = parser.lock().unwrap();
 
@@ -39,4 +43,27 @@ pub fn render(
 
     // Reset scrollback so the parser tracks live output correctly
     parser_guard.screen_mut().set_scrollback(0);
+    drop(parser_guard);
+
+    // Render selection highlight overlay
+    if let Some(sel) = selection {
+        let inner = Rect::new(
+            area.x + 1,
+            area.y + 1,
+            area.width.saturating_sub(2),
+            area.height.saturating_sub(2),
+        );
+        let buf = frame.buffer_mut();
+        for row in 0..inner.height {
+            for col in 0..inner.width {
+                if sel.contains(row, col) {
+                    let x = inner.x + col;
+                    let y = inner.y + row;
+                    if let Some(cell) = buf.cell_mut((x, y)) {
+                        cell.set_style(selection_style);
+                    }
+                }
+            }
+        }
+    }
 }

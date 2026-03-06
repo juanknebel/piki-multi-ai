@@ -1,4 +1,5 @@
 mod app;
+mod clipboard;
 mod diff;
 mod pty;
 mod theme;
@@ -9,7 +10,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEventKind};
+use crossterm::event::{
+    self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEventKind,
+};
 use ratatui::DefaultTerminal;
 use ratatui::layout::Rect;
 
@@ -86,7 +89,7 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
     loop {
         // Render
         terminal.draw(|frame| {
-            ui::layout::render(frame, &app);
+            ui::layout::render(frame, &mut app);
         })?;
 
         // Poll for events with timeout (non-blocking for async tasks)
@@ -111,6 +114,66 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
                     MouseEventKind::ScrollDown => {
                         if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
                             ws.term_scroll = ws.term_scroll.saturating_sub(3);
+                        }
+                    }
+                    MouseEventKind::Down(MouseButton::Left) => {
+                        if app.mode == AppMode::Normal {
+                            if let Some(inner) = app.terminal_inner_area {
+                                if mouse.row >= inner.y
+                                    && mouse.row < inner.y + inner.height
+                                    && mouse.column >= inner.x
+                                    && mouse.column < inner.x + inner.width
+                                {
+                                    let cell_row = mouse.row - inner.y;
+                                    let cell_col = mouse.column - inner.x;
+                                    app.selection =
+                                        Some(app::Selection::new(cell_row, cell_col));
+                                }
+                            }
+                        }
+                    }
+                    MouseEventKind::Drag(MouseButton::Left) => {
+                        if let Some(ref mut sel) = app.selection {
+                            if let Some(inner) = app.terminal_inner_area {
+                                let cell_row = mouse
+                                    .row
+                                    .saturating_sub(inner.y)
+                                    .min(inner.height.saturating_sub(1));
+                                let cell_col = mouse
+                                    .column
+                                    .saturating_sub(inner.x)
+                                    .min(inner.width.saturating_sub(1));
+                                sel.end_row = cell_row;
+                                sel.end_col = cell_col;
+                            }
+                        }
+                    }
+                    MouseEventKind::Up(MouseButton::Left) => {
+                        if let Some(ref mut sel) = app.selection {
+                            sel.active = false;
+                            let (sr, sc, er, ec) = sel.normalized();
+                            // Only copy if non-empty selection
+                            if sr != er || sc != ec {
+                                if let Some(ws) =
+                                    app.workspaces.get(app.active_workspace)
+                                    && let Some(parser) =
+                                        ws.pty_parsers.get(&ws.active_provider)
+                                {
+                                    let mut guard = parser.lock().unwrap();
+                                    guard.screen_mut().set_scrollback(ws.term_scroll);
+                                    let text = guard.screen().contents_between(
+                                        sr, sc, er, ec + 1,
+                                    );
+                                    guard.screen_mut().set_scrollback(0);
+                                    if let Err(e) = clipboard::copy_to_clipboard(&text) {
+                                        app.status_message =
+                                            Some(format!("Copy failed: {}", e));
+                                    } else {
+                                        app.status_message =
+                                            Some("Selection copied".into());
+                                    }
+                                }
+                            }
                         }
                     }
                     _ => {}
@@ -399,6 +462,26 @@ fn scrollback_max(parser: &Arc<std::sync::Mutex<vt100::Parser>>) -> usize {
     max
 }
 
+fn copy_visible_terminal(app: &mut App) {
+    if let Some(ws) = app.workspaces.get(app.active_workspace)
+        && let Some(parser) = ws.pty_parsers.get(&ws.active_provider)
+    {
+        let mut guard = parser.lock().unwrap();
+        guard.screen_mut().set_scrollback(ws.term_scroll);
+        let text = guard.screen().contents();
+        guard.screen_mut().set_scrollback(0);
+        drop(guard);
+        match clipboard::copy_to_clipboard(&text) {
+            Ok(()) => {
+                app.status_message = Some("Terminal content copied".into());
+            }
+            Err(e) => {
+                app.status_message = Some(format!("Copy failed: {}", e));
+            }
+        }
+    }
+}
+
 fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
     // Help overlay — any key closes it
     if app.mode == AppMode::Help {
@@ -426,8 +509,9 @@ fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         return handle_confirm_delete_input(app, key);
     }
 
-    // Clear status message on any key
+    // Clear status message and selection on any key
     app.status_message = None;
+    app.selection = None;
 
     if app.interacting {
         handle_interaction_mode(app, key)
@@ -533,6 +617,13 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
                 ws.term_scroll = ws.term_scroll.saturating_sub(screen_height);
             }
         }
+        // Ctrl+Shift+C: copy visible terminal content
+        KeyCode::Char('C')
+            if key.modifiers.contains(KeyModifiers::CONTROL)
+                && key.modifiers.contains(KeyModifiers::SHIFT) =>
+        {
+            copy_visible_terminal(app);
+        }
         // Fuzzy search (/ like vim, or Ctrl+f)
         KeyCode::Char('/') => {
             app.open_fuzzy_search();
@@ -576,6 +667,44 @@ fn handle_interaction_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
 fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
     if key.code == KeyCode::Char('g') && key.modifiers.contains(KeyModifiers::CONTROL) {
         app.interacting = false;
+        return None;
+    }
+    // Ctrl+Shift+V: paste from clipboard
+    if key.code == KeyCode::Char('V')
+        && key.modifiers.contains(KeyModifiers::CONTROL)
+        && key.modifiers.contains(KeyModifiers::SHIFT)
+    {
+        match clipboard::paste_from_clipboard() {
+            Ok(text) => {
+                if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+                    let provider = ws.active_provider;
+                    if let Some(pty) = ws.pty_sessions.get_mut(&provider) {
+                        let bracketed = ws
+                            .pty_parsers
+                            .get(&provider)
+                            .map(|p| p.lock().unwrap().screen().bracketed_paste())
+                            .unwrap_or(false);
+                        let data = if bracketed {
+                            format!("\x1b[200~{}\x1b[201~", text)
+                        } else {
+                            text
+                        };
+                        let _ = pty.write(data.as_bytes());
+                    }
+                }
+            }
+            Err(e) => {
+                app.status_message = Some(format!("Paste failed: {}", e));
+            }
+        }
+        return None;
+    }
+    // Ctrl+Shift+C: copy visible terminal content
+    if key.code == KeyCode::Char('C')
+        && key.modifiers.contains(KeyModifiers::CONTROL)
+        && key.modifiers.contains(KeyModifiers::SHIFT)
+    {
+        copy_visible_terminal(app);
         return None;
     }
     // Forward all other keys to the active provider's PTY

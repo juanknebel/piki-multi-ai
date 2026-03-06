@@ -40,5 +40,8 @@ dirs = "6"
 nucleo = "0.2"
 ignore = "0.4"
 
+# Clipboard
+arboard = { version = "3", features = ["wayland-data-control"] }
+
 # Error handling
 anyhow = "1"

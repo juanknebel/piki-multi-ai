@@ -51,7 +51,7 @@ fn pane_border_style(app: &App, pane: ActivePane) -> Style {
 }
 
 /// Render the main application layout
-pub fn render(frame: &mut Frame, app: &App) {
+pub fn render(frame: &mut Frame, app: &mut App) {
     let area = frame.area();
 
     // Main vertical split: content + footer
@@ -89,6 +89,15 @@ pub fn render(frame: &mut Frame, app: &App) {
 
     // Right: AI provider sub-tabs
     render_subtabs(frame, subtabs_area, app);
+
+    // Cache terminal inner area for mouse coordinate translation
+    let terminal_inner = Rect::new(
+        main_area.x + 1,
+        main_area.y + 1,
+        main_area.width.saturating_sub(2),
+        main_area.height.saturating_sub(2),
+    );
+    app.terminal_inner_area = Some(terminal_inner);
 
     // Right center: main content (PTY or Diff)
     render_main_content(frame, main_area, app);
@@ -327,7 +336,7 @@ fn render_subtabs(frame: &mut Frame, area: Rect, app: &App) {
     }
 }
 
-fn render_main_content(frame: &mut Frame, area: Rect, app: &App) {
+fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) {
     if app.mode == AppMode::InlineEdit {
         super::editor::render(frame, area, app);
         return;
@@ -335,6 +344,10 @@ fn render_main_content(frame: &mut Frame, area: Rect, app: &App) {
 
     let border_style = pane_border_style(app, ActivePane::MainPanel);
 
+    let selection = app.selection.take();
+    let selection_style = Style::default()
+        .bg(app.theme.selection.bg)
+        .fg(app.theme.selection.fg);
     if let Some(ws) = app.current_workspace() {
         let provider = ws.active_provider;
         if let Some(parser) = ws.pty_parsers.get(&provider) {
@@ -345,6 +358,8 @@ fn render_main_content(frame: &mut Frame, area: Rect, app: &App) {
                 border_style,
                 provider.label(),
                 ws.term_scroll,
+                selection.as_ref(),
+                selection_style,
             );
         } else {
             // Provider CLI not found — show fun ASCII art
@@ -390,6 +405,7 @@ fn render_main_content(frame: &mut Frame, area: Rect, app: &App) {
         .block(block);
         frame.render_widget(text, area);
     }
+    app.selection = selection;
 }
 
 fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
@@ -612,7 +628,7 @@ fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 fn render_help_overlay(frame: &mut Frame, area: Rect, theme: &Theme) {
-    let popup = centered_rect(50, 45, area);
+    let popup = centered_rect(50, 50, area);
     frame.render_widget(ratatui::widgets::Clear, popup);
 
     let help_text = vec![
@@ -665,6 +681,11 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, theme: &Theme) {
         "  Inline editor",
         "    Ctrl+S        Save",
         "    Esc           Close",
+        "",
+        "  Clipboard",
+        "    Mouse drag    Select text in terminal",
+        "    Ctrl+Shift+C  Copy visible terminal content",
+        "    Ctrl+Shift+V  Paste from clipboard (terminal)",
     ];
 
     let block = Block::default()

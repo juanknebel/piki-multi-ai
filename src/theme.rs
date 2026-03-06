@@ -54,6 +54,7 @@ struct ThemeToml {
     help: HelpToml,
     general: GeneralToml,
     fuzzy_search: FuzzySearchToml,
+    selection: SelectionToml,
 }
 
 #[derive(Deserialize, Default)]
@@ -169,6 +170,13 @@ struct FuzzySearchToml {
     count_text: Option<String>,
 }
 
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct SelectionToml {
+    bg: Option<String>,
+    fg: Option<String>,
+}
+
 // ── Resolved Theme (Color values) ──
 
 pub struct BorderTheme {
@@ -260,6 +268,11 @@ pub struct FuzzySearchTheme {
     pub count_text: Color,
 }
 
+pub struct SelectionTheme {
+    pub bg: Color,
+    pub fg: Color,
+}
+
 pub struct Theme {
     pub border: BorderTheme,
     pub workspace_list: WorkspaceListTheme,
@@ -273,6 +286,7 @@ pub struct Theme {
     pub help: HelpTheme,
     pub general: GeneralTheme,
     pub fuzzy_search: FuzzySearchTheme,
+    pub selection: SelectionTheme,
 }
 
 impl Default for Theme {
@@ -354,6 +368,10 @@ impl Default for Theme {
                 result_text: Color::Gray,
                 selected_bg: Color::DarkGray,
                 count_text: Color::DarkGray,
+            },
+            selection: SelectionTheme {
+                bg: Color::LightBlue,
+                fg: Color::Black,
             },
         }
     }
@@ -451,6 +469,10 @@ impl Theme {
                 result_text: resolve(&t.fuzzy_search.result_text, d.fuzzy_search.result_text),
                 selected_bg: resolve(&t.fuzzy_search.selected_bg, d.fuzzy_search.selected_bg),
                 count_text: resolve(&t.fuzzy_search.count_text, d.fuzzy_search.count_text),
+            },
+            selection: SelectionTheme {
+                bg: resolve(&t.selection.bg, d.selection.bg),
+                fg: resolve(&t.selection.fg, d.selection.fg),
             },
         }
     }

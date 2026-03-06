@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
+use ratatui::layout::Rect;
 use ratatui::text::Text;
 
 use crate::pty::PtySession;
@@ -525,6 +526,55 @@ fn char_to_byte_idx(s: &str, char_idx: usize) -> usize {
         .unwrap_or(s.len())
 }
 
+#[derive(Debug, Clone)]
+pub struct Selection {
+    pub anchor_row: u16,
+    pub anchor_col: u16,
+    pub end_row: u16,
+    pub end_col: u16,
+    pub active: bool,
+}
+
+impl Selection {
+    pub fn new(row: u16, col: u16) -> Self {
+        Self {
+            anchor_row: row,
+            anchor_col: col,
+            end_row: row,
+            end_col: col,
+            active: true,
+        }
+    }
+
+    /// Returns (start_row, start_col, end_row, end_col) ordered top-left to bottom-right
+    pub fn normalized(&self) -> (u16, u16, u16, u16) {
+        if self.anchor_row < self.end_row
+            || (self.anchor_row == self.end_row && self.anchor_col <= self.end_col)
+        {
+            (self.anchor_row, self.anchor_col, self.end_row, self.end_col)
+        } else {
+            (self.end_row, self.end_col, self.anchor_row, self.anchor_col)
+        }
+    }
+
+    pub fn contains(&self, row: u16, col: u16) -> bool {
+        let (sr, sc, er, ec) = self.normalized();
+        if row < sr || row > er {
+            return false;
+        }
+        if sr == er {
+            return col >= sc && col <= ec;
+        }
+        if row == sr {
+            return col >= sc;
+        }
+        if row == er {
+            return col <= ec;
+        }
+        true
+    }
+}
+
 /// Central application state
 pub struct App {
     pub should_quit: bool,
@@ -556,6 +606,8 @@ pub struct App {
     pub pty_rows: u16,
     pub pty_cols: u16,
     pub theme: Theme,
+    pub selection: Option<Selection>,
+    pub terminal_inner_area: Option<Rect>,
 }
 
 impl App {
@@ -584,6 +636,8 @@ impl App {
             pty_rows: 24,
             pty_cols: 80,
             theme: Theme::default(),
+            selection: None,
+            terminal_inner_area: None,
         }
     }
 
@@ -616,6 +670,7 @@ impl App {
             self.mode = AppMode::Normal;
             self.diff_content = None;
             self.diff_file_path = None;
+            self.selection = None;
             self.workspaces[index].term_scroll = 0;
         }
     }

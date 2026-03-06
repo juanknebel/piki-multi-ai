@@ -23,6 +23,7 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 - **Fuzzy file search** — Search all files in the active worktree with fuzzy matching powered by [nucleo](https://github.com/helix-editor/nucleo) (same engine as Helix editor), respects `.gitignore`
 - **$EDITOR integration** — Open any file in your preferred editor (`$EDITOR` or `vi`); TUI suspends and resumes automatically
 - **Inline editor** — Edit files directly inside the TUI with a built-in text editor (cursor movement, line numbers, scroll)
+- **Clipboard support** — Paste from clipboard (`Ctrl+Shift+V`), copy visible terminal (`Ctrl+Shift+C`), and mouse drag-to-select with auto-copy; cross-platform (Wayland, X11, macOS, Windows)
 - **Customizable themes** — Colors loaded from TOML files; supports named colors and hex `#rrggbb`
 
 ## Prerequisites
@@ -163,6 +164,14 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `Ctrl+v` | Open in inline editor |
 | `Esc` | Close search |
 
+**Clipboard:**
+
+| Key | Action |
+|-----|--------|
+| `Ctrl+Shift+V` | Paste from system clipboard (terminal interaction mode) |
+| `Ctrl+Shift+C` | Copy visible terminal content (both modes) |
+| Mouse drag | Select text in terminal pane (auto-copies on release) |
+
 **In inline editor:**
 
 | Key | Action |
@@ -219,6 +228,7 @@ The `install.sh` script copies all themes to `~/.config/piki-multi/themes/` (exi
 src/
   main.rs              # Tokio main loop, event handling, action dispatch
   app.rs               # App state, Workspace model, git status parsing
+  clipboard.rs         # System clipboard read/write (Wayland, X11, macOS, Windows)
   theme.rs             # Theme loading from TOML, color parsing
   pty/
     session.rs         # PTY management (portable-pty + vt100 parser)
