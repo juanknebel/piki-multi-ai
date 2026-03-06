@@ -582,6 +582,15 @@ impl Selection {
 }
 
 /// Central application state
+/// Which border is being dragged for resize
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResizeDrag {
+    /// Vertical border between left sidebar and main panel
+    Sidebar,
+    /// Horizontal border between workspace list and file list
+    LeftSplit,
+}
+
 pub struct App {
     pub should_quit: bool,
     pub mode: AppMode,
@@ -619,6 +628,18 @@ pub struct App {
     pub commit_msg_buffer: String,
     /// System info (CPU, RAM, battery, time)
     pub sysinfo: std::sync::Arc<std::sync::Mutex<crate::sysinfo::SystemInfo>>,
+    /// Sidebar width as percentage (10..=90)
+    pub sidebar_pct: u16,
+    /// Left panel vertical split: workspace list percentage (10..=90)
+    pub left_split_pct: u16,
+    /// Mouse drag-resize state
+    pub resize_drag: Option<ResizeDrag>,
+    /// X coordinate of the vertical border between sidebar and main panel
+    pub sidebar_x: u16,
+    /// Y coordinate of the horizontal border between workspace list and file list
+    pub left_split_y: u16,
+    /// Rect of the left sidebar area (for resize calculations)
+    pub left_area_rect: Rect,
 }
 
 impl App {
@@ -652,6 +673,12 @@ impl App {
             terminal_inner_area: None,
             commit_msg_buffer: String::new(),
             sysinfo: std::sync::Arc::new(std::sync::Mutex::new(crate::sysinfo::SystemInfo::default())),
+            sidebar_pct: 20,
+            left_split_pct: 50,
+            resize_drag: None,
+            sidebar_x: 0,
+            left_split_y: 0,
+            left_area_rect: Rect::default(),
         }
     }
 

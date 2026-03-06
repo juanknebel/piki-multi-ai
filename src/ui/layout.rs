@@ -9,14 +9,14 @@ use crate::theme::Theme;
 
 /// Compute the inner terminal area (minus borders) for a given total terminal size.
 /// Replicates layout math to find the main content area dimensions.
-pub fn compute_terminal_area(total: Rect) -> Rect {
+pub fn compute_terminal_area_with(total: Rect, sidebar_pct: u16) -> Rect {
     // Main vertical split: header + content + footer
     let [_header, content_area, _footer] =
         Layout::vertical([Constraint::Length(1), Constraint::Min(0), Constraint::Length(1)]).areas(total);
 
     // Horizontal split: left sidebar + right main panel
     let [_left, right_area] =
-        Layout::horizontal([Constraint::Percentage(20), Constraint::Percentage(80)])
+        Layout::horizontal([Constraint::Percentage(sidebar_pct), Constraint::Percentage(100 - sidebar_pct)])
             .areas(content_area);
 
     // Right panel: tabs + sub-tabs + content + status bar
@@ -60,12 +60,17 @@ pub fn render(frame: &mut Frame, app: &mut App) {
 
     // Horizontal split: left sidebar + right main panel
     let [left_area, right_area] =
-        Layout::horizontal([Constraint::Percentage(20), Constraint::Percentage(80)])
+        Layout::horizontal([Constraint::Percentage(app.sidebar_pct), Constraint::Percentage(100 - app.sidebar_pct)])
             .areas(content_area);
 
     // Left panel: workspaces (top) + files (bottom)
     let [ws_area, files_area] =
-        Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(left_area);
+        Layout::vertical([Constraint::Percentage(app.left_split_pct), Constraint::Percentage(100 - app.left_split_pct)]).areas(left_area);
+
+    // Store layout rects for mouse-based resize detection
+    app.sidebar_x = left_area.x + left_area.width;
+    app.left_split_y = ws_area.y + ws_area.height;
+    app.left_area_rect = left_area;
 
     // Right panel: tabs + sub-tabs + content + status bar
     let [tabs_area, subtabs_area, main_area, status_area] = Layout::vertical([
@@ -562,6 +567,7 @@ fn render_footer(frame: &mut Frame, area: Rect, app: &App) {
             ("P", "push"),
             ("Tab", "switch ws"),
             ("/", "search"),
+            ("</>", "resize"),
             ("g", "switch AI"),
             ("?", "help"),
             ("q", "quit"),
@@ -693,7 +699,7 @@ fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 fn render_help_overlay(frame: &mut Frame, area: Rect, theme: &Theme) {
-    let popup = centered_rect(50, 50, area);
+    let popup = centered_rect(55, 58, area);
     frame.render_widget(ratatui::widgets::Clear, popup);
 
     let help_text = vec![
@@ -724,12 +730,18 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, theme: &Theme) {
         "    j/k           Select file",
         "    Enter         Open diff",
         "",
+        "  Workspace list pane (interaction mode)",
+        "    j/k           Select workspace",
+        "    Enter         Switch to workspace",
+        "    d             Delete workspace",
+        "    Ctrl+g        Back to navigation",
+        "",
         "  Diff view",
         "    j/k           Scroll",
         "    Ctrl+d/u      Page down/up",
         "    g/G           Top/Bottom",
         "    n/p           Next/Prev file",
-        "    Ctrl+g        Close diff",
+        "    Esc/Ctrl+g    Close diff",
         "",
         "  Fuzzy search (/ or Ctrl+F)",
         "    Type          Filter files",
@@ -752,6 +764,11 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, theme: &Theme) {
         "  Inline editor",
         "    Ctrl+S        Save",
         "    Esc           Close",
+        "",
+        "  Pane resize",
+        "    < / >         Resize sidebar width",
+        "    + / -         Resize workspace/file split",
+        "    Mouse drag    Drag pane borders to resize",
         "",
         "  Clipboard",
         "    Mouse drag    Select text in terminal",

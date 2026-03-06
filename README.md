@@ -27,6 +27,7 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 - **Workspace prompts** — Optionally provide an initial prompt when creating a workspace; the prompt is auto-sent to the active AI provider on creation, enabling parallel AI orchestration
 - **Git operations** — Stage (`s`), unstage (`u`), commit (`c`), and push (`P`) directly from the TUI; commit dialog with inline message input
 - **System status header** — Live CPU%, RAM usage, battery level, and date/time displayed in a top header bar (powered by `systemstat`)
+- **Resizable panes** — Resize sidebar and workspace/file split with keyboard (`<`/`>`, `+`/`-`) or mouse drag on borders
 - **Customizable themes** — Colors loaded from TOML files; supports named colors and hex `#rrggbb`
 
 ## Prerequisites
@@ -134,6 +135,8 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `d` | Delete selected workspace |
 | `Tab` / `Shift+Tab` | Next / previous workspace |
 | `1`-`9` | Jump to workspace N |
+| `<` / `>` | Resize sidebar width (±5%) |
+| `+` / `-` | Resize workspace/file split (±10%) |
 | `/` or `Ctrl+f` | Fuzzy file search |
 | `g` | Cycle AI provider (Claude → Gemini → Codex → Shell) |
 | `?` | Help overlay |
@@ -145,8 +148,8 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 |-----|--------|
 | `Ctrl+g` | Back to navigation mode |
 | *Terminal pane* | All keys forwarded to AI provider |
-| *Workspace list* | `j`/`k` select, `Enter` activate |
-| *File list* | `j`/`k` select, `Enter` open diff, `e` open in $EDITOR, `v` inline editor |
+| *Workspace list* | `j`/`k` select, `Enter` switch, `d` delete |
+| *File list* | `j`/`k` select, `Enter` open diff, `e` open in $EDITOR, `v` inline editor, `s` stage, `u` unstage |
 
 **In diff view:**
 
@@ -168,6 +171,14 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `Ctrl+e` | Open in $EDITOR |
 | `Ctrl+v` | Open in inline editor |
 | `Esc` | Close search |
+
+**Pane resize:**
+
+| Key | Action |
+|-----|--------|
+| `<` / `>` | Resize sidebar width (±5%) |
+| `+` / `-` | Resize workspace/file split (±10%) |
+| Mouse drag on border | Drag pane borders to resize |
 
 **Clipboard:**
 
