@@ -24,6 +24,7 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 - **$EDITOR integration** — Open any file in your preferred editor (`$EDITOR` or `vi`); TUI suspends and resumes automatically
 - **Inline editor** — Edit files directly inside the TUI with a built-in text editor (cursor movement, line numbers, scroll)
 - **Clipboard support** — Paste from clipboard (`Ctrl+Shift+V`), copy visible terminal (`Ctrl+Shift+C`), and mouse drag-to-select with auto-copy; cross-platform (Wayland, X11, macOS, Windows)
+- **Workspace prompts** — Optionally provide an initial prompt when creating a workspace; the prompt is auto-sent to the active AI provider on creation, enabling parallel AI orchestration
 - **Customizable themes** — Colors loaded from TOML files; supports named colors and hex `#rrggbb`
 
 ## Prerequisites
@@ -62,8 +63,9 @@ Press `n` to open the New Workspace dialog. Provide:
 - **Name:** The git branch name (supports `/`, `.`, `-`, `_`).
 - **Dir:** The path to the source git repository.
 - **Desc:** (Optional) A brief description of the task.
+- **Prompt:** (Optional) An initial prompt to auto-send to the AI provider on creation.
 
-Press `Enter` to create or `Esc` to cancel.
+Press `Enter` to create or `Esc` to cancel. Use `Tab` to cycle between fields.
 
 ### Persistence
 

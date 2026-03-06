@@ -10,6 +10,8 @@ pub struct WorkspaceEntry {
     pub name: String,
     #[serde(default)]
     pub description: String,
+    #[serde(default)]
+    pub prompt: String,
     pub branch: String,
     pub worktree_path: PathBuf,
     pub source_repo: PathBuf,
@@ -45,6 +47,7 @@ pub fn save(git_root: &Path, workspaces: &[Workspace]) -> anyhow::Result<()> {
         .map(|ws| WorkspaceEntry {
             name: ws.name.clone(),
             description: ws.description.clone(),
+            prompt: ws.prompt.clone(),
             branch: ws.branch.clone(),
             worktree_path: ws.path.clone(),
             source_repo: ws.source_repo.clone(),

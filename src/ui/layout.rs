@@ -554,7 +554,7 @@ fn render_diff_overlay(frame: &mut Frame, area: Rect, app: &App) {
 
 fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
     let popup_width = area.width * 70 / 100;
-    let popup = centered_rect(popup_width.max(40), 12, area);
+    let popup = centered_rect(popup_width.max(40), 15, area);
     let theme = &app.theme.dialog;
 
     // Clear background
@@ -591,10 +591,11 @@ fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
     let name_active = app.active_dialog_field == DialogField::Name;
     let dir_active = app.active_dialog_field == DialogField::Directory;
     let desc_active = app.active_dialog_field == DialogField::Description;
+    let prompt_active = app.active_dialog_field == DialogField::Prompt;
 
     let lines = vec![
         Line::from(vec![
-            Span::styled("  Name: ", field_style(name_active)),
+            Span::styled("  Name:   ", field_style(name_active)),
             Span::styled(
                 visible_field(&app.input_buffer, name_active),
                 field_style(name_active),
@@ -602,7 +603,7 @@ fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
         ]),
         Line::from(""),
         Line::from(vec![
-            Span::styled("  Dir:  ", field_style(dir_active)),
+            Span::styled("  Dir:    ", field_style(dir_active)),
             Span::styled(
                 visible_field(&app.dir_input_buffer, dir_active),
                 field_style(dir_active),
@@ -610,10 +611,18 @@ fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
         ]),
         Line::from(""),
         Line::from(vec![
-            Span::styled("  Desc: ", field_style(desc_active)),
+            Span::styled("  Desc:   ", field_style(desc_active)),
             Span::styled(
                 visible_field(&app.desc_input_buffer, desc_active),
                 field_style(desc_active),
+            ),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  Prompt: ", field_style(prompt_active)),
+            Span::styled(
+                visible_field(&app.prompt_input_buffer, prompt_active),
+                field_style(prompt_active),
             ),
         ]),
         Line::from(""),

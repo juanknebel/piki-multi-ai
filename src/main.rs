@@ -60,6 +60,7 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
         let mut ws = app::Workspace::new(
             entry.name,
             entry.description,
+            entry.prompt.clone(),
             entry.branch,
             entry.worktree_path,
             entry.source_repo,
@@ -127,8 +128,7 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
                                 {
                                     let cell_row = mouse.row - inner.y;
                                     let cell_col = mouse.column - inner.x;
-                                    app.selection =
-                                        Some(app::Selection::new(cell_row, cell_col));
+                                    app.selection = Some(app::Selection::new(cell_row, cell_col));
                                 }
                             }
                         }
@@ -155,23 +155,17 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
                             let (sr, sc, er, ec) = sel.normalized();
                             // Only copy if non-empty selection
                             if sr != er || sc != ec {
-                                if let Some(ws) =
-                                    app.workspaces.get(app.active_workspace)
-                                    && let Some(parser) =
-                                        ws.pty_parsers.get(&ws.active_provider)
+                                if let Some(ws) = app.workspaces.get(app.active_workspace)
+                                    && let Some(parser) = ws.pty_parsers.get(&ws.active_provider)
                                 {
                                     let mut guard = parser.lock().unwrap();
                                     guard.screen_mut().set_scrollback(ws.term_scroll);
-                                    let text = guard.screen().contents_between(
-                                        sr, sc, er, ec + 1,
-                                    );
+                                    let text = guard.screen().contents_between(sr, sc, er, ec + 1);
                                     guard.screen_mut().set_scrollback(0);
                                     if let Err(e) = clipboard::copy_to_clipboard(&text) {
-                                        app.status_message =
-                                            Some(format!("Copy failed: {}", e));
+                                        app.status_message = Some(format!("Copy failed: {}", e));
                                     } else {
-                                        app.status_message =
-                                            Some("Selection copied".into());
+                                        app.status_message = Some("Selection copied".into());
                                     }
                                 }
                             }
@@ -240,7 +234,7 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
 
 /// Async actions triggered by key events
 enum Action {
-    CreateWorkspace(String, String, PathBuf),
+    CreateWorkspace(String, String, String, PathBuf),
     DeleteWorkspace(usize),
     /// Remove workspace from app list but keep worktree on disk
     RemoveFromList(usize),
@@ -257,16 +251,30 @@ async fn execute_action(
     terminal: &mut DefaultTerminal,
 ) -> anyhow::Result<()> {
     match action {
-        Action::CreateWorkspace(name, description, dir) => {
+        Action::CreateWorkspace(name, description, prompt, dir) => {
             match manager.create(&name, &description, &dir).await {
                 Ok(ws) => {
                     app.workspaces.push(ws);
                     let new_idx = app.workspaces.len() - 1;
+                    // Store the prompt
+                    app.workspaces[new_idx].prompt = prompt.clone();
                     app.switch_workspace(new_idx);
 
                     // Spawn PTY for each AI provider
                     spawn_all_providers(&mut app.workspaces[new_idx], app.pty_rows, app.pty_cols)
                         .await;
+
+                    // Auto-send prompt to active provider PTY if non-empty
+                    if !prompt.is_empty() {
+                        let ws = &mut app.workspaces[new_idx];
+                        let provider = ws.active_provider;
+                        if let Some(pty) = ws.pty_sessions.get_mut(&provider) {
+                            // Small delay to let the PTY initialize
+                            tokio::time::sleep(Duration::from_millis(500)).await;
+                            let prompt_with_newline = format!("{}\n", prompt);
+                            let _ = pty.write(prompt_with_newline.as_bytes());
+                        }
+                    }
 
                     // Start file watcher
                     let ws = &mut app.workspaces[new_idx];
@@ -566,6 +574,7 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
             app.input_buffer.clear();
             app.dir_input_buffer.clear();
             app.desc_input_buffer.clear();
+            app.prompt_input_buffer.clear();
             app.active_dialog_field = DialogField::Name;
         }
         KeyCode::Char('d') => {
@@ -988,7 +997,8 @@ fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
             app.active_dialog_field = match app.active_dialog_field {
                 DialogField::Name => DialogField::Directory,
                 DialogField::Directory => DialogField::Description,
-                DialogField::Description => DialogField::Name,
+                DialogField::Description => DialogField::Prompt,
+                DialogField::Prompt => DialogField::Name,
             };
         }
         KeyCode::Char(c) => match app.active_dialog_field {
@@ -1008,6 +1018,11 @@ fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
                     app.desc_input_buffer.push(c);
                 }
             }
+            DialogField::Prompt => {
+                if !c.is_control() {
+                    app.prompt_input_buffer.push(c);
+                }
+            }
         },
         KeyCode::Backspace => match app.active_dialog_field {
             DialogField::Name => {
@@ -1019,11 +1034,15 @@ fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
             DialogField::Description => {
                 app.desc_input_buffer.pop();
             }
+            DialogField::Prompt => {
+                app.prompt_input_buffer.pop();
+            }
         },
         KeyCode::Enter => {
             let name = app.input_buffer.clone();
             let dir_raw = app.dir_input_buffer.clone();
             let description = app.desc_input_buffer.clone();
+            let prompt = app.prompt_input_buffer.clone();
 
             if name.is_empty() || dir_raw.is_empty() {
                 app.status_message = Some("Name and directory are required".into());
@@ -1050,9 +1069,10 @@ fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
             app.input_buffer.clear();
             app.dir_input_buffer.clear();
             app.desc_input_buffer.clear();
+            app.prompt_input_buffer.clear();
             app.mode = AppMode::Normal;
             app.active_pane = ActivePane::WorkspaceList;
-            return Some(Action::CreateWorkspace(name, description, dir));
+            return Some(Action::CreateWorkspace(name, description, prompt, dir));
         }
         _ if key.code == KeyCode::Esc
             || (key.code == KeyCode::Char('g')
@@ -1061,6 +1081,7 @@ fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
             app.input_buffer.clear();
             app.dir_input_buffer.clear();
             app.desc_input_buffer.clear();
+            app.prompt_input_buffer.clear();
             app.mode = AppMode::Normal;
             app.active_pane = ActivePane::WorkspaceList;
         }

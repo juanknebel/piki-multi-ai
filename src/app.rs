@@ -92,6 +92,7 @@ pub enum DialogField {
     Name,
     Directory,
     Description,
+    Prompt,
 }
 
 /// Status of the Claude Code process in a workspace
@@ -127,6 +128,7 @@ pub struct ChangedFile {
 pub struct Workspace {
     pub name: String,
     pub description: String,
+    pub prompt: String,
     pub branch: String,
     pub path: PathBuf,
     /// Git root of the source repository this workspace was created from
@@ -154,6 +156,7 @@ impl Workspace {
     pub fn new(
         name: String,
         description: String,
+        prompt: String,
         branch: String,
         path: PathBuf,
         source_repo: PathBuf,
@@ -161,6 +164,7 @@ impl Workspace {
         Self {
             name,
             description,
+            prompt,
             branch,
             path,
             source_repo,
@@ -592,6 +596,7 @@ pub struct App {
     pub input_buffer: String,
     pub dir_input_buffer: String,
     pub desc_input_buffer: String,
+    pub prompt_input_buffer: String,
     pub active_dialog_field: DialogField,
     pub status_message: Option<String>,
     /// Index of workspace targeted for deletion (used by ConfirmDelete dialog)
@@ -627,6 +632,7 @@ impl App {
             input_buffer: String::new(),
             dir_input_buffer: String::new(),
             desc_input_buffer: String::new(),
+            prompt_input_buffer: String::new(),
             active_dialog_field: DialogField::Name,
             status_message: None,
             delete_target: None,

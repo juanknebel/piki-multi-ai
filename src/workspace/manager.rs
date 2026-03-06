@@ -137,6 +137,7 @@ impl WorkspaceManager {
         Ok(Workspace::new(
             name.to_string(),
             description.to_string(),
+            String::new(),
             branch_name,
             worktree_path,
             git_root,
