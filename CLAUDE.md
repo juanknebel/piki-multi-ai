@@ -32,7 +32,3 @@ Requires Rust >= 1.85 (edition 2024). Runtime deps: `claude` CLI in PATH, git >=
 **Diff pipeline** (`diff/runner.rs`): Runs `git diff | delta` (with plain `git diff` fallback), converts ANSI output to ratatui `Text` via `ansi-to-tui`.
 
 **UI** (`ui/`): `layout.rs` is the main render function composing all panels. Sub-modules render individual components (terminal, diff, workspaces, files, tabs, statusbar).
-
-## Task Tracking (AGENTS.md)
-
-Before writing code, create a task file in `claude-todo/T<NN>-<slug>.md` and update `claude-todo/INDEX.md`. Mark `IN_PROGRESS` before coding, `DONE` when compiling and tests pass.
