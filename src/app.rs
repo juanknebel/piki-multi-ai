@@ -617,6 +617,8 @@ pub struct App {
     pub terminal_inner_area: Option<Rect>,
     /// Commit message buffer (for git commit dialog)
     pub commit_msg_buffer: String,
+    /// System info (CPU, RAM, battery, time)
+    pub sysinfo: std::sync::Arc<std::sync::Mutex<crate::sysinfo::SystemInfo>>,
 }
 
 impl App {
@@ -649,6 +651,7 @@ impl App {
             selection: None,
             terminal_inner_area: None,
             commit_msg_buffer: String::new(),
+            sysinfo: std::sync::Arc::new(std::sync::Mutex::new(crate::sysinfo::SystemInfo::default())),
         }
     }
 

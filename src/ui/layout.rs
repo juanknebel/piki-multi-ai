@@ -10,9 +10,9 @@ use crate::theme::Theme;
 /// Compute the inner terminal area (minus borders) for a given total terminal size.
 /// Replicates layout math to find the main content area dimensions.
 pub fn compute_terminal_area(total: Rect) -> Rect {
-    // Main vertical split: content + footer
-    let [content_area, _footer] =
-        Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(total);
+    // Main vertical split: header + content + footer
+    let [_header, content_area, _footer] =
+        Layout::vertical([Constraint::Length(1), Constraint::Min(0), Constraint::Length(1)]).areas(total);
 
     // Horizontal split: left sidebar + right main panel
     let [_left, right_area] =
@@ -54,9 +54,9 @@ fn pane_border_style(app: &App, pane: ActivePane) -> Style {
 pub fn render(frame: &mut Frame, app: &mut App) {
     let area = frame.area();
 
-    // Main vertical split: content + footer
-    let [content_area, footer_area] =
-        Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(area);
+    // Main vertical split: header + content + footer
+    let [header_area, content_area, footer_area] =
+        Layout::vertical([Constraint::Length(1), Constraint::Min(0), Constraint::Length(1)]).areas(area);
 
     // Horizontal split: left sidebar + right main panel
     let [left_area, right_area] =
@@ -77,6 +77,9 @@ pub fn render(frame: &mut Frame, app: &mut App) {
     .areas(right_area);
 
     // --- Render panels ---
+
+    // Top header: system info
+    render_sysinfo_bar(frame, header_area, app);
 
     // Left top: workspace list
     render_workspace_list(frame, ws_area, app);
@@ -483,6 +486,40 @@ fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
     };
 
     let bar = Paragraph::new(Line::from(content));
+    frame.render_widget(bar, area);
+}
+
+fn render_sysinfo_bar(frame: &mut Frame, area: Rect, app: &App) {
+    let text = if let Ok(info) = app.sysinfo.lock() {
+        info.format()
+    } else {
+        String::new()
+    };
+
+    let spans: Vec<Span> = text
+        .split(" | ")
+        .flat_map(|part| {
+            if let Some((label, value)) = part.split_once(' ') {
+                vec![
+                    Span::styled(
+                        format!(" [{}] ", label),
+                        Style::default().fg(app.theme.footer.key),
+                    ),
+                    Span::styled(
+                        format!("{} ", value),
+                        Style::default().fg(app.theme.footer.description),
+                    ),
+                ]
+            } else {
+                vec![Span::styled(
+                    format!(" {} ", part),
+                    Style::default().fg(app.theme.footer.description),
+                )]
+            }
+        })
+        .collect();
+
+    let bar = Paragraph::new(Line::from(spans));
     frame.render_widget(bar, area);
 }
 
