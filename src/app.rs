@@ -772,6 +772,7 @@ pub struct App {
     pub left_split_y: u16,
     /// Rect of the left sidebar area (for resize calculations)
     pub left_area_rect: Rect,
+    pub config: crate::config::Config,
 }
 
 impl App {
@@ -817,6 +818,7 @@ impl App {
             sidebar_x: 0,
             left_split_y: 0,
             left_area_rect: Rect::default(),
+            config: crate::config::Config::load(),
         }
     }
 

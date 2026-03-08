@@ -31,6 +31,7 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 - **System status header** — Live CPU%, RAM usage, battery level, and date/time displayed in a top header bar (powered by `systemstat`)
 - **Resizable panes** — Resize sidebar and workspace/file split with keyboard (`<`/`>`, `+`/`-`) or mouse drag on borders
 - **Markdown viewer** — Preview `.md` files rendered in-terminal via `tui-markdown`; open from fuzzy search with `Ctrl+o`, scroll with `j/k`, `Ctrl+d/u`, `g/G`, or mouse wheel; read-only interact mode; close tab with `w`
+- **Customizable configuration** — Keybindings and themes loaded from `~/.config/piki-multi/config.toml`
 - **Customizable themes** — Colors loaded from TOML files; supports named colors and hex `#rrggbb`
 
 ## Prerequisites
@@ -60,7 +61,30 @@ Or use the install script:
 ## Usage
 
 ```bash
-piki-multi-ai
+piki-multi-ai [COMMAND]
+```
+
+### Options
+
+- `-h`, `--help`: Print help
+- `-V`, `--version`: Print version
+
+### Commands
+
+#### `generate-config`
+
+Generates a complete configuration file with all default keybindings and options to stdout:
+
+```bash
+piki-multi-ai generate-config > ~/.config/piki-multi/config.toml
+```
+
+#### `version`
+
+Shows version and author information (same as the **About** overlay in-app):
+
+```bash
+piki-multi-ai version
 ```
 
 ### Creating Workspaces
@@ -128,9 +152,9 @@ The STATUS panel uses `git status --porcelain=v1` and shows:
 
 ### Keybindings
 
-The UI uses a **vim-style modal model**: navigate between panes, then press Enter to interact.
+The UI uses a **vim-style modal model**: navigate between panes, then press Enter to interact. **All keybindings are customizable** via `config.toml`. Both the footer and the help overlay (`?`) update dynamically to show your current configuration.
 
-**Navigation mode** (yellow border):
+**Default Navigation mode** (yellow border):
 
 | Key | Action |
 |-----|--------|
@@ -212,9 +236,9 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | Arrow keys | Move cursor |
 | `Tab` | Insert 4 spaces |
 
-## Theming
+## Configuration & Theming
 
-All UI colors are customizable via TOML theme files. Without configuration, the built-in defaults are used.
+All UI aspects, including keybindings and themes, are customizable via `~/.config/piki-multi/config.toml`.
 
 ### Setup
 
@@ -222,10 +246,49 @@ All UI colors are customizable via TOML theme files. Without configuration, the 
 
 ```bash
 mkdir -p ~/.config/piki-multi/themes
-echo 'theme = "my-theme"' > ~/.config/piki-multi/config.toml
+echo 'theme = "nord"' > ~/.config/piki-multi/config.toml
 ```
 
-2. Create your theme file at `~/.config/piki-multi/themes/my-theme.toml`. You only need to specify the colors you want to override — everything else falls back to defaults:
+### Keybindings
+
+You can override any default keybinding in the `[keybindings]` section of `config.toml`. Keybindings are organized by mode:
+
+- `navigation`: Main UI navigation (moving between panes, global actions)
+- `interaction`: Actions while interacting with a pane (copy, paste, exit)
+- `markdown`: Markdown viewer controls (scrolling)
+- `diff`: Diff viewer controls (scrolling, file navigation)
+- `workspace_list`: Actions while in the workspace list
+- `file_list`: Actions while in the file list
+- `fuzzy`: Fuzzy search controls
+- `editor`: Inline editor controls
+- `new_workspace`: New workspace dialog controls
+- `commit`: Commit message dialog controls
+- `merge`: Merge confirmation dialog controls
+- `new_tab`: New tab dialog controls
+- `help` / `about` / `workspace_info`: Overlay controls
+
+Example:
+```toml
+theme = "nord"
+
+[keybindings.navigation]
+quit = "ctrl-q"
+new_workspace = "ctrl-n"
+
+[keybindings.interaction]
+exit_interaction = "esc"
+
+[keybindings.fuzzy]
+editor = "ctrl-o"  # Change open in editor from default ctrl-e
+```
+
+Keys support `ctrl-`, `alt-`, and `shift-` prefixes (e.g., `ctrl-shift-c`). You can use special key names like `enter`, `tab`, `backspace`, `esc`, `left`, `right`, `up`, `down`, `pageup`, `pagedown`, `home`, `end`, `insert`, `delete`, and function keys `f1`-`f12`.
+
+### Themes
+
+All UI colors are customizable via TOML theme files. Without configuration, the built-in defaults are used.
+
+1. Theme files are located at `~/.config/piki-multi/themes/<name>.toml`. You only need to specify the colors you want to override — everything else falls back to defaults:
 
 ```toml
 [border]
@@ -262,6 +325,7 @@ src/
   clipboard.rs         # System clipboard read/write (Wayland, X11, macOS, Windows)
   sysinfo.rs           # System info poller (CPU, RAM, battery via systemstat + chrono)
   theme.rs             # Theme loading from TOML, color parsing
+  config.rs            # Global configuration and keybindings (TOML)
   pty/
     session.rs         # PTY management (portable-pty + vt100 parser)
     input.rs           # Crossterm key events -> PTY bytes

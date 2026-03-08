@@ -1,5 +1,6 @@
 mod app;
 mod clipboard;
+mod config;
 mod diff;
 mod pty;
 mod theme;
@@ -18,8 +19,25 @@ use ratatui::DefaultTerminal;
 use ratatui::layout::Rect;
 
 use app::{AIProvider, ActivePane, App, AppMode, DialogField, MergeStrategy};
+use clap::{Parser, Subcommand};
 use pty::PtySession;
 use workspace::{FileWatcher, WorkspaceManager, config as ws_config};
+
+#[derive(Parser)]
+#[command(name = "piki-multi-ai")]
+#[command(version, about = "Terminal UI for orchestrating multiple AI assistants in parallel", long_about = None)]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Generates the default configuration file to stdout
+    GenerateConfig,
+    /// Shows version and author information (same as About in-app)
+    Version,
+}
 
 const TICK_RATE: Duration = Duration::from_millis(50);
 const DEBOUNCE: Duration = Duration::from_millis(500);
@@ -27,6 +45,36 @@ const PERIODIC_REFRESH: Duration = Duration::from_secs(3);
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let cli = Cli::parse();
+
+    if let Some(command) = cli.command {
+        match command {
+            Commands::GenerateConfig => {
+                println!("{}", config::Config::generate_default_toml());
+                return Ok(());
+            }
+            Commands::Version => {
+                let version = env!("CARGO_PKG_VERSION");
+                println!("");
+                println!("██████╗ ██╗██╗  ██╗██╗");
+                println!("██╔══██╗██║██║ ██╔╝██║");
+                println!("██████╔╝██║█████╔╝ ██║");
+                println!("██╔═══╝ ██║██╔═██╗ ██║");
+                println!("██║     ██║██║  ██╗██║");
+                println!("╚═╝     ╚═╝╚═╝  ╚═╝╚═╝");
+                println!("");
+                println!("piki-multi-ai v{version}");
+                println!("");
+                println!("Author: Juan Knebel");
+                println!("Contact: juanknebel@gmail.com");
+                println!("Web: github.com/juanknebel/piki-multi-ai");
+                println!("License: GPL-2.0");
+                println!("");
+                return Ok(());
+            }
+        }
+    }
+
     // Install panic hook that restores terminal before printing panic
     let original_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |panic_info| {
@@ -914,64 +962,47 @@ fn resize_all_ptys(app: &mut App) {
 fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
     // Workspace info overlay — h/l or arrows for horizontal scroll, Esc/i to close
     if app.mode == AppMode::WorkspaceInfo {
-        match key.code {
-            KeyCode::Char('l') | KeyCode::Right => {
-                app.info_hscroll = app.info_hscroll.saturating_add(4);
-            }
-            KeyCode::Char('h') | KeyCode::Left => {
-                app.info_hscroll = app.info_hscroll.saturating_sub(4);
-            }
-            KeyCode::Esc | KeyCode::Char('i') => {
-                app.info_hscroll = 0;
-                app.mode = AppMode::Normal;
-                // Re-enable mouse capture
-                let _ = crossterm::execute!(
-                    std::io::stderr(),
-                    crossterm::event::EnableMouseCapture
-                );
-            }
-            _ => {}
+        if app.config.matches_workspace_info(key, "right") || app.config.matches_workspace_info(key, "right_alt") {
+            app.info_hscroll = app.info_hscroll.saturating_add(4);
+        } else if app.config.matches_workspace_info(key, "left") || app.config.matches_workspace_info(key, "left_alt") {
+            app.info_hscroll = app.info_hscroll.saturating_sub(4);
+        } else if app.config.matches_workspace_info(key, "exit") || app.config.matches_workspace_info(key, "exit_info") {
+            app.info_hscroll = 0;
+            app.mode = AppMode::Normal;
+            // Re-enable mouse capture
+            let _ = crossterm::execute!(
+                std::io::stderr(),
+                crossterm::event::EnableMouseCapture
+            );
         }
         return None;
     }
 
-    // About overlay — close with Esc/q/a
+    // About overlay — close with Esc
     if app.mode == AppMode::About {
-        match key.code {
-            KeyCode::Esc => {
-                app.mode = AppMode::Normal;
-            }
-            _ => {}
+        if app.config.matches_about(key, "exit") {
+            app.mode = AppMode::Normal;
         }
         return None;
     }
 
     // Help overlay — scroll with j/k/arrows, close with Esc/q/?
     if app.mode == AppMode::Help {
-        match key.code {
-            KeyCode::Char('j') | KeyCode::Down => {
-                app.help_scroll = app.help_scroll.saturating_add(1);
-            }
-            KeyCode::Char('k') | KeyCode::Up => {
-                app.help_scroll = app.help_scroll.saturating_sub(1);
-            }
-            KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                app.help_scroll = app.help_scroll.saturating_add(10);
-            }
-            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                app.help_scroll = app.help_scroll.saturating_sub(10);
-            }
-            KeyCode::Char('g') => {
-                app.help_scroll = 0;
-            }
-            KeyCode::Char('G') => {
-                app.help_scroll = u16::MAX; // clamped during render
-            }
-            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('?') => {
-                app.help_scroll = 0;
-                app.mode = AppMode::Normal;
-            }
-            _ => {}
+        if app.config.matches_help(key, "down") || app.config.matches_help(key, "down_alt") {
+            app.help_scroll = app.help_scroll.saturating_add(1);
+        } else if app.config.matches_help(key, "up") || app.config.matches_help(key, "up_alt") {
+            app.help_scroll = app.help_scroll.saturating_sub(1);
+        } else if app.config.matches_help(key, "page_down") {
+            app.help_scroll = app.help_scroll.saturating_add(10);
+        } else if app.config.matches_help(key, "page_up") {
+            app.help_scroll = app.help_scroll.saturating_sub(10);
+        } else if app.config.matches_help(key, "scroll_top") {
+            app.help_scroll = 0;
+        } else if app.config.matches_help(key, "scroll_bottom") {
+            app.help_scroll = u16::MAX; // clamped during render
+        } else if app.config.matches_help(key, "exit") || app.config.matches_help(key, "exit_alt") || app.config.matches_help(key, "exit_help") {
+            app.help_scroll = 0;
+            app.mode = AppMode::Normal;
         }
         return None;
     }
@@ -1025,202 +1056,151 @@ fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
 // ── Navigation mode: hjkl between panes, Enter to interact, global shortcuts ──
 
 fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
-    match key.code {
-        // Pane navigation with hjkl
-        KeyCode::Char('h') | KeyCode::Left => {
-            if app.active_pane == ActivePane::MainPanel {
-                app.active_pane = ActivePane::FileList;
-            }
+    // Pane navigation
+    if app.config.matches_navigation(key, "left") || app.config.matches_navigation(key, "left_alt") {
+        if app.active_pane == ActivePane::MainPanel {
+            app.active_pane = ActivePane::FileList;
         }
-        KeyCode::Char('l') | KeyCode::Right => {
-            if matches!(
-                app.active_pane,
-                ActivePane::WorkspaceList | ActivePane::FileList
-            ) {
-                app.active_pane = ActivePane::MainPanel;
-            }
+    } else if app.config.matches_navigation(key, "right") || app.config.matches_navigation(key, "right_alt") {
+        if matches!(
+            app.active_pane,
+            ActivePane::WorkspaceList | ActivePane::FileList
+        ) {
+            app.active_pane = ActivePane::MainPanel;
         }
-        KeyCode::Char('j') | KeyCode::Down => {
-            if app.active_pane == ActivePane::WorkspaceList {
-                app.active_pane = ActivePane::FileList;
-            }
+    } else if app.config.matches_navigation(key, "down") || app.config.matches_navigation(key, "down_alt") {
+        if app.active_pane == ActivePane::WorkspaceList {
+            app.active_pane = ActivePane::FileList;
         }
-        KeyCode::Char('k') | KeyCode::Up => {
-            if app.active_pane == ActivePane::FileList {
-                app.active_pane = ActivePane::WorkspaceList;
-            }
+    } else if app.config.matches_navigation(key, "up") || app.config.matches_navigation(key, "up_alt") {
+        if app.active_pane == ActivePane::FileList {
+            app.active_pane = ActivePane::WorkspaceList;
         }
-        // Enter the active pane
-        KeyCode::Enter => {
-            app.interacting = true;
+    } else if app.config.matches_navigation(key, "enter_pane") {
+        app.interacting = true;
+    } else if app.config.matches_navigation(key, "quit") {
+        app.should_quit = true;
+    } else if app.config.matches_navigation(key, "help") {
+        app.mode = AppMode::Help;
+    } else if app.config.matches_navigation(key, "about") {
+        app.mode = AppMode::About;
+    } else if app.config.matches_navigation(key, "workspace_info") {
+        if !app.workspaces.is_empty() {
+            app.mode = AppMode::WorkspaceInfo;
+            app.info_hscroll = 0;
+            let _ = crossterm::execute!(
+                std::io::stderr(),
+                crossterm::event::DisableMouseCapture
+            );
         }
-        // Global shortcuts
-        KeyCode::Char('q') => {
-            app.should_quit = true;
+    } else if app.config.matches_navigation(key, "new_workspace") {
+        app.mode = AppMode::NewWorkspace;
+        app.input_buffer.clear();
+        app.dir_input_buffer.clear();
+        app.desc_input_buffer.clear();
+        app.prompt_input_buffer.clear();
+        app.input_cursor = 0;
+        app.dir_input_cursor = 0;
+        app.desc_input_cursor = 0;
+        app.prompt_input_cursor = 0;
+        app.active_dialog_field = DialogField::Name;
+    } else if app.config.matches_navigation(key, "delete_workspace") {
+        if !app.workspaces.is_empty() {
+            app.delete_target = Some(app.selected_workspace);
+            app.mode = AppMode::ConfirmDelete;
         }
-        KeyCode::Char('?') => {
-            app.mode = AppMode::Help;
+    } else if app.config.matches_navigation(key, "commit") {
+        if app.current_workspace().is_some() {
+            app.commit_msg_buffer.clear();
+            app.mode = AppMode::CommitMessage;
         }
-        KeyCode::Char('a') => {
-            app.mode = AppMode::About;
+    } else if app.config.matches_navigation(key, "merge") {
+        if app.current_workspace().is_some() {
+            app.mode = AppMode::ConfirmMerge;
         }
-        KeyCode::Char('i') => {
-            if !app.workspaces.is_empty() {
-                app.mode = AppMode::WorkspaceInfo;
-                app.info_hscroll = 0;
-                // Disable mouse capture so terminal allows text selection/copy
-                let _ = crossterm::execute!(
-                    std::io::stderr(),
-                    crossterm::event::DisableMouseCapture
-                );
-            }
+    } else if app.config.matches_navigation(key, "push") {
+        if app.current_workspace().is_some() {
+            return Some(Action::GitPush);
         }
-        KeyCode::Char('n') => {
-            app.mode = AppMode::NewWorkspace;
-            app.input_buffer.clear();
-            app.dir_input_buffer.clear();
-            app.desc_input_buffer.clear();
-            app.prompt_input_buffer.clear();
-            app.input_cursor = 0;
-            app.dir_input_cursor = 0;
-            app.desc_input_cursor = 0;
-            app.prompt_input_cursor = 0;
-            app.active_dialog_field = DialogField::Name;
-        }
-        KeyCode::Char('d') => {
-            if !app.workspaces.is_empty() {
-                app.delete_target = Some(app.selected_workspace);
-                app.mode = AppMode::ConfirmDelete;
-            }
-        }
-        KeyCode::Char('c') => {
-            if app.current_workspace().is_some() {
-                app.commit_msg_buffer.clear();
-                app.mode = AppMode::CommitMessage;
-            }
-        }
-        KeyCode::Char('M') => {
-            if app.current_workspace().is_some() {
-                app.mode = AppMode::ConfirmMerge;
-            }
-        }
-        KeyCode::Char('P') => {
-            if app.current_workspace().is_some() {
-                return Some(Action::GitPush);
-            }
-        }
-        KeyCode::Tab => {
-            if key.modifiers == KeyModifiers::SHIFT {
-                app.prev_workspace();
-            } else {
-                app.next_workspace();
-            }
-        }
-        KeyCode::Char(c @ '1'..='9') => {
-            let idx = (c as usize) - ('1' as usize);
-            app.switch_workspace(idx);
-        }
-        // Scrollback: Shift+K / PageUp = scroll up, Shift+J / PageDown = scroll down
-        KeyCode::Char('K') => {
-            if app.active_pane == ActivePane::MainPanel
-                && app.mode == AppMode::Normal
-                && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-                && let Some(tab) = ws.current_tab_mut()
-                && let Some(ref parser) = tab.pty_parser
-            {
-                let max = scrollback_max(parser);
-                tab.term_scroll = (tab.term_scroll + 3).min(max);
-            }
-        }
-        KeyCode::Char('J') => {
-            if app.active_pane == ActivePane::MainPanel
-                && app.mode == AppMode::Normal
-                && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-                && let Some(tab) = ws.current_tab_mut()
-            {
-                tab.term_scroll = tab.term_scroll.saturating_sub(3);
-            }
-        }
-        KeyCode::PageUp => {
-            if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-                && let Some(tab) = ws.current_tab_mut()
-                && let Some(ref parser) = tab.pty_parser
-            {
-                let screen_height = app.pty_rows as usize;
-                let max = scrollback_max(parser);
-                tab.term_scroll = (tab.term_scroll + screen_height).min(max);
-            }
-        }
-        KeyCode::PageDown => {
-            if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-                && let Some(tab) = ws.current_tab_mut()
-            {
-                let screen_height = app.pty_rows as usize;
-                tab.term_scroll = tab.term_scroll.saturating_sub(screen_height);
-            }
-        }
-        // Ctrl+Shift+C: copy visible terminal content
-        KeyCode::Char('C')
-            if key.modifiers.contains(KeyModifiers::CONTROL)
-                && key.modifiers.contains(KeyModifiers::SHIFT) =>
+    } else if app.config.matches_navigation(key, "next_workspace") {
+        app.next_workspace();
+    } else if app.config.matches_navigation(key, "prev_workspace") {
+        app.prev_workspace();
+    } else if app.config.matches_navigation(key, "scroll_up") {
+        if app.active_pane == ActivePane::MainPanel
+            && app.mode == AppMode::Normal
+            && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+            && let Some(tab) = ws.current_tab_mut()
+            && let Some(ref parser) = tab.pty_parser
         {
-            copy_visible_terminal(app);
+            let max = scrollback_max(parser);
+            tab.term_scroll = (tab.term_scroll + 3).min(max);
         }
-        // Fuzzy search (/ like vim, or Ctrl+f)
-        KeyCode::Char('/') => {
-            app.open_fuzzy_search();
+    } else if app.config.matches_navigation(key, "scroll_down") {
+        if app.active_pane == ActivePane::MainPanel
+            && app.mode == AppMode::Normal
+            && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+            && let Some(tab) = ws.current_tab_mut()
+        {
+            tab.term_scroll = tab.term_scroll.saturating_sub(3);
         }
-        KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            app.open_fuzzy_search();
+    } else if app.config.matches_navigation(key, "page_up") {
+        if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+            && let Some(tab) = ws.current_tab_mut()
+            && let Some(ref parser) = tab.pty_parser
+        {
+            let screen_height = app.pty_rows as usize;
+            let max = scrollback_max(parser);
+            tab.term_scroll = (tab.term_scroll + screen_height).min(max);
         }
-        // Resize panes: < / > adjust sidebar width, + / - adjust left split
-        KeyCode::Char('<') | KeyCode::Char(',') => {
-            app.sidebar_pct = app.sidebar_pct.saturating_sub(5).max(10);
-            resize_all_ptys(app);
+    } else if app.config.matches_navigation(key, "page_down") {
+        if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+            && let Some(tab) = ws.current_tab_mut()
+        {
+            let screen_height = app.pty_rows as usize;
+            tab.term_scroll = tab.term_scroll.saturating_sub(screen_height);
         }
-        KeyCode::Char('>') | KeyCode::Char('.') => {
-            app.sidebar_pct = (app.sidebar_pct + 5).min(90);
-            resize_all_ptys(app);
-        }
-        KeyCode::Char('+') | KeyCode::Char('=') => {
-            app.left_split_pct = (app.left_split_pct + 10).min(90);
-        }
-        KeyCode::Char('-') => {
-            app.left_split_pct = app.left_split_pct.saturating_sub(10).max(10);
-        }
-        // Cycle to next tab
-        KeyCode::Char('g') => {
-            if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
-                if !ws.tabs.is_empty() {
-                    ws.active_tab = (ws.active_tab + 1) % ws.tabs.len();
-                }
+    } else if app.config.matches_navigation(key, "copy") {
+        copy_visible_terminal(app);
+    } else if app.config.matches_navigation(key, "fuzzy_search") || app.config.matches_navigation(key, "fuzzy_search_alt") {
+        app.open_fuzzy_search();
+    } else if app.config.matches_navigation(key, "sidebar_shrink") || app.config.matches_navigation(key, "sidebar_shrink_alt") {
+        app.sidebar_pct = app.sidebar_pct.saturating_sub(5).max(10);
+        resize_all_ptys(app);
+    } else if app.config.matches_navigation(key, "sidebar_grow") || app.config.matches_navigation(key, "sidebar_grow_alt") {
+        app.sidebar_pct = (app.sidebar_pct + 5).min(90);
+        resize_all_ptys(app);
+    } else if app.config.matches_navigation(key, "split_up") || app.config.matches_navigation(key, "split_up_alt") {
+        app.left_split_pct = (app.left_split_pct + 10).min(90);
+    } else if app.config.matches_navigation(key, "split_down") {
+        app.left_split_pct = app.left_split_pct.saturating_sub(10).max(10);
+    } else if app.config.matches_navigation(key, "next_tab") {
+        if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+            if !ws.tabs.is_empty() {
+                ws.active_tab = (ws.active_tab + 1) % ws.tabs.len();
             }
         }
-        // Cycle to previous tab
-        KeyCode::Char('G') => {
-            if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
-                if !ws.tabs.is_empty() {
-                    ws.active_tab = (ws.active_tab + ws.tabs.len() - 1) % ws.tabs.len();
-                }
+    } else if app.config.matches_navigation(key, "prev_tab") {
+        if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+            if !ws.tabs.is_empty() {
+                ws.active_tab = (ws.active_tab + ws.tabs.len() - 1) % ws.tabs.len();
             }
         }
-        // New tab dialog
-        KeyCode::Char('t') => {
-            if app.current_workspace().is_some() {
-                app.mode = AppMode::NewTab;
+    } else if app.config.matches_navigation(key, "new_tab") {
+        if app.current_workspace().is_some() {
+            app.mode = AppMode::NewTab;
+        }
+    } else if app.config.matches_navigation(key, "close_tab") {
+        if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+            if ws.current_tab().is_some_and(|t| t.closable) {
+                ws.close_tab(ws.active_tab);
+            } else {
+                app.status_message = Some("Cannot close the initial shell tab".into());
             }
         }
-        // Close current tab
-        KeyCode::Char('w') => {
-            if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
-                if ws.current_tab().is_some_and(|t| t.closable) {
-                    ws.close_tab(ws.active_tab);
-                } else {
-                    app.status_message = Some("Cannot close the initial shell tab".into());
-                }
-            }
-        }
-        _ => {}
+    } else if let KeyCode::Char(c @ '1'..='9') = key.code {
+        let idx = (c as usize) - ('1' as usize);
+        app.switch_workspace(idx);
     }
     None
 }
@@ -1248,15 +1228,12 @@ fn handle_interaction_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
 }
 
 fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    if key.code == KeyCode::Char('g') && key.modifiers.contains(KeyModifiers::CONTROL) {
+    if app.config.matches_interaction(key, "exit_interaction") {
         app.interacting = false;
         return None;
     }
     // Ctrl+Shift+V: paste from clipboard
-    if key.code == KeyCode::Char('V')
-        && key.modifiers.contains(KeyModifiers::CONTROL)
-        && key.modifiers.contains(KeyModifiers::SHIFT)
-    {
+    if app.config.matches_interaction(key, "paste") {
         match clipboard::paste_from_clipboard() {
             Ok(text) => {
                 if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
@@ -1283,10 +1260,7 @@ fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
         return None;
     }
     // Ctrl+Shift+C: copy visible terminal content
-    if key.code == KeyCode::Char('C')
-        && key.modifiers.contains(KeyModifiers::CONTROL)
-        && key.modifiers.contains(KeyModifiers::SHIFT)
-    {
+    if app.config.matches_interaction(key, "copy") {
         copy_visible_terminal(app);
         return None;
     }
@@ -1304,28 +1278,24 @@ fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
 }
 
 fn handle_markdown_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    if key.code == KeyCode::Char('g') && key.modifiers.contains(KeyModifiers::CONTROL) {
+    if app.config.matches_markdown(key, "exit_interaction") {
         app.interacting = false;
         return None;
     }
     if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
         if let Some(tab) = ws.current_tab_mut() {
-            match key.code {
-                KeyCode::Char('j') | KeyCode::Down => {
-                    tab.markdown_scroll = tab.markdown_scroll.saturating_add(1);
-                }
-                KeyCode::Char('k') | KeyCode::Up => {
-                    tab.markdown_scroll = tab.markdown_scroll.saturating_sub(1);
-                }
-                KeyCode::Char('d') if key.modifiers == KeyModifiers::CONTROL => {
-                    tab.markdown_scroll = tab.markdown_scroll.saturating_add(20);
-                }
-                KeyCode::Char('u') if key.modifiers == KeyModifiers::CONTROL => {
-                    tab.markdown_scroll = tab.markdown_scroll.saturating_sub(20);
-                }
-                KeyCode::Char('g') => tab.markdown_scroll = 0,
-                KeyCode::Char('G') => tab.markdown_scroll = u16::MAX,
-                _ => {}
+            if app.config.matches_markdown(key, "down") || app.config.matches_markdown(key, "down_alt") {
+                tab.markdown_scroll = tab.markdown_scroll.saturating_add(1);
+            } else if app.config.matches_markdown(key, "up") || app.config.matches_markdown(key, "up_alt") {
+                tab.markdown_scroll = tab.markdown_scroll.saturating_sub(1);
+            } else if app.config.matches_markdown(key, "page_down") {
+                tab.markdown_scroll = tab.markdown_scroll.saturating_add(20);
+            } else if app.config.matches_markdown(key, "page_up") {
+                tab.markdown_scroll = tab.markdown_scroll.saturating_sub(20);
+            } else if app.config.matches_markdown(key, "scroll_top") {
+                tab.markdown_scroll = 0;
+            } else if app.config.matches_markdown(key, "scroll_bottom") {
+                tab.markdown_scroll = u16::MAX;
             }
         }
     }
@@ -1333,7 +1303,7 @@ fn handle_markdown_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
 }
 
 fn handle_diff_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    if key.code == KeyCode::Esc {
+    if app.config.matches_diff(key, "exit") {
         app.mode = AppMode::Normal;
         app.diff_content = None;
         app.diff_file_path = None;
@@ -1341,102 +1311,90 @@ fn handle_diff_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
         app.active_pane = ActivePane::FileList;
         return None;
     }
-    match key.code {
-        KeyCode::Char('j') | KeyCode::Down => {
-            app.diff_scroll = app.diff_scroll.saturating_add(1);
-        }
-        KeyCode::Char('k') | KeyCode::Up => {
-            app.diff_scroll = app.diff_scroll.saturating_sub(1);
-        }
-        KeyCode::Char('d') if key.modifiers == KeyModifiers::CONTROL => {
-            app.diff_scroll = app.diff_scroll.saturating_add(20);
-        }
-        KeyCode::Char('u') if key.modifiers == KeyModifiers::CONTROL => {
-            app.diff_scroll = app.diff_scroll.saturating_sub(20);
-        }
-        KeyCode::Char('g') => app.diff_scroll = 0,
-        KeyCode::Char('G') => app.diff_scroll = u16::MAX,
-        KeyCode::Char('n') => {
-            app.next_file();
-            return Some(Action::OpenDiff(app.selected_file));
-        }
-        KeyCode::Char('p') => {
-            app.prev_file();
-            return Some(Action::OpenDiff(app.selected_file));
-        }
-        _ => {}
+
+    if app.config.matches_diff(key, "down") || app.config.matches_diff(key, "down_alt") {
+        app.diff_scroll = app.diff_scroll.saturating_add(1);
+    } else if app.config.matches_diff(key, "up") || app.config.matches_diff(key, "up_alt") {
+        app.diff_scroll = app.diff_scroll.saturating_sub(1);
+    } else if app.config.matches_diff(key, "page_down") {
+        app.diff_scroll = app.diff_scroll.saturating_add(20);
+    } else if app.config.matches_diff(key, "page_up") {
+        app.diff_scroll = app.diff_scroll.saturating_sub(20);
+    } else if app.config.matches_diff(key, "scroll_top") {
+        app.diff_scroll = 0;
+    } else if app.config.matches_diff(key, "scroll_bottom") {
+        app.diff_scroll = u16::MAX;
+    } else if app.config.matches_diff(key, "next_file") {
+        app.next_file();
+        return Some(Action::OpenDiff(app.selected_file));
+    } else if app.config.matches_diff(key, "prev_file") {
+        app.prev_file();
+        return Some(Action::OpenDiff(app.selected_file));
     }
     None
 }
 
 fn handle_workspace_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    if key.code == KeyCode::Char('g') && key.modifiers.contains(KeyModifiers::CONTROL) {
+    if app.config.matches_workspace_list(key, "exit_interaction") {
         app.interacting = false;
         return None;
     }
-    match key.code {
-        KeyCode::Char('j') | KeyCode::Down => app.select_next_workspace(),
-        KeyCode::Char('k') | KeyCode::Up => app.select_prev_workspace(),
-        KeyCode::Enter => {
-            app.switch_workspace(app.selected_workspace);
+    if app.config.matches_workspace_list(key, "down") || app.config.matches_workspace_list(key, "down_alt") {
+        app.select_next_workspace();
+    } else if app.config.matches_workspace_list(key, "up") || app.config.matches_workspace_list(key, "up_alt") {
+        app.select_prev_workspace();
+    } else if app.config.matches_workspace_list(key, "select") {
+        app.switch_workspace(app.selected_workspace);
+    } else if app.config.matches_workspace_list(key, "delete") {
+        if !app.workspaces.is_empty() {
+            app.delete_target = Some(app.selected_workspace);
+            app.mode = AppMode::ConfirmDelete;
         }
-        KeyCode::Char('d') => {
-            if !app.workspaces.is_empty() {
-                app.delete_target = Some(app.selected_workspace);
-                app.mode = AppMode::ConfirmDelete;
-            }
-        }
-        _ => {}
     }
     None
 }
 
 fn handle_filelist_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    if key.code == KeyCode::Char('g') && key.modifiers.contains(KeyModifiers::CONTROL) {
+    if app.config.matches_file_list(key, "exit_interaction") {
         app.interacting = false;
         return None;
     }
-    match key.code {
-        KeyCode::Char('j') | KeyCode::Down => app.next_file(),
-        KeyCode::Char('k') | KeyCode::Up => app.prev_file(),
-        KeyCode::Enter => {
-            if let Some(ws) = app.current_workspace() {
-                if !ws.changed_files.is_empty() {
-                    return Some(Action::OpenDiff(app.selected_file));
-                }
+    if app.config.matches_file_list(key, "down") || app.config.matches_file_list(key, "down_alt") {
+        app.next_file();
+    } else if app.config.matches_file_list(key, "up") || app.config.matches_file_list(key, "up_alt") {
+        app.prev_file();
+    } else if app.config.matches_file_list(key, "diff") {
+        if let Some(ws) = app.current_workspace() {
+            if !ws.changed_files.is_empty() {
+                return Some(Action::OpenDiff(app.selected_file));
             }
         }
-        KeyCode::Char('e') => {
-            if let Some(ws) = app.current_workspace()
-                && let Some(file) = ws.changed_files.get(app.selected_file)
-            {
-                let full_path = ws.path.join(&file.path);
-                return Some(Action::OpenEditor(full_path));
+    } else if app.config.matches_file_list(key, "edit_external") {
+        if let Some(ws) = app.current_workspace()
+            && let Some(file) = ws.changed_files.get(app.selected_file)
+        {
+            let full_path = ws.path.join(&file.path);
+            return Some(Action::OpenEditor(full_path));
+        }
+    } else if app.config.matches_file_list(key, "edit_inline") {
+        if let Some(ws) = app.current_workspace()
+            && let Some(file) = ws.changed_files.get(app.selected_file)
+        {
+            let full_path = ws.path.join(&file.path);
+            app.open_inline_editor(full_path);
+        }
+    } else if app.config.matches_file_list(key, "stage") {
+        if let Some(ws) = app.current_workspace() {
+            if !ws.changed_files.is_empty() {
+                return Some(Action::GitStage(app.selected_file));
             }
         }
-        KeyCode::Char('v') => {
-            if let Some(ws) = app.current_workspace()
-                && let Some(file) = ws.changed_files.get(app.selected_file)
-            {
-                let full_path = ws.path.join(&file.path);
-                app.open_inline_editor(full_path);
+    } else if app.config.matches_file_list(key, "unstage") {
+        if let Some(ws) = app.current_workspace() {
+            if !ws.changed_files.is_empty() {
+                return Some(Action::GitUnstage(app.selected_file));
             }
         }
-        KeyCode::Char('s') => {
-            if let Some(ws) = app.current_workspace() {
-                if !ws.changed_files.is_empty() {
-                    return Some(Action::GitStage(app.selected_file));
-                }
-            }
-        }
-        KeyCode::Char('u') => {
-            if let Some(ws) = app.current_workspace() {
-                if !ws.changed_files.is_empty() {
-                    return Some(Action::GitUnstage(app.selected_file));
-                }
-            }
-        }
-        _ => {}
     }
     None
 }
