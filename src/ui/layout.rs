@@ -5,7 +5,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph, Tabs};
 
 use crate::app::{ActivePane, App, AppMode, DialogField, FileStatus};
-use crate::theme::Theme;
+
 
 /// Compute the inner terminal area (minus borders) for a given total terminal size.
 /// Replicates layout math to find the main content area dimensions.
@@ -137,7 +137,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         render_new_workspace_dialog(frame, area, app);
     }
     if app.mode == AppMode::Help {
-        render_help_overlay(frame, area, &app.theme);
+        render_help_overlay(frame, area, app);
     }
     if app.mode == AppMode::ConfirmDelete {
         render_confirm_delete_dialog(frame, area, app);
@@ -828,7 +828,8 @@ fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(text, popup);
 }
 
-fn render_help_overlay(frame: &mut Frame, area: Rect, theme: &Theme) {
+fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
+    let theme = &app.theme;
     let popup = centered_rect(55, 58, area);
     frame.render_widget(ratatui::widgets::Clear, popup);
 
@@ -914,7 +915,22 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, theme: &Theme) {
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.help.border));
 
-    let text = Paragraph::new(help_text.join("\n")).block(block);
+    let total_lines = help_text.len() as u16;
+    let inner_height = popup.height.saturating_sub(2); // borders
+    let max_scroll = total_lines.saturating_sub(inner_height);
+    let scroll = app.help_scroll.min(max_scroll);
+
+    let scroll_indicator = if max_scroll > 0 {
+        format!(" [{}/{} ↑j/k↓] ", scroll + 1, max_scroll + 1)
+    } else {
+        String::new()
+    };
+
+    let block = block.title_bottom(Line::from(scroll_indicator).right_aligned());
+
+    let text = Paragraph::new(help_text.join("\n"))
+        .block(block)
+        .scroll((scroll, 0));
     frame.render_widget(text, popup);
 }
 

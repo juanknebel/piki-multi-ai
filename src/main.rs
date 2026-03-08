@@ -860,9 +860,33 @@ fn resize_all_ptys(app: &mut App) {
 }
 
 fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
-    // Help overlay — any key closes it
+    // Help overlay — scroll with j/k/arrows, close with Esc/q/?
     if app.mode == AppMode::Help {
-        app.mode = AppMode::Normal;
+        match key.code {
+            KeyCode::Char('j') | KeyCode::Down => {
+                app.help_scroll = app.help_scroll.saturating_add(1);
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                app.help_scroll = app.help_scroll.saturating_sub(1);
+            }
+            KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                app.help_scroll = app.help_scroll.saturating_add(10);
+            }
+            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                app.help_scroll = app.help_scroll.saturating_sub(10);
+            }
+            KeyCode::Char('g') => {
+                app.help_scroll = 0;
+            }
+            KeyCode::Char('G') => {
+                app.help_scroll = u16::MAX; // clamped during render
+            }
+            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('?') => {
+                app.help_scroll = 0;
+                app.mode = AppMode::Normal;
+            }
+            _ => {}
+        }
         return None;
     }
 
