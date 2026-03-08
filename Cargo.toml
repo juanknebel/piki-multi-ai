@@ -45,3 +45,5 @@ arboard = { version = "3", features = ["wayland-data-control"] }
 
 # Error handling
 anyhow = "1"
+systemstat = "0.2.6"
+chrono = "0.4.44"

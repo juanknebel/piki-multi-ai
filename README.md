@@ -26,6 +26,7 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 - **Clipboard support** — Paste from clipboard (`Ctrl+Shift+V`), copy visible terminal (`Ctrl+Shift+C`), and mouse drag-to-select with auto-copy; cross-platform (Wayland, X11, macOS, Windows)
 - **Workspace prompts** — Optionally provide an initial prompt when creating a workspace; the prompt is auto-sent to the active AI provider on creation, enabling parallel AI orchestration
 - **Git operations** — Stage (`s`), unstage (`u`), commit (`c`), and push (`P`) directly from the TUI; commit dialog with inline message input
+- **System status header** — Live CPU%, RAM usage, battery level, and date/time displayed in a top header bar (powered by `systemstat`)
 - **Customizable themes** — Colors loaded from TOML files; supports named colors and hex `#rrggbb`
 
 ## Prerequisites
@@ -84,6 +85,7 @@ Workspace configurations are saved automatically and restored on startup.
 ### Layout
 
 ```
+ [CPU] 12%  [RAM] 4.2/16.0G  [BAT] 85%  [TIME] 2026-03-07 14:32
 +------------------+-------------------------------------------------------+
 | WORKSPACES       |  [ ws-1 ]  [ ws-2 ]  [ ws-3 ]   (tabs)               |
 |                  |  [ Claude Code ] [ Gemini ] [ Codex ] [ Shell ]      |
@@ -232,6 +234,7 @@ src/
   main.rs              # Tokio main loop, event handling, action dispatch
   app.rs               # App state, Workspace model, git status parsing
   clipboard.rs         # System clipboard read/write (Wayland, X11, macOS, Windows)
+  sysinfo.rs           # System info poller (CPU, RAM, battery via systemstat + chrono)
   theme.rs             # Theme loading from TOML, color parsing
   pty/
     session.rs         # PTY management (portable-pty + vt100 parser)

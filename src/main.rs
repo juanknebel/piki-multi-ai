@@ -4,6 +4,7 @@ mod diff;
 mod pty;
 mod theme;
 mod ui;
+mod sysinfo;
 mod workspace;
 
 use std::path::PathBuf;
@@ -45,6 +46,7 @@ async fn main() -> anyhow::Result<()> {
 async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
     let manager = WorkspaceManager::new();
     let mut app = App::new();
+    app.sysinfo = sysinfo::spawn_sysinfo_poller();
     app.theme = theme::load();
 
     // Compute real terminal dimensions for PTY spawning
