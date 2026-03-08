@@ -78,6 +78,15 @@ pub enum AppMode {
     InlineEdit,
     /// Commit message input dialog
     CommitMessage,
+    /// Merge confirmation dialog
+    ConfirmMerge,
+}
+
+/// Strategy for merging a workspace branch into main
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MergeStrategy {
+    Merge,
+    Rebase,
 }
 
 /// Which pane is currently selected / focused
@@ -152,6 +161,8 @@ pub struct Workspace {
     pub term_scroll: usize,
     /// Last byte count from PTY for auto-scroll detection
     pub last_bytes_processed: u64,
+    /// Commits ahead/behind upstream (ahead, behind)
+    pub ahead_behind: Option<(usize, usize)>,
 }
 
 impl Workspace {
@@ -180,6 +191,7 @@ impl Workspace {
             last_refresh: None,
             term_scroll: 0,
             last_bytes_processed: 0,
+            ahead_behind: None,
         }
     }
 
@@ -199,6 +211,7 @@ impl Workspace {
     /// Refresh the list of changed files by running `git diff --name-status HEAD`
     pub async fn refresh_changed_files(&mut self) -> anyhow::Result<()> {
         self.changed_files = get_changed_files(&self.path).await?;
+        self.ahead_behind = get_ahead_behind(&self.path).await;
         self.dirty = false;
         Ok(())
     }
@@ -300,6 +313,31 @@ pub async fn get_changed_files(worktree_path: &PathBuf) -> anyhow::Result<Vec<Ch
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     Ok(parse_porcelain_status(&stdout))
+}
+
+/// Get ahead/behind counts relative to upstream.
+/// Returns None if there's no upstream configured.
+async fn get_ahead_behind(worktree_path: &PathBuf) -> Option<(usize, usize)> {
+    let output = tokio::process::Command::new("git")
+        .args(["rev-list", "--left-right", "--count", "HEAD...@{upstream}"])
+        .current_dir(worktree_path)
+        .output()
+        .await
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parts: Vec<&str> = stdout.trim().split('\t').collect();
+    if parts.len() == 2 {
+        let ahead = parts[0].parse().unwrap_or(0);
+        let behind = parts[1].parse().unwrap_or(0);
+        Some((ahead, behind))
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]
