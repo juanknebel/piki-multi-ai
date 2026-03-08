@@ -68,8 +68,8 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
             entry.source_repo,
         );
 
-        // Spawn PTY for each AI provider
-        spawn_all_providers(&mut ws, app.pty_rows, app.pty_cols).await;
+        // Spawn initial Shell tab
+        spawn_initial_shell(&mut ws, app.pty_rows, app.pty_cols).await;
 
         // Start file watcher
         match FileWatcher::new(ws.path.clone(), ws.name.clone()) {
@@ -109,15 +109,18 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
                 Ok(Event::Mouse(mouse)) => match mouse.kind {
                     MouseEventKind::ScrollUp => {
                         if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-                            && let Some(parser) = ws.pty_parsers.get(&ws.active_provider)
+                            && let Some(tab) = ws.current_tab_mut()
+                            && let Some(ref parser) = tab.pty_parser
                         {
-                            let max = scrollback_max(&parser);
-                            ws.term_scroll = (ws.term_scroll + 3).min(max);
+                            let max = scrollback_max(parser);
+                            tab.term_scroll = (tab.term_scroll + 3).min(max);
                         }
                     }
                     MouseEventKind::ScrollDown => {
-                        if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
-                            ws.term_scroll = ws.term_scroll.saturating_sub(3);
+                        if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+                            && let Some(tab) = ws.current_tab_mut()
+                        {
+                            tab.term_scroll = tab.term_scroll.saturating_sub(3);
                         }
                     }
                     MouseEventKind::Down(MouseButton::Left) => {
@@ -192,10 +195,11 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
                             // Only copy if non-empty selection
                             if sr != er || sc != ec {
                                 if let Some(ws) = app.workspaces.get(app.active_workspace)
-                                    && let Some(parser) = ws.pty_parsers.get(&ws.active_provider)
+                                    && let Some(tab) = ws.current_tab()
+                                    && let Some(ref parser) = tab.pty_parser
                                 {
                                     let mut guard = parser.lock().unwrap();
-                                    guard.screen_mut().set_scrollback(ws.term_scroll);
+                                    guard.screen_mut().set_scrollback(tab.term_scroll);
                                     let text = guard.screen().contents_between(sr, sc, er, ec + 1);
                                     guard.screen_mut().set_scrollback(0);
                                     if let Err(e) = clipboard::copy_to_clipboard(&text) {
@@ -215,8 +219,10 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
                     app.pty_cols = new_area.width;
                     // Resize all PTY sessions in all workspaces
                     for ws in &mut app.workspaces {
-                        for (_, pty) in ws.pty_sessions.iter_mut() {
-                            let _ = pty.resize(new_area.height, new_area.width);
+                        for tab in &mut ws.tabs {
+                            if let Some(ref mut pty) = tab.pty_session {
+                                let _ = pty.resize(new_area.height, new_area.width);
+                            }
                         }
                     }
                 }
@@ -234,16 +240,21 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
                     ws.dirty = true;
                 }
             }
-            // Check if active provider PTY process has exited
-            if let Some(pty) = ws.pty_sessions.get_mut(&ws.active_provider) {
-                if !pty.is_alive() {
-                    ws.status = app::WorkspaceStatus::Done;
+            // Check if active tab PTY process has exited
+            let mut pty_done = false;
+            if let Some(tab) = ws.current_tab_mut() {
+                if let Some(ref mut pty) = tab.pty_session {
+                    if !pty.is_alive() {
+                        pty_done = true;
+                    }
+                    let current_bytes = pty.bytes_processed();
+                    if current_bytes != tab.last_bytes_processed {
+                        tab.last_bytes_processed = current_bytes;
+                    }
                 }
-                // Track bytes for status detection
-                let current_bytes = pty.bytes_processed();
-                if current_bytes != ws.last_bytes_processed {
-                    ws.last_bytes_processed = current_bytes;
-                }
+            }
+            if pty_done {
+                ws.status = app::WorkspaceStatus::Done;
             }
             // Debounced refresh of changed files list via git diff
             // Refresh when dirty (debounced) or periodically to catch commits/rebases
@@ -286,6 +297,8 @@ enum Action {
     GitCommit(String),
     /// Git: push current branch
     GitPush,
+    /// Spawn a new tab with the given provider
+    SpawnTab(AIProvider),
     /// Git: merge workspace branch into main
     GitMerge(MergeStrategy),
 }
@@ -306,19 +319,20 @@ async fn execute_action(
                     app.workspaces[new_idx].prompt = prompt.clone();
                     app.switch_workspace(new_idx);
 
-                    // Spawn PTY for each AI provider
-                    spawn_all_providers(&mut app.workspaces[new_idx], app.pty_rows, app.pty_cols)
+                    // Spawn initial Shell tab
+                    spawn_initial_shell(&mut app.workspaces[new_idx], app.pty_rows, app.pty_cols)
                         .await;
 
-                    // Auto-send prompt to active provider PTY if non-empty
+                    // Auto-send prompt to active tab PTY if non-empty
                     if !prompt.is_empty() {
                         let ws = &mut app.workspaces[new_idx];
-                        let provider = ws.active_provider;
-                        if let Some(pty) = ws.pty_sessions.get_mut(&provider) {
-                            // Small delay to let the PTY initialize
-                            tokio::time::sleep(Duration::from_millis(500)).await;
-                            let prompt_with_newline = format!("{}\n", prompt);
-                            let _ = pty.write(prompt_with_newline.as_bytes());
+                        if let Some(tab) = ws.current_tab_mut() {
+                            if let Some(ref mut pty) = tab.pty_session {
+                                // Small delay to let the PTY initialize
+                                tokio::time::sleep(Duration::from_millis(500)).await;
+                                let prompt_with_newline = format!("{}\n", prompt);
+                                let _ = pty.write(prompt_with_newline.as_bytes());
+                            }
                         }
                     }
 
@@ -345,8 +359,10 @@ async fn execute_action(
         Action::DeleteWorkspace(idx) => {
             if idx < app.workspaces.len() {
                 // Kill all PTY sessions before removing
-                for (_, pty) in app.workspaces[idx].pty_sessions.iter_mut() {
-                    let _ = pty.kill();
+                for tab in &mut app.workspaces[idx].tabs {
+                    if let Some(ref mut pty) = tab.pty_session {
+                        let _ = pty.kill();
+                    }
                 }
                 // Drop watcher (stops watching)
                 app.workspaces[idx].watcher = None;
@@ -382,8 +398,10 @@ async fn execute_action(
         Action::RemoveFromList(idx) => {
             if idx < app.workspaces.len() {
                 // Kill all PTY sessions
-                for (_, pty) in app.workspaces[idx].pty_sessions.iter_mut() {
-                    let _ = pty.kill();
+                for tab in &mut app.workspaces[idx].tabs {
+                    if let Some(ref mut pty) = tab.pty_session {
+                        let _ = pty.kill();
+                    }
                 }
                 app.workspaces[idx].watcher = None;
 
@@ -731,6 +749,13 @@ async fn execute_action(
                 let _ = ws.refresh_changed_files().await;
             }
         }
+        Action::SpawnTab(provider) => {
+            if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+                let idx = spawn_tab(ws, provider, app.pty_rows, app.pty_cols).await;
+                ws.active_tab = idx;
+                app.status_message = Some(format!("Opened {} tab", provider.label()));
+            }
+        }
     }
     Ok(())
 }
@@ -738,34 +763,42 @@ async fn execute_action(
 /// Kill all PTY sessions and drop watchers for a clean exit.
 fn shutdown(app: &mut App) {
     for ws in &mut app.workspaces {
-        // Kill all provider PTY processes
-        for (_, pty) in ws.pty_sessions.iter_mut() {
-            let _ = pty.kill();
+        for tab in &mut ws.tabs {
+            if let Some(ref mut pty) = tab.pty_session {
+                let _ = pty.kill();
+            }
         }
-        ws.pty_sessions.clear();
-        // Drop watcher
+        ws.tabs.clear();
         ws.watcher = None;
     }
 }
 
-/// Spawn a PTY session for each AI provider in a workspace.
-async fn spawn_all_providers(ws: &mut app::Workspace, rows: u16, cols: u16) {
-    for provider in AIProvider::all() {
-        let cmd = provider.resolved_command();
-        match PtySession::spawn(&ws.path, rows, cols, &cmd).await {
-            Ok(session) => {
-                ws.pty_parsers
-                    .insert(*provider, Arc::clone(session.parser()));
-                ws.pty_sessions.insert(*provider, session);
-            }
-            Err(_) => {
-                // Provider not installed or failed to spawn — skip silently
-            }
+/// Spawn an initial Shell tab for a workspace.
+async fn spawn_initial_shell(ws: &mut app::Workspace, rows: u16, cols: u16) {
+    let idx = ws.add_tab(AIProvider::Shell, false); // first shell is not closable
+    let cmd = AIProvider::Shell.resolved_command();
+    match PtySession::spawn(&ws.path, rows, cols, &cmd).await {
+        Ok(session) => {
+            ws.tabs[idx].pty_parser = Some(Arc::clone(session.parser()));
+            ws.tabs[idx].pty_session = Some(session);
+            ws.status = app::WorkspaceStatus::Busy;
         }
+        Err(_) => {}
     }
-    if !ws.pty_sessions.is_empty() {
-        ws.status = app::WorkspaceStatus::Busy;
+}
+
+/// Spawn a new tab with the given provider in a workspace.
+async fn spawn_tab(ws: &mut app::Workspace, provider: AIProvider, rows: u16, cols: u16) -> usize {
+    let idx = ws.add_tab(provider, true);
+    let cmd = provider.resolved_command();
+    match PtySession::spawn(&ws.path, rows, cols, &cmd).await {
+        Ok(session) => {
+            ws.tabs[idx].pty_parser = Some(Arc::clone(session.parser()));
+            ws.tabs[idx].pty_session = Some(session);
+        }
+        Err(_) => {}
     }
+    idx
 }
 
 /// Probe the actual scrollback buffer size by setting a large offset and reading back.
@@ -781,10 +814,11 @@ fn scrollback_max(parser: &Arc<std::sync::Mutex<vt100::Parser>>) -> usize {
 
 fn copy_visible_terminal(app: &mut App) {
     if let Some(ws) = app.workspaces.get(app.active_workspace)
-        && let Some(parser) = ws.pty_parsers.get(&ws.active_provider)
+        && let Some(tab) = ws.current_tab()
+        && let Some(ref parser) = tab.pty_parser
     {
         let mut guard = parser.lock().unwrap();
-        guard.screen_mut().set_scrollback(ws.term_scroll);
+        guard.screen_mut().set_scrollback(tab.term_scroll);
         let text = guard.screen().contents();
         guard.screen_mut().set_scrollback(0);
         drop(guard);
@@ -816,8 +850,10 @@ fn resize_all_ptys(app: &mut App) {
         app.pty_rows = new_area.height;
         app.pty_cols = new_area.width;
         for ws in &mut app.workspaces {
-            for (_, pty) in ws.pty_sessions.iter_mut() {
-                let _ = pty.resize(new_area.height, new_area.width);
+            for tab in &mut ws.tabs {
+                if let Some(ref mut pty) = tab.pty_session {
+                    let _ = pty.resize(new_area.height, new_area.width);
+                }
             }
         }
     }
@@ -853,6 +889,11 @@ fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
     // Confirm merge dialog captures all input
     if app.mode == AppMode::ConfirmMerge {
         return handle_confirm_merge_input(app, key);
+    }
+
+    // New tab provider selection dialog
+    if app.mode == AppMode::NewTab {
+        return handle_new_tab_input(app, key);
     }
 
     // Confirm delete dialog captures all input
@@ -956,33 +997,38 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
             if app.active_pane == ActivePane::MainPanel
                 && app.mode == AppMode::Normal
                 && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-                && let Some(parser) = ws.pty_parsers.get(&ws.active_provider)
+                && let Some(tab) = ws.current_tab_mut()
+                && let Some(ref parser) = tab.pty_parser
             {
                 let max = scrollback_max(parser);
-                ws.term_scroll = (ws.term_scroll + 3).min(max);
+                tab.term_scroll = (tab.term_scroll + 3).min(max);
             }
         }
         KeyCode::Char('J') => {
             if app.active_pane == ActivePane::MainPanel
                 && app.mode == AppMode::Normal
                 && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+                && let Some(tab) = ws.current_tab_mut()
             {
-                ws.term_scroll = ws.term_scroll.saturating_sub(3);
+                tab.term_scroll = tab.term_scroll.saturating_sub(3);
             }
         }
         KeyCode::PageUp => {
             if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-                && let Some(parser) = ws.pty_parsers.get(&ws.active_provider)
+                && let Some(tab) = ws.current_tab_mut()
+                && let Some(ref parser) = tab.pty_parser
             {
                 let screen_height = app.pty_rows as usize;
                 let max = scrollback_max(parser);
-                ws.term_scroll = (ws.term_scroll + screen_height).min(max);
+                tab.term_scroll = (tab.term_scroll + screen_height).min(max);
             }
         }
         KeyCode::PageDown => {
-            if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+            if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+                && let Some(tab) = ws.current_tab_mut()
+            {
                 let screen_height = app.pty_rows as usize;
-                ws.term_scroll = ws.term_scroll.saturating_sub(screen_height);
+                tab.term_scroll = tab.term_scroll.saturating_sub(screen_height);
             }
         }
         // Ctrl+Shift+C: copy visible terminal content
@@ -1014,16 +1060,36 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
         KeyCode::Char('-') => {
             app.left_split_pct = app.left_split_pct.saturating_sub(10).max(10);
         }
-        // Cycle AI provider sub-tab
+        // Cycle to next tab
         KeyCode::Char('g') => {
             if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
-                let providers = AIProvider::all();
-                let current_idx = providers
-                    .iter()
-                    .position(|p| *p == ws.active_provider)
-                    .unwrap_or(0);
-                ws.active_provider = providers[(current_idx + 1) % providers.len()];
-                ws.term_scroll = 0;
+                if !ws.tabs.is_empty() {
+                    ws.active_tab = (ws.active_tab + 1) % ws.tabs.len();
+                }
+            }
+        }
+        // Cycle to previous tab
+        KeyCode::Char('G') => {
+            if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+                if !ws.tabs.is_empty() {
+                    ws.active_tab = (ws.active_tab + ws.tabs.len() - 1) % ws.tabs.len();
+                }
+            }
+        }
+        // New tab dialog
+        KeyCode::Char('t') => {
+            if app.current_workspace().is_some() {
+                app.mode = AppMode::NewTab;
+            }
+        }
+        // Close current tab
+        KeyCode::Char('w') => {
+            if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+                if ws.current_tab().is_some_and(|t| t.closable) {
+                    ws.close_tab(ws.active_tab);
+                } else {
+                    app.status_message = Some("Cannot close the initial shell tab".into());
+                }
             }
         }
         _ => {}
@@ -1060,11 +1126,9 @@ fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
         match clipboard::paste_from_clipboard() {
             Ok(text) => {
                 if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
-                    let provider = ws.active_provider;
-                    if let Some(pty) = ws.pty_sessions.get_mut(&provider) {
-                        let bracketed = ws
-                            .pty_parsers
-                            .get(&provider)
+                    if let Some(tab) = ws.current_tab_mut() {
+                        let bracketed = tab.pty_parser
+                            .as_ref()
                             .map(|p| p.lock().unwrap().screen().bracketed_paste())
                             .unwrap_or(false);
                         let data = if bracketed {
@@ -1072,7 +1136,9 @@ fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
                         } else {
                             text
                         };
-                        let _ = pty.write(data.as_bytes());
+                        if let Some(ref mut pty) = tab.pty_session {
+                            let _ = pty.write(data.as_bytes());
+                        }
                     }
                 }
             }
@@ -1090,12 +1156,13 @@ fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
         copy_visible_terminal(app);
         return None;
     }
-    // Forward all other keys to the active provider's PTY
+    // Forward all other keys to the active tab's PTY
     if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
-        let provider = ws.active_provider;
-        if let Some(pty) = ws.pty_sessions.get_mut(&provider) {
-            if let Some(bytes) = pty::input::key_to_bytes(key) {
-                let _ = pty.write(&bytes);
+        if let Some(tab) = ws.current_tab_mut() {
+            if let Some(ref mut pty) = tab.pty_session {
+                if let Some(bytes) = pty::input::key_to_bytes(key) {
+                    let _ = pty.write(&bytes);
+                }
             }
         }
     }
@@ -1103,9 +1170,7 @@ fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
 }
 
 fn handle_diff_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    if key.code == KeyCode::Esc
-        || (key.code == KeyCode::Char('g') && key.modifiers.contains(KeyModifiers::CONTROL))
-    {
+    if key.code == KeyCode::Esc {
         app.mode = AppMode::Normal;
         app.diff_content = None;
         app.diff_file_path = None;
@@ -1538,6 +1603,32 @@ fn handle_confirm_merge_input(app: &mut App, key: KeyEvent) -> Option<Action> {
         KeyCode::Char('r') => {
             app.mode = AppMode::Normal;
             Some(Action::GitMerge(MergeStrategy::Rebase))
+        }
+        KeyCode::Esc => {
+            app.mode = AppMode::Normal;
+            None
+        }
+        _ => None,
+    }
+}
+
+fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    match key.code {
+        KeyCode::Char('1') => {
+            app.mode = AppMode::Normal;
+            Some(Action::SpawnTab(AIProvider::Claude))
+        }
+        KeyCode::Char('2') => {
+            app.mode = AppMode::Normal;
+            Some(Action::SpawnTab(AIProvider::Gemini))
+        }
+        KeyCode::Char('3') => {
+            app.mode = AppMode::Normal;
+            Some(Action::SpawnTab(AIProvider::Codex))
+        }
+        KeyCode::Char('4') => {
+            app.mode = AppMode::Normal;
+            Some(Action::SpawnTab(AIProvider::Shell))
         }
         KeyCode::Esc => {
             app.mode = AppMode::Normal;

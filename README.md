@@ -10,7 +10,7 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 ## Features
 
 - **Parallel workspaces** — Run multiple AI coding sessions simultaneously, each in an isolated git worktree
-- **Multi-AI provider** — Sub-tabs for Claude Code, Gemini CLI, Codex, and a local Shell per workspace; cycle with `g`
+- **Dynamic tabs** — Each workspace starts with a Shell tab; create additional tabs on demand (`t`) for Claude Code, Gemini CLI, Codex, or more shells; close tabs with `w`; cycle with `g`/`G`
 - **Live terminal rendering** — See AI assistant output in real-time with full ANSI color support via `tui-term`
 - **Interactive input** — Type directly into any AI session (Enter on the terminal pane to interact)
 - **Git branch-style naming** — Workspace names support `/`, `.`, `-`, `_` (e.g. `feature/login`, `bugfix/issue-42`)
@@ -25,7 +25,7 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 - **$EDITOR integration** — Open any file in your preferred editor (`$EDITOR` or `vi`); TUI suspends and resumes automatically
 - **Inline editor** — Edit files directly inside the TUI with a built-in text editor (cursor movement, line numbers, scroll)
 - **Clipboard support** — Paste from clipboard (`Ctrl+Shift+V`), copy visible terminal (`Ctrl+Shift+C`), and mouse drag-to-select with auto-copy; cross-platform (Wayland, X11, macOS, Windows)
-- **Workspace prompts** — Optionally provide an initial prompt when creating a workspace; the prompt is auto-sent to the active AI provider on creation, enabling parallel AI orchestration
+- **Workspace prompts** — Optionally provide an initial prompt when creating a workspace; the prompt is auto-sent to the active tab on creation, enabling parallel AI orchestration
 - **Git operations** — Stage (`s`), unstage (`u`), commit (`c`), push (`P`), and merge (`M`) directly from the TUI; commit dialog with inline message input
 - **Merge/Apply changes** — Merge or rebase workspace branches into main directly from the TUI (`M`); supports merge commit and rebase strategies with conflict detection
 - **System status header** — Live CPU%, RAM usage, battery level, and date/time displayed in a top header bar (powered by `systemstat`)
@@ -90,8 +90,8 @@ Workspace configurations are saved automatically and restored on startup.
 ```
  [CPU] 12%  [RAM] 4.2/16.0G  [BAT] 85%  [TIME] 2026-03-07 14:32
 +------------------+-------------------------------------------------------+
-| WORKSPACES       |  [ ws-1 ]  [ ws-2 ]  [ ws-3 ]   (tabs)               |
-|                  |  [ Claude Code ] [ Gemini ] [ Codex ] [ Shell ]      |
+| WORKSPACES       |  [ ws-1 ]  [ ws-2 ]  [ ws-3 ]   (workspace tabs)     |
+|                  |  [ Shell ]  [ Claude Code × ]    (dynamic sub-tabs)   |
 |  ▶ ws-1 (active) |-------------------------------------------------------|
 |    ● busy | 3    |                                                       |
 |    Fix login bug |  AI assistant live terminal output                    |
@@ -101,12 +101,13 @@ Workspace configurations are saved automatically and restored on startup.
 |------------------+                                                       |
 | STATUS           |                                                       |
 |                  |-------------------------------------------------------|
-|  M src/auth.rs   | branch: ws-1 | 3 files | ↑1 unpushed | Claude: busy  |
+|  M src/auth.rs   | branch: ws-1 | 3 files | ↑1 unpushed | Shell: busy   |
 |  A src/new.rs    +-------------------------------------------------------+
 |  ? untracked.txt |
 | ↑1 to push      |
 +------------------+--------------------------------------------------------+
-  [n] new  [d] delete  [/] search  [Tab] switch  [g] switch AI  [?] help  [q] quit
+  [hjkl] navigate [n] new ws [t] new tab [w] close tab [g/G] next/prev tab
+  [c] commit [P] push [M] merge [Tab] switch ws [/] search [?] help [q] quit
 ```
 
 ### File status indicators
@@ -138,10 +139,14 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `d` | Delete selected workspace |
 | `Tab` / `Shift+Tab` | Next / previous workspace |
 | `1`-`9` | Jump to workspace N |
+| `t` | New tab (opens provider selection: 1=Claude, 2=Gemini, 3=Codex, 4=Shell) |
+| `w` | Close current tab (initial shell tab cannot be closed) |
+| `g` / `G` | Next / previous tab |
 | `<` / `>` | Resize sidebar width (±5%) |
 | `+` / `-` | Resize workspace/file split (±10%) |
 | `/` or `Ctrl+f` | Fuzzy file search |
-| `g` | Cycle AI provider (Claude → Gemini → Codex → Shell) |
+| `c` | Commit (opens dialog) |
+| `P` | Push |
 | `M` | Merge workspace branch into main |
 | `?` | Help overlay |
 | `q` | Quit |
@@ -151,7 +156,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | Key | Action |
 |-----|--------|
 | `Ctrl+g` | Back to navigation mode |
-| *Terminal pane* | All keys forwarded to AI provider |
+| *Terminal pane* | All keys forwarded to active tab |
 | *Workspace list* | `j`/`k` select, `Enter` switch, `d` delete |
 | *File list* | `j`/`k` select, `Enter` open diff, `e` open in $EDITOR, `v` inline editor, `s` stage, `u` unstage |
 
@@ -163,7 +168,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `Ctrl+d` / `Ctrl+u` | Page down/up |
 | `g` / `G` | Top / bottom |
 | `n` / `p` | Next / previous file |
-| `Esc` / `Ctrl+g` | Close diff |
+| `Esc` | Close diff |
 
 **In fuzzy search** (`/` or `Ctrl+f`):
 
@@ -286,8 +291,8 @@ sequenceDiagram
     Main->>App: new()
     Main->>Main: ws_config::load_all()
     loop Each restored workspace
-        Main->>PTY: spawn_all_providers()
-        PTY->>PTY: fork + exec AI providers
+        Main->>PTY: spawn_initial_shell()
+        PTY->>PTY: fork + exec shell
         Main->>Watcher: new()
         Main->>App: push(workspace)
     end
@@ -355,7 +360,7 @@ sequenceDiagram
 - **portable-pty** (sync) wrapped with `tokio::task::spawn_blocking` for non-blocking PTY reads
 - **vt100** parser accumulates terminal state; **tui-term** renders it as a ratatui widget
 - **ansi-to-tui** converts delta's ANSI output to `ratatui::text::Text` for the diff view
-- Each workspace gets its own PTY session and file watcher, running independently
+- Each workspace starts with a single Shell tab; additional tabs (Claude, Gemini, Codex, Shell) are created on demand, each with its own PTY session
 - Worktrees are stored in `~/.local/share/piki-multi/worktrees/<project>/<name>` with branch names matching the workspace name exactly
 - Event-driven architecture: key handlers return `Option<Action>`, main loop executes actions asynchronously
 - STATUS panel uses `git status --porcelain=v1` for full coverage of untracked, staged, conflicted, and renamed files

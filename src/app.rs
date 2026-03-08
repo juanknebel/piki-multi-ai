@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -80,6 +79,8 @@ pub enum AppMode {
     CommitMessage,
     /// Merge confirmation dialog
     ConfirmMerge,
+    /// New tab provider selection dialog
+    NewTab,
 }
 
 /// Strategy for merging a workspace branch into main
@@ -135,6 +136,21 @@ pub struct ChangedFile {
     pub status: FileStatus,
 }
 
+/// A tab within a workspace, each with its own PTY session
+pub struct Tab {
+    #[allow(dead_code)]
+    pub id: usize,
+    pub provider: AIProvider,
+    pub pty_session: Option<PtySession>,
+    pub pty_parser: Option<Arc<Mutex<vt100::Parser>>>,
+    /// Whether this tab can be closed (first shell tab cannot)
+    pub closable: bool,
+    /// Scrollback offset: 0 = live view, N = N lines back from bottom
+    pub term_scroll: usize,
+    /// Last byte count from PTY for auto-scroll detection
+    pub last_bytes_processed: u64,
+}
+
 /// A single workspace backed by a git worktree
 pub struct Workspace {
     pub name: String,
@@ -146,21 +162,17 @@ pub struct Workspace {
     pub source_repo: PathBuf,
     pub status: WorkspaceStatus,
     pub changed_files: Vec<ChangedFile>,
-    /// PTY sessions keyed by AI provider
-    pub pty_sessions: HashMap<AIProvider, PtySession>,
-    /// vt100 parsers keyed by AI provider
-    pub pty_parsers: HashMap<AIProvider, Arc<Mutex<vt100::Parser>>>,
-    /// Which AI provider sub-tab is currently active
-    pub active_provider: AIProvider,
+    /// Dynamic tabs, each with its own PTY session
+    pub tabs: Vec<Tab>,
+    /// Index of the currently active tab
+    pub active_tab: usize,
+    /// Counter for generating unique tab IDs
+    pub next_tab_id: usize,
     pub watcher: Option<FileWatcher>,
     /// Whether the file list needs a refresh from git
     pub dirty: bool,
     /// Last time the file list was refreshed (for debounce)
     pub last_refresh: Option<Instant>,
-    /// Scrollback offset: 0 = live view, N = N lines back from bottom
-    pub term_scroll: usize,
-    /// Last byte count from PTY for auto-scroll detection
-    pub last_bytes_processed: u64,
     /// Commits ahead/behind upstream (ahead, behind)
     pub ahead_behind: Option<(usize, usize)>,
 }
@@ -183,16 +195,55 @@ impl Workspace {
             source_repo,
             status: WorkspaceStatus::Idle,
             changed_files: Vec::new(),
-            pty_sessions: HashMap::new(),
-            pty_parsers: HashMap::new(),
-            active_provider: AIProvider::Claude,
+            tabs: Vec::new(),
+            active_tab: 0,
+            next_tab_id: 0,
             watcher: None,
             dirty: false,
             last_refresh: None,
-            term_scroll: 0,
-            last_bytes_processed: 0,
             ahead_behind: None,
         }
+    }
+
+    /// Get the currently active tab
+    pub fn current_tab(&self) -> Option<&Tab> {
+        self.tabs.get(self.active_tab)
+    }
+
+    /// Get the currently active tab mutably
+    pub fn current_tab_mut(&mut self) -> Option<&mut Tab> {
+        self.tabs.get_mut(self.active_tab)
+    }
+
+    /// Add a new tab and return its index
+    pub fn add_tab(&mut self, provider: AIProvider, closable: bool) -> usize {
+        let tab = Tab {
+            id: self.next_tab_id,
+            provider,
+            pty_session: None,
+            pty_parser: None,
+            closable,
+            term_scroll: 0,
+            last_bytes_processed: 0,
+        };
+        self.next_tab_id += 1;
+        self.tabs.push(tab);
+        self.tabs.len() - 1
+    }
+
+    /// Close a tab by index, returns true if closed
+    pub fn close_tab(&mut self, idx: usize) -> bool {
+        if idx >= self.tabs.len() || !self.tabs[idx].closable {
+            return false;
+        }
+        if let Some(ref mut pty) = self.tabs[idx].pty_session {
+            let _ = pty.kill();
+        }
+        self.tabs.remove(idx);
+        if self.active_tab >= self.tabs.len() && !self.tabs.is_empty() {
+            self.active_tab = self.tabs.len() - 1;
+        }
+        true
     }
 
     pub fn file_count(&self) -> usize {
@@ -750,7 +801,9 @@ impl App {
             self.diff_content = None;
             self.diff_file_path = None;
             self.selection = None;
-            self.workspaces[index].term_scroll = 0;
+            if let Some(tab) = self.workspaces[index].current_tab_mut() {
+                tab.term_scroll = 0;
+            }
         }
     }
 

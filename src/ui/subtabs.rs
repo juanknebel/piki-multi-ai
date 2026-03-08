@@ -4,24 +4,23 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::Line;
 use ratatui::widgets::{Block, Borders, Tabs};
 
-use crate::app::AIProvider;
+use crate::app::Workspace;
 use crate::theme::Theme;
 
-/// Render the AI provider sub-tabs below the workspace tabs.
-pub fn render(frame: &mut Frame, area: Rect, active_provider: AIProvider, theme: &Theme) {
-    let titles: Vec<Line> = AIProvider::all()
+/// Render the dynamic sub-tabs below the workspace tabs.
+pub fn render(frame: &mut Frame, area: Rect, ws: &Workspace, theme: &Theme) {
+    let titles: Vec<Line> = ws
+        .tabs
         .iter()
-        .map(|p| Line::from(format!(" {} ", p.label())))
+        .map(|tab| {
+            let close_marker = if tab.closable { " ×" } else { "" };
+            Line::from(format!(" {}{} ", tab.provider.label(), close_marker))
+        })
         .collect();
-
-    let active_idx = AIProvider::all()
-        .iter()
-        .position(|p| *p == active_provider)
-        .unwrap_or(0);
 
     let tabs = Tabs::new(titles)
         .block(Block::default().borders(Borders::BOTTOM))
-        .select(active_idx)
+        .select(ws.active_tab)
         .highlight_style(
             Style::default()
                 .fg(theme.subtabs.active)

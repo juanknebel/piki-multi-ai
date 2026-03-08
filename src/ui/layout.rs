@@ -10,9 +10,9 @@ use crate::theme::Theme;
 /// Compute the inner terminal area (minus borders) for a given total terminal size.
 /// Replicates layout math to find the main content area dimensions.
 pub fn compute_terminal_area_with(total: Rect, sidebar_pct: u16) -> Rect {
-    // Main vertical split: header + content + footer
+    // Main vertical split: header + content + footer (use max footer height for conservative estimate)
     let [_header, content_area, _footer] =
-        Layout::vertical([Constraint::Length(1), Constraint::Min(0), Constraint::Length(1)]).areas(total);
+        Layout::vertical([Constraint::Length(1), Constraint::Min(0), Constraint::Length(2)]).areas(total);
 
     // Horizontal split: left sidebar + right main panel
     let [_left, right_area] =
@@ -51,12 +51,25 @@ fn pane_border_style(app: &App, pane: ActivePane) -> Style {
 }
 
 /// Render the main application layout
+/// Calculate how many lines the footer needs based on content width.
+fn compute_footer_height(app: &App, total_width: u16) -> u16 {
+    let keys = footer_keys(app);
+    let total: usize = keys
+        .iter()
+        .map(|(key, desc)| format!(" [{}] {} ", key, desc).len())
+        .sum();
+    if total as u16 <= total_width { 1 } else { 2 }
+}
+
 pub fn render(frame: &mut Frame, app: &mut App) {
     let area = frame.area();
 
+    // Pre-calculate footer height based on content width
+    let footer_height = compute_footer_height(app, area.width);
+
     // Main vertical split: header + content + footer
     let [header_area, content_area, footer_area] =
-        Layout::vertical([Constraint::Length(1), Constraint::Min(0), Constraint::Length(1)]).areas(area);
+        Layout::vertical([Constraint::Length(1), Constraint::Min(0), Constraint::Length(footer_height)]).areas(area);
 
     // Horizontal split: left sidebar + right main panel
     let [left_area, right_area] =
@@ -137,6 +150,9 @@ pub fn render(frame: &mut Frame, app: &mut App) {
     }
     if app.mode == AppMode::FuzzySearch {
         super::fuzzy::render(frame, area, app);
+    }
+    if app.mode == AppMode::NewTab {
+        render_new_tab_dialog(frame, area);
     }
 }
 
@@ -365,7 +381,7 @@ fn render_tab_bar(frame: &mut Frame, area: Rect, app: &App) {
 
 fn render_subtabs(frame: &mut Frame, area: Rect, app: &App) {
     if let Some(ws) = app.current_workspace() {
-        super::subtabs::render(frame, area, ws.active_provider, &app.theme);
+        super::subtabs::render(frame, area, ws, &app.theme);
     } else {
         let block = Block::default().borders(Borders::BOTTOM);
         frame.render_widget(block, area);
@@ -385,28 +401,29 @@ fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) {
         .bg(app.theme.selection.bg)
         .fg(app.theme.selection.fg);
     if let Some(ws) = app.current_workspace() {
-        let provider = ws.active_provider;
-        if let Some(parser) = ws.pty_parsers.get(&provider) {
-            super::terminal::render(
-                frame,
-                area,
-                parser,
-                border_style,
-                provider.label(),
-                ws.term_scroll,
-                selection.as_ref(),
-                selection_style,
-            );
-        } else {
-            // Provider CLI not found — show fun ASCII art
-            let block = Block::default()
-                .title(format!(" {} ", provider.label()))
-                .title_style(border_style)
-                .borders(Borders::ALL)
-                .border_style(border_style);
-            let cmd = provider.command();
-            let ascii_art = format!(
-                r#"
+        if let Some(tab) = ws.current_tab() {
+            let provider = tab.provider;
+            if let Some(ref parser) = tab.pty_parser {
+                super::terminal::render(
+                    frame,
+                    area,
+                    parser,
+                    border_style,
+                    provider.label(),
+                    tab.term_scroll,
+                    selection.as_ref(),
+                    selection_style,
+                );
+            } else {
+                // Provider CLI not found — show fun ASCII art
+                let block = Block::default()
+                    .title(format!(" {} ", provider.label()))
+                    .title_style(border_style)
+                    .borders(Borders::ALL)
+                    .border_style(border_style);
+                let cmd = provider.command();
+                let ascii_art = format!(
+                    r#"
         ___________________
        /                   \
       |   Command not found |
@@ -421,9 +438,21 @@ fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) {
                     (_____)
 
     Install `{cmd}` and add it to your PATH
-    then press [g] to switch providers."#
-            );
-            let text = Paragraph::new(ascii_art)
+    then press [t] to open a new tab."#
+                );
+                let text = Paragraph::new(ascii_art)
+                    .style(Style::default().fg(app.theme.general.muted_text))
+                    .block(block);
+                frame.render_widget(text, area);
+            }
+        } else {
+            // No tabs yet
+            let block = Block::default()
+                .title(" Terminal ")
+                .title_style(border_style)
+                .borders(Borders::ALL)
+                .border_style(border_style);
+            let text = Paragraph::new("  Press [t] to open a new tab")
                 .style(Style::default().fg(app.theme.general.muted_text))
                 .block(block);
             frame.render_widget(text, area);
@@ -486,8 +515,9 @@ fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
                     theme.navigate_bg
                 };
                 if let Some(ws) = app.current_workspace() {
-                    let scroll_info = if ws.term_scroll > 0 {
-                        format!(" | SCROLL -{}", ws.term_scroll)
+                    let tab_scroll = ws.current_tab().map(|t| t.term_scroll).unwrap_or(0);
+                    let scroll_info = if tab_scroll > 0 {
+                        format!(" | SCROLL -{}", tab_scroll)
                     } else {
                         String::new()
                     };
@@ -499,6 +529,7 @@ fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
                         Some((0, behind)) if behind > 0 => format!(" | ↓{} behind", behind),
                         _ => String::new(),
                     };
+                    let tab_label = ws.current_tab().map(|t| t.provider.label()).unwrap_or("—");
                     Span::styled(
                         format!(
                             " [{}] branch: {} | {} files{} | {}: {} | ws {}/{}{}",
@@ -506,7 +537,7 @@ fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
                             ws.branch,
                             ws.file_count(),
                             sync_info,
-                            ws.active_provider.label(),
+                            tab_label,
                             ws.status_label(),
                             app.active_workspace + 1,
                             app.workspaces.len(),
@@ -562,8 +593,8 @@ fn render_sysinfo_bar(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(bar, area);
 }
 
-fn render_footer(frame: &mut Frame, area: Rect, app: &App) {
-    let keys = match app.mode {
+fn footer_keys(app: &App) -> Vec<(&'static str, &'static str)> {
+    match app.mode {
         AppMode::FuzzySearch => vec![
             ("↑↓", "select"),
             ("Enter", "diff"),
@@ -579,6 +610,20 @@ fn render_footer(frame: &mut Frame, area: Rect, app: &App) {
         ],
         AppMode::CommitMessage => vec![("Enter", "commit"), ("Esc", "cancel")],
         AppMode::ConfirmMerge => vec![("m", "merge"), ("r", "rebase"), ("Esc", "cancel")],
+        AppMode::NewTab => vec![
+            ("1", "Claude"),
+            ("2", "Gemini"),
+            ("3", "Codex"),
+            ("4", "Shell"),
+            ("Esc", "cancel"),
+        ],
+        AppMode::Diff => vec![
+            ("j/k", "scroll"),
+            ("C-d/u", "page"),
+            ("g/G", "top/bottom"),
+            ("n/p", "next/prev file"),
+            ("Esc", "close"),
+        ],
         _ if app.interacting => {
             if app.active_pane == ActivePane::FileList {
                 vec![
@@ -596,38 +641,72 @@ fn render_footer(frame: &mut Frame, area: Rect, app: &App) {
         _ => vec![
             ("hjkl", "navigate"),
             ("Enter", "interact"),
-            ("n", "new"),
-            ("d", "delete"),
+            ("n", "new ws"),
+            ("d", "delete ws"),
+            ("t", "new tab"),
+            ("w", "close tab"),
+            ("g/G", "next/prev tab"),
             ("c", "commit"),
             ("P", "push"),
             ("M", "merge"),
             ("Tab", "switch ws"),
             ("/", "search"),
             ("</>", "resize"),
-            ("g", "switch AI"),
             ("?", "help"),
             ("q", "quit"),
         ],
+    }
+}
+
+fn render_footer(frame: &mut Frame, area: Rect, app: &App) {
+    let keys = footer_keys(app);
+
+    let make_spans = |items: &[(&str, &str)], theme: &crate::theme::Theme| -> Vec<Span<'static>> {
+        items
+            .iter()
+            .flat_map(|(key, desc)| {
+                vec![
+                    Span::styled(
+                        format!(" [{}] ", key),
+                        Style::default().fg(theme.footer.key),
+                    ),
+                    Span::styled(
+                        format!("{} ", desc),
+                        Style::default().fg(theme.footer.description),
+                    ),
+                ]
+            })
+            .collect()
     };
 
-    let spans: Vec<Span> = keys
+    // Calculate total width of all spans
+    let total_width: usize = keys
         .iter()
-        .flat_map(|(key, desc)| {
-            vec![
-                Span::styled(
-                    format!(" [{}] ", key),
-                    Style::default().fg(app.theme.footer.key),
-                ),
-                Span::styled(
-                    format!("{} ", desc),
-                    Style::default().fg(app.theme.footer.description),
-                ),
-            ]
-        })
-        .collect();
+        .map(|(key, desc)| format!(" [{}] {} ", key, desc).len())
+        .sum();
 
-    let footer = Paragraph::new(Line::from(spans));
-    frame.render_widget(footer, area);
+    if total_width as u16 <= area.width || area.height < 2 {
+        // Single line
+        let spans = make_spans(&keys, &app.theme);
+        let footer = Paragraph::new(Line::from(spans));
+        frame.render_widget(footer, area);
+    } else {
+        // Split into two lines: find the split point closest to half
+        let mut acc = 0usize;
+        let half = total_width / 2;
+        let mut split_at = keys.len();
+        for (i, (key, desc)) in keys.iter().enumerate() {
+            acc += format!(" [{}] {} ", key, desc).len();
+            if acc >= half {
+                split_at = i + 1;
+                break;
+            }
+        }
+        let line1 = Line::from(make_spans(&keys[..split_at], &app.theme));
+        let line2 = Line::from(make_spans(&keys[split_at..], &app.theme));
+        let footer = Paragraph::new(vec![line1, line2]);
+        frame.render_widget(footer, area);
+    }
 }
 
 fn render_diff_overlay(frame: &mut Frame, area: Rect, app: &App) {
@@ -747,7 +826,9 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, theme: &Theme) {
         "    d             Delete workspace",
         "    Tab/S-Tab     Next/Prev workspace",
         "    1-9           Go to workspace N",
-        "    g             Cycle AI provider",
+        "    g/G           Next/Prev tab",
+        "    t             New tab",
+        "    w             Close tab",
         "    ?             Toggle help",
         "    q             Quit",
         "",
@@ -760,7 +841,7 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, theme: &Theme) {
         "    Mouse scroll  Scroll up/down",
         "",
         "  Terminal pane (interaction mode)",
-        "    All keys sent to active provider",
+        "    All keys sent to active tab",
         "",
         "  File list pane",
         "    j/k           Select file",
@@ -777,7 +858,7 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, theme: &Theme) {
         "    Ctrl+d/u      Page down/up",
         "    g/G           Top/Bottom",
         "    n/p           Next/Prev file",
-        "    Esc/Ctrl+g    Close diff",
+        "    Esc           Close diff",
         "",
         "  Fuzzy search (/ or Ctrl+F)",
         "    Type          Filter files",
@@ -957,6 +1038,32 @@ fn render_confirm_merge_dialog(frame: &mut Frame, area: Rect, app: &App) {
             "  [Esc] Cancel",
             Style::default().fg(theme.new_ws_inactive),
         )),
+    ];
+
+    let text = Paragraph::new(lines).block(block);
+    frame.render_widget(text, popup);
+}
+
+fn render_new_tab_dialog(frame: &mut Frame, area: Rect) {
+    let popup = centered_rect(40, 10, area);
+    frame.render_widget(ratatui::widgets::Clear, popup);
+
+    let block = Block::default()
+        .title(" New Tab ")
+        .title_style(Style::default().fg(ratatui::style::Color::Cyan))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(ratatui::style::Color::Cyan));
+
+    let lines = vec![
+        Line::from(""),
+        Line::from("  Select provider:"),
+        Line::from(""),
+        Line::from("  [1] Claude Code"),
+        Line::from("  [2] Gemini"),
+        Line::from("  [3] Codex"),
+        Line::from("  [4] Shell"),
+        Line::from(""),
+        Line::from("  [Esc] Cancel"),
     ];
 
     let text = Paragraph::new(lines).block(block);
