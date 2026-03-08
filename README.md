@@ -30,6 +30,7 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 - **Merge/Apply changes** — Merge or rebase workspace branches into main directly from the TUI (`M`); supports merge commit and rebase strategies with conflict detection
 - **System status header** — Live CPU%, RAM usage, battery level, and date/time displayed in a top header bar (powered by `systemstat`)
 - **Resizable panes** — Resize sidebar and workspace/file split with keyboard (`<`/`>`, `+`/`-`) or mouse drag on borders
+- **Markdown viewer** — Preview `.md` files rendered in-terminal via `tui-markdown`; open from fuzzy search with `Ctrl+o`, scroll with `j/k`, `Ctrl+d/u`, `g/G`, or mouse wheel; read-only interact mode; close tab with `w`
 - **Customizable themes** — Colors loaded from TOML files; supports named colors and hex `#rrggbb`
 
 ## Prerequisites
@@ -159,6 +160,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | *Terminal pane* | All keys forwarded to active tab |
 | *Workspace list* | `j`/`k` select, `Enter` switch, `d` delete |
 | *File list* | `j`/`k` select, `Enter` open diff, `e` open in $EDITOR, `v` inline editor, `s` stage, `u` unstage |
+| *Markdown tab* | `j`/`k` scroll, `Ctrl+d`/`Ctrl+u` page, `g`/`G` top/bottom (read-only) |
 
 **In diff view:**
 
@@ -179,6 +181,8 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `Enter` | Open diff of selected file (if it has changes) |
 | `Ctrl+e` | Open in $EDITOR |
 | `Ctrl+v` | Open in inline editor |
+| `Ctrl+o` | Open markdown file in a new tab (`.md` / `.markdown` only) |
+| `Alt+m` | Open markdown file in external `mdr` viewer |
 | `Esc` | Close search |
 
 **Pane resize:**
@@ -264,6 +268,7 @@ src/
     terminal.rs        # Live PTY rendering (tui-term)
     diff.rs            # Diff rendering (ansi-to-tui)
     fuzzy.rs           # Fuzzy search overlay (nucleo matching + ignore walker)
+    markdown.rs        # Markdown file viewer (tui-markdown)
     editor.rs          # Inline file editor renderer
   workspace/
     manager.rs         # Git worktree CRUD

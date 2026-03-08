@@ -402,6 +402,24 @@ fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) {
         .fg(app.theme.selection.fg);
     if let Some(ws) = app.current_workspace() {
         if let Some(tab) = ws.current_tab() {
+            // Markdown tab
+            if let (Some(content), Some(label)) =
+                (&tab.markdown_content, &tab.markdown_label)
+            {
+                let content = content.clone();
+                let label = label.clone();
+                let scroll = tab.markdown_scroll;
+                super::markdown::render(
+                    frame,
+                    area,
+                    &content,
+                    &label,
+                    scroll,
+                    border_style,
+                );
+                return;
+            }
+
             let provider = tab.provider;
             if let Some(ref parser) = tab.pty_parser {
                 super::terminal::render(
@@ -600,6 +618,8 @@ fn footer_keys(app: &App) -> Vec<(&'static str, &'static str)> {
             ("Enter", "diff"),
             ("C-e", "editor"),
             ("C-v", "inline edit"),
+            ("C-o", "markdown"),
+            ("A-m", "mdr"),
             ("Esc", "close"),
         ],
         AppMode::InlineEdit => vec![("C-s", "save"), ("Esc", "close")],
@@ -632,6 +652,17 @@ fn footer_keys(app: &App) -> Vec<(&'static str, &'static str)> {
                     ("s", "stage"),
                     ("u", "unstage"),
                     ("e", "editor"),
+                    ("C-g", "back"),
+                ]
+            } else if app
+                .current_workspace()
+                .and_then(|ws| ws.current_tab())
+                .is_some_and(|tab| tab.markdown_content.is_some())
+            {
+                vec![
+                    ("j/k", "scroll"),
+                    ("C-d/u", "page"),
+                    ("g/G", "top/bottom"),
                     ("C-g", "back"),
                 ]
             } else {
@@ -882,6 +913,8 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         "    Enter         Open diff",
         "    Ctrl+E        Open in $EDITOR",
         "    Ctrl+V        Inline editor",
+        "    Ctrl+O        Open markdown viewer",
+        "    Alt+M         Open in mdr (external)",
         "    Esc           Close",
         "",
         "  File list (interaction mode)",

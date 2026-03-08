@@ -149,6 +149,12 @@ pub struct Tab {
     pub term_scroll: usize,
     /// Last byte count from PTY for auto-scroll detection
     pub last_bytes_processed: u64,
+    /// Markdown content (when this tab displays a markdown file instead of a PTY)
+    pub markdown_content: Option<String>,
+    /// Label for markdown tabs (filename)
+    pub markdown_label: Option<String>,
+    /// Scroll offset for markdown view
+    pub markdown_scroll: u16,
 }
 
 /// A single workspace backed by a git worktree
@@ -225,6 +231,9 @@ impl Workspace {
             closable,
             term_scroll: 0,
             last_bytes_processed: 0,
+            markdown_content: None,
+            markdown_label: None,
+            markdown_scroll: 0,
         };
         self.next_tab_id += 1;
         self.tabs.push(tab);
@@ -244,6 +253,27 @@ impl Workspace {
             self.active_tab = self.tabs.len() - 1;
         }
         true
+    }
+
+    /// Add a markdown viewer tab and return its index
+    pub fn add_markdown_tab(&mut self, label: String, content: String) -> usize {
+        let tab = Tab {
+            id: self.next_tab_id,
+            provider: AIProvider::Shell, // placeholder, not used for markdown
+            pty_session: None,
+            pty_parser: None,
+            closable: true,
+            term_scroll: 0,
+            last_bytes_processed: 0,
+            markdown_content: Some(content),
+            markdown_label: Some(label),
+            markdown_scroll: 0,
+        };
+        self.next_tab_id += 1;
+        self.tabs.push(tab);
+        let idx = self.tabs.len() - 1;
+        self.active_tab = idx;
+        idx
     }
 
     pub fn file_count(&self) -> usize {

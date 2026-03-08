@@ -110,17 +110,24 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
                     MouseEventKind::ScrollUp => {
                         if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
                             && let Some(tab) = ws.current_tab_mut()
-                            && let Some(ref parser) = tab.pty_parser
                         {
-                            let max = scrollback_max(parser);
-                            tab.term_scroll = (tab.term_scroll + 3).min(max);
+                            if tab.markdown_content.is_some() {
+                                tab.markdown_scroll = tab.markdown_scroll.saturating_sub(3);
+                            } else if let Some(ref parser) = tab.pty_parser {
+                                let max = scrollback_max(parser);
+                                tab.term_scroll = (tab.term_scroll + 3).min(max);
+                            }
                         }
                     }
                     MouseEventKind::ScrollDown => {
                         if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
                             && let Some(tab) = ws.current_tab_mut()
                         {
-                            tab.term_scroll = tab.term_scroll.saturating_sub(3);
+                            if tab.markdown_content.is_some() {
+                                tab.markdown_scroll = tab.markdown_scroll.saturating_add(3);
+                            } else {
+                                tab.term_scroll = tab.term_scroll.saturating_sub(3);
+                            }
                         }
                     }
                     MouseEventKind::Down(MouseButton::Left) => {
@@ -299,6 +306,10 @@ enum Action {
     GitPush,
     /// Spawn a new tab with the given provider
     SpawnTab(AIProvider),
+    /// Open a markdown file in a new tab
+    OpenMarkdown(PathBuf),
+    /// Open a markdown file in external mdr viewer
+    OpenMdr(PathBuf),
     /// Git: merge workspace branch into main
     GitMerge(MergeStrategy),
 }
@@ -756,6 +767,47 @@ async fn execute_action(
                 app.status_message = Some(format!("Opened {} tab", provider.label()));
             }
         }
+        Action::OpenMarkdown(path) => {
+            match std::fs::read_to_string(&path) {
+                Ok(content) => {
+                    let label = path
+                        .file_name()
+                        .map(|f| f.to_string_lossy().to_string())
+                        .unwrap_or_else(|| "markdown".to_string());
+                    if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+                        ws.add_markdown_tab(label.clone(), content);
+                        app.status_message = Some(format!("Opened {}", label));
+                    }
+                }
+                Err(e) => {
+                    app.status_message = Some(format!("Failed to read file: {}", e));
+                }
+            }
+        }
+        Action::OpenMdr(path) => {
+            crossterm::execute!(std::io::stderr(), crossterm::event::DisableMouseCapture)?;
+            ratatui::restore();
+            let status = std::process::Command::new("mdr").arg(&path).status();
+            *terminal = ratatui::init();
+            crossterm::execute!(std::io::stderr(), crossterm::event::EnableMouseCapture)?;
+            match status {
+                Ok(s) if s.success() => {
+                    app.status_message = Some(format!("mdr: {}", path.display()));
+                }
+                Ok(s) => {
+                    app.status_message = Some(format!("mdr exited with: {}", s));
+                }
+                Err(_) => {
+                    app.status_message = Some(
+                        "mdr not found. Install: cargo install markdown-reader".to_string(),
+                    );
+                }
+            }
+            if app.mode == AppMode::FuzzySearch {
+                app.fuzzy = None;
+                app.mode = AppMode::Normal;
+            }
+        }
     }
     Ok(())
 }
@@ -1132,6 +1184,12 @@ fn handle_interaction_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
         ActivePane::MainPanel => {
             if app.mode == AppMode::Diff {
                 handle_diff_interaction(app, key)
+            } else if app
+                .current_workspace()
+                .and_then(|ws| ws.current_tab())
+                .is_some_and(|tab| tab.markdown_content.is_some())
+            {
+                handle_markdown_interaction(app, key)
             } else {
                 handle_terminal_interaction(app, key)
             }
@@ -1191,6 +1249,35 @@ fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
                 if let Some(bytes) = pty::input::key_to_bytes(key) {
                     let _ = pty.write(&bytes);
                 }
+            }
+        }
+    }
+    None
+}
+
+fn handle_markdown_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
+    if key.code == KeyCode::Char('g') && key.modifiers.contains(KeyModifiers::CONTROL) {
+        app.interacting = false;
+        return None;
+    }
+    if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+        if let Some(tab) = ws.current_tab_mut() {
+            match key.code {
+                KeyCode::Char('j') | KeyCode::Down => {
+                    tab.markdown_scroll = tab.markdown_scroll.saturating_add(1);
+                }
+                KeyCode::Char('k') | KeyCode::Up => {
+                    tab.markdown_scroll = tab.markdown_scroll.saturating_sub(1);
+                }
+                KeyCode::Char('d') if key.modifiers == KeyModifiers::CONTROL => {
+                    tab.markdown_scroll = tab.markdown_scroll.saturating_add(20);
+                }
+                KeyCode::Char('u') if key.modifiers == KeyModifiers::CONTROL => {
+                    tab.markdown_scroll = tab.markdown_scroll.saturating_sub(20);
+                }
+                KeyCode::Char('g') => tab.markdown_scroll = 0,
+                KeyCode::Char('G') => tab.markdown_scroll = u16::MAX,
+                _ => {}
             }
         }
     }
@@ -1345,6 +1432,42 @@ fn handle_fuzzy_search_input(app: &mut App, key: KeyEvent) -> Option<Action> {
                     } else {
                         app.status_message = Some(format!("{} has no changes to diff", path));
                     }
+                }
+            }
+        }
+        // Ctrl+O: open markdown file in a new tab
+        KeyCode::Char('o') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            let selected_path = app
+                .fuzzy
+                .as_ref()
+                .and_then(|s| s.results.get(s.selected))
+                .map(|m| m.path.clone());
+
+            if let (Some(rel_path), Some(ws)) = (selected_path, app.current_workspace()) {
+                if rel_path.ends_with(".md") || rel_path.ends_with(".markdown") {
+                    let full_path = ws.path.join(&rel_path);
+                    app.fuzzy = None;
+                    app.mode = AppMode::Normal;
+                    return Some(Action::OpenMarkdown(full_path));
+                } else {
+                    app.status_message = Some("Not a markdown file".to_string());
+                }
+            }
+        }
+        // Alt+M: open markdown file in external mdr viewer
+        KeyCode::Char('m') if key.modifiers.contains(KeyModifiers::ALT) => {
+            let selected_path = app
+                .fuzzy
+                .as_ref()
+                .and_then(|s| s.results.get(s.selected))
+                .map(|m| m.path.clone());
+
+            if let (Some(rel_path), Some(ws)) = (selected_path, app.current_workspace()) {
+                if rel_path.ends_with(".md") || rel_path.ends_with(".markdown") {
+                    let full_path = ws.path.join(&rel_path);
+                    return Some(Action::OpenMdr(full_path));
+                } else {
+                    app.status_message = Some("Not a markdown file".to_string());
                 }
             }
         }
@@ -1695,3 +1818,4 @@ fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Action> {
         _ => None,
     }
 }
+

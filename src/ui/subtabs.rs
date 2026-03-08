@@ -14,7 +14,11 @@ pub fn render(frame: &mut Frame, area: Rect, ws: &Workspace, theme: &Theme) {
         .iter()
         .map(|tab| {
             let close_marker = if tab.closable { " ×" } else { "" };
-            Line::from(format!(" {}{} ", tab.provider.label(), close_marker))
+            let label = tab
+                .markdown_label
+                .as_deref()
+                .unwrap_or(tab.provider.label());
+            Line::from(format!(" {}{} ", label, close_marker))
         })
         .collect();
 
