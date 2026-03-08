@@ -52,7 +52,7 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
     // Compute real terminal dimensions for PTY spawning
     let term_size = terminal.size()?;
     let pty_area =
-        ui::layout::compute_terminal_area(Rect::new(0, 0, term_size.width, term_size.height));
+        ui::layout::compute_terminal_area_with(Rect::new(0, 0, term_size.width, term_size.height), app.sidebar_pct);
     app.pty_rows = pty_area.height;
     app.pty_cols = pty_area.width;
 
@@ -121,22 +121,54 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
                         }
                     }
                     MouseEventKind::Down(MouseButton::Left) => {
-                        if app.mode == AppMode::Normal {
+                        // Check if clicking on a resize border
+                        let col = mouse.column;
+                        let row = mouse.row;
+                        let on_sidebar_border = col >= app.sidebar_x.saturating_sub(1)
+                            && col <= app.sidebar_x + 1
+                            && row < app.left_area_rect.y + app.left_area_rect.height + app.left_area_rect.y;
+                        let on_left_split_border = row >= app.left_split_y.saturating_sub(1)
+                            && row <= app.left_split_y
+                            && col < app.sidebar_x;
+
+                        if on_sidebar_border {
+                            app.resize_drag = Some(app::ResizeDrag::Sidebar);
+                        } else if on_left_split_border {
+                            app.resize_drag = Some(app::ResizeDrag::LeftSplit);
+                        } else if app.mode == AppMode::Normal {
                             if let Some(inner) = app.terminal_inner_area {
-                                if mouse.row >= inner.y
-                                    && mouse.row < inner.y + inner.height
-                                    && mouse.column >= inner.x
-                                    && mouse.column < inner.x + inner.width
+                                if row >= inner.y
+                                    && row < inner.y + inner.height
+                                    && col >= inner.x
+                                    && col < inner.x + inner.width
                                 {
-                                    let cell_row = mouse.row - inner.y;
-                                    let cell_col = mouse.column - inner.x;
+                                    let cell_row = row - inner.y;
+                                    let cell_col = col - inner.x;
                                     app.selection = Some(app::Selection::new(cell_row, cell_col));
                                 }
                             }
                         }
                     }
                     MouseEventKind::Drag(MouseButton::Left) => {
-                        if let Some(ref mut sel) = app.selection {
+                        if let Some(drag) = app.resize_drag {
+                            let total = terminal.size().unwrap_or_default();
+                            match drag {
+                                app::ResizeDrag::Sidebar => {
+                                    let pct = ((mouse.column as u32) * 100 / total.width.max(1) as u32) as u16;
+                                    app.sidebar_pct = pct.clamp(10, 90);
+                                    resize_all_ptys(&mut app);
+                                }
+                                app::ResizeDrag::LeftSplit => {
+                                    let left_top = app.left_area_rect.y;
+                                    let left_height = app.left_area_rect.height;
+                                    if left_height > 0 {
+                                        let rel = mouse.row.saturating_sub(left_top) as u32;
+                                        let pct = (rel * 100 / left_height as u32) as u16;
+                                        app.left_split_pct = pct.clamp(10, 90);
+                                    }
+                                }
+                            }
+                        } else if let Some(ref mut sel) = app.selection {
                             if let Some(inner) = app.terminal_inner_area {
                                 let cell_row = mouse
                                     .row
@@ -152,7 +184,9 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
                         }
                     }
                     MouseEventKind::Up(MouseButton::Left) => {
-                        if let Some(ref mut sel) = app.selection {
+                        if app.resize_drag.is_some() {
+                            app.resize_drag = None;
+                        } else if let Some(ref mut sel) = app.selection {
                             sel.active = false;
                             let (sr, sc, er, ec) = sel.normalized();
                             // Only copy if non-empty selection
@@ -176,7 +210,7 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
                     _ => {}
                 },
                 Ok(Event::Resize(cols, rows)) => {
-                    let new_area = ui::layout::compute_terminal_area(Rect::new(0, 0, cols, rows));
+                    let new_area = ui::layout::compute_terminal_area_with(Rect::new(0, 0, cols, rows), app.sidebar_pct);
                     app.pty_rows = new_area.height;
                     app.pty_cols = new_area.width;
                     // Resize all PTY sessions in all workspaces
@@ -580,6 +614,30 @@ fn copy_visible_terminal(app: &mut App) {
     }
 }
 
+/// Recompute PTY dimensions after sidebar resize and resize all PTY sessions
+fn resize_all_ptys(app: &mut App) {
+    // We need the current terminal size; use cached pty dimensions as proxy
+    // The actual resize will happen on next render via compute_terminal_area_with
+    // For now, just mark that a resize is needed — the Event::Resize path handles actual PTY resize
+    // But we can estimate from the stored terminal_inner_area
+    if let Some(inner) = app.terminal_inner_area {
+        // Rough estimate: total width = inner.width / old_main_pct * 100
+        let total_width = inner.x + inner.width + 2; // approximate
+        let total_height = inner.y + inner.height + 4; // approximate (tabs+subtabs+status+footer+borders)
+        let new_area = ui::layout::compute_terminal_area_with(
+            Rect::new(0, 0, total_width, total_height),
+            app.sidebar_pct,
+        );
+        app.pty_rows = new_area.height;
+        app.pty_cols = new_area.width;
+        for ws in &mut app.workspaces {
+            for (_, pty) in ws.pty_sessions.iter_mut() {
+                let _ = pty.resize(new_area.height, new_area.width);
+            }
+        }
+    }
+}
+
 fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
     // Help overlay — any key closes it
     if app.mode == AppMode::Help {
@@ -745,6 +803,21 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
         }
         KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             app.open_fuzzy_search();
+        }
+        // Resize panes: < / > adjust sidebar width, + / - adjust left split
+        KeyCode::Char('<') | KeyCode::Char(',') => {
+            app.sidebar_pct = app.sidebar_pct.saturating_sub(5).max(10);
+            resize_all_ptys(app);
+        }
+        KeyCode::Char('>') | KeyCode::Char('.') => {
+            app.sidebar_pct = (app.sidebar_pct + 5).min(90);
+            resize_all_ptys(app);
+        }
+        KeyCode::Char('+') | KeyCode::Char('=') => {
+            app.left_split_pct = (app.left_split_pct + 10).min(90);
+        }
+        KeyCode::Char('-') => {
+            app.left_split_pct = app.left_split_pct.saturating_sub(10).max(10);
         }
         // Cycle AI provider sub-tab
         KeyCode::Char('g') => {
