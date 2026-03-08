@@ -1,4 +1,4 @@
-# agent-multi (v0.5.0)
+# agent-multi (v0.7.0)
 
 A terminal UI for orchestrating multiple [Claude Code](https://docs.anthropic.com/en/docs/claude-code) instances in parallel, each running in its own isolated git worktree.
 
