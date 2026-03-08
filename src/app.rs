@@ -83,6 +83,8 @@ pub enum AppMode {
     NewTab,
     /// About overlay
     About,
+    /// Workspace info overlay
+    WorkspaceInfo,
 }
 
 /// Strategy for merging a workspace branch into main
@@ -736,6 +738,8 @@ pub struct App {
     pub prompt_input_cursor: usize,
     /// Scroll offset for help overlay
     pub help_scroll: u16,
+    /// Horizontal scroll offset for workspace info overlay
+    pub info_hscroll: u16,
     pub active_dialog_field: DialogField,
     pub status_message: Option<String>,
     /// Index of workspace targeted for deletion (used by ConfirmDelete dialog)
@@ -793,6 +797,7 @@ impl App {
             desc_input_cursor: 0,
             prompt_input_cursor: 0,
             help_scroll: 0,
+            info_hscroll: 0,
             active_dialog_field: DialogField::Name,
             status_message: None,
             delete_target: None,

@@ -912,6 +912,29 @@ fn resize_all_ptys(app: &mut App) {
 }
 
 fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
+    // Workspace info overlay — h/l or arrows for horizontal scroll, Esc/i to close
+    if app.mode == AppMode::WorkspaceInfo {
+        match key.code {
+            KeyCode::Char('l') | KeyCode::Right => {
+                app.info_hscroll = app.info_hscroll.saturating_add(4);
+            }
+            KeyCode::Char('h') | KeyCode::Left => {
+                app.info_hscroll = app.info_hscroll.saturating_sub(4);
+            }
+            KeyCode::Esc | KeyCode::Char('i') => {
+                app.info_hscroll = 0;
+                app.mode = AppMode::Normal;
+                // Re-enable mouse capture
+                let _ = crossterm::execute!(
+                    std::io::stderr(),
+                    crossterm::event::EnableMouseCapture
+                );
+            }
+            _ => {}
+        }
+        return None;
+    }
+
     // About overlay — close with Esc/q/a
     if app.mode == AppMode::About {
         match key.code {
@@ -1040,6 +1063,17 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
         }
         KeyCode::Char('a') => {
             app.mode = AppMode::About;
+        }
+        KeyCode::Char('i') => {
+            if !app.workspaces.is_empty() {
+                app.mode = AppMode::WorkspaceInfo;
+                app.info_hscroll = 0;
+                // Disable mouse capture so terminal allows text selection/copy
+                let _ = crossterm::execute!(
+                    std::io::stderr(),
+                    crossterm::event::DisableMouseCapture
+                );
+            }
         }
         KeyCode::Char('n') => {
             app.mode = AppMode::NewWorkspace;

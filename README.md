@@ -14,7 +14,7 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 - **Live terminal rendering** — See AI assistant output in real-time with full ANSI color support via `tui-term`
 - **Interactive input** — Type directly into any AI session (Enter on the terminal pane to interact)
 - **Git branch-style naming** — Workspace names support `/`, `.`, `-`, `_` (e.g. `feature/login`, `bugfix/issue-42`)
-- **Rich workspace list** — Each workspace shows name, description, worktree path, status, and file count
+- **Rich workspace list** — Each workspace shows name, status, file count, and parent project; press `i` to view full details (branch, paths, description, prompt) in a copyable overlay
 - **File watching** — Automatically detects file changes in each worktree using `notify`, with periodic refresh every 3s to catch commits and rebases
 - **Full git status** — STATUS panel shows all file states: modified, staged, untracked, conflicted, renamed, and more via `git status --porcelain=v1`
 - **Ahead/behind indicator** — STATUS panel border and status bar show `↑N to push` / `↓N behind` relative to upstream tracking branch
@@ -95,8 +95,8 @@ Workspace configurations are saved automatically and restored on startup.
 |                  |  [ Shell ]  [ Claude Code × ]    (dynamic sub-tabs)   |
 |  ▶ ws-1 (active) |-------------------------------------------------------|
 |    ● busy | 3    |                                                       |
-|    Fix login bug |  AI assistant live terminal output                    |
-|    ~/.local/...  |  (diff opens as floating overlay)                     |
+|    ⌂ my-project  |  AI assistant live terminal output                    |
+|                  |  (diff opens as floating overlay)                     |
 |                  |                                                       |
 |    ws-2          |                                                       |
 |------------------+                                                       |
@@ -108,7 +108,7 @@ Workspace configurations are saved automatically and restored on startup.
 | ↑1 to push      |
 +------------------+--------------------------------------------------------+
   [hjkl] navigate [n] new ws [t] new tab [w] close tab [g/G] next/prev tab
-  [c] commit [P] push [M] merge [Tab] switch ws [/] search [?] help [a] about [q] quit
+  [c] commit [P] push [M] merge [Tab] switch ws [/] search [i] info [?] help [a] about [q] quit
 ```
 
 ### File status indicators
@@ -149,6 +149,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `c` | Commit (opens dialog) |
 | `P` | Push |
 | `M` | Merge workspace branch into main |
+| `i` | Workspace info overlay (branch, paths, description, prompt; mouse-copyable) |
 | `?` | Help overlay |
 | `a` | About overlay |
 | `q` | Quit |

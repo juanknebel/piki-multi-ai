@@ -1,6 +1,6 @@
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::style::{Modifier, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph, Tabs};
 
@@ -157,6 +157,9 @@ pub fn render(frame: &mut Frame, app: &mut App) {
     if app.mode == AppMode::About {
         render_about_overlay(frame, area, app);
     }
+    if app.mode == AppMode::WorkspaceInfo {
+        render_workspace_info_overlay(frame, area, app);
+    }
 }
 
 fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
@@ -228,39 +231,27 @@ fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
             ]);
 
             let mut lines = vec![line1, line2];
-            if !ws.description.is_empty() {
-                let max_desc = area.width.saturating_sub(6) as usize;
-                let desc = if ws.description.len() > max_desc {
-                    format!("{}…", &ws.description[..max_desc.saturating_sub(1)])
-                } else {
-                    ws.description.clone()
-                };
-                lines.push(Line::from(vec![
-                    Span::raw("   "),
-                    Span::styled(
-                        desc,
-                        Style::default()
-                            .fg(detail_color)
-                            .add_modifier(Modifier::ITALIC),
-                    ),
-                ]));
-            }
 
-            // Show worktree path
-            let path_str = ws.path.to_string_lossy();
-            let max_path = area.width.saturating_sub(6) as usize;
-            let path_display = if path_str.len() > max_path {
-                format!(
-                    "…{}",
-                    &path_str[path_str.len() - max_path.saturating_sub(1)..]
-                )
+            // Show parent project
+            let project_name = ws
+                .source_repo
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| ws.source_repo.to_string_lossy().to_string());
+            let max_proj = area.width.saturating_sub(6) as usize;
+            let proj_display = if project_name.len() > max_proj {
+                format!("{}…", &project_name[..max_proj.saturating_sub(1)])
             } else {
-                path_str.to_string()
+                project_name
             };
             lines.push(Line::from(vec![
                 Span::raw("   "),
-                Span::styled(path_display, Style::default().fg(detail_color)),
+                Span::styled(
+                    format!("⌂ {}", proj_display),
+                    Style::default().fg(detail_color),
+                ),
             ]));
+
 
             let style = if is_selected {
                 Style::default().bg(theme.selected_bg)
@@ -1008,6 +999,80 @@ fn render_about_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let text = Paragraph::new(about_lines)
         .block(block)
         .alignment(ratatui::layout::Alignment::Center);
+    frame.render_widget(text, popup);
+}
+
+fn render_workspace_info_overlay(frame: &mut Frame, area: Rect, app: &App) {
+    let theme = &app.theme;
+    let ws = &app.workspaces[app.selected_workspace];
+
+    let label_style = Style::default().add_modifier(Modifier::BOLD).fg(theme.help.border);
+    let project_name = ws
+        .source_repo
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| ws.source_repo.to_string_lossy().to_string());
+
+    let mut lines: Vec<Line> = vec![
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(" Branch:  ", label_style),
+            Span::raw(ws.branch.clone()),
+        ]),
+        Line::from(vec![
+            Span::styled(" Project: ", label_style),
+            Span::raw(project_name),
+        ]),
+        Line::from(vec![
+            Span::styled("          ", label_style),
+            Span::raw(ws.source_repo.to_string_lossy().to_string()),
+        ]),
+        Line::from(vec![
+            Span::styled(" Path:    ", label_style),
+            Span::raw(ws.path.to_string_lossy().to_string()),
+        ]),
+        Line::from(""),
+    ];
+
+    if !ws.description.is_empty() {
+        lines.push(Line::from(vec![
+            Span::styled(" Description: ", Style::default().add_modifier(Modifier::BOLD).fg(theme.help.border)),
+        ]));
+        lines.push(Line::from(format!("  {}", ws.description)));
+        lines.push(Line::from(""));
+    }
+
+    if !ws.prompt.is_empty() {
+        lines.push(Line::from(vec![
+            Span::styled(" Prompt: ", Style::default().add_modifier(Modifier::BOLD).fg(theme.help.border)),
+        ]));
+        // Wrap prompt text
+        let max_width = 56usize;
+        for chunk in ws.prompt.as_bytes().chunks(max_width) {
+            let s = String::from_utf8_lossy(chunk);
+            lines.push(Line::from(format!("  {}", s)));
+        }
+        lines.push(Line::from(""));
+    }
+
+    lines.push(Line::from(
+        Span::styled(" Esc to close · h/l to scroll · mouse select to copy", Style::default().fg(Color::DarkGray)),
+    ));
+
+    let height = (lines.len() as u16 + 2).min(area.height);
+    let popup = centered_rect(70, height, area);
+    frame.render_widget(ratatui::widgets::Clear, popup);
+
+    let title = format!(" {} ", ws.name);
+    let block = Block::default()
+        .title(title)
+        .title_style(Style::default().fg(theme.help.border).add_modifier(Modifier::BOLD))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.help.border));
+
+    let text = Paragraph::new(lines)
+        .block(block)
+        .scroll((0, app.info_hscroll));
     frame.render_widget(text, popup);
 }
 
