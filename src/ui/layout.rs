@@ -262,11 +262,33 @@ fn render_file_list(frame: &mut Frame, area: Rect, app: &App) {
     let border_style = pane_border_style(app, ActivePane::FileList);
     let theme = &app.theme.file_list;
 
-    let block = Block::default()
+    let ahead_title = app
+        .current_workspace()
+        .and_then(|ws| ws.ahead_behind)
+        .and_then(|(ahead, behind)| {
+            if ahead > 0 && behind > 0 {
+                Some(format!(" ↑{} ↓{} ", ahead, behind))
+            } else if ahead > 0 {
+                Some(format!(" ↑{} to push ", ahead))
+            } else if behind > 0 {
+                Some(format!(" ↓{} behind ", behind))
+            } else {
+                None
+            }
+        });
+
+    let mut block = Block::default()
         .title(" STATUS ")
         .title_style(border_style)
         .borders(Borders::ALL)
         .border_style(border_style);
+
+    if let Some(ref title) = ahead_title {
+        block = block.title_bottom(Line::from(Span::styled(
+            title.as_str(),
+            Style::default().fg(theme.modified),
+        )));
+    }
 
     let files = app
         .current_workspace()
@@ -469,12 +491,21 @@ fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
                     } else {
                         String::new()
                     };
+                    let sync_info = match ws.ahead_behind {
+                        Some((ahead, behind)) if ahead > 0 && behind > 0 => {
+                            format!(" | ↑{} ↓{}", ahead, behind)
+                        }
+                        Some((ahead, 0)) if ahead > 0 => format!(" | ↑{} unpushed", ahead),
+                        Some((0, behind)) if behind > 0 => format!(" | ↓{} behind", behind),
+                        _ => String::new(),
+                    };
                     Span::styled(
                         format!(
-                            " [{}] branch: {} | {} files | {}: {} | ws {}/{}{}",
+                            " [{}] branch: {} | {} files{} | {}: {} | ws {}/{}{}",
                             mode_label,
                             ws.branch,
                             ws.file_count(),
+                            sync_info,
                             ws.active_provider.label(),
                             ws.status_label(),
                             app.active_workspace + 1,

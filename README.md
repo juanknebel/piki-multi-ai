@@ -17,6 +17,7 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 - **Rich workspace list** — Each workspace shows name, description, worktree path, status, and file count
 - **File watching** — Automatically detects file changes in each worktree using `notify`, with periodic refresh every 3s to catch commits and rebases
 - **Full git status** — STATUS panel shows all file states: modified, staged, untracked, conflicted, renamed, and more via `git status --porcelain=v1`
+- **Ahead/behind indicator** — STATUS panel border and status bar show `↑N to push` / `↓N behind` relative to upstream tracking branch
 - **Side-by-side diffs** — View diffs as a floating overlay rendered by [delta](https://github.com/dandavison/delta) with ANSI colors preserved (terminal stays visible behind)
 - **Tab navigation** — Switch between workspaces with Tab, Shift+Tab, or number keys 1-9
 - **Vim-style navigation** — j/k for movement, Enter to activate, Esc to go back
@@ -100,9 +101,10 @@ Workspace configurations are saved automatically and restored on startup.
 |------------------+                                                       |
 | STATUS           |                                                       |
 |                  |-------------------------------------------------------|
-|  M src/auth.rs   |  branch: feature/ws-1 | 3 files | Claude Code: busy  |
+|  M src/auth.rs   | branch: ws-1 | 3 files | ↑1 unpushed | Claude: busy  |
 |  A src/new.rs    +-------------------------------------------------------+
 |  ? untracked.txt |
+| ↑1 to push      |
 +------------------+--------------------------------------------------------+
   [n] new  [d] delete  [/] search  [Tab] switch  [g] switch AI  [?] help  [q] quit
 ```
