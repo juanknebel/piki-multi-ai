@@ -80,12 +80,14 @@ pub fn render(frame: &mut Frame, app: &mut App) {
     let [ws_area, files_area] =
         Layout::vertical([Constraint::Percentage(app.left_split_pct), Constraint::Percentage(100 - app.left_split_pct)]).areas(left_area);
 
-    // Store layout rects for mouse-based resize detection
+    // Store layout rects for mouse hit-testing
     app.sidebar_x = left_area.x + left_area.width;
     app.left_split_y = ws_area.y + ws_area.height;
     app.left_area_rect = left_area;
+    app.ws_list_area = ws_area;
+    app.file_list_area = files_area;
 
-    // Right panel: tabs + sub-tabs + content + status bar
+    // Right panel: tabs + sub-tabs + content + status bar (store for mouse hit-testing)
     let [tabs_area, subtabs_area, main_area, status_area] = Layout::vertical([
         Constraint::Length(3),
         Constraint::Length(2),
@@ -93,6 +95,10 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         Constraint::Length(1),
     ])
     .areas(right_area);
+
+    app.tabs_area = tabs_area;
+    app.subtabs_area = subtabs_area;
+    app.main_content_area = main_area;
 
     // --- Render panels ---
 

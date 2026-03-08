@@ -29,6 +29,7 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 - **Git operations** — Stage (`s`), unstage (`u`), commit (`c`), push (`P`), and merge (`M`) directly from the TUI; commit dialog with inline message input
 - **Merge/Apply changes** — Merge or rebase workspace branches into main directly from the TUI (`M`); supports merge commit and rebase strategies with conflict detection
 - **System status header** — Live CPU%, RAM usage, battery level, and date/time displayed in a top header bar (powered by `systemstat`)
+- **Full mouse support** — Click to focus panes, select workspaces/files, switch tabs, close tabs (×), scroll anywhere contextually; drag to resize borders or select text; overlays dismiss on click
 - **Resizable panes** — Resize sidebar and workspace/file split with keyboard (`<`/`>`, `+`/`-`) or mouse drag on borders
 - **Markdown viewer** — Preview `.md` files rendered in-terminal via `tui-markdown`; open from fuzzy search with `Ctrl+o`, scroll with `j/k`, `Ctrl+d/u`, `g/G`, or mouse wheel; read-only interact mode; close tab with `w`
 - **Customizable configuration** — Keybindings and themes loaded from `~/.config/piki-multi/config.toml`
@@ -218,6 +219,25 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `<` / `>` | Resize sidebar width (±5%) |
 | `+` / `-` | Resize workspace/file split (±10%) |
 | Mouse drag on border | Drag pane borders to resize |
+
+**Mouse:**
+
+| Action | Effect |
+|--------|--------|
+| Click workspace list | Focus pane and switch to clicked workspace |
+| Click file list | Focus pane and select clicked file |
+| Click main panel | Focus pane and start text selection |
+| Click workspace tab | Switch to that workspace |
+| Click sub-tab | Switch to that tab |
+| Click × on sub-tab | Close that tab |
+| Scroll in workspace list | Navigate workspaces up/down |
+| Scroll in file list | Navigate files up/down |
+| Scroll in main panel | Scroll terminal/markdown content |
+| Scroll in Help/Diff overlay | Scroll overlay content |
+| Scroll in fuzzy search | Navigate results |
+| Click on Help/About/Info overlay | Dismiss overlay |
+| Drag on border | Resize pane split |
+| Drag in terminal | Select text (auto-copies on release) |
 
 **Clipboard:**
 

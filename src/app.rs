@@ -773,6 +773,14 @@ pub struct App {
     /// Rect of the left sidebar area (for resize calculations)
     pub left_area_rect: Rect,
     pub config: crate::config::Config,
+    /// Last left-click position and time (for double-click detection)
+    pub last_click: Option<(Instant, u16, u16)>,
+    /// Layout areas for mouse hit-testing
+    pub ws_list_area: Rect,
+    pub file_list_area: Rect,
+    pub tabs_area: Rect,
+    pub subtabs_area: Rect,
+    pub main_content_area: Rect,
 }
 
 impl App {
@@ -819,6 +827,12 @@ impl App {
             left_split_y: 0,
             left_area_rect: Rect::default(),
             config: crate::config::Config::load(),
+            last_click: None,
+            ws_list_area: Rect::default(),
+            file_list_area: Rect::default(),
+            tabs_area: Rect::default(),
+            subtabs_area: Rect::default(),
+            main_content_area: Rect::default(),
         }
     }
 
