@@ -154,6 +154,9 @@ pub fn render(frame: &mut Frame, app: &mut App) {
     if app.mode == AppMode::NewTab {
         render_new_tab_dialog(frame, area);
     }
+    if app.mode == AppMode::About {
+        render_about_overlay(frame, area, app);
+    }
 }
 
 fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
@@ -877,6 +880,7 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         "    t             New tab",
         "    w             Close tab",
         "    ?             Toggle help",
+        "    a             About",
         "    q             Quit",
         "",
         "  Interaction mode (green border)",
@@ -964,6 +968,46 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let text = Paragraph::new(help_text.join("\n"))
         .block(block)
         .scroll((scroll, 0));
+    frame.render_widget(text, popup);
+}
+
+fn render_about_overlay(frame: &mut Frame, area: Rect, app: &App) {
+    let theme = &app.theme;
+    let popup = centered_rect(50, 20, area);
+    frame.render_widget(ratatui::widgets::Clear, popup);
+
+    let version = env!("CARGO_PKG_VERSION");
+
+    let version_line = format!("piki-multi-ai v{version}");
+    let about_lines: Vec<Line> = vec![
+        Line::from(""),
+        Line::from(""),
+        Line::from("██████╗ ██╗██╗  ██╗██╗"),
+        Line::from("██╔══██╗██║██║ ██╔╝██║"),
+        Line::from("██████╔╝██║█████╔╝ ██║"),
+        Line::from("██╔═══╝ ██║██╔═██╗ ██║"),
+        Line::from("██║     ██║██║  ██╗██║"),
+        Line::from("╚═╝     ╚═╝╚═╝  ╚═╝╚═╝"),
+        Line::from(""),
+        Line::from(version_line),
+        Line::from(""),
+        Line::from("Author: Juan Knebel"),
+        Line::from("Contact: juanknebel@gmail.com"),
+        Line::from("Web: github.com/juanknebel/piki-multi-ai"),
+        Line::from("License: GPL-2.0"),
+        Line::from(""),
+        Line::from("Press Esc to close"),
+    ];
+
+    let block = Block::default()
+        .title(" About ")
+        .title_style(Style::default().fg(theme.help.border))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.help.border));
+
+    let text = Paragraph::new(about_lines)
+        .block(block)
+        .alignment(ratatui::layout::Alignment::Center);
     frame.render_widget(text, popup);
 }
 

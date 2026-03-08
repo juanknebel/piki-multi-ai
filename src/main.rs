@@ -912,6 +912,17 @@ fn resize_all_ptys(app: &mut App) {
 }
 
 fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
+    // About overlay — close with Esc/q/a
+    if app.mode == AppMode::About {
+        match key.code {
+            KeyCode::Esc => {
+                app.mode = AppMode::Normal;
+            }
+            _ => {}
+        }
+        return None;
+    }
+
     // Help overlay — scroll with j/k/arrows, close with Esc/q/?
     if app.mode == AppMode::Help {
         match key.code {
@@ -1026,6 +1037,9 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
         }
         KeyCode::Char('?') => {
             app.mode = AppMode::Help;
+        }
+        KeyCode::Char('a') => {
+            app.mode = AppMode::About;
         }
         KeyCode::Char('n') => {
             app.mode = AppMode::NewWorkspace;

@@ -1,4 +1,4 @@
-# agent-multi (v1.0.0)
+# agent-multi (v0.5.0)
 
 A terminal UI for orchestrating multiple [Claude Code](https://docs.anthropic.com/en/docs/claude-code) instances in parallel, each running in its own isolated git worktree.
 
@@ -108,7 +108,7 @@ Workspace configurations are saved automatically and restored on startup.
 | ↑1 to push      |
 +------------------+--------------------------------------------------------+
   [hjkl] navigate [n] new ws [t] new tab [w] close tab [g/G] next/prev tab
-  [c] commit [P] push [M] merge [Tab] switch ws [/] search [?] help [q] quit
+  [c] commit [P] push [M] merge [Tab] switch ws [/] search [?] help [a] about [q] quit
 ```
 
 ### File status indicators
@@ -150,6 +150,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `P` | Push |
 | `M` | Merge workspace branch into main |
 | `?` | Help overlay |
+| `a` | About overlay |
 | `q` | Quit |
 
 **Interaction mode** (green border):

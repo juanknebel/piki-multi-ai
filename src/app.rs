@@ -81,6 +81,8 @@ pub enum AppMode {
     ConfirmMerge,
     /// New tab provider selection dialog
     NewTab,
+    /// About overlay
+    About,
 }
 
 /// Strategy for merging a workspace branch into main
