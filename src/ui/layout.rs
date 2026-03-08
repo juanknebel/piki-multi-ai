@@ -750,16 +750,31 @@ fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
             Style::default().fg(theme.new_ws_inactive)
         }
     };
-    let cursor_char = |active: bool| if active { "█" } else { "" };
-
     // Auto-scroll: show the tail of text when it exceeds available width
     let label_width = 10_u16; // "  Name: " = 8 + some padding
     let field_max = popup.width.saturating_sub(label_width + 2) as usize; // borders
-    let visible_field = |text: &str, active: bool| -> String {
-        let suffix = cursor_char(active);
-        let full = format!("{}{}", text, suffix);
-        if full.len() > field_max && field_max > 2 {
-            format!("…{}", &full[full.len() - (field_max - 1)..])
+    let visible_field = |text: &str, active: bool, cursor: usize| -> String {
+        if !active {
+            if text.len() > field_max && field_max > 2 {
+                return format!("…{}", &text[text.len() - (field_max - 1)..]);
+            }
+            return text.to_string();
+        }
+        // Insert cursor block at position
+        let before: String = text.chars().take(cursor).collect();
+        let after: String = text.chars().skip(cursor).collect();
+        let full = format!("{}█{}", before, after);
+        if full.chars().count() > field_max && field_max > 2 {
+            // Scroll to keep cursor visible
+            let chars: Vec<char> = full.chars().collect();
+            let cursor_display = before.chars().count(); // cursor block is at this index
+            let start = if cursor_display + 2 > field_max {
+                cursor_display + 2 - field_max
+            } else {
+                0
+            };
+            let visible: String = chars[start..chars.len().min(start + field_max - 1)].iter().collect();
+            format!("…{}", visible)
         } else {
             full
         }
@@ -774,7 +789,7 @@ fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
         Line::from(vec![
             Span::styled("  Name:   ", field_style(name_active)),
             Span::styled(
-                visible_field(&app.input_buffer, name_active),
+                visible_field(&app.input_buffer, name_active, app.input_cursor),
                 field_style(name_active),
             ),
         ]),
@@ -782,7 +797,7 @@ fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
         Line::from(vec![
             Span::styled("  Dir:    ", field_style(dir_active)),
             Span::styled(
-                visible_field(&app.dir_input_buffer, dir_active),
+                visible_field(&app.dir_input_buffer, dir_active, app.dir_input_cursor),
                 field_style(dir_active),
             ),
         ]),
@@ -790,7 +805,7 @@ fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
         Line::from(vec![
             Span::styled("  Desc:   ", field_style(desc_active)),
             Span::styled(
-                visible_field(&app.desc_input_buffer, desc_active),
+                visible_field(&app.desc_input_buffer, desc_active, app.desc_input_cursor),
                 field_style(desc_active),
             ),
         ]),
@@ -798,7 +813,7 @@ fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
         Line::from(vec![
             Span::styled("  Prompt: ", field_style(prompt_active)),
             Span::styled(
-                visible_field(&app.prompt_input_buffer, prompt_active),
+                visible_field(&app.prompt_input_buffer, prompt_active, app.prompt_input_cursor),
                 field_style(prompt_active),
             ),
         ]),

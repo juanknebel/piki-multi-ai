@@ -957,6 +957,10 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
             app.dir_input_buffer.clear();
             app.desc_input_buffer.clear();
             app.prompt_input_buffer.clear();
+            app.input_cursor = 0;
+            app.dir_input_cursor = 0;
+            app.desc_input_cursor = 0;
+            app.prompt_input_cursor = 0;
             app.active_dialog_field = DialogField::Name;
         }
         KeyCode::Char('d') => {
@@ -1442,6 +1446,15 @@ fn handle_inline_edit_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     None
 }
 
+fn dialog_buf_and_cursor(app: &mut App) -> (&mut String, &mut usize) {
+    match app.active_dialog_field {
+        DialogField::Name => (&mut app.input_buffer, &mut app.input_cursor),
+        DialogField::Directory => (&mut app.dir_input_buffer, &mut app.dir_input_cursor),
+        DialogField::Description => (&mut app.desc_input_buffer, &mut app.desc_input_cursor),
+        DialogField::Prompt => (&mut app.prompt_input_buffer, &mut app.prompt_input_cursor),
+    }
+}
+
 fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     match key.code {
         KeyCode::Tab | KeyCode::BackTab => {
@@ -1452,43 +1465,56 @@ fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
                 DialogField::Prompt => DialogField::Name,
             };
         }
-        KeyCode::Char(c) => match app.active_dialog_field {
-            DialogField::Name => {
-                // Allow characters valid in git branch names: alphanumeric, '-', '_', '.', '/'
-                if c.is_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '/' {
-                    app.input_buffer.push(c);
+        KeyCode::Char(c) => {
+            let valid = match app.active_dialog_field {
+                DialogField::Name => {
+                    c.is_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '/'
                 }
+                _ => !c.is_control(),
+            };
+            if valid {
+                let (buf, cursor) = dialog_buf_and_cursor(app);
+                let byte_idx = buf.char_indices().nth(*cursor).map_or(buf.len(), |(i, _)| i);
+                buf.insert(byte_idx, c);
+                *cursor += 1;
             }
-            DialogField::Directory => {
-                if !c.is_control() {
-                    app.dir_input_buffer.push(c);
-                }
+        }
+        KeyCode::Backspace => {
+            let (buf, cursor) = dialog_buf_and_cursor(app);
+            if *cursor > 0 {
+                let byte_idx =
+                    buf.char_indices().nth(*cursor - 1).map_or(buf.len(), |(i, _)| i);
+                buf.remove(byte_idx);
+                *cursor -= 1;
             }
-            DialogField::Description => {
-                if !c.is_control() {
-                    app.desc_input_buffer.push(c);
-                }
+        }
+        KeyCode::Delete => {
+            let (buf, cursor) = dialog_buf_and_cursor(app);
+            if let Some((byte_idx, _)) = buf.char_indices().nth(*cursor) {
+                buf.remove(byte_idx);
             }
-            DialogField::Prompt => {
-                if !c.is_control() {
-                    app.prompt_input_buffer.push(c);
-                }
+        }
+        KeyCode::Left => {
+            let (_, cursor) = dialog_buf_and_cursor(app);
+            if *cursor > 0 {
+                *cursor -= 1;
             }
-        },
-        KeyCode::Backspace => match app.active_dialog_field {
-            DialogField::Name => {
-                app.input_buffer.pop();
+        }
+        KeyCode::Right => {
+            let (buf, cursor) = dialog_buf_and_cursor(app);
+            let len = buf.chars().count();
+            if *cursor < len {
+                *cursor += 1;
             }
-            DialogField::Directory => {
-                app.dir_input_buffer.pop();
-            }
-            DialogField::Description => {
-                app.desc_input_buffer.pop();
-            }
-            DialogField::Prompt => {
-                app.prompt_input_buffer.pop();
-            }
-        },
+        }
+        KeyCode::Home => {
+            let (_, cursor) = dialog_buf_and_cursor(app);
+            *cursor = 0;
+        }
+        KeyCode::End => {
+            let (buf, cursor) = dialog_buf_and_cursor(app);
+            *cursor = buf.chars().count();
+        }
         KeyCode::Enter => {
             let name = app.input_buffer.clone();
             let dir_raw = app.dir_input_buffer.clone();
@@ -1521,6 +1547,10 @@ fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
             app.dir_input_buffer.clear();
             app.desc_input_buffer.clear();
             app.prompt_input_buffer.clear();
+            app.input_cursor = 0;
+            app.dir_input_cursor = 0;
+            app.desc_input_cursor = 0;
+            app.prompt_input_cursor = 0;
             app.mode = AppMode::Normal;
             app.active_pane = ActivePane::WorkspaceList;
             return Some(Action::CreateWorkspace(name, description, prompt, dir));
@@ -1533,6 +1563,10 @@ fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
             app.dir_input_buffer.clear();
             app.desc_input_buffer.clear();
             app.prompt_input_buffer.clear();
+            app.input_cursor = 0;
+            app.dir_input_cursor = 0;
+            app.desc_input_cursor = 0;
+            app.prompt_input_cursor = 0;
             app.mode = AppMode::Normal;
             app.active_pane = ActivePane::WorkspaceList;
         }

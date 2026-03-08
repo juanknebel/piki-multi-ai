@@ -3,6 +3,11 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 /// Convert a crossterm KeyEvent into the raw bytes to send to the PTY.
 /// Returns None for key combinations we don't handle.
 pub fn key_to_bytes(key: KeyEvent) -> Option<Vec<u8>> {
+    // Ctrl+Enter — send newline (LF) so CLIs like Claude/Gemini insert a line break
+    if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Enter {
+        return Some(vec![10]); // LF
+    }
+
     // Ctrl + letter
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         if let KeyCode::Char(c) = key.code {

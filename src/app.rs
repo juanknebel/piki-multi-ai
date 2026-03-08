@@ -697,6 +697,11 @@ pub struct App {
     pub dir_input_buffer: String,
     pub desc_input_buffer: String,
     pub prompt_input_buffer: String,
+    /// Cursor positions (char index) for each dialog input field
+    pub input_cursor: usize,
+    pub dir_input_cursor: usize,
+    pub desc_input_cursor: usize,
+    pub prompt_input_cursor: usize,
     pub active_dialog_field: DialogField,
     pub status_message: Option<String>,
     /// Index of workspace targeted for deletion (used by ConfirmDelete dialog)
@@ -749,6 +754,10 @@ impl App {
             dir_input_buffer: String::new(),
             desc_input_buffer: String::new(),
             prompt_input_buffer: String::new(),
+            input_cursor: 0,
+            dir_input_cursor: 0,
+            desc_input_cursor: 0,
+            prompt_input_cursor: 0,
             active_dialog_field: DialogField::Name,
             status_message: None,
             delete_target: None,
