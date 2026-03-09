@@ -16,6 +16,7 @@ pub enum AIProvider {
     Gemini,
     Codex,
     Shell,
+    Kanban,
 }
 
 impl AIProvider {
@@ -26,6 +27,7 @@ impl AIProvider {
             AIProvider::Gemini => "gemini",
             AIProvider::Codex => "codex",
             AIProvider::Shell => "/bin/sh",
+            AIProvider::Kanban => "",
         }
     }
 
@@ -44,6 +46,7 @@ impl AIProvider {
             AIProvider::Gemini => "Gemini",
             AIProvider::Codex => "Codex",
             AIProvider::Shell => "Shell",
+            AIProvider::Kanban => "Kanban Board",
         }
     }
 
@@ -54,6 +57,7 @@ impl AIProvider {
             AIProvider::Gemini,
             AIProvider::Codex,
             AIProvider::Shell,
+            AIProvider::Kanban,
         ]
     }
 }
@@ -781,6 +785,10 @@ pub struct App {
     pub tabs_area: Rect,
     pub subtabs_area: Rect,
     pub main_content_area: Rect,
+    /// Kanban app state
+    pub kanban_app: Option<flow::App>,
+    /// Kanban provider
+    pub kanban_provider: Option<Box<dyn flow::provider::Provider>>,
 }
 
 impl App {
@@ -833,6 +841,8 @@ impl App {
             tabs_area: Rect::default(),
             subtabs_area: Rect::default(),
             main_content_area: Rect::default(),
+            kanban_app: None,
+            kanban_provider: None,
         }
     }
 

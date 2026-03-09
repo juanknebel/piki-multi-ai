@@ -53,3 +53,6 @@ clap = { version = "4", features = ["derive"] }
 tui-markdown = "0.3"
 systemstat = "0.2.6"
 chrono = "0.4.44"
+
+# Kanban board
+flow = { git = "https://github.com/juanknebel/flow" }

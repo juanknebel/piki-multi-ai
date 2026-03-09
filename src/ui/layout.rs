@@ -421,6 +421,19 @@ fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) {
             }
 
             let provider = tab.provider;
+
+            if provider == crate::app::AIProvider::Kanban {
+                if let Some(kanban_app) = &app.kanban_app {
+                    let block = Block::default()
+                        .borders(Borders::ALL)
+                        .border_style(border_style);
+                    let inner_area = block.inner(area);
+                    frame.render_widget(block, area);
+                    flow::ui::render(frame, kanban_app, Some(inner_area));
+                }
+                return;
+            }
+
             if let Some(ref parser) = tab.pty_parser {
                 super::terminal::render(
                     frame,
@@ -1233,7 +1246,7 @@ fn render_confirm_merge_dialog(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 fn render_new_tab_dialog(frame: &mut Frame, area: Rect) {
-    let popup = centered_rect(40, 10, area);
+    let popup = centered_rect(40, 11, area);
     frame.render_widget(ratatui::widgets::Clear, popup);
 
     let block = Block::default()
@@ -1250,6 +1263,7 @@ fn render_new_tab_dialog(frame: &mut Frame, area: Rect) {
         Line::from("  [2] Gemini"),
         Line::from("  [3] Codex"),
         Line::from("  [4] Shell"),
+        Line::from("  [5] Kanban Board"),
         Line::from(""),
         Line::from("  [Esc] Cancel"),
     ];

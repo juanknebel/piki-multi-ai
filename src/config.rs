@@ -6,11 +6,28 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KanbanConfig {
+    pub provider: String,
+    pub path: Option<String>,
+}
+
+impl Default for KanbanConfig {
+    fn default() -> Self {
+        Self {
+            provider: "local".to_string(),
+            path: Some("~/.config/flow/boards/default".to_string()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     #[serde(default)]
     pub theme: String,
     #[serde(default)]
     pub keybindings: Keybindings,
+    #[serde(default)]
+    pub kanban: KanbanConfig,
 }
 
 impl Default for Config {
@@ -18,6 +35,7 @@ impl Default for Config {
         Self {
             theme: "default".to_string(),
             keybindings: Keybindings::default(),
+            kanban: KanbanConfig::default(),
         }
     }
 }
@@ -96,6 +114,7 @@ fn default_navigation() -> HashMap<String, String> {
     m.insert("help".to_string(), "?".to_string());
     m.insert("about".to_string(), "a".to_string());
     m.insert("workspace_info".to_string(), "i".to_string());
+    m.insert("kanban".to_string(), "b".to_string());
     m.insert("new_workspace".to_string(), "n".to_string());
     m.insert("delete_workspace".to_string(), "d".to_string());
     m.insert("commit".to_string(), "c".to_string());

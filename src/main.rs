@@ -700,6 +700,45 @@ async fn execute_action(
             }
         }
         Action::SpawnTab(provider) => {
+            if provider == AIProvider::Kanban && app.kanban_app.is_none() {
+                // Initialize Kanban app if it doesn't exist yet
+                let mut kanban_provider = if app.config.kanban.provider == "jira" {
+                    Box::new(flow::provider_jira::JiraProvider::from_env()) as Box<dyn flow::provider::Provider>
+                } else {
+                    let default_path = app.config.kanban.path.clone().map(std::path::PathBuf::from).unwrap_or_else(|| {
+                        dirs::home_dir()
+                            .unwrap_or_else(|| std::path::PathBuf::from("."))
+                            .join(".config/flow/boards/default")
+                    });
+                    
+                    let expanded_path = if let Some(path_str) = default_path.to_str() {
+                        if path_str.starts_with("~/") {
+                            if let Some(home) = dirs::home_dir() {
+                                home.join(&path_str[2..])
+                            } else {
+                                default_path
+                            }
+                        } else {
+                            default_path
+                        }
+                    } else {
+                        default_path
+                    };
+
+                    Box::new(flow::provider_local::LocalProvider::new(expanded_path)) as Box<dyn flow::provider::Provider>
+                };
+
+                let board = kanban_provider.load_board().unwrap_or_else(|_e| {
+                    flow::Board { columns: vec![] }
+                });
+                let mut kanban = flow::App::new(board);
+                if kanban.board.columns.is_empty() {
+                    kanban.banner = Some("Load failed or empty board. Check board.txt.".to_string());
+                }
+                app.kanban_app = Some(kanban);
+                app.kanban_provider = Some(kanban_provider);
+            }
+
             if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
                 let idx = spawn_tab(ws, provider, app.pty_rows, app.pty_cols).await;
                 ws.active_tab = idx;
@@ -781,6 +820,9 @@ async fn spawn_initial_shell(ws: &mut app::Workspace, rows: u16, cols: u16) {
 /// Spawn a new tab with the given provider in a workspace.
 async fn spawn_tab(ws: &mut app::Workspace, provider: AIProvider, rows: u16, cols: u16) -> usize {
     let idx = ws.add_tab(provider, true);
+    if provider == AIProvider::Kanban {
+        return idx;
+    }
     let cmd = provider.resolved_command();
     match PtySession::spawn(&ws.path, rows, cols, &cmd).await {
         Ok(session) => {
@@ -1365,6 +1407,12 @@ fn handle_interaction_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
             } else if app
                 .current_workspace()
                 .and_then(|ws| ws.current_tab())
+                .is_some_and(|tab| tab.provider == AIProvider::Kanban)
+            {
+                handle_kanban_interaction(app, key)
+            } else if app
+                .current_workspace()
+                .and_then(|ws| ws.current_tab())
                 .is_some_and(|tab| tab.markdown_content.is_some())
             {
                 handle_markdown_interaction(app, key)
@@ -1375,6 +1423,208 @@ fn handle_interaction_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
         ActivePane::WorkspaceList => handle_workspace_interaction(app, key),
         ActivePane::FileList => handle_filelist_interaction(app, key),
     }
+}
+
+fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
+    if app.config.matches_interaction(key, "exit_interaction") {
+        app.interacting = false;
+        return None;
+    }
+
+    let (kanban_app, kanban_provider) = match (&mut app.kanban_app, &mut app.kanban_provider) {
+        (Some(a), Some(p)) => (a, p),
+        _ => return None,
+    };
+
+    // Helper to get selected card ID
+    let selected_card_id = |a: &flow::App| -> Option<String> {
+        a.board
+            .columns
+            .get(a.col)
+            .and_then(|col| col.cards.get(a.row))
+            .map(|card| card.id.clone())
+    };
+
+    if let Some(edit) = kanban_app.edit_state.as_mut() {
+        match key.code {
+            KeyCode::Esc => {
+                kanban_app.edit_state = None;
+            }
+            KeyCode::Tab => {
+                edit.focus_description = !edit.focus_description;
+                edit.cursor_pos = if edit.focus_description {
+                    edit.description.len()
+                } else {
+                    edit.title.len()
+                };
+            }
+            KeyCode::Enter => {
+                let card_id = edit.card_id.clone();
+                let title = edit.title.clone();
+                let description = edit.description.clone();
+                if let Err(e) = kanban_provider.update_card(&card_id, &title, &description) {
+                    kanban_app.banner = Some(format!("Save failed: {}", e));
+                } else {
+                    match kanban_provider.load_board() {
+                        Ok(b) => {
+                            kanban_app.board = b;
+                            kanban_app.clamp();
+                            // Optional: focus_card_by_id(&mut kanban_app, &card_id);
+                            kanban_app.banner = Some("Card saved".to_string());
+                        }
+                        Err(e) => kanban_app.banner = Some(format!("Reload failed: {}", e)),
+                    }
+                }
+                kanban_app.edit_state = None;
+            }
+            KeyCode::Char(c) => {
+                if edit.focus_description {
+                    edit.description.push(c);
+                } else {
+                    edit.title.push(c);
+                    edit.cursor_pos = edit.title.len();
+                }
+            }
+            KeyCode::Backspace => {
+                if edit.focus_description {
+                    edit.description.pop();
+                } else {
+                    edit.title.pop();
+                    edit.cursor_pos = edit.title.len();
+                }
+            }
+            _ => {}
+        }
+        return None;
+    }
+
+    if kanban_app.confirm_delete {
+        match key.code {
+            KeyCode::Char('y') | KeyCode::Char('Y') => {
+                if let Some(card_id) = selected_card_id(kanban_app) {
+                    if let Err(e) = kanban_provider.delete_card(&card_id) {
+                        kanban_app.banner = Some(format!("Delete failed: {}", e));
+                    } else {
+                        match kanban_provider.load_board() {
+                            Ok(b) => {
+                                kanban_app.board = b;
+                                kanban_app.clamp();
+                                kanban_app.banner = Some(format!("Card {} deleted", card_id));
+                            }
+                            Err(e) => kanban_app.banner = Some(format!("Reload failed: {}", e)),
+                        }
+                    }
+                }
+                kanban_app.confirm_delete = false;
+            }
+            KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+                kanban_app.confirm_delete = false;
+            }
+            _ => {}
+        }
+        return None;
+    }
+
+    let action = match key.code {
+        KeyCode::Char('q') => Some(flow::Action::Quit),
+        KeyCode::Esc => Some(flow::Action::CloseOrQuit),
+        KeyCode::Char('h') | KeyCode::Left => Some(flow::Action::FocusLeft),
+        KeyCode::Char('l') | KeyCode::Right => Some(flow::Action::FocusRight),
+        KeyCode::Char('j') | KeyCode::Down => Some(flow::Action::SelectDown),
+        KeyCode::Char('k') | KeyCode::Up => Some(flow::Action::SelectUp),
+        KeyCode::Char('H') => Some(flow::Action::MoveLeft),
+        KeyCode::Char('L') => Some(flow::Action::MoveRight),
+        KeyCode::Enter => Some(flow::Action::ToggleDetail),
+        KeyCode::Char('r') => Some(flow::Action::Refresh),
+        KeyCode::Char('d') => Some(flow::Action::Delete),
+        KeyCode::Char('a') | KeyCode::Char('n') => Some(flow::Action::Add),
+        KeyCode::Char('e') => Some(flow::Action::Edit),
+        _ => None,
+    };
+
+    if let Some(a) = action {
+        match a {
+            flow::Action::Add => {
+                let Some(col) = kanban_app.board.columns.get(kanban_app.col) else {
+                    kanban_app.banner = Some("Create failed: no column selected".to_string());
+                    return None;
+                };
+                match kanban_provider.create_card(&col.id) {
+                    Ok(id) => {
+                        kanban_app.edit_state = Some(flow::app::EditState {
+                            card_id: id,
+                            title: "New card".to_string(),
+                            description: "".to_string(),
+                            cursor_pos: 8,
+                            focus_description: false,
+                        });
+                    }
+                    Err(e) => {
+                        kanban_app.banner = Some(format!("Create failed: {}", e));
+                    }
+                }
+            }
+            flow::Action::Edit => {
+                let Some(col) = kanban_app.board.columns.get(kanban_app.col) else { return None; };
+                let Some(card) = col.cards.get(kanban_app.row) else {
+                    kanban_app.banner = Some("Edit failed: no card selected".to_string());
+                    return None;
+                };
+                kanban_app.edit_state = Some(flow::app::EditState {
+                    card_id: card.id.clone(),
+                    title: card.title.clone(),
+                    description: card.description.clone(),
+                    cursor_pos: card.title.len(),
+                    focus_description: false,
+                });
+            }
+            flow::Action::MoveLeft => {
+                if let Some((card_id, dst)) = kanban_app.optimistic_move(-1) {
+                    if let Err(e) = kanban_provider.move_card(&card_id, &dst) {
+                        kanban_app.banner = Some(format!("Move failed: {}", e));
+                        // Revert optimistic move by reloading
+                        if let Ok(b) = kanban_provider.load_board() {
+                            kanban_app.board = b;
+                        }
+                    } else {
+                        kanban_app.banner = Some("Moved".to_string());
+                    }
+                }
+            }
+            flow::Action::MoveRight => {
+                if let Some((card_id, dst)) = kanban_app.optimistic_move(1) {
+                    if let Err(e) = kanban_provider.move_card(&card_id, &dst) {
+                        kanban_app.banner = Some(format!("Move failed: {}", e));
+                        // Revert optimistic move by reloading
+                        if let Ok(b) = kanban_provider.load_board() {
+                            kanban_app.board = b;
+                        }
+                    } else {
+                        kanban_app.banner = Some("Moved".to_string());
+                    }
+                }
+            }
+            flow::Action::Refresh => {
+                match kanban_provider.load_board() {
+                    Ok(b) => {
+                        kanban_app.board = b;
+                        kanban_app.clamp();
+                        kanban_app.banner = Some("Refreshed".to_string());
+                    }
+                    Err(e) => {
+                        kanban_app.banner = Some(format!("Refresh failed: {}", e));
+                    }
+                }
+            }
+            _ => {
+                let should_quit = kanban_app.apply(a);
+                if should_quit {
+                    app.interacting = false;
+                }
+            }
+        }
+    }
+    None
 }
 
 fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
@@ -1966,6 +2216,10 @@ fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Action> {
         KeyCode::Char('4') => {
             app.mode = AppMode::Normal;
             Some(Action::SpawnTab(AIProvider::Shell))
+        }
+        KeyCode::Char('5') => {
+            app.mode = AppMode::Normal;
+            Some(Action::SpawnTab(AIProvider::Kanban))
         }
         KeyCode::Esc => {
             app.mode = AppMode::Normal;
