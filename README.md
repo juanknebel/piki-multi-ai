@@ -95,8 +95,13 @@ Press `n` to open the New Workspace dialog. Provide:
 - **Dir:** The path to the source git repository.
 - **Desc:** (Optional) A brief description of the task.
 - **Prompt:** (Optional) An initial prompt to auto-send to the AI provider on creation.
+- **Kanban Path:** (Optional) Path to the Kanban board for this workspace (defaults to `~/.config/flow/boards/default`).
 
 Press `Enter` to create or `Esc` to cancel. Use `Tab` to cycle between fields.
+
+### Editing Workspaces
+
+Press `e` on a selected workspace to modify its **Kanban Path** or **initial Prompt**. This is useful for re-directing a workspace to a specific task board or updating the orchestration instructions.
 
 ### Persistence
 
@@ -162,6 +167,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `h` / `j` / `k` / `l` | Move between panes |
 | `Enter` | Interact with selected pane |
 | `n` | Create new workspace |
+| `e` | Edit workspace options (Kanban path, Prompt) |
 | `d` | Delete selected workspace |
 | `Tab` / `Shift+Tab` | Next / previous workspace |
 | `1`-`9` | Jump to workspace N |

@@ -71,6 +71,8 @@ pub enum AppMode {
     Diff,
     /// Input dialog for creating a new workspace
     NewWorkspace,
+    /// Input dialog for editing a workspace
+    EditWorkspace,
     /// Confirmation dialog for deleting a workspace
     ConfirmDelete,
     /// Help overlay
@@ -113,6 +115,7 @@ pub enum DialogField {
     Directory,
     Description,
     Prompt,
+    KanbanPath,
 }
 
 /// Status of the Claude Code process in a workspace
@@ -170,6 +173,7 @@ pub struct Workspace {
     pub name: String,
     pub description: String,
     pub prompt: String,
+    pub kanban_path: Option<String>,
     pub branch: String,
     pub path: PathBuf,
     /// Git root of the source repository this workspace was created from
@@ -189,6 +193,10 @@ pub struct Workspace {
     pub last_refresh: Option<Instant>,
     /// Commits ahead/behind upstream (ahead, behind)
     pub ahead_behind: Option<(usize, usize)>,
+    /// Kanban app state
+    pub kanban_app: Option<flow::App>,
+    /// Kanban provider
+    pub kanban_provider: Option<Box<dyn flow::provider::Provider>>,
 }
 
 impl Workspace {
@@ -196,6 +204,7 @@ impl Workspace {
         name: String,
         description: String,
         prompt: String,
+        kanban_path: Option<String>,
         branch: String,
         path: PathBuf,
         source_repo: PathBuf,
@@ -204,6 +213,7 @@ impl Workspace {
             name,
             description,
             prompt,
+            kanban_path,
             branch,
             path,
             source_repo,
@@ -216,6 +226,8 @@ impl Workspace {
             dirty: false,
             last_refresh: None,
             ahead_behind: None,
+            kanban_app: None,
+            kanban_provider: None,
         }
     }
 
@@ -735,11 +747,13 @@ pub struct App {
     pub dir_input_buffer: String,
     pub desc_input_buffer: String,
     pub prompt_input_buffer: String,
+    pub kanban_input_buffer: String,
     /// Cursor positions (char index) for each dialog input field
     pub input_cursor: usize,
     pub dir_input_cursor: usize,
     pub desc_input_cursor: usize,
     pub prompt_input_cursor: usize,
+    pub kanban_input_cursor: usize,
     /// Scroll offset for help overlay
     pub help_scroll: u16,
     /// Horizontal scroll offset for workspace info overlay
@@ -748,6 +762,8 @@ pub struct App {
     pub status_message: Option<String>,
     /// Index of workspace targeted for deletion (used by ConfirmDelete dialog)
     pub delete_target: Option<usize>,
+    /// Index of workspace targeted for editing (used by EditWorkspace dialog)
+    pub edit_target: Option<usize>,
     /// Fuzzy file search state
     pub fuzzy: Option<FuzzyState>,
     /// Inline editor state
@@ -785,10 +801,6 @@ pub struct App {
     pub tabs_area: Rect,
     pub subtabs_area: Rect,
     pub main_content_area: Rect,
-    /// Kanban app state
-    pub kanban_app: Option<flow::App>,
-    /// Kanban provider
-    pub kanban_provider: Option<Box<dyn flow::provider::Provider>>,
 }
 
 impl App {
@@ -809,15 +821,18 @@ impl App {
             dir_input_buffer: String::new(),
             desc_input_buffer: String::new(),
             prompt_input_buffer: String::new(),
+            kanban_input_buffer: String::new(),
             input_cursor: 0,
             dir_input_cursor: 0,
             desc_input_cursor: 0,
             prompt_input_cursor: 0,
+            kanban_input_cursor: 0,
             help_scroll: 0,
             info_hscroll: 0,
             active_dialog_field: DialogField::Name,
             status_message: None,
             delete_target: None,
+            edit_target: None,
             fuzzy: None,
             editor: None,
             editing_file: None,
@@ -841,8 +856,6 @@ impl App {
             tabs_area: Rect::default(),
             subtabs_area: Rect::default(),
             main_content_area: Rect::default(),
-            kanban_app: None,
-            kanban_provider: None,
         }
     }
 

@@ -111,6 +111,7 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
             entry.name,
             entry.description,
             entry.prompt.clone(),
+            entry.kanban_path,
             entry.branch,
             entry.worktree_path,
             entry.source_repo,
@@ -227,7 +228,8 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
 
 /// Async actions triggered by key events
 enum Action {
-    CreateWorkspace(String, String, String, PathBuf),
+    CreateWorkspace(String, String, String, Option<String>, PathBuf),
+    EditWorkspace(usize, Option<String>, String),
     DeleteWorkspace(usize),
     /// Remove workspace from app list but keep worktree on disk
     RemoveFromList(usize),
@@ -260,13 +262,11 @@ async fn execute_action(
     terminal: &mut DefaultTerminal,
 ) -> anyhow::Result<()> {
     match action {
-        Action::CreateWorkspace(name, description, prompt, dir) => {
-            match manager.create(&name, &description, &dir).await {
+        Action::CreateWorkspace(name, description, prompt, kanban_path, dir) => {
+            match manager.create(&name, &description, &prompt, kanban_path, &dir).await {
                 Ok(ws) => {
                     app.workspaces.push(ws);
                     let new_idx = app.workspaces.len() - 1;
-                    // Store the prompt
-                    app.workspaces[new_idx].prompt = prompt.clone();
                     app.switch_workspace(new_idx);
 
                     // Spawn initial Shell tab
@@ -304,6 +304,19 @@ async fn execute_action(
                 Err(e) => {
                     app.status_message = Some(format!("Error: {}", e));
                 }
+            }
+        }
+        Action::EditWorkspace(idx, kanban_path, prompt) => {
+            if let Some(ws) = app.workspaces.get_mut(idx) {
+                if ws.kanban_path != kanban_path {
+                    ws.kanban_app = None;
+                    ws.kanban_provider = None;
+                }
+                ws.kanban_path = kanban_path;
+                ws.prompt = prompt;
+                let source = ws.source_repo.clone();
+                let _ = ws_config::save(&source, &app.workspaces);
+                app.status_message = Some("Workspace updated".into());
             }
         }
         Action::DeleteWorkspace(idx) => {
@@ -700,46 +713,50 @@ async fn execute_action(
             }
         }
         Action::SpawnTab(provider) => {
-            if provider == AIProvider::Kanban && app.kanban_app.is_none() {
-                // Initialize Kanban app if it doesn't exist yet
-                let mut kanban_provider = if app.config.kanban.provider == "jira" {
-                    Box::new(flow::provider_jira::JiraProvider::from_env()) as Box<dyn flow::provider::Provider>
-                } else {
-                    let default_path = app.config.kanban.path.clone().map(std::path::PathBuf::from).unwrap_or_else(|| {
-                        dirs::home_dir()
-                            .unwrap_or_else(|| std::path::PathBuf::from("."))
-                            .join(".config/flow/boards/default")
-                    });
+            if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+                if provider == AIProvider::Kanban && ws.kanban_app.is_none() {
+                    // Initialize Kanban app if it doesn't exist yet for this workspace
+                    let kanban_path_opt = ws.kanban_path.clone();
                     
-                    let expanded_path = if let Some(path_str) = default_path.to_str() {
-                        if path_str.starts_with("~/") {
-                            if let Some(home) = dirs::home_dir() {
-                                home.join(&path_str[2..])
+                    let mut kanban_provider = if app.config.kanban.provider == "jira" {
+                        Box::new(flow::provider_jira::JiraProvider::from_env()) as Box<dyn flow::provider::Provider>
+                    } else {
+                        let default_path = kanban_path_opt.map(std::path::PathBuf::from).unwrap_or_else(|| {
+                            app.config.kanban.path.clone().map(std::path::PathBuf::from).unwrap_or_else(|| {
+                                dirs::home_dir()
+                                    .unwrap_or_else(|| std::path::PathBuf::from("."))
+                                    .join(".config/flow/boards/default")
+                            })
+                        });
+                        
+                        let expanded_path = if let Some(path_str) = default_path.to_str() {
+                            if path_str.starts_with("~/") {
+                                if let Some(home) = dirs::home_dir() {
+                                    home.join(&path_str[2..])
+                                } else {
+                                    default_path
+                                }
                             } else {
                                 default_path
                             }
                         } else {
                             default_path
-                        }
-                    } else {
-                        default_path
+                        };
+
+                        Box::new(flow::provider_local::LocalProvider::new(expanded_path)) as Box<dyn flow::provider::Provider>
                     };
 
-                    Box::new(flow::provider_local::LocalProvider::new(expanded_path)) as Box<dyn flow::provider::Provider>
-                };
-
-                let board = kanban_provider.load_board().unwrap_or_else(|_e| {
-                    flow::Board { columns: vec![] }
-                });
-                let mut kanban = flow::App::new(board);
-                if kanban.board.columns.is_empty() {
-                    kanban.banner = Some("Load failed or empty board. Check board.txt.".to_string());
+                    let board = kanban_provider.load_board().unwrap_or_else(|_e| {
+                        flow::Board { columns: vec![] }
+                    });
+                    let mut kanban = flow::App::new(board);
+                    if kanban.board.columns.is_empty() {
+                        kanban.banner = Some("Load failed or empty board. Check board.txt.".to_string());
+                    }
+                    ws.kanban_app = Some(kanban);
+                    ws.kanban_provider = Some(kanban_provider);
                 }
-                app.kanban_app = Some(kanban);
-                app.kanban_provider = Some(kanban_provider);
-            }
 
-            if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
                 let idx = spawn_tab(ws, provider, app.pty_rows, app.pty_cols).await;
                 ws.active_tab = idx;
                 app.status_message = Some(format!("Opened {} tab", provider.label()));
@@ -1214,6 +1231,11 @@ fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         return handle_new_workspace_input(app, key);
     }
 
+    // Edit workspace dialog captures all input
+    if app.mode == AppMode::EditWorkspace {
+        return handle_edit_workspace_input(app, key);
+    }
+
     // Commit message dialog captures all input
     if app.mode == AppMode::CommitMessage {
         return handle_commit_message_input(app, key);
@@ -1284,6 +1306,19 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
                 std::io::stderr(),
                 crossterm::event::DisableMouseCapture
             );
+        }
+    } else if app.config.matches_navigation(key, "edit_workspace") {
+        if !app.workspaces.is_empty() {
+            let ws = &app.workspaces[app.selected_workspace];
+            let k_path = ws.kanban_path.clone().unwrap_or_default();
+            let prompt = ws.prompt.clone();
+            app.kanban_input_buffer = k_path;
+            app.prompt_input_buffer = prompt;
+            app.kanban_input_cursor = app.kanban_input_buffer.chars().count();
+            app.prompt_input_cursor = app.prompt_input_buffer.chars().count();
+            app.active_dialog_field = DialogField::KanbanPath;
+            app.edit_target = Some(app.selected_workspace);
+            app.mode = AppMode::EditWorkspace;
         }
     } else if app.config.matches_navigation(key, "new_workspace") {
         app.mode = AppMode::NewWorkspace;
@@ -1431,7 +1466,8 @@ fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
         return None;
     }
 
-    let (kanban_app, kanban_provider) = match (&mut app.kanban_app, &mut app.kanban_provider) {
+    let ws = app.workspaces.get_mut(app.active_workspace)?;
+    let (kanban_app, kanban_provider) = match (&mut ws.kanban_app, &mut ws.kanban_provider) {
         (Some(a), Some(p)) => (a, p),
         _ => return None,
     };
@@ -1750,6 +1786,19 @@ fn handle_workspace_interaction(app: &mut App, key: KeyEvent) -> Option<Action> 
             app.delete_target = Some(app.selected_workspace);
             app.mode = AppMode::ConfirmDelete;
         }
+    } else if app.config.matches_navigation(key, "edit_workspace") {
+        if let Some(ws) = app.workspaces.get(app.selected_workspace) {
+            let k_path = ws.kanban_path.clone().unwrap_or_default();
+            let prompt = ws.prompt.clone();
+            app.kanban_input_buffer = k_path;
+            app.prompt_input_buffer = prompt;
+            app.kanban_input_cursor = app.kanban_input_buffer.chars().count();
+            app.prompt_input_cursor = app.prompt_input_buffer.chars().count();
+            app.active_dialog_field = DialogField::KanbanPath;
+            app.edit_target = Some(app.selected_workspace);
+            app.mode = AppMode::EditWorkspace;
+            app.interacting = false;
+        }
     }
     None
 }
@@ -2005,7 +2054,94 @@ fn dialog_buf_and_cursor(app: &mut App) -> (&mut String, &mut usize) {
         DialogField::Directory => (&mut app.dir_input_buffer, &mut app.dir_input_cursor),
         DialogField::Description => (&mut app.desc_input_buffer, &mut app.desc_input_cursor),
         DialogField::Prompt => (&mut app.prompt_input_buffer, &mut app.prompt_input_cursor),
+        DialogField::KanbanPath => (&mut app.kanban_input_buffer, &mut app.kanban_input_cursor),
     }
+}
+
+fn handle_edit_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    match key.code {
+        KeyCode::Tab | KeyCode::BackTab => {
+            app.active_dialog_field = match app.active_dialog_field {
+                DialogField::KanbanPath => DialogField::Prompt,
+                _ => DialogField::KanbanPath,
+            };
+        }
+        KeyCode::Char(c) => {
+            if !c.is_control() {
+                let (buf, cursor) = dialog_buf_and_cursor(app);
+                let byte_idx = buf.char_indices().nth(*cursor).map_or(buf.len(), |(i, _)| i);
+                buf.insert(byte_idx, c);
+                *cursor += 1;
+            }
+        }
+        KeyCode::Backspace => {
+            let (buf, cursor) = dialog_buf_and_cursor(app);
+            if *cursor > 0 {
+                *cursor -= 1;
+                let byte_idx = buf.char_indices().nth(*cursor).map_or(buf.len(), |(i, _)| i);
+                buf.remove(byte_idx);
+            }
+        }
+        KeyCode::Delete => {
+            let (buf, cursor) = dialog_buf_and_cursor(app);
+            let len = buf.chars().count();
+            if *cursor < len {
+                let byte_idx = buf.char_indices().nth(*cursor).map_or(buf.len(), |(i, _)| i);
+                buf.remove(byte_idx);
+            }
+        }
+        KeyCode::Left => {
+            let (_, cursor) = dialog_buf_and_cursor(app);
+            if *cursor > 0 {
+                *cursor -= 1;
+            }
+        }
+        KeyCode::Right => {
+            let (buf, cursor) = dialog_buf_and_cursor(app);
+            let len = buf.chars().count();
+            if *cursor < len {
+                *cursor += 1;
+            }
+        }
+        KeyCode::Home => {
+            let (_, cursor) = dialog_buf_and_cursor(app);
+            *cursor = 0;
+        }
+        KeyCode::End => {
+            let (buf, cursor) = dialog_buf_and_cursor(app);
+            *cursor = buf.chars().count();
+        }
+        KeyCode::Enter => {
+            let kanban_path_raw = app.kanban_input_buffer.trim();
+            let kanban_path = if kanban_path_raw.is_empty() {
+                None
+            } else {
+                Some(kanban_path_raw.to_string())
+            };
+            let prompt = app.prompt_input_buffer.clone();
+            let idx = app.edit_target.take().unwrap_or(app.active_workspace);
+
+            app.kanban_input_buffer.clear();
+            app.prompt_input_buffer.clear();
+            app.kanban_input_cursor = 0;
+            app.prompt_input_cursor = 0;
+            app.mode = AppMode::Normal;
+            return Some(Action::EditWorkspace(idx, kanban_path, prompt));
+        }
+        _ if key.code == KeyCode::Esc
+            || (key.code == KeyCode::Char('g')
+                && key.modifiers.contains(KeyModifiers::CONTROL)) =>
+        {
+            app.edit_target = None;
+            app.kanban_input_buffer.clear();
+            app.prompt_input_buffer.clear();
+            app.kanban_input_cursor = 0;
+            app.prompt_input_cursor = 0;
+            app.mode = AppMode::Normal;
+        }
+        _ => {}
+    }
+    None
 }
 
 fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
@@ -2015,7 +2151,8 @@ fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
                 DialogField::Name => DialogField::Directory,
                 DialogField::Directory => DialogField::Description,
                 DialogField::Description => DialogField::Prompt,
-                DialogField::Prompt => DialogField::Name,
+                DialogField::Prompt => DialogField::KanbanPath,
+                DialogField::KanbanPath => DialogField::Name,
             };
         }
         KeyCode::Char(c) => {
@@ -2073,6 +2210,12 @@ fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
             let dir_raw = app.dir_input_buffer.clone();
             let description = app.desc_input_buffer.clone();
             let prompt = app.prompt_input_buffer.clone();
+            let kanban_path_raw = app.kanban_input_buffer.trim();
+            let kanban_path = if kanban_path_raw.is_empty() {
+                None
+            } else {
+                Some(kanban_path_raw.to_string())
+            };
 
             if name.is_empty() || dir_raw.is_empty() {
                 app.status_message = Some("Name and directory are required".into());
@@ -2100,13 +2243,15 @@ fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
             app.dir_input_buffer.clear();
             app.desc_input_buffer.clear();
             app.prompt_input_buffer.clear();
+            app.kanban_input_buffer.clear();
             app.input_cursor = 0;
             app.dir_input_cursor = 0;
             app.desc_input_cursor = 0;
             app.prompt_input_cursor = 0;
+            app.kanban_input_cursor = 0;
             app.mode = AppMode::Normal;
             app.active_pane = ActivePane::WorkspaceList;
-            return Some(Action::CreateWorkspace(name, description, prompt, dir));
+            return Some(Action::CreateWorkspace(name, description, prompt, kanban_path, dir));
         }
         _ if key.code == KeyCode::Esc
             || (key.code == KeyCode::Char('g')
@@ -2116,10 +2261,12 @@ fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
             app.dir_input_buffer.clear();
             app.desc_input_buffer.clear();
             app.prompt_input_buffer.clear();
+            app.kanban_input_buffer.clear();
             app.input_cursor = 0;
             app.dir_input_cursor = 0;
             app.desc_input_cursor = 0;
             app.prompt_input_cursor = 0;
+            app.kanban_input_cursor = 0;
             app.mode = AppMode::Normal;
             app.active_pane = ActivePane::WorkspaceList;
         }

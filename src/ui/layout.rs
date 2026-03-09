@@ -142,6 +142,9 @@ pub fn render(frame: &mut Frame, app: &mut App) {
     if app.mode == AppMode::NewWorkspace {
         render_new_workspace_dialog(frame, area, app);
     }
+    if app.mode == AppMode::EditWorkspace {
+        render_edit_workspace_dialog(frame, area, app);
+    }
     if app.mode == AppMode::Help {
         render_help_overlay(frame, area, app);
     }
@@ -423,13 +426,15 @@ fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) {
             let provider = tab.provider;
 
             if provider == crate::app::AIProvider::Kanban {
-                if let Some(kanban_app) = &app.kanban_app {
-                    let block = Block::default()
-                        .borders(Borders::ALL)
-                        .border_style(border_style);
-                    let inner_area = block.inner(area);
-                    frame.render_widget(block, area);
-                    flow::ui::render(frame, kanban_app, Some(inner_area));
+                if let Some(ws) = app.workspaces.get(app.active_workspace) {
+                    if let Some(kanban_app) = &ws.kanban_app {
+                        let block = Block::default()
+                            .borders(Borders::ALL)
+                            .border_style(border_style);
+                        let inner_area = block.inner(area);
+                        frame.render_widget(block, area);
+                        flow::ui::render(frame, kanban_app, Some(inner_area));
+                    }
                 }
                 return;
             }
@@ -654,8 +659,13 @@ fn footer_keys(app: &App) -> Vec<(String, String)> {
             (cfg.get_binding("merge", "rebase"), "rebase".to_string()),
             (cfg.get_binding("merge", "exit"), "cancel".to_string()),
         ],
+        AppMode::EditWorkspace => vec![
+            (cfg.get_binding("new_workspace", "switch_field"), "switch field".to_string()),
+            ("enter".to_string(), "save".to_string()),
+            ("esc".to_string(), "cancel".to_string()),
+        ],
         AppMode::NewTab => vec![
-            ("1-4".to_string(), "select".to_string()),
+            ("1-5".to_string(), "select".to_string()),
             (cfg.get_binding("new_tab", "exit"), "cancel".to_string()),
         ],
         AppMode::Diff => vec![
@@ -694,6 +704,7 @@ fn footer_keys(app: &App) -> Vec<(String, String)> {
             (format!("{}{}{}{}", cfg.get_binding("navigation", "up"), cfg.get_binding("navigation", "down"), cfg.get_binding("navigation", "left"), cfg.get_binding("navigation", "right")), "navigate".to_string()),
             (cfg.get_binding("navigation", "enter_pane"), "interact".to_string()),
             (cfg.get_binding("navigation", "new_workspace"), "new ws".to_string()),
+            (cfg.get_binding("navigation", "edit_workspace"), "edit ws".to_string()),
             (cfg.get_binding("navigation", "delete_workspace"), "delete ws".to_string()),
             (cfg.get_binding("navigation", "new_tab"), "new tab".to_string()),
             (cfg.get_binding("navigation", "close_tab"), "close tab".to_string()),
@@ -783,7 +794,7 @@ fn render_diff_overlay(frame: &mut Frame, area: Rect, app: &App) {
 
 fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
     let popup_width = area.width * 70 / 100;
-    let popup = centered_rect(popup_width.max(40), 15, area);
+    let popup = centered_rect(popup_width.max(40), 17, area);
     let theme = &app.theme.dialog;
 
     // Clear background
@@ -836,6 +847,7 @@ fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
     let dir_active = app.active_dialog_field == DialogField::Directory;
     let desc_active = app.active_dialog_field == DialogField::Description;
     let prompt_active = app.active_dialog_field == DialogField::Prompt;
+    let kanban_active = app.active_dialog_field == DialogField::KanbanPath;
 
     let lines = vec![
         Line::from(vec![
@@ -870,6 +882,92 @@ fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
             ),
         ]),
         Line::from(""),
+        Line::from(vec![
+            Span::styled("  Kanban: ", field_style(kanban_active)),
+            Span::styled(
+                visible_field(&app.kanban_input_buffer, kanban_active, app.kanban_input_cursor),
+                field_style(kanban_active),
+            ),
+        ]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  [Esc] Cancel",
+            Style::default().fg(theme.new_ws_inactive),
+        )]),
+    ];
+
+    let text = Paragraph::new(lines).block(block);
+    frame.render_widget(text, popup);
+}
+
+fn render_edit_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
+    let popup_width = area.width * 70 / 100;
+    let popup = centered_rect(popup_width.max(40), 11, area);
+    let theme = &app.theme.dialog;
+
+    frame.render_widget(ratatui::widgets::Clear, popup);
+
+    let block = Block::default()
+        .title(" Edit Workspace ")
+        .title_style(Style::default().fg(theme.new_ws_border))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.new_ws_border));
+
+    let field_style = |active: bool| {
+        if active {
+            Style::default().fg(theme.new_ws_active)
+        } else {
+            Style::default().fg(theme.new_ws_inactive)
+        }
+    };
+
+    let label_width = 10_u16;
+    let field_max = popup.width.saturating_sub(label_width + 2) as usize;
+    let visible_field = |text: &str, active: bool, cursor: usize| -> String {
+        if !active {
+            if text.len() > field_max && field_max > 2 {
+                return format!("…{}", &text[text.len() - (field_max - 1)..]);
+            }
+            return text.to_string();
+        }
+        let before: String = text.chars().take(cursor).collect();
+        let after: String = text.chars().skip(cursor).collect();
+        let full = format!("{}█{}", before, after);
+        if full.chars().count() > field_max && field_max > 2 {
+            let chars: Vec<char> = full.chars().collect();
+            let cursor_display = before.chars().count();
+            let start = if cursor_display + 2 > field_max {
+                cursor_display + 2 - field_max
+            } else {
+                0
+            };
+            let visible: String = chars[start..chars.len().min(start + field_max - 1)].iter().collect();
+            format!("…{}", visible)
+        } else {
+            full
+        }
+    };
+
+    let kanban_active = app.active_dialog_field == DialogField::KanbanPath;
+    let prompt_active = app.active_dialog_field == DialogField::Prompt;
+
+    let lines = vec![
+        Line::from(vec![
+            Span::styled("  Kanban: ", field_style(kanban_active)),
+            Span::styled(
+                visible_field(&app.kanban_input_buffer, kanban_active, app.kanban_input_cursor),
+                field_style(kanban_active),
+            ),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  Prompt: ", field_style(prompt_active)),
+            Span::styled(
+                visible_field(&app.prompt_input_buffer, prompt_active, app.prompt_input_cursor),
+                field_style(prompt_active),
+            ),
+        ]),
+        Line::from(""),
         Line::from(vec![Span::styled(
             "  [Esc] Cancel",
             Style::default().fg(theme.new_ws_inactive),
@@ -892,6 +990,7 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         format!("    {:<13} Move between panes", format!("{}/{}/{}/{}", cfg.get_binding("navigation", "up"), cfg.get_binding("navigation", "down"), cfg.get_binding("navigation", "left"), cfg.get_binding("navigation", "right"))),
         format!("    {:<13} Interact with pane", cfg.get_binding("navigation", "enter_pane")),
         format!("    {:<13} New workspace", cfg.get_binding("navigation", "new_workspace")),
+        format!("    {:<13} Edit workspace", cfg.get_binding("navigation", "edit_workspace")),
         format!("    {:<13} Delete workspace", cfg.get_binding("navigation", "delete_workspace")),
         format!("    {:<13} Next/Prev workspace", format!("{}/{}", cfg.get_binding("navigation", "next_workspace"), cfg.get_binding("navigation", "prev_workspace"))),
         format!("    {:<13} Go to workspace N", "1-9"),
@@ -1058,6 +1157,10 @@ fn render_workspace_info_overlay(frame: &mut Frame, area: Rect, app: &App) {
         Line::from(vec![
             Span::styled(" Path:    ", label_style),
             Span::raw(ws.path.to_string_lossy().to_string()),
+        ]),
+        Line::from(vec![
+            Span::styled(" Kanban:  ", label_style),
+            Span::raw(ws.kanban_path.clone().unwrap_or_else(|| "default".to_string())),
         ]),
         Line::from(""),
     ];

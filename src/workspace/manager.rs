@@ -57,6 +57,8 @@ impl WorkspaceManager {
         &self,
         name: &str,
         description: &str,
+        prompt: &str,
+        kanban_path: Option<String>,
         source_dir: &PathBuf,
     ) -> anyhow::Result<Workspace> {
         let git_root = Self::git_root(source_dir).await?;
@@ -137,7 +139,8 @@ impl WorkspaceManager {
         Ok(Workspace::new(
             name.to_string(),
             description.to_string(),
-            String::new(),
+            prompt.to_string(),
+            kanban_path,
             branch_name,
             worktree_path,
             git_root,

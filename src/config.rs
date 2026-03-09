@@ -114,6 +114,7 @@ fn default_navigation() -> HashMap<String, String> {
     m.insert("help".to_string(), "?".to_string());
     m.insert("about".to_string(), "a".to_string());
     m.insert("workspace_info".to_string(), "i".to_string());
+    m.insert("edit_workspace".to_string(), "e".to_string());
     m.insert("kanban".to_string(), "b".to_string());
     m.insert("new_workspace".to_string(), "n".to_string());
     m.insert("delete_workspace".to_string(), "d".to_string());
@@ -330,7 +331,8 @@ impl Config {
         if let Some(binding) = self.keybindings.navigation.get(action) {
             key_matches(event, binding)
         } else {
-            false
+            let defaults = default_navigation();
+            defaults.get(action).map_or(false, |b| key_matches(event, b))
         }
     }
 
@@ -400,24 +402,24 @@ impl Config {
 
     pub fn get_binding(&self, section: &str, action: &str) -> String {
         let binding = match section {
-            "navigation" => self.keybindings.navigation.get(action),
-            "interaction" => self.keybindings.interaction.get(action),
-            "markdown" => self.keybindings.markdown.get(action),
-            "diff" => self.keybindings.diff.get(action),
-            "workspace_list" => self.keybindings.workspace_list.get(action),
-            "file_list" => self.keybindings.file_list.get(action),
-            "help" => self.keybindings.help.get(action),
-            "about" => self.keybindings.about.get(action),
-            "workspace_info" => self.keybindings.workspace_info.get(action),
-            "fuzzy" => self.keybindings.fuzzy.get(action),
-            "editor" => self.keybindings.editor.get(action),
-            "new_workspace" => self.keybindings.new_workspace.get(action),
-            "commit" => self.keybindings.commit.get(action),
-            "merge" => self.keybindings.merge.get(action),
-            "new_tab" => self.keybindings.new_tab.get(action),
+            "navigation" => self.keybindings.navigation.get(action).cloned().or_else(|| default_navigation().get(action).cloned()),
+            "interaction" => self.keybindings.interaction.get(action).cloned().or_else(|| default_interaction().get(action).cloned()),
+            "markdown" => self.keybindings.markdown.get(action).cloned().or_else(|| default_markdown().get(action).cloned()),
+            "diff" => self.keybindings.diff.get(action).cloned().or_else(|| default_diff().get(action).cloned()),
+            "workspace_list" => self.keybindings.workspace_list.get(action).cloned().or_else(|| default_workspace_list().get(action).cloned()),
+            "file_list" => self.keybindings.file_list.get(action).cloned().or_else(|| default_file_list().get(action).cloned()),
+            "help" => self.keybindings.help.get(action).cloned().or_else(|| default_help().get(action).cloned()),
+            "about" => self.keybindings.about.get(action).cloned().or_else(|| default_about().get(action).cloned()),
+            "workspace_info" => self.keybindings.workspace_info.get(action).cloned().or_else(|| default_workspace_info().get(action).cloned()),
+            "fuzzy" => self.keybindings.fuzzy.get(action).cloned().or_else(|| default_fuzzy().get(action).cloned()),
+            "editor" => self.keybindings.editor.get(action).cloned().or_else(|| default_editor().get(action).cloned()),
+            "new_workspace" => self.keybindings.new_workspace.get(action).cloned().or_else(|| default_new_workspace().get(action).cloned()),
+            "commit" => self.keybindings.commit.get(action).cloned().or_else(|| default_commit().get(action).cloned()),
+            "merge" => self.keybindings.merge.get(action).cloned().or_else(|| default_merge().get(action).cloned()),
+            "new_tab" => self.keybindings.new_tab.get(action).cloned().or_else(|| default_new_tab().get(action).cloned()),
             _ => None,
         };
-        binding.cloned().unwrap_or_else(|| "???".to_string())
+        binding.unwrap_or_else(|| "???".to_string())
     }
 
     fn config_path() -> PathBuf {

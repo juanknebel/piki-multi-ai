@@ -12,6 +12,8 @@ pub struct WorkspaceEntry {
     pub description: String,
     #[serde(default)]
     pub prompt: String,
+    #[serde(default)]
+    pub kanban_path: Option<String>,
     pub branch: String,
     pub worktree_path: PathBuf,
     pub source_repo: PathBuf,
@@ -48,6 +50,7 @@ pub fn save(git_root: &Path, workspaces: &[Workspace]) -> anyhow::Result<()> {
             name: ws.name.clone(),
             description: ws.description.clone(),
             prompt: ws.prompt.clone(),
+            kanban_path: ws.kanban_path.clone(),
             branch: ws.branch.clone(),
             worktree_path: ws.path.clone(),
             source_repo: ws.source_repo.clone(),
