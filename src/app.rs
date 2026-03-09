@@ -91,6 +91,8 @@ pub enum AppMode {
     About,
     /// Workspace info overlay
     WorkspaceInfo,
+    /// Confirmation dialog for quitting the application
+    ConfirmQuit,
 }
 
 /// Strategy for merging a workspace branch into main

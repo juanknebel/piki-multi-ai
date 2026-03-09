@@ -169,6 +169,9 @@ pub fn render(frame: &mut Frame, app: &mut App) {
     if app.mode == AppMode::WorkspaceInfo {
         render_workspace_info_overlay(frame, area, app);
     }
+    if app.mode == AppMode::ConfirmQuit {
+        render_confirm_quit_dialog(frame, area, app);
+    }
 }
 
 fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
@@ -674,6 +677,10 @@ fn footer_keys(app: &App) -> Vec<(String, String)> {
             (format!("{}/{}", cfg.get_binding("diff", "scroll_top"), cfg.get_binding("diff", "scroll_bottom")), "top/bottom".to_string()),
             (format!("{}/{}", cfg.get_binding("diff", "next_file"), cfg.get_binding("diff", "prev_file")), "next/prev file".to_string()),
             (cfg.get_binding("diff", "exit"), "close".to_string()),
+        ],
+        AppMode::ConfirmQuit => vec![
+            ("Y".to_string(), "quit".to_string()),
+            ("N".to_string(), "cancel".to_string()),
         ],
         _ if app.interacting => {
             if app.active_pane == ActivePane::FileList {
@@ -1256,6 +1263,34 @@ fn render_confirm_delete_dialog(frame: &mut Frame, area: Rect, app: &App) {
             "  [Esc] Cancel",
             Style::default().fg(theme.delete_cancel),
         )),
+    ];
+
+    let text = Paragraph::new(lines).block(block);
+    frame.render_widget(text, popup);
+}
+
+fn render_confirm_quit_dialog(frame: &mut Frame, area: Rect, app: &App) {
+    let popup = centered_rect(40, 7, area);
+    frame.render_widget(ratatui::widgets::Clear, popup);
+    let theme = &app.theme.dialog;
+
+    let block = Block::default()
+        .title(" Quit ")
+        .title_style(Style::default().fg(theme.delete_border))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.delete_border));
+
+    let lines = vec![
+        Line::from(""),
+        Line::from(Span::styled(
+            "Are you sure you want to quit?",
+            Style::default().fg(theme.delete_text),
+        )).centered(),
+        Line::from(""),
+        Line::from(Span::styled(
+            "[Y] Yes    [N] No",
+            Style::default().fg(theme.delete_cancel),
+        )).centered(),
     ];
 
     let text = Paragraph::new(lines).block(block);

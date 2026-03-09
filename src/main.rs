@@ -1270,6 +1270,11 @@ fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         return handle_new_tab_input(app, key);
     }
 
+    // Confirm quit dialog captures all input
+    if app.mode == AppMode::ConfirmQuit {
+        return handle_confirm_quit_input(app, key);
+    }
+
     // Confirm delete dialog captures all input
     if app.mode == AppMode::ConfirmDelete {
         return handle_confirm_delete_input(app, key);
@@ -1312,7 +1317,7 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
     } else if app.config.matches_navigation(key, "enter_pane") {
         app.interacting = true;
     } else if app.config.matches_navigation(key, "quit") {
-        app.should_quit = true;
+        app.mode = AppMode::ConfirmQuit;
     } else if app.config.matches_navigation(key, "help") {
         app.mode = AppMode::Help;
     } else if app.config.matches_navigation(key, "about") {
@@ -2292,6 +2297,20 @@ fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
         _ => {}
     }
     None
+}
+
+fn handle_confirm_quit_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    match key.code {
+        KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
+            app.should_quit = true;
+            None
+        }
+        KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+            app.mode = AppMode::Normal;
+            None
+        }
+        _ => None,
+    }
 }
 
 fn handle_confirm_delete_input(app: &mut App, key: KeyEvent) -> Option<Action> {

@@ -183,7 +183,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `i` | Workspace info overlay (branch, paths, description, prompt; mouse-copyable) |
 | `?` | Help overlay |
 | `a` | About overlay |
-| `q` | Quit |
+| `q` | Quit (with confirmation dialog) |
 
 **Interaction mode** (green border):
 
@@ -443,6 +443,8 @@ sequenceDiagram
 
         else User presses 'q' (quit)
             User->>Main: KeyEvent('q')
+            Main->>App: mode = ConfirmQuit
+            User->>Main: KeyEvent('y') or Enter
             Main->>Main: shutdown()
             loop Each workspace
                 Main->>PTY: kill()
