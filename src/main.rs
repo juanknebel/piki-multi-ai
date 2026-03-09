@@ -743,6 +743,25 @@ async fn execute_action(
                             default_path
                         };
 
+                        // Initialize if board.txt doesn't exist
+                        let board_txt = expanded_path.join("board.txt");
+                        if !board_txt.exists() {
+                            if let Err(e) = std::fs::create_dir_all(&expanded_path) {
+                                app.status_message = Some(format!("Failed to create kanban dir: {}", e));
+                            } else {
+                                let board_content = "col todo \"TO DO\"\ncol in_progress \"IN PROGRESS\"\ncol in_review \"IN REVIEW\"\ncol done \"DONE\"\n";
+                                if let Err(e) = std::fs::write(&board_txt, board_content) {
+                                    app.status_message = Some(format!("Failed to write board.txt: {}", e));
+                                } else {
+                                    for col in &["todo", "in_progress", "in_review", "done"] {
+                                        let col_dir = expanded_path.join("cols").join(col);
+                                        let _ = std::fs::create_dir_all(&col_dir);
+                                        let _ = std::fs::write(col_dir.join("order.txt"), "");
+                                    }
+                                }
+                            }
+                        }
+
                         Box::new(flow::provider_local::LocalProvider::new(expanded_path)) as Box<dyn flow::provider::Provider>
                     };
 

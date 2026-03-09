@@ -95,7 +95,7 @@ Press `n` to open the New Workspace dialog. Provide:
 - **Dir:** The path to the source git repository.
 - **Desc:** (Optional) A brief description of the task.
 - **Prompt:** (Optional) An initial prompt to auto-send to the AI provider on creation.
-- **Kanban Path:** (Optional) Path to the Kanban board for this workspace (defaults to `~/.config/flow/boards/default`).
+- **Kanban Path:** (Optional) Path to the Kanban board for this workspace (defaults to `~/.config/flow/boards/default`). If a local path is provided and no `board.txt` exists there, a default board with 4 columns (`todo`, `in_progress`, `in_review`, `done`) will be created automatically.
 
 Press `Enter` to create or `Esc` to cancel. Use `Tab` to cycle between fields.
 
