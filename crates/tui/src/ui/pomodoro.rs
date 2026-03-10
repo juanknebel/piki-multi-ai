@@ -5,9 +5,9 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
-use crate::app::PomodoroState;
+use crate::app::{PomodoroState, Workspace};
 
-pub fn render(frame: &mut Frame, area: Rect, state: &PomodoroState, border_style: Style) {
+pub fn render(frame: &mut Frame, area: Rect, ws: &Workspace, state: &PomodoroState, border_style: Style) {
     let mut bg_style = Style::default();
     if state.alert {
         // Flash every 500ms
@@ -33,11 +33,12 @@ pub fn render(frame: &mut Frame, area: Rect, state: &PomodoroState, border_style
     frame.render_widget(Clear, area); // Clear with bg
     frame.render_widget(block, area);
 
-    let chunks: [Rect; 4] = Layout::vertical([
+    let chunks: [Rect; 5] = Layout::vertical([
         Constraint::Length(3), // Phase
         Constraint::Length(5), // Timer
         Constraint::Length(3), // Info
         Constraint::Min(0),    // Help/Buttons
+        Constraint::Length(6), // Stats
     ])
     .areas(inner_area);
 
@@ -100,4 +101,20 @@ pub fn render(frame: &mut Frame, area: Rect, state: &PomodoroState, border_style
         .alignment(Alignment::Center)
         .style(Style::default().fg(Color::Gray));
     frame.render_widget(help_para, chunks[3]);
+
+    // Stats
+    let stats = &ws.pomodoro_stats;
+    let stats_lines = vec![
+        Line::from(vec![
+            Span::styled("--- STATISTICS (This Workspace) ---", Style::default().add_modifier(Modifier::BOLD)),
+        ]),
+        Line::from(format!("Total Work Sessions: {}", stats.work_sessions)),
+        Line::from(format!("Total Work Minutes:  {}", stats.total_work_minutes)),
+        Line::from(format!("Short Breaks:        {}", stats.short_breaks)),
+        Line::from(format!("Long Breaks:         {}", stats.long_breaks)),
+    ];
+    let stats_para = Paragraph::new(stats_lines)
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(Color::Cyan));
+    frame.render_widget(stats_para, chunks[4]);
 }

@@ -88,7 +88,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
 
             if provider == crate::app::AIProvider::Pomodoro {
                 if let Some(ref pomodoro) = tab.pomodoro_state {
-                    super::pomodoro::render(frame, area, pomodoro, border_style);
+                    super::pomodoro::render(frame, area, ws, pomodoro, border_style);
                 }
                 return;
             }

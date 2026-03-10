@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
-use crate::domain::WorkspaceInfo;
+use crate::domain::{PomodoroStats, WorkspaceInfo};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WorkspaceEntry {
@@ -17,20 +17,28 @@ pub struct WorkspaceEntry {
     pub branch: String,
     pub worktree_path: PathBuf,
     pub source_repo: PathBuf,
+    #[serde(default)]
+    pub pomodoro_stats: PomodoroStats,
 }
 
 impl WorkspaceEntry {
     /// Convert this entry into a WorkspaceInfo
     pub fn into_info(self) -> WorkspaceInfo {
-        WorkspaceInfo::new(
-            self.name,
-            self.description,
-            self.prompt,
-            self.kanban_path,
-            self.branch,
-            self.worktree_path,
-            self.source_repo,
-        )
+        let source_repo_display = self.source_repo
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| self.source_repo.to_string_lossy().to_string());
+        WorkspaceInfo {
+            name: self.name,
+            description: self.description,
+            prompt: self.prompt,
+            kanban_path: self.kanban_path,
+            branch: self.branch,
+            path: self.worktree_path,
+            source_repo: self.source_repo,
+            pomodoro_stats: self.pomodoro_stats,
+            source_repo_display,
+        }
     }
 }
 
@@ -69,6 +77,7 @@ pub fn save(git_root: &Path, workspaces: &[WorkspaceInfo]) -> anyhow::Result<()>
             branch: ws.branch.clone(),
             worktree_path: ws.path.clone(),
             source_repo: ws.source_repo.clone(),
+            pomodoro_stats: ws.pomodoro_stats.clone(),
         })
         .collect();
 

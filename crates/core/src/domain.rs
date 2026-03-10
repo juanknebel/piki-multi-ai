@@ -59,6 +59,14 @@ impl AIProvider {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub struct PomodoroStats {
+    pub work_sessions: u32,
+    pub short_breaks: u32,
+    pub long_breaks: u32,
+    pub total_work_minutes: u32,
+}
+
 /// Status of the process in a workspace
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum WorkspaceStatus {
@@ -107,6 +115,9 @@ pub struct WorkspaceInfo {
     pub path: PathBuf,
     /// Git root of the source repository this workspace was created from
     pub source_repo: PathBuf,
+    /// Pomodoro usage statistics
+    #[serde(default)]
+    pub pomodoro_stats: PomodoroStats,
     /// Pre-computed display name for the source repo (avoids per-frame file_name() + to_string_lossy())
     #[serde(default)]
     pub source_repo_display: String,
@@ -134,6 +145,7 @@ impl WorkspaceInfo {
             branch,
             path,
             source_repo,
+            pomodoro_stats: PomodoroStats::default(),
             source_repo_display,
         }
     }

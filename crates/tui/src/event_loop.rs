@@ -280,7 +280,22 @@ pub(crate) async fn run(
             for tab in &mut ws.tabs {
                 if let Some(ref mut pomodoro) = tab.pomodoro_state {
                     if pomodoro.is_running && now.duration_since(tab.last_pomodoro_tick).as_secs() >= 1 {
-                        pomodoro.tick();
+                        if pomodoro.tick() {
+                            // Session finished! Update stats
+                            match pomodoro.phase {
+                                app::PomodoroPhase::Work => {
+                                    ws.info.pomodoro_stats.work_sessions += 1;
+                                    ws.info.pomodoro_stats.total_work_minutes += pomodoro.work_duration;
+                                }
+                                app::PomodoroPhase::ShortBreak => {
+                                    ws.info.pomodoro_stats.short_breaks += 1;
+                                }
+                                app::PomodoroPhase::LongBreak => {
+                                    ws.info.pomodoro_stats.long_breaks += 1;
+                                }
+                            }
+                            ws.dirty = true;
+                        }
                         tab.last_pomodoro_tick = now;
                         app.needs_redraw = true;
                     }

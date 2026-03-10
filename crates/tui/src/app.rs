@@ -184,9 +184,9 @@ impl PomodoroState {
         self.alert = false;
     }
 
-    pub fn tick(&mut self) {
+    pub fn tick(&mut self) -> bool {
         if !self.is_running || self.remaining_seconds == 0 {
-            return;
+            return false;
         }
 
         self.remaining_seconds -= 1;
@@ -194,7 +194,9 @@ impl PomodoroState {
         if self.remaining_seconds == 0 {
             self.alert = true;
             self.is_running = false;
+            return true;
         }
+        false
     }
 
     pub fn next_phase(&mut self) {
