@@ -173,7 +173,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `Tab` / `Shift+Tab` | Next / previous workspace |
 | `1`-`9` | Jump to workspace N |
 | `t` | New tab (opens provider selection: 1=Claude, 2=Gemini, 3=Codex, 4=Shell, 5=Kanban Board) |
-| `w` | Close current tab (initial shell tab cannot be closed) |
+| `w` | Close current tab (with confirmation dialog; initial shell tab cannot be closed) |
 | `g` / `G` | Next / previous tab |
 | `<` / `>` | Resize sidebar width (±5%) |
 | `+` / `-` | Resize workspace/file split (±10%) |
@@ -237,7 +237,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | Click main panel | Focus pane and start text selection |
 | Click workspace tab | Switch to that workspace |
 | Click sub-tab | Switch to that tab |
-| Click × on sub-tab | Close that tab |
+| Click × on sub-tab | Close that tab (with confirmation) |
 | Scroll in workspace list | Navigate workspaces up/down |
 | Scroll in file list | Navigate files up/down |
 | Scroll in main panel | Scroll terminal/markdown content |

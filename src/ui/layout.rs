@@ -169,6 +169,9 @@ pub fn render(frame: &mut Frame, app: &mut App) {
     if app.mode == AppMode::WorkspaceInfo {
         render_workspace_info_overlay(frame, area, app);
     }
+    if app.mode == AppMode::ConfirmCloseTab {
+        render_confirm_close_tab_dialog(frame, area, app);
+    }
     if app.mode == AppMode::ConfirmQuit {
         render_confirm_quit_dialog(frame, area, app);
     }
@@ -677,6 +680,10 @@ fn footer_keys(app: &App) -> Vec<(String, String)> {
             (format!("{}/{}", cfg.get_binding("diff", "scroll_top"), cfg.get_binding("diff", "scroll_bottom")), "top/bottom".to_string()),
             (format!("{}/{}", cfg.get_binding("diff", "next_file"), cfg.get_binding("diff", "prev_file")), "next/prev file".to_string()),
             (cfg.get_binding("diff", "exit"), "close".to_string()),
+        ],
+        AppMode::ConfirmCloseTab => vec![
+            ("Y".to_string(), "close".to_string()),
+            ("N".to_string(), "cancel".to_string()),
         ],
         AppMode::ConfirmQuit => vec![
             ("Y".to_string(), "quit".to_string()),
@@ -1277,6 +1284,45 @@ fn render_confirm_delete_dialog(frame: &mut Frame, area: Rect, app: &App) {
             "  [Esc] Cancel",
             Style::default().fg(theme.delete_cancel),
         )),
+    ];
+
+    let text = Paragraph::new(lines).block(block);
+    frame.render_widget(text, popup);
+}
+
+fn render_confirm_close_tab_dialog(frame: &mut Frame, area: Rect, app: &App) {
+    let popup = centered_rect(40, 7, area);
+    frame.render_widget(ratatui::widgets::Clear, popup);
+    let theme = &app.theme.dialog;
+
+    let tab_name = app
+        .close_tab_target
+        .and_then(|idx| {
+            app.current_workspace()
+                .and_then(|ws| ws.tabs.get(idx))
+                .map(|t| format!("{:?}", t.provider))
+        })
+        .unwrap_or_default();
+
+    let block = Block::default()
+        .title(" Close Tab ")
+        .title_style(Style::default().fg(theme.delete_border))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.delete_border));
+
+    let lines = vec![
+        Line::from(""),
+        Line::from(Span::styled(
+            format!("Close tab \"{}\"?", tab_name),
+            Style::default().fg(theme.delete_text),
+        ))
+        .centered(),
+        Line::from(""),
+        Line::from(Span::styled(
+            "[Y] Yes    [N] No",
+            Style::default().fg(theme.delete_cancel),
+        ))
+        .centered(),
     ];
 
     let text = Paragraph::new(lines).block(block);

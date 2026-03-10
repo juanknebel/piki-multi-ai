@@ -1077,8 +1077,11 @@ fn handle_mouse_event(app: &mut App, mouse: crossterm::event::MouseEvent, termin
                     let subtabs_area = app.subtabs_area;
                     if let Some((idx, on_close)) = subtab_index_at(app, col, subtabs_area) {
                         if on_close {
-                            if let Some(ws) = app.current_workspace_mut() {
-                                ws.close_tab(idx);
+                            if let Some(ws) = app.current_workspace() {
+                                if ws.tabs.get(idx).is_some_and(|t| t.closable) {
+                                    app.close_tab_target = Some(idx);
+                                    app.mode = AppMode::ConfirmCloseTab;
+                                }
                             }
                         } else if let Some(ws) = app.current_workspace_mut() {
                             ws.active_tab = idx;
@@ -1268,6 +1271,11 @@ fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
     // New tab provider selection dialog
     if app.mode == AppMode::NewTab {
         return handle_new_tab_input(app, key);
+    }
+
+    // Confirm close tab dialog captures all input
+    if app.mode == AppMode::ConfirmCloseTab {
+        return handle_confirm_close_tab_input(app, key);
     }
 
     // Confirm quit dialog captures all input
@@ -1463,9 +1471,10 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
             app.mode = AppMode::NewTab;
         }
     } else if app.config.matches_navigation(key, "close_tab") {
-        if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+        if let Some(ws) = app.workspaces.get(app.active_workspace) {
             if ws.current_tab().is_some_and(|t| t.closable) {
-                ws.close_tab(ws.active_tab);
+                app.close_tab_target = Some(ws.active_tab);
+                app.mode = AppMode::ConfirmCloseTab;
             } else {
                 app.status_message = Some("Cannot close the initial shell tab".into());
             }
@@ -2318,6 +2327,26 @@ fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
         _ => {}
     }
     None
+}
+
+fn handle_confirm_close_tab_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    match key.code {
+        KeyCode::Char('y') | KeyCode::Char('Y') => {
+            if let Some(idx) = app.close_tab_target.take() {
+                if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+                    ws.close_tab(idx);
+                }
+            }
+            app.mode = AppMode::Normal;
+            None
+        }
+        KeyCode::Char('n') | KeyCode::Char('N') => {
+            app.close_tab_target = None;
+            app.mode = AppMode::Normal;
+            None
+        }
+        _ => None,
+    }
 }
 
 fn handle_confirm_quit_input(app: &mut App, key: KeyEvent) -> Option<Action> {

@@ -91,6 +91,8 @@ pub enum AppMode {
     About,
     /// Workspace info overlay
     WorkspaceInfo,
+    /// Confirmation dialog for closing a tab
+    ConfirmCloseTab,
     /// Confirmation dialog for quitting the application
     ConfirmQuit,
 }
@@ -764,6 +766,8 @@ pub struct App {
     pub status_message: Option<String>,
     /// Index of workspace targeted for deletion (used by ConfirmDelete dialog)
     pub delete_target: Option<usize>,
+    /// Index of tab targeted for closing (used by ConfirmCloseTab dialog)
+    pub close_tab_target: Option<usize>,
     /// Index of workspace targeted for editing (used by EditWorkspace dialog)
     pub edit_target: Option<usize>,
     /// Fuzzy file search state
@@ -834,6 +838,7 @@ impl App {
             active_dialog_field: DialogField::Name,
             status_message: None,
             delete_target: None,
+            close_tab_target: None,
             edit_target: None,
             fuzzy: None,
             editor: None,
