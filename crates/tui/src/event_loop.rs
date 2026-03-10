@@ -303,6 +303,20 @@ pub(crate) async fn run(
             }
         }
 
+        // Save config for workspaces where pomodoro stats changed
+        {
+            let mut repos_to_save = std::collections::HashSet::new();
+            for ws in &app.workspaces {
+                if ws.dirty {
+                    repos_to_save.insert(ws.source_repo.clone());
+                }
+            }
+            for repo in repos_to_save {
+                let infos: Vec<_> = app.workspaces.iter().map(|w| w.info.clone()).collect();
+                tokio::spawn(async move { let _ = ws_config::save(&repo, &infos); });
+            }
+        }
+
         // Phase 4: Tick-gated periodic work
         if is_tick {
             // Inactive workspaces — only check is_alive every ~1s
