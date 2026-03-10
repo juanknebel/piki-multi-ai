@@ -280,8 +280,8 @@ fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 fn render_file_list(frame: &mut Frame, area: Rect, app: &App) {
-    let is_active = app.active_pane == ActivePane::FileList;
-    let border_style = pane_border_style(app, ActivePane::FileList);
+    let is_active = app.active_pane == ActivePane::GitStatus;
+    let border_style = pane_border_style(app, ActivePane::GitStatus);
     let theme = &app.theme.file_list;
 
     let ahead_title = app
@@ -683,7 +683,7 @@ fn footer_keys(app: &App) -> Vec<(String, String)> {
             ("N".to_string(), "cancel".to_string()),
         ],
         _ if app.interacting => {
-            if app.active_pane == ActivePane::FileList {
+            if app.active_pane == ActivePane::GitStatus {
                 vec![
                     (format!("{}/{}", cfg.get_binding("file_list", "up"), cfg.get_binding("file_list", "down")), "select".to_string()),
                     (cfg.get_binding("file_list", "diff"), "diff".to_string()),
@@ -707,25 +707,37 @@ fn footer_keys(app: &App) -> Vec<(String, String)> {
                 vec![(cfg.get_binding("interaction", "exit_interaction"), "navigation mode".to_string())]
             }
         }
-        _ => vec![
-            (format!("{}{}{}{}", cfg.get_binding("navigation", "up"), cfg.get_binding("navigation", "down"), cfg.get_binding("navigation", "left"), cfg.get_binding("navigation", "right")), "navigate".to_string()),
-            (cfg.get_binding("navigation", "enter_pane"), "interact".to_string()),
-            (cfg.get_binding("navigation", "new_workspace"), "new ws".to_string()),
-            (cfg.get_binding("navigation", "clone_workspace"), "clone ws".to_string()),
-            (cfg.get_binding("navigation", "edit_workspace"), "edit ws".to_string()),
-            (cfg.get_binding("navigation", "delete_workspace"), "delete ws".to_string()),
-            (cfg.get_binding("navigation", "new_tab"), "new tab".to_string()),
-            (cfg.get_binding("navigation", "close_tab"), "close tab".to_string()),
-            (format!("{}/{}", cfg.get_binding("navigation", "next_tab"), cfg.get_binding("navigation", "prev_tab")), "next/prev tab".to_string()),
-            (cfg.get_binding("navigation", "commit"), "commit".to_string()),
-            (cfg.get_binding("navigation", "push"), "push".to_string()),
-            (cfg.get_binding("navigation", "merge"), "merge".to_string()),
-            (cfg.get_binding("navigation", "next_workspace"), "switch ws".to_string()),
-            (cfg.get_binding("navigation", "fuzzy_search"), "search".to_string()),
-            (format!("{}/{}", cfg.get_binding("navigation", "sidebar_shrink"), cfg.get_binding("navigation", "sidebar_grow")), "resize".to_string()),
-            (cfg.get_binding("navigation", "help"), "help".to_string()),
-            (cfg.get_binding("navigation", "quit"), "quit".to_string()),
-        ],
+        _ => {
+            let nav = format!("{}{}{}{}", cfg.get_binding("navigation", "up"), cfg.get_binding("navigation", "down"), cfg.get_binding("navigation", "left"), cfg.get_binding("navigation", "right"));
+            let mut keys = vec![
+                (nav, "navigate".to_string()),
+                (cfg.get_binding("navigation", "enter_pane"), "interact".to_string()),
+            ];
+            match app.active_pane {
+                ActivePane::WorkspaceList => {
+                    keys.push((cfg.get_binding("navigation", "new_workspace"), "new ws".to_string()));
+                    keys.push((cfg.get_binding("navigation", "clone_workspace"), "clone ws".to_string()));
+                    keys.push((cfg.get_binding("navigation", "edit_workspace"), "edit ws".to_string()));
+                    keys.push((cfg.get_binding("navigation", "delete_workspace"), "delete ws".to_string()));
+                    keys.push((cfg.get_binding("navigation", "next_workspace"), "switch ws".to_string()));
+                }
+                ActivePane::GitStatus => {
+                    keys.push((cfg.get_binding("navigation", "fuzzy_search"), "search".to_string()));
+                    keys.push((cfg.get_binding("navigation", "commit"), "commit".to_string()));
+                    keys.push((cfg.get_binding("navigation", "push"), "push".to_string()));
+                    keys.push((cfg.get_binding("navigation", "merge"), "merge".to_string()));
+                }
+                ActivePane::MainPanel => {
+                    keys.push((cfg.get_binding("navigation", "new_tab"), "new tab".to_string()));
+                    keys.push((cfg.get_binding("navigation", "close_tab"), "close tab".to_string()));
+                    keys.push((format!("{}/{}", cfg.get_binding("navigation", "next_tab"), cfg.get_binding("navigation", "prev_tab")), "next/prev tab".to_string()));
+                }
+            }
+            keys.push((format!("{}/{}", cfg.get_binding("navigation", "sidebar_shrink"), cfg.get_binding("navigation", "sidebar_grow")), "resize".to_string()));
+            keys.push((cfg.get_binding("navigation", "help"), "help".to_string()));
+            keys.push((cfg.get_binding("navigation", "quit"), "quit".to_string()));
+            keys
+        },
     }
 }
 

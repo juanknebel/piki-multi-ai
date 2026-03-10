@@ -106,7 +106,7 @@ pub enum MergeStrategy {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActivePane {
     WorkspaceList,
-    FileList,
+    GitStatus,
     MainPanel, // Terminal or Diff
 }
 

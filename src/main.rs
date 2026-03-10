@@ -1101,7 +1101,7 @@ fn handle_mouse_event(app: &mut App, mouse: crossterm::event::MouseEvent, termin
                 }
                 // Click on file list
                 else if rect_contains(app.file_list_area, col, row) {
-                    app.active_pane = ActivePane::FileList;
+                    app.active_pane = ActivePane::GitStatus;
                     let inner_y = app.file_list_area.y + 1;
                     if row >= inner_y {
                         let relative_row = (row - inner_y) as usize;
@@ -1297,21 +1297,21 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
     // Pane navigation
     if app.config.matches_navigation(key, "left") || app.config.matches_navigation(key, "left_alt") {
         if app.active_pane == ActivePane::MainPanel {
-            app.active_pane = ActivePane::FileList;
+            app.active_pane = ActivePane::GitStatus;
         }
     } else if app.config.matches_navigation(key, "right") || app.config.matches_navigation(key, "right_alt") {
         if matches!(
             app.active_pane,
-            ActivePane::WorkspaceList | ActivePane::FileList
+            ActivePane::WorkspaceList | ActivePane::GitStatus
         ) {
             app.active_pane = ActivePane::MainPanel;
         }
     } else if app.config.matches_navigation(key, "down") || app.config.matches_navigation(key, "down_alt") {
         if app.active_pane == ActivePane::WorkspaceList {
-            app.active_pane = ActivePane::FileList;
+            app.active_pane = ActivePane::GitStatus;
         }
     } else if app.config.matches_navigation(key, "up") || app.config.matches_navigation(key, "up_alt") {
-        if app.active_pane == ActivePane::FileList {
+        if app.active_pane == ActivePane::GitStatus {
             app.active_pane = ActivePane::WorkspaceList;
         }
     } else if app.config.matches_navigation(key, "enter_pane") {
@@ -1501,7 +1501,7 @@ fn handle_interaction_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
             }
         }
         ActivePane::WorkspaceList => handle_workspace_interaction(app, key),
-        ActivePane::FileList => handle_filelist_interaction(app, key),
+        ActivePane::GitStatus => handle_filelist_interaction(app, key),
     }
 }
 
@@ -1789,7 +1789,7 @@ fn handle_diff_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
         app.diff_content = None;
         app.diff_file_path = None;
         app.interacting = false;
-        app.active_pane = ActivePane::FileList;
+        app.active_pane = ActivePane::GitStatus;
         return None;
     }
 
