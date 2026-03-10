@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use anyhow::{Context, bail};
 use tokio::process::Command;
 
-use crate::app::Workspace;
+use crate::domain::WorkspaceInfo;
 
 // No branch prefix — branch name matches the workspace name exactly.
 
@@ -60,7 +60,7 @@ impl WorkspaceManager {
         prompt: &str,
         kanban_path: Option<String>,
         source_dir: &PathBuf,
-    ) -> anyhow::Result<Workspace> {
+    ) -> anyhow::Result<WorkspaceInfo> {
         let git_root = Self::git_root(source_dir).await?;
         let worktrees_dir = worktrees_base(&git_root);
         let worktree_path = worktrees_dir.join(name);
@@ -136,7 +136,7 @@ impl WorkspaceManager {
             );
         }
 
-        Ok(Workspace::new(
+        Ok(WorkspaceInfo::new(
             name.to_string(),
             description.to_string(),
             prompt.to_string(),

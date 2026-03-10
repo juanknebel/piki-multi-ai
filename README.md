@@ -346,21 +346,32 @@ The `install.sh` script copies all themes to `~/.config/piki-multi/themes/` (exi
 
 ## Architecture
 
-The project is organized as a Cargo workspace:
+The project is organized as a Cargo workspace with a shared core library:
 
 ```
 Cargo.toml               # Workspace root
 crates/
-  tui/                   # TUI binary (piki-multi-ai)
+  core/                  # piki-core — shared library (no TUI dependencies)
     src/
-      main.rs            # Tokio main loop, event handling, action dispatch
-      app.rs             # App state, Workspace model, git status parsing
-      clipboard.rs       # System clipboard read/write (Wayland, X11, macOS, Windows)
-      sysinfo.rs         # System info poller (CPU, RAM, battery via systemstat + chrono)
-      theme.rs           # Theme loading from TOML, color parsing
-      config.rs          # Global configuration and keybindings (TOML)
+      domain.rs          # AIProvider, FileStatus, ChangedFile, WorkspaceStatus, WorkspaceInfo
+      git.rs             # Git status parsing, ahead/behind detection
       pty/
         session.rs       # PTY management (portable-pty + vt100 parser)
+      workspace/
+        manager.rs       # Git worktree CRUD
+        config.rs        # Workspace config persistence (JSON)
+        watcher.rs       # File system watcher (notify)
+      diff/
+        runner.rs        # git diff | delta pipeline (with untracked file support)
+      sysinfo.rs         # System info poller (CPU, RAM, battery via systemstat + chrono)
+  tui/                   # TUI binary (piki-multi-ai) — depends on piki-core
+    src/
+      main.rs            # Tokio main loop, event handling, action dispatch
+      app.rs             # TUI app state, Workspace wrapper, UI-specific types
+      clipboard.rs       # System clipboard read/write (Wayland, X11, macOS, Windows)
+      theme.rs           # Theme loading from TOML, color parsing (ratatui)
+      config.rs          # Global configuration and keybindings (TOML, crossterm)
+      pty/
         input.rs         # Crossterm key events -> PTY bytes
       ui/
         layout.rs        # Full TUI layout (all panels, overlays)
@@ -369,12 +380,6 @@ crates/
         fuzzy.rs         # Fuzzy search overlay (nucleo matching + ignore walker)
         markdown.rs      # Markdown file viewer (tui-markdown)
         editor.rs        # Inline file editor renderer
-      workspace/
-        manager.rs       # Git worktree CRUD
-        config.rs        # Workspace config persistence (JSON)
-        watcher.rs       # File system watcher (notify)
-      diff/
-        runner.rs        # git diff | delta pipeline (with untracked file support)
 ```
 
 ### Sequence diagram

@@ -21,13 +21,11 @@ dependencies = [
  "dirs",
  "flow",
  "ignore",
- "notify",
  "nucleo",
- "portable-pty",
+ "piki-core",
  "ratatui",
  "serde",
  "serde_json",
- "systemstat",
  "tokio",
  "toml",
  "tui-markdown",
@@ -2103,6 +2101,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67eabc2ef2a60eb7faa00097bd1ffdb5bd28e62bf39990626a582201b7a754e5"
 dependencies = [
  "siphasher",
+]
+
+[[package]]
+name = "piki-core"
+version = "0.95.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "dirs",
+ "notify",
+ "portable-pty",
+ "serde",
+ "serde_json",
+ "systemstat",
+ "tokio",
+ "vt100",
 ]
 
 [[package]]

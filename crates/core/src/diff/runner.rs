@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::process::Stdio;
 
-use crate::app::FileStatus;
+use crate::domain::FileStatus;
 
 /// Run a diff for the given file, piped through `delta --side-by-side`.
 /// Returns raw ANSI bytes suitable for conversion with ansi-to-tui.

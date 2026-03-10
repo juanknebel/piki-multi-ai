@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
-use crate::app::Workspace;
+use crate::domain::WorkspaceInfo;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WorkspaceEntry {
@@ -17,6 +17,21 @@ pub struct WorkspaceEntry {
     pub branch: String,
     pub worktree_path: PathBuf,
     pub source_repo: PathBuf,
+}
+
+impl WorkspaceEntry {
+    /// Convert this entry into a WorkspaceInfo
+    pub fn into_info(self) -> WorkspaceInfo {
+        WorkspaceInfo::new(
+            self.name,
+            self.description,
+            self.prompt,
+            self.kanban_path,
+            self.branch,
+            self.worktree_path,
+            self.source_repo,
+        )
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -41,8 +56,8 @@ fn config_path(git_root: &Path) -> PathBuf {
 }
 
 /// Save workspace list to disk.
-pub fn save(git_root: &Path, workspaces: &[Workspace]) -> anyhow::Result<()> {
-    // Only save workspaces that belong to this project
+/// Takes a slice of WorkspaceInfo and the git root to filter by project.
+pub fn save(git_root: &Path, workspaces: &[WorkspaceInfo]) -> anyhow::Result<()> {
     let entries: Vec<WorkspaceEntry> = workspaces
         .iter()
         .filter(|ws| ws.source_repo == git_root)
@@ -91,10 +106,6 @@ pub fn load(git_root: &Path) -> anyhow::Result<Vec<WorkspaceEntry>> {
 }
 
 /// Load all workspace entries from every project config in the config directory.
-/// Scans `~/.local/share/piki-multi/workspaces/*.json` and returns all valid entries,
-/// filtering out stale worktrees that no longer exist on disk.
-/// Skips corrupted or unreadable config files gracefully.
-/// Ensures each worktree is only loaded once.
 pub fn load_all() -> Vec<WorkspaceEntry> {
     let dir = config_dir();
     if !dir.exists() {
@@ -126,7 +137,6 @@ pub fn load_all() -> Vec<WorkspaceEntry> {
         };
 
         for e in config.workspaces {
-            // Only keep entries whose worktree still exists and we haven't seen yet
             if e.worktree_path.exists() && !seen_paths.contains(&e.worktree_path) {
                 seen_paths.insert(e.worktree_path.clone());
                 all_entries.push(e);

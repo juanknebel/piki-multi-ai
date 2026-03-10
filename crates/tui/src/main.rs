@@ -1,12 +1,9 @@
 mod app;
 mod clipboard;
 mod config;
-mod diff;
 mod pty;
 mod theme;
 mod ui;
-mod sysinfo;
-mod workspace;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -18,10 +15,12 @@ use crossterm::event::{
 use ratatui::DefaultTerminal;
 use ratatui::layout::Rect;
 
-use app::{AIProvider, ActivePane, App, AppMode, DialogField, MergeStrategy};
+use app::{ActivePane, App, AppMode, DialogField};
 use clap::{Parser, Subcommand};
-use pty::PtySession;
-use workspace::{FileWatcher, WorkspaceManager, config as ws_config};
+use piki_core::{AIProvider, MergeStrategy};
+use piki_core::pty::PtySession;
+use piki_core::workspace::{FileWatcher, WorkspaceManager};
+use piki_core::workspace::config as ws_config;
 
 #[derive(Parser)]
 #[command(name = "piki-multi-ai")]
@@ -94,7 +93,7 @@ async fn main() -> anyhow::Result<()> {
 async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
     let manager = WorkspaceManager::new();
     let mut app = App::new();
-    app.sysinfo = sysinfo::spawn_sysinfo_poller();
+    app.sysinfo = piki_core::sysinfo::spawn_sysinfo_poller();
     app.theme = theme::load();
 
     // Compute real terminal dimensions for PTY spawning
@@ -107,15 +106,7 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
     // Restore persisted workspaces from all project configs
     let entries = ws_config::load_all();
     for entry in entries {
-        let mut ws = app::Workspace::new(
-            entry.name,
-            entry.description,
-            entry.prompt.clone(),
-            entry.kanban_path,
-            entry.branch,
-            entry.worktree_path,
-            entry.source_repo,
-        );
+        let mut ws = app::Workspace::from_info(entry.into_info());
 
         // Spawn initial Shell tab
         spawn_initial_shell(&mut ws, app.pty_rows, app.pty_cols).await;
@@ -264,8 +255,8 @@ async fn execute_action(
     match action {
         Action::CreateWorkspace(name, description, prompt, kanban_path, dir) => {
             match manager.create(&name, &description, &prompt, kanban_path, &dir).await {
-                Ok(ws) => {
-                    app.workspaces.push(ws);
+                Ok(info) => {
+                    app.workspaces.push(app::Workspace::from_info(info));
                     let new_idx = app.workspaces.len() - 1;
                     app.switch_workspace(new_idx);
 
@@ -299,7 +290,7 @@ async fn execute_action(
 
                     // Persist config
                     let source = app.workspaces[new_idx].source_repo.clone();
-                    let _ = ws_config::save(&source, &app.workspaces);
+                    let _ = ws_config::save(&source, &app.workspaces.iter().map(|w| w.info.clone()).collect::<Vec<_>>());
                 }
                 Err(e) => {
                     app.status_message = Some(format!("Error: {}", e));
@@ -315,7 +306,7 @@ async fn execute_action(
                 ws.kanban_path = kanban_path;
                 ws.prompt = prompt;
                 let source = ws.source_repo.clone();
-                let _ = ws_config::save(&source, &app.workspaces);
+                let _ = ws_config::save(&source, &app.workspaces.iter().map(|w| w.info.clone()).collect::<Vec<_>>());
                 app.status_message = Some("Workspace updated".into());
             }
         }
@@ -350,7 +341,7 @@ async fn execute_action(
                         }
 
                         // Persist config
-                        let _ = ws_config::save(&source_repo, &app.workspaces);
+                        let _ = ws_config::save(&source_repo, &app.workspaces.iter().map(|w| w.info.clone()).collect::<Vec<_>>());
                     }
                     Err(e) => {
                         app.status_message = Some(format!("Error: {}", e));
@@ -385,7 +376,7 @@ async fn execute_action(
                 }
 
                 // Persist config
-                let _ = ws_config::save(&source_repo, &app.workspaces);
+                let _ = ws_config::save(&source_repo, &app.workspaces.iter().map(|w| w.info.clone()).collect::<Vec<_>>());
             }
         }
         Action::OpenEditor(path) => {
@@ -424,7 +415,7 @@ async fn execute_action(
                     let file_status = file.status.clone();
                     // Use a reasonable width; TODO: pass actual panel width
                     let width = 120;
-                    match diff::runner::run_diff(&worktree_path, &file_path, width, &file_status)
+                    match piki_core::diff::runner::run_diff(&worktree_path, &file_path, width, &file_status)
                         .await
                     {
                         Ok(ansi_bytes) => {

@@ -1,11 +1,7 @@
 pub mod diff;
 pub mod editor;
-pub mod files;
 pub mod fuzzy;
 pub mod layout;
 pub mod markdown;
-pub mod statusbar;
 pub mod subtabs;
-pub mod tabs;
 pub mod terminal;
-pub mod workspaces;
