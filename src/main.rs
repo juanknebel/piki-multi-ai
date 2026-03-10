@@ -1344,16 +1344,37 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
             app.edit_target = Some(app.selected_workspace);
             app.mode = AppMode::EditWorkspace;
         }
+    } else if app.config.matches_navigation(key, "clone_workspace") {
+        if !app.workspaces.is_empty() {
+            let ws = &app.workspaces[app.selected_workspace];
+            let dir = ws.source_repo.display().to_string();
+            let kanban = ws.kanban_path.clone().unwrap_or_default();
+            let prompt = ws.prompt.clone();
+            app.mode = AppMode::NewWorkspace;
+            app.input_buffer.clear();
+            app.input_cursor = 0;
+            app.dir_input_buffer = dir;
+            app.dir_input_cursor = app.dir_input_buffer.chars().count();
+            app.desc_input_buffer.clear();
+            app.desc_input_cursor = 0;
+            app.prompt_input_buffer = prompt;
+            app.prompt_input_cursor = app.prompt_input_buffer.chars().count();
+            app.kanban_input_buffer = kanban;
+            app.kanban_input_cursor = app.kanban_input_buffer.chars().count();
+            app.active_dialog_field = DialogField::Name;
+        }
     } else if app.config.matches_navigation(key, "new_workspace") {
         app.mode = AppMode::NewWorkspace;
         app.input_buffer.clear();
         app.dir_input_buffer.clear();
         app.desc_input_buffer.clear();
         app.prompt_input_buffer.clear();
+        app.kanban_input_buffer.clear();
         app.input_cursor = 0;
         app.dir_input_cursor = 0;
         app.desc_input_cursor = 0;
         app.prompt_input_cursor = 0;
+        app.kanban_input_cursor = 0;
         app.active_dialog_field = DialogField::Name;
     } else if app.config.matches_navigation(key, "delete_workspace") {
         if !app.workspaces.is_empty() {

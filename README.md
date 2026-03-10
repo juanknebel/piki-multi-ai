@@ -137,7 +137,7 @@ Workspace configurations are saved automatically and restored on startup.
 |  ? untracked.txt |
 | ↑1 to push      |
 +------------------+--------------------------------------------------------+
-  [hjkl] navigate [n] new ws [t] new tab [w] close tab [g/G] next/prev tab
+  [hjkl] navigate [n] new ws [r] clone ws [t] new tab [w] close tab [g/G] next/prev tab
   [c] commit [P] push [M] merge [Tab] switch ws [/] search [i] info [?] help [a] about [q] quit
 ```
 
@@ -167,6 +167,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `h` / `j` / `k` / `l` | Move between panes |
 | `Enter` | Interact with selected pane |
 | `n` | Create new workspace |
+| `r` | Clone workspace (new workspace pre-filled with directory, prompt, and kanban path) |
 | `e` | Edit workspace options (Kanban path, Prompt) |
 | `d` | Delete selected workspace |
 | `Tab` / `Shift+Tab` | Next / previous workspace |

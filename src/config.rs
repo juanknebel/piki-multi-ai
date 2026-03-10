@@ -118,6 +118,7 @@ fn default_navigation() -> HashMap<String, String> {
     m.insert("kanban".to_string(), "b".to_string());
     m.insert("new_workspace".to_string(), "n".to_string());
     m.insert("delete_workspace".to_string(), "d".to_string());
+    m.insert("clone_workspace".to_string(), "r".to_string());
     m.insert("commit".to_string(), "c".to_string());
     m.insert("merge".to_string(), "M".to_string());
     m.insert("push".to_string(), "P".to_string());
