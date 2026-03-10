@@ -32,3 +32,26 @@ Requires Rust >= 1.85 (edition 2024). Runtime deps: `claude` CLI in PATH, git >=
 **Diff pipeline** (`diff/runner.rs`): Runs `git diff | delta` (with plain `git diff` fallback), converts ANSI output to ratatui `Text` via `ansi-to-tui`.
 
 **UI** (`ui/`): `layout.rs` is the main render function composing all panels. Sub-modules render individual components (terminal, diff, workspaces, files, tabs, statusbar).
+
+## Task Tracking
+
+Use `flow` CLI with the project board to track tasks. Always set the env var:
+
+```bash
+export FLOW_BOARD_PATH=/home/zero/git/agent-multi/.board
+```
+
+Common commands:
+
+```bash
+flow list                              # See all cards by column
+flow show <card_id>                    # Card details
+flow create <column> "title" --body "description"  # Create card
+flow move <card_id> <column>           # Move card between columns
+flow edit <card_id> --title "..." --body "..."      # Update card
+flow delete <card_id>                  # Delete card
+```
+
+Columns: `todo`, `in_progress`, `in_review`, `done`.
+
+When working on a task, move it to `in_progress` before starting and to `done` when finished. Check the board at the start of each session to understand current state.

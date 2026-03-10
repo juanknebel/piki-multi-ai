@@ -346,30 +346,35 @@ The `install.sh` script copies all themes to `~/.config/piki-multi/themes/` (exi
 
 ## Architecture
 
+The project is organized as a Cargo workspace:
+
 ```
-src/
-  main.rs              # Tokio main loop, event handling, action dispatch
-  app.rs               # App state, Workspace model, git status parsing
-  clipboard.rs         # System clipboard read/write (Wayland, X11, macOS, Windows)
-  sysinfo.rs           # System info poller (CPU, RAM, battery via systemstat + chrono)
-  theme.rs             # Theme loading from TOML, color parsing
-  config.rs            # Global configuration and keybindings (TOML)
-  pty/
-    session.rs         # PTY management (portable-pty + vt100 parser)
-    input.rs           # Crossterm key events -> PTY bytes
-  ui/
-    layout.rs          # Full TUI layout (all panels, overlays)
-    terminal.rs        # Live PTY rendering (tui-term)
-    diff.rs            # Diff rendering (ansi-to-tui)
-    fuzzy.rs           # Fuzzy search overlay (nucleo matching + ignore walker)
-    markdown.rs        # Markdown file viewer (tui-markdown)
-    editor.rs          # Inline file editor renderer
-  workspace/
-    manager.rs         # Git worktree CRUD
-    config.rs          # Workspace config persistence (JSON)
-    watcher.rs         # File system watcher (notify)
-  diff/
-    runner.rs          # git diff | delta pipeline (with untracked file support)
+Cargo.toml               # Workspace root
+crates/
+  tui/                   # TUI binary (piki-multi-ai)
+    src/
+      main.rs            # Tokio main loop, event handling, action dispatch
+      app.rs             # App state, Workspace model, git status parsing
+      clipboard.rs       # System clipboard read/write (Wayland, X11, macOS, Windows)
+      sysinfo.rs         # System info poller (CPU, RAM, battery via systemstat + chrono)
+      theme.rs           # Theme loading from TOML, color parsing
+      config.rs          # Global configuration and keybindings (TOML)
+      pty/
+        session.rs       # PTY management (portable-pty + vt100 parser)
+        input.rs         # Crossterm key events -> PTY bytes
+      ui/
+        layout.rs        # Full TUI layout (all panels, overlays)
+        terminal.rs      # Live PTY rendering (tui-term)
+        diff.rs          # Diff rendering (ansi-to-tui)
+        fuzzy.rs         # Fuzzy search overlay (nucleo matching + ignore walker)
+        markdown.rs      # Markdown file viewer (tui-markdown)
+        editor.rs        # Inline file editor renderer
+      workspace/
+        manager.rs       # Git worktree CRUD
+        config.rs        # Workspace config persistence (JSON)
+        watcher.rs       # File system watcher (notify)
+      diff/
+        runner.rs        # git diff | delta pipeline (with untracked file support)
 ```
 
 ### Sequence diagram
