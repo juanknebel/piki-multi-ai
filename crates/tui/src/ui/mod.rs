@@ -5,6 +5,7 @@ pub mod fuzzy;
 pub mod layout;
 pub mod markdown;
 mod panels;
+pub mod pomodoro;
 mod sidebar;
 pub(crate) mod statusbar;
 pub mod subtabs;

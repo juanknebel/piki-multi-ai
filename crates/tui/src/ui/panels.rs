@@ -86,6 +86,13 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
 
             let provider = tab.provider;
 
+            if provider == crate::app::AIProvider::Pomodoro {
+                if let Some(ref pomodoro) = tab.pomodoro_state {
+                    super::pomodoro::render(frame, area, pomodoro, border_style);
+                }
+                return;
+            }
+
             if provider == crate::app::AIProvider::Kanban {
                 if let Some(ws) = app.workspaces.get(app.active_workspace)
                     && let Some(kanban_app) = &ws.kanban_app {

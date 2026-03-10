@@ -27,6 +27,7 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 - **Clipboard support** — Paste from clipboard (`Ctrl+Shift+V`), copy visible terminal (`Ctrl+Shift+C`), and mouse drag-to-select with auto-copy; cross-platform (Wayland, X11, macOS, Windows)
 - **Workspace prompts** — Optionally provide an initial prompt when creating a workspace; the prompt is auto-sent to the active tab on creation, enabling parallel AI orchestration
 - **Git operations** — Stage (`s`), unstage (`u`), commit (`c`), push (`P`), and merge (`M`) directly from the TUI; commit dialog with inline message input
+- **Pomodoro Timer** — Stay focused with a built-in Pomodoro timer (`t` -> `6`); configurable work/break durations and cycles; flashing visual alerts in the tab bar and main panel when a cycle ends
 - **Merge/Apply changes** — Merge or rebase workspace branches into main directly from the TUI (`M`); supports merge commit and rebase strategies with conflict detection
 - **System status header** — Live CPU%, RAM usage, battery level, and date/time displayed in a top header bar (powered by `systemstat`)
 - **Full mouse support** — Click to focus panes, select workspaces/files, switch tabs, close tabs (×), scroll anywhere contextually; drag to resize borders or select text; overlays dismiss on click
@@ -175,7 +176,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `d` | Delete selected workspace |
 | `Tab` / `Shift+Tab` | Next / previous workspace |
 | `1`-`9` | Jump to workspace N |
-| `t` | New tab (opens provider selection: 1=Claude, 2=Gemini, 3=Codex, 4=Shell, 5=Kanban Board) |
+| `t` | New tab (opens provider selection: 1=Claude, 2=Gemini, 3=Codex, 4=Shell, 5=Kanban Board, 6=Pomodoro Timer) |
 | `w` | Close current tab (with confirmation dialog; initial shell tab cannot be closed) |
 | `g` / `G` | Next / previous tab |
 | `<` / `>` | Resize sidebar width (±5%) |
@@ -199,6 +200,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | *File list* | `j`/`k` select, `Enter` open diff, `e` open in $EDITOR, `v` inline editor, `s` stage, `u` unstage |
 | *Markdown tab* | `j`/`k` scroll, `Ctrl+d`/`Ctrl+u` page, `g`/`G` top/bottom (read-only) |
 | *Kanban tab* | `h/l/j/k` navigate, `H/L` move card, `n` new card, `e` edit card, `d` delete, `Enter` details, `Esc` close modal |
+| *Pomodoro tab* | `s` start/pause/dismiss alert, `r` reset |
 
 **In diff view:**
 

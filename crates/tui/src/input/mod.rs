@@ -14,13 +14,14 @@ use piki_core::AIProvider;
 use self::dialog::{
     handle_commit_message_input, handle_confirm_close_tab_input, handle_confirm_delete_input,
     handle_confirm_merge_input, handle_confirm_quit_input, handle_edit_workspace_input,
-    handle_new_tab_input, handle_new_workspace_input,
+    handle_new_tab_input, handle_new_workspace_input, handle_pomodoro_config_input,
 };
 use self::editor_input::handle_inline_edit_input;
 use self::fuzzy_input::handle_fuzzy_search_input;
 use self::interaction::{
     handle_diff_interaction, handle_filelist_interaction, handle_kanban_interaction,
-    handle_markdown_interaction, handle_terminal_interaction, handle_workspace_interaction,
+    handle_markdown_interaction, handle_pomodoro_interaction, handle_terminal_interaction,
+    handle_workspace_interaction,
 };
 
 pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
@@ -84,6 +85,7 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         AppMode::ConfirmCloseTab => return handle_confirm_close_tab_input(app, key),
         AppMode::ConfirmQuit => return handle_confirm_quit_input(app, key),
         AppMode::ConfirmDelete => return handle_confirm_delete_input(app, key),
+        AppMode::PomodoroConfig => return handle_pomodoro_config_input(app, key),
         // Normal and Diff modes fall through to navigation/interaction handling
         AppMode::Normal | AppMode::Diff => {}
     }
@@ -312,6 +314,12 @@ fn handle_interaction_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
                 .is_some_and(|tab| tab.provider == AIProvider::Kanban)
             {
                 handle_kanban_interaction(app, key)
+            } else if app
+                .current_workspace()
+                .and_then(|ws| ws.current_tab())
+                .is_some_and(|tab| tab.provider == AIProvider::Pomodoro)
+            {
+                handle_pomodoro_interaction(app, key)
             } else if app
                 .current_workspace()
                 .and_then(|ws| ws.current_tab())

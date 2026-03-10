@@ -1,7 +1,8 @@
+use std::time::SystemTime;
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
-use ratatui::text::Line;
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Tabs};
 
 use crate::app::Workspace;
@@ -18,7 +19,21 @@ pub fn render(frame: &mut Frame, area: Rect, ws: &Workspace, theme: &Theme) {
                 .markdown_label
                 .as_deref()
                 .unwrap_or(tab.provider.label());
-            Line::from(format!(" {}{} ", label, close_marker))
+            
+            let mut style = Style::default();
+            if tab.pomodoro_state.as_ref().is_some_and(|s| s.alert) {
+                let millis = SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis();
+                if (millis / 500) % 2 == 0 {
+                    style = style.bg(Color::Red).fg(Color::White).add_modifier(Modifier::BOLD);
+                } else {
+                    style = style.bg(Color::Yellow).fg(Color::Black).add_modifier(Modifier::BOLD);
+                }
+            }
+
+            Line::from(Span::styled(format!(" {}{} ", label, close_marker), style))
         })
         .collect();
 

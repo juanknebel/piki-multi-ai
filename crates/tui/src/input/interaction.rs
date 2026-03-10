@@ -5,6 +5,34 @@ use crate::app::{ActivePane, App, AppMode, DialogField};
 use crate::clipboard;
 use crate::helpers::copy_visible_terminal;
 
+pub(super) fn handle_pomodoro_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
+    if app.config.matches_interaction(key, "exit_interaction") {
+        app.interacting = false;
+        return None;
+    }
+    if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+        if let Some(tab) = ws.current_tab_mut() {
+            if let Some(ref mut pomodoro) = tab.pomodoro_state {
+                match key.code {
+                    KeyCode::Char('s') => {
+                        if pomodoro.alert {
+                            pomodoro.next_phase();
+                            pomodoro.is_running = true;
+                        } else {
+                            pomodoro.is_running = !pomodoro.is_running;
+                        }
+                    }
+                    KeyCode::Char('r') => {
+                        pomodoro.reset();
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+    None
+}
+
 pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
     if app.config.matches_interaction(key, "exit_interaction") {
         app.interacting = false;

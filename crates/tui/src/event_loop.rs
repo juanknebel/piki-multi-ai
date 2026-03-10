@@ -275,6 +275,19 @@ pub(crate) async fn run(
             app.needs_redraw = true;
         }
 
+        // Tick Pomodoro timers
+        for ws in &mut app.workspaces {
+            for tab in &mut ws.tabs {
+                if let Some(ref mut pomodoro) = tab.pomodoro_state {
+                    if pomodoro.is_running && now.duration_since(tab.last_pomodoro_tick).as_secs() >= 1 {
+                        pomodoro.tick();
+                        tab.last_pomodoro_tick = now;
+                        app.needs_redraw = true;
+                    }
+                }
+            }
+        }
+
         // Phase 4: Tick-gated periodic work
         if is_tick {
             // Inactive workspaces — only check is_alive every ~1s

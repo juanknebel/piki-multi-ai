@@ -40,6 +40,10 @@ pub(crate) async fn spawn_tab(
     cols: u16,
 ) -> usize {
     let idx = ws.add_tab(provider, true);
+    if provider == AIProvider::Pomodoro {
+        ws.tabs[idx].pomodoro_state = Some(crate::app::PomodoroState::new(25, 5, 15, 4));
+        return idx;
+    }
     if provider == AIProvider::Kanban {
         return idx;
     }

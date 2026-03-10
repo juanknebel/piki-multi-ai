@@ -105,6 +105,8 @@ pub enum AppMode {
     ConfirmCloseTab,
     /// Confirmation dialog for quitting the application
     ConfirmQuit,
+    /// Configuration dialog for Pomodoro timer
+    PomodoroConfig,
 }
 
 /// Which pane is currently selected / focused
@@ -123,6 +125,101 @@ pub enum DialogField {
     Description,
     Prompt,
     KanbanPath,
+    PomodoroWork,
+    PomodoroShort,
+    PomodoroLong,
+    PomodoroCycles,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PomodoroPhase {
+    Work,
+    ShortBreak,
+    LongBreak,
+}
+
+impl PomodoroPhase {
+    pub fn label(&self) -> &str {
+        match self {
+            PomodoroPhase::Work => "Working",
+            PomodoroPhase::ShortBreak => "Short Break",
+            PomodoroPhase::LongBreak => "Long Break",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PomodoroState {
+    pub work_duration: u32,  // minutes
+    pub short_break: u32,     // minutes
+    pub long_break: u32,      // minutes
+    pub cycles_until_long: u32,
+    pub current_cycle: u32,
+    pub phase: PomodoroPhase,
+    pub remaining_seconds: u32,
+    pub is_running: bool,
+    pub alert: bool,
+}
+
+impl PomodoroState {
+    pub fn new(work: u32, short: u32, long: u32, cycles: u32) -> Self {
+        Self {
+            work_duration: work,
+            short_break: short,
+            long_break: long,
+            cycles_until_long: cycles,
+            current_cycle: 1,
+            phase: PomodoroPhase::Work,
+            remaining_seconds: work * 60,
+            is_running: false,
+            alert: false,
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.current_cycle = 1;
+        self.phase = PomodoroPhase::Work;
+        self.remaining_seconds = self.work_duration * 60;
+        self.is_running = false;
+        self.alert = false;
+    }
+
+    pub fn tick(&mut self) {
+        if !self.is_running || self.remaining_seconds == 0 {
+            return;
+        }
+
+        self.remaining_seconds -= 1;
+
+        if self.remaining_seconds == 0 {
+            self.alert = true;
+            self.is_running = false;
+        }
+    }
+
+    pub fn next_phase(&mut self) {
+        self.alert = false;
+        match self.phase {
+            PomodoroPhase::Work => {
+                if self.current_cycle >= self.cycles_until_long {
+                    self.phase = PomodoroPhase::LongBreak;
+                    self.remaining_seconds = self.long_break * 60;
+                    self.current_cycle = 1;
+                } else {
+                    self.phase = PomodoroPhase::ShortBreak;
+                    self.remaining_seconds = self.short_break * 60;
+                }
+            }
+            PomodoroPhase::ShortBreak | PomodoroPhase::LongBreak => {
+                if self.phase == PomodoroPhase::ShortBreak {
+                    self.current_cycle += 1;
+                }
+                self.phase = PomodoroPhase::Work;
+                self.remaining_seconds = self.work_duration * 60;
+            }
+        }
+        self.is_running = false; // Pause at transitions? User might prefer it.
+    }
 }
 
 /// A tab within a workspace, each with its own PTY session
@@ -146,6 +243,10 @@ pub struct Tab {
     pub markdown_scroll: u16,
     /// Cached parsed markdown (avoids re-parsing every frame)
     pub markdown_rendered: Option<Text<'static>>,
+    /// Pomodoro timer state
+    pub pomodoro_state: Option<PomodoroState>,
+    /// Last time the pomodoro was ticked
+    pub last_pomodoro_tick: Instant,
 }
 
 /// A single workspace backed by a git worktree
@@ -229,6 +330,8 @@ impl Workspace {
             markdown_label: None,
             markdown_scroll: 0,
             markdown_rendered: None,
+            pomodoro_state: None,
+            last_pomodoro_tick: Instant::now(),
         };
         self.next_tab_id += 1;
         self.tabs.push(tab);
@@ -265,6 +368,8 @@ impl Workspace {
             markdown_label: Some(label),
             markdown_scroll: 0,
             markdown_rendered: Some(rendered),
+            pomodoro_state: None,
+            last_pomodoro_tick: Instant::now(),
         };
         self.next_tab_id += 1;
         self.tabs.push(tab);
@@ -496,12 +601,20 @@ pub struct App {
     pub desc_input_buffer: String,
     pub prompt_input_buffer: String,
     pub kanban_input_buffer: String,
+    pub pomodoro_input_work: String,
+    pub pomodoro_input_short: String,
+    pub pomodoro_input_long: String,
+    pub pomodoro_input_cycles: String,
     /// Cursor positions (char index) for each dialog input field
     pub input_cursor: usize,
     pub dir_input_cursor: usize,
     pub desc_input_cursor: usize,
     pub prompt_input_cursor: usize,
     pub kanban_input_cursor: usize,
+    pub pomodoro_input_work_cursor: usize,
+    pub pomodoro_input_short_cursor: usize,
+    pub pomodoro_input_long_cursor: usize,
+    pub pomodoro_input_cycles_cursor: usize,
     /// Scroll offset for help overlay
     pub help_scroll: u16,
     /// Horizontal scroll offset for workspace info overlay
@@ -600,11 +713,19 @@ impl App {
             desc_input_buffer: String::new(),
             prompt_input_buffer: String::new(),
             kanban_input_buffer: String::new(),
+            pomodoro_input_work: String::new(),
+            pomodoro_input_short: String::new(),
+            pomodoro_input_long: String::new(),
+            pomodoro_input_cycles: String::new(),
             input_cursor: 0,
             dir_input_cursor: 0,
             desc_input_cursor: 0,
             prompt_input_cursor: 0,
             kanban_input_cursor: 0,
+            pomodoro_input_work_cursor: 0,
+            pomodoro_input_short_cursor: 0,
+            pomodoro_input_long_cursor: 0,
+            pomodoro_input_cycles_cursor: 0,
             help_scroll: 0,
             info_hscroll: 0,
             active_dialog_field: DialogField::Name,

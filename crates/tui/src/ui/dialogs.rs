@@ -708,7 +708,7 @@ pub(super) fn render_confirm_merge_dialog(frame: &mut Frame, area: Rect, app: &A
 }
 
 pub(crate) fn render_new_tab_dialog(frame: &mut Frame, area: Rect) {
-    let popup = clear_popup(frame, area, 40, 11);
+    let popup = clear_popup(frame, area, 40, 12);
 
     let lines = vec![
         Line::from(""),
@@ -719,10 +719,55 @@ pub(crate) fn render_new_tab_dialog(frame: &mut Frame, area: Rect) {
         Line::from("  [3] Codex"),
         Line::from("  [4] Shell"),
         Line::from("  [5] Kanban Board"),
+        Line::from("  [6] Pomodoro Timer"),
         Line::from(""),
         Line::from("  [Esc] Cancel"),
     ];
 
     let text = Paragraph::new(lines).block(popup_block("New Tab", Color::Cyan));
+    frame.render_widget(text, popup);
+}
+
+pub(super) fn render_pomodoro_config_dialog(frame: &mut Frame, area: Rect, app: &App) {
+    let popup = clear_popup(frame, area, 45, 13);
+    let theme = &app.theme.dialog;
+
+    let field_style = |active: bool| {
+        if active {
+            Style::default().fg(theme.new_ws_active)
+        } else {
+            Style::default().fg(theme.new_ws_inactive)
+        }
+    };
+    let fmax = 10usize;
+
+    let work_active = app.active_dialog_field == DialogField::PomodoroWork;
+    let short_active = app.active_dialog_field == DialogField::PomodoroShort;
+    let long_active = app.active_dialog_field == DialogField::PomodoroLong;
+    let cycles_active = app.active_dialog_field == DialogField::PomodoroCycles;
+
+    let lines = vec![
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  Work (min):    ", field_style(work_active)),
+            Span::styled(visible_field(&app.pomodoro_input_work, work_active, app.pomodoro_input_work_cursor, fmax), field_style(work_active)),
+        ]),
+        Line::from(vec![
+            Span::styled("  Short (min):   ", field_style(short_active)),
+            Span::styled(visible_field(&app.pomodoro_input_short, short_active, app.pomodoro_input_short_cursor, fmax), field_style(short_active)),
+        ]),
+        Line::from(vec![
+            Span::styled("  Long (min):    ", field_style(long_active)),
+            Span::styled(visible_field(&app.pomodoro_input_long, long_active, app.pomodoro_input_long_cursor, fmax), field_style(long_active)),
+        ]),
+        Line::from(vec![
+            Span::styled("  Cycles:        ", field_style(cycles_active)),
+            Span::styled(visible_field(&app.pomodoro_input_cycles, cycles_active, app.pomodoro_input_cycles_cursor, fmax), field_style(cycles_active)),
+        ]),
+        Line::from(""),
+        Line::from(vec![Span::styled("  [Tab] Switch field  [Enter] Start  [Esc] Cancel", Style::default().fg(theme.new_ws_inactive))]),
+    ];
+
+    let text = Paragraph::new(lines).block(popup_block("Pomodoro Config", theme.new_ws_border));
     frame.render_widget(text, popup);
 }

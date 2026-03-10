@@ -180,6 +180,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         AppMode::WorkspaceInfo => super::dialogs::render_workspace_info_overlay(frame, area, app),
         AppMode::ConfirmCloseTab => super::dialogs::render_confirm_close_tab_dialog(frame, area, app),
         AppMode::ConfirmQuit => super::dialogs::render_confirm_quit_dialog(frame, area, app),
+        AppMode::PomodoroConfig => super::dialogs::render_pomodoro_config_dialog(frame, area, app),
         AppMode::InlineEdit => {} // handled by main content render
     }
 }

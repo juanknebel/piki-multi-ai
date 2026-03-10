@@ -83,6 +83,10 @@ fn dialog_buf_and_cursor(app: &mut App) -> (&mut String, &mut usize) {
         DialogField::Description => (&mut app.desc_input_buffer, &mut app.desc_input_cursor),
         DialogField::Prompt => (&mut app.prompt_input_buffer, &mut app.prompt_input_cursor),
         DialogField::KanbanPath => (&mut app.kanban_input_buffer, &mut app.kanban_input_cursor),
+        DialogField::PomodoroWork => (&mut app.pomodoro_input_work, &mut app.pomodoro_input_work_cursor),
+        DialogField::PomodoroShort => (&mut app.pomodoro_input_short, &mut app.pomodoro_input_short_cursor),
+        DialogField::PomodoroLong => (&mut app.pomodoro_input_long, &mut app.pomodoro_input_long_cursor),
+        DialogField::PomodoroCycles => (&mut app.pomodoro_input_cycles, &mut app.pomodoro_input_cycles_cursor),
     }
 }
 
@@ -143,6 +147,7 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
                 DialogField::Description => DialogField::Prompt,
                 DialogField::Prompt => DialogField::KanbanPath,
                 DialogField::KanbanPath => DialogField::Name,
+                _ => DialogField::Name,
             };
             return None;
         }
@@ -353,10 +358,111 @@ pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Actio
             app.mode = AppMode::Normal;
             Some(Action::SpawnTab(AIProvider::Kanban))
         }
+        KeyCode::Char('6') => {
+            app.mode = AppMode::PomodoroConfig;
+            app.active_dialog_field = DialogField::PomodoroWork;
+            app.pomodoro_input_work = "25".to_string();
+            app.pomodoro_input_short = "5".to_string();
+            app.pomodoro_input_long = "15".to_string();
+            app.pomodoro_input_cycles = "4".to_string();
+            app.pomodoro_input_work_cursor = 2;
+            app.pomodoro_input_short_cursor = 1;
+            app.pomodoro_input_long_cursor = 2;
+            app.pomodoro_input_cycles_cursor = 1;
+            None
+        }
         KeyCode::Esc => {
             app.mode = AppMode::Normal;
             None
         }
         _ => None,
     }
+}
+
+pub(super) fn handle_pomodoro_config_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    match key.code {
+        KeyCode::Tab => {
+            app.active_dialog_field = match app.active_dialog_field {
+                DialogField::PomodoroWork => DialogField::PomodoroShort,
+                DialogField::PomodoroShort => DialogField::PomodoroLong,
+                DialogField::PomodoroLong => DialogField::PomodoroCycles,
+                DialogField::PomodoroCycles => DialogField::PomodoroWork,
+                _ => DialogField::PomodoroWork,
+            };
+        }
+        KeyCode::BackTab => {
+            app.active_dialog_field = match app.active_dialog_field {
+                DialogField::PomodoroWork => DialogField::PomodoroCycles,
+                DialogField::PomodoroShort => DialogField::PomodoroWork,
+                DialogField::PomodoroLong => DialogField::PomodoroShort,
+                DialogField::PomodoroCycles => DialogField::PomodoroLong,
+                _ => DialogField::PomodoroWork,
+            };
+        }
+        KeyCode::Char(c) if c.is_ascii_digit() => {
+            let (buf, cursor) = match app.active_dialog_field {
+                DialogField::PomodoroWork => (&mut app.pomodoro_input_work, &mut app.pomodoro_input_work_cursor),
+                DialogField::PomodoroShort => (&mut app.pomodoro_input_short, &mut app.pomodoro_input_short_cursor),
+                DialogField::PomodoroLong => (&mut app.pomodoro_input_long, &mut app.pomodoro_input_long_cursor),
+                DialogField::PomodoroCycles => (&mut app.pomodoro_input_cycles, &mut app.pomodoro_input_cycles_cursor),
+                _ => return None,
+            };
+            buf.insert(*cursor, c);
+            *cursor += 1;
+        }
+        KeyCode::Backspace => {
+            let (buf, cursor) = match app.active_dialog_field {
+                DialogField::PomodoroWork => (&mut app.pomodoro_input_work, &mut app.pomodoro_input_work_cursor),
+                DialogField::PomodoroShort => (&mut app.pomodoro_input_short, &mut app.pomodoro_input_short_cursor),
+                DialogField::PomodoroLong => (&mut app.pomodoro_input_long, &mut app.pomodoro_input_long_cursor),
+                DialogField::PomodoroCycles => (&mut app.pomodoro_input_cycles, &mut app.pomodoro_input_cycles_cursor),
+                _ => return None,
+            };
+            if *cursor > 0 {
+                *cursor -= 1;
+                buf.remove(*cursor);
+            }
+        }
+        KeyCode::Left => {
+            let cursor = match app.active_dialog_field {
+                DialogField::PomodoroWork => &mut app.pomodoro_input_work_cursor,
+                DialogField::PomodoroShort => &mut app.pomodoro_input_short_cursor,
+                DialogField::PomodoroLong => &mut app.pomodoro_input_long_cursor,
+                DialogField::PomodoroCycles => &mut app.pomodoro_input_cycles_cursor,
+                _ => return None,
+            };
+            if *cursor > 0 {
+                *cursor -= 1;
+            }
+        }
+        KeyCode::Right => {
+            let (buf, cursor) = match app.active_dialog_field {
+                DialogField::PomodoroWork => (&app.pomodoro_input_work, &mut app.pomodoro_input_work_cursor),
+                DialogField::PomodoroShort => (&app.pomodoro_input_short, &mut app.pomodoro_input_short_cursor),
+                DialogField::PomodoroLong => (&app.pomodoro_input_long, &mut app.pomodoro_input_long_cursor),
+                DialogField::PomodoroCycles => (&app.pomodoro_input_cycles, &mut app.pomodoro_input_cycles_cursor),
+                _ => return None,
+            };
+            if *cursor < buf.len() {
+                *cursor += 1;
+            }
+        }
+        KeyCode::Enter => {
+            let work = app.pomodoro_input_work.parse().unwrap_or(25);
+            let short = app.pomodoro_input_short.parse().unwrap_or(5);
+            let long = app.pomodoro_input_long.parse().unwrap_or(15);
+            let cycles = app.pomodoro_input_cycles.parse().unwrap_or(4);
+            if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+                let idx = ws.add_tab(AIProvider::Pomodoro, true);
+                ws.tabs[idx].pomodoro_state = Some(crate::app::PomodoroState::new(work, short, long, cycles));
+                ws.active_tab = idx;
+            }
+            app.mode = AppMode::Normal;
+        }
+        KeyCode::Esc => {
+            app.mode = AppMode::Normal;
+        }
+        _ => {}
+    }
+    None
 }

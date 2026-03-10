@@ -10,6 +10,7 @@ pub enum AIProvider {
     Codex,
     Shell,
     Kanban,
+    Pomodoro,
 }
 
 impl AIProvider {
@@ -21,6 +22,7 @@ impl AIProvider {
             AIProvider::Codex => "codex",
             AIProvider::Shell => "/bin/sh",
             AIProvider::Kanban => "",
+            AIProvider::Pomodoro => "",
         }
     }
 
@@ -40,6 +42,7 @@ impl AIProvider {
             AIProvider::Codex => "Codex",
             AIProvider::Shell => "Shell",
             AIProvider::Kanban => "Kanban Board",
+            AIProvider::Pomodoro => "Pomodoro Timer",
         }
     }
 
@@ -51,6 +54,7 @@ impl AIProvider {
             AIProvider::Codex,
             AIProvider::Shell,
             AIProvider::Kanban,
+            AIProvider::Pomodoro,
         ]
     }
 }

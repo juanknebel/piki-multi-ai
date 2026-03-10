@@ -178,8 +178,13 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             ("esc".to_string(), "cancel"),
         ],
         AppMode::NewTab => vec![
-            ("1-5".to_string(), "select"),
+            ("1-6".to_string(), "select"),
             (cfg.get_binding("new_tab", "exit"), "cancel"),
+        ],
+        AppMode::PomodoroConfig => vec![
+            ("tab".to_string(), "switch field"),
+            ("enter".to_string(), "start"),
+            ("esc".to_string(), "cancel"),
         ],
         AppMode::Diff => vec![
             (
@@ -265,6 +270,16 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                         ),
                         "top/bottom",
                     ),
+                    (cfg.get_binding("interaction", "exit_interaction"), "back"),
+                ]
+            } else if app
+                .current_workspace()
+                .and_then(|ws| ws.current_tab())
+                .is_some_and(|tab| tab.provider == piki_core::domain::AIProvider::Pomodoro)
+            {
+                vec![
+                    ("s".to_string(), "start/pause"),
+                    ("r".to_string(), "reset"),
                     (cfg.get_binding("interaction", "exit_interaction"), "back"),
                 ]
             } else if app.term_search.is_some() {
