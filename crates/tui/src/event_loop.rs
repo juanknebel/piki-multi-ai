@@ -279,7 +279,7 @@ pub(crate) async fn run(
         for ws in &mut app.workspaces {
             for tab in &mut ws.tabs {
                 if let Some(ref mut pomodoro) = tab.pomodoro_state {
-                    if pomodoro.is_running && now.duration_since(tab.last_pomodoro_tick).as_secs() >= 1 {
+                    if (pomodoro.is_running || pomodoro.alert) && now.duration_since(tab.last_pomodoro_tick).as_secs() >= 1 {
                         if pomodoro.tick() {
                             // Session finished! Update stats
                             match pomodoro.phase {
@@ -296,6 +296,13 @@ pub(crate) async fn run(
                             }
                             ws.dirty = true;
                         }
+
+                        // Auto-transition after 15 seconds of alert
+                        if pomodoro.alert && pomodoro.alert_seconds >= 15 {
+                            pomodoro.next_phase();
+                            pomodoro.is_running = true;
+                        }
+
                         tab.last_pomodoro_tick = now;
                         app.needs_redraw = true;
                     }

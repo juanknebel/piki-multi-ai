@@ -159,6 +159,7 @@ pub struct PomodoroState {
     pub remaining_seconds: u32,
     pub is_running: bool,
     pub alert: bool,
+    pub alert_seconds: u32,
 }
 
 impl PomodoroState {
@@ -173,6 +174,7 @@ impl PomodoroState {
             remaining_seconds: work * 60,
             is_running: false,
             alert: false,
+            alert_seconds: 0,
         }
     }
 
@@ -182,9 +184,15 @@ impl PomodoroState {
         self.remaining_seconds = self.work_duration * 60;
         self.is_running = false;
         self.alert = false;
+        self.alert_seconds = 0;
     }
 
     pub fn tick(&mut self) -> bool {
+        if self.alert {
+            self.alert_seconds += 1;
+            return false;
+        }
+
         if !self.is_running || self.remaining_seconds == 0 {
             return false;
         }
@@ -193,6 +201,7 @@ impl PomodoroState {
 
         if self.remaining_seconds == 0 {
             self.alert = true;
+            self.alert_seconds = 0;
             self.is_running = false;
             return true;
         }
@@ -201,6 +210,7 @@ impl PomodoroState {
 
     pub fn next_phase(&mut self) {
         self.alert = false;
+        self.alert_seconds = 0;
         match self.phase {
             PomodoroPhase::Work => {
                 if self.current_cycle >= self.cycles_until_long {
