@@ -525,6 +525,8 @@ pub struct App {
     pub cached_footer_height: Option<(AppMode, u16, u16)>,
 }
 
+const MAX_DIFF_CACHE_SIZE: usize = 32;
+
 impl App {
     pub fn new() -> Self {
         let (refresh_tx, refresh_rx) = tokio::sync::mpsc::unbounded_channel::<RefreshResult>();
@@ -588,6 +590,14 @@ impl App {
             diff_cache: std::collections::HashMap::new(),
             cached_footer_height: None,
         }
+    }
+
+    /// Insert a diff into the cache, clearing the entire cache if it exceeds the size limit.
+    pub fn insert_diff_cache(&mut self, key: String, value: Text<'static>) {
+        if self.diff_cache.len() >= MAX_DIFF_CACHE_SIZE {
+            self.diff_cache.clear();
+        }
+        self.diff_cache.insert(key, value);
     }
 
     pub fn current_workspace(&self) -> Option<&Workspace> {

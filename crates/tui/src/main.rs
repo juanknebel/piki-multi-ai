@@ -508,7 +508,7 @@ async fn execute_action(
                                 use ansi_to_tui::IntoText;
                                 match ansi_bytes.into_text() {
                                     Ok(text) => {
-                                        app.diff_cache.insert(file_path.clone(), text.clone());
+                                        app.insert_diff_cache(file_path.clone(), text.clone());
                                         app.diff_content = Some(text);
                                         app.diff_file_path = Some(file_path);
                                         app.diff_scroll = 0;
