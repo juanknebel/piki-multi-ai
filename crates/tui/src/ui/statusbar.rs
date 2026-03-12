@@ -129,7 +129,7 @@ pub(super) fn render_sysinfo_bar(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(bar, area);
 }
 
-pub(super) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
+pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
     let cfg = &app.config;
     match app.mode {
         AppMode::FuzzySearch => vec![
@@ -332,7 +332,7 @@ pub(super) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
     }
 }
 
-pub(super) fn render_footer_from_keys(
+pub(crate) fn render_footer_from_keys(
     frame: &mut Frame,
     area: Rect,
     keys: &[(String, &str)],

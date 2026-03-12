@@ -508,6 +508,11 @@ impl Config {
 }
 
 pub fn parse_key_event(s: &str) -> Option<KeyEvent> {
+    // Special-case: literal "-" character
+    if s == "-" {
+        return Some(KeyEvent::new(KeyCode::Char('-'), KeyModifiers::empty()));
+    }
+
     let parts: Vec<&str> = s.split('-').collect();
     let mut modifiers = KeyModifiers::empty();
     let code_str = if parts.len() > 1 {
@@ -563,5 +568,124 @@ pub fn key_matches(event: KeyEvent, binding: &str) -> bool {
         event.code == target.code && event.modifiers == target.modifiers
     } else {
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_config_has_valid_bindings() {
+        let cfg = Config::default();
+        // All navigation bindings should parse successfully
+        for (action, binding) in &cfg.keybindings.navigation {
+            assert!(
+                parse_key_event(binding).is_some(),
+                "navigation binding '{}' = '{}' failed to parse",
+                action,
+                binding,
+            );
+        }
+    }
+
+    #[test]
+    fn test_all_default_sections_parse() {
+        let cfg = Config::default();
+        let sections: Vec<(&str, &HashMap<String, String>)> = vec![
+            ("navigation", &cfg.keybindings.navigation),
+            ("interaction", &cfg.keybindings.interaction),
+            ("diff", &cfg.keybindings.diff),
+            ("help", &cfg.keybindings.help),
+            ("fuzzy", &cfg.keybindings.fuzzy),
+            ("editor", &cfg.keybindings.editor),
+            ("commit", &cfg.keybindings.commit),
+            ("merge", &cfg.keybindings.merge),
+            ("new_tab", &cfg.keybindings.new_tab),
+            ("new_workspace", &cfg.keybindings.new_workspace),
+            ("file_list", &cfg.keybindings.file_list),
+            ("workspace_list", &cfg.keybindings.workspace_list),
+            ("about", &cfg.keybindings.about),
+            ("workspace_info", &cfg.keybindings.workspace_info),
+            ("markdown", &cfg.keybindings.markdown),
+        ];
+        for (section, bindings) in sections {
+            for (action, binding) in bindings {
+                assert!(
+                    parse_key_event(binding).is_some(),
+                    "section '{}' action '{}' = '{}' failed to parse",
+                    section,
+                    action,
+                    binding,
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_key_matches_ctrl_modifier() {
+        let event = KeyEvent::new(KeyCode::Char('g'), KeyModifiers::CONTROL);
+        assert!(key_matches(event, "ctrl-g"));
+        assert!(!key_matches(event, "g"));
+        assert!(!key_matches(event, "alt-g"));
+    }
+
+    #[test]
+    fn test_key_matches_no_match() {
+        let event = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::empty());
+        assert!(key_matches(event, "q"));
+        assert!(!key_matches(event, "w"));
+        assert!(!key_matches(event, "ctrl-q"));
+    }
+
+    #[test]
+    fn test_partial_toml_merge_with_defaults() {
+        let toml_str = r#"
+[keybindings.navigation]
+quit = "ctrl-q"
+"#;
+        let cfg: Config = toml::from_str(toml_str).unwrap();
+        // Overridden binding
+        assert_eq!(cfg.keybindings.navigation.get("quit").unwrap(), "ctrl-q");
+        // Other sections still get defaults
+        assert!(cfg.keybindings.help.contains_key("exit"));
+        assert!(cfg.keybindings.diff.contains_key("down"));
+    }
+
+    #[test]
+    fn test_invalid_toml_fallback() {
+        let result: Result<Config, _> = toml::from_str("{{invalid toml}}");
+        assert!(result.is_err());
+        // Config::load() would fall back to defaults — verify defaults are valid
+        let cfg = Config::default();
+        assert!(!cfg.keybindings.navigation.is_empty());
+    }
+
+    #[test]
+    fn test_get_binding_falls_back_to_default() {
+        let cfg = Config::default();
+        assert_eq!(cfg.get_binding("navigation", "quit"), "q");
+        assert_eq!(cfg.get_binding("navigation", "help"), "?");
+        // Unknown action returns "???"
+        assert_eq!(cfg.get_binding("navigation", "nonexistent"), "???");
+        // Unknown section returns "???"
+        assert_eq!(cfg.get_binding("nonexistent_section", "quit"), "???");
+    }
+
+    #[test]
+    fn test_matches_navigation_with_defaults() {
+        let cfg = Config::default();
+        let q_event = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::empty());
+        assert!(cfg.matches_navigation(q_event, "quit"));
+        assert!(!cfg.matches_navigation(q_event, "help"));
+    }
+
+    #[test]
+    fn test_generate_default_toml_roundtrips() {
+        let toml_str = Config::generate_default_toml();
+        let cfg: Config = toml::from_str(&toml_str).unwrap();
+        // Verify key bindings survived the roundtrip
+        assert_eq!(cfg.keybindings.navigation.get("quit").unwrap(), "q");
+        assert_eq!(cfg.keybindings.navigation.get("help").unwrap(), "?");
     }
 }

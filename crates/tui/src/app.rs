@@ -786,3 +786,253 @@ impl App {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+    fn key(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::empty())
+    }
+
+    fn ctrl(c: char) -> KeyEvent {
+        KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL)
+    }
+
+    #[test]
+    fn test_initial_state() {
+        let app = App::new();
+        assert_eq!(app.mode, AppMode::Normal);
+        assert_eq!(app.active_pane, ActivePane::WorkspaceList);
+        assert!(!app.interacting);
+        assert!(!app.should_quit);
+        assert!(app.workspaces.is_empty());
+    }
+
+    #[test]
+    fn test_normal_to_help_and_back() {
+        let mut app = App::new();
+        let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('?')));
+        assert!(action.is_none());
+        assert_eq!(app.mode, AppMode::Help);
+
+        // Esc returns to Normal
+        let action = crate::input::handle_key_event(&mut app, key(KeyCode::Esc));
+        assert!(action.is_none());
+        assert_eq!(app.mode, AppMode::Normal);
+    }
+
+    #[test]
+    fn test_normal_to_about_and_back() {
+        let mut app = App::new();
+        let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('a')));
+        assert!(action.is_none());
+        assert_eq!(app.mode, AppMode::About);
+
+        let action = crate::input::handle_key_event(&mut app, key(KeyCode::Esc));
+        assert!(action.is_none());
+        assert_eq!(app.mode, AppMode::Normal);
+    }
+
+    #[test]
+    fn test_normal_to_confirm_quit() {
+        let mut app = App::new();
+        let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('q')));
+        assert!(action.is_none());
+        assert_eq!(app.mode, AppMode::ConfirmQuit);
+    }
+
+    #[test]
+    fn test_confirm_quit_cancel() {
+        let mut app = App::new();
+        app.mode = AppMode::ConfirmQuit;
+        let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('n')));
+        assert!(action.is_none());
+        assert_eq!(app.mode, AppMode::Normal);
+        assert!(!app.should_quit);
+    }
+
+    #[test]
+    fn test_confirm_quit_accept() {
+        let mut app = App::new();
+        app.mode = AppMode::ConfirmQuit;
+        let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('y')));
+        assert!(action.is_none());
+        assert!(app.should_quit);
+    }
+
+    #[test]
+    fn test_normal_to_new_workspace() {
+        let mut app = App::new();
+        let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('n')));
+        assert!(action.is_none());
+        assert_eq!(app.mode, AppMode::NewWorkspace);
+    }
+
+    #[test]
+    fn test_new_workspace_cancel() {
+        let mut app = App::new();
+        app.mode = AppMode::NewWorkspace;
+        let action = crate::input::handle_key_event(&mut app, key(KeyCode::Esc));
+        assert!(action.is_none());
+        assert_eq!(app.mode, AppMode::Normal);
+    }
+
+    #[test]
+    fn test_normal_to_new_tab_requires_workspace() {
+        let mut app = App::new();
+        // No workspaces → pressing 't' should NOT enter NewTab mode
+        let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('t')));
+        assert!(action.is_none());
+        assert_eq!(app.mode, AppMode::Normal);
+    }
+
+    #[test]
+    fn test_new_workspace_tab_cycles_fields() {
+        let mut app = App::new();
+        app.mode = AppMode::NewWorkspace;
+        assert_eq!(app.active_dialog_field, DialogField::Name);
+
+        crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
+        assert_eq!(app.active_dialog_field, DialogField::Directory);
+
+        crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
+        assert_eq!(app.active_dialog_field, DialogField::Description);
+
+        crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
+        assert_eq!(app.active_dialog_field, DialogField::Prompt);
+
+        crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
+        assert_eq!(app.active_dialog_field, DialogField::KanbanPath);
+
+        crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
+        assert_eq!(app.active_dialog_field, DialogField::Name);
+    }
+
+    #[test]
+    fn test_new_workspace_char_appends_to_active_buffer() {
+        let mut app = App::new();
+        app.mode = AppMode::NewWorkspace;
+        app.active_dialog_field = DialogField::Name;
+
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('a')));
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('b')));
+        assert_eq!(app.input_buffer, "ab");
+        assert_eq!(app.input_cursor, 2);
+    }
+
+    #[test]
+    fn test_guard_no_edit_without_workspaces() {
+        let mut app = App::new();
+        // 'e' (edit workspace) should do nothing without workspaces
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('e')));
+        assert_eq!(app.mode, AppMode::Normal);
+    }
+
+    #[test]
+    fn test_guard_no_delete_without_workspaces() {
+        let mut app = App::new();
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('d')));
+        assert_eq!(app.mode, AppMode::Normal);
+    }
+
+    #[test]
+    fn test_guard_no_info_without_workspaces() {
+        let mut app = App::new();
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('i')));
+        assert_eq!(app.mode, AppMode::Normal);
+    }
+
+    #[test]
+    fn test_interacting_toggle() {
+        let mut app = App::new();
+        assert!(!app.interacting);
+
+        // Enter → interact
+        crate::input::handle_key_event(&mut app, key(KeyCode::Enter));
+        assert!(app.interacting);
+
+        // Ctrl-G → back to navigation
+        crate::input::handle_key_event(&mut app, ctrl('g'));
+        assert!(!app.interacting);
+    }
+
+    #[test]
+    fn test_help_scroll() {
+        let mut app = App::new();
+        app.mode = AppMode::Help;
+
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('j')));
+        assert_eq!(app.help_scroll, 1);
+
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('k')));
+        assert_eq!(app.help_scroll, 0);
+
+        // Page down
+        crate::input::handle_key_event(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL),
+        );
+        assert_eq!(app.help_scroll, 10);
+    }
+
+    #[test]
+    fn test_pane_navigation() {
+        let mut app = App::new();
+        assert_eq!(app.active_pane, ActivePane::WorkspaceList);
+
+        // j → down → GitStatus
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('j')));
+        assert_eq!(app.active_pane, ActivePane::GitStatus);
+
+        // l → right → MainPanel
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('l')));
+        assert_eq!(app.active_pane, ActivePane::MainPanel);
+
+        // h → left → GitStatus
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('h')));
+        assert_eq!(app.active_pane, ActivePane::GitStatus);
+
+        // k → up → WorkspaceList
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('k')));
+        assert_eq!(app.active_pane, ActivePane::WorkspaceList);
+    }
+
+    #[test]
+    fn test_toast_set_and_expire() {
+        let mut app = App::new();
+        app.set_toast("hello", ToastLevel::Info);
+        assert!(app.toast.is_some());
+        assert_eq!(app.toast.as_ref().unwrap().message, "hello");
+        assert_eq!(app.toast.as_ref().unwrap().level, ToastLevel::Info);
+
+        // Toast shouldn't be expired immediately
+        assert!(!app.expire_toast());
+    }
+
+    #[test]
+    fn test_toast_error_duration() {
+        let app_toast = Toast::new("err".to_string(), ToastLevel::Error);
+        assert_eq!(app_toast.duration, Duration::from_secs(5));
+
+        let info_toast = Toast::new("info".to_string(), ToastLevel::Info);
+        assert_eq!(info_toast.duration, Duration::from_secs(3));
+    }
+
+    #[test]
+    fn test_workspace_number_keys_with_empty_list() {
+        let mut app = App::new();
+        // Pressing '1' with no workspaces should not panic
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('1')));
+        assert_eq!(app.active_workspace, 0);
+        assert_eq!(app.mode, AppMode::Normal);
+    }
+
+    #[test]
+    fn test_commit_requires_workspace() {
+        let mut app = App::new();
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('c')));
+        assert_eq!(app.mode, AppMode::Normal); // No workspace → no commit dialog
+    }
+}

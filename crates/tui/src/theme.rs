@@ -554,4 +554,37 @@ mod tests {
         assert_eq!(theme.border.active_navigate, Color::Yellow);
         assert_eq!(theme.border.inactive, Color::DarkGray);
     }
+
+    #[test]
+    fn test_empty_toml_produces_defaults() {
+        let t: ThemeToml = toml::from_str("").unwrap();
+        let theme = Theme::from_toml(t);
+        let default = Theme::default();
+        assert_eq!(theme.border.active_interact, default.border.active_interact);
+        assert_eq!(theme.border.inactive, default.border.inactive);
+        assert_eq!(theme.file_list.modified, default.file_list.modified);
+        assert_eq!(theme.footer.key, default.footer.key);
+    }
+
+    #[test]
+    fn test_invalid_hex_falls_back_to_white() {
+        // "#gggggg" is 7 chars starting with '#' so it enters the hex branch,
+        // but invalid hex digits default to 255 → Rgb(255,255,255)
+        assert_eq!(parse_color("#gggggg"), Color::Rgb(255, 255, 255));
+        // "#short" is only 6 chars → doesn't match hex branch → falls through to White
+        assert_eq!(parse_color("#short"), Color::White);
+        assert_eq!(parse_color("not_a_color"), Color::White);
+    }
+
+    #[test]
+    fn test_section_override_preserves_other_sections() {
+        let toml_str = "[file_list]\nmodified = \"#aabbcc\"\n";
+        let t: ThemeToml = toml::from_str(toml_str).unwrap();
+        let theme = Theme::from_toml(t);
+        // Overridden
+        assert_eq!(theme.file_list.modified, Color::Rgb(0xaa, 0xbb, 0xcc));
+        // Other sections untouched
+        assert_eq!(theme.border.active_interact, Color::Green);
+        assert_eq!(theme.footer.key, Color::Yellow);
+    }
 }
