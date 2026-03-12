@@ -487,8 +487,8 @@ pub struct App {
     pub terminal_inner_area: Option<Rect>,
     /// Commit message buffer (for git commit dialog)
     pub commit_msg_buffer: String,
-    /// System info (CPU, RAM, battery, time)
-    pub sysinfo: std::sync::Arc<std::sync::Mutex<piki_core::sysinfo::SystemInfo>>,
+    /// Pre-formatted system info string (CPU, RAM, battery, time)
+    pub sysinfo: std::sync::Arc<parking_lot::Mutex<String>>,
     /// Sidebar width as percentage (10..=90)
     pub sidebar_pct: u16,
     /// Left panel vertical split: workspace list percentage (10..=90)
@@ -566,7 +566,7 @@ impl App {
             selection: None,
             terminal_inner_area: None,
             commit_msg_buffer: String::new(),
-            sysinfo: std::sync::Arc::new(std::sync::Mutex::new(piki_core::sysinfo::SystemInfo::default())),
+            sysinfo: std::sync::Arc::new(parking_lot::Mutex::new(String::new())),
             sidebar_pct: 20,
             left_split_pct: 50,
             resize_drag: None,

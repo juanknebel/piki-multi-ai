@@ -1,18 +1,19 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 use systemstat::{Platform, System};
 use tokio::time::{Duration, interval};
 
 #[derive(Clone, Default)]
-pub struct SystemInfo {
-    pub cpu_percent: f32,
-    pub mem_used_gb: f32,
-    pub mem_total_gb: f32,
-    pub battery_percent: Option<f32>,
-    pub battery_charging: bool,
+struct SystemInfo {
+    cpu_percent: f32,
+    mem_used_gb: f32,
+    mem_total_gb: f32,
+    battery_percent: Option<f32>,
+    battery_charging: bool,
 }
 
 impl SystemInfo {
-    pub fn format(&self) -> String {
+    fn format(&self) -> String {
         let cpu = format!("CPU {:.0}%", self.cpu_percent);
         let mem = format!(
             "RAM {:.1}/{:.1}G",
@@ -36,24 +37,24 @@ impl SystemInfo {
     }
 }
 
-pub fn spawn_sysinfo_poller() -> Arc<Mutex<SystemInfo>> {
-    let info = Arc::new(Mutex::new(SystemInfo::default()));
-    let info_clone = info.clone();
+pub fn spawn_sysinfo_poller() -> Arc<Mutex<String>> {
+    // Do a synchronous initial sample so the first frame isn't empty
+    let initial = sample_system_info().format();
+    let formatted = Arc::new(Mutex::new(initial));
+    let formatted_clone = formatted.clone();
 
     tokio::spawn(async move {
         let mut tick = interval(Duration::from_secs(3));
         loop {
             tick.tick().await;
-            let snapshot = tokio::task::spawn_blocking(sample_system_info)
+            let snapshot = tokio::task::spawn_blocking(|| sample_system_info().format())
                 .await
                 .unwrap_or_default();
-            if let Ok(mut guard) = info_clone.lock() {
-                *guard = snapshot;
-            }
+            *formatted_clone.lock() = snapshot;
         }
     });
 
-    info
+    formatted
 }
 
 fn sample_system_info() -> SystemInfo {

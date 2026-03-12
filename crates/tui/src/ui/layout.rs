@@ -614,11 +614,7 @@ fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 fn render_sysinfo_bar(frame: &mut Frame, area: Rect, app: &App) {
-    let text = if let Ok(info) = app.sysinfo.lock() {
-        info.format()
-    } else {
-        String::new()
-    };
+    let text = app.sysinfo.lock().clone();
 
     let spans: Vec<Span> = text
         .split(" | ")
