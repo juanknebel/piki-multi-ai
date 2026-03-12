@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
@@ -8,7 +10,7 @@ use ratatui::widgets::{Block, Borders, Paragraph};
 pub fn render(
     frame: &mut Frame,
     area: Rect,
-    content: &Option<Text<'static>>,
+    content: &Option<Arc<Text<'static>>>,
     scroll: u16,
     file_path: &str,
     border_style: Style,
@@ -16,7 +18,7 @@ pub fn render(
 ) {
     if let Some(text) = content {
         let title = format!(" DIFF: {} ", file_path);
-        let paragraph = Paragraph::new(text.clone())
+        let paragraph = Paragraph::new((**text).clone())
             .block(
                 Block::default()
                     .title(title)

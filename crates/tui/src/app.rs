@@ -258,6 +258,8 @@ pub struct FuzzyState {
     pub all_files: Vec<String>,
     pub results: Vec<FuzzyMatch>,
     pub selected: usize,
+    /// Whether the filter needs to be re-applied (set on keystroke, cleared on tick)
+    pub filter_stale: bool,
 }
 
 impl FuzzyState {
@@ -437,7 +439,7 @@ pub struct App {
     pub selected_workspace: usize,
     pub selected_file: usize,
     pub diff_scroll: u16,
-    pub diff_content: Option<Text<'static>>,
+    pub diff_content: Option<Arc<Text<'static>>>,
     pub diff_file_path: Option<String>,
     pub input_buffer: String,
     pub dir_input_buffer: String,
@@ -509,7 +511,7 @@ pub struct App {
     pub subtabs_area: Rect,
     pub main_content_area: Rect,
     /// Cache for rendered diff output, keyed by file path
-    pub diff_cache: std::collections::HashMap<String, Text<'static>>,
+    pub diff_cache: std::collections::HashMap<String, Arc<Text<'static>>>,
     /// Last time inactive workspace PTYs were checked for exit
     pub last_inactive_pty_check: Instant,
 }
@@ -582,7 +584,7 @@ impl App {
     }
 
     /// Insert a diff into the cache, clearing the entire cache if it exceeds the size limit.
-    pub fn insert_diff_cache(&mut self, key: String, value: Text<'static>) {
+    pub fn insert_diff_cache(&mut self, key: String, value: Arc<Text<'static>>) {
         if self.diff_cache.len() >= MAX_DIFF_CACHE_SIZE {
             self.diff_cache.clear();
         }
@@ -674,6 +676,7 @@ impl App {
             all_files: Vec::new(),
             results: Vec::new(),
             selected: 0,
+            filter_stale: false,
         });
         self.mode = AppMode::FuzzySearch;
 
