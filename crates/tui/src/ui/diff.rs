@@ -35,13 +35,15 @@ impl Widget for BorrowedDiff<'_> {
                     break;
                 }
                 let content = span.content.as_ref();
-                let display: &str = if content.len() > available {
-                    &content[..available]
-                } else {
-                    content
-                };
+                // Truncate at a char boundary to avoid panicking on
+                // multi-byte UTF-8 (e.g. box-drawing '─' is 3 bytes).
+                let (byte_end, char_count) = content
+                    .char_indices()
+                    .take(available)
+                    .fold((0, 0u16), |(_, count), (i, c)| (i + c.len_utf8(), count + 1));
+                let display = &content[..byte_end];
                 buf.set_string(x, y, display, span.style);
-                x += display.len() as u16;
+                x += char_count;
             }
         }
     }

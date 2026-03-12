@@ -122,6 +122,7 @@ fn default_navigation() -> HashMap<String, String> {
     m.insert("commit".to_string(), "c".to_string());
     m.insert("merge".to_string(), "M".to_string());
     m.insert("push".to_string(), "P".to_string());
+    m.insert("undo".to_string(), "ctrl-z".to_string());
 
     // Tabs & Workspaces
     m.insert("next_workspace".to_string(), "tab".to_string());

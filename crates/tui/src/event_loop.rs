@@ -156,13 +156,35 @@ pub(crate) async fn run(
                 }
             }
 
+            entry = app.undo_rx.recv() => {
+                if let Some(entry) = entry {
+                    app.undo_stack.push_back(entry);
+                    while let Ok(entry) = app.undo_rx.try_recv() {
+                        app.undo_stack.push_back(entry);
+                    }
+                    // Cap at 20 entries
+                    while app.undo_stack.len() > 20 {
+                        app.undo_stack.pop_front();
+                    }
+                }
+            }
+
             msg = app.status_rx.recv() => {
                 if let Some(msg) = msg {
-                    app.status_message = Some(msg);
+                    let mut last_msg = msg;
                     // Drain any additional messages, keep the last one
                     while let Ok(msg) = app.status_rx.try_recv() {
-                        app.status_message = Some(msg);
+                        last_msg = msg;
                     }
+                    // Infer toast level from message content
+                    let level = if last_msg.starts_with("✓") || last_msg.starts_with("Staged:") || last_msg.starts_with("Unstaged:") {
+                        app::ToastLevel::Success
+                    } else if last_msg.contains("failed") || last_msg.contains("error") || last_msg.contains("Error") {
+                        app::ToastLevel::Error
+                    } else {
+                        app::ToastLevel::Info
+                    };
+                    app.set_toast(last_msg, level);
                     app.needs_redraw = true;
                 }
             }
@@ -248,6 +270,11 @@ pub(crate) async fn run(
                 }
                 app.needs_redraw = true;
             }
+        }
+
+        // Expire toasts
+        if app.expire_toast() {
+            app.needs_redraw = true;
         }
 
         // Phase 4: Tick-gated periodic work

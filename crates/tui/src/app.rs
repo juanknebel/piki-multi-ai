@@ -1,7 +1,7 @@
 use parking_lot::Mutex;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use ratatui::layout::Rect;
 use ratatui::text::Text;
@@ -13,6 +13,57 @@ pub use piki_core::workspace::FileWatcher;
 pub use piki_core::{AIProvider, ChangedFile, FileStatus, WorkspaceStatus};
 
 use crate::theme::Theme;
+
+/// Toast notification level
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ToastLevel {
+    Info,
+    Success,
+    Error,
+}
+
+/// A timed notification message
+pub struct Toast {
+    pub message: String,
+    pub level: ToastLevel,
+    pub created_at: Instant,
+    pub duration: Duration,
+}
+
+impl Toast {
+    fn new(message: String, level: ToastLevel) -> Self {
+        let duration = match level {
+            ToastLevel::Error => Duration::from_secs(5),
+            _ => Duration::from_secs(3),
+        };
+        Self {
+            message,
+            level,
+            created_at: Instant::now(),
+            duration,
+        }
+    }
+
+    /// Whether this toast has expired
+    pub fn expired(&self) -> bool {
+        self.created_at.elapsed() >= self.duration
+    }
+}
+
+/// An undo-able git stage/unstage action
+#[derive(Debug, Clone)]
+pub enum UndoAction {
+    Stage,
+    Unstage,
+}
+
+/// Entry in the undo stack
+#[derive(Debug, Clone)]
+pub struct UndoEntry {
+    pub action: UndoAction,
+    pub workspace_idx: usize,
+    pub file_path: String,
+}
 
 /// Result of an async git refresh for a workspace
 pub struct RefreshResult {
@@ -444,6 +495,8 @@ pub struct App {
     pub info_hscroll: u16,
     pub active_dialog_field: DialogField,
     pub status_message: Option<String>,
+    /// Toast notification (replaces status_message for timed display)
+    pub toast: Option<Toast>,
     /// Index of workspace targeted for deletion (used by ConfirmDelete dialog)
     pub delete_target: Option<usize>,
     /// Index of tab targeted for closing (used by ConfirmCloseTab dialog)
@@ -489,6 +542,11 @@ pub struct App {
     pub status_rx: tokio::sync::mpsc::UnboundedReceiver<String>,
     /// Whether a background git refresh is in-flight
     pub refresh_pending: bool,
+    /// Channel for receiving completed undo entries from background git tasks
+    pub undo_tx: tokio::sync::mpsc::UnboundedSender<UndoEntry>,
+    pub undo_rx: tokio::sync::mpsc::UnboundedReceiver<UndoEntry>,
+    /// Undo stack (max 20 entries)
+    pub undo_stack: std::collections::VecDeque<UndoEntry>,
     /// Last left-click position and time (for double-click detection)
     pub last_click: Option<(Instant, u16, u16)>,
     /// Layout areas for mouse hit-testing
@@ -509,6 +567,7 @@ impl App {
     pub fn new() -> Self {
         let (refresh_tx, refresh_rx) = tokio::sync::mpsc::unbounded_channel::<RefreshResult>();
         let (status_tx, status_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+        let (undo_tx, undo_rx) = tokio::sync::mpsc::unbounded_channel::<UndoEntry>();
         Self {
             should_quit: false,
             mode: AppMode::Normal,
@@ -535,6 +594,7 @@ impl App {
             info_hscroll: 0,
             active_dialog_field: DialogField::Name,
             status_message: None,
+            toast: None,
             delete_target: None,
             close_tab_target: None,
             edit_target: None,
@@ -561,6 +621,9 @@ impl App {
             status_tx,
             status_rx,
             refresh_pending: false,
+            undo_tx,
+            undo_rx,
+            undo_stack: std::collections::VecDeque::new(),
             last_click: None,
             ws_list_area: Rect::default(),
             file_list_area: Rect::default(),
@@ -576,6 +639,23 @@ impl App {
     /// Insert a diff into the cache (LRU eviction handles size limit automatically).
     pub fn insert_diff_cache(&mut self, key: String, value: Arc<Text<'static>>) {
         self.diff_cache.put(key, value);
+    }
+
+    /// Set a toast notification, replacing any existing one.
+    pub fn set_toast(&mut self, message: impl Into<String>, level: ToastLevel) {
+        self.toast = Some(Toast::new(message.into(), level));
+        // Also keep status_message in sync for backward compatibility
+        self.status_message = self.toast.as_ref().map(|t| t.message.clone());
+    }
+
+    /// Expire the toast if its duration has passed. Returns true if expired.
+    pub fn expire_toast(&mut self) -> bool {
+        if self.toast.as_ref().is_some_and(|t| t.expired()) {
+            self.toast = None;
+            self.status_message = None;
+            return true;
+        }
+        false
     }
 
     pub fn current_workspace(&self) -> Option<&Workspace> {

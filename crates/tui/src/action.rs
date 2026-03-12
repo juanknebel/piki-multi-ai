@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use ratatui::DefaultTerminal;
 
-use crate::app::{self, ActivePane, App, AppMode};
+use crate::app::{self, ActivePane, App, AppMode, ToastLevel};
 use crate::helpers::{spawn_initial_shell, spawn_tab};
 use piki_core::workspace::config as ws_config;
 use piki_core::workspace::{FileWatcher, WorkspaceManager};
@@ -37,6 +37,8 @@ pub(crate) enum Action {
     OpenMdr(PathBuf),
     /// Git: merge workspace branch into main
     GitMerge(MergeStrategy),
+    /// Undo last stage/unstage action
+    Undo,
 }
 
 pub(crate) async fn execute_action(
@@ -113,7 +115,7 @@ pub(crate) async fn execute_action(
                         let _ = ws_config::save(&source, &infos);
                     });
                 }
-                app.status_message = Some("Workspace updated".into());
+                app.set_toast("Workspace updated", ToastLevel::Success);
             }
         }
         Action::DeleteWorkspace(idx) => {
@@ -286,11 +288,13 @@ pub(crate) async fn execute_action(
             }
         }
         Action::GitStage(file_idx) => {
-            if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+            let ws_idx = app.active_workspace;
+            if let Some(ws) = app.workspaces.get_mut(ws_idx) {
                 if let Some(file) = ws.changed_files.get(file_idx) {
                     let file_path = file.path.clone();
                     let worktree = ws.path.clone();
                     let status_tx = app.status_tx.clone();
+                    let undo_tx = app.undo_tx.clone();
                     app.status_message = Some(format!("Staging: {}", file_path));
                     ws.dirty = true;
                     ws.last_refresh = None;
@@ -302,7 +306,12 @@ pub(crate) async fn execute_action(
                             .await;
                         match output {
                             Ok(o) if o.status.success() => {
-                                let _ = status_tx.send(format!("Staged: {}", file_path));
+                                let _ = undo_tx.send(app::UndoEntry {
+                                    action: app::UndoAction::Stage,
+                                    workspace_idx: ws_idx,
+                                    file_path: file_path.clone(),
+                                });
+                                let _ = status_tx.send(format!("Staged: {} [C-z undo]", file_path));
                             }
                             Ok(o) => {
                                 let stderr = String::from_utf8_lossy(&o.stderr);
@@ -317,11 +326,13 @@ pub(crate) async fn execute_action(
             }
         }
         Action::GitUnstage(file_idx) => {
-            if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+            let ws_idx = app.active_workspace;
+            if let Some(ws) = app.workspaces.get_mut(ws_idx) {
                 if let Some(file) = ws.changed_files.get(file_idx) {
                     let file_path = file.path.clone();
                     let worktree = ws.path.clone();
                     let status_tx = app.status_tx.clone();
+                    let undo_tx = app.undo_tx.clone();
                     app.status_message = Some(format!("Unstaging: {}", file_path));
                     ws.dirty = true;
                     ws.last_refresh = None;
@@ -333,7 +344,12 @@ pub(crate) async fn execute_action(
                             .await;
                         match output {
                             Ok(o) if o.status.success() => {
-                                let _ = status_tx.send(format!("Unstaged: {}", file_path));
+                                let _ = undo_tx.send(app::UndoEntry {
+                                    action: app::UndoAction::Unstage,
+                                    workspace_idx: ws_idx,
+                                    file_path: file_path.clone(),
+                                });
+                                let _ = status_tx.send(format!("Unstaged: {} [C-z undo]", file_path));
                             }
                             Ok(o) => {
                                 let stderr = String::from_utf8_lossy(&o.stderr);
@@ -690,6 +706,81 @@ pub(crate) async fn execute_action(
             if app.mode == AppMode::FuzzySearch {
                 app.fuzzy = None;
                 app.mode = AppMode::Normal;
+            }
+        }
+        Action::Undo => {
+            if let Some(entry) = app.undo_stack.pop_back() {
+                // Validate workspace still exists
+                if let Some(ws) = app.workspaces.get_mut(entry.workspace_idx) {
+                    let worktree = ws.path.clone();
+                    let file_path = entry.file_path.clone();
+                    let status_tx = app.status_tx.clone();
+                    ws.dirty = true;
+                    ws.last_refresh = None;
+                    match entry.action {
+                        app::UndoAction::Stage => {
+                            // Undo a stage = unstage
+                            tokio::spawn(async move {
+                                let output = tokio::process::Command::new("git")
+                                    .args(["reset", "HEAD", &file_path])
+                                    .current_dir(&worktree)
+                                    .output()
+                                    .await;
+                                match output {
+                                    Ok(o) if o.status.success() => {
+                                        let _ = status_tx
+                                            .send(format!("✓ Undo stage: {}", file_path));
+                                    }
+                                    Ok(o) => {
+                                        let stderr = String::from_utf8_lossy(&o.stderr);
+                                        let _ = status_tx.send(format!(
+                                            "Undo failed: {}",
+                                            stderr.trim()
+                                        ));
+                                    }
+                                    Err(e) => {
+                                        let _ =
+                                            status_tx.send(format!("Undo error: {}", e));
+                                    }
+                                }
+                            });
+                        }
+                        app::UndoAction::Unstage => {
+                            // Undo an unstage = re-stage
+                            tokio::spawn(async move {
+                                let output = tokio::process::Command::new("git")
+                                    .args(["add", &file_path])
+                                    .current_dir(&worktree)
+                                    .output()
+                                    .await;
+                                match output {
+                                    Ok(o) if o.status.success() => {
+                                        let _ = status_tx
+                                            .send(format!("✓ Undo unstage: {}", file_path));
+                                    }
+                                    Ok(o) => {
+                                        let stderr = String::from_utf8_lossy(&o.stderr);
+                                        let _ = status_tx.send(format!(
+                                            "Undo failed: {}",
+                                            stderr.trim()
+                                        ));
+                                    }
+                                    Err(e) => {
+                                        let _ =
+                                            status_tx.send(format!("Undo error: {}", e));
+                                    }
+                                }
+                            });
+                        }
+                    }
+                } else {
+                    app.set_toast(
+                        "Undo failed: workspace no longer exists".to_string(),
+                        ToastLevel::Error,
+                    );
+                }
+            } else {
+                app.set_toast("Nothing to undo".to_string(), ToastLevel::Info);
             }
         }
     }

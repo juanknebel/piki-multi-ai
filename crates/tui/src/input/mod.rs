@@ -24,111 +24,73 @@ use self::interaction::{
 };
 
 pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
-    // Workspace info overlay — h/l or arrows for horizontal scroll, Esc/i to close
-    if app.mode == AppMode::WorkspaceInfo {
-        if app.config.matches_workspace_info(key, "right")
-            || app.config.matches_workspace_info(key, "right_alt")
-        {
-            app.info_hscroll = app.info_hscroll.saturating_add(4);
-        } else if app.config.matches_workspace_info(key, "left")
-            || app.config.matches_workspace_info(key, "left_alt")
-        {
-            app.info_hscroll = app.info_hscroll.saturating_sub(4);
-        } else if app.config.matches_workspace_info(key, "exit")
-            || app.config.matches_workspace_info(key, "exit_info")
-        {
-            app.info_hscroll = 0;
-            app.mode = AppMode::Normal;
-            // Re-enable mouse capture
-            let _ = crossterm::execute!(std::io::stderr(), crossterm::event::EnableMouseCapture);
+    // Modal dispatch — each mode captures all input
+    match app.mode {
+        AppMode::WorkspaceInfo => {
+            if app.config.matches_workspace_info(key, "right")
+                || app.config.matches_workspace_info(key, "right_alt")
+            {
+                app.info_hscroll = app.info_hscroll.saturating_add(4);
+            } else if app.config.matches_workspace_info(key, "left")
+                || app.config.matches_workspace_info(key, "left_alt")
+            {
+                app.info_hscroll = app.info_hscroll.saturating_sub(4);
+            } else if app.config.matches_workspace_info(key, "exit")
+                || app.config.matches_workspace_info(key, "exit_info")
+            {
+                app.info_hscroll = 0;
+                app.mode = AppMode::Normal;
+                let _ = crossterm::execute!(std::io::stderr(), crossterm::event::EnableMouseCapture);
+            }
+            return None;
         }
-        return None;
-    }
-
-    // About overlay — close with Esc
-    if app.mode == AppMode::About {
-        if app.config.matches_about(key, "exit") {
-            app.mode = AppMode::Normal;
+        AppMode::About => {
+            if app.config.matches_about(key, "exit") {
+                app.mode = AppMode::Normal;
+            }
+            return None;
         }
-        return None;
-    }
-
-    // Help overlay — scroll with j/k/arrows, close with Esc/q/?
-    if app.mode == AppMode::Help {
-        if app.config.matches_help(key, "down") || app.config.matches_help(key, "down_alt") {
-            app.help_scroll = app.help_scroll.saturating_add(1);
-        } else if app.config.matches_help(key, "up") || app.config.matches_help(key, "up_alt") {
-            app.help_scroll = app.help_scroll.saturating_sub(1);
-        } else if app.config.matches_help(key, "page_down") {
-            app.help_scroll = app.help_scroll.saturating_add(10);
-        } else if app.config.matches_help(key, "page_up") {
-            app.help_scroll = app.help_scroll.saturating_sub(10);
-        } else if app.config.matches_help(key, "scroll_top") {
-            app.help_scroll = 0;
-        } else if app.config.matches_help(key, "scroll_bottom") {
-            app.help_scroll = u16::MAX; // clamped during render
-        } else if app.config.matches_help(key, "exit")
-            || app.config.matches_help(key, "exit_alt")
-            || app.config.matches_help(key, "exit_help")
-        {
-            app.help_scroll = 0;
-            app.mode = AppMode::Normal;
+        AppMode::Help => {
+            if app.config.matches_help(key, "down") || app.config.matches_help(key, "down_alt") {
+                app.help_scroll = app.help_scroll.saturating_add(1);
+            } else if app.config.matches_help(key, "up")
+                || app.config.matches_help(key, "up_alt")
+            {
+                app.help_scroll = app.help_scroll.saturating_sub(1);
+            } else if app.config.matches_help(key, "page_down") {
+                app.help_scroll = app.help_scroll.saturating_add(10);
+            } else if app.config.matches_help(key, "page_up") {
+                app.help_scroll = app.help_scroll.saturating_sub(10);
+            } else if app.config.matches_help(key, "scroll_top") {
+                app.help_scroll = 0;
+            } else if app.config.matches_help(key, "scroll_bottom") {
+                app.help_scroll = u16::MAX;
+            } else if app.config.matches_help(key, "exit")
+                || app.config.matches_help(key, "exit_alt")
+                || app.config.matches_help(key, "exit_help")
+            {
+                app.help_scroll = 0;
+                app.mode = AppMode::Normal;
+            }
+            return None;
         }
-        return None;
+        AppMode::FuzzySearch => return handle_fuzzy_search_input(app, key),
+        AppMode::InlineEdit => return handle_inline_edit_input(app, key),
+        AppMode::NewWorkspace => return handle_new_workspace_input(app, key),
+        AppMode::EditWorkspace => return handle_edit_workspace_input(app, key),
+        AppMode::CommitMessage => return handle_commit_message_input(app, key),
+        AppMode::ConfirmMerge => return handle_confirm_merge_input(app, key),
+        AppMode::NewTab => return handle_new_tab_input(app, key),
+        AppMode::ConfirmCloseTab => return handle_confirm_close_tab_input(app, key),
+        AppMode::ConfirmQuit => return handle_confirm_quit_input(app, key),
+        AppMode::ConfirmDelete => return handle_confirm_delete_input(app, key),
+        // Normal and Diff modes fall through to navigation/interaction handling
+        AppMode::Normal | AppMode::Diff => {}
     }
 
-    // Fuzzy search overlay captures all input
-    if app.mode == AppMode::FuzzySearch {
-        return handle_fuzzy_search_input(app, key);
-    }
-
-    // Inline editor captures all input
-    if app.mode == AppMode::InlineEdit {
-        return handle_inline_edit_input(app, key);
-    }
-
-    // New workspace dialog captures all input
-    if app.mode == AppMode::NewWorkspace {
-        return handle_new_workspace_input(app, key);
-    }
-
-    // Edit workspace dialog captures all input
-    if app.mode == AppMode::EditWorkspace {
-        return handle_edit_workspace_input(app, key);
-    }
-
-    // Commit message dialog captures all input
-    if app.mode == AppMode::CommitMessage {
-        return handle_commit_message_input(app, key);
-    }
-
-    // Confirm merge dialog captures all input
-    if app.mode == AppMode::ConfirmMerge {
-        return handle_confirm_merge_input(app, key);
-    }
-
-    // New tab provider selection dialog
-    if app.mode == AppMode::NewTab {
-        return handle_new_tab_input(app, key);
-    }
-
-    // Confirm close tab dialog captures all input
-    if app.mode == AppMode::ConfirmCloseTab {
-        return handle_confirm_close_tab_input(app, key);
-    }
-
-    // Confirm quit dialog captures all input
-    if app.mode == AppMode::ConfirmQuit {
-        return handle_confirm_quit_input(app, key);
-    }
-
-    // Confirm delete dialog captures all input
-    if app.mode == AppMode::ConfirmDelete {
-        return handle_confirm_delete_input(app, key);
-    }
-
-    // Clear status message and selection on any key
+    // Clear status message, toast, and selection on any key
     app.status_message = None;
+    app.toast = None;
     app.selection = None;
 
     if app.interacting {
@@ -245,6 +207,8 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
         if app.current_workspace().is_some() {
             return Some(Action::GitPush);
         }
+    } else if app.config.matches_navigation(key, "undo") {
+        return Some(Action::Undo);
     } else if app.config.matches_navigation(key, "next_workspace") {
         app.next_workspace();
     } else if app.config.matches_navigation(key, "prev_workspace") {

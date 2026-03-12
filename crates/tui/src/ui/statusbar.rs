@@ -4,11 +4,18 @@ use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
-use crate::app::{ActivePane, App, AppMode};
+use crate::app::{ActivePane, App, AppMode, ToastLevel};
 
-pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
+pub(crate) fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
     let theme = &app.theme.status_bar;
-    let content = if let Some(msg) = &app.status_message {
+    let content = if let Some(ref toast) = app.toast {
+        let (bg, fg) = match toast.level {
+            ToastLevel::Info => (theme.navigate_bg, theme.mode_fg),
+            ToastLevel::Success => (theme.interact_bg, theme.mode_fg),
+            ToastLevel::Error => (theme.error_bg, theme.error_fg),
+        };
+        Span::styled(format!(" {} ", toast.message), Style::default().bg(bg).fg(fg))
+    } else if let Some(msg) = &app.status_message {
         Span::styled(
             format!(" {} ", msg),
             Style::default().bg(theme.error_bg).fg(theme.error_fg),
@@ -295,6 +302,7 @@ pub(super) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                     keys.push((cfg.get_binding("navigation", "commit"), "commit"));
                     keys.push((cfg.get_binding("navigation", "push"), "push"));
                     keys.push((cfg.get_binding("navigation", "merge"), "merge"));
+                    keys.push((cfg.get_binding("navigation", "undo"), "undo"));
                 }
                 ActivePane::MainPanel => {
                     keys.push((cfg.get_binding("navigation", "new_tab"), "new tab"));

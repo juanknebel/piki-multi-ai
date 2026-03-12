@@ -13,12 +13,67 @@ fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
     Rect::new(x, y, width.min(area.width), height.min(area.height))
 }
 
+/// Clear background for a centered popup, returning the popup Rect.
+fn clear_popup(frame: &mut Frame, area: Rect, width: u16, height: u16) -> Rect {
+    let popup = centered_rect(width, height, area);
+    frame.render_widget(ratatui::widgets::Clear, popup);
+    popup
+}
+
+/// Build a standard bordered block for popups.
+fn popup_block(title: &str, border_color: Color) -> Block<'static> {
+    Block::default()
+        .title(format!(" {} ", title))
+        .title_style(Style::default().fg(border_color))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(border_color))
+}
+
+/// Auto-scrolling text field display. Shows cursor block when active.
+fn visible_field(text: &str, active: bool, cursor: usize, field_max: usize) -> String {
+    if !active {
+        if text.len() > field_max && field_max > 2 {
+            return format!("…{}", &text[text.len() - (field_max - 1)..]);
+        }
+        return text.to_string();
+    }
+    let before: String = text.chars().take(cursor).collect();
+    let after: String = text.chars().skip(cursor).collect();
+    let full = format!("{}█{}", before, after);
+    if full.chars().count() > field_max && field_max > 2 {
+        let chars: Vec<char> = full.chars().collect();
+        let cursor_display = before.chars().count();
+        let start = if cursor_display + 2 > field_max {
+            cursor_display + 2 - field_max
+        } else {
+            0
+        };
+        let visible: String = chars[start..chars.len().min(start + field_max - 1)]
+            .iter()
+            .collect();
+        format!("…{}", visible)
+    } else {
+        full
+    }
+}
+
+/// Generic Y/N confirmation dialog.
+fn render_yn_dialog(frame: &mut Frame, area: Rect, title: &str, message: &str, border_color: Color, hint_color: Color) {
+    let popup = clear_popup(frame, area, 40, 7);
+    let lines = vec![
+        Line::from(""),
+        Line::from(Span::styled(message, Style::default().fg(Color::White))).centered(),
+        Line::from(""),
+        Line::from(Span::styled("[Y] Yes    [N] No", Style::default().fg(hint_color))).centered(),
+    ];
+    let text = Paragraph::new(lines).block(popup_block(title, border_color));
+    frame.render_widget(text, popup);
+}
+
 pub(super) fn render_diff_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let width = area.width * 90 / 100;
     let height = area.height * 85 / 100;
-    let popup = centered_rect(width, height, area);
-
-    frame.render_widget(ratatui::widgets::Clear, popup);
+    let popup = clear_popup(frame, area, width, height);
 
     let file_path = app.diff_file_path.as_deref().unwrap_or("?");
     let border_style = Style::default().fg(app.theme.diff.border);
@@ -35,17 +90,8 @@ pub(super) fn render_diff_overlay(frame: &mut Frame, area: Rect, app: &App) {
 
 pub(super) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
     let popup_width = area.width * 70 / 100;
-    let popup = centered_rect(popup_width.max(40), 17, area);
+    let popup = clear_popup(frame, area, popup_width.max(40), 17);
     let theme = &app.theme.dialog;
-
-    // Clear background
-    frame.render_widget(ratatui::widgets::Clear, popup);
-
-    let block = Block::default()
-        .title(" New Workspace ")
-        .title_style(Style::default().fg(theme.new_ws_border))
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.new_ws_border));
 
     let field_style = |active: bool| {
         if active {
@@ -54,37 +100,8 @@ pub(super) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
             Style::default().fg(theme.new_ws_inactive)
         }
     };
-    // Auto-scroll: show the tail of text when it exceeds available width
-    let label_width = 10_u16; // "  Name: " = 8 + some padding
-    let field_max = popup.width.saturating_sub(label_width + 2) as usize; // borders
-    let visible_field = |text: &str, active: bool, cursor: usize| -> String {
-        if !active {
-            if text.len() > field_max && field_max > 2 {
-                return format!("…{}", &text[text.len() - (field_max - 1)..]);
-            }
-            return text.to_string();
-        }
-        // Insert cursor block at position
-        let before: String = text.chars().take(cursor).collect();
-        let after: String = text.chars().skip(cursor).collect();
-        let full = format!("{}█{}", before, after);
-        if full.chars().count() > field_max && field_max > 2 {
-            // Scroll to keep cursor visible
-            let chars: Vec<char> = full.chars().collect();
-            let cursor_display = before.chars().count(); // cursor block is at this index
-            let start = if cursor_display + 2 > field_max {
-                cursor_display + 2 - field_max
-            } else {
-                0
-            };
-            let visible: String = chars[start..chars.len().min(start + field_max - 1)]
-                .iter()
-                .collect();
-            format!("…{}", visible)
-        } else {
-            full
-        }
-    };
+    let label_width = 10_u16;
+    let fmax = popup.width.saturating_sub(label_width + 2) as usize;
 
     let name_active = app.active_dialog_field == DialogField::Name;
     let dir_active = app.active_dialog_field == DialogField::Directory;
@@ -95,74 +112,40 @@ pub(super) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
     let lines = vec![
         Line::from(vec![
             Span::styled("  Name:   ", field_style(name_active)),
-            Span::styled(
-                visible_field(&app.input_buffer, name_active, app.input_cursor),
-                field_style(name_active),
-            ),
+            Span::styled(visible_field(&app.input_buffer, name_active, app.input_cursor, fmax), field_style(name_active)),
         ]),
         Line::from(""),
         Line::from(vec![
             Span::styled("  Dir:    ", field_style(dir_active)),
-            Span::styled(
-                visible_field(&app.dir_input_buffer, dir_active, app.dir_input_cursor),
-                field_style(dir_active),
-            ),
+            Span::styled(visible_field(&app.dir_input_buffer, dir_active, app.dir_input_cursor, fmax), field_style(dir_active)),
         ]),
         Line::from(""),
         Line::from(vec![
             Span::styled("  Desc:   ", field_style(desc_active)),
-            Span::styled(
-                visible_field(&app.desc_input_buffer, desc_active, app.desc_input_cursor),
-                field_style(desc_active),
-            ),
+            Span::styled(visible_field(&app.desc_input_buffer, desc_active, app.desc_input_cursor, fmax), field_style(desc_active)),
         ]),
         Line::from(""),
         Line::from(vec![
             Span::styled("  Prompt: ", field_style(prompt_active)),
-            Span::styled(
-                visible_field(
-                    &app.prompt_input_buffer,
-                    prompt_active,
-                    app.prompt_input_cursor,
-                ),
-                field_style(prompt_active),
-            ),
+            Span::styled(visible_field(&app.prompt_input_buffer, prompt_active, app.prompt_input_cursor, fmax), field_style(prompt_active)),
         ]),
         Line::from(""),
         Line::from(vec![
             Span::styled("  Kanban: ", field_style(kanban_active)),
-            Span::styled(
-                visible_field(
-                    &app.kanban_input_buffer,
-                    kanban_active,
-                    app.kanban_input_cursor,
-                ),
-                field_style(kanban_active),
-            ),
+            Span::styled(visible_field(&app.kanban_input_buffer, kanban_active, app.kanban_input_cursor, fmax), field_style(kanban_active)),
         ]),
         Line::from(""),
-        Line::from(vec![Span::styled(
-            "  [Esc] Cancel",
-            Style::default().fg(theme.new_ws_inactive),
-        )]),
+        Line::from(vec![Span::styled("  [Esc] Cancel", Style::default().fg(theme.new_ws_inactive))]),
     ];
 
-    let text = Paragraph::new(lines).block(block);
+    let text = Paragraph::new(lines).block(popup_block("New Workspace", theme.new_ws_border));
     frame.render_widget(text, popup);
 }
 
 pub(super) fn render_edit_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
     let popup_width = area.width * 70 / 100;
-    let popup = centered_rect(popup_width.max(40), 11, area);
+    let popup = clear_popup(frame, area, popup_width.max(40), 11);
     let theme = &app.theme.dialog;
-
-    frame.render_widget(ratatui::widgets::Clear, popup);
-
-    let block = Block::default()
-        .title(" Edit Workspace ")
-        .title_style(Style::default().fg(theme.new_ws_border))
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.new_ws_border));
 
     let field_style = |active: bool| {
         if active {
@@ -171,35 +154,8 @@ pub(super) fn render_edit_workspace_dialog(frame: &mut Frame, area: Rect, app: &
             Style::default().fg(theme.new_ws_inactive)
         }
     };
-
     let label_width = 10_u16;
-    let field_max = popup.width.saturating_sub(label_width + 2) as usize;
-    let visible_field = |text: &str, active: bool, cursor: usize| -> String {
-        if !active {
-            if text.len() > field_max && field_max > 2 {
-                return format!("…{}", &text[text.len() - (field_max - 1)..]);
-            }
-            return text.to_string();
-        }
-        let before: String = text.chars().take(cursor).collect();
-        let after: String = text.chars().skip(cursor).collect();
-        let full = format!("{}█{}", before, after);
-        if full.chars().count() > field_max && field_max > 2 {
-            let chars: Vec<char> = full.chars().collect();
-            let cursor_display = before.chars().count();
-            let start = if cursor_display + 2 > field_max {
-                cursor_display + 2 - field_max
-            } else {
-                0
-            };
-            let visible: String = chars[start..chars.len().min(start + field_max - 1)]
-                .iter()
-                .collect();
-            format!("…{}", visible)
-        } else {
-            full
-        }
-    };
+    let fmax = popup.width.saturating_sub(label_width + 2) as usize;
 
     let kanban_active = app.active_dialog_field == DialogField::KanbanPath;
     let prompt_active = app.active_dialog_field == DialogField::Prompt;
@@ -207,43 +163,25 @@ pub(super) fn render_edit_workspace_dialog(frame: &mut Frame, area: Rect, app: &
     let lines = vec![
         Line::from(vec![
             Span::styled("  Kanban: ", field_style(kanban_active)),
-            Span::styled(
-                visible_field(
-                    &app.kanban_input_buffer,
-                    kanban_active,
-                    app.kanban_input_cursor,
-                ),
-                field_style(kanban_active),
-            ),
+            Span::styled(visible_field(&app.kanban_input_buffer, kanban_active, app.kanban_input_cursor, fmax), field_style(kanban_active)),
         ]),
         Line::from(""),
         Line::from(vec![
             Span::styled("  Prompt: ", field_style(prompt_active)),
-            Span::styled(
-                visible_field(
-                    &app.prompt_input_buffer,
-                    prompt_active,
-                    app.prompt_input_cursor,
-                ),
-                field_style(prompt_active),
-            ),
+            Span::styled(visible_field(&app.prompt_input_buffer, prompt_active, app.prompt_input_cursor, fmax), field_style(prompt_active)),
         ]),
         Line::from(""),
-        Line::from(vec![Span::styled(
-            "  [Esc] Cancel",
-            Style::default().fg(theme.new_ws_inactive),
-        )]),
+        Line::from(vec![Span::styled("  [Esc] Cancel", Style::default().fg(theme.new_ws_inactive))]),
     ];
 
-    let text = Paragraph::new(lines).block(block);
+    let text = Paragraph::new(lines).block(popup_block("Edit Workspace", theme.new_ws_border));
     frame.render_widget(text, popup);
 }
 
 pub(super) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let theme = &app.theme;
     let cfg = &app.config;
-    let popup = centered_rect(55, 62, area);
-    frame.render_widget(ratatui::widgets::Clear, popup);
+    let popup = clear_popup(frame, area, 55, 62);
 
     let help_text = vec![
         "".to_string(),
@@ -500,11 +438,7 @@ pub(super) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         ),
     ];
 
-    let block = Block::default()
-        .title(" Help ")
-        .title_style(Style::default().fg(theme.help.border))
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.help.border));
+    let block = popup_block("Help", theme.help.border);
 
     let total_lines = help_text.len() as u16;
     let inner_height = popup.height.saturating_sub(2); // borders
@@ -532,12 +466,9 @@ pub(super) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 pub(super) fn render_about_overlay(frame: &mut Frame, area: Rect, app: &App) {
-    let theme = &app.theme;
-    let popup = centered_rect(50, 20, area);
-    frame.render_widget(ratatui::widgets::Clear, popup);
+    let popup = clear_popup(frame, area, 50, 20);
 
     let version = env!("CARGO_PKG_VERSION");
-
     let version_line = format!("piki-multi-ai v{version}");
     let about_lines: Vec<Line> = vec![
         Line::from(""),
@@ -559,14 +490,8 @@ pub(super) fn render_about_overlay(frame: &mut Frame, area: Rect, app: &App) {
         Line::from("Press Esc to close"),
     ];
 
-    let block = Block::default()
-        .title(" About ")
-        .title_style(Style::default().fg(theme.help.border))
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.help.border));
-
     let text = Paragraph::new(about_lines)
-        .block(block)
+        .block(popup_block("About", app.theme.help.border))
         .alignment(ratatui::layout::Alignment::Center);
     frame.render_widget(text, popup);
 }
@@ -646,19 +571,9 @@ pub(super) fn render_workspace_info_overlay(frame: &mut Frame, area: Rect, app: 
     )));
 
     let height = (lines.len() as u16 + 2).min(area.height);
-    let popup = centered_rect(70, height, area);
-    frame.render_widget(ratatui::widgets::Clear, popup);
+    let popup = clear_popup(frame, area, 70, height);
 
-    let title = format!(" {} ", ws.name);
-    let block = Block::default()
-        .title(title)
-        .title_style(
-            Style::default()
-                .fg(theme.help.border)
-                .add_modifier(Modifier::BOLD),
-        )
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.help.border));
+    let block = popup_block(&ws.name, theme.help.border);
 
     let text = Paragraph::new(lines)
         .block(block)
@@ -667,8 +582,7 @@ pub(super) fn render_workspace_info_overlay(frame: &mut Frame, area: Rect, app: 
 }
 
 pub(super) fn render_confirm_delete_dialog(frame: &mut Frame, area: Rect, app: &App) {
-    let popup = centered_rect(50, 9, area);
-    frame.render_widget(ratatui::widgets::Clear, popup);
+    let popup = clear_popup(frame, area, 50, 9);
     let theme = &app.theme.dialog;
 
     let ws_name = app
@@ -676,12 +590,6 @@ pub(super) fn render_confirm_delete_dialog(frame: &mut Frame, area: Rect, app: &
         .and_then(|idx| app.workspaces.get(idx))
         .map(|ws| ws.name.as_str())
         .unwrap_or("?");
-
-    let block = Block::default()
-        .title(" Delete Workspace ")
-        .title_style(Style::default().fg(theme.delete_border))
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.delete_border));
 
     let lines = vec![
         Line::from(""),
@@ -710,15 +618,12 @@ pub(super) fn render_confirm_delete_dialog(frame: &mut Frame, area: Rect, app: &
         )),
     ];
 
-    let text = Paragraph::new(lines).block(block);
+    let text = Paragraph::new(lines).block(popup_block("Delete Workspace", theme.delete_border));
     frame.render_widget(text, popup);
 }
 
-pub(super) fn render_confirm_close_tab_dialog(frame: &mut Frame, area: Rect, app: &App) {
-    let popup = centered_rect(40, 7, area);
-    frame.render_widget(ratatui::widgets::Clear, popup);
+pub(crate) fn render_confirm_close_tab_dialog(frame: &mut Frame, area: Rect, app: &App) {
     let theme = &app.theme.dialog;
-
     let tab_name = app
         .close_tab_target
         .and_then(|idx| {
@@ -727,74 +632,18 @@ pub(super) fn render_confirm_close_tab_dialog(frame: &mut Frame, area: Rect, app
                 .map(|t| format!("{:?}", t.provider))
         })
         .unwrap_or_default();
-
-    let block = Block::default()
-        .title(" Close Tab ")
-        .title_style(Style::default().fg(theme.delete_border))
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.delete_border));
-
-    let lines = vec![
-        Line::from(""),
-        Line::from(Span::styled(
-            format!("Close tab \"{}\"?", tab_name),
-            Style::default().fg(theme.delete_text),
-        ))
-        .centered(),
-        Line::from(""),
-        Line::from(Span::styled(
-            "[Y] Yes    [N] No",
-            Style::default().fg(theme.delete_cancel),
-        ))
-        .centered(),
-    ];
-
-    let text = Paragraph::new(lines).block(block);
-    frame.render_widget(text, popup);
+    render_yn_dialog(frame, area, "Close Tab", &format!("Close tab \"{}\"?", tab_name), theme.delete_border, theme.delete_cancel);
 }
 
-pub(super) fn render_confirm_quit_dialog(frame: &mut Frame, area: Rect, app: &App) {
-    let popup = centered_rect(40, 7, area);
-    frame.render_widget(ratatui::widgets::Clear, popup);
+pub(crate) fn render_confirm_quit_dialog(frame: &mut Frame, area: Rect, app: &App) {
     let theme = &app.theme.dialog;
-
-    let block = Block::default()
-        .title(" Quit ")
-        .title_style(Style::default().fg(theme.delete_border))
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.delete_border));
-
-    let lines = vec![
-        Line::from(""),
-        Line::from(Span::styled(
-            "Are you sure you want to quit?",
-            Style::default().fg(theme.delete_text),
-        ))
-        .centered(),
-        Line::from(""),
-        Line::from(Span::styled(
-            "[Y] Yes    [N] No",
-            Style::default().fg(theme.delete_cancel),
-        ))
-        .centered(),
-    ];
-
-    let text = Paragraph::new(lines).block(block);
-    frame.render_widget(text, popup);
+    render_yn_dialog(frame, area, "Quit", "Are you sure you want to quit?", theme.delete_border, theme.delete_cancel);
 }
 
 pub(super) fn render_commit_dialog(frame: &mut Frame, area: Rect, app: &App) {
     let popup_width = area.width * 60 / 100;
-    let popup = centered_rect(popup_width.max(40), 7, area);
+    let popup = clear_popup(frame, area, popup_width.max(40), 7);
     let theme = &app.theme.dialog;
-
-    frame.render_widget(ratatui::widgets::Clear, popup);
-
-    let block = Block::default()
-        .title(" Commit ")
-        .title_style(Style::default().fg(theme.new_ws_border))
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.new_ws_border));
 
     let field_max = popup.width.saturating_sub(14) as usize;
     let cursor = "█";
@@ -818,25 +667,18 @@ pub(super) fn render_commit_dialog(frame: &mut Frame, area: Rect, app: &App) {
         )),
     ];
 
-    let text = Paragraph::new(lines).block(block);
+    let text = Paragraph::new(lines).block(popup_block("Commit", theme.new_ws_border));
     frame.render_widget(text, popup);
 }
 
 pub(super) fn render_confirm_merge_dialog(frame: &mut Frame, area: Rect, app: &App) {
-    let popup = centered_rect(50, 9, area);
-    frame.render_widget(ratatui::widgets::Clear, popup);
+    let popup = clear_popup(frame, area, 50, 9);
     let theme = &app.theme.dialog;
 
     let branch_name = app
         .current_workspace()
         .map(|ws| ws.branch.as_str())
         .unwrap_or("?");
-
-    let block = Block::default()
-        .title(" Merge ")
-        .title_style(Style::default().fg(theme.new_ws_border))
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(theme.new_ws_border));
 
     let lines = vec![
         Line::from(""),
@@ -865,19 +707,12 @@ pub(super) fn render_confirm_merge_dialog(frame: &mut Frame, area: Rect, app: &A
         )),
     ];
 
-    let text = Paragraph::new(lines).block(block);
+    let text = Paragraph::new(lines).block(popup_block("Merge", theme.new_ws_border));
     frame.render_widget(text, popup);
 }
 
-pub(super) fn render_new_tab_dialog(frame: &mut Frame, area: Rect) {
-    let popup = centered_rect(40, 11, area);
-    frame.render_widget(ratatui::widgets::Clear, popup);
-
-    let block = Block::default()
-        .title(" New Tab ")
-        .title_style(Style::default().fg(Color::Cyan))
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan));
+pub(crate) fn render_new_tab_dialog(frame: &mut Frame, area: Rect) {
+    let popup = clear_popup(frame, area, 40, 11);
 
     let lines = vec![
         Line::from(""),
@@ -892,6 +727,6 @@ pub(super) fn render_new_tab_dialog(frame: &mut Frame, area: Rect) {
         Line::from("  [Esc] Cancel"),
     ];
 
-    let text = Paragraph::new(lines).block(block);
+    let text = Paragraph::new(lines).block(popup_block("New Tab", Color::Cyan));
     frame.render_widget(text, popup);
 }

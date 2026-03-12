@@ -6,6 +6,76 @@ use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField};
 use piki_core::{AIProvider, MergeStrategy};
 
+/// Result of processing a text input key event
+enum TextInputResult {
+    /// Key was consumed by text editing
+    Consumed,
+    /// Key was not a text editing key
+    NotConsumed,
+}
+
+/// Handle common text editing keys (Char, Backspace, Delete, Left, Right, Home, End).
+/// `validator` returns true if the char should be inserted.
+fn handle_text_input(
+    buf: &mut String,
+    cursor: &mut usize,
+    key: KeyEvent,
+    validator: impl Fn(char) -> bool,
+) -> TextInputResult {
+    match key.code {
+        KeyCode::Char(c) => {
+            if validator(c) {
+                let byte_idx = buf
+                    .char_indices()
+                    .nth(*cursor)
+                    .map_or(buf.len(), |(i, _)| i);
+                buf.insert(byte_idx, c);
+                *cursor += 1;
+            }
+            TextInputResult::Consumed
+        }
+        KeyCode::Backspace => {
+            if *cursor > 0 {
+                *cursor -= 1;
+                let byte_idx = buf
+                    .char_indices()
+                    .nth(*cursor)
+                    .map_or(buf.len(), |(i, _)| i);
+                buf.remove(byte_idx);
+            }
+            TextInputResult::Consumed
+        }
+        KeyCode::Delete => {
+            if let Some((byte_idx, _)) = buf.char_indices().nth(*cursor) {
+                buf.remove(byte_idx);
+            }
+            TextInputResult::Consumed
+        }
+        KeyCode::Left => {
+            if *cursor > 0 {
+                *cursor -= 1;
+            }
+            TextInputResult::Consumed
+        }
+        KeyCode::Right => {
+            let len = buf.chars().count();
+            if *cursor < len {
+                *cursor += 1;
+            }
+            TextInputResult::Consumed
+        }
+        KeyCode::Home => {
+            *cursor = 0;
+            TextInputResult::Consumed
+        }
+        KeyCode::End => {
+            *cursor = buf.chars().count();
+            TextInputResult::Consumed
+        }
+        _ => TextInputResult::NotConsumed,
+    }
+}
+
 fn dialog_buf_and_cursor(app: &mut App) -> (&mut String, &mut usize) {
     match app.active_dialog_field {
         DialogField::Name => (&mut app.input_buffer, &mut app.input_cursor),
@@ -16,6 +86,11 @@ fn dialog_buf_and_cursor(app: &mut App) -> (&mut String, &mut usize) {
     }
 }
 
+fn is_cancel(key: KeyEvent) -> bool {
+    key.code == KeyCode::Esc
+        || (key.code == KeyCode::Char('g') && key.modifiers.contains(KeyModifiers::CONTROL))
+}
+
 pub(super) fn handle_edit_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     match key.code {
         KeyCode::Tab | KeyCode::BackTab => {
@@ -23,60 +98,7 @@ pub(super) fn handle_edit_workspace_input(app: &mut App, key: KeyEvent) -> Optio
                 DialogField::KanbanPath => DialogField::Prompt,
                 _ => DialogField::KanbanPath,
             };
-        }
-        KeyCode::Char(c) => {
-            if !c.is_control() {
-                let (buf, cursor) = dialog_buf_and_cursor(app);
-                let byte_idx = buf
-                    .char_indices()
-                    .nth(*cursor)
-                    .map_or(buf.len(), |(i, _)| i);
-                buf.insert(byte_idx, c);
-                *cursor += 1;
-            }
-        }
-        KeyCode::Backspace => {
-            let (buf, cursor) = dialog_buf_and_cursor(app);
-            if *cursor > 0 {
-                *cursor -= 1;
-                let byte_idx = buf
-                    .char_indices()
-                    .nth(*cursor)
-                    .map_or(buf.len(), |(i, _)| i);
-                buf.remove(byte_idx);
-            }
-        }
-        KeyCode::Delete => {
-            let (buf, cursor) = dialog_buf_and_cursor(app);
-            let len = buf.chars().count();
-            if *cursor < len {
-                let byte_idx = buf
-                    .char_indices()
-                    .nth(*cursor)
-                    .map_or(buf.len(), |(i, _)| i);
-                buf.remove(byte_idx);
-            }
-        }
-        KeyCode::Left => {
-            let (_, cursor) = dialog_buf_and_cursor(app);
-            if *cursor > 0 {
-                *cursor -= 1;
-            }
-        }
-        KeyCode::Right => {
-            let (buf, cursor) = dialog_buf_and_cursor(app);
-            let len = buf.chars().count();
-            if *cursor < len {
-                *cursor += 1;
-            }
-        }
-        KeyCode::Home => {
-            let (_, cursor) = dialog_buf_and_cursor(app);
-            *cursor = 0;
-        }
-        KeyCode::End => {
-            let (buf, cursor) = dialog_buf_and_cursor(app);
-            *cursor = buf.chars().count();
+            return None;
         }
         KeyCode::Enter => {
             let kanban_path_raw = app.kanban_input_buffer.trim();
@@ -95,19 +117,20 @@ pub(super) fn handle_edit_workspace_input(app: &mut App, key: KeyEvent) -> Optio
             app.mode = AppMode::Normal;
             return Some(Action::EditWorkspace(idx, kanban_path, prompt));
         }
-        _ if key.code == KeyCode::Esc
-            || (key.code == KeyCode::Char('g')
-                && key.modifiers.contains(KeyModifiers::CONTROL)) =>
-        {
+        _ if is_cancel(key) => {
             app.edit_target = None;
             app.kanban_input_buffer.clear();
             app.prompt_input_buffer.clear();
             app.kanban_input_cursor = 0;
             app.prompt_input_cursor = 0;
             app.mode = AppMode::Normal;
+            return None;
         }
         _ => {}
     }
+
+    let (buf, cursor) = dialog_buf_and_cursor(app);
+    handle_text_input(buf, cursor, key, |c| !c.is_control());
     None
 }
 
@@ -121,61 +144,7 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
                 DialogField::Prompt => DialogField::KanbanPath,
                 DialogField::KanbanPath => DialogField::Name,
             };
-        }
-        KeyCode::Char(c) => {
-            let valid = match app.active_dialog_field {
-                DialogField::Name => {
-                    c.is_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '/'
-                }
-                _ => !c.is_control(),
-            };
-            if valid {
-                let (buf, cursor) = dialog_buf_and_cursor(app);
-                let byte_idx = buf
-                    .char_indices()
-                    .nth(*cursor)
-                    .map_or(buf.len(), |(i, _)| i);
-                buf.insert(byte_idx, c);
-                *cursor += 1;
-            }
-        }
-        KeyCode::Backspace => {
-            let (buf, cursor) = dialog_buf_and_cursor(app);
-            if *cursor > 0 {
-                let byte_idx = buf
-                    .char_indices()
-                    .nth(*cursor - 1)
-                    .map_or(buf.len(), |(i, _)| i);
-                buf.remove(byte_idx);
-                *cursor -= 1;
-            }
-        }
-        KeyCode::Delete => {
-            let (buf, cursor) = dialog_buf_and_cursor(app);
-            if let Some((byte_idx, _)) = buf.char_indices().nth(*cursor) {
-                buf.remove(byte_idx);
-            }
-        }
-        KeyCode::Left => {
-            let (_, cursor) = dialog_buf_and_cursor(app);
-            if *cursor > 0 {
-                *cursor -= 1;
-            }
-        }
-        KeyCode::Right => {
-            let (buf, cursor) = dialog_buf_and_cursor(app);
-            let len = buf.chars().count();
-            if *cursor < len {
-                *cursor += 1;
-            }
-        }
-        KeyCode::Home => {
-            let (_, cursor) = dialog_buf_and_cursor(app);
-            *cursor = 0;
-        }
-        KeyCode::End => {
-            let (buf, cursor) = dialog_buf_and_cursor(app);
-            *cursor = buf.chars().count();
+            return None;
         }
         KeyCode::Enter => {
             let name = app.input_buffer.clone();
@@ -231,10 +200,7 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
                 dir,
             ));
         }
-        _ if key.code == KeyCode::Esc
-            || (key.code == KeyCode::Char('g')
-                && key.modifiers.contains(KeyModifiers::CONTROL)) =>
-        {
+        _ if is_cancel(key) => {
             app.input_buffer.clear();
             app.dir_input_buffer.clear();
             app.desc_input_buffer.clear();
@@ -247,9 +213,20 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
             app.kanban_input_cursor = 0;
             app.mode = AppMode::Normal;
             app.active_pane = ActivePane::WorkspaceList;
+            return None;
         }
         _ => {}
     }
+
+    let field = app.active_dialog_field;
+    let (buf, cursor) = dialog_buf_and_cursor(app);
+    let validator = |c: char| -> bool {
+        match field {
+            DialogField::Name => c.is_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '/',
+            _ => !c.is_control(),
+        }
+    };
+    handle_text_input(buf, cursor, key, validator);
     None
 }
 
@@ -313,14 +290,6 @@ pub(super) fn handle_confirm_delete_input(app: &mut App, key: KeyEvent) -> Optio
 
 pub(super) fn handle_commit_message_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     match key.code {
-        KeyCode::Char(c) => {
-            if !c.is_control() {
-                app.commit_msg_buffer.push(c);
-            }
-        }
-        KeyCode::Backspace => {
-            app.commit_msg_buffer.pop();
-        }
         KeyCode::Enter => {
             let message = app.commit_msg_buffer.clone();
             if message.is_empty() {
@@ -335,7 +304,12 @@ pub(super) fn handle_commit_message_input(app: &mut App, key: KeyEvent) -> Optio
             app.commit_msg_buffer.clear();
             app.mode = AppMode::Normal;
         }
-        _ => {}
+        _ => {
+            // Commit message uses a simple cursor-at-end model
+            let buf = &mut app.commit_msg_buffer;
+            let mut cursor = buf.chars().count();
+            handle_text_input(buf, &mut cursor, key, |c| !c.is_control());
+        }
     }
     None
 }

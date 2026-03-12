@@ -164,44 +164,22 @@ pub fn render(frame: &mut Frame, app: &mut App) {
     // Footer: keybindings
     super::statusbar::render_footer_from_keys(frame, footer_area, &keys, &app.theme);
 
-    // Overlays
-    if app.mode == AppMode::Diff {
-        super::dialogs::render_diff_overlay(frame, area, app);
-    }
-    if app.mode == AppMode::NewWorkspace {
-        super::dialogs::render_new_workspace_dialog(frame, area, app);
-    }
-    if app.mode == AppMode::EditWorkspace {
-        super::dialogs::render_edit_workspace_dialog(frame, area, app);
-    }
-    if app.mode == AppMode::Help {
-        super::dialogs::render_help_overlay(frame, area, app);
-    }
-    if app.mode == AppMode::ConfirmDelete {
-        super::dialogs::render_confirm_delete_dialog(frame, area, app);
-    }
-    if app.mode == AppMode::CommitMessage {
-        super::dialogs::render_commit_dialog(frame, area, app);
-    }
-    if app.mode == AppMode::ConfirmMerge {
-        super::dialogs::render_confirm_merge_dialog(frame, area, app);
-    }
-    if app.mode == AppMode::FuzzySearch {
-        super::fuzzy::render(frame, area, app);
-    }
-    if app.mode == AppMode::NewTab {
-        super::dialogs::render_new_tab_dialog(frame, area);
-    }
-    if app.mode == AppMode::About {
-        super::dialogs::render_about_overlay(frame, area, app);
-    }
-    if app.mode == AppMode::WorkspaceInfo {
-        super::dialogs::render_workspace_info_overlay(frame, area, app);
-    }
-    if app.mode == AppMode::ConfirmCloseTab {
-        super::dialogs::render_confirm_close_tab_dialog(frame, area, app);
-    }
-    if app.mode == AppMode::ConfirmQuit {
-        super::dialogs::render_confirm_quit_dialog(frame, area, app);
+    // Overlays — match ensures exhaustive coverage of all AppMode variants
+    match app.mode {
+        AppMode::Normal => {}
+        AppMode::Diff => super::dialogs::render_diff_overlay(frame, area, app),
+        AppMode::NewWorkspace => super::dialogs::render_new_workspace_dialog(frame, area, app),
+        AppMode::EditWorkspace => super::dialogs::render_edit_workspace_dialog(frame, area, app),
+        AppMode::Help => super::dialogs::render_help_overlay(frame, area, app),
+        AppMode::ConfirmDelete => super::dialogs::render_confirm_delete_dialog(frame, area, app),
+        AppMode::CommitMessage => super::dialogs::render_commit_dialog(frame, area, app),
+        AppMode::ConfirmMerge => super::dialogs::render_confirm_merge_dialog(frame, area, app),
+        AppMode::FuzzySearch => super::fuzzy::render(frame, area, app),
+        AppMode::NewTab => super::dialogs::render_new_tab_dialog(frame, area),
+        AppMode::About => super::dialogs::render_about_overlay(frame, area, app),
+        AppMode::WorkspaceInfo => super::dialogs::render_workspace_info_overlay(frame, area, app),
+        AppMode::ConfirmCloseTab => super::dialogs::render_confirm_close_tab_dialog(frame, area, app),
+        AppMode::ConfirmQuit => super::dialogs::render_confirm_quit_dialog(frame, area, app),
+        AppMode::InlineEdit => {} // handled by main content render
     }
 }

@@ -1,4 +1,4 @@
-mod dialogs;
+pub(crate) mod dialogs;
 pub mod diff;
 pub mod editor;
 pub mod fuzzy;
@@ -6,6 +6,6 @@ pub mod layout;
 pub mod markdown;
 mod panels;
 mod sidebar;
-mod statusbar;
+pub(crate) mod statusbar;
 pub mod subtabs;
 pub mod terminal;
