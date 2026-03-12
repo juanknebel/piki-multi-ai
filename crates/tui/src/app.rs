@@ -244,35 +244,20 @@ impl Workspace {
     }
 }
 
-/// A fuzzy search match result
-pub struct FuzzyMatch {
-    /// Index into FuzzyState.all_files (avoids cloning path strings)
-    pub path_idx: usize,
-    pub score: u32,
-    pub match_indices: Vec<u32>,
-}
-
-/// State for the fuzzy file search overlay
+/// State for the fuzzy file search overlay (backed by nucleo async matcher)
 pub struct FuzzyState {
     pub query: String,
-    pub all_files: Vec<String>,
-    pub results: Vec<FuzzyMatch>,
+    pub nucleo: nucleo::Nucleo<String>,
     pub selected: usize,
-    /// Whether the filter needs to be re-applied (set on keystroke, cleared on tick)
-    pub filter_stale: bool,
 }
 
 impl FuzzyState {
     /// Get the path of the currently selected result
     pub fn selected_path(&self) -> Option<&str> {
-        self.results
-            .get(self.selected)
-            .map(|m| self.all_files[m.path_idx].as_str())
-    }
-
-    /// Get the path for a given result
-    pub fn result_path(&self, result: &FuzzyMatch) -> &str {
-        &self.all_files[result.path_idx]
+        self.nucleo
+            .snapshot()
+            .get_matched_item(self.selected as u32)
+            .map(|item| item.data.as_str())
     }
 }
 
@@ -504,8 +489,6 @@ pub struct App {
     pub status_rx: tokio::sync::mpsc::UnboundedReceiver<String>,
     /// Whether a background git refresh is in-flight
     pub refresh_pending: bool,
-    /// Handle for async fuzzy search file scanning
-    pub fuzzy_scan_handle: Option<tokio::task::JoinHandle<Vec<String>>>,
     /// Last left-click position and time (for double-click detection)
     pub last_click: Option<(Instant, u16, u16)>,
     /// Layout areas for mouse hit-testing
@@ -578,7 +561,6 @@ impl App {
             status_tx,
             status_rx,
             refresh_pending: false,
-            fuzzy_scan_handle: None,
             last_click: None,
             ws_list_area: Rect::default(),
             file_list_area: Rect::default(),
@@ -666,7 +648,7 @@ impl App {
     }
 
     /// Open the fuzzy file search overlay by scanning all files in the active worktree.
-    /// The file scan runs asynchronously — the overlay opens immediately with an empty list.
+    /// Uses nucleo's async matcher — results appear incrementally as the walker discovers files.
     pub fn open_fuzzy_search(&mut self) {
         let worktree_path = match self.current_workspace() {
             Some(ws) => ws.info.path.clone(),
@@ -676,18 +658,23 @@ impl App {
             }
         };
 
+        let nucleo = nucleo::Nucleo::new(
+            nucleo::Config::DEFAULT,
+            Arc::new(|| {}),
+            Some(1),
+            1,
+        );
+        let injector = nucleo.injector();
+
         self.fuzzy = Some(FuzzyState {
             query: String::new(),
-            all_files: Vec::new(),
-            results: Vec::new(),
+            nucleo,
             selected: 0,
-            filter_stale: false,
         });
         self.mode = AppMode::FuzzySearch;
 
-        // Spawn async file scan
-        self.fuzzy_scan_handle = Some(tokio::task::spawn_blocking(move || {
-            let mut all_files = Vec::new();
+        // Spawn file walker — injects items incrementally as they're found
+        tokio::task::spawn_blocking(move || {
             let walker = ignore::WalkBuilder::new(&worktree_path)
                 .git_ignore(true)
                 .build();
@@ -695,60 +682,14 @@ impl App {
                 if entry.file_type().is_some_and(|ft| ft.is_file())
                     && let Ok(rel) = entry.path().strip_prefix(&worktree_path)
                 {
-                    all_files.push(rel.to_string_lossy().to_string());
+                    let path = rel.to_string_lossy().to_string();
+                    let col: nucleo::Utf32String = path.as_str().into();
+                    injector.push(path, |cols| {
+                        cols[0] = col;
+                    });
                 }
             }
-            all_files.sort();
-            all_files
-        }));
-    }
-
-    /// Re-filter fuzzy search results based on the current query
-    pub fn update_fuzzy_filter(&mut self) {
-        if let Some(ref mut state) = self.fuzzy {
-            if state.query.is_empty() {
-                state.results = (0..state.all_files.len())
-                    .map(|i| FuzzyMatch {
-                        path_idx: i,
-                        score: 0,
-                        match_indices: Vec::new(),
-                    })
-                    .collect();
-            } else {
-                use nucleo::pattern::{CaseMatching, Pattern};
-                let pattern = Pattern::parse(&state.query, CaseMatching::Smart);
-                let mut matcher = nucleo::Matcher::default();
-                let mut buf = Vec::new();
-                let mut results: Vec<FuzzyMatch> = state
-                    .all_files
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(idx, path)| {
-                        let haystack = nucleo::Utf32Str::new(path, &mut buf);
-                        let mut indices = Vec::new();
-                        pattern
-                            .indices(haystack, &mut matcher, &mut indices)
-                            .map(|score| {
-                                indices.sort_unstable();
-                                indices.dedup();
-                                FuzzyMatch {
-                                    path_idx: idx,
-                                    score,
-                                    match_indices: indices,
-                                }
-                            })
-                    })
-                    .collect();
-                results.sort_by(|a, b| b.score.cmp(&a.score));
-                state.results = results;
-            }
-            // Clamp selection
-            if state.results.is_empty() {
-                state.selected = 0;
-            } else if state.selected >= state.results.len() {
-                state.selected = state.results.len() - 1;
-            }
-        }
+        });
     }
 
     /// Open the inline editor for a file

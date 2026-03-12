@@ -14,6 +14,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         None => return,
     };
     let theme = &app.theme.fuzzy_search;
+    let snap = state.nucleo.snapshot();
 
     // Centered overlay: 70% width, 60% height
     let width = (area.width * 70 / 100).max(40).min(area.width);
@@ -52,8 +53,8 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     );
 
     // Line 1: result count
-    let total = state.all_files.len();
-    let filtered = state.results.len();
+    let total = snap.item_count();
+    let filtered = snap.matched_item_count();
     let count_line = Line::from(Span::styled(
         format!(" {}/{}", filtered, total),
         Style::default().fg(theme.count_text),
@@ -65,7 +66,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
 
     // Lines 2+: results list
     let results_height = (inner.height as usize).saturating_sub(2);
-    if results_height == 0 {
+    if results_height == 0 || filtered == 0 {
         return;
     }
 
@@ -76,15 +77,25 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         0
     };
 
-    let visible_results = state
-        .results
-        .iter()
-        .skip(scroll_offset)
-        .take(results_height);
+    // Prepare matcher for highlight indices (only for visible items)
+    let pattern = snap.pattern().column_pattern(0);
+    let has_pattern = !state.query.is_empty();
+    let mut matcher = nucleo::Matcher::default();
+    let mut indices_buf = Vec::new();
+    let mut utf32_buf = Vec::new();
 
-    for (i, result) in visible_results.enumerate() {
-        let abs_idx = scroll_offset + i;
-        let is_selected = abs_idx == state.selected;
+    for i in 0..results_height {
+        let abs_idx = (scroll_offset + i) as u32;
+        if abs_idx >= filtered {
+            break;
+        }
+
+        let item = match snap.get_matched_item(abs_idx) {
+            Some(item) => item,
+            None => break,
+        };
+        let path = item.data.as_str();
+        let is_selected = scroll_offset + i == state.selected;
 
         let bg = if is_selected {
             theme.selected_bg
@@ -92,17 +103,25 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             ratatui::style::Color::Reset
         };
 
-        let path = state.result_path(result);
-        // Build spans with match highlighting — group consecutive chars with same style
-        let match_set: HashSet<u32> = result.match_indices.iter().copied().collect();
+        // Compute match indices for highlighting
+        indices_buf.clear();
+        if has_pattern {
+            let haystack = nucleo::Utf32Str::new(path, &mut utf32_buf);
+            pattern.indices(haystack, &mut matcher, &mut indices_buf);
+            indices_buf.sort_unstable();
+            indices_buf.dedup();
+        }
+
         let matched_style = Style::default()
             .fg(theme.match_highlight)
             .bg(bg)
             .add_modifier(Modifier::BOLD);
         let normal_style = Style::default().fg(theme.result_text).bg(bg);
 
+        // Build spans with match highlighting — group consecutive chars with same style
+        let match_set: HashSet<u32> = indices_buf.iter().copied().collect();
         let mut spans = vec![Span::styled(" ", Style::default().bg(bg))];
-        let mut run_start: Option<(usize, bool)> = None; // (byte_offset, is_matched)
+        let mut run_start: Option<(usize, bool)> = None;
         for (ci, (byte_idx, _ch)) in path.char_indices().enumerate() {
             let is_match = match_set.contains(&(ci as u32));
             match run_start {

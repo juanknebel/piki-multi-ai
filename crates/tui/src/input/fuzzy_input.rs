@@ -17,11 +17,11 @@ pub(super) fn handle_fuzzy_search_input(app: &mut App, key: KeyEvent) -> Option<
             }
         }
         KeyCode::Down => {
-            if let Some(ref mut state) = app.fuzzy
-                && !state.results.is_empty()
-                && state.selected + 1 < state.results.len()
-            {
-                state.selected += 1;
+            if let Some(ref mut state) = app.fuzzy {
+                let count = state.nucleo.snapshot().matched_item_count() as usize;
+                if count > 0 && state.selected + 1 < count {
+                    state.selected += 1;
+                }
             }
         }
         KeyCode::Enter => {
@@ -113,14 +113,26 @@ pub(super) fn handle_fuzzy_search_input(app: &mut App, key: KeyEvent) -> Option<
         KeyCode::Backspace => {
             if let Some(ref mut state) = app.fuzzy {
                 state.query.pop();
-                state.filter_stale = true;
+                let query = state.query.clone();
+                state.nucleo.pattern.reparse(
+                    0,
+                    &query,
+                    nucleo::pattern::CaseMatching::Smart,
+                    false,
+                );
             }
             app.needs_redraw = true;
         }
         KeyCode::Char(c) => {
             if let Some(ref mut state) = app.fuzzy {
                 state.query.push(c);
-                state.filter_stale = true;
+                let query = state.query.clone();
+                state.nucleo.pattern.reparse(
+                    0,
+                    &query,
+                    nucleo::pattern::CaseMatching::Smart,
+                    true,
+                );
             }
             app.needs_redraw = true;
         }

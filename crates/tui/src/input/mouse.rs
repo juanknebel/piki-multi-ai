@@ -59,8 +59,9 @@ pub(crate) fn handle_mouse_event(
             }
             AppMode::FuzzySearch => {
                 if let Some(ref mut state) = app.fuzzy {
-                    if !state.results.is_empty() {
-                        state.selected = (state.selected + 1).min(state.results.len() - 1);
+                    let count = state.nucleo.snapshot().matched_item_count() as usize;
+                    if count > 0 {
+                        state.selected = (state.selected + 1).min(count - 1);
                     }
                 }
             }

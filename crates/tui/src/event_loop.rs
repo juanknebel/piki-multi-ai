@@ -236,35 +236,15 @@ pub(crate) async fn run(
             }
         }
 
-        // Poll async fuzzy search file scan
-        if let Some(ref handle) = app.fuzzy_scan_handle {
-            if handle.is_finished() {
-                if let Some(handle) = app.fuzzy_scan_handle.take() {
-                    if let Ok(files) = handle.await {
-                        if let Some(ref mut state) = app.fuzzy {
-                            let results = (0..files.len())
-                                .map(|i| app::FuzzyMatch {
-                                    path_idx: i,
-                                    score: 0,
-                                    match_indices: Vec::new(),
-                                })
-                                .collect();
-                            state.all_files = files;
-                            state.results = results;
-                            app.update_fuzzy_filter();
-                            app.needs_redraw = true;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Fuzzy filter: batch rapid keystrokes into one filter per wakeup
-        if let Some(ref state) = app.fuzzy {
-            if state.filter_stale {
-                app.update_fuzzy_filter();
-                if let Some(ref mut state) = app.fuzzy {
-                    state.filter_stale = false;
+        // Tick nucleo fuzzy matcher — processes new items and pattern changes
+        if let Some(ref mut state) = app.fuzzy {
+            let status = state.nucleo.tick(10);
+            if status.changed {
+                let count = state.nucleo.snapshot().matched_item_count() as usize;
+                if count == 0 {
+                    state.selected = 0;
+                } else if state.selected >= count {
+                    state.selected = count - 1;
                 }
                 app.needs_redraw = true;
             }
