@@ -499,6 +499,9 @@ pub struct App {
     /// Channel for receiving async git refresh results
     pub refresh_tx: tokio::sync::mpsc::UnboundedSender<RefreshResult>,
     pub refresh_rx: tokio::sync::mpsc::UnboundedReceiver<RefreshResult>,
+    /// Channel for receiving status messages from background tasks
+    pub status_tx: tokio::sync::mpsc::UnboundedSender<String>,
+    pub status_rx: tokio::sync::mpsc::UnboundedReceiver<String>,
     /// Whether a background git refresh is in-flight
     pub refresh_pending: bool,
     /// Handle for async fuzzy search file scanning
@@ -513,6 +516,8 @@ pub struct App {
     pub main_content_area: Rect,
     /// Cache for rendered diff output, keyed by file path (LRU eviction)
     pub diff_cache: lru::LruCache<String, Arc<Text<'static>>>,
+    /// Cached footer keys: (mode, interacting, active_pane, has_markdown) → keys
+    pub footer_cache: Option<(AppMode, bool, ActivePane, bool, Vec<(String, &'static str)>)>,
     /// Last time inactive workspace PTYs were checked for exit
     pub last_inactive_pty_check: Instant,
 }
@@ -520,6 +525,7 @@ pub struct App {
 impl App {
     pub fn new() -> Self {
         let (refresh_tx, refresh_rx) = tokio::sync::mpsc::unbounded_channel::<RefreshResult>();
+        let (status_tx, status_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
         Self {
             should_quit: false,
             mode: AppMode::Normal,
@@ -569,6 +575,8 @@ impl App {
             config: crate::config::Config::load(),
             refresh_tx,
             refresh_rx,
+            status_tx,
+            status_rx,
             refresh_pending: false,
             fuzzy_scan_handle: None,
             last_click: None,
@@ -578,6 +586,7 @@ impl App {
             subtabs_area: Rect::default(),
             main_content_area: Rect::default(),
             diff_cache: lru::LruCache::new(std::num::NonZeroUsize::new(32).unwrap()),
+            footer_cache: None,
             last_inactive_pty_check: Instant::now(),
         }
     }

@@ -136,7 +136,9 @@ pub(crate) async fn run(
                                 }
                             }
                         }
-                        app.diff_cache.clear();
+                        // Clear open diff so it re-renders at new width; LRU handles stale entries
+                        app.diff_content = None;
+                        app.footer_cache = None;
                         app.needs_redraw = true;
                     }
                     Some(Ok(_)) => {}
@@ -151,6 +153,17 @@ pub(crate) async fn run(
                     while let Ok(result) = app.refresh_rx.try_recv() {
                         process_refresh_result(&mut app, result);
                     }
+                }
+            }
+
+            msg = app.status_rx.recv() => {
+                if let Some(msg) = msg {
+                    app.status_message = Some(msg);
+                    // Drain any additional messages, keep the last one
+                    while let Ok(msg) = app.status_rx.try_recv() {
+                        app.status_message = Some(msg);
+                    }
+                    app.needs_redraw = true;
                 }
             }
 

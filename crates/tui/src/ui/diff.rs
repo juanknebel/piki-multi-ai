@@ -1,10 +1,51 @@
 use std::sync::Arc;
 
 use ratatui::Frame;
+use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
 use ratatui::text::Text;
-use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::widgets::{Block, Borders, Paragraph, Widget};
+
+/// A widget that renders borrowed `Text` without cloning, avoiding expensive
+/// deep copies of `Vec<Line<Vec<Span<String>>>>` on every frame.
+struct BorrowedDiff<'a> {
+    text: &'a Text<'static>,
+    block: Block<'a>,
+    scroll: u16,
+}
+
+impl Widget for BorrowedDiff<'_> {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        let inner = self.block.inner(area);
+        self.block.render(area, buf);
+
+        if inner.width == 0 || inner.height == 0 {
+            return;
+        }
+
+        let lines = &self.text.lines;
+        let skip = self.scroll as usize;
+        for (row_offset, line) in lines.iter().skip(skip).take(inner.height as usize).enumerate() {
+            let y = inner.y + row_offset as u16;
+            let mut x = inner.x;
+            for span in &line.spans {
+                let available = inner.width.saturating_sub(x - inner.x) as usize;
+                if available == 0 {
+                    break;
+                }
+                let content = span.content.as_ref();
+                let display: &str = if content.len() > available {
+                    &content[..available]
+                } else {
+                    content
+                };
+                buf.set_string(x, y, display, span.style);
+                x += display.len() as u16;
+            }
+        }
+    }
+}
 
 /// Render the side-by-side diff view in the given area.
 pub fn render(
@@ -18,16 +59,16 @@ pub fn render(
 ) {
     if let Some(text) = content {
         let title = format!(" DIFF: {} ", file_path);
-        let paragraph = Paragraph::new((**text).clone())
-            .block(
-                Block::default()
-                    .title(title)
-                    .title_style(border_style)
-                    .borders(Borders::ALL)
-                    .border_style(border_style),
-            )
-            .scroll((scroll, 0));
-        frame.render_widget(paragraph, area);
+        let widget = BorrowedDiff {
+            text,
+            block: Block::default()
+                .title(title)
+                .title_style(border_style)
+                .borders(Borders::ALL)
+                .border_style(border_style),
+            scroll,
+        };
+        frame.render_widget(widget, area);
     } else {
         let paragraph = Paragraph::new("  Select a file and press Enter to view diff")
             .style(Style::default().fg(empty_text_color))

@@ -290,19 +290,29 @@ pub(crate) async fn execute_action(
                 if let Some(file) = ws.changed_files.get(file_idx) {
                     let file_path = file.path.clone();
                     let worktree = ws.path.clone();
-                    let output = tokio::process::Command::new("git")
-                        .args(["add", &file_path])
-                        .current_dir(&worktree)
-                        .output()
-                        .await?;
-                    if output.status.success() {
-                        app.status_message = Some(format!("Staged: {}", file_path));
-                    } else {
-                        let stderr = String::from_utf8_lossy(&output.stderr);
-                        app.status_message = Some(format!("Stage failed: {}", stderr.trim()));
-                    }
+                    let status_tx = app.status_tx.clone();
+                    app.status_message = Some(format!("Staging: {}", file_path));
                     ws.dirty = true;
                     ws.last_refresh = None;
+                    tokio::spawn(async move {
+                        let output = tokio::process::Command::new("git")
+                            .args(["add", &file_path])
+                            .current_dir(&worktree)
+                            .output()
+                            .await;
+                        match output {
+                            Ok(o) if o.status.success() => {
+                                let _ = status_tx.send(format!("Staged: {}", file_path));
+                            }
+                            Ok(o) => {
+                                let stderr = String::from_utf8_lossy(&o.stderr);
+                                let _ = status_tx.send(format!("Stage failed: {}", stderr.trim()));
+                            }
+                            Err(e) => {
+                                let _ = status_tx.send(format!("Stage error: {}", e));
+                            }
+                        }
+                    });
                 }
             }
         }
@@ -311,19 +321,29 @@ pub(crate) async fn execute_action(
                 if let Some(file) = ws.changed_files.get(file_idx) {
                     let file_path = file.path.clone();
                     let worktree = ws.path.clone();
-                    let output = tokio::process::Command::new("git")
-                        .args(["reset", "HEAD", &file_path])
-                        .current_dir(&worktree)
-                        .output()
-                        .await?;
-                    if output.status.success() {
-                        app.status_message = Some(format!("Unstaged: {}", file_path));
-                    } else {
-                        let stderr = String::from_utf8_lossy(&output.stderr);
-                        app.status_message = Some(format!("Unstage failed: {}", stderr.trim()));
-                    }
+                    let status_tx = app.status_tx.clone();
+                    app.status_message = Some(format!("Unstaging: {}", file_path));
                     ws.dirty = true;
                     ws.last_refresh = None;
+                    tokio::spawn(async move {
+                        let output = tokio::process::Command::new("git")
+                            .args(["reset", "HEAD", &file_path])
+                            .current_dir(&worktree)
+                            .output()
+                            .await;
+                        match output {
+                            Ok(o) if o.status.success() => {
+                                let _ = status_tx.send(format!("Unstaged: {}", file_path));
+                            }
+                            Ok(o) => {
+                                let stderr = String::from_utf8_lossy(&o.stderr);
+                                let _ = status_tx.send(format!("Unstage failed: {}", stderr.trim()));
+                            }
+                            Err(e) => {
+                                let _ = status_tx.send(format!("Unstage error: {}", e));
+                            }
+                        }
+                    });
                 }
             }
         }

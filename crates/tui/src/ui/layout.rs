@@ -66,8 +66,25 @@ fn compute_footer_height_from_keys(keys: &[(String, &str)], total_width: u16) ->
 pub fn render(frame: &mut Frame, app: &mut App) {
     let area = frame.area();
 
-    // Compute footer keys once per frame, use for both height and rendering
-    let keys = super::statusbar::footer_keys(app);
+    // Compute footer keys — use cache when mode/interacting/pane haven't changed
+    let has_markdown = app
+        .current_workspace()
+        .and_then(|ws| ws.current_tab())
+        .is_some_and(|tab| tab.markdown_content.is_some());
+    let cache_key = (app.mode.clone(), app.interacting, app.active_pane, has_markdown);
+    let keys = if let Some((ref m, i, p, md, ref cached)) = app.footer_cache {
+        if *m == cache_key.0 && i == cache_key.1 && p == cache_key.2 && md == cache_key.3 {
+            cached.clone()
+        } else {
+            let k = super::statusbar::footer_keys(app);
+            app.footer_cache = Some((cache_key.0, cache_key.1, cache_key.2, cache_key.3, k.clone()));
+            k
+        }
+    } else {
+        let k = super::statusbar::footer_keys(app);
+        app.footer_cache = Some((cache_key.0, cache_key.1, cache_key.2, cache_key.3, k.clone()));
+        k
+    };
     let footer_height = compute_footer_height_from_keys(&keys, area.width);
 
     // Main vertical split: header + content + footer
