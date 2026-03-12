@@ -238,7 +238,14 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
             // Invalidate cached diffs for files with pending changes (width-keyed)
             for file in &result.changed_files {
                 let prefix = format!("{}@", file.path);
-                app.diff_cache.retain(|key, _| !key.starts_with(&prefix));
+                let keys_to_remove: Vec<String> = app.diff_cache
+                    .iter()
+                    .filter(|(key, _)| key.starts_with(&prefix))
+                    .map(|(key, _)| key.clone())
+                    .collect();
+                for key in keys_to_remove {
+                    app.diff_cache.pop(&key);
+                }
             }
             if let Some(ws) = app.workspaces.get_mut(result.workspace_idx) {
                 ws.changed_files = result.changed_files;

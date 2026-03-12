@@ -510,13 +510,11 @@ pub struct App {
     pub tabs_area: Rect,
     pub subtabs_area: Rect,
     pub main_content_area: Rect,
-    /// Cache for rendered diff output, keyed by file path
-    pub diff_cache: std::collections::HashMap<String, Arc<Text<'static>>>,
+    /// Cache for rendered diff output, keyed by file path (LRU eviction)
+    pub diff_cache: lru::LruCache<String, Arc<Text<'static>>>,
     /// Last time inactive workspace PTYs were checked for exit
     pub last_inactive_pty_check: Instant,
 }
-
-const MAX_DIFF_CACHE_SIZE: usize = 32;
 
 impl App {
     pub fn new() -> Self {
@@ -578,17 +576,14 @@ impl App {
             tabs_area: Rect::default(),
             subtabs_area: Rect::default(),
             main_content_area: Rect::default(),
-            diff_cache: std::collections::HashMap::new(),
+            diff_cache: lru::LruCache::new(std::num::NonZeroUsize::new(32).unwrap()),
             last_inactive_pty_check: Instant::now(),
         }
     }
 
-    /// Insert a diff into the cache, clearing the entire cache if it exceeds the size limit.
+    /// Insert a diff into the cache (LRU eviction handles size limit automatically).
     pub fn insert_diff_cache(&mut self, key: String, value: Arc<Text<'static>>) {
-        if self.diff_cache.len() >= MAX_DIFF_CACHE_SIZE {
-            self.diff_cache.clear();
-        }
-        self.diff_cache.insert(key, value);
+        self.diff_cache.put(key, value);
     }
 
     pub fn current_workspace(&self) -> Option<&Workspace> {

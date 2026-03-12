@@ -51,10 +51,10 @@ fn pane_border_style(app: &App, pane: ActivePane) -> Style {
 }
 
 /// Calculate how many lines the footer needs based on content width.
-fn compute_footer_height_from_keys(keys: &[(String, String)], total_width: u16) -> u16 {
+fn compute_footer_height_from_keys(keys: &[(String, &str)], total_width: u16) -> u16 {
     let total: usize = keys
         .iter()
-        .map(|(key, desc)| format!(" [{}] {} ", key, desc).len())
+        .map(|(key, desc)| key.len() + desc.len() + 5)
         .sum();
     if total as u16 <= total_width { 1 } else { 2 }
 }
@@ -637,69 +637,69 @@ fn render_sysinfo_bar(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(bar, area);
 }
 
-fn footer_keys(app: &App) -> Vec<(String, String)> {
+fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
     let cfg = &app.config;
     match app.mode {
         AppMode::FuzzySearch => vec![
-            (format!("{}/{}", cfg.get_binding("fuzzy", "up"), cfg.get_binding("fuzzy", "down")), "select".to_string()),
-            (cfg.get_binding("fuzzy", "diff"), "diff".to_string()),
-            (cfg.get_binding("fuzzy", "editor"), "editor".to_string()),
-            (cfg.get_binding("fuzzy", "inline_edit"), "inline edit".to_string()),
-            (cfg.get_binding("fuzzy", "markdown"), "markdown".to_string()),
-            (cfg.get_binding("fuzzy", "mdr"), "mdr".to_string()),
-            (cfg.get_binding("fuzzy", "exit"), "close".to_string()),
+            (format!("{}/{}", cfg.get_binding("fuzzy", "up"), cfg.get_binding("fuzzy", "down")), "select"),
+            (cfg.get_binding("fuzzy", "diff"), "diff"),
+            (cfg.get_binding("fuzzy", "editor"), "editor"),
+            (cfg.get_binding("fuzzy", "inline_edit"), "inline edit"),
+            (cfg.get_binding("fuzzy", "markdown"), "markdown"),
+            (cfg.get_binding("fuzzy", "mdr"), "mdr"),
+            (cfg.get_binding("fuzzy", "exit"), "close"),
         ],
         AppMode::InlineEdit => vec![
-            (cfg.get_binding("editor", "save"), "save".to_string()),
-            (cfg.get_binding("editor", "exit"), "close".to_string()),
+            (cfg.get_binding("editor", "save"), "save"),
+            (cfg.get_binding("editor", "exit"), "close"),
         ],
         AppMode::NewWorkspace => vec![
-            (cfg.get_binding("new_workspace", "switch_field"), "switch field".to_string()),
-            (cfg.get_binding("new_workspace", "create"), "create".to_string()),
-            (cfg.get_binding("new_workspace", "exit"), "cancel".to_string()),
+            (cfg.get_binding("new_workspace", "switch_field"), "switch field"),
+            (cfg.get_binding("new_workspace", "create"), "create"),
+            (cfg.get_binding("new_workspace", "exit"), "cancel"),
         ],
         AppMode::CommitMessage => vec![
-            (cfg.get_binding("commit", "commit"), "commit".to_string()),
-            (cfg.get_binding("commit", "exit"), "cancel".to_string()),
+            (cfg.get_binding("commit", "commit"), "commit"),
+            (cfg.get_binding("commit", "exit"), "cancel"),
         ],
         AppMode::ConfirmMerge => vec![
-            (cfg.get_binding("merge", "merge"), "merge".to_string()),
-            (cfg.get_binding("merge", "rebase"), "rebase".to_string()),
-            (cfg.get_binding("merge", "exit"), "cancel".to_string()),
+            (cfg.get_binding("merge", "merge"), "merge"),
+            (cfg.get_binding("merge", "rebase"), "rebase"),
+            (cfg.get_binding("merge", "exit"), "cancel"),
         ],
         AppMode::EditWorkspace => vec![
-            (cfg.get_binding("new_workspace", "switch_field"), "switch field".to_string()),
-            ("enter".to_string(), "save".to_string()),
-            ("esc".to_string(), "cancel".to_string()),
+            (cfg.get_binding("new_workspace", "switch_field"), "switch field"),
+            ("enter".to_string(), "save"),
+            ("esc".to_string(), "cancel"),
         ],
         AppMode::NewTab => vec![
-            ("1-5".to_string(), "select".to_string()),
-            (cfg.get_binding("new_tab", "exit"), "cancel".to_string()),
+            ("1-5".to_string(), "select"),
+            (cfg.get_binding("new_tab", "exit"), "cancel"),
         ],
         AppMode::Diff => vec![
-            (format!("{}/{}", cfg.get_binding("diff", "up"), cfg.get_binding("diff", "down")), "scroll".to_string()),
-            (format!("{}/{}", cfg.get_binding("diff", "page_up"), cfg.get_binding("diff", "page_down")), "page".to_string()),
-            (format!("{}/{}", cfg.get_binding("diff", "scroll_top"), cfg.get_binding("diff", "scroll_bottom")), "top/bottom".to_string()),
-            (format!("{}/{}", cfg.get_binding("diff", "next_file"), cfg.get_binding("diff", "prev_file")), "next/prev file".to_string()),
-            (cfg.get_binding("diff", "exit"), "close".to_string()),
+            (format!("{}/{}", cfg.get_binding("diff", "up"), cfg.get_binding("diff", "down")), "scroll"),
+            (format!("{}/{}", cfg.get_binding("diff", "page_up"), cfg.get_binding("diff", "page_down")), "page"),
+            (format!("{}/{}", cfg.get_binding("diff", "scroll_top"), cfg.get_binding("diff", "scroll_bottom")), "top/bottom"),
+            (format!("{}/{}", cfg.get_binding("diff", "next_file"), cfg.get_binding("diff", "prev_file")), "next/prev file"),
+            (cfg.get_binding("diff", "exit"), "close"),
         ],
         AppMode::ConfirmCloseTab => vec![
-            ("Y".to_string(), "close".to_string()),
-            ("N".to_string(), "cancel".to_string()),
+            ("Y".to_string(), "close"),
+            ("N".to_string(), "cancel"),
         ],
         AppMode::ConfirmQuit => vec![
-            ("Y".to_string(), "quit".to_string()),
-            ("N".to_string(), "cancel".to_string()),
+            ("Y".to_string(), "quit"),
+            ("N".to_string(), "cancel"),
         ],
         _ if app.interacting => {
             if app.active_pane == ActivePane::GitStatus {
                 vec![
-                    (format!("{}/{}", cfg.get_binding("file_list", "up"), cfg.get_binding("file_list", "down")), "select".to_string()),
-                    (cfg.get_binding("file_list", "diff"), "diff".to_string()),
-                    (cfg.get_binding("file_list", "stage"), "stage".to_string()),
-                    (cfg.get_binding("file_list", "unstage"), "unstage".to_string()),
-                    (cfg.get_binding("file_list", "edit_external"), "editor".to_string()),
-                    (cfg.get_binding("interaction", "exit_interaction"), "back".to_string()),
+                    (format!("{}/{}", cfg.get_binding("file_list", "up"), cfg.get_binding("file_list", "down")), "select"),
+                    (cfg.get_binding("file_list", "diff"), "diff"),
+                    (cfg.get_binding("file_list", "stage"), "stage"),
+                    (cfg.get_binding("file_list", "unstage"), "unstage"),
+                    (cfg.get_binding("file_list", "edit_external"), "editor"),
+                    (cfg.get_binding("interaction", "exit_interaction"), "back"),
                 ]
             } else if app
                 .current_workspace()
@@ -707,51 +707,51 @@ fn footer_keys(app: &App) -> Vec<(String, String)> {
                 .is_some_and(|tab| tab.markdown_content.is_some())
             {
                 vec![
-                    (format!("{}/{}", cfg.get_binding("markdown", "up"), cfg.get_binding("markdown", "down")), "scroll".to_string()),
-                    (format!("{}/{}", cfg.get_binding("markdown", "page_up"), cfg.get_binding("markdown", "page_down")), "page".to_string()),
-                    (format!("{}/{}", cfg.get_binding("markdown", "scroll_top"), cfg.get_binding("markdown", "scroll_bottom")), "top/bottom".to_string()),
-                    (cfg.get_binding("interaction", "exit_interaction"), "back".to_string()),
+                    (format!("{}/{}", cfg.get_binding("markdown", "up"), cfg.get_binding("markdown", "down")), "scroll"),
+                    (format!("{}/{}", cfg.get_binding("markdown", "page_up"), cfg.get_binding("markdown", "page_down")), "page"),
+                    (format!("{}/{}", cfg.get_binding("markdown", "scroll_top"), cfg.get_binding("markdown", "scroll_bottom")), "top/bottom"),
+                    (cfg.get_binding("interaction", "exit_interaction"), "back"),
                 ]
             } else {
-                vec![(cfg.get_binding("interaction", "exit_interaction"), "navigation mode".to_string())]
+                vec![(cfg.get_binding("interaction", "exit_interaction"), "navigation mode")]
             }
         }
         _ => {
             let nav = format!("{}{}{}{}", cfg.get_binding("navigation", "up"), cfg.get_binding("navigation", "down"), cfg.get_binding("navigation", "left"), cfg.get_binding("navigation", "right"));
             let mut keys = vec![
-                (nav, "navigate".to_string()),
-                (cfg.get_binding("navigation", "enter_pane"), "interact".to_string()),
+                (nav, "navigate"),
+                (cfg.get_binding("navigation", "enter_pane"), "interact"),
             ];
             match app.active_pane {
                 ActivePane::WorkspaceList => {
-                    keys.push((cfg.get_binding("navigation", "new_workspace"), "new ws".to_string()));
-                    keys.push((cfg.get_binding("navigation", "clone_workspace"), "clone ws".to_string()));
-                    keys.push((cfg.get_binding("navigation", "edit_workspace"), "edit ws".to_string()));
-                    keys.push((cfg.get_binding("navigation", "delete_workspace"), "delete ws".to_string()));
-                    keys.push((cfg.get_binding("navigation", "next_workspace"), "switch ws".to_string()));
+                    keys.push((cfg.get_binding("navigation", "new_workspace"), "new ws"));
+                    keys.push((cfg.get_binding("navigation", "clone_workspace"), "clone ws"));
+                    keys.push((cfg.get_binding("navigation", "edit_workspace"), "edit ws"));
+                    keys.push((cfg.get_binding("navigation", "delete_workspace"), "delete ws"));
+                    keys.push((cfg.get_binding("navigation", "next_workspace"), "switch ws"));
                 }
                 ActivePane::GitStatus => {
-                    keys.push((cfg.get_binding("navigation", "fuzzy_search"), "search".to_string()));
-                    keys.push((cfg.get_binding("navigation", "commit"), "commit".to_string()));
-                    keys.push((cfg.get_binding("navigation", "push"), "push".to_string()));
-                    keys.push((cfg.get_binding("navigation", "merge"), "merge".to_string()));
+                    keys.push((cfg.get_binding("navigation", "fuzzy_search"), "search"));
+                    keys.push((cfg.get_binding("navigation", "commit"), "commit"));
+                    keys.push((cfg.get_binding("navigation", "push"), "push"));
+                    keys.push((cfg.get_binding("navigation", "merge"), "merge"));
                 }
                 ActivePane::MainPanel => {
-                    keys.push((cfg.get_binding("navigation", "new_tab"), "new tab".to_string()));
-                    keys.push((cfg.get_binding("navigation", "close_tab"), "close tab".to_string()));
-                    keys.push((format!("{}/{}", cfg.get_binding("navigation", "next_tab"), cfg.get_binding("navigation", "prev_tab")), "next/prev tab".to_string()));
+                    keys.push((cfg.get_binding("navigation", "new_tab"), "new tab"));
+                    keys.push((cfg.get_binding("navigation", "close_tab"), "close tab"));
+                    keys.push((format!("{}/{}", cfg.get_binding("navigation", "next_tab"), cfg.get_binding("navigation", "prev_tab")), "next/prev tab"));
                 }
             }
-            keys.push((format!("{}/{}", cfg.get_binding("navigation", "sidebar_shrink"), cfg.get_binding("navigation", "sidebar_grow")), "resize".to_string()));
-            keys.push((cfg.get_binding("navigation", "help"), "help".to_string()));
-            keys.push((cfg.get_binding("navigation", "quit"), "quit".to_string()));
+            keys.push((format!("{}/{}", cfg.get_binding("navigation", "sidebar_shrink"), cfg.get_binding("navigation", "sidebar_grow")), "resize"));
+            keys.push((cfg.get_binding("navigation", "help"), "help"));
+            keys.push((cfg.get_binding("navigation", "quit"), "quit"));
             keys
         },
     }
 }
 
-fn render_footer_from_keys(frame: &mut Frame, area: Rect, keys: &[(String, String)], theme: &crate::theme::Theme) {
-    let make_spans = |items: &[(String, String)]| -> Vec<Span<'static>> {
+fn render_footer_from_keys(frame: &mut Frame, area: Rect, keys: &[(String, &str)], theme: &crate::theme::Theme) {
+    let make_spans = |items: &[(String, &str)]| -> Vec<Span<'static>> {
         items
             .iter()
             .flat_map(|(key, desc)| {
@@ -772,7 +772,7 @@ fn render_footer_from_keys(frame: &mut Frame, area: Rect, keys: &[(String, Strin
     // Calculate total width of all spans
     let total_width: usize = keys
         .iter()
-        .map(|(key, desc)| format!(" [{}] {} ", key, desc).len())
+        .map(|(key, desc)| key.len() + desc.len() + 5)
         .sum();
 
     if total_width as u16 <= area.width || area.height < 2 {
@@ -786,7 +786,7 @@ fn render_footer_from_keys(frame: &mut Frame, area: Rect, keys: &[(String, Strin
         let half = total_width / 2;
         let mut split_at = keys.len();
         for (i, (key, desc)) in keys.iter().enumerate() {
-            acc += format!(" [{}] {} ", key, desc).len();
+            acc += key.len() + desc.len() + 5;
             if acc >= half {
                 split_at = i + 1;
                 break;

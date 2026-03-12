@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 # Async runtime
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "time", "sync", "fs"] }
 
 # PTY
 portable-pty = "0.9"

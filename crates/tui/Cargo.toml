@@ -16,7 +16,7 @@ ratatui = { version = "0.30", features = ["crossterm"] }
 crossterm = "0.28"
 
 # Async runtime
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "time", "sync"] }
 
 # Terminal emulation
 vt100 = "0.16"
@@ -55,3 +55,6 @@ chrono = "0.4.44"
 
 # Kanban board
 flow = { git = "https://github.com/juanknebel/flow" }
+
+# LRU cache
+lru = "0.12"
