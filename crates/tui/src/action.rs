@@ -65,14 +65,13 @@ pub(crate) async fn execute_action(
                     // Auto-send prompt to active tab PTY if non-empty
                     if !prompt.is_empty() {
                         let ws = &mut app.workspaces[new_idx];
-                        if let Some(tab) = ws.current_tab_mut() {
-                            if let Some(ref mut pty) = tab.pty_session {
+                        if let Some(tab) = ws.current_tab_mut()
+                            && let Some(ref mut pty) = tab.pty_session {
                                 // Small delay to let the PTY initialize
                                 tokio::time::sleep(Duration::from_millis(500)).await;
                                 let prompt_with_newline = format!("{}\n", prompt);
                                 let _ = pty.write(prompt_with_newline.as_bytes());
                             }
-                        }
                     }
 
                     // Start file watcher
@@ -229,8 +228,8 @@ pub(crate) async fn execute_action(
             }
         }
         Action::OpenDiff(file_idx) => {
-            if let Some(ws) = app.workspaces.get(app.active_workspace) {
-                if let Some(file) = ws.changed_files.get(file_idx) {
+            if let Some(ws) = app.workspaces.get(app.active_workspace)
+                && let Some(file) = ws.changed_files.get(file_idx) {
                     let file_path = file.path.clone();
                     // Compute diff width from actual terminal size (matches diff overlay: 90% width minus borders)
                     let term_size = terminal.size()?;
@@ -285,12 +284,11 @@ pub(crate) async fn execute_action(
                         }
                     }
                 }
-            }
         }
         Action::GitStage(file_idx) => {
             let ws_idx = app.active_workspace;
-            if let Some(ws) = app.workspaces.get_mut(ws_idx) {
-                if let Some(file) = ws.changed_files.get(file_idx) {
+            if let Some(ws) = app.workspaces.get_mut(ws_idx)
+                && let Some(file) = ws.changed_files.get(file_idx) {
                     let file_path = file.path.clone();
                     let worktree = ws.path.clone();
                     let status_tx = app.status_tx.clone();
@@ -323,12 +321,11 @@ pub(crate) async fn execute_action(
                         }
                     });
                 }
-            }
         }
         Action::GitUnstage(file_idx) => {
             let ws_idx = app.active_workspace;
-            if let Some(ws) = app.workspaces.get_mut(ws_idx) {
-                if let Some(file) = ws.changed_files.get(file_idx) {
+            if let Some(ws) = app.workspaces.get_mut(ws_idx)
+                && let Some(file) = ws.changed_files.get(file_idx) {
                     let file_path = file.path.clone();
                     let worktree = ws.path.clone();
                     let status_tx = app.status_tx.clone();
@@ -361,7 +358,6 @@ pub(crate) async fn execute_action(
                         }
                     });
                 }
-            }
         }
         Action::GitCommit(message) => {
             if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
@@ -617,7 +613,7 @@ pub(crate) async fn execute_action(
                         let expanded_path = if let Some(path_str) = default_path.to_str() {
                             if path_str.starts_with("~/") {
                                 if let Some(home) = dirs::home_dir() {
-                                    home.join(&path_str[2..])
+                                    home.join(path_str.strip_prefix("~/").unwrap())
                                 } else {
                                     default_path
                                 }

@@ -45,21 +45,21 @@ async fn main() -> anyhow::Result<()> {
             }
             Commands::Version => {
                 let version = env!("CARGO_PKG_VERSION");
-                println!("");
+                println!();
                 println!("██████╗ ██╗██╗  ██╗██╗");
                 println!("██╔══██╗██║██║ ██╔╝██║");
                 println!("██████╔╝██║█████╔╝ ██║");
                 println!("██╔═══╝ ██║██╔═██╗ ██║");
                 println!("██║     ██║██║  ██╗██║");
                 println!("╚═╝     ╚═╝╚═╝  ╚═╝╚═╝");
-                println!("");
+                println!();
                 println!("piki-multi-ai v{version}");
-                println!("");
+                println!();
                 println!("Author: Juan Knebel");
                 println!("Contact: juanknebel@gmail.com");
                 println!("Web: github.com/juanknebel/piki-multi-ai");
                 println!("License: GPL-2.0");
-                println!("");
+                println!();
                 return Ok(());
             }
         }
@@ -106,7 +106,7 @@ async fn main() -> anyhow::Result<()> {
     let original_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |panic_info| {
         let _ = crossterm::execute!(std::io::stderr(), crossterm::event::DisableMouseCapture);
-        let _ = ratatui::restore();
+        ratatui::restore();
         original_hook(panic_info);
     }));
 

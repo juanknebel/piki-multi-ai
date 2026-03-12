@@ -337,7 +337,7 @@ impl Config {
             let defaults = default_navigation();
             defaults
                 .get(action)
-                .map_or(false, |b| key_matches(event, b))
+                .is_some_and(|b| key_matches(event, b))
         }
     }
 

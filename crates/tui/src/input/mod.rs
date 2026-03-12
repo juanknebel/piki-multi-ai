@@ -270,17 +270,15 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
     } else if app.config.matches_navigation(key, "split_down") {
         app.left_split_pct = app.left_split_pct.saturating_sub(10).max(10);
     } else if app.config.matches_navigation(key, "next_tab") {
-        if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
-            if !ws.tabs.is_empty() {
+        if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+            && !ws.tabs.is_empty() {
                 ws.active_tab = (ws.active_tab + 1) % ws.tabs.len();
             }
-        }
     } else if app.config.matches_navigation(key, "prev_tab") {
-        if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
-            if !ws.tabs.is_empty() {
+        if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+            && !ws.tabs.is_empty() {
                 ws.active_tab = (ws.active_tab + ws.tabs.len() - 1) % ws.tabs.len();
             }
-        }
     } else if app.config.matches_navigation(key, "new_tab") {
         if app.current_workspace().is_some() {
             app.mode = AppMode::NewTab;

@@ -25,13 +25,10 @@ pub(crate) fn shutdown(app: &mut App) {
 pub(crate) async fn spawn_initial_shell(ws: &mut app::Workspace, rows: u16, cols: u16) {
     let idx = ws.add_tab(AIProvider::Shell, false); // first shell is not closable
     let cmd = AIProvider::Shell.resolved_command();
-    match PtySession::spawn(&ws.path, rows, cols, &cmd).await {
-        Ok(session) => {
-            ws.tabs[idx].pty_parser = Some(Arc::clone(session.parser()));
-            ws.tabs[idx].pty_session = Some(session);
-            ws.status = app::WorkspaceStatus::Busy;
-        }
-        Err(_) => {}
+    if let Ok(session) = PtySession::spawn(&ws.path, rows, cols, &cmd).await {
+        ws.tabs[idx].pty_parser = Some(Arc::clone(session.parser()));
+        ws.tabs[idx].pty_session = Some(session);
+        ws.status = app::WorkspaceStatus::Busy;
     }
 }
 
@@ -47,12 +44,9 @@ pub(crate) async fn spawn_tab(
         return idx;
     }
     let cmd = provider.resolved_command();
-    match PtySession::spawn(&ws.path, rows, cols, &cmd).await {
-        Ok(session) => {
-            ws.tabs[idx].pty_parser = Some(Arc::clone(session.parser()));
-            ws.tabs[idx].pty_session = Some(session);
-        }
-        Err(_) => {}
+    if let Ok(session) = PtySession::spawn(&ws.path, rows, cols, &cmd).await {
+        ws.tabs[idx].pty_parser = Some(Arc::clone(session.parser()));
+        ws.tabs[idx].pty_session = Some(session);
     }
     idx
 }

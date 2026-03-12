@@ -13,6 +13,7 @@ use crate::app::{Selection, TermSearchState};
 /// Render the PTY terminal output in the given area.
 /// Locks the parser briefly to read the vt100 screen state.
 /// When `scroll_offset > 0`, shows scrollback history.
+#[allow(clippy::too_many_arguments)]
 pub fn render(
     frame: &mut Frame,
     area: Rect,

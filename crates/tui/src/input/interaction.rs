@@ -146,9 +146,7 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
                 }
             }
             flow::Action::Edit => {
-                let Some(col) = kanban_app.board.columns.get(kanban_app.col) else {
-                    return None;
-                };
+                let col = kanban_app.board.columns.get(kanban_app.col)?;
                 let Some(card) = col.cards.get(kanban_app.row) else {
                     kanban_app.banner = Some("Edit failed: no card selected".to_string());
                     return None;
@@ -240,7 +238,7 @@ fn search_terminal(app: &mut App) {
         for col in 0..cols {
             let cell = screen.cell(row, col);
             if let Some(cell) = cell {
-                line.push_str(&cell.contents());
+                line.push_str(cell.contents());
             } else {
                 line.push(' ');
             }
@@ -264,8 +262,8 @@ pub(super) fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Optio
                 app.term_search = None;
             }
             KeyCode::Enter => {
-                if let Some(ref mut search) = app.term_search {
-                    if !search.matches.is_empty() {
+                if let Some(ref mut search) = app.term_search
+                    && !search.matches.is_empty() {
                         if key.modifiers.contains(crossterm::event::KeyModifiers::SHIFT) {
                             // Shift+Enter → previous match
                             search.current_match = if search.current_match == 0 {
@@ -279,7 +277,6 @@ pub(super) fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Optio
                                 (search.current_match + 1) % search.matches.len();
                         }
                     }
-                }
             }
             KeyCode::Char(c) => {
                 if let Some(ref mut search) = app.term_search {
@@ -292,13 +289,12 @@ pub(super) fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Optio
                 search_terminal(app);
             }
             KeyCode::Backspace => {
-                if let Some(ref mut search) = app.term_search {
-                    if search.cursor > 0 {
+                if let Some(ref mut search) = app.term_search
+                    && search.cursor > 0 {
                         search.cursor -= 1;
                         let byte_pos = search.query.char_indices().nth(search.cursor).map(|(i, _)| i).unwrap_or(search.query.len());
                         search.query.remove(byte_pos);
                     }
-                }
                 search_terminal(app);
             }
             _ => {}
@@ -325,8 +321,8 @@ pub(super) fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Optio
     if app.config.matches_interaction(key, "paste") {
         match clipboard::paste_from_clipboard() {
             Ok(text) => {
-                if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
-                    if let Some(tab) = ws.current_tab_mut() {
+                if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+                    && let Some(tab) = ws.current_tab_mut() {
                         let bracketed = tab
                             .pty_parser
                             .as_ref()
@@ -341,7 +337,6 @@ pub(super) fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Optio
                             let _ = pty.write(data.as_bytes());
                         }
                     }
-                }
             }
             Err(e) => {
                 app.status_message = Some(format!("Paste failed: {}", e));
@@ -355,15 +350,12 @@ pub(super) fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Optio
         return None;
     }
     // Forward all other keys to the active tab's PTY
-    if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
-        if let Some(tab) = ws.current_tab_mut() {
-            if let Some(ref mut pty) = tab.pty_session {
-                if let Some(bytes) = crate::pty::input::key_to_bytes(key) {
+    if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+        && let Some(tab) = ws.current_tab_mut()
+            && let Some(ref mut pty) = tab.pty_session
+                && let Some(bytes) = crate::pty::input::key_to_bytes(key) {
                     let _ = pty.write(&bytes);
                 }
-            }
-        }
-    }
     None
 }
 
@@ -372,8 +364,8 @@ pub(super) fn handle_markdown_interaction(app: &mut App, key: KeyEvent) -> Optio
         app.interacting = false;
         return None;
     }
-    if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
-        if let Some(tab) = ws.current_tab_mut() {
+    if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+        && let Some(tab) = ws.current_tab_mut() {
             if app.config.matches_markdown(key, "down")
                 || app.config.matches_markdown(key, "down_alt")
             {
@@ -392,7 +384,6 @@ pub(super) fn handle_markdown_interaction(app: &mut App, key: KeyEvent) -> Optio
                 tab.markdown_scroll = u16::MAX;
             }
         }
-    }
     None
 }
 
@@ -448,8 +439,8 @@ pub(super) fn handle_workspace_interaction(app: &mut App, key: KeyEvent) -> Opti
             app.delete_target = Some(app.selected_workspace);
             app.mode = AppMode::ConfirmDelete;
         }
-    } else if app.config.matches_navigation(key, "edit_workspace") {
-        if let Some(ws) = app.workspaces.get(app.selected_workspace) {
+    } else if app.config.matches_navigation(key, "edit_workspace")
+        && let Some(ws) = app.workspaces.get(app.selected_workspace) {
             let k_path = ws.kanban_path.clone().unwrap_or_default();
             let prompt = ws.prompt.clone();
             app.kanban_input_buffer = k_path;
@@ -461,7 +452,6 @@ pub(super) fn handle_workspace_interaction(app: &mut App, key: KeyEvent) -> Opti
             app.mode = AppMode::EditWorkspace;
             app.interacting = false;
         }
-    }
     None
 }
 
@@ -476,11 +466,10 @@ pub(super) fn handle_filelist_interaction(app: &mut App, key: KeyEvent) -> Optio
     {
         app.prev_file();
     } else if app.config.matches_file_list(key, "diff") {
-        if let Some(ws) = app.current_workspace() {
-            if !ws.changed_files.is_empty() {
+        if let Some(ws) = app.current_workspace()
+            && !ws.changed_files.is_empty() {
                 return Some(Action::OpenDiff(app.selected_file));
             }
-        }
     } else if app.config.matches_file_list(key, "edit_external") {
         if let Some(ws) = app.current_workspace()
             && let Some(file) = ws.changed_files.get(app.selected_file)
@@ -496,17 +485,14 @@ pub(super) fn handle_filelist_interaction(app: &mut App, key: KeyEvent) -> Optio
             app.open_inline_editor(full_path);
         }
     } else if app.config.matches_file_list(key, "stage") {
-        if let Some(ws) = app.current_workspace() {
-            if !ws.changed_files.is_empty() {
+        if let Some(ws) = app.current_workspace()
+            && !ws.changed_files.is_empty() {
                 return Some(Action::GitStage(app.selected_file));
             }
-        }
-    } else if app.config.matches_file_list(key, "unstage") {
-        if let Some(ws) = app.current_workspace() {
-            if !ws.changed_files.is_empty() {
+    } else if app.config.matches_file_list(key, "unstage")
+        && let Some(ws) = app.current_workspace()
+            && !ws.changed_files.is_empty() {
                 return Some(Action::GitUnstage(app.selected_file));
             }
-        }
-    }
     None
 }

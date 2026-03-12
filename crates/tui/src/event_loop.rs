@@ -199,12 +199,11 @@ pub(crate) async fn run(
 
         // Poll file watcher events — mark workspaces as dirty when files change
         for ws in &mut app.workspaces {
-            if let Some(ref mut watcher) = ws.watcher {
-                if watcher.try_recv().is_some() {
+            if let Some(ref mut watcher) = ws.watcher
+                && watcher.try_recv().is_some() {
                     watcher.drain();
                     ws.dirty = true;
                 }
-            }
         }
 
         // Active workspace — check PTY bytes + is_alive
@@ -212,8 +211,8 @@ pub(crate) async fn run(
             let idx = app.active_workspace;
             if let Some(ws) = app.workspaces.get_mut(idx) {
                 let mut pty_done = false;
-                if let Some(tab) = ws.current_tab_mut() {
-                    if let Some(ref mut pty) = tab.pty_session {
+                if let Some(tab) = ws.current_tab_mut()
+                    && let Some(ref mut pty) = tab.pty_session {
                         if !pty.is_alive() {
                             pty_done = true;
                         }
@@ -223,7 +222,6 @@ pub(crate) async fn run(
                             app.needs_redraw = true;
                         }
                     }
-                }
                 if pty_done {
                     ws.status = app::WorkspaceStatus::Done;
                     app.needs_redraw = true;
@@ -287,13 +285,11 @@ pub(crate) async fn run(
                         continue;
                     }
                     let mut pty_done = false;
-                    if let Some(tab) = ws.current_tab_mut() {
-                        if let Some(ref mut pty) = tab.pty_session {
-                            if !pty.is_alive() {
+                    if let Some(tab) = ws.current_tab_mut()
+                        && let Some(ref mut pty) = tab.pty_session
+                            && !pty.is_alive() {
                                 pty_done = true;
                             }
-                        }
-                    }
                     if pty_done {
                         ws.status = app::WorkspaceStatus::Done;
                         app.needs_redraw = true;

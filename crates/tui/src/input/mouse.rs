@@ -35,8 +35,8 @@ pub(crate) fn handle_mouse_event(
                     app.select_prev_workspace();
                 } else if rect_contains(app.file_list_area, col, row) {
                     app.prev_file();
-                } else if rect_contains(app.main_content_area, col, row) {
-                    if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+                } else if rect_contains(app.main_content_area, col, row)
+                    && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
                         && let Some(tab) = ws.current_tab_mut()
                     {
                         if tab.markdown_content.is_some() {
@@ -46,7 +46,6 @@ pub(crate) fn handle_mouse_event(
                             tab.term_scroll = (tab.term_scroll + 3).min(max);
                         }
                     }
-                }
             }
             _ => {}
         },
@@ -70,8 +69,8 @@ pub(crate) fn handle_mouse_event(
                     app.select_next_workspace();
                 } else if rect_contains(app.file_list_area, col, row) {
                     app.next_file();
-                } else if rect_contains(app.main_content_area, col, row) {
-                    if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+                } else if rect_contains(app.main_content_area, col, row)
+                    && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
                         && let Some(tab) = ws.current_tab_mut()
                     {
                         if tab.markdown_content.is_some() {
@@ -80,7 +79,6 @@ pub(crate) fn handle_mouse_event(
                             tab.term_scroll = tab.term_scroll.saturating_sub(3);
                         }
                     }
-                }
             }
             _ => {}
         },
@@ -133,12 +131,11 @@ pub(crate) fn handle_mouse_event(
                     let subtabs_area = app.subtabs_area;
                     if let Some((idx, on_close)) = subtab_index_at(app, col, subtabs_area) {
                         if on_close {
-                            if let Some(ws) = app.current_workspace() {
-                                if ws.tabs.get(idx).is_some_and(|t| t.closable) {
+                            if let Some(ws) = app.current_workspace()
+                                && ws.tabs.get(idx).is_some_and(|t| t.closable) {
                                     app.close_tab_target = Some(idx);
                                     app.mode = AppMode::ConfirmCloseTab;
                                 }
-                            }
                         } else if let Some(ws) = app.current_workspace_mut() {
                             ws.active_tab = idx;
                         }
@@ -164,28 +161,26 @@ pub(crate) fn handle_mouse_event(
                     let inner_y = app.file_list_area.y + 1;
                     if row >= inner_y {
                         let relative_row = (row - inner_y) as usize;
-                        if let Some(ws) = app.current_workspace() {
-                            if relative_row < ws.changed_files.len() {
+                        if let Some(ws) = app.current_workspace()
+                            && relative_row < ws.changed_files.len() {
                                 app.selected_file = relative_row;
                                 // Double-click opens diff
                                 if is_double_click {
                                     return Some(Action::OpenDiff(relative_row));
                                 }
                             }
-                        }
                     }
                 }
                 // Click on main panel — start text selection
                 else if rect_contains(app.main_content_area, col, row) {
                     app.active_pane = ActivePane::MainPanel;
                     app.interacting = true;
-                    if let Some(inner) = app.terminal_inner_area {
-                        if rect_contains(inner, col, row) {
+                    if let Some(inner) = app.terminal_inner_area
+                        && rect_contains(inner, col, row) {
                             let cell_row = row - inner.y;
                             let cell_col = col - inner.x;
                             app.selection = Some(app::Selection::new(cell_row, cell_col));
                         }
-                    }
                 }
             }
         }
@@ -208,8 +203,8 @@ pub(crate) fn handle_mouse_event(
                         }
                     }
                 }
-            } else if let Some(ref mut sel) = app.selection {
-                if let Some(inner) = app.terminal_inner_area {
+            } else if let Some(ref mut sel) = app.selection
+                && let Some(inner) = app.terminal_inner_area {
                     let cell_row = row
                         .saturating_sub(inner.y)
                         .min(inner.height.saturating_sub(1));
@@ -219,7 +214,6 @@ pub(crate) fn handle_mouse_event(
                     sel.end_row = cell_row;
                     sel.end_col = cell_col;
                 }
-            }
         }
         MouseEventKind::Up(MouseButton::Left) => {
             if app.resize_drag.is_some() {
@@ -227,8 +221,8 @@ pub(crate) fn handle_mouse_event(
             } else if let Some(ref mut sel) = app.selection {
                 sel.active = false;
                 let (sr, sc, er, ec) = sel.normalized();
-                if sr != er || sc != ec {
-                    if let Some(ws) = app.workspaces.get(app.active_workspace)
+                if (sr != er || sc != ec)
+                    && let Some(ws) = app.workspaces.get(app.active_workspace)
                         && let Some(tab) = ws.current_tab()
                         && let Some(ref parser) = tab.pty_parser
                     {
@@ -242,7 +236,6 @@ pub(crate) fn handle_mouse_event(
                             app.status_message = Some("Selection copied".into());
                         }
                     }
-                }
             }
         }
         _ => {}

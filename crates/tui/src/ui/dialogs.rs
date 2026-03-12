@@ -43,11 +43,7 @@ fn visible_field(text: &str, active: bool, cursor: usize, field_max: usize) -> S
     if full.chars().count() > field_max && field_max > 2 {
         let chars: Vec<char> = full.chars().collect();
         let cursor_display = before.chars().count();
-        let start = if cursor_display + 2 > field_max {
-            cursor_display + 2 - field_max
-        } else {
-            0
-        };
+        let start = (cursor_display + 2).saturating_sub(field_max);
         let visible: String = chars[start..chars.len().min(start + field_max - 1)]
             .iter()
             .collect();

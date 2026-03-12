@@ -9,7 +9,7 @@ use crate::domain::WorkspaceInfo;
 
 /// Returns the base directory for worktrees:
 /// `$HOME/.local/share/piki-multi/worktrees/<project_dir_name>`
-fn worktrees_base(git_root: &PathBuf) -> PathBuf {
+fn worktrees_base(git_root: &std::path::Path) -> PathBuf {
     let project_name = git_root
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
@@ -24,6 +24,12 @@ fn worktrees_base(git_root: &PathBuf) -> PathBuf {
 /// Manages git worktree creation and removal.
 /// Stateless — each operation receives the source directory.
 pub struct WorkspaceManager;
+
+impl Default for WorkspaceManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl WorkspaceManager {
     pub fn new() -> Self {
@@ -157,26 +163,22 @@ impl WorkspaceManager {
             .current_dir(source_repo)
             .output()
             .await
-        {
-            if output.status.success() {
+            && output.status.success() {
                 let refname = String::from_utf8_lossy(&output.stdout).trim().to_string();
                 // refs/remotes/origin/main -> main
                 if let Some(branch) = refname.strip_prefix("refs/remotes/origin/") {
                     return branch.to_string();
                 }
             }
-        }
         // Fallback: check if "main" branch exists, otherwise "master"
         if let Ok(output) = Command::new("git")
             .args(["rev-parse", "--verify", "refs/heads/main"])
             .current_dir(source_repo)
             .output()
             .await
-        {
-            if output.status.success() {
+            && output.status.success() {
                 return "main".to_string();
             }
-        }
         "master".to_string()
     }
 

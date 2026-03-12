@@ -233,11 +233,10 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
 pub(super) fn handle_confirm_close_tab_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     match key.code {
         KeyCode::Char('y') | KeyCode::Char('Y') => {
-            if let Some(idx) = app.close_tab_target.take() {
-                if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+            if let Some(idx) = app.close_tab_target.take()
+                && let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
                     ws.close_tab(idx);
                 }
-            }
             app.mode = AppMode::Normal;
             None
         }

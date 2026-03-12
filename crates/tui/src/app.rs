@@ -475,6 +475,9 @@ pub struct TermSearchState {
     pub current_match: usize,
 }
 
+/// Cached footer keys: (mode, interacting, active_pane, has_markdown, keys)
+pub type FooterCache = (AppMode, bool, ActivePane, bool, Vec<(String, &'static str)>);
+
 pub struct App {
     pub should_quit: bool,
     pub mode: AppMode,
@@ -570,7 +573,7 @@ pub struct App {
     /// Cache for rendered diff output, keyed by file path (LRU eviction)
     pub diff_cache: lru::LruCache<String, Arc<Text<'static>>>,
     /// Cached footer keys: (mode, interacting, active_pane, has_markdown) → keys
-    pub footer_cache: Option<(AppMode, bool, ActivePane, bool, Vec<(String, &'static str)>)>,
+    pub footer_cache: Option<FooterCache>,
     /// Last time inactive workspace PTYs were checked for exit
     pub last_inactive_pty_check: Instant,
 }
@@ -711,20 +714,18 @@ impl App {
     }
 
     pub fn next_file(&mut self) {
-        if let Some(ws) = self.current_workspace() {
-            if !ws.changed_files.is_empty() {
+        if let Some(ws) = self.current_workspace()
+            && !ws.changed_files.is_empty() {
                 self.selected_file = (self.selected_file + 1) % ws.changed_files.len();
             }
-        }
     }
 
     pub fn prev_file(&mut self) {
-        if let Some(ws) = self.current_workspace() {
-            if !ws.changed_files.is_empty() {
+        if let Some(ws) = self.current_workspace()
+            && !ws.changed_files.is_empty() {
                 let len = ws.changed_files.len();
                 self.selected_file = (self.selected_file + len - 1) % len;
             }
-        }
     }
 
     pub fn select_next_workspace(&mut self) {
