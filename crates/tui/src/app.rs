@@ -1,16 +1,16 @@
+use parking_lot::Mutex;
 use std::path::PathBuf;
 use std::sync::Arc;
-use parking_lot::Mutex;
 use std::time::Instant;
 
 use ratatui::layout::Rect;
 use ratatui::text::Text;
 
 // Re-export domain types from core for convenience
-pub use piki_core::{AIProvider, ChangedFile, FileStatus, WorkspaceStatus};
 pub use piki_core::git::{get_ahead_behind, get_changed_files};
 pub use piki_core::pty::PtySession;
 pub use piki_core::workspace::FileWatcher;
+pub use piki_core::{AIProvider, ChangedFile, FileStatus, WorkspaceStatus};
 
 use crate::theme::Theme;
 
@@ -265,7 +265,9 @@ pub struct FuzzyState {
 impl FuzzyState {
     /// Get the path of the currently selected result
     pub fn selected_path(&self) -> Option<&str> {
-        self.results.get(self.selected).map(|m| self.all_files[m.path_idx].as_str())
+        self.results
+            .get(self.selected)
+            .map(|m| self.all_files[m.path_idx].as_str())
     }
 
     /// Get the path for a given result
@@ -415,7 +417,6 @@ impl Selection {
             (self.end_row, self.end_col, self.anchor_row, self.anchor_col)
         }
     }
-
 }
 
 /// Central application state
@@ -753,110 +754,5 @@ impl App {
                 self.status_message = Some(format!("Cannot read file: {}", e));
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    pub use piki_core::git::parse_porcelain_status;
-    pub use piki_core::FileStatus;
-
-    #[test]
-    fn test_parse_porcelain_modified_unstaged() {
-        let input = " M src/main.rs\n";
-        let files = parse_porcelain_status(input);
-        assert_eq!(files.len(), 1);
-        assert_eq!(files[0].path, "src/main.rs");
-        assert_eq!(files[0].status, FileStatus::Modified);
-    }
-
-    #[test]
-    fn test_parse_porcelain_staged() {
-        let input = "M  src/main.rs\n";
-        let files = parse_porcelain_status(input);
-        assert_eq!(files.len(), 1);
-        assert_eq!(files[0].path, "src/main.rs");
-        assert_eq!(files[0].status, FileStatus::Staged);
-    }
-
-    #[test]
-    fn test_parse_porcelain_staged_modified() {
-        let input = "MM src/main.rs\n";
-        let files = parse_porcelain_status(input);
-        assert_eq!(files.len(), 1);
-        assert_eq!(files[0].path, "src/main.rs");
-        assert_eq!(files[0].status, FileStatus::StagedModified);
-    }
-
-    #[test]
-    fn test_parse_porcelain_added() {
-        let input = "A  src/new.rs\n";
-        let files = parse_porcelain_status(input);
-        assert_eq!(files.len(), 1);
-        assert_eq!(files[0].path, "src/new.rs");
-        assert_eq!(files[0].status, FileStatus::Added);
-    }
-
-    #[test]
-    fn test_parse_porcelain_deleted() {
-        let input = " D old_file.rs\n";
-        let files = parse_porcelain_status(input);
-        assert_eq!(files.len(), 1);
-        assert_eq!(files[0].path, "old_file.rs");
-        assert_eq!(files[0].status, FileStatus::Deleted);
-    }
-
-    #[test]
-    fn test_parse_porcelain_untracked() {
-        let input = "?? new_file.rs\n";
-        let files = parse_porcelain_status(input);
-        assert_eq!(files.len(), 1);
-        assert_eq!(files[0].path, "new_file.rs");
-        assert_eq!(files[0].status, FileStatus::Untracked);
-    }
-
-    #[test]
-    fn test_parse_porcelain_conflicts() {
-        let input = "UU conflict.rs\nAA both_added.rs\nDD both_deleted.rs\n";
-        let files = parse_porcelain_status(input);
-        assert_eq!(files.len(), 3);
-        assert_eq!(files[0].status, FileStatus::Conflicted);
-        assert_eq!(files[1].status, FileStatus::Conflicted);
-        assert_eq!(files[2].status, FileStatus::Conflicted);
-    }
-
-    #[test]
-    fn test_parse_porcelain_renamed() {
-        let input = "R  old.rs -> new.rs\n";
-        let files = parse_porcelain_status(input);
-        assert_eq!(files.len(), 1);
-        assert_eq!(files[0].status, FileStatus::Renamed);
-        assert_eq!(files[0].path, "new.rs");
-    }
-
-    #[test]
-    fn test_parse_porcelain_empty() {
-        let files = parse_porcelain_status("");
-        assert!(files.is_empty());
-    }
-
-    #[test]
-    fn test_parse_porcelain_mixed() {
-        let input = " M src/app.rs\nA  src/new.rs\n?? untracked.txt\nMM both.rs\nD  deleted.rs\n";
-        let files = parse_porcelain_status(input);
-        assert_eq!(files.len(), 5);
-        assert_eq!(files[0].status, FileStatus::Modified);
-        assert_eq!(files[1].status, FileStatus::Added);
-        assert_eq!(files[2].status, FileStatus::Untracked);
-        assert_eq!(files[3].status, FileStatus::StagedModified);
-        assert_eq!(files[4].status, FileStatus::Deleted);
-    }
-
-    #[test]
-    fn test_parse_porcelain_malformed() {
-        let input = "x\n\n M valid.rs\n";
-        let files = parse_porcelain_status(input);
-        assert_eq!(files.len(), 1);
-        assert_eq!(files[0].path, "valid.rs");
     }
 }

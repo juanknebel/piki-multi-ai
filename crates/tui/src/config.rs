@@ -323,7 +323,7 @@ impl Config {
             .context("failed to read config file")
             .and_then(|data| toml::from_str(&data).context("failed to parse config file"))
             .unwrap_or_else(|e| {
-                eprintln!("Warning: failed to load config from {:?}: {}", path, e);
+                tracing::warn!(?path, %e, "failed to load config, using defaults");
                 Self::default()
             })
     }
@@ -333,7 +333,9 @@ impl Config {
             key_matches(event, binding)
         } else {
             let defaults = default_navigation();
-            defaults.get(action).map_or(false, |b| key_matches(event, b))
+            defaults
+                .get(action)
+                .map_or(false, |b| key_matches(event, b))
         }
     }
 
@@ -403,21 +405,96 @@ impl Config {
 
     pub fn get_binding(&self, section: &str, action: &str) -> String {
         let binding = match section {
-            "navigation" => self.keybindings.navigation.get(action).cloned().or_else(|| default_navigation().get(action).cloned()),
-            "interaction" => self.keybindings.interaction.get(action).cloned().or_else(|| default_interaction().get(action).cloned()),
-            "markdown" => self.keybindings.markdown.get(action).cloned().or_else(|| default_markdown().get(action).cloned()),
-            "diff" => self.keybindings.diff.get(action).cloned().or_else(|| default_diff().get(action).cloned()),
-            "workspace_list" => self.keybindings.workspace_list.get(action).cloned().or_else(|| default_workspace_list().get(action).cloned()),
-            "file_list" => self.keybindings.file_list.get(action).cloned().or_else(|| default_file_list().get(action).cloned()),
-            "help" => self.keybindings.help.get(action).cloned().or_else(|| default_help().get(action).cloned()),
-            "about" => self.keybindings.about.get(action).cloned().or_else(|| default_about().get(action).cloned()),
-            "workspace_info" => self.keybindings.workspace_info.get(action).cloned().or_else(|| default_workspace_info().get(action).cloned()),
-            "fuzzy" => self.keybindings.fuzzy.get(action).cloned().or_else(|| default_fuzzy().get(action).cloned()),
-            "editor" => self.keybindings.editor.get(action).cloned().or_else(|| default_editor().get(action).cloned()),
-            "new_workspace" => self.keybindings.new_workspace.get(action).cloned().or_else(|| default_new_workspace().get(action).cloned()),
-            "commit" => self.keybindings.commit.get(action).cloned().or_else(|| default_commit().get(action).cloned()),
-            "merge" => self.keybindings.merge.get(action).cloned().or_else(|| default_merge().get(action).cloned()),
-            "new_tab" => self.keybindings.new_tab.get(action).cloned().or_else(|| default_new_tab().get(action).cloned()),
+            "navigation" => self
+                .keybindings
+                .navigation
+                .get(action)
+                .cloned()
+                .or_else(|| default_navigation().get(action).cloned()),
+            "interaction" => self
+                .keybindings
+                .interaction
+                .get(action)
+                .cloned()
+                .or_else(|| default_interaction().get(action).cloned()),
+            "markdown" => self
+                .keybindings
+                .markdown
+                .get(action)
+                .cloned()
+                .or_else(|| default_markdown().get(action).cloned()),
+            "diff" => self
+                .keybindings
+                .diff
+                .get(action)
+                .cloned()
+                .or_else(|| default_diff().get(action).cloned()),
+            "workspace_list" => self
+                .keybindings
+                .workspace_list
+                .get(action)
+                .cloned()
+                .or_else(|| default_workspace_list().get(action).cloned()),
+            "file_list" => self
+                .keybindings
+                .file_list
+                .get(action)
+                .cloned()
+                .or_else(|| default_file_list().get(action).cloned()),
+            "help" => self
+                .keybindings
+                .help
+                .get(action)
+                .cloned()
+                .or_else(|| default_help().get(action).cloned()),
+            "about" => self
+                .keybindings
+                .about
+                .get(action)
+                .cloned()
+                .or_else(|| default_about().get(action).cloned()),
+            "workspace_info" => self
+                .keybindings
+                .workspace_info
+                .get(action)
+                .cloned()
+                .or_else(|| default_workspace_info().get(action).cloned()),
+            "fuzzy" => self
+                .keybindings
+                .fuzzy
+                .get(action)
+                .cloned()
+                .or_else(|| default_fuzzy().get(action).cloned()),
+            "editor" => self
+                .keybindings
+                .editor
+                .get(action)
+                .cloned()
+                .or_else(|| default_editor().get(action).cloned()),
+            "new_workspace" => self
+                .keybindings
+                .new_workspace
+                .get(action)
+                .cloned()
+                .or_else(|| default_new_workspace().get(action).cloned()),
+            "commit" => self
+                .keybindings
+                .commit
+                .get(action)
+                .cloned()
+                .or_else(|| default_commit().get(action).cloned()),
+            "merge" => self
+                .keybindings
+                .merge
+                .get(action)
+                .cloned()
+                .or_else(|| default_merge().get(action).cloned()),
+            "new_tab" => self
+                .keybindings
+                .new_tab
+                .get(action)
+                .cloned()
+                .or_else(|| default_new_tab().get(action).cloned()),
             _ => None,
         };
         binding.unwrap_or_else(|| "???".to_string())

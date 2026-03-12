@@ -1,8 +1,8 @@
+use parking_lot::Mutex;
 use std::io::{Read, Write};
 use std::path::Path;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use parking_lot::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 
@@ -58,7 +58,10 @@ impl PtySession {
             let mut batch = Vec::with_capacity(65536);
             loop {
                 match reader.read(&mut buf) {
-                    Ok(0) => break, // EOF — process exited
+                    Ok(0) => {
+                        tracing::debug!("PTY reader EOF");
+                        break;
+                    }
                     Ok(n) => {
                         batch.extend_from_slice(&buf[..n]);
                         bytes_clone.fetch_add(n as u64, Ordering::Relaxed);
@@ -78,6 +81,8 @@ impl PtySession {
                 p.process(&batch);
             }
         });
+
+        tracing::info!(command = command, path = %worktree_path.display(), rows, cols, "PTY spawned");
 
         Ok(Self {
             child,
@@ -121,6 +126,7 @@ impl PtySession {
 
     /// Kill the child process
     pub fn kill(&mut self) -> anyhow::Result<()> {
+        tracing::info!("PTY killed");
         self.child.kill()?;
         Ok(())
     }

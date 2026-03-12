@@ -97,7 +97,9 @@ pub async fn get_changed_files(worktree_path: &PathBuf) -> anyhow::Result<Vec<Ch
         .await?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    Ok(parse_porcelain_status(&stdout))
+    let files = parse_porcelain_status(&stdout);
+    tracing::debug!(path = %worktree_path.display(), count = files.len(), "get_changed_files");
+    Ok(files)
 }
 
 /// Get ahead/behind counts relative to upstream.
@@ -119,6 +121,7 @@ pub async fn get_ahead_behind(worktree_path: &PathBuf) -> Option<(usize, usize)>
     if parts.len() == 2 {
         let ahead = parts[0].parse().unwrap_or(0);
         let behind = parts[1].parse().unwrap_or(0);
+        tracing::debug!(path = %worktree_path.display(), ahead, behind, "ahead_behind");
         Some((ahead, behind))
     } else {
         None

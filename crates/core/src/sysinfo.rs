@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use parking_lot::Mutex;
+use std::sync::Arc;
 use systemstat::{Platform, System};
 use tokio::time::{Duration, interval};
 
@@ -15,10 +15,7 @@ struct SystemInfo {
 impl SystemInfo {
     fn format(&self) -> String {
         let cpu = format!("CPU {:.0}%", self.cpu_percent);
-        let mem = format!(
-            "RAM {:.1}/{:.1}G",
-            self.mem_used_gb, self.mem_total_gb
-        );
+        let mem = format!("RAM {:.1}/{:.1}G", self.mem_used_gb, self.mem_total_gb);
         let bat = match self.battery_percent {
             Some(pct) => {
                 let icon = if self.battery_charging { "+" } else { "" };
@@ -26,7 +23,9 @@ impl SystemInfo {
             }
             None => String::new(),
         };
-        let time = chrono::Local::now().format("TIME %Y-%m-%d %H:%M").to_string();
+        let time = chrono::Local::now()
+            .format("TIME %Y-%m-%d %H:%M")
+            .to_string();
 
         let mut parts = vec![cpu, mem];
         if !bat.is_empty() {

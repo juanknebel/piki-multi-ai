@@ -26,9 +26,16 @@ parking_lot = "0.12"
 # Error handling
 anyhow = "1"
 
+# Logging
+tracing = "0.1"
+
 # System info
 systemstat = "0.2.6"
 chrono = "0.4.44"
 
 # Home directory resolution
 dirs = "6"
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "test-util"] }

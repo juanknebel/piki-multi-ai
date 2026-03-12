@@ -18,10 +18,10 @@ use ratatui::layout::Rect;
 
 use app::{ActivePane, App, AppMode, DialogField};
 use clap::{Parser, Subcommand};
-use piki_core::{AIProvider, MergeStrategy};
 use piki_core::pty::PtySession;
-use piki_core::workspace::{FileWatcher, WorkspaceManager};
 use piki_core::workspace::config as ws_config;
+use piki_core::workspace::{FileWatcher, WorkspaceManager};
+use piki_core::{AIProvider, MergeStrategy};
 
 #[derive(Parser)]
 #[command(name = "piki-multi-ai")]
@@ -29,6 +29,10 @@ use piki_core::workspace::config as ws_config;
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
+
+    /// Logging level: trace, debug, info, warn, error
+    #[arg(long, default_value = "info", global = true)]
+    log_level: String,
 }
 
 #[derive(Subcommand)]
@@ -75,6 +79,43 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
+    // Initialize structured logging to file
+    let log_dir = dirs::data_dir()
+        .unwrap_or_else(|| PathBuf::from("/tmp"))
+        .join("piki-multi/logs");
+    let file_appender = tracing_appender::rolling::daily(&log_dir, "piki-multi.log");
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+
+    let level_filter = match cli.log_level.to_lowercase().as_str() {
+        "trace" => tracing_subscriber::filter::LevelFilter::TRACE,
+        "debug" => tracing_subscriber::filter::LevelFilter::DEBUG,
+        "warn" => tracing_subscriber::filter::LevelFilter::WARN,
+        "error" => tracing_subscriber::filter::LevelFilter::ERROR,
+        _ => tracing_subscriber::filter::LevelFilter::INFO,
+    };
+
+    tracing_subscriber::fmt()
+        .with_writer(non_blocking)
+        .with_ansi(false)
+        .with_target(true)
+        .with_max_level(level_filter)
+        .init();
+
+    tracing::info!(log_level = %cli.log_level, "piki-multi-ai starting");
+
+    // Pre-flight dependency checks
+    let preflight = piki_core::preflight::run_preflight_checks();
+    if preflight.has_errors() {
+        for error in &preflight.errors {
+            tracing::error!("{}", error);
+            eprintln!("FATAL: {}", error);
+        }
+        std::process::exit(1);
+    }
+    for warning in &preflight.warnings {
+        tracing::warn!("{}", warning);
+    }
+
     // Install panic hook that restores terminal before printing panic
     let original_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |panic_info| {
@@ -85,9 +126,10 @@ async fn main() -> anyhow::Result<()> {
 
     let terminal = ratatui::init();
     crossterm::execute!(std::io::stderr(), crossterm::event::EnableMouseCapture)?;
-    let result = run(terminal).await;
+    let result = run(terminal, preflight.warnings).await;
     crossterm::execute!(std::io::stderr(), crossterm::event::DisableMouseCapture)?;
     ratatui::restore();
+    tracing::info!("piki-multi-ai shutdown");
     result
 }
 
@@ -114,16 +156,23 @@ fn process_refresh_result(app: &mut App, result: app::RefreshResult) {
     app.needs_redraw = true;
 }
 
-async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
+async fn run(mut terminal: DefaultTerminal, preflight_warnings: Vec<String>) -> anyhow::Result<()> {
     let manager = WorkspaceManager::new();
     let mut app = App::new();
     app.sysinfo = piki_core::sysinfo::spawn_sysinfo_poller();
     app.theme = theme::load();
 
+    // Show preflight warnings in status bar
+    if !preflight_warnings.is_empty() {
+        app.status_message = Some(preflight_warnings.join(" | "));
+    }
+
     // Compute real terminal dimensions for PTY spawning
     let term_size = terminal.size()?;
-    let pty_area =
-        ui::layout::compute_terminal_area_with(Rect::new(0, 0, term_size.width, term_size.height), app.sidebar_pct);
+    let pty_area = ui::layout::compute_terminal_area_with(
+        Rect::new(0, 0, term_size.width, term_size.height),
+        app.sidebar_pct,
+    );
     app.pty_rows = pty_area.height;
     app.pty_cols = pty_area.width;
 
@@ -150,10 +199,12 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
 
         app.workspaces.push(ws);
     }
+    tracing::info!(count = app.workspaces.len(), "workspaces restored");
     if !app.workspaces.is_empty() {
         app.switch_workspace(0);
     }
 
+    tracing::info!("event loop starting");
     let mut reader = EventStream::new();
     let mut tick_interval = tokio::time::interval(TICK_RATE);
     tick_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -390,7 +441,10 @@ async fn execute_action(
 ) -> anyhow::Result<()> {
     match action {
         Action::CreateWorkspace(name, description, prompt, kanban_path, dir) => {
-            match manager.create(&name, &description, &prompt, kanban_path, &dir).await {
+            match manager
+                .create(&name, &description, &prompt, kanban_path, &dir)
+                .await
+            {
                 Ok(info) => {
                     app.workspaces.push(app::Workspace::from_info(info));
                     let new_idx = app.workspaces.len() - 1;
@@ -428,7 +482,9 @@ async fn execute_action(
                     {
                         let source = app.workspaces[new_idx].source_repo.clone();
                         let infos: Vec<_> = app.workspaces.iter().map(|w| w.info.clone()).collect();
-                        tokio::spawn(async move { let _ = ws_config::save(&source, &infos); });
+                        tokio::spawn(async move {
+                            let _ = ws_config::save(&source, &infos);
+                        });
                     }
                 }
                 Err(e) => {
@@ -447,7 +503,9 @@ async fn execute_action(
                 {
                     let source = ws.source_repo.clone();
                     let infos: Vec<_> = app.workspaces.iter().map(|w| w.info.clone()).collect();
-                    tokio::spawn(async move { let _ = ws_config::save(&source, &infos); });
+                    tokio::spawn(async move {
+                        let _ = ws_config::save(&source, &infos);
+                    });
                 }
                 app.status_message = Some("Workspace updated".into());
             }
@@ -485,8 +543,11 @@ async fn execute_action(
                         // Persist config
                         {
                             let source = source_repo.clone();
-                            let infos: Vec<_> = app.workspaces.iter().map(|w| w.info.clone()).collect();
-                            tokio::spawn(async move { let _ = ws_config::save(&source, &infos); });
+                            let infos: Vec<_> =
+                                app.workspaces.iter().map(|w| w.info.clone()).collect();
+                            tokio::spawn(async move {
+                                let _ = ws_config::save(&source, &infos);
+                            });
                         }
                     }
                     Err(e) => {
@@ -525,7 +586,9 @@ async fn execute_action(
                 {
                     let source = source_repo.clone();
                     let infos: Vec<_> = app.workspaces.iter().map(|w| w.info.clone()).collect();
-                    tokio::spawn(async move { let _ = ws_config::save(&source, &infos); });
+                    tokio::spawn(async move {
+                        let _ = ws_config::save(&source, &infos);
+                    });
                 }
             }
         }
@@ -564,7 +627,11 @@ async fn execute_action(
                     // Compute diff width from actual terminal size (matches diff overlay: 90% width minus borders)
                     let term_size = terminal.size()?;
                     let overlay_inner_width = (term_size.width * 90 / 100).saturating_sub(2);
-                    let width = if overlay_inner_width > 10 { overlay_inner_width } else { 120 };
+                    let width = if overlay_inner_width > 10 {
+                        overlay_inner_width
+                    } else {
+                        120
+                    };
                     let cache_key = format!("{}@{}", file_path, width);
                     // Check cache first to avoid re-running git diff | delta
                     if let Some(cached) = app.diff_cache.get(&cache_key) {
@@ -577,8 +644,13 @@ async fn execute_action(
                     } else {
                         let worktree_path = ws.path.clone();
                         let file_status = file.status.clone();
-                        match piki_core::diff::runner::run_diff(&worktree_path, &file_path, width, &file_status)
-                            .await
+                        match piki_core::diff::runner::run_diff(
+                            &worktree_path,
+                            &file_path,
+                            width,
+                            &file_status,
+                        )
+                        .await
                         {
                             Ok(ansi_bytes) => {
                                 use ansi_to_tui::IntoText;
@@ -704,8 +776,7 @@ async fn execute_action(
                 }
 
                 // Detect main branch
-                let main_branch =
-                    WorkspaceManager::detect_main_branch(&source_repo).await;
+                let main_branch = WorkspaceManager::detect_main_branch(&source_repo).await;
 
                 match strategy {
                     MergeStrategy::Merge => {
@@ -715,8 +786,9 @@ async fn execute_action(
                             .current_dir(&source_repo)
                             .output()
                             .await?;
-                        let src_dirty =
-                            !String::from_utf8_lossy(&src_status.stdout).trim().is_empty();
+                        let src_dirty = !String::from_utf8_lossy(&src_status.stdout)
+                            .trim()
+                            .is_empty();
                         if src_dirty {
                             tokio::process::Command::new("git")
                                 .args(["stash", "push", "-m", "piki-multi-merge-temp"])
@@ -731,8 +803,9 @@ async fn execute_action(
                             .current_dir(&source_repo)
                             .output()
                             .await?;
-                        let prev =
-                            String::from_utf8_lossy(&prev_branch.stdout).trim().to_string();
+                        let prev = String::from_utf8_lossy(&prev_branch.stdout)
+                            .trim()
+                            .to_string();
 
                         // Checkout main
                         let checkout = tokio::process::Command::new("git")
@@ -742,8 +815,11 @@ async fn execute_action(
                             .await?;
                         if !checkout.status.success() {
                             let stderr = String::from_utf8_lossy(&checkout.stderr);
-                            app.status_message =
-                                Some(format!("Checkout {} failed: {}", main_branch, stderr.trim()));
+                            app.status_message = Some(format!(
+                                "Checkout {} failed: {}",
+                                main_branch,
+                                stderr.trim()
+                            ));
                             if src_dirty {
                                 let _ = tokio::process::Command::new("git")
                                     .args(["stash", "pop"])
@@ -764,8 +840,10 @@ async fn execute_action(
                         if merge.status.success() {
                             let stdout = String::from_utf8_lossy(&merge.stdout);
                             let first = stdout.lines().next().unwrap_or("Merged");
-                            app.status_message =
-                                Some(format!("✓ Merged '{}' into {}: {}", branch, main_branch, first));
+                            app.status_message = Some(format!(
+                                "✓ Merged '{}' into {}: {}",
+                                branch, main_branch, first
+                            ));
                         } else {
                             let stderr = String::from_utf8_lossy(&merge.stderr);
                             // Abort the failed merge to leave repo clean
@@ -827,8 +905,9 @@ async fn execute_action(
                             .current_dir(&source_repo)
                             .output()
                             .await?;
-                        let prev =
-                            String::from_utf8_lossy(&prev_branch.stdout).trim().to_string();
+                        let prev = String::from_utf8_lossy(&prev_branch.stdout)
+                            .trim()
+                            .to_string();
 
                         let _ = tokio::process::Command::new("git")
                             .args(["checkout", &main_branch])
@@ -873,18 +952,26 @@ async fn execute_action(
                 if provider == AIProvider::Kanban && ws.kanban_app.is_none() {
                     // Initialize Kanban app if it doesn't exist yet for this workspace
                     let kanban_path_opt = ws.kanban_path.clone();
-                    
+
                     let mut kanban_provider = if app.config.kanban.provider == "jira" {
-                        Box::new(flow::provider_jira::JiraProvider::from_env()) as Box<dyn flow::provider::Provider>
+                        Box::new(flow::provider_jira::JiraProvider::from_env())
+                            as Box<dyn flow::provider::Provider>
                     } else {
-                        let default_path = kanban_path_opt.map(std::path::PathBuf::from).unwrap_or_else(|| {
-                            app.config.kanban.path.clone().map(std::path::PathBuf::from).unwrap_or_else(|| {
-                                dirs::home_dir()
-                                    .unwrap_or_else(|| std::path::PathBuf::from("."))
-                                    .join(".config/flow/boards/default")
-                            })
-                        });
-                        
+                        let default_path = kanban_path_opt
+                            .map(std::path::PathBuf::from)
+                            .unwrap_or_else(|| {
+                                app.config
+                                    .kanban
+                                    .path
+                                    .clone()
+                                    .map(std::path::PathBuf::from)
+                                    .unwrap_or_else(|| {
+                                        dirs::home_dir()
+                                            .unwrap_or_else(|| std::path::PathBuf::from("."))
+                                            .join(".config/flow/boards/default")
+                                    })
+                            });
+
                         let expanded_path = if let Some(path_str) = default_path.to_str() {
                             if path_str.starts_with("~/") {
                                 if let Some(home) = dirs::home_dir() {
@@ -903,11 +990,13 @@ async fn execute_action(
                         let board_txt = expanded_path.join("board.txt");
                         if !board_txt.exists() {
                             if let Err(e) = std::fs::create_dir_all(&expanded_path) {
-                                app.status_message = Some(format!("Failed to create kanban dir: {}", e));
+                                app.status_message =
+                                    Some(format!("Failed to create kanban dir: {}", e));
                             } else {
                                 let board_content = "col todo \"TO DO\"\ncol in_progress \"IN PROGRESS\"\ncol in_review \"IN REVIEW\"\ncol done \"DONE\"\n";
                                 if let Err(e) = std::fs::write(&board_txt, board_content) {
-                                    app.status_message = Some(format!("Failed to write board.txt: {}", e));
+                                    app.status_message =
+                                        Some(format!("Failed to write board.txt: {}", e));
                                 } else {
                                     for col in &["todo", "in_progress", "in_review", "done"] {
                                         let col_dir = expanded_path.join("cols").join(col);
@@ -918,15 +1007,17 @@ async fn execute_action(
                             }
                         }
 
-                        Box::new(flow::provider_local::LocalProvider::new(expanded_path)) as Box<dyn flow::provider::Provider>
+                        Box::new(flow::provider_local::LocalProvider::new(expanded_path))
+                            as Box<dyn flow::provider::Provider>
                     };
 
-                    let board = kanban_provider.load_board().unwrap_or_else(|_e| {
-                        flow::Board { columns: vec![] }
-                    });
+                    let board = kanban_provider
+                        .load_board()
+                        .unwrap_or_else(|_e| flow::Board { columns: vec![] });
                     let mut kanban = flow::App::new(board);
                     if kanban.board.columns.is_empty() {
-                        kanban.banner = Some("Load failed or empty board. Check board.txt.".to_string());
+                        kanban.banner =
+                            Some("Load failed or empty board. Check board.txt.".to_string());
                     }
                     ws.kanban_app = Some(kanban);
                     ws.kanban_provider = Some(kanban_provider);
@@ -937,23 +1028,21 @@ async fn execute_action(
                 app.status_message = Some(format!("Opened {} tab", provider.label()));
             }
         }
-        Action::OpenMarkdown(path) => {
-            match std::fs::read_to_string(&path) {
-                Ok(content) => {
-                    let label = path
-                        .file_name()
-                        .map(|f| f.to_string_lossy().to_string())
-                        .unwrap_or_else(|| "markdown".to_string());
-                    if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
-                        ws.add_markdown_tab(label.clone(), content);
-                        app.status_message = Some(format!("Opened {}", label));
-                    }
-                }
-                Err(e) => {
-                    app.status_message = Some(format!("Failed to read file: {}", e));
+        Action::OpenMarkdown(path) => match std::fs::read_to_string(&path) {
+            Ok(content) => {
+                let label = path
+                    .file_name()
+                    .map(|f| f.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "markdown".to_string());
+                if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+                    ws.add_markdown_tab(label.clone(), content);
+                    app.status_message = Some(format!("Opened {}", label));
                 }
             }
-        }
+            Err(e) => {
+                app.status_message = Some(format!("Failed to read file: {}", e));
+            }
+        },
         Action::OpenMdr(path) => {
             crossterm::execute!(std::io::stderr(), crossterm::event::DisableMouseCapture)?;
             ratatui::restore();
@@ -968,9 +1057,8 @@ async fn execute_action(
                     app.status_message = Some(format!("mdr exited with: {}", s));
                 }
                 Err(_) => {
-                    app.status_message = Some(
-                        "mdr not found. Install: cargo install markdown-reader".to_string(),
-                    );
+                    app.status_message =
+                        Some("mdr not found. Install: cargo install markdown-reader".to_string());
                 }
             }
             if app.mode == AppMode::FuzzySearch {
@@ -1107,7 +1195,10 @@ fn subtab_index_at(app: &App, col: u16, area: Rect) -> Option<(usize, bool)> {
     let ws = app.current_workspace()?;
     let mut x = area.x;
     for (i, tab) in ws.tabs.iter().enumerate() {
-        let label = tab.markdown_label.as_deref().unwrap_or(tab.provider.label());
+        let label = tab
+            .markdown_label
+            .as_deref()
+            .unwrap_or(tab.provider.label());
         // Matches subtabs.rs: format!(" {}{} ", label, close_marker) where close_marker = " ×" or ""
         // Display widths: " " (1) + label (ascii len) + " ×" (2 display cols) + " " (1) = label.len() + 4
         // Without close: " " (1) + label + " " (1) = label.len() + 2
@@ -1127,85 +1218,102 @@ fn subtab_index_at(app: &App, col: u16, area: Rect) -> Option<(usize, bool)> {
 }
 
 /// Handle all mouse events. Returns an Action if one needs async execution.
-fn handle_mouse_event(app: &mut App, mouse: crossterm::event::MouseEvent, terminal: &mut DefaultTerminal) -> Option<Action> {
+fn handle_mouse_event(
+    app: &mut App,
+    mouse: crossterm::event::MouseEvent,
+    terminal: &mut DefaultTerminal,
+) -> Option<Action> {
     let col = mouse.column;
     let row = mouse.row;
 
     match mouse.kind {
-        MouseEventKind::ScrollUp => {
-            match app.mode {
-                AppMode::Help => { app.help_scroll = app.help_scroll.saturating_sub(3); }
-                AppMode::Diff => { app.diff_scroll = app.diff_scroll.saturating_sub(3); }
-                AppMode::FuzzySearch => {
-                    if let Some(ref mut state) = app.fuzzy {
-                        state.selected = state.selected.saturating_sub(1);
-                    }
-                }
-                AppMode::Normal | AppMode::InlineEdit => {
-                    if rect_contains(app.ws_list_area, col, row) {
-                        app.select_prev_workspace();
-                    } else if rect_contains(app.file_list_area, col, row) {
-                        app.prev_file();
-                    } else if rect_contains(app.main_content_area, col, row) {
-                        if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-                            && let Some(tab) = ws.current_tab_mut()
-                        {
-                            if tab.markdown_content.is_some() {
-                                tab.markdown_scroll = tab.markdown_scroll.saturating_sub(3);
-                            } else if let Some(ref parser) = tab.pty_parser {
-                                let max = scrollback_max(parser);
-                                tab.term_scroll = (tab.term_scroll + 3).min(max);
-                            }
-                        }
-                    }
-                }
-                _ => {}
+        MouseEventKind::ScrollUp => match app.mode {
+            AppMode::Help => {
+                app.help_scroll = app.help_scroll.saturating_sub(3);
             }
-        }
-        MouseEventKind::ScrollDown => {
-            match app.mode {
-                AppMode::Help => { app.help_scroll = app.help_scroll.saturating_add(3); }
-                AppMode::Diff => { app.diff_scroll = app.diff_scroll.saturating_add(3); }
-                AppMode::FuzzySearch => {
-                    if let Some(ref mut state) = app.fuzzy {
-                        if !state.results.is_empty() {
-                            state.selected = (state.selected + 1).min(state.results.len() - 1);
-                        }
-                    }
-                }
-                AppMode::Normal | AppMode::InlineEdit => {
-                    if rect_contains(app.ws_list_area, col, row) {
-                        app.select_next_workspace();
-                    } else if rect_contains(app.file_list_area, col, row) {
-                        app.next_file();
-                    } else if rect_contains(app.main_content_area, col, row) {
-                        if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-                            && let Some(tab) = ws.current_tab_mut()
-                        {
-                            if tab.markdown_content.is_some() {
-                                tab.markdown_scroll = tab.markdown_scroll.saturating_add(3);
-                            } else {
-                                tab.term_scroll = tab.term_scroll.saturating_sub(3);
-                            }
-                        }
-                    }
-                }
-                _ => {}
+            AppMode::Diff => {
+                app.diff_scroll = app.diff_scroll.saturating_sub(3);
             }
-        }
+            AppMode::FuzzySearch => {
+                if let Some(ref mut state) = app.fuzzy {
+                    state.selected = state.selected.saturating_sub(1);
+                }
+            }
+            AppMode::Normal | AppMode::InlineEdit => {
+                if rect_contains(app.ws_list_area, col, row) {
+                    app.select_prev_workspace();
+                } else if rect_contains(app.file_list_area, col, row) {
+                    app.prev_file();
+                } else if rect_contains(app.main_content_area, col, row) {
+                    if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+                        && let Some(tab) = ws.current_tab_mut()
+                    {
+                        if tab.markdown_content.is_some() {
+                            tab.markdown_scroll = tab.markdown_scroll.saturating_sub(3);
+                        } else if let Some(ref parser) = tab.pty_parser {
+                            let max = scrollback_max(parser);
+                            tab.term_scroll = (tab.term_scroll + 3).min(max);
+                        }
+                    }
+                }
+            }
+            _ => {}
+        },
+        MouseEventKind::ScrollDown => match app.mode {
+            AppMode::Help => {
+                app.help_scroll = app.help_scroll.saturating_add(3);
+            }
+            AppMode::Diff => {
+                app.diff_scroll = app.diff_scroll.saturating_add(3);
+            }
+            AppMode::FuzzySearch => {
+                if let Some(ref mut state) = app.fuzzy {
+                    if !state.results.is_empty() {
+                        state.selected = (state.selected + 1).min(state.results.len() - 1);
+                    }
+                }
+            }
+            AppMode::Normal | AppMode::InlineEdit => {
+                if rect_contains(app.ws_list_area, col, row) {
+                    app.select_next_workspace();
+                } else if rect_contains(app.file_list_area, col, row) {
+                    app.next_file();
+                } else if rect_contains(app.main_content_area, col, row) {
+                    if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+                        && let Some(tab) = ws.current_tab_mut()
+                    {
+                        if tab.markdown_content.is_some() {
+                            tab.markdown_scroll = tab.markdown_scroll.saturating_add(3);
+                        } else {
+                            tab.term_scroll = tab.term_scroll.saturating_sub(3);
+                        }
+                    }
+                }
+            }
+            _ => {}
+        },
         MouseEventKind::Down(MouseButton::Left) => {
             // Detect double-click
             let now = Instant::now();
-            let is_double_click = app
-                .last_click
-                .is_some_and(|(t, c, r)| now.duration_since(t).as_millis() < 400 && c == col && r == row);
+            let is_double_click = app.last_click.is_some_and(|(t, c, r)| {
+                now.duration_since(t).as_millis() < 400 && c == col && r == row
+            });
             app.last_click = Some((now, col, row));
 
             // Dismiss overlays on click
             match app.mode {
-                AppMode::Help => { app.mode = AppMode::Normal; return None; }
-                AppMode::About => { app.mode = AppMode::Normal; return None; }
-                AppMode::WorkspaceInfo => { app.mode = AppMode::Normal; return None; }
+                AppMode::Help => {
+                    app.mode = AppMode::Normal;
+                    return None;
+                }
+                AppMode::About => {
+                    app.mode = AppMode::Normal;
+                    return None;
+                }
+                AppMode::WorkspaceInfo => {
+                    app.mode = AppMode::Normal;
+                    return None;
+                }
                 _ => {}
             }
 
@@ -1310,8 +1418,12 @@ fn handle_mouse_event(app: &mut App, mouse: crossterm::event::MouseEvent, termin
                 }
             } else if let Some(ref mut sel) = app.selection {
                 if let Some(inner) = app.terminal_inner_area {
-                    let cell_row = row.saturating_sub(inner.y).min(inner.height.saturating_sub(1));
-                    let cell_col = col.saturating_sub(inner.x).min(inner.width.saturating_sub(1));
+                    let cell_row = row
+                        .saturating_sub(inner.y)
+                        .min(inner.height.saturating_sub(1));
+                    let cell_col = col
+                        .saturating_sub(inner.x)
+                        .min(inner.width.saturating_sub(1));
                     sel.end_row = cell_row;
                     sel.end_col = cell_col;
                 }
@@ -1349,18 +1461,21 @@ fn handle_mouse_event(app: &mut App, mouse: crossterm::event::MouseEvent, termin
 fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
     // Workspace info overlay — h/l or arrows for horizontal scroll, Esc/i to close
     if app.mode == AppMode::WorkspaceInfo {
-        if app.config.matches_workspace_info(key, "right") || app.config.matches_workspace_info(key, "right_alt") {
+        if app.config.matches_workspace_info(key, "right")
+            || app.config.matches_workspace_info(key, "right_alt")
+        {
             app.info_hscroll = app.info_hscroll.saturating_add(4);
-        } else if app.config.matches_workspace_info(key, "left") || app.config.matches_workspace_info(key, "left_alt") {
+        } else if app.config.matches_workspace_info(key, "left")
+            || app.config.matches_workspace_info(key, "left_alt")
+        {
             app.info_hscroll = app.info_hscroll.saturating_sub(4);
-        } else if app.config.matches_workspace_info(key, "exit") || app.config.matches_workspace_info(key, "exit_info") {
+        } else if app.config.matches_workspace_info(key, "exit")
+            || app.config.matches_workspace_info(key, "exit_info")
+        {
             app.info_hscroll = 0;
             app.mode = AppMode::Normal;
             // Re-enable mouse capture
-            let _ = crossterm::execute!(
-                std::io::stderr(),
-                crossterm::event::EnableMouseCapture
-            );
+            let _ = crossterm::execute!(std::io::stderr(), crossterm::event::EnableMouseCapture);
         }
         return None;
     }
@@ -1387,7 +1502,10 @@ fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
             app.help_scroll = 0;
         } else if app.config.matches_help(key, "scroll_bottom") {
             app.help_scroll = u16::MAX; // clamped during render
-        } else if app.config.matches_help(key, "exit") || app.config.matches_help(key, "exit_alt") || app.config.matches_help(key, "exit_help") {
+        } else if app.config.matches_help(key, "exit")
+            || app.config.matches_help(key, "exit_alt")
+            || app.config.matches_help(key, "exit_help")
+        {
             app.help_scroll = 0;
             app.mode = AppMode::Normal;
         }
@@ -1459,22 +1577,29 @@ fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
 
 fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
     // Pane navigation
-    if app.config.matches_navigation(key, "left") || app.config.matches_navigation(key, "left_alt") {
+    if app.config.matches_navigation(key, "left") || app.config.matches_navigation(key, "left_alt")
+    {
         if app.active_pane == ActivePane::MainPanel {
             app.active_pane = ActivePane::GitStatus;
         }
-    } else if app.config.matches_navigation(key, "right") || app.config.matches_navigation(key, "right_alt") {
+    } else if app.config.matches_navigation(key, "right")
+        || app.config.matches_navigation(key, "right_alt")
+    {
         if matches!(
             app.active_pane,
             ActivePane::WorkspaceList | ActivePane::GitStatus
         ) {
             app.active_pane = ActivePane::MainPanel;
         }
-    } else if app.config.matches_navigation(key, "down") || app.config.matches_navigation(key, "down_alt") {
+    } else if app.config.matches_navigation(key, "down")
+        || app.config.matches_navigation(key, "down_alt")
+    {
         if app.active_pane == ActivePane::WorkspaceList {
             app.active_pane = ActivePane::GitStatus;
         }
-    } else if app.config.matches_navigation(key, "up") || app.config.matches_navigation(key, "up_alt") {
+    } else if app.config.matches_navigation(key, "up")
+        || app.config.matches_navigation(key, "up_alt")
+    {
         if app.active_pane == ActivePane::GitStatus {
             app.active_pane = ActivePane::WorkspaceList;
         }
@@ -1490,10 +1615,7 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
         if !app.workspaces.is_empty() {
             app.mode = AppMode::WorkspaceInfo;
             app.info_hscroll = 0;
-            let _ = crossterm::execute!(
-                std::io::stderr(),
-                crossterm::event::DisableMouseCapture
-            );
+            let _ = crossterm::execute!(std::io::stderr(), crossterm::event::DisableMouseCapture);
         }
     } else if app.config.matches_navigation(key, "edit_workspace") {
         if !app.workspaces.is_empty() {
@@ -1598,15 +1720,23 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
         }
     } else if app.config.matches_navigation(key, "copy") {
         copy_visible_terminal(app);
-    } else if app.config.matches_navigation(key, "fuzzy_search") || app.config.matches_navigation(key, "fuzzy_search_alt") {
+    } else if app.config.matches_navigation(key, "fuzzy_search")
+        || app.config.matches_navigation(key, "fuzzy_search_alt")
+    {
         app.open_fuzzy_search();
-    } else if app.config.matches_navigation(key, "sidebar_shrink") || app.config.matches_navigation(key, "sidebar_shrink_alt") {
+    } else if app.config.matches_navigation(key, "sidebar_shrink")
+        || app.config.matches_navigation(key, "sidebar_shrink_alt")
+    {
         app.sidebar_pct = app.sidebar_pct.saturating_sub(5).max(10);
         resize_all_ptys(app);
-    } else if app.config.matches_navigation(key, "sidebar_grow") || app.config.matches_navigation(key, "sidebar_grow_alt") {
+    } else if app.config.matches_navigation(key, "sidebar_grow")
+        || app.config.matches_navigation(key, "sidebar_grow_alt")
+    {
         app.sidebar_pct = (app.sidebar_pct + 5).min(90);
         resize_all_ptys(app);
-    } else if app.config.matches_navigation(key, "split_up") || app.config.matches_navigation(key, "split_up_alt") {
+    } else if app.config.matches_navigation(key, "split_up")
+        || app.config.matches_navigation(key, "split_up_alt")
+    {
         app.left_split_pct = (app.left_split_pct + 10).min(90);
     } else if app.config.matches_navigation(key, "split_down") {
         app.left_split_pct = app.left_split_pct.saturating_sub(10).max(10);
@@ -1811,7 +1941,9 @@ fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
                 }
             }
             flow::Action::Edit => {
-                let Some(col) = kanban_app.board.columns.get(kanban_app.col) else { return None; };
+                let Some(col) = kanban_app.board.columns.get(kanban_app.col) else {
+                    return None;
+                };
                 let Some(card) = col.cards.get(kanban_app.row) else {
                     kanban_app.banner = Some("Edit failed: no card selected".to_string());
                     return None;
@@ -1850,18 +1982,16 @@ fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
                     }
                 }
             }
-            flow::Action::Refresh => {
-                match kanban_provider.load_board() {
-                    Ok(b) => {
-                        kanban_app.board = b;
-                        kanban_app.clamp();
-                        kanban_app.banner = Some("Refreshed".to_string());
-                    }
-                    Err(e) => {
-                        kanban_app.banner = Some(format!("Refresh failed: {}", e));
-                    }
+            flow::Action::Refresh => match kanban_provider.load_board() {
+                Ok(b) => {
+                    kanban_app.board = b;
+                    kanban_app.clamp();
+                    kanban_app.banner = Some("Refreshed".to_string());
                 }
-            }
+                Err(e) => {
+                    kanban_app.banner = Some(format!("Refresh failed: {}", e));
+                }
+            },
             _ => {
                 let should_quit = kanban_app.apply(a);
                 if should_quit {
@@ -1884,7 +2014,8 @@ fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
             Ok(text) => {
                 if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
                     if let Some(tab) = ws.current_tab_mut() {
-                        let bracketed = tab.pty_parser
+                        let bracketed = tab
+                            .pty_parser
                             .as_ref()
                             .map(|p| p.lock().screen().bracketed_paste())
                             .unwrap_or(false);
@@ -1930,9 +2061,13 @@ fn handle_markdown_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
     }
     if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
         if let Some(tab) = ws.current_tab_mut() {
-            if app.config.matches_markdown(key, "down") || app.config.matches_markdown(key, "down_alt") {
+            if app.config.matches_markdown(key, "down")
+                || app.config.matches_markdown(key, "down_alt")
+            {
                 tab.markdown_scroll = tab.markdown_scroll.saturating_add(1);
-            } else if app.config.matches_markdown(key, "up") || app.config.matches_markdown(key, "up_alt") {
+            } else if app.config.matches_markdown(key, "up")
+                || app.config.matches_markdown(key, "up_alt")
+            {
                 tab.markdown_scroll = tab.markdown_scroll.saturating_sub(1);
             } else if app.config.matches_markdown(key, "page_down") {
                 tab.markdown_scroll = tab.markdown_scroll.saturating_add(20);
@@ -1985,9 +2120,13 @@ fn handle_workspace_interaction(app: &mut App, key: KeyEvent) -> Option<Action> 
         app.interacting = false;
         return None;
     }
-    if app.config.matches_workspace_list(key, "down") || app.config.matches_workspace_list(key, "down_alt") {
+    if app.config.matches_workspace_list(key, "down")
+        || app.config.matches_workspace_list(key, "down_alt")
+    {
         app.select_next_workspace();
-    } else if app.config.matches_workspace_list(key, "up") || app.config.matches_workspace_list(key, "up_alt") {
+    } else if app.config.matches_workspace_list(key, "up")
+        || app.config.matches_workspace_list(key, "up_alt")
+    {
         app.select_prev_workspace();
     } else if app.config.matches_workspace_list(key, "select") {
         app.switch_workspace(app.selected_workspace);
@@ -2020,7 +2159,8 @@ fn handle_filelist_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
     }
     if app.config.matches_file_list(key, "down") || app.config.matches_file_list(key, "down_alt") {
         app.next_file();
-    } else if app.config.matches_file_list(key, "up") || app.config.matches_file_list(key, "up_alt") {
+    } else if app.config.matches_file_list(key, "up") || app.config.matches_file_list(key, "up_alt")
+    {
         app.prev_file();
     } else if app.config.matches_file_list(key, "diff") {
         if let Some(ws) = app.current_workspace() {
@@ -2080,7 +2220,11 @@ fn handle_fuzzy_search_input(app: &mut App, key: KeyEvent) -> Option<Action> {
             }
         }
         KeyCode::Enter => {
-            let selected_path = app.fuzzy.as_ref().and_then(|s| s.selected_path()).map(String::from);
+            let selected_path = app
+                .fuzzy
+                .as_ref()
+                .and_then(|s| s.selected_path())
+                .map(String::from);
 
             if let Some(path) = selected_path {
                 // Check if file is in changed_files list; if so, open its diff
@@ -2098,7 +2242,11 @@ fn handle_fuzzy_search_input(app: &mut App, key: KeyEvent) -> Option<Action> {
         }
         // Ctrl+O: open markdown file in a new tab
         KeyCode::Char('o') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            let selected_path = app.fuzzy.as_ref().and_then(|s| s.selected_path()).map(String::from);
+            let selected_path = app
+                .fuzzy
+                .as_ref()
+                .and_then(|s| s.selected_path())
+                .map(String::from);
 
             if let (Some(rel_path), Some(ws)) = (selected_path, app.current_workspace()) {
                 if rel_path.ends_with(".md") || rel_path.ends_with(".markdown") {
@@ -2113,7 +2261,11 @@ fn handle_fuzzy_search_input(app: &mut App, key: KeyEvent) -> Option<Action> {
         }
         // Alt+M: open markdown file in external mdr viewer
         KeyCode::Char('m') if key.modifiers.contains(KeyModifiers::ALT) => {
-            let selected_path = app.fuzzy.as_ref().and_then(|s| s.selected_path()).map(String::from);
+            let selected_path = app
+                .fuzzy
+                .as_ref()
+                .and_then(|s| s.selected_path())
+                .map(String::from);
 
             if let (Some(rel_path), Some(ws)) = (selected_path, app.current_workspace()) {
                 if rel_path.ends_with(".md") || rel_path.ends_with(".markdown") {
@@ -2126,7 +2278,11 @@ fn handle_fuzzy_search_input(app: &mut App, key: KeyEvent) -> Option<Action> {
         }
         // Ctrl+E: open in $EDITOR
         KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            let selected_path = app.fuzzy.as_ref().and_then(|s| s.selected_path()).map(String::from);
+            let selected_path = app
+                .fuzzy
+                .as_ref()
+                .and_then(|s| s.selected_path())
+                .map(String::from);
 
             if let (Some(rel_path), Some(ws)) = (selected_path, app.current_workspace()) {
                 let full_path = ws.path.join(&rel_path);
@@ -2135,7 +2291,11 @@ fn handle_fuzzy_search_input(app: &mut App, key: KeyEvent) -> Option<Action> {
         }
         // Ctrl+V: open inline editor
         KeyCode::Char('v') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            let selected_path = app.fuzzy.as_ref().and_then(|s| s.selected_path()).map(String::from);
+            let selected_path = app
+                .fuzzy
+                .as_ref()
+                .and_then(|s| s.selected_path())
+                .map(String::from);
 
             if let Some(rel_path) = selected_path
                 && let Some(ws) = app.current_workspace()
@@ -2261,7 +2421,10 @@ fn handle_edit_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
         KeyCode::Char(c) => {
             if !c.is_control() {
                 let (buf, cursor) = dialog_buf_and_cursor(app);
-                let byte_idx = buf.char_indices().nth(*cursor).map_or(buf.len(), |(i, _)| i);
+                let byte_idx = buf
+                    .char_indices()
+                    .nth(*cursor)
+                    .map_or(buf.len(), |(i, _)| i);
                 buf.insert(byte_idx, c);
                 *cursor += 1;
             }
@@ -2270,7 +2433,10 @@ fn handle_edit_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
             let (buf, cursor) = dialog_buf_and_cursor(app);
             if *cursor > 0 {
                 *cursor -= 1;
-                let byte_idx = buf.char_indices().nth(*cursor).map_or(buf.len(), |(i, _)| i);
+                let byte_idx = buf
+                    .char_indices()
+                    .nth(*cursor)
+                    .map_or(buf.len(), |(i, _)| i);
                 buf.remove(byte_idx);
             }
         }
@@ -2278,7 +2444,10 @@ fn handle_edit_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
             let (buf, cursor) = dialog_buf_and_cursor(app);
             let len = buf.chars().count();
             if *cursor < len {
-                let byte_idx = buf.char_indices().nth(*cursor).map_or(buf.len(), |(i, _)| i);
+                let byte_idx = buf
+                    .char_indices()
+                    .nth(*cursor)
+                    .map_or(buf.len(), |(i, _)| i);
                 buf.remove(byte_idx);
             }
         }
@@ -2356,7 +2525,10 @@ fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
             };
             if valid {
                 let (buf, cursor) = dialog_buf_and_cursor(app);
-                let byte_idx = buf.char_indices().nth(*cursor).map_or(buf.len(), |(i, _)| i);
+                let byte_idx = buf
+                    .char_indices()
+                    .nth(*cursor)
+                    .map_or(buf.len(), |(i, _)| i);
                 buf.insert(byte_idx, c);
                 *cursor += 1;
             }
@@ -2364,8 +2536,10 @@ fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
         KeyCode::Backspace => {
             let (buf, cursor) = dialog_buf_and_cursor(app);
             if *cursor > 0 {
-                let byte_idx =
-                    buf.char_indices().nth(*cursor - 1).map_or(buf.len(), |(i, _)| i);
+                let byte_idx = buf
+                    .char_indices()
+                    .nth(*cursor - 1)
+                    .map_or(buf.len(), |(i, _)| i);
                 buf.remove(byte_idx);
                 *cursor -= 1;
             }
@@ -2443,7 +2617,13 @@ fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
             app.kanban_input_cursor = 0;
             app.mode = AppMode::Normal;
             app.active_pane = ActivePane::WorkspaceList;
-            return Some(Action::CreateWorkspace(name, description, prompt, kanban_path, dir));
+            return Some(Action::CreateWorkspace(
+                name,
+                description,
+                prompt,
+                kanban_path,
+                dir,
+            ));
         }
         _ if key.code == KeyCode::Esc
             || (key.code == KeyCode::Char('g')
@@ -2601,4 +2781,3 @@ fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Action> {
         _ => None,
     }
 }
-

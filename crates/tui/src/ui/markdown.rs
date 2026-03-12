@@ -25,11 +25,7 @@ pub fn parse_to_static(content: &str) -> Text<'static> {
     let mut processed: Vec<Line<'static>> = Vec::with_capacity(text.lines.len());
 
     for line in text.lines {
-        let first_text = line
-            .spans
-            .first()
-            .map(|s| s.content.as_ref())
-            .unwrap_or("");
+        let first_text = line.spans.first().map(|s| s.content.as_ref()).unwrap_or("");
 
         if first_text.starts_with("```") {
             in_code_block = !in_code_block;
@@ -38,8 +34,7 @@ pub fn parse_to_static(content: &str) -> Text<'static> {
         }
 
         if in_code_block {
-            let mut spans: Vec<Span<'static>> =
-                vec![Span::styled("  ▐ ", fence_prefix_style)];
+            let mut spans: Vec<Span<'static>> = vec![Span::styled("  ▐ ", fence_prefix_style)];
             for span in line.spans {
                 let owned = Span::styled(span.content.into_owned(), code_bg.patch(span.style));
                 spans.push(owned);

@@ -34,6 +34,8 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 - **Markdown viewer** — Preview `.md` files rendered in-terminal via `tui-markdown`; open from fuzzy search with `Ctrl+o`, scroll with `j/k`, `Ctrl+d/u`, `g/G`, or mouse wheel; read-only interact mode; close tab with `w`
 - **Customizable configuration** — Keybindings and themes loaded from `~/.config/piki-multi/config.toml`
 - **Customizable themes** — Colors loaded from TOML files; supports named colors and hex `#rrggbb`
+- **Pre-flight checks** — Validates required (git >= 2.20) and optional dependencies (claude, gemini, codex, delta) at startup with clear error/warning messages
+- **Structured logging** — File-based structured logging via `tracing` with daily rotation to `~/.local/share/piki-multi/logs/`; configurable via `--log-level` flag (trace/debug/info/warn/error)
 
 ## Prerequisites
 
@@ -69,6 +71,7 @@ piki-multi-ai [COMMAND]
 
 - `-h`, `--help`: Print help
 - `-V`, `--version`: Print version
+- `--log-level <LEVEL>`: Set logging verbosity — `trace`, `debug`, `info` (default), `warn`, `error`. Logs are written to `~/.local/share/piki-multi/logs/`
 
 ### Commands
 
@@ -364,6 +367,7 @@ crates/
       diff/
         runner.rs        # git diff | delta pipeline (with untracked file support)
       sysinfo.rs         # System info poller (CPU, RAM, battery via systemstat + chrono)
+      preflight.rs       # Pre-flight dependency checks (git version, optional tools)
   tui/                   # TUI binary (piki-multi-ai) — depends on piki-core
     src/
       main.rs            # Tokio main loop, event handling, action dispatch
@@ -476,6 +480,7 @@ sequenceDiagram
 - Event-driven architecture: `crossterm::EventStream` + `tokio::select!` for truly async event loop; key handlers return `Option<Action>`, main loop executes actions asynchronously
 - STATUS panel uses `git status --porcelain=v1` for full coverage of untracked, staged, conflicted, and renamed files
 - Diff runner uses `git diff --no-index /dev/null <file>` for untracked files
+- **Structured logging** to file via `tracing` (not to terminal) — TUI output is unaffected; logs rotate daily in `~/.local/share/piki-multi/logs/`
 
 ### Performance optimizations
 

@@ -107,7 +107,11 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             let is_match = match_set.contains(&(ci as u32));
             match run_start {
                 Some((start, prev_match)) if prev_match != is_match => {
-                    let style = if prev_match { matched_style } else { normal_style };
+                    let style = if prev_match {
+                        matched_style
+                    } else {
+                        normal_style
+                    };
                     spans.push(Span::styled(path[start..byte_idx].to_string(), style));
                     run_start = Some((byte_idx, is_match));
                 }
@@ -119,7 +123,11 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         }
         // Flush last run
         if let Some((start, is_match)) = run_start {
-            let style = if is_match { matched_style } else { normal_style };
+            let style = if is_match {
+                matched_style
+            } else {
+                normal_style
+            };
             spans.push(Span::styled(path[start..].to_string(), style));
         }
 

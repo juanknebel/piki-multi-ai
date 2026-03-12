@@ -47,6 +47,11 @@ parking_lot = "0.12"
 # Error handling
 anyhow = "1"
 
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-appender = "0.2"
+
 # CLI Argument Parsing
 clap = { version = "4", features = ["derive"] }
 
@@ -59,3 +64,6 @@ flow = { git = "https://github.com/juanknebel/flow" }
 
 # LRU cache
 lru = "0.12"
+
+[dev-dependencies]
+tempfile = "3"

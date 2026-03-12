@@ -136,6 +136,8 @@ impl WorkspaceManager {
             );
         }
 
+        tracing::info!(workspace = name, branch = %branch_name, path = %worktree_path.display(), "workspace created");
+
         Ok(WorkspaceInfo::new(
             name.to_string(),
             description.to_string(),
@@ -210,6 +212,8 @@ impl WorkspaceManager {
             .current_dir(source_repo)
             .output()
             .await;
+
+        tracing::info!(workspace = name, "workspace removed");
 
         Ok(())
     }

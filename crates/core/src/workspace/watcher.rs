@@ -30,6 +30,7 @@ impl FileWatcher {
     /// Watches recursively, filtering out .git/, target/, and temp files.
     pub fn new(worktree_path: PathBuf, workspace_name: String) -> anyhow::Result<Self> {
         let (tx, rx) = tokio::sync::mpsc::channel(100);
+        let name_for_log = workspace_name.clone();
         let name = workspace_name;
 
         let mut watcher = RecommendedWatcher::new(
@@ -66,6 +67,8 @@ impl FileWatcher {
         )?;
 
         watcher.watch(&worktree_path, RecursiveMode::Recursive)?;
+
+        tracing::info!(workspace = %name_for_log, path = %worktree_path.display(), "file watcher started");
 
         Ok(Self {
             _watcher: watcher,

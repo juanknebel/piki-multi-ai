@@ -17,6 +17,10 @@ pub async fn run_diff(
     match run_diff_with_delta(worktree_path, file_path, width, file_status).await {
         Ok(bytes) => Ok(bytes),
         Err(_) => {
+            tracing::warn!(
+                file = file_path,
+                "delta not available, falling back to plain git diff"
+            );
             // Fallback: plain git diff with color
             let output = if *file_status == FileStatus::Untracked {
                 tokio::process::Command::new("git")

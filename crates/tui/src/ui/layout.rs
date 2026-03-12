@@ -6,18 +6,23 @@ use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph, Tabs};
 
 use crate::app::{ActivePane, App, AppMode, DialogField, FileStatus};
 
-
 /// Compute the inner terminal area (minus borders) for a given total terminal size.
 /// Replicates layout math to find the main content area dimensions.
 pub fn compute_terminal_area_with(total: Rect, sidebar_pct: u16) -> Rect {
     // Main vertical split: header + content + footer (use max footer height for conservative estimate)
-    let [_header, content_area, _footer] =
-        Layout::vertical([Constraint::Length(1), Constraint::Min(0), Constraint::Length(2)]).areas(total);
+    let [_header, content_area, _footer] = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Min(0),
+        Constraint::Length(2),
+    ])
+    .areas(total);
 
     // Horizontal split: left sidebar + right main panel
-    let [_left, right_area] =
-        Layout::horizontal([Constraint::Percentage(sidebar_pct), Constraint::Percentage(100 - sidebar_pct)])
-            .areas(content_area);
+    let [_left, right_area] = Layout::horizontal([
+        Constraint::Percentage(sidebar_pct),
+        Constraint::Percentage(100 - sidebar_pct),
+    ])
+    .areas(content_area);
 
     // Right panel: tabs + sub-tabs + content + status bar
     let [_tabs, _subtabs, main_area, _status] = Layout::vertical([
@@ -68,17 +73,26 @@ pub fn render(frame: &mut Frame, app: &mut App) {
     let footer_height = compute_footer_height_from_keys(&keys, area.width);
 
     // Main vertical split: header + content + footer
-    let [header_area, content_area, footer_area] =
-        Layout::vertical([Constraint::Length(1), Constraint::Min(0), Constraint::Length(footer_height)]).areas(area);
+    let [header_area, content_area, footer_area] = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Min(0),
+        Constraint::Length(footer_height),
+    ])
+    .areas(area);
 
     // Horizontal split: left sidebar + right main panel
-    let [left_area, right_area] =
-        Layout::horizontal([Constraint::Percentage(app.sidebar_pct), Constraint::Percentage(100 - app.sidebar_pct)])
-            .areas(content_area);
+    let [left_area, right_area] = Layout::horizontal([
+        Constraint::Percentage(app.sidebar_pct),
+        Constraint::Percentage(100 - app.sidebar_pct),
+    ])
+    .areas(content_area);
 
     // Left panel: workspaces (top) + files (bottom)
-    let [ws_area, files_area] =
-        Layout::vertical([Constraint::Percentage(app.left_split_pct), Constraint::Percentage(100 - app.left_split_pct)]).areas(left_area);
+    let [ws_area, files_area] = Layout::vertical([
+        Constraint::Percentage(app.left_split_pct),
+        Constraint::Percentage(100 - app.left_split_pct),
+    ])
+    .areas(left_area);
 
     // Store layout rects for mouse hit-testing
     app.sidebar_x = left_area.x + left_area.width;
@@ -260,7 +274,6 @@ fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                 Span::styled(proj_text, Style::default().fg(detail_color)),
             ]));
 
-
             let style = if is_selected {
                 Style::default().bg(theme.selected_bg)
             } else {
@@ -423,14 +436,7 @@ fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) {
                     let content = content.clone();
                     let label = label.clone();
                     let scroll = tab.markdown_scroll;
-                    super::markdown::render(
-                        frame,
-                        area,
-                        &content,
-                        &label,
-                        scroll,
-                        border_style,
-                    );
+                    super::markdown::render(frame, area, &content, &label, scroll, border_style);
                 }
                 return;
             }
@@ -641,7 +647,14 @@ fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
     let cfg = &app.config;
     match app.mode {
         AppMode::FuzzySearch => vec![
-            (format!("{}/{}", cfg.get_binding("fuzzy", "up"), cfg.get_binding("fuzzy", "down")), "select"),
+            (
+                format!(
+                    "{}/{}",
+                    cfg.get_binding("fuzzy", "up"),
+                    cfg.get_binding("fuzzy", "down")
+                ),
+                "select",
+            ),
             (cfg.get_binding("fuzzy", "diff"), "diff"),
             (cfg.get_binding("fuzzy", "editor"), "editor"),
             (cfg.get_binding("fuzzy", "inline_edit"), "inline edit"),
@@ -654,7 +667,10 @@ fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             (cfg.get_binding("editor", "exit"), "close"),
         ],
         AppMode::NewWorkspace => vec![
-            (cfg.get_binding("new_workspace", "switch_field"), "switch field"),
+            (
+                cfg.get_binding("new_workspace", "switch_field"),
+                "switch field",
+            ),
             (cfg.get_binding("new_workspace", "create"), "create"),
             (cfg.get_binding("new_workspace", "exit"), "cancel"),
         ],
@@ -668,7 +684,10 @@ fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             (cfg.get_binding("merge", "exit"), "cancel"),
         ],
         AppMode::EditWorkspace => vec![
-            (cfg.get_binding("new_workspace", "switch_field"), "switch field"),
+            (
+                cfg.get_binding("new_workspace", "switch_field"),
+                "switch field",
+            ),
             ("enter".to_string(), "save"),
             ("esc".to_string(), "cancel"),
         ],
@@ -677,24 +696,53 @@ fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             (cfg.get_binding("new_tab", "exit"), "cancel"),
         ],
         AppMode::Diff => vec![
-            (format!("{}/{}", cfg.get_binding("diff", "up"), cfg.get_binding("diff", "down")), "scroll"),
-            (format!("{}/{}", cfg.get_binding("diff", "page_up"), cfg.get_binding("diff", "page_down")), "page"),
-            (format!("{}/{}", cfg.get_binding("diff", "scroll_top"), cfg.get_binding("diff", "scroll_bottom")), "top/bottom"),
-            (format!("{}/{}", cfg.get_binding("diff", "next_file"), cfg.get_binding("diff", "prev_file")), "next/prev file"),
+            (
+                format!(
+                    "{}/{}",
+                    cfg.get_binding("diff", "up"),
+                    cfg.get_binding("diff", "down")
+                ),
+                "scroll",
+            ),
+            (
+                format!(
+                    "{}/{}",
+                    cfg.get_binding("diff", "page_up"),
+                    cfg.get_binding("diff", "page_down")
+                ),
+                "page",
+            ),
+            (
+                format!(
+                    "{}/{}",
+                    cfg.get_binding("diff", "scroll_top"),
+                    cfg.get_binding("diff", "scroll_bottom")
+                ),
+                "top/bottom",
+            ),
+            (
+                format!(
+                    "{}/{}",
+                    cfg.get_binding("diff", "next_file"),
+                    cfg.get_binding("diff", "prev_file")
+                ),
+                "next/prev file",
+            ),
             (cfg.get_binding("diff", "exit"), "close"),
         ],
-        AppMode::ConfirmCloseTab => vec![
-            ("Y".to_string(), "close"),
-            ("N".to_string(), "cancel"),
-        ],
-        AppMode::ConfirmQuit => vec![
-            ("Y".to_string(), "quit"),
-            ("N".to_string(), "cancel"),
-        ],
+        AppMode::ConfirmCloseTab => vec![("Y".to_string(), "close"), ("N".to_string(), "cancel")],
+        AppMode::ConfirmQuit => vec![("Y".to_string(), "quit"), ("N".to_string(), "cancel")],
         _ if app.interacting => {
             if app.active_pane == ActivePane::GitStatus {
                 vec![
-                    (format!("{}/{}", cfg.get_binding("file_list", "up"), cfg.get_binding("file_list", "down")), "select"),
+                    (
+                        format!(
+                            "{}/{}",
+                            cfg.get_binding("file_list", "up"),
+                            cfg.get_binding("file_list", "down")
+                        ),
+                        "select",
+                    ),
                     (cfg.get_binding("file_list", "diff"), "diff"),
                     (cfg.get_binding("file_list", "stage"), "stage"),
                     (cfg.get_binding("file_list", "unstage"), "unstage"),
@@ -707,17 +755,47 @@ fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                 .is_some_and(|tab| tab.markdown_content.is_some())
             {
                 vec![
-                    (format!("{}/{}", cfg.get_binding("markdown", "up"), cfg.get_binding("markdown", "down")), "scroll"),
-                    (format!("{}/{}", cfg.get_binding("markdown", "page_up"), cfg.get_binding("markdown", "page_down")), "page"),
-                    (format!("{}/{}", cfg.get_binding("markdown", "scroll_top"), cfg.get_binding("markdown", "scroll_bottom")), "top/bottom"),
+                    (
+                        format!(
+                            "{}/{}",
+                            cfg.get_binding("markdown", "up"),
+                            cfg.get_binding("markdown", "down")
+                        ),
+                        "scroll",
+                    ),
+                    (
+                        format!(
+                            "{}/{}",
+                            cfg.get_binding("markdown", "page_up"),
+                            cfg.get_binding("markdown", "page_down")
+                        ),
+                        "page",
+                    ),
+                    (
+                        format!(
+                            "{}/{}",
+                            cfg.get_binding("markdown", "scroll_top"),
+                            cfg.get_binding("markdown", "scroll_bottom")
+                        ),
+                        "top/bottom",
+                    ),
                     (cfg.get_binding("interaction", "exit_interaction"), "back"),
                 ]
             } else {
-                vec![(cfg.get_binding("interaction", "exit_interaction"), "navigation mode")]
+                vec![(
+                    cfg.get_binding("interaction", "exit_interaction"),
+                    "navigation mode",
+                )]
             }
         }
         _ => {
-            let nav = format!("{}{}{}{}", cfg.get_binding("navigation", "up"), cfg.get_binding("navigation", "down"), cfg.get_binding("navigation", "left"), cfg.get_binding("navigation", "right"));
+            let nav = format!(
+                "{}{}{}{}",
+                cfg.get_binding("navigation", "up"),
+                cfg.get_binding("navigation", "down"),
+                cfg.get_binding("navigation", "left"),
+                cfg.get_binding("navigation", "right")
+            );
             let mut keys = vec![
                 (nav, "navigate"),
                 (cfg.get_binding("navigation", "enter_pane"), "interact"),
@@ -727,7 +805,10 @@ fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                     keys.push((cfg.get_binding("navigation", "new_workspace"), "new ws"));
                     keys.push((cfg.get_binding("navigation", "clone_workspace"), "clone ws"));
                     keys.push((cfg.get_binding("navigation", "edit_workspace"), "edit ws"));
-                    keys.push((cfg.get_binding("navigation", "delete_workspace"), "delete ws"));
+                    keys.push((
+                        cfg.get_binding("navigation", "delete_workspace"),
+                        "delete ws",
+                    ));
                     keys.push((cfg.get_binding("navigation", "next_workspace"), "switch ws"));
                 }
                 ActivePane::GitStatus => {
@@ -739,18 +820,37 @@ fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                 ActivePane::MainPanel => {
                     keys.push((cfg.get_binding("navigation", "new_tab"), "new tab"));
                     keys.push((cfg.get_binding("navigation", "close_tab"), "close tab"));
-                    keys.push((format!("{}/{}", cfg.get_binding("navigation", "next_tab"), cfg.get_binding("navigation", "prev_tab")), "next/prev tab"));
+                    keys.push((
+                        format!(
+                            "{}/{}",
+                            cfg.get_binding("navigation", "next_tab"),
+                            cfg.get_binding("navigation", "prev_tab")
+                        ),
+                        "next/prev tab",
+                    ));
                 }
             }
-            keys.push((format!("{}/{}", cfg.get_binding("navigation", "sidebar_shrink"), cfg.get_binding("navigation", "sidebar_grow")), "resize"));
+            keys.push((
+                format!(
+                    "{}/{}",
+                    cfg.get_binding("navigation", "sidebar_shrink"),
+                    cfg.get_binding("navigation", "sidebar_grow")
+                ),
+                "resize",
+            ));
             keys.push((cfg.get_binding("navigation", "help"), "help"));
             keys.push((cfg.get_binding("navigation", "quit"), "quit"));
             keys
-        },
+        }
     }
 }
 
-fn render_footer_from_keys(frame: &mut Frame, area: Rect, keys: &[(String, &str)], theme: &crate::theme::Theme) {
+fn render_footer_from_keys(
+    frame: &mut Frame,
+    area: Rect,
+    keys: &[(String, &str)],
+    theme: &crate::theme::Theme,
+) {
     let make_spans = |items: &[(String, &str)]| -> Vec<Span<'static>> {
         items
             .iter()
@@ -863,7 +963,9 @@ fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
             } else {
                 0
             };
-            let visible: String = chars[start..chars.len().min(start + field_max - 1)].iter().collect();
+            let visible: String = chars[start..chars.len().min(start + field_max - 1)]
+                .iter()
+                .collect();
             format!("…{}", visible)
         } else {
             full
@@ -904,7 +1006,11 @@ fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
         Line::from(vec![
             Span::styled("  Prompt: ", field_style(prompt_active)),
             Span::styled(
-                visible_field(&app.prompt_input_buffer, prompt_active, app.prompt_input_cursor),
+                visible_field(
+                    &app.prompt_input_buffer,
+                    prompt_active,
+                    app.prompt_input_cursor,
+                ),
                 field_style(prompt_active),
             ),
         ]),
@@ -912,7 +1018,11 @@ fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
         Line::from(vec![
             Span::styled("  Kanban: ", field_style(kanban_active)),
             Span::styled(
-                visible_field(&app.kanban_input_buffer, kanban_active, app.kanban_input_cursor),
+                visible_field(
+                    &app.kanban_input_buffer,
+                    kanban_active,
+                    app.kanban_input_cursor,
+                ),
                 field_style(kanban_active),
             ),
         ]),
@@ -968,7 +1078,9 @@ fn render_edit_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
             } else {
                 0
             };
-            let visible: String = chars[start..chars.len().min(start + field_max - 1)].iter().collect();
+            let visible: String = chars[start..chars.len().min(start + field_max - 1)]
+                .iter()
+                .collect();
             format!("…{}", visible)
         } else {
             full
@@ -982,7 +1094,11 @@ fn render_edit_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
         Line::from(vec![
             Span::styled("  Kanban: ", field_style(kanban_active)),
             Span::styled(
-                visible_field(&app.kanban_input_buffer, kanban_active, app.kanban_input_cursor),
+                visible_field(
+                    &app.kanban_input_buffer,
+                    kanban_active,
+                    app.kanban_input_cursor,
+                ),
                 field_style(kanban_active),
             ),
         ]),
@@ -990,7 +1106,11 @@ fn render_edit_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
         Line::from(vec![
             Span::styled("  Prompt: ", field_style(prompt_active)),
             Span::styled(
-                visible_field(&app.prompt_input_buffer, prompt_active, app.prompt_input_cursor),
+                visible_field(
+                    &app.prompt_input_buffer,
+                    prompt_active,
+                    app.prompt_input_cursor,
+                ),
                 field_style(prompt_active),
             ),
         ]),
@@ -1014,67 +1134,221 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let help_text = vec![
         "".to_string(),
         "  Navigation mode (yellow border)".to_string(),
-        format!("    {:<13} Move between panes", format!("{}/{}/{}/{}", cfg.get_binding("navigation", "up"), cfg.get_binding("navigation", "down"), cfg.get_binding("navigation", "left"), cfg.get_binding("navigation", "right"))),
-        format!("    {:<13} Interact with pane", cfg.get_binding("navigation", "enter_pane")),
-        format!("    {:<13} New workspace", cfg.get_binding("navigation", "new_workspace")),
-        format!("    {:<13} Clone workspace", cfg.get_binding("navigation", "clone_workspace")),
-        format!("    {:<13} Edit workspace", cfg.get_binding("navigation", "edit_workspace")),
-        format!("    {:<13} Delete workspace", cfg.get_binding("navigation", "delete_workspace")),
-        format!("    {:<13} Next/Prev workspace", format!("{}/{}", cfg.get_binding("navigation", "next_workspace"), cfg.get_binding("navigation", "prev_workspace"))),
+        format!(
+            "    {:<13} Move between panes",
+            format!(
+                "{}/{}/{}/{}",
+                cfg.get_binding("navigation", "up"),
+                cfg.get_binding("navigation", "down"),
+                cfg.get_binding("navigation", "left"),
+                cfg.get_binding("navigation", "right")
+            )
+        ),
+        format!(
+            "    {:<13} Interact with pane",
+            cfg.get_binding("navigation", "enter_pane")
+        ),
+        format!(
+            "    {:<13} New workspace",
+            cfg.get_binding("navigation", "new_workspace")
+        ),
+        format!(
+            "    {:<13} Clone workspace",
+            cfg.get_binding("navigation", "clone_workspace")
+        ),
+        format!(
+            "    {:<13} Edit workspace",
+            cfg.get_binding("navigation", "edit_workspace")
+        ),
+        format!(
+            "    {:<13} Delete workspace",
+            cfg.get_binding("navigation", "delete_workspace")
+        ),
+        format!(
+            "    {:<13} Next/Prev workspace",
+            format!(
+                "{}/{}",
+                cfg.get_binding("navigation", "next_workspace"),
+                cfg.get_binding("navigation", "prev_workspace")
+            )
+        ),
         format!("    {:<13} Go to workspace N", "1-9"),
-        format!("    {:<13} Next/Prev tab", format!("{}/{}", cfg.get_binding("navigation", "next_tab"), cfg.get_binding("navigation", "prev_tab"))),
-        format!("    {:<13} New tab", cfg.get_binding("navigation", "new_tab")),
-        format!("    {:<13} Close tab", cfg.get_binding("navigation", "close_tab")),
-        format!("    {:<13} Toggle help", cfg.get_binding("navigation", "help")),
+        format!(
+            "    {:<13} Next/Prev tab",
+            format!(
+                "{}/{}",
+                cfg.get_binding("navigation", "next_tab"),
+                cfg.get_binding("navigation", "prev_tab")
+            )
+        ),
+        format!(
+            "    {:<13} New tab",
+            cfg.get_binding("navigation", "new_tab")
+        ),
+        format!(
+            "    {:<13} Close tab",
+            cfg.get_binding("navigation", "close_tab")
+        ),
+        format!(
+            "    {:<13} Toggle help",
+            cfg.get_binding("navigation", "help")
+        ),
         format!("    {:<13} About", cfg.get_binding("navigation", "about")),
         format!("    {:<13} Quit", cfg.get_binding("navigation", "quit")),
         "".to_string(),
         "  Interaction mode (green border)".to_string(),
-        format!("    {:<13} Back to navigation", cfg.get_binding("interaction", "exit_interaction")),
+        format!(
+            "    {:<13} Back to navigation",
+            cfg.get_binding("interaction", "exit_interaction")
+        ),
         "".to_string(),
         "  Terminal pane (navigation mode)".to_string(),
-        format!("    {:<13} Scroll up/down (3 lines)", format!("{}/{}", cfg.get_binding("navigation", "scroll_up"), cfg.get_binding("navigation", "scroll_down"))),
-        format!("    {:<13} Scroll by page", format!("{}/{}", cfg.get_binding("navigation", "page_up"), cfg.get_binding("navigation", "page_down"))),
+        format!(
+            "    {:<13} Scroll up/down (3 lines)",
+            format!(
+                "{}/{}",
+                cfg.get_binding("navigation", "scroll_up"),
+                cfg.get_binding("navigation", "scroll_down")
+            )
+        ),
+        format!(
+            "    {:<13} Scroll by page",
+            format!(
+                "{}/{}",
+                cfg.get_binding("navigation", "page_up"),
+                cfg.get_binding("navigation", "page_down")
+            )
+        ),
         "    Mouse scroll  Scroll up/down".to_string(),
         "".to_string(),
         "  Terminal pane (interaction mode)".to_string(),
         "    All keys sent to active tab".to_string(),
         "".to_string(),
         "  File list pane".to_string(),
-        format!("    {:<13} Select file", format!("{}/{}", cfg.get_binding("file_list", "up"), cfg.get_binding("file_list", "down"))),
+        format!(
+            "    {:<13} Select file",
+            format!(
+                "{}/{}",
+                cfg.get_binding("file_list", "up"),
+                cfg.get_binding("file_list", "down")
+            )
+        ),
         format!("    {:<13} Open diff", cfg.get_binding("file_list", "diff")),
         "".to_string(),
         "  Workspace list pane (interaction mode)".to_string(),
-        format!("    {:<13} Select workspace", format!("{}/{}", cfg.get_binding("workspace_list", "up"), cfg.get_binding("workspace_list", "down"))),
-        format!("    {:<13} Switch to workspace", cfg.get_binding("workspace_list", "select")),
-        format!("    {:<13} Delete workspace", cfg.get_binding("workspace_list", "delete")),
-        format!("    {:<13} Back to navigation", cfg.get_binding("interaction", "exit_interaction")),
+        format!(
+            "    {:<13} Select workspace",
+            format!(
+                "{}/{}",
+                cfg.get_binding("workspace_list", "up"),
+                cfg.get_binding("workspace_list", "down")
+            )
+        ),
+        format!(
+            "    {:<13} Switch to workspace",
+            cfg.get_binding("workspace_list", "select")
+        ),
+        format!(
+            "    {:<13} Delete workspace",
+            cfg.get_binding("workspace_list", "delete")
+        ),
+        format!(
+            "    {:<13} Back to navigation",
+            cfg.get_binding("interaction", "exit_interaction")
+        ),
         "".to_string(),
         "  Diff view".to_string(),
-        format!("    {:<13} Scroll", format!("{}/{}", cfg.get_binding("diff", "up"), cfg.get_binding("diff", "down"))),
-        format!("    {:<13} Page down/up", format!("{}/{}", cfg.get_binding("diff", "page_up"), cfg.get_binding("diff", "page_down"))),
-        format!("    {:<13} Top/Bottom", format!("{}/{}", cfg.get_binding("diff", "scroll_top"), cfg.get_binding("diff", "scroll_bottom"))),
-        format!("    {:<13} Next/Prev file", format!("{}/{}", cfg.get_binding("diff", "next_file"), cfg.get_binding("diff", "prev_file"))),
+        format!(
+            "    {:<13} Scroll",
+            format!(
+                "{}/{}",
+                cfg.get_binding("diff", "up"),
+                cfg.get_binding("diff", "down")
+            )
+        ),
+        format!(
+            "    {:<13} Page down/up",
+            format!(
+                "{}/{}",
+                cfg.get_binding("diff", "page_up"),
+                cfg.get_binding("diff", "page_down")
+            )
+        ),
+        format!(
+            "    {:<13} Top/Bottom",
+            format!(
+                "{}/{}",
+                cfg.get_binding("diff", "scroll_top"),
+                cfg.get_binding("diff", "scroll_bottom")
+            )
+        ),
+        format!(
+            "    {:<13} Next/Prev file",
+            format!(
+                "{}/{}",
+                cfg.get_binding("diff", "next_file"),
+                cfg.get_binding("diff", "prev_file")
+            )
+        ),
         format!("    {:<13} Close diff", cfg.get_binding("diff", "exit")),
         "".to_string(),
-        format!("  Fuzzy search ({} or {})", cfg.get_binding("navigation", "fuzzy_search"), cfg.get_binding("navigation", "fuzzy_search_alt")).to_string(),
+        format!(
+            "  Fuzzy search ({} or {})",
+            cfg.get_binding("navigation", "fuzzy_search"),
+            cfg.get_binding("navigation", "fuzzy_search_alt")
+        )
+        .to_string(),
         "    Type          Filter files".to_string(),
-        format!("    {:<13} Select result", format!("{}/{}", cfg.get_binding("fuzzy", "up"), cfg.get_binding("fuzzy", "down"))),
+        format!(
+            "    {:<13} Select result",
+            format!(
+                "{}/{}",
+                cfg.get_binding("fuzzy", "up"),
+                cfg.get_binding("fuzzy", "down")
+            )
+        ),
         format!("    {:<13} Open diff", cfg.get_binding("fuzzy", "diff")),
-        format!("    {:<13} Open in $EDITOR", cfg.get_binding("fuzzy", "editor")),
-        format!("    {:<13} Inline editor", cfg.get_binding("fuzzy", "inline_edit")),
-        format!("    {:<13} Open markdown viewer", cfg.get_binding("fuzzy", "markdown")),
-        format!("    {:<13} Open in mdr (external)", cfg.get_binding("fuzzy", "mdr")),
+        format!(
+            "    {:<13} Open in $EDITOR",
+            cfg.get_binding("fuzzy", "editor")
+        ),
+        format!(
+            "    {:<13} Inline editor",
+            cfg.get_binding("fuzzy", "inline_edit")
+        ),
+        format!(
+            "    {:<13} Open markdown viewer",
+            cfg.get_binding("fuzzy", "markdown")
+        ),
+        format!(
+            "    {:<13} Open in mdr (external)",
+            cfg.get_binding("fuzzy", "mdr")
+        ),
         format!("    {:<13} Close", cfg.get_binding("fuzzy", "exit")),
         "".to_string(),
         "  File list (interaction mode)".to_string(),
-        format!("    {:<13} Open in $EDITOR", cfg.get_binding("file_list", "edit_external")),
-        format!("    {:<13} Inline editor", cfg.get_binding("file_list", "edit_inline")),
-        format!("    {:<13} Stage file (git add)", cfg.get_binding("file_list", "stage")),
-        format!("    {:<13} Unstage file (git reset)", cfg.get_binding("file_list", "unstage")),
+        format!(
+            "    {:<13} Open in $EDITOR",
+            cfg.get_binding("file_list", "edit_external")
+        ),
+        format!(
+            "    {:<13} Inline editor",
+            cfg.get_binding("file_list", "edit_inline")
+        ),
+        format!(
+            "    {:<13} Stage file (git add)",
+            cfg.get_binding("file_list", "stage")
+        ),
+        format!(
+            "    {:<13} Unstage file (git reset)",
+            cfg.get_binding("file_list", "unstage")
+        ),
         "".to_string(),
         "  Git operations".to_string(),
-        format!("    {:<13} Commit (opens dialog)", cfg.get_binding("navigation", "commit")),
+        format!(
+            "    {:<13} Commit (opens dialog)",
+            cfg.get_binding("navigation", "commit")
+        ),
         format!("    {:<13} Push", cfg.get_binding("navigation", "push")),
         "".to_string(),
         "  Inline editor".to_string(),
@@ -1082,14 +1356,34 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         format!("    {:<13} Close", cfg.get_binding("editor", "exit")),
         "".to_string(),
         "  Pane resize".to_string(),
-        format!("    {:<13} Resize sidebar width", format!("{} / {}", cfg.get_binding("navigation", "sidebar_shrink"), cfg.get_binding("navigation", "sidebar_grow"))),
-        format!("    {:<13} Resize workspace/file split", format!("{} / {}", cfg.get_binding("navigation", "split_up"), cfg.get_binding("navigation", "split_down"))),
+        format!(
+            "    {:<13} Resize sidebar width",
+            format!(
+                "{} / {}",
+                cfg.get_binding("navigation", "sidebar_shrink"),
+                cfg.get_binding("navigation", "sidebar_grow")
+            )
+        ),
+        format!(
+            "    {:<13} Resize workspace/file split",
+            format!(
+                "{} / {}",
+                cfg.get_binding("navigation", "split_up"),
+                cfg.get_binding("navigation", "split_down")
+            )
+        ),
         "    Mouse drag    Drag pane borders to resize".to_string(),
         "".to_string(),
         "  Clipboard".to_string(),
         "    Mouse drag    Select text in terminal".to_string(),
-        format!("    {:<13} Copy visible terminal content", cfg.get_binding("interaction", "copy")),
-        format!("    {:<13} Paste from clipboard (terminal)", cfg.get_binding("interaction", "paste")),
+        format!(
+            "    {:<13} Copy visible terminal content",
+            cfg.get_binding("interaction", "copy")
+        ),
+        format!(
+            "    {:<13} Paste from clipboard (terminal)",
+            cfg.get_binding("interaction", "paste")
+        ),
     ];
 
     let block = Block::default()
@@ -1104,7 +1398,13 @@ fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let scroll = app.help_scroll.min(max_scroll);
 
     let scroll_indicator = if max_scroll > 0 {
-        format!(" [{}/{} ↑{}/{}↓] ", scroll + 1, max_scroll + 1, cfg.get_binding("help", "up"), cfg.get_binding("help", "down"))
+        format!(
+            " [{}/{} ↑{}/{}↓] ",
+            scroll + 1,
+            max_scroll + 1,
+            cfg.get_binding("help", "up"),
+            cfg.get_binding("help", "down")
+        )
     } else {
         String::new()
     };
@@ -1161,7 +1461,9 @@ fn render_workspace_info_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let theme = &app.theme;
     let ws = &app.workspaces[app.selected_workspace];
 
-    let label_style = Style::default().add_modifier(Modifier::BOLD).fg(theme.help.border);
+    let label_style = Style::default()
+        .add_modifier(Modifier::BOLD)
+        .fg(theme.help.border);
     let project_name = ws
         .source_repo
         .file_name()
@@ -1188,23 +1490,33 @@ fn render_workspace_info_overlay(frame: &mut Frame, area: Rect, app: &App) {
         ]),
         Line::from(vec![
             Span::styled(" Kanban:  ", label_style),
-            Span::raw(ws.kanban_path.clone().unwrap_or_else(|| "default".to_string())),
+            Span::raw(
+                ws.kanban_path
+                    .clone()
+                    .unwrap_or_else(|| "default".to_string()),
+            ),
         ]),
         Line::from(""),
     ];
 
     if !ws.description.is_empty() {
-        lines.push(Line::from(vec![
-            Span::styled(" Description: ", Style::default().add_modifier(Modifier::BOLD).fg(theme.help.border)),
-        ]));
+        lines.push(Line::from(vec![Span::styled(
+            " Description: ",
+            Style::default()
+                .add_modifier(Modifier::BOLD)
+                .fg(theme.help.border),
+        )]));
         lines.push(Line::from(format!("  {}", ws.description)));
         lines.push(Line::from(""));
     }
 
     if !ws.prompt.is_empty() {
-        lines.push(Line::from(vec![
-            Span::styled(" Prompt: ", Style::default().add_modifier(Modifier::BOLD).fg(theme.help.border)),
-        ]));
+        lines.push(Line::from(vec![Span::styled(
+            " Prompt: ",
+            Style::default()
+                .add_modifier(Modifier::BOLD)
+                .fg(theme.help.border),
+        )]));
         // Wrap prompt text
         let max_width = 56usize;
         for chunk in ws.prompt.as_bytes().chunks(max_width) {
@@ -1214,9 +1526,10 @@ fn render_workspace_info_overlay(frame: &mut Frame, area: Rect, app: &App) {
         lines.push(Line::from(""));
     }
 
-    lines.push(Line::from(
-        Span::styled(" Esc to close · h/l to scroll · mouse select to copy", Style::default().fg(Color::DarkGray)),
-    ));
+    lines.push(Line::from(Span::styled(
+        " Esc to close · h/l to scroll · mouse select to copy",
+        Style::default().fg(Color::DarkGray),
+    )));
 
     let height = (lines.len() as u16 + 2).min(area.height);
     let popup = centered_rect(70, height, area);
@@ -1225,7 +1538,11 @@ fn render_workspace_info_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let title = format!(" {} ", ws.name);
     let block = Block::default()
         .title(title)
-        .title_style(Style::default().fg(theme.help.border).add_modifier(Modifier::BOLD))
+        .title_style(
+            Style::default()
+                .fg(theme.help.border)
+                .add_modifier(Modifier::BOLD),
+        )
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.help.border));
 
@@ -1345,12 +1662,14 @@ fn render_confirm_quit_dialog(frame: &mut Frame, area: Rect, app: &App) {
         Line::from(Span::styled(
             "Are you sure you want to quit?",
             Style::default().fg(theme.delete_text),
-        )).centered(),
+        ))
+        .centered(),
         Line::from(""),
         Line::from(Span::styled(
             "[Y] Yes    [N] No",
             Style::default().fg(theme.delete_cancel),
-        )).centered(),
+        ))
+        .centered(),
     ];
 
     let text = Paragraph::new(lines).block(block);

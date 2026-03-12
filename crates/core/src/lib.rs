@@ -1,6 +1,7 @@
 pub mod diff;
 pub mod domain;
 pub mod git;
+pub mod preflight;
 pub mod pty;
 pub mod sysinfo;
 pub mod workspace;
