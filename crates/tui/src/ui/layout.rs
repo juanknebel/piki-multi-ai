@@ -64,8 +64,20 @@ fn compute_footer_height(app: &App, total_width: u16) -> u16 {
 pub fn render(frame: &mut Frame, app: &mut App) {
     let area = frame.area();
 
-    // Pre-calculate footer height based on content width
-    let footer_height = compute_footer_height(app, area.width);
+    // Use cached footer height when mode and width haven't changed
+    let footer_height = if let Some((ref mode, w, h)) = app.cached_footer_height {
+        if *mode == app.mode && w == area.width {
+            h
+        } else {
+            let h = compute_footer_height(app, area.width);
+            app.cached_footer_height = Some((app.mode.clone(), area.width, h));
+            h
+        }
+    } else {
+        let h = compute_footer_height(app, area.width);
+        app.cached_footer_height = Some((app.mode.clone(), area.width, h));
+        h
+    };
 
     // Main vertical split: header + content + footer
     let [header_area, content_area, footer_area] =

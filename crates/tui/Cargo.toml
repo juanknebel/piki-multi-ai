@@ -40,6 +40,9 @@ ignore = "0.4"
 # Clipboard
 arboard = { version = "3", features = ["wayland-data-control"] }
 
+# Fast synchronization primitives
+parking_lot = "0.12"
+
 # Error handling
 anyhow = "1"
 

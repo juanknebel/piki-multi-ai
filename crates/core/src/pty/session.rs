@@ -1,7 +1,8 @@
 use std::io::{Read, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 
@@ -49,19 +50,32 @@ impl PtySession {
         let bytes_processed = Arc::new(AtomicU64::new(0));
         let bytes_clone = Arc::clone(&bytes_processed);
 
-        // Spawn a blocking task to read PTY output and feed the vt100 parser
+        // Spawn a blocking task to read PTY output and feed the vt100 parser.
+        // Batches up to 64KB before locking the parser to reduce lock contention
+        // with the render thread during heavy output.
         let reader_handle = tokio::task::spawn_blocking(move || {
-            let mut buf = [0u8; 4096];
+            let mut buf = [0u8; 16384];
+            let mut batch = Vec::with_capacity(65536);
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) => break, // EOF — process exited
                     Ok(n) => {
-                        let mut p = parser_clone.lock().unwrap();
-                        p.process(&buf[..n]);
+                        batch.extend_from_slice(&buf[..n]);
                         bytes_clone.fetch_add(n as u64, Ordering::Relaxed);
+                        // Flush when batch is full or PTY buffer is likely drained
+                        if batch.len() >= 65536 || n < buf.len() {
+                            let mut p = parser_clone.lock();
+                            p.process(&batch);
+                            batch.clear();
+                        }
                     }
                     Err(_) => break,
                 }
+            }
+            // Flush remaining bytes
+            if !batch.is_empty() {
+                let mut p = parser_clone.lock();
+                p.process(&batch);
             }
         });
 
@@ -100,7 +114,7 @@ impl PtySession {
             pixel_width: 0,
             pixel_height: 0,
         })?;
-        let mut p = self.parser.lock().unwrap();
+        let mut p = self.parser.lock();
         p.screen_mut().set_size(rows, cols);
         Ok(())
     }

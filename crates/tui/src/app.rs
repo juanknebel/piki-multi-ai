@@ -1,5 +1,6 @@
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 use std::time::Instant;
 
 use ratatui::layout::Rect;
@@ -12,6 +13,13 @@ pub use piki_core::pty::PtySession;
 pub use piki_core::workspace::FileWatcher;
 
 use crate::theme::Theme;
+
+/// Result of an async git refresh for a workspace
+pub struct RefreshResult {
+    pub workspace_idx: usize,
+    pub changed_files: Vec<ChangedFile>,
+    pub ahead_behind: Option<(usize, usize)>,
+}
 
 /// Main application mode
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -233,7 +241,8 @@ impl Workspace {
 
 /// A fuzzy search match result
 pub struct FuzzyMatch {
-    pub path: String,
+    /// Index into FuzzyState.all_files (avoids cloning path strings)
+    pub path_idx: usize,
     pub score: u32,
     pub match_indices: Vec<u32>,
 }
@@ -244,6 +253,18 @@ pub struct FuzzyState {
     pub all_files: Vec<String>,
     pub results: Vec<FuzzyMatch>,
     pub selected: usize,
+}
+
+impl FuzzyState {
+    /// Get the path of the currently selected result
+    pub fn selected_path(&self) -> Option<&str> {
+        self.results.get(self.selected).map(|m| self.all_files[m.path_idx].as_str())
+    }
+
+    /// Get the path for a given result
+    pub fn result_path(&self, result: &FuzzyMatch) -> &str {
+        &self.all_files[result.path_idx]
+    }
 }
 
 /// State for the inline file editor
@@ -480,7 +501,16 @@ pub struct App {
     pub left_split_y: u16,
     /// Rect of the left sidebar area (for resize calculations)
     pub left_area_rect: Rect,
+    /// Whether the UI needs to be redrawn
+    pub needs_redraw: bool,
     pub config: crate::config::Config,
+    /// Channel for receiving async git refresh results
+    pub refresh_tx: tokio::sync::mpsc::UnboundedSender<RefreshResult>,
+    pub refresh_rx: tokio::sync::mpsc::UnboundedReceiver<RefreshResult>,
+    /// Whether a background git refresh is in-flight
+    pub refresh_pending: bool,
+    /// Handle for async fuzzy search file scanning
+    pub fuzzy_scan_handle: Option<tokio::task::JoinHandle<Vec<String>>>,
     /// Last left-click position and time (for double-click detection)
     pub last_click: Option<(Instant, u16, u16)>,
     /// Layout areas for mouse hit-testing
@@ -489,10 +519,15 @@ pub struct App {
     pub tabs_area: Rect,
     pub subtabs_area: Rect,
     pub main_content_area: Rect,
+    /// Cache for rendered diff output, keyed by file path
+    pub diff_cache: std::collections::HashMap<String, Text<'static>>,
+    /// Cached footer height: (mode, terminal_width, computed_height)
+    pub cached_footer_height: Option<(AppMode, u16, u16)>,
 }
 
 impl App {
     pub fn new() -> Self {
+        let (refresh_tx, refresh_rx) = tokio::sync::mpsc::unbounded_channel::<RefreshResult>();
         Self {
             should_quit: false,
             mode: AppMode::Normal,
@@ -538,13 +573,20 @@ impl App {
             sidebar_x: 0,
             left_split_y: 0,
             left_area_rect: Rect::default(),
+            needs_redraw: true,
             config: crate::config::Config::load(),
+            refresh_tx,
+            refresh_rx,
+            refresh_pending: false,
+            fuzzy_scan_handle: None,
             last_click: None,
             ws_list_area: Rect::default(),
             file_list_area: Rect::default(),
             tabs_area: Rect::default(),
             subtabs_area: Rect::default(),
             main_content_area: Rect::default(),
+            diff_cache: std::collections::HashMap::new(),
+            cached_footer_height: None,
         }
     }
 
@@ -578,6 +620,9 @@ impl App {
             self.diff_content = None;
             self.diff_file_path = None;
             self.selection = None;
+            // Trigger immediate background refresh for the new workspace
+            self.workspaces[index].dirty = true;
+            self.workspaces[index].last_refresh = None;
             if let Some(tab) = self.workspaces[index].current_tab_mut() {
                 tab.term_scroll = 0;
             }
@@ -614,7 +659,8 @@ impl App {
         }
     }
 
-    /// Open the fuzzy file search overlay by scanning all files in the active worktree
+    /// Open the fuzzy file search overlay by scanning all files in the active worktree.
+    /// The file scan runs asynchronously — the overlay opens immediately with an empty list.
     pub fn open_fuzzy_search(&mut self) {
         let worktree_path = match self.current_workspace() {
             Some(ws) => ws.info.path.clone(),
@@ -624,46 +670,39 @@ impl App {
             }
         };
 
-        let mut all_files = Vec::new();
-        let walker = ignore::WalkBuilder::new(&worktree_path)
-            .git_ignore(true)
-            .build();
-        for entry in walker.flatten() {
-            if entry.file_type().is_some_and(|ft| ft.is_file())
-                && let Ok(rel) = entry.path().strip_prefix(&worktree_path)
-            {
-                all_files.push(rel.to_string_lossy().to_string());
-            }
-        }
-        all_files.sort();
-
-        let results: Vec<FuzzyMatch> = all_files
-            .iter()
-            .map(|p| FuzzyMatch {
-                path: p.clone(),
-                score: 0,
-                match_indices: Vec::new(),
-            })
-            .collect();
-
         self.fuzzy = Some(FuzzyState {
             query: String::new(),
-            all_files,
-            results,
+            all_files: Vec::new(),
+            results: Vec::new(),
             selected: 0,
         });
         self.mode = AppMode::FuzzySearch;
+
+        // Spawn async file scan
+        self.fuzzy_scan_handle = Some(tokio::task::spawn_blocking(move || {
+            let mut all_files = Vec::new();
+            let walker = ignore::WalkBuilder::new(&worktree_path)
+                .git_ignore(true)
+                .build();
+            for entry in walker.flatten() {
+                if entry.file_type().is_some_and(|ft| ft.is_file())
+                    && let Ok(rel) = entry.path().strip_prefix(&worktree_path)
+                {
+                    all_files.push(rel.to_string_lossy().to_string());
+                }
+            }
+            all_files.sort();
+            all_files
+        }));
     }
 
     /// Re-filter fuzzy search results based on the current query
     pub fn update_fuzzy_filter(&mut self) {
         if let Some(ref mut state) = self.fuzzy {
             if state.query.is_empty() {
-                state.results = state
-                    .all_files
-                    .iter()
-                    .map(|p| FuzzyMatch {
-                        path: p.clone(),
+                state.results = (0..state.all_files.len())
+                    .map(|i| FuzzyMatch {
+                        path_idx: i,
                         score: 0,
                         match_indices: Vec::new(),
                     })
@@ -676,7 +715,8 @@ impl App {
                 let mut results: Vec<FuzzyMatch> = state
                     .all_files
                     .iter()
-                    .filter_map(|path| {
+                    .enumerate()
+                    .filter_map(|(idx, path)| {
                         let haystack = nucleo::Utf32Str::new(path, &mut buf);
                         let mut indices = Vec::new();
                         pattern
@@ -685,7 +725,7 @@ impl App {
                                 indices.sort_unstable();
                                 indices.dedup();
                                 FuzzyMatch {
-                                    path: path.clone(),
+                                    path_idx: idx,
                                     score,
                                     match_indices: indices,
                                 }

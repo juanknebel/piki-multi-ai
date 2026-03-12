@@ -131,10 +131,13 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
     }
 
     loop {
-        // Render
-        terminal.draw(|frame| {
-            ui::layout::render(frame, &mut app);
-        })?;
+        // Render only when state has changed
+        if app.needs_redraw {
+            terminal.draw(|frame| {
+                ui::layout::render(frame, &mut app);
+            })?;
+            app.needs_redraw = false;
+        }
 
         // Poll for events with timeout (non-blocking for async tasks)
         let poll_result = event::poll(TICK_RATE);
@@ -145,11 +148,13 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
                     if let Some(action) = handle_key_event(&mut app, key) {
                         execute_action(&mut app, &manager, action, &mut terminal).await?;
                     }
+                    app.needs_redraw = true;
                 }
                 Ok(Event::Mouse(mouse)) => {
                     if let Some(action) = handle_mouse_event(&mut app, mouse, &mut terminal) {
                         execute_action(&mut app, &manager, action, &mut terminal).await?;
                     }
+                    app.needs_redraw = true;
                 },
                 Ok(Event::Resize(cols, rows)) => {
                     let new_area = ui::layout::compute_terminal_area_with(Rect::new(0, 0, cols, rows), app.sidebar_pct);
@@ -163,6 +168,7 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
                             }
                         }
                     }
+                    app.needs_redraw = true;
                 }
                 Ok(_) => {}
                 Err(_) => continue, // Transient crossterm error, skip this tick
@@ -188,23 +194,80 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
                     let current_bytes = pty.bytes_processed();
                     if current_bytes != tab.last_bytes_processed {
                         tab.last_bytes_processed = current_bytes;
+                        app.needs_redraw = true;
                     }
                 }
             }
             if pty_done {
                 ws.status = app::WorkspaceStatus::Done;
+                app.needs_redraw = true;
             }
-            // Debounced refresh of changed files list via git diff
-            // Refresh when dirty (debounced) or periodically to catch commits/rebases
-            let since_last = ws.last_refresh.map(|t| now.duration_since(t));
-            let should_refresh = if ws.dirty {
-                since_last.map(|d| d >= DEBOUNCE).unwrap_or(true)
-            } else {
-                since_last.map(|d| d >= PERIODIC_REFRESH).unwrap_or(true)
-            };
-            if should_refresh {
-                let _ = ws.refresh_changed_files().await;
+        }
+
+        // Collect completed background git refresh results
+        while let Ok(result) = app.refresh_rx.try_recv() {
+            // Invalidate cached diffs for files with pending changes
+            for file in &result.changed_files {
+                app.diff_cache.remove(&file.path);
+            }
+            if let Some(ws) = app.workspaces.get_mut(result.workspace_idx) {
+                ws.changed_files = result.changed_files;
+                ws.ahead_behind = result.ahead_behind;
+                ws.dirty = false;
                 ws.last_refresh = Some(now);
+            }
+            app.refresh_pending = false;
+            app.needs_redraw = true;
+        }
+
+        // Spawn background git refresh ONLY for active workspace
+        {
+            let idx = app.active_workspace;
+            if let Some(ws) = app.workspaces.get(idx) {
+                let since_last = ws.last_refresh.map(|t| now.duration_since(t));
+                let should_refresh = if ws.dirty {
+                    since_last.map(|d| d >= DEBOUNCE).unwrap_or(true)
+                } else {
+                    since_last.map(|d| d >= PERIODIC_REFRESH).unwrap_or(true)
+                };
+                if should_refresh && !app.refresh_pending {
+                    let path = ws.info.path.clone();
+                    let tx = app.refresh_tx.clone();
+                    app.refresh_pending = true;
+                    tokio::spawn(async move {
+                        let files = app::get_changed_files(&path).await.unwrap_or_default();
+                        let ab = app::get_ahead_behind(&path).await;
+                        let _ = tx.send(app::RefreshResult {
+                            workspace_idx: idx,
+                            changed_files: files,
+                            ahead_behind: ab,
+                        });
+                    });
+                }
+            }
+        }
+
+        // Poll async fuzzy search file scan
+        if let Some(ref handle) = app.fuzzy_scan_handle {
+            if handle.is_finished() {
+                if let Some(handle) = app.fuzzy_scan_handle.take() {
+                    if let Ok(files) = handle.await {
+                        if let Some(ref mut state) = app.fuzzy {
+                            let results = (0..files.len())
+                                .map(|i| app::FuzzyMatch {
+                                    path_idx: i,
+                                    score: 0,
+                                    match_indices: Vec::new(),
+                                })
+                                .collect();
+                            state.all_files = files;
+                            state.results = results;
+                            // Re-apply filter if user already typed something
+                            app.update_fuzzy_filter();
+                            app.needs_redraw = true;
+                        }
+                    }
+                }
             }
         }
 
@@ -288,9 +351,12 @@ async fn execute_action(
                         }
                     }
 
-                    // Persist config
-                    let source = app.workspaces[new_idx].source_repo.clone();
-                    let _ = ws_config::save(&source, &app.workspaces.iter().map(|w| w.info.clone()).collect::<Vec<_>>());
+                    // Persist config async
+                    {
+                        let source = app.workspaces[new_idx].source_repo.clone();
+                        let infos: Vec<_> = app.workspaces.iter().map(|w| w.info.clone()).collect();
+                        tokio::spawn(async move { let _ = ws_config::save(&source, &infos); });
+                    }
                 }
                 Err(e) => {
                     app.status_message = Some(format!("Error: {}", e));
@@ -305,8 +371,11 @@ async fn execute_action(
                 }
                 ws.kanban_path = kanban_path;
                 ws.prompt = prompt;
-                let source = ws.source_repo.clone();
-                let _ = ws_config::save(&source, &app.workspaces.iter().map(|w| w.info.clone()).collect::<Vec<_>>());
+                {
+                    let source = ws.source_repo.clone();
+                    let infos: Vec<_> = app.workspaces.iter().map(|w| w.info.clone()).collect();
+                    tokio::spawn(async move { let _ = ws_config::save(&source, &infos); });
+                }
                 app.status_message = Some("Workspace updated".into());
             }
         }
@@ -341,7 +410,11 @@ async fn execute_action(
                         }
 
                         // Persist config
-                        let _ = ws_config::save(&source_repo, &app.workspaces.iter().map(|w| w.info.clone()).collect::<Vec<_>>());
+                        {
+                            let source = source_repo.clone();
+                            let infos: Vec<_> = app.workspaces.iter().map(|w| w.info.clone()).collect();
+                            tokio::spawn(async move { let _ = ws_config::save(&source, &infos); });
+                        }
                     }
                     Err(e) => {
                         app.status_message = Some(format!("Error: {}", e));
@@ -376,7 +449,11 @@ async fn execute_action(
                 }
 
                 // Persist config
-                let _ = ws_config::save(&source_repo, &app.workspaces.iter().map(|w| w.info.clone()).collect::<Vec<_>>());
+                {
+                    let source = source_repo.clone();
+                    let infos: Vec<_> = app.workspaces.iter().map(|w| w.info.clone()).collect();
+                    tokio::spawn(async move { let _ = ws_config::save(&source, &infos); });
+                }
             }
         }
         Action::OpenEditor(path) => {
@@ -410,33 +487,44 @@ async fn execute_action(
         Action::OpenDiff(file_idx) => {
             if let Some(ws) = app.workspaces.get(app.active_workspace) {
                 if let Some(file) = ws.changed_files.get(file_idx) {
-                    let worktree_path = ws.path.clone();
                     let file_path = file.path.clone();
-                    let file_status = file.status.clone();
-                    // Use a reasonable width; TODO: pass actual panel width
-                    let width = 120;
-                    match piki_core::diff::runner::run_diff(&worktree_path, &file_path, width, &file_status)
-                        .await
-                    {
-                        Ok(ansi_bytes) => {
-                            use ansi_to_tui::IntoText;
-                            match ansi_bytes.into_text() {
-                                Ok(text) => {
-                                    app.diff_content = Some(text);
-                                    app.diff_file_path = Some(file_path);
-                                    app.diff_scroll = 0;
-                                    app.mode = AppMode::Diff;
-                                    app.active_pane = ActivePane::MainPanel;
-                                    app.interacting = true;
-                                }
-                                Err(e) => {
-                                    app.status_message =
-                                        Some(format!("Failed to parse diff: {}", e));
+                    // Check cache first to avoid re-running git diff | delta
+                    if let Some(cached) = app.diff_cache.get(&file_path) {
+                        app.diff_content = Some(cached.clone());
+                        app.diff_file_path = Some(file_path);
+                        app.diff_scroll = 0;
+                        app.mode = AppMode::Diff;
+                        app.active_pane = ActivePane::MainPanel;
+                        app.interacting = true;
+                    } else {
+                        let worktree_path = ws.path.clone();
+                        let file_status = file.status.clone();
+                        // Use a reasonable width; TODO: pass actual panel width
+                        let width = 120;
+                        match piki_core::diff::runner::run_diff(&worktree_path, &file_path, width, &file_status)
+                            .await
+                        {
+                            Ok(ansi_bytes) => {
+                                use ansi_to_tui::IntoText;
+                                match ansi_bytes.into_text() {
+                                    Ok(text) => {
+                                        app.diff_cache.insert(file_path.clone(), text.clone());
+                                        app.diff_content = Some(text);
+                                        app.diff_file_path = Some(file_path);
+                                        app.diff_scroll = 0;
+                                        app.mode = AppMode::Diff;
+                                        app.active_pane = ActivePane::MainPanel;
+                                        app.interacting = true;
+                                    }
+                                    Err(e) => {
+                                        app.status_message =
+                                            Some(format!("Failed to parse diff: {}", e));
+                                    }
                                 }
                             }
-                        }
-                        Err(e) => {
-                            app.status_message = Some(format!("Diff error: {}", e));
+                            Err(e) => {
+                                app.status_message = Some(format!("Diff error: {}", e));
+                            }
                         }
                     }
                 }
@@ -864,8 +952,8 @@ async fn spawn_tab(ws: &mut app::Workspace, provider: AIProvider, rows: u16, col
 /// Probe the actual scrollback buffer size by setting a large offset and reading back.
 /// `scrollback()` returns the current offset (which is always 0 after render reset),
 /// so we temporarily set it to MAX, read the clamped value, then restore to 0.
-fn scrollback_max(parser: &Arc<std::sync::Mutex<vt100::Parser>>) -> usize {
-    let mut guard = parser.lock().unwrap();
+fn scrollback_max(parser: &Arc<parking_lot::Mutex<vt100::Parser>>) -> usize {
+    let mut guard = parser.lock();
     guard.screen_mut().set_scrollback(usize::MAX);
     let max = guard.screen().scrollback();
     guard.screen_mut().set_scrollback(0);
@@ -877,7 +965,7 @@ fn copy_visible_terminal(app: &mut App) {
         && let Some(tab) = ws.current_tab()
         && let Some(ref parser) = tab.pty_parser
     {
-        let mut guard = parser.lock().unwrap();
+        let mut guard = parser.lock();
         guard.screen_mut().set_scrollback(tab.term_scroll);
         let text = guard.screen().contents();
         guard.screen_mut().set_scrollback(0);
@@ -1163,7 +1251,7 @@ fn handle_mouse_event(app: &mut App, mouse: crossterm::event::MouseEvent, termin
                         && let Some(tab) = ws.current_tab()
                         && let Some(ref parser) = tab.pty_parser
                     {
-                        let mut guard = parser.lock().unwrap();
+                        let mut guard = parser.lock();
                         guard.screen_mut().set_scrollback(tab.term_scroll);
                         let text = guard.screen().contents_between(sr, sc, er, ec + 1);
                         guard.screen_mut().set_scrollback(0);
@@ -1721,7 +1809,7 @@ fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
                     if let Some(tab) = ws.current_tab_mut() {
                         let bracketed = tab.pty_parser
                             .as_ref()
-                            .map(|p| p.lock().unwrap().screen().bracketed_paste())
+                            .map(|p| p.lock().screen().bracketed_paste())
                             .unwrap_or(false);
                         let data = if bracketed {
                             format!("\x1b[200~{}\x1b[201~", text)
@@ -1915,11 +2003,7 @@ fn handle_fuzzy_search_input(app: &mut App, key: KeyEvent) -> Option<Action> {
             }
         }
         KeyCode::Enter => {
-            let selected_path = app
-                .fuzzy
-                .as_ref()
-                .and_then(|s| s.results.get(s.selected))
-                .map(|m| m.path.clone());
+            let selected_path = app.fuzzy.as_ref().and_then(|s| s.selected_path()).map(String::from);
 
             if let Some(path) = selected_path {
                 // Check if file is in changed_files list; if so, open its diff
@@ -1937,11 +2021,7 @@ fn handle_fuzzy_search_input(app: &mut App, key: KeyEvent) -> Option<Action> {
         }
         // Ctrl+O: open markdown file in a new tab
         KeyCode::Char('o') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            let selected_path = app
-                .fuzzy
-                .as_ref()
-                .and_then(|s| s.results.get(s.selected))
-                .map(|m| m.path.clone());
+            let selected_path = app.fuzzy.as_ref().and_then(|s| s.selected_path()).map(String::from);
 
             if let (Some(rel_path), Some(ws)) = (selected_path, app.current_workspace()) {
                 if rel_path.ends_with(".md") || rel_path.ends_with(".markdown") {
@@ -1956,11 +2036,7 @@ fn handle_fuzzy_search_input(app: &mut App, key: KeyEvent) -> Option<Action> {
         }
         // Alt+M: open markdown file in external mdr viewer
         KeyCode::Char('m') if key.modifiers.contains(KeyModifiers::ALT) => {
-            let selected_path = app
-                .fuzzy
-                .as_ref()
-                .and_then(|s| s.results.get(s.selected))
-                .map(|m| m.path.clone());
+            let selected_path = app.fuzzy.as_ref().and_then(|s| s.selected_path()).map(String::from);
 
             if let (Some(rel_path), Some(ws)) = (selected_path, app.current_workspace()) {
                 if rel_path.ends_with(".md") || rel_path.ends_with(".markdown") {
@@ -1973,11 +2049,7 @@ fn handle_fuzzy_search_input(app: &mut App, key: KeyEvent) -> Option<Action> {
         }
         // Ctrl+E: open in $EDITOR
         KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            let selected_path = app
-                .fuzzy
-                .as_ref()
-                .and_then(|s| s.results.get(s.selected))
-                .map(|m| m.path.clone());
+            let selected_path = app.fuzzy.as_ref().and_then(|s| s.selected_path()).map(String::from);
 
             if let (Some(rel_path), Some(ws)) = (selected_path, app.current_workspace()) {
                 let full_path = ws.path.join(&rel_path);
@@ -1986,11 +2058,7 @@ fn handle_fuzzy_search_input(app: &mut App, key: KeyEvent) -> Option<Action> {
         }
         // Ctrl+V: open inline editor
         KeyCode::Char('v') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            let selected_path = app
-                .fuzzy
-                .as_ref()
-                .and_then(|s| s.results.get(s.selected))
-                .map(|m| m.path.clone());
+            let selected_path = app.fuzzy.as_ref().and_then(|s| s.selected_path()).map(String::from);
 
             if let Some(rel_path) = selected_path
                 && let Some(ws) = app.current_workspace()

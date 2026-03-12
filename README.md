@@ -477,6 +477,15 @@ sequenceDiagram
 - STATUS panel uses `git status --porcelain=v1` for full coverage of untracked, staged, conflicted, and renamed files
 - Diff runner uses `git diff --no-index /dev/null <file>` for untracked files
 
+### Performance optimizations
+
+- **Dirty-flag rendering** — UI only redraws when state actually changes (key/mouse events, PTY output, file watcher, resize), eliminating redundant 50ms tick redraws and reducing idle CPU usage
+- **parking_lot::Mutex** — Fast, non-poisoning mutex for the vt100 parser eliminates frame drops caused by `try_lock` failures during heavy PTY output
+- **Selective diff cache invalidation** — Only invalidates cached diffs for files that changed, preserving expensive delta renders for unmodified files
+- **Zero-allocation fuzzy search** — Fuzzy match results store indices into the file list instead of cloning path strings, eliminating per-keystroke allocations
+- **Async config persistence** — Workspace config saves run in background tasks via `tokio::spawn`, preventing event loop blocking on file I/O
+- **16KB PTY read buffer** — Larger read buffer reduces mutex lock frequency during high-throughput terminal output
+
 ## License
 
 GPL-2.0 — See [LICENSE](LICENSE) for details.

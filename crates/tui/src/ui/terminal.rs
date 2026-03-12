@@ -1,4 +1,5 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -21,7 +22,7 @@ pub fn render(
     selection: Option<&Selection>,
     selection_style: Style,
 ) {
-    let mut parser_guard = parser.lock().unwrap();
+    let mut parser_guard = parser.lock();
 
     // Apply scrollback offset
     parser_guard.screen_mut().set_scrollback(scroll_offset);

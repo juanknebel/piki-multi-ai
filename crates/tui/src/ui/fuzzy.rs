@@ -90,9 +90,10 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             ratatui::style::Color::Reset
         };
 
+        let path = state.result_path(result);
         // Build spans with match highlighting
         let mut spans = vec![Span::styled(" ", Style::default().bg(bg))];
-        for (ci, ch) in result.path.chars().enumerate() {
+        for (ci, ch) in path.chars().enumerate() {
             let is_match = result.match_indices.contains(&(ci as u32));
             let style = if is_match {
                 Style::default()
