@@ -13,7 +13,8 @@ piki-core = { path = "../core" }
 
 # TUI
 ratatui = { version = "0.30", features = ["crossterm"] }
-crossterm = "0.28"
+crossterm = { version = "0.28", features = ["event-stream"] }
+futures = "0.3"
 
 # Async runtime
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "time", "sync"] }

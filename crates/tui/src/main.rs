@@ -10,8 +10,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crossterm::event::{
-    self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEventKind,
+    Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEventKind,
 };
+use futures::StreamExt;
 use ratatui::DefaultTerminal;
 use ratatui::layout::Rect;
 
@@ -90,6 +91,29 @@ async fn main() -> anyhow::Result<()> {
     result
 }
 
+fn process_refresh_result(app: &mut App, result: app::RefreshResult) {
+    for file in &result.changed_files {
+        let prefix = format!("{}@", file.path);
+        let keys_to_remove: Vec<String> = app
+            .diff_cache
+            .iter()
+            .filter(|(key, _)| key.starts_with(&prefix))
+            .map(|(key, _)| key.clone())
+            .collect();
+        for key in keys_to_remove {
+            app.diff_cache.pop(&key);
+        }
+    }
+    if let Some(ws) = app.workspaces.get_mut(result.workspace_idx) {
+        ws.changed_files = result.changed_files;
+        ws.ahead_behind = result.ahead_behind;
+        ws.dirty = false;
+        ws.last_refresh = Some(Instant::now());
+    }
+    app.refresh_pending = false;
+    app.needs_redraw = true;
+}
+
 async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
     let manager = WorkspaceManager::new();
     let mut app = App::new();
@@ -130,8 +154,12 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
         app.switch_workspace(0);
     }
 
+    let mut reader = EventStream::new();
+    let mut tick_interval = tokio::time::interval(TICK_RATE);
+    tick_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
     loop {
-        // Render only when state has changed
+        // Phase 1: Render only when state has changed
         if app.needs_redraw {
             terminal.draw(|frame| {
                 ui::layout::render(frame, &mut app);
@@ -139,45 +167,64 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
             app.needs_redraw = false;
         }
 
-        // Poll for events with timeout (non-blocking for async tasks)
-        let poll_result = event::poll(TICK_RATE);
-        if matches!(poll_result, Ok(true)) {
-            let read_result = event::read();
-            match read_result {
-                Ok(Event::Key(key)) if key.kind == KeyEventKind::Press => {
-                    if let Some(action) = handle_key_event(&mut app, key) {
-                        execute_action(&mut app, &manager, action, &mut terminal).await?;
+        // Phase 2: Wait for terminal event, refresh result, or tick
+        let mut is_tick = false;
+
+        tokio::select! {
+            biased;
+
+            maybe_event = reader.next() => {
+                match maybe_event {
+                    Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press => {
+                        if let Some(action) = handle_key_event(&mut app, key) {
+                            execute_action(&mut app, &manager, action, &mut terminal).await?;
+                        }
+                        app.needs_redraw = true;
                     }
-                    app.needs_redraw = true;
-                }
-                Ok(Event::Mouse(mouse)) => {
-                    if let Some(action) = handle_mouse_event(&mut app, mouse, &mut terminal) {
-                        execute_action(&mut app, &manager, action, &mut terminal).await?;
+                    Some(Ok(Event::Mouse(mouse))) => {
+                        if let Some(action) = handle_mouse_event(&mut app, mouse, &mut terminal) {
+                            execute_action(&mut app, &manager, action, &mut terminal).await?;
+                        }
+                        app.needs_redraw = true;
                     }
-                    app.needs_redraw = true;
-                },
-                Ok(Event::Resize(cols, rows)) => {
-                    let new_area = ui::layout::compute_terminal_area_with(Rect::new(0, 0, cols, rows), app.sidebar_pct);
-                    app.pty_rows = new_area.height;
-                    app.pty_cols = new_area.width;
-                    // Resize all PTY sessions in all workspaces
-                    for ws in &mut app.workspaces {
-                        for tab in &mut ws.tabs {
-                            if let Some(ref mut pty) = tab.pty_session {
-                                let _ = pty.resize(new_area.height, new_area.width);
+                    Some(Ok(Event::Resize(cols, rows))) => {
+                        let new_area = ui::layout::compute_terminal_area_with(Rect::new(0, 0, cols, rows), app.sidebar_pct);
+                        app.pty_rows = new_area.height;
+                        app.pty_cols = new_area.width;
+                        for ws in &mut app.workspaces {
+                            for tab in &mut ws.tabs {
+                                if let Some(ref mut pty) = tab.pty_session {
+                                    let _ = pty.resize(new_area.height, new_area.width);
+                                }
                             }
                         }
+                        app.diff_cache.clear();
+                        app.needs_redraw = true;
                     }
-                    app.diff_cache.clear();
-                    app.needs_redraw = true;
+                    Some(Ok(_)) => {}
+                    Some(Err(_)) => {}
+                    None => break,
                 }
-                Ok(_) => {}
-                Err(_) => continue, // Transient crossterm error, skip this tick
+            }
+
+            result = app.refresh_rx.recv() => {
+                if let Some(result) = result {
+                    process_refresh_result(&mut app, result);
+                    while let Ok(result) = app.refresh_rx.try_recv() {
+                        process_refresh_result(&mut app, result);
+                    }
+                }
+            }
+
+            _ = tick_interval.tick() => {
+                is_tick = true;
             }
         }
 
-        // Part A: Poll file watcher events — mark workspaces as dirty when files change
+        // Phase 3: Sync work after every wakeup
         let now = Instant::now();
+
+        // Poll file watcher events — mark workspaces as dirty when files change
         for ws in &mut app.workspaces {
             if let Some(ref mut watcher) = ws.watcher {
                 if watcher.try_recv().is_some() {
@@ -187,7 +234,7 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
             }
         }
 
-        // Part B: Active workspace — check PTY bytes + is_alive every tick
+        // Active workspace — check PTY bytes + is_alive
         {
             let idx = app.active_workspace;
             if let Some(ws) = app.workspaces.get_mut(idx) {
@@ -209,52 +256,6 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
                     app.needs_redraw = true;
                 }
             }
-        }
-
-        // Part C: Inactive workspaces — only check is_alive every ~1s
-        if now.duration_since(app.last_inactive_pty_check) >= Duration::from_secs(1) {
-            app.last_inactive_pty_check = now;
-            for (i, ws) in app.workspaces.iter_mut().enumerate() {
-                if i == app.active_workspace {
-                    continue;
-                }
-                let mut pty_done = false;
-                if let Some(tab) = ws.current_tab_mut() {
-                    if let Some(ref mut pty) = tab.pty_session {
-                        if !pty.is_alive() {
-                            pty_done = true;
-                        }
-                    }
-                }
-                if pty_done {
-                    ws.status = app::WorkspaceStatus::Done;
-                    app.needs_redraw = true;
-                }
-            }
-        }
-
-        // Collect completed background git refresh results
-        while let Ok(result) = app.refresh_rx.try_recv() {
-            // Invalidate cached diffs for files with pending changes (width-keyed)
-            for file in &result.changed_files {
-                let prefix = format!("{}@", file.path);
-                let keys_to_remove: Vec<String> = app.diff_cache
-                    .iter()
-                    .filter(|(key, _)| key.starts_with(&prefix))
-                    .map(|(key, _)| key.clone())
-                    .collect();
-                for key in keys_to_remove {
-                    app.diff_cache.pop(&key);
-                }
-            }
-            if let Some(ws) = app.workspaces.get_mut(result.workspace_idx) {
-                ws.changed_files = result.changed_files;
-                ws.ahead_behind = result.ahead_behind;
-                ws.dirty = false;
-                ws.last_refresh = Some(now);
-            }
-            app.refresh_pending = false;
-            app.needs_redraw = true;
         }
 
         // Spawn background git refresh ONLY for active workspace
@@ -299,7 +300,6 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
                                 .collect();
                             state.all_files = files;
                             state.results = results;
-                            // Re-apply filter if user already typed something
                             app.update_fuzzy_filter();
                             app.needs_redraw = true;
                         }
@@ -308,7 +308,7 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
             }
         }
 
-        // Tick-based fuzzy filter: batch rapid keystrokes into one filter per tick
+        // Fuzzy filter: batch rapid keystrokes into one filter per wakeup
         if let Some(ref state) = app.fuzzy {
             if state.filter_stale {
                 app.update_fuzzy_filter();
@@ -316,6 +316,31 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
                     state.filter_stale = false;
                 }
                 app.needs_redraw = true;
+            }
+        }
+
+        // Phase 4: Tick-gated periodic work
+        if is_tick {
+            // Inactive workspaces — only check is_alive every ~1s
+            if now.duration_since(app.last_inactive_pty_check) >= Duration::from_secs(1) {
+                app.last_inactive_pty_check = now;
+                for (i, ws) in app.workspaces.iter_mut().enumerate() {
+                    if i == app.active_workspace {
+                        continue;
+                    }
+                    let mut pty_done = false;
+                    if let Some(tab) = ws.current_tab_mut() {
+                        if let Some(ref mut pty) = tab.pty_session {
+                            if !pty.is_alive() {
+                                pty_done = true;
+                            }
+                        }
+                    }
+                    if pty_done {
+                        ws.status = app::WorkspaceStatus::Done;
+                        app.needs_redraw = true;
+                    }
+                }
             }
         }
 

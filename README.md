@@ -406,7 +406,7 @@ sequenceDiagram
         Main->>App: push(workspace)
     end
 
-    loop Event loop (50ms tick)
+    loop Event loop (tokio::select!)
         Main->>UI: terminal.draw(render(app))
         UI-->>User: TUI frame
 
@@ -473,7 +473,7 @@ sequenceDiagram
 - **ansi-to-tui** converts delta's ANSI output to `ratatui::text::Text` for the diff view
 - Each workspace starts with a single Shell tab; additional tabs (Claude, Gemini, Codex, Shell) are created on demand, each with its own PTY session
 - Worktrees are stored in `~/.local/share/piki-multi/worktrees/<project>/<name>` with branch names matching the workspace name exactly
-- Event-driven architecture: key handlers return `Option<Action>`, main loop executes actions asynchronously
+- Event-driven architecture: `crossterm::EventStream` + `tokio::select!` for truly async event loop; key handlers return `Option<Action>`, main loop executes actions asynchronously
 - STATUS panel uses `git status --porcelain=v1` for full coverage of untracked, staged, conflicted, and renamed files
 - Diff runner uses `git diff --no-index /dev/null <file>` for untracked files
 
@@ -488,6 +488,7 @@ sequenceDiagram
 - **LRU diff cache** — Replaces naive clear-all-at-capacity eviction with LRU, preserving recently-viewed diffs when the cache is full
 - **Zero-allocation footer** — Footer key descriptions use `&'static str` instead of per-frame `String` allocations, and width calculations use arithmetic instead of `format!()`
 - **Minimal tokio features** — Only compiles required tokio features (`rt-multi-thread`, `macros`, `process`, `time`, `sync`, `fs`) instead of `"full"`, reducing compile time and binary size
+- **Event-driven loop** — Uses `crossterm::EventStream` + `tokio::select!` instead of blocking `event::poll`, eliminating 0-50ms latency on async results (git refresh, fuzzy scan) and achieving true zero-CPU idle
 
 ## License
 
