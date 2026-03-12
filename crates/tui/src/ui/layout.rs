@@ -50,10 +50,8 @@ fn pane_border_style(app: &App, pane: ActivePane) -> Style {
     }
 }
 
-/// Render the main application layout
 /// Calculate how many lines the footer needs based on content width.
-fn compute_footer_height(app: &App, total_width: u16) -> u16 {
-    let keys = footer_keys(app);
+fn compute_footer_height_from_keys(keys: &[(String, String)], total_width: u16) -> u16 {
     let total: usize = keys
         .iter()
         .map(|(key, desc)| format!(" [{}] {} ", key, desc).len())
@@ -61,23 +59,13 @@ fn compute_footer_height(app: &App, total_width: u16) -> u16 {
     if total as u16 <= total_width { 1 } else { 2 }
 }
 
+/// Render the main application layout
 pub fn render(frame: &mut Frame, app: &mut App) {
     let area = frame.area();
 
-    // Use cached footer height when mode and width haven't changed
-    let footer_height = if let Some((ref mode, w, h)) = app.cached_footer_height {
-        if *mode == app.mode && w == area.width {
-            h
-        } else {
-            let h = compute_footer_height(app, area.width);
-            app.cached_footer_height = Some((app.mode.clone(), area.width, h));
-            h
-        }
-    } else {
-        let h = compute_footer_height(app, area.width);
-        app.cached_footer_height = Some((app.mode.clone(), area.width, h));
-        h
-    };
+    // Compute footer keys once per frame, use for both height and rendering
+    let keys = footer_keys(app);
+    let footer_height = compute_footer_height_from_keys(&keys, area.width);
 
     // Main vertical split: header + content + footer
     let [header_area, content_area, footer_area] =
@@ -145,7 +133,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
     render_status_bar(frame, status_area, app);
 
     // Footer: keybindings
-    render_footer(frame, footer_area, app);
+    render_footer_from_keys(frame, footer_area, &keys, &app.theme);
 
     // Overlays
     if app.mode == AppMode::Diff {
@@ -259,24 +247,17 @@ fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
 
             let mut lines = vec![line1, line2];
 
-            // Show parent project
-            let project_name = ws
-                .source_repo
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| ws.source_repo.to_string_lossy().to_string());
+            // Show parent project (pre-computed in WorkspaceInfo)
+            let project_name = &ws.source_repo_display;
             let max_proj = area.width.saturating_sub(6) as usize;
-            let proj_display = if project_name.len() > max_proj {
-                format!("{}…", &project_name[..max_proj.saturating_sub(1)])
+            let proj_text = if project_name.len() > max_proj {
+                format!("⌂ {}…", &project_name[..max_proj.saturating_sub(1)])
             } else {
-                project_name
+                format!("⌂ {}", project_name)
             };
             lines.push(Line::from(vec![
                 Span::raw("   "),
-                Span::styled(
-                    format!("⌂ {}", proj_display),
-                    Style::default().fg(detail_color),
-                ),
+                Span::styled(proj_text, Style::default().fg(detail_color)),
             ]));
 
 
@@ -423,21 +404,34 @@ fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) {
         .fg(app.theme.selection.fg);
     if let Some(ws) = app.current_workspace() {
         if let Some(tab) = ws.current_tab() {
-            // Markdown tab
-            if let (Some(content), Some(label)) =
-                (&tab.markdown_content, &tab.markdown_label)
-            {
-                let content = content.clone();
-                let label = label.clone();
-                let scroll = tab.markdown_scroll;
-                super::markdown::render(
-                    frame,
-                    area,
-                    &content,
-                    &label,
-                    scroll,
-                    border_style,
-                );
+            // Markdown tab — use cached parsed text when available
+            if tab.markdown_content.is_some() {
+                if let Some(ref rendered) = tab.markdown_rendered {
+                    let label = tab.markdown_label.as_deref().unwrap_or("markdown");
+                    let scroll = tab.markdown_scroll;
+                    super::markdown::render_cached(
+                        frame,
+                        area,
+                        rendered,
+                        label,
+                        scroll,
+                        border_style,
+                    );
+                } else if let (Some(content), Some(label)) =
+                    (&tab.markdown_content, &tab.markdown_label)
+                {
+                    let content = content.clone();
+                    let label = label.clone();
+                    let scroll = tab.markdown_scroll;
+                    super::markdown::render(
+                        frame,
+                        area,
+                        &content,
+                        &label,
+                        scroll,
+                        border_style,
+                    );
+                }
                 return;
             }
 
@@ -756,10 +750,8 @@ fn footer_keys(app: &App) -> Vec<(String, String)> {
     }
 }
 
-fn render_footer(frame: &mut Frame, area: Rect, app: &App) {
-    let keys = footer_keys(app);
-
-    let make_spans = |items: &[(String, String)], theme: &crate::theme::Theme| -> Vec<Span<'static>> {
+fn render_footer_from_keys(frame: &mut Frame, area: Rect, keys: &[(String, String)], theme: &crate::theme::Theme) {
+    let make_spans = |items: &[(String, String)]| -> Vec<Span<'static>> {
         items
             .iter()
             .flat_map(|(key, desc)| {
@@ -785,7 +777,7 @@ fn render_footer(frame: &mut Frame, area: Rect, app: &App) {
 
     if total_width as u16 <= area.width || area.height < 2 {
         // Single line
-        let spans = make_spans(&keys, &app.theme);
+        let spans = make_spans(keys);
         let footer = Paragraph::new(Line::from(spans));
         frame.render_widget(footer, area);
     } else {
@@ -800,8 +792,8 @@ fn render_footer(frame: &mut Frame, area: Rect, app: &App) {
                 break;
             }
         }
-        let line1 = Line::from(make_spans(&keys[..split_at], &app.theme));
-        let line2 = Line::from(make_spans(&keys[split_at..], &app.theme));
+        let line1 = Line::from(make_spans(&keys[..split_at]));
+        let line2 = Line::from(make_spans(&keys[split_at..]));
         let footer = Paragraph::new(vec![line1, line2]);
         frame.render_widget(footer, area);
     }

@@ -46,7 +46,7 @@ pub fn render(
     parser_guard.screen_mut().set_scrollback(0);
     drop(parser_guard);
 
-    // Render selection highlight overlay
+    // Render selection highlight overlay — iterate only the selected rows
     if let Some(sel) = selection {
         let inner = Rect::new(
             area.x + 1,
@@ -54,15 +54,22 @@ pub fn render(
             area.width.saturating_sub(2),
             area.height.saturating_sub(2),
         );
+        let (start_row, start_col, end_row, end_col) = sel.normalized();
+        let first_row = start_row.min(inner.height.saturating_sub(1));
+        let last_row = end_row.min(inner.height.saturating_sub(1));
         let buf = frame.buffer_mut();
-        for row in 0..inner.height {
-            for col in 0..inner.width {
-                if sel.contains(row, col) {
-                    let x = inner.x + col;
-                    let y = inner.y + row;
-                    if let Some(cell) = buf.cell_mut((x, y)) {
-                        cell.set_style(selection_style);
-                    }
+        for row in first_row..=last_row {
+            let col_start = if row == start_row { start_col } else { 0 };
+            let col_end = if row == end_row {
+                end_col.min(inner.width.saturating_sub(1))
+            } else {
+                inner.width.saturating_sub(1)
+            };
+            for col in col_start..=col_end {
+                let x = inner.x + col;
+                let y = inner.y + row;
+                if let Some(cell) = buf.cell_mut((x, y)) {
+                    cell.set_style(selection_style);
                 }
             }
         }

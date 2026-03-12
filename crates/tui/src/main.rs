@@ -175,7 +175,7 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
             }
         }
 
-        // Poll file watcher events — mark workspaces as dirty when files change
+        // Part A: Poll file watcher events — mark workspaces as dirty when files change
         let now = Instant::now();
         for ws in &mut app.workspaces {
             if let Some(ref mut watcher) = ws.watcher {
@@ -184,23 +184,51 @@ async fn run(mut terminal: DefaultTerminal) -> anyhow::Result<()> {
                     ws.dirty = true;
                 }
             }
-            // Check if active tab PTY process has exited
-            let mut pty_done = false;
-            if let Some(tab) = ws.current_tab_mut() {
-                if let Some(ref mut pty) = tab.pty_session {
-                    if !pty.is_alive() {
-                        pty_done = true;
-                    }
-                    let current_bytes = pty.bytes_processed();
-                    if current_bytes != tab.last_bytes_processed {
-                        tab.last_bytes_processed = current_bytes;
-                        app.needs_redraw = true;
+        }
+
+        // Part B: Active workspace — check PTY bytes + is_alive every tick
+        {
+            let idx = app.active_workspace;
+            if let Some(ws) = app.workspaces.get_mut(idx) {
+                let mut pty_done = false;
+                if let Some(tab) = ws.current_tab_mut() {
+                    if let Some(ref mut pty) = tab.pty_session {
+                        if !pty.is_alive() {
+                            pty_done = true;
+                        }
+                        let current_bytes = pty.bytes_processed();
+                        if current_bytes != tab.last_bytes_processed {
+                            tab.last_bytes_processed = current_bytes;
+                            app.needs_redraw = true;
+                        }
                     }
                 }
+                if pty_done {
+                    ws.status = app::WorkspaceStatus::Done;
+                    app.needs_redraw = true;
+                }
             }
-            if pty_done {
-                ws.status = app::WorkspaceStatus::Done;
-                app.needs_redraw = true;
+        }
+
+        // Part C: Inactive workspaces — only check is_alive every ~1s
+        if now.duration_since(app.last_inactive_pty_check) >= Duration::from_secs(1) {
+            app.last_inactive_pty_check = now;
+            for (i, ws) in app.workspaces.iter_mut().enumerate() {
+                if i == app.active_workspace {
+                    continue;
+                }
+                let mut pty_done = false;
+                if let Some(tab) = ws.current_tab_mut() {
+                    if let Some(ref mut pty) = tab.pty_session {
+                        if !pty.is_alive() {
+                            pty_done = true;
+                        }
+                    }
+                }
+                if pty_done {
+                    ws.status = app::WorkspaceStatus::Done;
+                    app.needs_redraw = true;
+                }
             }
         }
 

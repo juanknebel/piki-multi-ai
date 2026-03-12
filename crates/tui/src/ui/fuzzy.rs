@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
@@ -91,19 +93,34 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         };
 
         let path = state.result_path(result);
-        // Build spans with match highlighting
+        // Build spans with match highlighting — group consecutive chars with same style
+        let match_set: HashSet<u32> = result.match_indices.iter().copied().collect();
+        let matched_style = Style::default()
+            .fg(theme.match_highlight)
+            .bg(bg)
+            .add_modifier(Modifier::BOLD);
+        let normal_style = Style::default().fg(theme.result_text).bg(bg);
+
         let mut spans = vec![Span::styled(" ", Style::default().bg(bg))];
-        for (ci, ch) in path.chars().enumerate() {
-            let is_match = result.match_indices.contains(&(ci as u32));
-            let style = if is_match {
-                Style::default()
-                    .fg(theme.match_highlight)
-                    .bg(bg)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(theme.result_text).bg(bg)
-            };
-            spans.push(Span::styled(String::from(ch), style));
+        let mut run_start: Option<(usize, bool)> = None; // (byte_offset, is_matched)
+        for (ci, (byte_idx, _ch)) in path.char_indices().enumerate() {
+            let is_match = match_set.contains(&(ci as u32));
+            match run_start {
+                Some((start, prev_match)) if prev_match != is_match => {
+                    let style = if prev_match { matched_style } else { normal_style };
+                    spans.push(Span::styled(path[start..byte_idx].to_string(), style));
+                    run_start = Some((byte_idx, is_match));
+                }
+                None => {
+                    run_start = Some((byte_idx, is_match));
+                }
+                _ => {}
+            }
+        }
+        // Flush last run
+        if let Some((start, is_match)) = run_start {
+            let style = if is_match { matched_style } else { normal_style };
+            spans.push(Span::styled(path[start..].to_string(), style));
         }
 
         let line = Line::from(spans);

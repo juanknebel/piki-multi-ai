@@ -93,6 +93,8 @@ pub struct Tab {
     pub markdown_label: Option<String>,
     /// Scroll offset for markdown view
     pub markdown_scroll: u16,
+    /// Cached parsed markdown (avoids re-parsing every frame)
+    pub markdown_rendered: Option<Text<'static>>,
 }
 
 /// A single workspace backed by a git worktree
@@ -175,6 +177,7 @@ impl Workspace {
             markdown_content: None,
             markdown_label: None,
             markdown_scroll: 0,
+            markdown_rendered: None,
         };
         self.next_tab_id += 1;
         self.tabs.push(tab);
@@ -198,6 +201,7 @@ impl Workspace {
 
     /// Add a markdown viewer tab and return its index
     pub fn add_markdown_tab(&mut self, label: String, content: String) -> usize {
+        let rendered = crate::ui::markdown::parse_to_static(&content);
         let tab = Tab {
             id: self.next_tab_id,
             provider: AIProvider::Shell, // placeholder, not used for markdown
@@ -209,6 +213,7 @@ impl Workspace {
             markdown_content: Some(content),
             markdown_label: Some(label),
             markdown_scroll: 0,
+            markdown_rendered: Some(rendered),
         };
         self.next_tab_id += 1;
         self.tabs.push(tab);
@@ -409,22 +414,6 @@ impl Selection {
         }
     }
 
-    pub fn contains(&self, row: u16, col: u16) -> bool {
-        let (sr, sc, er, ec) = self.normalized();
-        if row < sr || row > er {
-            return false;
-        }
-        if sr == er {
-            return col >= sc && col <= ec;
-        }
-        if row == sr {
-            return col >= sc;
-        }
-        if row == er {
-            return col <= ec;
-        }
-        true
-    }
 }
 
 /// Central application state
@@ -521,8 +510,8 @@ pub struct App {
     pub main_content_area: Rect,
     /// Cache for rendered diff output, keyed by file path
     pub diff_cache: std::collections::HashMap<String, Text<'static>>,
-    /// Cached footer height: (mode, terminal_width, computed_height)
-    pub cached_footer_height: Option<(AppMode, u16, u16)>,
+    /// Last time inactive workspace PTYs were checked for exit
+    pub last_inactive_pty_check: Instant,
 }
 
 const MAX_DIFF_CACHE_SIZE: usize = 32;
@@ -588,7 +577,7 @@ impl App {
             subtabs_area: Rect::default(),
             main_content_area: Rect::default(),
             diff_cache: std::collections::HashMap::new(),
-            cached_footer_height: None,
+            last_inactive_pty_check: Instant::now(),
         }
     }
 

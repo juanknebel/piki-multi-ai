@@ -6,6 +6,13 @@ use ratatui::widgets::{Block, Borders, Paragraph};
 
 use crate::app::App;
 
+fn char_to_byte_idx(s: &str, char_idx: usize) -> usize {
+    s.char_indices()
+        .nth(char_idx)
+        .map(|(i, _)| i)
+        .unwrap_or(s.len())
+}
+
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let editor = match &app.editor {
         Some(e) => e,
@@ -45,27 +52,31 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             )];
 
             if row == editor.cursor_row {
-                // Render line with cursor
-                for (ci, ch) in line_text.chars().enumerate() {
-                    if ci == editor.cursor_col {
-                        spans.push(Span::styled(
-                            String::from(ch),
-                            Style::default()
-                                .bg(ratatui::style::Color::White)
-                                .fg(ratatui::style::Color::Black),
-                        ));
-                    } else {
-                        spans.push(Span::raw(String::from(ch)));
-                    }
-                }
-                // If cursor is at end of line
-                if editor.cursor_col >= line_text.chars().count() {
+                // Render line with cursor using 3 slices instead of per-char alloc
+                let cursor_byte = char_to_byte_idx(line_text, editor.cursor_col);
+                if cursor_byte >= line_text.len() {
+                    // Cursor at end of line
+                    spans.push(Span::raw(line_text.clone()));
                     spans.push(Span::styled(
                         " ",
                         Style::default()
                             .bg(ratatui::style::Color::White)
                             .fg(ratatui::style::Color::Black),
                     ));
+                } else {
+                    let next_byte = char_to_byte_idx(line_text, editor.cursor_col + 1);
+                    if cursor_byte > 0 {
+                        spans.push(Span::raw(line_text[..cursor_byte].to_string()));
+                    }
+                    spans.push(Span::styled(
+                        line_text[cursor_byte..next_byte].to_string(),
+                        Style::default()
+                            .bg(ratatui::style::Color::White)
+                            .fg(ratatui::style::Color::Black),
+                    ));
+                    if next_byte < line_text.len() {
+                        spans.push(Span::raw(line_text[next_byte..].to_string()));
+                    }
                 }
             } else {
                 spans.push(Span::raw(line_text.clone()));

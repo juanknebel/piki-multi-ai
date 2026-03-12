@@ -103,6 +103,9 @@ pub struct WorkspaceInfo {
     pub path: PathBuf,
     /// Git root of the source repository this workspace was created from
     pub source_repo: PathBuf,
+    /// Pre-computed display name for the source repo (avoids per-frame file_name() + to_string_lossy())
+    #[serde(default)]
+    pub source_repo_display: String,
 }
 
 impl WorkspaceInfo {
@@ -115,6 +118,10 @@ impl WorkspaceInfo {
         path: PathBuf,
         source_repo: PathBuf,
     ) -> Self {
+        let source_repo_display = source_repo
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| source_repo.to_string_lossy().to_string());
         Self {
             name,
             description,
@@ -123,6 +130,7 @@ impl WorkspaceInfo {
             branch,
             path,
             source_repo,
+            source_repo_display,
         }
     }
 }
