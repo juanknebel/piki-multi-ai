@@ -160,6 +160,7 @@ fn default_interaction() -> HashMap<String, String> {
     m.insert("exit_interaction".to_string(), "ctrl-g".to_string());
     m.insert("paste".to_string(), "ctrl-shift-v".to_string());
     m.insert("copy".to_string(), "ctrl-shift-c".to_string());
+    m.insert("search".to_string(), "ctrl-shift-f".to_string());
     m
 }
 

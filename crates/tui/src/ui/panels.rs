@@ -110,6 +110,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                     tab.term_scroll,
                     selection.as_ref(),
                     selection_style,
+                    app.term_search.as_ref(),
                 );
             } else {
                 // Provider CLI not found — show fun ASCII art

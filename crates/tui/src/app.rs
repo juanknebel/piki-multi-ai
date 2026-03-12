@@ -465,6 +465,16 @@ pub enum ResizeDrag {
     LeftSplit,
 }
 
+/// Terminal search overlay state
+pub struct TermSearchState {
+    pub query: String,
+    pub cursor: usize,
+    /// Match positions as (row, col) pairs in screen coordinates
+    pub matches: Vec<(usize, usize)>,
+    /// Index into `matches` for the currently highlighted match
+    pub current_match: usize,
+}
+
 pub struct App {
     pub should_quit: bool,
     pub mode: AppMode,
@@ -547,6 +557,8 @@ pub struct App {
     pub undo_rx: tokio::sync::mpsc::UnboundedReceiver<UndoEntry>,
     /// Undo stack (max 20 entries)
     pub undo_stack: std::collections::VecDeque<UndoEntry>,
+    /// Terminal search overlay (None = closed)
+    pub term_search: Option<TermSearchState>,
     /// Last left-click position and time (for double-click detection)
     pub last_click: Option<(Instant, u16, u16)>,
     /// Layout areas for mouse hit-testing
@@ -624,6 +636,7 @@ impl App {
             undo_tx,
             undo_rx,
             undo_stack: std::collections::VecDeque::new(),
+            term_search: None,
             last_click: None,
             ws_list_area: Rect::default(),
             file_list_area: Rect::default(),

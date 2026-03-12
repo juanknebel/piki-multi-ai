@@ -208,9 +208,117 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
     None
 }
 
+fn search_terminal(app: &mut App) {
+    let search = match app.term_search.as_mut() {
+        Some(s) if !s.query.is_empty() => s,
+        _ => return,
+    };
+    search.matches.clear();
+    search.current_match = 0;
+
+    let ws = match app.workspaces.get(app.active_workspace) {
+        Some(ws) => ws,
+        None => return,
+    };
+    let tab = match ws.current_tab() {
+        Some(t) => t,
+        None => return,
+    };
+    let parser = match tab.pty_parser.as_ref() {
+        Some(p) => p,
+        None => return,
+    };
+
+    let guard = parser.lock();
+    let screen = guard.screen();
+    let query = &search.query;
+    let rows = screen.size().0;
+    let cols = screen.size().1;
+    for row in 0..rows {
+        // Build the row text from cell contents
+        let mut line = String::with_capacity(cols as usize);
+        for col in 0..cols {
+            let cell = screen.cell(row, col);
+            if let Some(cell) = cell {
+                line.push_str(&cell.contents());
+            } else {
+                line.push(' ');
+            }
+        }
+        // Find all substring matches in this row
+        let query_lower = query.to_lowercase();
+        let line_lower = line.to_lowercase();
+        let mut start = 0;
+        while let Some(pos) = line_lower[start..].find(&query_lower) {
+            search.matches.push((row as usize, start + pos));
+            start += pos + 1;
+        }
+    }
+}
+
 pub(super) fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
+    // Terminal search overlay captures input when active
+    if app.term_search.is_some() {
+        match key.code {
+            KeyCode::Esc => {
+                app.term_search = None;
+            }
+            KeyCode::Enter => {
+                if let Some(ref mut search) = app.term_search {
+                    if !search.matches.is_empty() {
+                        if key.modifiers.contains(crossterm::event::KeyModifiers::SHIFT) {
+                            // Shift+Enter → previous match
+                            search.current_match = if search.current_match == 0 {
+                                search.matches.len() - 1
+                            } else {
+                                search.current_match - 1
+                            };
+                        } else {
+                            // Enter → next match
+                            search.current_match =
+                                (search.current_match + 1) % search.matches.len();
+                        }
+                    }
+                }
+            }
+            KeyCode::Char(c) => {
+                if let Some(ref mut search) = app.term_search {
+                    search.query.insert(
+                        search.query.char_indices().nth(search.cursor).map(|(i, _)| i).unwrap_or(search.query.len()),
+                        c,
+                    );
+                    search.cursor += 1;
+                }
+                search_terminal(app);
+            }
+            KeyCode::Backspace => {
+                if let Some(ref mut search) = app.term_search {
+                    if search.cursor > 0 {
+                        search.cursor -= 1;
+                        let byte_pos = search.query.char_indices().nth(search.cursor).map(|(i, _)| i).unwrap_or(search.query.len());
+                        search.query.remove(byte_pos);
+                    }
+                }
+                search_terminal(app);
+            }
+            _ => {}
+        }
+        return None;
+    }
+
     if app.config.matches_interaction(key, "exit_interaction") {
         app.interacting = false;
+        app.term_search = None;
+        return None;
+    }
+    // Ctrl+Shift+F: open terminal search
+    if app.config.matches_interaction(key, "search") {
+        app.term_search = Some(crate::app::TermSearchState {
+            query: String::new(),
+            cursor: 0,
+            matches: Vec::new(),
+            current_match: 0,
+        });
         return None;
     }
     // Ctrl+Shift+V: paste from clipboard

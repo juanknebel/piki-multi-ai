@@ -267,11 +267,23 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                     ),
                     (cfg.get_binding("interaction", "exit_interaction"), "back"),
                 ]
+            } else if app.term_search.is_some() {
+                vec![
+                    ("enter".to_string(), "next match"),
+                    ("shift-enter".to_string(), "prev match"),
+                    ("esc".to_string(), "close search"),
+                ]
             } else {
-                vec![(
-                    cfg.get_binding("interaction", "exit_interaction"),
-                    "navigation mode",
-                )]
+                vec![
+                    (
+                        cfg.get_binding("interaction", "search"),
+                        "search",
+                    ),
+                    (
+                        cfg.get_binding("interaction", "exit_interaction"),
+                        "navigation mode",
+                    ),
+                ]
             }
         }
         _ => {
