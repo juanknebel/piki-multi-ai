@@ -51,10 +51,7 @@ mod tests {
             .unwrap();
         let buf = terminal.backend().buffer().clone();
         let content = buffer_to_string(&buf);
-        assert!(
-            content.contains("Close"),
-            "should contain 'Close' in title"
-        );
+        assert!(content.contains("Close"), "should contain 'Close' in title");
     }
 
     #[test]
@@ -67,7 +64,10 @@ mod tests {
             .unwrap();
         let buf = terminal.backend().buffer().clone();
         let content = buffer_to_string(&buf);
-        assert!(content.contains("New Tab"), "should contain 'New Tab' title");
+        assert!(
+            content.contains("New Tab"),
+            "should contain 'New Tab' title"
+        );
         assert!(content.contains("Shell"), "should list Shell provider");
     }
 
@@ -96,18 +96,10 @@ mod tests {
     fn test_render_footer_from_keys_single_line() {
         let mut terminal = test_terminal(80, 1);
         let theme = Theme::default();
-        let keys = vec![
-            ("q".to_string(), "quit"),
-            ("?".to_string(), "help"),
-        ];
+        let keys = vec![("q".to_string(), "quit"), ("?".to_string(), "help")];
         terminal
             .draw(|frame| {
-                super::statusbar::render_footer_from_keys(
-                    frame,
-                    frame.area(),
-                    &keys,
-                    &theme,
-                );
+                super::statusbar::render_footer_from_keys(frame, frame.area(), &keys, &theme);
             })
             .unwrap();
         let buf = terminal.backend().buffer().clone();
@@ -131,12 +123,7 @@ mod tests {
         ];
         terminal
             .draw(|frame| {
-                super::statusbar::render_footer_from_keys(
-                    frame,
-                    frame.area(),
-                    &keys,
-                    &theme,
-                );
+                super::statusbar::render_footer_from_keys(frame, frame.area(), &keys, &theme);
             })
             .unwrap();
         // No panic = success; the widget handles wrapping gracefully

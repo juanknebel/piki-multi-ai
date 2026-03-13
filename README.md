@@ -9,12 +9,14 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 
 ## Features
 
-- **Parallel workspaces** — Run multiple AI coding sessions simultaneously, each in an isolated git worktree
+- **Parallel workspaces** — Run multiple AI coding sessions simultaneously, each in an isolated git worktree or pointing directly to an existing directory (Simple mode)
 - **Dynamic tabs** — Each workspace starts with a Shell tab; create additional tabs on demand (`t`) for Claude Code, Gemini CLI, Codex, Kanban Board, or more shells; close tabs with `w`; cycle with `g`/`G`
 - **Live terminal rendering** — See AI assistant output in real-time with full ANSI color support via `tui-term`
 - **Interactive input** — Type directly into any AI session (Enter on the terminal pane to interact)
 - **Git branch-style naming** — Workspace names support `/`, `.`, `-`, `_` (e.g. `feature/login`, `bugfix/issue-42`)
-- **Rich workspace list** — Each workspace shows name, status, file count, and parent project; press `i` to view full details (branch, paths, description, prompt) in a copyable overlay
+- **Workspace groups** — Organize workspaces into named groups with collapsible headers (`▼`/`▸`) in the sidebar; assign groups when creating or editing workspaces
+- **Simple workspaces** — Create workspaces that point directly to an existing directory without creating a git worktree or branch; name is auto-derived from the directory
+- **Rich workspace list** — Each workspace shows name, file count, and parent project; press `i` to view full details (branch, paths, type, group, description, prompt) in a copyable overlay
 - **File watching** — Automatically detects file changes in each worktree using `notify`, with periodic refresh every 3s to catch commits and rebases
 - **Full git status** — STATUS panel shows all file states: modified, staged, untracked, conflicted, renamed, and more via `git status --porcelain=v1`
 - **Ahead/behind indicator** — STATUS panel border and status bar show `↑N to push` / `↓N behind` relative to upstream tracking branch
@@ -94,17 +96,19 @@ piki-multi-ai version
 ### Creating Workspaces
 
 Press `n` to open the New Workspace dialog. Provide:
-- **Name:** The git branch name (supports `/`, `.`, `-`, `_`).
-- **Dir:** The path to the source git repository.
+- **Type:** Toggle between `Worktree` (default, creates an isolated git worktree) and `Simple` (points directly to an existing directory without creating a branch or worktree). Use `Space`, `Left`, or `Right` to toggle.
+- **Name:** The git branch name (supports `/`, `.`, `-`, `_`). Hidden for Simple workspaces — name is auto-derived from the directory.
+- **Dir:** The path to the source git repository (Worktree) or the target directory (Simple).
 - **Desc:** (Optional) A brief description of the task.
 - **Prompt:** (Optional) An initial prompt to auto-send to the AI provider on creation.
 - **Kanban Path:** (Optional) Path to the Kanban board for this workspace (defaults to `~/.config/flow/boards/default`). If a local path is provided and no `board.txt` exists there, a default board with 4 columns (`todo`, `in_progress`, `in_review`, `done`) will be created automatically.
+- **Group:** (Optional) Assign the workspace to a named group. Grouped workspaces appear under collapsible headers in the sidebar.
 
 Press `Enter` to create or `Esc` to cancel. Use `Tab` to cycle between fields.
 
 ### Editing Workspaces
 
-Press `e` on a selected workspace to modify its **Kanban Path** or **initial Prompt**. This is useful for re-directing a workspace to a specific task board or updating the orchestration instructions.
+Press `e` on a selected workspace to modify its **Kanban Path**, **Prompt**, or **Group**. This is useful for re-directing a workspace to a specific task board, updating the orchestration instructions, or reorganizing workspaces into groups.
 
 ### Persistence
 
@@ -118,6 +122,7 @@ Workspace configurations are saved automatically and restored on startup.
   - On startup, `piki-multi-ai` scans the config directory and restores all valid workspaces.
   - Stale entries (worktrees deleted manually) are cleaned up automatically.
   - Robust de-duplication ensures each workspace is loaded only once.
+  - Simple workspaces reference the original directory and are never cleaned up as stale.
 
 ### Layout
 
@@ -126,15 +131,15 @@ Workspace configurations are saved automatically and restored on startup.
 +------------------+-------------------------------------------------------+
 | WORKSPACES       |  [ ws-1 ]  [ ws-2 ]  [ ws-3 ]   (workspace tabs)     |
 |                  |  [ Shell ]  [ Claude Code × ]    (dynamic sub-tabs)   |
-|  ▶ ws-1 (active) |-------------------------------------------------------|
-|    ● busy | 3    |                                                       |
-|    ⌂ my-project  |  AI assistant live terminal output                    |
-|                  |  (diff opens as floating overlay)                     |
+|  ▼ frontend (2)  |-------------------------------------------------------|
+|  ▶ ws-1 (active) |                                                       |
+|    3 files       |  AI assistant live terminal output                    |
+|    ⌂ my-project  |  (diff opens as floating overlay)                     |
 |                  |                                                       |
 |    ws-2          |                                                       |
+|  ▸ backend (1)   |                                                       |
 |------------------+                                                       |
-| STATUS           |                                                       |
-|                  |-------------------------------------------------------|
+| STATUS           |-------------------------------------------------------|
 |  M src/auth.rs   | branch: ws-1 | 3 files | ↑1 unpushed | Shell: busy   |
 |  A src/new.rs    +-------------------------------------------------------+
 |  ? untracked.txt |
@@ -356,7 +361,7 @@ Cargo.toml               # Workspace root
 crates/
   core/                  # piki-core — shared library (no TUI dependencies)
     src/
-      domain.rs          # AIProvider, FileStatus, ChangedFile, WorkspaceStatus, WorkspaceInfo
+      domain.rs          # AIProvider, FileStatus, ChangedFile, WorkspaceStatus, WorkspaceInfo, WorkspaceType
       git.rs             # Git status parsing, ahead/behind detection
       pty/
         session.rs       # PTY management (portable-pty + vt100 parser)
@@ -476,7 +481,7 @@ sequenceDiagram
 - **vt100** parser accumulates terminal state; **tui-term** renders it as a ratatui widget
 - **ansi-to-tui** converts delta's ANSI output to `ratatui::text::Text` for the diff view
 - Each workspace starts with a single Shell tab; additional tabs (Claude, Gemini, Codex, Shell) are created on demand, each with its own PTY session
-- Worktrees are stored in `~/.local/share/piki-multi/worktrees/<project>/<name>` with branch names matching the workspace name exactly
+- Worktrees are stored in `~/.local/share/piki-multi/worktrees/<project>/<name>` with branch names matching the workspace name exactly; Simple workspaces point directly to their source directory
 - Event-driven architecture: `crossterm::EventStream` + `tokio::select!` for truly async event loop; key handlers return `Option<Action>`, main loop executes actions asynchronously
 - STATUS panel uses `git status --porcelain=v1` for full coverage of untracked, staged, conflicted, and renamed files
 - Diff runner uses `git diff --no-index /dev/null <file>` for untracked files

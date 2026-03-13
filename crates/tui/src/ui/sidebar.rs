@@ -4,7 +4,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph};
 
-use crate::app::{ActivePane, App, FileStatus};
+use crate::app::{ActivePane, App, FileStatus, SidebarItem};
 
 use super::layout::pane_border_style;
 
@@ -27,77 +27,93 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
         return;
     }
 
-    let items: Vec<ListItem> = app
-        .workspaces
+    let sidebar_items = app.sidebar_items();
+    let items: Vec<ListItem> = sidebar_items
         .iter()
         .enumerate()
-        .map(|(i, ws)| {
-            let is_selected = i == app.selected_workspace && is_active;
-            let detail_color = if is_selected {
-                theme.detail_selected
-            } else {
-                theme.detail_normal
-            };
-
-            let marker = if i == app.active_workspace {
-                "▶"
-            } else {
-                " "
-            };
-            let status_icon = match ws.status {
-                crate::app::WorkspaceStatus::Idle => "●",
-                crate::app::WorkspaceStatus::Busy => "◐",
-                crate::app::WorkspaceStatus::Done => "✓",
-                crate::app::WorkspaceStatus::Error(_) => "✗",
-            };
-            let line1 = Line::from(vec![
-                Span::raw(format!(" {} ", marker)),
-                Span::styled(
-                    ws.name.clone(),
-                    if i == app.active_workspace {
-                        Style::default()
-                            .fg(theme.name_active)
-                            .add_modifier(Modifier::BOLD)
+        .map(|(row, item)| {
+            let is_selected = row == app.selected_sidebar_row && is_active;
+            match item {
+                SidebarItem::GroupHeader {
+                    name,
+                    count,
+                    collapsed,
+                } => {
+                    let arrow = if *collapsed { "▸" } else { "▼" };
+                    let line = Line::from(vec![
+                        Span::raw(format!(" {} ", arrow)),
+                        Span::styled(
+                            format!("{} ({})", name, count),
+                            Style::default()
+                                .fg(theme.name_inactive)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                    ]);
+                    let style = if is_selected {
+                        Style::default().bg(theme.selected_bg)
                     } else {
-                        Style::default().fg(theme.name_inactive)
-                    },
-                ),
-            ]);
-            let line2 = Line::from(vec![
-                Span::raw("   "),
-                Span::styled(
-                    format!(
-                        "{} {} | {} files",
-                        status_icon,
-                        ws.status_label(),
-                        ws.file_count()
-                    ),
-                    Style::default().fg(detail_color),
-                ),
-            ]);
+                        Style::default()
+                    };
+                    ListItem::new(vec![line]).style(style)
+                }
+                SidebarItem::Workspace { index } => {
+                    let ws = &app.workspaces[*index];
+                    let detail_color = if is_selected {
+                        theme.detail_selected
+                    } else {
+                        theme.detail_normal
+                    };
 
-            let mut lines = vec![line1, line2];
+                    let marker = if *index == app.active_workspace {
+                        "▶"
+                    } else {
+                        " "
+                    };
+                    let line1 = Line::from(vec![
+                        Span::raw(format!(" {} ", marker)),
+                        Span::styled(
+                            ws.name.clone(),
+                            if *index == app.active_workspace {
+                                Style::default()
+                                    .fg(theme.name_active)
+                                    .add_modifier(Modifier::BOLD)
+                            } else {
+                                Style::default().fg(theme.name_inactive)
+                            },
+                        ),
+                    ]);
+                    let line2 = Line::from(vec![
+                        Span::raw("   "),
+                        Span::styled(
+                            format!("{} files", ws.file_count()),
+                            Style::default().fg(detail_color),
+                        ),
+                    ]);
 
-            // Show parent project (pre-computed in WorkspaceInfo)
-            let project_name = &ws.source_repo_display;
-            let max_proj = area.width.saturating_sub(6) as usize;
-            let proj_text = if project_name.len() > max_proj {
-                format!("⌂ {}…", &project_name[..max_proj.saturating_sub(1)])
-            } else {
-                format!("⌂ {}", project_name)
-            };
-            lines.push(Line::from(vec![
-                Span::raw("   "),
-                Span::styled(proj_text, Style::default().fg(detail_color)),
-            ]));
+                    let mut lines = vec![line1, line2];
 
-            let style = if is_selected {
-                Style::default().bg(theme.selected_bg)
-            } else {
-                Style::default()
-            };
+                    // Show parent project (pre-computed in WorkspaceInfo)
+                    let project_name = &ws.source_repo_display;
+                    let max_proj = area.width.saturating_sub(6) as usize;
+                    let proj_text = if project_name.len() > max_proj {
+                        format!("⌂ {}…", &project_name[..max_proj.saturating_sub(1)])
+                    } else {
+                        format!("⌂ {}", project_name)
+                    };
+                    lines.push(Line::from(vec![
+                        Span::raw("   "),
+                        Span::styled(proj_text, Style::default().fg(detail_color)),
+                    ]));
 
-            ListItem::new(lines).style(style)
+                    let style = if is_selected {
+                        Style::default().bg(theme.selected_bg)
+                    } else {
+                        Style::default()
+                    };
+
+                    ListItem::new(lines).style(style)
+                }
+            }
         })
         .collect();
 

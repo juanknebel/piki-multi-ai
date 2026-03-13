@@ -40,7 +40,8 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
             {
                 app.info_hscroll = 0;
                 app.mode = AppMode::Normal;
-                let _ = crossterm::execute!(std::io::stderr(), crossterm::event::EnableMouseCapture);
+                let _ =
+                    crossterm::execute!(std::io::stderr(), crossterm::event::EnableMouseCapture);
             }
             return None;
         }
@@ -53,9 +54,7 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         AppMode::Help => {
             if app.config.matches_help(key, "down") || app.config.matches_help(key, "down_alt") {
                 app.help_scroll = app.help_scroll.saturating_add(1);
-            } else if app.config.matches_help(key, "up")
-                || app.config.matches_help(key, "up_alt")
-            {
+            } else if app.config.matches_help(key, "up") || app.config.matches_help(key, "up_alt") {
                 app.help_scroll = app.help_scroll.saturating_sub(1);
             } else if app.config.matches_help(key, "page_down") {
                 app.help_scroll = app.help_scroll.saturating_add(10);
@@ -149,10 +148,13 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
             let ws = &app.workspaces[app.selected_workspace];
             let k_path = ws.kanban_path.clone().unwrap_or_default();
             let prompt = ws.prompt.clone();
+            let group = ws.info.group.clone().unwrap_or_default();
             app.kanban_input_buffer = k_path;
             app.prompt_input_buffer = prompt;
+            app.group_input_buffer = group;
             app.kanban_input_cursor = app.kanban_input_buffer.chars().count();
             app.prompt_input_cursor = app.prompt_input_buffer.chars().count();
+            app.group_input_cursor = app.group_input_buffer.chars().count();
             app.active_dialog_field = DialogField::KanbanPath;
             app.edit_target = Some(app.selected_workspace);
             app.mode = AppMode::EditWorkspace;
@@ -163,6 +165,7 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
             let dir = ws.source_repo.display().to_string();
             let kanban = ws.kanban_path.clone().unwrap_or_default();
             let prompt = ws.prompt.clone();
+            let group = ws.info.group.clone().unwrap_or_default();
             app.mode = AppMode::NewWorkspace;
             app.input_buffer.clear();
             app.input_cursor = 0;
@@ -174,6 +177,9 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
             app.prompt_input_cursor = app.prompt_input_buffer.chars().count();
             app.kanban_input_buffer = kanban;
             app.kanban_input_cursor = app.kanban_input_buffer.chars().count();
+            app.group_input_buffer = group;
+            app.group_input_cursor = app.group_input_buffer.chars().count();
+            app.workspace_type_selection = ws.info.workspace_type;
             app.active_dialog_field = DialogField::Name;
         }
     } else if app.config.matches_navigation(key, "new_workspace") {
@@ -183,11 +189,14 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
         app.desc_input_buffer.clear();
         app.prompt_input_buffer.clear();
         app.kanban_input_buffer.clear();
+        app.group_input_buffer.clear();
         app.input_cursor = 0;
         app.dir_input_cursor = 0;
         app.desc_input_cursor = 0;
         app.prompt_input_cursor = 0;
         app.kanban_input_cursor = 0;
+        app.group_input_cursor = 0;
+        app.workspace_type_selection = piki_core::WorkspaceType::default();
         app.active_dialog_field = DialogField::Name;
     } else if app.config.matches_navigation(key, "delete_workspace") {
         if !app.workspaces.is_empty() {
@@ -271,14 +280,16 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
         app.left_split_pct = app.left_split_pct.saturating_sub(10).max(10);
     } else if app.config.matches_navigation(key, "next_tab") {
         if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-            && !ws.tabs.is_empty() {
-                ws.active_tab = (ws.active_tab + 1) % ws.tabs.len();
-            }
+            && !ws.tabs.is_empty()
+        {
+            ws.active_tab = (ws.active_tab + 1) % ws.tabs.len();
+        }
     } else if app.config.matches_navigation(key, "prev_tab") {
         if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-            && !ws.tabs.is_empty() {
-                ws.active_tab = (ws.active_tab + ws.tabs.len() - 1) % ws.tabs.len();
-            }
+            && !ws.tabs.is_empty()
+        {
+            ws.active_tab = (ws.active_tab + ws.tabs.len() - 1) % ws.tabs.len();
+        }
     } else if app.config.matches_navigation(key, "new_tab") {
         if app.current_workspace().is_some() {
             app.mode = AppMode::NewTab;

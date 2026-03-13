@@ -10,15 +10,16 @@ pub fn key_to_bytes(key: KeyEvent) -> Option<Vec<u8>> {
 
     // Ctrl + letter
     if key.modifiers.contains(KeyModifiers::CONTROL)
-        && let KeyCode::Char(c) = key.code {
-            // Ctrl+A = 1, Ctrl+B = 2, ..., Ctrl+Z = 26
-            let byte = (c.to_ascii_lowercase() as u8)
-                .wrapping_sub(b'a')
-                .wrapping_add(1);
-            if (1..=26).contains(&byte) {
-                return Some(vec![byte]);
-            }
+        && let KeyCode::Char(c) = key.code
+    {
+        // Ctrl+A = 1, Ctrl+B = 2, ..., Ctrl+Z = 26
+        let byte = (c.to_ascii_lowercase() as u8)
+            .wrapping_sub(b'a')
+            .wrapping_add(1);
+        if (1..=26).contains(&byte) {
+            return Some(vec![byte]);
         }
+    }
 
     match key.code {
         KeyCode::Char(c) => {

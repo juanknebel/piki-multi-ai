@@ -14,7 +14,10 @@ pub(crate) fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
             ToastLevel::Success => (theme.interact_bg, theme.mode_fg),
             ToastLevel::Error => (theme.error_bg, theme.error_fg),
         };
-        Span::styled(format!(" {} ", toast.message), Style::default().bg(bg).fg(fg))
+        Span::styled(
+            format!(" {} ", toast.message),
+            Style::default().bg(bg).fg(fg),
+        )
     } else if let Some(msg) = &app.status_message {
         Span::styled(
             format!(" {} ", msg),
@@ -275,10 +278,7 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                 ]
             } else {
                 vec![
-                    (
-                        cfg.get_binding("interaction", "search"),
-                        "search",
-                    ),
+                    (cfg.get_binding("interaction", "search"), "search"),
                     (
                         cfg.get_binding("interaction", "exit_interaction"),
                         "navigation mode",

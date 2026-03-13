@@ -71,18 +71,35 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         .current_workspace()
         .and_then(|ws| ws.current_tab())
         .is_some_and(|tab| tab.markdown_content.is_some());
-    let cache_key = (app.mode.clone(), app.interacting, app.active_pane, has_markdown);
+    let cache_key = (
+        app.mode.clone(),
+        app.interacting,
+        app.active_pane,
+        has_markdown,
+    );
     let keys = if let Some((ref m, i, p, md, ref cached)) = app.footer_cache {
         if *m == cache_key.0 && i == cache_key.1 && p == cache_key.2 && md == cache_key.3 {
             cached.clone()
         } else {
             let k = super::statusbar::footer_keys(app);
-            app.footer_cache = Some((cache_key.0, cache_key.1, cache_key.2, cache_key.3, k.clone()));
+            app.footer_cache = Some((
+                cache_key.0,
+                cache_key.1,
+                cache_key.2,
+                cache_key.3,
+                k.clone(),
+            ));
             k
         }
     } else {
         let k = super::statusbar::footer_keys(app);
-        app.footer_cache = Some((cache_key.0, cache_key.1, cache_key.2, cache_key.3, k.clone()));
+        app.footer_cache = Some((
+            cache_key.0,
+            cache_key.1,
+            cache_key.2,
+            cache_key.3,
+            k.clone(),
+        ));
         k
     };
     let footer_height = compute_footer_height_from_keys(&keys, area.width);
@@ -178,7 +195,9 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         AppMode::NewTab => super::dialogs::render_new_tab_dialog(frame, area),
         AppMode::About => super::dialogs::render_about_overlay(frame, area, app),
         AppMode::WorkspaceInfo => super::dialogs::render_workspace_info_overlay(frame, area, app),
-        AppMode::ConfirmCloseTab => super::dialogs::render_confirm_close_tab_dialog(frame, area, app),
+        AppMode::ConfirmCloseTab => {
+            super::dialogs::render_confirm_close_tab_dialog(frame, area, app)
+        }
         AppMode::ConfirmQuit => super::dialogs::render_confirm_quit_dialog(frame, area, app),
         AppMode::InlineEdit => {} // handled by main content render
     }

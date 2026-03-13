@@ -4,7 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField};
-use piki_core::{AIProvider, MergeStrategy};
+use piki_core::{AIProvider, MergeStrategy, WorkspaceType};
 
 /// Result of processing a text input key event
 enum TextInputResult {
@@ -78,11 +78,14 @@ fn handle_text_input(
 
 fn dialog_buf_and_cursor(app: &mut App) -> (&mut String, &mut usize) {
     match app.active_dialog_field {
+        // Type is not a text field; handled before this is called
+        DialogField::Type => (&mut app.input_buffer, &mut app.input_cursor),
         DialogField::Name => (&mut app.input_buffer, &mut app.input_cursor),
         DialogField::Directory => (&mut app.dir_input_buffer, &mut app.dir_input_cursor),
         DialogField::Description => (&mut app.desc_input_buffer, &mut app.desc_input_cursor),
         DialogField::Prompt => (&mut app.prompt_input_buffer, &mut app.prompt_input_cursor),
         DialogField::KanbanPath => (&mut app.kanban_input_buffer, &mut app.kanban_input_cursor),
+        DialogField::Group => (&mut app.group_input_buffer, &mut app.group_input_cursor),
     }
 }
 
@@ -96,6 +99,8 @@ pub(super) fn handle_edit_workspace_input(app: &mut App, key: KeyEvent) -> Optio
         KeyCode::Tab | KeyCode::BackTab => {
             app.active_dialog_field = match app.active_dialog_field {
                 DialogField::KanbanPath => DialogField::Prompt,
+                DialogField::Prompt => DialogField::Group,
+                DialogField::Group => DialogField::KanbanPath,
                 _ => DialogField::KanbanPath,
             };
             return None;
@@ -108,21 +113,31 @@ pub(super) fn handle_edit_workspace_input(app: &mut App, key: KeyEvent) -> Optio
                 Some(kanban_path_raw.to_string())
             };
             let prompt = app.prompt_input_buffer.clone();
+            let group_raw = app.group_input_buffer.trim();
+            let group = if group_raw.is_empty() {
+                None
+            } else {
+                Some(group_raw.to_string())
+            };
             let idx = app.edit_target.take().unwrap_or(app.active_workspace);
 
             app.kanban_input_buffer.clear();
             app.prompt_input_buffer.clear();
+            app.group_input_buffer.clear();
             app.kanban_input_cursor = 0;
             app.prompt_input_cursor = 0;
+            app.group_input_cursor = 0;
             app.mode = AppMode::Normal;
-            return Some(Action::EditWorkspace(idx, kanban_path, prompt));
+            return Some(Action::EditWorkspace(idx, kanban_path, prompt, group));
         }
         _ if is_cancel(key) => {
             app.edit_target = None;
             app.kanban_input_buffer.clear();
             app.prompt_input_buffer.clear();
+            app.group_input_buffer.clear();
             app.kanban_input_cursor = 0;
             app.prompt_input_cursor = 0;
+            app.group_input_cursor = 0;
             app.mode = AppMode::Normal;
             return None;
         }
@@ -137,17 +152,20 @@ pub(super) fn handle_edit_workspace_input(app: &mut App, key: KeyEvent) -> Optio
 pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     match key.code {
         KeyCode::Tab | KeyCode::BackTab => {
+            let is_simple = app.workspace_type_selection == WorkspaceType::Simple;
             app.active_dialog_field = match app.active_dialog_field {
+                DialogField::Type if is_simple => DialogField::Directory,
+                DialogField::Type => DialogField::Name,
                 DialogField::Name => DialogField::Directory,
                 DialogField::Directory => DialogField::Description,
                 DialogField::Description => DialogField::Prompt,
                 DialogField::Prompt => DialogField::KanbanPath,
-                DialogField::KanbanPath => DialogField::Name,
+                DialogField::KanbanPath => DialogField::Group,
+                DialogField::Group => DialogField::Type,
             };
             return None;
         }
         KeyCode::Enter => {
-            let name = app.input_buffer.clone();
             let dir_raw = app.dir_input_buffer.clone();
             let description = app.desc_input_buffer.clone();
             let prompt = app.prompt_input_buffer.clone();
@@ -157,9 +175,35 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
             } else {
                 Some(kanban_path_raw.to_string())
             };
+            let group_raw = app.group_input_buffer.trim();
+            let group = if group_raw.is_empty() {
+                None
+            } else {
+                Some(group_raw.to_string())
+            };
+            let ws_type = app.workspace_type_selection;
+
+            // For Simple workspaces, derive name from directory basename
+            let name = if ws_type == WorkspaceType::Simple {
+                if app.input_buffer.is_empty() {
+                    PathBuf::from(&dir_raw)
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_default()
+                } else {
+                    app.input_buffer.clone()
+                }
+            } else {
+                app.input_buffer.clone()
+            };
 
             if name.is_empty() || dir_raw.is_empty() {
-                app.status_message = Some("Name and directory are required".into());
+                let msg = if ws_type == WorkspaceType::Simple {
+                    "Directory is required"
+                } else {
+                    "Name and directory are required"
+                };
+                app.status_message = Some(msg.into());
                 return None;
             }
 
@@ -185,11 +229,14 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
             app.desc_input_buffer.clear();
             app.prompt_input_buffer.clear();
             app.kanban_input_buffer.clear();
+            app.group_input_buffer.clear();
             app.input_cursor = 0;
             app.dir_input_cursor = 0;
             app.desc_input_cursor = 0;
             app.prompt_input_cursor = 0;
             app.kanban_input_cursor = 0;
+            app.group_input_cursor = 0;
+            app.workspace_type_selection = WorkspaceType::default();
             app.mode = AppMode::Normal;
             app.active_pane = ActivePane::WorkspaceList;
             return Some(Action::CreateWorkspace(
@@ -198,6 +245,8 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
                 prompt,
                 kanban_path,
                 dir,
+                ws_type,
+                group,
             ));
         }
         _ if is_cancel(key) => {
@@ -206,11 +255,14 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
             app.desc_input_buffer.clear();
             app.prompt_input_buffer.clear();
             app.kanban_input_buffer.clear();
+            app.group_input_buffer.clear();
             app.input_cursor = 0;
             app.dir_input_cursor = 0;
             app.desc_input_cursor = 0;
             app.prompt_input_cursor = 0;
             app.kanban_input_cursor = 0;
+            app.group_input_cursor = 0;
+            app.workspace_type_selection = WorkspaceType::default();
             app.mode = AppMode::Normal;
             app.active_pane = ActivePane::WorkspaceList;
             return None;
@@ -218,11 +270,32 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
         _ => {}
     }
 
+    // Type field: toggle with Space/Left/Right, not a text input
+    if app.active_dialog_field == DialogField::Type {
+        match key.code {
+            KeyCode::Char(' ') | KeyCode::Left | KeyCode::Right => {
+                app.workspace_type_selection = match app.workspace_type_selection {
+                    WorkspaceType::Worktree => WorkspaceType::Simple,
+                    WorkspaceType::Simple => WorkspaceType::Worktree,
+                };
+                // If switching to Simple and Name was next, clear it
+                if app.workspace_type_selection == WorkspaceType::Simple {
+                    app.input_buffer.clear();
+                    app.input_cursor = 0;
+                }
+            }
+            _ => {}
+        }
+        return None;
+    }
+
     let field = app.active_dialog_field;
     let (buf, cursor) = dialog_buf_and_cursor(app);
     let validator = |c: char| -> bool {
         match field {
-            DialogField::Name => c.is_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '/',
+            DialogField::Name => {
+                c.is_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '/'
+            }
             _ => !c.is_control(),
         }
     };
@@ -234,9 +307,10 @@ pub(super) fn handle_confirm_close_tab_input(app: &mut App, key: KeyEvent) -> Op
     match key.code {
         KeyCode::Char('y') | KeyCode::Char('Y') => {
             if let Some(idx) = app.close_tab_target.take()
-                && let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
-                    ws.close_tab(idx);
-                }
+                && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+            {
+                ws.close_tab(idx);
+            }
             app.mode = AppMode::Normal;
             None
         }

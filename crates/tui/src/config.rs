@@ -335,9 +335,7 @@ impl Config {
             key_matches(event, binding)
         } else {
             let defaults = default_navigation();
-            defaults
-                .get(action)
-                .is_some_and(|b| key_matches(event, b))
+            defaults.get(action).is_some_and(|b| key_matches(event, b))
         }
     }
 

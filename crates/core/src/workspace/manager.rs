@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use anyhow::{Context, bail};
 use tokio::process::Command;
 
-use crate::domain::WorkspaceInfo;
+use crate::domain::{WorkspaceInfo, WorkspaceType};
 
 // No branch prefix — branch name matches the workspace name exactly.
 
@@ -155,6 +155,45 @@ impl WorkspaceManager {
         ))
     }
 
+    /// Create a simple workspace pointing to an existing directory.
+    /// No worktree or branch is created.
+    pub async fn create_simple(
+        &self,
+        name: &str,
+        description: &str,
+        prompt: &str,
+        kanban_path: Option<String>,
+        dir: &PathBuf,
+    ) -> anyhow::Result<WorkspaceInfo> {
+        let git_root = Self::git_root(dir).await?;
+        let branch_output = Command::new("git")
+            .args(["rev-parse", "--abbrev-ref", "HEAD"])
+            .current_dir(dir)
+            .output()
+            .await
+            .context("failed to detect branch")?;
+        let branch = if branch_output.status.success() {
+            String::from_utf8_lossy(&branch_output.stdout)
+                .trim()
+                .to_string()
+        } else {
+            "main".to_string()
+        };
+
+        let mut info = WorkspaceInfo::new(
+            name.to_string(),
+            description.to_string(),
+            prompt.to_string(),
+            kanban_path,
+            branch,
+            dir.clone(),
+            git_root,
+        );
+        info.workspace_type = WorkspaceType::Simple;
+        tracing::info!(workspace = name, path = %dir.display(), "simple workspace created");
+        Ok(info)
+    }
+
     /// Detect the main branch name (main, master, etc.) for a repository.
     pub async fn detect_main_branch(source_repo: &PathBuf) -> String {
         // Try symbolic-ref of origin/HEAD
@@ -163,22 +202,24 @@ impl WorkspaceManager {
             .current_dir(source_repo)
             .output()
             .await
-            && output.status.success() {
-                let refname = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                // refs/remotes/origin/main -> main
-                if let Some(branch) = refname.strip_prefix("refs/remotes/origin/") {
-                    return branch.to_string();
-                }
+            && output.status.success()
+        {
+            let refname = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            // refs/remotes/origin/main -> main
+            if let Some(branch) = refname.strip_prefix("refs/remotes/origin/") {
+                return branch.to_string();
             }
+        }
         // Fallback: check if "main" branch exists, otherwise "master"
         if let Ok(output) = Command::new("git")
             .args(["rev-parse", "--verify", "refs/heads/main"])
             .current_dir(source_repo)
             .output()
             .await
-            && output.status.success() {
-                return "main".to_string();
-            }
+            && output.status.success()
+        {
+            return "main".to_string();
+        }
         "master".to_string()
     }
 

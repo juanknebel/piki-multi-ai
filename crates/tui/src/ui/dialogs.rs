@@ -4,7 +4,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph};
 
-use crate::app::{App, DialogField};
+use crate::app::{App, DialogField, WorkspaceType};
 
 /// Helper to create a centered rect with fixed width (chars) and height (lines)
 fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
@@ -54,13 +54,24 @@ fn visible_field(text: &str, active: bool, cursor: usize, field_max: usize) -> S
 }
 
 /// Generic Y/N confirmation dialog.
-fn render_yn_dialog(frame: &mut Frame, area: Rect, title: &str, message: &str, border_color: Color, hint_color: Color) {
+fn render_yn_dialog(
+    frame: &mut Frame,
+    area: Rect,
+    title: &str,
+    message: &str,
+    border_color: Color,
+    hint_color: Color,
+) {
     let popup = clear_popup(frame, area, 40, 7);
     let lines = vec![
         Line::from(""),
         Line::from(Span::styled(message, Style::default().fg(Color::White))).centered(),
         Line::from(""),
-        Line::from(Span::styled("[Y] Yes    [N] No", Style::default().fg(hint_color))).centered(),
+        Line::from(Span::styled(
+            "[Y] Yes    [N] No",
+            Style::default().fg(hint_color),
+        ))
+        .centered(),
     ];
     let text = Paragraph::new(lines).block(popup_block(title, border_color));
     frame.render_widget(text, popup);
@@ -86,7 +97,9 @@ pub(super) fn render_diff_overlay(frame: &mut Frame, area: Rect, app: &App) {
 
 pub(super) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
     let popup_width = area.width * 70 / 100;
-    let popup = clear_popup(frame, area, popup_width.max(40), 17);
+    let is_simple = app.workspace_type_selection == WorkspaceType::Simple;
+    let popup_height = if is_simple { 17 } else { 19 };
+    let popup = clear_popup(frame, area, popup_width.max(40), popup_height);
     let theme = &app.theme.dialog;
 
     let field_style = |active: bool| {
@@ -99,40 +112,101 @@ pub(super) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
     let label_width = 10_u16;
     let fmax = popup.width.saturating_sub(label_width + 2) as usize;
 
-    let name_active = app.active_dialog_field == DialogField::Name;
+    let type_active = app.active_dialog_field == DialogField::Type;
     let dir_active = app.active_dialog_field == DialogField::Directory;
     let desc_active = app.active_dialog_field == DialogField::Description;
     let prompt_active = app.active_dialog_field == DialogField::Prompt;
     let kanban_active = app.active_dialog_field == DialogField::KanbanPath;
+    let group_active = app.active_dialog_field == DialogField::Group;
 
-    let lines = vec![
-        Line::from(vec![
+    let type_text = match app.workspace_type_selection {
+        WorkspaceType::Simple => "[Simple]  Worktree",
+        WorkspaceType::Worktree => " Simple  [Worktree]",
+    };
+
+    let mut lines: Vec<Line<'_>> = Vec::new();
+
+    lines.push(Line::from(vec![
+        Span::styled("  Type:   ", field_style(type_active)),
+        Span::styled(type_text, field_style(type_active)),
+    ]));
+    lines.push(Line::from(""));
+
+    if !is_simple {
+        let name_active = app.active_dialog_field == DialogField::Name;
+        let name_display =
+            visible_field(&app.input_buffer, name_active, app.input_cursor, fmax);
+        lines.push(Line::from(vec![
             Span::styled("  Name:   ", field_style(name_active)),
-            Span::styled(visible_field(&app.input_buffer, name_active, app.input_cursor, fmax), field_style(name_active)),
-        ]),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled("  Dir:    ", field_style(dir_active)),
-            Span::styled(visible_field(&app.dir_input_buffer, dir_active, app.dir_input_cursor, fmax), field_style(dir_active)),
-        ]),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled("  Desc:   ", field_style(desc_active)),
-            Span::styled(visible_field(&app.desc_input_buffer, desc_active, app.desc_input_cursor, fmax), field_style(desc_active)),
-        ]),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled("  Prompt: ", field_style(prompt_active)),
-            Span::styled(visible_field(&app.prompt_input_buffer, prompt_active, app.prompt_input_cursor, fmax), field_style(prompt_active)),
-        ]),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled("  Kanban: ", field_style(kanban_active)),
-            Span::styled(visible_field(&app.kanban_input_buffer, kanban_active, app.kanban_input_cursor, fmax), field_style(kanban_active)),
-        ]),
-        Line::from(""),
-        Line::from(vec![Span::styled("  [Esc] Cancel", Style::default().fg(theme.new_ws_inactive))]),
-    ];
+            Span::styled(name_display, field_style(name_active)),
+        ]));
+        lines.push(Line::from(""));
+    }
+
+    let dir_display = visible_field(
+        &app.dir_input_buffer,
+        dir_active,
+        app.dir_input_cursor,
+        fmax,
+    );
+    lines.push(Line::from(vec![
+        Span::styled("  Dir:    ", field_style(dir_active)),
+        Span::styled(dir_display, field_style(dir_active)),
+    ]));
+    lines.push(Line::from(""));
+
+    let desc_display = visible_field(
+        &app.desc_input_buffer,
+        desc_active,
+        app.desc_input_cursor,
+        fmax,
+    );
+    lines.push(Line::from(vec![
+        Span::styled("  Desc:   ", field_style(desc_active)),
+        Span::styled(desc_display, field_style(desc_active)),
+    ]));
+    lines.push(Line::from(""));
+
+    let prompt_display = visible_field(
+        &app.prompt_input_buffer,
+        prompt_active,
+        app.prompt_input_cursor,
+        fmax,
+    );
+    lines.push(Line::from(vec![
+        Span::styled("  Prompt: ", field_style(prompt_active)),
+        Span::styled(prompt_display, field_style(prompt_active)),
+    ]));
+    lines.push(Line::from(""));
+
+    let kanban_display = visible_field(
+        &app.kanban_input_buffer,
+        kanban_active,
+        app.kanban_input_cursor,
+        fmax,
+    );
+    lines.push(Line::from(vec![
+        Span::styled("  Kanban: ", field_style(kanban_active)),
+        Span::styled(kanban_display, field_style(kanban_active)),
+    ]));
+    lines.push(Line::from(""));
+
+    let group_display = visible_field(
+        &app.group_input_buffer,
+        group_active,
+        app.group_input_cursor,
+        fmax,
+    );
+    lines.push(Line::from(vec![
+        Span::styled("  Group:  ", field_style(group_active)),
+        Span::styled(group_display, field_style(group_active)),
+    ]));
+    lines.push(Line::from(""));
+
+    lines.push(Line::from(vec![Span::styled(
+        "  [Esc] Cancel",
+        Style::default().fg(theme.new_ws_inactive),
+    )]));
 
     let text = Paragraph::new(lines).block(popup_block("New Workspace", theme.new_ws_border));
     frame.render_widget(text, popup);
@@ -140,7 +214,7 @@ pub(super) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
 
 pub(super) fn render_edit_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
     let popup_width = area.width * 70 / 100;
-    let popup = clear_popup(frame, area, popup_width.max(40), 11);
+    let popup = clear_popup(frame, area, popup_width.max(40), 13);
     let theme = &app.theme.dialog;
 
     let field_style = |active: bool| {
@@ -155,19 +229,52 @@ pub(super) fn render_edit_workspace_dialog(frame: &mut Frame, area: Rect, app: &
 
     let kanban_active = app.active_dialog_field == DialogField::KanbanPath;
     let prompt_active = app.active_dialog_field == DialogField::Prompt;
+    let group_active = app.active_dialog_field == DialogField::Group;
 
     let lines = vec![
         Line::from(vec![
             Span::styled("  Kanban: ", field_style(kanban_active)),
-            Span::styled(visible_field(&app.kanban_input_buffer, kanban_active, app.kanban_input_cursor, fmax), field_style(kanban_active)),
+            Span::styled(
+                visible_field(
+                    &app.kanban_input_buffer,
+                    kanban_active,
+                    app.kanban_input_cursor,
+                    fmax,
+                ),
+                field_style(kanban_active),
+            ),
         ]),
         Line::from(""),
         Line::from(vec![
             Span::styled("  Prompt: ", field_style(prompt_active)),
-            Span::styled(visible_field(&app.prompt_input_buffer, prompt_active, app.prompt_input_cursor, fmax), field_style(prompt_active)),
+            Span::styled(
+                visible_field(
+                    &app.prompt_input_buffer,
+                    prompt_active,
+                    app.prompt_input_cursor,
+                    fmax,
+                ),
+                field_style(prompt_active),
+            ),
         ]),
         Line::from(""),
-        Line::from(vec![Span::styled("  [Esc] Cancel", Style::default().fg(theme.new_ws_inactive))]),
+        Line::from(vec![
+            Span::styled("  Group:  ", field_style(group_active)),
+            Span::styled(
+                visible_field(
+                    &app.group_input_buffer,
+                    group_active,
+                    app.group_input_cursor,
+                    fmax,
+                ),
+                field_style(group_active),
+            ),
+        ]),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  [Esc] Cancel",
+            Style::default().fg(theme.new_ws_inactive),
+        )]),
     ];
 
     let text = Paragraph::new(lines).block(popup_block("Edit Workspace", theme.new_ws_border));
@@ -531,6 +638,17 @@ pub(super) fn render_workspace_info_overlay(frame: &mut Frame, area: Rect, app: 
                     .unwrap_or_else(|| "default".to_string()),
             ),
         ]),
+        Line::from(vec![
+            Span::styled(" Type:    ", label_style),
+            Span::raw(match ws.info.workspace_type {
+                WorkspaceType::Simple => "Simple",
+                WorkspaceType::Worktree => "Worktree",
+            }),
+        ]),
+        Line::from(vec![
+            Span::styled(" Group:   ", label_style),
+            Span::raw(ws.info.group.as_deref().unwrap_or("(none)").to_string()),
+        ]),
         Line::from(""),
     ];
 
@@ -581,16 +699,19 @@ pub(super) fn render_confirm_delete_dialog(frame: &mut Frame, area: Rect, app: &
     let popup = clear_popup(frame, area, 50, 9);
     let theme = &app.theme.dialog;
 
-    let ws_name = app
-        .delete_target
-        .and_then(|idx| app.workspaces.get(idx))
-        .map(|ws| ws.name.as_str())
-        .unwrap_or("?");
+    let ws = app.delete_target.and_then(|idx| app.workspaces.get(idx));
+    let ws_name = ws.map(|ws| ws.name.as_str()).unwrap_or("?");
+    let is_simple = ws
+        .map(|ws| ws.info.workspace_type == WorkspaceType::Simple)
+        .unwrap_or(false);
 
-    let lines = vec![
+    let mut lines = vec![
         Line::from(""),
         Line::from(vec![
-            Span::styled("  Delete ", Style::default().fg(theme.delete_text)),
+            Span::styled(
+                if is_simple { "  Remove " } else { "  Delete " },
+                Style::default().fg(theme.delete_text),
+            ),
             Span::styled(
                 ws_name,
                 Style::default()
@@ -600,19 +721,27 @@ pub(super) fn render_confirm_delete_dialog(frame: &mut Frame, area: Rect, app: &
             Span::styled(" ?", Style::default().fg(theme.delete_text)),
         ]),
         Line::from(""),
-        Line::from(Span::styled(
+    ];
+
+    if is_simple {
+        lines.push(Line::from(Span::styled(
+            "  [y] Yes, remove from list",
+            Style::default().fg(theme.delete_yes),
+        )));
+    } else {
+        lines.push(Line::from(Span::styled(
             "  [y] Yes, delete worktree and branch",
             Style::default().fg(theme.delete_yes),
-        )),
-        Line::from(Span::styled(
+        )));
+        lines.push(Line::from(Span::styled(
             "  [n] No, keep worktree on disk",
             Style::default().fg(theme.delete_no),
-        )),
-        Line::from(Span::styled(
-            "  [Esc] Cancel",
-            Style::default().fg(theme.delete_cancel),
-        )),
-    ];
+        )));
+    }
+    lines.push(Line::from(Span::styled(
+        "  [Esc] Cancel",
+        Style::default().fg(theme.delete_cancel),
+    )));
 
     let text = Paragraph::new(lines).block(popup_block("Delete Workspace", theme.delete_border));
     frame.render_widget(text, popup);
@@ -628,12 +757,26 @@ pub(crate) fn render_confirm_close_tab_dialog(frame: &mut Frame, area: Rect, app
                 .map(|t| format!("{:?}", t.provider))
         })
         .unwrap_or_default();
-    render_yn_dialog(frame, area, "Close Tab", &format!("Close tab \"{}\"?", tab_name), theme.delete_border, theme.delete_cancel);
+    render_yn_dialog(
+        frame,
+        area,
+        "Close Tab",
+        &format!("Close tab \"{}\"?", tab_name),
+        theme.delete_border,
+        theme.delete_cancel,
+    );
 }
 
 pub(crate) fn render_confirm_quit_dialog(frame: &mut Frame, area: Rect, app: &App) {
     let theme = &app.theme.dialog;
-    render_yn_dialog(frame, area, "Quit", "Are you sure you want to quit?", theme.delete_border, theme.delete_cancel);
+    render_yn_dialog(
+        frame,
+        area,
+        "Quit",
+        "Are you sure you want to quit?",
+        theme.delete_border,
+        theme.delete_cancel,
+    );
 }
 
 pub(super) fn render_commit_dialog(frame: &mut Frame, area: Rect, app: &App) {

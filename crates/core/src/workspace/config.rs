@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
-use crate::domain::WorkspaceInfo;
+use crate::domain::{WorkspaceInfo, WorkspaceType};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WorkspaceEntry {
@@ -17,12 +17,16 @@ pub struct WorkspaceEntry {
     pub branch: String,
     pub worktree_path: PathBuf,
     pub source_repo: PathBuf,
+    #[serde(default)]
+    pub workspace_type: WorkspaceType,
+    #[serde(default)]
+    pub group: Option<String>,
 }
 
 impl WorkspaceEntry {
     /// Convert this entry into a WorkspaceInfo
     pub fn into_info(self) -> WorkspaceInfo {
-        WorkspaceInfo::new(
+        let mut info = WorkspaceInfo::new(
             self.name,
             self.description,
             self.prompt,
@@ -30,7 +34,10 @@ impl WorkspaceEntry {
             self.branch,
             self.worktree_path,
             self.source_repo,
-        )
+        );
+        info.workspace_type = self.workspace_type;
+        info.group = self.group;
+        info
     }
 }
 
@@ -69,6 +76,8 @@ pub fn save(git_root: &Path, workspaces: &[WorkspaceInfo]) -> anyhow::Result<()>
             branch: ws.branch.clone(),
             worktree_path: ws.path.clone(),
             source_repo: ws.source_repo.clone(),
+            workspace_type: ws.workspace_type,
+            group: ws.group.clone(),
         })
         .collect();
 

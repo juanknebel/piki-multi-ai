@@ -64,6 +64,14 @@ pub enum WorkspaceStatus {
     Error(String),
 }
 
+/// Type of workspace: backed by a git worktree or pointing to a directory directly
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum WorkspaceType {
+    #[default]
+    Worktree,
+    Simple,
+}
+
 /// Strategy for merging a workspace branch into main
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MergeStrategy {
@@ -106,6 +114,10 @@ pub struct WorkspaceInfo {
     /// Pre-computed display name for the source repo (avoids per-frame file_name() + to_string_lossy())
     #[serde(default)]
     pub source_repo_display: String,
+    #[serde(default)]
+    pub workspace_type: WorkspaceType,
+    #[serde(default)]
+    pub group: Option<String>,
 }
 
 impl WorkspaceInfo {
@@ -131,6 +143,8 @@ impl WorkspaceInfo {
             path,
             source_repo,
             source_repo_display,
+            workspace_type: WorkspaceType::default(),
+            group: None,
         }
     }
 }

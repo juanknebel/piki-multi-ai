@@ -26,7 +26,12 @@ impl Widget for BorrowedDiff<'_> {
 
         let lines = &self.text.lines;
         let skip = self.scroll as usize;
-        for (row_offset, line) in lines.iter().skip(skip).take(inner.height as usize).enumerate() {
+        for (row_offset, line) in lines
+            .iter()
+            .skip(skip)
+            .take(inner.height as usize)
+            .enumerate()
+        {
             let y = inner.y + row_offset as u16;
             let mut x = inner.x;
             for span in &line.spans {
@@ -40,7 +45,9 @@ impl Widget for BorrowedDiff<'_> {
                 let (byte_end, char_count) = content
                     .char_indices()
                     .take(available)
-                    .fold((0, 0u16), |(_, count), (i, c)| (i + c.len_utf8(), count + 1));
+                    .fold((0, 0u16), |(_, count), (i, c)| {
+                        (i + c.len_utf8(), count + 1)
+                    });
                 let display = &content[..byte_end];
                 buf.set_string(x, y, display, span.style);
                 x += char_count;

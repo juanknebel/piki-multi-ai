@@ -10,7 +10,7 @@ use ratatui::text::Text;
 pub use piki_core::git::{get_ahead_behind, get_changed_files};
 pub use piki_core::pty::PtySession;
 pub use piki_core::workspace::FileWatcher;
-pub use piki_core::{AIProvider, ChangedFile, FileStatus, WorkspaceStatus};
+pub use piki_core::{AIProvider, ChangedFile, FileStatus, WorkspaceStatus, WorkspaceType};
 
 use crate::theme::Theme;
 
@@ -118,11 +118,26 @@ pub enum ActivePane {
 /// Which field is active in the New Workspace dialog
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DialogField {
+    Type,
     Name,
     Directory,
     Description,
     Prompt,
     KanbanPath,
+    Group,
+}
+
+/// An item in the sidebar workspace list
+#[derive(Debug, Clone)]
+pub enum SidebarItem {
+    GroupHeader {
+        name: String,
+        count: usize,
+        collapsed: bool,
+    },
+    Workspace {
+        index: usize,
+    },
 }
 
 /// A tab within a workspace, each with its own PTY session
@@ -496,12 +511,17 @@ pub struct App {
     pub desc_input_buffer: String,
     pub prompt_input_buffer: String,
     pub kanban_input_buffer: String,
+    pub group_input_buffer: String,
     /// Cursor positions (char index) for each dialog input field
     pub input_cursor: usize,
     pub dir_input_cursor: usize,
     pub desc_input_cursor: usize,
     pub prompt_input_cursor: usize,
     pub kanban_input_cursor: usize,
+    pub group_input_cursor: usize,
+    pub workspace_type_selection: WorkspaceType,
+    pub collapsed_groups: std::collections::HashSet<String>,
+    pub selected_sidebar_row: usize,
     /// Scroll offset for help overlay
     pub help_scroll: u16,
     /// Horizontal scroll offset for workspace info overlay
@@ -600,11 +620,16 @@ impl App {
             desc_input_buffer: String::new(),
             prompt_input_buffer: String::new(),
             kanban_input_buffer: String::new(),
+            group_input_buffer: String::new(),
             input_cursor: 0,
             dir_input_cursor: 0,
             desc_input_cursor: 0,
             prompt_input_cursor: 0,
             kanban_input_cursor: 0,
+            group_input_cursor: 0,
+            workspace_type_selection: WorkspaceType::default(),
+            collapsed_groups: std::collections::HashSet::new(),
+            selected_sidebar_row: 0,
             help_scroll: 0,
             info_hscroll: 0,
             active_dialog_field: DialogField::Name,
@@ -700,6 +725,7 @@ impl App {
             self.active_workspace = index;
             self.selected_workspace = index;
             self.selected_file = 0;
+            self.sync_sidebar_row(index);
             self.mode = AppMode::Normal;
             self.diff_content = None;
             self.diff_file_path = None;
@@ -715,29 +741,106 @@ impl App {
 
     pub fn next_file(&mut self) {
         if let Some(ws) = self.current_workspace()
-            && !ws.changed_files.is_empty() {
-                self.selected_file = (self.selected_file + 1) % ws.changed_files.len();
-            }
+            && !ws.changed_files.is_empty()
+        {
+            self.selected_file = (self.selected_file + 1) % ws.changed_files.len();
+        }
     }
 
     pub fn prev_file(&mut self) {
         if let Some(ws) = self.current_workspace()
-            && !ws.changed_files.is_empty() {
-                let len = ws.changed_files.len();
-                self.selected_file = (self.selected_file + len - 1) % len;
-            }
-    }
-
-    pub fn select_next_workspace(&mut self) {
-        if !self.workspaces.is_empty() {
-            self.selected_workspace = (self.selected_workspace + 1) % self.workspaces.len();
+            && !ws.changed_files.is_empty()
+        {
+            let len = ws.changed_files.len();
+            self.selected_file = (self.selected_file + len - 1) % len;
         }
     }
 
-    pub fn select_prev_workspace(&mut self) {
-        if !self.workspaces.is_empty() {
-            let len = self.workspaces.len();
-            self.selected_workspace = (self.selected_workspace + len - 1) % len;
+    /// Build the visual sidebar item list, grouping workspaces by their group field.
+    pub fn sidebar_items(&self) -> Vec<SidebarItem> {
+        let mut items = Vec::new();
+        let mut groups: std::collections::BTreeMap<String, Vec<usize>> =
+            std::collections::BTreeMap::new();
+        let mut ungrouped = Vec::new();
+
+        for (i, ws) in self.workspaces.iter().enumerate() {
+            if let Some(ref group) = ws.info.group {
+                groups.entry(group.clone()).or_default().push(i);
+            } else {
+                ungrouped.push(i);
+            }
+        }
+
+        for idx in ungrouped {
+            items.push(SidebarItem::Workspace { index: idx });
+        }
+
+        for (name, indices) in &groups {
+            let collapsed = self.collapsed_groups.contains(name);
+            items.push(SidebarItem::GroupHeader {
+                name: name.clone(),
+                count: indices.len(),
+                collapsed,
+            });
+            if !collapsed {
+                for &idx in indices {
+                    items.push(SidebarItem::Workspace { index: idx });
+                }
+            }
+        }
+
+        items
+    }
+
+    /// Map a sidebar visual row to a workspace index.
+    pub fn sidebar_row_to_workspace(&self, row: usize) -> Option<usize> {
+        self.sidebar_items().get(row).and_then(|item| match item {
+            SidebarItem::Workspace { index } => Some(*index),
+            _ => None,
+        })
+    }
+
+    pub fn select_next_sidebar_row(&mut self) {
+        let count = self.sidebar_items().len();
+        if count > 0 {
+            self.selected_sidebar_row = (self.selected_sidebar_row + 1) % count;
+            if let Some(idx) = self.sidebar_row_to_workspace(self.selected_sidebar_row) {
+                self.selected_workspace = idx;
+            }
+        }
+    }
+
+    pub fn select_prev_sidebar_row(&mut self) {
+        let count = self.sidebar_items().len();
+        if count > 0 {
+            self.selected_sidebar_row = (self.selected_sidebar_row + count - 1) % count;
+            if let Some(idx) = self.sidebar_row_to_workspace(self.selected_sidebar_row) {
+                self.selected_workspace = idx;
+            }
+        }
+    }
+
+    pub fn toggle_selected_group(&mut self) {
+        let items = self.sidebar_items();
+        let name = match items.get(self.selected_sidebar_row) {
+            Some(SidebarItem::GroupHeader { name, .. }) => name.clone(),
+            _ => return,
+        };
+        if !self.collapsed_groups.remove(&name) {
+            self.collapsed_groups.insert(name);
+        }
+    }
+
+    /// Update selected_sidebar_row to point to the given workspace index.
+    pub fn sync_sidebar_row(&mut self, ws_idx: usize) {
+        let items = self.sidebar_items();
+        for (i, item) in items.iter().enumerate() {
+            if let SidebarItem::Workspace { index } = item
+                && *index == ws_idx
+            {
+                self.selected_sidebar_row = i;
+                return;
+            }
         }
     }
 
@@ -752,12 +855,7 @@ impl App {
             }
         };
 
-        let nucleo = nucleo::Nucleo::new(
-            nucleo::Config::DEFAULT,
-            Arc::new(|| {}),
-            Some(1),
-            1,
-        );
+        let nucleo = nucleo::Nucleo::new(nucleo::Config::DEFAULT, Arc::new(|| {}), Some(1), 1);
         let injector = nucleo.injector();
 
         self.fuzzy = Some(FuzzyState {
@@ -919,6 +1017,12 @@ mod tests {
 
         crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
         assert_eq!(app.active_dialog_field, DialogField::KanbanPath);
+
+        crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
+        assert_eq!(app.active_dialog_field, DialogField::Group);
+
+        crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
+        assert_eq!(app.active_dialog_field, DialogField::Type);
 
         crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
         assert_eq!(app.active_dialog_field, DialogField::Name);

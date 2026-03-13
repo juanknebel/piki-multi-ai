@@ -5,8 +5,8 @@ use ratatui::layout::Rect;
 use crate::app::{self, App};
 use crate::clipboard;
 use crate::ui;
-use piki_core::pty::PtySession;
 use piki_core::AIProvider;
+use piki_core::pty::PtySession;
 
 /// Kill all PTY sessions and drop watchers for a clean exit.
 pub(crate) fn shutdown(app: &mut App) {

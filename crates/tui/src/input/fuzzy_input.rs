@@ -127,12 +127,10 @@ pub(super) fn handle_fuzzy_search_input(app: &mut App, key: KeyEvent) -> Option<
             if let Some(ref mut state) = app.fuzzy {
                 state.query.push(c);
                 let query = state.query.clone();
-                state.nucleo.pattern.reparse(
-                    0,
-                    &query,
-                    nucleo::pattern::CaseMatching::Smart,
-                    true,
-                );
+                state
+                    .nucleo
+                    .pattern
+                    .reparse(0, &query, nucleo::pattern::CaseMatching::Smart, true);
             }
             app.needs_redraw = true;
         }

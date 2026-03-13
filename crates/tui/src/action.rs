@@ -8,12 +8,20 @@ use crate::app::{self, ActivePane, App, AppMode, ToastLevel};
 use crate::helpers::{spawn_initial_shell, spawn_tab};
 use piki_core::workspace::config as ws_config;
 use piki_core::workspace::{FileWatcher, WorkspaceManager};
-use piki_core::{AIProvider, MergeStrategy};
+use piki_core::{AIProvider, MergeStrategy, WorkspaceType};
 
 /// Async actions triggered by key events
 pub(crate) enum Action {
-    CreateWorkspace(String, String, String, Option<String>, PathBuf),
-    EditWorkspace(usize, Option<String>, String),
+    CreateWorkspace(
+        String,
+        String,
+        String,
+        Option<String>,
+        PathBuf,
+        WorkspaceType,
+        Option<String>,
+    ),
+    EditWorkspace(usize, Option<String>, String, Option<String>),
     DeleteWorkspace(usize),
     /// Remove workspace from app list but keep worktree on disk
     RemoveFromList(usize),
@@ -48,12 +56,22 @@ pub(crate) async fn execute_action(
     terminal: &mut DefaultTerminal,
 ) -> anyhow::Result<()> {
     match action {
-        Action::CreateWorkspace(name, description, prompt, kanban_path, dir) => {
-            match manager
-                .create(&name, &description, &prompt, kanban_path, &dir)
-                .await
-            {
-                Ok(info) => {
+        Action::CreateWorkspace(name, description, prompt, kanban_path, dir, ws_type, group) => {
+            let result = match ws_type {
+                WorkspaceType::Simple => {
+                    manager
+                        .create_simple(&name, &description, &prompt, kanban_path, &dir)
+                        .await
+                }
+                WorkspaceType::Worktree => {
+                    manager
+                        .create(&name, &description, &prompt, kanban_path, &dir)
+                        .await
+                }
+            };
+            match result {
+                Ok(mut info) => {
+                    info.group = group;
                     app.workspaces.push(app::Workspace::from_info(info));
                     let new_idx = app.workspaces.len() - 1;
                     app.switch_workspace(new_idx);
@@ -66,12 +84,13 @@ pub(crate) async fn execute_action(
                     if !prompt.is_empty() {
                         let ws = &mut app.workspaces[new_idx];
                         if let Some(tab) = ws.current_tab_mut()
-                            && let Some(ref mut pty) = tab.pty_session {
-                                // Small delay to let the PTY initialize
-                                tokio::time::sleep(Duration::from_millis(500)).await;
-                                let prompt_with_newline = format!("{}\n", prompt);
-                                let _ = pty.write(prompt_with_newline.as_bytes());
-                            }
+                            && let Some(ref mut pty) = tab.pty_session
+                        {
+                            // Small delay to let the PTY initialize
+                            tokio::time::sleep(Duration::from_millis(500)).await;
+                            let prompt_with_newline = format!("{}\n", prompt);
+                            let _ = pty.write(prompt_with_newline.as_bytes());
+                        }
                     }
 
                     // Start file watcher
@@ -99,7 +118,7 @@ pub(crate) async fn execute_action(
                 }
             }
         }
-        Action::EditWorkspace(idx, kanban_path, prompt) => {
+        Action::EditWorkspace(idx, kanban_path, prompt, group) => {
             if let Some(ws) = app.workspaces.get_mut(idx) {
                 if ws.kanban_path != kanban_path {
                     ws.kanban_app = None;
@@ -107,6 +126,7 @@ pub(crate) async fn execute_action(
                 }
                 ws.kanban_path = kanban_path;
                 ws.prompt = prompt;
+                ws.info.group = group;
                 {
                     let source = ws.source_repo.clone();
                     let infos: Vec<_> = app.workspaces.iter().map(|w| w.info.clone()).collect();
@@ -119,6 +139,8 @@ pub(crate) async fn execute_action(
         }
         Action::DeleteWorkspace(idx) => {
             if idx < app.workspaces.len() {
+                let is_simple = app.workspaces[idx].info.workspace_type == WorkspaceType::Simple;
+
                 // Kill all PTY sessions before removing
                 for tab in &mut app.workspaces[idx].tabs {
                     if let Some(ref mut pty) = tab.pty_session {
@@ -128,37 +150,47 @@ pub(crate) async fn execute_action(
                 // Drop watcher (stops watching)
                 app.workspaces[idx].watcher = None;
 
-                let name = app.workspaces[idx].name.clone();
                 let source_repo = app.workspaces[idx].source_repo.clone();
 
-                match manager.remove(&name, &source_repo).await {
-                    Ok(()) => {
-                        app.workspaces.remove(idx);
-                        // Adjust indices
-                        if app.workspaces.is_empty() {
-                            app.active_workspace = 0;
-                            app.selected_workspace = 0;
-                        } else {
-                            if app.active_workspace >= app.workspaces.len() {
-                                app.active_workspace = app.workspaces.len() - 1;
-                            }
-                            if app.selected_workspace >= app.workspaces.len() {
-                                app.selected_workspace = app.workspaces.len() - 1;
-                            }
+                let removed = if is_simple {
+                    // Simple workspaces: just remove from list
+                    app.workspaces.remove(idx);
+                    true
+                } else {
+                    let name = app.workspaces[idx].name.clone();
+                    match manager.remove(&name, &source_repo).await {
+                        Ok(()) => {
+                            app.workspaces.remove(idx);
+                            true
                         }
-
-                        // Persist config
-                        {
-                            let source = source_repo.clone();
-                            let infos: Vec<_> =
-                                app.workspaces.iter().map(|w| w.info.clone()).collect();
-                            tokio::spawn(async move {
-                                let _ = ws_config::save(&source, &infos);
-                            });
+                        Err(e) => {
+                            app.status_message = Some(format!("Error: {}", e));
+                            false
                         }
                     }
-                    Err(e) => {
-                        app.status_message = Some(format!("Error: {}", e));
+                };
+
+                if removed {
+                    // Adjust indices
+                    if app.workspaces.is_empty() {
+                        app.active_workspace = 0;
+                        app.selected_workspace = 0;
+                    } else {
+                        if app.active_workspace >= app.workspaces.len() {
+                            app.active_workspace = app.workspaces.len() - 1;
+                        }
+                        if app.selected_workspace >= app.workspaces.len() {
+                            app.selected_workspace = app.workspaces.len() - 1;
+                        }
+                    }
+
+                    // Persist config
+                    {
+                        let source = source_repo.clone();
+                        let infos: Vec<_> = app.workspaces.iter().map(|w| w.info.clone()).collect();
+                        tokio::spawn(async move {
+                            let _ = ws_config::save(&source, &infos);
+                        });
                     }
                 }
             }
@@ -229,135 +261,138 @@ pub(crate) async fn execute_action(
         }
         Action::OpenDiff(file_idx) => {
             if let Some(ws) = app.workspaces.get(app.active_workspace)
-                && let Some(file) = ws.changed_files.get(file_idx) {
-                    let file_path = file.path.clone();
-                    // Compute diff width from actual terminal size (matches diff overlay: 90% width minus borders)
-                    let term_size = terminal.size()?;
-                    let overlay_inner_width = (term_size.width * 90 / 100).saturating_sub(2);
-                    let width = if overlay_inner_width > 10 {
-                        overlay_inner_width
-                    } else {
-                        120
-                    };
-                    let cache_key = format!("{}@{}", file_path, width);
-                    // Check cache first to avoid re-running git diff | delta
-                    if let Some(cached) = app.diff_cache.get(&cache_key) {
-                        app.diff_content = Some(Arc::clone(cached));
-                        app.diff_file_path = Some(file_path);
-                        app.diff_scroll = 0;
-                        app.mode = AppMode::Diff;
-                        app.active_pane = ActivePane::MainPanel;
-                        app.interacting = true;
-                    } else {
-                        let worktree_path = ws.path.clone();
-                        let file_status = file.status.clone();
-                        match piki_core::diff::runner::run_diff(
-                            &worktree_path,
-                            &file_path,
-                            width,
-                            &file_status,
-                        )
-                        .await
-                        {
-                            Ok(ansi_bytes) => {
-                                use ansi_to_tui::IntoText;
-                                match ansi_bytes.into_text() {
-                                    Ok(text) => {
-                                        let text = Arc::new(text);
-                                        app.insert_diff_cache(cache_key, Arc::clone(&text));
-                                        app.diff_content = Some(text);
-                                        app.diff_file_path = Some(file_path);
-                                        app.diff_scroll = 0;
-                                        app.mode = AppMode::Diff;
-                                        app.active_pane = ActivePane::MainPanel;
-                                        app.interacting = true;
-                                    }
-                                    Err(e) => {
-                                        app.status_message =
-                                            Some(format!("Failed to parse diff: {}", e));
-                                    }
+                && let Some(file) = ws.changed_files.get(file_idx)
+            {
+                let file_path = file.path.clone();
+                // Compute diff width from actual terminal size (matches diff overlay: 90% width minus borders)
+                let term_size = terminal.size()?;
+                let overlay_inner_width = (term_size.width * 90 / 100).saturating_sub(2);
+                let width = if overlay_inner_width > 10 {
+                    overlay_inner_width
+                } else {
+                    120
+                };
+                let cache_key = format!("{}@{}", file_path, width);
+                // Check cache first to avoid re-running git diff | delta
+                if let Some(cached) = app.diff_cache.get(&cache_key) {
+                    app.diff_content = Some(Arc::clone(cached));
+                    app.diff_file_path = Some(file_path);
+                    app.diff_scroll = 0;
+                    app.mode = AppMode::Diff;
+                    app.active_pane = ActivePane::MainPanel;
+                    app.interacting = true;
+                } else {
+                    let worktree_path = ws.path.clone();
+                    let file_status = file.status.clone();
+                    match piki_core::diff::runner::run_diff(
+                        &worktree_path,
+                        &file_path,
+                        width,
+                        &file_status,
+                    )
+                    .await
+                    {
+                        Ok(ansi_bytes) => {
+                            use ansi_to_tui::IntoText;
+                            match ansi_bytes.into_text() {
+                                Ok(text) => {
+                                    let text = Arc::new(text);
+                                    app.insert_diff_cache(cache_key, Arc::clone(&text));
+                                    app.diff_content = Some(text);
+                                    app.diff_file_path = Some(file_path);
+                                    app.diff_scroll = 0;
+                                    app.mode = AppMode::Diff;
+                                    app.active_pane = ActivePane::MainPanel;
+                                    app.interacting = true;
+                                }
+                                Err(e) => {
+                                    app.status_message =
+                                        Some(format!("Failed to parse diff: {}", e));
                                 }
                             }
-                            Err(e) => {
-                                app.status_message = Some(format!("Diff error: {}", e));
-                            }
+                        }
+                        Err(e) => {
+                            app.status_message = Some(format!("Diff error: {}", e));
                         }
                     }
                 }
+            }
         }
         Action::GitStage(file_idx) => {
             let ws_idx = app.active_workspace;
             if let Some(ws) = app.workspaces.get_mut(ws_idx)
-                && let Some(file) = ws.changed_files.get(file_idx) {
-                    let file_path = file.path.clone();
-                    let worktree = ws.path.clone();
-                    let status_tx = app.status_tx.clone();
-                    let undo_tx = app.undo_tx.clone();
-                    app.status_message = Some(format!("Staging: {}", file_path));
-                    ws.dirty = true;
-                    ws.last_refresh = None;
-                    tokio::spawn(async move {
-                        let output = tokio::process::Command::new("git")
-                            .args(["add", &file_path])
-                            .current_dir(&worktree)
-                            .output()
-                            .await;
-                        match output {
-                            Ok(o) if o.status.success() => {
-                                let _ = undo_tx.send(app::UndoEntry {
-                                    action: app::UndoAction::Stage,
-                                    workspace_idx: ws_idx,
-                                    file_path: file_path.clone(),
-                                });
-                                let _ = status_tx.send(format!("Staged: {} [C-z undo]", file_path));
-                            }
-                            Ok(o) => {
-                                let stderr = String::from_utf8_lossy(&o.stderr);
-                                let _ = status_tx.send(format!("Stage failed: {}", stderr.trim()));
-                            }
-                            Err(e) => {
-                                let _ = status_tx.send(format!("Stage error: {}", e));
-                            }
+                && let Some(file) = ws.changed_files.get(file_idx)
+            {
+                let file_path = file.path.clone();
+                let worktree = ws.path.clone();
+                let status_tx = app.status_tx.clone();
+                let undo_tx = app.undo_tx.clone();
+                app.status_message = Some(format!("Staging: {}", file_path));
+                ws.dirty = true;
+                ws.last_refresh = None;
+                tokio::spawn(async move {
+                    let output = tokio::process::Command::new("git")
+                        .args(["add", &file_path])
+                        .current_dir(&worktree)
+                        .output()
+                        .await;
+                    match output {
+                        Ok(o) if o.status.success() => {
+                            let _ = undo_tx.send(app::UndoEntry {
+                                action: app::UndoAction::Stage,
+                                workspace_idx: ws_idx,
+                                file_path: file_path.clone(),
+                            });
+                            let _ = status_tx.send(format!("Staged: {} [C-z undo]", file_path));
                         }
-                    });
-                }
+                        Ok(o) => {
+                            let stderr = String::from_utf8_lossy(&o.stderr);
+                            let _ = status_tx.send(format!("Stage failed: {}", stderr.trim()));
+                        }
+                        Err(e) => {
+                            let _ = status_tx.send(format!("Stage error: {}", e));
+                        }
+                    }
+                });
+            }
         }
         Action::GitUnstage(file_idx) => {
             let ws_idx = app.active_workspace;
             if let Some(ws) = app.workspaces.get_mut(ws_idx)
-                && let Some(file) = ws.changed_files.get(file_idx) {
-                    let file_path = file.path.clone();
-                    let worktree = ws.path.clone();
-                    let status_tx = app.status_tx.clone();
-                    let undo_tx = app.undo_tx.clone();
-                    app.status_message = Some(format!("Unstaging: {}", file_path));
-                    ws.dirty = true;
-                    ws.last_refresh = None;
-                    tokio::spawn(async move {
-                        let output = tokio::process::Command::new("git")
-                            .args(["reset", "HEAD", &file_path])
-                            .current_dir(&worktree)
-                            .output()
-                            .await;
-                        match output {
-                            Ok(o) if o.status.success() => {
-                                let _ = undo_tx.send(app::UndoEntry {
-                                    action: app::UndoAction::Unstage,
-                                    workspace_idx: ws_idx,
-                                    file_path: file_path.clone(),
-                                });
-                                let _ = status_tx.send(format!("Unstaged: {} [C-z undo]", file_path));
-                            }
-                            Ok(o) => {
-                                let stderr = String::from_utf8_lossy(&o.stderr);
-                                let _ = status_tx.send(format!("Unstage failed: {}", stderr.trim()));
-                            }
-                            Err(e) => {
-                                let _ = status_tx.send(format!("Unstage error: {}", e));
-                            }
+                && let Some(file) = ws.changed_files.get(file_idx)
+            {
+                let file_path = file.path.clone();
+                let worktree = ws.path.clone();
+                let status_tx = app.status_tx.clone();
+                let undo_tx = app.undo_tx.clone();
+                app.status_message = Some(format!("Unstaging: {}", file_path));
+                ws.dirty = true;
+                ws.last_refresh = None;
+                tokio::spawn(async move {
+                    let output = tokio::process::Command::new("git")
+                        .args(["reset", "HEAD", &file_path])
+                        .current_dir(&worktree)
+                        .output()
+                        .await;
+                    match output {
+                        Ok(o) if o.status.success() => {
+                            let _ = undo_tx.send(app::UndoEntry {
+                                action: app::UndoAction::Unstage,
+                                workspace_idx: ws_idx,
+                                file_path: file_path.clone(),
+                            });
+                            let _ = status_tx.send(format!("Unstaged: {} [C-z undo]", file_path));
                         }
-                    });
-                }
+                        Ok(o) => {
+                            let stderr = String::from_utf8_lossy(&o.stderr);
+                            let _ = status_tx.send(format!("Unstage failed: {}", stderr.trim()));
+                        }
+                        Err(e) => {
+                            let _ = status_tx.send(format!("Unstage error: {}", e));
+                        }
+                    }
+                });
+            }
         }
         Action::GitCommit(message) => {
             if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
@@ -724,19 +759,16 @@ pub(crate) async fn execute_action(
                                     .await;
                                 match output {
                                     Ok(o) if o.status.success() => {
-                                        let _ = status_tx
-                                            .send(format!("✓ Undo stage: {}", file_path));
+                                        let _ =
+                                            status_tx.send(format!("✓ Undo stage: {}", file_path));
                                     }
                                     Ok(o) => {
                                         let stderr = String::from_utf8_lossy(&o.stderr);
-                                        let _ = status_tx.send(format!(
-                                            "Undo failed: {}",
-                                            stderr.trim()
-                                        ));
+                                        let _ = status_tx
+                                            .send(format!("Undo failed: {}", stderr.trim()));
                                     }
                                     Err(e) => {
-                                        let _ =
-                                            status_tx.send(format!("Undo error: {}", e));
+                                        let _ = status_tx.send(format!("Undo error: {}", e));
                                     }
                                 }
                             });
@@ -756,14 +788,11 @@ pub(crate) async fn execute_action(
                                     }
                                     Ok(o) => {
                                         let stderr = String::from_utf8_lossy(&o.stderr);
-                                        let _ = status_tx.send(format!(
-                                            "Undo failed: {}",
-                                            stderr.trim()
-                                        ));
+                                        let _ = status_tx
+                                            .send(format!("Undo failed: {}", stderr.trim()));
                                     }
                                     Err(e) => {
-                                        let _ =
-                                            status_tx.send(format!("Undo error: {}", e));
+                                        let _ = status_tx.send(format!("Undo error: {}", e));
                                     }
                                 }
                             });

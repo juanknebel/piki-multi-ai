@@ -88,14 +88,15 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
 
             if provider == crate::app::AIProvider::Kanban {
                 if let Some(ws) = app.workspaces.get(app.active_workspace)
-                    && let Some(kanban_app) = &ws.kanban_app {
-                        let block = Block::default()
-                            .borders(Borders::ALL)
-                            .border_style(border_style);
-                        let inner_area = block.inner(area);
-                        frame.render_widget(block, area);
-                        flow::ui::render(frame, kanban_app, Some(inner_area));
-                    }
+                    && let Some(kanban_app) = &ws.kanban_app
+                {
+                    let block = Block::default()
+                        .borders(Borders::ALL)
+                        .border_style(border_style);
+                    let inner_area = block.inner(area);
+                    frame.render_widget(block, area);
+                    flow::ui::render(frame, kanban_app, Some(inner_area));
+                }
                 return;
             }
 

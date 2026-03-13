@@ -6,7 +6,9 @@ use ratatui::DefaultTerminal;
 use crate::action::Action;
 use crate::app::{self, ActivePane, App, AppMode};
 use crate::clipboard;
-use crate::helpers::{rect_contains, resize_all_ptys, scrollback_max, subtab_index_at, tab_index_at};
+use crate::helpers::{
+    rect_contains, resize_all_ptys, scrollback_max, subtab_index_at, tab_index_at,
+};
 
 /// Handle all mouse events. Returns an Action if one needs async execution.
 pub(crate) fn handle_mouse_event(
@@ -32,20 +34,20 @@ pub(crate) fn handle_mouse_event(
             }
             AppMode::Normal | AppMode::InlineEdit => {
                 if rect_contains(app.ws_list_area, col, row) {
-                    app.select_prev_workspace();
+                    app.select_prev_sidebar_row();
                 } else if rect_contains(app.file_list_area, col, row) {
                     app.prev_file();
                 } else if rect_contains(app.main_content_area, col, row)
                     && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-                        && let Some(tab) = ws.current_tab_mut()
-                    {
-                        if tab.markdown_content.is_some() {
-                            tab.markdown_scroll = tab.markdown_scroll.saturating_sub(3);
-                        } else if let Some(ref parser) = tab.pty_parser {
-                            let max = scrollback_max(parser);
-                            tab.term_scroll = (tab.term_scroll + 3).min(max);
-                        }
+                    && let Some(tab) = ws.current_tab_mut()
+                {
+                    if tab.markdown_content.is_some() {
+                        tab.markdown_scroll = tab.markdown_scroll.saturating_sub(3);
+                    } else if let Some(ref parser) = tab.pty_parser {
+                        let max = scrollback_max(parser);
+                        tab.term_scroll = (tab.term_scroll + 3).min(max);
                     }
+                }
             }
             _ => {}
         },
@@ -66,19 +68,19 @@ pub(crate) fn handle_mouse_event(
             }
             AppMode::Normal | AppMode::InlineEdit => {
                 if rect_contains(app.ws_list_area, col, row) {
-                    app.select_next_workspace();
+                    app.select_next_sidebar_row();
                 } else if rect_contains(app.file_list_area, col, row) {
                     app.next_file();
                 } else if rect_contains(app.main_content_area, col, row)
                     && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-                        && let Some(tab) = ws.current_tab_mut()
-                    {
-                        if tab.markdown_content.is_some() {
-                            tab.markdown_scroll = tab.markdown_scroll.saturating_add(3);
-                        } else {
-                            tab.term_scroll = tab.term_scroll.saturating_sub(3);
-                        }
+                    && let Some(tab) = ws.current_tab_mut()
+                {
+                    if tab.markdown_content.is_some() {
+                        tab.markdown_scroll = tab.markdown_scroll.saturating_add(3);
+                    } else {
+                        tab.term_scroll = tab.term_scroll.saturating_sub(3);
                     }
+                }
             }
             _ => {}
         },
@@ -132,10 +134,11 @@ pub(crate) fn handle_mouse_event(
                     if let Some((idx, on_close)) = subtab_index_at(app, col, subtabs_area) {
                         if on_close {
                             if let Some(ws) = app.current_workspace()
-                                && ws.tabs.get(idx).is_some_and(|t| t.closable) {
-                                    app.close_tab_target = Some(idx);
-                                    app.mode = AppMode::ConfirmCloseTab;
-                                }
+                                && ws.tabs.get(idx).is_some_and(|t| t.closable)
+                            {
+                                app.close_tab_target = Some(idx);
+                                app.mode = AppMode::ConfirmCloseTab;
+                            }
                         } else if let Some(ws) = app.current_workspace_mut() {
                             ws.active_tab = idx;
                         }
@@ -147,11 +150,27 @@ pub(crate) fn handle_mouse_event(
                     let inner_y = app.ws_list_area.y + 1;
                     if row >= inner_y {
                         let relative_row = (row - inner_y) as usize;
-                        let item_height = 3;
-                        let clicked_idx = relative_row / item_height;
-                        if clicked_idx < app.workspaces.len() {
-                            app.selected_workspace = clicked_idx;
-                            app.switch_workspace(clicked_idx);
+                        let sidebar_items = app.sidebar_items();
+                        let mut cumulative_height = 0;
+                        for (i, item) in sidebar_items.iter().enumerate() {
+                            let item_height = match item {
+                                crate::app::SidebarItem::GroupHeader { .. } => 1,
+                                crate::app::SidebarItem::Workspace { .. } => 3,
+                            };
+                            if relative_row < cumulative_height + item_height {
+                                app.selected_sidebar_row = i;
+                                match item {
+                                    crate::app::SidebarItem::GroupHeader { .. } => {
+                                        app.toggle_selected_group();
+                                    }
+                                    crate::app::SidebarItem::Workspace { index } => {
+                                        app.selected_workspace = *index;
+                                        app.switch_workspace(*index);
+                                    }
+                                }
+                                break;
+                            }
+                            cumulative_height += item_height;
                         }
                     }
                 }
@@ -162,13 +181,14 @@ pub(crate) fn handle_mouse_event(
                     if row >= inner_y {
                         let relative_row = (row - inner_y) as usize;
                         if let Some(ws) = app.current_workspace()
-                            && relative_row < ws.changed_files.len() {
-                                app.selected_file = relative_row;
-                                // Double-click opens diff
-                                if is_double_click {
-                                    return Some(Action::OpenDiff(relative_row));
-                                }
+                            && relative_row < ws.changed_files.len()
+                        {
+                            app.selected_file = relative_row;
+                            // Double-click opens diff
+                            if is_double_click {
+                                return Some(Action::OpenDiff(relative_row));
                             }
+                        }
                     }
                 }
                 // Click on main panel — start text selection
@@ -176,11 +196,12 @@ pub(crate) fn handle_mouse_event(
                     app.active_pane = ActivePane::MainPanel;
                     app.interacting = true;
                     if let Some(inner) = app.terminal_inner_area
-                        && rect_contains(inner, col, row) {
-                            let cell_row = row - inner.y;
-                            let cell_col = col - inner.x;
-                            app.selection = Some(app::Selection::new(cell_row, cell_col));
-                        }
+                        && rect_contains(inner, col, row)
+                    {
+                        let cell_row = row - inner.y;
+                        let cell_col = col - inner.x;
+                        app.selection = Some(app::Selection::new(cell_row, cell_col));
+                    }
                 }
             }
         }
@@ -204,16 +225,17 @@ pub(crate) fn handle_mouse_event(
                     }
                 }
             } else if let Some(ref mut sel) = app.selection
-                && let Some(inner) = app.terminal_inner_area {
-                    let cell_row = row
-                        .saturating_sub(inner.y)
-                        .min(inner.height.saturating_sub(1));
-                    let cell_col = col
-                        .saturating_sub(inner.x)
-                        .min(inner.width.saturating_sub(1));
-                    sel.end_row = cell_row;
-                    sel.end_col = cell_col;
-                }
+                && let Some(inner) = app.terminal_inner_area
+            {
+                let cell_row = row
+                    .saturating_sub(inner.y)
+                    .min(inner.height.saturating_sub(1));
+                let cell_col = col
+                    .saturating_sub(inner.x)
+                    .min(inner.width.saturating_sub(1));
+                sel.end_row = cell_row;
+                sel.end_col = cell_col;
+            }
         }
         MouseEventKind::Up(MouseButton::Left) => {
             if app.resize_drag.is_some() {
@@ -223,19 +245,19 @@ pub(crate) fn handle_mouse_event(
                 let (sr, sc, er, ec) = sel.normalized();
                 if (sr != er || sc != ec)
                     && let Some(ws) = app.workspaces.get(app.active_workspace)
-                        && let Some(tab) = ws.current_tab()
-                        && let Some(ref parser) = tab.pty_parser
-                    {
-                        let mut guard = parser.lock();
-                        guard.screen_mut().set_scrollback(tab.term_scroll);
-                        let text = guard.screen().contents_between(sr, sc, er, ec + 1);
-                        guard.screen_mut().set_scrollback(0);
-                        if let Err(e) = clipboard::copy_to_clipboard(&text) {
-                            app.status_message = Some(format!("Copy failed: {}", e));
-                        } else {
-                            app.status_message = Some("Selection copied".into());
-                        }
+                    && let Some(tab) = ws.current_tab()
+                    && let Some(ref parser) = tab.pty_parser
+                {
+                    let mut guard = parser.lock();
+                    guard.screen_mut().set_scrollback(tab.term_scroll);
+                    let text = guard.screen().contents_between(sr, sc, er, ec + 1);
+                    guard.screen_mut().set_scrollback(0);
+                    if let Err(e) = clipboard::copy_to_clipboard(&text) {
+                        app.status_message = Some(format!("Copy failed: {}", e));
+                    } else {
+                        app.status_message = Some("Selection copied".into());
                     }
+                }
             }
         }
         _ => {}

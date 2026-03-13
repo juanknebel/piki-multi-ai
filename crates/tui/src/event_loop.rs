@@ -10,8 +10,8 @@ use crate::app::{self, App};
 use crate::helpers::{shutdown, spawn_initial_shell};
 use crate::input;
 use crate::{theme, ui};
-use piki_core::workspace::config as ws_config;
 use piki_core::workspace::FileWatcher;
+use piki_core::workspace::config as ws_config;
 
 const TICK_RATE: Duration = Duration::from_millis(50);
 const DEBOUNCE: Duration = Duration::from_millis(500);
@@ -200,10 +200,11 @@ pub(crate) async fn run(
         // Poll file watcher events — mark workspaces as dirty when files change
         for ws in &mut app.workspaces {
             if let Some(ref mut watcher) = ws.watcher
-                && watcher.try_recv().is_some() {
-                    watcher.drain();
-                    ws.dirty = true;
-                }
+                && watcher.try_recv().is_some()
+            {
+                watcher.drain();
+                ws.dirty = true;
+            }
         }
 
         // Active workspace — check PTY bytes + is_alive
@@ -212,16 +213,17 @@ pub(crate) async fn run(
             if let Some(ws) = app.workspaces.get_mut(idx) {
                 let mut pty_done = false;
                 if let Some(tab) = ws.current_tab_mut()
-                    && let Some(ref mut pty) = tab.pty_session {
-                        if !pty.is_alive() {
-                            pty_done = true;
-                        }
-                        let current_bytes = pty.bytes_processed();
-                        if current_bytes != tab.last_bytes_processed {
-                            tab.last_bytes_processed = current_bytes;
-                            app.needs_redraw = true;
-                        }
+                    && let Some(ref mut pty) = tab.pty_session
+                {
+                    if !pty.is_alive() {
+                        pty_done = true;
                     }
+                    let current_bytes = pty.bytes_processed();
+                    if current_bytes != tab.last_bytes_processed {
+                        tab.last_bytes_processed = current_bytes;
+                        app.needs_redraw = true;
+                    }
+                }
                 if pty_done {
                     ws.status = app::WorkspaceStatus::Done;
                     app.needs_redraw = true;
@@ -287,9 +289,10 @@ pub(crate) async fn run(
                     let mut pty_done = false;
                     if let Some(tab) = ws.current_tab_mut()
                         && let Some(ref mut pty) = tab.pty_session
-                            && !pty.is_alive() {
-                                pty_done = true;
-                            }
+                        && !pty.is_alive()
+                    {
+                        pty_done = true;
+                    }
                     if pty_done {
                         ws.status = app::WorkspaceStatus::Done;
                         app.needs_redraw = true;
