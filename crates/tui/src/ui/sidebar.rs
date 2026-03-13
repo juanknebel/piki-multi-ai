@@ -28,9 +28,52 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
     }
 
     let sidebar_items = app.sidebar_items();
+
+    // Compute item heights and scroll offset for mixed-height items
+    let item_height = |item: &SidebarItem| -> usize {
+        match item {
+            SidebarItem::GroupHeader { .. } => 1,
+            SidebarItem::Workspace { .. } => 3,
+        }
+    };
+    let visible_height = area.height.saturating_sub(2) as usize;
+    let mut scroll_offset = 0;
+    if visible_height > 0 {
+        // Sum heights up to and including selected row
+        let mut height_to_selected: usize = 0;
+        for (i, item) in sidebar_items.iter().enumerate() {
+            height_to_selected += item_height(item);
+            if i == app.selected_sidebar_row {
+                break;
+            }
+        }
+        if height_to_selected > visible_height {
+            // Find first item to skip so selected fits
+            let mut skip_height = height_to_selected - visible_height;
+            for (i, item) in sidebar_items.iter().enumerate() {
+                let h = item_height(item);
+                if skip_height == 0 {
+                    break;
+                }
+                scroll_offset = i + 1;
+                skip_height = skip_height.saturating_sub(h);
+            }
+        }
+    }
+
+    let mut total_lines = 0;
     let items: Vec<ListItem> = sidebar_items
         .iter()
         .enumerate()
+        .skip(scroll_offset)
+        .filter(|(_, item)| {
+            let h = item_height(item);
+            if total_lines + h > visible_height {
+                return false;
+            }
+            total_lines += h;
+            true
+        })
         .map(|(row, item)| {
             let is_selected = row == app.selected_sidebar_row && is_active;
             match item {
@@ -92,7 +135,6 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
 
                     let mut lines = vec![line1, line2];
 
-                    // Show parent project (pre-computed in WorkspaceInfo)
                     let project_name = &ws.source_repo_display;
                     let max_proj = area.width.saturating_sub(6) as usize;
                     let proj_text = if project_name.len() > max_proj {
@@ -167,9 +209,19 @@ pub(super) fn render_file_list(frame: &mut Frame, area: Rect, app: &App) {
         return;
     }
 
+    // Compute visible window: inner height minus border (top+bottom = 2 lines)
+    let visible_height = area.height.saturating_sub(2) as usize;
+    let scroll_offset = if visible_height > 0 && app.selected_file >= visible_height {
+        app.selected_file - visible_height + 1
+    } else {
+        0
+    };
+
     let items: Vec<ListItem> = files
         .iter()
         .enumerate()
+        .skip(scroll_offset)
+        .take(visible_height)
         .map(|(i, f)| {
             let (label, color) = match f.status {
                 FileStatus::Modified => ("M", theme.modified),
