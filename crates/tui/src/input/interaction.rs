@@ -3,6 +3,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField};
 use crate::clipboard;
+use crate::dialog_state::DialogState;
 use crate::helpers::copy_visible_terminal;
 
 pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
@@ -463,24 +464,26 @@ pub(super) fn handle_workspace_interaction(app: &mut App, key: KeyEvent) -> Opti
         if !app.workspaces.is_empty()
             && let Some(ws_idx) = app.sidebar_row_to_workspace(app.selected_sidebar_row)
         {
-            app.delete_target = Some(ws_idx);
+            app.active_dialog = Some(DialogState::ConfirmDelete { target: ws_idx });
             app.mode = AppMode::ConfirmDelete;
         }
     } else if app.config.matches_navigation(key, "edit_workspace")
         && let Some(ws_idx) = app.sidebar_row_to_workspace(app.selected_sidebar_row)
         && let Some(ws) = app.workspaces.get(ws_idx)
     {
-        let k_path = ws.kanban_path.clone().unwrap_or_default();
+        let kanban = ws.kanban_path.clone().unwrap_or_default();
         let prompt = ws.prompt.clone();
         let group = ws.info.group.clone().unwrap_or_default();
-        app.kanban_input_buffer = k_path;
-        app.prompt_input_buffer = prompt;
-        app.group_input_buffer = group;
-        app.kanban_input_cursor = app.kanban_input_buffer.chars().count();
-        app.prompt_input_cursor = app.prompt_input_buffer.chars().count();
-        app.group_input_cursor = app.group_input_buffer.chars().count();
-        app.active_dialog_field = DialogField::KanbanPath;
-        app.edit_target = Some(ws_idx);
+        app.active_dialog = Some(DialogState::EditWorkspace {
+            target: ws_idx,
+            kanban_cursor: kanban.chars().count(),
+            kanban,
+            prompt_cursor: prompt.chars().count(),
+            prompt,
+            group_cursor: group.chars().count(),
+            group,
+            active_field: DialogField::KanbanPath,
+        });
         app.mode = AppMode::EditWorkspace;
         app.interacting = false;
     }

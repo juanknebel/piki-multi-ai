@@ -6,6 +6,7 @@ use ratatui::DefaultTerminal;
 use crate::action::Action;
 use crate::app::{self, ActivePane, App, AppMode};
 use crate::clipboard;
+use crate::dialog_state::DialogState;
 use crate::helpers::{
     rect_contains, resize_all_ptys, scrollback_max, subtab_index_at, tab_index_at,
 };
@@ -22,7 +23,9 @@ pub(crate) fn handle_mouse_event(
     match mouse.kind {
         MouseEventKind::ScrollUp => match app.mode {
             AppMode::Help => {
-                app.help_scroll = app.help_scroll.saturating_sub(3);
+                if let Some(DialogState::Help { ref mut scroll }) = app.active_dialog {
+                    *scroll = scroll.saturating_sub(3);
+                }
             }
             AppMode::Diff => {
                 app.diff_scroll = app.diff_scroll.saturating_sub(3);
@@ -53,7 +56,9 @@ pub(crate) fn handle_mouse_event(
         },
         MouseEventKind::ScrollDown => match app.mode {
             AppMode::Help => {
-                app.help_scroll = app.help_scroll.saturating_add(3);
+                if let Some(DialogState::Help { ref mut scroll }) = app.active_dialog {
+                    *scroll = scroll.saturating_add(3);
+                }
             }
             AppMode::Diff => {
                 app.diff_scroll = app.diff_scroll.saturating_add(3);
@@ -136,7 +141,8 @@ pub(crate) fn handle_mouse_event(
                             if let Some(ws) = app.current_workspace()
                                 && ws.tabs.get(idx).is_some_and(|t| t.closable)
                             {
-                                app.close_tab_target = Some(idx);
+                                app.active_dialog =
+                                    Some(DialogState::ConfirmCloseTab { target: idx });
                                 app.mode = AppMode::ConfirmCloseTab;
                             }
                         } else if let Some(ws) = app.current_workspace_mut() {

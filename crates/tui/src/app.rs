@@ -12,6 +12,7 @@ pub use piki_core::pty::PtySession;
 pub use piki_core::workspace::FileWatcher;
 pub use piki_core::{AIProvider, ChangedFile, FileStatus, WorkspaceStatus, WorkspaceType};
 
+use crate::dialog_state::DialogState;
 use crate::theme::Theme;
 
 /// Toast notification level
@@ -506,36 +507,13 @@ pub struct App {
     pub diff_scroll: u16,
     pub diff_content: Option<Arc<Text<'static>>>,
     pub diff_file_path: Option<String>,
-    pub input_buffer: String,
-    pub dir_input_buffer: String,
-    pub desc_input_buffer: String,
-    pub prompt_input_buffer: String,
-    pub kanban_input_buffer: String,
-    pub group_input_buffer: String,
-    /// Cursor positions (char index) for each dialog input field
-    pub input_cursor: usize,
-    pub dir_input_cursor: usize,
-    pub desc_input_cursor: usize,
-    pub prompt_input_cursor: usize,
-    pub kanban_input_cursor: usize,
-    pub group_input_cursor: usize,
-    pub workspace_type_selection: WorkspaceType,
+    /// Active dialog state — None means no dialog is open
+    pub active_dialog: Option<DialogState>,
     pub collapsed_groups: std::collections::HashSet<String>,
     pub selected_sidebar_row: usize,
-    /// Scroll offset for help overlay
-    pub help_scroll: u16,
-    /// Horizontal scroll offset for workspace info overlay
-    pub info_hscroll: u16,
-    pub active_dialog_field: DialogField,
     pub status_message: Option<String>,
     /// Toast notification (replaces status_message for timed display)
     pub toast: Option<Toast>,
-    /// Index of workspace targeted for deletion (used by ConfirmDelete dialog)
-    pub delete_target: Option<usize>,
-    /// Index of tab targeted for closing (used by ConfirmCloseTab dialog)
-    pub close_tab_target: Option<usize>,
-    /// Index of workspace targeted for editing (used by EditWorkspace dialog)
-    pub edit_target: Option<usize>,
     /// Fuzzy file search state
     pub fuzzy: Option<FuzzyState>,
     /// Inline editor state
@@ -548,8 +526,6 @@ pub struct App {
     pub theme: Theme,
     pub selection: Option<Selection>,
     pub terminal_inner_area: Option<Rect>,
-    /// Commit message buffer (for git commit dialog)
-    pub commit_msg_buffer: String,
     /// Pre-formatted system info string (CPU, RAM, battery, time)
     pub sysinfo: std::sync::Arc<parking_lot::Mutex<String>>,
     /// Sidebar width as percentage (10..=90)
@@ -615,29 +591,11 @@ impl App {
             diff_scroll: 0,
             diff_content: None,
             diff_file_path: None,
-            input_buffer: String::new(),
-            dir_input_buffer: String::new(),
-            desc_input_buffer: String::new(),
-            prompt_input_buffer: String::new(),
-            kanban_input_buffer: String::new(),
-            group_input_buffer: String::new(),
-            input_cursor: 0,
-            dir_input_cursor: 0,
-            desc_input_cursor: 0,
-            prompt_input_cursor: 0,
-            kanban_input_cursor: 0,
-            group_input_cursor: 0,
-            workspace_type_selection: WorkspaceType::default(),
+            active_dialog: None,
             collapsed_groups: std::collections::HashSet::new(),
             selected_sidebar_row: 0,
-            help_scroll: 0,
-            info_hscroll: 0,
-            active_dialog_field: DialogField::Name,
             status_message: None,
             toast: None,
-            delete_target: None,
-            close_tab_target: None,
-            edit_target: None,
             fuzzy: None,
             editor: None,
             editing_file: None,
@@ -646,7 +604,6 @@ impl App {
             theme: Theme::default(),
             selection: None,
             terminal_inner_area: None,
-            commit_msg_buffer: String::new(),
             sysinfo: std::sync::Arc::new(parking_lot::Mutex::new(String::new())),
             sidebar_pct: 20,
             left_split_pct: 50,
@@ -902,6 +859,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dialog_state::DialogState;
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
     fn key(code: KeyCode) -> KeyEvent {
@@ -959,6 +917,7 @@ mod tests {
     fn test_confirm_quit_cancel() {
         let mut app = App::new();
         app.mode = AppMode::ConfirmQuit;
+        app.active_dialog = Some(DialogState::ConfirmQuit);
         let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('n')));
         assert!(action.is_none());
         assert_eq!(app.mode, AppMode::Normal);
@@ -969,6 +928,7 @@ mod tests {
     fn test_confirm_quit_accept() {
         let mut app = App::new();
         app.mode = AppMode::ConfirmQuit;
+        app.active_dialog = Some(DialogState::ConfirmQuit);
         let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('y')));
         assert!(action.is_none());
         assert!(app.should_quit);
@@ -985,10 +945,14 @@ mod tests {
     #[test]
     fn test_new_workspace_cancel() {
         let mut app = App::new();
-        app.mode = AppMode::NewWorkspace;
+        // Opening new workspace sets both mode and dialog
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('n')));
+        assert_eq!(app.mode, AppMode::NewWorkspace);
+
         let action = crate::input::handle_key_event(&mut app, key(KeyCode::Esc));
         assert!(action.is_none());
         assert_eq!(app.mode, AppMode::Normal);
+        assert!(app.active_dialog.is_none());
     }
 
     #[test]
@@ -1003,41 +967,60 @@ mod tests {
     #[test]
     fn test_new_workspace_tab_cycles_fields() {
         let mut app = App::new();
-        app.mode = AppMode::NewWorkspace;
-        assert_eq!(app.active_dialog_field, DialogField::Name);
+        // Use the normal entry point to set up dialog state
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('n')));
+        assert_eq!(app.mode, AppMode::NewWorkspace);
+
+        let get_field = |app: &App| -> DialogField {
+            match &app.active_dialog {
+                Some(DialogState::NewWorkspace { active_field, .. }) => *active_field,
+                _ => panic!("Expected NewWorkspace dialog"),
+            }
+        };
+
+        assert_eq!(get_field(&app), DialogField::Name);
 
         crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
-        assert_eq!(app.active_dialog_field, DialogField::Directory);
+        assert_eq!(get_field(&app), DialogField::Directory);
 
         crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
-        assert_eq!(app.active_dialog_field, DialogField::Description);
+        assert_eq!(get_field(&app), DialogField::Description);
 
         crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
-        assert_eq!(app.active_dialog_field, DialogField::Prompt);
+        assert_eq!(get_field(&app), DialogField::Prompt);
 
         crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
-        assert_eq!(app.active_dialog_field, DialogField::KanbanPath);
+        assert_eq!(get_field(&app), DialogField::KanbanPath);
 
         crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
-        assert_eq!(app.active_dialog_field, DialogField::Group);
+        assert_eq!(get_field(&app), DialogField::Group);
 
         crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
-        assert_eq!(app.active_dialog_field, DialogField::Type);
+        assert_eq!(get_field(&app), DialogField::Type);
 
         crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
-        assert_eq!(app.active_dialog_field, DialogField::Name);
+        assert_eq!(get_field(&app), DialogField::Name);
     }
 
     #[test]
     fn test_new_workspace_char_appends_to_active_buffer() {
         let mut app = App::new();
-        app.mode = AppMode::NewWorkspace;
-        app.active_dialog_field = DialogField::Name;
+        // Use normal entry point to create dialog
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('n')));
+        assert_eq!(app.mode, AppMode::NewWorkspace);
 
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('a')));
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('b')));
-        assert_eq!(app.input_buffer, "ab");
-        assert_eq!(app.input_cursor, 2);
+
+        match &app.active_dialog {
+            Some(DialogState::NewWorkspace {
+                name, name_cursor, ..
+            }) => {
+                assert_eq!(name, "ab");
+                assert_eq!(*name_cursor, 2);
+            }
+            _ => panic!("Expected NewWorkspace dialog"),
+        }
     }
 
     #[test]
@@ -1079,20 +1062,29 @@ mod tests {
     #[test]
     fn test_help_scroll() {
         let mut app = App::new();
-        app.mode = AppMode::Help;
+        // Use the normal entry point to open help
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('?')));
+        assert_eq!(app.mode, AppMode::Help);
+
+        let get_scroll = |app: &App| -> u16 {
+            match &app.active_dialog {
+                Some(DialogState::Help { scroll }) => *scroll,
+                _ => panic!("Expected Help dialog"),
+            }
+        };
 
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('j')));
-        assert_eq!(app.help_scroll, 1);
+        assert_eq!(get_scroll(&app), 1);
 
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('k')));
-        assert_eq!(app.help_scroll, 0);
+        assert_eq!(get_scroll(&app), 0);
 
         // Page down
         crate::input::handle_key_event(
             &mut app,
             KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL),
         );
-        assert_eq!(app.help_scroll, 10);
+        assert_eq!(get_scroll(&app), 10);
     }
 
     #[test]

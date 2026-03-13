@@ -5,6 +5,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph};
 
 use crate::app::{App, DialogField, WorkspaceType};
+use crate::dialog_state::DialogState;
 
 /// Helper to create a centered rect with fixed width (chars) and height (lines)
 fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
@@ -77,6 +78,29 @@ fn render_yn_dialog(
     frame.render_widget(text, popup);
 }
 
+/// Render a labeled text field line.
+fn render_text_field<'a>(
+    label: &'a str,
+    text: &str,
+    active: bool,
+    cursor: usize,
+    fmax: usize,
+    field_style: Style,
+) -> Line<'a> {
+    Line::from(vec![
+        Span::styled(label, field_style),
+        Span::styled(visible_field(text, active, cursor, fmax), field_style),
+    ])
+}
+
+fn field_style(active: bool, active_color: Color, inactive_color: Color) -> Style {
+    if active {
+        Style::default().fg(active_color)
+    } else {
+        Style::default().fg(inactive_color)
+    }
+}
+
 pub(super) fn render_diff_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let width = area.width * 90 / 100;
     let height = area.height * 85 / 100;
@@ -96,30 +120,45 @@ pub(super) fn render_diff_overlay(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 pub(super) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
+    let Some(DialogState::NewWorkspace {
+        ref name,
+        name_cursor,
+        ref dir,
+        dir_cursor,
+        ref desc,
+        desc_cursor,
+        ref prompt,
+        prompt_cursor,
+        ref kanban,
+        kanban_cursor,
+        ref group,
+        group_cursor,
+        ws_type,
+        active_field,
+    }) = app.active_dialog
+    else {
+        return;
+    };
+
     let popup_width = area.width * 70 / 100;
-    let is_simple = app.workspace_type_selection == WorkspaceType::Simple;
+    let is_simple = ws_type == WorkspaceType::Simple;
     let popup_height = if is_simple { 17 } else { 19 };
     let popup = clear_popup(frame, area, popup_width.max(40), popup_height);
     let theme = &app.theme.dialog;
 
-    let field_style = |active: bool| {
-        if active {
-            Style::default().fg(theme.new_ws_active)
-        } else {
-            Style::default().fg(theme.new_ws_inactive)
-        }
-    };
+    let active_c = theme.new_ws_active;
+    let inactive_c = theme.new_ws_inactive;
     let label_width = 10_u16;
     let fmax = popup.width.saturating_sub(label_width + 2) as usize;
 
-    let type_active = app.active_dialog_field == DialogField::Type;
-    let dir_active = app.active_dialog_field == DialogField::Directory;
-    let desc_active = app.active_dialog_field == DialogField::Description;
-    let prompt_active = app.active_dialog_field == DialogField::Prompt;
-    let kanban_active = app.active_dialog_field == DialogField::KanbanPath;
-    let group_active = app.active_dialog_field == DialogField::Group;
+    let type_active = active_field == DialogField::Type;
+    let dir_active = active_field == DialogField::Directory;
+    let desc_active = active_field == DialogField::Description;
+    let prompt_active = active_field == DialogField::Prompt;
+    let kanban_active = active_field == DialogField::KanbanPath;
+    let group_active = active_field == DialogField::Group;
 
-    let type_text = match app.workspace_type_selection {
+    let type_text = match ws_type {
         WorkspaceType::Simple => "[Simple]  Worktree",
         WorkspaceType::Worktree => " Simple  [Worktree]",
     };
@@ -127,80 +166,72 @@ pub(super) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
     let mut lines: Vec<Line<'_>> = Vec::new();
 
     lines.push(Line::from(vec![
-        Span::styled("  Type:   ", field_style(type_active)),
-        Span::styled(type_text, field_style(type_active)),
+        Span::styled("  Type:   ", field_style(type_active, active_c, inactive_c)),
+        Span::styled(type_text, field_style(type_active, active_c, inactive_c)),
     ]));
     lines.push(Line::from(""));
 
     if !is_simple {
-        let name_active = app.active_dialog_field == DialogField::Name;
-        let name_display =
-            visible_field(&app.input_buffer, name_active, app.input_cursor, fmax);
-        lines.push(Line::from(vec![
-            Span::styled("  Name:   ", field_style(name_active)),
-            Span::styled(name_display, field_style(name_active)),
-        ]));
+        let name_active = active_field == DialogField::Name;
+        lines.push(render_text_field(
+            "  Name:   ",
+            name,
+            name_active,
+            name_cursor,
+            fmax,
+            field_style(name_active, active_c, inactive_c),
+        ));
         lines.push(Line::from(""));
     }
 
-    let dir_display = visible_field(
-        &app.dir_input_buffer,
+    lines.push(render_text_field(
+        "  Dir:    ",
+        dir,
         dir_active,
-        app.dir_input_cursor,
+        dir_cursor,
         fmax,
-    );
-    lines.push(Line::from(vec![
-        Span::styled("  Dir:    ", field_style(dir_active)),
-        Span::styled(dir_display, field_style(dir_active)),
-    ]));
+        field_style(dir_active, active_c, inactive_c),
+    ));
     lines.push(Line::from(""));
 
-    let desc_display = visible_field(
-        &app.desc_input_buffer,
+    lines.push(render_text_field(
+        "  Desc:   ",
+        desc,
         desc_active,
-        app.desc_input_cursor,
+        desc_cursor,
         fmax,
-    );
-    lines.push(Line::from(vec![
-        Span::styled("  Desc:   ", field_style(desc_active)),
-        Span::styled(desc_display, field_style(desc_active)),
-    ]));
+        field_style(desc_active, active_c, inactive_c),
+    ));
     lines.push(Line::from(""));
 
-    let prompt_display = visible_field(
-        &app.prompt_input_buffer,
+    lines.push(render_text_field(
+        "  Prompt: ",
+        prompt,
         prompt_active,
-        app.prompt_input_cursor,
+        prompt_cursor,
         fmax,
-    );
-    lines.push(Line::from(vec![
-        Span::styled("  Prompt: ", field_style(prompt_active)),
-        Span::styled(prompt_display, field_style(prompt_active)),
-    ]));
+        field_style(prompt_active, active_c, inactive_c),
+    ));
     lines.push(Line::from(""));
 
-    let kanban_display = visible_field(
-        &app.kanban_input_buffer,
+    lines.push(render_text_field(
+        "  Kanban: ",
+        kanban,
         kanban_active,
-        app.kanban_input_cursor,
+        kanban_cursor,
         fmax,
-    );
-    lines.push(Line::from(vec![
-        Span::styled("  Kanban: ", field_style(kanban_active)),
-        Span::styled(kanban_display, field_style(kanban_active)),
-    ]));
+        field_style(kanban_active, active_c, inactive_c),
+    ));
     lines.push(Line::from(""));
 
-    let group_display = visible_field(
-        &app.group_input_buffer,
+    lines.push(render_text_field(
+        "  Group:  ",
+        group,
         group_active,
-        app.group_input_cursor,
+        group_cursor,
         fmax,
-    );
-    lines.push(Line::from(vec![
-        Span::styled("  Group:  ", field_style(group_active)),
-        Span::styled(group_display, field_style(group_active)),
-    ]));
+        field_style(group_active, active_c, inactive_c),
+    ));
     lines.push(Line::from(""));
 
     lines.push(Line::from(vec![Span::styled(
@@ -213,63 +244,60 @@ pub(super) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
 }
 
 pub(super) fn render_edit_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
+    let Some(DialogState::EditWorkspace {
+        ref kanban,
+        kanban_cursor,
+        ref prompt,
+        prompt_cursor,
+        ref group,
+        group_cursor,
+        active_field,
+        ..
+    }) = app.active_dialog
+    else {
+        return;
+    };
+
     let popup_width = area.width * 70 / 100;
     let popup = clear_popup(frame, area, popup_width.max(40), 13);
     let theme = &app.theme.dialog;
 
-    let field_style = |active: bool| {
-        if active {
-            Style::default().fg(theme.new_ws_active)
-        } else {
-            Style::default().fg(theme.new_ws_inactive)
-        }
-    };
+    let active_c = theme.new_ws_active;
+    let inactive_c = theme.new_ws_inactive;
     let label_width = 10_u16;
     let fmax = popup.width.saturating_sub(label_width + 2) as usize;
 
-    let kanban_active = app.active_dialog_field == DialogField::KanbanPath;
-    let prompt_active = app.active_dialog_field == DialogField::Prompt;
-    let group_active = app.active_dialog_field == DialogField::Group;
+    let kanban_active = active_field == DialogField::KanbanPath;
+    let prompt_active = active_field == DialogField::Prompt;
+    let group_active = active_field == DialogField::Group;
 
     let lines = vec![
-        Line::from(vec![
-            Span::styled("  Kanban: ", field_style(kanban_active)),
-            Span::styled(
-                visible_field(
-                    &app.kanban_input_buffer,
-                    kanban_active,
-                    app.kanban_input_cursor,
-                    fmax,
-                ),
-                field_style(kanban_active),
-            ),
-        ]),
+        render_text_field(
+            "  Kanban: ",
+            kanban,
+            kanban_active,
+            kanban_cursor,
+            fmax,
+            field_style(kanban_active, active_c, inactive_c),
+        ),
         Line::from(""),
-        Line::from(vec![
-            Span::styled("  Prompt: ", field_style(prompt_active)),
-            Span::styled(
-                visible_field(
-                    &app.prompt_input_buffer,
-                    prompt_active,
-                    app.prompt_input_cursor,
-                    fmax,
-                ),
-                field_style(prompt_active),
-            ),
-        ]),
+        render_text_field(
+            "  Prompt: ",
+            prompt,
+            prompt_active,
+            prompt_cursor,
+            fmax,
+            field_style(prompt_active, active_c, inactive_c),
+        ),
         Line::from(""),
-        Line::from(vec![
-            Span::styled("  Group:  ", field_style(group_active)),
-            Span::styled(
-                visible_field(
-                    &app.group_input_buffer,
-                    group_active,
-                    app.group_input_cursor,
-                    fmax,
-                ),
-                field_style(group_active),
-            ),
-        ]),
+        render_text_field(
+            "  Group:  ",
+            group,
+            group_active,
+            group_cursor,
+            fmax,
+            field_style(group_active, active_c, inactive_c),
+        ),
         Line::from(""),
         Line::from(vec![Span::styled(
             "  [Esc] Cancel",
@@ -282,6 +310,11 @@ pub(super) fn render_edit_workspace_dialog(frame: &mut Frame, area: Rect, app: &
 }
 
 pub(super) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
+    let help_scroll = match app.active_dialog {
+        Some(DialogState::Help { scroll }) => scroll,
+        _ => 0,
+    };
+
     let theme = &app.theme;
     let cfg = &app.config;
     let popup = clear_popup(frame, area, 55, 62);
@@ -546,7 +579,7 @@ pub(super) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let total_lines = help_text.len() as u16;
     let inner_height = popup.height.saturating_sub(2); // borders
     let max_scroll = total_lines.saturating_sub(inner_height);
-    let scroll = app.help_scroll.min(max_scroll);
+    let scroll = help_scroll.min(max_scroll);
 
     let scroll_indicator = if max_scroll > 0 {
         format!(
@@ -600,6 +633,11 @@ pub(super) fn render_about_overlay(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 pub(super) fn render_workspace_info_overlay(frame: &mut Frame, area: Rect, app: &App) {
+    let info_hscroll = match app.active_dialog {
+        Some(DialogState::WorkspaceInfo { hscroll }) => hscroll,
+        _ => 0,
+    };
+
     let theme = &app.theme;
     let ws = &app.workspaces[app.selected_workspace];
 
@@ -689,17 +727,20 @@ pub(super) fn render_workspace_info_overlay(frame: &mut Frame, area: Rect, app: 
 
     let block = popup_block(&ws.name, theme.help.border);
 
-    let text = Paragraph::new(lines)
-        .block(block)
-        .scroll((0, app.info_hscroll));
+    let text = Paragraph::new(lines).block(block).scroll((0, info_hscroll));
     frame.render_widget(text, popup);
 }
 
 pub(super) fn render_confirm_delete_dialog(frame: &mut Frame, area: Rect, app: &App) {
+    let target = match app.active_dialog {
+        Some(DialogState::ConfirmDelete { target }) => Some(target),
+        _ => None,
+    };
+
     let popup = clear_popup(frame, area, 50, 9);
     let theme = &app.theme.dialog;
 
-    let ws = app.delete_target.and_then(|idx| app.workspaces.get(idx));
+    let ws = target.and_then(|idx| app.workspaces.get(idx));
     let ws_name = ws.map(|ws| ws.name.as_str()).unwrap_or("?");
     let is_simple = ws
         .map(|ws| ws.info.workspace_type == WorkspaceType::Simple)
@@ -749,14 +790,14 @@ pub(super) fn render_confirm_delete_dialog(frame: &mut Frame, area: Rect, app: &
 
 pub(crate) fn render_confirm_close_tab_dialog(frame: &mut Frame, area: Rect, app: &App) {
     let theme = &app.theme.dialog;
-    let tab_name = app
-        .close_tab_target
-        .and_then(|idx| {
-            app.current_workspace()
-                .and_then(|ws| ws.tabs.get(idx))
-                .map(|t| format!("{:?}", t.provider))
-        })
-        .unwrap_or_default();
+    let tab_name = match app.active_dialog {
+        Some(DialogState::ConfirmCloseTab { target }) => app
+            .current_workspace()
+            .and_then(|ws| ws.tabs.get(target))
+            .map(|t| format!("{:?}", t.provider))
+            .unwrap_or_default(),
+        _ => String::new(),
+    };
     render_yn_dialog(
         frame,
         area,
@@ -780,13 +821,18 @@ pub(crate) fn render_confirm_quit_dialog(frame: &mut Frame, area: Rect, app: &Ap
 }
 
 pub(super) fn render_commit_dialog(frame: &mut Frame, area: Rect, app: &App) {
+    let commit_buffer = match app.active_dialog {
+        Some(DialogState::CommitMessage { ref buffer }) => buffer.as_str(),
+        _ => "",
+    };
+
     let popup_width = area.width * 60 / 100;
     let popup = clear_popup(frame, area, popup_width.max(40), 7);
     let theme = &app.theme.dialog;
 
     let field_max = popup.width.saturating_sub(14) as usize;
     let cursor = "█";
-    let full = format!("{}{}", app.commit_msg_buffer, cursor);
+    let full = format!("{}{}", commit_buffer, cursor);
     let visible = if full.len() > field_max && field_max > 2 {
         format!("…{}", &full[full.len() - (field_max - 1)..])
     } else {

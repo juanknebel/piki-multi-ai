@@ -8,13 +8,14 @@ use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField};
+use crate::dialog_state::DialogState;
 use crate::helpers::{copy_visible_terminal, resize_all_ptys, scrollback_max};
-use piki_core::AIProvider;
 
 use self::dialog::{
-    handle_commit_message_input, handle_confirm_close_tab_input, handle_confirm_delete_input,
-    handle_confirm_merge_input, handle_confirm_quit_input, handle_edit_workspace_input,
-    handle_new_tab_input, handle_new_workspace_input,
+    handle_about_input, handle_commit_message_input, handle_confirm_close_tab_input,
+    handle_confirm_delete_input, handle_confirm_merge_input, handle_confirm_quit_input,
+    handle_edit_workspace_input, handle_help_input, handle_new_tab_input,
+    handle_new_workspace_input, handle_workspace_info_input,
 };
 use self::editor_input::handle_inline_edit_input;
 use self::fuzzy_input::handle_fuzzy_search_input;
@@ -26,53 +27,9 @@ use self::interaction::{
 pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
     // Modal dispatch — each mode captures all input
     match app.mode {
-        AppMode::WorkspaceInfo => {
-            if app.config.matches_workspace_info(key, "right")
-                || app.config.matches_workspace_info(key, "right_alt")
-            {
-                app.info_hscroll = app.info_hscroll.saturating_add(4);
-            } else if app.config.matches_workspace_info(key, "left")
-                || app.config.matches_workspace_info(key, "left_alt")
-            {
-                app.info_hscroll = app.info_hscroll.saturating_sub(4);
-            } else if app.config.matches_workspace_info(key, "exit")
-                || app.config.matches_workspace_info(key, "exit_info")
-            {
-                app.info_hscroll = 0;
-                app.mode = AppMode::Normal;
-                let _ =
-                    crossterm::execute!(std::io::stderr(), crossterm::event::EnableMouseCapture);
-            }
-            return None;
-        }
-        AppMode::About => {
-            if app.config.matches_about(key, "exit") {
-                app.mode = AppMode::Normal;
-            }
-            return None;
-        }
-        AppMode::Help => {
-            if app.config.matches_help(key, "down") || app.config.matches_help(key, "down_alt") {
-                app.help_scroll = app.help_scroll.saturating_add(1);
-            } else if app.config.matches_help(key, "up") || app.config.matches_help(key, "up_alt") {
-                app.help_scroll = app.help_scroll.saturating_sub(1);
-            } else if app.config.matches_help(key, "page_down") {
-                app.help_scroll = app.help_scroll.saturating_add(10);
-            } else if app.config.matches_help(key, "page_up") {
-                app.help_scroll = app.help_scroll.saturating_sub(10);
-            } else if app.config.matches_help(key, "scroll_top") {
-                app.help_scroll = 0;
-            } else if app.config.matches_help(key, "scroll_bottom") {
-                app.help_scroll = u16::MAX;
-            } else if app.config.matches_help(key, "exit")
-                || app.config.matches_help(key, "exit_alt")
-                || app.config.matches_help(key, "exit_help")
-            {
-                app.help_scroll = 0;
-                app.mode = AppMode::Normal;
-            }
-            return None;
-        }
+        AppMode::WorkspaceInfo => return handle_workspace_info_input(app, key),
+        AppMode::About => return handle_about_input(app, key),
+        AppMode::Help => return handle_help_input(app, key),
         AppMode::FuzzySearch => return handle_fuzzy_search_input(app, key),
         AppMode::InlineEdit => return handle_inline_edit_input(app, key),
         AppMode::NewWorkspace => return handle_new_workspace_input(app, key),
@@ -132,31 +89,36 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
     } else if app.config.matches_navigation(key, "enter_pane") {
         app.interacting = true;
     } else if app.config.matches_navigation(key, "quit") {
+        app.active_dialog = Some(DialogState::ConfirmQuit);
         app.mode = AppMode::ConfirmQuit;
     } else if app.config.matches_navigation(key, "help") {
+        app.active_dialog = Some(DialogState::Help { scroll: 0 });
         app.mode = AppMode::Help;
     } else if app.config.matches_navigation(key, "about") {
+        app.active_dialog = Some(DialogState::About);
         app.mode = AppMode::About;
     } else if app.config.matches_navigation(key, "workspace_info") {
         if !app.workspaces.is_empty() {
+            app.active_dialog = Some(DialogState::WorkspaceInfo { hscroll: 0 });
             app.mode = AppMode::WorkspaceInfo;
-            app.info_hscroll = 0;
             let _ = crossterm::execute!(std::io::stderr(), crossterm::event::DisableMouseCapture);
         }
     } else if app.config.matches_navigation(key, "edit_workspace") {
         if !app.workspaces.is_empty() {
             let ws = &app.workspaces[app.selected_workspace];
-            let k_path = ws.kanban_path.clone().unwrap_or_default();
+            let kanban = ws.kanban_path.clone().unwrap_or_default();
             let prompt = ws.prompt.clone();
             let group = ws.info.group.clone().unwrap_or_default();
-            app.kanban_input_buffer = k_path;
-            app.prompt_input_buffer = prompt;
-            app.group_input_buffer = group;
-            app.kanban_input_cursor = app.kanban_input_buffer.chars().count();
-            app.prompt_input_cursor = app.prompt_input_buffer.chars().count();
-            app.group_input_cursor = app.group_input_buffer.chars().count();
-            app.active_dialog_field = DialogField::KanbanPath;
-            app.edit_target = Some(app.selected_workspace);
+            app.active_dialog = Some(DialogState::EditWorkspace {
+                target: app.selected_workspace,
+                kanban_cursor: kanban.chars().count(),
+                kanban,
+                prompt_cursor: prompt.chars().count(),
+                prompt,
+                group_cursor: group.chars().count(),
+                group,
+                active_field: DialogField::KanbanPath,
+            });
             app.mode = AppMode::EditWorkspace;
         }
     } else if app.config.matches_navigation(key, "clone_workspace") {
@@ -166,50 +128,60 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
             let kanban = ws.kanban_path.clone().unwrap_or_default();
             let prompt = ws.prompt.clone();
             let group = ws.info.group.clone().unwrap_or_default();
+            let ws_type = ws.info.workspace_type;
+            app.active_dialog = Some(DialogState::NewWorkspace {
+                name: String::new(),
+                name_cursor: 0,
+                dir_cursor: dir.chars().count(),
+                dir,
+                desc: String::new(),
+                desc_cursor: 0,
+                prompt_cursor: prompt.chars().count(),
+                prompt,
+                kanban_cursor: kanban.chars().count(),
+                kanban,
+                group_cursor: group.chars().count(),
+                group,
+                ws_type,
+                active_field: DialogField::Name,
+            });
             app.mode = AppMode::NewWorkspace;
-            app.input_buffer.clear();
-            app.input_cursor = 0;
-            app.dir_input_buffer = dir;
-            app.dir_input_cursor = app.dir_input_buffer.chars().count();
-            app.desc_input_buffer.clear();
-            app.desc_input_cursor = 0;
-            app.prompt_input_buffer = prompt;
-            app.prompt_input_cursor = app.prompt_input_buffer.chars().count();
-            app.kanban_input_buffer = kanban;
-            app.kanban_input_cursor = app.kanban_input_buffer.chars().count();
-            app.group_input_buffer = group;
-            app.group_input_cursor = app.group_input_buffer.chars().count();
-            app.workspace_type_selection = ws.info.workspace_type;
-            app.active_dialog_field = DialogField::Name;
         }
     } else if app.config.matches_navigation(key, "new_workspace") {
+        app.active_dialog = Some(DialogState::NewWorkspace {
+            name: String::new(),
+            name_cursor: 0,
+            dir: String::new(),
+            dir_cursor: 0,
+            desc: String::new(),
+            desc_cursor: 0,
+            prompt: String::new(),
+            prompt_cursor: 0,
+            kanban: String::new(),
+            kanban_cursor: 0,
+            group: String::new(),
+            group_cursor: 0,
+            ws_type: piki_core::WorkspaceType::default(),
+            active_field: DialogField::Name,
+        });
         app.mode = AppMode::NewWorkspace;
-        app.input_buffer.clear();
-        app.dir_input_buffer.clear();
-        app.desc_input_buffer.clear();
-        app.prompt_input_buffer.clear();
-        app.kanban_input_buffer.clear();
-        app.group_input_buffer.clear();
-        app.input_cursor = 0;
-        app.dir_input_cursor = 0;
-        app.desc_input_cursor = 0;
-        app.prompt_input_cursor = 0;
-        app.kanban_input_cursor = 0;
-        app.group_input_cursor = 0;
-        app.workspace_type_selection = piki_core::WorkspaceType::default();
-        app.active_dialog_field = DialogField::Name;
     } else if app.config.matches_navigation(key, "delete_workspace") {
         if !app.workspaces.is_empty() {
-            app.delete_target = Some(app.selected_workspace);
+            app.active_dialog = Some(DialogState::ConfirmDelete {
+                target: app.selected_workspace,
+            });
             app.mode = AppMode::ConfirmDelete;
         }
     } else if app.config.matches_navigation(key, "commit") {
         if app.current_workspace().is_some() {
-            app.commit_msg_buffer.clear();
+            app.active_dialog = Some(DialogState::CommitMessage {
+                buffer: String::new(),
+            });
             app.mode = AppMode::CommitMessage;
         }
     } else if app.config.matches_navigation(key, "merge") {
         if app.current_workspace().is_some() {
+            app.active_dialog = Some(DialogState::ConfirmMerge);
             app.mode = AppMode::ConfirmMerge;
         }
     } else if app.config.matches_navigation(key, "push") {
@@ -292,12 +264,15 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
         }
     } else if app.config.matches_navigation(key, "new_tab") {
         if app.current_workspace().is_some() {
+            app.active_dialog = Some(DialogState::NewTab);
             app.mode = AppMode::NewTab;
         }
     } else if app.config.matches_navigation(key, "close_tab") {
         if let Some(ws) = app.workspaces.get(app.active_workspace) {
             if ws.current_tab().is_some_and(|t| t.closable) {
-                app.close_tab_target = Some(ws.active_tab);
+                app.active_dialog = Some(DialogState::ConfirmCloseTab {
+                    target: ws.active_tab,
+                });
                 app.mode = AppMode::ConfirmCloseTab;
             } else {
                 app.status_message = Some("Cannot close the initial shell tab".into());
@@ -320,7 +295,7 @@ fn handle_interaction_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
             } else if app
                 .current_workspace()
                 .and_then(|ws| ws.current_tab())
-                .is_some_and(|tab| tab.provider == AIProvider::Kanban)
+                .is_some_and(|tab| tab.provider == piki_core::AIProvider::Kanban)
             {
                 handle_kanban_interaction(app, key)
             } else if app

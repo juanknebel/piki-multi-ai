@@ -4,6 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField};
+use crate::dialog_state::DialogState;
 use piki_core::{AIProvider, MergeStrategy, WorkspaceType};
 
 /// Result of processing a text input key event
@@ -76,28 +77,29 @@ fn handle_text_input(
     }
 }
 
-fn dialog_buf_and_cursor(app: &mut App) -> (&mut String, &mut usize) {
-    match app.active_dialog_field {
-        // Type is not a text field; handled before this is called
-        DialogField::Type => (&mut app.input_buffer, &mut app.input_cursor),
-        DialogField::Name => (&mut app.input_buffer, &mut app.input_cursor),
-        DialogField::Directory => (&mut app.dir_input_buffer, &mut app.dir_input_cursor),
-        DialogField::Description => (&mut app.desc_input_buffer, &mut app.desc_input_cursor),
-        DialogField::Prompt => (&mut app.prompt_input_buffer, &mut app.prompt_input_cursor),
-        DialogField::KanbanPath => (&mut app.kanban_input_buffer, &mut app.kanban_input_cursor),
-        DialogField::Group => (&mut app.group_input_buffer, &mut app.group_input_cursor),
-    }
-}
-
 fn is_cancel(key: KeyEvent) -> bool {
     key.code == KeyCode::Esc
         || (key.code == KeyCode::Char('g') && key.modifiers.contains(KeyModifiers::CONTROL))
 }
 
 pub(super) fn handle_edit_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::EditWorkspace {
+        ref mut target,
+        ref mut kanban,
+        ref mut kanban_cursor,
+        ref mut prompt,
+        ref mut prompt_cursor,
+        ref mut group,
+        ref mut group_cursor,
+        ref mut active_field,
+    }) = app.active_dialog
+    else {
+        return None;
+    };
+
     match key.code {
         KeyCode::Tab | KeyCode::BackTab => {
-            app.active_dialog_field = match app.active_dialog_field {
+            *active_field = match *active_field {
                 DialogField::KanbanPath => DialogField::Prompt,
                 DialogField::Prompt => DialogField::Group,
                 DialogField::Group => DialogField::KanbanPath,
@@ -106,54 +108,74 @@ pub(super) fn handle_edit_workspace_input(app: &mut App, key: KeyEvent) -> Optio
             return None;
         }
         KeyCode::Enter => {
-            let kanban_path_raw = app.kanban_input_buffer.trim();
+            let kanban_path_raw = kanban.trim();
             let kanban_path = if kanban_path_raw.is_empty() {
                 None
             } else {
                 Some(kanban_path_raw.to_string())
             };
-            let prompt = app.prompt_input_buffer.clone();
-            let group_raw = app.group_input_buffer.trim();
-            let group = if group_raw.is_empty() {
+            let prompt_val = prompt.clone();
+            let group_raw = group.trim();
+            let group_val = if group_raw.is_empty() {
                 None
             } else {
                 Some(group_raw.to_string())
             };
-            let idx = app.edit_target.take().unwrap_or(app.active_workspace);
+            let idx = *target;
 
-            app.kanban_input_buffer.clear();
-            app.prompt_input_buffer.clear();
-            app.group_input_buffer.clear();
-            app.kanban_input_cursor = 0;
-            app.prompt_input_cursor = 0;
-            app.group_input_cursor = 0;
+            app.active_dialog = None;
             app.mode = AppMode::Normal;
-            return Some(Action::EditWorkspace(idx, kanban_path, prompt, group));
+            return Some(Action::EditWorkspace(
+                idx,
+                kanban_path,
+                prompt_val,
+                group_val,
+            ));
         }
         _ if is_cancel(key) => {
-            app.edit_target = None;
-            app.kanban_input_buffer.clear();
-            app.prompt_input_buffer.clear();
-            app.group_input_buffer.clear();
-            app.kanban_input_cursor = 0;
-            app.prompt_input_cursor = 0;
-            app.group_input_cursor = 0;
+            app.active_dialog = None;
             app.mode = AppMode::Normal;
             return None;
         }
         _ => {}
     }
 
-    let (buf, cursor) = dialog_buf_and_cursor(app);
+    // Text input for the active field
+    let (buf, cursor) = match *active_field {
+        DialogField::KanbanPath => (kanban as &mut String, kanban_cursor as &mut usize),
+        DialogField::Prompt => (prompt, prompt_cursor),
+        DialogField::Group => (group, group_cursor),
+        _ => return None,
+    };
     handle_text_input(buf, cursor, key, |c| !c.is_control());
     None
 }
 
 pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::NewWorkspace {
+        ref mut name,
+        ref mut name_cursor,
+        ref mut dir,
+        ref mut dir_cursor,
+        ref mut desc,
+        ref mut desc_cursor,
+        ref mut prompt,
+        ref mut prompt_cursor,
+        ref mut kanban,
+        ref mut kanban_cursor,
+        ref mut group,
+        ref mut group_cursor,
+        ref mut ws_type,
+        ref mut active_field,
+    }) = app.active_dialog
+    else {
+        return None;
+    };
+
     match key.code {
         KeyCode::Tab | KeyCode::BackTab => {
-            let is_simple = app.workspace_type_selection == WorkspaceType::Simple;
-            app.active_dialog_field = match app.active_dialog_field {
+            let is_simple = *ws_type == WorkspaceType::Simple;
+            *active_field = match *active_field {
                 DialogField::Type if is_simple => DialogField::Directory,
                 DialogField::Type => DialogField::Name,
                 DialogField::Name => DialogField::Directory,
@@ -166,39 +188,39 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
             return None;
         }
         KeyCode::Enter => {
-            let dir_raw = app.dir_input_buffer.clone();
-            let description = app.desc_input_buffer.clone();
-            let prompt = app.prompt_input_buffer.clone();
-            let kanban_path_raw = app.kanban_input_buffer.trim();
+            let dir_raw = dir.clone();
+            let description = desc.clone();
+            let prompt_val = prompt.clone();
+            let kanban_path_raw = kanban.trim();
             let kanban_path = if kanban_path_raw.is_empty() {
                 None
             } else {
                 Some(kanban_path_raw.to_string())
             };
-            let group_raw = app.group_input_buffer.trim();
-            let group = if group_raw.is_empty() {
+            let group_raw = group.trim();
+            let group_val = if group_raw.is_empty() {
                 None
             } else {
                 Some(group_raw.to_string())
             };
-            let ws_type = app.workspace_type_selection;
+            let ws_type_val = *ws_type;
 
             // For Simple workspaces, derive name from directory basename
-            let name = if ws_type == WorkspaceType::Simple {
-                if app.input_buffer.is_empty() {
+            let ws_name = if ws_type_val == WorkspaceType::Simple {
+                if name.is_empty() {
                     PathBuf::from(&dir_raw)
                         .file_name()
                         .map(|n| n.to_string_lossy().to_string())
                         .unwrap_or_default()
                 } else {
-                    app.input_buffer.clone()
+                    name.clone()
                 }
             } else {
-                app.input_buffer.clone()
+                name.clone()
             };
 
-            if name.is_empty() || dir_raw.is_empty() {
-                let msg = if ws_type == WorkspaceType::Simple {
+            if ws_name.is_empty() || dir_raw.is_empty() {
+                let msg = if ws_type_val == WorkspaceType::Simple {
                     "Directory is required"
                 } else {
                     "Name and directory are required"
@@ -218,51 +240,27 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
                 dir_raw.clone()
             };
 
-            let dir = PathBuf::from(&dir_str);
-            if !dir.exists() {
+            let dir_path = PathBuf::from(&dir_str);
+            if !dir_path.exists() {
                 app.status_message = Some(format!("Directory does not exist: {}", dir_str));
                 return None;
             }
 
-            app.input_buffer.clear();
-            app.dir_input_buffer.clear();
-            app.desc_input_buffer.clear();
-            app.prompt_input_buffer.clear();
-            app.kanban_input_buffer.clear();
-            app.group_input_buffer.clear();
-            app.input_cursor = 0;
-            app.dir_input_cursor = 0;
-            app.desc_input_cursor = 0;
-            app.prompt_input_cursor = 0;
-            app.kanban_input_cursor = 0;
-            app.group_input_cursor = 0;
-            app.workspace_type_selection = WorkspaceType::default();
+            app.active_dialog = None;
             app.mode = AppMode::Normal;
             app.active_pane = ActivePane::WorkspaceList;
             return Some(Action::CreateWorkspace(
-                name,
+                ws_name,
                 description,
-                prompt,
+                prompt_val,
                 kanban_path,
-                dir,
-                ws_type,
-                group,
+                dir_path,
+                ws_type_val,
+                group_val,
             ));
         }
         _ if is_cancel(key) => {
-            app.input_buffer.clear();
-            app.dir_input_buffer.clear();
-            app.desc_input_buffer.clear();
-            app.prompt_input_buffer.clear();
-            app.kanban_input_buffer.clear();
-            app.group_input_buffer.clear();
-            app.input_cursor = 0;
-            app.dir_input_cursor = 0;
-            app.desc_input_cursor = 0;
-            app.prompt_input_cursor = 0;
-            app.kanban_input_cursor = 0;
-            app.group_input_cursor = 0;
-            app.workspace_type_selection = WorkspaceType::default();
+            app.active_dialog = None;
             app.mode = AppMode::Normal;
             app.active_pane = ActivePane::WorkspaceList;
             return None;
@@ -271,17 +269,17 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
     }
 
     // Type field: toggle with Space/Left/Right, not a text input
-    if app.active_dialog_field == DialogField::Type {
+    if *active_field == DialogField::Type {
         match key.code {
             KeyCode::Char(' ') | KeyCode::Left | KeyCode::Right => {
-                app.workspace_type_selection = match app.workspace_type_selection {
+                *ws_type = match *ws_type {
                     WorkspaceType::Worktree => WorkspaceType::Simple,
                     WorkspaceType::Simple => WorkspaceType::Worktree,
                 };
-                // If switching to Simple and Name was next, clear it
-                if app.workspace_type_selection == WorkspaceType::Simple {
-                    app.input_buffer.clear();
-                    app.input_cursor = 0;
+                // If switching to Simple, clear name
+                if *ws_type == WorkspaceType::Simple {
+                    name.clear();
+                    *name_cursor = 0;
                 }
             }
             _ => {}
@@ -289,8 +287,16 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
         return None;
     }
 
-    let field = app.active_dialog_field;
-    let (buf, cursor) = dialog_buf_and_cursor(app);
+    let field = *active_field;
+    let (buf, cursor) = match field {
+        DialogField::Name => (name as &mut String, name_cursor as &mut usize),
+        DialogField::Directory => (dir, dir_cursor),
+        DialogField::Description => (desc, desc_cursor),
+        DialogField::Prompt => (prompt, prompt_cursor),
+        DialogField::KanbanPath => (kanban, kanban_cursor),
+        DialogField::Group => (group, group_cursor),
+        DialogField::Type => return None,
+    };
     let validator = |c: char| -> bool {
         match field {
             DialogField::Name => {
@@ -304,18 +310,21 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
 }
 
 pub(super) fn handle_confirm_close_tab_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::ConfirmCloseTab { target }) = app.active_dialog else {
+        return None;
+    };
+
     match key.code {
         KeyCode::Char('y') | KeyCode::Char('Y') => {
-            if let Some(idx) = app.close_tab_target.take()
-                && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-            {
-                ws.close_tab(idx);
+            if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+                ws.close_tab(target);
             }
+            app.active_dialog = None;
             app.mode = AppMode::Normal;
             None
         }
         KeyCode::Char('n') | KeyCode::Char('N') => {
-            app.close_tab_target = None;
+            app.active_dialog = None;
             app.mode = AppMode::Normal;
             None
         }
@@ -327,9 +336,11 @@ pub(super) fn handle_confirm_quit_input(app: &mut App, key: KeyEvent) -> Option<
     match key.code {
         KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
             app.should_quit = true;
+            app.active_dialog = None;
             None
         }
         KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+            app.active_dialog = None;
             app.mode = AppMode::Normal;
             None
         }
@@ -338,21 +349,25 @@ pub(super) fn handle_confirm_quit_input(app: &mut App, key: KeyEvent) -> Option<
 }
 
 pub(super) fn handle_confirm_delete_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::ConfirmDelete { target }) = app.active_dialog else {
+        return None;
+    };
+
     match key.code {
         KeyCode::Char('y') | KeyCode::Char('Y') => {
-            let target = app.delete_target.take();
+            app.active_dialog = None;
             app.mode = AppMode::Normal;
             app.active_pane = ActivePane::WorkspaceList;
-            target.map(Action::DeleteWorkspace)
+            Some(Action::DeleteWorkspace(target))
         }
         KeyCode::Char('n') | KeyCode::Char('N') => {
-            let target = app.delete_target.take();
+            app.active_dialog = None;
             app.mode = AppMode::Normal;
             app.active_pane = ActivePane::WorkspaceList;
-            target.map(Action::RemoveFromList)
+            Some(Action::RemoveFromList(target))
         }
         KeyCode::Esc => {
-            app.delete_target = None;
+            app.active_dialog = None;
             app.mode = AppMode::Normal;
             app.active_pane = ActivePane::WorkspaceList;
             None
@@ -362,26 +377,28 @@ pub(super) fn handle_confirm_delete_input(app: &mut App, key: KeyEvent) -> Optio
 }
 
 pub(super) fn handle_commit_message_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::CommitMessage { ref mut buffer }) = app.active_dialog else {
+        return None;
+    };
+
     match key.code {
         KeyCode::Enter => {
-            let message = app.commit_msg_buffer.clone();
+            let message = buffer.clone();
             if message.is_empty() {
                 app.status_message = Some("Commit message cannot be empty".into());
                 return None;
             }
-            app.commit_msg_buffer.clear();
+            app.active_dialog = None;
             app.mode = AppMode::Normal;
             return Some(Action::GitCommit(message));
         }
         KeyCode::Esc => {
-            app.commit_msg_buffer.clear();
+            app.active_dialog = None;
             app.mode = AppMode::Normal;
         }
         _ => {
-            // Commit message uses a simple cursor-at-end model
-            let buf = &mut app.commit_msg_buffer;
-            let mut cursor = buf.chars().count();
-            handle_text_input(buf, &mut cursor, key, |c| !c.is_control());
+            let mut cursor = buffer.chars().count();
+            handle_text_input(buffer, &mut cursor, key, |c| !c.is_control());
         }
     }
     None
@@ -390,14 +407,17 @@ pub(super) fn handle_commit_message_input(app: &mut App, key: KeyEvent) -> Optio
 pub(super) fn handle_confirm_merge_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     match key.code {
         KeyCode::Char('m') => {
+            app.active_dialog = None;
             app.mode = AppMode::Normal;
             Some(Action::GitMerge(MergeStrategy::Merge))
         }
         KeyCode::Char('r') => {
+            app.active_dialog = None;
             app.mode = AppMode::Normal;
             Some(Action::GitMerge(MergeStrategy::Rebase))
         }
         KeyCode::Esc => {
+            app.active_dialog = None;
             app.mode = AppMode::Normal;
             None
         }
@@ -408,29 +428,93 @@ pub(super) fn handle_confirm_merge_input(app: &mut App, key: KeyEvent) -> Option
 pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     match key.code {
         KeyCode::Char('1') => {
+            app.active_dialog = None;
             app.mode = AppMode::Normal;
             Some(Action::SpawnTab(AIProvider::Claude))
         }
         KeyCode::Char('2') => {
+            app.active_dialog = None;
             app.mode = AppMode::Normal;
             Some(Action::SpawnTab(AIProvider::Gemini))
         }
         KeyCode::Char('3') => {
+            app.active_dialog = None;
             app.mode = AppMode::Normal;
             Some(Action::SpawnTab(AIProvider::Codex))
         }
         KeyCode::Char('4') => {
+            app.active_dialog = None;
             app.mode = AppMode::Normal;
             Some(Action::SpawnTab(AIProvider::Shell))
         }
         KeyCode::Char('5') => {
+            app.active_dialog = None;
             app.mode = AppMode::Normal;
             Some(Action::SpawnTab(AIProvider::Kanban))
         }
         KeyCode::Esc => {
+            app.active_dialog = None;
             app.mode = AppMode::Normal;
             None
         }
         _ => None,
     }
+}
+
+pub(super) fn handle_help_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::Help { ref mut scroll }) = app.active_dialog else {
+        return None;
+    };
+
+    if app.config.matches_help(key, "down") || app.config.matches_help(key, "down_alt") {
+        *scroll = scroll.saturating_add(1);
+    } else if app.config.matches_help(key, "up") || app.config.matches_help(key, "up_alt") {
+        *scroll = scroll.saturating_sub(1);
+    } else if app.config.matches_help(key, "page_down") {
+        *scroll = scroll.saturating_add(10);
+    } else if app.config.matches_help(key, "page_up") {
+        *scroll = scroll.saturating_sub(10);
+    } else if app.config.matches_help(key, "scroll_top") {
+        *scroll = 0;
+    } else if app.config.matches_help(key, "scroll_bottom") {
+        *scroll = u16::MAX;
+    } else if app.config.matches_help(key, "exit")
+        || app.config.matches_help(key, "exit_alt")
+        || app.config.matches_help(key, "exit_help")
+    {
+        app.active_dialog = None;
+        app.mode = AppMode::Normal;
+    }
+    None
+}
+
+pub(super) fn handle_about_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    if app.config.matches_about(key, "exit") {
+        app.active_dialog = None;
+        app.mode = AppMode::Normal;
+    }
+    None
+}
+
+pub(super) fn handle_workspace_info_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::WorkspaceInfo { ref mut hscroll }) = app.active_dialog else {
+        return None;
+    };
+
+    if app.config.matches_workspace_info(key, "right")
+        || app.config.matches_workspace_info(key, "right_alt")
+    {
+        *hscroll = hscroll.saturating_add(4);
+    } else if app.config.matches_workspace_info(key, "left")
+        || app.config.matches_workspace_info(key, "left_alt")
+    {
+        *hscroll = hscroll.saturating_sub(4);
+    } else if app.config.matches_workspace_info(key, "exit")
+        || app.config.matches_workspace_info(key, "exit_info")
+    {
+        app.active_dialog = None;
+        app.mode = AppMode::Normal;
+        let _ = crossterm::execute!(std::io::stderr(), crossterm::event::EnableMouseCapture);
+    }
+    None
 }

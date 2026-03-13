@@ -2,6 +2,7 @@ mod action;
 mod app;
 mod clipboard;
 mod config;
+mod dialog_state;
 mod event_loop;
 mod helpers;
 mod input;
