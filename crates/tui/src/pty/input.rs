@@ -30,6 +30,7 @@ pub fn key_to_bytes(key: KeyEvent) -> Option<Vec<u8>> {
         KeyCode::Enter => Some(vec![13]),      // CR
         KeyCode::Backspace => Some(vec![127]), // DEL
         KeyCode::Tab => Some(vec![9]),
+        KeyCode::BackTab => Some(b"\x1b[Z".to_vec()), // Shift+Tab
         KeyCode::Esc => Some(vec![27]),
         KeyCode::Up => Some(b"\x1b[A".to_vec()),
         KeyCode::Down => Some(b"\x1b[B".to_vec()),
