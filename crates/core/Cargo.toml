@@ -1,6 +1,6 @@
 [package]
 name = "piki-core"
-version = "0.99.0"
+version = "1.0.0-beta"
 edition = "2024"
 
 [dependencies]
