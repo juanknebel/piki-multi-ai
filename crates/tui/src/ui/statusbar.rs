@@ -235,6 +235,26 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             ),
             (cfg.get_binding("diff", "exit"), "close"),
         ],
+        AppMode::Logs => vec![
+            (
+                format!(
+                    "{}/{}",
+                    cfg.get_binding("logs", "up"),
+                    cfg.get_binding("logs", "down")
+                ),
+                "scroll",
+            ),
+            (
+                format!(
+                    "{}/{}",
+                    cfg.get_binding("logs", "page_up"),
+                    cfg.get_binding("logs", "page_down")
+                ),
+                "page",
+            ),
+            ("0-5".to_string(), "filter level"),
+            (cfg.get_binding("logs", "exit"), "close"),
+        ],
         AppMode::Dashboard => vec![
             (
                 format!(

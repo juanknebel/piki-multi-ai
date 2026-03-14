@@ -598,6 +598,36 @@ pub(super) fn handle_about_input(app: &mut App, key: KeyEvent) -> Option<Action>
     None
 }
 
+pub(super) fn handle_logs_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::Logs {
+        ref mut scroll,
+        ref mut level_filter,
+    }) = app.active_dialog
+    else {
+        return None;
+    };
+
+    if app.config.matches_logs(key, "down") || app.config.matches_logs(key, "down_alt") {
+        *scroll = scroll.saturating_add(1);
+    } else if app.config.matches_logs(key, "up") || app.config.matches_logs(key, "up_alt") {
+        *scroll = scroll.saturating_sub(1);
+    } else if app.config.matches_logs(key, "page_down") {
+        *scroll = scroll.saturating_add(10);
+    } else if app.config.matches_logs(key, "page_up") {
+        *scroll = scroll.saturating_sub(10);
+    } else if app.config.matches_logs(key, "scroll_top") {
+        *scroll = 0;
+    } else if app.config.matches_logs(key, "scroll_bottom") {
+        *scroll = u16::MAX;
+    } else if let KeyCode::Char(c @ '0'..='5') = key.code {
+        *level_filter = (c as u8) - b'0';
+    } else if app.config.matches_logs(key, "exit") || app.config.matches_logs(key, "exit_alt") {
+        app.active_dialog = None;
+        app.mode = AppMode::Normal;
+    }
+    None
+}
+
 pub(super) fn handle_workspace_info_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     let Some(DialogState::WorkspaceInfo { ref mut hscroll }) = app.active_dialog else {
         return None;

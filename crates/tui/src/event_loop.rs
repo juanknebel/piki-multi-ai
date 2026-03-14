@@ -52,9 +52,11 @@ fn process_refresh_result(app: &mut App, result: app::RefreshResult) {
 pub(crate) async fn run(
     mut terminal: DefaultTerminal,
     preflight_warnings: Vec<String>,
+    log_buffer: crate::log_buffer::LogBuffer,
 ) -> anyhow::Result<()> {
     let manager = piki_core::workspace::WorkspaceManager::new();
     let mut app = App::new();
+    app.log_buffer = log_buffer;
     app.sysinfo = piki_core::sysinfo::spawn_sysinfo_poller();
     app.theme = theme::load();
 

@@ -110,6 +110,8 @@ pub enum AppMode {
     ConfirmQuit,
     /// Workspace dashboard overview
     Dashboard,
+    /// Internal log viewer
+    Logs,
 }
 
 /// Which pane is currently selected / focused
@@ -557,6 +559,8 @@ pub struct App {
     pub theme: Theme,
     pub selection: Option<Selection>,
     pub terminal_inner_area: Option<Rect>,
+    /// In-memory log ring buffer for the log viewer overlay
+    pub log_buffer: crate::log_buffer::LogBuffer,
     /// Pre-formatted system info string (CPU, RAM, battery, time)
     pub sysinfo: std::sync::Arc<parking_lot::Mutex<String>>,
     /// Sidebar width as percentage (10..=90)
@@ -615,6 +619,7 @@ impl App {
             mode: AppMode::Normal,
             active_pane: ActivePane::WorkspaceList,
             interacting: false,
+            log_buffer: crate::log_buffer::new_buffer(),
             workspaces: Vec::new(),
             active_workspace: 0,
             selected_workspace: 0,

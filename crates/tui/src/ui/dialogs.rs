@@ -387,6 +387,10 @@ pub(super) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
             "    {:<13} Dashboard",
             cfg.get_binding("navigation", "dashboard")
         ),
+        format!(
+            "    {:<13} Logs",
+            cfg.get_binding("navigation", "logs")
+        ),
         format!("    {:<13} Quit", cfg.get_binding("navigation", "quit")),
         "".to_string(),
         "  Interaction mode (green border)".to_string(),
@@ -1074,6 +1078,110 @@ pub(super) fn render_confirm_merge_dialog(frame: &mut Frame, area: Rect, app: &A
     ];
 
     let text = Paragraph::new(lines).block(popup_block("Merge", theme.new_ws_border));
+    frame.render_widget(text, popup);
+}
+
+pub(super) fn render_logs_overlay(frame: &mut Frame, area: Rect, app: &App) {
+    let (log_scroll, level_filter) = match app.active_dialog {
+        Some(DialogState::Logs {
+            scroll,
+            level_filter,
+        }) => (scroll, level_filter),
+        _ => (u16::MAX, 0),
+    };
+
+    let width = area.width * 90 / 100;
+    let height = area.height * 85 / 100;
+    let popup = clear_popup(frame, area, width.max(40), height.max(10));
+    let inner_height = popup.height.saturating_sub(3) as usize; // borders + footer
+
+    // Read log entries and filter by level
+    let buf = app.log_buffer.lock();
+    let filtered: Vec<_> = buf
+        .iter()
+        .filter(|entry| {
+            if level_filter == 0 {
+                return true;
+            }
+            let entry_num = match entry.level {
+                tracing::Level::ERROR => 1,
+                tracing::Level::WARN => 2,
+                tracing::Level::INFO => 3,
+                tracing::Level::DEBUG => 4,
+                tracing::Level::TRACE => 5,
+            };
+            entry_num <= level_filter
+        })
+        .collect();
+
+    let total = filtered.len();
+    let max_scroll = total.saturating_sub(inner_height);
+    let scroll = if log_scroll == u16::MAX {
+        max_scroll
+    } else {
+        (log_scroll as usize).min(max_scroll)
+    };
+
+    let mut lines: Vec<Line<'_>> = Vec::new();
+    let start = scroll;
+    let end = total.min(scroll + inner_height);
+
+    for entry in &filtered[start..end] {
+        let level_color = match entry.level {
+            tracing::Level::ERROR => Color::Red,
+            tracing::Level::WARN => Color::Yellow,
+            tracing::Level::INFO => Color::Green,
+            tracing::Level::DEBUG => Color::Cyan,
+            tracing::Level::TRACE => Color::DarkGray,
+        };
+        let level_str = match entry.level {
+            tracing::Level::ERROR => "ERROR",
+            tracing::Level::WARN => "WARN ",
+            tracing::Level::INFO => "INFO ",
+            tracing::Level::DEBUG => "DEBUG",
+            tracing::Level::TRACE => "TRACE",
+        };
+
+        lines.push(Line::from(vec![
+            Span::styled(
+                format!(" {} ", entry.timestamp),
+                Style::default().fg(Color::DarkGray),
+            ),
+            Span::styled(format!("{} ", level_str), Style::default().fg(level_color)),
+            Span::styled(
+                format!("{} ", entry.target),
+                Style::default().fg(Color::DarkGray),
+            ),
+            Span::styled(&entry.message, Style::default().fg(Color::White)),
+        ]));
+    }
+
+    // Footer
+    let filter_label = match level_filter {
+        0 => "all",
+        1 => ">=error",
+        2 => ">=warn",
+        3 => ">=info",
+        4 => ">=debug",
+        5 => ">=trace",
+        _ => "all",
+    };
+    lines.push(Line::from(Span::styled(
+        " j/k scroll  Ctrl+d/u page  g/G top/bottom  0-5 filter  Esc close",
+        Style::default().fg(Color::DarkGray),
+    )));
+
+    let title = format!(" Logs [{}] ", filter_label);
+    let scroll_indicator = if total > 0 {
+        format!(" [{}/{}] ", scroll + inner_height.min(total), total)
+    } else {
+        " [0/0] ".to_string()
+    };
+
+    let block = popup_block(&title, app.theme.help.border)
+        .title_bottom(Line::from(scroll_indicator).right_aligned());
+
+    let text = Paragraph::new(lines).block(block);
     frame.render_widget(text, popup);
 }
 

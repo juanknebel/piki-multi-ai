@@ -39,6 +39,7 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 - **Customizable configuration** — Keybindings and themes loaded from `~/.config/piki-multi/config.toml`
 - **Customizable themes** — Colors loaded from TOML files; supports named colors and hex `#rrggbb`
 - **Pre-flight checks** — Validates required (git >= 2.20) and optional dependencies (delta) at startup with clear error/warning messages
+- **In-app log viewer** — Press `Ctrl+l` to open a scrollable overlay showing the last 500 log entries from the current session; color-coded by level (ERROR=red, WARN=yellow, INFO=green, DEBUG=cyan, TRACE=gray); filter by level with `0`-`5` keys; scroll with `j`/`k`, `Ctrl+d`/`Ctrl+u`, `g`/`G`
 - **Structured logging** — File-based structured logging via `tracing` with daily rotation to `~/.local/share/piki-multi/logs/`; configurable via `--log-level` flag (trace/debug/info/warn/error)
 
 ## Prerequisites
@@ -147,8 +148,10 @@ Workspace configurations are saved automatically and restored on startup.
 |  ? untracked.txt |
 | ↑1 to push      |
 +------------------+--------------------------------------------------------+
-  [hjkl] navigate [n] new ws [r] clone ws [t] new tab [w] close tab [g/G] next/prev tab [D] dashboard
-  [c] commit [P] push [M] merge [Tab] switch ws [/] search [i] info [?] help [a] about [q] quit
+  Footer keys change per active pane. Examples:
+  Workspace list: [hjkl] navigate [enter] interact [n] new ws [r] clone ws [e] edit ws [d] delete ws [tab] switch ws [</> ] resize [?] help [q] quit
+  Git status:     [hjkl] navigate [enter] interact [/] search [c] commit [P] push [M] merge [ctrl-z] undo [</> ] resize [?] help [q] quit
+  Main panel:     [hjkl] navigate [enter] interact [t] new tab [w] close tab [g/G] next/prev tab [</> ] resize [?] help [q] quit
 ```
 
 For **Project workspaces**, the STATUS panel is replaced by a SERVICES panel showing sub-directories:
@@ -198,6 +201,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `t` | New tab (opens provider selection: 1=Claude, 2=Gemini, 3=OpenCode, 4=Kilo, 5=Codex, 6=Shell, 7=Kanban Board) |
 | `w` | Close current tab (with confirmation dialog) |
 | `D` | Workspace dashboard overlay (bird's-eye view of all workspaces and tabs) |
+| `Ctrl+l` | Log viewer overlay (last 500 log entries, color-coded, filterable by level) |
 | `g` / `G` | Next / previous tab |
 | `<` / `>` | Resize sidebar width (±5%) |
 | `+` / `-` | Resize workspace/file split (±10%) |
@@ -231,6 +235,16 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `g` / `G` | Top / bottom |
 | `n` / `p` | Next / previous file |
 | `Esc` | Close diff |
+
+**In log viewer** (`Ctrl+l`):
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Scroll up/down |
+| `Ctrl+d` / `Ctrl+u` | Page down/up |
+| `g` / `G` | Top / bottom |
+| `0`-`5` | Filter by level (0=all, 1=error, 2=warn, 3=info, 4=debug, 5=trace) |
+| `Esc` or `Ctrl+l` | Close log viewer |
 
 **In fuzzy search** (`/` or `Ctrl+f`):
 
@@ -328,6 +342,7 @@ You can override any default keybinding in the `[keybindings]` section of `confi
 - `merge`: Merge confirmation dialog controls
 - `new_tab`: New tab dialog controls
 - `dashboard`: Dashboard overlay controls
+- `logs`: Log viewer overlay controls
 - `help` / `about` / `workspace_info`: Overlay controls
 
 Example:
@@ -407,6 +422,7 @@ crates/
       clipboard.rs       # System clipboard read/write (Wayland, X11, macOS, Windows)
       theme.rs           # Theme loading from TOML, color parsing (ratatui)
       config.rs          # Global configuration and keybindings (TOML, crossterm)
+      log_buffer.rs      # In-memory ring buffer tracing layer for log viewer
       pty/
         input.rs         # Crossterm key events -> PTY bytes
       ui/

@@ -6,6 +6,7 @@ mod dialog_state;
 mod event_loop;
 mod helpers;
 mod input;
+mod log_buffer;
 mod pty;
 mod theme;
 mod ui;
@@ -81,11 +82,21 @@ async fn main() -> anyhow::Result<()> {
         _ => tracing_subscriber::filter::LevelFilter::INFO,
     };
 
-    tracing_subscriber::fmt()
+    use tracing_subscriber::prelude::*;
+
+    let log_buffer = log_buffer::new_buffer();
+
+    let fmt_layer = tracing_subscriber::fmt::layer()
         .with_writer(non_blocking)
         .with_ansi(false)
-        .with_target(true)
-        .with_max_level(level_filter)
+        .with_target(true);
+
+    let memory_layer = log_buffer::MemoryLayer::new(std::sync::Arc::clone(&log_buffer));
+
+    tracing_subscriber::registry()
+        .with(fmt_layer)
+        .with(memory_layer)
+        .with(level_filter)
         .init();
 
     tracing::info!(log_level = %cli.log_level, "piki-multi-ai starting");
@@ -136,7 +147,7 @@ async fn main() -> anyhow::Result<()> {
             )
         )?;
     }
-    let result = event_loop::run(terminal, preflight.warnings).await;
+    let result = event_loop::run(terminal, preflight.warnings, log_buffer).await;
     if kitty_keyboard {
         crossterm::execute!(
             std::io::stderr(),

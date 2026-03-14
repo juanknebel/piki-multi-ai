@@ -74,6 +74,8 @@ pub struct Keybindings {
     pub new_tab: HashMap<String, String>,
     #[serde(default = "default_dashboard")]
     pub dashboard: HashMap<String, String>,
+    #[serde(default = "default_logs")]
+    pub logs: HashMap<String, String>,
 }
 
 impl Default for Keybindings {
@@ -95,6 +97,7 @@ impl Default for Keybindings {
             merge: default_merge(),
             new_tab: default_new_tab(),
             dashboard: default_dashboard(),
+            logs: default_logs(),
         }
     }
 }
@@ -123,6 +126,7 @@ fn default_navigation() -> HashMap<String, String> {
     m.insert("delete_workspace".to_string(), "d".to_string());
     m.insert("clone_workspace".to_string(), "r".to_string());
     m.insert("dashboard".to_string(), "D".to_string());
+    m.insert("logs".to_string(), "ctrl-l".to_string());
     m.insert("commit".to_string(), "c".to_string());
     m.insert("merge".to_string(), "M".to_string());
     m.insert("push".to_string(), "P".to_string());
@@ -313,6 +317,21 @@ fn default_dashboard() -> HashMap<String, String> {
     m
 }
 
+fn default_logs() -> HashMap<String, String> {
+    let mut m = HashMap::new();
+    m.insert("down".to_string(), "j".to_string());
+    m.insert("up".to_string(), "k".to_string());
+    m.insert("down_alt".to_string(), "down".to_string());
+    m.insert("up_alt".to_string(), "up".to_string());
+    m.insert("page_down".to_string(), "ctrl-d".to_string());
+    m.insert("page_up".to_string(), "ctrl-u".to_string());
+    m.insert("scroll_top".to_string(), "g".to_string());
+    m.insert("scroll_bottom".to_string(), "G".to_string());
+    m.insert("exit".to_string(), "esc".to_string());
+    m.insert("exit_alt".to_string(), "ctrl-l".to_string());
+    m
+}
+
 fn default_new_tab() -> HashMap<String, String> {
     let mut m = HashMap::new();
     m.insert("exit".to_string(), "esc".to_string());
@@ -427,6 +446,14 @@ impl Config {
         }
     }
 
+    pub fn matches_logs(&self, event: KeyEvent, action: &str) -> bool {
+        if let Some(binding) = self.keybindings.logs.get(action) {
+            key_matches(event, binding)
+        } else {
+            false
+        }
+    }
+
     pub fn get_binding(&self, section: &str, action: &str) -> String {
         let binding = match section {
             "navigation" => self
@@ -525,6 +552,12 @@ impl Config {
                 .get(action)
                 .cloned()
                 .or_else(|| default_dashboard().get(action).cloned()),
+            "logs" => self
+                .keybindings
+                .logs
+                .get(action)
+                .cloned()
+                .or_else(|| default_logs().get(action).cloned()),
             _ => None,
         };
         binding.unwrap_or_else(|| "???".to_string())
