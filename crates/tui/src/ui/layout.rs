@@ -194,6 +194,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
             super::dialogs::render_confirm_close_tab_dialog(frame, area, app)
         }
         AppMode::ConfirmQuit => super::dialogs::render_confirm_quit_dialog(frame, area, app),
+        AppMode::Dashboard => super::dialogs::render_dashboard_overlay(frame, area, app),
         AppMode::InlineEdit => {} // handled by main content render
     }
 }

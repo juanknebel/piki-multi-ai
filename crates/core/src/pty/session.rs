@@ -136,6 +136,12 @@ impl PtySession {
         matches!(self.child.try_wait(), Ok(None))
     }
 
+    /// Non-mutating liveness check: returns true if the reader task is still running.
+    /// Suitable for use during rendering where only `&self` is available.
+    pub fn peek_alive(&self) -> bool {
+        !self.reader_handle.is_finished()
+    }
+
     /// Abort the reader task (call on cleanup)
     pub fn abort_reader(&self) {
         self.reader_handle.abort();

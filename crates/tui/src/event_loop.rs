@@ -7,7 +7,7 @@ use ratatui::layout::Rect;
 
 use crate::action::execute_action;
 use crate::app::{self, App};
-use crate::helpers::{shutdown, spawn_initial_shell};
+use crate::helpers::shutdown;
 use crate::input;
 use crate::{theme, ui};
 use piki_core::workspace::FileWatcher;
@@ -76,9 +76,6 @@ pub(crate) async fn run(
     let entries = ws_config::load_all();
     for entry in entries {
         let mut ws = app::Workspace::from_info(entry.into_info());
-
-        // Spawn initial Shell tab
-        spawn_initial_shell(&mut ws, app.pty_rows, app.pty_cols).await;
 
         // Start file watcher
         match FileWatcher::new(ws.path.clone(), ws.name.clone()) {
@@ -220,25 +217,40 @@ pub(crate) async fn run(
             }
         }
 
-        // Active workspace — check PTY bytes + is_alive
+        // Active workspace — check PTY bytes + is_alive for all tabs
         {
             let idx = app.active_workspace;
             if let Some(ws) = app.workspaces.get_mut(idx) {
-                let mut pty_done = false;
+                // Check bytes on active tab for redraw
                 if let Some(tab) = ws.current_tab_mut()
                     && let Some(ref mut pty) = tab.pty_session
                 {
-                    if !pty.is_alive() {
-                        pty_done = true;
-                    }
                     let current_bytes = pty.bytes_processed();
                     if current_bytes != tab.last_bytes_processed {
                         tab.last_bytes_processed = current_bytes;
                         app.needs_redraw = true;
                     }
                 }
-                if pty_done {
-                    ws.status = app::WorkspaceStatus::Done;
+                // Check is_alive for all tabs, recompute workspace status
+                let mut any_alive = false;
+                let mut any_tab = false;
+                for tab in &mut ws.tabs {
+                    if let Some(ref mut pty) = tab.pty_session {
+                        any_tab = true;
+                        if pty.is_alive() {
+                            any_alive = true;
+                        }
+                    }
+                }
+                let new_status = if any_alive {
+                    app::WorkspaceStatus::Busy
+                } else if any_tab {
+                    app::WorkspaceStatus::Done
+                } else {
+                    app::WorkspaceStatus::Idle
+                };
+                if ws.status != new_status {
+                    ws.status = new_status;
                     app.needs_redraw = true;
                 }
             }
@@ -324,15 +336,25 @@ pub(crate) async fn run(
                     if i == app.active_workspace {
                         continue;
                     }
-                    let mut pty_done = false;
-                    if let Some(tab) = ws.current_tab_mut()
-                        && let Some(ref mut pty) = tab.pty_session
-                        && !pty.is_alive()
-                    {
-                        pty_done = true;
+                    let mut any_alive = false;
+                    let mut any_tab = false;
+                    for tab in &mut ws.tabs {
+                        if let Some(ref mut pty) = tab.pty_session {
+                            any_tab = true;
+                            if pty.is_alive() {
+                                any_alive = true;
+                            }
+                        }
                     }
-                    if pty_done {
-                        ws.status = app::WorkspaceStatus::Done;
+                    let new_status = if any_alive {
+                        app::WorkspaceStatus::Busy
+                    } else if any_tab {
+                        app::WorkspaceStatus::Done
+                    } else {
+                        app::WorkspaceStatus::Idle
+                    };
+                    if ws.status != new_status {
+                        ws.status = new_status;
                         app.needs_redraw = true;
                     }
                 }

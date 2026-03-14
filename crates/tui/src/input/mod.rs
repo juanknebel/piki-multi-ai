@@ -14,7 +14,7 @@ use crate::helpers::{copy_visible_terminal, resize_all_ptys, scrollback_max};
 use self::dialog::{
     handle_about_input, handle_commit_message_input, handle_confirm_close_tab_input,
     handle_confirm_delete_input, handle_confirm_merge_input, handle_confirm_quit_input,
-    handle_edit_workspace_input, handle_help_input, handle_new_tab_input,
+    handle_dashboard_input, handle_edit_workspace_input, handle_help_input, handle_new_tab_input,
     handle_new_workspace_input, handle_workspace_info_input,
 };
 use self::editor_input::handle_inline_edit_input;
@@ -39,6 +39,7 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         AppMode::NewTab => return handle_new_tab_input(app, key),
         AppMode::ConfirmCloseTab => return handle_confirm_close_tab_input(app, key),
         AppMode::ConfirmQuit => return handle_confirm_quit_input(app, key),
+        AppMode::Dashboard => return handle_dashboard_input(app, key),
         AppMode::ConfirmDelete => return handle_confirm_delete_input(app, key),
         // Normal and Diff modes fall through to navigation/interaction handling
         AppMode::Normal | AppMode::Diff => {}
@@ -97,6 +98,14 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
     } else if app.config.matches_navigation(key, "about") {
         app.active_dialog = Some(DialogState::About);
         app.mode = AppMode::About;
+    } else if app.config.matches_navigation(key, "dashboard") {
+        if !app.workspaces.is_empty() {
+            app.active_dialog = Some(DialogState::Dashboard {
+                selected: app.active_workspace,
+                scroll_offset: 0,
+            });
+            app.mode = AppMode::Dashboard;
+        }
     } else if app.config.matches_navigation(key, "workspace_info") {
         if !app.workspaces.is_empty() {
             app.active_dialog = Some(DialogState::WorkspaceInfo { hscroll: 0 });

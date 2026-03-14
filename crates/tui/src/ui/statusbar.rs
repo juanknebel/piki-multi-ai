@@ -235,6 +235,18 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             ),
             (cfg.get_binding("diff", "exit"), "close"),
         ],
+        AppMode::Dashboard => vec![
+            (
+                format!(
+                    "{}/{}",
+                    cfg.get_binding("dashboard", "up"),
+                    cfg.get_binding("dashboard", "down")
+                ),
+                "select",
+            ),
+            (cfg.get_binding("dashboard", "select"), "switch"),
+            (cfg.get_binding("dashboard", "exit"), "close"),
+        ],
         AppMode::ConfirmCloseTab => vec![("Y".to_string(), "close"), ("N".to_string(), "cancel")],
         AppMode::ConfirmQuit => vec![("Y".to_string(), "quit"), ("N".to_string(), "cancel")],
         _ if app.interacting => {

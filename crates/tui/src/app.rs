@@ -108,6 +108,8 @@ pub enum AppMode {
     ConfirmCloseTab,
     /// Confirmation dialog for quitting the application
     ConfirmQuit,
+    /// Workspace dashboard overview
+    Dashboard,
 }
 
 /// Which pane is currently selected / focused

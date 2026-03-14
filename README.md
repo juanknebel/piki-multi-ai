@@ -10,7 +10,8 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 ## Features
 
 - **Parallel workspaces** — Run multiple AI coding sessions simultaneously, each in an isolated git worktree, pointing directly to an existing directory (Simple mode), or managing a multi-service project root (Project mode)
-- **Dynamic tabs** — Each workspace starts with a Shell tab; create additional tabs on demand (`t`) for Claude Code, Gemini CLI, OpenCode, Kilo, Codex, Kanban Board, or more shells; close tabs with `w`; cycle with `g`/`G`
+- **Dynamic tabs** — Workspaces start empty; create tabs on demand (`t`) for Claude Code, Gemini CLI, OpenCode, Kilo, Codex, Shell, or Kanban Board; close tabs with `w`; cycle with `g`/`G`
+- **Workspace dashboard** — Press `D` for a bird's-eye overview of all workspaces with their tabs, status (idle/busy/done), changed files, and ahead/behind; `j`/`k` to navigate, `Enter` to switch, `Esc` to close
 - **Live terminal rendering** — See AI assistant output in real-time with full ANSI color support via `tui-term`
 - **Interactive input** — Type directly into any AI session (Enter on the terminal pane to interact)
 - **Git branch-style naming** — Workspace names support `/`, `.`, `-`, `_` (e.g. `feature/login`, `bugfix/issue-42`)
@@ -28,7 +29,7 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 - **$EDITOR integration** — Open any file in your preferred editor (`$EDITOR` or `vi`); TUI suspends and resumes automatically
 - **Inline editor** — Edit files directly inside the TUI with a built-in text editor (cursor movement, line numbers, scroll)
 - **Clipboard support** — Paste from clipboard (`Ctrl+Shift+V`), copy visible terminal (`Ctrl+Shift+C`), and mouse drag-to-select with auto-copy; cross-platform (Wayland, X11, macOS, Windows)
-- **Workspace prompts** — Optionally provide an initial prompt when creating a workspace; the prompt is auto-sent to the active tab on creation, enabling parallel AI orchestration
+- **Workspace prompts** — Optionally provide an initial prompt when creating a workspace, stored for reference and used when spawning AI tabs
 - **Git operations** — Stage (`s`), unstage (`u`), commit (`c`), push (`P`), and merge (`M`) directly from the TUI; commit dialog with inline message input
 - **Merge/Apply changes** — Merge or rebase workspace branches into main directly from the TUI (`M`); supports merge commit and rebase strategies with conflict detection
 - **System status header** — Live CPU%, RAM usage, battery level, and date/time displayed in a top header bar (powered by `systemstat`)
@@ -101,7 +102,7 @@ Press `n` to open the New Workspace dialog. Provide:
 - **Name:** The git branch name (supports `/`, `.`, `-`, `_`). Hidden for Simple and Project workspaces — name is auto-derived from the directory.
 - **Dir:** The path to the source git repository (Worktree), the target directory (Simple), or the project root containing sub-directories (Project).
 - **Desc:** (Optional) A brief description of the task.
-- **Prompt:** (Optional) An initial prompt to auto-send to the AI provider on creation.
+- **Prompt:** (Optional) An initial prompt stored with the workspace.
 - **Kanban Path:** (Optional) Path to the Kanban board for this workspace (defaults to `~/.config/flow/boards/default`). If a local path is provided and no `board.txt` exists there, a default board with 4 columns (`todo`, `in_progress`, `in_review`, `done`) will be created automatically.
 - **Group:** (Optional) Assign the workspace to a named group. Grouped workspaces appear under collapsible headers in the sidebar.
 
@@ -130,23 +131,23 @@ Workspace configurations are saved automatically and restored on startup.
 ```
  [CPU] 12%  [RAM] 4.2/16.0G  [BAT] 85%  [TIME] 2026-03-07 14:32
 +------------------+-------------------------------------------------------+
-| WORKSPACES       |  [ Shell ]  [ Claude Code × ]    (dynamic sub-tabs)   |
+| WORKSPACES       |  [ Claude Code × ]  [ Shell × ]   (dynamic sub-tabs)  |
 |                  |-------------------------------------------------------|
 |  ▼ frontend (2)  |                                                       |
 |  ▶ ws-1 (active) |  AI assistant live terminal output                    |
-|    3 files       |  (diff opens as floating overlay)                     |
-|    ⌂ my-project  |                                                       |
+|    3 files       |  (Press [t] to open a new tab)                        |
+|    ⌂ my-project  |  (diff opens as floating overlay)                     |
 |                  |                                                       |
 |    ws-2          |                                                       |
 |  ▸ backend (1)   |                                                       |
 |------------------+                                                       |
 | STATUS           |-------------------------------------------------------|
-|  M src/auth.rs   | branch: ws-1 | 3 files | ↑1 unpushed | Shell: busy   |
+|  M src/auth.rs   | branch: ws-1 | 3 files | ↑1 unpushed | Claude: busy  |
 |  A src/new.rs    +-------------------------------------------------------+
 |  ? untracked.txt |
 | ↑1 to push      |
 +------------------+--------------------------------------------------------+
-  [hjkl] navigate [n] new ws [r] clone ws [t] new tab [w] close tab [g/G] next/prev tab
+  [hjkl] navigate [n] new ws [r] clone ws [t] new tab [w] close tab [g/G] next/prev tab [D] dashboard
   [c] commit [P] push [M] merge [Tab] switch ws [/] search [i] info [?] help [a] about [q] quit
 ```
 
@@ -195,7 +196,8 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `Tab` / `Shift+Tab` | Next / previous workspace |
 | `1`-`9` | Jump to workspace N |
 | `t` | New tab (opens provider selection: 1=Claude, 2=Gemini, 3=OpenCode, 4=Kilo, 5=Codex, 6=Shell, 7=Kanban Board) |
-| `w` | Close current tab (with confirmation dialog; initial shell tab cannot be closed) |
+| `w` | Close current tab (with confirmation dialog) |
+| `D` | Workspace dashboard overlay (bird's-eye view of all workspaces and tabs) |
 | `g` / `G` | Next / previous tab |
 | `<` / `>` | Resize sidebar width (±5%) |
 | `+` / `-` | Resize workspace/file split (±10%) |
@@ -325,6 +327,7 @@ You can override any default keybinding in the `[keybindings]` section of `confi
 - `commit`: Commit message dialog controls
 - `merge`: Merge confirmation dialog controls
 - `new_tab`: New tab dialog controls
+- `dashboard`: Dashboard overlay controls
 - `help` / `about` / `workspace_info`: Overlay controls
 
 Example:
@@ -433,8 +436,6 @@ sequenceDiagram
     Main->>App: new()
     Main->>Main: ws_config::load_all()
     loop Each restored workspace
-        Main->>PTY: spawn_initial_shell()
-        PTY->>PTY: fork + exec shell
         Main->>Watcher: new()
         Main->>App: push(workspace)
     end
@@ -450,8 +451,6 @@ sequenceDiagram
             Main->>WM: create(name, repo)
             WM->>WM: git worktree add
             WM-->>Main: Workspace { path, branch }
-            Main->>PTY: spawn_all_providers()
-            PTY->>PTY: fork + exec AI providers
             Main->>Watcher: new(path)
             Main->>App: push(workspace)
 
@@ -504,7 +503,7 @@ sequenceDiagram
 - **portable-pty** (sync) wrapped with `tokio::task::spawn_blocking` for non-blocking PTY reads
 - **vt100** parser accumulates terminal state; **tui-term** renders it as a ratatui widget
 - **ansi-to-tui** converts delta's ANSI output to `ratatui::text::Text` for the diff view
-- Each workspace starts with a single Shell tab; additional tabs (Claude, Gemini, OpenCode, Kilo, Codex, Shell) are created on demand, each with its own PTY session
+- Workspaces start with no tabs; all tabs (Claude, Gemini, OpenCode, Kilo, Codex, Shell, Kanban) are created on demand via `t`, each with its own PTY session
 - Worktrees are stored in `~/.local/share/piki-multi/worktrees/<project>/<name>` with branch names matching the workspace name exactly; Simple workspaces point directly to their source directory; Project workspaces scan sub-directories instead of running git operations
 - Event-driven architecture: `crossterm::EventStream` + `tokio::select!` for truly async event loop; key handlers return `Option<Action>`, main loop executes actions asynchronously
 - STATUS panel uses `git status --porcelain=v1` for full coverage of untracked, staged, conflicted, and renamed files

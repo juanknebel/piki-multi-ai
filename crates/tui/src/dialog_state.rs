@@ -50,4 +50,8 @@ pub enum DialogState {
     WorkspaceInfo {
         hscroll: u16,
     },
+    Dashboard {
+        selected: usize,
+        scroll_offset: usize,
+    },
 }

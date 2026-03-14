@@ -1,11 +1,10 @@
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
 
 use ratatui::DefaultTerminal;
 
 use crate::app::{self, ActivePane, App, AppMode, ToastLevel};
-use crate::helpers::{spawn_initial_shell, spawn_tab};
+use crate::helpers::spawn_tab;
 use piki_core::workspace::config as ws_config;
 use piki_core::workspace::{FileWatcher, WorkspaceManager};
 use piki_core::{AIProvider, MergeStrategy, WorkspaceType};
@@ -81,26 +80,9 @@ pub(crate) async fn execute_action(
                     let new_idx = app.workspaces.len() - 1;
                     app.switch_workspace(new_idx);
 
-                    // Spawn initial Shell tab
-                    spawn_initial_shell(&mut app.workspaces[new_idx], app.pty_rows, app.pty_cols)
-                        .await;
-
                     // Populate sub-directories for Project workspaces
                     if ws_type == WorkspaceType::Project {
                         app.workspaces[new_idx].refresh_sub_directories().await;
-                    }
-
-                    // Auto-send prompt to active tab PTY if non-empty
-                    if !prompt.is_empty() {
-                        let ws = &mut app.workspaces[new_idx];
-                        if let Some(tab) = ws.current_tab_mut()
-                            && let Some(ref mut pty) = tab.pty_session
-                        {
-                            // Small delay to let the PTY initialize
-                            tokio::time::sleep(Duration::from_millis(500)).await;
-                            let prompt_with_newline = format!("{}\n", prompt);
-                            let _ = pty.write(prompt_with_newline.as_bytes());
-                        }
                     }
 
                     // Start file watcher

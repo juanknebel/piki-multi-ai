@@ -72,6 +72,8 @@ pub struct Keybindings {
     pub merge: HashMap<String, String>,
     #[serde(default = "default_new_tab")]
     pub new_tab: HashMap<String, String>,
+    #[serde(default = "default_dashboard")]
+    pub dashboard: HashMap<String, String>,
 }
 
 impl Default for Keybindings {
@@ -92,6 +94,7 @@ impl Default for Keybindings {
             commit: default_commit(),
             merge: default_merge(),
             new_tab: default_new_tab(),
+            dashboard: default_dashboard(),
         }
     }
 }
@@ -119,6 +122,7 @@ fn default_navigation() -> HashMap<String, String> {
     m.insert("new_workspace".to_string(), "n".to_string());
     m.insert("delete_workspace".to_string(), "d".to_string());
     m.insert("clone_workspace".to_string(), "r".to_string());
+    m.insert("dashboard".to_string(), "D".to_string());
     m.insert("commit".to_string(), "c".to_string());
     m.insert("merge".to_string(), "M".to_string());
     m.insert("push".to_string(), "P".to_string());
@@ -297,6 +301,18 @@ fn default_merge() -> HashMap<String, String> {
     m
 }
 
+fn default_dashboard() -> HashMap<String, String> {
+    let mut m = HashMap::new();
+    m.insert("down".to_string(), "j".to_string());
+    m.insert("up".to_string(), "k".to_string());
+    m.insert("down_alt".to_string(), "down".to_string());
+    m.insert("up_alt".to_string(), "up".to_string());
+    m.insert("select".to_string(), "enter".to_string());
+    m.insert("exit".to_string(), "esc".to_string());
+    m.insert("exit_alt".to_string(), "D".to_string());
+    m
+}
+
 fn default_new_tab() -> HashMap<String, String> {
     let mut m = HashMap::new();
     m.insert("exit".to_string(), "esc".to_string());
@@ -403,6 +419,14 @@ impl Config {
         }
     }
 
+    pub fn matches_dashboard(&self, event: KeyEvent, action: &str) -> bool {
+        if let Some(binding) = self.keybindings.dashboard.get(action) {
+            key_matches(event, binding)
+        } else {
+            false
+        }
+    }
+
     pub fn get_binding(&self, section: &str, action: &str) -> String {
         let binding = match section {
             "navigation" => self
@@ -495,6 +519,12 @@ impl Config {
                 .get(action)
                 .cloned()
                 .or_else(|| default_new_tab().get(action).cloned()),
+            "dashboard" => self
+                .keybindings
+                .dashboard
+                .get(action)
+                .cloned()
+                .or_else(|| default_dashboard().get(action).cloned()),
             _ => None,
         };
         binding.unwrap_or_else(|| "???".to_string())

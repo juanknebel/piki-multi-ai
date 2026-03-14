@@ -506,6 +506,63 @@ pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Actio
     }
 }
 
+pub(super) fn handle_dashboard_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::Dashboard {
+        ref mut selected,
+        ref mut scroll_offset,
+    }) = app.active_dialog
+    else {
+        return None;
+    };
+
+    let count = app.workspaces.len();
+    if count == 0 {
+        app.active_dialog = None;
+        app.mode = AppMode::Normal;
+        return None;
+    }
+
+    // Compute the first visual line for each workspace (1 header + max(1, tabs) per ws)
+    let ws_first_line = |idx: usize| -> usize {
+        let mut line = 0;
+        for i in 0..idx {
+            line += 1 + app.workspaces[i].tabs.len().max(1);
+        }
+        line
+    };
+    let ws_height = |idx: usize| -> usize { 1 + app.workspaces[idx].tabs.len().max(1) };
+
+    if app.config.matches_dashboard(key, "down") || app.config.matches_dashboard(key, "down_alt") {
+        if *selected + 1 < count {
+            *selected += 1;
+        }
+        // Keep selected workspace fully visible (estimate 15 visible lines)
+        let visible = 15usize;
+        let ws_end = ws_first_line(*selected) + ws_height(*selected);
+        if ws_end > *scroll_offset + visible {
+            *scroll_offset = ws_end.saturating_sub(visible);
+        }
+    } else if app.config.matches_dashboard(key, "up")
+        || app.config.matches_dashboard(key, "up_alt")
+    {
+        *selected = selected.saturating_sub(1);
+        let ws_start = ws_first_line(*selected);
+        if ws_start < *scroll_offset {
+            *scroll_offset = ws_start;
+        }
+    } else if app.config.matches_dashboard(key, "select") {
+        let idx = *selected;
+        app.active_dialog = None;
+        app.switch_workspace(idx);
+    } else if app.config.matches_dashboard(key, "exit")
+        || app.config.matches_dashboard(key, "exit_alt")
+    {
+        app.active_dialog = None;
+        app.mode = AppMode::Normal;
+    }
+    None
+}
+
 pub(super) fn handle_help_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     let Some(DialogState::Help { ref mut scroll }) = app.active_dialog else {
         return None;
