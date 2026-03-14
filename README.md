@@ -10,7 +10,7 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 ## Features
 
 - **Parallel workspaces** — Run multiple AI coding sessions simultaneously, each in an isolated git worktree, pointing directly to an existing directory (Simple mode), or managing a multi-service project root (Project mode)
-- **Dynamic tabs** — Each workspace starts with a Shell tab; create additional tabs on demand (`t`) for Claude Code, Gemini CLI, Codex, Kanban Board, or more shells; close tabs with `w`; cycle with `g`/`G`
+- **Dynamic tabs** — Each workspace starts with a Shell tab; create additional tabs on demand (`t`) for Claude Code, Gemini CLI, OpenCode, Kilo, Codex, Kanban Board, or more shells; close tabs with `w`; cycle with `g`/`G`
 - **Live terminal rendering** — See AI assistant output in real-time with full ANSI color support via `tui-term`
 - **Interactive input** — Type directly into any AI session (Enter on the terminal pane to interact)
 - **Git branch-style naming** — Workspace names support `/`, `.`, `-`, `_` (e.g. `feature/login`, `bugfix/issue-42`)
@@ -194,7 +194,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `d` | Delete selected workspace |
 | `Tab` / `Shift+Tab` | Next / previous workspace |
 | `1`-`9` | Jump to workspace N |
-| `t` | New tab (opens provider selection: 1=Claude, 2=Gemini, 3=Codex, 4=Shell, 5=Kanban Board) |
+| `t` | New tab (opens provider selection: 1=Claude, 2=Gemini, 3=OpenCode, 4=Kilo, 5=Codex, 6=Shell, 7=Kanban Board) |
 | `w` | Close current tab (with confirmation dialog; initial shell tab cannot be closed) |
 | `g` / `G` | Next / previous tab |
 | `<` / `>` | Resize sidebar width (±5%) |
@@ -504,7 +504,7 @@ sequenceDiagram
 - **portable-pty** (sync) wrapped with `tokio::task::spawn_blocking` for non-blocking PTY reads
 - **vt100** parser accumulates terminal state; **tui-term** renders it as a ratatui widget
 - **ansi-to-tui** converts delta's ANSI output to `ratatui::text::Text` for the diff view
-- Each workspace starts with a single Shell tab; additional tabs (Claude, Gemini, Codex, Shell) are created on demand, each with its own PTY session
+- Each workspace starts with a single Shell tab; additional tabs (Claude, Gemini, OpenCode, Kilo, Codex, Shell) are created on demand, each with its own PTY session
 - Worktrees are stored in `~/.local/share/piki-multi/worktrees/<project>/<name>` with branch names matching the workspace name exactly; Simple workspaces point directly to their source directory; Project workspaces scan sub-directories instead of running git operations
 - Event-driven architecture: `crossterm::EventStream` + `tokio::select!` for truly async event loop; key handlers return `Option<Action>`, main loop executes actions asynchronously
 - STATUS panel uses `git status --porcelain=v1` for full coverage of untracked, staged, conflicted, and renamed files

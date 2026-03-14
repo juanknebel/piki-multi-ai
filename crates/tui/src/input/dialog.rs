@@ -475,14 +475,24 @@ pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Actio
         KeyCode::Char('3') => {
             app.active_dialog = None;
             app.mode = AppMode::Normal;
-            Some(Action::SpawnTab(AIProvider::Codex))
+            Some(Action::SpawnTab(AIProvider::OpenCode))
         }
         KeyCode::Char('4') => {
             app.active_dialog = None;
             app.mode = AppMode::Normal;
-            Some(Action::SpawnTab(AIProvider::Shell))
+            Some(Action::SpawnTab(AIProvider::Kilo))
         }
         KeyCode::Char('5') => {
+            app.active_dialog = None;
+            app.mode = AppMode::Normal;
+            Some(Action::SpawnTab(AIProvider::Codex))
+        }
+        KeyCode::Char('6') => {
+            app.active_dialog = None;
+            app.mode = AppMode::Normal;
+            Some(Action::SpawnTab(AIProvider::Shell))
+        }
+        KeyCode::Char('7') => {
             app.active_dialog = None;
             app.mode = AppMode::Normal;
             Some(Action::SpawnTab(AIProvider::Kanban))

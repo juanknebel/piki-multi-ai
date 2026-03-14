@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 pub enum AIProvider {
     Claude,
     Gemini,
+    OpenCode,
+    Kilo,
     Codex,
     Shell,
     Kanban,
@@ -18,6 +20,8 @@ impl AIProvider {
         match self {
             AIProvider::Claude => "claude",
             AIProvider::Gemini => "gemini",
+            AIProvider::OpenCode => "opencode",
+            AIProvider::Kilo => "kilo",
             AIProvider::Codex => "codex",
             AIProvider::Shell => "/bin/sh",
             AIProvider::Kanban => "",
@@ -37,6 +41,8 @@ impl AIProvider {
         match self {
             AIProvider::Claude => "Claude Code",
             AIProvider::Gemini => "Gemini",
+            AIProvider::OpenCode => "OpenCode",
+            AIProvider::Kilo => "Kilo",
             AIProvider::Codex => "Codex",
             AIProvider::Shell => "Shell",
             AIProvider::Kanban => "Kanban Board",
@@ -48,6 +54,8 @@ impl AIProvider {
         &[
             AIProvider::Claude,
             AIProvider::Gemini,
+            AIProvider::OpenCode,
+            AIProvider::Kilo,
             AIProvider::Codex,
             AIProvider::Shell,
             AIProvider::Kanban,

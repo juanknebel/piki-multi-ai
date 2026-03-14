@@ -903,7 +903,7 @@ pub(super) fn render_confirm_merge_dialog(frame: &mut Frame, area: Rect, app: &A
 }
 
 pub(crate) fn render_new_tab_dialog(frame: &mut Frame, area: Rect) {
-    let popup = clear_popup(frame, area, 40, 11);
+    let popup = clear_popup(frame, area, 40, 13);
 
     let lines = vec![
         Line::from(""),
@@ -911,9 +911,11 @@ pub(crate) fn render_new_tab_dialog(frame: &mut Frame, area: Rect) {
         Line::from(""),
         Line::from("  [1] Claude Code"),
         Line::from("  [2] Gemini"),
-        Line::from("  [3] Codex"),
-        Line::from("  [4] Shell"),
-        Line::from("  [5] Kanban Board"),
+        Line::from("  [3] OpenCode"),
+        Line::from("  [4] Kilo"),
+        Line::from("  [5] Codex"),
+        Line::from("  [6] Shell"),
+        Line::from("  [7] Kanban Board"),
         Line::from(""),
         Line::from("  [Esc] Cancel"),
     ];
