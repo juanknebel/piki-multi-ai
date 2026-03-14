@@ -40,23 +40,6 @@ pub fn run_preflight_checks() -> PreflightResult {
         }
     }
 
-    // Optional tools
-    check_optional(
-        &mut warnings,
-        "claude",
-        "AI assistant (claude) not found — Claude tabs will fail to spawn",
-    );
-    check_optional(
-        &mut warnings,
-        "gemini",
-        "AI assistant (gemini) not found — Gemini tabs will fail to spawn",
-    );
-    check_optional(
-        &mut warnings,
-        "codex",
-        "AI assistant (codex) not found — Codex tabs will fail to spawn",
-    );
-
     // delta (optional, affects diff display)
     if Command::new("delta").arg("--version").output().is_err()
         || Command::new("delta")
@@ -69,15 +52,6 @@ pub fn run_preflight_checks() -> PreflightResult {
     }
 
     PreflightResult { errors, warnings }
-}
-
-fn check_optional(warnings: &mut Vec<String>, cmd: &str, message: &str) {
-    match Command::new(cmd).arg("--version").output() {
-        Ok(output) if output.status.success() => {}
-        _ => {
-            warnings.push(message.to_string());
-        }
-    }
 }
 
 /// Parse "git version X.Y.Z" into (major, minor).
