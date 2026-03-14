@@ -244,12 +244,22 @@ pub(crate) async fn execute_action(
         }
         Action::OpenEditor(path) => {
             // Suspend TUI, open $EDITOR, restore TUI
-            crossterm::execute!(std::io::stderr(), crossterm::event::DisableMouseCapture)?;
+            crossterm::execute!(
+                std::io::stderr(),
+                crossterm::event::PopKeyboardEnhancementFlags,
+                crossterm::event::DisableMouseCapture
+            )?;
             ratatui::restore();
             let editor_cmd = std::env::var("EDITOR").unwrap_or_else(|_| "vi".to_string());
             let status = std::process::Command::new(&editor_cmd).arg(&path).status();
             *terminal = ratatui::init();
-            crossterm::execute!(std::io::stderr(), crossterm::event::EnableMouseCapture)?;
+            crossterm::execute!(
+                std::io::stderr(),
+                crossterm::event::EnableMouseCapture,
+                crossterm::event::PushKeyboardEnhancementFlags(
+                    crossterm::event::KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
+                )
+            )?;
             match status {
                 Ok(s) if s.success() => {
                     if let Some(ws) = app.current_workspace_mut() {
@@ -728,11 +738,21 @@ pub(crate) async fn execute_action(
             }
         },
         Action::OpenMdr(path) => {
-            crossterm::execute!(std::io::stderr(), crossterm::event::DisableMouseCapture)?;
+            crossterm::execute!(
+                std::io::stderr(),
+                crossterm::event::PopKeyboardEnhancementFlags,
+                crossterm::event::DisableMouseCapture
+            )?;
             ratatui::restore();
             let status = std::process::Command::new("mdr").arg(&path).status();
             *terminal = ratatui::init();
-            crossterm::execute!(std::io::stderr(), crossterm::event::EnableMouseCapture)?;
+            crossterm::execute!(
+                std::io::stderr(),
+                crossterm::event::EnableMouseCapture,
+                crossterm::event::PushKeyboardEnhancementFlags(
+                    crossterm::event::KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
+                )
+            )?;
             match status {
                 Ok(s) if s.success() => {
                     app.status_message = Some(format!("mdr: {}", path.display()));

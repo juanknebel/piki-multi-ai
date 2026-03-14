@@ -271,6 +271,14 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | Drag on border | Resize pane split |
 | Drag in terminal | Select text (auto-copies on release) |
 
+**Terminal input:**
+
+| Key | Action |
+|-----|--------|
+| `Shift+Enter` | Insert newline (requires Kitty keyboard protocol support) |
+| `Ctrl+Enter` | Insert newline (fallback for terminals without Kitty protocol) |
+| `Enter` | Submit / send input |
+
 **Clipboard:**
 
 | Key | Action |

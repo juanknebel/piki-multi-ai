@@ -103,9 +103,24 @@ async fn main() -> anyhow::Result<()> {
         tracing::warn!("{}", warning);
     }
 
+    // Check if terminal supports the Kitty keyboard protocol (for Shift+Enter detection)
+    let kitty_keyboard = crossterm::terminal::supports_keyboard_enhancement()
+        .unwrap_or(false);
+    if kitty_keyboard {
+        tracing::info!("terminal supports Kitty keyboard protocol");
+    } else {
+        tracing::info!("terminal does not support Kitty keyboard protocol; use Ctrl+Enter for newline");
+    }
+
     // Install panic hook that restores terminal before printing panic
     let original_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |panic_info| {
+        if kitty_keyboard {
+            let _ = crossterm::execute!(
+                std::io::stderr(),
+                crossterm::event::PopKeyboardEnhancementFlags
+            );
+        }
         let _ = crossterm::execute!(std::io::stderr(), crossterm::event::DisableMouseCapture);
         ratatui::restore();
         original_hook(panic_info);
@@ -113,7 +128,21 @@ async fn main() -> anyhow::Result<()> {
 
     let terminal = ratatui::init();
     crossterm::execute!(std::io::stderr(), crossterm::event::EnableMouseCapture)?;
+    if kitty_keyboard {
+        crossterm::execute!(
+            std::io::stderr(),
+            crossterm::event::PushKeyboardEnhancementFlags(
+                crossterm::event::KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
+            )
+        )?;
+    }
     let result = event_loop::run(terminal, preflight.warnings).await;
+    if kitty_keyboard {
+        crossterm::execute!(
+            std::io::stderr(),
+            crossterm::event::PopKeyboardEnhancementFlags
+        )?;
+    }
     crossterm::execute!(std::io::stderr(), crossterm::event::DisableMouseCapture)?;
     ratatui::restore();
     tracing::info!("piki-multi-ai shutdown");
