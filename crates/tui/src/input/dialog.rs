@@ -98,11 +98,20 @@ pub(super) fn handle_edit_workspace_input(app: &mut App, key: KeyEvent) -> Optio
     };
 
     match key.code {
-        KeyCode::Tab | KeyCode::BackTab => {
+        KeyCode::Tab => {
             *active_field = match *active_field {
                 DialogField::KanbanPath => DialogField::Prompt,
                 DialogField::Prompt => DialogField::Group,
                 DialogField::Group => DialogField::KanbanPath,
+                _ => DialogField::KanbanPath,
+            };
+            return None;
+        }
+        KeyCode::BackTab => {
+            *active_field = match *active_field {
+                DialogField::KanbanPath => DialogField::Group,
+                DialogField::Prompt => DialogField::KanbanPath,
+                DialogField::Group => DialogField::Prompt,
                 _ => DialogField::KanbanPath,
             };
             return None;
@@ -173,10 +182,10 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
     };
 
     match key.code {
-        KeyCode::Tab | KeyCode::BackTab => {
-            let is_simple = *ws_type == WorkspaceType::Simple;
+        KeyCode::Tab => {
+            let hide_name = *ws_type != WorkspaceType::Worktree;
             *active_field = match *active_field {
-                DialogField::Type if is_simple => DialogField::Directory,
+                DialogField::Type if hide_name => DialogField::Directory,
                 DialogField::Type => DialogField::Name,
                 DialogField::Name => DialogField::Directory,
                 DialogField::Directory => DialogField::Description,
@@ -184,6 +193,20 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
                 DialogField::Prompt => DialogField::KanbanPath,
                 DialogField::KanbanPath => DialogField::Group,
                 DialogField::Group => DialogField::Type,
+            };
+            return None;
+        }
+        KeyCode::BackTab => {
+            let hide_name = *ws_type != WorkspaceType::Worktree;
+            *active_field = match *active_field {
+                DialogField::Type => DialogField::Group,
+                DialogField::Name => DialogField::Type,
+                DialogField::Directory if hide_name => DialogField::Type,
+                DialogField::Directory => DialogField::Name,
+                DialogField::Description => DialogField::Directory,
+                DialogField::Prompt => DialogField::Description,
+                DialogField::KanbanPath => DialogField::Prompt,
+                DialogField::Group => DialogField::KanbanPath,
             };
             return None;
         }
@@ -205,8 +228,8 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
             };
             let ws_type_val = *ws_type;
 
-            // For Simple workspaces, derive name from directory basename
-            let ws_name = if ws_type_val == WorkspaceType::Simple {
+            // For Simple/Project workspaces, derive name from directory basename
+            let ws_name = if ws_type_val != WorkspaceType::Worktree {
                 if name.is_empty() {
                     PathBuf::from(&dir_raw)
                         .file_name()
@@ -220,7 +243,7 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
             };
 
             if ws_name.is_empty() || dir_raw.is_empty() {
-                let msg = if ws_type_val == WorkspaceType::Simple {
+                let msg = if ws_type_val != WorkspaceType::Worktree {
                     "Directory is required"
                 } else {
                     "Name and directory are required"
@@ -268,16 +291,28 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
         _ => {}
     }
 
-    // Type field: toggle with Space/Left/Right, not a text input
+    // Type field: cycle with Space/Right (visual left→right) or Left (reverse)
+    // Visual order: Simple  Worktree  Project
     if *active_field == DialogField::Type {
         match key.code {
-            KeyCode::Char(' ') | KeyCode::Left | KeyCode::Right => {
+            KeyCode::Char(' ') | KeyCode::Right => {
                 *ws_type = match *ws_type {
-                    WorkspaceType::Worktree => WorkspaceType::Simple,
                     WorkspaceType::Simple => WorkspaceType::Worktree,
+                    WorkspaceType::Worktree => WorkspaceType::Project,
+                    WorkspaceType::Project => WorkspaceType::Simple,
                 };
-                // If switching to Simple, clear name
-                if *ws_type == WorkspaceType::Simple {
+                if *ws_type != WorkspaceType::Worktree {
+                    name.clear();
+                    *name_cursor = 0;
+                }
+            }
+            KeyCode::Left => {
+                *ws_type = match *ws_type {
+                    WorkspaceType::Simple => WorkspaceType::Project,
+                    WorkspaceType::Worktree => WorkspaceType::Simple,
+                    WorkspaceType::Project => WorkspaceType::Worktree,
+                };
+                if *ws_type != WorkspaceType::Worktree {
                     name.clear();
                     *name_cursor = 0;
                 }

@@ -143,7 +143,7 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
                 group_cursor: group.chars().count(),
                 group,
                 ws_type,
-                active_field: DialogField::Name,
+                active_field: DialogField::Type,
             });
             app.mode = AppMode::NewWorkspace;
         }
@@ -162,7 +162,7 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
             group: String::new(),
             group_cursor: 0,
             ws_type: piki_core::WorkspaceType::default(),
-            active_field: DialogField::Name,
+            active_field: DialogField::Type,
         });
         app.mode = AppMode::NewWorkspace;
     } else if app.config.matches_navigation(key, "delete_workspace") {
@@ -173,19 +173,25 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
             app.mode = AppMode::ConfirmDelete;
         }
     } else if app.config.matches_navigation(key, "commit") {
-        if app.current_workspace().is_some() {
+        if let Some(ws) = app.current_workspace()
+            && ws.info.workspace_type != piki_core::WorkspaceType::Project
+        {
             app.active_dialog = Some(DialogState::CommitMessage {
                 buffer: String::new(),
             });
             app.mode = AppMode::CommitMessage;
         }
     } else if app.config.matches_navigation(key, "merge") {
-        if app.current_workspace().is_some() {
+        if let Some(ws) = app.current_workspace()
+            && ws.info.workspace_type != piki_core::WorkspaceType::Project
+        {
             app.active_dialog = Some(DialogState::ConfirmMerge);
             app.mode = AppMode::ConfirmMerge;
         }
     } else if app.config.matches_navigation(key, "push") {
-        if app.current_workspace().is_some() {
+        if let Some(ws) = app.current_workspace()
+            && ws.info.workspace_type != piki_core::WorkspaceType::Project
+        {
             return Some(Action::GitPush);
         }
     } else if app.config.matches_navigation(key, "undo") {

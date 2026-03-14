@@ -64,16 +64,32 @@ pub(crate) fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
                     } else {
                         String::new()
                     };
-                    let sync_info = match ws.ahead_behind {
-                        Some((ahead, behind)) if ahead > 0 && behind > 0 => {
-                            format!(" | ↑{} ↓{}", ahead, behind)
-                        }
-                        Some((ahead, 0)) if ahead > 0 => format!(" | ↑{} unpushed", ahead),
-                        Some((0, behind)) if behind > 0 => format!(" | ↓{} behind", behind),
-                        _ => String::new(),
-                    };
                     let tab_label = ws.current_tab().map(|t| t.provider.label()).unwrap_or("—");
-                    Span::styled(
+                    let is_project = ws.info.workspace_type == piki_core::WorkspaceType::Project;
+                    let info_str = if is_project {
+                        format!(
+                            " [{}] project | {} services | {}: {} | ws {}/{}{}",
+                            mode_label,
+                            ws.file_count(),
+                            tab_label,
+                            ws.status_label(),
+                            app.active_workspace + 1,
+                            app.workspaces.len(),
+                            scroll_info,
+                        )
+                    } else {
+                        let sync_info = match ws.ahead_behind {
+                            Some((ahead, behind)) if ahead > 0 && behind > 0 => {
+                                format!(" | ↑{} ↓{}", ahead, behind)
+                            }
+                            Some((ahead, 0)) if ahead > 0 => {
+                                format!(" | ↑{} unpushed", ahead)
+                            }
+                            Some((0, behind)) if behind > 0 => {
+                                format!(" | ↓{} behind", behind)
+                            }
+                            _ => String::new(),
+                        };
                         format!(
                             " [{}] branch: {} | {} files{} | {}: {} | ws {}/{}{}",
                             mode_label,
@@ -85,9 +101,9 @@ pub(crate) fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
                             app.active_workspace + 1,
                             app.workspaces.len(),
                             scroll_info,
-                        ),
-                        Style::default().bg(mode_color).fg(theme.mode_fg),
-                    )
+                        )
+                    };
+                    Span::styled(info_str, Style::default().bg(mode_color).fg(theme.mode_fg))
                 } else {
                     Span::styled(
                         format!(" [{}] No active workspace", mode_label),
@@ -223,21 +239,39 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
         AppMode::ConfirmQuit => vec![("Y".to_string(), "quit"), ("N".to_string(), "cancel")],
         _ if app.interacting => {
             if app.active_pane == ActivePane::GitStatus {
-                vec![
-                    (
-                        format!(
-                            "{}/{}",
-                            cfg.get_binding("file_list", "up"),
-                            cfg.get_binding("file_list", "down")
+                let is_project = app
+                    .current_workspace()
+                    .is_some_and(|ws| ws.info.workspace_type == piki_core::WorkspaceType::Project);
+                if is_project {
+                    vec![
+                        (
+                            format!(
+                                "{}/{}",
+                                cfg.get_binding("file_list", "up"),
+                                cfg.get_binding("file_list", "down")
+                            ),
+                            "select",
                         ),
-                        "select",
-                    ),
-                    (cfg.get_binding("file_list", "diff"), "diff"),
-                    (cfg.get_binding("file_list", "stage"), "stage"),
-                    (cfg.get_binding("file_list", "unstage"), "unstage"),
-                    (cfg.get_binding("file_list", "edit_external"), "editor"),
-                    (cfg.get_binding("interaction", "exit_interaction"), "back"),
-                ]
+                        ("enter".to_string(), "open as workspace"),
+                        (cfg.get_binding("interaction", "exit_interaction"), "back"),
+                    ]
+                } else {
+                    vec![
+                        (
+                            format!(
+                                "{}/{}",
+                                cfg.get_binding("file_list", "up"),
+                                cfg.get_binding("file_list", "down")
+                            ),
+                            "select",
+                        ),
+                        (cfg.get_binding("file_list", "diff"), "diff"),
+                        (cfg.get_binding("file_list", "stage"), "stage"),
+                        (cfg.get_binding("file_list", "unstage"), "unstage"),
+                        (cfg.get_binding("file_list", "edit_external"), "editor"),
+                        (cfg.get_binding("interaction", "exit_interaction"), "back"),
+                    ]
+                }
             } else if app
                 .current_workspace()
                 .and_then(|ws| ws.current_tab())
@@ -310,11 +344,16 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                     keys.push((cfg.get_binding("navigation", "next_workspace"), "switch ws"));
                 }
                 ActivePane::GitStatus => {
+                    let is_project = app.current_workspace().is_some_and(|ws| {
+                        ws.info.workspace_type == piki_core::WorkspaceType::Project
+                    });
                     keys.push((cfg.get_binding("navigation", "fuzzy_search"), "search"));
-                    keys.push((cfg.get_binding("navigation", "commit"), "commit"));
-                    keys.push((cfg.get_binding("navigation", "push"), "push"));
-                    keys.push((cfg.get_binding("navigation", "merge"), "merge"));
-                    keys.push((cfg.get_binding("navigation", "undo"), "undo"));
+                    if !is_project {
+                        keys.push((cfg.get_binding("navigation", "commit"), "commit"));
+                        keys.push((cfg.get_binding("navigation", "push"), "push"));
+                        keys.push((cfg.get_binding("navigation", "merge"), "merge"));
+                        keys.push((cfg.get_binding("navigation", "undo"), "undo"));
+                    }
                 }
                 ActivePane::MainPanel => {
                     keys.push((cfg.get_binding("navigation", "new_tab"), "new tab"));

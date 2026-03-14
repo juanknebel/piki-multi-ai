@@ -18,23 +18,32 @@ const DEBOUNCE: Duration = Duration::from_millis(500);
 const PERIODIC_REFRESH: Duration = Duration::from_secs(3);
 
 fn process_refresh_result(app: &mut App, result: app::RefreshResult) {
-    for file in &result.changed_files {
-        let prefix = format!("{}@", file.path);
-        let keys_to_remove: Vec<String> = app
-            .diff_cache
-            .iter()
-            .filter(|(key, _)| key.starts_with(&prefix))
-            .map(|(key, _)| key.clone())
-            .collect();
-        for key in keys_to_remove {
-            app.diff_cache.pop(&key);
+    if let Some(ref sub_dirs) = result.sub_directories {
+        // Project workspace: update sub_directories
+        if let Some(ws) = app.workspaces.get_mut(result.workspace_idx) {
+            ws.sub_directories = sub_dirs.clone();
+            ws.dirty = false;
+            ws.last_refresh = Some(Instant::now());
         }
-    }
-    if let Some(ws) = app.workspaces.get_mut(result.workspace_idx) {
-        ws.changed_files = result.changed_files;
-        ws.ahead_behind = result.ahead_behind;
-        ws.dirty = false;
-        ws.last_refresh = Some(Instant::now());
+    } else {
+        for file in &result.changed_files {
+            let prefix = format!("{}@", file.path);
+            let keys_to_remove: Vec<String> = app
+                .diff_cache
+                .iter()
+                .filter(|(key, _)| key.starts_with(&prefix))
+                .map(|(key, _)| key.clone())
+                .collect();
+            for key in keys_to_remove {
+                app.diff_cache.pop(&key);
+            }
+        }
+        if let Some(ws) = app.workspaces.get_mut(result.workspace_idx) {
+            ws.changed_files = result.changed_files;
+            ws.ahead_behind = result.ahead_behind;
+            ws.dirty = false;
+            ws.last_refresh = Some(Instant::now());
+        }
     }
     app.refresh_pending = false;
     app.needs_redraw = true;
@@ -82,7 +91,11 @@ pub(crate) async fn run(
         }
 
         // Initial file status refresh so pre-existing changes show up
-        let _ = ws.refresh_changed_files().await;
+        if ws.info.workspace_type == piki_core::WorkspaceType::Project {
+            ws.refresh_sub_directories().await;
+        } else {
+            let _ = ws.refresh_changed_files().await;
+        }
 
         app.workspaces.push(ws);
     }
@@ -244,15 +257,40 @@ pub(crate) async fn run(
                 if should_refresh && !app.refresh_pending {
                     let path = ws.info.path.clone();
                     let tx = app.refresh_tx.clone();
+                    let is_project = ws.info.workspace_type == piki_core::WorkspaceType::Project;
                     app.refresh_pending = true;
                     tokio::spawn(async move {
-                        let files = app::get_changed_files(&path).await.unwrap_or_default();
-                        let ab = app::get_ahead_behind(&path).await;
-                        let _ = tx.send(app::RefreshResult {
-                            workspace_idx: idx,
-                            changed_files: files,
-                            ahead_behind: ab,
-                        });
+                        if is_project {
+                            // Scan sub-directories instead of git status
+                            let mut dirs = Vec::new();
+                            if let Ok(mut entries) = tokio::fs::read_dir(&path).await {
+                                while let Ok(Some(entry)) = entries.next_entry().await {
+                                    if let Ok(ft) = entry.file_type().await
+                                        && ft.is_dir()
+                                        && let Some(name) = entry.file_name().to_str()
+                                        && !name.starts_with('.')
+                                    {
+                                        dirs.push(name.to_string());
+                                    }
+                                }
+                            }
+                            dirs.sort();
+                            let _ = tx.send(app::RefreshResult {
+                                workspace_idx: idx,
+                                changed_files: Vec::new(),
+                                ahead_behind: None,
+                                sub_directories: Some(dirs),
+                            });
+                        } else {
+                            let files = app::get_changed_files(&path).await.unwrap_or_default();
+                            let ab = app::get_ahead_behind(&path).await;
+                            let _ = tx.send(app::RefreshResult {
+                                workspace_idx: idx,
+                                changed_files: files,
+                                ahead_behind: ab,
+                                sub_directories: None,
+                            });
+                        }
                     });
                 }
             }

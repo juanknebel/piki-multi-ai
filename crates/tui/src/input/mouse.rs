@@ -7,9 +7,7 @@ use crate::action::Action;
 use crate::app::{self, ActivePane, App, AppMode};
 use crate::clipboard;
 use crate::dialog_state::DialogState;
-use crate::helpers::{
-    rect_contains, resize_all_ptys, scrollback_max, subtab_index_at,
-};
+use crate::helpers::{rect_contains, resize_all_ptys, scrollback_max, subtab_index_at};
 
 /// Handle all mouse events. Returns an Action if one needs async execution.
 pub(crate) fn handle_mouse_event(
@@ -174,13 +172,55 @@ pub(crate) fn handle_mouse_event(
                         }
                     }
                 }
-                // Click on file list
+                // Click on file list / services list
                 else if rect_contains(app.file_list_area, col, row) {
                     app.active_pane = ActivePane::GitStatus;
                     let inner_y = app.file_list_area.y + 1;
                     if row >= inner_y {
                         let relative_row = (row - inner_y) as usize;
-                        if let Some(ws) = app.current_workspace()
+                        let is_project = app.current_workspace().is_some_and(|ws| {
+                            ws.info.workspace_type == piki_core::WorkspaceType::Project
+                        });
+                        if is_project {
+                            // Extract needed data before mutating app
+                            let click_data = app.current_workspace().and_then(|ws| {
+                                if relative_row < ws.sub_directories.len() {
+                                    Some((
+                                        ws.path
+                                            .join(&ws.sub_directories[relative_row])
+                                            .display()
+                                            .to_string(),
+                                        ws.prompt.clone(),
+                                        ws.kanban_path.clone().unwrap_or_default(),
+                                        ws.info.group.clone().unwrap_or_default(),
+                                    ))
+                                } else {
+                                    None
+                                }
+                            });
+                            if let Some((full_dir, prompt, kanban, group)) = click_data {
+                                app.selected_file = relative_row;
+                                if is_double_click {
+                                    app.active_dialog = Some(DialogState::NewWorkspace {
+                                        name: String::new(),
+                                        name_cursor: 0,
+                                        dir_cursor: full_dir.chars().count(),
+                                        dir: full_dir,
+                                        desc: String::new(),
+                                        desc_cursor: 0,
+                                        prompt_cursor: prompt.chars().count(),
+                                        prompt,
+                                        kanban_cursor: kanban.chars().count(),
+                                        kanban,
+                                        group_cursor: group.chars().count(),
+                                        group,
+                                        ws_type: piki_core::WorkspaceType::Simple,
+                                        active_field: crate::app::DialogField::Type,
+                                    });
+                                    app.mode = AppMode::NewWorkspace;
+                                }
+                            }
+                        } else if let Some(ws) = app.current_workspace()
                             && relative_row < ws.changed_files.len()
                         {
                             app.selected_file = relative_row;

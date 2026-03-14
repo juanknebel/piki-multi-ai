@@ -64,12 +64,13 @@ pub enum WorkspaceStatus {
     Error(String),
 }
 
-/// Type of workspace: backed by a git worktree or pointing to a directory directly
+/// Type of workspace: backed by a git worktree, pointing to a directory, or a project root
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum WorkspaceType {
     #[default]
     Worktree,
     Simple,
+    Project,
 }
 
 /// Strategy for merging a workspace branch into main

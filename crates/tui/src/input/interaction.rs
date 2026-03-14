@@ -495,6 +495,51 @@ pub(super) fn handle_filelist_interaction(app: &mut App, key: KeyEvent) -> Optio
         app.interacting = false;
         return None;
     }
+
+    // Project workspaces: navigate sub-directories, Enter opens NewWorkspace dialog
+    let is_project = app
+        .current_workspace()
+        .is_some_and(|ws| ws.info.workspace_type == piki_core::WorkspaceType::Project);
+
+    if is_project {
+        if app.config.matches_file_list(key, "down")
+            || app.config.matches_file_list(key, "down_alt")
+        {
+            app.next_file();
+        } else if app.config.matches_file_list(key, "up")
+            || app.config.matches_file_list(key, "up_alt")
+        {
+            app.prev_file();
+        } else if key.code == KeyCode::Enter
+            && let Some(ws) = app.current_workspace()
+            && let Some(dir_name) = ws.sub_directories.get(app.selected_file)
+        {
+            let full_dir = ws.path.join(dir_name).display().to_string();
+            let prompt = ws.prompt.clone();
+            let kanban = ws.kanban_path.clone().unwrap_or_default();
+            let group = ws.info.group.clone().unwrap_or_default();
+            app.active_dialog = Some(DialogState::NewWorkspace {
+                name: String::new(),
+                name_cursor: 0,
+                dir_cursor: full_dir.chars().count(),
+                dir: full_dir,
+                desc: String::new(),
+                desc_cursor: 0,
+                prompt_cursor: prompt.chars().count(),
+                prompt,
+                kanban_cursor: kanban.chars().count(),
+                kanban,
+                group_cursor: group.chars().count(),
+                group,
+                ws_type: piki_core::WorkspaceType::Simple,
+                active_field: DialogField::Type,
+            });
+            app.mode = AppMode::NewWorkspace;
+            app.interacting = false;
+        }
+        return None;
+    }
+
     if app.config.matches_file_list(key, "down") || app.config.matches_file_list(key, "down_alt") {
         app.next_file();
     } else if app.config.matches_file_list(key, "up") || app.config.matches_file_list(key, "up_alt")

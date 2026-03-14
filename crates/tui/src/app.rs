@@ -71,6 +71,8 @@ pub struct RefreshResult {
     pub workspace_idx: usize,
     pub changed_files: Vec<ChangedFile>,
     pub ahead_behind: Option<(usize, usize)>,
+    /// Sub-directories for Project workspaces (when set, replaces sub_directories instead of changed_files)
+    pub sub_directories: Option<Vec<String>>,
 }
 
 /// Main application mode
@@ -170,6 +172,8 @@ pub struct Workspace {
     pub info: piki_core::WorkspaceInfo,
     pub status: WorkspaceStatus,
     pub changed_files: Vec<ChangedFile>,
+    /// Sub-directories for Project workspaces
+    pub sub_directories: Vec<String>,
     /// Dynamic tabs, each with its own PTY session
     pub tabs: Vec<Tab>,
     /// Index of the currently active tab
@@ -209,6 +213,7 @@ impl Workspace {
             info,
             status: WorkspaceStatus::Idle,
             changed_files: Vec::new(),
+            sub_directories: Vec::new(),
             tabs: Vec::new(),
             active_tab: 0,
             next_tab_id: 0,
@@ -290,7 +295,11 @@ impl Workspace {
     }
 
     pub fn file_count(&self) -> usize {
-        self.changed_files.len()
+        if self.info.workspace_type == WorkspaceType::Project {
+            self.sub_directories.len()
+        } else {
+            self.changed_files.len()
+        }
     }
 
     pub fn status_label(&self) -> &str {
@@ -308,6 +317,26 @@ impl Workspace {
         self.ahead_behind = get_ahead_behind(&self.info.path).await;
         self.dirty = false;
         Ok(())
+    }
+
+    /// Refresh the list of immediate sub-directories (for Project workspaces).
+    pub async fn refresh_sub_directories(&mut self) {
+        let path = self.info.path.clone();
+        let mut dirs = Vec::new();
+        if let Ok(mut entries) = tokio::fs::read_dir(&path).await {
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                if let Ok(ft) = entry.file_type().await
+                    && ft.is_dir()
+                    && let Some(name) = entry.file_name().to_str()
+                    && !name.starts_with('.')
+                {
+                    dirs.push(name.to_string());
+                }
+            }
+        }
+        dirs.sort();
+        self.sub_directories = dirs;
+        self.dirty = false;
     }
 }
 
@@ -697,19 +726,20 @@ impl App {
     }
 
     pub fn next_file(&mut self) {
-        if let Some(ws) = self.current_workspace()
-            && !ws.changed_files.is_empty()
-        {
-            self.selected_file = (self.selected_file + 1) % ws.changed_files.len();
+        if let Some(ws) = self.current_workspace() {
+            let count = ws.file_count();
+            if count > 0 {
+                self.selected_file = (self.selected_file + 1) % count;
+            }
         }
     }
 
     pub fn prev_file(&mut self) {
-        if let Some(ws) = self.current_workspace()
-            && !ws.changed_files.is_empty()
-        {
-            let len = ws.changed_files.len();
-            self.selected_file = (self.selected_file + len - 1) % len;
+        if let Some(ws) = self.current_workspace() {
+            let count = ws.file_count();
+            if count > 0 {
+                self.selected_file = (self.selected_file + count - 1) % count;
+            }
         }
     }
 
@@ -978,6 +1008,10 @@ mod tests {
             }
         };
 
+        // Dialog opens on Type field
+        assert_eq!(get_field(&app), DialogField::Type);
+
+        crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
         assert_eq!(get_field(&app), DialogField::Name);
 
         crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
@@ -997,9 +1031,6 @@ mod tests {
 
         crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
         assert_eq!(get_field(&app), DialogField::Type);
-
-        crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
-        assert_eq!(get_field(&app), DialogField::Name);
     }
 
     #[test]
@@ -1008,6 +1039,9 @@ mod tests {
         // Use normal entry point to create dialog
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('n')));
         assert_eq!(app.mode, AppMode::NewWorkspace);
+
+        // Tab from Type to Name field first
+        crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
 
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('a')));
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('b')));

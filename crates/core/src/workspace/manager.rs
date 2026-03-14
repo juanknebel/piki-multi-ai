@@ -194,6 +194,30 @@ impl WorkspaceManager {
         Ok(info)
     }
 
+    /// Create a project workspace pointing to a directory with sub-services.
+    /// No git operations — the directory doesn't need to be a git repo.
+    pub async fn create_project(
+        &self,
+        name: &str,
+        description: &str,
+        prompt: &str,
+        kanban_path: Option<String>,
+        dir: &std::path::Path,
+    ) -> anyhow::Result<WorkspaceInfo> {
+        let mut info = WorkspaceInfo::new(
+            name.to_string(),
+            description.to_string(),
+            prompt.to_string(),
+            kanban_path,
+            String::new(),
+            dir.to_path_buf(),
+            dir.to_path_buf(),
+        );
+        info.workspace_type = WorkspaceType::Project;
+        tracing::info!(workspace = name, path = %dir.display(), "project workspace created");
+        Ok(info)
+    }
+
     /// Detect the main branch name (main, master, etc.) for a repository.
     pub async fn detect_main_branch(source_repo: &PathBuf) -> String {
         // Try symbolic-ref of origin/HEAD

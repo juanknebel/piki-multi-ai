@@ -141,8 +141,8 @@ pub(super) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
     };
 
     let popup_width = area.width * 70 / 100;
-    let is_simple = ws_type == WorkspaceType::Simple;
-    let popup_height = if is_simple { 17 } else { 19 };
+    let hide_name = ws_type != WorkspaceType::Worktree;
+    let popup_height = if hide_name { 17 } else { 19 };
     let popup = clear_popup(frame, area, popup_width.max(40), popup_height);
     let theme = &app.theme.dialog;
 
@@ -159,8 +159,9 @@ pub(super) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
     let group_active = active_field == DialogField::Group;
 
     let type_text = match ws_type {
-        WorkspaceType::Simple => "[Simple]  Worktree",
-        WorkspaceType::Worktree => " Simple  [Worktree]",
+        WorkspaceType::Simple => "[Simple]  Worktree   Project",
+        WorkspaceType::Worktree => " Simple  [Worktree]  Project",
+        WorkspaceType::Project => " Simple   Worktree  [Project]",
     };
 
     let mut lines: Vec<Line<'_>> = Vec::new();
@@ -171,7 +172,7 @@ pub(super) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
     ]));
     lines.push(Line::from(""));
 
-    if !is_simple {
+    if !hide_name {
         let name_active = active_field == DialogField::Name;
         lines.push(render_text_field(
             "  Name:   ",
@@ -681,6 +682,7 @@ pub(super) fn render_workspace_info_overlay(frame: &mut Frame, area: Rect, app: 
             Span::raw(match ws.info.workspace_type {
                 WorkspaceType::Simple => "Simple",
                 WorkspaceType::Worktree => "Worktree",
+                WorkspaceType::Project => "Project",
             }),
         ]),
         Line::from(vec![
@@ -742,15 +744,19 @@ pub(super) fn render_confirm_delete_dialog(frame: &mut Frame, area: Rect, app: &
 
     let ws = target.and_then(|idx| app.workspaces.get(idx));
     let ws_name = ws.map(|ws| ws.name.as_str()).unwrap_or("?");
-    let is_simple = ws
-        .map(|ws| ws.info.workspace_type == WorkspaceType::Simple)
+    let is_worktree = ws
+        .map(|ws| ws.info.workspace_type == WorkspaceType::Worktree)
         .unwrap_or(false);
 
     let mut lines = vec![
         Line::from(""),
         Line::from(vec![
             Span::styled(
-                if is_simple { "  Remove " } else { "  Delete " },
+                if is_worktree {
+                    "  Delete "
+                } else {
+                    "  Remove "
+                },
                 Style::default().fg(theme.delete_text),
             ),
             Span::styled(
@@ -764,7 +770,7 @@ pub(super) fn render_confirm_delete_dialog(frame: &mut Frame, area: Rect, app: &
         Line::from(""),
     ];
 
-    if is_simple {
+    if !is_worktree {
         lines.push(Line::from(Span::styled(
             "  [y] Yes, remove from list",
             Style::default().fg(theme.delete_yes),

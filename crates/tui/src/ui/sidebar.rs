@@ -124,12 +124,15 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                             },
                         ),
                     ]);
+                    let count_label = if ws.info.workspace_type == piki_core::WorkspaceType::Project
+                    {
+                        format!("{} services", ws.file_count())
+                    } else {
+                        format!("{} files", ws.file_count())
+                    };
                     let line2 = Line::from(vec![
                         Span::raw("   "),
-                        Span::styled(
-                            format!("{} files", ws.file_count()),
-                            Style::default().fg(detail_color),
-                        ),
+                        Span::styled(count_label, Style::default().fg(detail_color)),
                     ]);
 
                     let mut lines = vec![line1, line2];
@@ -167,6 +170,82 @@ pub(super) fn render_file_list(frame: &mut Frame, area: Rect, app: &App) {
     let border_style = pane_border_style(app, ActivePane::GitStatus);
     let theme = &app.theme.file_list;
 
+    let is_project = app
+        .current_workspace()
+        .is_some_and(|ws| ws.info.workspace_type == piki_core::WorkspaceType::Project);
+
+    if is_project {
+        render_project_file_list(frame, area, app, is_active, border_style, theme);
+    } else {
+        render_git_file_list(frame, area, app, is_active, border_style, theme);
+    }
+}
+
+fn render_project_file_list(
+    frame: &mut Frame,
+    area: Rect,
+    app: &App,
+    is_active: bool,
+    border_style: Style,
+    theme: &crate::theme::FileListTheme,
+) {
+    let block = Block::default()
+        .title(" SERVICES ")
+        .title_style(border_style)
+        .borders(Borders::ALL)
+        .border_style(border_style);
+
+    let dirs = app
+        .current_workspace()
+        .map(|ws| &ws.sub_directories[..])
+        .unwrap_or(&[]);
+
+    if dirs.is_empty() {
+        let text = Paragraph::new("  No sub-directories")
+            .style(Style::default().fg(theme.empty_text))
+            .block(block);
+        frame.render_widget(text, area);
+        return;
+    }
+
+    let visible_height = area.height.saturating_sub(2) as usize;
+    let scroll_offset = if visible_height > 0 && app.selected_file >= visible_height {
+        app.selected_file - visible_height + 1
+    } else {
+        0
+    };
+
+    let items: Vec<ListItem> = dirs
+        .iter()
+        .enumerate()
+        .skip(scroll_offset)
+        .take(visible_height)
+        .map(|(i, dir_name)| {
+            let line = Line::from(vec![
+                Span::styled("  📂 ", Style::default().fg(theme.file_path)),
+                Span::styled(dir_name.as_str(), Style::default().fg(theme.file_path)),
+            ]);
+            let style = if i == app.selected_file && is_active {
+                Style::default().bg(theme.selected_bg)
+            } else {
+                Style::default()
+            };
+            ListItem::new(line).style(style)
+        })
+        .collect();
+
+    let list = List::new(items).block(block);
+    frame.render_widget(list, area);
+}
+
+fn render_git_file_list(
+    frame: &mut Frame,
+    area: Rect,
+    app: &App,
+    is_active: bool,
+    border_style: Style,
+    theme: &crate::theme::FileListTheme,
+) {
     let ahead_title = app
         .current_workspace()
         .and_then(|ws| ws.ahead_behind)
@@ -208,7 +287,6 @@ pub(super) fn render_file_list(frame: &mut Frame, area: Rect, app: &App) {
         return;
     }
 
-    // Compute visible window: inner height minus border (top+bottom = 2 lines)
     let visible_height = area.height.saturating_sub(2) as usize;
     let scroll_offset = if visible_height > 0 && app.selected_file >= visible_height {
         app.selected_file - visible_height + 1

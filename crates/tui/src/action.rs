@@ -68,6 +68,11 @@ pub(crate) async fn execute_action(
                         .create(&name, &description, &prompt, kanban_path, &dir)
                         .await
                 }
+                WorkspaceType::Project => {
+                    manager
+                        .create_project(&name, &description, &prompt, kanban_path, &dir)
+                        .await
+                }
             };
             match result {
                 Ok(mut info) => {
@@ -79,6 +84,11 @@ pub(crate) async fn execute_action(
                     // Spawn initial Shell tab
                     spawn_initial_shell(&mut app.workspaces[new_idx], app.pty_rows, app.pty_cols)
                         .await;
+
+                    // Populate sub-directories for Project workspaces
+                    if ws_type == WorkspaceType::Project {
+                        app.workspaces[new_idx].refresh_sub_directories().await;
+                    }
 
                     // Auto-send prompt to active tab PTY if non-empty
                     if !prompt.is_empty() {
@@ -139,7 +149,8 @@ pub(crate) async fn execute_action(
         }
         Action::DeleteWorkspace(idx) => {
             if idx < app.workspaces.len() {
-                let is_simple = app.workspaces[idx].info.workspace_type == WorkspaceType::Simple;
+                let is_worktree =
+                    app.workspaces[idx].info.workspace_type == WorkspaceType::Worktree;
 
                 // Kill all PTY sessions before removing
                 for tab in &mut app.workspaces[idx].tabs {
@@ -152,7 +163,7 @@ pub(crate) async fn execute_action(
 
                 let source_repo = app.workspaces[idx].source_repo.clone();
 
-                let removed = if is_simple {
+                let removed = if !is_worktree {
                     // Simple workspaces: just remove from list
                     app.workspaces.remove(idx);
                     true
