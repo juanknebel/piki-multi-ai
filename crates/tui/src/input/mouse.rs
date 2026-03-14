@@ -8,7 +8,7 @@ use crate::app::{self, ActivePane, App, AppMode};
 use crate::clipboard;
 use crate::dialog_state::DialogState;
 use crate::helpers::{
-    rect_contains, resize_all_ptys, scrollback_max, subtab_index_at, tab_index_at,
+    rect_contains, resize_all_ptys, scrollback_max, subtab_index_at,
 };
 
 /// Handle all mouse events. Returns an Action if one needs async execution.
@@ -127,14 +127,8 @@ pub(crate) fn handle_mouse_event(
             } else if on_left_split_border {
                 app.resize_drag = Some(app::ResizeDrag::LeftSplit);
             } else if app.mode == AppMode::Normal {
-                // Click on workspace tabs
-                if rect_contains(app.tabs_area, col, row) {
-                    if let Some(idx) = tab_index_at(app, col, app.tabs_area) {
-                        app.switch_workspace(idx);
-                    }
-                }
                 // Click on sub-tabs
-                else if rect_contains(app.subtabs_area, col, row) {
+                if rect_contains(app.subtabs_area, col, row) {
                     let subtabs_area = app.subtabs_area;
                     if let Some((idx, on_close)) = subtab_index_at(app, col, subtabs_area) {
                         if on_close {

@@ -9,7 +9,6 @@ use crate::app::{ActivePane, App, FileStatus, SidebarItem};
 use super::layout::pane_border_style;
 
 pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
-    let is_active = app.active_pane == ActivePane::WorkspaceList;
     let border_style = pane_border_style(app, ActivePane::WorkspaceList);
     let theme = &app.theme.workspace_list;
 
@@ -75,7 +74,7 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
             true
         })
         .map(|(row, item)| {
-            let is_selected = row == app.selected_sidebar_row && is_active;
+            let is_selected = row == app.selected_sidebar_row;
             match item {
                 SidebarItem::GroupHeader {
                     name,

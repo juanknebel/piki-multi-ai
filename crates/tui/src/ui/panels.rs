@@ -1,41 +1,11 @@
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
-use ratatui::text::Line;
-use ratatui::widgets::{Block, Borders, Paragraph, Tabs};
+use ratatui::style::Style;
+use ratatui::widgets::{Block, Borders, Paragraph};
 
 use crate::app::{ActivePane, App, AppMode};
 
 use super::layout::pane_border_style;
-
-pub(super) fn render_tab_bar(frame: &mut Frame, area: Rect, app: &App) {
-    if app.workspaces.is_empty() {
-        let block = Block::default()
-            .title(" No workspaces ")
-            .borders(Borders::BOTTOM);
-        frame.render_widget(block, area);
-        return;
-    }
-
-    let titles: Vec<Line> = app
-        .workspaces
-        .iter()
-        .map(|ws| Line::from(format!(" {} ", ws.name)))
-        .collect();
-
-    let tabs = Tabs::new(titles)
-        .block(Block::default().borders(Borders::BOTTOM))
-        .select(app.active_workspace)
-        .highlight_style(
-            Style::default()
-                .fg(app.theme.tabs.active)
-                .add_modifier(Modifier::BOLD),
-        )
-        .style(Style::default().fg(app.theme.tabs.inactive))
-        .divider("|");
-
-    frame.render_widget(tabs, area);
-}
 
 pub(super) fn render_subtabs(frame: &mut Frame, area: Rect, app: &App) {
     if let Some(ws) = app.current_workspace() {

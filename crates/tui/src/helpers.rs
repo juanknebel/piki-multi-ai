@@ -114,19 +114,6 @@ pub(crate) fn rect_contains(r: Rect, col: u16, row: u16) -> bool {
     col >= r.x && col < r.x + r.width && row >= r.y && row < r.y + r.height
 }
 
-/// Calculate which workspace tab index was clicked based on column position
-pub(crate) fn tab_index_at(app: &App, col: u16, area: Rect) -> Option<usize> {
-    let mut x = area.x;
-    for (i, ws) in app.workspaces.iter().enumerate() {
-        let tab_width = ws.name.len() as u16 + 2; // " name "
-        if col >= x && col < x + tab_width {
-            return Some(i);
-        }
-        x += tab_width + 1; // +1 for "|" divider
-    }
-    None
-}
-
 /// Calculate which sub-tab index was clicked and whether the close button was hit
 pub(crate) fn subtab_index_at(app: &App, col: u16, area: Rect) -> Option<(usize, bool)> {
     let ws = app.current_workspace()?;

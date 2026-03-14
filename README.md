@@ -129,12 +129,12 @@ Workspace configurations are saved automatically and restored on startup.
 ```
  [CPU] 12%  [RAM] 4.2/16.0G  [BAT] 85%  [TIME] 2026-03-07 14:32
 +------------------+-------------------------------------------------------+
-| WORKSPACES       |  [ ws-1 ]  [ ws-2 ]  [ ws-3 ]   (workspace tabs)     |
-|                  |  [ Shell ]  [ Claude Code × ]    (dynamic sub-tabs)   |
-|  ▼ frontend (2)  |-------------------------------------------------------|
-|  ▶ ws-1 (active) |                                                       |
-|    3 files       |  AI assistant live terminal output                    |
-|    ⌂ my-project  |  (diff opens as floating overlay)                     |
+| WORKSPACES       |  [ Shell ]  [ Claude Code × ]    (dynamic sub-tabs)   |
+|                  |-------------------------------------------------------|
+|  ▼ frontend (2)  |                                                       |
+|  ▶ ws-1 (active) |  AI assistant live terminal output                    |
+|    3 files       |  (diff opens as floating overlay)                     |
+|    ⌂ my-project  |                                                       |
 |                  |                                                       |
 |    ws-2          |                                                       |
 |  ▸ backend (1)   |                                                       |
@@ -243,7 +243,6 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | Click workspace list | Focus pane and switch to clicked workspace |
 | Click file list | Focus pane and select clicked file |
 | Click main panel | Focus pane and start text selection |
-| Click workspace tab | Switch to that workspace |
 | Click sub-tab | Switch to that tab |
 | Click × on sub-tab | Close that tab (with confirmation) |
 | Scroll in workspace list | Navigate workspaces up/down |

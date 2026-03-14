@@ -22,9 +22,8 @@ pub fn compute_terminal_area_with(total: Rect, sidebar_pct: u16) -> Rect {
     ])
     .areas(content_area);
 
-    // Right panel: tabs + sub-tabs + content + status bar
-    let [_tabs, _subtabs, main_area, _status] = Layout::vertical([
-        Constraint::Length(3),
+    // Right panel: sub-tabs + content + status bar
+    let [_subtabs, main_area, _status] = Layout::vertical([
         Constraint::Length(2),
         Constraint::Min(0),
         Constraint::Length(1),
@@ -133,16 +132,15 @@ pub fn render(frame: &mut Frame, app: &mut App) {
     app.ws_list_area = ws_area;
     app.file_list_area = files_area;
 
-    // Right panel: tabs + sub-tabs + content + status bar (store for mouse hit-testing)
-    let [tabs_area, subtabs_area, main_area, status_area] = Layout::vertical([
-        Constraint::Length(3),
+    // Right panel: sub-tabs + content + status bar (store for mouse hit-testing)
+    let [subtabs_area, main_area, status_area] = Layout::vertical([
         Constraint::Length(2),
         Constraint::Min(0),
         Constraint::Length(1),
     ])
     .areas(right_area);
 
-    app.tabs_area = tabs_area;
+    app.tabs_area = Rect::default();
     app.subtabs_area = subtabs_area;
     app.main_content_area = main_area;
 
@@ -156,9 +154,6 @@ pub fn render(frame: &mut Frame, app: &mut App) {
 
     // Left bottom: changed files
     super::sidebar::render_file_list(frame, files_area, app);
-
-    // Right top: workspace tabs
-    super::panels::render_tab_bar(frame, tabs_area, app);
 
     // Right: AI provider sub-tabs
     super::panels::render_subtabs(frame, subtabs_area, app);
