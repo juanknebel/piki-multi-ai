@@ -35,9 +35,9 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
             KeyCode::Tab => {
                 edit.focus_description = !edit.focus_description;
                 edit.cursor_pos = if edit.focus_description {
-                    edit.description.len()
+                    edit.description.chars().count()
                 } else {
-                    edit.title.len()
+                    edit.title.chars().count()
                 };
             }
             KeyCode::Enter => {
@@ -59,20 +59,76 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
                 }
                 kanban_app.edit_state = None;
             }
-            KeyCode::Char(c) => {
-                if edit.focus_description {
-                    edit.description.push(c);
-                } else {
-                    edit.title.push(c);
-                    edit.cursor_pos = edit.title.len();
+            KeyCode::Left => {
+                if edit.cursor_pos > 0 {
+                    edit.cursor_pos -= 1;
                 }
             }
-            KeyCode::Backspace => {
-                if edit.focus_description {
-                    edit.description.pop();
+            KeyCode::Right => {
+                let field = if edit.focus_description {
+                    &edit.description
                 } else {
-                    edit.title.pop();
-                    edit.cursor_pos = edit.title.len();
+                    &edit.title
+                };
+                if edit.cursor_pos < field.chars().count() {
+                    edit.cursor_pos += 1;
+                }
+            }
+            KeyCode::Home => {
+                edit.cursor_pos = 0;
+            }
+            KeyCode::End => {
+                let field = if edit.focus_description {
+                    &edit.description
+                } else {
+                    &edit.title
+                };
+                edit.cursor_pos = field.chars().count();
+            }
+            KeyCode::Delete => {
+                let field = if edit.focus_description {
+                    &mut edit.description
+                } else {
+                    &mut edit.title
+                };
+                let char_count = field.chars().count();
+                if edit.cursor_pos < char_count {
+                    let byte_pos = field
+                        .char_indices()
+                        .nth(edit.cursor_pos)
+                        .map(|(i, _)| i)
+                        .unwrap_or(field.len());
+                    field.remove(byte_pos);
+                }
+            }
+            KeyCode::Char(c) => {
+                let field = if edit.focus_description {
+                    &mut edit.description
+                } else {
+                    &mut edit.title
+                };
+                let byte_pos = field
+                    .char_indices()
+                    .nth(edit.cursor_pos)
+                    .map(|(i, _)| i)
+                    .unwrap_or(field.len());
+                field.insert(byte_pos, c);
+                edit.cursor_pos += 1;
+            }
+            KeyCode::Backspace => {
+                if edit.cursor_pos > 0 {
+                    let field = if edit.focus_description {
+                        &mut edit.description
+                    } else {
+                        &mut edit.title
+                    };
+                    edit.cursor_pos -= 1;
+                    let byte_pos = field
+                        .char_indices()
+                        .nth(edit.cursor_pos)
+                        .map(|(i, _)| i)
+                        .unwrap_or(field.len());
+                    field.remove(byte_pos);
                 }
             }
             _ => {}
@@ -156,7 +212,7 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
                     card_id: card.id.clone(),
                     title: card.title.clone(),
                     description: card.description.clone(),
-                    cursor_pos: card.title.len(),
+                    cursor_pos: card.title.chars().count(),
                     focus_description: false,
                 });
             }

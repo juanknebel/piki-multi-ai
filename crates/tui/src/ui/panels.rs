@@ -1,7 +1,8 @@
 use ratatui::Frame;
-use ratatui::layout::Rect;
-use ratatui::style::Style;
-use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
 use crate::app::{ActivePane, App, AppMode};
 
@@ -57,15 +58,24 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
             let provider = tab.provider;
 
             if provider == crate::app::AIProvider::Kanban {
-                if let Some(ws) = app.workspaces.get(app.active_workspace)
-                    && let Some(kanban_app) = &ws.kanban_app
+                if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+                    && let Some(kanban_app) = ws.kanban_app.as_mut()
                 {
+                    // Take edit_state so flow doesn't render its own overlay
+                    let edit_state = kanban_app.edit_state.take();
+
                     let block = Block::default()
                         .borders(Borders::ALL)
                         .border_style(border_style);
                     let inner_area = block.inner(area);
                     frame.render_widget(block, area);
                     flow::ui::render(frame, kanban_app, Some(inner_area));
+
+                    // Restore and render our own overlay with proper cursor
+                    if let Some(edit) = edit_state {
+                        kanban_app.edit_state = Some(edit);
+                        render_kanban_edit(frame, inner_area, kanban_app.edit_state.as_ref().unwrap());
+                    }
                 }
                 return;
             }
@@ -139,4 +149,138 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
         frame.render_widget(text, area);
     }
     app.selection = selection;
+}
+
+fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow::app::EditState) {
+    let area = flow::ui::centered(70, 60, parent);
+    f.render_widget(Clear, area);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .margin(1)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Length(3),
+            Constraint::Min(1),
+            Constraint::Length(1),
+        ])
+        .split(area);
+
+    f.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::raw("Editing "),
+            Span::styled(
+                &edit.card_id,
+                Style::default().add_modifier(Modifier::BOLD),
+            ),
+        ])),
+        chunks[0],
+    );
+
+    let title_style = if !edit.focus_description {
+        Style::default().fg(Color::Cyan)
+    } else {
+        Style::default()
+    };
+    f.render_widget(
+        Paragraph::new(edit.title.clone()).block(
+            Block::default()
+                .title("Title")
+                .borders(Borders::ALL)
+                .border_style(title_style),
+        ),
+        chunks[1],
+    );
+
+    let desc_style = if edit.focus_description {
+        Style::default().fg(Color::Cyan)
+    } else {
+        Style::default()
+    };
+    let inner_width = chunks[2].width.saturating_sub(2).max(1) as usize;
+    let wrapped: Vec<Line> = char_wrap(&edit.description, inner_width)
+        .into_iter()
+        .map(Line::from)
+        .collect();
+    f.render_widget(
+        Paragraph::new(wrapped).block(
+            Block::default()
+                .title("Description")
+                .borders(Borders::ALL)
+                .border_style(desc_style),
+        ),
+        chunks[2],
+    );
+
+    f.render_widget(
+        Paragraph::new("Tab: switch field  Enter: save  Esc: cancel")
+            .style(Style::default().fg(Color::DarkGray))
+            .alignment(ratatui::layout::Alignment::Center),
+        chunks[3],
+    );
+
+    // Position cursor using cursor_pos for both fields
+    if !edit.focus_description {
+        f.set_cursor_position((
+            chunks[1].x + 1 + edit.cursor_pos as u16,
+            chunks[1].y + 1,
+        ));
+    } else {
+        let (row, col) = cursor_visual_pos(&edit.description, edit.cursor_pos, inner_width);
+        f.set_cursor_position((chunks[2].x + 1 + col, chunks[2].y + 1 + row));
+    }
+
+    f.render_widget(
+        Block::default()
+            .borders(Borders::ALL)
+            .title("Edit Card")
+            .border_style(Style::default().fg(Color::Cyan)),
+        area,
+    );
+}
+
+/// Wrap text at character boundaries, respecting explicit newlines.
+fn char_wrap(text: &str, width: usize) -> Vec<String> {
+    let mut lines = Vec::new();
+    for segment in text.split('\n') {
+        if segment.is_empty() {
+            lines.push(String::new());
+        } else {
+            let chars: Vec<char> = segment.chars().collect();
+            for chunk in chars.chunks(width) {
+                lines.push(chunk.iter().collect());
+            }
+        }
+    }
+    if lines.is_empty() {
+        lines.push(String::new());
+    }
+    lines
+}
+
+/// Compute the visual (row, col) for a cursor position in char-wrapped text.
+fn cursor_visual_pos(text: &str, cursor: usize, width: usize) -> (u16, u16) {
+    let mut row: u16 = 0;
+    let mut col: usize = 0;
+    for (i, ch) in text.chars().enumerate() {
+        if ch != '\n' && col >= width {
+            row += 1;
+            col = 0;
+        }
+        if i == cursor {
+            return (row, col as u16);
+        }
+        if ch == '\n' {
+            row += 1;
+            col = 0;
+        } else {
+            col += 1;
+        }
+    }
+    // Cursor at end of text
+    if col >= width {
+        row += 1;
+        col = 0;
+    }
+    (row, col as u16)
 }

@@ -228,6 +228,17 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | *Markdown tab* | `j`/`k` scroll, `Ctrl+d`/`Ctrl+u` page, `g`/`G` top/bottom (read-only) |
 | *Kanban tab* | `h/l/j/k` navigate, `H/L` move card, `n` new card, `e` edit card, `d` delete, `Enter` details, `Esc` close modal |
 
+**In kanban card editor** (after pressing `e` or `n`):
+
+| Key | Action |
+|-----|--------|
+| `Left` / `Right` | Move cursor within field |
+| `Home` / `End` | Jump to start / end of field |
+| `Backspace` / `Delete` | Delete char before / at cursor |
+| `Tab` | Switch between Title and Description |
+| `Enter` | Save card |
+| `Esc` | Cancel editing |
+
 **In diff view:**
 
 | Key | Action |
