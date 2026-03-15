@@ -151,6 +151,11 @@ pub(super) fn render_sysinfo_bar(frame: &mut Frame, area: Rect, app: &App) {
 pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
     let cfg = &app.config;
     match app.mode {
+        AppMode::CommandPalette => vec![
+            ("up/down".to_string(), "select"),
+            ("enter".to_string(), "execute"),
+            ("esc".to_string(), "close"),
+        ],
         AppMode::FuzzySearch => vec![
             (
                 format!(

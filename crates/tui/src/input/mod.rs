@@ -1,3 +1,4 @@
+mod command_palette_input;
 mod dialog;
 mod editor_input;
 mod fuzzy_input;
@@ -17,6 +18,7 @@ use self::dialog::{
     handle_dashboard_input, handle_edit_workspace_input, handle_help_input, handle_logs_input,
     handle_new_tab_input, handle_new_workspace_input, handle_workspace_info_input,
 };
+use self::command_palette_input::handle_command_palette_input;
 use self::editor_input::handle_inline_edit_input;
 use self::fuzzy_input::handle_fuzzy_search_input;
 use self::interaction::{
@@ -41,6 +43,7 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         AppMode::ConfirmQuit => return handle_confirm_quit_input(app, key),
         AppMode::Dashboard => return handle_dashboard_input(app, key),
         AppMode::Logs => return handle_logs_input(app, key),
+        AppMode::CommandPalette => return handle_command_palette_input(app, key),
         AppMode::ConfirmDelete => return handle_confirm_delete_input(app, key),
         // Normal and Diff modes fall through to navigation/interaction handling
         AppMode::Normal | AppMode::Diff => {}
@@ -60,7 +63,7 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
 
 // ── Navigation mode: hjkl between panes, Enter to interact, global shortcuts ──
 
-fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
+pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
     // Pane navigation
     if app.config.matches_navigation(key, "left") || app.config.matches_navigation(key, "left_alt")
     {
@@ -256,6 +259,8 @@ fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
         || app.config.matches_navigation(key, "fuzzy_search_alt")
     {
         app.open_fuzzy_search();
+    } else if app.config.matches_navigation(key, "command_palette") {
+        app.open_command_palette();
     } else if app.config.matches_navigation(key, "sidebar_shrink")
         || app.config.matches_navigation(key, "sidebar_shrink_alt")
     {

@@ -1,6 +1,7 @@
 mod action;
 mod app;
 mod clipboard;
+mod command_palette;
 mod config;
 mod dialog_state;
 mod event_loop;

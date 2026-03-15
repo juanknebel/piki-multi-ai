@@ -324,6 +324,20 @@ pub(crate) async fn run(
             }
         }
 
+        // Tick nucleo command palette matcher
+        if let Some(ref mut state) = app.command_palette {
+            let status = state.nucleo.tick(10);
+            if status.changed {
+                let count = state.nucleo.snapshot().matched_item_count() as usize;
+                if count == 0 {
+                    state.selected = 0;
+                } else if state.selected >= count {
+                    state.selected = count - 1;
+                }
+                app.needs_redraw = true;
+            }
+        }
+
         // Expire toasts
         if app.expire_toast() {
             app.needs_redraw = true;

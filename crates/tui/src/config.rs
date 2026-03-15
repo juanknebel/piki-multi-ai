@@ -150,6 +150,7 @@ fn default_navigation() -> HashMap<String, String> {
     m.insert("copy".to_string(), "ctrl-shift-c".to_string());
     m.insert("fuzzy_search".to_string(), "/".to_string());
     m.insert("fuzzy_search_alt".to_string(), "ctrl-f".to_string());
+    m.insert("command_palette".to_string(), "ctrl-p".to_string());
 
     // Resizing
     m.insert("sidebar_shrink".to_string(), "<".to_string());

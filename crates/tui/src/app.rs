@@ -112,6 +112,8 @@ pub enum AppMode {
     Dashboard,
     /// Internal log viewer
     Logs,
+    /// Command palette overlay
+    CommandPalette,
 }
 
 /// Which pane is currently selected / focused
@@ -549,6 +551,8 @@ pub struct App {
     pub toast: Option<Toast>,
     /// Fuzzy file search state
     pub fuzzy: Option<FuzzyState>,
+    /// Command palette state
+    pub command_palette: Option<crate::command_palette::CommandPaletteState>,
     /// Inline editor state
     pub editor: Option<EditorState>,
     /// Path of the file being edited inline
@@ -633,6 +637,7 @@ impl App {
             status_message: None,
             toast: None,
             fuzzy: None,
+            command_palette: None,
             editor: None,
             editing_file: None,
             pty_rows: 24,
@@ -876,6 +881,12 @@ impl App {
                 }
             }
         });
+    }
+
+    /// Open the command palette overlay.
+    pub fn open_command_palette(&mut self) {
+        self.command_palette = Some(crate::command_palette::create_state());
+        self.mode = AppMode::CommandPalette;
     }
 
     /// Open the inline editor for a file

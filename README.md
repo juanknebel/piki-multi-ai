@@ -39,6 +39,7 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 - **Customizable configuration** — Keybindings and themes loaded from `~/.config/piki-multi/config.toml`
 - **Customizable themes** — Colors loaded from TOML files; supports named colors and hex `#rrggbb`
 - **Pre-flight checks** — Validates required (git >= 2.20) and optional dependencies (delta) at startup with clear error/warning messages
+- **Command palette** — Press `Ctrl+p` to open a VS Code-style searchable command palette; fuzzy-filter ~25 commands across 7 categories (Workspace, Git, Tabs, Search, View, Layout, App) with match highlighting and keybinding hints; powered by [nucleo](https://github.com/helix-editor/nucleo)
 - **In-app log viewer** — Press `Ctrl+l` to open a scrollable overlay showing the last 500 log entries from the current session; color-coded by level (ERROR=red, WARN=yellow, INFO=green, DEBUG=cyan, TRACE=gray); filter by level with `0`-`5` keys; scroll with `j`/`k`, `Ctrl+d`/`Ctrl+u`, `g`/`G`
 - **Structured logging** — File-based structured logging via `tracing` with daily rotation to `~/.local/share/piki-multi/logs/`; configurable via `--log-level` flag (trace/debug/info/warn/error)
 
@@ -201,6 +202,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `t` | New tab (opens provider selection: 1=Claude, 2=Gemini, 3=OpenCode, 4=Kilo, 5=Codex, 6=Shell, 7=Kanban Board) |
 | `w` | Close current tab (with confirmation dialog) |
 | `D` | Workspace dashboard overlay (bird's-eye view of all workspaces and tabs) |
+| `Ctrl+p` | Command palette (fuzzy-searchable list of all commands) |
 | `Ctrl+l` | Log viewer overlay (last 500 log entries, color-coded, filterable by level) |
 | `g` / `G` | Next / previous tab |
 | `<` / `>` | Resize sidebar width (±5%) |
@@ -245,6 +247,15 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `g` / `G` | Top / bottom |
 | `0`-`5` | Filter by level (0=all, 1=error, 2=warn, 3=info, 4=debug, 5=trace) |
 | `Esc` or `Ctrl+l` | Close log viewer |
+
+**In command palette** (`Ctrl+p`):
+
+| Key | Action |
+|-----|--------|
+| *type* | Filter commands by fuzzy match |
+| `↑` / `↓` | Select command |
+| `Enter` | Execute selected command |
+| `Esc` | Close palette |
 
 **In fuzzy search** (`/` or `Ctrl+f`):
 
@@ -425,11 +436,13 @@ crates/
       log_buffer.rs      # In-memory ring buffer tracing layer for log viewer
       pty/
         input.rs         # Crossterm key events -> PTY bytes
+      command_palette.rs # Command palette types, registry, nucleo state
       ui/
         layout.rs        # Full TUI layout (all panels, overlays)
         terminal.rs      # Live PTY rendering (tui-term)
         diff.rs          # Diff rendering (ansi-to-tui)
         fuzzy.rs         # Fuzzy search overlay (nucleo matching + ignore walker)
+        command_palette.rs # Command palette overlay renderer
         markdown.rs      # Markdown file viewer (tui-markdown)
         editor.rs        # Inline file editor renderer
 ```
