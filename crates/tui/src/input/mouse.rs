@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::time::Instant;
 
 use crossterm::event::{MouseButton, MouseEventKind};
@@ -8,6 +9,89 @@ use crate::app::{self, ActivePane, App, AppMode};
 use crate::clipboard;
 use crate::dialog_state::DialogState;
 use crate::helpers::{rect_contains, resize_all_ptys, scrollback_max, subtab_index_at};
+
+/// Encode a mouse scroll event as terminal escape bytes based on the protocol encoding.
+/// `button` is 64 for scroll-up, 65 for scroll-down. `col`/`row` are 1-based PTY coordinates.
+fn encode_mouse_scroll(
+    button: u8,
+    col: u16,
+    row: u16,
+    encoding: vt100::MouseProtocolEncoding,
+) -> Vec<u8> {
+    match encoding {
+        vt100::MouseProtocolEncoding::Sgr => {
+            format!("\x1b[<{button};{col};{row}M").into_bytes()
+        }
+        vt100::MouseProtocolEncoding::Utf8 => {
+            let mut buf = vec![b'\x1b', b'[', b'M', button + 32];
+            // UTF-8 encode col and row (each + 32)
+            let mut tmp = [0u8; 4];
+            let ch_col = char::from_u32((col as u32) + 32).unwrap_or('!');
+            let len = ch_col.encode_utf8(&mut tmp).len();
+            buf.extend_from_slice(&tmp[..len]);
+            let ch_row = char::from_u32((row as u32) + 32).unwrap_or('!');
+            let len = ch_row.encode_utf8(&mut tmp).len();
+            buf.extend_from_slice(&tmp[..len]);
+            buf
+        }
+        // Default (X10-compatible) encoding
+        _ => {
+            vec![
+                b'\x1b',
+                b'[',
+                b'M',
+                button + 32,
+                (col as u8).saturating_add(32),
+                (row as u8).saturating_add(32),
+            ]
+        }
+    }
+}
+
+/// Try to forward a scroll event to the PTY if the child is in alternate screen with mouse capture.
+/// Returns `true` if the event was forwarded, `false` if normal scrollback handling should be used.
+/// `button`: 64 = scroll up, 65 = scroll down.
+fn try_forward_scroll_to_pty(app: &mut App, col: u16, row: u16, button: u8) -> bool {
+    let inner = match app.terminal_inner_area {
+        Some(r) => r,
+        None => return false,
+    };
+
+    let ws = match app.workspaces.get_mut(app.active_workspace) {
+        Some(ws) => ws,
+        None => return false,
+    };
+    let tab = match ws.current_tab_mut() {
+        Some(t) => t,
+        None => return false,
+    };
+    let parser = match tab.pty_parser {
+        Some(ref p) => Arc::clone(p),
+        None => return false,
+    };
+
+    let guard = parser.lock();
+    let screen = guard.screen();
+    let alt = screen.alternate_screen();
+    let mouse_mode = screen.mouse_protocol_mode();
+    let mouse_enc = screen.mouse_protocol_encoding();
+    drop(guard);
+
+    if !alt || matches!(mouse_mode, vt100::MouseProtocolMode::None) {
+        return false;
+    }
+
+    // Translate from outer terminal coords to 1-based PTY coords
+    let pty_col = col.saturating_sub(inner.x) + 1;
+    let pty_row = row.saturating_sub(inner.y) + 1;
+
+    let bytes = encode_mouse_scroll(button, pty_col, pty_row, mouse_enc);
+
+    if let Some(ref mut session) = tab.pty_session {
+        let _ = session.write(&bytes);
+    }
+    true
+}
 
 /// Handle all mouse events. Returns an Action if one needs async execution.
 pub(crate) fn handle_mouse_event(
@@ -39,6 +123,7 @@ pub(crate) fn handle_mouse_event(
                 } else if rect_contains(app.file_list_area, col, row) {
                     app.prev_file();
                 } else if rect_contains(app.main_content_area, col, row)
+                    && !try_forward_scroll_to_pty(app, col, row, 64)
                     && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
                     && let Some(tab) = ws.current_tab_mut()
                 {
@@ -75,6 +160,7 @@ pub(crate) fn handle_mouse_event(
                 } else if rect_contains(app.file_list_area, col, row) {
                     app.next_file();
                 } else if rect_contains(app.main_content_area, col, row)
+                    && !try_forward_scroll_to_pty(app, col, row, 65)
                     && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
                     && let Some(tab) = ws.current_tab_mut()
                 {
