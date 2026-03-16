@@ -502,6 +502,11 @@ pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Actio
             app.mode = AppMode::Normal;
             Some(Action::SpawnTab(AIProvider::CodeReview))
         }
+        KeyCode::Char('9') => {
+            app.active_dialog = None;
+            app.mode = AppMode::Normal;
+            Some(Action::SpawnTab(AIProvider::Api))
+        }
         KeyCode::Esc => {
             app.active_dialog = None;
             app.mode = AppMode::Normal;
@@ -547,8 +552,7 @@ pub(super) fn handle_dashboard_input(app: &mut App, key: KeyEvent) -> Option<Act
         if ws_end > *scroll_offset + visible {
             *scroll_offset = ws_end.saturating_sub(visible);
         }
-    } else if app.config.matches_dashboard(key, "up")
-        || app.config.matches_dashboard(key, "up_alt")
+    } else if app.config.matches_dashboard(key, "up") || app.config.matches_dashboard(key, "up_alt")
     {
         *selected = selected.saturating_sub(1);
         let ws_start = ws_first_line(*selected);

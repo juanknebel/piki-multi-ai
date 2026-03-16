@@ -10,7 +10,7 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 ## Features
 
 - **Parallel workspaces** — Run multiple AI coding sessions simultaneously, each in an isolated git worktree, pointing directly to an existing directory (Simple mode), or managing a multi-service project root (Project mode)
-- **Dynamic tabs** — Workspaces start empty; create tabs on demand (`t`) for Claude Code, Gemini CLI, OpenCode, Kilo, Codex, Shell, Kanban Board, or Code Review; close tabs with `w`; cycle with `g`/`G`
+- **Dynamic tabs** — Workspaces start empty; create tabs on demand (`t`) for Claude Code, Gemini CLI, OpenCode, Kilo, Codex, Shell, Kanban Board, Code Review, or API Explorer; close tabs with `w`; cycle with `g`/`G`
 - **Workspace dashboard** — Press `D` for a bird's-eye overview of all workspaces with their tabs, status (idle/busy/done), changed files, and ahead/behind; `j`/`k` to navigate, `Enter` to switch, `Esc` to close
 - **Live terminal rendering** — See AI assistant output in real-time with full ANSI color support via `tui-term`
 - **Interactive input** — Type directly into any AI session (Enter on the terminal pane to interact)
@@ -43,6 +43,7 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 - **In-app log viewer** — Press `Ctrl+l` to open a scrollable overlay showing the last 500 log entries from the current session; color-coded by level (ERROR=red, WARN=yellow, INFO=green, DEBUG=cyan, TRACE=gray); filter by level with `0`-`5` keys; scroll with `j`/`k`, `Ctrl+d`/`Ctrl+u`, `g`/`G`
 - **Structured logging** — File-based structured logging via `tracing` with daily rotation to `~/.local/share/piki-multi/logs/`; configurable via `--log-level` flag (trace/debug/info/warn/error)
 - **Code Review** — Full-screen PR review tab powered by `gh` CLI; browse changed files, view diffs with line numbers and a cursor, add inline comments on any line (`c`), delete comments (`d`), submit reviews (approve/request changes/comment) with inline comments via GitHub API; persistent draft overlay; tab only opens if the current branch has an open PR; locked mode prevents accidental workspace switching — press `q` to close or `s` to submit; `gh` availability and authentication are checked lazily on first use and cached for the session
+- **API Explorer** — Interactive HTTP client tab (`t` then `9`) with Hurl-like syntax; write `METHOD URL`, headers, and body in a built-in editor; `Ctrl+S` to send; response displayed with status code, elapsed time, and pretty-printed JSON; `Ctrl+J`/`Ctrl+K` to scroll response
 
 ## Prerequisites
 
@@ -483,6 +484,15 @@ crates/
         runner.rs        # git diff | delta pipeline (with untracked file support)
       sysinfo.rs         # System info poller (CPU, RAM, battery via systemstat + chrono)
       preflight.rs       # Pre-flight dependency checks (git version, optional tools)
+  api-client/            # piki-api-client — HTTP/API client (independent, no TUI/core deps)
+    src/
+      lib.rs             # Public re-exports
+      client.rs          # ApiClient trait (transport abstraction)
+      config.rs          # ClientConfig, Auth
+      request.rs         # ApiRequest builder, Method enum
+      response.rs        # ApiResponse (status, headers, body)
+      http/
+        client.rs        # HttpClient (reqwest-based ApiClient impl)
   tui/                   # TUI binary (piki-multi-ai) — depends on piki-core
     src/
       main.rs            # Tokio main loop, event handling, action dispatch

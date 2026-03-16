@@ -192,8 +192,7 @@ pub fn create_state() -> CommandPaletteState {
     let injector = nucleo.injector();
 
     for cmd in all_commands() {
-        let search_text: nucleo::Utf32String =
-            format!("{}: {}", cmd.category, cmd.label).into();
+        let search_text: nucleo::Utf32String = format!("{}: {}", cmd.category, cmd.label).into();
         injector.push(cmd, |cols| {
             cols[0] = search_text;
         });

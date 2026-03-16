@@ -66,7 +66,8 @@ impl tracing::field::Visit for MessageVisitor {
         } else if self.message.is_empty() {
             self.message = format!("{}={:?}", field.name(), value);
         } else {
-            self.message.push_str(&format!(" {}={:?}", field.name(), value));
+            self.message
+                .push_str(&format!(" {}={:?}", field.name(), value));
         }
     }
 
@@ -76,7 +77,8 @@ impl tracing::field::Visit for MessageVisitor {
         } else if self.message.is_empty() {
             self.message = format!("{}={}", field.name(), value);
         } else {
-            self.message.push_str(&format!(" {}={}", field.name(), value));
+            self.message
+                .push_str(&format!(" {}={}", field.name(), value));
         }
     }
 }

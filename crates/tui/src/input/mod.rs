@@ -13,18 +13,19 @@ use crate::app::{ActivePane, App, AppMode, DialogField};
 use crate::dialog_state::DialogState;
 use crate::helpers::{copy_visible_terminal, resize_all_ptys, scrollback_max};
 
+use self::command_palette_input::handle_command_palette_input;
 use self::dialog::{
     handle_about_input, handle_commit_message_input, handle_confirm_close_tab_input,
     handle_confirm_delete_input, handle_confirm_merge_input, handle_confirm_quit_input,
     handle_dashboard_input, handle_edit_workspace_input, handle_help_input, handle_logs_input,
     handle_new_tab_input, handle_new_workspace_input, handle_workspace_info_input,
 };
-use self::command_palette_input::handle_command_palette_input;
 use self::editor_input::handle_inline_edit_input;
 use self::fuzzy_input::handle_fuzzy_search_input;
 use self::interaction::{
-    handle_diff_interaction, handle_filelist_interaction, handle_kanban_interaction,
-    handle_markdown_interaction, handle_terminal_interaction, handle_workspace_interaction,
+    handle_api_interaction, handle_diff_interaction, handle_filelist_interaction,
+    handle_kanban_interaction, handle_markdown_interaction, handle_terminal_interaction,
+    handle_workspace_interaction,
 };
 
 pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
@@ -330,6 +331,12 @@ fn handle_interaction_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
         ActivePane::MainPanel => {
             if app.mode == AppMode::Diff {
                 handle_diff_interaction(app, key)
+            } else if app
+                .current_workspace()
+                .and_then(|ws| ws.current_tab())
+                .is_some_and(|tab| tab.api_state.is_some())
+            {
+                handle_api_interaction(app, key)
             } else if app
                 .current_workspace()
                 .and_then(|ws| ws.current_tab())

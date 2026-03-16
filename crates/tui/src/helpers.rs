@@ -32,6 +32,10 @@ pub(crate) async fn spawn_tab(
     if provider == AIProvider::Kanban || provider == AIProvider::CodeReview {
         return idx;
     }
+    if provider == AIProvider::Api {
+        ws.tabs[idx].api_state = Some(app::ApiTabState::new());
+        return idx;
+    }
     let cmd = provider.resolved_command();
     if let Ok(session) = PtySession::spawn(&ws.path, rows, cols, &cmd).await {
         ws.tabs[idx].pty_parser = Some(Arc::clone(session.parser()));

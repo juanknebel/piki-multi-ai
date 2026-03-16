@@ -71,6 +71,14 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                 return;
             }
 
+            if provider == crate::app::AIProvider::Api {
+                if let Some(ref api) = tab.api_state {
+                    super::api::render(frame, area, api, border_style);
+                }
+                return;
+            }
+
+
             if provider == crate::app::AIProvider::Kanban {
                 if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
                     && let Some(kanban_app) = ws.kanban_app.as_mut()
@@ -88,7 +96,11 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                     // Restore and render our own overlay with proper cursor
                     if let Some(edit) = edit_state {
                         kanban_app.edit_state = Some(edit);
-                        render_kanban_edit(frame, inner_area, kanban_app.edit_state.as_ref().unwrap());
+                        render_kanban_edit(
+                            frame,
+                            inner_area,
+                            kanban_app.edit_state.as_ref().unwrap(),
+                        );
                     }
                 }
                 return;
@@ -196,10 +208,7 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow::app::EditState) 
     f.render_widget(
         Paragraph::new(Line::from(vec![
             Span::raw("Editing "),
-            Span::styled(
-                &edit.card_id,
-                Style::default().add_modifier(Modifier::BOLD),
-            ),
+            Span::styled(&edit.card_id, Style::default().add_modifier(Modifier::BOLD)),
         ])),
         chunks[0],
     );

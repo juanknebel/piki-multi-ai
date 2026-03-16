@@ -44,6 +44,10 @@ Requires Rust >= 1.85 (edition 2024). Runtime deps: `claude` CLI in PATH, git >=
 
 **UI** (`ui/`): `layout.rs` is the main render function composing all panels. Sub-modules render individual components (terminal, diff, workspaces, files, tabs, statusbar).
 
+**API client** (`crates/api-client/`): Independent crate (`piki-api-client`) for HTTP API calls. `ApiClient` trait abstracts the transport layer; `HttpClient` implements it via `reqwest`. Includes a Hurl-like syntax parser (`parser.rs`) that converts `METHOD URL\nHeaders\n\nBody` text into `ParsedRequest` structs. `Protocol` enum (`protocol.rs`) prepared for future gRPC support. Does not depend on `piki-core` or `piki-tui`.
+
+**API Explorer tab** (`ui/api.rs`, `input/interaction.rs:handle_api_interaction`): Non-PTY tab (like Kanban) where users write HTTP requests in Hurl syntax and view responses. Uses `EditorState` for text editing, `ApiTabState` for tab state, and spawns async requests via `tokio::spawn` with a `pending_response` `Arc<Mutex>` slot polled in the event loop. `Ctrl+F` opens a search bar in the response panel (`ApiSearchState`); typing performs case-insensitive substring matching across all response bodies with Enter/Shift+Enter to navigate matches and auto-scroll.
+
 ## Task Tracking
 
 Use `flow` CLI with the project board to track tasks. Always set the env var:

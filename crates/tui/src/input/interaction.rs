@@ -499,6 +499,244 @@ pub(super) fn handle_workspace_interaction(app: &mut App, key: KeyEvent) -> Opti
     None
 }
 
+const HTTP_METHODS: &[&str] = &["GET", "POST", "PUT", "DELETE", "PATCH", "GRPC"];
+
+/// Check if a line looks like a METHOD URL request line.
+fn is_method_line(line: &str) -> bool {
+    let trimmed = line.trim();
+    if trimmed.starts_with('#') {
+        return false;
+    }
+    if let Some((word, rest)) = trimmed.split_once(char::is_whitespace) {
+        HTTP_METHODS.contains(&word.to_uppercase().as_str()) && !rest.trim().is_empty()
+    } else {
+        false
+    }
+}
+
+/// Extract the request block text where the cursor is positioned.
+/// Blocks are delimited by METHOD lines (GET, POST, etc.).
+fn extract_block_at_cursor(editor: &crate::app::EditorState) -> String {
+    let cursor_row = editor.cursor_row;
+    let lines = &editor.lines;
+
+    // Find all METHOD line indices
+    let method_indices: Vec<usize> = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| is_method_line(l))
+        .map(|(i, _)| i)
+        .collect();
+
+    if method_indices.is_empty() {
+        // No method lines found, send everything
+        return editor.contents();
+    }
+
+    // Find the block containing the cursor:
+    // block_start = last METHOD line at or before cursor
+    // block_end = next METHOD line after cursor (or end of file)
+    let block_start = method_indices
+        .iter()
+        .rev()
+        .find(|&&i| i <= cursor_row)
+        .copied()
+        .unwrap_or(0);
+
+    let block_end = method_indices
+        .iter()
+        .find(|&&i| i > cursor_row && i > block_start)
+        .copied()
+        .unwrap_or(lines.len());
+
+    let block_lines = &lines[block_start..block_end];
+    let mut s = block_lines.join("\n");
+    s.push('\n');
+    s
+}
+
+/// Search the API response body for matches, updating the search state.
+fn search_api_response(api: &mut crate::app::ApiTabState) {
+    let search = match api.search.as_mut() {
+        Some(s) if !s.query.is_empty() => s,
+        _ => return,
+    };
+    search.matches.clear();
+    search.current_match = 0;
+
+    let query_lower = search.query.to_lowercase();
+    let mut global_line: usize = 0;
+
+    for (idx, resp) in api.responses.iter().enumerate() {
+        // Header line (matches the render_responses layout)
+        global_line += 1;
+
+        // Body lines
+        for body_line in resp.body.lines() {
+            let line_lower = body_line.to_lowercase();
+            let mut start = 0;
+            while let Some(pos) = line_lower[start..].find(&query_lower) {
+                search.matches.push((global_line, start + pos));
+                start += pos + 1;
+            }
+            global_line += 1;
+        }
+
+        // Separator between responses
+        if idx + 1 < api.responses.len() {
+            global_line += 1;
+        }
+    }
+
+    // Auto-scroll to the first match
+    if let Some(&(line, _)) = api.search.as_ref().and_then(|s| s.matches.first()) {
+        api.response_scroll = line.saturating_sub(1) as u16;
+    }
+}
+
+pub(super) fn handle_api_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
+    if app.config.matches_interaction(key, "exit_interaction") {
+        app.interacting = false;
+        return None;
+    }
+
+    let ws = app.workspaces.get_mut(app.active_workspace)?;
+    let tab = ws.current_tab_mut()?;
+    let api = tab.api_state.as_mut()?;
+
+    // Search overlay captures input when active
+    if api.search.is_some() {
+        match key.code {
+            KeyCode::Esc => {
+                api.search = None;
+            }
+            KeyCode::Enter => {
+                if let Some(ref mut search) = api.search
+                    && !search.matches.is_empty()
+                {
+                    if key
+                        .modifiers
+                        .contains(crossterm::event::KeyModifiers::SHIFT)
+                    {
+                        // Shift+Enter → previous match
+                        search.current_match = if search.current_match == 0 {
+                            search.matches.len() - 1
+                        } else {
+                            search.current_match - 1
+                        };
+                    } else {
+                        // Enter → next match
+                        search.current_match = (search.current_match + 1) % search.matches.len();
+                    }
+                    // Auto-scroll to current match
+                    let line = search.matches[search.current_match].0;
+                    api.response_scroll = line.saturating_sub(1) as u16;
+                }
+            }
+            KeyCode::Char(c) => {
+                if let Some(ref mut search) = api.search {
+                    search.query.insert(
+                        search
+                            .query
+                            .char_indices()
+                            .nth(search.cursor)
+                            .map(|(i, _)| i)
+                            .unwrap_or(search.query.len()),
+                        c,
+                    );
+                    search.cursor += 1;
+                }
+                search_api_response(api);
+            }
+            KeyCode::Backspace => {
+                if let Some(ref mut search) = api.search
+                    && search.cursor > 0
+                {
+                    search.cursor -= 1;
+                    let byte_pos = search
+                        .query
+                        .char_indices()
+                        .nth(search.cursor)
+                        .map(|(i, _)| i)
+                        .unwrap_or(search.query.len());
+                    search.query.remove(byte_pos);
+                }
+                search_api_response(api);
+            }
+            _ => {}
+        }
+        return None;
+    }
+
+    // Ctrl+F: open search in response panel
+    if key.code == KeyCode::Char('f')
+        && key
+            .modifiers
+            .contains(crossterm::event::KeyModifiers::CONTROL)
+        && !api.responses.is_empty()
+    {
+        api.search = Some(crate::app::ApiSearchState {
+            query: String::new(),
+            cursor: 0,
+            matches: Vec::new(),
+            current_match: 0,
+        });
+        return None;
+    }
+
+    // Ctrl+S: send the request block at cursor
+    if key.code == KeyCode::Char('s')
+        && key
+            .modifiers
+            .contains(crossterm::event::KeyModifiers::CONTROL)
+    {
+        let block_text = extract_block_at_cursor(&api.editor);
+        return Some(Action::SendApiRequest(block_text));
+    }
+
+    // Ctrl+J: scroll response down
+    if key.code == KeyCode::Char('j')
+        && key
+            .modifiers
+            .contains(crossterm::event::KeyModifiers::CONTROL)
+    {
+        api.response_scroll = api.response_scroll.saturating_add(1);
+        return None;
+    }
+
+    // Ctrl+K: scroll response up
+    if key.code == KeyCode::Char('k')
+        && key
+            .modifiers
+            .contains(crossterm::event::KeyModifiers::CONTROL)
+    {
+        api.response_scroll = api.response_scroll.saturating_sub(1);
+        return None;
+    }
+
+    // Editor input
+    match key.code {
+        KeyCode::Up => api.editor.move_up(),
+        KeyCode::Down => api.editor.move_down(),
+        KeyCode::Left => api.editor.move_left(),
+        KeyCode::Right => api.editor.move_right(),
+        KeyCode::Enter => api.editor.enter(),
+        KeyCode::Backspace => api.editor.backspace(),
+        KeyCode::Char(c) => api.editor.insert_char(c),
+        KeyCode::Tab => {
+            for _ in 0..4 {
+                api.editor.insert_char(' ');
+            }
+        }
+        _ => {}
+    }
+
+    // Keep cursor visible
+    api.editor.adjust_scroll(20); // approximate visible height
+
+    None
+}
+
 pub(super) fn handle_filelist_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
     if app.config.matches_file_list(key, "exit_interaction") {
         app.interacting = false;

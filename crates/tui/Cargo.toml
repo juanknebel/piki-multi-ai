@@ -10,6 +10,7 @@ path = "src/main.rs"
 [dependencies]
 # Core library
 piki-core = { path = "../core" }
+piki-api-client = { path = "../api-client" }
 
 # TUI
 ratatui = { version = "0.30", features = ["crossterm"] }

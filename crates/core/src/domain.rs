@@ -13,6 +13,7 @@ pub enum AIProvider {
     Shell,
     Kanban,
     CodeReview,
+    Api,
 }
 
 impl AIProvider {
@@ -27,6 +28,7 @@ impl AIProvider {
             AIProvider::Shell => "/bin/sh",
             AIProvider::Kanban => "",
             AIProvider::CodeReview => "gh",
+            AIProvider::Api => "",
         }
     }
 
@@ -49,6 +51,7 @@ impl AIProvider {
             AIProvider::Shell => "Shell",
             AIProvider::Kanban => "Kanban Board",
             AIProvider::CodeReview => "Code Review",
+            AIProvider::Api => "API Explorer",
         }
     }
 
@@ -63,6 +66,7 @@ impl AIProvider {
             AIProvider::Shell,
             AIProvider::Kanban,
             AIProvider::CodeReview,
+            AIProvider::Api,
         ]
     }
 }

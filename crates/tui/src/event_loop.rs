@@ -258,6 +258,21 @@ pub(crate) async fn run(
             }
         }
 
+        // Poll API Explorer pending responses
+        if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+            && let Some(tab) = ws.current_tab_mut()
+            && let Some(ref mut api) = tab.api_state
+            && api.loading
+        {
+            let mut slot = api.pending_responses.lock();
+            if let Some(responses) = slot.take() {
+                api.responses = responses;
+                api.loading = false;
+                api.response_scroll = 0;
+                app.needs_redraw = true;
+            }
+        }
+
         // Spawn background git refresh ONLY for active workspace
         {
             let idx = app.active_workspace;

@@ -151,6 +151,49 @@ pub enum SidebarItem {
     },
 }
 
+/// Response data for the API Explorer tab
+#[allow(dead_code)]
+pub struct ApiResponseDisplay {
+    pub status: u16,
+    pub elapsed_ms: u128,
+    pub body: String,
+    pub headers: String,
+}
+
+/// Search state for the API response panel
+pub struct ApiSearchState {
+    pub query: String,
+    pub cursor: usize,
+    /// Match positions as (line_index in rendered body, col)
+    pub matches: Vec<(usize, usize)>,
+    /// Index into `matches` for the currently highlighted match
+    pub current_match: usize,
+}
+
+/// State for the API Explorer tab
+pub struct ApiTabState {
+    pub editor: EditorState,
+    pub responses: Vec<ApiResponseDisplay>,
+    pub loading: bool,
+    pub response_scroll: u16,
+    pub pending_responses: Arc<Mutex<Option<Vec<ApiResponseDisplay>>>>,
+    /// Search overlay for the response panel (None = closed)
+    pub search: Option<ApiSearchState>,
+}
+
+impl ApiTabState {
+    pub fn new() -> Self {
+        Self {
+            editor: EditorState::new("GET https://\n\n"),
+            responses: Vec::new(),
+            loading: false,
+            response_scroll: 0,
+            pending_responses: Arc::new(Mutex::new(None)),
+            search: None,
+        }
+    }
+}
+
 /// A tab within a workspace, each with its own PTY session
 pub struct Tab {
     #[allow(dead_code)]
@@ -172,6 +215,8 @@ pub struct Tab {
     pub markdown_scroll: u16,
     /// Cached parsed markdown (avoids re-parsing every frame)
     pub markdown_rendered: Option<Text<'static>>,
+    /// API Explorer state (when this tab is an API Explorer)
+    pub api_state: Option<ApiTabState>,
 }
 
 /// A single workspace backed by a git worktree
@@ -261,6 +306,7 @@ impl Workspace {
             markdown_label: None,
             markdown_scroll: 0,
             markdown_rendered: None,
+            api_state: None,
         };
         self.next_tab_id += 1;
         self.tabs.push(tab);
@@ -297,6 +343,7 @@ impl Workspace {
             markdown_label: Some(label),
             markdown_scroll: 0,
             markdown_rendered: Some(rendered),
+            api_state: None,
         };
         self.next_tab_id += 1;
         self.tabs.push(tab);

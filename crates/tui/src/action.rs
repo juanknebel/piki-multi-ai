@@ -53,6 +53,8 @@ pub(crate) enum Action {
     LoadPrFileDiff(usize),
     /// Submit the PR review using the draft state
     SubmitPrReview,
+    /// Send an API request (raw Hurl text)
+    SendApiRequest(String),
 }
 
 pub(crate) async fn execute_action(
@@ -1010,6 +1012,111 @@ pub(crate) async fn execute_action(
             if app.mode == AppMode::FuzzySearch {
                 app.fuzzy = None;
                 app.mode = AppMode::Normal;
+            }
+        }
+        Action::SendApiRequest(text) => {
+            // Parse the Hurl text (supports multiple requests)
+            let parsed_requests = match piki_api_client::parse_hurl_multi(&text) {
+                Ok(p) => p,
+                Err(e) => {
+                    app.set_toast(format!("Parse error: {}", e), ToastLevel::Error);
+                    return Ok(());
+                }
+            };
+
+            // Set loading state
+            if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+                && let Some(tab) = ws.current_tab_mut()
+                && let Some(ref mut api) = tab.api_state
+            {
+                api.loading = true;
+                api.responses.clear();
+                let slot = Arc::clone(&api.pending_responses);
+
+                tokio::spawn(async move {
+                    let mut results = Vec::with_capacity(parsed_requests.len());
+
+                    for parsed in parsed_requests {
+                        let url = if !parsed.url.contains("://") {
+                            format!("https://{}", parsed.url)
+                        } else {
+                            parsed.url.clone()
+                        };
+
+                        let mut request = match parsed.method {
+                            piki_api_client::Method::Get => piki_api_client::ApiRequest::get(""),
+                            piki_api_client::Method::Post => piki_api_client::ApiRequest::post(""),
+                            piki_api_client::Method::Put => piki_api_client::ApiRequest::put(""),
+                            piki_api_client::Method::Delete => {
+                                piki_api_client::ApiRequest::delete("")
+                            }
+                            piki_api_client::Method::Patch => {
+                                piki_api_client::ApiRequest::patch("")
+                            }
+                        };
+                        request.body = parsed.body;
+                        for (k, v) in &parsed.headers {
+                            request.headers.insert(k.clone(), v.clone());
+                        }
+
+                        let config = piki_api_client::ClientConfig::new(&url);
+                        let client = match piki_api_client::HttpClient::new(config) {
+                            Ok(c) => c,
+                            Err(e) => {
+                                results.push(app::ApiResponseDisplay {
+                                    status: 0,
+                                    elapsed_ms: 0,
+                                    body: format!("Client error: {}", e),
+                                    headers: String::new(),
+                                });
+                                continue;
+                            }
+                        };
+
+                        let start = std::time::Instant::now();
+                        let result =
+                            <piki_api_client::HttpClient as piki_api_client::ApiClient>::execute(
+                                &client, request,
+                            )
+                            .await;
+                        let elapsed = start.elapsed().as_millis();
+
+                        let display = match result {
+                            Ok(resp) => {
+                                let body_text = String::from_utf8_lossy(&resp.body).to_string();
+                                let body = if let Ok(json) =
+                                    serde_json::from_str::<serde_json::Value>(&body_text)
+                                {
+                                    serde_json::to_string_pretty(&json).unwrap_or(body_text)
+                                } else {
+                                    body_text
+                                };
+                                let headers = resp
+                                    .headers
+                                    .iter()
+                                    .map(|(k, v)| format!("{}: {}", k, v))
+                                    .collect::<Vec<_>>()
+                                    .join("\n");
+                                app::ApiResponseDisplay {
+                                    status: resp.status,
+                                    elapsed_ms: elapsed,
+                                    body,
+                                    headers,
+                                }
+                            }
+                            Err(e) => app::ApiResponseDisplay {
+                                status: 0,
+                                elapsed_ms: elapsed,
+                                body: format!("Error: {}", e),
+                                headers: String::new(),
+                            },
+                        };
+                        results.push(display);
+                    }
+
+                    let mut guard = slot.lock();
+                    *guard = Some(results);
+                });
             }
         }
         Action::Undo => {

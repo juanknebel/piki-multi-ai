@@ -387,10 +387,7 @@ pub(super) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
             "    {:<13} Dashboard",
             cfg.get_binding("navigation", "dashboard")
         ),
-        format!(
-            "    {:<13} Logs",
-            cfg.get_binding("navigation", "logs")
-        ),
+        format!("    {:<13} Logs", cfg.get_binding("navigation", "logs")),
         format!("    {:<13} Quit", cfg.get_binding("navigation", "quit")),
         "".to_string(),
         "  Interaction mode (green border)".to_string(),
@@ -687,14 +684,8 @@ pub(super) fn render_dashboard_overlay(frame: &mut Frame, area: Rect, app: &App)
             let files = ws.file_count();
             body_lines.push(Line::from(vec![
                 Span::styled(marker, row_style),
-                Span::styled(
-                    name,
-                    row_style.add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(
-                    format!("  {} ", status_label),
-                    status_style,
-                ),
+                Span::styled(name, row_style.add_modifier(Modifier::BOLD)),
+                Span::styled(format!("  {} ", status_label), status_style),
                 Span::styled(format!("{}f", files), muted),
             ]));
         } else {
@@ -713,10 +704,7 @@ pub(super) fn render_dashboard_overlay(frame: &mut Frame, area: Rect, app: &App)
                     row_style.add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(branch, muted),
-                Span::styled(
-                    format!("  {} ", status_label),
-                    status_style,
-                ),
+                Span::styled(format!("  {} ", status_label), status_style),
                 Span::styled(format!("{}f", files), muted),
                 Span::styled(ab, muted),
             ]));
@@ -1199,7 +1187,7 @@ pub(super) fn render_logs_overlay(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 pub(crate) fn render_new_tab_dialog(frame: &mut Frame, area: Rect) {
-    let popup = clear_popup(frame, area, 40, 14);
+    let popup = clear_popup(frame, area, 40, 15);
 
     let lines = vec![
         Line::from(""),
@@ -1213,6 +1201,7 @@ pub(crate) fn render_new_tab_dialog(frame: &mut Frame, area: Rect) {
         Line::from("  [6] Shell"),
         Line::from("  [7] Kanban Board"),
         Line::from("  [8] Code Review"),
+        Line::from("  [9] API Explorer"),
         Line::from(""),
         Line::from("  [Esc] Cancel"),
     ];

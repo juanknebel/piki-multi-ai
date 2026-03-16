@@ -118,9 +118,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             .bg(bg)
             .add_modifier(Modifier::BOLD);
         let normal_style = Style::default().fg(theme.result_text).bg(bg);
-        let hint_style = Style::default()
-            .fg(theme.count_text)
-            .bg(bg);
+        let hint_style = Style::default().fg(theme.count_text).bg(bg);
 
         // Build spans with match highlighting
         let match_set: HashSet<u32> = indices_buf.iter().copied().collect();
@@ -164,10 +162,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         let available = inner.width as usize;
         if content_width + hint_str.len() < available {
             let padding = available - content_width - hint_str.len();
-            spans.push(Span::styled(
-                " ".repeat(padding),
-                Style::default().bg(bg),
-            ));
+            spans.push(Span::styled(" ".repeat(padding), Style::default().bg(bg)));
             spans.push(Span::styled(hint_str, hint_style));
         }
 

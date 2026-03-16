@@ -19,9 +19,7 @@ fn encode_mouse_scroll(
     encoding: vt100::MouseProtocolEncoding,
 ) -> Vec<u8> {
     match encoding {
-        vt100::MouseProtocolEncoding::Sgr => {
-            format!("\x1b[<{button};{col};{row}M").into_bytes()
-        }
+        vt100::MouseProtocolEncoding::Sgr => format!("\x1b[<{button};{col};{row}M").into_bytes(),
         vt100::MouseProtocolEncoding::Utf8 => {
             let mut buf = vec![b'\x1b', b'[', b'M', button + 32];
             // UTF-8 encode col and row (each + 32)

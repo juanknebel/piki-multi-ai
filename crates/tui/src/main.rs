@@ -117,12 +117,13 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Check if terminal supports the Kitty keyboard protocol (for Shift+Enter detection)
-    let kitty_keyboard = crossterm::terminal::supports_keyboard_enhancement()
-        .unwrap_or(false);
+    let kitty_keyboard = crossterm::terminal::supports_keyboard_enhancement().unwrap_or(false);
     if kitty_keyboard {
         tracing::info!("terminal supports Kitty keyboard protocol");
     } else {
-        tracing::info!("terminal does not support Kitty keyboard protocol; use Ctrl+Enter for newline");
+        tracing::info!(
+            "terminal does not support Kitty keyboard protocol; use Ctrl+Enter for newline"
+        );
     }
 
     // Install panic hook that restores terminal before printing panic
