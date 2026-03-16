@@ -93,12 +93,92 @@ fn try_forward_scroll_to_pty(app: &mut App, col: u16, row: u16, button: u8) -> b
     true
 }
 
+/// Handle mouse events when code review is locked (full-screen mode).
+/// Supports scrolling (moves cursor in diff view) and click to set cursor/focus.
+fn handle_code_review_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) -> Option<Action> {
+    let ws = app.workspaces.get_mut(app.active_workspace)?;
+    let cr = ws.code_review.as_mut()?;
+
+    let line_count = cr.current_diff().map(|d| d.lines.len()).unwrap_or(0);
+
+    match mouse.kind {
+        MouseEventKind::ScrollUp => {
+            match cr.focus {
+                crate::code_review::ReviewFocus::FileList => {
+                    if !cr.files.is_empty() {
+                        cr.selected_file =
+                            (cr.selected_file + cr.files.len() - 1) % cr.files.len();
+                        if cr.selected_file < cr.file_scroll {
+                            cr.file_scroll = cr.selected_file;
+                        }
+                    }
+                }
+                crate::code_review::ReviewFocus::DiffView => {
+                    if line_count > 0 {
+                        cr.cursor_line = cr.cursor_line.saturating_sub(3);
+                        cr.diff_scroll = cr.diff_scroll.saturating_sub(3);
+                    }
+                }
+            }
+            None
+        }
+        MouseEventKind::ScrollDown => {
+            match cr.focus {
+                crate::code_review::ReviewFocus::FileList => {
+                    if !cr.files.is_empty() {
+                        cr.selected_file = (cr.selected_file + 1) % cr.files.len();
+                        let visible = 20usize;
+                        if cr.selected_file >= cr.file_scroll + visible {
+                            cr.file_scroll = cr.selected_file.saturating_sub(visible - 1);
+                        }
+                    }
+                }
+                crate::code_review::ReviewFocus::DiffView => {
+                    if line_count > 0 {
+                        cr.cursor_line =
+                            (cr.cursor_line + 3).min(line_count.saturating_sub(1));
+                        cr.diff_scroll = cr.diff_scroll.saturating_add(3);
+                    }
+                }
+            }
+            None
+        }
+        MouseEventKind::Down(MouseButton::Left) => {
+            // Click on left 25% = file list, right 75% = diff view
+            let total_width = app.main_content_area.width.max(1);
+            let files_end = app.main_content_area.x + total_width / 4;
+            if mouse.column < files_end {
+                cr.focus = crate::code_review::ReviewFocus::FileList;
+            } else {
+                cr.focus = crate::code_review::ReviewFocus::DiffView;
+                // Map click row to diff line index (approximate: row + scroll offset)
+                // The header area is 2 lines + 1 border line from the diff block
+                let diff_area_top = app.main_content_area.y + 3; // header(2) + border(1)
+                if mouse.row > diff_area_top && line_count > 0 {
+                    let clicked_visual_row =
+                        (mouse.row - diff_area_top - 1) as usize + cr.diff_scroll;
+                    // This is a visual row; for simplicity, map directly to diff line index
+                    // (ignoring comment decorations for click targeting)
+                    cr.cursor_line = clicked_visual_row.min(line_count.saturating_sub(1));
+                }
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
 /// Handle all mouse events. Returns an Action if one needs async execution.
 pub(crate) fn handle_mouse_event(
     app: &mut App,
     mouse: crossterm::event::MouseEvent,
     terminal: &mut DefaultTerminal,
 ) -> Option<Action> {
+    // Code review locked mode — only allow scroll/click within the review
+    if super::code_review_input::is_code_review_locked(app) {
+        return handle_code_review_mouse(app, mouse);
+    }
+
     let col = mouse.column;
     let row = mouse.row;
 

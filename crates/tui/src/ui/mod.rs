@@ -1,3 +1,4 @@
+pub(crate) mod code_review;
 pub mod command_palette;
 pub(crate) mod dialogs;
 pub mod diff;

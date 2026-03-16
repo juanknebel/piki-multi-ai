@@ -29,7 +29,7 @@ pub(crate) async fn spawn_tab(
     cols: u16,
 ) -> usize {
     let idx = ws.add_tab(provider, true);
-    if provider == AIProvider::Kanban {
+    if provider == AIProvider::Kanban || provider == AIProvider::CodeReview {
         return idx;
     }
     let cmd = provider.resolved_command();

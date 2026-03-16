@@ -1,3 +1,4 @@
+mod code_review_input;
 mod command_palette_input;
 mod dialog;
 mod editor_input;
@@ -27,6 +28,13 @@ use self::interaction::{
 };
 
 pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
+    // Code review is a locked mode — ALL keys route here, nothing leaks
+    if code_review_input::is_code_review_locked(app) {
+        app.status_message = None;
+        app.toast = None;
+        return code_review_input::handle_code_review_key(app, key);
+    }
+
     // Modal dispatch — each mode captures all input
     match app.mode {
         AppMode::WorkspaceInfo => return handle_workspace_info_input(app, key),
@@ -45,6 +53,9 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         AppMode::Logs => return handle_logs_input(app, key),
         AppMode::CommandPalette => return handle_command_palette_input(app, key),
         AppMode::ConfirmDelete => return handle_confirm_delete_input(app, key),
+        AppMode::SubmitReview => {
+            return code_review_input::handle_submit_review_input(app, key)
+        }
         // Normal and Diff modes fall through to navigation/interaction handling
         AppMode::Normal | AppMode::Diff => {}
     }

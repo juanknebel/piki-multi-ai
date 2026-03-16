@@ -114,6 +114,8 @@ pub enum AppMode {
     Logs,
     /// Command palette overlay
     CommandPalette,
+    /// Submit review overlay (code review)
+    SubmitReview,
 }
 
 /// Which pane is currently selected / focused
@@ -197,6 +199,8 @@ pub struct Workspace {
     pub kanban_app: Option<flow::App>,
     /// Kanban provider
     pub kanban_provider: Option<Box<dyn flow::provider::Provider>>,
+    /// Code review state
+    pub code_review: Option<crate::code_review::CodeReviewState>,
 }
 
 impl std::ops::Deref for Workspace {
@@ -229,6 +233,7 @@ impl Workspace {
             ahead_behind: None,
             kanban_app: None,
             kanban_provider: None,
+            code_review: None,
         }
     }
 
@@ -611,6 +616,8 @@ pub struct App {
     pub footer_cache: Option<FooterCache>,
     /// Last time inactive workspace PTYs were checked for exit
     pub last_inactive_pty_check: Instant,
+    /// Cached result of `gh` CLI availability check (None = not yet checked)
+    pub gh_available: Option<bool>,
 }
 
 impl App {
@@ -672,6 +679,7 @@ impl App {
             diff_cache: lru::LruCache::new(std::num::NonZeroUsize::new(32).unwrap()),
             footer_cache: None,
             last_inactive_pty_check: Instant::now(),
+            gh_available: None,
         }
     }
 

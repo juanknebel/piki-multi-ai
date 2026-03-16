@@ -10,7 +10,7 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 ## Features
 
 - **Parallel workspaces** — Run multiple AI coding sessions simultaneously, each in an isolated git worktree, pointing directly to an existing directory (Simple mode), or managing a multi-service project root (Project mode)
-- **Dynamic tabs** — Workspaces start empty; create tabs on demand (`t`) for Claude Code, Gemini CLI, OpenCode, Kilo, Codex, Shell, or Kanban Board; close tabs with `w`; cycle with `g`/`G`
+- **Dynamic tabs** — Workspaces start empty; create tabs on demand (`t`) for Claude Code, Gemini CLI, OpenCode, Kilo, Codex, Shell, Kanban Board, or Code Review; close tabs with `w`; cycle with `g`/`G`
 - **Workspace dashboard** — Press `D` for a bird's-eye overview of all workspaces with their tabs, status (idle/busy/done), changed files, and ahead/behind; `j`/`k` to navigate, `Enter` to switch, `Esc` to close
 - **Live terminal rendering** — See AI assistant output in real-time with full ANSI color support via `tui-term`
 - **Interactive input** — Type directly into any AI session (Enter on the terminal pane to interact)
@@ -38,10 +38,11 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 - **Markdown viewer** — Preview `.md` files rendered in-terminal via `tui-markdown`; open from fuzzy search with `Ctrl+o`, scroll with `j/k`, `Ctrl+d/u`, `g/G`, or mouse wheel; read-only interact mode; close tab with `w`
 - **Customizable configuration** — Keybindings and themes loaded from `~/.config/piki-multi/config.toml`
 - **Customizable themes** — Colors loaded from TOML files; supports named colors and hex `#rrggbb`
-- **Pre-flight checks** — Validates required (git >= 2.20) and optional dependencies (delta) at startup with clear error/warning messages
+- **Pre-flight checks** — Validates required (git >= 2.20) and optional dependencies (delta) at startup with clear error/warning messages; `gh` CLI availability is checked lazily on first Code Review use
 - **Command palette** — Press `Ctrl+p` to open a VS Code-style searchable command palette; fuzzy-filter ~25 commands across 7 categories (Workspace, Git, Tabs, Search, View, Layout, App) with match highlighting and keybinding hints; powered by [nucleo](https://github.com/helix-editor/nucleo)
 - **In-app log viewer** — Press `Ctrl+l` to open a scrollable overlay showing the last 500 log entries from the current session; color-coded by level (ERROR=red, WARN=yellow, INFO=green, DEBUG=cyan, TRACE=gray); filter by level with `0`-`5` keys; scroll with `j`/`k`, `Ctrl+d`/`Ctrl+u`, `g`/`G`
 - **Structured logging** — File-based structured logging via `tracing` with daily rotation to `~/.local/share/piki-multi/logs/`; configurable via `--log-level` flag (trace/debug/info/warn/error)
+- **Code Review** — Full-screen PR review tab powered by `gh` CLI; browse changed files, view diffs with line numbers and a cursor, add inline comments on any line (`c`), delete comments (`d`), submit reviews (approve/request changes/comment) with inline comments via GitHub API; persistent draft overlay; tab only opens if the current branch has an open PR; locked mode prevents accidental workspace switching — press `q` to close or `s` to submit; `gh` availability and authentication are checked lazily on first use and cached for the session
 
 ## Prerequisites
 
@@ -49,6 +50,7 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (`claude` in PATH)
 - [git](https://git-scm.com/) >= 2.20 (worktree support)
 - [delta](https://github.com/dandavison/delta) (optional, for side-by-side diffs — falls back to plain git diff)
+- [gh](https://cli.github.com/) (optional, required for code review feature — run `gh auth login` to authenticate)
 
 ## Installation
 
@@ -199,7 +201,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `d` | Delete selected workspace |
 | `Tab` / `Shift+Tab` | Next / previous workspace |
 | `1`-`9` | Jump to workspace N |
-| `t` | New tab (opens provider selection: 1=Claude, 2=Gemini, 3=OpenCode, 4=Kilo, 5=Codex, 6=Shell, 7=Kanban Board) |
+| `t` | New tab (opens provider selection: 1=Claude, 2=Gemini, 3=OpenCode, 4=Kilo, 5=Codex, 6=Shell, 7=Kanban Board, 8=Code Review) |
 | `w` | Close current tab (with confirmation dialog) |
 | `D` | Workspace dashboard overlay (bird's-eye view of all workspaces and tabs) |
 | `Ctrl+p` | Command palette (fuzzy-searchable list of all commands) |
@@ -227,6 +229,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | *Services list (Project)* | `j`/`k` select, `Enter` open New Workspace dialog pre-filled with sub-directory |
 | *Markdown tab* | `j`/`k` scroll, `Ctrl+d`/`Ctrl+u` page, `g`/`G` top/bottom (read-only) |
 | *Kanban tab* | `h/l/j/k` navigate, `H/L` move card, `n` new card, `e` edit card, `d` delete, `Enter` details, `Esc` close modal |
+| *Code Review tab* | Locked mode — see Code Review section below |
 
 **In kanban card editor** (after pressing `e` or `n`):
 
@@ -334,6 +337,48 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | Arrow keys | Move cursor |
 | `Tab` | Insert 4 spaces |
 
+**Code Review** (locked mode — all other keys blocked):
+
+The Code Review tab takes over the full screen. While active, workspace switching, pane navigation, and all other global keybindings are disabled. You must close the review (`q`) or submit it (`s` → `Enter`) to return to normal mode. The diff pane shows a custom unified diff renderer with line numbers and a cursor — press `c` on any line to add an inline comment, `d` to remove it. Comments are displayed as yellow blocks inline in the diff and submitted alongside the review via the GitHub API. Note: GitHub does not allow Approve or Request Changes on your own PRs — use Comment instead.
+
+| Key | Context | Action |
+|-----|---------|--------|
+| `j` / `k` | File list | Navigate files |
+| `Enter` | File list | View diff for selected file |
+| `l` | File list | Switch focus to diff pane |
+| `r` | File list | Refresh PR data from GitHub |
+| `j` / `k` | Diff pane | Move cursor up/down |
+| `Ctrl+d` / `Ctrl+u` | Diff pane | Page down/up (cursor jumps ±20) |
+| `g` / `G` | Diff pane | Jump cursor to top/bottom |
+| `c` | Diff pane | Add inline comment on cursor line (opens editor) |
+| `d` | Diff pane | Delete inline comment on cursor line |
+| `h` | Diff pane | Switch focus to file list |
+| `n` / `p` | Diff pane | Next/previous file (auto-loads diff) |
+| `s` | Any | Open submit review overlay |
+| `q` | Any | Close code review (discard state) |
+| Mouse scroll | File list / Diff | Scroll content (moves cursor in diff) |
+| Mouse click | Left/right pane | Switch focus / set cursor |
+
+**In comment editor** (opened with `c` on a diff line):
+
+| Key | Action |
+|-----|--------|
+| *type* | Edit comment text |
+| `Enter` | Save comment (empty body removes it) |
+| `Esc` | Cancel without saving |
+| `Left` / `Right` / `Home` / `End` | Move cursor |
+| `Backspace` | Delete character |
+
+**In submit review overlay** (opened with `s`):
+
+| Key | Action |
+|-----|--------|
+| `Tab` | Cycle verdict (Approve → Request Changes → Comment) |
+| *type* | Edit review comment body |
+| `Enter` | Submit review to GitHub (inline comments included) |
+| `Esc` | Close overlay (draft preserved) |
+| `Ctrl+D` | Discard draft, comments, and close overlay |
+
 ## Configuration & Theming
 
 All UI aspects, including keybindings and themes, are customizable via `~/.config/piki-multi/config.toml`.
@@ -427,6 +472,7 @@ crates/
     src/
       domain.rs          # AIProvider, FileStatus, ChangedFile, WorkspaceStatus, WorkspaceInfo, WorkspaceType
       git.rs             # Git status parsing, ahead/behind detection
+      github.rs          # GitHub PR operations via gh CLI (PR info, files, unified diff parser, inline comments, submit review); all calls logged via tracing (visible in Ctrl+L log viewer)
       pty/
         session.rs       # PTY management (portable-pty + vt100 parser)
       workspace/
@@ -441,6 +487,7 @@ crates/
     src/
       main.rs            # Tokio main loop, event handling, action dispatch
       app.rs             # TUI app state, Workspace wrapper, UI-specific types
+      code_review.rs     # Code review state (PR info, files, cached diffs, persistent draft)
       clipboard.rs       # System clipboard read/write (Wayland, X11, macOS, Windows)
       theme.rs           # Theme loading from TOML, color parsing (ratatui)
       config.rs          # Global configuration and keybindings (TOML, crossterm)
@@ -456,6 +503,7 @@ crates/
         command_palette.rs # Command palette overlay renderer
         markdown.rs      # Markdown file viewer (tui-markdown)
         editor.rs        # Inline file editor renderer
+        code_review.rs   # Full-screen code review layout + submit overlay
 ```
 
 ### Sequence diagram
@@ -543,7 +591,7 @@ sequenceDiagram
 - **portable-pty** (sync) wrapped with `tokio::task::spawn_blocking` for non-blocking PTY reads
 - **vt100** parser accumulates terminal state; **tui-term** renders it as a ratatui widget
 - **ansi-to-tui** converts delta's ANSI output to `ratatui::text::Text` for the diff view
-- Workspaces start with no tabs; all tabs (Claude, Gemini, OpenCode, Kilo, Codex, Shell, Kanban) are created on demand via `t`, each with its own PTY session
+- Workspaces start with no tabs; all tabs (Claude, Gemini, OpenCode, Kilo, Codex, Shell, Kanban, Code Review) are created on demand via `t`; PTY-backed tabs each have their own session, while Kanban and Code Review tabs manage their own state without PTY
 - Worktrees are stored in `~/.local/share/piki-multi/worktrees/<project>/<name>` with branch names matching the workspace name exactly; Simple workspaces point directly to their source directory; Project workspaces scan sub-directories instead of running git operations
 - Event-driven architecture: `crossterm::EventStream` + `tokio::select!` for truly async event loop; key handlers return `Option<Action>`, main loop executes actions asynchronously
 - STATUS panel uses `git status --porcelain=v1` for full coverage of untracked, staged, conflicted, and renamed files

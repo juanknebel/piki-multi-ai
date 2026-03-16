@@ -497,6 +497,11 @@ pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Actio
             app.mode = AppMode::Normal;
             Some(Action::SpawnTab(AIProvider::Kanban))
         }
+        KeyCode::Char('8') => {
+            app.active_dialog = None;
+            app.mode = AppMode::Normal;
+            Some(Action::SpawnTab(AIProvider::CodeReview))
+        }
         KeyCode::Esc => {
             app.active_dialog = None;
             app.mode = AppMode::Normal;

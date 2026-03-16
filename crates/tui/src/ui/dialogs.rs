@@ -318,7 +318,7 @@ pub(super) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
 
     let theme = &app.theme;
     let cfg = &app.config;
-    let popup = clear_popup(frame, area, 55, 62);
+    let popup = clear_popup(frame, area, 55, 75);
 
     let help_text = vec![
         "".to_string(),
@@ -570,6 +570,19 @@ pub(super) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
             )
         ),
         "    Mouse drag    Drag pane borders to resize".to_string(),
+        "".to_string(),
+        "  Code Review (requires gh CLI, locked mode)".to_string(),
+        "    j/k           Navigate files / scroll diff".to_string(),
+        "    Enter         View file diff".to_string(),
+        "    h/l           Switch file list / diff pane".to_string(),
+        "    n/p           Next/prev file (in diff view)".to_string(),
+        "    g/G           Top/bottom of diff".to_string(),
+        "    Ctrl+d/u      Page down/up in diff".to_string(),
+        "    s             Open submit review dialog".to_string(),
+        "    r             Refresh PR data".to_string(),
+        "    q             Close review (discard state)".to_string(),
+        "    Tab           Cycle verdict (in submit)".to_string(),
+        "    Ctrl+D        Discard draft (in submit)".to_string(),
         "".to_string(),
         "  Clipboard".to_string(),
         "    Mouse drag    Select text in terminal".to_string(),
@@ -1186,7 +1199,7 @@ pub(super) fn render_logs_overlay(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 pub(crate) fn render_new_tab_dialog(frame: &mut Frame, area: Rect) {
-    let popup = clear_popup(frame, area, 40, 13);
+    let popup = clear_popup(frame, area, 40, 14);
 
     let lines = vec![
         Line::from(""),
@@ -1199,6 +1212,7 @@ pub(crate) fn render_new_tab_dialog(frame: &mut Frame, area: Rect) {
         Line::from("  [5] Codex"),
         Line::from("  [6] Shell"),
         Line::from("  [7] Kanban Board"),
+        Line::from("  [8] Code Review"),
         Line::from(""),
         Line::from("  [Esc] Cancel"),
     ];

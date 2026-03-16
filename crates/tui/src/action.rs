@@ -4,6 +4,7 @@ use std::sync::Arc;
 use ratatui::DefaultTerminal;
 
 use crate::app::{self, ActivePane, App, AppMode, ToastLevel};
+use crate::code_review::CodeReviewState;
 use crate::helpers::spawn_tab;
 use piki_core::workspace::config as ws_config;
 use piki_core::workspace::{FileWatcher, WorkspaceManager};
@@ -46,6 +47,12 @@ pub(crate) enum Action {
     GitMerge(MergeStrategy),
     /// Undo last stage/unstage action
     Undo,
+    /// Load PR review data (info + files) for the active workspace
+    LoadPrReview,
+    /// Load diff for a specific file in the PR review
+    LoadPrFileDiff(usize),
+    /// Submit the PR review using the draft state
+    SubmitPrReview,
 }
 
 pub(crate) async fn execute_action(
@@ -623,6 +630,168 @@ pub(crate) async fn execute_action(
                 let _ = ws.refresh_changed_files().await;
             }
         }
+        Action::LoadPrReview => {
+            let worktree_path = app
+                .workspaces
+                .get(app.active_workspace)
+                .map(|ws| ws.path.clone());
+            if let Some(worktree_path) = worktree_path {
+                match piki_core::github::get_pr_for_branch(&worktree_path).await {
+                    Ok(Some(pr_info)) => {
+                        match piki_core::github::get_pr_files(&worktree_path).await {
+                            Ok(files) => {
+                                if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+                                    ws.code_review =
+                                        Some(CodeReviewState::new(pr_info, files));
+                                }
+                                app.set_toast("PR loaded", ToastLevel::Success);
+                            }
+                            Err(e) => {
+                                app.set_toast(
+                                    format!("Failed to load PR files: {}", e),
+                                    ToastLevel::Error,
+                                );
+                            }
+                        }
+                    }
+                    Ok(None) => {
+                        if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+                            && ws
+                                .current_tab()
+                                .is_some_and(|t| t.provider == AIProvider::CodeReview)
+                        {
+                            ws.close_tab(ws.active_tab);
+                        }
+                        app.set_toast("No open PR for this branch", ToastLevel::Error);
+                    }
+                    Err(e) => {
+                        if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+                            && ws
+                                .current_tab()
+                                .is_some_and(|t| t.provider == AIProvider::CodeReview)
+                        {
+                            ws.close_tab(ws.active_tab);
+                        }
+                        app.set_toast(format!("gh error: {}", e), ToastLevel::Error);
+                    }
+                }
+            }
+        }
+        Action::LoadPrFileDiff(file_idx) => {
+            // Extract what we need before the async call
+            let diff_data = app
+                .workspaces
+                .get_mut(app.active_workspace)
+                .and_then(|ws| {
+                    let cr = ws.code_review.as_mut()?;
+                    let file = cr.files.get(file_idx)?;
+                    let file_path = file.path.clone();
+                    if cr.file_diffs.contains_key(&file_path) {
+                        return None; // Already cached
+                    }
+                    cr.loading = true;
+                    let base_ref = cr.pr_info.base_ref_name.clone();
+                    Some((ws.path.clone(), file_path, base_ref))
+                });
+            if let Some((worktree_path, file_path, base_ref)) = diff_data {
+                match piki_core::github::get_pr_file_diff_raw(
+                    &worktree_path,
+                    &file_path,
+                    &base_ref,
+                )
+                .await
+                {
+                    Ok(parsed) => {
+                        if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+                            && let Some(ref mut cr) = ws.code_review
+                        {
+                            cr.file_diffs.insert(file_path, parsed);
+                            cr.diff_scroll = 0;
+                            cr.cursor_line = 0;
+                            cr.loading = false;
+                        }
+                    }
+                    Err(e) => {
+                        if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+                            && let Some(ref mut cr) = ws.code_review
+                        {
+                            cr.loading = false;
+                        }
+                        app.set_toast(format!("Diff error: {}", e), ToastLevel::Error);
+                    }
+                }
+            }
+        }
+        Action::SubmitPrReview => {
+            let submit_data = if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+                if let Some(cr) = ws.code_review.as_mut() {
+                    let verdict = cr.draft.verdict;
+                    let body = cr.draft.body.clone();
+                    let comments = cr.draft.comments.clone();
+                    let pr_number = cr.pr_info.number;
+                    cr.show_submit = false;
+                    Some((ws.info.path.clone(), verdict, body, comments, pr_number))
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            if let Some((worktree_path, verdict, body, comments, pr_number)) = submit_data {
+                let result = if comments.is_empty() {
+                    piki_core::github::submit_review(&worktree_path, verdict, &body).await
+                } else {
+                    piki_core::github::submit_review_with_comments(
+                        &worktree_path,
+                        pr_number,
+                        verdict,
+                        &body,
+                        &comments,
+                    )
+                    .await
+                };
+                match result {
+                    Ok(_) => {
+                        if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+                            ws.code_review = None;
+                            if ws
+                                .current_tab()
+                                .is_some_and(|t| t.provider == AIProvider::CodeReview)
+                            {
+                                ws.close_tab(ws.active_tab);
+                            }
+                        }
+                        app.mode = AppMode::Normal;
+                        app.interacting = false;
+                        app.active_dialog = None;
+                        app.set_toast(
+                            format!("Review submitted: {}", verdict.label()),
+                            ToastLevel::Success,
+                        );
+                    }
+                    Err(e) => {
+                        let msg = e.to_string();
+                        let user_msg = if msg.contains("Can not request changes on your own")
+                            || msg.contains("Can not approve your own")
+                        {
+                            "Cannot approve/request-changes on your own PR — use Comment"
+                                .to_string()
+                        } else if msg.contains("Unprocessable Entity") {
+                            format!("GitHub rejected: {}", msg)
+                        } else {
+                            format!("Submit failed: {}", msg)
+                        };
+                        // Show error inside the submit overlay so user can see it and retry
+                        if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+                            && let Some(cr) = ws.code_review.as_mut()
+                        {
+                            cr.show_submit = true;
+                            cr.submit_error = Some(user_msg);
+                        }
+                    }
+                }
+            }
+        }
         Action::SpawnTab(provider) => {
             if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
                 if provider == AIProvider::Kanban && ws.kanban_app.is_none() {
@@ -702,6 +871,97 @@ pub(crate) async fn execute_action(
                 let idx = spawn_tab(ws, provider, app.pty_rows, app.pty_cols).await;
                 ws.active_tab = idx;
                 app.status_message = Some(format!("Opened {} tab", provider.label()));
+            }
+
+            // Code Review: check gh availability (lazy, cached) then load PR data
+            if provider == AIProvider::CodeReview {
+                // Lazy gh CLI check — run once, cache forever
+                if app.gh_available.is_none() {
+                    let gh_ok = tokio::process::Command::new("gh")
+                        .arg("--version")
+                        .output()
+                        .await
+                        .is_ok_and(|o| o.status.success());
+                    let auth_ok = if gh_ok {
+                        tokio::process::Command::new("gh")
+                            .args(["auth", "status"])
+                            .output()
+                            .await
+                            .is_ok_and(|o| o.status.success())
+                    } else {
+                        false
+                    };
+                    app.gh_available = Some(gh_ok && auth_ok);
+                    if !gh_ok {
+                        app.set_toast(
+                            "gh CLI not found — install from https://cli.github.com/",
+                            ToastLevel::Error,
+                        );
+                    } else if !auth_ok {
+                        app.set_toast(
+                            "gh not authenticated — run `gh auth login`",
+                            ToastLevel::Error,
+                        );
+                    }
+                }
+                if app.gh_available != Some(true) {
+                    // Remove the tab we just created
+                    if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+                        && ws
+                            .current_tab()
+                            .is_some_and(|t| t.provider == AIProvider::CodeReview)
+                    {
+                        ws.close_tab(ws.active_tab);
+                    }
+                    return Ok(());
+                }
+                let worktree_path = app
+                    .workspaces
+                    .get(app.active_workspace)
+                    .map(|ws| ws.info.path.clone());
+                if let Some(worktree_path) = worktree_path {
+                    match piki_core::github::get_pr_for_branch(&worktree_path).await {
+                        Ok(Some(pr_info)) => {
+                            match piki_core::github::get_pr_files(&worktree_path).await {
+                                Ok(files) => {
+                                    if let Some(ws) =
+                                        app.workspaces.get_mut(app.active_workspace)
+                                    {
+                                        ws.code_review =
+                                            Some(CodeReviewState::new(pr_info, files));
+                                    }
+                                    app.set_toast("PR loaded", ToastLevel::Success);
+                                }
+                                Err(e) => {
+                                    app.set_toast(
+                                        format!("Failed to load PR files: {}", e),
+                                        ToastLevel::Error,
+                                    );
+                                }
+                            }
+                        }
+                        Ok(None) => {
+                            if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+                                && ws
+                                    .current_tab()
+                                    .is_some_and(|t| t.provider == AIProvider::CodeReview)
+                            {
+                                ws.close_tab(ws.active_tab);
+                            }
+                            app.set_toast("No open PR for this branch", ToastLevel::Error);
+                        }
+                        Err(e) => {
+                            if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+                                && ws
+                                    .current_tab()
+                                    .is_some_and(|t| t.provider == AIProvider::CodeReview)
+                            {
+                                ws.close_tab(ws.active_tab);
+                            }
+                            app.set_toast(format!("gh error: {}", e), ToastLevel::Error);
+                        }
+                    }
+                }
             }
         }
         Action::OpenMarkdown(path) => match std::fs::read_to_string(&path) {

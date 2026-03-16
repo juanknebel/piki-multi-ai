@@ -202,8 +202,14 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             ("esc".to_string(), "cancel"),
         ],
         AppMode::NewTab => vec![
-            ("1-5".to_string(), "select"),
+            ("1-8".to_string(), "select"),
             (cfg.get_binding("new_tab", "exit"), "cancel"),
+        ],
+        AppMode::SubmitReview => vec![
+            ("Tab".to_string(), "cycle verdict"),
+            ("enter".to_string(), "submit"),
+            ("esc".to_string(), "close"),
+            ("C-d".to_string(), "discard"),
         ],
         AppMode::Diff => vec![
             (

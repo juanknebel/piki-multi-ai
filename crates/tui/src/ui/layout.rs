@@ -61,9 +61,26 @@ fn compute_footer_height_from_keys(keys: &[(String, &str)], total_width: u16) ->
     if total as u16 <= total_width { 1 } else { 2 }
 }
 
+/// Check if the active tab is a CodeReview tab with loaded state
+fn is_code_review_active(app: &App) -> bool {
+    app.current_workspace()
+        .and_then(|ws| ws.current_tab())
+        .is_some_and(|tab| tab.provider == piki_core::AIProvider::CodeReview)
+        && app.current_workspace().is_some_and(|ws| ws.code_review.is_some())
+}
+
 /// Render the main application layout
 pub fn render(frame: &mut Frame, app: &mut App) {
     let area = frame.area();
+
+    // Full-screen code review layout bypass
+    if is_code_review_active(app) {
+        super::code_review::render_fullscreen(frame, area, app);
+        if app.mode == AppMode::SubmitReview {
+            super::code_review::render_submit_overlay(frame, area, app);
+        }
+        return;
+    }
 
     // Compute footer keys — use cache when mode/interacting/pane haven't changed
     let has_markdown = app
@@ -198,5 +215,6 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         AppMode::Logs => super::dialogs::render_logs_overlay(frame, area, app),
         AppMode::CommandPalette => super::command_palette::render(frame, area, app),
         AppMode::InlineEdit => {} // handled by main content render
+        AppMode::SubmitReview => {} // handled by full-screen code review bypass above
     }
 }

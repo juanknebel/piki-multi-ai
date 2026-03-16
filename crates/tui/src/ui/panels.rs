@@ -57,6 +57,20 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
 
             let provider = tab.provider;
 
+            if provider == crate::app::AIProvider::CodeReview {
+                // Code review has its own full-screen layout; show a placeholder here
+                let block = Block::default()
+                    .title(" Code Review ")
+                    .title_style(border_style)
+                    .borders(Borders::ALL)
+                    .border_style(border_style);
+                let text = Paragraph::new("  Code Review renders in full-screen mode")
+                    .style(Style::default().fg(app.theme.general.muted_text))
+                    .block(block);
+                frame.render_widget(text, area);
+                return;
+            }
+
             if provider == crate::app::AIProvider::Kanban {
                 if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
                     && let Some(kanban_app) = ws.kanban_app.as_mut()

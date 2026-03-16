@@ -1,6 +1,7 @@
 mod action;
 mod app;
 mod clipboard;
+pub(crate) mod code_review;
 mod command_palette;
 mod config;
 mod dialog_state;

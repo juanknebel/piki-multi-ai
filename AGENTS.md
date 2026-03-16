@@ -26,7 +26,7 @@ cargo clippy             # Lint
 cargo fmt --check        # Check formatting
 ```
 
-Requires Rust >= 1.85 (edition 2024). Runtime deps: `claude` CLI in PATH, git >= 2.20, optionally `delta` for side-by-side diffs.
+Requires Rust >= 1.85 (edition 2024). Runtime deps: `claude` CLI in PATH, git >= 2.20, optionally `delta` for side-by-side diffs, optionally `gh` CLI for code review feature.
 
 ## Architecture
 
@@ -39,6 +39,8 @@ Requires Rust >= 1.85 (edition 2024). Runtime deps: `claude` CLI in PATH, git >=
 **Workspace management** (`workspace/`): `WorkspaceManager` handles git worktree CRUD. Worktrees stored in `.agent-multi/worktrees/<name>` with branches `agent-multi/<name>`. `FileWatcher` uses `notify` crate with mpsc channels.
 
 **Diff pipeline** (`diff/runner.rs`): Runs `git diff | delta` (with plain `git diff` fallback), converts ANSI output to ratatui `Text` via `ansi-to-tui`.
+
+**GitHub integration** (`github.rs`): Async wrappers around `gh` CLI for PR operations: view PR info/files, get per-file diffs as parsed unified diffs with line numbers (`parse_unified_diff`), submit reviews with inline comments via `gh api`. Used by the Code Review tab.
 
 **UI** (`ui/`): `layout.rs` is the main render function composing all panels. Sub-modules render individual components (terminal, diff, workspaces, files, tabs, statusbar).
 
