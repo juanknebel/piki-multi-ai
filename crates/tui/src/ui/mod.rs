@@ -60,9 +60,10 @@ mod tests {
     #[test]
     fn test_render_new_tab_dialog() {
         let mut terminal = test_terminal(80, 24);
+        let app = App::new();
         terminal
             .draw(|frame| {
-                super::dialogs::render_new_tab_dialog(frame, frame.area());
+                super::dialogs::render_new_tab_dialog(frame, frame.area(), &app);
             })
             .unwrap();
         let buf = terminal.backend().buffer().clone();
@@ -71,7 +72,12 @@ mod tests {
             content.contains("New Tab"),
             "should contain 'New Tab' title"
         );
-        assert!(content.contains("Shell"), "should list Shell provider");
+        assert!(content.contains("Shell"), "should list Shell option");
+        assert!(
+            content.contains("AI Agents"),
+            "should list AI Agents category"
+        );
+        assert!(content.contains("Tools"), "should list Tools category");
     }
 
     #[test]

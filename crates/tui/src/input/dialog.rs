@@ -4,7 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField};
-use crate::dialog_state::DialogState;
+use crate::dialog_state::{DialogState, NewTabMenu};
 use piki_core::{AIProvider, MergeStrategy, WorkspaceType};
 
 /// Result of processing a text input key event
@@ -461,58 +461,87 @@ pub(super) fn handle_confirm_merge_input(app: &mut App, key: KeyEvent) -> Option
 }
 
 pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Action> {
-    match key.code {
-        KeyCode::Char('1') => {
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
-            Some(Action::SpawnTab(AIProvider::Claude))
-        }
-        KeyCode::Char('2') => {
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
-            Some(Action::SpawnTab(AIProvider::Gemini))
-        }
-        KeyCode::Char('3') => {
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
-            Some(Action::SpawnTab(AIProvider::OpenCode))
-        }
-        KeyCode::Char('4') => {
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
-            Some(Action::SpawnTab(AIProvider::Kilo))
-        }
-        KeyCode::Char('5') => {
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
-            Some(Action::SpawnTab(AIProvider::Codex))
-        }
-        KeyCode::Char('6') => {
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
-            Some(Action::SpawnTab(AIProvider::Shell))
-        }
-        KeyCode::Char('7') => {
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
-            Some(Action::SpawnTab(AIProvider::Kanban))
-        }
-        KeyCode::Char('8') => {
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
-            Some(Action::SpawnTab(AIProvider::CodeReview))
-        }
-        KeyCode::Char('9') => {
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
-            Some(Action::SpawnTab(AIProvider::Api))
-        }
-        KeyCode::Esc => {
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
-            None
-        }
-        _ => None,
+    let menu = match app.active_dialog {
+        Some(DialogState::NewTab { menu }) => menu,
+        _ => return None,
+    };
+
+    match menu {
+        NewTabMenu::Main => match key.code {
+            KeyCode::Char('1') => {
+                app.active_dialog = None;
+                app.mode = AppMode::Normal;
+                Some(Action::SpawnTab(AIProvider::Shell))
+            }
+            KeyCode::Char('2') => {
+                app.active_dialog = Some(DialogState::NewTab { menu: NewTabMenu::Agents });
+                None
+            }
+            KeyCode::Char('3') => {
+                app.active_dialog = Some(DialogState::NewTab { menu: NewTabMenu::Tools });
+                None
+            }
+            KeyCode::Esc => {
+                app.active_dialog = None;
+                app.mode = AppMode::Normal;
+                None
+            }
+            _ => None,
+        },
+        NewTabMenu::Agents => match key.code {
+            KeyCode::Char('1') => {
+                app.active_dialog = None;
+                app.mode = AppMode::Normal;
+                Some(Action::SpawnTab(AIProvider::Claude))
+            }
+            KeyCode::Char('2') => {
+                app.active_dialog = None;
+                app.mode = AppMode::Normal;
+                Some(Action::SpawnTab(AIProvider::Gemini))
+            }
+            KeyCode::Char('3') => {
+                app.active_dialog = None;
+                app.mode = AppMode::Normal;
+                Some(Action::SpawnTab(AIProvider::OpenCode))
+            }
+            KeyCode::Char('4') => {
+                app.active_dialog = None;
+                app.mode = AppMode::Normal;
+                Some(Action::SpawnTab(AIProvider::Kilo))
+            }
+            KeyCode::Char('5') => {
+                app.active_dialog = None;
+                app.mode = AppMode::Normal;
+                Some(Action::SpawnTab(AIProvider::Codex))
+            }
+            KeyCode::Esc => {
+                app.active_dialog = Some(DialogState::NewTab { menu: NewTabMenu::Main });
+                None
+            }
+            _ => None,
+        },
+        NewTabMenu::Tools => match key.code {
+            KeyCode::Char('1') => {
+                app.active_dialog = None;
+                app.mode = AppMode::Normal;
+                Some(Action::SpawnTab(AIProvider::Kanban))
+            }
+            KeyCode::Char('2') => {
+                app.active_dialog = None;
+                app.mode = AppMode::Normal;
+                Some(Action::SpawnTab(AIProvider::CodeReview))
+            }
+            KeyCode::Char('3') => {
+                app.active_dialog = None;
+                app.mode = AppMode::Normal;
+                Some(Action::SpawnTab(AIProvider::Api))
+            }
+            KeyCode::Esc => {
+                app.active_dialog = Some(DialogState::NewTab { menu: NewTabMenu::Main });
+                None
+            }
+            _ => None,
+        },
     }
 }
 

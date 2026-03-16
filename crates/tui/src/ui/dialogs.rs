@@ -5,7 +5,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph};
 
 use crate::app::{App, DialogField, WorkspaceType};
-use crate::dialog_state::DialogState;
+use crate::dialog_state::{DialogState, NewTabMenu};
 
 /// Helper to create a centered rect with fixed width (chars) and height (lines)
 fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
@@ -1231,26 +1231,61 @@ pub(super) fn render_logs_overlay(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(text, popup);
 }
 
-pub(crate) fn render_new_tab_dialog(frame: &mut Frame, area: Rect) {
-    let popup = clear_popup(frame, area, 40, 15);
+pub(crate) fn render_new_tab_dialog(frame: &mut Frame, area: Rect, app: &App) {
+    let menu = match app.active_dialog {
+        Some(DialogState::NewTab { menu }) => menu,
+        _ => NewTabMenu::Main,
+    };
 
-    let lines = vec![
-        Line::from(""),
-        Line::from("  Select provider:"),
-        Line::from(""),
-        Line::from("  [1] Claude Code"),
-        Line::from("  [2] Gemini"),
-        Line::from("  [3] OpenCode"),
-        Line::from("  [4] Kilo"),
-        Line::from("  [5] Codex"),
-        Line::from("  [6] Shell"),
-        Line::from("  [7] Kanban Board"),
-        Line::from("  [8] Code Review"),
-        Line::from("  [9] API Explorer"),
-        Line::from(""),
-        Line::from("  [Esc] Cancel"),
-    ];
-
-    let text = Paragraph::new(lines).block(popup_block("New Tab", Color::Cyan));
-    frame.render_widget(text, popup);
+    match menu {
+        NewTabMenu::Main => {
+            let popup = clear_popup(frame, area, 40, 9);
+            let lines = vec![
+                Line::from(""),
+                Line::from("  Select category:"),
+                Line::from(""),
+                Line::from("  [1] Shell"),
+                Line::from(vec![
+                    Span::raw("  [2] AI Agents  "),
+                    Span::styled("→", Style::default().fg(Color::DarkGray)),
+                ]),
+                Line::from(vec![
+                    Span::raw("  [3] Tools      "),
+                    Span::styled("→", Style::default().fg(Color::DarkGray)),
+                ]),
+                Line::from(""),
+                Line::from("  [Esc] Cancel"),
+            ];
+            let text = Paragraph::new(lines).block(popup_block("New Tab", Color::Cyan));
+            frame.render_widget(text, popup);
+        }
+        NewTabMenu::Agents => {
+            let popup = clear_popup(frame, area, 40, 11);
+            let lines = vec![
+                Line::from(""),
+                Line::from("  [1] Claude Code"),
+                Line::from("  [2] Gemini"),
+                Line::from("  [3] OpenCode"),
+                Line::from("  [4] Kilo"),
+                Line::from("  [5] Codex"),
+                Line::from(""),
+                Line::from("  [Esc] Back"),
+            ];
+            let text = Paragraph::new(lines).block(popup_block("AI Agents", Color::Cyan));
+            frame.render_widget(text, popup);
+        }
+        NewTabMenu::Tools => {
+            let popup = clear_popup(frame, area, 40, 9);
+            let lines = vec![
+                Line::from(""),
+                Line::from("  [1] Kanban Board"),
+                Line::from("  [2] Code Review"),
+                Line::from("  [3] API Explorer"),
+                Line::from(""),
+                Line::from("  [Esc] Back"),
+            ];
+            let text = Paragraph::new(lines).block(popup_block("Tools", Color::Cyan));
+            frame.render_widget(text, popup);
+        }
+    }
 }

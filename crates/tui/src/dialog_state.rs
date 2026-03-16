@@ -1,6 +1,14 @@
 use crate::app::DialogField;
 use piki_core::WorkspaceType;
 
+/// Which level of the new-tab menu is currently shown.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NewTabMenu {
+    Main,
+    Agents,
+    Tools,
+}
+
 /// Centralized dialog state — replaces 20+ scattered fields on App.
 /// Dismissing any dialog is simply `app.active_dialog = None`.
 #[derive(Debug, Clone)]
@@ -42,7 +50,7 @@ pub enum DialogState {
     },
     ConfirmQuit,
     ConfirmMerge,
-    NewTab,
+    NewTab { menu: NewTabMenu },
     Help {
         scroll: u16,
     },

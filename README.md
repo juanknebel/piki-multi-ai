@@ -10,7 +10,7 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 ## Features
 
 - **Parallel workspaces** — Run multiple AI coding sessions simultaneously, each in an isolated git worktree, pointing directly to an existing directory (Simple mode), or managing a multi-service project root (Project mode)
-- **Dynamic tabs** — Workspaces start empty; create tabs on demand (`t`) for Claude Code, Gemini CLI, OpenCode, Kilo, Codex, Shell, Kanban Board, Code Review, or API Explorer; close tabs with `w`; cycle with `g`/`G`
+- **Dynamic tabs** — Workspaces start empty; create tabs on demand (`t`) organized in categories: Shell (direct), AI Agents (Claude Code, Gemini, OpenCode, Kilo, Codex), and Tools (Kanban Board, Code Review, API Explorer); close tabs with `w`; cycle with `g`/`G`
 - **Workspace dashboard** — Press `D` for a bird's-eye overview of all workspaces with their tabs, status (idle/busy/done), changed files, and ahead/behind; `j`/`k` to navigate, `Enter` to switch, `Esc` to close
 - **Live terminal rendering** — See AI assistant output in real-time with full ANSI color support via `tui-term`
 - **Interactive input** — Type directly into any AI session (Enter on the terminal pane to interact)
@@ -203,7 +203,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `d` | Delete selected workspace |
 | `Tab` / `Shift+Tab` | Next / previous workspace |
 | `1`-`9` | Jump to workspace N |
-| `t` | New tab (opens provider selection: 1=Claude, 2=Gemini, 3=OpenCode, 4=Kilo, 5=Codex, 6=Shell, 7=Kanban Board, 8=Code Review, 9=API Explorer) |
+| `t` | New tab (opens category menu: 1=Shell, 2=AI Agents →, 3=Tools →; submenus for agent/tool selection) |
 | `w` | Close current tab (with confirmation dialog) |
 | `D` | Workspace dashboard overlay (bird's-eye view of all workspaces and tabs) |
 | `Ctrl+p` | Command palette (fuzzy-searchable list of all commands) |
@@ -607,7 +607,7 @@ sequenceDiagram
 - **portable-pty** (sync) wrapped with `tokio::task::spawn_blocking` for non-blocking PTY reads
 - **vt100** parser accumulates terminal state; **tui-term** renders it as a ratatui widget
 - **ansi-to-tui** converts delta's ANSI output to `ratatui::text::Text` for the diff view
-- Workspaces start with no tabs; all tabs (Claude, Gemini, OpenCode, Kilo, Codex, Shell, Kanban, Code Review, API Explorer) are created on demand via `t`; PTY-backed tabs each have their own session, while Kanban, Code Review, and API Explorer tabs manage their own state without PTY
+- Workspaces start with no tabs; all tabs (Claude, Gemini, OpenCode, Kilo, Codex, Shell, Kanban, Code Review, API Explorer) are created on demand via `t` which opens a categorized menu (Shell, AI Agents, Tools); PTY-backed tabs each have their own session, while Kanban, Code Review, and API Explorer tabs manage their own state without PTY
 - Worktrees are stored in `~/.local/share/piki-multi/worktrees/<project>/<name>` with branch names matching the workspace name exactly; Simple workspaces point directly to their source directory; Project workspaces scan sub-directories instead of running git operations
 - Event-driven architecture: `crossterm::EventStream` + `tokio::select!` for truly async event loop; key handlers return `Option<Action>`, main loop executes actions asynchronously
 - STATUS panel uses `git status --porcelain=v1` for full coverage of untracked, staged, conflicted, and renamed files

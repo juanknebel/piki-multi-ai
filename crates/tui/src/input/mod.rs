@@ -305,7 +305,7 @@ pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Act
         }
     } else if app.config.matches_navigation(key, "new_tab") {
         if app.current_workspace().is_some() {
-            app.active_dialog = Some(DialogState::NewTab);
+            app.active_dialog = Some(DialogState::NewTab { menu: crate::dialog_state::NewTabMenu::Main });
             app.mode = AppMode::NewTab;
         }
     } else if app.config.matches_navigation(key, "close_tab") {

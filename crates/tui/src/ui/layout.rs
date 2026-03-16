@@ -96,19 +96,29 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         Some(_) => 1,
         None => 0,
     };
+    let new_tab_menu: u8 = match app.active_dialog {
+        Some(crate::dialog_state::DialogState::NewTab { menu }) => match menu {
+            crate::dialog_state::NewTabMenu::Main => 1,
+            crate::dialog_state::NewTabMenu::Agents => 2,
+            crate::dialog_state::NewTabMenu::Tools => 3,
+        },
+        _ => 0,
+    };
     let cache_key = (
         app.mode.clone(),
         app.interacting,
         app.active_pane,
         has_markdown,
         api_footer_state,
+        new_tab_menu,
     );
-    let keys = if let Some((ref m, i, p, md, api, ref cached)) = app.footer_cache {
+    let keys = if let Some((ref m, i, p, md, api, ntm, ref cached)) = app.footer_cache {
         if *m == cache_key.0
             && i == cache_key.1
             && p == cache_key.2
             && md == cache_key.3
             && api == cache_key.4
+            && ntm == cache_key.5
         {
             cached.clone()
         } else {
@@ -119,6 +129,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
                 cache_key.2,
                 cache_key.3,
                 cache_key.4,
+                cache_key.5,
                 k.clone(),
             ));
             k
@@ -131,6 +142,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
             cache_key.2,
             cache_key.3,
             cache_key.4,
+            cache_key.5,
             k.clone(),
         ));
         k
@@ -221,7 +233,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         AppMode::CommitMessage => super::dialogs::render_commit_dialog(frame, area, app),
         AppMode::ConfirmMerge => super::dialogs::render_confirm_merge_dialog(frame, area, app),
         AppMode::FuzzySearch => super::fuzzy::render(frame, area, app),
-        AppMode::NewTab => super::dialogs::render_new_tab_dialog(frame, area),
+        AppMode::NewTab => super::dialogs::render_new_tab_dialog(frame, area, app),
         AppMode::About => super::dialogs::render_about_overlay(frame, area, app),
         AppMode::WorkspaceInfo => super::dialogs::render_workspace_info_overlay(frame, area, app),
         AppMode::ConfirmCloseTab => {

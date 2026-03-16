@@ -201,10 +201,26 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             ("enter".to_string(), "save"),
             ("esc".to_string(), "cancel"),
         ],
-        AppMode::NewTab => vec![
-            ("1-8".to_string(), "select"),
-            (cfg.get_binding("new_tab", "exit"), "cancel"),
-        ],
+        AppMode::NewTab => {
+            let menu = match app.active_dialog {
+                Some(crate::dialog_state::DialogState::NewTab { menu }) => menu,
+                _ => crate::dialog_state::NewTabMenu::Main,
+            };
+            match menu {
+                crate::dialog_state::NewTabMenu::Main => vec![
+                    ("1-3".to_string(), "select"),
+                    (cfg.get_binding("new_tab", "exit"), "cancel"),
+                ],
+                crate::dialog_state::NewTabMenu::Agents => vec![
+                    ("1-5".to_string(), "select"),
+                    (cfg.get_binding("new_tab", "exit"), "back"),
+                ],
+                crate::dialog_state::NewTabMenu::Tools => vec![
+                    ("1-3".to_string(), "select"),
+                    (cfg.get_binding("new_tab", "exit"), "back"),
+                ],
+            }
+        }
         AppMode::SubmitReview => vec![
             ("Tab".to_string(), "cycle verdict"),
             ("enter".to_string(), "submit"),

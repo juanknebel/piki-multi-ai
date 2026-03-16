@@ -11,6 +11,16 @@
 3. Update inline code comments only where logic is not self-evident
 4. Documentation must be updated in the **same task** as the code change — never leave it for later
 
+### Pre-commit quality gate
+
+**Before every commit**, ensure zero compiler and linter warnings:
+
+```bash
+cargo clippy --all-targets    # Must produce 0 warnings
+```
+
+Do **not** commit code that introduces new warnings. Fix all warnings before committing.
+
 ## What is this?
 
 agent-multi is a Rust TUI application for running multiple Claude Code instances in parallel, each in its own isolated git worktree. Built with ratatui + crossterm for the UI, portable-pty for PTY management, and tokio for async.

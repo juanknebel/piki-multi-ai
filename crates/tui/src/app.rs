@@ -578,13 +578,15 @@ pub struct TermSearchState {
     pub current_match: usize,
 }
 
-/// Cached footer keys: (mode, interacting, active_pane, has_markdown, api_footer_state, keys)
+/// Cached footer keys: (mode, interacting, active_pane, has_markdown, api_footer_state, new_tab_menu, keys)
 /// api_footer_state: 0 = no API tab, 1 = API tab, 2 = API tab with search open
+/// new_tab_menu: 0 = N/A, 1 = Main, 2 = Agents, 3 = Tools
 pub type FooterCache = (
     AppMode,
     bool,
     ActivePane,
     bool,
+    u8,
     u8,
     Vec<(String, &'static str)>,
 );
