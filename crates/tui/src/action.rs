@@ -1026,6 +1026,7 @@ pub(crate) async fn execute_action(
             let parsed_requests = match piki_api_client::parse_hurl_multi(&text) {
                 Ok(p) => p,
                 Err(e) => {
+                    tracing::warn!(error = %e, "API Explorer: failed to parse request");
                     app.set_toast(format!("Parse error: {}", e), ToastLevel::Error);
                     return Ok(());
                 }
@@ -1070,6 +1071,7 @@ pub(crate) async fn execute_action(
                         let client = match piki_api_client::HttpClient::new(config) {
                             Ok(c) => c,
                             Err(e) => {
+                                tracing::error!(error = %e, "API Explorer: failed to create HTTP client");
                                 results.push(app::ApiResponseDisplay {
                                     status: 0,
                                     elapsed_ms: 0,
@@ -1104,6 +1106,7 @@ pub(crate) async fn execute_action(
                                     .map(|(k, v)| format!("{}: {}", k, v))
                                     .collect::<Vec<_>>()
                                     .join("\n");
+                                tracing::info!(status = resp.status, elapsed_ms = elapsed, url = %url, "API Explorer: request completed");
                                 app::ApiResponseDisplay {
                                     status: resp.status,
                                     elapsed_ms: elapsed,
@@ -1111,12 +1114,15 @@ pub(crate) async fn execute_action(
                                     headers,
                                 }
                             }
-                            Err(e) => app::ApiResponseDisplay {
-                                status: 0,
-                                elapsed_ms: elapsed,
-                                body: format!("Error: {}", e),
-                                headers: String::new(),
-                            },
+                            Err(e) => {
+                                tracing::error!(error = %e, url = %url, "API Explorer: request failed");
+                                app::ApiResponseDisplay {
+                                    status: 0,
+                                    elapsed_ms: elapsed,
+                                    body: format!("Error: {}", e),
+                                    headers: String::new(),
+                                }
+                            }
                         };
                         results.push(display);
                     }
