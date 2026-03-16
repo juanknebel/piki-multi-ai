@@ -33,25 +33,23 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
                 kanban_app.edit_state = None;
             }
             KeyCode::Tab => {
-                edit.focus_description = !edit.focus_description;
-                edit.cursor_pos = if edit.focus_description {
-                    edit.description.chars().count()
-                } else {
-                    edit.title.chars().count()
-                };
+                edit.focus = edit.focus.next();
+                edit.cursor_pos = edit.current_text().len();
             }
             KeyCode::Enter => {
                 let card_id = edit.card_id.clone();
                 let title = edit.title.clone();
                 let description = edit.description.clone();
-                if let Err(e) = kanban_provider.update_card(&card_id, &title, &description) {
+                let priority = edit.priority;
+                if let Err(e) =
+                    kanban_provider.update_card(&card_id, &title, &description, priority)
+                {
                     kanban_app.banner = Some(format!("Save failed: {}", e));
                 } else {
                     match kanban_provider.load_board() {
                         Ok(b) => {
                             kanban_app.board = b;
                             kanban_app.clamp();
-                            // Optional: focus_card_by_id(&mut kanban_app, &card_id);
                             kanban_app.banner = Some("Card saved".to_string());
                         }
                         Err(e) => kanban_app.banner = Some(format!("Reload failed: {}", e)),
@@ -60,76 +58,29 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
                 kanban_app.edit_state = None;
             }
             KeyCode::Left => {
-                if edit.cursor_pos > 0 {
-                    edit.cursor_pos -= 1;
-                }
+                edit.move_cursor_left();
             }
             KeyCode::Right => {
-                let field = if edit.focus_description {
-                    &edit.description
-                } else {
-                    &edit.title
-                };
-                if edit.cursor_pos < field.chars().count() {
-                    edit.cursor_pos += 1;
-                }
+                edit.move_cursor_right();
             }
             KeyCode::Home => {
-                edit.cursor_pos = 0;
+                if edit.focus != flow::app::EditFocus::Priority {
+                    edit.cursor_pos = 0;
+                }
             }
             KeyCode::End => {
-                let field = if edit.focus_description {
-                    &edit.description
-                } else {
-                    &edit.title
-                };
-                edit.cursor_pos = field.chars().count();
+                if edit.focus != flow::app::EditFocus::Priority {
+                    edit.cursor_pos = edit.current_text().len();
+                }
             }
             KeyCode::Delete => {
-                let field = if edit.focus_description {
-                    &mut edit.description
-                } else {
-                    &mut edit.title
-                };
-                let char_count = field.chars().count();
-                if edit.cursor_pos < char_count {
-                    let byte_pos = field
-                        .char_indices()
-                        .nth(edit.cursor_pos)
-                        .map(|(i, _)| i)
-                        .unwrap_or(field.len());
-                    field.remove(byte_pos);
-                }
+                edit.delete_curr();
             }
             KeyCode::Char(c) => {
-                let field = if edit.focus_description {
-                    &mut edit.description
-                } else {
-                    &mut edit.title
-                };
-                let byte_pos = field
-                    .char_indices()
-                    .nth(edit.cursor_pos)
-                    .map(|(i, _)| i)
-                    .unwrap_or(field.len());
-                field.insert(byte_pos, c);
-                edit.cursor_pos += 1;
+                edit.insert_char(c);
             }
             KeyCode::Backspace => {
-                if edit.cursor_pos > 0 {
-                    let field = if edit.focus_description {
-                        &mut edit.description
-                    } else {
-                        &mut edit.title
-                    };
-                    edit.cursor_pos -= 1;
-                    let byte_pos = field
-                        .char_indices()
-                        .nth(edit.cursor_pos)
-                        .map(|(i, _)| i)
-                        .unwrap_or(field.len());
-                    field.remove(byte_pos);
-                }
+                edit.delete_prev();
             }
             _ => {}
         }
@@ -193,8 +144,9 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
                             card_id: id,
                             title: "New card".to_string(),
                             description: "".to_string(),
+                            priority: flow::Priority::Medium,
                             cursor_pos: 8,
-                            focus_description: false,
+                            focus: flow::app::EditFocus::Title,
                         });
                     }
                     Err(e) => {
@@ -212,8 +164,9 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
                     card_id: card.id.clone(),
                     title: card.title.clone(),
                     description: card.description.clone(),
-                    cursor_pos: card.title.chars().count(),
-                    focus_description: false,
+                    priority: card.priority,
+                    cursor_pos: card.title.len(),
+                    focus: flow::app::EditFocus::Title,
                 });
             }
             flow::Action::MoveLeft => {

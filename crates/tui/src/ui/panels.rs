@@ -151,7 +151,19 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
     app.selection = selection;
 }
 
+fn priority_color(p: flow::Priority) -> Color {
+    match p {
+        flow::Priority::Bug => Color::Red,
+        flow::Priority::High => Color::Yellow,
+        flow::Priority::Medium => Color::White,
+        flow::Priority::Low => Color::DarkGray,
+        flow::Priority::Wishlist => Color::Cyan,
+    }
+}
+
 fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow::app::EditState) {
+    use flow::app::EditFocus;
+
     let area = flow::ui::centered(70, 60, parent);
     f.render_widget(Clear, area);
 
@@ -160,6 +172,7 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow::app::EditState) 
         .margin(1)
         .constraints([
             Constraint::Length(1),
+            Constraint::Length(3),
             Constraint::Length(3),
             Constraint::Min(1),
             Constraint::Length(1),
@@ -177,7 +190,7 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow::app::EditState) 
         chunks[0],
     );
 
-    let title_style = if !edit.focus_description {
+    let title_style = if edit.focus == EditFocus::Title {
         Style::default().fg(Color::Cyan)
     } else {
         Style::default()
@@ -192,12 +205,42 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow::app::EditState) 
         chunks[1],
     );
 
-    let desc_style = if edit.focus_description {
+    let priority_focused = edit.focus == EditFocus::Priority;
+    let priority_style = if priority_focused {
         Style::default().fg(Color::Cyan)
     } else {
         Style::default()
     };
-    let inner_width = chunks[2].width.saturating_sub(2).max(1) as usize;
+    let priority_spans = vec![
+        Span::raw(" "),
+        Span::styled(
+            format!(" {} ", edit.priority.label()),
+            Style::default()
+                .fg(priority_color(edit.priority))
+                .add_modifier(Modifier::BOLD),
+        ),
+        if priority_focused {
+            Span::styled("  ←/→ to change", Style::default().fg(Color::DarkGray))
+        } else {
+            Span::raw("")
+        },
+    ];
+    f.render_widget(
+        Paragraph::new(Line::from(priority_spans)).block(
+            Block::default()
+                .title("Priority")
+                .borders(Borders::ALL)
+                .border_style(priority_style),
+        ),
+        chunks[2],
+    );
+
+    let desc_style = if edit.focus == EditFocus::Description {
+        Style::default().fg(Color::Cyan)
+    } else {
+        Style::default()
+    };
+    let inner_width = chunks[3].width.saturating_sub(2).max(1) as usize;
     let wrapped: Vec<Line> = char_wrap(&edit.description, inner_width)
         .into_iter()
         .map(Line::from)
@@ -209,25 +252,34 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow::app::EditState) 
                 .borders(Borders::ALL)
                 .border_style(desc_style),
         ),
-        chunks[2],
-    );
-
-    f.render_widget(
-        Paragraph::new("Tab: switch field  Enter: save  Esc: cancel")
-            .style(Style::default().fg(Color::DarkGray))
-            .alignment(ratatui::layout::Alignment::Center),
         chunks[3],
     );
 
-    // Position cursor using cursor_pos for both fields
-    if !edit.focus_description {
-        f.set_cursor_position((
-            chunks[1].x + 1 + edit.cursor_pos as u16,
-            chunks[1].y + 1,
-        ));
-    } else {
-        let (row, col) = cursor_visual_pos(&edit.description, edit.cursor_pos, inner_width);
-        f.set_cursor_position((chunks[2].x + 1 + col, chunks[2].y + 1 + row));
+    f.render_widget(
+        Paragraph::new("Tab: switch field  ←/→: priority  Enter: save  Esc: cancel")
+            .style(Style::default().fg(Color::DarkGray))
+            .alignment(ratatui::layout::Alignment::Center),
+        chunks[4],
+    );
+
+    // Position cursor
+    match edit.focus {
+        EditFocus::Title => {
+            let char_pos = edit.title[..edit.cursor_pos.min(edit.title.len())]
+                .chars()
+                .count();
+            f.set_cursor_position((chunks[1].x + 1 + char_pos as u16, chunks[1].y + 1));
+        }
+        EditFocus::Priority => {
+            // No text cursor for priority field
+        }
+        EditFocus::Description => {
+            let char_pos = edit.description[..edit.cursor_pos.min(edit.description.len())]
+                .chars()
+                .count();
+            let (row, col) = cursor_visual_pos(&edit.description, char_pos, inner_width);
+            f.set_cursor_position((chunks[3].x + 1 + col, chunks[3].y + 1 + row));
+        }
     }
 
     f.render_widget(

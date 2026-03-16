@@ -55,11 +55,13 @@ Common commands:
 ```bash
 flow list                              # See all cards by column
 flow show <card_id>                    # Card details
-flow create <column> "title" --body "description"  # Create card
+flow create <column> "title" --body "description" --priority medium  # Create card
 flow move <card_id> <column>           # Move card between columns
-flow edit <card_id> --title "..." --body "..."      # Update card
+flow edit <card_id> --title "..." --body "..." --priority high       # Update card
 flow delete <card_id>                  # Delete card
 ```
+
+Priority values: `low`, `medium` (default), `high`, `bug`, `wishlist`.
 
 Columns: `todo`, `in_progress`, `in_review`, `done`.
 
