@@ -772,16 +772,43 @@ impl App {
     }
 
     pub fn next_workspace(&mut self) {
-        if !self.workspaces.is_empty() {
-            self.switch_workspace((self.active_workspace + 1) % self.workspaces.len());
+        let visible: Vec<usize> = self
+            .sidebar_items()
+            .iter()
+            .filter_map(|item| match item {
+                SidebarItem::Workspace { index } => Some(*index),
+                _ => None,
+            })
+            .collect();
+        if visible.is_empty() {
+            return;
         }
+        let pos = visible
+            .iter()
+            .position(|&i| i == self.active_workspace)
+            .unwrap_or(0);
+        let next = visible[(pos + 1) % visible.len()];
+        self.switch_workspace(next);
     }
 
     pub fn prev_workspace(&mut self) {
-        if !self.workspaces.is_empty() {
-            let len = self.workspaces.len();
-            self.switch_workspace((self.active_workspace + len - 1) % len);
+        let visible: Vec<usize> = self
+            .sidebar_items()
+            .iter()
+            .filter_map(|item| match item {
+                SidebarItem::Workspace { index } => Some(*index),
+                _ => None,
+            })
+            .collect();
+        if visible.is_empty() {
+            return;
         }
+        let pos = visible
+            .iter()
+            .position(|&i| i == self.active_workspace)
+            .unwrap_or(0);
+        let prev = visible[(pos + visible.len() - 1) % visible.len()];
+        self.switch_workspace(prev);
     }
 
     pub fn switch_workspace(&mut self, index: usize) {

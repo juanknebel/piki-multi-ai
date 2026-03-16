@@ -98,6 +98,8 @@ pub(crate) async fn run(
 
         app.workspaces.push(ws);
     }
+    // Sort by persistent order field for deterministic ordering across restarts
+    app.workspaces.sort_by_key(|ws| ws.info.order);
     tracing::info!(count = app.workspaces.len(), "workspaces restored");
     if !app.workspaces.is_empty() {
         app.switch_workspace(0);

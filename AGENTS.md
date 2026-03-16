@@ -36,7 +36,7 @@ Requires Rust >= 1.85 (edition 2024). Runtime deps: `claude` CLI in PATH, git >=
 
 **PTY** (`pty/`): `PtySession` wraps portable-pty (sync) with `spawn_blocking` for non-blocking reads. `vt100::Parser` accumulates terminal state, rendered by `tui-term`. `input.rs` converts crossterm key events to PTY byte sequences.
 
-**Workspace management** (`workspace/`): `WorkspaceManager` handles git worktree CRUD. Worktrees stored in `.agent-multi/worktrees/<name>` with branches `agent-multi/<name>`. `FileWatcher` uses `notify` crate with mpsc channels.
+**Workspace management** (`workspace/`): `WorkspaceManager` handles git worktree CRUD. Worktrees stored in `.agent-multi/worktrees/<name>` with branches `agent-multi/<name>`. `FileWatcher` uses `notify` crate with mpsc channels. Each workspace has a persistent `order: u32` field that controls deterministic display ordering across restarts; new workspaces get `max_order + 1`. Tab/Shift+Tab cycling follows sidebar visual order, skipping workspaces in collapsed groups.
 
 **Diff pipeline** (`diff/runner.rs`): Runs `git diff | delta` (with plain `git diff` fallback), converts ANSI output to ratatui `Text` via `ansi-to-tui`.
 
@@ -71,4 +71,13 @@ Priority values: `low`, `medium` (default), `high`, `bug`, `wishlist`.
 
 Columns: `todo`, `in_progress`, `in_review`, `done`.
 
-When working on a task, move it to `in_progress` before starting and to `done` when finished. Check the board at the start of each session to understand current state.
+### Task lifecycle (mandatory)
+
+**ALWAYS** keep the board in sync with your work:
+
+1. **Before implementing**: Search the board (`flow list`) for an existing card matching the task. If none exists, create one with `flow create todo "Title" --body "description" --priority <level>`.
+2. **Starting work**: Move the card to `in_progress` before writing any code.
+3. **Implementation done**: Move the card to `in_review` once the code is complete and tests pass.
+4. **After commit**: Move the card to `done` only after the git commit is created.
+
+Check the board at the start of each session to understand current state.

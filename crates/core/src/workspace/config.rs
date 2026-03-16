@@ -21,6 +21,8 @@ pub struct WorkspaceEntry {
     pub workspace_type: WorkspaceType,
     #[serde(default)]
     pub group: Option<String>,
+    #[serde(default)]
+    pub order: u32,
 }
 
 impl WorkspaceEntry {
@@ -37,6 +39,7 @@ impl WorkspaceEntry {
         );
         info.workspace_type = self.workspace_type;
         info.group = self.group;
+        info.order = self.order;
         info
     }
 }
@@ -78,6 +81,7 @@ pub fn save(git_root: &Path, workspaces: &[WorkspaceInfo]) -> anyhow::Result<()>
             source_repo: ws.source_repo.clone(),
             workspace_type: ws.workspace_type,
             group: ws.group.clone(),
+            order: ws.order,
         })
         .collect();
 
@@ -105,11 +109,21 @@ pub fn load(git_root: &Path) -> anyhow::Result<Vec<WorkspaceEntry>> {
         serde_json::from_str(&data).context("failed to parse config file")?;
 
     // Filter out stale entries
-    let entries = config
+    let mut entries: Vec<WorkspaceEntry> = config
         .workspaces
         .into_iter()
         .filter(|e| e.worktree_path.exists())
         .collect();
+
+    // Sort by order field
+    entries.sort_by_key(|e| e.order);
+
+    // Legacy migration: if all entries have order == 0, assign sequential values
+    if entries.len() > 1 && entries.iter().all(|e| e.order == 0) {
+        for (i, e) in entries.iter_mut().enumerate() {
+            e.order = i as u32;
+        }
+    }
 
     Ok(entries)
 }
@@ -150,6 +164,16 @@ pub fn load_all() -> Vec<WorkspaceEntry> {
                 seen_paths.insert(e.worktree_path.clone());
                 all_entries.push(e);
             }
+        }
+    }
+
+    // Sort by order field
+    all_entries.sort_by_key(|e| e.order);
+
+    // Legacy migration: if all entries have order == 0, assign sequential values
+    if all_entries.len() > 1 && all_entries.iter().all(|e| e.order == 0) {
+        for (i, e) in all_entries.iter_mut().enumerate() {
+            e.order = i as u32;
         }
     }
 

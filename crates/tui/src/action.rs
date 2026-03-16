@@ -85,6 +85,13 @@ pub(crate) async fn execute_action(
             match result {
                 Ok(mut info) => {
                     info.group = group;
+                    info.order = app
+                        .workspaces
+                        .iter()
+                        .map(|w| w.info.order)
+                        .max()
+                        .map(|m| m + 1)
+                        .unwrap_or(0);
                     app.workspaces.push(app::Workspace::from_info(info));
                     let new_idx = app.workspaces.len() - 1;
                     app.switch_workspace(new_idx);
