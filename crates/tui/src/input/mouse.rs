@@ -182,6 +182,14 @@ pub(crate) fn handle_mouse_event(
 
     match mouse.kind {
         MouseEventKind::ScrollUp => match app.mode {
+            AppMode::Logs => {
+                if let Some(DialogState::Logs {
+                    ref mut selected, ..
+                }) = app.active_dialog
+                {
+                    *selected = selected.saturating_sub(3);
+                }
+            }
             AppMode::Help => {
                 if let Some(DialogState::Help { ref mut scroll }) = app.active_dialog {
                     *scroll = scroll.saturating_sub(3);
@@ -223,6 +231,14 @@ pub(crate) fn handle_mouse_event(
             _ => {}
         },
         MouseEventKind::ScrollDown => match app.mode {
+            AppMode::Logs => {
+                if let Some(DialogState::Logs {
+                    ref mut selected, ..
+                }) = app.active_dialog
+                {
+                    *selected = selected.saturating_add(3);
+                }
+            }
             AppMode::Help => {
                 if let Some(DialogState::Help { ref mut scroll }) = app.active_dialog {
                     *scroll = scroll.saturating_add(3);
@@ -274,8 +290,73 @@ pub(crate) fn handle_mouse_event(
             });
             app.last_click = Some((now, col, row));
 
-            // Dismiss overlays on click
+            // Dismiss overlays on click (except Logs — handle click-to-select)
             match app.mode {
+                AppMode::Logs => {
+                    // Click to select a row within the logs popup
+                    if let Some(DialogState::Logs {
+                        ref mut scroll,
+                        ref mut selected,
+                        level_filter,
+                        ..
+                    }) = app.active_dialog
+                    {
+                        let term_size = terminal.size().unwrap_or_default();
+                        let popup_width = (term_size.width * 90 / 100).max(40);
+                        let popup_height = (term_size.height * 85 / 100).max(10);
+                        let popup_x = (term_size.width.saturating_sub(popup_width)) / 2;
+                        let popup_y = (term_size.height.saturating_sub(popup_height)) / 2;
+                        let content_top = popup_y + 1;
+                        let content_bottom = popup_y + popup_height.saturating_sub(2);
+                        let inner_height =
+                            (content_bottom.saturating_sub(content_top)) as usize;
+                        if row >= content_top
+                            && row < content_bottom
+                            && col >= popup_x
+                            && col < popup_x + popup_width
+                        {
+                            // Compute total filtered entries for scroll resolution
+                            let total = {
+                                let buf = app.log_buffer.lock();
+                                buf.iter()
+                                    .filter(|e| {
+                                        if level_filter == 0 {
+                                            return true;
+                                        }
+                                        let n = match e.level {
+                                            tracing::Level::ERROR => 1,
+                                            tracing::Level::WARN => 2,
+                                            tracing::Level::INFO => 3,
+                                            tracing::Level::DEBUG => 4,
+                                            tracing::Level::TRACE => 5,
+                                        };
+                                        n <= level_filter
+                                    })
+                                    .count()
+                            };
+                            let last = total.saturating_sub(1);
+                            let max_scroll = total.saturating_sub(inner_height);
+                            // Resolve current selected
+                            let cur_sel = (*selected).min(last);
+                            let scroll_val = if *scroll == u16::MAX {
+                                if total <= inner_height {
+                                    0
+                                } else {
+                                    cur_sel
+                                        .saturating_sub(inner_height.saturating_sub(1))
+                                        .min(max_scroll)
+                                }
+                            } else {
+                                (*scroll as usize).min(max_scroll)
+                            };
+                            let clicked_row = (row - content_top) as usize;
+                            let new_sel = (scroll_val + clicked_row).min(last);
+                            *selected = new_sel;
+                            *scroll = scroll_val as u16;
+                        }
+                    }
+                    return None;
+                }
                 AppMode::Help => {
                     app.mode = AppMode::Normal;
                     return None;

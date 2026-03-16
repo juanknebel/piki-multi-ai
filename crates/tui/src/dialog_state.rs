@@ -57,5 +57,7 @@ pub enum DialogState {
     Logs {
         scroll: u16,
         level_filter: u8,
+        selected: usize,
+        hscroll: u16,
     },
 }

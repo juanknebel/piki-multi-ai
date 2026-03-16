@@ -1083,18 +1083,21 @@ pub(super) fn render_confirm_merge_dialog(frame: &mut Frame, area: Rect, app: &A
 }
 
 pub(super) fn render_logs_overlay(frame: &mut Frame, area: Rect, app: &App) {
-    let (log_scroll, level_filter) = match app.active_dialog {
+    let (log_scroll, level_filter, log_selected, log_hscroll) = match app.active_dialog {
         Some(DialogState::Logs {
             scroll,
             level_filter,
-        }) => (scroll, level_filter),
-        _ => (u16::MAX, 0),
+            selected,
+            hscroll,
+        }) => (scroll, level_filter, selected, hscroll),
+        _ => (u16::MAX, 0, usize::MAX, 0),
     };
 
     let width = area.width * 90 / 100;
     let height = area.height * 85 / 100;
     let popup = clear_popup(frame, area, width.max(40), height.max(10));
     let inner_height = popup.height.saturating_sub(3) as usize; // borders + footer
+    let inner_width = popup.width.saturating_sub(2) as usize; // borders
 
     // Read log entries and filter by level
     let buf = app.log_buffer.lock();
@@ -1116,18 +1119,45 @@ pub(super) fn render_logs_overlay(frame: &mut Frame, area: Rect, app: &App) {
         .collect();
 
     let total = filtered.len();
+    // Clamp selected to valid range
+    let selected = if total == 0 {
+        0
+    } else {
+        log_selected.min(total.saturating_sub(1))
+    };
+
+    // Auto-scroll to keep selection visible
     let max_scroll = total.saturating_sub(inner_height);
     let scroll = if log_scroll == u16::MAX {
-        max_scroll
+        // Auto-scroll: ensure selected is at bottom of view
+        if total <= inner_height {
+            0
+        } else {
+            selected.saturating_sub(inner_height.saturating_sub(1)).min(max_scroll)
+        }
     } else {
-        (log_scroll as usize).min(max_scroll)
+        let mut s = (log_scroll as usize).min(max_scroll);
+        // Ensure selected line is visible
+        if selected < s {
+            s = selected;
+        } else if selected >= s + inner_height {
+            s = selected.saturating_sub(inner_height.saturating_sub(1));
+        }
+        s
     };
+
+    let hscroll = log_hscroll as usize;
+    // Pad width ensures selected bg fills visible area after Paragraph::scroll
+    let pad_width = hscroll + inner_width;
 
     let mut lines: Vec<Line<'_>> = Vec::new();
     let start = scroll;
     let end = total.min(scroll + inner_height);
 
-    for entry in &filtered[start..end] {
+    for (view_idx, entry) in filtered[start..end].iter().enumerate() {
+        let abs_idx = start + view_idx;
+        let is_selected = abs_idx == selected && total > 0;
+
         let level_color = match entry.level {
             tracing::Level::ERROR => Color::Red,
             tracing::Level::WARN => Color::Yellow,
@@ -1143,18 +1173,35 @@ pub(super) fn render_logs_overlay(frame: &mut Frame, area: Rect, app: &App) {
             tracing::Level::TRACE => "TRACE",
         };
 
-        lines.push(Line::from(vec![
-            Span::styled(
-                format!(" {} ", entry.timestamp),
-                Style::default().fg(Color::DarkGray),
-            ),
-            Span::styled(format!("{} ", level_str), Style::default().fg(level_color)),
-            Span::styled(
-                format!("{} ", entry.target),
-                Style::default().fg(Color::DarkGray),
-            ),
-            Span::styled(&entry.message, Style::default().fg(Color::White)),
-        ]));
+        if is_selected {
+            // Selected line: full-width background, padded so bg fills visible area after scroll
+            let full_text = format!(
+                " {} {} {} {}",
+                entry.timestamp, level_str, entry.target, entry.message
+            );
+            let sel_style = Style::default().bg(Color::DarkGray).fg(Color::White);
+            lines.push(Line::from(vec![Span::styled(
+                format!("{:<width$}", full_text, width = pad_width),
+                sel_style,
+            )]));
+        } else {
+            // Normal line with colored spans — Paragraph::scroll handles hscroll
+            lines.push(Line::from(vec![
+                Span::styled(
+                    format!(" {} ", entry.timestamp),
+                    Style::default().fg(Color::DarkGray),
+                ),
+                Span::styled(
+                    format!("{} ", level_str),
+                    Style::default().fg(level_color),
+                ),
+                Span::styled(
+                    format!("{} ", entry.target),
+                    Style::default().fg(Color::DarkGray),
+                ),
+                Span::styled(&entry.message, Style::default().fg(Color::White)),
+            ]));
+        }
     }
 
     // Footer
@@ -1167,14 +1214,10 @@ pub(super) fn render_logs_overlay(frame: &mut Frame, area: Rect, app: &App) {
         5 => ">=trace",
         _ => "all",
     };
-    lines.push(Line::from(Span::styled(
-        " j/k scroll  Ctrl+d/u page  g/G top/bottom  0-5 filter  Esc close",
-        Style::default().fg(Color::DarkGray),
-    )));
 
     let title = format!(" Logs [{}] ", filter_label);
     let scroll_indicator = if total > 0 {
-        format!(" [{}/{}] ", scroll + inner_height.min(total), total)
+        format!(" [{}/{}] ", selected + 1, total)
     } else {
         " [0/0] ".to_string()
     };
@@ -1182,7 +1225,9 @@ pub(super) fn render_logs_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let block = popup_block(&title, app.theme.help.border)
         .title_bottom(Line::from(scroll_indicator).right_aligned());
 
-    let text = Paragraph::new(lines).block(block);
+    let text = Paragraph::new(lines)
+        .block(block)
+        .scroll((0, log_hscroll));
     frame.render_widget(text, popup);
 }
 

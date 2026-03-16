@@ -126,6 +126,8 @@ pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Act
         app.active_dialog = Some(DialogState::Logs {
             scroll: u16::MAX,
             level_filter: 0,
+            selected: usize::MAX,
+            hscroll: 0,
         });
         app.mode = AppMode::Logs;
     } else if app.config.matches_navigation(key, "workspace_info") {

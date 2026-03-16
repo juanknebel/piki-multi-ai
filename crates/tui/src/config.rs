@@ -328,6 +328,12 @@ fn default_logs() -> HashMap<String, String> {
     m.insert("page_up".to_string(), "ctrl-u".to_string());
     m.insert("scroll_top".to_string(), "g".to_string());
     m.insert("scroll_bottom".to_string(), "G".to_string());
+    m.insert("left".to_string(), "h".to_string());
+    m.insert("right".to_string(), "l".to_string());
+    m.insert("left_alt".to_string(), "left".to_string());
+    m.insert("right_alt".to_string(), "right".to_string());
+    m.insert("copy".to_string(), "enter".to_string());
+    m.insert("copy_alt".to_string(), "y".to_string());
     m.insert("exit".to_string(), "esc".to_string());
     m.insert("exit_alt".to_string(), "ctrl-l".to_string());
     m

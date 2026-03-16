@@ -608,28 +608,113 @@ pub(super) fn handle_about_input(app: &mut App, key: KeyEvent) -> Option<Action>
 }
 
 pub(super) fn handle_logs_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    // Compute filtered count to resolve usize::MAX selected
+    let filter_val = match app.active_dialog {
+        Some(DialogState::Logs { level_filter, .. }) => level_filter,
+        _ => return None,
+    };
+    let total = {
+        let buf = app.log_buffer.lock();
+        buf.iter()
+            .filter(|entry| {
+                if filter_val == 0 {
+                    return true;
+                }
+                let n = match entry.level {
+                    tracing::Level::ERROR => 1,
+                    tracing::Level::WARN => 2,
+                    tracing::Level::INFO => 3,
+                    tracing::Level::DEBUG => 4,
+                    tracing::Level::TRACE => 5,
+                };
+                n <= filter_val
+            })
+            .count()
+    };
+    let last = total.saturating_sub(1);
+
     let Some(DialogState::Logs {
         ref mut scroll,
         ref mut level_filter,
+        ref mut selected,
+        ref mut hscroll,
     }) = app.active_dialog
     else {
         return None;
     };
 
+    // Resolve sentinel to concrete value
+    if *selected > last {
+        *selected = last;
+        // Also resolve scroll so render uses concrete tracking
+        if *scroll == u16::MAX {
+            *scroll = total.saturating_sub(20) as u16; // approximate; render will adjust
+        }
+    }
+
     if app.config.matches_logs(key, "down") || app.config.matches_logs(key, "down_alt") {
-        *scroll = scroll.saturating_add(1);
+        *selected = (*selected + 1).min(last);
     } else if app.config.matches_logs(key, "up") || app.config.matches_logs(key, "up_alt") {
-        *scroll = scroll.saturating_sub(1);
+        *selected = selected.saturating_sub(1);
     } else if app.config.matches_logs(key, "page_down") {
-        *scroll = scroll.saturating_add(10);
+        *selected = (*selected + 10).min(last);
     } else if app.config.matches_logs(key, "page_up") {
-        *scroll = scroll.saturating_sub(10);
+        *selected = selected.saturating_sub(10);
     } else if app.config.matches_logs(key, "scroll_top") {
+        *selected = 0;
         *scroll = 0;
     } else if app.config.matches_logs(key, "scroll_bottom") {
+        *selected = last;
         *scroll = u16::MAX;
+    } else if app.config.matches_logs(key, "right") || app.config.matches_logs(key, "right_alt") {
+        *hscroll = hscroll.saturating_add(4);
+    } else if app.config.matches_logs(key, "left") || app.config.matches_logs(key, "left_alt") {
+        *hscroll = hscroll.saturating_sub(4);
+    } else if app.config.matches_logs(key, "copy") || app.config.matches_logs(key, "copy_alt") {
+        // Copy selected line to clipboard
+        let sel = *selected;
+        let filter = *level_filter;
+        let buf = app.log_buffer.lock();
+        let filtered: Vec<_> = buf
+            .iter()
+            .filter(|entry| {
+                if filter == 0 {
+                    return true;
+                }
+                let entry_num = match entry.level {
+                    tracing::Level::ERROR => 1,
+                    tracing::Level::WARN => 2,
+                    tracing::Level::INFO => 3,
+                    tracing::Level::DEBUG => 4,
+                    tracing::Level::TRACE => 5,
+                };
+                entry_num <= filter
+            })
+            .collect();
+        let clamped = sel.min(filtered.len().saturating_sub(1));
+        if let Some(entry) = filtered.get(clamped) {
+            let level_str = match entry.level {
+                tracing::Level::ERROR => "ERROR",
+                tracing::Level::WARN => "WARN",
+                tracing::Level::INFO => "INFO",
+                tracing::Level::DEBUG => "DEBUG",
+                tracing::Level::TRACE => "TRACE",
+            };
+            let text = format!(
+                "{} {} {} {}",
+                entry.timestamp, level_str, entry.target, entry.message
+            );
+            drop(buf);
+            match crate::clipboard::copy_to_clipboard(&text) {
+                Ok(()) => app.status_message = Some("Log line copied".into()),
+                Err(e) => app.status_message = Some(format!("Copy failed: {e}")),
+            }
+        }
     } else if let KeyCode::Char(c @ '0'..='5') = key.code {
         *level_filter = (c as u8) - b'0';
+        // Reset selection when filter changes
+        *selected = usize::MAX;
+        *scroll = u16::MAX;
     } else if app.config.matches_logs(key, "exit") || app.config.matches_logs(key, "exit_alt") {
         app.active_dialog = None;
         app.mode = AppMode::Normal;

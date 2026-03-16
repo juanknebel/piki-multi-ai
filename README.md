@@ -40,7 +40,7 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 - **Customizable themes** — Colors loaded from TOML files; supports named colors and hex `#rrggbb`
 - **Pre-flight checks** — Validates required (git >= 2.20) and optional dependencies (delta) at startup with clear error/warning messages; `gh` CLI availability is checked lazily on first Code Review use
 - **Command palette** — Press `Ctrl+p` to open a VS Code-style searchable command palette; fuzzy-filter ~25 commands across 7 categories (Workspace, Git, Tabs, Search, View, Layout, App) with match highlighting and keybinding hints; powered by [nucleo](https://github.com/helix-editor/nucleo)
-- **In-app log viewer** — Press `Ctrl+l` to open a scrollable overlay showing the last 500 log entries from the current session; color-coded by level (ERROR=red, WARN=yellow, INFO=green, DEBUG=cyan, TRACE=gray); filter by level with `0`-`5` keys; scroll with `j`/`k`, `Ctrl+d`/`Ctrl+u`, `g`/`G`
+- **In-app log viewer** — Press `Ctrl+l` to open a scrollable overlay showing the last 500 log entries from the current session; color-coded by level (ERROR=red, WARN=yellow, INFO=green, DEBUG=cyan, TRACE=gray); filter by level with `0`-`5` keys; select lines with `j`/`k` (highlighted), horizontal scroll with `h`/`l`, page with `Ctrl+d`/`Ctrl+u`, `g`/`G` top/bottom; `Enter`/`y` copies selected line to clipboard; mouse scroll and click to select
 - **Structured logging** — File-based structured logging via `tracing` with daily rotation to `~/.local/share/piki-multi/logs/`; configurable via `--log-level` flag (trace/debug/info/warn/error)
 - **Code Review** — Full-screen PR review tab powered by `gh` CLI; browse changed files, view diffs with line numbers and a cursor, add inline comments on any line (`c`), delete comments (`d`), submit reviews (approve/request changes/comment) with inline comments via GitHub API; persistent draft overlay; tab only opens if the current branch has an open PR; locked mode prevents accidental workspace switching — press `q` to close or `s` to submit; `gh` availability and authentication are checked lazily on first use and cached for the session
 - **API Explorer** — Interactive HTTP client tab (`t` then `9`) with Hurl-like syntax; write `METHOD URL`, headers, and body in a built-in editor (starts empty); `Ctrl+S` to send; response displayed with status code, elapsed time, and pretty-printed JSON; `Ctrl+J`/`Ctrl+K` to scroll response; `Ctrl+F` to search response; contextual footer hints for API-specific shortcuts
@@ -258,10 +258,14 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 
 | Key | Action |
 |-----|--------|
-| `j` / `k` | Scroll up/down |
+| `j` / `k` | Select next/previous line |
+| `h` / `l` | Scroll left/right (horizontal) |
 | `Ctrl+d` / `Ctrl+u` | Page down/up |
 | `g` / `G` | Top / bottom |
+| `Enter` / `y` | Copy selected line to clipboard |
 | `0`-`5` | Filter by level (0=all, 1=error, 2=warn, 3=info, 4=debug, 5=trace) |
+| Mouse scroll | Select up/down |
+| Mouse click | Select clicked line |
 | `Esc` or `Ctrl+l` | Close log viewer |
 
 **In command palette** (`Ctrl+p`):

@@ -253,7 +253,15 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                     cfg.get_binding("logs", "up"),
                     cfg.get_binding("logs", "down")
                 ),
-                "scroll",
+                "select",
+            ),
+            (
+                format!(
+                    "{}/{}",
+                    cfg.get_binding("logs", "left"),
+                    cfg.get_binding("logs", "right")
+                ),
+                "hscroll",
             ),
             (
                 format!(
@@ -263,7 +271,8 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                 ),
                 "page",
             ),
-            ("0-5".to_string(), "filter level"),
+            (cfg.get_binding("logs", "copy"), "copy"),
+            ("0-5".to_string(), "filter"),
             (cfg.get_binding("logs", "exit"), "close"),
         ],
         AppMode::Dashboard => vec![
