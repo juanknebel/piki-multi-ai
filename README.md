@@ -1,11 +1,42 @@
-# agent-multi (v1.0.0-beta)
+# agent-multi (v1.0.0)
 
 A terminal UI for orchestrating multiple [Claude Code](https://docs.anthropic.com/en/docs/claude-code) instances in parallel — each running in its own isolated git worktree, pointing to an existing directory, or managing a multi-service project root.
 
 Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](https://github.com/supermaven-inc/superset.sh).
 
-![Main Layout](screenshots/screenshot_1.png)
-![Diff View](screenshots/screenshot_2.png)
+### Navigation & Interaction
+
+| Navigation mode | Interaction mode |
+|:---:|:---:|
+| ![Navigation mode](screenshots/01-general-navigate.png) | ![Interaction mode](screenshots/02-general-interact.png) |
+
+### Workspace Dashboard
+
+![Dashboard](screenshots/03-dashboard.png)
+
+### New Tab (categorized menu)
+
+| Main menu | AI Agents | Tools |
+|:---:|:---:|:---:|
+| ![New Tab](screenshots/04-new-tab.png) | ![AI Agents](screenshots/05-new-tab-agents.png) | ![Tools](screenshots/06-new-tab-tools.png) |
+
+### AI Agent Tab & Git Diff
+
+| OpenCode tab | Side-by-side diff |
+|:---:|:---:|
+| ![OpenCode](screenshots/07-tab-opencode.png) | ![Git Diff](screenshots/08-git-diff.png) |
+
+### API Explorer
+
+| Request & Response | Response search |
+|:---:|:---:|
+| ![API Explorer](screenshots/09-tab-api-explorer.png) | ![API Search](screenshots/10-tab-api-explorer-search.png) |
+
+### Code Review
+
+| Inline comment | General comment |
+|:---:|:---:|
+| ![Inline comment](screenshots/11-code-review-inline-comment.png) | ![General comment](screenshots/12-code-review-general-comment.png) |
 
 ## Features
 
