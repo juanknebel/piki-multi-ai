@@ -339,7 +339,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 
 **Code Review** (locked mode — all other keys blocked):
 
-The Code Review tab takes over the full screen. While active, workspace switching, pane navigation, and all other global keybindings are disabled. You must close the review (`q`) or submit it (`s` → `Enter`) to return to normal mode. The diff pane shows a custom unified diff renderer with line numbers and a cursor — press `c` on any line to add an inline comment, `d` to remove it. Comments are displayed as yellow blocks inline in the diff and submitted alongside the review via the GitHub API. Note: GitHub does not allow Approve or Request Changes on your own PRs — use Comment instead.
+The Code Review tab takes over the full screen. While active, workspace switching, pane navigation, and all other global keybindings are disabled. You must close the review (`q`) or submit it (`s` → `Enter`) to return to normal mode. The diff pane shows a **side-by-side split view**: the left panel displays the old file (deletions in red), the right panel displays the new file (additions in green), and context lines appear on both sides. Deletions and additions are paired row-by-row; file and hunk headers span the full width. Press `c` on any line to add an inline comment, `d` to remove it. Comments are displayed as yellow blocks inline on the appropriate side (left for deletions, right for additions) and submitted alongside the review via the GitHub API. The cursor highlights both halves simultaneously. Note: GitHub does not allow Approve or Request Changes on your own PRs — use Comment instead.
 
 | Key | Context | Action |
 |-----|---------|--------|
@@ -503,7 +503,7 @@ crates/
         command_palette.rs # Command palette overlay renderer
         markdown.rs      # Markdown file viewer (tui-markdown)
         editor.rs        # Inline file editor renderer
-        code_review.rs   # Full-screen code review layout + submit overlay
+        code_review.rs   # Full-screen code review layout (side-by-side split diff) + submit overlay
 ```
 
 ### Sequence diagram

@@ -49,6 +49,18 @@ impl ReviewDraft {
             .iter()
             .find(|c| c.path == path && c.line == line)
     }
+
+    /// Get the comment at a specific file path, line, and side (LEFT/RIGHT).
+    pub fn comment_at_line_and_side(
+        &self,
+        path: &str,
+        line: u32,
+        side: &str,
+    ) -> Option<&InlineComment> {
+        self.comments
+            .iter()
+            .find(|c| c.path == path && c.line == line && c.side == side)
+    }
 }
 
 /// Full code review state for a workspace

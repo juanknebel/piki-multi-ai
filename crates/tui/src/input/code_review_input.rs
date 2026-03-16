@@ -421,31 +421,20 @@ fn ensure_cursor_visible(cr: &mut crate::code_review::CodeReviewState) {
 }
 
 /// Compute the visual row index for the current cursor_line,
-/// accounting for comment decoration lines above.
+/// accounting for comment decoration lines and split-row pairing.
 fn compute_visual_row_for_cursor(cr: &crate::code_review::CodeReviewState) -> usize {
     let diff = match cr.current_diff() {
         Some(d) => d,
         None => return cr.cursor_line,
     };
     let file_path = cr.current_file_path().unwrap_or("");
-    let mut visual_row = 0;
-    for (i, line) in diff.lines.iter().enumerate() {
-        if i == cr.cursor_line {
-            return visual_row;
-        }
-        visual_row += 1;
-        // Check if this line has a comment → adds 3 decoration lines
-        let has_comment = match line.line_type {
-            DiffLineType::Deletion => line
-                .old_line
-                .is_some_and(|ln| cr.draft.comment_at_line(file_path, ln).is_some()),
-            _ => line
-                .new_line
-                .is_some_and(|ln| cr.draft.comment_at_line(file_path, ln).is_some()),
-        };
-        if has_comment {
-            visual_row += 3;
+    let split_rows =
+        crate::ui::code_review::compute_split_rows(diff, &cr.draft, file_path);
+    for (row_idx, srow) in split_rows.iter().enumerate() {
+        if srow.contains_diff_idx(cr.cursor_line) {
+            return row_idx;
         }
     }
-    visual_row
+    // Fallback: cursor beyond all rows
+    split_rows.len().saturating_sub(1)
 }

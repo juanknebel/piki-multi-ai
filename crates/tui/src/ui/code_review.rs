@@ -182,47 +182,191 @@ fn render_file_list(frame: &mut Frame, area: Rect, state: &CodeReviewState) {
     frame.render_widget(list, inner);
 }
 
-/// Compute the visual lines for a parsed diff, including comment decoration lines.
-/// Returns (visual_lines, mapping from visual_row -> diff_line_index or None for comment rows).
-fn compute_visual_lines(
+/// Which side a comment decoration belongs to in the split view.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CommentSide {
+    Left,
+    Right,
+}
+
+/// A single row in the side-by-side split diff view.
+#[derive(Debug, Clone)]
+pub(crate) enum SplitRow {
+    /// File or hunk header — rendered full width.
+    FullWidth { diff_idx: usize },
+    /// Paired content row: left (old file) and right (new file).
+    /// Each side is `Some(diff_line_index)` or `None` (blank filler).
+    Paired {
+        left: Option<usize>,
+        right: Option<usize>,
+    },
+    /// Comment box header on one side.
+    CommentHeader {
+        diff_idx: usize,
+        side: CommentSide,
+    },
+    /// Comment box body on one side.
+    CommentBody {
+        diff_idx: usize,
+        side: CommentSide,
+    },
+    /// Comment box footer on one side.
+    CommentFooter {
+        diff_idx: usize,
+        side: CommentSide,
+    },
+}
+
+impl SplitRow {
+    /// Returns true if this row references the given diff line index.
+    pub(crate) fn contains_diff_idx(&self, idx: usize) -> bool {
+        match self {
+            SplitRow::FullWidth { diff_idx } => *diff_idx == idx,
+            SplitRow::Paired { left, right } => {
+                left.is_some_and(|i| i == idx) || right.is_some_and(|i| i == idx)
+            }
+            SplitRow::CommentHeader { diff_idx, .. }
+            | SplitRow::CommentBody { diff_idx, .. }
+            | SplitRow::CommentFooter { diff_idx, .. } => *diff_idx == idx,
+        }
+    }
+}
+
+/// Build the list of split rows from a parsed diff, pairing deletions with additions.
+pub(crate) fn compute_split_rows(
     diff: &ParsedDiff,
     draft: &super::super::code_review::ReviewDraft,
     file_path: &str,
-) -> Vec<VisualLine> {
-    let mut visual = Vec::new();
-    for (i, line) in diff.lines.iter().enumerate() {
-        visual.push(VisualLine::DiffLine(i));
+) -> Vec<SplitRow> {
+    let mut rows: Vec<SplitRow> = Vec::new();
+    let mut del_buf: Vec<usize> = Vec::new(); // indices of consecutive deletions
 
-        // If this line has a comment, add decoration lines after it
-        if let Some(ln) = line.new_line {
-            if draft.comment_at_line(file_path, ln).is_some() {
-                visual.push(VisualLine::CommentHeader(i));
-                visual.push(VisualLine::CommentBody(i));
-                visual.push(VisualLine::CommentFooter(i));
+    let lines = &diff.lines;
+
+    // Flush pending deletions as left-only rows (right=None), with comment decorations.
+    let flush_dels = |del_buf: &mut Vec<usize>,
+                      rows: &mut Vec<SplitRow>,
+                      draft: &super::super::code_review::ReviewDraft,
+                      file_path: &str| {
+        for &di in del_buf.iter() {
+            rows.push(SplitRow::Paired {
+                left: Some(di),
+                right: None,
+            });
+            append_comment_decorations(rows, diff, draft, file_path, di);
+        }
+        del_buf.clear();
+    };
+
+    let mut i = 0;
+    while i < lines.len() {
+        let line = &lines[i];
+        match line.line_type {
+            DiffLineType::FileHeader | DiffLineType::HunkHeader => {
+                flush_dels(&mut del_buf, &mut rows, draft, file_path);
+                rows.push(SplitRow::FullWidth { diff_idx: i });
+                i += 1;
             }
-        } else if let Some(ln) = line.old_line {
-            // For deletion-only lines that have comments on old_line
-            if line.line_type == DiffLineType::Deletion
-                && draft.comment_at_line(file_path, ln).is_some()
-            {
-                visual.push(VisualLine::CommentHeader(i));
-                visual.push(VisualLine::CommentBody(i));
-                visual.push(VisualLine::CommentFooter(i));
+            DiffLineType::Deletion => {
+                del_buf.push(i);
+                i += 1;
+            }
+            DiffLineType::Addition => {
+                if del_buf.is_empty() {
+                    // Addition with no preceding deletion → right-only
+                    rows.push(SplitRow::Paired {
+                        left: None,
+                        right: Some(i),
+                    });
+                    append_comment_decorations(&mut rows, diff, draft, file_path, i);
+                    i += 1;
+                } else {
+                    // Pair deletions with additions 1:1
+                    let mut add_buf: Vec<usize> = Vec::new();
+                    let mut j = i;
+                    while j < lines.len() && lines[j].line_type == DiffLineType::Addition {
+                        add_buf.push(j);
+                        j += 1;
+                    }
+                    let max_len = del_buf.len().max(add_buf.len());
+                    for k in 0..max_len {
+                        let left = del_buf.get(k).copied();
+                        let right = add_buf.get(k).copied();
+                        rows.push(SplitRow::Paired { left, right });
+                        // Append comment decorations for whichever side(s) exist
+                        if let Some(li) = left {
+                            append_comment_decorations(&mut rows, diff, draft, file_path, li);
+                        }
+                        if let Some(ri) = right {
+                            append_comment_decorations(&mut rows, diff, draft, file_path, ri);
+                        }
+                    }
+                    del_buf.clear();
+                    i = j;
+                }
+            }
+            DiffLineType::Context => {
+                flush_dels(&mut del_buf, &mut rows, draft, file_path);
+                rows.push(SplitRow::Paired {
+                    left: Some(i),
+                    right: Some(i),
+                });
+                append_comment_decorations(&mut rows, diff, draft, file_path, i);
+                i += 1;
             }
         }
     }
-    visual
+    // Flush any trailing deletions
+    flush_dels(&mut del_buf, &mut rows, draft, file_path);
+    rows
 }
 
-#[derive(Debug, Clone, Copy)]
-enum VisualLine {
-    DiffLine(usize),       // index into ParsedDiff.lines
-    CommentHeader(usize),  // comment decoration for diff line at index
-    CommentBody(usize),
-    CommentFooter(usize),
+/// Append comment decoration rows (header/body/footer) for a diff line if it has a comment.
+fn append_comment_decorations(
+    rows: &mut Vec<SplitRow>,
+    diff: &ParsedDiff,
+    draft: &super::super::code_review::ReviewDraft,
+    file_path: &str,
+    diff_idx: usize,
+) {
+    let line = &diff.lines[diff_idx];
+    let (ln, side_str, side) = match line.line_type {
+        DiffLineType::Deletion => {
+            if let Some(ln) = line.old_line {
+                (ln, "LEFT", CommentSide::Left)
+            } else {
+                return;
+            }
+        }
+        DiffLineType::Addition | DiffLineType::Context => {
+            if let Some(ln) = line.new_line {
+                (ln, "RIGHT", CommentSide::Right)
+            } else {
+                return;
+            }
+        }
+        _ => return,
+    };
+    if draft
+        .comment_at_line_and_side(file_path, ln, side_str)
+        .is_some()
+    {
+        rows.push(SplitRow::CommentHeader {
+            diff_idx,
+            side,
+        });
+        rows.push(SplitRow::CommentBody {
+            diff_idx,
+            side,
+        });
+        rows.push(SplitRow::CommentFooter {
+            diff_idx,
+            side,
+        });
+    }
 }
 
-/// Render the diff pane with line numbers, cursor, and inline comments
+/// Render the side-by-side split diff pane with line numbers, cursor, and inline comments
 fn render_diff(frame: &mut Frame, area: Rect, state: &CodeReviewState) {
     let focus_color = if state.focus == ReviewFocus::DiffView {
         Color::Cyan
@@ -244,171 +388,135 @@ fn render_diff(frame: &mut Frame, area: Rect, state: &CodeReviewState) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    if inner.width == 0 || inner.height == 0 {
+    if inner.width < 4 || inner.height == 0 {
         return;
     }
 
     if let Some(diff) = state.current_diff() {
         let file_path = state.current_file_path().unwrap_or("");
-        let visual_lines = compute_visual_lines(diff, &state.draft, file_path);
+        let split_rows = compute_split_rows(diff, &state.draft, file_path);
         let viewport_height = inner.height as usize;
         let scroll = state.diff_scroll;
-        let gutter_width: u16 = 11; // "  old | new | "
 
-        for (row_offset, vline) in visual_lines
+        let left_half = inner.width / 2;
+        let right_half = inner.width - left_half;
+        let gutter: u16 = 7; // " %4d |" = 7 chars
+
+        for (row_offset, srow) in split_rows
             .iter()
             .skip(scroll)
             .take(viewport_height)
             .enumerate()
         {
             let y = inner.y + row_offset as u16;
-            let available_content_width = inner.width.saturating_sub(gutter_width);
 
-            match vline {
-                VisualLine::DiffLine(idx) => {
-                    let diff_line = &diff.lines[*idx];
+            match srow {
+                SplitRow::FullWidth { diff_idx } => {
+                    let diff_line = &diff.lines[*diff_idx];
                     let is_cursor = state.focus == ReviewFocus::DiffView
-                        && state.cursor_line == *idx;
+                        && state.cursor_line == *diff_idx;
 
-                    // Gutter
-                    let old_str = diff_line
-                        .old_line
-                        .map(|n| format!("{:>4}", n))
-                        .unwrap_or_else(|| "    ".to_string());
-                    let new_str = diff_line
-                        .new_line
-                        .map(|n| format!("{:>4}", n))
-                        .unwrap_or_else(|| "    ".to_string());
-
-                    let gutter_style = if is_cursor {
-                        Style::default()
-                            .fg(Color::DarkGray)
-                            .add_modifier(Modifier::REVERSED)
+                    let style = match diff_line.line_type {
+                        DiffLineType::HunkHeader => Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD),
+                        DiffLineType::FileHeader => Style::default()
+                            .fg(Color::White)
+                            .add_modifier(Modifier::BOLD),
+                        _ => Style::default().fg(Color::Gray),
+                    };
+                    let style = if is_cursor {
+                        style.add_modifier(Modifier::REVERSED)
                     } else {
-                        Style::default().fg(Color::DarkGray)
+                        style
                     };
 
-                    let gutter_text = format!("{} {} ", old_str, new_str);
                     buf_set_string_clipped(
                         frame.buffer_mut(),
                         inner.x,
                         y,
-                        &gutter_text,
-                        gutter_style,
+                        &diff_line.content,
+                        style,
                         inner.width,
                     );
-
-                    // Content
-                    let (content_style, prefix) = match diff_line.line_type {
-                        DiffLineType::Addition => (Style::default().fg(Color::Green), "+"),
-                        DiffLineType::Deletion => (Style::default().fg(Color::Red), "-"),
-                        DiffLineType::HunkHeader => (
-                            Style::default()
-                                .fg(Color::Cyan)
-                                .add_modifier(Modifier::BOLD),
-                            "",
-                        ),
-                        DiffLineType::FileHeader => (
-                            Style::default()
-                                .fg(Color::White)
-                                .add_modifier(Modifier::BOLD),
-                            "",
-                        ),
-                        DiffLineType::Context => (Style::default().fg(Color::Gray), " "),
-                    };
-
-                    let content_style = if is_cursor {
-                        content_style.add_modifier(Modifier::REVERSED)
-                    } else {
-                        content_style
-                    };
-
-                    let display_text = if matches!(
-                        diff_line.line_type,
-                        DiffLineType::HunkHeader | DiffLineType::FileHeader
-                    ) {
-                        diff_line.content.clone()
-                    } else {
-                        format!("{}{}", prefix, diff_line.content)
-                    };
-
-                    buf_set_string_clipped(
-                        frame.buffer_mut(),
-                        inner.x + gutter_width,
-                        y,
-                        &display_text,
-                        content_style,
-                        available_content_width,
-                    );
-
-                    // If cursor line, fill remaining width with reversed style
+                    // Fill remaining width for cursor highlight
                     if is_cursor {
-                        let used = gutter_width as usize + display_text.chars().count();
-                        let remaining = inner.width as usize;
-                        if used < remaining {
-                            let pad = " ".repeat(remaining - used);
+                        let used = diff_line.content.chars().count().min(inner.width as usize);
+                        if used < inner.width as usize {
+                            let pad = " ".repeat(inner.width as usize - used);
                             buf_set_string_clipped(
                                 frame.buffer_mut(),
                                 inner.x + used as u16,
                                 y,
                                 &pad,
-                                content_style,
-                                (remaining - used) as u16,
+                                style,
+                                (inner.width as usize - used) as u16,
                             );
                         }
                     }
                 }
-                VisualLine::CommentHeader(idx) => {
-                    let diff_line = &diff.lines[*idx];
-                    let ln = diff_line.new_line.or(diff_line.old_line).unwrap_or(0);
-                    let header = format!(
-                        "{}  \u{250c}\u{2500}\u{2500} line {} \u{2500}\u{2500}",
-                        " ".repeat(gutter_width as usize),
-                        ln,
-                    );
-                    buf_set_string_clipped(
-                        frame.buffer_mut(),
+                SplitRow::Paired { left, right } => {
+                    let is_cursor = state.focus == ReviewFocus::DiffView
+                        && (left.is_some_and(|i| i == state.cursor_line)
+                            || right.is_some_and(|i| i == state.cursor_line));
+
+                    // Left half
+                    render_half_line(
+                        frame,
                         inner.x,
                         y,
-                        &header,
-                        Style::default().fg(Color::Yellow),
-                        inner.width,
+                        left_half,
+                        gutter,
+                        *left,
+                        diff,
+                        is_cursor,
+                        true,
+                    );
+
+                    // Vertical separator
+                    let sep_x = inner.x + left_half;
+                    if sep_x < inner.x + inner.width {
+                        buf_set_string_clipped(
+                            frame.buffer_mut(),
+                            sep_x,
+                            y,
+                            "\u{2502}",
+                            Style::default().fg(Color::DarkGray),
+                            1,
+                        );
+                    }
+
+                    // Right half (starts after separator, so we use right_half - 1 if separator takes space)
+                    let right_start = inner.x + left_half + 1;
+                    let right_width = right_half.saturating_sub(1);
+                    render_half_line(
+                        frame,
+                        right_start,
+                        y,
+                        right_width,
+                        gutter,
+                        *right,
+                        diff,
+                        is_cursor,
+                        false,
                     );
                 }
-                VisualLine::CommentBody(idx) => {
-                    let diff_line = &diff.lines[*idx];
-                    let ln = diff_line.new_line.or(diff_line.old_line).unwrap_or(0);
-                    let body = state
-                        .draft
-                        .comment_at_line(file_path, ln)
-                        .map(|c| c.body.as_str())
-                        .unwrap_or("");
-                    let body_line = format!(
-                        "{}  \u{2502} {}",
-                        " ".repeat(gutter_width as usize),
-                        body,
-                    );
-                    buf_set_string_clipped(
-                        frame.buffer_mut(),
-                        inner.x,
-                        y,
-                        &body_line,
-                        Style::default().fg(Color::Yellow),
-                        inner.width,
+                SplitRow::CommentHeader { diff_idx, side } => {
+                    render_comment_decoration_row(
+                        frame, inner, y, left_half, right_half, diff, &state.draft, file_path,
+                        *diff_idx, *side, CommentDecorPart::Header,
                     );
                 }
-                VisualLine::CommentFooter(_idx) => {
-                    let footer = format!(
-                        "{}  \u{2514}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}",
-                        " ".repeat(gutter_width as usize),
+                SplitRow::CommentBody { diff_idx, side } => {
+                    render_comment_decoration_row(
+                        frame, inner, y, left_half, right_half, diff, &state.draft, file_path,
+                        *diff_idx, *side, CommentDecorPart::Body,
                     );
-                    buf_set_string_clipped(
-                        frame.buffer_mut(),
-                        inner.x,
-                        y,
-                        &footer,
-                        Style::default().fg(Color::Yellow),
-                        inner.width,
+                }
+                SplitRow::CommentFooter { diff_idx, side } => {
+                    render_comment_decoration_row(
+                        frame, inner, y, left_half, right_half, diff, &state.draft, file_path,
+                        *diff_idx, *side, CommentDecorPart::Footer,
                     );
                 }
             }
@@ -421,6 +529,176 @@ fn render_diff(frame: &mut Frame, area: Rect, state: &CodeReviewState) {
         let text = Paragraph::new("  Select a file and press Enter to view diff")
             .style(Style::default().fg(Color::DarkGray));
         frame.render_widget(text, inner);
+    }
+}
+
+/// Render one half (left or right) of a paired split row.
+#[allow(clippy::too_many_arguments)]
+fn render_half_line(
+    frame: &mut Frame,
+    x: u16,
+    y: u16,
+    half_width: u16,
+    gutter: u16,
+    line_idx: Option<usize>,
+    diff: &ParsedDiff,
+    is_cursor: bool,
+    is_left: bool,
+) {
+    if half_width < gutter + 1 {
+        return;
+    }
+    let content_width = half_width.saturating_sub(gutter);
+
+    match line_idx {
+        Some(idx) => {
+            let diff_line = &diff.lines[idx];
+
+            // Gutter: line number
+            let ln = if is_left {
+                diff_line.old_line
+            } else {
+                diff_line.new_line
+            };
+            let ln_str = ln
+                .map(|n| format!(" {:>4}\u{2502}", n))
+                .unwrap_or_else(|| "     \u{2502}".to_string());
+
+            let gutter_style = if is_cursor {
+                Style::default()
+                    .fg(Color::DarkGray)
+                    .add_modifier(Modifier::REVERSED)
+            } else {
+                Style::default().fg(Color::DarkGray)
+            };
+
+            buf_set_string_clipped(frame.buffer_mut(), x, y, &ln_str, gutter_style, gutter);
+
+            // Content
+            let (content_style, prefix) = match diff_line.line_type {
+                DiffLineType::Addition => (Style::default().fg(Color::Green), "+"),
+                DiffLineType::Deletion => (Style::default().fg(Color::Red), "-"),
+                DiffLineType::Context => (Style::default().fg(Color::Gray), " "),
+                _ => (Style::default().fg(Color::Gray), " "),
+            };
+
+            let content_style = if is_cursor {
+                content_style.add_modifier(Modifier::REVERSED)
+            } else {
+                content_style
+            };
+
+            let display = format!("{}{}", prefix, diff_line.content);
+            buf_set_string_clipped(
+                frame.buffer_mut(),
+                x + gutter,
+                y,
+                &display,
+                content_style,
+                content_width,
+            );
+
+            // Fill remaining for cursor highlight
+            if is_cursor {
+                let used = display.chars().count().min(content_width as usize);
+                if used < content_width as usize {
+                    let pad = " ".repeat(content_width as usize - used);
+                    buf_set_string_clipped(
+                        frame.buffer_mut(),
+                        x + gutter + used as u16,
+                        y,
+                        &pad,
+                        content_style,
+                        (content_width as usize - used) as u16,
+                    );
+                }
+            }
+        }
+        None => {
+            // Empty filler — dim fill
+            let fill_style = if is_cursor {
+                Style::default()
+                    .fg(Color::DarkGray)
+                    .add_modifier(Modifier::REVERSED)
+            } else {
+                Style::default().fg(Color::DarkGray)
+            };
+            let fill = " ".repeat(half_width as usize);
+            buf_set_string_clipped(frame.buffer_mut(), x, y, &fill, fill_style, half_width);
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum CommentDecorPart {
+    Header,
+    Body,
+    Footer,
+}
+
+/// Render a comment decoration row (header/body/footer) on the appropriate side.
+#[allow(clippy::too_many_arguments)]
+fn render_comment_decoration_row(
+    frame: &mut Frame,
+    inner: Rect,
+    y: u16,
+    left_half: u16,
+    right_half: u16,
+    diff: &ParsedDiff,
+    draft: &super::super::code_review::ReviewDraft,
+    file_path: &str,
+    diff_idx: usize,
+    side: CommentSide,
+    part: CommentDecorPart,
+) {
+    let diff_line = &diff.lines[diff_idx];
+    let (ln, side_str) = match side {
+        CommentSide::Left => (
+            diff_line.old_line.unwrap_or(0),
+            "LEFT",
+        ),
+        CommentSide::Right => (
+            diff_line.new_line.unwrap_or(0),
+            "RIGHT",
+        ),
+    };
+
+    let comment_style = Style::default().fg(Color::Yellow);
+
+    // Determine the x offset and available width for this side
+    let (side_x, side_width) = match side {
+        CommentSide::Left => (inner.x, left_half),
+        CommentSide::Right => (inner.x + left_half + 1, right_half.saturating_sub(1)),
+    };
+
+    let text = match part {
+        CommentDecorPart::Header => {
+            format!("  \u{250c}\u{2500}\u{2500} line {} \u{2500}\u{2500}", ln)
+        }
+        CommentDecorPart::Body => {
+            let body = draft
+                .comment_at_line_and_side(file_path, ln, side_str)
+                .map(|c| c.body.as_str())
+                .unwrap_or("");
+            format!("  \u{2502} {}", body)
+        }
+        CommentDecorPart::Footer => {
+            "  \u{2514}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}".to_string()
+        }
+    };
+
+    buf_set_string_clipped(frame.buffer_mut(), side_x, y, &text, comment_style, side_width);
+
+    // Draw vertical separator on comment rows too
+    if left_half < inner.width {
+        buf_set_string_clipped(
+            frame.buffer_mut(),
+            inner.x + left_half,
+            y,
+            "\u{2502}",
+            Style::default().fg(Color::DarkGray),
+            1,
+        );
     }
 }
 
