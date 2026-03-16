@@ -43,7 +43,7 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 - **In-app log viewer** — Press `Ctrl+l` to open a scrollable overlay showing the last 500 log entries from the current session; color-coded by level (ERROR=red, WARN=yellow, INFO=green, DEBUG=cyan, TRACE=gray); filter by level with `0`-`5` keys; scroll with `j`/`k`, `Ctrl+d`/`Ctrl+u`, `g`/`G`
 - **Structured logging** — File-based structured logging via `tracing` with daily rotation to `~/.local/share/piki-multi/logs/`; configurable via `--log-level` flag (trace/debug/info/warn/error)
 - **Code Review** — Full-screen PR review tab powered by `gh` CLI; browse changed files, view diffs with line numbers and a cursor, add inline comments on any line (`c`), delete comments (`d`), submit reviews (approve/request changes/comment) with inline comments via GitHub API; persistent draft overlay; tab only opens if the current branch has an open PR; locked mode prevents accidental workspace switching — press `q` to close or `s` to submit; `gh` availability and authentication are checked lazily on first use and cached for the session
-- **API Explorer** — Interactive HTTP client tab (`t` then `9`) with Hurl-like syntax; write `METHOD URL`, headers, and body in a built-in editor; `Ctrl+S` to send; response displayed with status code, elapsed time, and pretty-printed JSON; `Ctrl+J`/`Ctrl+K` to scroll response
+- **API Explorer** — Interactive HTTP client tab (`t` then `9`) with Hurl-like syntax; write `METHOD URL`, headers, and body in a built-in editor (starts empty); `Ctrl+S` to send; response displayed with status code, elapsed time, and pretty-printed JSON; `Ctrl+J`/`Ctrl+K` to scroll response; `Ctrl+F` to search response; contextual footer hints for API-specific shortcuts
 
 ## Prerequisites
 
@@ -202,7 +202,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `d` | Delete selected workspace |
 | `Tab` / `Shift+Tab` | Next / previous workspace |
 | `1`-`9` | Jump to workspace N |
-| `t` | New tab (opens provider selection: 1=Claude, 2=Gemini, 3=OpenCode, 4=Kilo, 5=Codex, 6=Shell, 7=Kanban Board, 8=Code Review) |
+| `t` | New tab (opens provider selection: 1=Claude, 2=Gemini, 3=OpenCode, 4=Kilo, 5=Codex, 6=Shell, 7=Kanban Board, 8=Code Review, 9=API Explorer) |
 | `w` | Close current tab (with confirmation dialog) |
 | `D` | Workspace dashboard overlay (bird's-eye view of all workspaces and tabs) |
 | `Ctrl+p` | Command palette (fuzzy-searchable list of all commands) |
@@ -231,6 +231,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | *Markdown tab* | `j`/`k` scroll, `Ctrl+d`/`Ctrl+u` page, `g`/`G` top/bottom (read-only) |
 | *Kanban tab* | `h/l/j/k` navigate, `H/L` move card, `n` new card, `e` edit card, `d` delete, `Enter` details, `Esc` close modal |
 | *Code Review tab* | Locked mode — see Code Review section below |
+| *API Explorer tab* | `Ctrl+S` send request, `Ctrl+J`/`Ctrl+K` scroll response, `Ctrl+F` search response, `Ctrl+C` copy response, mouse scroll in editor/response |
 
 **In kanban card editor** (after pressing `e` or `n`):
 
@@ -601,7 +602,7 @@ sequenceDiagram
 - **portable-pty** (sync) wrapped with `tokio::task::spawn_blocking` for non-blocking PTY reads
 - **vt100** parser accumulates terminal state; **tui-term** renders it as a ratatui widget
 - **ansi-to-tui** converts delta's ANSI output to `ratatui::text::Text` for the diff view
-- Workspaces start with no tabs; all tabs (Claude, Gemini, OpenCode, Kilo, Codex, Shell, Kanban, Code Review) are created on demand via `t`; PTY-backed tabs each have their own session, while Kanban and Code Review tabs manage their own state without PTY
+- Workspaces start with no tabs; all tabs (Claude, Gemini, OpenCode, Kilo, Codex, Shell, Kanban, Code Review, API Explorer) are created on demand via `t`; PTY-backed tabs each have their own session, while Kanban, Code Review, and API Explorer tabs manage their own state without PTY
 - Worktrees are stored in `~/.local/share/piki-multi/worktrees/<project>/<name>` with branch names matching the workspace name exactly; Simple workspaces point directly to their source directory; Project workspaces scan sub-directories instead of running git operations
 - Event-driven architecture: `crossterm::EventStream` + `tokio::select!` for truly async event loop; key handlers return `Option<Action>`, main loop executes actions asynchronously
 - STATUS panel uses `git status --porcelain=v1` for full coverage of untracked, staged, conflicted, and renamed files

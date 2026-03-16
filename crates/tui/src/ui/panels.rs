@@ -24,6 +24,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
     }
 
     let border_style = pane_border_style(app, ActivePane::MainPanel);
+    app.api_response_inner_area = None;
 
     let selection = app.selection.take();
     let selection_style = Style::default()
@@ -73,8 +74,21 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
 
             if provider == crate::app::AIProvider::Api {
                 if let Some(ref api) = tab.api_state {
-                    super::api::render(frame, area, api, border_style);
+                    let response_inner = super::api::render(
+                        frame,
+                        area,
+                        api,
+                        border_style,
+                        selection.as_ref(),
+                        selection_style,
+                    );
+                    app.api_response_inner_area = response_inner;
+                    // Override terminal_inner_area so mouse selection coordinates work
+                    if let Some(inner) = response_inner {
+                        app.terminal_inner_area = Some(inner);
+                    }
                 }
+                app.selection = selection;
                 return;
             }
 

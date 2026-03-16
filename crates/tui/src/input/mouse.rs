@@ -5,7 +5,7 @@ use crossterm::event::{MouseButton, MouseEventKind};
 use ratatui::DefaultTerminal;
 
 use crate::action::Action;
-use crate::app::{self, ActivePane, App, AppMode};
+use crate::app::{self, ActivePane, ApiResponseDisplay, App, AppMode};
 use crate::clipboard;
 use crate::dialog_state::DialogState;
 use crate::helpers::{rect_contains, resize_all_ptys, scrollback_max, subtab_index_at};
@@ -196,6 +196,7 @@ pub(crate) fn handle_mouse_event(
                 }
             }
             AppMode::Normal | AppMode::InlineEdit => {
+                let api_resp_area = app.api_response_inner_area;
                 if rect_contains(app.ws_list_area, col, row) {
                     app.select_prev_sidebar_row();
                 } else if rect_contains(app.file_list_area, col, row) {
@@ -207,6 +208,12 @@ pub(crate) fn handle_mouse_event(
                 {
                     if tab.markdown_content.is_some() {
                         tab.markdown_scroll = tab.markdown_scroll.saturating_sub(3);
+                    } else if let Some(ref mut api) = tab.api_state {
+                        if api_resp_area.is_some_and(|r| row >= r.y.saturating_sub(1)) {
+                            api.response_scroll = api.response_scroll.saturating_sub(3);
+                        } else {
+                            api.editor.scroll_offset = api.editor.scroll_offset.saturating_sub(1);
+                        }
                     } else if let Some(ref parser) = tab.pty_parser {
                         let max = scrollback_max(parser);
                         tab.term_scroll = (tab.term_scroll + 3).min(max);
@@ -233,6 +240,7 @@ pub(crate) fn handle_mouse_event(
                 }
             }
             AppMode::Normal | AppMode::InlineEdit => {
+                let api_resp_area = app.api_response_inner_area;
                 if rect_contains(app.ws_list_area, col, row) {
                     app.select_next_sidebar_row();
                 } else if rect_contains(app.file_list_area, col, row) {
@@ -244,6 +252,13 @@ pub(crate) fn handle_mouse_event(
                 {
                     if tab.markdown_content.is_some() {
                         tab.markdown_scroll = tab.markdown_scroll.saturating_add(3);
+                    } else if let Some(ref mut api) = tab.api_state {
+                        if api_resp_area.is_some_and(|r| row >= r.y.saturating_sub(1)) {
+                            api.response_scroll = api.response_scroll.saturating_add(3);
+                        } else {
+                            let max = api.editor.lines.len().saturating_sub(1);
+                            api.editor.scroll_offset = (api.editor.scroll_offset + 1).min(max);
+                        }
                     } else {
                         tab.term_scroll = tab.term_scroll.saturating_sub(3);
                     }
@@ -447,19 +462,35 @@ pub(crate) fn handle_mouse_event(
             } else if let Some(ref mut sel) = app.selection {
                 sel.active = false;
                 let (sr, sc, er, ec) = sel.normalized();
-                if (sr != er || sc != ec)
-                    && let Some(ws) = app.workspaces.get(app.active_workspace)
-                    && let Some(tab) = ws.current_tab()
-                    && let Some(ref parser) = tab.pty_parser
-                {
-                    let mut guard = parser.lock();
-                    guard.screen_mut().set_scrollback(tab.term_scroll);
-                    let text = guard.screen().contents_between(sr, sc, er, ec + 1);
-                    guard.screen_mut().set_scrollback(0);
-                    if let Err(e) = clipboard::copy_to_clipboard(&text) {
-                        app.status_message = Some(format!("Copy failed: {}", e));
+                if sr != er || sc != ec {
+                    let copied = if let Some(ws) = app.workspaces.get(app.active_workspace)
+                        && let Some(tab) = ws.current_tab()
+                        && let Some(ref parser) = tab.pty_parser
+                    {
+                        let mut guard = parser.lock();
+                        guard.screen_mut().set_scrollback(tab.term_scroll);
+                        let text = guard.screen().contents_between(sr, sc, er, ec + 1);
+                        guard.screen_mut().set_scrollback(0);
+                        Some(text)
+                    } else if let Some(ws) = app.workspaces.get(app.active_workspace)
+                        && let Some(tab) = ws.current_tab()
+                        && let Some(ref api) = tab.api_state
+                        && app.api_response_inner_area.is_some()
+                    {
+                        let lines = build_response_text_lines(&api.responses);
+                        let scroll = api.response_scroll as usize;
+                        let text = extract_text_from_lines(&lines, sr, sc, er, ec, scroll);
+                        if text.is_empty() { None } else { Some(text) }
                     } else {
-                        app.status_message = Some("Selection copied".into());
+                        None
+                    };
+
+                    if let Some(text) = copied {
+                        if let Err(e) = clipboard::copy_to_clipboard(&text) {
+                            app.status_message = Some(format!("Copy failed: {}", e));
+                        } else {
+                            app.status_message = Some("Selection copied".into());
+                        }
                     }
                 }
             }
@@ -467,4 +498,72 @@ pub(crate) fn handle_mouse_event(
         _ => {}
     }
     None
+}
+
+/// Build plain-text lines matching the render layout of API responses.
+/// Each response gets a header line, body lines, and a separator between responses.
+fn build_response_text_lines(responses: &[ApiResponseDisplay]) -> Vec<String> {
+    let mut lines = Vec::new();
+    let total = responses.len();
+    for (idx, resp) in responses.iter().enumerate() {
+        // Header line (matches render_responses layout)
+        let header = if resp.status == 0 {
+            format!("── Response #{} (error) — {}ms ", idx + 1, resp.elapsed_ms)
+        } else if total == 1 {
+            format!("── {} — {}ms ", resp.status, resp.elapsed_ms)
+        } else {
+            format!("── #{} ({}) — {}ms ", idx + 1, resp.status, resp.elapsed_ms)
+        };
+        lines.push(header);
+
+        // Body lines
+        for line in resp.body.lines() {
+            lines.push(line.to_string());
+        }
+
+        // Separator between responses
+        if idx + 1 < total {
+            lines.push(String::new());
+        }
+    }
+    lines
+}
+
+/// Extract text from rendered lines between selection coordinates, accounting for scroll.
+fn extract_text_from_lines(
+    lines: &[String],
+    start_row: u16,
+    start_col: u16,
+    end_row: u16,
+    end_col: u16,
+    scroll: usize,
+) -> String {
+    let sr = start_row as usize + scroll;
+    let er = end_row as usize + scroll;
+    let sc = start_col as usize;
+    let ec = end_col as usize;
+
+    let mut result = String::new();
+    for row in sr..=er {
+        if row >= lines.len() {
+            break;
+        }
+        let line = &lines[row];
+        let chars: Vec<char> = line.chars().collect();
+        let col_start = if row == sr { sc } else { 0 };
+        let col_end = if row == er {
+            ec.min(chars.len().saturating_sub(1))
+        } else {
+            chars.len().saturating_sub(1)
+        };
+        if col_start <= col_end && col_start < chars.len() {
+            let end = (col_end + 1).min(chars.len());
+            let slice: String = chars[col_start..end].iter().collect();
+            result.push_str(&slice);
+        }
+        if row < er {
+            result.push('\n');
+        }
+    }
+    result
 }

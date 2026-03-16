@@ -627,8 +627,14 @@ pub fn parse_key_event(s: &str) -> Option<KeyEvent> {
 
 pub fn key_matches(event: KeyEvent, binding: &str) -> bool {
     if let Some(target) = parse_key_event(binding) {
-        // Only compare code and modifiers.
-        event.code == target.code && event.modifiers == target.modifiers
+        // Compare modifiers and key code. For Char variants, compare case-insensitively
+        // because crossterm may send 'C' (uppercase) when Shift is held, while the
+        // binding parser produces 'c' (lowercase).
+        let code_match = match (event.code, target.code) {
+            (KeyCode::Char(a), KeyCode::Char(b)) => a.eq_ignore_ascii_case(&b),
+            (a, b) => a == b,
+        };
+        code_match && event.modifiers == target.modifiers
     } else {
         false
     }
@@ -691,6 +697,25 @@ mod tests {
         assert!(key_matches(event, "ctrl-g"));
         assert!(!key_matches(event, "g"));
         assert!(!key_matches(event, "alt-g"));
+    }
+
+    #[test]
+    fn test_key_matches_ctrl_shift_c() {
+        // Kitty protocol reports lowercase key + SHIFT modifier
+        let event = KeyEvent::new(
+            KeyCode::Char('c'),
+            KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+        );
+        assert!(key_matches(event, "ctrl-shift-c"));
+        assert!(!key_matches(event, "ctrl-c"));
+        assert!(!key_matches(event, "c"));
+
+        // Some terminals report uppercase key + SHIFT modifier
+        let event = KeyEvent::new(
+            KeyCode::Char('C'),
+            KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+        );
+        assert!(key_matches(event, "ctrl-shift-c"));
     }
 
     #[test]

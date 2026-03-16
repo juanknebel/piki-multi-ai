@@ -87,14 +87,29 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         .current_workspace()
         .and_then(|ws| ws.current_tab())
         .is_some_and(|tab| tab.markdown_content.is_some());
+    let api_footer_state: u8 = match app
+        .current_workspace()
+        .and_then(|ws| ws.current_tab())
+        .and_then(|tab| tab.api_state.as_ref())
+    {
+        Some(api) if api.search.is_some() => 2,
+        Some(_) => 1,
+        None => 0,
+    };
     let cache_key = (
         app.mode.clone(),
         app.interacting,
         app.active_pane,
         has_markdown,
+        api_footer_state,
     );
-    let keys = if let Some((ref m, i, p, md, ref cached)) = app.footer_cache {
-        if *m == cache_key.0 && i == cache_key.1 && p == cache_key.2 && md == cache_key.3 {
+    let keys = if let Some((ref m, i, p, md, api, ref cached)) = app.footer_cache {
+        if *m == cache_key.0
+            && i == cache_key.1
+            && p == cache_key.2
+            && md == cache_key.3
+            && api == cache_key.4
+        {
             cached.clone()
         } else {
             let k = super::statusbar::footer_keys(app);
@@ -103,6 +118,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
                 cache_key.1,
                 cache_key.2,
                 cache_key.3,
+                cache_key.4,
                 k.clone(),
             ));
             k
@@ -114,6 +130,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
             cache_key.1,
             cache_key.2,
             cache_key.3,
+            cache_key.4,
             k.clone(),
         ));
         k

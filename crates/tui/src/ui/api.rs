@@ -4,7 +4,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
-use crate::app::{ApiResponseDisplay, ApiTabState};
+use crate::app::{ApiResponseDisplay, ApiTabState, Selection};
 
 fn char_to_byte_idx(s: &str, char_idx: usize) -> usize {
     s.char_indices()
@@ -13,7 +13,16 @@ fn char_to_byte_idx(s: &str, char_idx: usize) -> usize {
         .unwrap_or(s.len())
 }
 
-pub(crate) fn render(frame: &mut Frame, area: Rect, api: &ApiTabState, border_style: Style) {
+/// Render the API Explorer tab. Returns the inner area of the response panel
+/// (for mouse hit-testing), or `None` if no response is displayed.
+pub(crate) fn render(
+    frame: &mut Frame,
+    area: Rect,
+    api: &ApiTabState,
+    border_style: Style,
+    selection: Option<&Selection>,
+    selection_style: Style,
+) -> Option<Rect> {
     let has_response = !api.responses.is_empty() || api.loading;
 
     let chunks = if has_response {
@@ -27,7 +36,16 @@ pub(crate) fn render(frame: &mut Frame, area: Rect, api: &ApiTabState, border_st
 
     // ── Response pane ──
     if has_response {
-        render_responses(frame, chunks[1], api, border_style);
+        render_responses(
+            frame,
+            chunks[1],
+            api,
+            border_style,
+            selection,
+            selection_style,
+        )
+    } else {
+        None
     }
 }
 
@@ -95,7 +113,14 @@ fn render_editor(frame: &mut Frame, area: Rect, api: &ApiTabState, border_style:
     frame.render_widget(paragraph, inner);
 }
 
-fn render_responses(frame: &mut Frame, area: Rect, api: &ApiTabState, border_style: Style) {
+fn render_responses(
+    frame: &mut Frame,
+    area: Rect,
+    api: &ApiTabState,
+    border_style: Style,
+    selection: Option<&Selection>,
+    selection_style: Style,
+) -> Option<Rect> {
     if api.loading {
         let block = Block::default()
             .title(" Response ")
@@ -106,11 +131,11 @@ fn render_responses(frame: &mut Frame, area: Rect, api: &ApiTabState, border_sty
             .style(Style::default().fg(Color::Yellow))
             .block(block);
         frame.render_widget(text, area);
-        return;
+        return None;
     }
 
     if api.responses.is_empty() {
-        return;
+        return None;
     }
 
     // Build all response lines with separators between responses
@@ -197,6 +222,29 @@ fn render_responses(frame: &mut Frame, area: Rect, api: &ApiTabState, border_sty
         .scroll((api.response_scroll, 0));
     frame.render_widget(text, area);
 
+    // Render selection highlight overlay
+    if let Some(sel) = selection {
+        let (start_row, start_col, end_row, end_col) = sel.normalized();
+        let first_row = start_row.min(inner.height.saturating_sub(1));
+        let last_row = end_row.min(inner.height.saturating_sub(1));
+        let buf = frame.buffer_mut();
+        for row in first_row..=last_row {
+            let col_start = if row == start_row { start_col } else { 0 };
+            let col_end = if row == end_row {
+                end_col.min(inner.width.saturating_sub(1))
+            } else {
+                inner.width.saturating_sub(1)
+            };
+            for col in col_start..=col_end {
+                let x = inner.x + col;
+                let y = inner.y + row;
+                if let Some(cell) = buf.cell_mut((x, y)) {
+                    cell.set_style(selection_style);
+                }
+            }
+        }
+    }
+
     // Render search highlights and search bar
     if let Some(ref search) = api.search {
         let query_len = search.query.chars().count();
@@ -253,6 +301,8 @@ fn render_responses(frame: &mut Frame, area: Rect, api: &ApiTabState, border_sty
         ]));
         frame.render_widget(bar, bar_area);
     }
+
+    Some(inner)
 }
 
 fn status_color(status: u16) -> Color {

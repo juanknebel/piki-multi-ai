@@ -1,4 +1,4 @@
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField};
@@ -600,6 +600,41 @@ pub(super) fn handle_api_interaction(app: &mut App, key: KeyEvent) -> Option<Act
         return None;
     }
 
+    // Ctrl+C / Ctrl+Shift+C: copy entire response body
+    // Ctrl+C is safe here (no PTY in API tab); Ctrl+Shift+C may be intercepted by the terminal
+    if (key.code == KeyCode::Char('c')
+        && key.modifiers.contains(KeyModifiers::CONTROL)
+        && !key.modifiers.contains(KeyModifiers::SHIFT))
+        || app.config.matches_interaction(key, "copy")
+    {
+        let text = app
+            .workspaces
+            .get(app.active_workspace)
+            .and_then(|ws| ws.current_tab())
+            .and_then(|tab| tab.api_state.as_ref())
+            .map(|api| {
+                api.responses
+                    .iter()
+                    .map(|r| r.body.as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n\n")
+            })
+            .unwrap_or_default();
+        if text.is_empty() {
+            app.set_toast("No response to copy", crate::app::ToastLevel::Info);
+        } else {
+            match clipboard::copy_to_clipboard(&text) {
+                Ok(()) => {
+                    app.set_toast("Response copied", crate::app::ToastLevel::Info);
+                }
+                Err(e) => {
+                    app.set_toast(format!("Copy failed: {e}"), crate::app::ToastLevel::Error);
+                }
+            }
+        }
+        return None;
+    }
+
     let ws = app.workspaces.get_mut(app.active_workspace)?;
     let tab = ws.current_tab_mut()?;
     let api = tab.api_state.as_mut()?;
@@ -714,7 +749,7 @@ pub(super) fn handle_api_interaction(app: &mut App, key: KeyEvent) -> Option<Act
         return None;
     }
 
-    // Editor input
+    // Editor input — skip chars with Ctrl/Alt modifiers (those are shortcuts, not text input)
     match key.code {
         KeyCode::Up => api.editor.move_up(),
         KeyCode::Down => api.editor.move_down(),
@@ -722,7 +757,13 @@ pub(super) fn handle_api_interaction(app: &mut App, key: KeyEvent) -> Option<Act
         KeyCode::Right => api.editor.move_right(),
         KeyCode::Enter => api.editor.enter(),
         KeyCode::Backspace => api.editor.backspace(),
-        KeyCode::Char(c) => api.editor.insert_char(c),
+        KeyCode::Char(c)
+            if !key
+                .modifiers
+                .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) =>
+        {
+            api.editor.insert_char(c);
+        }
         KeyCode::Tab => {
             for _ in 0..4 {
                 api.editor.insert_char(' ');

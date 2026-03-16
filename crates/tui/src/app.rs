@@ -184,7 +184,7 @@ pub struct ApiTabState {
 impl ApiTabState {
     pub fn new() -> Self {
         Self {
-            editor: EditorState::new("GET https://\n\n"),
+            editor: EditorState::new(""),
             responses: Vec::new(),
             loading: false,
             response_scroll: 0,
@@ -578,8 +578,16 @@ pub struct TermSearchState {
     pub current_match: usize,
 }
 
-/// Cached footer keys: (mode, interacting, active_pane, has_markdown, keys)
-pub type FooterCache = (AppMode, bool, ActivePane, bool, Vec<(String, &'static str)>);
+/// Cached footer keys: (mode, interacting, active_pane, has_markdown, api_footer_state, keys)
+/// api_footer_state: 0 = no API tab, 1 = API tab, 2 = API tab with search open
+pub type FooterCache = (
+    AppMode,
+    bool,
+    ActivePane,
+    bool,
+    u8,
+    Vec<(String, &'static str)>,
+);
 
 pub struct App {
     pub should_quit: bool,
@@ -615,6 +623,8 @@ pub struct App {
     pub theme: Theme,
     pub selection: Option<Selection>,
     pub terminal_inner_area: Option<Rect>,
+    /// Inner area of the API response panel (for mouse hit-testing)
+    pub api_response_inner_area: Option<Rect>,
     /// In-memory log ring buffer for the log viewer overlay
     pub log_buffer: crate::log_buffer::LogBuffer,
     /// Pre-formatted system info string (CPU, RAM, battery, time)
@@ -699,6 +709,7 @@ impl App {
             theme: Theme::default(),
             selection: None,
             terminal_inner_area: None,
+            api_response_inner_area: None,
             sysinfo: std::sync::Arc::new(parking_lot::Mutex::new(String::new())),
             sidebar_pct: 20,
             left_split_pct: 50,

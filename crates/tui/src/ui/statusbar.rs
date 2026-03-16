@@ -318,6 +318,31 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             } else if app
                 .current_workspace()
                 .and_then(|ws| ws.current_tab())
+                .is_some_and(|tab| tab.api_state.is_some())
+            {
+                let has_search = app
+                    .current_workspace()
+                    .and_then(|ws| ws.current_tab())
+                    .and_then(|tab| tab.api_state.as_ref())
+                    .is_some_and(|api| api.search.is_some());
+                if has_search {
+                    vec![
+                        ("enter".to_string(), "next match"),
+                        ("shift-enter".to_string(), "prev match"),
+                        ("esc".to_string(), "close search"),
+                    ]
+                } else {
+                    vec![
+                        ("^S".to_string(), "send"),
+                        ("^J/^K".to_string(), "scroll"),
+                        ("^F".to_string(), "search"),
+                        ("^C".to_string(), "copy response"),
+                        (cfg.get_binding("interaction", "exit_interaction"), "back"),
+                    ]
+                }
+            } else if app
+                .current_workspace()
+                .and_then(|ws| ws.current_tab())
                 .is_some_and(|tab| tab.markdown_content.is_some())
             {
                 vec![
