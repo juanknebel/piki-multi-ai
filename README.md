@@ -132,6 +132,20 @@ Shows version and author information (same as the **About** overlay in-app):
 piki-multi-ai version
 ```
 
+#### `migrate`
+
+Migrates workspace configurations from JSON files to a SQLite database. JSON files are preserved (not deleted) for manual verification:
+
+```bash
+piki-multi-ai migrate
+```
+
+After migration, switch to the SQLite backend:
+
+```bash
+PIKI_STORAGE=sqlite piki-multi-ai
+```
+
 ### Creating Workspaces
 
 Press `n` to open the New Workspace dialog. Provide:
@@ -151,17 +165,28 @@ Press `e` on a selected workspace to modify its **Kanban Path**, **Prompt**, or 
 
 ### Persistence
 
-Workspace configurations are saved automatically and restored on startup.
+Workspace configurations are saved automatically and restored on startup. Two storage backends are available:
 
-- **Storage:**
-  - `~/.local/share/piki-multi/worktrees/<project-name>/<workspace-name>/` (git worktrees)
-  - `~/.local/share/piki-multi/workspaces/<project-name>.json` (workspace config per project)
+**JSON (default):**
 
-- **Restoration:**
-  - On startup, `piki-multi-ai` scans the config directory and restores all valid workspaces.
-  - Stale entries (worktrees deleted manually) are cleaned up automatically.
-  - Robust de-duplication ensures each workspace is loaded only once.
-  - Simple and Project workspaces reference the original directory and are never cleaned up as stale.
+- `~/.local/share/piki-multi/workspaces/<project-name>.json` (workspace config per project)
+
+**SQLite** (opt-in via `PIKI_STORAGE=sqlite`):
+
+- `~/.local/share/piki-multi/piki.db` (single SQLite database with WAL mode)
+- Includes workspace config, API Explorer history (with FTS5 full-text search), collapsed groups, and UI layout preferences
+- API history persists across restarts and is searchable via `Ctrl+H` in the API Explorer tab
+
+| Environment Variable | Values | Default | Description |
+|---|---|---|---|
+| `PIKI_STORAGE` | `json`, `sqlite` | `json` | Storage backend for workspace config and app state |
+
+**Restoration:**
+
+- On startup, `piki-multi-ai` scans the storage backend and restores all valid workspaces.
+- Stale entries (worktrees deleted manually) are cleaned up automatically.
+- Robust de-duplication ensures each workspace is loaded only once.
+- Simple and Project workspaces reference the original directory and are never cleaned up as stale.
 
 ### Layout
 

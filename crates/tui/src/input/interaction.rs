@@ -639,6 +639,116 @@ pub(super) fn handle_api_interaction(app: &mut App, key: KeyEvent) -> Option<Act
     let tab = ws.current_tab_mut()?;
     let api = tab.api_state.as_mut()?;
 
+    // History overlay captures input when active
+    if api.history.is_some() {
+        match key.code {
+            KeyCode::Esc => {
+                api.history = None;
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                if let Some(ref mut hist) = api.history {
+                    hist.selected = hist.selected.saturating_sub(1);
+                    if hist.selected < hist.scroll_offset {
+                        hist.scroll_offset = hist.selected;
+                    }
+                }
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if let Some(ref mut hist) = api.history {
+                    if hist.selected + 1 < hist.entries.len() {
+                        hist.selected += 1;
+                    }
+                    // Auto-scroll: keep 2 lines of context
+                    let visible_height = 15_usize; // approximate
+                    if hist.selected >= hist.scroll_offset + visible_height {
+                        hist.scroll_offset = hist.selected.saturating_sub(visible_height - 1);
+                    }
+                }
+            }
+            KeyCode::Enter => {
+                if let Some(ref hist) = api.history
+                    && let Some(entry) = hist.entries.get(hist.selected)
+                {
+                    // Load request into editor and response into panel
+                    api.editor = crate::app::EditorState::new(&entry.request_text);
+                    api.responses = vec![crate::app::ApiResponseDisplay {
+                        status: entry.status,
+                        elapsed_ms: entry.elapsed_ms,
+                        body: entry.response_body.clone(),
+                        headers: entry.response_headers.clone(),
+                    }];
+                    api.response_scroll = 0;
+                }
+                api.history = None;
+            }
+            KeyCode::Char('d') => {
+                if let Some(ref mut hist) = api.history
+                    && let Some(entry) = hist.entries.get(hist.selected)
+                {
+                    if let Some(id) = entry.id
+                        && let Some(ref api_storage) = app.storage.api_history
+                    {
+                        let _ = api_storage.delete_api_entry(id);
+                    }
+                    hist.entries.remove(hist.selected);
+                    if hist.selected >= hist.entries.len() && hist.selected > 0 {
+                        hist.selected -= 1;
+                    }
+                    if hist.entries.is_empty() {
+                        api.history = None;
+                    }
+                }
+                return None;
+            }
+            KeyCode::Char('/') => {
+                if let Some(ref mut hist) = api.history {
+                    hist.searching = true;
+                    hist.search_query.clear();
+                }
+            }
+            KeyCode::Backspace => {
+                if let Some(ref mut hist) = api.history
+                    && hist.searching
+                {
+                    hist.search_query.pop();
+                    // Re-search
+                    if let Some(ref api_storage) = app.storage.api_history {
+                        if hist.search_query.is_empty() {
+                            if let Ok(entries) = api_storage.load_recent_api_history(100) {
+                                hist.entries = entries;
+                            }
+                        } else if let Ok(entries) =
+                            api_storage.search_api_history(&hist.search_query, 100)
+                        {
+                            hist.entries = entries;
+                        }
+                        hist.selected = 0;
+                        hist.scroll_offset = 0;
+                    }
+                }
+                return None;
+            }
+            KeyCode::Char(c) => {
+                if let Some(ref mut hist) = api.history
+                    && hist.searching
+                {
+                    hist.search_query.push(c);
+                    // Search via FTS
+                    if let Some(ref api_storage) = app.storage.api_history
+                        && let Ok(entries) = api_storage.search_api_history(&hist.search_query, 100)
+                    {
+                        hist.entries = entries;
+                        hist.selected = 0;
+                        hist.scroll_offset = 0;
+                    }
+                }
+                return None;
+            }
+            _ => {}
+        }
+        return None;
+    }
+
     // Search overlay captures input when active
     if api.search.is_some() {
         match key.code {
@@ -716,6 +826,34 @@ pub(super) fn handle_api_interaction(app: &mut App, key: KeyEvent) -> Option<Act
             matches: Vec::new(),
             current_match: 0,
         });
+        return None;
+    }
+
+    // Ctrl+H: open API history overlay (SQLite backend only)
+    if key.code == KeyCode::Char('h')
+        && key
+            .modifiers
+            .contains(crossterm::event::KeyModifiers::CONTROL)
+    {
+        if let Some(ref api_storage) = app.storage.api_history {
+            if let Ok(entries) = api_storage.load_recent_api_history(100) {
+                let ws = app.workspaces.get_mut(app.active_workspace)?;
+                let tab = ws.current_tab_mut()?;
+                let api = tab.api_state.as_mut()?;
+                api.history = Some(crate::app::ApiHistoryState {
+                    entries,
+                    selected: 0,
+                    scroll_offset: 0,
+                    search_query: String::new(),
+                    searching: false,
+                });
+            }
+        } else {
+            app.set_toast(
+                "API history requires PIKI_STORAGE=sqlite",
+                crate::app::ToastLevel::Info,
+            );
+        }
         return None;
     }
 

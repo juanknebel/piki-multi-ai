@@ -21,6 +21,14 @@ mod tests {
     use crate::app::App;
     use crate::theme::Theme;
 
+    fn test_storage() -> std::sync::Arc<piki_core::storage::AppStorage> {
+        std::sync::Arc::new(piki_core::storage::AppStorage {
+            workspaces: Box::new(piki_core::storage::json::JsonStorage),
+            api_history: None,
+            ui_prefs: None,
+        })
+    }
+
     fn test_terminal(w: u16, h: u16) -> Terminal<TestBackend> {
         Terminal::new(TestBackend::new(w, h)).unwrap()
     }
@@ -28,7 +36,7 @@ mod tests {
     #[test]
     fn test_render_confirm_quit_dialog() {
         let mut terminal = test_terminal(80, 24);
-        let app = App::new();
+        let app = App::new(test_storage());
         terminal
             .draw(|frame| {
                 super::dialogs::render_confirm_quit_dialog(frame, frame.area(), &app);
@@ -46,7 +54,7 @@ mod tests {
     #[test]
     fn test_render_confirm_close_tab_dialog() {
         let mut terminal = test_terminal(80, 24);
-        let app = App::new();
+        let app = App::new(test_storage());
         terminal
             .draw(|frame| {
                 super::dialogs::render_confirm_close_tab_dialog(frame, frame.area(), &app);
@@ -60,7 +68,7 @@ mod tests {
     #[test]
     fn test_render_new_tab_dialog() {
         let mut terminal = test_terminal(80, 24);
-        let app = App::new();
+        let app = App::new(test_storage());
         terminal
             .draw(|frame| {
                 super::dialogs::render_new_tab_dialog(frame, frame.area(), &app);
@@ -83,7 +91,7 @@ mod tests {
     #[test]
     fn test_render_status_bar_normal_no_workspace() {
         let mut terminal = test_terminal(80, 1);
-        let app = App::new();
+        let app = App::new(test_storage());
         terminal
             .draw(|frame| {
                 super::statusbar::render_status_bar(frame, frame.area(), &app);

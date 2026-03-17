@@ -104,8 +104,7 @@ fn handle_code_review_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) 
             match cr.focus {
                 crate::code_review::ReviewFocus::FileList => {
                     if !cr.files.is_empty() {
-                        cr.selected_file =
-                            (cr.selected_file + cr.files.len() - 1) % cr.files.len();
+                        cr.selected_file = (cr.selected_file + cr.files.len() - 1) % cr.files.len();
                         if cr.selected_file < cr.file_scroll {
                             cr.file_scroll = cr.selected_file;
                         }
@@ -133,8 +132,7 @@ fn handle_code_review_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) 
                 }
                 crate::code_review::ReviewFocus::DiffView => {
                     if line_count > 0 {
-                        cr.cursor_line =
-                            (cr.cursor_line + 3).min(line_count.saturating_sub(1));
+                        cr.cursor_line = (cr.cursor_line + 3).min(line_count.saturating_sub(1));
                         cr.diff_scroll = cr.diff_scroll.saturating_add(3);
                     }
                 }
@@ -308,8 +306,7 @@ pub(crate) fn handle_mouse_event(
                         let popup_y = (term_size.height.saturating_sub(popup_height)) / 2;
                         let content_top = popup_y + 1;
                         let content_bottom = popup_y + popup_height.saturating_sub(2);
-                        let inner_height =
-                            (content_bottom.saturating_sub(content_top)) as usize;
+                        let inner_height = (content_bottom.saturating_sub(content_top)) as usize;
                         if row >= content_top
                             && row < content_bottom
                             && col >= popup_x
@@ -540,6 +537,7 @@ pub(crate) fn handle_mouse_event(
         MouseEventKind::Up(MouseButton::Left) => {
             if app.resize_drag.is_some() {
                 app.resize_drag = None;
+                app.save_layout_prefs();
             } else if let Some(ref mut sel) = app.selection {
                 sel.active = false;
                 let (sr, sc, er, ec) = sel.normalized();

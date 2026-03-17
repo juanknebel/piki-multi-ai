@@ -6,7 +6,6 @@ use ratatui::DefaultTerminal;
 use crate::app::{self, ActivePane, App, AppMode, ToastLevel};
 use crate::code_review::CodeReviewState;
 use crate::helpers::spawn_tab;
-use piki_core::workspace::config as ws_config;
 use piki_core::workspace::{FileWatcher, WorkspaceManager};
 use piki_core::{AIProvider, MergeStrategy, WorkspaceType};
 
@@ -116,8 +115,9 @@ pub(crate) async fn execute_action(
                     {
                         let source = app.workspaces[new_idx].source_repo.clone();
                         let infos: Vec<_> = app.workspaces.iter().map(|w| w.info.clone()).collect();
+                        let storage = Arc::clone(&app.storage);
                         tokio::spawn(async move {
-                            let _ = ws_config::save(&source, &infos);
+                            let _ = storage.workspaces.save_workspaces(&source, &infos);
                         });
                     }
                 }
@@ -138,8 +138,9 @@ pub(crate) async fn execute_action(
                 {
                     let source = ws.source_repo.clone();
                     let infos: Vec<_> = app.workspaces.iter().map(|w| w.info.clone()).collect();
+                    let storage = Arc::clone(&app.storage);
                     tokio::spawn(async move {
-                        let _ = ws_config::save(&source, &infos);
+                        let _ = storage.workspaces.save_workspaces(&source, &infos);
                     });
                 }
                 app.set_toast("Workspace updated", ToastLevel::Success);
@@ -197,8 +198,9 @@ pub(crate) async fn execute_action(
                     {
                         let source = source_repo.clone();
                         let infos: Vec<_> = app.workspaces.iter().map(|w| w.info.clone()).collect();
+                        let storage = Arc::clone(&app.storage);
                         tokio::spawn(async move {
-                            let _ = ws_config::save(&source, &infos);
+                            let _ = storage.workspaces.save_workspaces(&source, &infos);
                         });
                     }
                 }
@@ -234,8 +236,9 @@ pub(crate) async fn execute_action(
                 {
                     let source = source_repo.clone();
                     let infos: Vec<_> = app.workspaces.iter().map(|w| w.info.clone()).collect();
+                    let storage = Arc::clone(&app.storage);
                     tokio::spawn(async move {
-                        let _ = ws_config::save(&source, &infos);
+                        let _ = storage.workspaces.save_workspaces(&source, &infos);
                     });
                 }
             }
@@ -650,8 +653,7 @@ pub(crate) async fn execute_action(
                         match piki_core::github::get_pr_files(&worktree_path).await {
                             Ok(files) => {
                                 if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
-                                    ws.code_review =
-                                        Some(CodeReviewState::new(pr_info, files));
+                                    ws.code_review = Some(CodeReviewState::new(pr_info, files));
                                 }
                                 app.set_toast("PR loaded", ToastLevel::Success);
                             }
@@ -688,27 +690,20 @@ pub(crate) async fn execute_action(
         }
         Action::LoadPrFileDiff(file_idx) => {
             // Extract what we need before the async call
-            let diff_data = app
-                .workspaces
-                .get_mut(app.active_workspace)
-                .and_then(|ws| {
-                    let cr = ws.code_review.as_mut()?;
-                    let file = cr.files.get(file_idx)?;
-                    let file_path = file.path.clone();
-                    if cr.file_diffs.contains_key(&file_path) {
-                        return None; // Already cached
-                    }
-                    cr.loading = true;
-                    let base_ref = cr.pr_info.base_ref_name.clone();
-                    Some((ws.path.clone(), file_path, base_ref))
-                });
+            let diff_data = app.workspaces.get_mut(app.active_workspace).and_then(|ws| {
+                let cr = ws.code_review.as_mut()?;
+                let file = cr.files.get(file_idx)?;
+                let file_path = file.path.clone();
+                if cr.file_diffs.contains_key(&file_path) {
+                    return None; // Already cached
+                }
+                cr.loading = true;
+                let base_ref = cr.pr_info.base_ref_name.clone();
+                Some((ws.path.clone(), file_path, base_ref))
+            });
             if let Some((worktree_path, file_path, base_ref)) = diff_data {
-                match piki_core::github::get_pr_file_diff_raw(
-                    &worktree_path,
-                    &file_path,
-                    &base_ref,
-                )
-                .await
+                match piki_core::github::get_pr_file_diff_raw(&worktree_path, &file_path, &base_ref)
+                    .await
                 {
                     Ok(parsed) => {
                         if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
@@ -933,11 +928,8 @@ pub(crate) async fn execute_action(
                         Ok(Some(pr_info)) => {
                             match piki_core::github::get_pr_files(&worktree_path).await {
                                 Ok(files) => {
-                                    if let Some(ws) =
-                                        app.workspaces.get_mut(app.active_workspace)
-                                    {
-                                        ws.code_review =
-                                            Some(CodeReviewState::new(pr_info, files));
+                                    if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+                                        ws.code_review = Some(CodeReviewState::new(pr_info, files));
                                     }
                                     app.set_toast("PR loaded", ToastLevel::Success);
                                 }
@@ -1040,6 +1032,7 @@ pub(crate) async fn execute_action(
                 api.loading = true;
                 api.responses.clear();
                 let slot = Arc::clone(&api.pending_responses);
+                let storage = Arc::clone(&app.storage);
 
                 tokio::spawn(async move {
                     let mut results = Vec::with_capacity(parsed_requests.len());
@@ -1049,6 +1042,14 @@ pub(crate) async fn execute_action(
                             format!("https://{}", parsed.url)
                         } else {
                             parsed.url.clone()
+                        };
+
+                        let method_str = match parsed.method {
+                            piki_api_client::Method::Get => "GET",
+                            piki_api_client::Method::Post => "POST",
+                            piki_api_client::Method::Put => "PUT",
+                            piki_api_client::Method::Delete => "DELETE",
+                            piki_api_client::Method::Patch => "PATCH",
                         };
 
                         let mut request = match parsed.method {
@@ -1062,10 +1063,23 @@ pub(crate) async fn execute_action(
                                 piki_api_client::ApiRequest::patch("")
                             }
                         };
-                        request.body = parsed.body;
+                        request.body = parsed.body.clone();
                         for (k, v) in &parsed.headers {
                             request.headers.insert(k.clone(), v.clone());
                         }
+
+                        // Build request text for history
+                        let request_text = {
+                            let mut text = format!("{} {}", method_str, url);
+                            for (k, v) in &parsed.headers {
+                                text.push_str(&format!("\n{}: {}", k, v));
+                            }
+                            if let Some(ref body) = parsed.body {
+                                let body_str = String::from_utf8_lossy(body);
+                                text.push_str(&format!("\n\n{}", body_str));
+                            }
+                            text
+                        };
 
                         let config = piki_api_client::ClientConfig::new(&url);
                         let client = match piki_api_client::HttpClient::new(config) {
@@ -1124,6 +1138,25 @@ pub(crate) async fn execute_action(
                                 }
                             }
                         };
+
+                        // Persist to API history storage if available
+                        if let Some(ref api_storage) = storage.api_history {
+                            let entry = piki_core::storage::ApiHistoryEntry {
+                                id: None,
+                                created_at: String::new(),
+                                request_text,
+                                method: method_str.to_string(),
+                                url: url.clone(),
+                                status: display.status,
+                                elapsed_ms: display.elapsed_ms,
+                                response_body: display.body.clone(),
+                                response_headers: display.headers.clone(),
+                            };
+                            if let Err(e) = api_storage.save_api_entry(&entry) {
+                                tracing::warn!(error = %e, "Failed to persist API history entry");
+                            }
+                        }
+
                         results.push(display);
                     }
 

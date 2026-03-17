@@ -35,7 +35,7 @@ pub(crate) fn render(
     render_editor(frame, chunks[0], api, border_style);
 
     // ── Response pane ──
-    if has_response {
+    let result = if has_response {
         render_responses(
             frame,
             chunks[1],
@@ -46,7 +46,14 @@ pub(crate) fn render(
         )
     } else {
         None
+    };
+
+    // ── History overlay ──
+    if let Some(ref hist) = api.history {
+        render_history_overlay(frame, area, hist);
     }
+
+    result
 }
 
 fn render_editor(frame: &mut Frame, area: Rect, api: &ApiTabState, border_style: Style) {
@@ -55,7 +62,7 @@ fn render_editor(frame: &mut Frame, area: Rect, api: &ApiTabState, border_style:
         .title_style(border_style)
         .title_bottom(
             Line::from(Span::styled(
-                " [^S send] ",
+                " [^S send | ^H history] ",
                 Style::default().fg(Color::DarkGray),
             ))
             .right_aligned(),
@@ -443,4 +450,80 @@ fn matches_keyword(chars: &[char], keyword: &str) -> bool {
         return false;
     }
     chars[..kw.len()] == kw[..] && chars.get(kw.len()).is_none_or(|c| !c.is_alphanumeric())
+}
+
+// ── History overlay ──
+
+fn render_history_overlay(frame: &mut Frame, area: Rect, hist: &crate::app::ApiHistoryState) {
+    // Centered floating panel: 80% width, 70% height
+    let overlay_w = (area.width as u32 * 80 / 100).min(area.width as u32) as u16;
+    let overlay_h = (area.height as u32 * 70 / 100)
+        .min(area.height as u32)
+        .max(5) as u16;
+    let x = area.x + (area.width.saturating_sub(overlay_w)) / 2;
+    let y = area.y + (area.height.saturating_sub(overlay_h)) / 2;
+    let overlay_area = Rect::new(x, y, overlay_w, overlay_h);
+
+    frame.render_widget(Clear, overlay_area);
+
+    let title = if hist.searching {
+        format!(" API History (/{}) ", hist.search_query)
+    } else {
+        format!(" API History ({} entries) ", hist.entries.len())
+    };
+
+    let block = Block::default()
+        .title(title)
+        .title_bottom(
+            Line::from(Span::styled(
+                " [j/k nav | Enter load | d delete | / search | Esc close] ",
+                Style::default().fg(Color::DarkGray),
+            ))
+            .right_aligned(),
+        )
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan));
+
+    let inner = block.inner(overlay_area);
+    frame.render_widget(block, overlay_area);
+
+    if hist.entries.is_empty() {
+        let empty =
+            Paragraph::new("  No history entries").style(Style::default().fg(Color::DarkGray));
+        frame.render_widget(empty, inner);
+        return;
+    }
+
+    let visible_height = inner.height as usize;
+    let lines: Vec<Line<'static>> = hist
+        .entries
+        .iter()
+        .enumerate()
+        .skip(hist.scroll_offset)
+        .take(visible_height)
+        .map(|(idx, entry)| {
+            let status_color = status_color(entry.status);
+            let ts = if entry.created_at.len() >= 16 {
+                &entry.created_at[..16]
+            } else {
+                &entry.created_at
+            };
+            let text = format!(
+                " {} {} {} -> {} ({}ms)",
+                ts, entry.method, entry.url, entry.status, entry.elapsed_ms,
+            );
+            let style = if idx == hist.selected {
+                Style::default()
+                    .fg(Color::White)
+                    .bg(Color::DarkGray)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(status_color)
+            };
+            Line::styled(text, style)
+        })
+        .collect();
+
+    let paragraph = Paragraph::new(lines);
+    frame.render_widget(paragraph, inner);
 }

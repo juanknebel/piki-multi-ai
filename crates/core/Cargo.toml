@@ -33,6 +33,9 @@ tracing = "0.1"
 systemstat = "0.2.6"
 chrono = "0.4.44"
 
+# SQLite storage backend
+rusqlite = { version = "0.34", features = ["bundled"] }
+
 # Home directory resolution
 dirs = "6"
 

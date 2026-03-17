@@ -54,9 +54,7 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         AppMode::Logs => return handle_logs_input(app, key),
         AppMode::CommandPalette => return handle_command_palette_input(app, key),
         AppMode::ConfirmDelete => return handle_confirm_delete_input(app, key),
-        AppMode::SubmitReview => {
-            return code_review_input::handle_submit_review_input(app, key)
-        }
+        AppMode::SubmitReview => return code_review_input::handle_submit_review_input(app, key),
         // Normal and Diff modes fall through to navigation/interaction handling
         AppMode::Normal | AppMode::Diff => {}
     }
@@ -280,17 +278,21 @@ pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Act
     {
         app.sidebar_pct = app.sidebar_pct.saturating_sub(5).max(10);
         resize_all_ptys(app);
+        app.save_layout_prefs();
     } else if app.config.matches_navigation(key, "sidebar_grow")
         || app.config.matches_navigation(key, "sidebar_grow_alt")
     {
         app.sidebar_pct = (app.sidebar_pct + 5).min(90);
         resize_all_ptys(app);
+        app.save_layout_prefs();
     } else if app.config.matches_navigation(key, "split_up")
         || app.config.matches_navigation(key, "split_up_alt")
     {
         app.left_split_pct = (app.left_split_pct + 10).min(90);
+        app.save_layout_prefs();
     } else if app.config.matches_navigation(key, "split_down") {
         app.left_split_pct = app.left_split_pct.saturating_sub(10).max(10);
+        app.save_layout_prefs();
     } else if app.config.matches_navigation(key, "next_tab") {
         if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
             && !ws.tabs.is_empty()
@@ -305,7 +307,9 @@ pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Act
         }
     } else if app.config.matches_navigation(key, "new_tab") {
         if app.current_workspace().is_some() {
-            app.active_dialog = Some(DialogState::NewTab { menu: crate::dialog_state::NewTabMenu::Main });
+            app.active_dialog = Some(DialogState::NewTab {
+                menu: crate::dialog_state::NewTabMenu::Main,
+            });
             app.mode = AppMode::NewTab;
         }
     } else if app.config.matches_navigation(key, "close_tab") {

@@ -35,6 +35,8 @@ enum Commands {
     GenerateConfig,
     /// Shows version and author information (same as About in-app)
     Version,
+    /// Migrate workspace config from JSON files to SQLite database
+    Migrate,
 }
 
 #[tokio::main]
@@ -64,6 +66,21 @@ async fn main() -> anyhow::Result<()> {
                 println!("Web: github.com/juanknebel/piki-multi-ai");
                 println!("License: GPL-2.0");
                 println!();
+                return Ok(());
+            }
+            Commands::Migrate => {
+                let data_dir = dirs::data_dir()
+                    .unwrap_or_else(|| PathBuf::from("/tmp"))
+                    .join("piki-multi");
+                let db_path = data_dir.join("piki.db");
+                std::fs::create_dir_all(db_path.parent().unwrap())?;
+                let storage = piki_core::storage::sqlite::SqliteStorage::open(&db_path)?;
+                let count = storage.migrate_from_json()?;
+                println!("Migrated {count} workspaces from JSON to SQLite");
+                println!("Database: {}", db_path.display());
+                println!();
+                println!("To use SQLite as the storage backend, run:");
+                println!("  PIKI_STORAGE=sqlite piki-multi-ai");
                 return Ok(());
             }
         }

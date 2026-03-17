@@ -11,7 +11,6 @@ use crate::helpers::shutdown;
 use crate::input;
 use crate::{theme, ui};
 use piki_core::workspace::FileWatcher;
-use piki_core::workspace::config as ws_config;
 
 const TICK_RATE: Duration = Duration::from_millis(50);
 const DEBOUNCE: Duration = Duration::from_millis(500);
@@ -55,10 +54,28 @@ pub(crate) async fn run(
     log_buffer: crate::log_buffer::LogBuffer,
 ) -> anyhow::Result<()> {
     let manager = piki_core::workspace::WorkspaceManager::new();
-    let mut app = App::new();
+    let storage = std::sync::Arc::new(piki_core::storage::create_storage()?);
+    let mut app = App::new(std::sync::Arc::clone(&storage));
     app.log_buffer = log_buffer;
     app.sysinfo = piki_core::sysinfo::spawn_sysinfo_poller();
     app.theme = theme::load();
+
+    // Load UI preferences from storage (if SQLite backend)
+    if let Some(ref ui_prefs) = storage.ui_prefs {
+        if let Ok(groups) = ui_prefs.get_collapsed_groups() {
+            app.collapsed_groups = groups;
+        }
+        if let Ok(Some(val)) = ui_prefs.get_preference("sidebar_pct")
+            && let Ok(pct) = val.parse::<u16>()
+        {
+            app.sidebar_pct = pct.clamp(10, 90);
+        }
+        if let Ok(Some(val)) = ui_prefs.get_preference("left_split_pct")
+            && let Ok(pct) = val.parse::<u16>()
+        {
+            app.left_split_pct = pct.clamp(10, 90);
+        }
+    }
 
     // Show preflight warnings in status bar
     if !preflight_warnings.is_empty() {
@@ -74,8 +91,8 @@ pub(crate) async fn run(
     app.pty_rows = pty_area.height;
     app.pty_cols = pty_area.width;
 
-    // Restore persisted workspaces from all project configs
-    let entries = ws_config::load_all();
+    // Restore persisted workspaces from storage backend
+    let entries = storage.workspaces.load_all_workspaces();
     for entry in entries {
         let mut ws = app::Workspace::from_info(entry.into_info());
 

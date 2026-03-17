@@ -4,6 +4,7 @@ pub mod git;
 pub mod github;
 pub mod preflight;
 pub mod pty;
+pub mod storage;
 pub mod sysinfo;
 pub mod workspace;
 
