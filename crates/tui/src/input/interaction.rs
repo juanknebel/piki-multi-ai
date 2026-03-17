@@ -636,6 +636,7 @@ pub(super) fn handle_api_interaction(app: &mut App, key: KeyEvent) -> Option<Act
     }
 
     let ws = app.workspaces.get_mut(app.active_workspace)?;
+    let repo_path = ws.source_repo.clone();
     let tab = ws.current_tab_mut()?;
     let api = tab.api_state.as_mut()?;
 
@@ -714,11 +715,13 @@ pub(super) fn handle_api_interaction(app: &mut App, key: KeyEvent) -> Option<Act
                     // Re-search
                     if let Some(ref api_storage) = app.storage.api_history {
                         if hist.search_query.is_empty() {
-                            if let Ok(entries) = api_storage.load_recent_api_history(100) {
+                            if let Ok(entries) =
+                                api_storage.load_recent_api_history(&repo_path, 100)
+                            {
                                 hist.entries = entries;
                             }
                         } else if let Ok(entries) =
-                            api_storage.search_api_history(&hist.search_query, 100)
+                            api_storage.search_api_history(&repo_path, &hist.search_query, 100)
                         {
                             hist.entries = entries;
                         }
@@ -735,7 +738,8 @@ pub(super) fn handle_api_interaction(app: &mut App, key: KeyEvent) -> Option<Act
                     hist.search_query.push(c);
                     // Search via FTS
                     if let Some(ref api_storage) = app.storage.api_history
-                        && let Ok(entries) = api_storage.search_api_history(&hist.search_query, 100)
+                        && let Ok(entries) =
+                            api_storage.search_api_history(&repo_path, &hist.search_query, 100)
                     {
                         hist.entries = entries;
                         hist.selected = 0;
@@ -836,7 +840,13 @@ pub(super) fn handle_api_interaction(app: &mut App, key: KeyEvent) -> Option<Act
             .contains(crossterm::event::KeyModifiers::CONTROL)
     {
         if let Some(ref api_storage) = app.storage.api_history {
-            if let Ok(entries) = api_storage.load_recent_api_history(100) {
+            let repo = app
+                .workspaces
+                .get(app.active_workspace)
+                .map(|ws| ws.source_repo.clone());
+            if let Some(repo) = repo
+                && let Ok(entries) = api_storage.load_recent_api_history(&repo, 100)
+            {
                 let ws = app.workspaces.get_mut(app.active_workspace)?;
                 let tab = ws.current_tab_mut()?;
                 let api = tab.api_state.as_mut()?;

@@ -175,7 +175,8 @@ Workspace configurations are saved automatically and restored on startup. Two st
 
 - `~/.local/share/piki-multi/piki.db` (single SQLite database with WAL mode)
 - Includes workspace config, API Explorer history (with FTS5 full-text search), collapsed groups, and UI layout preferences
-- API history persists across restarts and is searchable via `Ctrl+H` in the API Explorer tab
+- API history persists across restarts and is searchable via `Ctrl+H` in the API Explorer tab; duplicate requests (same method + URL + body) are deduplicated automatically, keeping only the latest response
+- API history is scoped per project — each repository sees only its own entries
 
 | Environment Variable | Values | Default | Description |
 |---|---|---|---|

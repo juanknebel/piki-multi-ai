@@ -100,6 +100,7 @@ CREATE INDEX IF NOT EXISTS idx_workspaces_source_repo ON workspaces(source_repo)
 
 CREATE TABLE IF NOT EXISTS api_history (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_repo      TEXT NOT NULL,
     created_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     request_text     TEXT NOT NULL,
     method           TEXT NOT NULL,
@@ -110,6 +111,7 @@ CREATE TABLE IF NOT EXISTS api_history (
     response_headers TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_api_history_created ON api_history(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_api_history_repo ON api_history(source_repo);
 
 CREATE VIRTUAL TABLE IF NOT EXISTS api_history_fts USING fts5(
     request_text, url, response_body,
@@ -125,6 +127,16 @@ CREATE TRIGGER IF NOT EXISTS api_history_ad AFTER DELETE ON api_history BEGIN
     INSERT INTO api_history_fts(api_history_fts, rowid, request_text, url, response_body)
     VALUES ('delete', old.id, old.request_text, old.url, old.response_body);
 END;
+
+CREATE TRIGGER IF NOT EXISTS api_history_au AFTER UPDATE ON api_history BEGIN
+    INSERT INTO api_history_fts(api_history_fts, rowid, request_text, url, response_body)
+    VALUES ('delete', old.id, old.request_text, old.url, old.response_body);
+    INSERT INTO api_history_fts(rowid, request_text, url, response_body)
+    VALUES (new.id, new.request_text, new.url, new.response_body);
+END;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_api_history_natural_key
+    ON api_history(source_repo, method, url, request_text);
 
 CREATE TABLE IF NOT EXISTS collapsed_groups (group_name TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS ui_preferences (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -164,14 +176,15 @@ fn row_to_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkspaceEntry> {
 fn row_to_api_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<ApiHistoryEntry> {
     Ok(ApiHistoryEntry {
         id: Some(row.get(0)?),
-        created_at: row.get(1)?,
-        request_text: row.get(2)?,
-        method: row.get(3)?,
-        url: row.get(4)?,
-        status: row.get::<_, u32>(5)? as u16,
-        elapsed_ms: row.get::<_, i64>(6)? as u128,
-        response_body: row.get(7)?,
-        response_headers: row.get(8)?,
+        source_repo: row.get(1)?,
+        created_at: row.get(2)?,
+        request_text: row.get(3)?,
+        method: row.get(4)?,
+        url: row.get(5)?,
+        status: row.get::<_, u32>(6)? as u16,
+        elapsed_ms: row.get::<_, i64>(7)? as u128,
+        response_body: row.get(8)?,
+        response_headers: row.get(9)?,
     })
 }
 
@@ -253,8 +266,16 @@ impl ApiHistoryStorage for Arc<SqliteStorage> {
     fn save_api_entry(&self, entry: &ApiHistoryEntry) -> anyhow::Result<()> {
         let conn = self.conn.lock();
         conn.execute(
-            "INSERT INTO api_history (request_text, method, url, status, elapsed_ms, response_body, response_headers) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO api_history (source_repo, request_text, method, url, status, elapsed_ms, response_body, response_headers)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+             ON CONFLICT(source_repo, method, url, request_text) DO UPDATE SET
+                 status = excluded.status,
+                 elapsed_ms = excluded.elapsed_ms,
+                 response_body = excluded.response_body,
+                 response_headers = excluded.response_headers,
+                 created_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')",
             rusqlite::params![
+                entry.source_repo,
                 entry.request_text,
                 entry.method,
                 entry.url,
@@ -269,30 +290,40 @@ impl ApiHistoryStorage for Arc<SqliteStorage> {
 
     fn search_api_history(
         &self,
+        source_repo: &Path,
         query: &str,
         limit: usize,
     ) -> anyhow::Result<Vec<ApiHistoryEntry>> {
         let conn = self.conn.lock();
+        let repo_str = source_repo.to_string_lossy();
         let mut stmt = conn.prepare(
-            "SELECT h.id, h.created_at, h.request_text, h.method, h.url, h.status, h.elapsed_ms, h.response_body, h.response_headers FROM api_history h JOIN api_history_fts f ON h.id = f.rowid WHERE api_history_fts MATCH ?1 ORDER BY h.created_at DESC LIMIT ?2",
+            "SELECT h.id, h.source_repo, h.created_at, h.request_text, h.method, h.url, h.status, h.elapsed_ms, h.response_body, h.response_headers FROM api_history h JOIN api_history_fts f ON h.id = f.rowid WHERE h.source_repo = ?1 AND api_history_fts MATCH ?2 ORDER BY h.created_at DESC LIMIT ?3",
         )?;
 
         let entries = stmt
-            .query_map(rusqlite::params![query, limit as i64], row_to_api_entry)?
+            .query_map(
+                rusqlite::params![&*repo_str, query, limit as i64],
+                row_to_api_entry,
+            )?
             .filter_map(|r| r.ok())
             .collect();
 
         Ok(entries)
     }
 
-    fn load_recent_api_history(&self, limit: usize) -> anyhow::Result<Vec<ApiHistoryEntry>> {
+    fn load_recent_api_history(
+        &self,
+        source_repo: &Path,
+        limit: usize,
+    ) -> anyhow::Result<Vec<ApiHistoryEntry>> {
         let conn = self.conn.lock();
+        let repo_str = source_repo.to_string_lossy();
         let mut stmt = conn.prepare(
-            "SELECT id, created_at, request_text, method, url, status, elapsed_ms, response_body, response_headers FROM api_history ORDER BY created_at DESC LIMIT ?1",
+            "SELECT id, source_repo, created_at, request_text, method, url, status, elapsed_ms, response_body, response_headers FROM api_history WHERE source_repo = ?1 ORDER BY created_at DESC LIMIT ?2",
         )?;
 
         let entries = stmt
-            .query_map([limit as i64], row_to_api_entry)?
+            .query_map(rusqlite::params![&*repo_str, limit as i64], row_to_api_entry)?
             .filter_map(|r| r.ok())
             .collect();
 

@@ -1033,6 +1033,7 @@ pub(crate) async fn execute_action(
                 api.responses.clear();
                 let slot = Arc::clone(&api.pending_responses);
                 let storage = Arc::clone(&app.storage);
+                let source_repo = ws.source_repo.to_string_lossy().to_string();
 
                 tokio::spawn(async move {
                     let mut results = Vec::with_capacity(parsed_requests.len());
@@ -1143,6 +1144,7 @@ pub(crate) async fn execute_action(
                         if let Some(ref api_storage) = storage.api_history {
                             let entry = piki_core::storage::ApiHistoryEntry {
                                 id: None,
+                                source_repo: source_repo.clone(),
                                 created_at: String::new(),
                                 request_text,
                                 method: method_str.to_string(),

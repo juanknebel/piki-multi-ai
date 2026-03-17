@@ -10,6 +10,7 @@ pub mod sqlite;
 /// Entry representing an API request/response pair in history
 pub struct ApiHistoryEntry {
     pub id: Option<i64>,
+    pub source_repo: String,
     pub created_at: String,
     pub request_text: String,
     pub method: String,
@@ -28,9 +29,17 @@ pub trait WorkspaceStorage: Send + Sync {
 
 pub trait ApiHistoryStorage: Send + Sync {
     fn save_api_entry(&self, entry: &ApiHistoryEntry) -> anyhow::Result<()>;
-    fn search_api_history(&self, query: &str, limit: usize)
-    -> anyhow::Result<Vec<ApiHistoryEntry>>;
-    fn load_recent_api_history(&self, limit: usize) -> anyhow::Result<Vec<ApiHistoryEntry>>;
+    fn search_api_history(
+        &self,
+        source_repo: &Path,
+        query: &str,
+        limit: usize,
+    ) -> anyhow::Result<Vec<ApiHistoryEntry>>;
+    fn load_recent_api_history(
+        &self,
+        source_repo: &Path,
+        limit: usize,
+    ) -> anyhow::Result<Vec<ApiHistoryEntry>>;
     fn delete_api_entry(&self, id: i64) -> anyhow::Result<()>;
 }
 
