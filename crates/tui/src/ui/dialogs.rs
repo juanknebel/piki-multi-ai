@@ -1133,7 +1133,9 @@ pub(super) fn render_logs_overlay(frame: &mut Frame, area: Rect, app: &App) {
         if total <= inner_height {
             0
         } else {
-            selected.saturating_sub(inner_height.saturating_sub(1)).min(max_scroll)
+            selected
+                .saturating_sub(inner_height.saturating_sub(1))
+                .min(max_scroll)
         }
     } else {
         let mut s = (log_scroll as usize).min(max_scroll);
@@ -1191,10 +1193,7 @@ pub(super) fn render_logs_overlay(frame: &mut Frame, area: Rect, app: &App) {
                     format!(" {} ", entry.timestamp),
                     Style::default().fg(Color::DarkGray),
                 ),
-                Span::styled(
-                    format!("{} ", level_str),
-                    Style::default().fg(level_color),
-                ),
+                Span::styled(format!("{} ", level_str), Style::default().fg(level_color)),
                 Span::styled(
                     format!("{} ", entry.target),
                     Style::default().fg(Color::DarkGray),
@@ -1225,9 +1224,7 @@ pub(super) fn render_logs_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let block = popup_block(&title, app.theme.help.border)
         .title_bottom(Line::from(scroll_indicator).right_aligned());
 
-    let text = Paragraph::new(lines)
-        .block(block)
-        .scroll((0, log_hscroll));
+    let text = Paragraph::new(lines).block(block).scroll((0, log_hscroll));
     frame.render_widget(text, popup);
 }
 

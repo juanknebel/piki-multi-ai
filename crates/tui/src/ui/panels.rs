@@ -92,7 +92,6 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                 return;
             }
 
-
             if provider == crate::app::AIProvider::Kanban {
                 if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
                     && let Some(kanban_app) = ws.kanban_app.as_mut()

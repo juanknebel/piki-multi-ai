@@ -474,11 +474,15 @@ pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Actio
                 Some(Action::SpawnTab(AIProvider::Shell))
             }
             KeyCode::Char('2') => {
-                app.active_dialog = Some(DialogState::NewTab { menu: NewTabMenu::Agents });
+                app.active_dialog = Some(DialogState::NewTab {
+                    menu: NewTabMenu::Agents,
+                });
                 None
             }
             KeyCode::Char('3') => {
-                app.active_dialog = Some(DialogState::NewTab { menu: NewTabMenu::Tools });
+                app.active_dialog = Some(DialogState::NewTab {
+                    menu: NewTabMenu::Tools,
+                });
                 None
             }
             KeyCode::Esc => {
@@ -515,7 +519,9 @@ pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Actio
                 Some(Action::SpawnTab(AIProvider::Codex))
             }
             KeyCode::Esc => {
-                app.active_dialog = Some(DialogState::NewTab { menu: NewTabMenu::Main });
+                app.active_dialog = Some(DialogState::NewTab {
+                    menu: NewTabMenu::Main,
+                });
                 None
             }
             _ => None,
@@ -537,7 +543,9 @@ pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Actio
                 Some(Action::SpawnTab(AIProvider::Api))
             }
             KeyCode::Esc => {
-                app.active_dialog = Some(DialogState::NewTab { menu: NewTabMenu::Main });
+                app.active_dialog = Some(DialogState::NewTab {
+                    menu: NewTabMenu::Main,
+                });
                 None
             }
             _ => None,

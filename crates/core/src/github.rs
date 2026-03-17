@@ -273,7 +273,14 @@ pub async fn get_pr_file_diff_raw(
 pub async fn get_repo_nwo(worktree_path: &Path) -> anyhow::Result<String> {
     tracing::debug!(path = %worktree_path.display(), "gh: fetching repo nwo");
     let output = tokio::process::Command::new("gh")
-        .args(["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"])
+        .args([
+            "repo",
+            "view",
+            "--json",
+            "nameWithOwner",
+            "-q",
+            ".nameWithOwner",
+        ])
         .current_dir(worktree_path)
         .output()
         .await?;

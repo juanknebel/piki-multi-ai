@@ -66,7 +66,9 @@ fn is_code_review_active(app: &App) -> bool {
     app.current_workspace()
         .and_then(|ws| ws.current_tab())
         .is_some_and(|tab| tab.provider == piki_core::AIProvider::CodeReview)
-        && app.current_workspace().is_some_and(|ws| ws.code_review.is_some())
+        && app
+            .current_workspace()
+            .is_some_and(|ws| ws.code_review.is_some())
 }
 
 /// Render the main application layout
@@ -243,7 +245,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         AppMode::Dashboard => super::dialogs::render_dashboard_overlay(frame, area, app),
         AppMode::Logs => super::dialogs::render_logs_overlay(frame, area, app),
         AppMode::CommandPalette => super::command_palette::render(frame, area, app),
-        AppMode::InlineEdit => {} // handled by main content render
+        AppMode::InlineEdit => {}   // handled by main content render
         AppMode::SubmitReview => {} // handled by full-screen code review bypass above
     }
 }

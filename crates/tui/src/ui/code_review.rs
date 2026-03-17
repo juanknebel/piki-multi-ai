@@ -40,11 +40,9 @@ pub(super) fn render_fullscreen(frame: &mut Frame, area: Rect, app: &App) {
     render_pr_header(frame, header_area, state);
 
     // Body: file list (25%) | diff (75%)
-    let [files_area, diff_area] = Layout::horizontal([
-        Constraint::Percentage(25),
-        Constraint::Percentage(75),
-    ])
-    .areas(body_area);
+    let [files_area, diff_area] =
+        Layout::horizontal([Constraint::Percentage(25), Constraint::Percentage(75)])
+            .areas(body_area);
 
     render_file_list(frame, files_area, state);
     render_diff(frame, diff_area, state);
@@ -72,15 +70,9 @@ fn render_pr_header(frame: &mut Frame, area: Rect, state: &CodeReviewState) {
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(
-            &pr.title,
-            Style::default().add_modifier(Modifier::BOLD),
-        ),
+        Span::styled(&pr.title, Style::default().add_modifier(Modifier::BOLD)),
         Span::raw("  "),
-        Span::styled(
-            format!("[{}]", pr.state),
-            Style::default().fg(state_color),
-        ),
+        Span::styled(format!("[{}]", pr.state), Style::default().fg(state_color)),
         Span::raw("  "),
         Span::styled(
             format!("{} ← {}", pr.base_ref_name, pr.head_ref_name),
@@ -127,8 +119,7 @@ fn render_file_list(frame: &mut Frame, area: Rect, state: &CodeReviewState) {
     frame.render_widget(block, area);
 
     if state.files.is_empty() {
-        let text = Paragraph::new("  No files changed")
-            .style(Style::default().fg(Color::DarkGray));
+        let text = Paragraph::new("  No files changed").style(Style::default().fg(Color::DarkGray));
         frame.render_widget(text, inner);
         return;
     }
@@ -161,9 +152,15 @@ fn render_file_list(frame: &mut Frame, area: Rect, state: &CodeReviewState) {
                 Span::styled(format!("{}{} ", indicator, cached_marker), style),
                 Span::styled(&file.path, style),
                 Span::raw(" "),
-                Span::styled(format!("+{}", file.additions), Style::default().fg(Color::Green)),
+                Span::styled(
+                    format!("+{}", file.additions),
+                    Style::default().fg(Color::Green),
+                ),
                 Span::raw(" "),
-                Span::styled(format!("-{}", file.deletions), Style::default().fg(Color::Red)),
+                Span::styled(
+                    format!("-{}", file.deletions),
+                    Style::default().fg(Color::Red),
+                ),
             ];
 
             if comment_count > 0 {
@@ -201,20 +198,11 @@ pub(crate) enum SplitRow {
         right: Option<usize>,
     },
     /// Comment box header on one side.
-    CommentHeader {
-        diff_idx: usize,
-        side: CommentSide,
-    },
+    CommentHeader { diff_idx: usize, side: CommentSide },
     /// Comment box body on one side.
-    CommentBody {
-        diff_idx: usize,
-        side: CommentSide,
-    },
+    CommentBody { diff_idx: usize, side: CommentSide },
     /// Comment box footer on one side.
-    CommentFooter {
-        diff_idx: usize,
-        side: CommentSide,
-    },
+    CommentFooter { diff_idx: usize, side: CommentSide },
 }
 
 impl SplitRow {
@@ -351,18 +339,9 @@ fn append_comment_decorations(
         .comment_at_line_and_side(file_path, ln, side_str)
         .is_some()
     {
-        rows.push(SplitRow::CommentHeader {
-            diff_idx,
-            side,
-        });
-        rows.push(SplitRow::CommentBody {
-            diff_idx,
-            side,
-        });
-        rows.push(SplitRow::CommentFooter {
-            diff_idx,
-            side,
-        });
+        rows.push(SplitRow::CommentHeader { diff_idx, side });
+        rows.push(SplitRow::CommentBody { diff_idx, side });
+        rows.push(SplitRow::CommentFooter { diff_idx, side });
     }
 }
 
@@ -413,8 +392,8 @@ fn render_diff(frame: &mut Frame, area: Rect, state: &CodeReviewState) {
             match srow {
                 SplitRow::FullWidth { diff_idx } => {
                     let diff_line = &diff.lines[*diff_idx];
-                    let is_cursor = state.focus == ReviewFocus::DiffView
-                        && state.cursor_line == *diff_idx;
+                    let is_cursor =
+                        state.focus == ReviewFocus::DiffView && state.cursor_line == *diff_idx;
 
                     let style = match diff_line.line_type {
                         DiffLineType::HunkHeader => Style::default()
@@ -462,15 +441,7 @@ fn render_diff(frame: &mut Frame, area: Rect, state: &CodeReviewState) {
 
                     // Left half
                     render_half_line(
-                        frame,
-                        inner.x,
-                        y,
-                        left_half,
-                        gutter,
-                        *left,
-                        diff,
-                        is_cursor,
-                        true,
+                        frame, inner.x, y, left_half, gutter, *left, diff, is_cursor, true,
                     );
 
                     // Vertical separator
@@ -503,27 +474,53 @@ fn render_diff(frame: &mut Frame, area: Rect, state: &CodeReviewState) {
                 }
                 SplitRow::CommentHeader { diff_idx, side } => {
                     render_comment_decoration_row(
-                        frame, inner, y, left_half, right_half, diff, &state.draft, file_path,
-                        *diff_idx, *side, CommentDecorPart::Header,
+                        frame,
+                        inner,
+                        y,
+                        left_half,
+                        right_half,
+                        diff,
+                        &state.draft,
+                        file_path,
+                        *diff_idx,
+                        *side,
+                        CommentDecorPart::Header,
                     );
                 }
                 SplitRow::CommentBody { diff_idx, side } => {
                     render_comment_decoration_row(
-                        frame, inner, y, left_half, right_half, diff, &state.draft, file_path,
-                        *diff_idx, *side, CommentDecorPart::Body,
+                        frame,
+                        inner,
+                        y,
+                        left_half,
+                        right_half,
+                        diff,
+                        &state.draft,
+                        file_path,
+                        *diff_idx,
+                        *side,
+                        CommentDecorPart::Body,
                     );
                 }
                 SplitRow::CommentFooter { diff_idx, side } => {
                     render_comment_decoration_row(
-                        frame, inner, y, left_half, right_half, diff, &state.draft, file_path,
-                        *diff_idx, *side, CommentDecorPart::Footer,
+                        frame,
+                        inner,
+                        y,
+                        left_half,
+                        right_half,
+                        diff,
+                        &state.draft,
+                        file_path,
+                        *diff_idx,
+                        *side,
+                        CommentDecorPart::Footer,
                     );
                 }
             }
         }
     } else if state.loading {
-        let text = Paragraph::new("  Loading diff...")
-            .style(Style::default().fg(Color::DarkGray));
+        let text = Paragraph::new("  Loading diff...").style(Style::default().fg(Color::DarkGray));
         frame.render_widget(text, inner);
     } else {
         let text = Paragraph::new("  Select a file and press Enter to view diff")
@@ -653,14 +650,8 @@ fn render_comment_decoration_row(
 ) {
     let diff_line = &diff.lines[diff_idx];
     let (ln, side_str) = match side {
-        CommentSide::Left => (
-            diff_line.old_line.unwrap_or(0),
-            "LEFT",
-        ),
-        CommentSide::Right => (
-            diff_line.new_line.unwrap_or(0),
-            "RIGHT",
-        ),
+        CommentSide::Left => (diff_line.old_line.unwrap_or(0), "LEFT"),
+        CommentSide::Right => (diff_line.new_line.unwrap_or(0), "RIGHT"),
     };
 
     let comment_style = Style::default().fg(Color::Yellow);
@@ -687,7 +678,14 @@ fn render_comment_decoration_row(
         }
     };
 
-    buf_set_string_clipped(frame.buffer_mut(), side_x, y, &text, comment_style, side_width);
+    buf_set_string_clipped(
+        frame.buffer_mut(),
+        side_x,
+        y,
+        &text,
+        comment_style,
+        side_width,
+    );
 
     // Draw vertical separator on comment rows too
     if left_half < inner.width {
@@ -792,7 +790,10 @@ fn render_comment_input_overlay(frame: &mut Frame, area: Rect, state: &CodeRevie
         " [Enter] save  [Esc] cancel ",
         Style::default().fg(Color::DarkGray),
     ));
-    frame.render_widget(Paragraph::new(hints).alignment(Alignment::Center), hint_area);
+    frame.render_widget(
+        Paragraph::new(hints).alignment(Alignment::Center),
+        hint_area,
+    );
 }
 
 /// Render the submit review overlay (centered dialog reading from persistent draft)
@@ -826,17 +827,24 @@ pub(super) fn render_submit_overlay(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(block, popup);
 
     let has_error = state.submit_error.is_some();
-    let [_gap1, verdict_area, comments_area, error_area, _gap2, body_area, hint_area] =
-        Layout::vertical([
-            Constraint::Length(1),
-            Constraint::Length(1),
-            Constraint::Length(1),
-            Constraint::Length(if has_error { 1 } else { 0 }),
-            Constraint::Length(1),
-            Constraint::Min(3),
-            Constraint::Length(2),
-        ])
-        .areas(inner);
+    let [
+        _gap1,
+        verdict_area,
+        comments_area,
+        error_area,
+        _gap2,
+        body_area,
+        hint_area,
+    ] = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Length(1),
+        Constraint::Length(1),
+        Constraint::Length(if has_error { 1 } else { 0 }),
+        Constraint::Length(1),
+        Constraint::Min(3),
+        Constraint::Length(2),
+    ])
+    .areas(inner);
 
     // Verdict selector
     let verdicts = [
@@ -871,20 +879,24 @@ pub(super) fn render_submit_overlay(frame: &mut Frame, area: Rect, app: &App) {
     // Inline comments count
     let comments_text = if comment_count > 0 {
         Span::styled(
-            format!("  {} inline comment{}", comment_count, if comment_count == 1 { "" } else { "s" }),
+            format!(
+                "  {} inline comment{}",
+                comment_count,
+                if comment_count == 1 { "" } else { "s" }
+            ),
             Style::default().fg(Color::Yellow),
         )
     } else {
-        Span::styled(
-            "  No inline comments",
-            Style::default().fg(Color::DarkGray),
-        )
+        Span::styled("  No inline comments", Style::default().fg(Color::DarkGray))
     };
     frame.render_widget(Paragraph::new(Line::from(comments_text)), comments_area);
 
     // Error message (if any)
     if let Some(ref err) = state.submit_error {
-        let err_text: String = err.chars().take(inner.width.saturating_sub(2) as usize).collect();
+        let err_text: String = err
+            .chars()
+            .take(inner.width.saturating_sub(2) as usize)
+            .collect();
         frame.render_widget(
             Paragraph::new(Line::from(Span::styled(
                 format!("  {}", err_text),
@@ -918,8 +930,14 @@ pub(super) fn render_submit_overlay(frame: &mut Frame, area: Rect, app: &App) {
     // Hints (2 lines so everything is visible)
     let hint_style = Style::default().fg(Color::DarkGray);
     let hints = vec![
-        Line::from(Span::styled(" [Tab] cycle verdict   [Enter] submit ", hint_style)),
-        Line::from(Span::styled(" [Esc] close           [Ctrl+D] discard draft ", hint_style)),
+        Line::from(Span::styled(
+            " [Tab] cycle verdict   [Enter] submit ",
+            hint_style,
+        )),
+        Line::from(Span::styled(
+            " [Esc] close           [Ctrl+D] discard draft ",
+            hint_style,
+        )),
     ];
     frame.render_widget(
         Paragraph::new(hints).alignment(Alignment::Center),

@@ -50,7 +50,9 @@ pub enum DialogState {
     },
     ConfirmQuit,
     ConfirmMerge,
-    NewTab { menu: NewTabMenu },
+    NewTab {
+        menu: NewTabMenu,
+    },
     Help {
         scroll: u16,
     },

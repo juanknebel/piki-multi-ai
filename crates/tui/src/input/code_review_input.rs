@@ -230,8 +230,7 @@ fn handle_file_list_keys(
         }
         KeyCode::Char('k') | KeyCode::Up => {
             if !cr.files.is_empty() {
-                cr.selected_file =
-                    (cr.selected_file + cr.files.len() - 1) % cr.files.len();
+                cr.selected_file = (cr.selected_file + cr.files.len() - 1) % cr.files.len();
                 if cr.selected_file < cr.file_scroll {
                     cr.file_scroll = cr.selected_file;
                 }
@@ -262,10 +261,7 @@ fn handle_diff_view_keys(
     cr: &mut crate::code_review::CodeReviewState,
     key: KeyEvent,
 ) -> Option<Action> {
-    let line_count = cr
-        .current_diff()
-        .map(|d| d.lines.len())
-        .unwrap_or(0);
+    let line_count = cr.current_diff().map(|d| d.lines.len()).unwrap_or(0);
 
     match key.code {
         KeyCode::Char('j') | KeyCode::Down => {
@@ -316,8 +312,7 @@ fn handle_diff_view_keys(
                 match diff_line.line_type {
                     DiffLineType::Addition | DiffLineType::Context => {
                         if let Some(ln) = diff_line.new_line {
-                            let file_path =
-                                cr.current_file_path().unwrap_or("").to_string();
+                            let file_path = cr.current_file_path().unwrap_or("").to_string();
                             let existing_body = cr
                                 .draft
                                 .comment_at_line(&file_path, ln)
@@ -335,8 +330,7 @@ fn handle_diff_view_keys(
                     }
                     DiffLineType::Deletion => {
                         if let Some(ln) = diff_line.old_line {
-                            let file_path =
-                                cr.current_file_path().unwrap_or("").to_string();
+                            let file_path = cr.current_file_path().unwrap_or("").to_string();
                             let existing_body = cr
                                 .draft
                                 .comment_at_line(&file_path, ln)
@@ -388,8 +382,7 @@ fn handle_diff_view_keys(
         }
         KeyCode::Char('p') => {
             if !cr.files.is_empty() {
-                cr.selected_file =
-                    (cr.selected_file + cr.files.len() - 1) % cr.files.len();
+                cr.selected_file = (cr.selected_file + cr.files.len() - 1) % cr.files.len();
                 cr.diff_scroll = 0;
                 cr.cursor_line = 0;
                 return Some(Action::LoadPrFileDiff(cr.selected_file));
@@ -428,8 +421,7 @@ fn compute_visual_row_for_cursor(cr: &crate::code_review::CodeReviewState) -> us
         None => return cr.cursor_line,
     };
     let file_path = cr.current_file_path().unwrap_or("");
-    let split_rows =
-        crate::ui::code_review::compute_split_rows(diff, &cr.draft, file_path);
+    let split_rows = crate::ui::code_review::compute_split_rows(diff, &cr.draft, file_path);
     for (row_idx, srow) in split_rows.iter().enumerate() {
         if srow.contains_diff_idx(cr.cursor_line) {
             return row_idx;
