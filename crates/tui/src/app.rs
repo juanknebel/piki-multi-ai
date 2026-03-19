@@ -689,7 +689,7 @@ pub struct App {
     pub last_inactive_pty_check: Instant,
     /// Cached result of `gh` CLI availability check (None = not yet checked)
     pub gh_available: Option<bool>,
-    /// Storage backend (JSON or SQLite depending on PIKI_STORAGE env var)
+    /// Storage backend (SQLite)
     pub storage: std::sync::Arc<piki_core::storage::AppStorage>,
 }
 

@@ -78,9 +78,6 @@ async fn main() -> anyhow::Result<()> {
                 let count = storage.migrate_from_json()?;
                 println!("Migrated {count} workspaces from JSON to SQLite");
                 println!("Database: {}", db_path.display());
-                println!();
-                println!("To use SQLite as the storage backend, run:");
-                println!("  PIKI_STORAGE=sqlite piki-multi-ai");
                 return Ok(());
             }
         }

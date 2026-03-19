@@ -134,16 +134,10 @@ piki-multi-ai version
 
 #### `migrate`
 
-Migrates workspace configurations from JSON files to a SQLite database. JSON files are preserved (not deleted) for manual verification:
+Migrates workspace configurations from legacy JSON files to the SQLite database. JSON files are preserved (not deleted) for manual verification:
 
 ```bash
 piki-multi-ai migrate
-```
-
-After migration, switch to the SQLite backend:
-
-```bash
-PIKI_STORAGE=sqlite piki-multi-ai
 ```
 
 ### Creating Workspaces
@@ -165,22 +159,14 @@ Press `e` on a selected workspace to modify its **Kanban Path**, **Prompt**, or 
 
 ### Persistence
 
-Workspace configurations are saved automatically and restored on startup. Two storage backends are available:
-
-**JSON (default):**
-
-- `~/.local/share/piki-multi/workspaces/<project-name>.json` (workspace config per project)
-
-**SQLite** (opt-in via `PIKI_STORAGE=sqlite`):
+Workspace configurations are saved automatically and restored on startup using a SQLite database:
 
 - `~/.local/share/piki-multi/piki.db` (single SQLite database with WAL mode)
 - Includes workspace config, API Explorer history (with FTS5 full-text search), collapsed groups, and UI layout preferences
 - API history persists across restarts and is searchable via `Ctrl+H` in the API Explorer tab; duplicate requests (same method + URL + body) are deduplicated automatically, keeping only the latest response
 - API history is scoped per project — each repository sees only its own entries
 
-| Environment Variable | Values | Default | Description |
-|---|---|---|---|
-| `PIKI_STORAGE` | `json`, `sqlite` | `json` | Storage backend for workspace config and app state |
+> **Note:** If you have existing JSON workspace configs in `~/.local/share/piki-multi/workspaces/`, run `piki-multi-ai migrate` to import them into the database.
 
 **Restoration:**
 

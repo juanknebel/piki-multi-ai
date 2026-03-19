@@ -833,7 +833,7 @@ pub(super) fn handle_api_interaction(app: &mut App, key: KeyEvent) -> Option<Act
         return None;
     }
 
-    // Ctrl+H: open API history overlay (SQLite backend only)
+    // Ctrl+H: open API history overlay
     if key.code == KeyCode::Char('h')
         && key
             .modifiers
@@ -858,11 +858,6 @@ pub(super) fn handle_api_interaction(app: &mut App, key: KeyEvent) -> Option<Act
                     searching: false,
                 });
             }
-        } else {
-            app.set_toast(
-                "API history requires PIKI_STORAGE=sqlite",
-                crate::app::ToastLevel::Info,
-            );
         }
         return None;
     }

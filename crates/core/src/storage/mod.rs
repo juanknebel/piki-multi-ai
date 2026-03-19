@@ -57,24 +57,15 @@ pub struct AppStorage {
 }
 
 pub fn create_storage() -> anyhow::Result<AppStorage> {
-    match std::env::var("PIKI_STORAGE").as_deref() {
-        Ok("sqlite") => {
-            let data_dir = dirs::data_dir()
-                .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
-                .join("piki-multi");
-            let db_path = data_dir.join("piki.db");
-            std::fs::create_dir_all(db_path.parent().unwrap())?;
-            let store = std::sync::Arc::new(sqlite::SqliteStorage::open(&db_path)?);
-            Ok(AppStorage {
-                workspaces: Box::new(std::sync::Arc::clone(&store)),
-                api_history: Some(Box::new(std::sync::Arc::clone(&store))),
-                ui_prefs: Some(Box::new(store)),
-            })
-        }
-        _ => Ok(AppStorage {
-            workspaces: Box::new(json::JsonStorage),
-            api_history: None,
-            ui_prefs: None,
-        }),
-    }
+    let data_dir = dirs::data_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+        .join("piki-multi");
+    let db_path = data_dir.join("piki.db");
+    std::fs::create_dir_all(db_path.parent().unwrap())?;
+    let store = std::sync::Arc::new(sqlite::SqliteStorage::open(&db_path)?);
+    Ok(AppStorage {
+        workspaces: Box::new(std::sync::Arc::clone(&store)),
+        api_history: Some(Box::new(std::sync::Arc::clone(&store))),
+        ui_prefs: Some(Box::new(store)),
+    })
 }
