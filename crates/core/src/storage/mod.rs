@@ -56,11 +56,8 @@ pub struct AppStorage {
     pub ui_prefs: Option<Box<dyn UiPrefsStorage>>,
 }
 
-pub fn create_storage() -> anyhow::Result<AppStorage> {
-    let data_dir = dirs::data_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
-        .join("piki-multi");
-    let db_path = data_dir.join("piki.db");
+pub fn create_storage(paths: &crate::paths::DataPaths) -> anyhow::Result<AppStorage> {
+    let db_path = paths.db_path();
     std::fs::create_dir_all(db_path.parent().unwrap())?;
     let store = std::sync::Arc::new(sqlite::SqliteStorage::open(&db_path)?);
     Ok(AppStorage {

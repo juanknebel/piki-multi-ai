@@ -484,11 +484,8 @@ struct ConfigToml {
     theme: Option<String>,
 }
 
-pub fn load() -> Theme {
-    let config_dir = match dirs::config_dir() {
-        Some(d) => d.join("piki-multi"),
-        None => return Theme::default(),
-    };
+pub fn load_from(paths: &piki_core::paths::DataPaths) -> Theme {
+    let config_dir = paths.config_dir();
 
     let config_path = config_dir.join("config.toml");
     let theme_name = std::fs::read_to_string(&config_path)

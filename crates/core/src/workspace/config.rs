@@ -130,12 +130,20 @@ pub fn load(git_root: &Path) -> anyhow::Result<Vec<WorkspaceEntry>> {
 
 /// Load all workspace entries from every project config in the config directory.
 pub fn load_all() -> Vec<WorkspaceEntry> {
-    let dir = config_dir();
+    load_all_from_dir(&config_dir())
+}
+
+/// Load all workspace entries using a custom data directory.
+pub fn load_all_with_paths(paths: &crate::paths::DataPaths) -> Vec<WorkspaceEntry> {
+    load_all_from_dir(&paths.legacy_workspaces_dir())
+}
+
+fn load_all_from_dir(dir: &Path) -> Vec<WorkspaceEntry> {
     if !dir.exists() {
         return Vec::new();
     }
 
-    let read_dir = match std::fs::read_dir(&dir) {
+    let read_dir = match std::fs::read_dir(dir) {
         Ok(rd) => rd,
         Err(_) => return Vec::new(),
     };

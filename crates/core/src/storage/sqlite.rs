@@ -50,8 +50,8 @@ impl SqliteStorage {
 
     /// Migrate all workspaces from JSON config files into SQLite.
     /// Returns the number of entries migrated.
-    pub fn migrate_from_json(&self) -> anyhow::Result<usize> {
-        let entries = crate::workspace::config::load_all();
+    pub fn migrate_from_json(&self, paths: &crate::paths::DataPaths) -> anyhow::Result<usize> {
+        let entries = crate::workspace::config::load_all_with_paths(paths);
         let mut conn = self.conn.lock();
         let tx = conn.transaction()?;
         let mut count = 0;

@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 use anyhow::Context;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -426,20 +425,24 @@ impl Config {
         toml::to_string_pretty(&Self::default()).unwrap_or_default()
     }
 
-    pub fn load() -> Self {
-        let path = Self::config_path();
+    pub fn load_from(paths: &piki_core::paths::DataPaths) -> Self {
+        let path = paths.config_path();
+        Self::load_from_path(&path)
+    }
+
+    fn load_from_path(path: &std::path::Path) -> Self {
         if !path.exists() {
             let default_config = Self::default();
             if let Some(parent) = path.parent() {
                 let _ = std::fs::create_dir_all(parent);
             }
             if let Ok(toml) = toml::to_string_pretty(&default_config) {
-                let _ = std::fs::write(&path, toml);
+                let _ = std::fs::write(path, toml);
             }
             return default_config;
         }
 
-        std::fs::read_to_string(&path)
+        std::fs::read_to_string(path)
             .context("failed to read config file")
             .and_then(|data| toml::from_str(&data).context("failed to parse config file"))
             .unwrap_or_else(|e| {
@@ -695,10 +698,6 @@ impl Config {
         binding.unwrap_or_else(|| "???".to_string())
     }
 
-    fn config_path() -> PathBuf {
-        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-        PathBuf::from(home).join(".config/piki-multi/config.toml")
-    }
 }
 
 pub fn parse_key_event(s: &str) -> Option<KeyEvent> {

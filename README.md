@@ -117,6 +117,7 @@ piki-multi-ai [COMMAND]
 - `-h`, `--help`: Print help
 - `-V`, `--version`: Print version
 - `--log-level <LEVEL>`: Set logging verbosity — `trace`, `debug`, `info` (default), `warn`, `error`. Logs are written to `~/.local/share/piki-multi/logs/`
+- `--data-dir <PATH>`: Override the data directory. When set, **all** app state is stored under this path: database, worktrees, logs, and config. Useful for running a nightly/test instance alongside stable (e.g. `piki-multi-ai --data-dir /tmp/piki-nightly`)
 
 ### Commands
 

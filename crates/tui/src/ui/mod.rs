@@ -59,7 +59,7 @@ mod tests {
     #[test]
     fn test_render_confirm_quit_dialog() {
         let mut terminal = test_terminal(80, 24);
-        let app = App::new(test_storage());
+        let app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
         terminal
             .draw(|frame| {
                 super::dialogs::render_confirm_quit_dialog(frame, frame.area(), &app);
@@ -72,7 +72,7 @@ mod tests {
     #[test]
     fn test_render_confirm_close_tab_dialog() {
         let mut terminal = test_terminal(80, 24);
-        let app = App::new(test_storage());
+        let app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
         terminal
             .draw(|frame| {
                 super::dialogs::render_confirm_close_tab_dialog(frame, frame.area(), &app);
@@ -85,7 +85,7 @@ mod tests {
     #[test]
     fn test_render_new_tab_dialog() {
         let mut terminal = test_terminal(80, 24);
-        let app = App::new(test_storage());
+        let app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
         terminal
             .draw(|frame| {
                 super::dialogs::render_new_tab_dialog(frame, frame.area(), &app);
@@ -98,7 +98,7 @@ mod tests {
     #[test]
     fn test_render_status_bar_normal_no_workspace() {
         let mut terminal = test_terminal(80, 1);
-        let app = App::new(test_storage());
+        let app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
         terminal
             .draw(|frame| {
                 super::statusbar::render_status_bar(frame, frame.area(), &app);
@@ -147,7 +147,7 @@ mod tests {
     #[test]
     fn test_snapshot_confirm_delete_dialog() {
         let mut terminal = test_terminal(80, 24);
-        let mut app = App::new(test_storage());
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
         app.active_dialog = Some(DialogState::ConfirmDelete { target: 0 });
         terminal
             .draw(|frame| {
@@ -161,7 +161,7 @@ mod tests {
     #[test]
     fn test_snapshot_confirm_merge_dialog() {
         let mut terminal = test_terminal(80, 24);
-        let mut app = App::new(test_storage());
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
         app.active_dialog = Some(DialogState::ConfirmMerge);
         terminal
             .draw(|frame| {
@@ -175,7 +175,7 @@ mod tests {
     #[test]
     fn test_snapshot_commit_message_dialog() {
         let mut terminal = test_terminal(80, 24);
-        let mut app = App::new(test_storage());
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
         app.active_dialog = Some(DialogState::CommitMessage {
             buffer: "feat: add snapshot tests".to_string(),
         });
@@ -191,7 +191,7 @@ mod tests {
     #[test]
     fn test_snapshot_help_overlay() {
         let mut terminal = test_terminal(80, 40);
-        let mut app = App::new(test_storage());
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
         app.active_dialog = Some(DialogState::Help { scroll: 0 });
         terminal
             .draw(|frame| {
@@ -205,7 +205,7 @@ mod tests {
     #[test]
     fn test_snapshot_about_overlay() {
         let mut terminal = test_terminal(80, 30);
-        let mut app = App::new(test_storage());
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
         app.active_dialog = Some(DialogState::About);
         terminal
             .draw(|frame| {
@@ -219,7 +219,7 @@ mod tests {
     #[test]
     fn test_snapshot_dashboard_overlay() {
         let mut terminal = test_terminal(80, 24);
-        let mut app = App::new(test_storage());
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
         app.active_dialog = Some(DialogState::Dashboard {
             selected: 0,
             scroll_offset: 0,
@@ -236,7 +236,7 @@ mod tests {
     #[test]
     fn test_snapshot_new_tab_dialog_agents_menu() {
         let mut terminal = test_terminal(80, 24);
-        let mut app = App::new(test_storage());
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
         app.active_dialog = Some(DialogState::NewTab {
             menu: NewTabMenu::Agents,
         });
@@ -254,7 +254,7 @@ mod tests {
     #[test]
     fn test_snapshot_empty_app_layout() {
         let mut terminal = test_terminal(80, 24);
-        let mut app = App::new(test_storage());
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
         terminal
             .draw(|frame| {
                 super::layout::render(frame, &mut app);
