@@ -30,7 +30,8 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
 
     // Pre-compute visual position (0-based) for each workspace index in sidebar order.
     // This maps workspace_index → visual_position so 1-9 badges reflect display order.
-    let mut ws_visual_pos: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
+    let mut ws_visual_pos: std::collections::HashMap<usize, usize> =
+        std::collections::HashMap::new();
     let mut visual_counter = 0;
     for item in &sidebar_items {
         if let SidebarItem::Workspace { index } = item {
@@ -130,10 +131,7 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                         " ".to_string()
                     };
                     let line1 = Line::from(vec![
-                        Span::styled(
-                            number_badge.to_string(),
-                            Style::default().fg(detail_color),
-                        ),
+                        Span::styled(number_badge.to_string(), Style::default().fg(detail_color)),
                         Span::raw(format!("{} ", marker)),
                         Span::styled(
                             ws.name.clone(),

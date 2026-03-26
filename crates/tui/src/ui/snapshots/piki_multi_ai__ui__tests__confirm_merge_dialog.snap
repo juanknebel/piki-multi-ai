@@ -1,0 +1,21 @@
+---
+source: crates/tui/src/ui/mod.rs
+assertion_line: 186
+expression: content
+---
+
+
+
+
+
+
+
+               ┌ Merge ─────────────────────────────────────────┐
+               │                                                │
+               │  Merge ? into main?                            │
+               │                                                │
+               │  [m] Merge commit                              │
+               │  [r] Rebase + fast-forward                     │
+               │  [Esc] Cancel                                  │
+               │                                                │
+               └────────────────────────────────────────────────┘

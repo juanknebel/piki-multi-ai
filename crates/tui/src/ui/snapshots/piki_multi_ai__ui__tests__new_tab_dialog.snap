@@ -1,0 +1,21 @@
+---
+source: crates/tui/src/ui/mod.rs
+assertion_line: 109
+expression: content
+---
+
+
+
+
+
+
+
+                    ┌ New Tab ─────────────────────────────┐
+                    │                                      │
+                    │  Select category:                    │
+                    │                                      │
+                    │  [1] Shell                           │
+                    │  [2] AI Agents  →                    │
+                    │  [3] Tools      →                    │
+                    │                                      │
+                    └──────────────────────────────────────┘

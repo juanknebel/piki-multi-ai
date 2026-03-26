@@ -48,12 +48,37 @@ macro_rules! cmd {
 fn all_commands() -> Vec<PaletteCommand> {
     vec![
         // Workspace
-        cmd!("new_workspace", "New Workspace", "Workspace", "new_workspace"),
-        cmd!("clone_workspace", "Clone Workspace", "Workspace", "clone_workspace"),
-        cmd!("edit_workspace", "Edit Workspace", "Workspace", "edit_workspace"),
-        cmd!("delete_workspace", "Delete Workspace", "Workspace", "delete_workspace"),
+        cmd!(
+            "new_workspace",
+            "New Workspace",
+            "Workspace",
+            "new_workspace"
+        ),
+        cmd!(
+            "clone_workspace",
+            "Clone Workspace",
+            "Workspace",
+            "clone_workspace"
+        ),
+        cmd!(
+            "edit_workspace",
+            "Edit Workspace",
+            "Workspace",
+            "edit_workspace"
+        ),
+        cmd!(
+            "delete_workspace",
+            "Delete Workspace",
+            "Workspace",
+            "delete_workspace"
+        ),
         cmd!("dashboard", "Dashboard", "Workspace", "dashboard"),
-        cmd!("workspace_info", "Workspace Info", "Workspace", "workspace_info"),
+        cmd!(
+            "workspace_info",
+            "Workspace Info",
+            "Workspace",
+            "workspace_info"
+        ),
         // Git
         cmd!("commit", "Commit", "Git", "commit"),
         cmd!("merge", "Merge", "Git", "merge"),
@@ -65,13 +90,23 @@ fn all_commands() -> Vec<PaletteCommand> {
         cmd!("next_tab", "Next Tab", "Tabs", "next_tab"),
         cmd!("prev_tab", "Previous Tab", "Tabs", "prev_tab"),
         // Search
-        cmd!("fuzzy_search", "Fuzzy File Search", "Search", "fuzzy_search"),
+        cmd!(
+            "fuzzy_search",
+            "Fuzzy File Search",
+            "Search",
+            "fuzzy_search"
+        ),
         // View
         cmd!("help", "Help", "View", "help"),
         cmd!("about", "About", "View", "about"),
         cmd!("logs", "Logs", "View", "logs"),
         // Layout
-        cmd!("sidebar_shrink", "Shrink Sidebar", "Layout", "sidebar_shrink"),
+        cmd!(
+            "sidebar_shrink",
+            "Shrink Sidebar",
+            "Layout",
+            "sidebar_shrink"
+        ),
         cmd!("sidebar_grow", "Grow Sidebar", "Layout", "sidebar_grow"),
         cmd!("split_up", "Grow Left Split", "Layout", "split_up"),
         cmd!("split_down", "Shrink Left Split", "Layout", "split_down"),

@@ -1,0 +1,7 @@
+---
+source: crates/tui/src/ui/mod.rs
+assertion_line: 156
+expression: content
+---
+ [hjkl] navigate  [enter] inte
+ [n] new ws  [q] quit  [?] hel

@@ -323,7 +323,10 @@ impl ApiHistoryStorage for Arc<SqliteStorage> {
         )?;
 
         let entries = stmt
-            .query_map(rusqlite::params![&*repo_str, limit as i64], row_to_api_entry)?
+            .query_map(
+                rusqlite::params![&*repo_str, limit as i64],
+                row_to_api_entry,
+            )?
             .filter_map(|r| r.ok())
             .collect();
 

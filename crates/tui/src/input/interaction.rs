@@ -449,7 +449,9 @@ pub(super) fn handle_diff_interaction(app: &mut App, key: KeyEvent) -> Option<Ac
 
 pub(super) fn handle_workspace_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
     if app.config.matches_workspace_list(key, "exit_interaction")
-        || app.config.matches_workspace_list(key, "exit_interaction_alt")
+        || app
+            .config
+            .matches_workspace_list(key, "exit_interaction_alt")
     {
         app.interacting = false;
         return None;

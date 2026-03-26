@@ -127,10 +127,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
 
         // Number badge (1-9) for quick access hint
         if entry.index < 9 {
-            spans.push(Span::styled(
-                format!("{} ", entry.index + 1),
-                hint_style,
-            ));
+            spans.push(Span::styled(format!("{} ", entry.index + 1), hint_style));
         } else {
             spans.push(Span::styled("  ", Style::default().bg(bg)));
         }

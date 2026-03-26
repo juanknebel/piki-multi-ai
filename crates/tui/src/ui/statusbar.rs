@@ -469,10 +469,7 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                 ),
                 "resize",
             ));
-            keys.push((
-                cfg.get_binding("navigation", "command_palette"),
-                "commands",
-            ));
+            keys.push((cfg.get_binding("navigation", "command_palette"), "commands"));
             keys.push((
                 cfg.get_binding("navigation", "workspace_switcher"),
                 "switch ws",

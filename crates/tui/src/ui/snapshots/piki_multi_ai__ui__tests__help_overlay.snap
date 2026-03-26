@@ -1,0 +1,45 @@
+---
+source: crates/tui/src/ui/mod.rs
+assertion_line: 216
+expression: content
+---
+            ┌ Help ───────────────────────────────────────────────┐
+            │                                                     │
+            │  Navigation mode (yellow border)                    │
+            │    k/j/h/l       Move between panes (h→ws list)     │
+            │    enter         Interact with pane                 │
+            │    n             New workspace                      │
+            │    r             Clone workspace                    │
+            │    e             Edit workspace                     │
+            │    d             Delete workspace                   │
+            │    tab/shift-tab Next/Prev workspace                │
+            │    1-9           Go to workspace N                  │
+            │    space         Fuzzy workspace search             │
+            │    `             Previous workspace                 │
+            │    ctrl-p        Command palette                    │
+            │    g/G           Next/Prev tab                      │
+            │    t             New tab                            │
+            │    w             Close tab                          │
+            │    ?             Toggle help                        │
+            │    a             About                              │
+            │    s             Quick stage (file list focused)    │
+            │    u             Quick unstage (file list focused)  │
+            │    D             Dashboard                          │
+            │    ctrl-l        Logs                               │
+            │    q             Quit                               │
+            │                                                     │
+            │  Interaction mode (green border)                    │
+            │    ctrl-g        Back to navigation                 │
+            │    Esc           Back (non-terminal panes)          │
+            │                                                     │
+            │  Terminal pane (navigation mode)                    │
+            │    K/J           Scroll up/down (3 lines)           │
+            │    pageup/pagedown Scroll by page                   │
+            │    Mouse scroll  Scroll up/down                     │
+            │                                                     │
+            │  Terminal pane (interaction mode)                   │
+            │    All keys sent to active tab                      │
+            │                                                     │
+            │  File list pane                                     │
+            │    k/j           Select file                        │
+            └─────────────────────────────────────── [1/62 ↑k/j↓] ┘
