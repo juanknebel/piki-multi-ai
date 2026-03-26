@@ -12,6 +12,7 @@ mod sidebar;
 pub(crate) mod statusbar;
 pub mod subtabs;
 pub mod terminal;
+pub mod workspace_switcher;
 
 #[cfg(test)]
 mod tests {

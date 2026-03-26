@@ -55,8 +55,9 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 - **Ahead/behind indicator** — STATUS panel border and status bar show `↑N to push` / `↓N behind` relative to upstream tracking branch
 - **Side-by-side diffs** — View diffs as a floating overlay rendered by [delta](https://github.com/dandavison/delta) with ANSI colors preserved (terminal stays visible behind)
 - **Deterministic workspace ordering** — Workspaces persist their display order via an `order` field; new workspaces append to the end; order is stable across restarts
-- **Tab navigation** — Switch between workspaces with Tab, Shift+Tab, or number keys 1-9; Tab cycling follows sidebar visual order, skipping workspaces in collapsed groups
-- **Vim-style navigation** — j/k for movement, Enter to activate, Esc to go back
+- **Tab navigation** — Switch between workspaces with Tab, Shift+Tab, or number keys 1-9 (shown as badges in the sidebar); Tab cycling follows sidebar visual order, skipping workspaces in collapsed groups; backtick (`` ` ``) toggles to previous workspace (Alt-Tab style)
+- **Fuzzy workspace switcher** — Press `Space` to open a fuzzy search overlay for instant workspace switching by name, group, or branch
+- **Vim-style navigation** — j/k for movement, Enter to activate, Esc to go back (non-terminal panes), Ctrl+G for terminal panes; h from main panel goes to workspace list; j/k from main panel reach GitStatus/WorkspaceList; Enter on a workspace switches and auto-focuses the main panel
 - **Fuzzy file search** — Search all files in the active worktree with fuzzy matching powered by [nucleo](https://github.com/helix-editor/nucleo) (same engine as Helix editor), respects `.gitignore`
 - **$EDITOR integration** — Open any file in your preferred editor (`$EDITOR` or `vi`); TUI suspends and resumes automatically
 - **Inline editor** — Edit files directly inside the TUI with a built-in text editor (cursor movement, line numbers, scroll)
@@ -71,7 +72,7 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 - **Customizable configuration** — Keybindings and themes loaded from `~/.config/piki-multi/config.toml`
 - **Customizable themes** — Colors loaded from TOML files; supports named colors and hex `#rrggbb`
 - **Pre-flight checks** — Validates required (git >= 2.20) and optional dependencies (delta) at startup with clear error/warning messages; `gh` CLI availability is checked lazily on first Code Review use
-- **Command palette** — Press `Ctrl+p` to open a VS Code-style searchable command palette; fuzzy-filter ~25 commands across 7 categories (Workspace, Git, Tabs, Search, View, Layout, App) with match highlighting and keybinding hints; powered by [nucleo](https://github.com/helix-editor/nucleo)
+- **Command palette** — Press `Ctrl+p` to open a VS Code-style searchable command palette; fuzzy-filter ~25+ commands across 8 categories (Workspace, Switch, Git, Tabs, Search, View, Layout, App) with match highlighting and keybinding hints; includes dynamic "Switch to" entries for all workspaces; powered by [nucleo](https://github.com/helix-editor/nucleo)
 - **In-app log viewer** — Press `Ctrl+l` to open a scrollable overlay showing the last 500 log entries from the current session; color-coded by level (ERROR=red, WARN=yellow, INFO=green, DEBUG=cyan, TRACE=gray); filter by level with `0`-`5` keys; select lines with `j`/`k` (highlighted), horizontal scroll with `h`/`l`, page with `Ctrl+d`/`Ctrl+u`, `g`/`G` top/bottom; `Enter`/`y` copies selected line to clipboard; mouse scroll and click to select
 - **Structured logging** — File-based structured logging via `tracing` with daily rotation to `~/.local/share/piki-multi/logs/`; configurable via `--log-level` flag (trace/debug/info/warn/error)
 - **Code Review** — Full-screen PR review tab powered by `gh` CLI; browse changed files, view diffs with line numbers and a cursor, add inline comments on any line (`c`), delete comments (`d`), submit reviews (approve/request changes/comment) with inline comments via GitHub API; persistent draft overlay; tab only opens if the current branch has an open PR; locked mode prevents accidental workspace switching — press `q` to close or `s` to submit; `gh` availability and authentication are checked lazily on first use and cached for the session
@@ -197,9 +198,9 @@ Workspace configurations are saved automatically and restored on startup using a
 | ↑1 to push      |
 +------------------+--------------------------------------------------------+
   Footer keys change per active pane. Examples:
-  Workspace list: [hjkl] navigate [enter] interact [n] new ws [r] clone ws [e] edit ws [d] delete ws [tab] switch ws [</> ] resize [?] help [q] quit
-  Git status:     [hjkl] navigate [enter] interact [/] search [c] commit [P] push [M] merge [ctrl-z] undo [</> ] resize [?] help [q] quit
-  Main panel:     [hjkl] navigate [enter] interact [t] new tab [w] close tab [g/G] next/prev tab [</> ] resize [?] help [q] quit
+  Workspace list: [hjkl] navigate [enter] interact [n] new ws [r] clone ws [e] edit ws [d] delete ws [tab] switch ws [^P] commands [space] switch ws [?] help [q] quit
+  Git status:     [hjkl] navigate [enter] interact [/] search [c] commit [P] push [M] merge [ctrl-z] undo [^P] commands [space] switch ws [?] help [q] quit
+  Main panel:     [hjkl] navigate [enter] interact [t] new tab [w] close tab [g/G] next/prev tab [^P] commands [space] switch ws [?] help [q] quit
 ```
 
 For **Project workspaces**, the STATUS panel is replaced by a SERVICES panel showing sub-directories:
@@ -238,14 +239,16 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 
 | Key | Action |
 |-----|--------|
-| `h` / `j` / `k` / `l` | Move between panes |
+| `h` / `j` / `k` / `l` | Move between panes (`h` from main panel goes to workspace list) |
 | `Enter` | Interact with selected pane |
 | `n` | Create new workspace |
 | `r` | Clone workspace (new workspace pre-filled with directory, prompt, and kanban path) |
 | `e` | Edit workspace options (Kanban path, Prompt) |
 | `d` | Delete selected workspace |
 | `Tab` / `Shift+Tab` | Next / previous workspace |
-| `1`-`9` | Jump to workspace N |
+| `1`-`9` | Jump to workspace N (numbers shown in sidebar) |
+| `Space` | Fuzzy workspace switcher (search by name/group/branch) |
+| `` ` `` | Toggle to previous workspace |
 | `t` | New tab (opens category menu: 1=Shell, 2=AI Agents →, 3=Tools →; submenus for agent/tool selection) |
 | `w` | Close current tab (with confirmation dialog) |
 | `D` | Workspace dashboard overlay (bird's-eye view of all workspaces and tabs) |
@@ -255,6 +258,8 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `<` / `>` | Resize sidebar width (±5%) |
 | `+` / `-` | Resize workspace/file split (±10%) |
 | `/` or `Ctrl+f` | Fuzzy file search |
+| `s` | Quick stage file (when file list focused) |
+| `u` | Quick unstage file (when file list focused) |
 | `c` | Commit (opens dialog) — not available for Project workspaces |
 | `P` | Push — not available for Project workspaces |
 | `M` | Merge workspace branch into main — not available for Project workspaces |
@@ -267,9 +272,10 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 
 | Key | Action |
 |-----|--------|
-| `Ctrl+g` | Back to navigation mode |
+| `Ctrl+g` | Back to navigation mode (all panes) |
+| `Esc` | Back to navigation mode (non-terminal panes only) |
 | *Terminal pane* | All keys forwarded to active tab |
-| *Workspace list* | `j`/`k` select, `Enter` switch, `d` delete |
+| *Workspace list* | `j`/`k` select, `Enter` switch + focus main panel, `d` delete |
 | *File list* | `j`/`k` select, `Enter` open diff, `e` open in $EDITOR, `v` inline editor, `s` stage, `u` unstage |
 | *Services list (Project)* | `j`/`k` select, `Enter` open New Workspace dialog pre-filled with sub-directory |
 | *Markdown tab* | `j`/`k` scroll, `Ctrl+d`/`Ctrl+u` page, `g`/`G` top/bottom (read-only) |

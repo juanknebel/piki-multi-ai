@@ -151,6 +151,12 @@ fn default_navigation() -> HashMap<String, String> {
     m.insert("fuzzy_search".to_string(), "/".to_string());
     m.insert("fuzzy_search_alt".to_string(), "ctrl-f".to_string());
     m.insert("command_palette".to_string(), "ctrl-p".to_string());
+    m.insert("workspace_switcher".to_string(), "space".to_string());
+    m.insert("toggle_prev_workspace".to_string(), "`".to_string());
+
+    // Quick actions (context-sensitive)
+    m.insert("stage_quick".to_string(), "s".to_string());
+    m.insert("unstage_quick".to_string(), "u".to_string());
 
     // Resizing
     m.insert("sidebar_shrink".to_string(), "<".to_string());
@@ -176,6 +182,7 @@ fn default_interaction() -> HashMap<String, String> {
 fn default_markdown() -> HashMap<String, String> {
     let mut m = HashMap::new();
     m.insert("exit_interaction".to_string(), "ctrl-g".to_string());
+    m.insert("exit_interaction_alt".to_string(), "esc".to_string());
     m.insert("down".to_string(), "j".to_string());
     m.insert("up".to_string(), "k".to_string());
     m.insert("down_alt".to_string(), "down".to_string());
@@ -206,6 +213,7 @@ fn default_diff() -> HashMap<String, String> {
 fn default_workspace_list() -> HashMap<String, String> {
     let mut m = HashMap::new();
     m.insert("exit_interaction".to_string(), "ctrl-g".to_string());
+    m.insert("exit_interaction_alt".to_string(), "esc".to_string());
     m.insert("down".to_string(), "j".to_string());
     m.insert("up".to_string(), "k".to_string());
     m.insert("down_alt".to_string(), "down".to_string());
@@ -218,6 +226,7 @@ fn default_workspace_list() -> HashMap<String, String> {
 fn default_file_list() -> HashMap<String, String> {
     let mut m = HashMap::new();
     m.insert("exit_interaction".to_string(), "ctrl-g".to_string());
+    m.insert("exit_interaction_alt".to_string(), "esc".to_string());
     m.insert("down".to_string(), "j".to_string());
     m.insert("up".to_string(), "k".to_string());
     m.insert("down_alt".to_string(), "down".to_string());
@@ -385,7 +394,8 @@ impl Config {
         if let Some(binding) = self.keybindings.interaction.get(action) {
             key_matches(event, binding)
         } else {
-            false
+            let defaults = default_interaction();
+            defaults.get(action).is_some_and(|b| key_matches(event, b))
         }
     }
 
@@ -393,7 +403,8 @@ impl Config {
         if let Some(binding) = self.keybindings.markdown.get(action) {
             key_matches(event, binding)
         } else {
-            false
+            let defaults = default_markdown();
+            defaults.get(action).is_some_and(|b| key_matches(event, b))
         }
     }
 
@@ -401,7 +412,8 @@ impl Config {
         if let Some(binding) = self.keybindings.diff.get(action) {
             key_matches(event, binding)
         } else {
-            false
+            let defaults = default_diff();
+            defaults.get(action).is_some_and(|b| key_matches(event, b))
         }
     }
 
@@ -409,7 +421,8 @@ impl Config {
         if let Some(binding) = self.keybindings.workspace_list.get(action) {
             key_matches(event, binding)
         } else {
-            false
+            let defaults = default_workspace_list();
+            defaults.get(action).is_some_and(|b| key_matches(event, b))
         }
     }
 
@@ -417,7 +430,8 @@ impl Config {
         if let Some(binding) = self.keybindings.file_list.get(action) {
             key_matches(event, binding)
         } else {
-            false
+            let defaults = default_file_list();
+            defaults.get(action).is_some_and(|b| key_matches(event, b))
         }
     }
 
@@ -613,6 +627,7 @@ pub fn parse_key_event(s: &str) -> Option<KeyEvent> {
         "end" => KeyCode::End,
         "insert" => KeyCode::Insert,
         "delete" => KeyCode::Delete,
+        "space" => KeyCode::Char(' '),
         s if s.len() == 1 => {
             let c = s.chars().next().unwrap();
             // If it's an uppercase char, implicitly add SHIFT modifier

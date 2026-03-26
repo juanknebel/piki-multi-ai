@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use crate::app::Workspace;
+
 /// A command that can be executed from the command palette.
 pub struct PaletteCommand {
     /// Unique identifier matching a navigation keybinding action name
@@ -10,6 +12,8 @@ pub struct PaletteCommand {
     pub category: &'static str,
     /// Keybinding hint (e.g. "n", "ctrl-z") — looked up at render time from config
     pub keybinding_action: &'static str,
+    /// Optional workspace index for dynamic "Switch to" commands
+    pub switch_workspace_idx: Option<usize>,
 }
 
 /// State for the command palette overlay (backed by nucleo async matcher)
@@ -28,171 +32,80 @@ impl CommandPaletteState {
     }
 }
 
+macro_rules! cmd {
+    ($id:expr, $label:expr, $cat:expr, $kb:expr) => {
+        PaletteCommand {
+            id: $id,
+            label: $label,
+            category: $cat,
+            keybinding_action: $kb,
+            switch_workspace_idx: None,
+        }
+    };
+}
+
 /// Returns the static list of all palette commands.
-pub fn all_commands() -> Vec<PaletteCommand> {
+fn all_commands() -> Vec<PaletteCommand> {
     vec![
         // Workspace
-        PaletteCommand {
-            id: "new_workspace",
-            label: "New Workspace",
-            category: "Workspace",
-            keybinding_action: "new_workspace",
-        },
-        PaletteCommand {
-            id: "clone_workspace",
-            label: "Clone Workspace",
-            category: "Workspace",
-            keybinding_action: "clone_workspace",
-        },
-        PaletteCommand {
-            id: "edit_workspace",
-            label: "Edit Workspace",
-            category: "Workspace",
-            keybinding_action: "edit_workspace",
-        },
-        PaletteCommand {
-            id: "delete_workspace",
-            label: "Delete Workspace",
-            category: "Workspace",
-            keybinding_action: "delete_workspace",
-        },
-        PaletteCommand {
-            id: "dashboard",
-            label: "Dashboard",
-            category: "Workspace",
-            keybinding_action: "dashboard",
-        },
-        PaletteCommand {
-            id: "workspace_info",
-            label: "Workspace Info",
-            category: "Workspace",
-            keybinding_action: "workspace_info",
-        },
+        cmd!("new_workspace", "New Workspace", "Workspace", "new_workspace"),
+        cmd!("clone_workspace", "Clone Workspace", "Workspace", "clone_workspace"),
+        cmd!("edit_workspace", "Edit Workspace", "Workspace", "edit_workspace"),
+        cmd!("delete_workspace", "Delete Workspace", "Workspace", "delete_workspace"),
+        cmd!("dashboard", "Dashboard", "Workspace", "dashboard"),
+        cmd!("workspace_info", "Workspace Info", "Workspace", "workspace_info"),
         // Git
-        PaletteCommand {
-            id: "commit",
-            label: "Commit",
-            category: "Git",
-            keybinding_action: "commit",
-        },
-        PaletteCommand {
-            id: "merge",
-            label: "Merge",
-            category: "Git",
-            keybinding_action: "merge",
-        },
-        PaletteCommand {
-            id: "push",
-            label: "Push",
-            category: "Git",
-            keybinding_action: "push",
-        },
-        PaletteCommand {
-            id: "undo",
-            label: "Undo",
-            category: "Git",
-            keybinding_action: "undo",
-        },
+        cmd!("commit", "Commit", "Git", "commit"),
+        cmd!("merge", "Merge", "Git", "merge"),
+        cmd!("push", "Push", "Git", "push"),
+        cmd!("undo", "Undo", "Git", "undo"),
         // Tabs
-        PaletteCommand {
-            id: "new_tab",
-            label: "New Tab",
-            category: "Tabs",
-            keybinding_action: "new_tab",
-        },
-        PaletteCommand {
-            id: "close_tab",
-            label: "Close Tab",
-            category: "Tabs",
-            keybinding_action: "close_tab",
-        },
-        PaletteCommand {
-            id: "next_tab",
-            label: "Next Tab",
-            category: "Tabs",
-            keybinding_action: "next_tab",
-        },
-        PaletteCommand {
-            id: "prev_tab",
-            label: "Previous Tab",
-            category: "Tabs",
-            keybinding_action: "prev_tab",
-        },
+        cmd!("new_tab", "New Tab", "Tabs", "new_tab"),
+        cmd!("close_tab", "Close Tab", "Tabs", "close_tab"),
+        cmd!("next_tab", "Next Tab", "Tabs", "next_tab"),
+        cmd!("prev_tab", "Previous Tab", "Tabs", "prev_tab"),
         // Search
-        PaletteCommand {
-            id: "fuzzy_search",
-            label: "Fuzzy File Search",
-            category: "Search",
-            keybinding_action: "fuzzy_search",
-        },
+        cmd!("fuzzy_search", "Fuzzy File Search", "Search", "fuzzy_search"),
         // View
-        PaletteCommand {
-            id: "help",
-            label: "Help",
-            category: "View",
-            keybinding_action: "help",
-        },
-        PaletteCommand {
-            id: "about",
-            label: "About",
-            category: "View",
-            keybinding_action: "about",
-        },
-        PaletteCommand {
-            id: "logs",
-            label: "Logs",
-            category: "View",
-            keybinding_action: "logs",
-        },
+        cmd!("help", "Help", "View", "help"),
+        cmd!("about", "About", "View", "about"),
+        cmd!("logs", "Logs", "View", "logs"),
         // Layout
-        PaletteCommand {
-            id: "sidebar_shrink",
-            label: "Shrink Sidebar",
-            category: "Layout",
-            keybinding_action: "sidebar_shrink",
-        },
-        PaletteCommand {
-            id: "sidebar_grow",
-            label: "Grow Sidebar",
-            category: "Layout",
-            keybinding_action: "sidebar_grow",
-        },
-        PaletteCommand {
-            id: "split_up",
-            label: "Grow Left Split",
-            category: "Layout",
-            keybinding_action: "split_up",
-        },
-        PaletteCommand {
-            id: "split_down",
-            label: "Shrink Left Split",
-            category: "Layout",
-            keybinding_action: "split_down",
-        },
+        cmd!("sidebar_shrink", "Shrink Sidebar", "Layout", "sidebar_shrink"),
+        cmd!("sidebar_grow", "Grow Sidebar", "Layout", "sidebar_grow"),
+        cmd!("split_up", "Grow Left Split", "Layout", "split_up"),
+        cmd!("split_down", "Shrink Left Split", "Layout", "split_down"),
         // Clipboard
-        PaletteCommand {
-            id: "copy",
-            label: "Copy Terminal",
-            category: "Clipboard",
-            keybinding_action: "copy",
-        },
+        cmd!("copy", "Copy Terminal", "Clipboard", "copy"),
         // App
-        PaletteCommand {
-            id: "quit",
-            label: "Quit",
-            category: "App",
-            keybinding_action: "quit",
-        },
+        cmd!("quit", "Quit", "App", "quit"),
     ]
 }
 
-/// Create a new CommandPaletteState with all commands injected into nucleo.
-pub fn create_state() -> CommandPaletteState {
+/// Create a new CommandPaletteState with all commands and workspace switch entries.
+pub fn create_state(workspaces: &[Workspace]) -> CommandPaletteState {
     let nucleo = nucleo::Nucleo::new(nucleo::Config::DEFAULT, Arc::new(|| {}), Some(1), 1);
     let injector = nucleo.injector();
 
     for cmd in all_commands() {
         let search_text: nucleo::Utf32String = format!("{}: {}", cmd.category, cmd.label).into();
+        injector.push(cmd, |cols| {
+            cols[0] = search_text;
+        });
+    }
+
+    // Inject dynamic workspace switch commands
+    for (i, ws) in workspaces.iter().enumerate() {
+        // Leak the label string — the palette is short-lived and recreated each open
+        let label: &'static str = Box::leak(format!("Switch to {}", ws.name).into_boxed_str());
+        let cmd = PaletteCommand {
+            id: "switch_workspace",
+            label,
+            category: "Switch",
+            keybinding_action: "",
+            switch_workspace_idx: Some(i),
+        };
+        let search_text: nucleo::Utf32String = format!("Switch: {}", ws.name).into();
         injector.push(cmd, |cols| {
             cols[0] = search_text;
         });

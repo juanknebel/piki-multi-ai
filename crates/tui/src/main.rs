@@ -3,6 +3,7 @@ mod app;
 mod clipboard;
 pub(crate) mod code_review;
 mod command_palette;
+mod workspace_switcher;
 mod config;
 mod dialog_state;
 mod event_loop;

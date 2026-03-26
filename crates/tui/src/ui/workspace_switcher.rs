@@ -9,16 +9,16 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 use crate::app::App;
 
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
-    let state = match &app.command_palette {
+    let state = match &app.workspace_switcher {
         Some(s) => s,
         None => return,
     };
     let theme = &app.theme.fuzzy_search;
     let snap = state.nucleo.snapshot();
 
-    // Centered overlay: 70% width, 60% height
-    let width = (area.width * 70 / 100).max(40).min(area.width);
-    let height = (area.height * 60 / 100).max(10).min(area.height);
+    // Centered overlay: 60% width, 50% height
+    let width = (area.width * 60 / 100).max(30).min(area.width);
+    let height = (area.height * 50 / 100).max(8).min(area.height);
     let x = area.x + (area.width.saturating_sub(width)) / 2;
     let y = area.y + (area.height.saturating_sub(height)) / 2;
     let popup = Rect::new(x, y, width, height);
@@ -26,7 +26,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(Clear, popup);
 
     let block = Block::default()
-        .title(" Command Palette ")
+        .title(" Switch Workspace (Space) ")
         .title_style(Style::default().fg(theme.border))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.border));
@@ -70,14 +70,12 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         return;
     }
 
-    // Compute scroll offset so selected item is visible
     let scroll_offset = if state.selected >= results_height {
         state.selected - results_height + 1
     } else {
         0
     };
 
-    // Prepare matcher for highlight indices
     let pattern = snap.pattern().column_pattern(0);
     let has_pattern = !state.query.is_empty();
     let mut matcher = nucleo::Matcher::default();
@@ -94,8 +92,12 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             Some(item) => item,
             None => break,
         };
-        let cmd = item.data;
-        let display_text = format!("{}: {}", cmd.category, cmd.label);
+        let entry = &item.data;
+        let display_text = if let Some(ref group) = entry.group {
+            format!("{} ({}) [{}]", entry.name, group, entry.branch)
+        } else {
+            format!("{} [{}]", entry.name, entry.branch)
+        };
         let is_selected = scroll_offset + i == state.selected;
 
         let bg = if is_selected {
@@ -120,9 +122,19 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         let normal_style = Style::default().fg(theme.result_text).bg(bg);
         let hint_style = Style::default().fg(theme.count_text).bg(bg);
 
-        // Build spans with match highlighting
         let match_set: HashSet<u32> = indices_buf.iter().copied().collect();
         let mut spans = vec![Span::styled(" ", Style::default().bg(bg))];
+
+        // Number badge (1-9) for quick access hint
+        if entry.index < 9 {
+            spans.push(Span::styled(
+                format!("{} ", entry.index + 1),
+                hint_style,
+            ));
+        } else {
+            spans.push(Span::styled("  ", Style::default().bg(bg)));
+        }
+
         let mut run_start: Option<(usize, bool)> = None;
         for (ci, (byte_idx, _ch)) in display_text.char_indices().enumerate() {
             let is_match = match_set.contains(&(ci as u32));
@@ -145,7 +157,6 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 _ => {}
             }
         }
-        // Flush last run
         if let Some((start, is_match)) = run_start {
             let style = if is_match {
                 matched_style
@@ -153,25 +164,6 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                 normal_style
             };
             spans.push(Span::styled(display_text[start..].to_string(), style));
-        }
-
-        // Right-aligned keybinding hint (skip for dynamic commands with no binding)
-        let key_hint = if cmd.keybinding_action.is_empty() {
-            String::new()
-        } else {
-            app.config.get_binding("navigation", cmd.keybinding_action)
-        };
-        let hint_str = if key_hint.is_empty() || key_hint == "???" {
-            String::new()
-        } else {
-            format!(" [{}]", key_hint)
-        };
-        let content_width: usize = spans.iter().map(|s| s.width()).sum();
-        let available = inner.width as usize;
-        if content_width + hint_str.len() < available {
-            let padding = available - content_width - hint_str.len();
-            spans.push(Span::styled(" ".repeat(padding), Style::default().bg(bg)));
-            spans.push(Span::styled(hint_str, hint_style));
         }
 
         let line = Line::from(spans);

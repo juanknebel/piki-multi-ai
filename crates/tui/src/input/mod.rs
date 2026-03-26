@@ -5,6 +5,7 @@ mod editor_input;
 mod fuzzy_input;
 mod interaction;
 pub(crate) mod mouse;
+mod workspace_switcher_input;
 
 use crossterm::event::{KeyCode, KeyEvent};
 
@@ -53,6 +54,9 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         AppMode::Dashboard => return handle_dashboard_input(app, key),
         AppMode::Logs => return handle_logs_input(app, key),
         AppMode::CommandPalette => return handle_command_palette_input(app, key),
+        AppMode::WorkspaceSwitcher => {
+            return workspace_switcher_input::handle_workspace_switcher_input(app, key)
+        }
         AppMode::ConfirmDelete => return handle_confirm_delete_input(app, key),
         AppMode::SubmitReview => return code_review_input::handle_submit_review_input(app, key),
         // Normal and Diff modes fall through to navigation/interaction handling
@@ -78,7 +82,7 @@ pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Act
     if app.config.matches_navigation(key, "left") || app.config.matches_navigation(key, "left_alt")
     {
         if app.active_pane == ActivePane::MainPanel {
-            app.active_pane = ActivePane::GitStatus;
+            app.active_pane = ActivePane::WorkspaceList;
         }
     } else if app.config.matches_navigation(key, "right")
         || app.config.matches_navigation(key, "right_alt")
@@ -92,14 +96,18 @@ pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Act
     } else if app.config.matches_navigation(key, "down")
         || app.config.matches_navigation(key, "down_alt")
     {
-        if app.active_pane == ActivePane::WorkspaceList {
-            app.active_pane = ActivePane::GitStatus;
+        match app.active_pane {
+            ActivePane::WorkspaceList => app.active_pane = ActivePane::GitStatus,
+            ActivePane::MainPanel => app.active_pane = ActivePane::GitStatus,
+            _ => {}
         }
     } else if app.config.matches_navigation(key, "up")
         || app.config.matches_navigation(key, "up_alt")
     {
-        if app.active_pane == ActivePane::GitStatus {
-            app.active_pane = ActivePane::WorkspaceList;
+        match app.active_pane {
+            ActivePane::GitStatus => app.active_pane = ActivePane::WorkspaceList,
+            ActivePane::MainPanel => app.active_pane = ActivePane::WorkspaceList,
+            _ => {}
         }
     } else if app.config.matches_navigation(key, "enter_pane") {
         app.interacting = true;
@@ -273,6 +281,10 @@ pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Act
         app.open_fuzzy_search();
     } else if app.config.matches_navigation(key, "command_palette") {
         app.open_command_palette();
+    } else if app.config.matches_navigation(key, "workspace_switcher") {
+        app.open_workspace_switcher();
+    } else if app.config.matches_navigation(key, "toggle_prev_workspace") {
+        app.toggle_previous_workspace();
     } else if app.config.matches_navigation(key, "sidebar_shrink")
         || app.config.matches_navigation(key, "sidebar_shrink_alt")
     {
@@ -323,9 +335,41 @@ pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Act
                 app.status_message = Some("Cannot close the initial shell tab".into());
             }
         }
+    } else if app.config.matches_navigation(key, "stage_quick") {
+        // Quick stage without entering interaction mode
+        if app.active_pane == ActivePane::GitStatus
+            && let Some(ws) = app.current_workspace()
+            && !ws.changed_files.is_empty()
+        {
+            return Some(Action::GitStage(app.selected_file));
+        }
+    } else if app.config.matches_navigation(key, "unstage_quick") {
+        // Quick unstage without entering interaction mode
+        if app.active_pane == ActivePane::GitStatus
+            && let Some(ws) = app.current_workspace()
+            && !ws.changed_files.is_empty()
+        {
+            return Some(Action::GitUnstage(app.selected_file));
+        }
     } else if let KeyCode::Char(c @ '1'..='9') = key.code {
-        let idx = (c as usize) - ('1' as usize);
-        app.switch_workspace(idx);
+        let visual_pos = (c as usize) - ('1' as usize);
+        // Map visual position to actual workspace index via sidebar order
+        let ws_indices: Vec<usize> = app
+            .sidebar_items()
+            .iter()
+            .filter_map(|item| match item {
+                crate::app::SidebarItem::Workspace { index } => Some(*index),
+                _ => None,
+            })
+            .collect();
+        if let Some(&ws_idx) = ws_indices.get(visual_pos) {
+            app.switch_workspace(ws_idx);
+        } else {
+            app.set_toast(
+                format!("No workspace {} (have {})", visual_pos + 1, ws_indices.len()),
+                crate::app::ToastLevel::Info,
+            );
+        }
     }
     None
 }

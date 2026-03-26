@@ -151,7 +151,7 @@ pub(super) fn render_sysinfo_bar(frame: &mut Frame, area: Rect, app: &App) {
 pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
     let cfg = &app.config;
     match app.mode {
-        AppMode::CommandPalette => vec![
+        AppMode::CommandPalette | AppMode::WorkspaceSwitcher => vec![
             ("up/down".to_string(), "select"),
             ("enter".to_string(), "execute"),
             ("esc".to_string(), "close"),
@@ -468,6 +468,14 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                     cfg.get_binding("navigation", "sidebar_grow")
                 ),
                 "resize",
+            ));
+            keys.push((
+                cfg.get_binding("navigation", "command_palette"),
+                "commands",
+            ));
+            keys.push((
+                cfg.get_binding("navigation", "workspace_switcher"),
+                "switch ws",
             ));
             keys.push((cfg.get_binding("navigation", "help"), "help"));
             keys.push((cfg.get_binding("navigation", "quit"), "quit"));

@@ -324,7 +324,7 @@ pub(super) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         "".to_string(),
         "  Navigation mode (yellow border)".to_string(),
         format!(
-            "    {:<13} Move between panes",
+            "    {:<13} Move between panes (h→ws list)",
             format!(
                 "{}/{}/{}/{}",
                 cfg.get_binding("navigation", "up"),
@@ -363,6 +363,18 @@ pub(super) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         ),
         format!("    {:<13} Go to workspace N", "1-9"),
         format!(
+            "    {:<13} Fuzzy workspace search",
+            cfg.get_binding("navigation", "workspace_switcher")
+        ),
+        format!(
+            "    {:<13} Previous workspace",
+            cfg.get_binding("navigation", "toggle_prev_workspace")
+        ),
+        format!(
+            "    {:<13} Command palette",
+            cfg.get_binding("navigation", "command_palette")
+        ),
+        format!(
             "    {:<13} Next/Prev tab",
             format!(
                 "{}/{}",
@@ -384,6 +396,14 @@ pub(super) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         ),
         format!("    {:<13} About", cfg.get_binding("navigation", "about")),
         format!(
+            "    {:<13} Quick stage (file list focused)",
+            cfg.get_binding("navigation", "stage_quick")
+        ),
+        format!(
+            "    {:<13} Quick unstage (file list focused)",
+            cfg.get_binding("navigation", "unstage_quick")
+        ),
+        format!(
             "    {:<13} Dashboard",
             cfg.get_binding("navigation", "dashboard")
         ),
@@ -395,6 +415,7 @@ pub(super) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
             "    {:<13} Back to navigation",
             cfg.get_binding("interaction", "exit_interaction")
         ),
+        "    Esc           Back (non-terminal panes)".to_string(),
         "".to_string(),
         "  Terminal pane (navigation mode)".to_string(),
         format!(
@@ -439,7 +460,7 @@ pub(super) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
             )
         ),
         format!(
-            "    {:<13} Switch to workspace",
+            "    {:<13} Switch + focus main panel",
             cfg.get_binding("workspace_list", "select")
         ),
         format!(

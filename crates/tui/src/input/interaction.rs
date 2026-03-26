@@ -386,7 +386,9 @@ pub(super) fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Optio
 }
 
 pub(super) fn handle_markdown_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    if app.config.matches_markdown(key, "exit_interaction") {
+    if app.config.matches_markdown(key, "exit_interaction")
+        || app.config.matches_markdown(key, "exit_interaction_alt")
+    {
         app.interacting = false;
         return None;
     }
@@ -446,7 +448,9 @@ pub(super) fn handle_diff_interaction(app: &mut App, key: KeyEvent) -> Option<Ac
 }
 
 pub(super) fn handle_workspace_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    if app.config.matches_workspace_list(key, "exit_interaction") {
+    if app.config.matches_workspace_list(key, "exit_interaction")
+        || app.config.matches_workspace_list(key, "exit_interaction_alt")
+    {
         app.interacting = false;
         return None;
     }
@@ -466,6 +470,8 @@ pub(super) fn handle_workspace_interaction(app: &mut App, key: KeyEvent) -> Opti
             }
             Some(crate::app::SidebarItem::Workspace { index }) => {
                 app.switch_workspace(*index);
+                app.active_pane = ActivePane::MainPanel;
+                app.interacting = false;
             }
             None => {}
         }
@@ -595,7 +601,7 @@ fn search_api_response(api: &mut crate::app::ApiTabState) {
 }
 
 pub(super) fn handle_api_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    if app.config.matches_interaction(key, "exit_interaction") {
+    if app.config.matches_interaction(key, "exit_interaction") || key.code == KeyCode::Esc {
         app.interacting = false;
         return None;
     }
@@ -922,7 +928,9 @@ pub(super) fn handle_api_interaction(app: &mut App, key: KeyEvent) -> Option<Act
 }
 
 pub(super) fn handle_filelist_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    if app.config.matches_file_list(key, "exit_interaction") {
+    if app.config.matches_file_list(key, "exit_interaction")
+        || app.config.matches_file_list(key, "exit_interaction_alt")
+    {
         app.interacting = false;
         return None;
     }

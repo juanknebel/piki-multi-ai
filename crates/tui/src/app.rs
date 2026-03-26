@@ -116,6 +116,8 @@ pub enum AppMode {
     CommandPalette,
     /// Submit review overlay (code review)
     SubmitReview,
+    /// Fuzzy workspace switcher overlay
+    WorkspaceSwitcher,
 }
 
 /// Which pane is currently selected / focused
@@ -627,6 +629,10 @@ pub struct App {
     pub fuzzy: Option<FuzzyState>,
     /// Command palette state
     pub command_palette: Option<crate::command_palette::CommandPaletteState>,
+    /// Workspace switcher state (fuzzy search over workspaces)
+    pub workspace_switcher: Option<crate::workspace_switcher::WorkspaceSwitcherState>,
+    /// Previous workspace index for quick toggle (backtick)
+    pub previous_workspace: Option<usize>,
     /// Inline editor state
     pub editor: Option<EditorState>,
     /// Path of the file being edited inline
@@ -718,6 +724,8 @@ impl App {
             toast: None,
             fuzzy: None,
             command_palette: None,
+            workspace_switcher: None,
+            previous_workspace: None,
             editor: None,
             editing_file: None,
             pty_rows: 24,
@@ -838,6 +846,9 @@ impl App {
 
     pub fn switch_workspace(&mut self, index: usize) {
         if index < self.workspaces.len() {
+            if index != self.active_workspace {
+                self.previous_workspace = Some(self.active_workspace);
+            }
             self.active_workspace = index;
             self.selected_workspace = index;
             self.selected_file = 0;
@@ -1007,8 +1018,27 @@ impl App {
 
     /// Open the command palette overlay.
     pub fn open_command_palette(&mut self) {
-        self.command_palette = Some(crate::command_palette::create_state());
+        self.command_palette = Some(crate::command_palette::create_state(&self.workspaces));
         self.mode = AppMode::CommandPalette;
+    }
+
+    /// Toggle to the previously active workspace (Alt-Tab equivalent).
+    pub fn toggle_previous_workspace(&mut self) {
+        if let Some(prev) = self.previous_workspace
+            && prev < self.workspaces.len()
+        {
+            self.switch_workspace(prev);
+        }
+    }
+
+    /// Open the fuzzy workspace switcher overlay.
+    pub fn open_workspace_switcher(&mut self) {
+        if self.workspaces.is_empty() {
+            return;
+        }
+        self.workspace_switcher =
+            Some(crate::workspace_switcher::create_state(&self.workspaces));
+        self.mode = AppMode::WorkspaceSwitcher;
     }
 
     /// Open the inline editor for a file
@@ -1282,12 +1312,8 @@ mod tests {
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('l')));
         assert_eq!(app.active_pane, ActivePane::MainPanel);
 
-        // h → left → GitStatus
+        // h → left → WorkspaceList
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('h')));
-        assert_eq!(app.active_pane, ActivePane::GitStatus);
-
-        // k → up → WorkspaceList
-        crate::input::handle_key_event(&mut app, key(KeyCode::Char('k')));
         assert_eq!(app.active_pane, ActivePane::WorkspaceList);
     }
 

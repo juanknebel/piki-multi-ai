@@ -245,6 +245,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         AppMode::Dashboard => super::dialogs::render_dashboard_overlay(frame, area, app),
         AppMode::Logs => super::dialogs::render_logs_overlay(frame, area, app),
         AppMode::CommandPalette => super::command_palette::render(frame, area, app),
+        AppMode::WorkspaceSwitcher => super::workspace_switcher::render(frame, area, app),
         AppMode::InlineEdit => {}   // handled by main content render
         AppMode::SubmitReview => {} // handled by full-screen code review bypass above
     }
