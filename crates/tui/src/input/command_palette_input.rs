@@ -1,31 +1,29 @@
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::KeyEvent;
 
 use crate::action::Action;
 use crate::app::{App, AppMode};
 use crate::config::parse_key_event;
 
+use super::fuzzy_common::{FuzzyAction, handle_fuzzy_input};
+
 pub(super) fn handle_command_palette_input(app: &mut App, key: KeyEvent) -> Option<Action> {
-    match key.code {
-        KeyCode::Esc => {
+    let state = app.command_palette.as_mut()?;
+    let matched_count = state.nucleo.snapshot().matched_item_count() as usize;
+    let action = handle_fuzzy_input(
+        &mut state.query,
+        &mut state.selected,
+        matched_count,
+        &mut state.nucleo.pattern,
+        key,
+        true, // command palette resets selection on query change
+    );
+
+    match action {
+        FuzzyAction::Dismiss => {
             app.command_palette = None;
             app.mode = AppMode::Normal;
         }
-        KeyCode::Up => {
-            if let Some(ref mut state) = app.command_palette
-                && state.selected > 0
-            {
-                state.selected -= 1;
-            }
-        }
-        KeyCode::Down => {
-            if let Some(ref mut state) = app.command_palette {
-                let count = state.nucleo.snapshot().matched_item_count() as usize;
-                if count > 0 && state.selected + 1 < count {
-                    state.selected += 1;
-                }
-            }
-        }
-        KeyCode::Enter => {
+        FuzzyAction::Select => {
             let selected = app
                 .command_palette
                 .as_ref()
@@ -40,43 +38,16 @@ pub(super) fn handle_command_palette_input(app: &mut App, key: KeyEvent) -> Opti
                 return execute_palette_command(app, id, switch_idx);
             }
         }
-        KeyCode::Backspace => {
-            if let Some(ref mut state) = app.command_palette {
-                state.query.pop();
-                state.selected = 0;
-                let query = state.query.clone();
-                state.nucleo.pattern.reparse(
-                    0,
-                    &query,
-                    nucleo::pattern::CaseMatching::Smart,
-                    false,
-                );
-            }
+        FuzzyAction::Handled => {
             app.needs_redraw = true;
         }
-        KeyCode::Char(c) => {
-            if let Some(ref mut state) = app.command_palette {
-                state.query.push(c);
-                state.selected = 0;
-                let query = state.query.clone();
-                state
-                    .nucleo
-                    .pattern
-                    .reparse(0, &query, nucleo::pattern::CaseMatching::Smart, true);
-            }
-            app.needs_redraw = true;
-        }
-        _ => {}
+        FuzzyAction::NotHandled => {}
     }
     None
 }
 
 /// Execute a palette command by looking up its keybinding and dispatching through navigation mode.
-fn execute_palette_command(
-    app: &mut App,
-    id: &str,
-    switch_idx: Option<usize>,
-) -> Option<Action> {
+fn execute_palette_command(app: &mut App, id: &str, switch_idx: Option<usize>) -> Option<Action> {
     // Handle dynamic workspace switch commands
     if let Some(idx) = switch_idx {
         app.switch_workspace(idx);

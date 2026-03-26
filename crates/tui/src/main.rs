@@ -11,6 +11,7 @@ mod helpers;
 mod input;
 mod log_buffer;
 mod pty;
+mod syntax;
 mod theme;
 mod ui;
 

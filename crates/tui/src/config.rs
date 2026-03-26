@@ -24,16 +24,23 @@ impl Default for KanbanConfig {
 pub struct Config {
     #[serde(default)]
     pub theme: String,
+    #[serde(default = "default_syntax_theme")]
+    pub syntax_theme: String,
     #[serde(default)]
     pub keybindings: Keybindings,
     #[serde(default)]
     pub kanban: KanbanConfig,
 }
 
+fn default_syntax_theme() -> String {
+    "base16-ocean.dark".to_string()
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
             theme: "default".to_string(),
+            syntax_theme: default_syntax_theme(),
             keybindings: Keybindings::default(),
             kanban: KanbanConfig::default(),
         }

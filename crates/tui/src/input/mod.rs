@@ -1,10 +1,13 @@
 mod code_review_input;
 mod command_palette_input;
+pub(crate) mod confirm_common;
 mod dialog;
 mod editor_input;
+pub(crate) mod fuzzy_common;
 mod fuzzy_input;
 mod interaction;
 pub(crate) mod mouse;
+pub(crate) mod text_field_common;
 mod workspace_switcher_input;
 
 use crossterm::event::{KeyCode, KeyEvent};
@@ -55,7 +58,7 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         AppMode::Logs => return handle_logs_input(app, key),
         AppMode::CommandPalette => return handle_command_palette_input(app, key),
         AppMode::WorkspaceSwitcher => {
-            return workspace_switcher_input::handle_workspace_switcher_input(app, key)
+            return workspace_switcher_input::handle_workspace_switcher_input(app, key);
         }
         AppMode::ConfirmDelete => return handle_confirm_delete_input(app, key),
         AppMode::SubmitReview => return code_review_input::handle_submit_review_input(app, key),
@@ -366,7 +369,11 @@ pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Act
             app.switch_workspace(ws_idx);
         } else {
             app.set_toast(
-                format!("No workspace {} (have {})", visual_pos + 1, ws_indices.len()),
+                format!(
+                    "No workspace {} (have {})",
+                    visual_pos + 1,
+                    ws_indices.len()
+                ),
                 crate::app::ToastLevel::Info,
             );
         }

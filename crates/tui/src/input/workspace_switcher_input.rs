@@ -1,54 +1,38 @@
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::KeyEvent;
 
 use crate::action::Action;
 use crate::app::{App, AppMode};
 
+use super::fuzzy_common::{FuzzyAction, handle_fuzzy_input};
+
 pub(super) fn handle_workspace_switcher_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     let state = app.workspace_switcher.as_mut()?;
 
-    match key.code {
-        KeyCode::Esc => {
+    let matched_count = state.nucleo.snapshot().matched_item_count() as usize;
+    let action = handle_fuzzy_input(
+        &mut state.query,
+        &mut state.selected,
+        matched_count,
+        &mut state.nucleo.pattern,
+        key,
+        true, // workspace switcher resets selection on query change
+    );
+
+    match action {
+        FuzzyAction::Dismiss => {
             app.workspace_switcher = None;
             app.mode = AppMode::Normal;
         }
-        KeyCode::Enter => {
-            if let Some(idx) = state.selected_index() {
+        FuzzyAction::Select => {
+            if let Some(ref state) = app.workspace_switcher
+                && let Some(idx) = state.selected_index()
+            {
                 app.workspace_switcher = None;
                 app.mode = AppMode::Normal;
                 app.switch_workspace(idx);
             }
         }
-        KeyCode::Up => {
-            if state.selected > 0 {
-                state.selected -= 1;
-            }
-        }
-        KeyCode::Down => {
-            let snap = state.nucleo.snapshot();
-            let count = snap.matched_item_count() as usize;
-            if state.selected + 1 < count {
-                state.selected += 1;
-            }
-        }
-        KeyCode::Backspace => {
-            state.query.pop();
-            state.selected = 0;
-            let query = state.query.clone();
-            state
-                .nucleo
-                .pattern
-                .reparse(0, &query, nucleo::pattern::CaseMatching::Smart, false);
-        }
-        KeyCode::Char(c) => {
-            state.query.push(c);
-            state.selected = 0;
-            let query = state.query.clone();
-            state
-                .nucleo
-                .pattern
-                .reparse(0, &query, nucleo::pattern::CaseMatching::Smart, true);
-        }
-        _ => {}
+        FuzzyAction::Handled | FuzzyAction::NotHandled => {}
     }
 
     // Tick the nucleo matcher so results update

@@ -641,6 +641,7 @@ pub struct App {
     pub pty_rows: u16,
     pub pty_cols: u16,
     pub theme: Theme,
+    pub syntax: crate::syntax::SyntaxHighlighter,
     pub selection: Option<Selection>,
     pub terminal_inner_area: Option<Rect>,
     /// Inner area of the API response panel (for mouse hit-testing)
@@ -731,6 +732,7 @@ impl App {
             pty_rows: 24,
             pty_cols: 80,
             theme: Theme::default(),
+            syntax: crate::syntax::SyntaxHighlighter::new("base16-ocean.dark"),
             selection: None,
             terminal_inner_area: None,
             api_response_inner_area: None,
@@ -1352,5 +1354,241 @@ mod tests {
         let mut app = App::new(test_storage());
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('c')));
         assert_eq!(app.mode, AppMode::Normal); // No workspace → no commit dialog
+    }
+
+    // ── Helper: add a minimal test workspace ──
+
+    fn add_test_workspace(app: &mut App) -> usize {
+        let info = piki_core::WorkspaceInfo {
+            name: format!("test-ws-{}", app.workspaces.len()),
+            path: std::path::PathBuf::from("/tmp/test"),
+            branch: "main".to_string(),
+            workspace_type: piki_core::WorkspaceType::Simple,
+            description: String::new(),
+            prompt: String::new(),
+            kanban_path: None,
+            group: None,
+            order: app.workspaces.len() as u32,
+            source_repo: std::path::PathBuf::from("/tmp/test"),
+            source_repo_display: String::new(),
+        };
+        let ws = Workspace::from_info(info);
+        app.workspaces.push(ws);
+        app.workspaces.len() - 1
+    }
+
+    // ── Fuzzy overlay tests ──
+
+    #[test]
+    fn test_command_palette_open_and_dismiss() {
+        let mut app = App::new(test_storage());
+        crate::input::handle_key_event(&mut app, ctrl('p'));
+        assert_eq!(app.mode, AppMode::CommandPalette);
+        assert!(app.command_palette.is_some());
+
+        crate::input::handle_key_event(&mut app, key(KeyCode::Esc));
+        assert_eq!(app.mode, AppMode::Normal);
+        assert!(app.command_palette.is_none());
+    }
+
+    #[test]
+    fn test_workspace_switcher_open_and_dismiss() {
+        let mut app = App::new(test_storage());
+        add_test_workspace(&mut app);
+
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char(' ')));
+        assert_eq!(app.mode, AppMode::WorkspaceSwitcher);
+        assert!(app.workspace_switcher.is_some());
+
+        crate::input::handle_key_event(&mut app, key(KeyCode::Esc));
+        assert_eq!(app.mode, AppMode::Normal);
+        assert!(app.workspace_switcher.is_none());
+    }
+
+    #[test]
+    fn test_workspace_switcher_no_workspace() {
+        let mut app = App::new(test_storage());
+        // No workspaces → Space should not open switcher
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char(' ')));
+        assert_eq!(app.mode, AppMode::Normal);
+        assert!(app.workspace_switcher.is_none());
+    }
+
+    // ── Previous workspace toggle tests ──
+
+    #[test]
+    fn test_toggle_previous_workspace_round_trip() {
+        let mut app = App::new(test_storage());
+        add_test_workspace(&mut app); // index 0
+        add_test_workspace(&mut app); // index 1
+        app.switch_workspace(1);
+        assert_eq!(app.active_workspace, 1);
+        assert_eq!(app.previous_workspace, Some(0));
+
+        // Backtick toggles back to 0
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('`')));
+        assert_eq!(app.active_workspace, 0);
+        assert_eq!(app.previous_workspace, Some(1));
+
+        // Backtick toggles back to 1
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('`')));
+        assert_eq!(app.active_workspace, 1);
+        assert_eq!(app.previous_workspace, Some(0));
+    }
+
+    #[test]
+    fn test_toggle_previous_workspace_none() {
+        let mut app = App::new(test_storage());
+        add_test_workspace(&mut app);
+        assert!(app.previous_workspace.is_none());
+
+        // Backtick with no previous → nothing changes
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('`')));
+        assert_eq!(app.active_workspace, 0);
+        assert!(app.previous_workspace.is_none());
+    }
+
+    // ── Esc exits non-terminal interaction tests ──
+
+    #[test]
+    fn test_esc_exits_workspace_list_interaction() {
+        let mut app = App::new(test_storage());
+        add_test_workspace(&mut app);
+        app.active_pane = ActivePane::WorkspaceList;
+        app.interacting = true;
+
+        crate::input::handle_key_event(&mut app, key(KeyCode::Esc));
+        assert!(!app.interacting);
+    }
+
+    #[test]
+    fn test_esc_exits_filelist_interaction() {
+        let mut app = App::new(test_storage());
+        add_test_workspace(&mut app);
+        app.active_pane = ActivePane::GitStatus;
+        app.interacting = true;
+
+        crate::input::handle_key_event(&mut app, key(KeyCode::Esc));
+        assert!(!app.interacting);
+    }
+
+    #[test]
+    fn test_ctrl_g_exits_interaction() {
+        let mut app = App::new(test_storage());
+        add_test_workspace(&mut app);
+        app.active_pane = ActivePane::WorkspaceList;
+        app.interacting = true;
+
+        crate::input::handle_key_event(&mut app, ctrl('g'));
+        assert!(!app.interacting);
+    }
+
+    // ── Quick stage/unstage tests ──
+
+    #[test]
+    fn test_quick_stage_from_navigation() {
+        let mut app = App::new(test_storage());
+        let idx = add_test_workspace(&mut app);
+        app.workspaces[idx].changed_files.push(ChangedFile {
+            path: "foo.rs".to_string(),
+            status: FileStatus::Modified,
+        });
+        app.active_pane = ActivePane::GitStatus;
+        app.interacting = false;
+
+        let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('s')));
+        assert!(matches!(action, Some(crate::action::Action::GitStage(0))));
+    }
+
+    #[test]
+    fn test_quick_unstage_from_navigation() {
+        let mut app = App::new(test_storage());
+        let idx = add_test_workspace(&mut app);
+        app.workspaces[idx].changed_files.push(ChangedFile {
+            path: "foo.rs".to_string(),
+            status: FileStatus::Staged,
+        });
+        app.active_pane = ActivePane::GitStatus;
+        app.interacting = false;
+
+        let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('u')));
+        assert!(matches!(
+            action,
+            Some(crate::action::Action::GitUnstage(0))
+        ));
+    }
+
+    #[test]
+    fn test_quick_stage_wrong_pane_ignored() {
+        let mut app = App::new(test_storage());
+        let idx = add_test_workspace(&mut app);
+        app.workspaces[idx].changed_files.push(ChangedFile {
+            path: "foo.rs".to_string(),
+            status: FileStatus::Modified,
+        });
+        app.active_pane = ActivePane::MainPanel;
+        app.interacting = false;
+
+        let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('s')));
+        assert!(action.is_none());
+    }
+
+    // ── Symmetric pane navigation tests ──
+
+    #[test]
+    fn test_pane_nav_main_panel_h_to_workspace_list() {
+        let mut app = App::new(test_storage());
+        app.active_pane = ActivePane::MainPanel;
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('h')));
+        assert_eq!(app.active_pane, ActivePane::WorkspaceList);
+    }
+
+    #[test]
+    fn test_pane_nav_main_panel_j_to_git_status() {
+        let mut app = App::new(test_storage());
+        app.active_pane = ActivePane::MainPanel;
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('j')));
+        assert_eq!(app.active_pane, ActivePane::GitStatus);
+    }
+
+    #[test]
+    fn test_pane_nav_main_panel_k_to_workspace_list() {
+        let mut app = App::new(test_storage());
+        app.active_pane = ActivePane::MainPanel;
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('k')));
+        assert_eq!(app.active_pane, ActivePane::WorkspaceList);
+    }
+
+    // ── Workspace switch + focus tests ──
+
+    #[test]
+    fn test_workspace_enter_focuses_main_panel() {
+        let mut app = App::new(test_storage());
+        add_test_workspace(&mut app); // index 0
+        add_test_workspace(&mut app); // index 1
+        app.active_pane = ActivePane::WorkspaceList;
+        app.interacting = true;
+        // Select the second workspace row in the sidebar
+        app.selected_sidebar_row = 1;
+
+        // Press Enter to select workspace 1
+        crate::input::handle_key_event(&mut app, key(KeyCode::Enter));
+        assert_eq!(app.active_workspace, 1);
+        assert_eq!(app.active_pane, ActivePane::MainPanel);
+        assert!(!app.interacting);
+    }
+
+    // ── Number key invalid workspace tests ──
+
+    #[test]
+    fn test_workspace_number_keys_toast_invalid() {
+        let mut app = App::new(test_storage());
+        add_test_workspace(&mut app); // index 0
+        add_test_workspace(&mut app); // index 1
+
+        // Press '5' — no workspace at that position
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('5')));
+        assert!(app.toast.is_some());
+        assert!(app.toast.as_ref().unwrap().message.contains("No workspace"));
     }
 }

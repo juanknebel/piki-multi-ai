@@ -1,86 +1,14 @@
 use std::path::PathBuf;
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField};
 use crate::dialog_state::{DialogState, NewTabMenu};
 use piki_core::{AIProvider, MergeStrategy, WorkspaceType};
 
-/// Result of processing a text input key event
-enum TextInputResult {
-    /// Key was consumed by text editing
-    Consumed,
-    /// Key was not a text editing key
-    NotConsumed,
-}
-
-/// Handle common text editing keys (Char, Backspace, Delete, Left, Right, Home, End).
-/// `validator` returns true if the char should be inserted.
-fn handle_text_input(
-    buf: &mut String,
-    cursor: &mut usize,
-    key: KeyEvent,
-    validator: impl Fn(char) -> bool,
-) -> TextInputResult {
-    match key.code {
-        KeyCode::Char(c) => {
-            if validator(c) {
-                let byte_idx = buf
-                    .char_indices()
-                    .nth(*cursor)
-                    .map_or(buf.len(), |(i, _)| i);
-                buf.insert(byte_idx, c);
-                *cursor += 1;
-            }
-            TextInputResult::Consumed
-        }
-        KeyCode::Backspace => {
-            if *cursor > 0 {
-                *cursor -= 1;
-                let byte_idx = buf
-                    .char_indices()
-                    .nth(*cursor)
-                    .map_or(buf.len(), |(i, _)| i);
-                buf.remove(byte_idx);
-            }
-            TextInputResult::Consumed
-        }
-        KeyCode::Delete => {
-            if let Some((byte_idx, _)) = buf.char_indices().nth(*cursor) {
-                buf.remove(byte_idx);
-            }
-            TextInputResult::Consumed
-        }
-        KeyCode::Left => {
-            if *cursor > 0 {
-                *cursor -= 1;
-            }
-            TextInputResult::Consumed
-        }
-        KeyCode::Right => {
-            let len = buf.chars().count();
-            if *cursor < len {
-                *cursor += 1;
-            }
-            TextInputResult::Consumed
-        }
-        KeyCode::Home => {
-            *cursor = 0;
-            TextInputResult::Consumed
-        }
-        KeyCode::End => {
-            *cursor = buf.chars().count();
-            TextInputResult::Consumed
-        }
-        _ => TextInputResult::NotConsumed,
-    }
-}
-
-fn is_cancel(key: KeyEvent) -> bool {
-    key.code == KeyCode::Esc
-        || (key.code == KeyCode::Char('g') && key.modifiers.contains(KeyModifiers::CONTROL))
-}
+use super::confirm_common::{ConfirmResult, dismiss_dialog, handle_yn_input};
+use super::text_field_common::{handle_text_input, is_cancel};
 
 pub(super) fn handle_edit_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     let Some(DialogState::EditWorkspace {
@@ -349,38 +277,39 @@ pub(super) fn handle_confirm_close_tab_input(app: &mut App, key: KeyEvent) -> Op
         return None;
     };
 
-    match key.code {
-        KeyCode::Char('y') | KeyCode::Char('Y') => {
+    match handle_yn_input(key) {
+        ConfirmResult::Yes => {
             if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
                 ws.close_tab(target);
             }
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
-            None
+            dismiss_dialog(app);
         }
-        KeyCode::Char('n') | KeyCode::Char('N') => {
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
-            None
+        ConfirmResult::No | ConfirmResult::Cancel => {
+            dismiss_dialog(app);
         }
-        _ => None,
+        ConfirmResult::NotHandled => {}
     }
+    None
 }
 
 pub(super) fn handle_confirm_quit_input(app: &mut App, key: KeyEvent) -> Option<Action> {
-    match key.code {
-        KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
-            app.should_quit = true;
-            app.active_dialog = None;
-            None
-        }
-        KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
-            None
-        }
-        _ => None,
+    // Quit also accepts Enter as confirmation
+    if key.code == KeyCode::Enter {
+        app.should_quit = true;
+        dismiss_dialog(app);
+        return None;
     }
+    match handle_yn_input(key) {
+        ConfirmResult::Yes => {
+            app.should_quit = true;
+            dismiss_dialog(app);
+        }
+        ConfirmResult::No | ConfirmResult::Cancel => {
+            dismiss_dialog(app);
+        }
+        ConfirmResult::NotHandled => {}
+    }
+    None
 }
 
 pub(super) fn handle_confirm_delete_input(app: &mut App, key: KeyEvent) -> Option<Action> {
@@ -388,26 +317,23 @@ pub(super) fn handle_confirm_delete_input(app: &mut App, key: KeyEvent) -> Optio
         return None;
     };
 
-    match key.code {
-        KeyCode::Char('y') | KeyCode::Char('Y') => {
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
+    match handle_yn_input(key) {
+        ConfirmResult::Yes => {
+            dismiss_dialog(app);
             app.active_pane = ActivePane::WorkspaceList;
             Some(Action::DeleteWorkspace(target))
         }
-        KeyCode::Char('n') | KeyCode::Char('N') => {
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
+        ConfirmResult::No => {
+            dismiss_dialog(app);
             app.active_pane = ActivePane::WorkspaceList;
             Some(Action::RemoveFromList(target))
         }
-        KeyCode::Esc => {
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
+        ConfirmResult::Cancel => {
+            dismiss_dialog(app);
             app.active_pane = ActivePane::WorkspaceList;
             None
         }
-        _ => None,
+        ConfirmResult::NotHandled => None,
     }
 }
 
