@@ -343,8 +343,13 @@ impl Workspace {
     }
 
     /// Add a markdown viewer tab and return its index
-    pub fn add_markdown_tab(&mut self, label: String, content: String) -> usize {
-        let rendered = crate::ui::markdown::parse_to_static(&content);
+    pub fn add_markdown_tab(
+        &mut self,
+        label: String,
+        content: String,
+        syntax_hl: Option<&crate::syntax::SyntaxHighlighter>,
+    ) -> usize {
+        let rendered = crate::ui::markdown::parse_to_static(&content, syntax_hl);
         let tab = Tab {
             id: self.next_tab_id,
             provider: AIProvider::Shell, // placeholder, not used for markdown
@@ -705,6 +710,8 @@ impl App {
         let (refresh_tx, refresh_rx) = tokio::sync::mpsc::unbounded_channel::<RefreshResult>();
         let (status_tx, status_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
         let (undo_tx, undo_rx) = tokio::sync::mpsc::unbounded_channel::<UndoEntry>();
+        let config = crate::config::Config::load();
+        let syntax = crate::syntax::SyntaxHighlighter::new(&config.syntax_theme);
         Self {
             should_quit: false,
             mode: AppMode::Normal,
@@ -732,7 +739,7 @@ impl App {
             pty_rows: 24,
             pty_cols: 80,
             theme: Theme::default(),
-            syntax: crate::syntax::SyntaxHighlighter::new("base16-ocean.dark"),
+            syntax,
             selection: None,
             terminal_inner_area: None,
             api_response_inner_area: None,
@@ -744,7 +751,7 @@ impl App {
             left_split_y: 0,
             left_area_rect: Rect::default(),
             needs_redraw: true,
-            config: crate::config::Config::load(),
+            config,
             refresh_tx,
             refresh_rx,
             status_tx,
@@ -1038,8 +1045,7 @@ impl App {
         if self.workspaces.is_empty() {
             return;
         }
-        self.workspace_switcher =
-            Some(crate::workspace_switcher::create_state(&self.workspaces));
+        self.workspace_switcher = Some(crate::workspace_switcher::create_state(&self.workspaces));
         self.mode = AppMode::WorkspaceSwitcher;
     }
 
@@ -1512,10 +1518,7 @@ mod tests {
         app.interacting = false;
 
         let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('u')));
-        assert!(matches!(
-            action,
-            Some(crate::action::Action::GitUnstage(0))
-        ));
+        assert!(matches!(action, Some(crate::action::Action::GitUnstage(0))));
     }
 
     #[test]
