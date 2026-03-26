@@ -159,16 +159,21 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
 
                     let mut lines = vec![line1, line2];
 
-                    let project_name = &ws.source_repo_display;
-                    let max_proj = area.width.saturating_sub(6) as usize;
-                    let proj_text = if project_name.len() > max_proj {
-                        format!("⌂ {}…", &project_name[..max_proj.saturating_sub(1)])
+                    // Line 3: description if available, otherwise branch name
+                    let detail_text = if ws.info.description.is_empty() {
+                        format!("⎇ {}", ws.info.branch)
                     } else {
-                        format!("⌂ {}", project_name)
+                        ws.info.description.clone()
+                    };
+                    let max_len = area.width.saturating_sub(6) as usize;
+                    let truncated = if detail_text.len() > max_len {
+                        format!("{}…", &detail_text[..max_len.saturating_sub(1)])
+                    } else {
+                        detail_text
                     };
                     lines.push(Line::from(vec![
                         Span::raw("   "),
-                        Span::styled(proj_text, Style::default().fg(detail_color)),
+                        Span::styled(truncated, Style::default().fg(detail_color)),
                     ]));
 
                     let style = if is_selected {

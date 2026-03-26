@@ -186,7 +186,7 @@ Workspace configurations are saved automatically and restored on startup using a
 |  ▼ frontend (2)  |                                                       |
 |  ▶ ws-1 (active) |  AI assistant live terminal output                    |
 |    3 files       |  (Press [t] to open a new tab)                        |
-|    ⌂ my-project  |  (diff opens as floating overlay)                     |
+|    Fix auth bug  |  (diff opens as floating overlay)                     |
 |                  |                                                       |
 |    ws-2          |                                                       |
 |  ▸ backend (1)   |                                                       |
