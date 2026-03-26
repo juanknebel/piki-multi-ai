@@ -36,6 +36,8 @@ cargo clippy             # Lint
 cargo fmt --check        # Check formatting
 ```
 
+**TUI Snapshot tests** (`crates/tui/src/ui/mod.rs`): Use `insta` crate for visual snapshot testing of rendered UI. Snapshots live in `crates/tui/src/ui/snapshots/`. When adding new UI tests, render to a `TestBackend` buffer and call `insta::assert_snapshot!`. After first run, accept new snapshots with `cargo insta review` or rename `.snap.new` files to `.snap`.
+
 Requires Rust >= 1.85 (edition 2024). Runtime deps: `claude` CLI in PATH, git >= 2.20, optionally `delta` for side-by-side diffs, optionally `gh` CLI for code review feature.
 
 ## Architecture
@@ -52,7 +54,9 @@ Requires Rust >= 1.85 (edition 2024). Runtime deps: `claude` CLI in PATH, git >=
 
 **GitHub integration** (`github.rs`): Async wrappers around `gh` CLI for PR operations: view PR info/files, get per-file diffs as parsed unified diffs with line numbers (`parse_unified_diff`), submit reviews with inline comments via `gh api`. Used by the Code Review tab.
 
-**UI** (`ui/`): `layout.rs` is the main render function composing all panels. Sub-modules render individual components (terminal, diff, workspaces, files, tabs, statusbar).
+**UI** (`ui/`): `layout.rs` is the main render function composing all panels. Sub-modules render individual components (terminal, diff, workspaces, files, tabs, statusbar). `ui/mod.rs` contains insta snapshot tests for dialogs, overlays, and the full layout; snapshots stored in `ui/snapshots/`.
+
+**Syntax highlighting** (`syntax.rs`): `SyntaxHighlighter` wraps `syntect` for ratatui integration. Provides `find_syntax(path)` (by file extension), `find_syntax_by_name(name)` (by language token), `highlighter_for(syntax)`, and `highlight_line(hl, line, base_style) -> Vec<Span>`. Stored on `App` as `app.syntax`. Integrated in three rendering surfaces: code review diffs (`ui/code_review.rs` — per-line highlighting merged with add/delete base styles), inline editor (`ui/editor.rs` — with cursor overlay splitting), and markdown fenced code blocks (`ui/markdown.rs` — language hint extraction from opening fence). Theme configurable via `syntax_theme` in `config.toml` (default: `base16-ocean.dark`).
 
 **API client** (`crates/api-client/`): Independent crate (`piki-api-client`) for HTTP API calls. `ApiClient` trait abstracts the transport layer; `HttpClient` implements it via `reqwest`. Includes a Hurl-like syntax parser (`parser.rs`) that converts `METHOD URL\nHeaders\n\nBody` text into `ParsedRequest` structs. `Protocol` enum (`protocol.rs`) prepared for future gRPC support. Does not depend on `piki-core` or `piki-tui`.
 

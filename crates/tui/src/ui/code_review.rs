@@ -45,7 +45,7 @@ pub(super) fn render_fullscreen(frame: &mut Frame, area: Rect, app: &App) {
             .areas(body_area);
 
     render_file_list(frame, files_area, state);
-    render_diff(frame, diff_area, state);
+    render_diff(frame, diff_area, state, &app.syntax);
     render_footer(frame, footer_area, state);
 
     // Comment input overlay (on top of everything)
@@ -346,7 +346,12 @@ fn append_comment_decorations(
 }
 
 /// Render the side-by-side split diff pane with line numbers, cursor, and inline comments
-fn render_diff(frame: &mut Frame, area: Rect, state: &CodeReviewState) {
+fn render_diff(
+    frame: &mut Frame,
+    area: Rect,
+    state: &CodeReviewState,
+    syntax_hl: &crate::syntax::SyntaxHighlighter,
+) {
     let focus_color = if state.focus == ReviewFocus::DiffView {
         Color::Cyan
     } else {
@@ -373,6 +378,7 @@ fn render_diff(frame: &mut Frame, area: Rect, state: &CodeReviewState) {
 
     if let Some(diff) = state.current_diff() {
         let file_path = state.current_file_path().unwrap_or("");
+        let file_syntax = syntax_hl.find_syntax(file_path);
         let split_rows = compute_split_rows(diff, &state.draft, file_path);
         let viewport_height = inner.height as usize;
         let scroll = state.diff_scroll;
@@ -441,7 +447,17 @@ fn render_diff(frame: &mut Frame, area: Rect, state: &CodeReviewState) {
 
                     // Left half
                     render_half_line(
-                        frame, inner.x, y, left_half, gutter, *left, diff, is_cursor, true,
+                        frame,
+                        inner.x,
+                        y,
+                        left_half,
+                        gutter,
+                        *left,
+                        diff,
+                        is_cursor,
+                        true,
+                        syntax_hl,
+                        file_syntax,
                     );
 
                     // Vertical separator
@@ -470,6 +486,8 @@ fn render_diff(frame: &mut Frame, area: Rect, state: &CodeReviewState) {
                         diff,
                         is_cursor,
                         false,
+                        syntax_hl,
+                        file_syntax,
                     );
                 }
                 SplitRow::CommentHeader { diff_idx, side } => {
@@ -541,6 +559,8 @@ fn render_half_line(
     diff: &ParsedDiff,
     is_cursor: bool,
     is_left: bool,
+    syntax_hl: &crate::syntax::SyntaxHighlighter,
+    file_syntax: Option<&syntect::parsing::SyntaxReference>,
 ) {
     if half_width < gutter + 1 {
         return;
@@ -571,44 +591,69 @@ fn render_half_line(
 
             buf_set_string_clipped(frame.buffer_mut(), x, y, &ln_str, gutter_style, gutter);
 
-            // Content
-            let (content_style, prefix) = match diff_line.line_type {
+            // Content: determine base style and prefix from diff line type
+            let (base_style, prefix) = match diff_line.line_type {
                 DiffLineType::Addition => (Style::default().fg(Color::Green), "+"),
                 DiffLineType::Deletion => (Style::default().fg(Color::Red), "-"),
                 DiffLineType::Context => (Style::default().fg(Color::Gray), " "),
                 _ => (Style::default().fg(Color::Gray), " "),
             };
 
-            let content_style = if is_cursor {
-                content_style.add_modifier(Modifier::REVERSED)
+            let base_style = if is_cursor {
+                base_style.add_modifier(Modifier::REVERSED)
             } else {
-                content_style
+                base_style
             };
 
-            let display = format!("{}{}", prefix, diff_line.content);
-            buf_set_string_clipped(
-                frame.buffer_mut(),
-                x + gutter,
-                y,
-                &display,
-                content_style,
-                content_width,
-            );
+            // Write the prefix character with the base diff style
+            buf_set_string_clipped(frame.buffer_mut(), x + gutter, y, prefix, base_style, 1);
+
+            // Syntax-highlight the content portion (after removing +/- prefix)
+            let content_start = x + gutter + 1;
+            let code_width = content_width.saturating_sub(1);
+            let used = if let Some(syntax) = file_syntax {
+                let mut hl = syntax_hl.highlighter_for(syntax);
+                let spans = syntax_hl.highlight_line(&mut hl, &diff_line.content, base_style);
+                // When cursor is active, apply REVERSED modifier to all spans
+                let spans: Vec<Span<'static>> = if is_cursor {
+                    spans
+                        .into_iter()
+                        .map(|s| {
+                            Span::styled(
+                                s.content.into_owned(),
+                                s.style.add_modifier(Modifier::REVERSED),
+                            )
+                        })
+                        .collect()
+                } else {
+                    spans
+                };
+                buf_set_spans_clipped(frame.buffer_mut(), content_start, y, &spans, code_width)
+            } else {
+                // Fallback: no syntax highlighting
+                let display = &diff_line.content;
+                buf_set_string_clipped(
+                    frame.buffer_mut(),
+                    content_start,
+                    y,
+                    display,
+                    base_style,
+                    code_width,
+                );
+                display.chars().count().min(code_width as usize) as u16
+            };
 
             // Fill remaining for cursor highlight
-            if is_cursor {
-                let used = display.chars().count().min(content_width as usize);
-                if used < content_width as usize {
-                    let pad = " ".repeat(content_width as usize - used);
-                    buf_set_string_clipped(
-                        frame.buffer_mut(),
-                        x + gutter + used as u16,
-                        y,
-                        &pad,
-                        content_style,
-                        (content_width as usize - used) as u16,
-                    );
-                }
+            if is_cursor && used < code_width {
+                let pad = " ".repeat((code_width - used) as usize);
+                buf_set_string_clipped(
+                    frame.buffer_mut(),
+                    content_start + used,
+                    y,
+                    &pad,
+                    base_style,
+                    code_width - used,
+                );
             }
         }
         None => {
@@ -715,6 +760,32 @@ fn buf_set_string_clipped(
     // Truncate to max_width characters
     let truncated: String = s.chars().take(max_width as usize).collect();
     buf.set_string(x, y, &truncated, style);
+}
+
+/// Helper: write syntax-highlighted spans to the buffer, clipped to max_width chars.
+/// Returns the number of characters written.
+fn buf_set_spans_clipped(
+    buf: &mut ratatui::buffer::Buffer,
+    x: u16,
+    y: u16,
+    spans: &[Span<'_>],
+    max_width: u16,
+) -> u16 {
+    if max_width == 0 {
+        return 0;
+    }
+    let mut offset: u16 = 0;
+    for span in spans {
+        if offset >= max_width {
+            break;
+        }
+        let remaining = (max_width - offset) as usize;
+        let text: String = span.content.chars().take(remaining).collect();
+        let char_count = text.chars().count() as u16;
+        buf.set_string(x + offset, y, &text, span.style);
+        offset += char_count;
+    }
+    offset
 }
 
 /// Render context-sensitive footer keybindings

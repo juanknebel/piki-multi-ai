@@ -60,7 +60,8 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 - **Vim-style navigation** — j/k for movement, Enter to activate, Esc to go back (non-terminal panes), Ctrl+G for terminal panes; h from main panel goes to workspace list; j/k from main panel reach GitStatus/WorkspaceList; Enter on a workspace switches and auto-focuses the main panel
 - **Fuzzy file search** — Search all files in the active worktree with fuzzy matching powered by [nucleo](https://github.com/helix-editor/nucleo) (same engine as Helix editor), respects `.gitignore`
 - **$EDITOR integration** — Open any file in your preferred editor (`$EDITOR` or `vi`); TUI suspends and resumes automatically
-- **Inline editor** — Edit files directly inside the TUI with a built-in text editor (cursor movement, line numbers, scroll)
+- **Inline editor** — Edit files directly inside the TUI with a built-in text editor (cursor movement, line numbers, scroll); syntax-highlighted via `syntect`
+- **Syntax highlighting** — Language-aware syntax coloring powered by [syntect](https://github.com/trishume/syntect) across three surfaces: code review diffs (per-line highlighting merged with add/delete coloring), inline editor (with cursor overlay), and markdown fenced code blocks (with language hints like ` ```rust `); configurable theme via `syntax_theme` in `config.toml` (default: `base16-ocean.dark`)
 - **Clipboard support** — Paste from clipboard (`Ctrl+Shift+V`), copy visible terminal (`Ctrl+Shift+C`), and mouse drag-to-select with auto-copy; cross-platform (Wayland, X11, macOS, Windows)
 - **Workspace prompts** — Optionally provide an initial prompt when creating a workspace, stored for reference and used when spawning AI tabs
 - **Git operations** — Stage (`s`), unstage (`u`), commit (`c`), push (`P`), and merge (`M`) directly from the TUI; commit dialog with inline message input

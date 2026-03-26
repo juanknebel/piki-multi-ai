@@ -51,7 +51,15 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                     let content = content.clone();
                     let label = label.clone();
                     let scroll = tab.markdown_scroll;
-                    super::markdown::render(frame, area, &content, &label, scroll, border_style);
+                    super::markdown::render(
+                        frame,
+                        area,
+                        &content,
+                        &label,
+                        scroll,
+                        border_style,
+                        Some(&app.syntax),
+                    );
                 }
                 return;
             }

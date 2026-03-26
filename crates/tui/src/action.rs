@@ -972,7 +972,7 @@ pub(crate) async fn execute_action(
                     .map(|f| f.to_string_lossy().to_string())
                     .unwrap_or_else(|| "markdown".to_string());
                 if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
-                    ws.add_markdown_tab(label.clone(), content);
+                    ws.add_markdown_tab(label.clone(), content, Some(&app.syntax));
                     app.status_message = Some(format!("Opened {}", label));
                 }
             }
