@@ -5,6 +5,7 @@ use ratatui::DefaultTerminal;
 
 use crate::app::{self, ActivePane, App, AppMode, ToastLevel};
 use crate::code_review::CodeReviewState;
+use crate::dialog_state::{ConflictFile, ConflictStrategy, DialogState, GitLogEntry};
 use crate::helpers::spawn_tab;
 use piki_core::workspace::{FileWatcher, WorkspaceManager};
 use piki_core::{AIProvider, MergeStrategy, WorkspaceType};
@@ -54,6 +55,33 @@ pub(crate) enum Action {
     SubmitPrReview,
     /// Send an API request (raw Hurl text)
     SendApiRequest(String),
+    /// Load git log for the active workspace
+    LoadGitLog,
+    /// View diff for a specific commit by SHA
+    ViewCommitDiff(String),
+    /// Git stash: list all stash entries
+    GitStashList,
+    /// Git stash: save with message
+    GitStashSave(String),
+    /// Git stash: pop entry at index
+    GitStashPop(usize),
+    /// Git stash: apply entry at index
+    GitStashApply(usize),
+    /// Git stash: drop entry at index
+    GitStashDrop(usize),
+    /// Git stash: show diff for entry at index
+    GitStashShow(usize),
+    /// View the conflict diff for a file (shows ours vs theirs)
+    ViewConflictDiff(String),
+    /// Resolve a merge conflict on a single file using the given strategy
+    ResolveConflict {
+        file: String,
+        strategy: ConflictStrategy,
+    },
+    /// Abort the current merge or rebase
+    AbortMerge,
+    /// Scan for conflicts in worktree and source_repo, open resolution overlay
+    DetectConflicts,
 }
 
 pub(crate) async fn execute_action(
@@ -453,14 +481,19 @@ pub(crate) async fn execute_action(
             }
         }
         Action::GitMerge(strategy) => {
-            if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
-                let source_repo = ws.source_repo.clone();
-                let branch = ws.branch.clone();
-
+            // Extract data we need and drop the mutable borrow on workspaces
+            let merge_data = app.workspaces.get(app.active_workspace).map(|ws| {
+                (
+                    ws.source_repo.clone(),
+                    ws.branch.clone(),
+                    ws.path.clone(),
+                )
+            });
+            if let Some((source_repo, branch, ws_path)) = merge_data {
                 // Check workspace has no uncommitted changes
                 let status_output = tokio::process::Command::new("git")
                     .args(["status", "--porcelain"])
-                    .current_dir(&ws.path)
+                    .current_dir(&ws_path)
                     .output()
                     .await?;
                 let status_str = String::from_utf8_lossy(&status_output.stdout);
@@ -532,6 +565,7 @@ pub(crate) async fn execute_action(
                             .output()
                             .await?;
 
+                        let mut has_conflicts = false;
                         if merge.status.success() {
                             let stdout = String::from_utf8_lossy(&merge.stdout);
                             let first = stdout.lines().next().unwrap_or("Merged");
@@ -540,57 +574,124 @@ pub(crate) async fn execute_action(
                                 branch, main_branch, first
                             ));
                         } else {
-                            let stderr = String::from_utf8_lossy(&merge.stderr);
-                            // Abort the failed merge to leave repo clean
-                            let _ = tokio::process::Command::new("git")
-                                .args(["merge", "--abort"])
+                            // Check for conflict markers in git status
+                            let conflict_check = tokio::process::Command::new("git")
+                                .args(["status", "--porcelain=v1"])
                                 .current_dir(&source_repo)
                                 .output()
-                                .await;
-                            app.status_message = Some(format!(
-                                "Merge conflict: {} — resolve in Shell tab",
-                                stderr.trim()
-                            ));
+                                .await?;
+                            let conflict_stdout =
+                                String::from_utf8_lossy(&conflict_check.stdout);
+                            let conflict_files: Vec<ConflictFile> =
+                                piki_core::git::parse_porcelain_status(&conflict_stdout)
+                                    .into_iter()
+                                    .filter(|f| {
+                                        matches!(f.status, piki_core::FileStatus::Conflicted)
+                                    })
+                                    .map(|f| ConflictFile {
+                                        path: f.path.clone(),
+                                        status: format!("{:?}", f.status),
+                                    })
+                                    .collect();
+                            if !conflict_files.is_empty() {
+                                has_conflicts = true;
+                                // Open conflict resolution overlay — stay on main branch
+                                // so user can resolve conflicts in the source repo
+                                app.active_dialog = Some(DialogState::ConflictResolution {
+                                    files: conflict_files,
+                                    selected: 0,
+                                    repo_path: source_repo.clone(),
+                                });
+                                app.mode = AppMode::ConflictResolution;
+                                app.set_toast(
+                                    "Merge conflicts detected — resolve below",
+                                    ToastLevel::Error,
+                                );
+                            } else {
+                                // Some other merge error, abort
+                                let _ = tokio::process::Command::new("git")
+                                    .args(["merge", "--abort"])
+                                    .current_dir(&source_repo)
+                                    .output()
+                                    .await;
+                                let stderr = String::from_utf8_lossy(&merge.stderr);
+                                app.status_message = Some(format!(
+                                    "Merge failed: {}",
+                                    stderr.trim()
+                                ));
+                            }
                         }
 
-                        // Restore previous branch
-                        if prev != main_branch {
-                            let _ = tokio::process::Command::new("git")
-                                .args(["checkout", &prev])
-                                .current_dir(&source_repo)
-                                .output()
-                                .await;
-                        }
-
-                        // Restore stash if we stashed
-                        if src_dirty {
-                            let _ = tokio::process::Command::new("git")
-                                .args(["stash", "pop"])
-                                .current_dir(&source_repo)
-                                .output()
-                                .await;
+                        // Only restore branch and stash if no conflicts
+                        // (conflicts need to be resolved on the current branch)
+                        if !has_conflicts {
+                            if prev != main_branch {
+                                let _ = tokio::process::Command::new("git")
+                                    .args(["checkout", &prev])
+                                    .current_dir(&source_repo)
+                                    .output()
+                                    .await;
+                            }
+                            if src_dirty {
+                                let _ = tokio::process::Command::new("git")
+                                    .args(["stash", "pop"])
+                                    .current_dir(&source_repo)
+                                    .output()
+                                    .await;
+                            }
                         }
                     }
                     MergeStrategy::Rebase => {
                         // Rebase workspace branch onto main
                         let rebase = tokio::process::Command::new("git")
                             .args(["rebase", &main_branch])
-                            .current_dir(&ws.path)
+                            .current_dir(&ws_path)
                             .output()
                             .await?;
 
                         if !rebase.status.success() {
-                            let stderr = String::from_utf8_lossy(&rebase.stderr);
-                            // Abort rebase on conflict
-                            let _ = tokio::process::Command::new("git")
-                                .args(["rebase", "--abort"])
-                                .current_dir(&ws.path)
+                            // Check for conflict markers in git status
+                            let conflict_check = tokio::process::Command::new("git")
+                                .args(["status", "--porcelain=v1"])
+                                .current_dir(&ws_path)
                                 .output()
-                                .await;
-                            app.status_message = Some(format!(
-                                "Rebase conflict: {} — resolve in Shell tab",
-                                stderr.trim()
-                            ));
+                                .await?;
+                            let conflict_stdout =
+                                String::from_utf8_lossy(&conflict_check.stdout);
+                            let conflict_files: Vec<ConflictFile> =
+                                piki_core::git::parse_porcelain_status(&conflict_stdout)
+                                    .into_iter()
+                                    .filter(|f| {
+                                        matches!(f.status, piki_core::FileStatus::Conflicted)
+                                    })
+                                    .map(|f| ConflictFile {
+                                        path: f.path.clone(),
+                                        status: format!("{:?}", f.status),
+                                    })
+                                    .collect();
+                            if !conflict_files.is_empty() {
+                                app.active_dialog = Some(DialogState::ConflictResolution {
+                                    files: conflict_files,
+                                    selected: 0,
+                                    repo_path: ws_path.clone(),
+                                });
+                                app.mode = AppMode::ConflictResolution;
+                                app.set_toast(
+                                    "Rebase conflicts detected — resolve below",
+                                    ToastLevel::Error,
+                                );
+                            } else {
+                                let stderr = String::from_utf8_lossy(&rebase.stderr);
+                                let _ = tokio::process::Command::new("git")
+                                    .args(["rebase", "--abort"])
+                                    .current_dir(&ws_path)
+                                    .output()
+                                    .await;
+                                app.status_message = Some(format!(
+                                    "Rebase failed: {}",
+                                    stderr.trim()
+                                ));
+                            }
                             return Ok(());
                         }
 
@@ -638,8 +739,10 @@ pub(crate) async fn execute_action(
                     }
                 }
 
-                ws.dirty = true;
-                let _ = ws.refresh_changed_files().await;
+                if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+                    ws.dirty = true;
+                    let _ = ws.refresh_changed_files().await;
+                }
             }
         }
         Action::LoadPrReview => {
@@ -1236,6 +1339,599 @@ pub(crate) async fn execute_action(
                 app.set_toast("Nothing to undo".to_string(), ToastLevel::Info);
             }
         }
+        Action::LoadGitLog => {
+            let worktree = match app.current_workspace() {
+                Some(ws) => ws.path.clone(),
+                None => return Ok(()),
+            };
+            let output = tokio::process::Command::new("git")
+                .args(["log", "--oneline", "--graph", "--decorate", "--all", "-50"])
+                .current_dir(&worktree)
+                .output()
+                .await?;
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let lines: Vec<GitLogEntry> = stdout
+                .lines()
+                .map(|line| {
+                    // Extract SHA: skip graph chars (*, |, /, \, space), then look for hex
+                    let trimmed = line.trim_start_matches(|c: char| "*|/\\ ".contains(c));
+                    let sha = trimmed
+                        .split_whitespace()
+                        .next()
+                        .filter(|s| s.len() >= 7 && s.chars().all(|c| c.is_ascii_hexdigit()))
+                        .map(String::from);
+                    GitLogEntry {
+                        raw_line: line.to_string(),
+                        sha,
+                    }
+                })
+                .collect();
+            app.active_dialog = Some(DialogState::GitLog {
+                lines,
+                selected: 0,
+                scroll: 0,
+            });
+            app.mode = AppMode::GitLog;
+        }
+        Action::ViewCommitDiff(sha) => {
+            let worktree = match app.current_workspace() {
+                Some(ws) => ws.path.clone(),
+                None => return Ok(()),
+            };
+            // Compute diff width from terminal size (matches diff overlay: 90% width minus borders)
+            let term_size = terminal.size()?;
+            let overlay_inner_width = (term_size.width * 90 / 100).saturating_sub(2);
+            let width = if overlay_inner_width > 10 {
+                overlay_inner_width
+            } else {
+                120
+            };
+            // Try delta first, fall back to plain git show
+            let ansi_bytes = match run_commit_diff_with_delta(&worktree, &sha, width).await {
+                Ok(bytes) => bytes,
+                Err(_) => {
+                    // Fallback: plain git show with color
+                    let output = tokio::process::Command::new("git")
+                        .args(["show", "--color=always", "--stat", "-p", &sha])
+                        .current_dir(&worktree)
+                        .output()
+                        .await?;
+                    output.stdout
+                }
+            };
+            use ansi_to_tui::IntoText;
+            match ansi_bytes.into_text() {
+                Ok(text) => {
+                    let text = Arc::new(text);
+                    app.diff_content = Some(text);
+                    app.diff_file_path = Some(format!("commit {}", sha));
+                    app.diff_scroll = 0;
+                    app.mode = AppMode::Diff;
+                    app.active_pane = ActivePane::MainPanel;
+                    app.interacting = true;
+                }
+                Err(e) => {
+                    app.status_message = Some(format!("Failed to parse commit diff: {}", e));
+                }
+            }
+        }
+        Action::GitStashList => {
+            let worktree = match app.current_workspace() {
+                Some(ws) => ws.path.clone(),
+                None => return Ok(()),
+            };
+            let entries = parse_stash_list(&worktree).await;
+            app.active_dialog = Some(DialogState::GitStash {
+                entries,
+                selected: 0,
+                scroll: 0,
+                input_mode: false,
+                input_buffer: String::new(),
+                input_cursor: 0,
+            });
+            app.mode = AppMode::GitStash;
+        }
+        Action::GitStashSave(message) => {
+            let worktree = match app.current_workspace() {
+                Some(ws) => ws.path.clone(),
+                None => return Ok(()),
+            };
+            let output = tokio::process::Command::new("git")
+                .args(["stash", "push", "-m", &message])
+                .current_dir(&worktree)
+                .output()
+                .await?;
+            if output.status.success() {
+                app.set_toast(format!("Stashed: {}", message), ToastLevel::Success);
+                if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+                    ws.dirty = true;
+                    ws.last_refresh = None;
+                }
+            } else {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                app.set_toast(
+                    format!("Stash failed: {}", stderr.trim()),
+                    ToastLevel::Error,
+                );
+            }
+            // Refresh stash list in the overlay
+            let entries = parse_stash_list(&worktree).await;
+            if let Some(DialogState::GitStash {
+                entries: ref mut e,
+                ref mut selected,
+                ..
+            }) = app.active_dialog
+            {
+                *e = entries;
+                if *selected >= e.len() {
+                    *selected = e.len().saturating_sub(1);
+                }
+            }
+        }
+        Action::GitStashPop(idx) => {
+            let worktree = match app.current_workspace() {
+                Some(ws) => ws.path.clone(),
+                None => return Ok(()),
+            };
+            let stash_ref = format!("stash@{{{}}}", idx);
+            let output = tokio::process::Command::new("git")
+                .args(["stash", "pop", &stash_ref])
+                .current_dir(&worktree)
+                .output()
+                .await?;
+            if output.status.success() {
+                app.set_toast(format!("Popped {}", stash_ref), ToastLevel::Success);
+                if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+                    ws.dirty = true;
+                    ws.last_refresh = None;
+                }
+            } else {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                app.set_toast(format!("Pop failed: {}", stderr.trim()), ToastLevel::Error);
+            }
+            let entries = parse_stash_list(&worktree).await;
+            if let Some(DialogState::GitStash {
+                entries: ref mut e,
+                ref mut selected,
+                ..
+            }) = app.active_dialog
+            {
+                *e = entries;
+                if *selected >= e.len() {
+                    *selected = e.len().saturating_sub(1);
+                }
+            }
+        }
+        Action::GitStashApply(idx) => {
+            let worktree = match app.current_workspace() {
+                Some(ws) => ws.path.clone(),
+                None => return Ok(()),
+            };
+            let stash_ref = format!("stash@{{{}}}", idx);
+            let output = tokio::process::Command::new("git")
+                .args(["stash", "apply", &stash_ref])
+                .current_dir(&worktree)
+                .output()
+                .await?;
+            if output.status.success() {
+                app.set_toast(format!("Applied {}", stash_ref), ToastLevel::Success);
+                if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+                    ws.dirty = true;
+                    ws.last_refresh = None;
+                }
+            } else {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                app.set_toast(
+                    format!("Apply failed: {}", stderr.trim()),
+                    ToastLevel::Error,
+                );
+            }
+        }
+        Action::GitStashDrop(idx) => {
+            let worktree = match app.current_workspace() {
+                Some(ws) => ws.path.clone(),
+                None => return Ok(()),
+            };
+            let stash_ref = format!("stash@{{{}}}", idx);
+            let output = tokio::process::Command::new("git")
+                .args(["stash", "drop", &stash_ref])
+                .current_dir(&worktree)
+                .output()
+                .await?;
+            if output.status.success() {
+                app.set_toast(format!("Dropped {}", stash_ref), ToastLevel::Success);
+            } else {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                app.set_toast(format!("Drop failed: {}", stderr.trim()), ToastLevel::Error);
+            }
+            let entries = parse_stash_list(&worktree).await;
+            if let Some(DialogState::GitStash {
+                entries: ref mut e,
+                ref mut selected,
+                ..
+            }) = app.active_dialog
+            {
+                *e = entries;
+                if *selected >= e.len() {
+                    *selected = e.len().saturating_sub(1);
+                }
+            }
+        }
+        Action::GitStashShow(idx) => {
+            let worktree = match app.current_workspace() {
+                Some(ws) => ws.path.clone(),
+                None => return Ok(()),
+            };
+            let stash_ref = format!("stash@{{{}}}", idx);
+            let term_size = terminal.size()?;
+            let overlay_inner_width = (term_size.width * 90 / 100).saturating_sub(2);
+            let width = if overlay_inner_width > 10 {
+                overlay_inner_width
+            } else {
+                120
+            };
+            // Try delta first, fall back to plain git stash show
+            let ansi_bytes = match run_stash_diff_with_delta(&worktree, &stash_ref, width).await {
+                Ok(bytes) => bytes,
+                Err(_) => {
+                    let output = tokio::process::Command::new("git")
+                        .args(["stash", "show", "-p", "--color=always", &stash_ref])
+                        .current_dir(&worktree)
+                        .output()
+                        .await?;
+                    output.stdout
+                }
+            };
+            use ansi_to_tui::IntoText;
+            match ansi_bytes.into_text() {
+                Ok(text) => {
+                    let text = Arc::new(text);
+                    app.diff_content = Some(text);
+                    app.diff_file_path = Some(format!("stash: {}", stash_ref));
+                    app.diff_scroll = 0;
+                    app.mode = AppMode::Diff;
+                    app.active_pane = ActivePane::MainPanel;
+                    app.interacting = true;
+                }
+                Err(e) => {
+                    app.status_message = Some(format!("Failed to parse stash diff: {}", e));
+                }
+            }
+        }
+        Action::ViewConflictDiff(file) => {
+            // Use repo_path from the conflict dialog (conflicts may be in source_repo, not worktree)
+            let worktree = match &app.active_dialog {
+                Some(DialogState::ConflictResolution { repo_path, .. }) => repo_path.clone(),
+                _ => match app.current_workspace() {
+                    Some(ws) => ws.path.clone(),
+                    None => return Ok(()),
+                },
+            };
+            let term_size = terminal.size()?;
+            let overlay_inner_width = (term_size.width * 90 / 100).saturating_sub(2);
+            let width = if overlay_inner_width > 10 {
+                overlay_inner_width
+            } else {
+                120
+            };
+            // Try delta first, fall back to plain git diff
+            let ansi_bytes =
+                match run_conflict_diff_with_delta(&worktree, &file, width).await {
+                    Ok(bytes) => bytes,
+                    Err(_) => {
+                        let output = tokio::process::Command::new("git")
+                            .args(["diff", "--color=always", "--", &file])
+                            .current_dir(&worktree)
+                            .output()
+                            .await?;
+                        output.stdout
+                    }
+                };
+            use ansi_to_tui::IntoText;
+            match ansi_bytes.into_text() {
+                Ok(text) => {
+                    let text = Arc::new(text);
+                    app.diff_content = Some(text);
+                    app.diff_file_path = Some(format!("conflict: {}", file));
+                    app.diff_scroll = 0;
+                    app.mode = AppMode::Diff;
+                    app.active_pane = ActivePane::MainPanel;
+                    app.interacting = true;
+                }
+                Err(e) => {
+                    app.status_message = Some(format!("Failed to parse diff: {}", e));
+                }
+            }
+        }
+        Action::ResolveConflict { file, strategy } => {
+            // Use repo_path from the conflict dialog (conflicts may be in source_repo)
+            let worktree = match &app.active_dialog {
+                Some(DialogState::ConflictResolution { repo_path, .. }) => repo_path.clone(),
+                _ => match app.current_workspace() {
+                    Some(ws) => ws.path.clone(),
+                    None => return Ok(()),
+                },
+            };
+            match strategy {
+                ConflictStrategy::Ours => {
+                    tokio::process::Command::new("git")
+                        .args(["checkout", "--ours", &file])
+                        .current_dir(&worktree)
+                        .output()
+                        .await?;
+                    tokio::process::Command::new("git")
+                        .args(["add", &file])
+                        .current_dir(&worktree)
+                        .output()
+                        .await?;
+                }
+                ConflictStrategy::Theirs => {
+                    tokio::process::Command::new("git")
+                        .args(["checkout", "--theirs", &file])
+                        .current_dir(&worktree)
+                        .output()
+                        .await?;
+                    tokio::process::Command::new("git")
+                        .args(["add", &file])
+                        .current_dir(&worktree)
+                        .output()
+                        .await?;
+                }
+                ConflictStrategy::MarkResolved => {
+                    tokio::process::Command::new("git")
+                        .args(["add", &file])
+                        .current_dir(&worktree)
+                        .output()
+                        .await?;
+                }
+            }
+            app.set_toast(format!("Resolved: {}", file), ToastLevel::Success);
+            // Remove from conflict list
+            if let Some(DialogState::ConflictResolution {
+                ref mut files,
+                ref mut selected,
+                ..
+            }) = app.active_dialog
+            {
+                files.retain(|f| f.path != file);
+                if files.is_empty() {
+                    // Auto-commit to complete the merge
+                    let merge_commit = tokio::process::Command::new("git")
+                        .args(["commit", "--no-edit"])
+                        .current_dir(&worktree)
+                        .output()
+                        .await;
+                    let msg = match merge_commit {
+                        Ok(out) if out.status.success() => {
+                            let stdout = String::from_utf8_lossy(&out.stdout);
+                            let first = stdout.lines().next().unwrap_or("Merge committed");
+                            format!("✓ All conflicts resolved and merge committed: {}", first)
+                        }
+                        _ => "All conflicts resolved — commit to complete merge".to_string(),
+                    };
+                    app.active_dialog = None;
+                    app.mode = AppMode::Normal;
+                    app.interacting = false;
+                    app.diff_content = None;
+                    app.diff_file_path = None;
+                    app.set_toast(msg, ToastLevel::Success);
+                } else if *selected >= files.len() {
+                    *selected = files.len() - 1;
+                }
+            }
+            // Refresh workspace
+            if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+                ws.dirty = true;
+                ws.last_refresh = None;
+            }
+        }
+        Action::AbortMerge => {
+            let worktree = match &app.active_dialog {
+                Some(DialogState::ConflictResolution { repo_path, .. }) => repo_path.clone(),
+                _ => match app.current_workspace() {
+                    Some(ws) => ws.path.clone(),
+                    None => return Ok(()),
+                },
+            };
+            // Try merge --abort first, fall back to rebase --abort
+            let merge_result = tokio::process::Command::new("git")
+                .args(["merge", "--abort"])
+                .current_dir(&worktree)
+                .output()
+                .await?;
+            if !merge_result.status.success() {
+                tokio::process::Command::new("git")
+                    .args(["rebase", "--abort"])
+                    .current_dir(&worktree)
+                    .output()
+                    .await?;
+            }
+            app.active_dialog = None;
+            app.mode = AppMode::Normal;
+            app.interacting = false;
+            app.diff_content = None;
+            app.diff_file_path = None;
+            app.set_toast("Merge aborted", ToastLevel::Info);
+            if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+                ws.dirty = true;
+                ws.last_refresh = None;
+            }
+        }
+        Action::DetectConflicts => {
+            let (ws_path, source_repo) = match app.current_workspace() {
+                Some(ws) => (ws.path.clone(), ws.source_repo.clone()),
+                None => return Ok(()),
+            };
+            // Check both worktree and source_repo for conflicts
+            for repo_path in [&ws_path, &source_repo] {
+                let output = tokio::process::Command::new("git")
+                    .args(["status", "--porcelain=v1"])
+                    .current_dir(repo_path)
+                    .output()
+                    .await?;
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let conflicts: Vec<ConflictFile> =
+                    piki_core::git::parse_porcelain_status(&stdout)
+                        .into_iter()
+                        .filter(|f| matches!(f.status, piki_core::FileStatus::Conflicted))
+                        .map(|f| ConflictFile {
+                            path: f.path.clone(),
+                            status: format!("{:?}", f.status),
+                        })
+                        .collect();
+                if !conflicts.is_empty() {
+                    app.open_conflict_resolution_with(conflicts, repo_path.clone());
+                    return Ok(());
+                }
+            }
+            app.set_toast("No conflicts detected", ToastLevel::Info);
+        }
     }
     Ok(())
+}
+
+/// Run `git show <sha>` piped through delta for formatted output.
+async fn run_commit_diff_with_delta(
+    worktree: &std::path::Path,
+    sha: &str,
+    width: u16,
+) -> anyhow::Result<Vec<u8>> {
+    let git_show = tokio::process::Command::new("git")
+        .args(["show", "--color=always", sha])
+        .current_dir(worktree)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()?;
+
+    let git_stdout = git_show
+        .stdout
+        .ok_or_else(|| anyhow::anyhow!("failed to capture git show stdout"))?;
+
+    let git_stdout_std: std::process::Stdio = git_stdout.try_into()?;
+
+    let delta_output = tokio::process::Command::new("delta")
+        .args([
+            "--side-by-side",
+            &format!("--width={}", width),
+            "--paging=never",
+            "--true-color=always",
+            "--line-fill-method=ansi",
+        ])
+        .stdin(git_stdout_std)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .await?;
+
+    if !delta_output.status.success() {
+        anyhow::bail!("delta exited with non-zero status");
+    }
+
+    Ok(delta_output.stdout)
+}
+
+/// Run `git stash show -p <ref>` piped through delta for formatted output.
+async fn run_stash_diff_with_delta(
+    worktree: &std::path::Path,
+    stash_ref: &str,
+    width: u16,
+) -> anyhow::Result<Vec<u8>> {
+    let git_stash = tokio::process::Command::new("git")
+        .args(["stash", "show", "-p", "--color=always", stash_ref])
+        .current_dir(worktree)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()?;
+
+    let git_stdout = git_stash
+        .stdout
+        .ok_or_else(|| anyhow::anyhow!("failed to capture git stash show stdout"))?;
+
+    let git_stdout_std: std::process::Stdio = git_stdout.try_into()?;
+
+    let delta_output = tokio::process::Command::new("delta")
+        .args([
+            "--side-by-side",
+            &format!("--width={}", width),
+            "--paging=never",
+            "--true-color=always",
+            "--line-fill-method=ansi",
+        ])
+        .stdin(git_stdout_std)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .await?;
+
+    if !delta_output.status.success() {
+        anyhow::bail!("delta exited with non-zero status");
+    }
+
+    Ok(delta_output.stdout)
+}
+
+/// Run `git diff -- <file>` piped through delta for conflict viewing.
+async fn run_conflict_diff_with_delta(
+    worktree: &std::path::Path,
+    file: &str,
+    width: u16,
+) -> anyhow::Result<Vec<u8>> {
+    let git_diff = tokio::process::Command::new("git")
+        .args(["diff", "--color=always", "--", file])
+        .current_dir(worktree)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()?;
+
+    let git_stdout = git_diff
+        .stdout
+        .ok_or_else(|| anyhow::anyhow!("failed to capture git diff stdout"))?;
+
+    let git_stdout_std: std::process::Stdio = git_stdout.try_into()?;
+
+    let delta_output = tokio::process::Command::new("delta")
+        .args([
+            "--side-by-side",
+            &format!("--width={}", width),
+            "--paging=never",
+            "--true-color=always",
+            "--line-fill-method=ansi",
+        ])
+        .stdin(git_stdout_std)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .await?;
+
+    if !delta_output.status.success() {
+        anyhow::bail!("delta exited with non-zero status");
+    }
+
+    Ok(delta_output.stdout)
+}
+
+/// Parse `git stash list` output into (ref, message) pairs.
+async fn parse_stash_list(worktree: &std::path::Path) -> Vec<(String, String)> {
+    let output = tokio::process::Command::new("git")
+        .args(["stash", "list"])
+        .current_dir(worktree)
+        .output()
+        .await
+        .ok();
+    match output {
+        Some(o) if o.status.success() => {
+            let stdout = String::from_utf8_lossy(&o.stdout);
+            stdout
+                .lines()
+                .filter_map(|line| {
+                    // Format: "stash@{0}: On main: my message" or "stash@{0}: WIP on main: ..."
+                    let colon_pos = line.find(':')?;
+                    let stash_ref = line[..colon_pos].trim().to_string();
+                    let message = line[colon_pos + 1..].trim().to_string();
+                    Some((stash_ref, message))
+                })
+                .collect()
+        }
+        _ => Vec::new(),
+    }
 }

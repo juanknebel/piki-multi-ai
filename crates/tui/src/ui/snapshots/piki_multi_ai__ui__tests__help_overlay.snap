@@ -1,6 +1,5 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 216
 expression: content
 ---
             ┌ Help ───────────────────────────────────────────────┐
@@ -26,6 +25,7 @@ expression: content
             │    u             Quick unstage (file list focused)  │
             │    D             Dashboard                          │
             │    ctrl-l        Logs                               │
+            │    L             Git log                            │
             │    q             Quit                               │
             │                                                     │
             │  Interaction mode (green border)                    │
@@ -41,5 +41,4 @@ expression: content
             │    All keys sent to active tab                      │
             │                                                     │
             │  File list pane                                     │
-            │    k/j           Select file                        │
-            └─────────────────────────────────────── [1/62 ↑k/j↓] ┘
+            └─────────────────────────────────────── [1/83 ↑k/j↓] ┘

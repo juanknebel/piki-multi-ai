@@ -303,6 +303,53 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             (cfg.get_binding("dashboard", "select"), "switch"),
             (cfg.get_binding("dashboard", "exit"), "close"),
         ],
+        AppMode::GitStash => vec![
+            (
+                format!(
+                    "{}/{}",
+                    cfg.get_binding("git_stash", "up"),
+                    cfg.get_binding("git_stash", "down")
+                ),
+                "select",
+            ),
+            (cfg.get_binding("git_stash", "save"), "save"),
+            (cfg.get_binding("git_stash", "pop"), "pop"),
+            (cfg.get_binding("git_stash", "apply"), "apply"),
+            (cfg.get_binding("git_stash", "drop"), "drop"),
+            (cfg.get_binding("git_stash", "show"), "show diff"),
+            (cfg.get_binding("git_stash", "exit"), "close"),
+        ],
+        AppMode::GitLog => vec![
+            (
+                format!(
+                    "{}/{}",
+                    cfg.get_binding("git_log", "up"),
+                    cfg.get_binding("git_log", "down")
+                ),
+                "navigate",
+            ),
+            (cfg.get_binding("git_log", "select"), "view diff"),
+            (cfg.get_binding("git_log", "exit"), "close"),
+        ],
+        AppMode::ConflictResolution => vec![
+            (
+                format!(
+                    "{}/{}",
+                    cfg.get_binding("conflict_resolution", "up"),
+                    cfg.get_binding("conflict_resolution", "down")
+                ),
+                "select",
+            ),
+            (cfg.get_binding("conflict_resolution", "ours"), "ours"),
+            (cfg.get_binding("conflict_resolution", "theirs"), "theirs"),
+            (
+                cfg.get_binding("conflict_resolution", "mark_resolved"),
+                "mark resolved",
+            ),
+            (cfg.get_binding("conflict_resolution", "edit"), "edit"),
+            (cfg.get_binding("conflict_resolution", "abort"), "abort"),
+            (cfg.get_binding("conflict_resolution", "exit"), "close"),
+        ],
         AppMode::ConfirmCloseTab => vec![("Y".to_string(), "close"), ("N".to_string(), "cancel")],
         AppMode::ConfirmQuit => vec![("Y".to_string(), "quit"), ("N".to_string(), "cancel")],
         _ if app.interacting => {

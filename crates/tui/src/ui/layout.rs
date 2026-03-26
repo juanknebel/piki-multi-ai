@@ -246,6 +246,11 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         AppMode::Logs => super::dialogs::render_logs_overlay(frame, area, app),
         AppMode::CommandPalette => super::command_palette::render(frame, area, app),
         AppMode::WorkspaceSwitcher => super::workspace_switcher::render(frame, area, app),
+        AppMode::GitStash => super::dialogs::render_git_stash_overlay(frame, area, app),
+        AppMode::GitLog => super::dialogs::render_git_log_overlay(frame, area, app),
+        AppMode::ConflictResolution => {
+            super::dialogs::render_conflict_resolution_overlay(frame, area, app)
+        }
         AppMode::InlineEdit => {}   // handled by main content render
         AppMode::SubmitReview => {} // handled by full-screen code review bypass above
     }

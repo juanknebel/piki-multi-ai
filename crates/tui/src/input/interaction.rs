@@ -417,11 +417,26 @@ pub(super) fn handle_markdown_interaction(app: &mut App, key: KeyEvent) -> Optio
 
 pub(super) fn handle_diff_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
     if app.config.matches_diff(key, "exit") {
-        app.mode = AppMode::Normal;
         app.diff_content = None;
         app.diff_file_path = None;
         app.interacting = false;
-        app.active_pane = ActivePane::GitStatus;
+        // Return to the overlay we came from, if any
+        if matches!(
+            app.active_dialog,
+            Some(DialogState::ConflictResolution { .. })
+                | Some(DialogState::GitLog { .. })
+                | Some(DialogState::GitStash { .. })
+        ) {
+            app.mode = match &app.active_dialog {
+                Some(DialogState::ConflictResolution { .. }) => AppMode::ConflictResolution,
+                Some(DialogState::GitLog { .. }) => AppMode::GitLog,
+                Some(DialogState::GitStash { .. }) => AppMode::GitStash,
+                _ => AppMode::Normal,
+            };
+        } else {
+            app.mode = AppMode::Normal;
+            app.active_pane = ActivePane::GitStatus;
+        }
         return None;
     }
 

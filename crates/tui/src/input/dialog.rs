@@ -4,7 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField};
-use crate::dialog_state::{DialogState, NewTabMenu};
+use crate::dialog_state::{ConflictStrategy, DialogState, NewTabMenu};
 use piki_core::{AIProvider, MergeStrategy, WorkspaceType};
 
 use super::confirm_common::{ConfirmResult, dismiss_dialog, handle_yn_input};
@@ -704,6 +704,210 @@ pub(super) fn handle_workspace_info_input(app: &mut App, key: KeyEvent) -> Optio
         app.active_dialog = None;
         app.mode = AppMode::Normal;
         let _ = crossterm::execute!(std::io::stderr(), crossterm::event::EnableMouseCapture);
+    }
+    None
+}
+
+pub(super) fn handle_git_stash_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::GitStash {
+        ref entries,
+        ref mut selected,
+        ref mut scroll,
+        ref mut input_mode,
+        ref mut input_buffer,
+        ref mut input_cursor,
+    }) = app.active_dialog
+    else {
+        return None;
+    };
+
+    if *input_mode {
+        // Text input mode for stash message
+        match key.code {
+            KeyCode::Enter => {
+                let msg = input_buffer.clone();
+                *input_mode = false;
+                input_buffer.clear();
+                *input_cursor = 0;
+                if !msg.is_empty() {
+                    return Some(Action::GitStashSave(msg));
+                }
+            }
+            KeyCode::Esc => {
+                *input_mode = false;
+                input_buffer.clear();
+                *input_cursor = 0;
+            }
+            _ => {
+                handle_text_input(input_buffer, input_cursor, key, |c| !c.is_control());
+            }
+        }
+        return None;
+    }
+
+    // List mode
+    let total = entries.len();
+    let last = total.saturating_sub(1);
+    let _ = scroll; // scroll is managed by the renderer
+
+    if app.config.matches_git_stash(key, "down") || app.config.matches_git_stash(key, "down_alt") {
+        if total > 0 {
+            *selected = (*selected + 1).min(last);
+        }
+    } else if app.config.matches_git_stash(key, "up") || app.config.matches_git_stash(key, "up_alt")
+    {
+        *selected = selected.saturating_sub(1);
+    } else if app.config.matches_git_stash(key, "save") {
+        *input_mode = true;
+    } else if app.config.matches_git_stash(key, "pop") {
+        if !entries.is_empty() {
+            return Some(Action::GitStashPop(*selected));
+        }
+    } else if app.config.matches_git_stash(key, "apply") {
+        if !entries.is_empty() {
+            return Some(Action::GitStashApply(*selected));
+        }
+    } else if app.config.matches_git_stash(key, "drop") {
+        if !entries.is_empty() {
+            return Some(Action::GitStashDrop(*selected));
+        }
+    } else if app.config.matches_git_stash(key, "show") {
+        if !entries.is_empty() {
+            return Some(Action::GitStashShow(*selected));
+        }
+    } else if app.config.matches_git_stash(key, "exit")
+        || app.config.matches_git_stash(key, "exit_alt")
+    {
+        app.active_dialog = None;
+        app.mode = AppMode::Normal;
+    }
+    None
+}
+
+pub(super) fn handle_git_log_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::GitLog {
+        ref lines,
+        ref mut selected,
+        ref mut scroll,
+    }) = app.active_dialog
+    else {
+        return None;
+    };
+
+    let total = lines.len();
+    let last = total.saturating_sub(1);
+
+    if app.config.matches_git_log(key, "down") || app.config.matches_git_log(key, "down_alt") {
+        *selected = (*selected + 1).min(last);
+    } else if app.config.matches_git_log(key, "up") || app.config.matches_git_log(key, "up_alt") {
+        *selected = selected.saturating_sub(1);
+    } else if app.config.matches_git_log(key, "page_down") {
+        *selected = (*selected + 10).min(last);
+    } else if app.config.matches_git_log(key, "page_up") {
+        *selected = selected.saturating_sub(10);
+    } else if app.config.matches_git_log(key, "scroll_top") {
+        *selected = 0;
+        *scroll = 0;
+    } else if app.config.matches_git_log(key, "scroll_bottom") {
+        *selected = last;
+    } else if app.config.matches_git_log(key, "select") {
+        if let Some(entry) = lines.get(*selected)
+            && let Some(ref sha) = entry.sha
+        {
+            let sha = sha.clone();
+            return Some(Action::ViewCommitDiff(sha));
+        }
+    } else if app.config.matches_git_log(key, "exit") || app.config.matches_git_log(key, "exit_alt")
+    {
+        app.active_dialog = None;
+        app.mode = AppMode::Normal;
+    }
+    None
+}
+
+pub(super) fn handle_conflict_resolution_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::ConflictResolution {
+        ref files,
+        ref mut selected,
+        ref repo_path,
+    }) = app.active_dialog
+    else {
+        return None;
+    };
+
+    let total = files.len();
+    let last = total.saturating_sub(1);
+
+    if app
+        .config
+        .matches_conflict_resolution(key, "down")
+        || app
+            .config
+            .matches_conflict_resolution(key, "down_alt")
+    {
+        *selected = (*selected + 1).min(last);
+    } else if app
+        .config
+        .matches_conflict_resolution(key, "up")
+        || app
+            .config
+            .matches_conflict_resolution(key, "up_alt")
+    {
+        *selected = selected.saturating_sub(1);
+    } else if app.config.matches_conflict_resolution(key, "ours") {
+        if let Some(f) = files.get(*selected) {
+            let path = f.path.clone();
+            return Some(Action::ResolveConflict {
+                file: path,
+                strategy: ConflictStrategy::Ours,
+            });
+        }
+    } else if app.config.matches_conflict_resolution(key, "theirs") {
+        if let Some(f) = files.get(*selected) {
+            let path = f.path.clone();
+            return Some(Action::ResolveConflict {
+                file: path,
+                strategy: ConflictStrategy::Theirs,
+            });
+        }
+    } else if app
+        .config
+        .matches_conflict_resolution(key, "mark_resolved")
+    {
+        if let Some(f) = files.get(*selected) {
+            let path = f.path.clone();
+            return Some(Action::ResolveConflict {
+                file: path,
+                strategy: ConflictStrategy::MarkResolved,
+            });
+        }
+    } else if app.config.matches_conflict_resolution(key, "select")
+        || key.code == KeyCode::Enter
+    {
+        // View conflict diff
+        if let Some(f) = files.get(*selected) {
+            let path = f.path.clone();
+            return Some(Action::ViewConflictDiff(path));
+        }
+    } else if app.config.matches_conflict_resolution(key, "edit") {
+        if let Some(f) = files.get(*selected) {
+            let full_path = repo_path.join(&f.path);
+            return Some(Action::OpenEditor(full_path));
+        }
+    } else if app.config.matches_conflict_resolution(key, "abort") {
+        return Some(Action::AbortMerge);
+    } else if app
+        .config
+        .matches_conflict_resolution(key, "exit")
+        || app
+            .config
+            .matches_conflict_resolution(key, "exit_alt")
+    {
+        app.active_dialog = None;
+        app.mode = AppMode::Normal;
+        app.interacting = false;
+        app.diff_content = None;
+        app.diff_file_path = None;
     }
     None
 }

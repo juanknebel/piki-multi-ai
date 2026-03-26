@@ -118,6 +118,12 @@ pub enum AppMode {
     SubmitReview,
     /// Fuzzy workspace switcher overlay
     WorkspaceSwitcher,
+    /// Git log overlay
+    GitLog,
+    /// Git stash overlay
+    GitStash,
+    /// Conflict resolution overlay
+    ConflictResolution,
 }
 
 /// Which pane is currently selected / focused
@@ -983,6 +989,26 @@ impl App {
                 return;
             }
         }
+    }
+
+    /// Open the conflict resolution overlay for the active workspace.
+    /// Open conflict resolution overlay with detected conflicts.
+    /// Called from Action::DetectConflicts after async git status scan.
+    pub fn open_conflict_resolution_with(
+        &mut self,
+        conflicts: Vec<crate::dialog_state::ConflictFile>,
+        repo_path: std::path::PathBuf,
+    ) {
+        if conflicts.is_empty() {
+            self.set_toast("No conflicts detected", ToastLevel::Info);
+            return;
+        }
+        self.active_dialog = Some(DialogState::ConflictResolution {
+            files: conflicts,
+            selected: 0,
+            repo_path,
+        });
+        self.mode = AppMode::ConflictResolution;
     }
 
     /// Open the fuzzy file search overlay by scanning all files in the active worktree.
