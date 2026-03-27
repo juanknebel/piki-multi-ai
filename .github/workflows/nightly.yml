@@ -1,0 +1,85 @@
+name: Nightly
+
+on:
+  push:
+    branches:
+      - nightly
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            artifact: piki-multi-ai-linux-amd64
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            artifact: piki-multi-ai-macos-arm64
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            artifact: piki-multi-ai-macos-amd64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install musl tools
+        if: contains(matrix.target, 'musl')
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package binary
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar czf ../../../${{ matrix.artifact }}.tar.gz piki-multi-ai
+          cd ../../..
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Delete existing nightly release
+        run: gh release delete nightly --yes --cleanup-tag || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create nightly release
+        run: |
+          gh release create nightly \
+            --title "Nightly $(date -u +%Y-%m-%d)" \
+            --notes "Automated nightly build from the \`nightly\` branch.
+
+          **Commit:** ${{ github.sha }}
+          **Built at:** $(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+          > This is a pre-release. For stable versions, see the [latest release](../../releases/latest)." \
+            --prerelease \
+            *.tar.gz
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
