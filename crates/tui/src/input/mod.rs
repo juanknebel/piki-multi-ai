@@ -259,9 +259,29 @@ pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Act
     } else if app.config.matches_navigation(key, "undo") {
         return Some(Action::Undo);
     } else if app.config.matches_navigation(key, "next_workspace") {
-        app.next_workspace();
+        match app.active_pane {
+            ActivePane::WorkspaceList => app.next_workspace(),
+            ActivePane::MainPanel => {
+                if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+                    && !ws.tabs.is_empty()
+                {
+                    ws.active_tab = (ws.active_tab + 1) % ws.tabs.len();
+                }
+            }
+            ActivePane::GitStatus => app.next_file(),
+        }
     } else if app.config.matches_navigation(key, "prev_workspace") {
-        app.prev_workspace();
+        match app.active_pane {
+            ActivePane::WorkspaceList => app.prev_workspace(),
+            ActivePane::MainPanel => {
+                if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+                    && !ws.tabs.is_empty()
+                {
+                    ws.active_tab = (ws.active_tab + ws.tabs.len() - 1) % ws.tabs.len();
+                }
+            }
+            ActivePane::GitStatus => app.prev_file(),
+        }
     } else if app.config.matches_navigation(key, "scroll_up") {
         if app.active_pane == ActivePane::MainPanel
             && app.mode == AppMode::Normal

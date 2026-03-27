@@ -110,6 +110,15 @@ pub fn render_cached(
         .scroll((scroll, 0));
 
     frame.render_widget(paragraph, area);
+    let visible_height = area.height.saturating_sub(2) as usize;
+    super::scrollbar::render_vertical(
+        frame,
+        area,
+        scroll as usize,
+        text.lines.len(),
+        visible_height,
+        Color::DarkGray,
+    );
 }
 
 /// Render markdown content in the main panel area (uncached path).

@@ -9,6 +9,7 @@ pub mod layout;
 pub mod markdown;
 mod panels;
 mod sidebar;
+pub(crate) mod scrollbar;
 pub(crate) mod statusbar;
 pub mod subtabs;
 pub mod terminal;

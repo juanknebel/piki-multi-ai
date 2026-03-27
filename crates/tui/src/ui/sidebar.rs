@@ -1,6 +1,6 @@
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph};
 
@@ -188,6 +188,21 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
 
     let list = List::new(items).block(block);
     frame.render_widget(list, area);
+
+    let total_visual_height: usize = sidebar_items.iter().map(&item_height).sum();
+    let scroll_pos: usize = sidebar_items
+        .iter()
+        .take(scroll_offset)
+        .map(item_height)
+        .sum();
+    super::scrollbar::render_vertical(
+        frame,
+        area,
+        scroll_pos,
+        total_visual_height,
+        visible_height,
+        Color::DarkGray,
+    );
 }
 
 pub(super) fn render_file_list(frame: &mut Frame, area: Rect, app: &App) {
@@ -261,6 +276,14 @@ fn render_project_file_list(
 
     let list = List::new(items).block(block);
     frame.render_widget(list, area);
+    super::scrollbar::render_vertical(
+        frame,
+        area,
+        scroll_offset,
+        dirs.len(),
+        visible_height,
+        Color::DarkGray,
+    );
 }
 
 fn render_git_file_list(
@@ -350,4 +373,12 @@ fn render_git_file_list(
 
     let list = List::new(items).block(block);
     frame.render_widget(list, area);
+    super::scrollbar::render_vertical(
+        frame,
+        area,
+        scroll_offset,
+        files.len(),
+        visible_height,
+        Color::DarkGray,
+    );
 }
