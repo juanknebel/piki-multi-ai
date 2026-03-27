@@ -254,6 +254,8 @@ fn default_file_list() -> HashMap<String, String> {
     m.insert("edit_inline".to_string(), "v".to_string());
     m.insert("stage".to_string(), "s".to_string());
     m.insert("unstage".to_string(), "u".to_string());
+    m.insert("toggle_select".to_string(), "space".to_string());
+    m.insert("select_all".to_string(), "a".to_string());
     m
 }
 

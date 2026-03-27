@@ -33,6 +33,10 @@ pub(crate) enum Action {
     GitStage(usize),
     /// Git: unstage a file at the given index
     GitUnstage(usize),
+    /// Git: stage all multi-selected files
+    GitStageSelected,
+    /// Git: unstage all multi-selected files
+    GitUnstageSelected,
     /// Git: commit with message
     GitCommit(String),
     /// Git: push current branch
@@ -442,6 +446,98 @@ pub(crate) async fn execute_action(
                         }
                     }
                 });
+            }
+        }
+        Action::GitStageSelected => {
+            let ws_idx = app.active_workspace;
+            if let Some(ws) = app.workspaces.get_mut(ws_idx) {
+                let paths: Vec<String> = app.selected_files.iter().cloned().collect();
+                if !paths.is_empty() {
+                    let worktree = ws.path.clone();
+                    let status_tx = app.status_tx.clone();
+                    let undo_tx = app.undo_tx.clone();
+                    let count = paths.len();
+                    app.status_message = Some(format!("Staging {} files...", count));
+                    ws.dirty = true;
+                    ws.last_refresh = None;
+                    app.selected_files.clear();
+                    tokio::spawn(async move {
+                        let mut args = vec!["add".to_string()];
+                        args.extend(paths.iter().cloned());
+                        let output = tokio::process::Command::new("git")
+                            .args(&args)
+                            .current_dir(&worktree)
+                            .output()
+                            .await;
+                        match output {
+                            Ok(o) if o.status.success() => {
+                                for p in &paths {
+                                    let _ = undo_tx.send(app::UndoEntry {
+                                        action: app::UndoAction::Stage,
+                                        workspace_idx: ws_idx,
+                                        file_path: p.clone(),
+                                    });
+                                }
+                                let _ =
+                                    status_tx.send(format!("Staged {} files [C-z undo]", count));
+                            }
+                            Ok(o) => {
+                                let stderr = String::from_utf8_lossy(&o.stderr);
+                                let _ =
+                                    status_tx.send(format!("Stage failed: {}", stderr.trim()));
+                            }
+                            Err(e) => {
+                                let _ = status_tx.send(format!("Stage error: {}", e));
+                            }
+                        }
+                    });
+                }
+            }
+        }
+        Action::GitUnstageSelected => {
+            let ws_idx = app.active_workspace;
+            if let Some(ws) = app.workspaces.get_mut(ws_idx) {
+                let paths: Vec<String> = app.selected_files.iter().cloned().collect();
+                if !paths.is_empty() {
+                    let worktree = ws.path.clone();
+                    let status_tx = app.status_tx.clone();
+                    let undo_tx = app.undo_tx.clone();
+                    let count = paths.len();
+                    app.status_message = Some(format!("Unstaging {} files...", count));
+                    ws.dirty = true;
+                    ws.last_refresh = None;
+                    app.selected_files.clear();
+                    tokio::spawn(async move {
+                        let mut args = vec!["reset".to_string(), "HEAD".to_string()];
+                        args.extend(paths.iter().cloned());
+                        let output = tokio::process::Command::new("git")
+                            .args(&args)
+                            .current_dir(&worktree)
+                            .output()
+                            .await;
+                        match output {
+                            Ok(o) if o.status.success() => {
+                                for p in &paths {
+                                    let _ = undo_tx.send(app::UndoEntry {
+                                        action: app::UndoAction::Unstage,
+                                        workspace_idx: ws_idx,
+                                        file_path: p.clone(),
+                                    });
+                                }
+                                let _ = status_tx
+                                    .send(format!("Unstaged {} files [C-z undo]", count));
+                            }
+                            Ok(o) => {
+                                let stderr = String::from_utf8_lossy(&o.stderr);
+                                let _ =
+                                    status_tx.send(format!("Unstage failed: {}", stderr.trim()));
+                            }
+                            Err(e) => {
+                                let _ = status_tx.send(format!("Unstage error: {}", e));
+                            }
+                        }
+                    });
+                }
             }
         }
         Action::GitCommit(message) => {

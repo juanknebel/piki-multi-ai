@@ -284,7 +284,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `Esc` | Back to navigation mode (non-terminal panes only) |
 | *Terminal pane* | All keys forwarded to active tab |
 | *Workspace list* | `j`/`k` select, `Enter` switch + focus main panel, `d` delete |
-| *File list* | `j`/`k` select, `Enter` open diff, `e` open in $EDITOR, `v` inline editor, `s` stage, `u` unstage |
+| *File list* | `j`/`k` select, `Space` toggle multi-select, `a` select/deselect all, `Enter` open diff, `e` open in $EDITOR, `v` inline editor, `s` stage, `u` unstage (bulk when multi-selected) |
 | *Services list (Project)* | `j`/`k` select, `Enter` open New Workspace dialog pre-filled with sub-directory |
 | *Markdown tab* | `j`/`k` scroll, `Ctrl+d`/`Ctrl+u` page, `g`/`G` top/bottom (read-only) |
 | *Kanban tab* | `h/l/j/k` navigate, `H/L` move card, `n` new card, `e` edit card, `d` delete, `Enter` details, `Esc` close modal |

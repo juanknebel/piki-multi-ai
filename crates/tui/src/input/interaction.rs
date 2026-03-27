@@ -1021,17 +1021,36 @@ pub(super) fn handle_filelist_interaction(app: &mut App, key: KeyEvent) -> Optio
             let full_path = ws.path.join(&file.path);
             app.open_inline_editor(full_path);
         }
+    } else if app.config.matches_file_list(key, "toggle_select") {
+        app.toggle_file_selection();
+        app.next_file();
+    } else if app.config.matches_file_list(key, "select_all") {
+        if let Some(ws) = app.current_workspace() {
+            if app.selected_files.len() == ws.changed_files.len() {
+                app.deselect_all_files();
+            } else {
+                app.select_all_files();
+            }
+        }
     } else if app.config.matches_file_list(key, "stage") {
         if let Some(ws) = app.current_workspace()
             && !ws.changed_files.is_empty()
         {
-            return Some(Action::GitStage(app.selected_file));
+            if app.selected_files.is_empty() {
+                return Some(Action::GitStage(app.selected_file));
+            } else {
+                return Some(Action::GitStageSelected);
+            }
         }
     } else if app.config.matches_file_list(key, "unstage")
         && let Some(ws) = app.current_workspace()
         && !ws.changed_files.is_empty()
     {
-        return Some(Action::GitUnstage(app.selected_file));
+        if app.selected_files.is_empty() {
+            return Some(Action::GitUnstage(app.selected_file));
+        } else {
+            return Some(Action::GitUnstageSelected);
+        }
     }
     None
 }

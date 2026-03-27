@@ -43,6 +43,14 @@ fn process_refresh_result(app: &mut App, result: app::RefreshResult) {
             ws.dirty = false;
             ws.last_refresh = Some(Instant::now());
         }
+        // Remove selected paths that no longer appear in the file list
+        if result.workspace_idx == app.active_workspace
+            && let Some(ws) = app.workspaces.get(result.workspace_idx)
+        {
+            let live_paths: std::collections::HashSet<&str> =
+                ws.changed_files.iter().map(|f| f.path.as_str()).collect();
+            app.selected_files.retain(|p| live_paths.contains(p.as_str()));
+        }
     }
     app.refresh_pending = false;
     app.needs_redraw = true;

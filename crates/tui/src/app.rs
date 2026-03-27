@@ -613,6 +613,7 @@ pub type FooterCache = (
     bool,
     u8,
     u8,
+    usize,
     Vec<(String, &'static str)>,
 );
 
@@ -626,6 +627,8 @@ pub struct App {
     pub active_workspace: usize,
     pub selected_workspace: usize,
     pub selected_file: usize,
+    /// Multi-selected file paths in the git status list (empty = no multi-selection)
+    pub selected_files: std::collections::HashSet<String>,
     pub diff_scroll: u16,
     pub diff_content: Option<Arc<Text<'static>>>,
     pub diff_file_path: Option<String>,
@@ -731,6 +734,7 @@ impl App {
             active_workspace: 0,
             selected_workspace: 0,
             selected_file: 0,
+            selected_files: std::collections::HashSet::new(),
             diff_scroll: 0,
             diff_content: None,
             diff_file_path: None,
@@ -870,6 +874,7 @@ impl App {
             self.active_workspace = index;
             self.selected_workspace = index;
             self.selected_file = 0;
+            self.selected_files.clear();
             self.sync_sidebar_row(index);
             self.mode = AppMode::Normal;
             self.diff_content = None;
@@ -900,6 +905,40 @@ impl App {
                 self.selected_file = (self.selected_file + count - 1) % count;
             }
         }
+    }
+
+    /// Toggle multi-selection of the file at the current cursor position.
+    pub fn toggle_file_selection(&mut self) {
+        if let Some(ws) = self.current_workspace()
+            && let Some(file) = ws.changed_files.get(self.selected_file)
+        {
+            let path = file.path.clone();
+            if !self.selected_files.remove(&path) {
+                self.selected_files.insert(path);
+            }
+        }
+    }
+
+    /// Select all files in the current workspace.
+    pub fn select_all_files(&mut self) {
+        if let Some(ws) = self.current_workspace() {
+            self.selected_files = ws.changed_files.iter().map(|f| f.path.clone()).collect();
+        }
+    }
+
+    /// Deselect all files.
+    pub fn deselect_all_files(&mut self) {
+        self.selected_files.clear();
+    }
+
+    /// Returns true if the file at the given path is multi-selected.
+    pub fn is_file_selected(&self, path: &str) -> bool {
+        self.selected_files.contains(path)
+    }
+
+    /// Number of multi-selected files.
+    pub fn selection_count(&self) -> usize {
+        self.selected_files.len()
     }
 
     /// Build the visual sidebar item list, grouping workspaces by their group field.

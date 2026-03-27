@@ -106,6 +106,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         },
         _ => 0,
     };
+    let sel_count = app.selection_count();
     let cache_key = (
         app.mode.clone(),
         app.interacting,
@@ -113,14 +114,16 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         has_markdown,
         api_footer_state,
         new_tab_menu,
+        sel_count,
     );
-    let keys = if let Some((ref m, i, p, md, api, ntm, ref cached)) = app.footer_cache {
+    let keys = if let Some((ref m, i, p, md, api, ntm, sc, ref cached)) = app.footer_cache {
         if *m == cache_key.0
             && i == cache_key.1
             && p == cache_key.2
             && md == cache_key.3
             && api == cache_key.4
             && ntm == cache_key.5
+            && sc == cache_key.6
         {
             cached.clone()
         } else {
@@ -132,6 +135,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
                 cache_key.3,
                 cache_key.4,
                 cache_key.5,
+                cache_key.6,
                 k.clone(),
             ));
             k
@@ -145,6 +149,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
             cache_key.3,
             cache_key.4,
             cache_key.5,
+            cache_key.6,
             k.clone(),
         ));
         k

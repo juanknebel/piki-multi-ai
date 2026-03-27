@@ -384,7 +384,11 @@ pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Act
             && let Some(ws) = app.current_workspace()
             && !ws.changed_files.is_empty()
         {
-            return Some(Action::GitStage(app.selected_file));
+            if app.selected_files.is_empty() {
+                return Some(Action::GitStage(app.selected_file));
+            } else {
+                return Some(Action::GitStageSelected);
+            }
         }
     } else if app.config.matches_navigation(key, "unstage_quick") {
         // Quick unstage without entering interaction mode
@@ -392,7 +396,11 @@ pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Act
             && let Some(ws) = app.current_workspace()
             && !ws.changed_files.is_empty()
         {
-            return Some(Action::GitUnstage(app.selected_file));
+            if app.selected_files.is_empty() {
+                return Some(Action::GitUnstage(app.selected_file));
+            } else {
+                return Some(Action::GitUnstageSelected);
+            }
         }
     } else if let KeyCode::Char(c @ '1'..='9') = key.code {
         let visual_pos = (c as usize) - ('1' as usize);

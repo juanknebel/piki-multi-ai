@@ -309,8 +309,14 @@ fn render_git_file_list(
             }
         });
 
+    let sel_count = app.selection_count();
+    let title = if sel_count > 0 {
+        format!(" STATUS ({} selected) ", sel_count)
+    } else {
+        " STATUS ".to_string()
+    };
     let mut block = Block::default()
-        .title(" STATUS ")
+        .title(title)
         .title_style(border_style)
         .borders(Borders::ALL)
         .border_style(border_style);
@@ -358,12 +364,19 @@ fn render_git_file_list(
                 FileStatus::Staged => ("S", theme.staged),
                 FileStatus::StagedModified => ("SM", theme.staged_modified),
             };
+            let is_multi_selected = app.is_file_selected(&f.path);
+            let select_marker = if is_multi_selected { ">" } else { " " };
             let line = Line::from(vec![
-                Span::styled(format!("  {} ", label), Style::default().fg(color)),
+                Span::styled(
+                    format!(" {}{} ", select_marker, label),
+                    Style::default().fg(color),
+                ),
                 Span::styled(&f.path, Style::default().fg(theme.file_path)),
             ]);
             let style = if i == app.selected_file && is_active {
                 Style::default().bg(theme.selected_bg)
+            } else if is_multi_selected {
+                Style::default().bg(theme.multi_select_bg)
             } else {
                 Style::default()
             };

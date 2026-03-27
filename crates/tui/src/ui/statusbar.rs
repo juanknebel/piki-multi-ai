@@ -371,6 +371,10 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                         (cfg.get_binding("interaction", "exit_interaction"), "back"),
                     ]
                 } else {
+                    let has_sel = app.selection_count() > 0;
+                    let stage_label: &'static str = if has_sel { "stage sel" } else { "stage" };
+                    let unstage_label: &'static str =
+                        if has_sel { "unstage sel" } else { "unstage" };
                     vec![
                         (
                             format!(
@@ -378,11 +382,16 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                                 cfg.get_binding("file_list", "up"),
                                 cfg.get_binding("file_list", "down")
                             ),
+                            "navigate",
+                        ),
+                        (
+                            cfg.get_binding("file_list", "toggle_select"),
                             "select",
                         ),
                         (cfg.get_binding("file_list", "diff"), "diff"),
-                        (cfg.get_binding("file_list", "stage"), "stage"),
-                        (cfg.get_binding("file_list", "unstage"), "unstage"),
+                        (cfg.get_binding("file_list", "stage"), stage_label),
+                        (cfg.get_binding("file_list", "unstage"), unstage_label),
+                        (cfg.get_binding("file_list", "select_all"), "sel all"),
                         (cfg.get_binding("file_list", "edit_external"), "editor"),
                         (cfg.get_binding("interaction", "exit_interaction"), "back"),
                     ]
