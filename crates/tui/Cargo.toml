@@ -61,7 +61,8 @@ tui-markdown = "0.3"
 chrono = "0.4.44"
 
 # Kanban board
-flow = { git = "https://github.com/juanknebel/flow" }
+flow-core = { git = "https://github.com/juanknebel/flow" }
+flow-tui = { git = "https://github.com/juanknebel/flow" }
 
 # LRU cache
 lru = "0.12"

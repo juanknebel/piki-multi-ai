@@ -1002,8 +1002,8 @@ pub(crate) async fn execute_action(
                     let kanban_path_opt = ws.kanban_path.clone();
 
                     let mut kanban_provider = if app.config.kanban.provider == "jira" {
-                        Box::new(flow::provider_jira::JiraProvider::from_env())
-                            as Box<dyn flow::provider::Provider>
+                        Box::new(flow_core::provider_jira::JiraProvider::from_env())
+                            as Box<dyn flow_core::provider::Provider>
                     } else {
                         let default_path = kanban_path_opt
                             .map(std::path::PathBuf::from)
@@ -1055,14 +1055,14 @@ pub(crate) async fn execute_action(
                             }
                         }
 
-                        Box::new(flow::provider_local::LocalProvider::new(expanded_path))
-                            as Box<dyn flow::provider::Provider>
+                        Box::new(flow_core::provider_local::LocalProvider::new(expanded_path))
+                            as Box<dyn flow_core::provider::Provider>
                     };
 
                     let board = kanban_provider
                         .load_board()
-                        .unwrap_or_else(|_e| flow::Board { columns: vec![] });
-                    let mut kanban = flow::App::new(board);
+                        .unwrap_or_else(|_e| flow_core::Board { columns: vec![] });
+                    let mut kanban = flow_tui::App::new(board);
                     if kanban.board.columns.is_empty() {
                         kanban.banner =
                             Some("Load failed or empty board. Check board.txt.".to_string());

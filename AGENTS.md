@@ -72,7 +72,7 @@ Requires Rust >= 1.85 (edition 2024). Runtime deps: `claude` CLI in PATH, git >=
 
 ## Task Tracking
 
-Use `flow` CLI with the project board to track tasks. Always set the env var:
+Use `flow-cli` to manage the project kanban board. Always set the env var:
 
 ```bash
 export FLOW_BOARD_PATH=/home/zero/git/agent-multi/.board
@@ -81,13 +81,16 @@ export FLOW_BOARD_PATH=/home/zero/git/agent-multi/.board
 Common commands:
 
 ```bash
-flow list                              # See all cards by column
-flow show <card_id>                    # Card details
-flow create <column> "title" --body "description" --priority medium  # Create card
-flow move <card_id> <column>           # Move card between columns
-flow edit <card_id> --title "..." --body "..." --priority high       # Update card
-flow delete <card_id>                  # Delete card
+flow-cli list                              # See all cards by column
+flow-cli show <card_id>                    # Card details
+flow-cli create <column> "title" --body "description" --priority medium  # Create card
+flow-cli move <card_id> <column>           # Move card between columns
+flow-cli edit <card_id> --title "..." --body "..." --priority high       # Update card
+flow-cli delete <card_id>                  # Delete card
+flow-cli columns                           # List column ids and card counts
 ```
+
+Output format can be changed with `-f`: `plain` (default), `json`, `xml`, `csv`, `table`, `markdown`.
 
 Priority values: `low`, `medium` (default), `high`, `bug`, `wishlist`.
 
@@ -97,7 +100,7 @@ Columns: `todo`, `in_progress`, `in_review`, `done`.
 
 **ALWAYS** keep the board in sync with your work:
 
-1. **Before implementing**: Search the board (`flow list`) for an existing card matching the task. If none exists, create one with `flow create todo "Title" --body "description" --priority <level>`.
+1. **Before implementing**: Search the board (`flow-cli list`) for an existing card matching the task. If none exists, create one with `flow-cli create todo "Title" --body "description" --priority <level>`.
 2. **Starting work**: Move the card to `in_progress` before writing any code.
 3. **Implementation done**: Move the card to `in_review` once the code is complete and tests pass.
 4. **After commit**: Move the card to `done` only after the git commit is created.

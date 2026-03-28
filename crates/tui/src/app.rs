@@ -261,9 +261,9 @@ pub struct Workspace {
     /// Commits ahead/behind upstream (ahead, behind)
     pub ahead_behind: Option<(usize, usize)>,
     /// Kanban app state
-    pub kanban_app: Option<flow::App>,
+    pub kanban_app: Option<flow_tui::App>,
     /// Kanban provider
-    pub kanban_provider: Option<Box<dyn flow::provider::Provider>>,
+    pub kanban_provider: Option<Box<dyn flow_core::provider::Provider>>,
     /// Code review state
     pub code_review: Option<crate::code_review::CodeReviewState>,
 }

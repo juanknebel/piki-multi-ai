@@ -112,7 +112,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                         .border_style(border_style);
                     let inner_area = block.inner(area);
                     frame.render_widget(block, area);
-                    flow::ui::render(frame, kanban_app, Some(inner_area));
+                    flow_tui::ui::render(frame, kanban_app, Some(inner_area));
 
                     // Restore and render our own overlay with proper cursor
                     if let Some(edit) = edit_state {
@@ -198,20 +198,20 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
     app.selection = selection;
 }
 
-fn priority_color(p: flow::Priority) -> Color {
+fn priority_color(p: flow_core::Priority) -> Color {
     match p {
-        flow::Priority::Bug => Color::Red,
-        flow::Priority::High => Color::Yellow,
-        flow::Priority::Medium => Color::White,
-        flow::Priority::Low => Color::DarkGray,
-        flow::Priority::Wishlist => Color::Cyan,
+        flow_core::Priority::Bug => Color::Red,
+        flow_core::Priority::High => Color::Yellow,
+        flow_core::Priority::Medium => Color::White,
+        flow_core::Priority::Low => Color::DarkGray,
+        flow_core::Priority::Wishlist => Color::Cyan,
     }
 }
 
-fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow::app::EditState) {
-    use flow::app::EditFocus;
+fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditState) {
+    use flow_tui::app::EditFocus;
 
-    let area = flow::ui::centered(70, 60, parent);
+    let area = flow_tui::ui::centered(70, 60, parent);
     f.render_widget(Clear, area);
 
     let chunks = Layout::default()
@@ -219,6 +219,7 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow::app::EditState) 
         .margin(1)
         .constraints([
             Constraint::Length(1),
+            Constraint::Length(3),
             Constraint::Length(3),
             Constraint::Length(3),
             Constraint::Min(1),
@@ -279,12 +280,27 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow::app::EditState) 
         chunks[2],
     );
 
+    let assignee_style = if edit.focus == EditFocus::Assignee {
+        Style::default().fg(Color::Cyan)
+    } else {
+        Style::default()
+    };
+    f.render_widget(
+        Paragraph::new(edit.assignee.clone()).block(
+            Block::default()
+                .title("Assignee")
+                .borders(Borders::ALL)
+                .border_style(assignee_style),
+        ),
+        chunks[3],
+    );
+
     let desc_style = if edit.focus == EditFocus::Description {
         Style::default().fg(Color::Cyan)
     } else {
         Style::default()
     };
-    let inner_width = chunks[3].width.saturating_sub(2).max(1) as usize;
+    let inner_width = chunks[4].width.saturating_sub(2).max(1) as usize;
     let wrapped: Vec<Line> = char_wrap(&edit.description, inner_width)
         .into_iter()
         .map(Line::from)
@@ -296,14 +312,14 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow::app::EditState) 
                 .borders(Borders::ALL)
                 .border_style(desc_style),
         ),
-        chunks[3],
+        chunks[4],
     );
 
     f.render_widget(
         Paragraph::new("Tab: switch field  ←/→: priority  Enter: save  Esc: cancel")
             .style(Style::default().fg(Color::DarkGray))
             .alignment(ratatui::layout::Alignment::Center),
-        chunks[4],
+        chunks[5],
     );
 
     // Position cursor
@@ -317,12 +333,18 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow::app::EditState) 
         EditFocus::Priority => {
             // No text cursor for priority field
         }
+        EditFocus::Assignee => {
+            let char_pos = edit.assignee[..edit.cursor_pos.min(edit.assignee.len())]
+                .chars()
+                .count();
+            f.set_cursor_position((chunks[3].x + 1 + char_pos as u16, chunks[3].y + 1));
+        }
         EditFocus::Description => {
             let char_pos = edit.description[..edit.cursor_pos.min(edit.description.len())]
                 .chars()
                 .count();
             let (row, col) = cursor_visual_pos(&edit.description, char_pos, inner_width);
-            f.set_cursor_position((chunks[3].x + 1 + col, chunks[3].y + 1 + row));
+            f.set_cursor_position((chunks[4].x + 1 + col, chunks[4].y + 1 + row));
         }
     }
 
