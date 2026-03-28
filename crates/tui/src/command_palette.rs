@@ -83,12 +83,17 @@ fn all_commands() -> Vec<PaletteCommand> {
         cmd!("commit", "Commit", "Git", "commit"),
         cmd!("merge", "Merge", "Git", "merge"),
         cmd!("push", "Push", "Git", "push"),
+        cmd!("stash", "Stash", "Git", "stash"),
+        cmd!("git_log", "Git Log", "Git", "git_log"),
+        cmd!("conflicts", "Conflict Resolution", "Git", "conflicts"),
         cmd!("undo", "Undo", "Git", "undo"),
         // Tabs
         cmd!("new_tab", "New Tab", "Tabs", "new_tab"),
         cmd!("close_tab", "Close Tab", "Tabs", "close_tab"),
         cmd!("next_tab", "Next Tab", "Tabs", "next_tab"),
         cmd!("prev_tab", "Previous Tab", "Tabs", "prev_tab"),
+        // Workspace (extra)
+        cmd!("kanban", "Open Kanban Board", "Workspace", "kanban"),
         // Search
         cmd!(
             "fuzzy_search",

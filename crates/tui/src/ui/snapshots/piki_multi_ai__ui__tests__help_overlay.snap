@@ -1,5 +1,6 @@
 ---
 source: crates/tui/src/ui/mod.rs
+assertion_line: 203
 expression: content
 ---
             ┌ Help ───────────────────────────────────────────────┐
@@ -21,6 +22,9 @@ expression: content
             │    w             Close tab                          │
             │    ?             Toggle help                        │
             │    a             About                              │
+            │    i             Workspace info                     │
+            │    b             Open Kanban Board                  │
+            │    ctrl-z        Undo last stage/unstage            │
             │    s             Quick stage (file list focused)    │
             │    u             Quick unstage (file list focused)  │
             │    D             Dashboard                          │
@@ -38,7 +42,4 @@ expression: content
             │    Mouse scroll  Scroll up/down                     │
             │                                                     │
             │  Terminal pane (interaction mode)                   │
-            │    All keys sent to active tab                      │
-            │                                                     │
-            │  File list pane                                     │
-            └─────────────────────────────────────── [1/83 ↑k/j↓] ┘
+            └─────────────────────────────────────── [1/89 ↑k/j↓] ┘

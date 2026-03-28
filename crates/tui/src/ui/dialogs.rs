@@ -396,6 +396,18 @@ pub(super) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         ),
         format!("    {:<13} About", cfg.get_binding("navigation", "about")),
         format!(
+            "    {:<13} Workspace info",
+            cfg.get_binding("navigation", "workspace_info")
+        ),
+        format!(
+            "    {:<13} Open Kanban Board",
+            cfg.get_binding("navigation", "kanban")
+        ),
+        format!(
+            "    {:<13} Undo last stage/unstage",
+            cfg.get_binding("navigation", "undo")
+        ),
+        format!(
             "    {:<13} Quick stage (file list focused)",
             cfg.get_binding("navigation", "stage_quick")
         ),
@@ -442,6 +454,10 @@ pub(super) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         "".to_string(),
         "  Terminal pane (interaction mode)".to_string(),
         "    All keys sent to active tab".to_string(),
+        format!(
+            "    {:<13} Search in terminal output",
+            cfg.get_binding("interaction", "search")
+        ),
         "".to_string(),
         "  File list pane".to_string(),
         format!(
@@ -562,6 +578,14 @@ pub(super) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
             "    {:<13} Unstage file (git reset)",
             cfg.get_binding("file_list", "unstage")
         ),
+        format!(
+            "    {:<13} Toggle multi-select",
+            cfg.get_binding("file_list", "toggle_select")
+        ),
+        format!(
+            "    {:<13} Select/deselect all",
+            cfg.get_binding("file_list", "select_all")
+        ),
         "".to_string(),
         "  Git operations".to_string(),
         format!(
@@ -569,6 +593,10 @@ pub(super) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
             cfg.get_binding("navigation", "commit")
         ),
         format!("    {:<13} Push", cfg.get_binding("navigation", "push")),
+        format!(
+            "    {:<13} Merge/Rebase into main",
+            cfg.get_binding("navigation", "merge")
+        ),
         format!(
             "    {:<13} Conflict resolution",
             cfg.get_binding("navigation", "conflicts")
@@ -579,22 +607,64 @@ pub(super) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         ),
         "".to_string(),
         "  Git stash overlay".to_string(),
-        "    s             Save new stash (enter message)".to_string(),
-        "    p             Pop selected stash".to_string(),
-        "    a             Apply selected stash".to_string(),
-        "    d             Drop selected stash".to_string(),
-        "    Enter         Show stash diff".to_string(),
-        "    Esc           Close".to_string(),
+        format!(
+            "    {:<13} Save new stash (enter message)",
+            cfg.get_binding("git_stash", "save")
+        ),
+        format!(
+            "    {:<13} Pop selected stash",
+            cfg.get_binding("git_stash", "pop")
+        ),
+        format!(
+            "    {:<13} Apply selected stash",
+            cfg.get_binding("git_stash", "apply")
+        ),
+        format!(
+            "    {:<13} Drop selected stash",
+            cfg.get_binding("git_stash", "drop")
+        ),
+        format!(
+            "    {:<13} Show stash diff",
+            cfg.get_binding("git_stash", "show")
+        ),
+        format!(
+            "    {:<13} Close",
+            cfg.get_binding("git_stash", "exit")
+        ),
         "".to_string(),
         "  Conflict resolution overlay".to_string(),
-        "    j/k           Navigate files".to_string(),
-        "    Enter         View conflict diff".to_string(),
-        "    o             Resolve with ours".to_string(),
-        "    t             Resolve with theirs".to_string(),
-        "    m             Mark as resolved (git add)".to_string(),
-        "    e             Edit file in $EDITOR".to_string(),
-        "    A             Abort merge/rebase".to_string(),
-        "    Esc           Close".to_string(),
+        format!(
+            "    {:<13} Navigate files",
+            format!(
+                "{}/{}",
+                cfg.get_binding("conflict_resolution", "up"),
+                cfg.get_binding("conflict_resolution", "down")
+            )
+        ),
+        format!(
+            "    {:<13} Resolve with ours",
+            cfg.get_binding("conflict_resolution", "ours")
+        ),
+        format!(
+            "    {:<13} Resolve with theirs",
+            cfg.get_binding("conflict_resolution", "theirs")
+        ),
+        format!(
+            "    {:<13} Mark as resolved (git add)",
+            cfg.get_binding("conflict_resolution", "mark_resolved")
+        ),
+        format!(
+            "    {:<13} Edit file in $EDITOR",
+            cfg.get_binding("conflict_resolution", "edit")
+        ),
+        format!(
+            "    {:<13} Abort merge/rebase",
+            cfg.get_binding("conflict_resolution", "abort")
+        ),
+        format!(
+            "    {:<13} Close",
+            cfg.get_binding("conflict_resolution", "exit")
+        ),
         "".to_string(),
         "  Inline editor".to_string(),
         format!("    {:<13} Save", cfg.get_binding("editor", "save")),

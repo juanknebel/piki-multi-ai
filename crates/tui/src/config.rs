@@ -417,6 +417,7 @@ fn default_conflict_resolution() -> HashMap<String, String> {
     m.insert("mark_resolved".to_string(), "m".to_string());
     m.insert("edit".to_string(), "e".to_string());
     m.insert("abort".to_string(), "A".to_string());
+    m.insert("select".to_string(), "enter".to_string());
     m.insert("exit".to_string(), "esc".to_string());
     m.insert("exit_alt".to_string(), "X".to_string());
     m
