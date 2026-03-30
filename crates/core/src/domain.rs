@@ -69,6 +69,31 @@ impl AIProvider {
             AIProvider::Api,
         ]
     }
+
+    /// Providers that can be dispatched as agents
+    pub fn dispatchable() -> &'static [AIProvider] {
+        &[
+            AIProvider::Claude,
+            AIProvider::Gemini,
+            AIProvider::OpenCode,
+            AIProvider::Kilo,
+            AIProvider::Codex,
+        ]
+    }
+
+    /// CLI arguments to pass a prompt/task to this provider
+    pub fn prompt_args(&self, prompt: &str) -> Vec<String> {
+        if prompt.is_empty() {
+            return Vec::new();
+        }
+        match self {
+            AIProvider::Claude | AIProvider::Gemini | AIProvider::Codex | AIProvider::OpenCode => {
+                vec![prompt.to_string()]
+            }
+            AIProvider::Kilo => vec!["--prompt".to_string(), prompt.to_string()],
+            _ => Vec::new(),
+        }
+    }
 }
 
 /// Status of the process in a workspace
@@ -138,6 +163,12 @@ pub struct WorkspaceInfo {
     /// Persistent display order (lower values appear first)
     #[serde(default)]
     pub order: u32,
+    /// Card ID from the kanban board that triggered this workspace dispatch
+    #[serde(default)]
+    pub dispatch_card_id: Option<String>,
+    /// Kanban board path of the source workspace (for card lifecycle management)
+    #[serde(default)]
+    pub dispatch_source_kanban: Option<String>,
 }
 
 impl WorkspaceInfo {
@@ -166,6 +197,8 @@ impl WorkspaceInfo {
             workspace_type: WorkspaceType::default(),
             group: None,
             order: 0,
+            dispatch_card_id: None,
+            dispatch_source_kanban: None,
         }
     }
 }

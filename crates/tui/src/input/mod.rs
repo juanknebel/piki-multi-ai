@@ -21,9 +21,10 @@ use self::command_palette_input::handle_command_palette_input;
 use self::dialog::{
     handle_about_input, handle_commit_message_input, handle_confirm_close_tab_input,
     handle_confirm_delete_input, handle_confirm_merge_input, handle_confirm_quit_input,
-    handle_conflict_resolution_input, handle_dashboard_input, handle_edit_workspace_input,
-    handle_git_log_input, handle_git_stash_input, handle_help_input, handle_logs_input,
-    handle_new_tab_input, handle_new_workspace_input, handle_workspace_info_input,
+    handle_conflict_resolution_input, handle_dashboard_input, handle_dispatch_agent_input,
+    handle_edit_workspace_input, handle_git_log_input, handle_git_stash_input, handle_help_input,
+    handle_logs_input, handle_new_tab_input, handle_new_workspace_input,
+    handle_workspace_info_input,
 };
 use self::editor_input::handle_inline_edit_input;
 use self::fuzzy_input::handle_fuzzy_search_input;
@@ -66,6 +67,7 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         AppMode::GitStash => return handle_git_stash_input(app, key),
         AppMode::GitLog => return handle_git_log_input(app, key),
         AppMode::ConflictResolution => return handle_conflict_resolution_input(app, key),
+        AppMode::DispatchAgent => return handle_dispatch_agent_input(app, key),
         // Normal and Diff modes fall through to navigation/interaction handling
         AppMode::Normal | AppMode::Diff => {}
     }

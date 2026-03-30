@@ -23,6 +23,7 @@ impl PtySession {
         rows: u16,
         cols: u16,
         command: &str,
+        args: &[String],
     ) -> anyhow::Result<Self> {
         let pty_system = native_pty_system();
 
@@ -36,6 +37,7 @@ impl PtySession {
         let pair = pty_system.openpty(size)?;
 
         let mut cmd = CommandBuilder::new(command);
+        cmd.args(args);
         cmd.cwd(worktree_path);
 
         let child = pair.slave.spawn_command(cmd)?;

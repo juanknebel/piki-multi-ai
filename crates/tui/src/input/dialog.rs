@@ -911,3 +911,58 @@ pub(super) fn handle_conflict_resolution_input(app: &mut App, key: KeyEvent) -> 
     }
     None
 }
+
+pub(super) fn handle_dispatch_agent_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::DispatchAgent {
+        source_ws,
+        ref card_id,
+        ref card_title,
+        ref card_description,
+        card_priority,
+        ref mut provider_idx,
+        ref mut additional_prompt,
+        ref mut additional_prompt_cursor,
+    }) = app.active_dialog
+    else {
+        return None;
+    };
+
+    let providers = AIProvider::dispatchable();
+
+    match key.code {
+        KeyCode::Left => {
+            *provider_idx = (*provider_idx + providers.len() - 1) % providers.len();
+            None
+        }
+        KeyCode::Right | KeyCode::Tab => {
+            *provider_idx = (*provider_idx + 1) % providers.len();
+            None
+        }
+        KeyCode::Enter => {
+            let provider = providers[*provider_idx];
+            let action = Action::DispatchAgent {
+                source_ws,
+                card_id: card_id.clone(),
+                card_title: card_title.clone(),
+                card_description: card_description.clone(),
+                card_priority,
+                provider,
+                additional_prompt: additional_prompt.clone(),
+            };
+            app.active_dialog = None;
+            app.mode = AppMode::Normal;
+            Some(action)
+        }
+        _ if is_cancel(key) => {
+            app.active_dialog = None;
+            app.mode = AppMode::Normal;
+            None
+        }
+        _ => {
+            handle_text_input(additional_prompt, additional_prompt_cursor, key, |c| {
+                !c.is_control()
+            });
+            None
+        }
+    }
+}

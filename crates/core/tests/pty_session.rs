@@ -8,7 +8,7 @@ use piki_core::pty::PtySession;
 async fn test_spawn_echo() {
     let (_dir, repo_path) = common::setup_test_repo();
 
-    let pty = PtySession::spawn(&repo_path, 24, 80, "echo").await;
+    let pty = PtySession::spawn(&repo_path, 24, 80, "echo", &[]).await;
     assert!(pty.is_ok(), "spawn echo should succeed: {:?}", pty.err());
 
     // Let echo finish
@@ -22,7 +22,7 @@ async fn test_spawn_echo() {
 async fn test_is_alive() {
     let (_dir, repo_path) = common::setup_test_repo();
 
-    let mut pty = PtySession::spawn(&repo_path, 24, 80, "sleep")
+    let mut pty = PtySession::spawn(&repo_path, 24, 80, "sleep", &[])
         .await
         .expect("spawn sleep should succeed");
 
@@ -37,7 +37,7 @@ async fn test_is_alive() {
 async fn test_write_and_read_cat() {
     let (_dir, repo_path) = common::setup_test_repo();
 
-    let mut pty = PtySession::spawn(&repo_path, 24, 80, "cat")
+    let mut pty = PtySession::spawn(&repo_path, 24, 80, "cat", &[])
         .await
         .expect("spawn cat should succeed");
 
@@ -65,7 +65,7 @@ async fn test_write_and_read_cat() {
 async fn test_resize() {
     let (_dir, repo_path) = common::setup_test_repo();
 
-    let pty = PtySession::spawn(&repo_path, 24, 80, "cat")
+    let pty = PtySession::spawn(&repo_path, 24, 80, "cat", &[])
         .await
         .expect("spawn cat should succeed");
 

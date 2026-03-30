@@ -86,6 +86,16 @@ pub(crate) enum Action {
     AbortMerge,
     /// Scan for conflicts in worktree and source_repo, open resolution overlay
     DetectConflicts,
+    /// Dispatch an agent to work on a kanban card
+    DispatchAgent {
+        source_ws: usize,
+        card_id: String,
+        card_title: String,
+        card_description: String,
+        card_priority: flow_core::Priority,
+        provider: AIProvider,
+        additional_prompt: String,
+    },
 }
 
 pub(crate) async fn execute_action(
@@ -180,6 +190,47 @@ pub(crate) async fn execute_action(
         }
         Action::DeleteWorkspace(idx) => {
             if idx < app.workspaces.len() {
+                // If this was a dispatched agent, move card back to todo
+                let dispatch_info = app.workspaces[idx]
+                    .info
+                    .dispatch_card_id
+                    .clone()
+                    .zip(app.workspaces[idx].info.dispatch_source_kanban.clone());
+                if let Some((card_id, kanban_path)) = dispatch_info {
+                    let source_ws_idx = app.workspaces.iter().position(|w| {
+                        w.kanban_path.as_deref() == Some(kanban_path.as_str())
+                            && w.kanban_provider.is_some()
+                    });
+                    if let Some(src_idx) = source_ws_idx {
+                        let src_ws = &mut app.workspaces[src_idx];
+                        if let Some(ref mut kp) = src_ws.kanban_provider {
+                            if let Ok(board) = kp.load_board() {
+                                for col in &board.columns {
+                                    if let Some(card) =
+                                        col.cards.iter().find(|c| c.id == card_id)
+                                    {
+                                        let _ = kp.update_card(
+                                            &card_id,
+                                            &card.title,
+                                            &card.description,
+                                            card.priority,
+                                            "",
+                                        );
+                                        break;
+                                    }
+                                }
+                            }
+                            let _ = kp.move_card(&card_id, "todo");
+                            if let Ok(board) = kp.load_board()
+                                && let Some(ref mut ka) = src_ws.kanban_app
+                            {
+                                ka.board = board;
+                                ka.clamp();
+                            }
+                        }
+                    }
+                }
+
                 let is_worktree =
                     app.workspaces[idx].info.workspace_type == WorkspaceType::Worktree;
 
@@ -1071,7 +1122,7 @@ pub(crate) async fn execute_action(
                     ws.kanban_provider = Some(kanban_provider);
                 }
 
-                let idx = spawn_tab(ws, provider, app.pty_rows, app.pty_cols).await;
+                let idx = spawn_tab(ws, provider, app.pty_rows, app.pty_cols, None).await;
                 ws.active_tab = idx;
                 app.status_message = Some(format!("Opened {} tab", provider.label()));
             }
@@ -1881,6 +1932,133 @@ pub(crate) async fn execute_action(
                 }
             }
             app.set_toast("No conflicts detected", ToastLevel::Info);
+        }
+        Action::DispatchAgent {
+            source_ws,
+            card_id,
+            card_title,
+            card_description,
+            card_priority,
+            provider,
+            additional_prompt,
+        } => {
+            // 1. Extract source workspace data
+            let (source_dir, source_ws_name) = match app.workspaces.get(source_ws) {
+                Some(ws) => (ws.source_repo.clone(), ws.name.clone()),
+                None => {
+                    app.status_message = Some("Source workspace not found".into());
+                    return Ok(());
+                }
+            };
+            let kanban_path = app
+                .workspaces
+                .get(source_ws)
+                .and_then(|ws| ws.kanban_path.clone());
+
+            // 2. Build branch name: <type>/<sanitized_card_id>
+            let type_prefix = match card_priority {
+                flow_core::Priority::Bug => "bug",
+                flow_core::Priority::Wishlist => "spike",
+                _ => "feature",
+            };
+            let sanitized_id: String = card_id
+                .chars()
+                .map(|c| {
+                    if c.is_alphanumeric() || c == '-' || c == '_' || c == '.' {
+                        c
+                    } else {
+                        '-'
+                    }
+                })
+                .collect();
+            let ws_name = format!("{}/{}", type_prefix, sanitized_id);
+            let group_name = format!("{}-AGENTS", source_ws_name);
+
+            // 3. Compose prompt
+            let prompt = if additional_prompt.trim().is_empty() {
+                card_description.clone()
+            } else {
+                format!("{}\n\n{}", card_description, additional_prompt.trim())
+            };
+
+            // 4. Create worktree workspace
+            let result = manager
+                .create(&ws_name, &card_title, &prompt, None, &source_dir)
+                .await;
+
+            match result {
+                Ok(mut info) => {
+                    info.group = Some(group_name);
+                    info.dispatch_card_id = Some(card_id.clone());
+                    info.dispatch_source_kanban = kanban_path;
+                    info.order = app
+                        .workspaces
+                        .iter()
+                        .map(|w| w.info.order)
+                        .max()
+                        .map(|m| m + 1)
+                        .unwrap_or(0);
+
+                    // 5. Update kanban card: set assignee and move to IN PROGRESS
+                    if let Some(src_ws) = app.workspaces.get_mut(source_ws)
+                        && let Some(ref mut kp) = src_ws.kanban_provider
+                    {
+                        let _ = kp.update_card(
+                            &card_id,
+                            &card_title,
+                            &card_description,
+                            card_priority,
+                            provider.label(),
+                        );
+                        let _ = kp.move_card(&card_id, "in_progress");
+                        // Reload board
+                        if let Some(ref mut ka) = src_ws.kanban_app
+                            && let Ok(board) = kp.load_board()
+                        {
+                            ka.board = board;
+                            ka.clamp();
+                        }
+                    }
+
+                    // 6. Create workspace and switch to it
+                    app.workspaces.push(app::Workspace::from_info(info));
+                    let new_idx = app.workspaces.len() - 1;
+                    app.switch_workspace(new_idx);
+
+                    // 7. Start file watcher
+                    let ws = &mut app.workspaces[new_idx];
+                    match FileWatcher::new(ws.path.clone(), ws.name.clone()) {
+                        Ok(watcher) => ws.watcher = Some(watcher),
+                        Err(e) => {
+                            app.status_message = Some(format!("Watcher error: {}", e));
+                        }
+                    }
+
+                    // 8. Spawn AI provider tab with prompt
+                    let ws = &mut app.workspaces[new_idx];
+                    let idx =
+                        spawn_tab(ws, provider, app.pty_rows, app.pty_cols, Some(&prompt)).await;
+                    ws.active_tab = idx;
+
+                    // 9. Persist config async
+                    {
+                        let source = app.workspaces[new_idx].source_repo.clone();
+                        let infos: Vec<_> = app.workspaces.iter().map(|w| w.info.clone()).collect();
+                        let storage = Arc::clone(&app.storage);
+                        tokio::spawn(async move {
+                            let _ = storage.workspaces.save_workspaces(&source, &infos);
+                        });
+                    }
+
+                    app.set_toast(
+                        format!("Agent dispatched: {} via {}", card_title, provider.label()),
+                        ToastLevel::Success,
+                    );
+                }
+                Err(e) => {
+                    app.status_message = Some(format!("Dispatch failed: {}", e));
+                }
+            }
         }
     }
     Ok(())

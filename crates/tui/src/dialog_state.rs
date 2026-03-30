@@ -113,4 +113,15 @@ pub enum DialogState {
         /// The repo path where conflicts exist (source_repo for merge, ws.path for manual)
         repo_path: std::path::PathBuf,
     },
+    DispatchAgent {
+        source_ws: usize,
+        card_id: String,
+        card_title: String,
+        card_description: String,
+        card_priority: flow_core::Priority,
+        /// Index into AIProvider::dispatchable()
+        provider_idx: usize,
+        additional_prompt: String,
+        additional_prompt_cursor: usize,
+    },
 }

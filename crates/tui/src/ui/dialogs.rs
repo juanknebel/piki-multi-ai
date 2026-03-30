@@ -666,6 +666,17 @@ pub(super) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
             cfg.get_binding("conflict_resolution", "exit")
         ),
         "".to_string(),
+        "  Kanban board (interaction mode)".to_string(),
+        "    h/l/j/k     Navigate columns and cards".to_string(),
+        "    H/L         Move card left/right".to_string(),
+        "    n           New card".to_string(),
+        "    e           Edit selected card".to_string(),
+        "    d           Delete card".to_string(),
+        "    D           Dispatch agent (feature/bug/spike branch + AI)".to_string(),
+        "    Enter       Toggle card details".to_string(),
+        "    r           Refresh board".to_string(),
+        "    Esc         Close".to_string(),
+        "".to_string(),
         "  Inline editor".to_string(),
         format!("    {:<13} Save", cfg.get_binding("editor", "save")),
         format!("    {:<13} Close", cfg.get_binding("editor", "exit")),
@@ -1773,5 +1784,95 @@ pub(super) fn render_conflict_resolution_overlay(frame: &mut Frame, area: Rect, 
         .title_bottom(Line::from(count_indicator).right_aligned());
 
     let text = Paragraph::new(lines).block(block);
+    frame.render_widget(text, popup);
+}
+
+pub(super) fn render_dispatch_agent_dialog(frame: &mut Frame, area: Rect, app: &App) {
+    let Some(DialogState::DispatchAgent {
+        ref card_title,
+        ref card_description,
+        provider_idx,
+        ref additional_prompt,
+        additional_prompt_cursor,
+        ..
+    }) = app.active_dialog
+    else {
+        return;
+    };
+
+    let providers = piki_core::AIProvider::dispatchable();
+    let popup_width = (area.width * 60 / 100).max(50);
+    let popup_height = 14;
+    let popup = clear_popup(frame, area, popup_width, popup_height);
+    let active_c = app.theme.dialog.new_ws_active;
+    let inactive_c = app.theme.dialog.new_ws_inactive;
+    let fmax = popup.width.saturating_sub(14) as usize;
+
+    // Truncate card title/desc for display
+    let title_display = if card_title.len() > fmax {
+        format!("{}…", &card_title[..fmax.saturating_sub(1)])
+    } else {
+        card_title.clone()
+    };
+    let desc_display = if card_description.len() > fmax {
+        format!("{}…", &card_description[..fmax.saturating_sub(1)])
+    } else {
+        card_description.clone()
+    };
+
+    // Provider selector
+    let provider_text: String = providers
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            if i == provider_idx {
+                format!("[{}]", p.label())
+            } else {
+                format!(" {} ", p.label())
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    let lines = vec![
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  Card:     ", Style::default().fg(inactive_c)),
+            Span::styled(title_display, Style::default().fg(Color::White)),
+        ]),
+        Line::from(vec![
+            Span::styled("  Desc:     ", Style::default().fg(inactive_c)),
+            Span::styled(desc_display, Style::default().fg(Color::DarkGray)),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  Agent:    ", Style::default().fg(active_c)),
+            Span::styled(provider_text, Style::default().fg(active_c)),
+        ]),
+        Line::from(Span::styled(
+            "              ◄/► to change",
+            Style::default().fg(Color::DarkGray),
+        )),
+        Line::from(""),
+        render_text_field(
+            "  Prompt:   ",
+            additional_prompt,
+            true,
+            additional_prompt_cursor,
+            fmax,
+            field_style(true, active_c, inactive_c),
+        ),
+        Line::from(""),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(
+                "  [Enter] Dispatch    ",
+                Style::default().fg(active_c).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("[Esc] Cancel", Style::default().fg(inactive_c)),
+        ]),
+    ];
+
+    let text = Paragraph::new(lines).block(popup_block("Dispatch Agent", Color::Yellow));
     frame.render_widget(text, popup);
 }

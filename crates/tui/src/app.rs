@@ -124,6 +124,8 @@ pub enum AppMode {
     GitStash,
     /// Conflict resolution overlay
     ConflictResolution,
+    /// Dispatch agent dialog
+    DispatchAgent,
 }
 
 /// Which pane is currently selected / focused
@@ -1445,6 +1447,8 @@ mod tests {
             order: app.workspaces.len() as u32,
             source_repo: std::path::PathBuf::from("/tmp/test"),
             source_repo_display: String::new(),
+            dispatch_card_id: None,
+            dispatch_source_kanban: None,
         };
         let ws = Workspace::from_info(info);
         app.workspaces.push(ws);

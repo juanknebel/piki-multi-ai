@@ -45,6 +45,16 @@ impl SqliteStorage {
             tx.commit()?;
         }
 
+        if version < 2 {
+            let tx = conn.transaction()?;
+            tx.execute_batch(
+                "ALTER TABLE workspaces ADD COLUMN dispatch_card_id TEXT;
+                 ALTER TABLE workspaces ADD COLUMN dispatch_source_kanban TEXT;",
+            )?;
+            tx.execute("INSERT INTO schema_version (version) VALUES (2)", [])?;
+            tx.commit()?;
+        }
+
         Ok(())
     }
 
@@ -58,7 +68,7 @@ impl SqliteStorage {
 
         for entry in &entries {
             let rows = tx.execute(
-                "INSERT OR IGNORE INTO workspaces (project_root, name, description, prompt, kanban_path, branch, worktree_path, source_repo, workspace_type, group_name, display_order) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                "INSERT OR IGNORE INTO workspaces (project_root, name, description, prompt, kanban_path, branch, worktree_path, source_repo, workspace_type, group_name, display_order, dispatch_card_id, dispatch_source_kanban) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
                 rusqlite::params![
                     entry.source_repo.to_string_lossy(),
                     entry.name,
@@ -71,6 +81,8 @@ impl SqliteStorage {
                     workspace_type_str(entry.workspace_type),
                     entry.group,
                     entry.order,
+                    entry.dispatch_card_id,
+                    entry.dispatch_source_kanban,
                 ],
             )?;
             count += rows;
@@ -170,6 +182,8 @@ fn row_to_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkspaceEntry> {
         workspace_type: parse_workspace_type(&row.get::<_, String>(7)?),
         group: row.get(8)?,
         order: row.get(9)?,
+        dispatch_card_id: row.get(10)?,
+        dispatch_source_kanban: row.get(11)?,
     })
 }
 
@@ -204,7 +218,7 @@ impl WorkspaceStorage for Arc<SqliteStorage> {
 
         for ws in workspaces.iter().filter(|ws| ws.source_repo == git_root) {
             tx.execute(
-                "INSERT INTO workspaces (project_root, name, description, prompt, kanban_path, branch, worktree_path, source_repo, workspace_type, group_name, display_order) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                "INSERT INTO workspaces (project_root, name, description, prompt, kanban_path, branch, worktree_path, source_repo, workspace_type, group_name, display_order, dispatch_card_id, dispatch_source_kanban) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
                 rusqlite::params![
                     git_root_str,
                     ws.name,
@@ -217,6 +231,8 @@ impl WorkspaceStorage for Arc<SqliteStorage> {
                     workspace_type_str(ws.workspace_type),
                     ws.group,
                     ws.order,
+                    ws.dispatch_card_id,
+                    ws.dispatch_source_kanban,
                 ],
             )?;
         }
@@ -229,7 +245,7 @@ impl WorkspaceStorage for Arc<SqliteStorage> {
         let conn = self.conn.lock();
         let git_root_str = git_root.to_string_lossy();
         let mut stmt = conn.prepare(
-            "SELECT name, description, prompt, kanban_path, branch, worktree_path, source_repo, workspace_type, group_name, display_order FROM workspaces WHERE source_repo = ?1 ORDER BY display_order",
+            "SELECT name, description, prompt, kanban_path, branch, worktree_path, source_repo, workspace_type, group_name, display_order, dispatch_card_id, dispatch_source_kanban FROM workspaces WHERE source_repo = ?1 ORDER BY display_order",
         )?;
 
         let entries: Vec<WorkspaceEntry> = stmt
@@ -244,7 +260,7 @@ impl WorkspaceStorage for Arc<SqliteStorage> {
     fn load_all_workspaces(&self) -> Vec<WorkspaceEntry> {
         let conn = self.conn.lock();
         let mut stmt = match conn.prepare(
-            "SELECT name, description, prompt, kanban_path, branch, worktree_path, source_repo, workspace_type, group_name, display_order FROM workspaces ORDER BY display_order",
+            "SELECT name, description, prompt, kanban_path, branch, worktree_path, source_repo, workspace_type, group_name, display_order, dispatch_card_id, dispatch_source_kanban FROM workspaces ORDER BY display_order",
         ) {
             Ok(s) => s,
             Err(_) => return Vec::new(),

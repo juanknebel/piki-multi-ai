@@ -115,6 +115,39 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
         return None;
     }
 
+    // Dispatch agent: extract card data before borrowing app for dialog
+    if key.code == KeyCode::Char('D') {
+        let card_data = kanban_app
+            .board
+            .columns
+            .get(kanban_app.col)
+            .and_then(|col| col.cards.get(kanban_app.row))
+            .map(|card| {
+                (
+                    card.id.clone(),
+                    card.title.clone(),
+                    card.description.clone(),
+                    card.priority,
+                )
+            });
+        let source_ws = app.active_workspace;
+        if let Some((card_id, card_title, card_description, card_priority)) = card_data {
+            app.active_dialog = Some(DialogState::DispatchAgent {
+                source_ws,
+                card_id,
+                card_title,
+                card_description,
+                card_priority,
+                provider_idx: 0,
+                additional_prompt: String::new(),
+                additional_prompt_cursor: 0,
+            });
+            app.mode = AppMode::DispatchAgent;
+            app.interacting = false;
+        }
+        return None;
+    }
+
     let action = match key.code {
         KeyCode::Char('q') => Some(flow_tui::Action::Quit),
         KeyCode::Esc => Some(flow_tui::Action::CloseOrQuit),

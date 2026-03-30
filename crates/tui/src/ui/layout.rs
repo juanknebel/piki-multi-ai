@@ -256,6 +256,9 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         AppMode::ConflictResolution => {
             super::dialogs::render_conflict_resolution_overlay(frame, area, app)
         }
+        AppMode::DispatchAgent => {
+            super::dialogs::render_dispatch_agent_dialog(frame, area, app)
+        }
         AppMode::InlineEdit => {}   // handled by main content render
         AppMode::SubmitReview => {} // handled by full-screen code review bypass above
     }
