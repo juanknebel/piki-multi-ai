@@ -126,6 +126,12 @@ pub enum AppMode {
     ConflictResolution,
     /// Dispatch agent dialog
     DispatchAgent,
+    /// Manage agent profiles overlay
+    ManageAgents,
+    /// Edit/create agent profile dialog (step 1: name + provider)
+    EditAgent,
+    /// Edit agent role (step 2: large floating text editor)
+    EditAgentRole,
 }
 
 /// Which pane is currently selected / focused
@@ -714,6 +720,8 @@ pub struct App {
     pub gh_available: Option<bool>,
     /// Storage backend (SQLite)
     pub storage: std::sync::Arc<piki_core::storage::AppStorage>,
+    /// Cached agent profiles for the current project
+    pub agent_profiles: Vec<piki_core::storage::AgentProfile>,
 }
 
 impl App {
@@ -787,6 +795,7 @@ impl App {
             last_inactive_pty_check: Instant::now(),
             gh_available: None,
             storage,
+            agent_profiles: Vec::new(),
         }
     }
 
@@ -1145,6 +1154,7 @@ mod tests {
             workspaces: Box::new(piki_core::storage::json::JsonStorage),
             api_history: None,
             ui_prefs: None,
+            agent_profiles: None,
         })
     }
 
@@ -1449,6 +1459,7 @@ mod tests {
             source_repo_display: String::new(),
             dispatch_card_id: None,
             dispatch_source_kanban: None,
+            dispatch_agent_name: None,
         };
         let ws = Workspace::from_info(info);
         app.workspaces.push(ws);

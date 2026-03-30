@@ -94,8 +94,19 @@ pub(crate) enum Action {
         card_description: String,
         card_priority: flow_core::Priority,
         provider: AIProvider,
+        agent_name: Option<String>,
+        agent_role: Option<String>,
         additional_prompt: String,
     },
+    /// Save an agent profile to storage
+    SaveAgent {
+        source_repo: std::path::PathBuf,
+        profile: piki_core::storage::AgentProfile,
+    },
+    /// Delete an agent profile by ID
+    DeleteAgent(i64),
+    /// Persist agent config file to the repo (Simple workspace only)
+    SyncAgentToRepo(i64),
 }
 
 pub(crate) async fn execute_action(
@@ -331,7 +342,8 @@ pub(crate) async fn execute_action(
             crossterm::execute!(
                 std::io::stderr(),
                 crossterm::event::PopKeyboardEnhancementFlags,
-                crossterm::event::DisableMouseCapture
+                crossterm::event::DisableMouseCapture,
+                crossterm::event::DisableBracketedPaste,
             )?;
             ratatui::restore();
             let editor_cmd = std::env::var("EDITOR").unwrap_or_else(|_| "vi".to_string());
@@ -340,6 +352,7 @@ pub(crate) async fn execute_action(
             crossterm::execute!(
                 std::io::stderr(),
                 crossterm::event::EnableMouseCapture,
+                crossterm::event::EnableBracketedPaste,
                 crossterm::event::PushKeyboardEnhancementFlags(
                     crossterm::event::KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
                 )
@@ -1234,7 +1247,8 @@ pub(crate) async fn execute_action(
             crossterm::execute!(
                 std::io::stderr(),
                 crossterm::event::PopKeyboardEnhancementFlags,
-                crossterm::event::DisableMouseCapture
+                crossterm::event::DisableMouseCapture,
+                crossterm::event::DisableBracketedPaste,
             )?;
             ratatui::restore();
             let status = std::process::Command::new("mdr").arg(&path).status();
@@ -1242,6 +1256,7 @@ pub(crate) async fn execute_action(
             crossterm::execute!(
                 std::io::stderr(),
                 crossterm::event::EnableMouseCapture,
+                crossterm::event::EnableBracketedPaste,
                 crossterm::event::PushKeyboardEnhancementFlags(
                     crossterm::event::KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
                 )
@@ -1940,6 +1955,8 @@ pub(crate) async fn execute_action(
             card_description,
             card_priority,
             provider,
+            agent_name,
+            agent_role,
             additional_prompt,
         } => {
             // 1. Extract source workspace data
@@ -1974,16 +1991,33 @@ pub(crate) async fn execute_action(
             let ws_name = format!("{}/{}", type_prefix, sanitized_id);
             let group_name = format!("{}-AGENTS", source_ws_name);
 
-            // 3. Compose prompt
-            let prompt = if additional_prompt.trim().is_empty() {
-                card_description.clone()
+            // 3. Compose task prompt: always include card title so the agent starts working
+            let task_prompt = if let Some(ref name) = agent_name {
+                let mut parts = vec![format!(
+                    "Use the {} agent to plan and then implement the task: {}",
+                    name, card_title
+                )];
+                if !card_description.is_empty() {
+                    parts.push(card_description.clone());
+                }
+                if !additional_prompt.trim().is_empty() {
+                    parts.push(additional_prompt.trim().to_string());
+                }
+                parts.join("\n\n")
             } else {
-                format!("{}\n\n{}", card_description, additional_prompt.trim())
+                let mut parts = vec![card_title.clone()];
+                if !card_description.is_empty() {
+                    parts.push(card_description.clone());
+                }
+                if !additional_prompt.trim().is_empty() {
+                    parts.push(additional_prompt.trim().to_string());
+                }
+                parts.join("\n\n")
             };
 
             // 4. Create worktree workspace
             let result = manager
-                .create(&ws_name, &card_title, &prompt, None, &source_dir)
+                .create(&ws_name, &card_title, &task_prompt, kanban_path.clone(), &source_dir)
                 .await;
 
             match result {
@@ -1991,6 +2025,7 @@ pub(crate) async fn execute_action(
                     info.group = Some(group_name);
                     info.dispatch_card_id = Some(card_id.clone());
                     info.dispatch_source_kanban = kanban_path;
+                    info.dispatch_agent_name = agent_name.clone();
                     info.order = app
                         .workspaces
                         .iter()
@@ -1999,7 +2034,15 @@ pub(crate) async fn execute_action(
                         .map(|m| m + 1)
                         .unwrap_or(0);
 
-                    // 5. Update kanban card: set assignee and move to IN PROGRESS
+                    // 5. Materialize agent config files in worktree
+                    if let (Some(name), Some(role)) = (&agent_name, &agent_role) {
+                        let _ = materialize_agent_config(&info.path, name, provider, role);
+                    }
+
+                    // 6. Update kanban card: set assignee and move to IN PROGRESS
+                    let assignee_label = agent_name
+                        .as_deref()
+                        .unwrap_or(provider.label());
                     if let Some(src_ws) = app.workspaces.get_mut(source_ws)
                         && let Some(ref mut kp) = src_ws.kanban_provider
                     {
@@ -2008,7 +2051,7 @@ pub(crate) async fn execute_action(
                             &card_title,
                             &card_description,
                             card_priority,
-                            provider.label(),
+                            assignee_label,
                         );
                         let _ = kp.move_card(&card_id, "in_progress");
                         // Reload board
@@ -2034,10 +2077,11 @@ pub(crate) async fn execute_action(
                         }
                     }
 
-                    // 8. Spawn AI provider tab with prompt
+                    // 8. Spawn AI provider tab with task prompt
                     let ws = &mut app.workspaces[new_idx];
                     let idx =
-                        spawn_tab(ws, provider, app.pty_rows, app.pty_cols, Some(&prompt)).await;
+                        spawn_tab(ws, provider, app.pty_rows, app.pty_cols, Some(&task_prompt))
+                            .await;
                     ws.active_tab = idx;
 
                     // 9. Persist config async
@@ -2060,7 +2104,96 @@ pub(crate) async fn execute_action(
                 }
             }
         }
+        Action::SaveAgent {
+            source_repo,
+            profile,
+        } => {
+            if let Some(ref storage) = app.storage.agent_profiles {
+                if let Err(e) = storage.save_agent(&profile) {
+                    app.status_message = Some(format!("Save agent failed: {}", e));
+                } else {
+                    // Reload agents for this project
+                    if let Ok(agents) = storage.load_agents(&source_repo) {
+                        app.agent_profiles = agents;
+                    }
+                    app.set_toast(
+                        format!("Agent saved: {}", profile.name),
+                        ToastLevel::Success,
+                    );
+                }
+            }
+        }
+        Action::DeleteAgent(id) => {
+            let repo = app.current_workspace().map(|ws| ws.source_repo.clone());
+            if let Some(ref storage) = app.storage.agent_profiles {
+                if let Err(e) = storage.delete_agent(id) {
+                    app.status_message = Some(format!("Delete agent failed: {}", e));
+                } else {
+                    if let Some(ref repo) = repo
+                        && let Ok(agents) = storage.load_agents(repo)
+                    {
+                        app.agent_profiles = agents;
+                    }
+                    app.set_toast("Agent deleted".to_string(), ToastLevel::Success);
+                }
+            }
+        }
+        Action::SyncAgentToRepo(id) => {
+            let ws_info = app.current_workspace().map(|ws| {
+                (ws.path.clone(), ws.source_repo.clone())
+            });
+            let agent_data = app
+                .agent_profiles
+                .iter()
+                .find(|a| a.id == Some(id))
+                .map(|a| (a.name.clone(), a.provider.clone(), a.role.clone()));
+
+            if let Some((ws_path, repo)) = ws_info
+                && let Some((name, provider_str, role)) = agent_data
+            {
+                let provider = AIProvider::from_label(&provider_str);
+                match materialize_agent_config(&ws_path, &name, provider, &role) {
+                    Ok(()) => {
+                        if let Some(ref storage) = app.storage.agent_profiles {
+                            let _ = storage.mark_synced(id);
+                            if let Ok(agents) = storage.load_agents(&repo) {
+                                app.agent_profiles = agents;
+                            }
+                        }
+                        app.set_toast(
+                            format!("Agent synced: {}", name),
+                            ToastLevel::Success,
+                        );
+                    }
+                    Err(e) => {
+                        app.status_message = Some(format!("Sync failed: {}", e));
+                    }
+                }
+            }
+        }
     }
+    Ok(())
+}
+
+/// Write agent role/instructions to the provider's standard subagent config path in the worktree.
+fn materialize_agent_config(
+    worktree_path: &std::path::Path,
+    agent_name: &str,
+    provider: AIProvider,
+    role: &str,
+) -> anyhow::Result<()> {
+    let filename = format!("{}.md", agent_name);
+    let dir = match provider {
+        AIProvider::Claude => ".claude/agents",
+        AIProvider::Gemini => ".gemini/agents",
+        AIProvider::OpenCode => ".opencode/agents",
+        AIProvider::Kilo => ".kilo/agents",
+        AIProvider::Codex => ".codex/agents",
+        _ => return Ok(()),
+    };
+    let agent_dir = worktree_path.join(dir);
+    std::fs::create_dir_all(&agent_dir)?;
+    std::fs::write(agent_dir.join(filename), role)?;
     Ok(())
 }
 

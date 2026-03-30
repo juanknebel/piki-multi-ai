@@ -1,10 +1,10 @@
 use std::path::PathBuf;
 
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField};
-use crate::dialog_state::{ConflictStrategy, DialogState, NewTabMenu};
+use crate::dialog_state::{ConflictStrategy, DialogState, EditAgentField, NewTabMenu};
 use piki_core::{AIProvider, MergeStrategy, WorkspaceType};
 
 use super::confirm_common::{ConfirmResult, dismiss_dialog, handle_yn_input};
@@ -919,7 +919,8 @@ pub(super) fn handle_dispatch_agent_input(app: &mut App, key: KeyEvent) -> Optio
         ref card_title,
         ref card_description,
         card_priority,
-        ref mut provider_idx,
+        ref mut agent_idx,
+        ref agents,
         ref mut additional_prompt,
         ref mut additional_prompt_cursor,
     }) = app.active_dialog
@@ -927,19 +928,30 @@ pub(super) fn handle_dispatch_agent_input(app: &mut App, key: KeyEvent) -> Optio
         return None;
     };
 
-    let providers = AIProvider::dispatchable();
+    let count = if agents.is_empty() {
+        AIProvider::dispatchable().len()
+    } else {
+        agents.len()
+    };
 
     match key.code {
         KeyCode::Left => {
-            *provider_idx = (*provider_idx + providers.len() - 1) % providers.len();
+            *agent_idx = (*agent_idx + count - 1) % count;
             None
         }
         KeyCode::Right | KeyCode::Tab => {
-            *provider_idx = (*provider_idx + 1) % providers.len();
+            *agent_idx = (*agent_idx + 1) % count;
             None
         }
         KeyCode::Enter => {
-            let provider = providers[*provider_idx];
+            let (provider, agent_name, agent_role) = if agents.is_empty() {
+                let p = AIProvider::dispatchable()[*agent_idx];
+                (p, None, None)
+            } else {
+                let (name, prov_str, role) = &agents[*agent_idx];
+                let p = AIProvider::from_label(prov_str);
+                (p, Some(name.clone()), Some(role.clone()))
+            };
             let action = Action::DispatchAgent {
                 source_ws,
                 card_id: card_id.clone(),
@@ -947,6 +959,8 @@ pub(super) fn handle_dispatch_agent_input(app: &mut App, key: KeyEvent) -> Optio
                 card_description: card_description.clone(),
                 card_priority,
                 provider,
+                agent_name,
+                agent_role,
                 additional_prompt: additional_prompt.clone(),
             };
             app.active_dialog = None;
@@ -964,5 +978,310 @@ pub(super) fn handle_dispatch_agent_input(app: &mut App, key: KeyEvent) -> Optio
             });
             None
         }
+    }
+}
+
+pub(super) fn handle_manage_agents_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::ManageAgents {
+        ref mut selected, ..
+    }) = app.active_dialog
+    else {
+        return None;
+    };
+
+    let count = app.agent_profiles.len();
+
+    match key.code {
+        KeyCode::Char('j') | KeyCode::Down => {
+            if count > 0 {
+                *selected = (*selected + 1) % count;
+            }
+            None
+        }
+        KeyCode::Char('k') | KeyCode::Up => {
+            if count > 0 {
+                *selected = (*selected + count - 1) % count;
+            }
+            None
+        }
+        KeyCode::Char('n') => {
+            // New agent
+            app.active_dialog = Some(DialogState::EditAgent {
+                editing_id: None,
+                name: String::new(),
+                name_cursor: 0,
+                provider_idx: 0,
+                role: String::new(),
+                active_field: EditAgentField::Name,
+            });
+            app.mode = AppMode::EditAgent;
+            None
+        }
+        KeyCode::Char('e') | KeyCode::Enter => {
+            // Edit selected agent
+            if let Some(agent) = app.agent_profiles.get(*selected) {
+                let providers = AIProvider::dispatchable();
+                let provider_idx = providers
+                    .iter()
+                    .position(|p| p.label() == agent.provider)
+                    .unwrap_or(0);
+                let name = agent.name.clone();
+                let role = agent.role.clone();
+                app.active_dialog = Some(DialogState::EditAgent {
+                    editing_id: agent.id,
+                    name_cursor: name.len(),
+                    name,
+                    provider_idx,
+                    role,
+                    active_field: EditAgentField::Name,
+                });
+                app.mode = AppMode::EditAgent;
+            }
+            None
+        }
+        KeyCode::Char('d') => {
+            // Delete selected agent
+            if let Some(agent) = app.agent_profiles.get(*selected)
+                && let Some(id) = agent.id
+            {
+                let action = Action::DeleteAgent(id);
+                if *selected > 0 && *selected >= count.saturating_sub(1) {
+                    *selected = selected.saturating_sub(1);
+                }
+                return Some(action);
+            }
+            None
+        }
+        KeyCode::Char('p') => {
+            // Persist agent to repo (Simple workspace only)
+            if let Some(agent) = app.agent_profiles.get(*selected)
+                && let Some(id) = agent.id
+            {
+                return Some(Action::SyncAgentToRepo(id));
+            }
+            None
+        }
+        _ if is_cancel(key) => {
+            app.active_dialog = None;
+            app.mode = AppMode::Normal;
+            None
+        }
+        _ => None,
+    }
+}
+
+pub(super) fn handle_edit_agent_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::EditAgent {
+        editing_id,
+        ref mut name,
+        ref mut name_cursor,
+        ref mut provider_idx,
+        ref role,
+        ref mut active_field,
+    }) = app.active_dialog
+    else {
+        return None;
+    };
+
+    let providers = AIProvider::dispatchable();
+
+    match key.code {
+        KeyCode::Tab | KeyCode::BackTab => {
+            *active_field = match active_field {
+                EditAgentField::Name => EditAgentField::Provider,
+                EditAgentField::Provider => EditAgentField::Name,
+            };
+            None
+        }
+        KeyCode::Left if *active_field == EditAgentField::Provider => {
+            *provider_idx = (*provider_idx + providers.len() - 1) % providers.len();
+            None
+        }
+        KeyCode::Right if *active_field == EditAgentField::Provider => {
+            *provider_idx = (*provider_idx + 1) % providers.len();
+            None
+        }
+        KeyCode::Enter => {
+            if name.trim().is_empty() {
+                return None;
+            }
+            // Advance to step 2: role editor
+            let role_text = role.clone();
+            let cursor = role_text.len();
+            app.active_dialog = Some(DialogState::EditAgentRole {
+                editing_id,
+                name: name.trim().to_string(),
+                provider_idx: *provider_idx,
+                role: role_text,
+                role_cursor: cursor,
+                scroll: 0,
+            });
+            app.mode = AppMode::EditAgentRole;
+            None
+        }
+        _ if is_cancel(key) => {
+            app.active_dialog = Some(DialogState::ManageAgents { selected: 0 });
+            app.mode = AppMode::ManageAgents;
+            None
+        }
+        _ => {
+            if *active_field == EditAgentField::Name {
+                handle_text_input(name, name_cursor, key, |c| {
+                    c.is_alphanumeric() || c == '-' || c == '_'
+                });
+            }
+            None
+        }
+    }
+}
+
+pub(super) fn handle_edit_agent_role_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let source_repo_str = app
+        .current_workspace()
+        .map(|ws| ws.source_repo.display().to_string())
+        .unwrap_or_default();
+
+    let Some(DialogState::EditAgentRole {
+        editing_id,
+        ref name,
+        provider_idx,
+        ref mut role,
+        ref mut role_cursor,
+        ref mut scroll,
+    }) = app.active_dialog
+    else {
+        return None;
+    };
+
+    let providers = AIProvider::dispatchable();
+
+    // Ctrl+S: save and close
+    if key.code == KeyCode::Char('s') && key.modifiers.contains(KeyModifiers::CONTROL) {
+        let profile = piki_core::storage::AgentProfile {
+            id: editing_id,
+            source_repo: source_repo_str.clone(),
+            name: name.clone(),
+            provider: providers[provider_idx].label().to_string(),
+            role: role.clone(),
+            version: 0, // DB handles version increment
+            last_synced_at: None,
+        };
+        let action = Action::SaveAgent {
+            source_repo: PathBuf::from(&source_repo_str),
+            profile,
+        };
+        app.active_dialog = Some(DialogState::ManageAgents { selected: 0 });
+        app.mode = AppMode::ManageAgents;
+        return Some(action);
+    }
+
+    // Ctrl+X: go back to step 1 without saving
+    if key.code == KeyCode::Char('x') && key.modifiers.contains(KeyModifiers::CONTROL) {
+        app.active_dialog = Some(DialogState::EditAgent {
+            editing_id,
+            name: name.clone(),
+            name_cursor: name.len(),
+            provider_idx,
+            role: role.clone(),
+            active_field: EditAgentField::Name,
+        });
+        app.mode = AppMode::EditAgent;
+        return None;
+    }
+
+    // Ctrl+D: clear all text
+    if key.code == KeyCode::Char('d') && key.modifiers.contains(KeyModifiers::CONTROL) {
+        role.clear();
+        *role_cursor = 0;
+        *scroll = 0;
+        return None;
+    }
+
+    // Text editing
+    match key.code {
+        KeyCode::Enter => {
+            // Insert newline
+            let byte_idx = cursor_to_byte(role, *role_cursor);
+            role.insert(byte_idx, '\n');
+            *role_cursor += 1;
+        }
+        KeyCode::Down => {
+            move_cursor_vertical(role, role_cursor, 1);
+        }
+        KeyCode::Up => {
+            move_cursor_vertical(role, role_cursor, -1);
+        }
+        KeyCode::PageDown => {
+            move_cursor_vertical(role, role_cursor, 10);
+        }
+        KeyCode::PageUp => {
+            move_cursor_vertical(role, role_cursor, -10);
+        }
+        _ => {
+            handle_text_input(role, role_cursor, key, |c| c != '\t');
+        }
+    }
+    None
+}
+
+/// Move cursor up or down by `delta` lines, preserving column position.
+pub(super) fn move_cursor_vertical(text: &str, cursor: &mut usize, delta: i32) {
+    let (cur_line, cur_col, line_starts) = cursor_line_col(text, *cursor);
+    let target = if delta > 0 {
+        (cur_line + delta as usize).min(line_starts.len() - 1)
+    } else {
+        cur_line.saturating_sub((-delta) as usize)
+    };
+    if target == cur_line {
+        // Already at boundary
+        if delta < 0 {
+            *cursor = 0;
+        } else {
+            *cursor = char_count(text);
+        }
+        return;
+    }
+    let start = line_starts[target];
+    let end = line_starts
+        .get(target + 1)
+        .map(|e| e - 1) // exclude the \n
+        .unwrap_or(char_count(text));
+    let line_len = end - start;
+    *cursor = start + cur_col.min(line_len);
+}
+
+/// Returns (line_index, column, line_start_offsets) for a cursor position in text.
+fn cursor_line_col(text: &str, cursor: usize) -> (usize, usize, Vec<usize>) {
+    let mut line_starts = vec![0usize];
+    for (i, c) in text.chars().enumerate() {
+        if c == '\n' {
+            line_starts.push(i + 1);
+        }
+    }
+    let mut line = 0;
+    for (i, &start) in line_starts.iter().enumerate() {
+        if cursor >= start {
+            line = i;
+        }
+    }
+    let col = cursor - line_starts[line];
+    (line, col, line_starts)
+}
+
+fn cursor_to_byte(text: &str, cursor: usize) -> usize {
+    if text.is_ascii() {
+        cursor.min(text.len())
+    } else {
+        text.char_indices()
+            .nth(cursor)
+            .map_or(text.len(), |(i, _)| i)
+    }
+}
+
+fn char_count(text: &str) -> usize {
+    if text.is_ascii() {
+        text.len()
+    } else {
+        text.chars().count()
     }
 }

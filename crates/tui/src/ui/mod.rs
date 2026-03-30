@@ -29,6 +29,7 @@ mod tests {
             workspaces: Box::new(piki_core::storage::json::JsonStorage),
             api_history: None,
             ui_prefs: None,
+            agent_profiles: None,
         })
     }
 

@@ -159,6 +159,10 @@ pub(crate) async fn run(
                         }
                         app.needs_redraw = true;
                     }
+                    Some(Ok(Event::Paste(text))) => {
+                        input::handle_paste(&mut app, &text);
+                        app.needs_redraw = true;
+                    }
                     Some(Ok(Event::Mouse(mouse))) => {
                         if let Some(action) = input::mouse::handle_mouse_event(&mut app, mouse, &mut terminal) {
                             execute_action(&mut app, &manager, action, &mut terminal).await?;

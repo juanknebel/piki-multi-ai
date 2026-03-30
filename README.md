@@ -2,7 +2,7 @@
 
 A terminal UI for orchestrating multiple [Claude Code](https://docs.anthropic.com/en/docs/claude-code) instances in parallel — each running in its own isolated git worktree, pointing to an existing directory, or managing a multi-service project root.
 
-Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](https://github.com/supermaven-inc/superset.sh).
+Built with Rust and [ratatui](https://ratatui.rs/).
 
 ### Navigation & Interaction
 
@@ -81,7 +81,8 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 - **Command palette** — Press `Ctrl+p` to open a VS Code-style searchable command palette; fuzzy-filter 26+ commands across 9 categories (Workspace, Git, Tabs, Search, View, Layout, Clipboard, App, Switch) with match highlighting and keybinding hints; includes dynamic "Switch to" entries for all workspaces; powered by [nucleo](https://github.com/helix-editor/nucleo)
 - **In-app log viewer** — Press `Ctrl+l` to open a scrollable overlay showing the last 500 log entries from the current session; color-coded by level (ERROR=red, WARN=yellow, INFO=green, DEBUG=cyan, TRACE=gray); filter by level with `0`-`5` keys; select lines with `j`/`k` (highlighted), horizontal scroll with `h`/`l`, page with `Ctrl+d`/`Ctrl+u`, `g`/`G` top/bottom; `Enter`/`y` copies selected line to clipboard; mouse scroll and click to select
 - **Structured logging** — File-based structured logging via `tracing` with daily rotation to `~/.local/share/piki-multi/logs/`; configurable via `--log-level` flag (trace/debug/info/warn/error)
-- **Agent Dispatch** — Select a kanban card, press `D` to dispatch an AI agent: automatically creates a git worktree with a convention-based branch (`feature/`, `bug/`, or `spike/` based on card priority), a workspace grouped under `<parent>-AGENTS`, and launches the chosen AI provider (Claude, Gemini, OpenCode, Kilo, Codex) with the card description as prompt; card moves to "in progress" with assignee set; deleting the agent workspace moves the card back to "todo" and clears the assignee
+- **Agent Profiles** — Configure named agents per project (`A` key, Simple workspaces only) with a two-step wizard: step 1 selects name + provider, step 2 opens a large floating editor for the agent's role/instructions; agents are stored in SQLite per `source_repo` with version tracking; press `p` to sync agent config to the repo as provider-native subagent files (e.g., `.claude/agents/<name>.md`); version indicator shows sync status (`v3 ✓` synced, `v2 ✗` pending); editing an agent increments its version and resets sync status; falls back to raw provider selector when no agents are configured
+- **Agent Dispatch** — Select a kanban card, press `D` to dispatch a configured agent or raw provider: automatically creates a git worktree with a convention-based branch (`feature/`, `bug/`, or `spike/` based on card priority), a workspace grouped under `<parent>-AGENTS`, inherits the parent's kanban board, and launches the agent with an auto-composed prompt (`Use the <agent> agent to plan and then implement the task: <card title>` + card description + optional additional prompt); the agent's role is materialized as a provider-native subagent file in the worktree; card moves to "in progress" with assignee set to agent name; deleting the agent workspace moves the card back to "todo" and clears the assignee
 - **Code Review** — Full-screen PR review tab powered by `gh` CLI; browse changed files, view diffs with line numbers and a cursor, add inline comments on any line (`c`), delete comments (`d`), submit reviews (approve/request changes/comment) with inline comments via GitHub API; persistent draft overlay; tab only opens if the current branch has an open PR; locked mode prevents accidental workspace switching — press `q` to close or `s` to submit; `gh` availability and authentication are checked lazily on first use and cached for the session
 - **API Explorer** — Interactive HTTP client tab (`t` then `9`) with Hurl-like syntax; write `METHOD URL`, headers, and body in a built-in editor (starts empty); `Ctrl+S` to send; response displayed with status code, elapsed time, and pretty-printed JSON; `Ctrl+J`/`Ctrl+K` to scroll response; `Ctrl+F` to search response; contextual footer hints for API-specific shortcuts; errors (parse failures, client init, network errors) and successful requests are logged to the in-app log viewer (`Ctrl+L`)
 
@@ -260,6 +261,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `t` | New tab (opens category menu: 1=Shell, 2=AI Agents →, 3=Tools →; submenus for agent/tool selection) |
 | `w` | Close current tab (with confirmation dialog) |
 | `b` | Open kanban board for current workspace |
+| `A` | Manage agent profiles (create/edit/delete agents for this project) |
 | `D` | Workspace dashboard overlay (bird's-eye view of all workspaces and tabs) |
 | `Ctrl+p` | Command palette (fuzzy-searchable list of all commands) |
 | `Ctrl+l` | Log viewer overlay (last 500 log entries, color-coded, filterable by level) |
@@ -319,6 +321,37 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | Any text | Type additional prompt (appended to card description) |
 | `Enter` | Dispatch (creates worktree with `feature/`/`bug/`/`spike/` branch, workspace in `<parent>-AGENTS` group, launches agent) |
 | `Esc` | Cancel |
+
+**In manage agents overlay** (after pressing `A`):
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Navigate agent list |
+| `n` | Create new agent profile |
+| `e` / `Enter` | Edit selected agent |
+| `d` | Delete selected agent |
+| `Esc` | Close |
+
+**In edit agent dialog — step 1** (name + provider):
+
+| Key | Action |
+|-----|--------|
+| `Tab` | Switch between Name and Provider fields |
+| `Left` / `Right` | Cycle provider (on Provider field) |
+| `Enter` | Next — open role editor (step 2) |
+| `Esc` | Cancel |
+
+**In edit agent dialog — step 2** (role editor, large floating window):
+
+| Key | Action |
+|-----|--------|
+| Any text | Edit agent role/instructions (multiline with Enter) |
+| `Up` / `Down` | Move cursor between lines |
+| `PageUp` / `PageDown` | Jump 10 lines |
+| Mouse scroll | Scroll 3 lines up/down |
+| `Ctrl+D` | Clear all text |
+| `Ctrl+S` | Save agent and close |
+| `Ctrl+X` | Back to step 1 without saving |
 
 **In diff view:**
 

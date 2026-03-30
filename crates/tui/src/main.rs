@@ -157,13 +157,21 @@ async fn main() -> anyhow::Result<()> {
                 crossterm::event::PopKeyboardEnhancementFlags
             );
         }
-        let _ = crossterm::execute!(std::io::stderr(), crossterm::event::DisableMouseCapture);
+        let _ = crossterm::execute!(
+            std::io::stderr(),
+            crossterm::event::DisableMouseCapture,
+            crossterm::event::DisableBracketedPaste,
+        );
         ratatui::restore();
         original_hook(panic_info);
     }));
 
     let terminal = ratatui::init();
-    crossterm::execute!(std::io::stderr(), crossterm::event::EnableMouseCapture)?;
+    crossterm::execute!(
+        std::io::stderr(),
+        crossterm::event::EnableMouseCapture,
+        crossterm::event::EnableBracketedPaste,
+    )?;
     if kitty_keyboard {
         crossterm::execute!(
             std::io::stderr(),

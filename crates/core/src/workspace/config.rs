@@ -27,6 +27,8 @@ pub struct WorkspaceEntry {
     pub dispatch_card_id: Option<String>,
     #[serde(default)]
     pub dispatch_source_kanban: Option<String>,
+    #[serde(default)]
+    pub dispatch_agent_name: Option<String>,
 }
 
 impl WorkspaceEntry {
@@ -46,6 +48,7 @@ impl WorkspaceEntry {
         info.order = self.order;
         info.dispatch_card_id = self.dispatch_card_id;
         info.dispatch_source_kanban = self.dispatch_source_kanban;
+        info.dispatch_agent_name = self.dispatch_agent_name;
         info
     }
 }
@@ -90,6 +93,7 @@ pub fn save(git_root: &Path, workspaces: &[WorkspaceInfo]) -> anyhow::Result<()>
             order: ws.order,
             dispatch_card_id: ws.dispatch_card_id.clone(),
             dispatch_source_kanban: ws.dispatch_source_kanban.clone(),
+            dispatch_agent_name: ws.dispatch_agent_name.clone(),
         })
         .collect();
 

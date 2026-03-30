@@ -70,6 +70,18 @@ impl AIProvider {
         ]
     }
 
+    /// Parse a provider from its label string (e.g. "Claude Code" → Claude)
+    pub fn from_label(label: &str) -> AIProvider {
+        match label {
+            "Claude Code" => AIProvider::Claude,
+            "Gemini" => AIProvider::Gemini,
+            "OpenCode" => AIProvider::OpenCode,
+            "Kilo" => AIProvider::Kilo,
+            "Codex" => AIProvider::Codex,
+            _ => AIProvider::Claude,
+        }
+    }
+
     /// Providers that can be dispatched as agents
     pub fn dispatchable() -> &'static [AIProvider] {
         &[
@@ -169,6 +181,9 @@ pub struct WorkspaceInfo {
     /// Kanban board path of the source workspace (for card lifecycle management)
     #[serde(default)]
     pub dispatch_source_kanban: Option<String>,
+    /// Name of the agent profile used for dispatch
+    #[serde(default)]
+    pub dispatch_agent_name: Option<String>,
 }
 
 impl WorkspaceInfo {
@@ -199,6 +214,7 @@ impl WorkspaceInfo {
             order: 0,
             dispatch_card_id: None,
             dispatch_source_kanban: None,
+            dispatch_agent_name: None,
         }
     }
 }

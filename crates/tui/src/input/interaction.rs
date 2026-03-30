@@ -132,13 +132,28 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
             });
         let source_ws = app.active_workspace;
         if let Some((card_id, card_title, card_description, card_priority)) = card_data {
+            // Load & snapshot configured agents for this project
+            if let Some(ref storage) = app.storage.agent_profiles
+                && let Some(ws) = app.current_workspace()
+            {
+                let repo = ws.source_repo.clone();
+                if let Ok(agents) = storage.load_agents(&repo) {
+                    app.agent_profiles = agents;
+                }
+            }
+            let agents: Vec<(String, String, String)> = app
+                .agent_profiles
+                .iter()
+                .map(|a| (a.name.clone(), a.provider.clone(), a.role.clone()))
+                .collect();
             app.active_dialog = Some(DialogState::DispatchAgent {
                 source_ws,
                 card_id,
                 card_title,
                 card_description,
                 card_priority,
-                provider_idx: 0,
+                agent_idx: 0,
+                agents,
                 additional_prompt: String::new(),
                 additional_prompt_cursor: 0,
             });

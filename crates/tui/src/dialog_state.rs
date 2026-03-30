@@ -119,9 +119,41 @@ pub enum DialogState {
         card_title: String,
         card_description: String,
         card_priority: flow_core::Priority,
-        /// Index into AIProvider::dispatchable()
-        provider_idx: usize,
+        /// When agents exist: index into agents vec. When empty: index into AIProvider::dispatchable()
+        agent_idx: usize,
+        /// Snapshot of configured agents (name, provider, role). Empty = fallback to raw providers
+        agents: Vec<(String, String, String)>,
         additional_prompt: String,
         additional_prompt_cursor: usize,
     },
+    ManageAgents {
+        selected: usize,
+    },
+    /// Step 1: name + provider selection
+    EditAgent {
+        /// None = creating new, Some(id) = editing existing
+        editing_id: Option<i64>,
+        name: String,
+        name_cursor: usize,
+        provider_idx: usize,
+        /// Preserved role content (carried between steps)
+        role: String,
+        active_field: EditAgentField,
+    },
+    /// Step 2: large floating editor for the agent role
+    EditAgentRole {
+        editing_id: Option<i64>,
+        name: String,
+        provider_idx: usize,
+        role: String,
+        role_cursor: usize,
+        /// Vertical scroll offset
+        scroll: usize,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EditAgentField {
+    Name,
+    Provider,
 }

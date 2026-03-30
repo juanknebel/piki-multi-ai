@@ -22,9 +22,10 @@ use self::dialog::{
     handle_about_input, handle_commit_message_input, handle_confirm_close_tab_input,
     handle_confirm_delete_input, handle_confirm_merge_input, handle_confirm_quit_input,
     handle_conflict_resolution_input, handle_dashboard_input, handle_dispatch_agent_input,
-    handle_edit_workspace_input, handle_git_log_input, handle_git_stash_input, handle_help_input,
-    handle_logs_input, handle_new_tab_input, handle_new_workspace_input,
-    handle_workspace_info_input,
+    handle_edit_agent_input, handle_edit_agent_role_input, handle_edit_workspace_input,
+    handle_git_log_input,
+    handle_git_stash_input, handle_help_input, handle_logs_input, handle_manage_agents_input,
+    handle_new_tab_input, handle_new_workspace_input, handle_workspace_info_input,
 };
 use self::editor_input::handle_inline_edit_input;
 use self::fuzzy_input::handle_fuzzy_search_input;
@@ -33,6 +34,11 @@ use self::interaction::{
     handle_kanban_interaction, handle_markdown_interaction, handle_terminal_interaction,
     handle_workspace_interaction,
 };
+
+/// Handle a bracketed paste event — insert full text at once into the active text field.
+pub(crate) fn handle_paste(app: &mut App, text: &str) {
+    text_field_common::handle_bulk_insert(app, text);
+}
 
 pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
     // Code review is a locked mode — ALL keys route here, nothing leaks
@@ -68,6 +74,9 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         AppMode::GitLog => return handle_git_log_input(app, key),
         AppMode::ConflictResolution => return handle_conflict_resolution_input(app, key),
         AppMode::DispatchAgent => return handle_dispatch_agent_input(app, key),
+        AppMode::ManageAgents => return handle_manage_agents_input(app, key),
+        AppMode::EditAgent => return handle_edit_agent_input(app, key),
+        AppMode::EditAgentRole => return handle_edit_agent_role_input(app, key),
         // Normal and Diff modes fall through to navigation/interaction handling
         AppMode::Normal | AppMode::Diff => {}
     }
@@ -252,6 +261,22 @@ pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Act
         if app.current_workspace().is_some() {
             return Some(Action::LoadGitLog);
         }
+    } else if key.code == KeyCode::Char('A')
+        && app
+            .current_workspace()
+            .is_some_and(|ws| ws.info.workspace_type == piki_core::WorkspaceType::Simple)
+    {
+        // Load agents for current project before opening the overlay (Simple ws only)
+        if let Some(ref storage) = app.storage.agent_profiles
+            && let Some(ws) = app.current_workspace()
+        {
+            let repo = ws.source_repo.clone();
+            if let Ok(agents) = storage.load_agents(&repo) {
+                app.agent_profiles = agents;
+            }
+        }
+        app.active_dialog = Some(DialogState::ManageAgents { selected: 0 });
+        app.mode = AppMode::ManageAgents;
     } else if app.config.matches_navigation(key, "conflicts") {
         if let Some(ws) = app.current_workspace()
             && ws.info.workspace_type != piki_core::WorkspaceType::Project

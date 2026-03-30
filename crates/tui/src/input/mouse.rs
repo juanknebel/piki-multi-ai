@@ -180,6 +180,16 @@ pub(crate) fn handle_mouse_event(
 
     match mouse.kind {
         MouseEventKind::ScrollUp => match app.mode {
+            AppMode::EditAgentRole => {
+                if let Some(DialogState::EditAgentRole {
+                    ref role,
+                    ref mut role_cursor,
+                    ..
+                }) = app.active_dialog
+                {
+                    super::dialog::move_cursor_vertical(role, role_cursor, -3);
+                }
+            }
             AppMode::Logs => {
                 if let Some(DialogState::Logs {
                     ref mut selected, ..
@@ -229,6 +239,16 @@ pub(crate) fn handle_mouse_event(
             _ => {}
         },
         MouseEventKind::ScrollDown => match app.mode {
+            AppMode::EditAgentRole => {
+                if let Some(DialogState::EditAgentRole {
+                    ref role,
+                    ref mut role_cursor,
+                    ..
+                }) = app.active_dialog
+                {
+                    super::dialog::move_cursor_vertical(role, role_cursor, 3);
+                }
+            }
             AppMode::Logs => {
                 if let Some(DialogState::Logs {
                     ref mut selected, ..
