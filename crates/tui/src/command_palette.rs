@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use crate::app::Workspace;
@@ -7,7 +8,7 @@ pub struct PaletteCommand {
     /// Unique identifier matching a navigation keybinding action name
     pub id: &'static str,
     /// Human-readable label shown in the palette
-    pub label: &'static str,
+    pub label: Cow<'static, str>,
     /// Category for grouping (e.g. "Workspace", "Git", "Tabs")
     pub category: &'static str,
     /// Keybinding hint (e.g. "n", "ctrl-z") — looked up at render time from config
@@ -36,7 +37,7 @@ macro_rules! cmd {
     ($id:expr, $label:expr, $cat:expr, $kb:expr) => {
         PaletteCommand {
             id: $id,
-            label: $label,
+            label: Cow::Borrowed($label),
             category: $cat,
             keybinding_action: $kb,
             switch_workspace_idx: None,
@@ -136,11 +137,10 @@ pub fn create_state(workspaces: &[Workspace]) -> CommandPaletteState {
 
     // Inject dynamic workspace switch commands
     for (i, ws) in workspaces.iter().enumerate() {
-        // Leak the label string — the palette is short-lived and recreated each open
-        let label: &'static str = Box::leak(format!("Switch to {}", ws.name).into_boxed_str());
+        let label = format!("Switch to {}", ws.name);
         let cmd = PaletteCommand {
             id: "switch_workspace",
-            label,
+            label: Cow::Owned(label),
             category: "Switch",
             keybinding_action: "",
             switch_workspace_idx: Some(i),

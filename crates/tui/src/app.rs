@@ -535,6 +535,38 @@ impl EditorState {
         }
     }
 
+    /// Insert a multi-line string at the cursor position (for paste).
+    pub fn insert_text(&mut self, text: &str) {
+        let line = &mut self.lines[self.cursor_row];
+        let byte_idx = char_to_byte_idx(line, self.cursor_col);
+        let after = line[byte_idx..].to_string();
+        line.truncate(byte_idx);
+
+        let mut paste_lines: Vec<&str> = text.split('\n').collect();
+        // Remove trailing empty element from a trailing newline
+        if paste_lines.last() == Some(&"") {
+            paste_lines.pop();
+        }
+
+        if paste_lines.is_empty() {
+            line.push_str(&after);
+            return;
+        }
+
+        // First paste line appends to current line
+        self.lines[self.cursor_row].push_str(paste_lines[0]);
+
+        // Middle lines are inserted as new lines
+        for &pl in &paste_lines[1..] {
+            self.cursor_row += 1;
+            self.lines.insert(self.cursor_row, pl.to_string());
+        }
+
+        // Append the remainder after the cursor to the last inserted line
+        self.cursor_col = self.lines[self.cursor_row].chars().count();
+        self.lines[self.cursor_row].push_str(&after);
+    }
+
     fn clamp_col(&mut self) {
         let line_len = self.lines[self.cursor_row].chars().count();
         if self.cursor_col > line_len {

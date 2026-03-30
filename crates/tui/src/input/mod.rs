@@ -35,8 +35,83 @@ use self::interaction::{
     handle_workspace_interaction,
 };
 
-/// Handle a bracketed paste event — insert full text at once into the active text field.
+/// Handle a bracketed paste event — insert full text at once into the active context.
 pub(crate) fn handle_paste(app: &mut App, text: &str) {
+    // Terminal interaction: write to PTY
+    if app.interacting
+        && matches!(app.mode, AppMode::Normal | AppMode::Diff)
+        && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+        && let Some(tab) = ws.current_tab_mut()
+    {
+        if tab.pty_session.is_some() {
+            let bracketed = tab
+                .pty_parser
+                .as_ref()
+                .map(|p| p.lock().screen().bracketed_paste())
+                .unwrap_or(false);
+            let data = if bracketed {
+                format!("\x1b[200~{text}\x1b[201~")
+            } else {
+                text.to_string()
+            };
+            if let Some(ref mut pty) = tab.pty_session {
+                let _ = pty.write(data.as_bytes());
+            }
+            return;
+        }
+        if let Some(ref mut api) = tab.api_state {
+            api.editor.insert_text(text);
+            return;
+        }
+    }
+
+    // Inline editor
+    if app.mode == AppMode::InlineEdit {
+        if let Some(ref mut editor) = app.editor {
+            editor.insert_text(text);
+        }
+        return;
+    }
+
+    // Fuzzy overlays: insert into query
+    match app.mode {
+        AppMode::FuzzySearch => {
+            if let Some(ref mut state) = app.fuzzy {
+                state.query.push_str(text);
+                let q = state.query.clone();
+                state
+                    .nucleo
+                    .pattern
+                    .reparse(0, &q, nucleo::pattern::CaseMatching::Smart, true);
+            }
+            return;
+        }
+        AppMode::CommandPalette => {
+            if let Some(ref mut state) = app.command_palette {
+                state.query.push_str(text);
+                let q = state.query.clone();
+                state
+                    .nucleo
+                    .pattern
+                    .reparse(0, &q, nucleo::pattern::CaseMatching::Smart, true);
+            }
+            return;
+        }
+        AppMode::WorkspaceSwitcher => {
+            if let Some(ref mut state) = app.workspace_switcher {
+                state.query.push_str(text);
+                let q = state.query.clone();
+                state
+                    .nucleo
+                    .pattern
+                    .reparse(0, &q, nucleo::pattern::CaseMatching::Smart, true);
+            }
+            return;
+        }
+        _ => {}
+    }
+
+    // Dialog text fields
     text_field_common::handle_bulk_insert(app, text);
 }
 
