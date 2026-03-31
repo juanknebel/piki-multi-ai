@@ -5,10 +5,12 @@ set -euo pipefail
 # Designed for worktree-based workflow where main and nightly live in separate directories.
 #
 # Usage:
-#   ./scripts/release.sh <version>           # e.g. ./scripts/release.sh 1.2.0
-#   ./scripts/release.sh --hotfix            # patch release from main
-#   ./scripts/release.sh --dry-run <version> # simulate without changes
-#   ./scripts/release.sh --dry-run --hotfix  # simulate hotfix
+#   ./scripts/release.sh <version>                # e.g. ./scripts/release.sh 1.2.0
+#   ./scripts/release.sh --hotfix                 # patch release from main
+#   ./scripts/release.sh --dry-run <version>      # simulate without changes
+#   ./scripts/release.sh --dry-run --hotfix       # simulate hotfix
+#   ./scripts/release.sh --yes 1.2.0              # skip confirmation prompts
+#   ./scripts/release.sh --dry-run --yes --hotfix # combine flags
 
 # ---------------------------------------------------------------------------
 # Configuration — adjust these paths to match your worktree layout
@@ -17,6 +19,7 @@ set -euo pipefail
 MAIN_BRANCH="main"
 DEV_BRANCH="nightly"
 DRY_RUN=false
+AUTO_YES=false
 
 # Resolve worktree paths dynamically from `git worktree list`
 resolve_worktree_path() {
@@ -52,11 +55,28 @@ run() {
 }
 
 confirm() {
-    if $DRY_RUN; then return; fi
+    if $DRY_RUN || $AUTO_YES; then return; fi
     local msg="$1"
     echo -en "${YELLOW}$msg [y/N]${NC} "
     read -r answer
     [[ "$answer" =~ ^[Yy]$ ]] || die "Aborted."
+}
+
+# Remove stale index.lock if no other git process is using it
+clear_lock() {
+    local dir="$1"
+    local git_dir
+    git_dir="$(git -C "$dir" rev-parse --git-dir 2>/dev/null)" || return
+    local lock="$git_dir/index.lock"
+    if [[ -f "$lock" ]]; then
+        # Check if any git process is still running for this dir
+        if ! pgrep -f "git.*$(basename "$dir")" >/dev/null 2>&1; then
+            warn "Removing stale lock: $lock"
+            rm -f "$lock"
+        else
+            die "Lock file exists and git is still running: $lock"
+        fi
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -170,6 +190,7 @@ release_from_nightly() {
 
     # 6. Sync main back into nightly and reset to nightly version
     info "Syncing $MAIN_BRANCH back into $DEV_BRANCH..."
+    clear_lock "$DEV_DIR"
     run git -C "$DEV_DIR" merge "$MAIN_BRANCH"
     local next_nightly
     next_nightly="$(next_minor "$version")-nightly"
@@ -250,6 +271,7 @@ hotfix() {
     # Sync to nightly
     info "Syncing hotfix to $DEV_BRANCH..."
     check_clean "$DEV_DIR" "$DEV_BRANCH"
+    clear_lock "$DEV_DIR"
     run git -C "$DEV_DIR" merge "$MAIN_BRANCH" -m "merge: sync hotfix $tag to nightly"
     local next_nightly
     next_nightly="$(next_minor "$version")-nightly"
@@ -268,10 +290,17 @@ hotfix() {
 # ---------------------------------------------------------------------------
 
 main() {
-    # Parse --dry-run flag
-    if [[ "${1:-}" == "--dry-run" ]]; then
-        DRY_RUN=true
-        shift
+    # Parse flags
+    while [[ "${1:-}" == --* ]]; do
+        case "$1" in
+            --dry-run) DRY_RUN=true; shift ;;
+            --yes|-y)  AUTO_YES=true; shift ;;
+            --hotfix)  break ;;  # not a flag, it's the command
+            *) die "Unknown flag: $1" ;;
+        esac
+    done
+
+    if $DRY_RUN; then
         info "DRY RUN — no changes will be made"
         echo ""
     fi
@@ -280,8 +309,8 @@ main() {
 
     if [[ $# -lt 1 ]]; then
         echo "Usage:"
-        echo "  $0 [--dry-run] <version>     Release from nightly (e.g. $0 1.2.0)"
-        echo "  $0 [--dry-run] --hotfix      Patch release from main"
+        echo "  $0 [--dry-run] [--yes] <version>     Release from nightly (e.g. $0 1.2.0)"
+        echo "  $0 [--dry-run] [--yes] --hotfix      Patch release from main"
         exit 1
     fi
 
