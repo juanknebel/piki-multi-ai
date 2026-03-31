@@ -78,6 +78,15 @@ pub fn render(
             scroll,
         };
         frame.render_widget(widget, area);
+        let visible_height = area.height.saturating_sub(2) as usize;
+        super::scrollbar::render_vertical(
+            frame,
+            area,
+            scroll as usize,
+            text.lines.len(),
+            visible_height,
+            Color::DarkGray,
+        );
     } else {
         let paragraph = Paragraph::new("  Select a file and press Enter to view diff")
             .style(Style::default().fg(empty_text_color))

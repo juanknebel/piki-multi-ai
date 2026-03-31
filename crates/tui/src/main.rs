@@ -10,8 +10,10 @@ mod helpers;
 mod input;
 mod log_buffer;
 mod pty;
+mod syntax;
 mod theme;
 mod ui;
+mod workspace_switcher;
 
 use std::path::PathBuf;
 
@@ -27,6 +29,12 @@ struct Cli {
     /// Logging level: trace, debug, info, warn, error
     #[arg(long, default_value = "info", global = true)]
     log_level: String,
+
+    /// Override the data directory (database, worktrees, logs).
+    /// Defaults to ~/.local/share/piki-multi.
+    /// Useful for running a nightly/test instance alongside stable.
+    #[arg(long, global = true)]
+    data_dir: Option<PathBuf>,
 }
 
 #[derive(Subcommand)]
@@ -42,6 +50,11 @@ enum Commands {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+
+    let paths = match cli.data_dir {
+        Some(dir) => piki_core::paths::DataPaths::new(dir),
+        None => piki_core::paths::DataPaths::default_paths(),
+    };
 
     if let Some(command) = cli.command {
         match command {
@@ -69,13 +82,10 @@ async fn main() -> anyhow::Result<()> {
                 return Ok(());
             }
             Commands::Migrate => {
-                let data_dir = dirs::data_dir()
-                    .unwrap_or_else(|| PathBuf::from("/tmp"))
-                    .join("piki-multi");
-                let db_path = data_dir.join("piki.db");
+                let db_path = paths.db_path();
                 std::fs::create_dir_all(db_path.parent().unwrap())?;
                 let storage = piki_core::storage::sqlite::SqliteStorage::open(&db_path)?;
-                let count = storage.migrate_from_json()?;
+                let count = storage.migrate_from_json(&paths)?;
                 println!("Migrated {count} workspaces from JSON to SQLite");
                 println!("Database: {}", db_path.display());
                 return Ok(());
@@ -84,9 +94,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Initialize structured logging to file
-    let log_dir = dirs::data_dir()
-        .unwrap_or_else(|| PathBuf::from("/tmp"))
-        .join("piki-multi/logs");
+    let log_dir = paths.log_dir();
     let file_appender = tracing_appender::rolling::daily(&log_dir, "piki-multi.log");
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
 
@@ -149,13 +157,21 @@ async fn main() -> anyhow::Result<()> {
                 crossterm::event::PopKeyboardEnhancementFlags
             );
         }
-        let _ = crossterm::execute!(std::io::stderr(), crossterm::event::DisableMouseCapture);
+        let _ = crossterm::execute!(
+            std::io::stderr(),
+            crossterm::event::DisableMouseCapture,
+            crossterm::event::DisableBracketedPaste,
+        );
         ratatui::restore();
         original_hook(panic_info);
     }));
 
     let terminal = ratatui::init();
-    crossterm::execute!(std::io::stderr(), crossterm::event::EnableMouseCapture)?;
+    crossterm::execute!(
+        std::io::stderr(),
+        crossterm::event::EnableMouseCapture,
+        crossterm::event::EnableBracketedPaste,
+    )?;
     if kitty_keyboard {
         crossterm::execute!(
             std::io::stderr(),
@@ -164,7 +180,7 @@ async fn main() -> anyhow::Result<()> {
             )
         )?;
     }
-    let result = event_loop::run(terminal, preflight.warnings, log_buffer).await;
+    let result = event_loop::run(terminal, preflight.warnings, log_buffer, paths).await;
     if kitty_keyboard {
         crossterm::execute!(
             std::io::stderr(),

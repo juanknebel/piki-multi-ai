@@ -1,0 +1,20 @@
+---
+source: crates/tui/src/ui/mod.rs
+assertion_line: 83
+expression: content
+---
+
+
+
+
+
+
+
+
+                    ┌ Quit ────────────────────────────────┐
+                    │                                      │
+                    │    Are you sure you want to quit?    │
+                    │                                      │
+                    │           [Y] Yes    [N] No          │
+                    │                                      │
+                    └──────────────────────────────────────┘

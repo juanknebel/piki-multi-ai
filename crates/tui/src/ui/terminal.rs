@@ -45,9 +45,27 @@ pub fn render(
     }
     frame.render_widget(pseudo_term, area);
 
+    // Probe max scrollback while we hold the lock
+    parser_guard.screen_mut().set_scrollback(usize::MAX);
+    let max_scrollback = parser_guard.screen().scrollback();
     // Reset scrollback so the parser tracks live output correctly
     parser_guard.screen_mut().set_scrollback(0);
     drop(parser_guard);
+
+    // Scrollbar for terminal scrollback (inverted: 0=live/bottom, max=top)
+    let visible_height = area.height.saturating_sub(2) as usize;
+    if max_scrollback > 0 {
+        let total = max_scrollback + visible_height;
+        let position = max_scrollback.saturating_sub(actual_offset);
+        super::scrollbar::render_vertical(
+            frame,
+            area,
+            position,
+            total,
+            visible_height,
+            Color::DarkGray,
+        );
+    }
 
     let inner = Rect::new(
         area.x + 1,

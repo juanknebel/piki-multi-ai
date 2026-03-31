@@ -151,7 +151,7 @@ pub(super) fn render_sysinfo_bar(frame: &mut Frame, area: Rect, app: &App) {
 pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
     let cfg = &app.config;
     match app.mode {
-        AppMode::CommandPalette => vec![
+        AppMode::CommandPalette | AppMode::WorkspaceSwitcher => vec![
             ("up/down".to_string(), "select"),
             ("enter".to_string(), "execute"),
             ("esc".to_string(), "close"),
@@ -303,6 +303,53 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             (cfg.get_binding("dashboard", "select"), "switch"),
             (cfg.get_binding("dashboard", "exit"), "close"),
         ],
+        AppMode::GitStash => vec![
+            (
+                format!(
+                    "{}/{}",
+                    cfg.get_binding("git_stash", "up"),
+                    cfg.get_binding("git_stash", "down")
+                ),
+                "select",
+            ),
+            (cfg.get_binding("git_stash", "save"), "save"),
+            (cfg.get_binding("git_stash", "pop"), "pop"),
+            (cfg.get_binding("git_stash", "apply"), "apply"),
+            (cfg.get_binding("git_stash", "drop"), "drop"),
+            (cfg.get_binding("git_stash", "show"), "show diff"),
+            (cfg.get_binding("git_stash", "exit"), "close"),
+        ],
+        AppMode::GitLog => vec![
+            (
+                format!(
+                    "{}/{}",
+                    cfg.get_binding("git_log", "up"),
+                    cfg.get_binding("git_log", "down")
+                ),
+                "navigate",
+            ),
+            (cfg.get_binding("git_log", "select"), "view diff"),
+            (cfg.get_binding("git_log", "exit"), "close"),
+        ],
+        AppMode::ConflictResolution => vec![
+            (
+                format!(
+                    "{}/{}",
+                    cfg.get_binding("conflict_resolution", "up"),
+                    cfg.get_binding("conflict_resolution", "down")
+                ),
+                "select",
+            ),
+            (cfg.get_binding("conflict_resolution", "ours"), "ours"),
+            (cfg.get_binding("conflict_resolution", "theirs"), "theirs"),
+            (
+                cfg.get_binding("conflict_resolution", "mark_resolved"),
+                "mark resolved",
+            ),
+            (cfg.get_binding("conflict_resolution", "edit"), "edit"),
+            (cfg.get_binding("conflict_resolution", "abort"), "abort"),
+            (cfg.get_binding("conflict_resolution", "exit"), "close"),
+        ],
         AppMode::ConfirmCloseTab => vec![("Y".to_string(), "close"), ("N".to_string(), "cancel")],
         AppMode::ConfirmQuit => vec![("Y".to_string(), "quit"), ("N".to_string(), "cancel")],
         _ if app.interacting => {
@@ -324,6 +371,10 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                         (cfg.get_binding("interaction", "exit_interaction"), "back"),
                     ]
                 } else {
+                    let has_sel = app.selection_count() > 0;
+                    let stage_label: &'static str = if has_sel { "stage sel" } else { "stage" };
+                    let unstage_label: &'static str =
+                        if has_sel { "unstage sel" } else { "unstage" };
                     vec![
                         (
                             format!(
@@ -331,11 +382,16 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                                 cfg.get_binding("file_list", "up"),
                                 cfg.get_binding("file_list", "down")
                             ),
+                            "navigate",
+                        ),
+                        (
+                            cfg.get_binding("file_list", "toggle_select"),
                             "select",
                         ),
                         (cfg.get_binding("file_list", "diff"), "diff"),
-                        (cfg.get_binding("file_list", "stage"), "stage"),
-                        (cfg.get_binding("file_list", "unstage"), "unstage"),
+                        (cfg.get_binding("file_list", "stage"), stage_label),
+                        (cfg.get_binding("file_list", "unstage"), unstage_label),
+                        (cfg.get_binding("file_list", "select_all"), "sel all"),
                         (cfg.get_binding("file_list", "edit_external"), "editor"),
                         (cfg.get_binding("interaction", "exit_interaction"), "back"),
                     ]
@@ -468,6 +524,11 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                     cfg.get_binding("navigation", "sidebar_grow")
                 ),
                 "resize",
+            ));
+            keys.push((cfg.get_binding("navigation", "command_palette"), "commands"));
+            keys.push((
+                cfg.get_binding("navigation", "workspace_switcher"),
+                "switch ws",
             ));
             keys.push((cfg.get_binding("navigation", "help"), "help"));
             keys.push((cfg.get_binding("navigation", "quit"), "quit"));

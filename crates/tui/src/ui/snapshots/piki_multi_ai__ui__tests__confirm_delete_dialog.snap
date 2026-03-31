@@ -1,0 +1,21 @@
+---
+source: crates/tui/src/ui/mod.rs
+assertion_line: 172
+expression: content
+---
+
+
+
+
+
+
+
+               ┌ Delete Workspace ──────────────────────────────┐
+               │                                                │
+               │  Remove ? ?                                    │
+               │                                                │
+               │  [y] Yes, remove from list                     │
+               │  [Esc] Cancel                                  │
+               │                                                │
+               │                                                │
+               └────────────────────────────────────────────────┘

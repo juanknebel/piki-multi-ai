@@ -4,26 +4,14 @@ use anyhow::{Context, bail};
 use tokio::process::Command;
 
 use crate::domain::{WorkspaceInfo, WorkspaceType};
+use crate::paths::DataPaths;
 
 // No branch prefix — branch name matches the workspace name exactly.
 
-/// Returns the base directory for worktrees:
-/// `$HOME/.local/share/piki-multi/worktrees/<project_dir_name>`
-fn worktrees_base(git_root: &std::path::Path) -> PathBuf {
-    let project_name = git_root
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| "unknown".to_string());
-
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    PathBuf::from(home)
-        .join(".local/share/piki-multi/worktrees")
-        .join(project_name)
-}
-
 /// Manages git worktree creation and removal.
-/// Stateless — each operation receives the source directory.
-pub struct WorkspaceManager;
+pub struct WorkspaceManager {
+    paths: DataPaths,
+}
 
 impl Default for WorkspaceManager {
     fn default() -> Self {
@@ -33,7 +21,23 @@ impl Default for WorkspaceManager {
 
 impl WorkspaceManager {
     pub fn new() -> Self {
-        Self
+        Self {
+            paths: DataPaths::default_paths(),
+        }
+    }
+
+    pub fn with_paths(paths: DataPaths) -> Self {
+        Self { paths }
+    }
+
+    /// Returns the base directory for worktrees:
+    /// `<data_dir>/worktrees/<project_dir_name>`
+    fn worktrees_base(&self, git_root: &std::path::Path) -> PathBuf {
+        let project_name = git_root
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+        self.paths.worktrees_dir(&project_name)
     }
 
     /// Detect the git root for a given directory
@@ -68,7 +72,7 @@ impl WorkspaceManager {
         source_dir: &PathBuf,
     ) -> anyhow::Result<WorkspaceInfo> {
         let git_root = Self::git_root(source_dir).await?;
-        let worktrees_dir = worktrees_base(&git_root);
+        let worktrees_dir = self.worktrees_base(&git_root);
         let worktree_path = worktrees_dir.join(name);
         let branch_name = name.to_string();
 
@@ -250,7 +254,7 @@ impl WorkspaceManager {
     /// Remove a workspace: remove worktree, delete branch.
     /// Uses the workspace's `source_repo` to locate the git root.
     pub async fn remove(&self, name: &str, source_repo: &PathBuf) -> anyhow::Result<()> {
-        let worktree_path = worktrees_base(source_repo).join(name);
+        let worktree_path = self.worktrees_base(source_repo).join(name);
         let branch_name = name.to_string();
 
         // git worktree remove --force <path>

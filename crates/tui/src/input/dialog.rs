@@ -4,83 +4,11 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField};
-use crate::dialog_state::{DialogState, NewTabMenu};
+use crate::dialog_state::{ConflictStrategy, DialogState, EditAgentField, NewTabMenu};
 use piki_core::{AIProvider, MergeStrategy, WorkspaceType};
 
-/// Result of processing a text input key event
-enum TextInputResult {
-    /// Key was consumed by text editing
-    Consumed,
-    /// Key was not a text editing key
-    NotConsumed,
-}
-
-/// Handle common text editing keys (Char, Backspace, Delete, Left, Right, Home, End).
-/// `validator` returns true if the char should be inserted.
-fn handle_text_input(
-    buf: &mut String,
-    cursor: &mut usize,
-    key: KeyEvent,
-    validator: impl Fn(char) -> bool,
-) -> TextInputResult {
-    match key.code {
-        KeyCode::Char(c) => {
-            if validator(c) {
-                let byte_idx = buf
-                    .char_indices()
-                    .nth(*cursor)
-                    .map_or(buf.len(), |(i, _)| i);
-                buf.insert(byte_idx, c);
-                *cursor += 1;
-            }
-            TextInputResult::Consumed
-        }
-        KeyCode::Backspace => {
-            if *cursor > 0 {
-                *cursor -= 1;
-                let byte_idx = buf
-                    .char_indices()
-                    .nth(*cursor)
-                    .map_or(buf.len(), |(i, _)| i);
-                buf.remove(byte_idx);
-            }
-            TextInputResult::Consumed
-        }
-        KeyCode::Delete => {
-            if let Some((byte_idx, _)) = buf.char_indices().nth(*cursor) {
-                buf.remove(byte_idx);
-            }
-            TextInputResult::Consumed
-        }
-        KeyCode::Left => {
-            if *cursor > 0 {
-                *cursor -= 1;
-            }
-            TextInputResult::Consumed
-        }
-        KeyCode::Right => {
-            let len = buf.chars().count();
-            if *cursor < len {
-                *cursor += 1;
-            }
-            TextInputResult::Consumed
-        }
-        KeyCode::Home => {
-            *cursor = 0;
-            TextInputResult::Consumed
-        }
-        KeyCode::End => {
-            *cursor = buf.chars().count();
-            TextInputResult::Consumed
-        }
-        _ => TextInputResult::NotConsumed,
-    }
-}
-
-fn is_cancel(key: KeyEvent) -> bool {
-    key.code == KeyCode::Esc
-        || (key.code == KeyCode::Char('g') && key.modifiers.contains(KeyModifiers::CONTROL))
-}
+use super::confirm_common::{ConfirmResult, dismiss_dialog, handle_yn_input};
+use super::text_field_common::{handle_text_input, is_cancel};
 
 pub(super) fn handle_edit_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     let Some(DialogState::EditWorkspace {
@@ -349,38 +277,39 @@ pub(super) fn handle_confirm_close_tab_input(app: &mut App, key: KeyEvent) -> Op
         return None;
     };
 
-    match key.code {
-        KeyCode::Char('y') | KeyCode::Char('Y') => {
+    match handle_yn_input(key) {
+        ConfirmResult::Yes => {
             if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
                 ws.close_tab(target);
             }
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
-            None
+            dismiss_dialog(app);
         }
-        KeyCode::Char('n') | KeyCode::Char('N') => {
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
-            None
+        ConfirmResult::No | ConfirmResult::Cancel => {
+            dismiss_dialog(app);
         }
-        _ => None,
+        ConfirmResult::NotHandled => {}
     }
+    None
 }
 
 pub(super) fn handle_confirm_quit_input(app: &mut App, key: KeyEvent) -> Option<Action> {
-    match key.code {
-        KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
-            app.should_quit = true;
-            app.active_dialog = None;
-            None
-        }
-        KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
-            None
-        }
-        _ => None,
+    // Quit also accepts Enter as confirmation
+    if key.code == KeyCode::Enter {
+        app.should_quit = true;
+        dismiss_dialog(app);
+        return None;
     }
+    match handle_yn_input(key) {
+        ConfirmResult::Yes => {
+            app.should_quit = true;
+            dismiss_dialog(app);
+        }
+        ConfirmResult::No | ConfirmResult::Cancel => {
+            dismiss_dialog(app);
+        }
+        ConfirmResult::NotHandled => {}
+    }
+    None
 }
 
 pub(super) fn handle_confirm_delete_input(app: &mut App, key: KeyEvent) -> Option<Action> {
@@ -388,26 +317,23 @@ pub(super) fn handle_confirm_delete_input(app: &mut App, key: KeyEvent) -> Optio
         return None;
     };
 
-    match key.code {
-        KeyCode::Char('y') | KeyCode::Char('Y') => {
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
+    match handle_yn_input(key) {
+        ConfirmResult::Yes => {
+            dismiss_dialog(app);
             app.active_pane = ActivePane::WorkspaceList;
             Some(Action::DeleteWorkspace(target))
         }
-        KeyCode::Char('n') | KeyCode::Char('N') => {
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
+        ConfirmResult::No => {
+            dismiss_dialog(app);
             app.active_pane = ActivePane::WorkspaceList;
             Some(Action::RemoveFromList(target))
         }
-        KeyCode::Esc => {
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
+        ConfirmResult::Cancel => {
+            dismiss_dialog(app);
             app.active_pane = ActivePane::WorkspaceList;
             None
         }
-        _ => None,
+        ConfirmResult::NotHandled => None,
     }
 }
 
@@ -780,4 +706,707 @@ pub(super) fn handle_workspace_info_input(app: &mut App, key: KeyEvent) -> Optio
         let _ = crossterm::execute!(std::io::stderr(), crossterm::event::EnableMouseCapture);
     }
     None
+}
+
+pub(super) fn handle_git_stash_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::GitStash {
+        ref entries,
+        ref mut selected,
+        ref mut scroll,
+        ref mut input_mode,
+        ref mut input_buffer,
+        ref mut input_cursor,
+    }) = app.active_dialog
+    else {
+        return None;
+    };
+
+    if *input_mode {
+        // Text input mode for stash message
+        match key.code {
+            KeyCode::Enter => {
+                let msg = input_buffer.clone();
+                *input_mode = false;
+                input_buffer.clear();
+                *input_cursor = 0;
+                if !msg.is_empty() {
+                    return Some(Action::GitStashSave(msg));
+                }
+            }
+            KeyCode::Esc => {
+                *input_mode = false;
+                input_buffer.clear();
+                *input_cursor = 0;
+            }
+            _ => {
+                handle_text_input(input_buffer, input_cursor, key, |c| !c.is_control());
+            }
+        }
+        return None;
+    }
+
+    // List mode
+    let total = entries.len();
+    let last = total.saturating_sub(1);
+    let _ = scroll; // scroll is managed by the renderer
+
+    if app.config.matches_git_stash(key, "down") || app.config.matches_git_stash(key, "down_alt") {
+        if total > 0 {
+            *selected = (*selected + 1).min(last);
+        }
+    } else if app.config.matches_git_stash(key, "up") || app.config.matches_git_stash(key, "up_alt")
+    {
+        *selected = selected.saturating_sub(1);
+    } else if app.config.matches_git_stash(key, "save") {
+        *input_mode = true;
+    } else if app.config.matches_git_stash(key, "pop") {
+        if !entries.is_empty() {
+            return Some(Action::GitStashPop(*selected));
+        }
+    } else if app.config.matches_git_stash(key, "apply") {
+        if !entries.is_empty() {
+            return Some(Action::GitStashApply(*selected));
+        }
+    } else if app.config.matches_git_stash(key, "drop") {
+        if !entries.is_empty() {
+            return Some(Action::GitStashDrop(*selected));
+        }
+    } else if app.config.matches_git_stash(key, "show") {
+        if !entries.is_empty() {
+            return Some(Action::GitStashShow(*selected));
+        }
+    } else if app.config.matches_git_stash(key, "exit")
+        || app.config.matches_git_stash(key, "exit_alt")
+    {
+        app.active_dialog = None;
+        app.mode = AppMode::Normal;
+    }
+    None
+}
+
+pub(super) fn handle_git_log_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::GitLog {
+        ref lines,
+        ref mut selected,
+        ref mut scroll,
+    }) = app.active_dialog
+    else {
+        return None;
+    };
+
+    let total = lines.len();
+    let last = total.saturating_sub(1);
+
+    if app.config.matches_git_log(key, "down") || app.config.matches_git_log(key, "down_alt") {
+        *selected = (*selected + 1).min(last);
+    } else if app.config.matches_git_log(key, "up") || app.config.matches_git_log(key, "up_alt") {
+        *selected = selected.saturating_sub(1);
+    } else if app.config.matches_git_log(key, "page_down") {
+        *selected = (*selected + 10).min(last);
+    } else if app.config.matches_git_log(key, "page_up") {
+        *selected = selected.saturating_sub(10);
+    } else if app.config.matches_git_log(key, "scroll_top") {
+        *selected = 0;
+        *scroll = 0;
+    } else if app.config.matches_git_log(key, "scroll_bottom") {
+        *selected = last;
+    } else if app.config.matches_git_log(key, "select") {
+        if let Some(entry) = lines.get(*selected)
+            && let Some(ref sha) = entry.sha
+        {
+            let sha = sha.clone();
+            return Some(Action::ViewCommitDiff(sha));
+        }
+    } else if app.config.matches_git_log(key, "exit") || app.config.matches_git_log(key, "exit_alt")
+    {
+        app.active_dialog = None;
+        app.mode = AppMode::Normal;
+    }
+    None
+}
+
+pub(super) fn handle_conflict_resolution_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::ConflictResolution {
+        ref files,
+        ref mut selected,
+        ref repo_path,
+    }) = app.active_dialog
+    else {
+        return None;
+    };
+
+    let total = files.len();
+    let last = total.saturating_sub(1);
+
+    if app
+        .config
+        .matches_conflict_resolution(key, "down")
+        || app
+            .config
+            .matches_conflict_resolution(key, "down_alt")
+    {
+        *selected = (*selected + 1).min(last);
+    } else if app
+        .config
+        .matches_conflict_resolution(key, "up")
+        || app
+            .config
+            .matches_conflict_resolution(key, "up_alt")
+    {
+        *selected = selected.saturating_sub(1);
+    } else if app.config.matches_conflict_resolution(key, "ours") {
+        if let Some(f) = files.get(*selected) {
+            let path = f.path.clone();
+            return Some(Action::ResolveConflict {
+                file: path,
+                strategy: ConflictStrategy::Ours,
+            });
+        }
+    } else if app.config.matches_conflict_resolution(key, "theirs") {
+        if let Some(f) = files.get(*selected) {
+            let path = f.path.clone();
+            return Some(Action::ResolveConflict {
+                file: path,
+                strategy: ConflictStrategy::Theirs,
+            });
+        }
+    } else if app
+        .config
+        .matches_conflict_resolution(key, "mark_resolved")
+    {
+        if let Some(f) = files.get(*selected) {
+            let path = f.path.clone();
+            return Some(Action::ResolveConflict {
+                file: path,
+                strategy: ConflictStrategy::MarkResolved,
+            });
+        }
+    } else if app.config.matches_conflict_resolution(key, "select")
+        || key.code == KeyCode::Enter
+    {
+        // View conflict diff
+        if let Some(f) = files.get(*selected) {
+            let path = f.path.clone();
+            return Some(Action::ViewConflictDiff(path));
+        }
+    } else if app.config.matches_conflict_resolution(key, "edit") {
+        if let Some(f) = files.get(*selected) {
+            let full_path = repo_path.join(&f.path);
+            return Some(Action::OpenEditor(full_path));
+        }
+    } else if app.config.matches_conflict_resolution(key, "abort") {
+        return Some(Action::AbortMerge);
+    } else if app
+        .config
+        .matches_conflict_resolution(key, "exit")
+        || app
+            .config
+            .matches_conflict_resolution(key, "exit_alt")
+    {
+        app.active_dialog = None;
+        app.mode = AppMode::Normal;
+        app.interacting = false;
+        app.diff_content = None;
+        app.diff_file_path = None;
+    }
+    None
+}
+
+pub(super) fn handle_dispatch_agent_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::DispatchAgent {
+        source_ws,
+        ref card_id,
+        ref card_title,
+        ref card_description,
+        card_priority,
+        ref mut agent_idx,
+        ref agents,
+        ref mut additional_prompt,
+        ref mut additional_prompt_cursor,
+        ref mut step,
+        ref mut use_current_ws,
+    }) = app.active_dialog
+    else {
+        return None;
+    };
+
+    if *step == 1 {
+        // Step 2: workspace destination selection
+        match key.code {
+            KeyCode::Left | KeyCode::Right | KeyCode::Tab => {
+                *use_current_ws = !*use_current_ws;
+                None
+            }
+            KeyCode::Enter => {
+                let (provider, agent_name, agent_role) = if agents.is_empty() {
+                    let p = AIProvider::dispatchable()[*agent_idx];
+                    (p, None, None)
+                } else if *agent_idx == agents.len() {
+                    (AIProvider::Claude, None, None)
+                } else {
+                    let (name, prov_str, role) = &agents[*agent_idx];
+                    let p = AIProvider::from_label(prov_str);
+                    (p, Some(name.clone()), Some(role.clone()))
+                };
+                let action = Action::DispatchAgent {
+                    source_ws,
+                    card_id: card_id.clone(),
+                    card_title: card_title.clone(),
+                    card_description: card_description.clone(),
+                    card_priority,
+                    provider,
+                    agent_name,
+                    agent_role,
+                    additional_prompt: additional_prompt.clone(),
+                    use_current_ws: *use_current_ws,
+                };
+                app.active_dialog = None;
+                app.mode = AppMode::Normal;
+                Some(action)
+            }
+            _ if is_cancel(key) => {
+                // Back to step 0
+                *step = 0;
+                None
+            }
+            _ => None,
+        }
+    } else {
+        // Step 0: agent/provider selection
+        let count = if agents.is_empty() {
+            AIProvider::dispatchable().len()
+        } else {
+            agents.len() + 1 // +1 for "(None)" option
+        };
+
+        match key.code {
+            KeyCode::Left => {
+                *agent_idx = (*agent_idx + count - 1) % count;
+                None
+            }
+            KeyCode::Right | KeyCode::Tab => {
+                *agent_idx = (*agent_idx + 1) % count;
+                None
+            }
+            KeyCode::Enter => {
+                let no_agent = agents.is_empty() || *agent_idx == agents.len();
+                if no_agent {
+                    // No agent selected — ask about workspace destination
+                    *step = 1;
+                    None
+                } else {
+                    // Agent selected — dispatch directly to new worktree
+                    let (name, prov_str, role) = &agents[*agent_idx];
+                    let p = AIProvider::from_label(prov_str);
+                    let action = Action::DispatchAgent {
+                        source_ws,
+                        card_id: card_id.clone(),
+                        card_title: card_title.clone(),
+                        card_description: card_description.clone(),
+                        card_priority,
+                        provider: p,
+                        agent_name: Some(name.clone()),
+                        agent_role: Some(role.clone()),
+                        additional_prompt: additional_prompt.clone(),
+                        use_current_ws: false,
+                    };
+                    app.active_dialog = None;
+                    app.mode = AppMode::Normal;
+                    Some(action)
+                }
+            }
+            _ if is_cancel(key) => {
+                app.active_dialog = None;
+                app.mode = AppMode::Normal;
+                None
+            }
+            _ => {
+                handle_text_input(additional_prompt, additional_prompt_cursor, key, |c| {
+                    !c.is_control()
+                });
+                None
+            }
+        }
+    }
+}
+
+pub(super) fn handle_manage_agents_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::ManageAgents {
+        ref mut selected, ..
+    }) = app.active_dialog
+    else {
+        return None;
+    };
+
+    let count = app.agent_profiles.len();
+
+    match key.code {
+        KeyCode::Char('j') | KeyCode::Down => {
+            if count > 0 {
+                *selected = (*selected + 1) % count;
+            }
+            None
+        }
+        KeyCode::Char('k') | KeyCode::Up => {
+            if count > 0 {
+                *selected = (*selected + count - 1) % count;
+            }
+            None
+        }
+        KeyCode::Char('n') => {
+            // New agent
+            app.active_dialog = Some(DialogState::EditAgent {
+                editing_id: None,
+                name: String::new(),
+                name_cursor: 0,
+                provider_idx: 0,
+                role: String::new(),
+                active_field: EditAgentField::Name,
+            });
+            app.mode = AppMode::EditAgent;
+            None
+        }
+        KeyCode::Char('e') | KeyCode::Enter => {
+            // Edit selected agent
+            if let Some(agent) = app.agent_profiles.get(*selected) {
+                let providers = AIProvider::dispatchable();
+                let provider_idx = providers
+                    .iter()
+                    .position(|p| p.label() == agent.provider)
+                    .unwrap_or(0);
+                let name = agent.name.clone();
+                let role = agent.role.clone();
+                app.active_dialog = Some(DialogState::EditAgent {
+                    editing_id: agent.id,
+                    name_cursor: name.len(),
+                    name,
+                    provider_idx,
+                    role,
+                    active_field: EditAgentField::Name,
+                });
+                app.mode = AppMode::EditAgent;
+            }
+            None
+        }
+        KeyCode::Char('d') => {
+            // Delete selected agent
+            if let Some(agent) = app.agent_profiles.get(*selected)
+                && let Some(id) = agent.id
+            {
+                let action = Action::DeleteAgent(id);
+                if *selected > 0 && *selected >= count.saturating_sub(1) {
+                    *selected = selected.saturating_sub(1);
+                }
+                return Some(action);
+            }
+            None
+        }
+        KeyCode::Char('p') => {
+            // Persist agent to repo (Simple workspace only)
+            if let Some(agent) = app.agent_profiles.get(*selected)
+                && let Some(id) = agent.id
+            {
+                return Some(Action::SyncAgentToRepo(id));
+            }
+            None
+        }
+        KeyCode::Char('i') => {
+            // Import agents from repo files
+            Some(Action::ScanRepoAgents)
+        }
+        _ if is_cancel(key) => {
+            app.active_dialog = None;
+            app.mode = AppMode::Normal;
+            None
+        }
+        _ => None,
+    }
+}
+
+pub(super) fn handle_edit_agent_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::EditAgent {
+        editing_id,
+        ref mut name,
+        ref mut name_cursor,
+        ref mut provider_idx,
+        ref role,
+        ref mut active_field,
+    }) = app.active_dialog
+    else {
+        return None;
+    };
+
+    let providers = AIProvider::dispatchable();
+
+    match key.code {
+        KeyCode::Tab | KeyCode::BackTab => {
+            *active_field = match active_field {
+                EditAgentField::Name => EditAgentField::Provider,
+                EditAgentField::Provider => EditAgentField::Name,
+            };
+            None
+        }
+        KeyCode::Left if *active_field == EditAgentField::Provider => {
+            *provider_idx = (*provider_idx + providers.len() - 1) % providers.len();
+            None
+        }
+        KeyCode::Right if *active_field == EditAgentField::Provider => {
+            *provider_idx = (*provider_idx + 1) % providers.len();
+            None
+        }
+        KeyCode::Enter => {
+            if name.trim().is_empty() {
+                return None;
+            }
+            // Advance to step 2: role editor
+            let role_text = role.clone();
+            let cursor = role_text.len();
+            app.active_dialog = Some(DialogState::EditAgentRole {
+                editing_id,
+                name: name.trim().to_string(),
+                provider_idx: *provider_idx,
+                role: role_text,
+                role_cursor: cursor,
+                scroll: 0,
+            });
+            app.mode = AppMode::EditAgentRole;
+            None
+        }
+        _ if is_cancel(key) => {
+            app.active_dialog = Some(DialogState::ManageAgents { selected: 0 });
+            app.mode = AppMode::ManageAgents;
+            None
+        }
+        _ => {
+            if *active_field == EditAgentField::Name {
+                handle_text_input(name, name_cursor, key, |c| {
+                    c.is_alphanumeric() || c == '-' || c == '_'
+                });
+            }
+            None
+        }
+    }
+}
+
+pub(super) fn handle_edit_agent_role_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let source_repo_str = app
+        .current_workspace()
+        .map(|ws| ws.source_repo.display().to_string())
+        .unwrap_or_default();
+
+    let Some(DialogState::EditAgentRole {
+        editing_id,
+        ref name,
+        provider_idx,
+        ref mut role,
+        ref mut role_cursor,
+        ref mut scroll,
+    }) = app.active_dialog
+    else {
+        return None;
+    };
+
+    let providers = AIProvider::dispatchable();
+
+    // Ctrl+S: save and close
+    if key.code == KeyCode::Char('s') && key.modifiers.contains(KeyModifiers::CONTROL) {
+        let profile = piki_core::storage::AgentProfile {
+            id: editing_id,
+            source_repo: source_repo_str.clone(),
+            name: name.clone(),
+            provider: providers[provider_idx].label().to_string(),
+            role: role.clone(),
+            version: 0, // DB handles version increment
+            last_synced_at: None,
+        };
+        let action = Action::SaveAgent {
+            source_repo: PathBuf::from(&source_repo_str),
+            profile,
+        };
+        app.active_dialog = Some(DialogState::ManageAgents { selected: 0 });
+        app.mode = AppMode::ManageAgents;
+        return Some(action);
+    }
+
+    // Esc: go back to step 1 without saving
+    if is_cancel(key) {
+        app.active_dialog = Some(DialogState::EditAgent {
+            editing_id,
+            name: name.clone(),
+            name_cursor: name.len(),
+            provider_idx,
+            role: role.clone(),
+            active_field: EditAgentField::Name,
+        });
+        app.mode = AppMode::EditAgent;
+        return None;
+    }
+
+    // Ctrl+D: clear all text
+    if key.code == KeyCode::Char('d') && key.modifiers.contains(KeyModifiers::CONTROL) {
+        role.clear();
+        *role_cursor = 0;
+        *scroll = 0;
+        return None;
+    }
+
+    // Text editing
+    match key.code {
+        KeyCode::Enter => {
+            // Insert newline
+            let byte_idx = cursor_to_byte(role, *role_cursor);
+            role.insert(byte_idx, '\n');
+            *role_cursor += 1;
+        }
+        KeyCode::Down => {
+            move_cursor_vertical(role, role_cursor, 1);
+        }
+        KeyCode::Up => {
+            move_cursor_vertical(role, role_cursor, -1);
+        }
+        KeyCode::PageDown => {
+            move_cursor_vertical(role, role_cursor, 10);
+        }
+        KeyCode::PageUp => {
+            move_cursor_vertical(role, role_cursor, -10);
+        }
+        _ => {
+            handle_text_input(role, role_cursor, key, |c| c != '\t');
+        }
+    }
+    None
+}
+
+/// Move cursor up or down by `delta` lines, preserving column position.
+pub(super) fn move_cursor_vertical(text: &str, cursor: &mut usize, delta: i32) {
+    let (cur_line, cur_col, line_starts) = cursor_line_col(text, *cursor);
+    let target = if delta > 0 {
+        (cur_line + delta as usize).min(line_starts.len() - 1)
+    } else {
+        cur_line.saturating_sub((-delta) as usize)
+    };
+    if target == cur_line {
+        // Already at boundary
+        if delta < 0 {
+            *cursor = 0;
+        } else {
+            *cursor = char_count(text);
+        }
+        return;
+    }
+    let start = line_starts[target];
+    let end = line_starts
+        .get(target + 1)
+        .map(|e| e - 1) // exclude the \n
+        .unwrap_or(char_count(text));
+    let line_len = end - start;
+    *cursor = start + cur_col.min(line_len);
+}
+
+/// Returns (line_index, column, line_start_offsets) for a cursor position in text.
+fn cursor_line_col(text: &str, cursor: usize) -> (usize, usize, Vec<usize>) {
+    let mut line_starts = vec![0usize];
+    for (i, c) in text.chars().enumerate() {
+        if c == '\n' {
+            line_starts.push(i + 1);
+        }
+    }
+    let mut line = 0;
+    for (i, &start) in line_starts.iter().enumerate() {
+        if cursor >= start {
+            line = i;
+        }
+    }
+    let col = cursor - line_starts[line];
+    (line, col, line_starts)
+}
+
+fn cursor_to_byte(text: &str, cursor: usize) -> usize {
+    if text.is_ascii() {
+        cursor.min(text.len())
+    } else {
+        text.char_indices()
+            .nth(cursor)
+            .map_or(text.len(), |(i, _)| i)
+    }
+}
+
+fn char_count(text: &str) -> usize {
+    if text.is_ascii() {
+        text.len()
+    } else {
+        text.chars().count()
+    }
+}
+
+pub(super) fn handle_import_agents_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::ImportAgents {
+        ref discovered,
+        ref mut selected,
+        ref mut cursor,
+    }) = app.active_dialog
+    else {
+        return None;
+    };
+
+    let count = discovered.len();
+    if count == 0 {
+        if is_cancel(key) || key.code == KeyCode::Enter {
+            app.active_dialog = Some(DialogState::ManageAgents { selected: 0 });
+            app.mode = AppMode::ManageAgents;
+        }
+        return None;
+    }
+
+    match key.code {
+        KeyCode::Char('j') | KeyCode::Down => {
+            *cursor = (*cursor + 1) % count;
+            None
+        }
+        KeyCode::Char('k') | KeyCode::Up => {
+            *cursor = (*cursor + count - 1) % count;
+            None
+        }
+        KeyCode::Char(' ') => {
+            selected[*cursor] = !selected[*cursor];
+            if *cursor + 1 < count {
+                *cursor += 1;
+            }
+            None
+        }
+        KeyCode::Char('a') => {
+            let all_selected = selected.iter().all(|&s| s);
+            for s in selected.iter_mut() {
+                *s = !all_selected;
+            }
+            None
+        }
+        KeyCode::Enter => {
+            // Collect selected agents for import
+            let to_import: Vec<(String, String, String)> = discovered
+                .iter()
+                .zip(selected.iter())
+                .filter(|(_, sel)| **sel)
+                .map(|((name, provider, role, _), _)| {
+                    (name.clone(), provider.clone(), role.clone())
+                })
+                .collect();
+            if to_import.is_empty() {
+                // Nothing selected, go back
+                app.active_dialog = Some(DialogState::ManageAgents { selected: 0 });
+                app.mode = AppMode::ManageAgents;
+                None
+            } else {
+                app.active_dialog = None;
+                app.mode = AppMode::Normal;
+                Some(Action::ImportAgents(to_import))
+            }
+        }
+        _ if is_cancel(key) => {
+            app.active_dialog = Some(DialogState::ManageAgents { selected: 0 });
+            app.mode = AppMode::ManageAgents;
+            None
+        }
+        _ => None,
+    }
 }

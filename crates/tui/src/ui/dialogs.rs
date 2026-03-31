@@ -324,7 +324,7 @@ pub(super) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         "".to_string(),
         "  Navigation mode (yellow border)".to_string(),
         format!(
-            "    {:<13} Move between panes",
+            "    {:<13} Move between panes (h→ws list)",
             format!(
                 "{}/{}/{}/{}",
                 cfg.get_binding("navigation", "up"),
@@ -363,6 +363,18 @@ pub(super) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         ),
         format!("    {:<13} Go to workspace N", "1-9"),
         format!(
+            "    {:<13} Fuzzy workspace search",
+            cfg.get_binding("navigation", "workspace_switcher")
+        ),
+        format!(
+            "    {:<13} Previous workspace",
+            cfg.get_binding("navigation", "toggle_prev_workspace")
+        ),
+        format!(
+            "    {:<13} Command palette",
+            cfg.get_binding("navigation", "command_palette")
+        ),
+        format!(
             "    {:<13} Next/Prev tab",
             format!(
                 "{}/{}",
@@ -384,10 +396,34 @@ pub(super) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         ),
         format!("    {:<13} About", cfg.get_binding("navigation", "about")),
         format!(
+            "    {:<13} Workspace info",
+            cfg.get_binding("navigation", "workspace_info")
+        ),
+        format!(
+            "    {:<13} Open Kanban Board",
+            cfg.get_binding("navigation", "kanban")
+        ),
+        format!(
+            "    {:<13} Undo last stage/unstage",
+            cfg.get_binding("navigation", "undo")
+        ),
+        format!(
+            "    {:<13} Quick stage (file list focused)",
+            cfg.get_binding("navigation", "stage_quick")
+        ),
+        format!(
+            "    {:<13} Quick unstage (file list focused)",
+            cfg.get_binding("navigation", "unstage_quick")
+        ),
+        format!(
             "    {:<13} Dashboard",
             cfg.get_binding("navigation", "dashboard")
         ),
         format!("    {:<13} Logs", cfg.get_binding("navigation", "logs")),
+        format!(
+            "    {:<13} Git log",
+            cfg.get_binding("navigation", "git_log")
+        ),
         format!("    {:<13} Quit", cfg.get_binding("navigation", "quit")),
         "".to_string(),
         "  Interaction mode (green border)".to_string(),
@@ -395,6 +431,7 @@ pub(super) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
             "    {:<13} Back to navigation",
             cfg.get_binding("interaction", "exit_interaction")
         ),
+        "    Esc           Back (non-terminal panes)".to_string(),
         "".to_string(),
         "  Terminal pane (navigation mode)".to_string(),
         format!(
@@ -417,6 +454,10 @@ pub(super) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         "".to_string(),
         "  Terminal pane (interaction mode)".to_string(),
         "    All keys sent to active tab".to_string(),
+        format!(
+            "    {:<13} Search in terminal output",
+            cfg.get_binding("interaction", "search")
+        ),
         "".to_string(),
         "  File list pane".to_string(),
         format!(
@@ -439,7 +480,7 @@ pub(super) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
             )
         ),
         format!(
-            "    {:<13} Switch to workspace",
+            "    {:<13} Switch + focus main panel",
             cfg.get_binding("workspace_list", "select")
         ),
         format!(
@@ -537,6 +578,14 @@ pub(super) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
             "    {:<13} Unstage file (git reset)",
             cfg.get_binding("file_list", "unstage")
         ),
+        format!(
+            "    {:<13} Toggle multi-select",
+            cfg.get_binding("file_list", "toggle_select")
+        ),
+        format!(
+            "    {:<13} Select/deselect all",
+            cfg.get_binding("file_list", "select_all")
+        ),
         "".to_string(),
         "  Git operations".to_string(),
         format!(
@@ -544,6 +593,113 @@ pub(super) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
             cfg.get_binding("navigation", "commit")
         ),
         format!("    {:<13} Push", cfg.get_binding("navigation", "push")),
+        format!(
+            "    {:<13} Merge/Rebase into main",
+            cfg.get_binding("navigation", "merge")
+        ),
+        format!(
+            "    {:<13} Conflict resolution",
+            cfg.get_binding("navigation", "conflicts")
+        ),
+        format!(
+            "    {:<13} Git stash overlay",
+            cfg.get_binding("navigation", "stash")
+        ),
+        "".to_string(),
+        "  Git stash overlay".to_string(),
+        format!(
+            "    {:<13} Save new stash (enter message)",
+            cfg.get_binding("git_stash", "save")
+        ),
+        format!(
+            "    {:<13} Pop selected stash",
+            cfg.get_binding("git_stash", "pop")
+        ),
+        format!(
+            "    {:<13} Apply selected stash",
+            cfg.get_binding("git_stash", "apply")
+        ),
+        format!(
+            "    {:<13} Drop selected stash",
+            cfg.get_binding("git_stash", "drop")
+        ),
+        format!(
+            "    {:<13} Show stash diff",
+            cfg.get_binding("git_stash", "show")
+        ),
+        format!(
+            "    {:<13} Close",
+            cfg.get_binding("git_stash", "exit")
+        ),
+        "".to_string(),
+        "  Conflict resolution overlay".to_string(),
+        format!(
+            "    {:<13} Navigate files",
+            format!(
+                "{}/{}",
+                cfg.get_binding("conflict_resolution", "up"),
+                cfg.get_binding("conflict_resolution", "down")
+            )
+        ),
+        format!(
+            "    {:<13} Resolve with ours",
+            cfg.get_binding("conflict_resolution", "ours")
+        ),
+        format!(
+            "    {:<13} Resolve with theirs",
+            cfg.get_binding("conflict_resolution", "theirs")
+        ),
+        format!(
+            "    {:<13} Mark as resolved (git add)",
+            cfg.get_binding("conflict_resolution", "mark_resolved")
+        ),
+        format!(
+            "    {:<13} Edit file in $EDITOR",
+            cfg.get_binding("conflict_resolution", "edit")
+        ),
+        format!(
+            "    {:<13} Abort merge/rebase",
+            cfg.get_binding("conflict_resolution", "abort")
+        ),
+        format!(
+            "    {:<13} Close",
+            cfg.get_binding("conflict_resolution", "exit")
+        ),
+        "".to_string(),
+        "  Kanban board (interaction mode)".to_string(),
+        "    h/l/j/k     Navigate columns and cards".to_string(),
+        "    H/L         Move card left/right".to_string(),
+        "    n           New card".to_string(),
+        "    e           Edit selected card".to_string(),
+        "    d           Delete card".to_string(),
+        "    D           Dispatch agent (feature/bug/spike branch + AI)".to_string(),
+        "    Enter       Toggle card details".to_string(),
+        "    r           Refresh board".to_string(),
+        "    Esc         Close".to_string(),
+        "".to_string(),
+        "  Dispatch agent dialog (D on kanban card)".to_string(),
+        "    ◄/►/Tab     Cycle agent/provider (includes (None))".to_string(),
+        "    Enter       With agent: dispatch to new worktree".to_string(),
+        "                With (None): choose workspace (New/Current)".to_string(),
+        "    Esc         Cancel / Back".to_string(),
+        "".to_string(),
+        "  Manage agents (A in navigation mode)".to_string(),
+        "    j/k         Navigate agent list".to_string(),
+        "    n           New agent (step 1: name + provider)".to_string(),
+        "    e / Enter   Edit selected agent".to_string(),
+        "    d           Delete selected agent".to_string(),
+        "    p           Sync agent to repo".to_string(),
+        "    i           Import agents from repo".to_string(),
+        "    Esc         Close".to_string(),
+        "  Import agents overlay (i in manage agents)".to_string(),
+        "    j/k         Navigate discovered agents".to_string(),
+        "    Space       Toggle selection".to_string(),
+        "    a           Toggle select all".to_string(),
+        "    Enter       Import selected".to_string(),
+        "    Esc         Cancel".to_string(),
+        "  Agent role editor (step 2)".to_string(),
+        "    Ctrl+S      Save agent and close".to_string(),
+        "    Esc         Back to step 1 without saving".to_string(),
         "".to_string(),
         "  Inline editor".to_string(),
         format!("    {:<13} Save", cfg.get_binding("editor", "save")),
@@ -1285,4 +1441,867 @@ pub(crate) fn render_new_tab_dialog(frame: &mut Frame, area: Rect, app: &App) {
             frame.render_widget(text, popup);
         }
     }
+}
+
+pub(super) fn render_git_stash_overlay(frame: &mut Frame, area: Rect, app: &App) {
+    let (entries, selected, _scroll, input_mode, input_buffer, input_cursor) =
+        match app.active_dialog {
+            Some(DialogState::GitStash {
+                ref entries,
+                selected,
+                scroll,
+                input_mode,
+                ref input_buffer,
+                input_cursor,
+            }) => (
+                entries,
+                selected,
+                scroll,
+                input_mode,
+                input_buffer,
+                input_cursor,
+            ),
+            _ => return,
+        };
+
+    let theme = &app.theme;
+    let width = area.width * 75 / 100;
+    let height = area.height * 70 / 100;
+    let popup = clear_popup(frame, area, width.max(40), height.max(10));
+
+    let inner_height = popup.height.saturating_sub(2) as usize; // borders
+    // Reserve 2 lines for footer hint (and input if active)
+    let footer_lines = if input_mode { 3 } else { 2 };
+    let visible_rows = inner_height.saturating_sub(footer_lines);
+
+    let mut lines: Vec<Line<'_>> = Vec::new();
+
+    if entries.is_empty() {
+        lines.push(Line::from(""));
+        lines.push(
+            Line::from(Span::styled(
+                "  No stash entries",
+                Style::default().fg(Color::DarkGray),
+            ))
+            .centered(),
+        );
+        lines.push(Line::from(""));
+    } else {
+        // Compute scroll to keep selected visible
+        let scroll_offset = if selected >= visible_rows {
+            selected + 1 - visible_rows
+        } else {
+            0
+        };
+
+        for (i, (stash_ref, message)) in entries.iter().enumerate() {
+            if i < scroll_offset {
+                continue;
+            }
+            if lines.len() >= visible_rows {
+                break;
+            }
+            let is_selected = i == selected;
+            let marker = if is_selected { ">" } else { " " };
+            let bg = if is_selected {
+                theme.workspace_list.selected_bg
+            } else {
+                Color::Reset
+            };
+            let ref_style = Style::default()
+                .fg(Color::Yellow)
+                .bg(bg)
+                .add_modifier(Modifier::BOLD);
+            let msg_style = Style::default().fg(Color::White).bg(bg);
+            let marker_style = Style::default().fg(Color::Cyan).bg(bg);
+
+            // Truncate message to fit
+            let max_msg_len = popup.width.saturating_sub(20) as usize;
+            let msg_display: String = if message.len() > max_msg_len {
+                format!("{}...", &message[..max_msg_len.saturating_sub(3)])
+            } else {
+                message.clone()
+            };
+
+            lines.push(Line::from(vec![
+                Span::styled(format!(" {} ", marker), marker_style),
+                Span::styled(format!("{:<12}", stash_ref), ref_style),
+                Span::styled(format!(" {}", msg_display), msg_style),
+            ]));
+        }
+    }
+
+    // Pad remaining visible rows
+    while lines.len() < visible_rows {
+        lines.push(Line::from(""));
+    }
+
+    // Input line for stash save
+    if input_mode {
+        let label_style = Style::default().fg(Color::Cyan);
+        let input_display = visible_field(
+            input_buffer,
+            true,
+            input_cursor,
+            popup.width.saturating_sub(14) as usize,
+        );
+        lines.push(Line::from(vec![
+            Span::styled("  Message: ", label_style),
+            Span::styled(input_display, Style::default().fg(Color::White)),
+        ]));
+    }
+
+    // Footer hint
+    let hint = if input_mode {
+        " Enter confirm  Esc cancel"
+    } else {
+        " s save  p pop  a apply  d drop  Enter show  Esc close"
+    };
+    lines.push(Line::from(Span::styled(
+        hint,
+        Style::default().fg(Color::DarkGray),
+    )));
+
+    // Title with count
+    let title_text = if entries.is_empty() {
+        " Git Stash ".to_string()
+    } else {
+        format!(" Git Stash [{}/{}] ", selected + 1, entries.len())
+    };
+
+    let block = Block::default()
+        .title(title_text)
+        .title_style(Style::default().fg(theme.help.border))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.help.border));
+
+    let text = Paragraph::new(lines).block(block);
+    frame.render_widget(text, popup);
+}
+
+pub(super) fn render_git_log_overlay(frame: &mut Frame, area: Rect, app: &App) {
+    let (log_lines, selected, scroll) = match app.active_dialog {
+        Some(DialogState::GitLog {
+            ref lines,
+            selected,
+            scroll,
+        }) => (lines, selected, scroll),
+        _ => return,
+    };
+
+    let theme = &app.theme;
+    let width = (area.width * 85 / 100).max(40).min(area.width);
+    let height = (area.height * 80 / 100).max(10).min(area.height);
+    let popup = clear_popup(frame, area, width, height);
+
+    let inner_height = popup.height.saturating_sub(2); // borders
+    if inner_height < 3 {
+        return;
+    }
+
+    let footer_height: u16 = 1;
+    let body_height = (inner_height - footer_height) as usize;
+
+    // Auto-scroll to keep selected visible
+    let actual_scroll = if selected < scroll {
+        selected
+    } else if selected >= scroll + body_height {
+        selected - body_height + 1
+    } else {
+        scroll
+    };
+
+    let total = log_lines.len();
+
+    // Build visible lines
+    let mut display_lines: Vec<Line<'_>> = Vec::new();
+    for (i, entry) in log_lines
+        .iter()
+        .skip(actual_scroll)
+        .take(body_height)
+        .enumerate()
+    {
+        let is_selected = actual_scroll + i == selected;
+        let bg = if is_selected {
+            theme.workspace_list.selected_bg
+        } else {
+            Color::Reset
+        };
+        let style = Style::default().bg(bg);
+
+        // Truncate line to fit popup width (leave 2 for borders + 1 for padding)
+        let max_chars = (popup.width.saturating_sub(3)) as usize;
+        let truncated: String = entry.raw_line.chars().take(max_chars).collect();
+
+        display_lines.push(Line::from(Span::styled(
+            format!(" {:<width$}", truncated, width = max_chars),
+            style,
+        )));
+    }
+
+    // Pad remaining space
+    while display_lines.len() < body_height {
+        display_lines.push(Line::from(""));
+    }
+
+    // Footer hint
+    display_lines.push(Line::from(vec![
+        Span::styled(
+            " [j/k]",
+            Style::default().fg(theme.workspace_list.name_active),
+        ),
+        Span::raw(" navigate  "),
+        Span::styled(
+            "[enter]",
+            Style::default().fg(theme.workspace_list.name_active),
+        ),
+        Span::raw(" view diff  "),
+        Span::styled(
+            "[esc]",
+            Style::default().fg(theme.workspace_list.name_active),
+        ),
+        Span::raw(" close"),
+    ]));
+
+    // Title with scroll indicator
+    let scroll_indicator = if total > 0 {
+        format!(" [{}/{}] ", selected + 1, total)
+    } else {
+        String::new()
+    };
+
+    let block = popup_block("Git Log", theme.help.border)
+        .title_bottom(Line::from(scroll_indicator).right_aligned());
+
+    let text = Paragraph::new(display_lines).block(block);
+    frame.render_widget(text, popup);
+}
+
+pub(super) fn render_conflict_resolution_overlay(frame: &mut Frame, area: Rect, app: &App) {
+    let (conflict_files, selected) = match app.active_dialog {
+        Some(DialogState::ConflictResolution {
+            ref files,
+            selected,
+            ..
+        }) => (files, selected),
+        _ => return,
+    };
+
+    let theme = &app.theme;
+    let width = (area.width * 70 / 100).max(50).min(area.width);
+    let height = (area.height * 60 / 100).max(12).min(area.height);
+    let popup = clear_popup(frame, area, width, height);
+
+    let inner_height = popup.height.saturating_sub(2) as usize; // borders
+    let footer_lines = 2;
+    let visible_rows = inner_height.saturating_sub(footer_lines);
+
+    let mut lines: Vec<Line<'_>> = Vec::new();
+
+    if conflict_files.is_empty() {
+        lines.push(Line::from(""));
+        lines.push(
+            Line::from(Span::styled(
+                "  No conflicted files",
+                Style::default().fg(Color::DarkGray),
+            ))
+            .centered(),
+        );
+        lines.push(Line::from(""));
+    } else {
+        // Compute scroll to keep selected visible
+        let scroll_offset = if selected >= visible_rows {
+            selected + 1 - visible_rows
+        } else {
+            0
+        };
+
+        for (i, f) in conflict_files.iter().enumerate() {
+            if i < scroll_offset {
+                continue;
+            }
+            if lines.len() >= visible_rows {
+                break;
+            }
+            let is_selected = i == selected;
+            let marker = if is_selected { ">" } else { " " };
+            let bg = if is_selected {
+                theme.workspace_list.selected_bg
+            } else {
+                Color::Reset
+            };
+            let marker_style = Style::default().fg(Color::Cyan).bg(bg);
+            let icon_style = Style::default()
+                .fg(Color::Magenta)
+                .bg(bg)
+                .add_modifier(Modifier::BOLD);
+            let path_style = Style::default().fg(Color::White).bg(bg);
+
+            // Truncate path to fit
+            let max_path_len = popup.width.saturating_sub(10) as usize;
+            let path_display: String = if f.path.len() > max_path_len {
+                format!("...{}", &f.path[f.path.len() - max_path_len.saturating_sub(3)..])
+            } else {
+                f.path.clone()
+            };
+
+            lines.push(Line::from(vec![
+                Span::styled(format!(" {} ", marker), marker_style),
+                Span::styled("C ", icon_style),
+                Span::styled(path_display, path_style),
+            ]));
+        }
+    }
+
+    // Pad remaining visible rows
+    while lines.len() < visible_rows {
+        lines.push(Line::from(""));
+    }
+
+    // Footer hints
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled(
+            " [o]",
+            Style::default().fg(theme.workspace_list.name_active),
+        ),
+        Span::raw(" ours  "),
+        Span::styled(
+            "[t]",
+            Style::default().fg(theme.workspace_list.name_active),
+        ),
+        Span::raw(" theirs  "),
+        Span::styled(
+            "[m]",
+            Style::default().fg(theme.workspace_list.name_active),
+        ),
+        Span::raw(" mark resolved  "),
+        Span::styled(
+            "[e]",
+            Style::default().fg(theme.workspace_list.name_active),
+        ),
+        Span::raw(" edit  "),
+        Span::styled(
+            "[A]",
+            Style::default().fg(Color::Red),
+        ),
+        Span::raw(" abort  "),
+        Span::styled(
+            "[esc]",
+            Style::default().fg(theme.workspace_list.name_active),
+        ),
+        Span::raw(" close"),
+    ]));
+
+    // Title with count indicator
+    let count_indicator = format!(
+        " [{}/{}] ",
+        if conflict_files.is_empty() {
+            0
+        } else {
+            selected + 1
+        },
+        conflict_files.len()
+    );
+
+    let block = popup_block("Conflict Resolution", Color::Magenta)
+        .title_bottom(Line::from(count_indicator).right_aligned());
+
+    let text = Paragraph::new(lines).block(block);
+    frame.render_widget(text, popup);
+}
+
+pub(super) fn render_dispatch_agent_dialog(frame: &mut Frame, area: Rect, app: &App) {
+    let Some(DialogState::DispatchAgent {
+        ref card_title,
+        ref card_description,
+        agent_idx,
+        ref agents,
+        ref additional_prompt,
+        additional_prompt_cursor,
+        step,
+        use_current_ws,
+        ..
+    }) = app.active_dialog
+    else {
+        return;
+    };
+
+    let popup_width = (area.width * 60 / 100).max(50);
+    let popup_height = 14;
+    let popup = clear_popup(frame, area, popup_width, popup_height);
+    let active_c = app.theme.dialog.new_ws_active;
+    let inactive_c = app.theme.dialog.new_ws_inactive;
+    let fmax = popup.width.saturating_sub(14) as usize;
+
+    // Truncate card title/desc for display
+    let title_display = if card_title.len() > fmax {
+        format!("{}…", &card_title[..fmax.saturating_sub(1)])
+    } else {
+        card_title.clone()
+    };
+    let desc_display = if card_description.len() > fmax {
+        format!("{}…", &card_description[..fmax.saturating_sub(1)])
+    } else {
+        card_description.clone()
+    };
+
+    // Agent/provider selector — agents mode or fallback to raw providers
+    let selector_text: String = if agents.is_empty() {
+        let providers = piki_core::AIProvider::dispatchable();
+        providers
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                if i == agent_idx {
+                    format!("[{}]", p.label())
+                } else {
+                    format!(" {} ", p.label())
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    } else {
+        let mut items: Vec<String> = agents
+            .iter()
+            .enumerate()
+            .map(|(i, (name, _, _))| {
+                if i == agent_idx {
+                    format!("[{}]", name)
+                } else {
+                    format!(" {} ", name)
+                }
+            })
+            .collect();
+        // Append "(None)" option
+        if agent_idx == agents.len() {
+            items.push("[(None)]".to_string());
+        } else {
+            items.push(" (None) ".to_string());
+        }
+        items.join(" ")
+    };
+
+    let mut lines = vec![
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  Card:     ", Style::default().fg(inactive_c)),
+            Span::styled(title_display, Style::default().fg(Color::White)),
+        ]),
+        Line::from(vec![
+            Span::styled("  Desc:     ", Style::default().fg(inactive_c)),
+            Span::styled(desc_display, Style::default().fg(Color::DarkGray)),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  Agent:    ", Style::default().fg(active_c)),
+            Span::styled(selector_text, Style::default().fg(active_c)),
+        ]),
+        Line::from(Span::styled(
+            "              ◄/► to change",
+            Style::default().fg(Color::DarkGray),
+        )),
+        Line::from(""),
+    ];
+
+    if step == 1 {
+        // Step 2: workspace destination selector
+        let ws_selector = if use_current_ws {
+            " New   [Current]"
+        } else {
+            "[New]   Current "
+        };
+        lines.push(Line::from(vec![
+            Span::styled("  Workspace:", Style::default().fg(active_c)),
+            Span::styled(
+                format!(" {}", ws_selector),
+                Style::default().fg(active_c),
+            ),
+        ]));
+        lines.push(Line::from(Span::styled(
+            "              ◄/► to change",
+            Style::default().fg(Color::DarkGray),
+        )));
+        lines.push(Line::from(""));
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled(
+                "  [Enter] Dispatch    ",
+                Style::default().fg(active_c).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("[Esc] Back", Style::default().fg(inactive_c)),
+        ]));
+    } else {
+        // Step 0: agent selection + prompt
+        lines.push(render_text_field(
+            "  Prompt:   ",
+            additional_prompt,
+            true,
+            additional_prompt_cursor,
+            fmax,
+            field_style(true, active_c, inactive_c),
+        ));
+        lines.push(Line::from(""));
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled(
+                "  [Enter] Dispatch    ",
+                Style::default().fg(active_c).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("[Esc] Cancel", Style::default().fg(inactive_c)),
+        ]));
+    }
+
+    let text = Paragraph::new(lines).block(popup_block("Dispatch Agent", Color::Yellow));
+    frame.render_widget(text, popup);
+}
+
+pub(super) fn render_manage_agents_dialog(frame: &mut Frame, area: Rect, app: &App) {
+    let Some(DialogState::ManageAgents { selected, .. }) = app.active_dialog else {
+        return;
+    };
+
+    let popup_width = (area.width * 60 / 100).max(50);
+    let popup_height = (app.agent_profiles.len() as u16 + 6).min(area.height - 4).max(8);
+    let popup = clear_popup(frame, area, popup_width, popup_height);
+    let active_c = app.theme.dialog.new_ws_active;
+    let inactive_c = app.theme.dialog.new_ws_inactive;
+
+    let mut lines = vec![Line::from("")];
+
+    if app.agent_profiles.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "  No agents configured. Press [n] to create one.",
+            Style::default().fg(Color::DarkGray),
+        )));
+    } else {
+        for (i, agent) in app.agent_profiles.iter().enumerate() {
+            let marker = if i == selected { "  ▸ " } else { "    " };
+            let style = if i == selected {
+                Style::default().fg(active_c).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::White)
+            };
+            let sync_indicator = if agent.last_synced_at.is_some() {
+                Span::styled(
+                    format!(" v{} ✓", agent.version),
+                    Style::default().fg(Color::Green),
+                )
+            } else {
+                Span::styled(
+                    format!(" v{} ✗", agent.version),
+                    Style::default().fg(Color::DarkGray),
+                )
+            };
+            lines.push(Line::from(vec![
+                Span::styled(marker, style),
+                Span::styled(format!("{:<18}", agent.name), style),
+                Span::styled(
+                    format!("{:<13}", agent.provider),
+                    Style::default().fg(inactive_c),
+                ),
+                sync_indicator,
+            ]));
+        }
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled("  [n] New  ", Style::default().fg(active_c)),
+        Span::styled("[e] Edit  ", Style::default().fg(active_c)),
+        Span::styled("[d] Delete  ", Style::default().fg(active_c)),
+        Span::styled("[p] Sync to repo  ", Style::default().fg(active_c)),
+        Span::styled("[i] Import from repo  ", Style::default().fg(active_c)),
+        Span::styled("[Esc] Close", Style::default().fg(inactive_c)),
+    ]));
+
+    let project_name = app
+        .current_workspace()
+        .map(|ws| {
+            ws.source_repo
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string()
+        })
+        .unwrap_or_default();
+    let title = format!("Manage Agents ({})", project_name);
+
+    let text = Paragraph::new(lines).block(popup_block(&title, Color::Cyan));
+    frame.render_widget(text, popup);
+}
+
+pub(super) fn render_edit_agent_dialog(frame: &mut Frame, area: Rect, app: &App) {
+    let Some(DialogState::EditAgent {
+        editing_id,
+        ref name,
+        name_cursor,
+        provider_idx,
+        active_field,
+        ..
+    }) = app.active_dialog
+    else {
+        return;
+    };
+
+    let providers = piki_core::AIProvider::dispatchable();
+    let popup_width = (area.width * 50 / 100).max(45);
+    let popup_height = 11;
+    let popup = clear_popup(frame, area, popup_width, popup_height);
+    let active_c = app.theme.dialog.new_ws_active;
+    let inactive_c = app.theme.dialog.new_ws_inactive;
+    let fmax = popup.width.saturating_sub(14) as usize;
+
+    use crate::dialog_state::EditAgentField;
+
+    let name_active = active_field == EditAgentField::Name;
+    let prov_active = active_field == EditAgentField::Provider;
+
+    let provider_text: String = providers
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            if i == provider_idx {
+                format!("[{}]", p.label())
+            } else {
+                format!(" {} ", p.label())
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    let prov_color = if prov_active { active_c } else { inactive_c };
+
+    let title = if editing_id.is_some() {
+        "Edit Agent (1/2)"
+    } else {
+        "New Agent (1/2)"
+    };
+
+    let lines = vec![
+        Line::from(""),
+        render_text_field(
+            "  Name:     ",
+            name,
+            name_active,
+            name_cursor,
+            fmax,
+            field_style(name_active, active_c, inactive_c),
+        ),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(
+                "  Provider: ",
+                Style::default().fg(if prov_active { active_c } else { inactive_c }),
+            ),
+            Span::styled(provider_text, Style::default().fg(prov_color)),
+        ]),
+        Line::from(Span::styled(
+            "              Tab switch  ◄/► provider",
+            Style::default().fg(Color::DarkGray),
+        )),
+        Line::from(""),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(
+                "  [Enter] Next (edit role)    ",
+                Style::default().fg(active_c).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("[Esc] Cancel", Style::default().fg(inactive_c)),
+        ]),
+    ];
+
+    let text = Paragraph::new(lines).block(popup_block(title, Color::Cyan));
+    frame.render_widget(text, popup);
+}
+
+pub(super) fn render_edit_agent_role_dialog(frame: &mut Frame, area: Rect, app: &mut App) {
+    let Some(DialogState::EditAgentRole {
+        ref name,
+        provider_idx,
+        ref role,
+        role_cursor,
+        ref mut scroll,
+        ..
+    }) = app.active_dialog
+    else {
+        return;
+    };
+
+    let providers = piki_core::AIProvider::dispatchable();
+    let provider_label = providers
+        .get(provider_idx)
+        .map(|p| p.label())
+        .unwrap_or("?");
+
+    // Large floating editor — 80% of screen
+    let popup_width = (area.width * 80 / 100).max(60);
+    let popup_height = (area.height * 70 / 100).max(15);
+    let popup = clear_popup(frame, area, popup_width, popup_height);
+    let active_c = app.theme.dialog.new_ws_active;
+    let inactive_c = app.theme.dialog.new_ws_inactive;
+
+    let title = format!("Agent Role — {} ({})", name, provider_label);
+    let inner_width = popup.width.saturating_sub(4) as usize;
+    let inner_height = popup.height.saturating_sub(5) as usize;
+
+    // Render role text with word wrapping and cursor
+    let role_lines: Vec<&str> = role.split('\n').collect();
+
+    // Compute cursor position in wrapped text
+    let mut display_lines: Vec<String> = Vec::new();
+    let mut cursor_line = 0;
+    let mut cursor_col = 0;
+    let mut char_count = 0;
+
+    for line in &role_lines {
+        if line.is_empty() {
+            if char_count == role_cursor {
+                cursor_line = display_lines.len();
+                cursor_col = 0;
+            }
+            display_lines.push(String::new());
+            char_count += 1; // count the \n
+        } else {
+            let chars: Vec<char> = line.chars().collect();
+            for chunk in chars.chunks(inner_width.max(1)) {
+                let s: String = chunk.iter().collect();
+                for (i, _) in chunk.iter().enumerate() {
+                    if char_count + i == role_cursor {
+                        cursor_line = display_lines.len();
+                        cursor_col = i;
+                    }
+                }
+                char_count += chunk.len();
+                display_lines.push(s);
+            }
+            char_count += 1; // count the \n
+        }
+    }
+    // Handle cursor at end
+    if role_cursor >= role.len() {
+        cursor_line = display_lines.len().saturating_sub(1);
+        cursor_col = display_lines.last().map(|l| l.len()).unwrap_or(0);
+    }
+
+    // Auto-scroll to keep cursor visible
+    let s = *scroll;
+    if cursor_line >= s + inner_height {
+        *scroll = cursor_line - inner_height + 1;
+    } else if cursor_line < s {
+        *scroll = cursor_line;
+    }
+    let s = *scroll;
+
+    let mut lines = vec![Line::from(Span::styled(
+        format!("  {}/{} lines", cursor_line + 1, display_lines.len()),
+        Style::default().fg(Color::DarkGray),
+    ))];
+
+    let visible_range = s..display_lines.len().min(s + inner_height);
+    for (i, line_idx) in visible_range.enumerate() {
+        let text = display_lines.get(line_idx).map(|s| s.as_str()).unwrap_or("");
+        if line_idx == cursor_line {
+            // Show cursor
+            let before: String = text.chars().take(cursor_col).collect();
+            let after: String = text.chars().skip(cursor_col).collect();
+            lines.push(Line::from(vec![
+                Span::styled("  ", Style::default()),
+                Span::styled(before, Style::default().fg(Color::White)),
+                Span::styled("█", Style::default().fg(active_c)),
+                Span::styled(after, Style::default().fg(Color::White)),
+            ]));
+        } else {
+            lines.push(Line::from(vec![
+                Span::styled("  ", Style::default()),
+                Span::styled(text.to_string(), Style::default().fg(Color::White)),
+            ]));
+        }
+        let _ = i;
+    }
+
+    // Pad remaining lines
+    while lines.len() < inner_height + 1 {
+        lines.push(Line::from(""));
+    }
+
+    // Footer
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled(
+            "  [Ctrl+S] Save    ",
+            Style::default().fg(active_c).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled("[Ctrl+D] Clear all    ", Style::default().fg(inactive_c)),
+        Span::styled("[Esc] Back", Style::default().fg(inactive_c)),
+    ]));
+
+    let text = Paragraph::new(lines).block(popup_block(&title, Color::Cyan));
+    frame.render_widget(text, popup);
+}
+
+pub(super) fn render_import_agents_dialog(frame: &mut Frame, area: Rect, app: &App) {
+    let Some(DialogState::ImportAgents {
+        ref discovered,
+        ref selected,
+        cursor,
+    }) = app.active_dialog
+    else {
+        return;
+    };
+
+    let popup_width = (area.width * 60 / 100).max(50);
+    let popup_height = (discovered.len() as u16 + 6).min(area.height - 4).max(8);
+    let popup = clear_popup(frame, area, popup_width, popup_height);
+    let active_c = app.theme.dialog.new_ws_active;
+    let inactive_c = app.theme.dialog.new_ws_inactive;
+
+    let mut lines = vec![Line::from("")];
+
+    if discovered.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "  No agent files found in repo.",
+            Style::default().fg(Color::DarkGray),
+        )));
+    } else {
+        for (i, (name, provider, _role, exists)) in discovered.iter().enumerate() {
+            let checkbox = if selected.get(i).copied().unwrap_or(false) {
+                "[x] "
+            } else {
+                "[ ] "
+            };
+            let marker = if i == cursor { "▸ " } else { "  " };
+            let style = if i == cursor {
+                Style::default().fg(active_c).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::White)
+            };
+            let status = if *exists {
+                Span::styled(" (exists)", Style::default().fg(Color::DarkGray))
+            } else {
+                Span::styled(" (new)", Style::default().fg(Color::Green))
+            };
+            lines.push(Line::from(vec![
+                Span::styled(format!("  {}{}", marker, checkbox), style),
+                Span::styled(format!("{:<18}", name), style),
+                Span::styled(
+                    format!("{:<13}", provider),
+                    Style::default().fg(inactive_c),
+                ),
+                status,
+            ]));
+        }
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled("  [Space] Toggle  ", Style::default().fg(active_c)),
+        Span::styled("[a] All  ", Style::default().fg(active_c)),
+        Span::styled("[Enter] Import  ", Style::default().fg(active_c)),
+        Span::styled("[Esc] Cancel", Style::default().fg(inactive_c)),
+    ]));
+
+    let text =
+        Paragraph::new(lines).block(popup_block("Import Agents from Repo", Color::Cyan));
+    frame.render_widget(text, popup);
 }

@@ -155,9 +155,17 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             spans.push(Span::styled(display_text[start..].to_string(), style));
         }
 
-        // Right-aligned keybinding hint
-        let key_hint = app.config.get_binding("navigation", cmd.keybinding_action);
-        let hint_str = format!(" [{}]", key_hint);
+        // Right-aligned keybinding hint (skip for dynamic commands with no binding)
+        let key_hint = if cmd.keybinding_action.is_empty() {
+            String::new()
+        } else {
+            app.config.get_binding("navigation", cmd.keybinding_action)
+        };
+        let hint_str = if key_hint.is_empty() || key_hint == "???" {
+            String::new()
+        } else {
+            format!(" [{}]", key_hint)
+        };
         let content_width: usize = spans.iter().map(|s| s.width()).sum();
         let available = inner.width as usize;
         if content_width + hint_str.len() < available {

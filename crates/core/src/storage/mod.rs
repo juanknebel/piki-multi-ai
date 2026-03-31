@@ -43,6 +43,27 @@ pub trait ApiHistoryStorage: Send + Sync {
     fn delete_api_entry(&self, id: i64) -> anyhow::Result<()>;
 }
 
+/// A configured agent profile with a specific role, associated to a project
+pub struct AgentProfile {
+    pub id: Option<i64>,
+    pub source_repo: String,
+    pub name: String,
+    pub provider: String,
+    pub role: String,
+    /// Incremented on every save
+    pub version: u32,
+    /// Timestamp of last sync to repo (None = never synced)
+    pub last_synced_at: Option<String>,
+}
+
+pub trait AgentProfileStorage: Send + Sync {
+    fn save_agent(&self, profile: &AgentProfile) -> anyhow::Result<()>;
+    fn load_agents(&self, source_repo: &Path) -> anyhow::Result<Vec<AgentProfile>>;
+    fn delete_agent(&self, id: i64) -> anyhow::Result<()>;
+    /// Mark an agent as synced to the repo right now
+    fn mark_synced(&self, id: i64) -> anyhow::Result<()>;
+}
+
 pub trait UiPrefsStorage: Send + Sync {
     fn get_collapsed_groups(&self) -> anyhow::Result<HashSet<String>>;
     fn set_collapsed_groups(&self, groups: &HashSet<String>) -> anyhow::Result<()>;
@@ -54,18 +75,17 @@ pub struct AppStorage {
     pub workspaces: Box<dyn WorkspaceStorage>,
     pub api_history: Option<Box<dyn ApiHistoryStorage>>,
     pub ui_prefs: Option<Box<dyn UiPrefsStorage>>,
+    pub agent_profiles: Option<Box<dyn AgentProfileStorage>>,
 }
 
-pub fn create_storage() -> anyhow::Result<AppStorage> {
-    let data_dir = dirs::data_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
-        .join("piki-multi");
-    let db_path = data_dir.join("piki.db");
+pub fn create_storage(paths: &crate::paths::DataPaths) -> anyhow::Result<AppStorage> {
+    let db_path = paths.db_path();
     std::fs::create_dir_all(db_path.parent().unwrap())?;
     let store = std::sync::Arc::new(sqlite::SqliteStorage::open(&db_path)?);
     Ok(AppStorage {
         workspaces: Box::new(std::sync::Arc::clone(&store)),
         api_history: Some(Box::new(std::sync::Arc::clone(&store))),
-        ui_prefs: Some(Box::new(store)),
+        ui_prefs: Some(Box::new(std::sync::Arc::clone(&store))),
+        agent_profiles: Some(Box::new(store)),
     })
 }

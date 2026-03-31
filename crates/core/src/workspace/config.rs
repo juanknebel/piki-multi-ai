@@ -23,6 +23,12 @@ pub struct WorkspaceEntry {
     pub group: Option<String>,
     #[serde(default)]
     pub order: u32,
+    #[serde(default)]
+    pub dispatch_card_id: Option<String>,
+    #[serde(default)]
+    pub dispatch_source_kanban: Option<String>,
+    #[serde(default)]
+    pub dispatch_agent_name: Option<String>,
 }
 
 impl WorkspaceEntry {
@@ -40,6 +46,9 @@ impl WorkspaceEntry {
         info.workspace_type = self.workspace_type;
         info.group = self.group;
         info.order = self.order;
+        info.dispatch_card_id = self.dispatch_card_id;
+        info.dispatch_source_kanban = self.dispatch_source_kanban;
+        info.dispatch_agent_name = self.dispatch_agent_name;
         info
     }
 }
@@ -82,6 +91,9 @@ pub fn save(git_root: &Path, workspaces: &[WorkspaceInfo]) -> anyhow::Result<()>
             workspace_type: ws.workspace_type,
             group: ws.group.clone(),
             order: ws.order,
+            dispatch_card_id: ws.dispatch_card_id.clone(),
+            dispatch_source_kanban: ws.dispatch_source_kanban.clone(),
+            dispatch_agent_name: ws.dispatch_agent_name.clone(),
         })
         .collect();
 
@@ -130,12 +142,20 @@ pub fn load(git_root: &Path) -> anyhow::Result<Vec<WorkspaceEntry>> {
 
 /// Load all workspace entries from every project config in the config directory.
 pub fn load_all() -> Vec<WorkspaceEntry> {
-    let dir = config_dir();
+    load_all_from_dir(&config_dir())
+}
+
+/// Load all workspace entries using a custom data directory.
+pub fn load_all_with_paths(paths: &crate::paths::DataPaths) -> Vec<WorkspaceEntry> {
+    load_all_from_dir(&paths.legacy_workspaces_dir())
+}
+
+fn load_all_from_dir(dir: &Path) -> Vec<WorkspaceEntry> {
     if !dir.exists() {
         return Vec::new();
     }
 
-    let read_dir = match std::fs::read_dir(&dir) {
+    let read_dir = match std::fs::read_dir(dir) {
         Ok(rd) => rd,
         Err(_) => return Vec::new(),
     };

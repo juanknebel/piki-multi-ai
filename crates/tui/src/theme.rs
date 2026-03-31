@@ -90,6 +90,7 @@ struct FileListToml {
     staged_modified: Option<String>,
     file_path: Option<String>,
     selected_bg: Option<String>,
+    multi_select_bg: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -206,6 +207,7 @@ pub struct FileListTheme {
     pub staged_modified: Color,
     pub file_path: Color,
     pub selected_bg: Color,
+    pub multi_select_bg: Color,
 }
 
 pub struct TabsTheme {
@@ -317,6 +319,7 @@ impl Default for Theme {
                 staged_modified: Color::Yellow,
                 file_path: Color::White,
                 selected_bg: Color::DarkGray,
+                multi_select_bg: Color::Rgb(40, 40, 60),
             },
             tabs: TabsTheme {
                 active: Color::Yellow,
@@ -415,6 +418,10 @@ impl Theme {
                 staged_modified: resolve(&t.file_list.staged_modified, d.file_list.staged_modified),
                 file_path: resolve(&t.file_list.file_path, d.file_list.file_path),
                 selected_bg: resolve(&t.file_list.selected_bg, d.file_list.selected_bg),
+                multi_select_bg: resolve(
+                    &t.file_list.multi_select_bg,
+                    d.file_list.multi_select_bg,
+                ),
             },
             tabs: TabsTheme {
                 active: resolve(&t.tabs.active, d.tabs.active),
@@ -484,11 +491,8 @@ struct ConfigToml {
     theme: Option<String>,
 }
 
-pub fn load() -> Theme {
-    let config_dir = match dirs::config_dir() {
-        Some(d) => d.join("piki-multi"),
-        None => return Theme::default(),
-    };
+pub fn load_from(paths: &piki_core::paths::DataPaths) -> Theme {
+    let config_dir = paths.config_dir();
 
     let config_path = config_dir.join("config.toml");
     let theme_name = std::fs::read_to_string(&config_path)

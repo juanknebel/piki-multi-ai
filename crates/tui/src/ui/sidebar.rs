@@ -1,6 +1,6 @@
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph};
 
@@ -27,6 +27,18 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
     }
 
     let sidebar_items = app.sidebar_items();
+
+    // Pre-compute visual position (0-based) for each workspace index in sidebar order.
+    // This maps workspace_index → visual_position so 1-9 badges reflect display order.
+    let mut ws_visual_pos: std::collections::HashMap<usize, usize> =
+        std::collections::HashMap::new();
+    let mut visual_counter = 0;
+    for item in &sidebar_items {
+        if let SidebarItem::Workspace { index } = item {
+            ws_visual_pos.insert(*index, visual_counter);
+            visual_counter += 1;
+        }
+    }
 
     // Compute item heights and scroll offset for mixed-height items
     let item_height = |item: &SidebarItem| -> usize {
@@ -111,8 +123,16 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                     } else {
                         " "
                     };
+                    // Show 1-9 badge matching visual order for quick-jump shortcuts
+                    let visual_pos = ws_visual_pos.get(index).copied().unwrap_or(usize::MAX);
+                    let number_badge = if visual_pos < 9 {
+                        format!("{}", visual_pos + 1)
+                    } else {
+                        " ".to_string()
+                    };
                     let line1 = Line::from(vec![
-                        Span::raw(format!(" {} ", marker)),
+                        Span::styled(number_badge.to_string(), Style::default().fg(detail_color)),
+                        Span::raw(format!("{} ", marker)),
                         Span::styled(
                             ws.name.clone(),
                             if *index == app.active_workspace {
@@ -137,16 +157,21 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
 
                     let mut lines = vec![line1, line2];
 
-                    let project_name = &ws.source_repo_display;
-                    let max_proj = area.width.saturating_sub(6) as usize;
-                    let proj_text = if project_name.len() > max_proj {
-                        format!("⌂ {}…", &project_name[..max_proj.saturating_sub(1)])
+                    // Line 3: description if available, otherwise branch name
+                    let detail_text = if ws.info.description.is_empty() {
+                        format!("⎇ {}", ws.info.branch)
                     } else {
-                        format!("⌂ {}", project_name)
+                        ws.info.description.clone()
+                    };
+                    let max_len = area.width.saturating_sub(6) as usize;
+                    let truncated = if detail_text.len() > max_len {
+                        format!("{}…", &detail_text[..max_len.saturating_sub(1)])
+                    } else {
+                        detail_text
                     };
                     lines.push(Line::from(vec![
                         Span::raw("   "),
-                        Span::styled(proj_text, Style::default().fg(detail_color)),
+                        Span::styled(truncated, Style::default().fg(detail_color)),
                     ]));
 
                     let style = if is_selected {
@@ -163,6 +188,21 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
 
     let list = List::new(items).block(block);
     frame.render_widget(list, area);
+
+    let total_visual_height: usize = sidebar_items.iter().map(&item_height).sum();
+    let scroll_pos: usize = sidebar_items
+        .iter()
+        .take(scroll_offset)
+        .map(item_height)
+        .sum();
+    super::scrollbar::render_vertical(
+        frame,
+        area,
+        scroll_pos,
+        total_visual_height,
+        visible_height,
+        Color::DarkGray,
+    );
 }
 
 pub(super) fn render_file_list(frame: &mut Frame, area: Rect, app: &App) {
@@ -236,6 +276,14 @@ fn render_project_file_list(
 
     let list = List::new(items).block(block);
     frame.render_widget(list, area);
+    super::scrollbar::render_vertical(
+        frame,
+        area,
+        scroll_offset,
+        dirs.len(),
+        visible_height,
+        Color::DarkGray,
+    );
 }
 
 fn render_git_file_list(
@@ -261,8 +309,14 @@ fn render_git_file_list(
             }
         });
 
+    let sel_count = app.selection_count();
+    let title = if sel_count > 0 {
+        format!(" STATUS ({} selected) ", sel_count)
+    } else {
+        " STATUS ".to_string()
+    };
     let mut block = Block::default()
-        .title(" STATUS ")
+        .title(title)
         .title_style(border_style)
         .borders(Borders::ALL)
         .border_style(border_style);
@@ -310,12 +364,19 @@ fn render_git_file_list(
                 FileStatus::Staged => ("S", theme.staged),
                 FileStatus::StagedModified => ("SM", theme.staged_modified),
             };
+            let is_multi_selected = app.is_file_selected(&f.path);
+            let select_marker = if is_multi_selected { ">" } else { " " };
             let line = Line::from(vec![
-                Span::styled(format!("  {} ", label), Style::default().fg(color)),
+                Span::styled(
+                    format!(" {}{} ", select_marker, label),
+                    Style::default().fg(color),
+                ),
                 Span::styled(&f.path, Style::default().fg(theme.file_path)),
             ]);
             let style = if i == app.selected_file && is_active {
                 Style::default().bg(theme.selected_bg)
+            } else if is_multi_selected {
+                Style::default().bg(theme.multi_select_bg)
             } else {
                 Style::default()
             };
@@ -325,4 +386,12 @@ fn render_git_file_list(
 
     let list = List::new(items).block(block);
     frame.render_widget(list, area);
+    super::scrollbar::render_vertical(
+        frame,
+        area,
+        scroll_offset,
+        files.len(),
+        visible_height,
+        Color::DarkGray,
+    );
 }

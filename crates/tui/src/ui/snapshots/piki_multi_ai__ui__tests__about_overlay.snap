@@ -1,0 +1,30 @@
+---
+source: crates/tui/src/ui/mod.rs
+assertion_line: 217
+expression: content
+---
+
+
+
+
+
+               ┌ About ─────────────────────────────────────────┐
+               │                                                │
+               │                                                │
+               │             ██████╗ ██╗██╗  ██╗██╗             │
+               │             ██╔══██╗██║██║ ██╔╝██║             │
+               │             ██████╔╝██║█████╔╝ ██║             │
+               │             ██╔═══╝ ██║██╔═██╗ ██║             │
+               │             ██║     ██║██║  ██╗██║             │
+               │             ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝             │
+               │                                                │
+               │          piki-multi-ai v0.0.0-nightly          │
+               │                                                │
+               │               Author: Juan Knebel              │
+               │          Contact: juanknebel@gmail.com         │
+               │    Web: github.com/juanknebel/piki-multi-ai    │
+               │                License: GPL-2.0                │
+               │                                                │
+               │               Press Esc to close               │
+               │                                                │
+               └────────────────────────────────────────────────┘

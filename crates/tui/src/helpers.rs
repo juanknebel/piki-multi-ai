@@ -27,6 +27,7 @@ pub(crate) async fn spawn_tab(
     provider: AIProvider,
     rows: u16,
     cols: u16,
+    prompt: Option<&str>,
 ) -> usize {
     let idx = ws.add_tab(provider, true);
     if provider == AIProvider::Kanban || provider == AIProvider::CodeReview {
@@ -37,7 +38,10 @@ pub(crate) async fn spawn_tab(
         return idx;
     }
     let cmd = provider.resolved_command();
-    if let Ok(session) = PtySession::spawn(&ws.path, rows, cols, &cmd).await {
+    let args = prompt
+        .map(|p| provider.prompt_args(p))
+        .unwrap_or_default();
+    if let Ok(session) = PtySession::spawn(&ws.path, rows, cols, &cmd, &args).await {
         ws.tabs[idx].pty_parser = Some(Arc::clone(session.parser()));
         ws.tabs[idx].pty_session = Some(session);
         ws.status = app::WorkspaceStatus::Busy;

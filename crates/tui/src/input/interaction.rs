@@ -19,7 +19,7 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
     };
 
     // Helper to get selected card ID
-    let selected_card_id = |a: &flow::App| -> Option<String> {
+    let selected_card_id = |a: &flow_tui::App| -> Option<String> {
         a.board
             .columns
             .get(a.col)
@@ -41,8 +41,9 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
                 let title = edit.title.clone();
                 let description = edit.description.clone();
                 let priority = edit.priority;
+                let assignee = edit.assignee.clone();
                 if let Err(e) =
-                    kanban_provider.update_card(&card_id, &title, &description, priority)
+                    kanban_provider.update_card(&card_id, &title, &description, priority, &assignee)
                 {
                     kanban_app.banner = Some(format!("Save failed: {}", e));
                 } else {
@@ -64,12 +65,12 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
                 edit.move_cursor_right();
             }
             KeyCode::Home => {
-                if edit.focus != flow::app::EditFocus::Priority {
+                if edit.focus != flow_tui::app::EditFocus::Priority {
                     edit.cursor_pos = 0;
                 }
             }
             KeyCode::End => {
-                if edit.focus != flow::app::EditFocus::Priority {
+                if edit.focus != flow_tui::app::EditFocus::Priority {
                     edit.cursor_pos = edit.current_text().len();
                 }
             }
@@ -114,39 +115,90 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
         return None;
     }
 
+    // Dispatch agent: extract card data before borrowing app for dialog
+    if key.code == KeyCode::Char('D') {
+        let card_data = kanban_app
+            .board
+            .columns
+            .get(kanban_app.col)
+            .and_then(|col| col.cards.get(kanban_app.row))
+            .map(|card| {
+                (
+                    card.id.clone(),
+                    card.title.clone(),
+                    card.description.clone(),
+                    card.priority,
+                )
+            });
+        let source_ws = app.active_workspace;
+        if let Some((card_id, card_title, card_description, card_priority)) = card_data {
+            // Load & snapshot configured agents for this project
+            if let Some(ref storage) = app.storage.agent_profiles
+                && let Some(ws) = app.current_workspace()
+            {
+                let repo = ws.source_repo.clone();
+                if let Ok(agents) = storage.load_agents(&repo) {
+                    app.agent_profiles = agents;
+                }
+            }
+            let agents: Vec<(String, String, String)> = app
+                .agent_profiles
+                .iter()
+                .map(|a| (a.name.clone(), a.provider.clone(), a.role.clone()))
+                .collect();
+            app.active_dialog = Some(DialogState::DispatchAgent {
+                source_ws,
+                card_id,
+                card_title,
+                card_description,
+                card_priority,
+                agent_idx: 0,
+                agents,
+                additional_prompt: String::new(),
+                additional_prompt_cursor: 0,
+                step: 0,
+                use_current_ws: false,
+            });
+            app.mode = AppMode::DispatchAgent;
+            app.interacting = false;
+        }
+        return None;
+    }
+
     let action = match key.code {
-        KeyCode::Char('q') => Some(flow::Action::Quit),
-        KeyCode::Esc => Some(flow::Action::CloseOrQuit),
-        KeyCode::Char('h') | KeyCode::Left => Some(flow::Action::FocusLeft),
-        KeyCode::Char('l') | KeyCode::Right => Some(flow::Action::FocusRight),
-        KeyCode::Char('j') | KeyCode::Down => Some(flow::Action::SelectDown),
-        KeyCode::Char('k') | KeyCode::Up => Some(flow::Action::SelectUp),
-        KeyCode::Char('H') => Some(flow::Action::MoveLeft),
-        KeyCode::Char('L') => Some(flow::Action::MoveRight),
-        KeyCode::Enter => Some(flow::Action::ToggleDetail),
-        KeyCode::Char('r') => Some(flow::Action::Refresh),
-        KeyCode::Char('d') => Some(flow::Action::Delete),
-        KeyCode::Char('a') | KeyCode::Char('n') => Some(flow::Action::Add),
-        KeyCode::Char('e') => Some(flow::Action::Edit),
+        KeyCode::Char('q') => Some(flow_tui::Action::Quit),
+        KeyCode::Esc => Some(flow_tui::Action::CloseOrQuit),
+        KeyCode::Char('h') | KeyCode::Left => Some(flow_tui::Action::FocusLeft),
+        KeyCode::Char('l') | KeyCode::Right => Some(flow_tui::Action::FocusRight),
+        KeyCode::Char('j') | KeyCode::Down => Some(flow_tui::Action::SelectDown),
+        KeyCode::Char('k') | KeyCode::Up => Some(flow_tui::Action::SelectUp),
+        KeyCode::Char('H') => Some(flow_tui::Action::MoveLeft),
+        KeyCode::Char('L') => Some(flow_tui::Action::MoveRight),
+        KeyCode::Enter => Some(flow_tui::Action::ToggleDetail),
+        KeyCode::Char('r') => Some(flow_tui::Action::Refresh),
+        KeyCode::Char('d') => Some(flow_tui::Action::Delete),
+        KeyCode::Char('a') | KeyCode::Char('n') => Some(flow_tui::Action::Add),
+        KeyCode::Char('e') => Some(flow_tui::Action::Edit),
         _ => None,
     };
 
     if let Some(a) = action {
         match a {
-            flow::Action::Add => {
+            flow_tui::Action::Add => {
                 let Some(col) = kanban_app.board.columns.get(kanban_app.col) else {
                     kanban_app.banner = Some("Create failed: no column selected".to_string());
                     return None;
                 };
                 match kanban_provider.create_card(&col.id) {
                     Ok(id) => {
-                        kanban_app.edit_state = Some(flow::app::EditState {
+                        kanban_app.edit_state = Some(flow_tui::app::EditState {
                             card_id: id,
                             title: "New card".to_string(),
                             description: "".to_string(),
-                            priority: flow::Priority::Medium,
+                            priority: flow_core::Priority::Medium,
+                            assignee: "".to_string(),
                             cursor_pos: 8,
-                            focus: flow::app::EditFocus::Title,
+                            focus: flow_tui::app::EditFocus::Title,
                         });
                     }
                     Err(e) => {
@@ -154,22 +206,23 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
                     }
                 }
             }
-            flow::Action::Edit => {
+            flow_tui::Action::Edit => {
                 let col = kanban_app.board.columns.get(kanban_app.col)?;
                 let Some(card) = col.cards.get(kanban_app.row) else {
                     kanban_app.banner = Some("Edit failed: no card selected".to_string());
                     return None;
                 };
-                kanban_app.edit_state = Some(flow::app::EditState {
+                kanban_app.edit_state = Some(flow_tui::app::EditState {
                     card_id: card.id.clone(),
                     title: card.title.clone(),
                     description: card.description.clone(),
                     priority: card.priority,
+                    assignee: card.assignee.clone(),
                     cursor_pos: card.title.len(),
-                    focus: flow::app::EditFocus::Title,
+                    focus: flow_tui::app::EditFocus::Title,
                 });
             }
-            flow::Action::MoveLeft => {
+            flow_tui::Action::MoveLeft => {
                 if let Some((card_id, dst)) = kanban_app.optimistic_move(-1) {
                     if let Err(e) = kanban_provider.move_card(&card_id, &dst) {
                         kanban_app.banner = Some(format!("Move failed: {}", e));
@@ -182,7 +235,7 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
                     }
                 }
             }
-            flow::Action::MoveRight => {
+            flow_tui::Action::MoveRight => {
                 if let Some((card_id, dst)) = kanban_app.optimistic_move(1) {
                     if let Err(e) = kanban_provider.move_card(&card_id, &dst) {
                         kanban_app.banner = Some(format!("Move failed: {}", e));
@@ -195,7 +248,7 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
                     }
                 }
             }
-            flow::Action::Refresh => match kanban_provider.load_board() {
+            flow_tui::Action::Refresh => match kanban_provider.load_board() {
                 Ok(b) => {
                     kanban_app.board = b;
                     kanban_app.clamp();
@@ -386,7 +439,9 @@ pub(super) fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Optio
 }
 
 pub(super) fn handle_markdown_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    if app.config.matches_markdown(key, "exit_interaction") {
+    if app.config.matches_markdown(key, "exit_interaction")
+        || app.config.matches_markdown(key, "exit_interaction_alt")
+    {
         app.interacting = false;
         return None;
     }
@@ -415,11 +470,26 @@ pub(super) fn handle_markdown_interaction(app: &mut App, key: KeyEvent) -> Optio
 
 pub(super) fn handle_diff_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
     if app.config.matches_diff(key, "exit") {
-        app.mode = AppMode::Normal;
         app.diff_content = None;
         app.diff_file_path = None;
         app.interacting = false;
-        app.active_pane = ActivePane::GitStatus;
+        // Return to the overlay we came from, if any
+        if matches!(
+            app.active_dialog,
+            Some(DialogState::ConflictResolution { .. })
+                | Some(DialogState::GitLog { .. })
+                | Some(DialogState::GitStash { .. })
+        ) {
+            app.mode = match &app.active_dialog {
+                Some(DialogState::ConflictResolution { .. }) => AppMode::ConflictResolution,
+                Some(DialogState::GitLog { .. }) => AppMode::GitLog,
+                Some(DialogState::GitStash { .. }) => AppMode::GitStash,
+                _ => AppMode::Normal,
+            };
+        } else {
+            app.mode = AppMode::Normal;
+            app.active_pane = ActivePane::GitStatus;
+        }
         return None;
     }
 
@@ -446,7 +516,11 @@ pub(super) fn handle_diff_interaction(app: &mut App, key: KeyEvent) -> Option<Ac
 }
 
 pub(super) fn handle_workspace_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    if app.config.matches_workspace_list(key, "exit_interaction") {
+    if app.config.matches_workspace_list(key, "exit_interaction")
+        || app
+            .config
+            .matches_workspace_list(key, "exit_interaction_alt")
+    {
         app.interacting = false;
         return None;
     }
@@ -466,6 +540,8 @@ pub(super) fn handle_workspace_interaction(app: &mut App, key: KeyEvent) -> Opti
             }
             Some(crate::app::SidebarItem::Workspace { index }) => {
                 app.switch_workspace(*index);
+                app.active_pane = ActivePane::MainPanel;
+                app.interacting = false;
             }
             None => {}
         }
@@ -595,7 +671,7 @@ fn search_api_response(api: &mut crate::app::ApiTabState) {
 }
 
 pub(super) fn handle_api_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    if app.config.matches_interaction(key, "exit_interaction") {
+    if app.config.matches_interaction(key, "exit_interaction") || key.code == KeyCode::Esc {
         app.interacting = false;
         return None;
     }
@@ -922,7 +998,9 @@ pub(super) fn handle_api_interaction(app: &mut App, key: KeyEvent) -> Option<Act
 }
 
 pub(super) fn handle_filelist_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    if app.config.matches_file_list(key, "exit_interaction") {
+    if app.config.matches_file_list(key, "exit_interaction")
+        || app.config.matches_file_list(key, "exit_interaction_alt")
+    {
         app.interacting = false;
         return None;
     }
@@ -996,17 +1074,36 @@ pub(super) fn handle_filelist_interaction(app: &mut App, key: KeyEvent) -> Optio
             let full_path = ws.path.join(&file.path);
             app.open_inline_editor(full_path);
         }
+    } else if app.config.matches_file_list(key, "toggle_select") {
+        app.toggle_file_selection();
+        app.next_file();
+    } else if app.config.matches_file_list(key, "select_all") {
+        if let Some(ws) = app.current_workspace() {
+            if app.selected_files.len() == ws.changed_files.len() {
+                app.deselect_all_files();
+            } else {
+                app.select_all_files();
+            }
+        }
     } else if app.config.matches_file_list(key, "stage") {
         if let Some(ws) = app.current_workspace()
             && !ws.changed_files.is_empty()
         {
-            return Some(Action::GitStage(app.selected_file));
+            if app.selected_files.is_empty() {
+                return Some(Action::GitStage(app.selected_file));
+            } else {
+                return Some(Action::GitStageSelected);
+            }
         }
     } else if app.config.matches_file_list(key, "unstage")
         && let Some(ws) = app.current_workspace()
         && !ws.changed_files.is_empty()
     {
-        return Some(Action::GitUnstage(app.selected_file));
+        if app.selected_files.is_empty() {
+            return Some(Action::GitUnstage(app.selected_file));
+        } else {
+            return Some(Action::GitUnstageSelected);
+        }
     }
     None
 }

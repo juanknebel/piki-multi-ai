@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 use anyhow::Context;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -24,16 +23,23 @@ impl Default for KanbanConfig {
 pub struct Config {
     #[serde(default)]
     pub theme: String,
+    #[serde(default = "default_syntax_theme")]
+    pub syntax_theme: String,
     #[serde(default)]
     pub keybindings: Keybindings,
     #[serde(default)]
     pub kanban: KanbanConfig,
 }
 
+fn default_syntax_theme() -> String {
+    "base16-ocean.dark".to_string()
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
             theme: "default".to_string(),
+            syntax_theme: default_syntax_theme(),
             keybindings: Keybindings::default(),
             kanban: KanbanConfig::default(),
         }
@@ -76,6 +82,12 @@ pub struct Keybindings {
     pub dashboard: HashMap<String, String>,
     #[serde(default = "default_logs")]
     pub logs: HashMap<String, String>,
+    #[serde(default = "default_git_stash")]
+    pub git_stash: HashMap<String, String>,
+    #[serde(default = "default_git_log")]
+    pub git_log: HashMap<String, String>,
+    #[serde(default = "default_conflict_resolution")]
+    pub conflict_resolution: HashMap<String, String>,
 }
 
 impl Default for Keybindings {
@@ -98,6 +110,9 @@ impl Default for Keybindings {
             new_tab: default_new_tab(),
             dashboard: default_dashboard(),
             logs: default_logs(),
+            git_stash: default_git_stash(),
+            git_log: default_git_log(),
+            conflict_resolution: default_conflict_resolution(),
         }
     }
 }
@@ -130,6 +145,9 @@ fn default_navigation() -> HashMap<String, String> {
     m.insert("commit".to_string(), "c".to_string());
     m.insert("merge".to_string(), "M".to_string());
     m.insert("push".to_string(), "P".to_string());
+    m.insert("stash".to_string(), "S".to_string());
+    m.insert("git_log".to_string(), "L".to_string());
+    m.insert("conflicts".to_string(), "X".to_string());
     m.insert("undo".to_string(), "ctrl-z".to_string());
 
     // Tabs & Workspaces
@@ -151,6 +169,12 @@ fn default_navigation() -> HashMap<String, String> {
     m.insert("fuzzy_search".to_string(), "/".to_string());
     m.insert("fuzzy_search_alt".to_string(), "ctrl-f".to_string());
     m.insert("command_palette".to_string(), "ctrl-p".to_string());
+    m.insert("workspace_switcher".to_string(), "space".to_string());
+    m.insert("toggle_prev_workspace".to_string(), "`".to_string());
+
+    // Quick actions (context-sensitive)
+    m.insert("stage_quick".to_string(), "s".to_string());
+    m.insert("unstage_quick".to_string(), "u".to_string());
 
     // Resizing
     m.insert("sidebar_shrink".to_string(), "<".to_string());
@@ -176,6 +200,7 @@ fn default_interaction() -> HashMap<String, String> {
 fn default_markdown() -> HashMap<String, String> {
     let mut m = HashMap::new();
     m.insert("exit_interaction".to_string(), "ctrl-g".to_string());
+    m.insert("exit_interaction_alt".to_string(), "esc".to_string());
     m.insert("down".to_string(), "j".to_string());
     m.insert("up".to_string(), "k".to_string());
     m.insert("down_alt".to_string(), "down".to_string());
@@ -206,6 +231,7 @@ fn default_diff() -> HashMap<String, String> {
 fn default_workspace_list() -> HashMap<String, String> {
     let mut m = HashMap::new();
     m.insert("exit_interaction".to_string(), "ctrl-g".to_string());
+    m.insert("exit_interaction_alt".to_string(), "esc".to_string());
     m.insert("down".to_string(), "j".to_string());
     m.insert("up".to_string(), "k".to_string());
     m.insert("down_alt".to_string(), "down".to_string());
@@ -218,6 +244,7 @@ fn default_workspace_list() -> HashMap<String, String> {
 fn default_file_list() -> HashMap<String, String> {
     let mut m = HashMap::new();
     m.insert("exit_interaction".to_string(), "ctrl-g".to_string());
+    m.insert("exit_interaction_alt".to_string(), "esc".to_string());
     m.insert("down".to_string(), "j".to_string());
     m.insert("up".to_string(), "k".to_string());
     m.insert("down_alt".to_string(), "down".to_string());
@@ -227,6 +254,8 @@ fn default_file_list() -> HashMap<String, String> {
     m.insert("edit_inline".to_string(), "v".to_string());
     m.insert("stage".to_string(), "s".to_string());
     m.insert("unstage".to_string(), "u".to_string());
+    m.insert("toggle_select".to_string(), "space".to_string());
+    m.insert("select_all".to_string(), "a".to_string());
     m
 }
 
@@ -345,25 +374,78 @@ fn default_new_tab() -> HashMap<String, String> {
     m
 }
 
+fn default_git_stash() -> HashMap<String, String> {
+    let mut m = HashMap::new();
+    m.insert("down".to_string(), "j".to_string());
+    m.insert("up".to_string(), "k".to_string());
+    m.insert("down_alt".to_string(), "down".to_string());
+    m.insert("up_alt".to_string(), "up".to_string());
+    m.insert("save".to_string(), "s".to_string());
+    m.insert("pop".to_string(), "p".to_string());
+    m.insert("apply".to_string(), "a".to_string());
+    m.insert("drop".to_string(), "d".to_string());
+    m.insert("show".to_string(), "enter".to_string());
+    m.insert("exit".to_string(), "esc".to_string());
+    m.insert("exit_alt".to_string(), "S".to_string());
+    m
+}
+
+fn default_git_log() -> HashMap<String, String> {
+    let mut m = HashMap::new();
+    m.insert("down".to_string(), "j".to_string());
+    m.insert("up".to_string(), "k".to_string());
+    m.insert("down_alt".to_string(), "down".to_string());
+    m.insert("up_alt".to_string(), "up".to_string());
+    m.insert("page_down".to_string(), "ctrl-d".to_string());
+    m.insert("page_up".to_string(), "ctrl-u".to_string());
+    m.insert("scroll_top".to_string(), "g".to_string());
+    m.insert("scroll_bottom".to_string(), "G".to_string());
+    m.insert("select".to_string(), "enter".to_string());
+    m.insert("exit".to_string(), "esc".to_string());
+    m.insert("exit_alt".to_string(), "L".to_string());
+    m
+}
+
+fn default_conflict_resolution() -> HashMap<String, String> {
+    let mut m = HashMap::new();
+    m.insert("down".to_string(), "j".to_string());
+    m.insert("up".to_string(), "k".to_string());
+    m.insert("down_alt".to_string(), "down".to_string());
+    m.insert("up_alt".to_string(), "up".to_string());
+    m.insert("ours".to_string(), "o".to_string());
+    m.insert("theirs".to_string(), "t".to_string());
+    m.insert("mark_resolved".to_string(), "m".to_string());
+    m.insert("edit".to_string(), "e".to_string());
+    m.insert("abort".to_string(), "A".to_string());
+    m.insert("select".to_string(), "enter".to_string());
+    m.insert("exit".to_string(), "esc".to_string());
+    m.insert("exit_alt".to_string(), "X".to_string());
+    m
+}
+
 impl Config {
     pub fn generate_default_toml() -> String {
         toml::to_string_pretty(&Self::default()).unwrap_or_default()
     }
 
-    pub fn load() -> Self {
-        let path = Self::config_path();
+    pub fn load_from(paths: &piki_core::paths::DataPaths) -> Self {
+        let path = paths.config_path();
+        Self::load_from_path(&path)
+    }
+
+    fn load_from_path(path: &std::path::Path) -> Self {
         if !path.exists() {
             let default_config = Self::default();
             if let Some(parent) = path.parent() {
                 let _ = std::fs::create_dir_all(parent);
             }
             if let Ok(toml) = toml::to_string_pretty(&default_config) {
-                let _ = std::fs::write(&path, toml);
+                let _ = std::fs::write(path, toml);
             }
             return default_config;
         }
 
-        std::fs::read_to_string(&path)
+        std::fs::read_to_string(path)
             .context("failed to read config file")
             .and_then(|data| toml::from_str(&data).context("failed to parse config file"))
             .unwrap_or_else(|e| {
@@ -385,7 +467,8 @@ impl Config {
         if let Some(binding) = self.keybindings.interaction.get(action) {
             key_matches(event, binding)
         } else {
-            false
+            let defaults = default_interaction();
+            defaults.get(action).is_some_and(|b| key_matches(event, b))
         }
     }
 
@@ -393,7 +476,8 @@ impl Config {
         if let Some(binding) = self.keybindings.markdown.get(action) {
             key_matches(event, binding)
         } else {
-            false
+            let defaults = default_markdown();
+            defaults.get(action).is_some_and(|b| key_matches(event, b))
         }
     }
 
@@ -401,7 +485,8 @@ impl Config {
         if let Some(binding) = self.keybindings.diff.get(action) {
             key_matches(event, binding)
         } else {
-            false
+            let defaults = default_diff();
+            defaults.get(action).is_some_and(|b| key_matches(event, b))
         }
     }
 
@@ -409,7 +494,8 @@ impl Config {
         if let Some(binding) = self.keybindings.workspace_list.get(action) {
             key_matches(event, binding)
         } else {
-            false
+            let defaults = default_workspace_list();
+            defaults.get(action).is_some_and(|b| key_matches(event, b))
         }
     }
 
@@ -417,7 +503,8 @@ impl Config {
         if let Some(binding) = self.keybindings.file_list.get(action) {
             key_matches(event, binding)
         } else {
-            false
+            let defaults = default_file_list();
+            defaults.get(action).is_some_and(|b| key_matches(event, b))
         }
     }
 
@@ -458,6 +545,32 @@ impl Config {
             key_matches(event, binding)
         } else {
             false
+        }
+    }
+
+    pub fn matches_git_stash(&self, event: KeyEvent, action: &str) -> bool {
+        if let Some(binding) = self.keybindings.git_stash.get(action) {
+            key_matches(event, binding)
+        } else {
+            false
+        }
+    }
+
+    pub fn matches_git_log(&self, event: KeyEvent, action: &str) -> bool {
+        if let Some(binding) = self.keybindings.git_log.get(action) {
+            key_matches(event, binding)
+        } else {
+            let defaults = default_git_log();
+            defaults.get(action).is_some_and(|b| key_matches(event, b))
+        }
+    }
+
+    pub fn matches_conflict_resolution(&self, event: KeyEvent, action: &str) -> bool {
+        if let Some(binding) = self.keybindings.conflict_resolution.get(action) {
+            key_matches(event, binding)
+        } else {
+            let defaults = default_conflict_resolution();
+            defaults.get(action).is_some_and(|b| key_matches(event, b))
         }
     }
 
@@ -565,15 +678,29 @@ impl Config {
                 .get(action)
                 .cloned()
                 .or_else(|| default_logs().get(action).cloned()),
+            "git_stash" => self
+                .keybindings
+                .git_stash
+                .get(action)
+                .cloned()
+                .or_else(|| default_git_stash().get(action).cloned()),
+            "git_log" => self
+                .keybindings
+                .git_log
+                .get(action)
+                .cloned()
+                .or_else(|| default_git_log().get(action).cloned()),
+            "conflict_resolution" => self
+                .keybindings
+                .conflict_resolution
+                .get(action)
+                .cloned()
+                .or_else(|| default_conflict_resolution().get(action).cloned()),
             _ => None,
         };
         binding.unwrap_or_else(|| "???".to_string())
     }
 
-    fn config_path() -> PathBuf {
-        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-        PathBuf::from(home).join(".config/piki-multi/config.toml")
-    }
 }
 
 pub fn parse_key_event(s: &str) -> Option<KeyEvent> {
@@ -613,13 +740,15 @@ pub fn parse_key_event(s: &str) -> Option<KeyEvent> {
         "end" => KeyCode::End,
         "insert" => KeyCode::Insert,
         "delete" => KeyCode::Delete,
+        "space" => KeyCode::Char(' '),
         s if s.len() == 1 => {
-            let c = s.chars().next().unwrap();
-            // If it's an uppercase char, implicitly add SHIFT modifier
-            if c.is_uppercase() {
+            // Use the original code_str to preserve case (the match lowercases it)
+            let original_c = code_str.chars().next().unwrap();
+            // If the original char is uppercase, implicitly add SHIFT modifier
+            if original_c.is_uppercase() {
                 modifiers.insert(KeyModifiers::SHIFT);
             }
-            KeyCode::Char(c)
+            KeyCode::Char(s.chars().next().unwrap())
         }
         s if s.starts_with('f') && s.len() > 1 => {
             let n = s[1..].parse::<u8>().ok()?;
@@ -683,6 +812,9 @@ mod tests {
             ("about", &cfg.keybindings.about),
             ("workspace_info", &cfg.keybindings.workspace_info),
             ("markdown", &cfg.keybindings.markdown),
+            ("git_stash", &cfg.keybindings.git_stash),
+            ("git_log", &cfg.keybindings.git_log),
+            ("conflict_resolution", &cfg.keybindings.conflict_resolution),
         ];
         for (section, bindings) in sections {
             for (action, binding) in bindings {

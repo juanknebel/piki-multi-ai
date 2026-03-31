@@ -1,10 +1,14 @@
 mod code_review_input;
 mod command_palette_input;
+pub(crate) mod confirm_common;
 mod dialog;
 mod editor_input;
+pub(crate) mod fuzzy_common;
 mod fuzzy_input;
 mod interaction;
 pub(crate) mod mouse;
+pub(crate) mod text_field_common;
+mod workspace_switcher_input;
 
 use crossterm::event::{KeyCode, KeyEvent};
 
@@ -17,8 +21,12 @@ use self::command_palette_input::handle_command_palette_input;
 use self::dialog::{
     handle_about_input, handle_commit_message_input, handle_confirm_close_tab_input,
     handle_confirm_delete_input, handle_confirm_merge_input, handle_confirm_quit_input,
-    handle_dashboard_input, handle_edit_workspace_input, handle_help_input, handle_logs_input,
-    handle_new_tab_input, handle_new_workspace_input, handle_workspace_info_input,
+    handle_conflict_resolution_input, handle_dashboard_input, handle_dispatch_agent_input,
+    handle_edit_agent_input, handle_edit_agent_role_input, handle_edit_workspace_input,
+    handle_git_log_input,
+    handle_git_stash_input, handle_help_input, handle_import_agents_input, handle_logs_input,
+    handle_manage_agents_input, handle_new_tab_input, handle_new_workspace_input,
+    handle_workspace_info_input,
 };
 use self::editor_input::handle_inline_edit_input;
 use self::fuzzy_input::handle_fuzzy_search_input;
@@ -27,6 +35,86 @@ use self::interaction::{
     handle_kanban_interaction, handle_markdown_interaction, handle_terminal_interaction,
     handle_workspace_interaction,
 };
+
+/// Handle a bracketed paste event — insert full text at once into the active context.
+pub(crate) fn handle_paste(app: &mut App, text: &str) {
+    // Terminal interaction: write to PTY
+    if app.interacting
+        && matches!(app.mode, AppMode::Normal | AppMode::Diff)
+        && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+        && let Some(tab) = ws.current_tab_mut()
+    {
+        if tab.pty_session.is_some() {
+            let bracketed = tab
+                .pty_parser
+                .as_ref()
+                .map(|p| p.lock().screen().bracketed_paste())
+                .unwrap_or(false);
+            let data = if bracketed {
+                format!("\x1b[200~{text}\x1b[201~")
+            } else {
+                text.to_string()
+            };
+            if let Some(ref mut pty) = tab.pty_session {
+                let _ = pty.write(data.as_bytes());
+            }
+            return;
+        }
+        if let Some(ref mut api) = tab.api_state {
+            api.editor.insert_text(text);
+            return;
+        }
+    }
+
+    // Inline editor
+    if app.mode == AppMode::InlineEdit {
+        if let Some(ref mut editor) = app.editor {
+            editor.insert_text(text);
+        }
+        return;
+    }
+
+    // Fuzzy overlays: insert into query
+    match app.mode {
+        AppMode::FuzzySearch => {
+            if let Some(ref mut state) = app.fuzzy {
+                state.query.push_str(text);
+                let q = state.query.clone();
+                state
+                    .nucleo
+                    .pattern
+                    .reparse(0, &q, nucleo::pattern::CaseMatching::Smart, true);
+            }
+            return;
+        }
+        AppMode::CommandPalette => {
+            if let Some(ref mut state) = app.command_palette {
+                state.query.push_str(text);
+                let q = state.query.clone();
+                state
+                    .nucleo
+                    .pattern
+                    .reparse(0, &q, nucleo::pattern::CaseMatching::Smart, true);
+            }
+            return;
+        }
+        AppMode::WorkspaceSwitcher => {
+            if let Some(ref mut state) = app.workspace_switcher {
+                state.query.push_str(text);
+                let q = state.query.clone();
+                state
+                    .nucleo
+                    .pattern
+                    .reparse(0, &q, nucleo::pattern::CaseMatching::Smart, true);
+            }
+            return;
+        }
+        _ => {}
+    }
+
+    // Dialog text fields
+    text_field_common::handle_bulk_insert(app, text);
+}
 
 pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
     // Code review is a locked mode — ALL keys route here, nothing leaks
@@ -53,8 +141,19 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         AppMode::Dashboard => return handle_dashboard_input(app, key),
         AppMode::Logs => return handle_logs_input(app, key),
         AppMode::CommandPalette => return handle_command_palette_input(app, key),
+        AppMode::WorkspaceSwitcher => {
+            return workspace_switcher_input::handle_workspace_switcher_input(app, key);
+        }
         AppMode::ConfirmDelete => return handle_confirm_delete_input(app, key),
         AppMode::SubmitReview => return code_review_input::handle_submit_review_input(app, key),
+        AppMode::GitStash => return handle_git_stash_input(app, key),
+        AppMode::GitLog => return handle_git_log_input(app, key),
+        AppMode::ConflictResolution => return handle_conflict_resolution_input(app, key),
+        AppMode::DispatchAgent => return handle_dispatch_agent_input(app, key),
+        AppMode::ManageAgents => return handle_manage_agents_input(app, key),
+        AppMode::EditAgent => return handle_edit_agent_input(app, key),
+        AppMode::EditAgentRole => return handle_edit_agent_role_input(app, key),
+        AppMode::ImportAgents => return handle_import_agents_input(app, key),
         // Normal and Diff modes fall through to navigation/interaction handling
         AppMode::Normal | AppMode::Diff => {}
     }
@@ -78,7 +177,7 @@ pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Act
     if app.config.matches_navigation(key, "left") || app.config.matches_navigation(key, "left_alt")
     {
         if app.active_pane == ActivePane::MainPanel {
-            app.active_pane = ActivePane::GitStatus;
+            app.active_pane = ActivePane::WorkspaceList;
         }
     } else if app.config.matches_navigation(key, "right")
         || app.config.matches_navigation(key, "right_alt")
@@ -92,14 +191,18 @@ pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Act
     } else if app.config.matches_navigation(key, "down")
         || app.config.matches_navigation(key, "down_alt")
     {
-        if app.active_pane == ActivePane::WorkspaceList {
-            app.active_pane = ActivePane::GitStatus;
+        match app.active_pane {
+            ActivePane::WorkspaceList => app.active_pane = ActivePane::GitStatus,
+            ActivePane::MainPanel => app.active_pane = ActivePane::GitStatus,
+            _ => {}
         }
     } else if app.config.matches_navigation(key, "up")
         || app.config.matches_navigation(key, "up_alt")
     {
-        if app.active_pane == ActivePane::GitStatus {
-            app.active_pane = ActivePane::WorkspaceList;
+        match app.active_pane {
+            ActivePane::GitStatus => app.active_pane = ActivePane::WorkspaceList,
+            ActivePane::MainPanel => app.active_pane = ActivePane::WorkspaceList,
+            _ => {}
         }
     } else if app.config.matches_navigation(key, "enter_pane") {
         app.interacting = true;
@@ -225,12 +328,64 @@ pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Act
         {
             return Some(Action::GitPush);
         }
+    } else if app.config.matches_navigation(key, "stash") {
+        if let Some(ws) = app.current_workspace()
+            && ws.info.workspace_type != piki_core::WorkspaceType::Project
+        {
+            return Some(Action::GitStashList);
+        }
+    } else if app.config.matches_navigation(key, "git_log") {
+        if app.current_workspace().is_some() {
+            return Some(Action::LoadGitLog);
+        }
+    } else if key.code == KeyCode::Char('A')
+        && app
+            .current_workspace()
+            .is_some_and(|ws| ws.info.workspace_type == piki_core::WorkspaceType::Simple)
+    {
+        // Load agents for current project before opening the overlay (Simple ws only)
+        if let Some(ref storage) = app.storage.agent_profiles
+            && let Some(ws) = app.current_workspace()
+        {
+            let repo = ws.source_repo.clone();
+            if let Ok(agents) = storage.load_agents(&repo) {
+                app.agent_profiles = agents;
+            }
+        }
+        app.active_dialog = Some(DialogState::ManageAgents { selected: 0 });
+        app.mode = AppMode::ManageAgents;
+    } else if app.config.matches_navigation(key, "conflicts") {
+        if let Some(ws) = app.current_workspace()
+            && ws.info.workspace_type != piki_core::WorkspaceType::Project
+        {
+            return Some(Action::DetectConflicts);
+        }
     } else if app.config.matches_navigation(key, "undo") {
         return Some(Action::Undo);
     } else if app.config.matches_navigation(key, "next_workspace") {
-        app.next_workspace();
+        match app.active_pane {
+            ActivePane::WorkspaceList => app.next_workspace(),
+            ActivePane::MainPanel => {
+                if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+                    && !ws.tabs.is_empty()
+                {
+                    ws.active_tab = (ws.active_tab + 1) % ws.tabs.len();
+                }
+            }
+            ActivePane::GitStatus => app.next_file(),
+        }
     } else if app.config.matches_navigation(key, "prev_workspace") {
-        app.prev_workspace();
+        match app.active_pane {
+            ActivePane::WorkspaceList => app.prev_workspace(),
+            ActivePane::MainPanel => {
+                if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+                    && !ws.tabs.is_empty()
+                {
+                    ws.active_tab = (ws.active_tab + ws.tabs.len() - 1) % ws.tabs.len();
+                }
+            }
+            ActivePane::GitStatus => app.prev_file(),
+        }
     } else if app.config.matches_navigation(key, "scroll_up") {
         if app.active_pane == ActivePane::MainPanel
             && app.mode == AppMode::Normal
@@ -273,6 +428,10 @@ pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Act
         app.open_fuzzy_search();
     } else if app.config.matches_navigation(key, "command_palette") {
         app.open_command_palette();
+    } else if app.config.matches_navigation(key, "workspace_switcher") {
+        app.open_workspace_switcher();
+    } else if app.config.matches_navigation(key, "toggle_prev_workspace") {
+        app.toggle_previous_workspace();
     } else if app.config.matches_navigation(key, "sidebar_shrink")
         || app.config.matches_navigation(key, "sidebar_shrink_alt")
     {
@@ -323,9 +482,53 @@ pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Act
                 app.status_message = Some("Cannot close the initial shell tab".into());
             }
         }
+    } else if app.config.matches_navigation(key, "stage_quick") {
+        // Quick stage without entering interaction mode
+        if app.active_pane == ActivePane::GitStatus
+            && let Some(ws) = app.current_workspace()
+            && !ws.changed_files.is_empty()
+        {
+            if app.selected_files.is_empty() {
+                return Some(Action::GitStage(app.selected_file));
+            } else {
+                return Some(Action::GitStageSelected);
+            }
+        }
+    } else if app.config.matches_navigation(key, "unstage_quick") {
+        // Quick unstage without entering interaction mode
+        if app.active_pane == ActivePane::GitStatus
+            && let Some(ws) = app.current_workspace()
+            && !ws.changed_files.is_empty()
+        {
+            if app.selected_files.is_empty() {
+                return Some(Action::GitUnstage(app.selected_file));
+            } else {
+                return Some(Action::GitUnstageSelected);
+            }
+        }
     } else if let KeyCode::Char(c @ '1'..='9') = key.code {
-        let idx = (c as usize) - ('1' as usize);
-        app.switch_workspace(idx);
+        let visual_pos = (c as usize) - ('1' as usize);
+        // Map visual position to actual workspace index via sidebar order
+        let ws_indices: Vec<usize> = app
+            .sidebar_items()
+            .iter()
+            .filter_map(|item| match item {
+                crate::app::SidebarItem::Workspace { index } => Some(*index),
+                _ => None,
+            })
+            .collect();
+        if let Some(&ws_idx) = ws_indices.get(visual_pos) {
+            app.switch_workspace(ws_idx);
+        } else {
+            app.set_toast(
+                format!(
+                    "No workspace {} (have {})",
+                    visual_pos + 1,
+                    ws_indices.len()
+                ),
+                crate::app::ToastLevel::Info,
+            );
+        }
     }
     None
 }

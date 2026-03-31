@@ -45,20 +45,80 @@ impl SqliteStorage {
             tx.commit()?;
         }
 
+        if version < 2 {
+            let tx = conn.transaction()?;
+            tx.execute_batch(
+                "ALTER TABLE workspaces ADD COLUMN dispatch_card_id TEXT;
+                 ALTER TABLE workspaces ADD COLUMN dispatch_source_kanban TEXT;",
+            )?;
+            tx.execute("INSERT INTO schema_version (version) VALUES (2)", [])?;
+            tx.commit()?;
+        }
+
+        if version < 3 {
+            let tx = conn.transaction()?;
+            tx.execute_batch(
+                "CREATE TABLE IF NOT EXISTS agent_profiles (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source_repo     TEXT NOT NULL,
+                    name            TEXT NOT NULL,
+                    provider        TEXT NOT NULL,
+                    role            TEXT NOT NULL DEFAULT '',
+                    version         INTEGER NOT NULL DEFAULT 1,
+                    last_synced_at  TEXT
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_profiles_key
+                    ON agent_profiles(source_repo, name);",
+            )?;
+            tx.execute("INSERT INTO schema_version (version) VALUES (3)", [])?;
+            tx.commit()?;
+        }
+
+        if version < 4 {
+            let tx = conn.transaction()?;
+            tx.execute_batch(
+                "ALTER TABLE workspaces ADD COLUMN dispatch_agent_name TEXT;",
+            )?;
+            tx.execute("INSERT INTO schema_version (version) VALUES (4)", [])?;
+            tx.commit()?;
+        }
+
+        // Fix: recreate agent_profiles with correct schema if created by old v3 migration
+        if version < 5 {
+            let tx = conn.transaction()?;
+            tx.execute_batch(
+                "DROP TABLE IF EXISTS agent_profiles;
+                 DROP INDEX IF EXISTS idx_agent_profiles_key;
+                 CREATE TABLE agent_profiles (
+                     id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                     source_repo     TEXT NOT NULL,
+                     name            TEXT NOT NULL,
+                     provider        TEXT NOT NULL,
+                     role            TEXT NOT NULL DEFAULT '',
+                     version         INTEGER NOT NULL DEFAULT 1,
+                     last_synced_at  TEXT
+                 );
+                 CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_profiles_key
+                     ON agent_profiles(source_repo, name);",
+            )?;
+            tx.execute("INSERT INTO schema_version (version) VALUES (5)", [])?;
+            tx.commit()?;
+        }
+
         Ok(())
     }
 
     /// Migrate all workspaces from JSON config files into SQLite.
     /// Returns the number of entries migrated.
-    pub fn migrate_from_json(&self) -> anyhow::Result<usize> {
-        let entries = crate::workspace::config::load_all();
+    pub fn migrate_from_json(&self, paths: &crate::paths::DataPaths) -> anyhow::Result<usize> {
+        let entries = crate::workspace::config::load_all_with_paths(paths);
         let mut conn = self.conn.lock();
         let tx = conn.transaction()?;
         let mut count = 0;
 
         for entry in &entries {
             let rows = tx.execute(
-                "INSERT OR IGNORE INTO workspaces (project_root, name, description, prompt, kanban_path, branch, worktree_path, source_repo, workspace_type, group_name, display_order) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                "INSERT OR IGNORE INTO workspaces (project_root, name, description, prompt, kanban_path, branch, worktree_path, source_repo, workspace_type, group_name, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
                 rusqlite::params![
                     entry.source_repo.to_string_lossy(),
                     entry.name,
@@ -71,6 +131,9 @@ impl SqliteStorage {
                     workspace_type_str(entry.workspace_type),
                     entry.group,
                     entry.order,
+                    entry.dispatch_card_id,
+                    entry.dispatch_source_kanban,
+                    entry.dispatch_agent_name,
                 ],
             )?;
             count += rows;
@@ -170,6 +233,9 @@ fn row_to_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkspaceEntry> {
         workspace_type: parse_workspace_type(&row.get::<_, String>(7)?),
         group: row.get(8)?,
         order: row.get(9)?,
+        dispatch_card_id: row.get(10)?,
+        dispatch_source_kanban: row.get(11)?,
+        dispatch_agent_name: row.get(12)?,
     })
 }
 
@@ -204,7 +270,7 @@ impl WorkspaceStorage for Arc<SqliteStorage> {
 
         for ws in workspaces.iter().filter(|ws| ws.source_repo == git_root) {
             tx.execute(
-                "INSERT INTO workspaces (project_root, name, description, prompt, kanban_path, branch, worktree_path, source_repo, workspace_type, group_name, display_order) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                "INSERT INTO workspaces (project_root, name, description, prompt, kanban_path, branch, worktree_path, source_repo, workspace_type, group_name, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
                 rusqlite::params![
                     git_root_str,
                     ws.name,
@@ -217,6 +283,9 @@ impl WorkspaceStorage for Arc<SqliteStorage> {
                     workspace_type_str(ws.workspace_type),
                     ws.group,
                     ws.order,
+                    ws.dispatch_card_id,
+                    ws.dispatch_source_kanban,
+                    ws.dispatch_agent_name,
                 ],
             )?;
         }
@@ -229,7 +298,7 @@ impl WorkspaceStorage for Arc<SqliteStorage> {
         let conn = self.conn.lock();
         let git_root_str = git_root.to_string_lossy();
         let mut stmt = conn.prepare(
-            "SELECT name, description, prompt, kanban_path, branch, worktree_path, source_repo, workspace_type, group_name, display_order FROM workspaces WHERE source_repo = ?1 ORDER BY display_order",
+            "SELECT name, description, prompt, kanban_path, branch, worktree_path, source_repo, workspace_type, group_name, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name FROM workspaces WHERE source_repo = ?1 ORDER BY display_order",
         )?;
 
         let entries: Vec<WorkspaceEntry> = stmt
@@ -244,7 +313,7 @@ impl WorkspaceStorage for Arc<SqliteStorage> {
     fn load_all_workspaces(&self) -> Vec<WorkspaceEntry> {
         let conn = self.conn.lock();
         let mut stmt = match conn.prepare(
-            "SELECT name, description, prompt, kanban_path, branch, worktree_path, source_repo, workspace_type, group_name, display_order FROM workspaces ORDER BY display_order",
+            "SELECT name, description, prompt, kanban_path, branch, worktree_path, source_repo, workspace_type, group_name, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name FROM workspaces ORDER BY display_order",
         ) {
             Ok(s) => s,
             Err(_) => return Vec::new(),
@@ -323,7 +392,10 @@ impl ApiHistoryStorage for Arc<SqliteStorage> {
         )?;
 
         let entries = stmt
-            .query_map(rusqlite::params![&*repo_str, limit as i64], row_to_api_entry)?
+            .query_map(
+                rusqlite::params![&*repo_str, limit as i64],
+                row_to_api_entry,
+            )?
             .filter_map(|r| r.ok())
             .collect();
 
@@ -381,6 +453,56 @@ impl UiPrefsStorage for Arc<SqliteStorage> {
         conn.execute(
             "INSERT OR REPLACE INTO ui_preferences (key, value) VALUES (?1, ?2)",
             rusqlite::params![key, value],
+        )?;
+        Ok(())
+    }
+}
+
+impl super::AgentProfileStorage for Arc<SqliteStorage> {
+    fn save_agent(&self, profile: &super::AgentProfile) -> anyhow::Result<()> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "INSERT INTO agent_profiles (source_repo, name, provider, role, version)
+             VALUES (?1, ?2, ?3, ?4, 1)
+             ON CONFLICT(source_repo, name) DO UPDATE SET
+                 provider = ?3, role = ?4, version = version + 1, last_synced_at = NULL",
+            rusqlite::params![profile.source_repo, profile.name, profile.provider, profile.role],
+        )?;
+        Ok(())
+    }
+
+    fn load_agents(&self, source_repo: &Path) -> anyhow::Result<Vec<super::AgentProfile>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT id, source_repo, name, provider, role, version, last_synced_at
+             FROM agent_profiles WHERE source_repo = ?1 ORDER BY name",
+        )?;
+        let rows = stmt.query_map([source_repo.to_string_lossy().as_ref()], |row| {
+            Ok(super::AgentProfile {
+                id: Some(row.get(0)?),
+                source_repo: row.get(1)?,
+                name: row.get(2)?,
+                provider: row.get(3)?,
+                role: row.get(4)?,
+                version: row.get(5)?,
+                last_synced_at: row.get(6)?,
+            })
+        })?;
+        Ok(rows.filter_map(|r| r.ok()).collect())
+    }
+
+    fn delete_agent(&self, id: i64) -> anyhow::Result<()> {
+        let conn = self.conn.lock();
+        conn.execute("DELETE FROM agent_profiles WHERE id = ?1", [id])?;
+        Ok(())
+    }
+
+    fn mark_synced(&self, id: i64) -> anyhow::Result<()> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "UPDATE agent_profiles SET last_synced_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+             WHERE id = ?1",
+            [id],
         )?;
         Ok(())
     }

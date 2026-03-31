@@ -43,6 +43,14 @@ fn process_refresh_result(app: &mut App, result: app::RefreshResult) {
             ws.dirty = false;
             ws.last_refresh = Some(Instant::now());
         }
+        // Remove selected paths that no longer appear in the file list
+        if result.workspace_idx == app.active_workspace
+            && let Some(ws) = app.workspaces.get(result.workspace_idx)
+        {
+            let live_paths: std::collections::HashSet<&str> =
+                ws.changed_files.iter().map(|f| f.path.as_str()).collect();
+            app.selected_files.retain(|p| live_paths.contains(p.as_str()));
+        }
     }
     app.refresh_pending = false;
     app.needs_redraw = true;
@@ -52,13 +60,14 @@ pub(crate) async fn run(
     mut terminal: DefaultTerminal,
     preflight_warnings: Vec<String>,
     log_buffer: crate::log_buffer::LogBuffer,
+    paths: piki_core::paths::DataPaths,
 ) -> anyhow::Result<()> {
-    let manager = piki_core::workspace::WorkspaceManager::new();
-    let storage = std::sync::Arc::new(piki_core::storage::create_storage()?);
-    let mut app = App::new(std::sync::Arc::clone(&storage));
+    let manager = piki_core::workspace::WorkspaceManager::with_paths(paths.clone());
+    let storage = std::sync::Arc::new(piki_core::storage::create_storage(&paths)?);
+    let mut app = App::new(std::sync::Arc::clone(&storage), &paths);
     app.log_buffer = log_buffer;
     app.sysinfo = piki_core::sysinfo::spawn_sysinfo_poller();
-    app.theme = theme::load();
+    app.theme = theme::load_from(&paths);
 
     // Load UI preferences from storage (if SQLite backend)
     if let Some(ref ui_prefs) = storage.ui_prefs {
@@ -148,6 +157,10 @@ pub(crate) async fn run(
                         if let Some(action) = input::handle_key_event(&mut app, key) {
                             execute_action(&mut app, &manager, action, &mut terminal).await?;
                         }
+                        app.needs_redraw = true;
+                    }
+                    Some(Ok(Event::Paste(text))) => {
+                        input::handle_paste(&mut app, &text);
                         app.needs_redraw = true;
                     }
                     Some(Ok(Event::Mouse(mouse))) => {

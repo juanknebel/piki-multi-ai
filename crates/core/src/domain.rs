@@ -69,6 +69,43 @@ impl AIProvider {
             AIProvider::Api,
         ]
     }
+
+    /// Parse a provider from its label string (e.g. "Claude Code" → Claude)
+    pub fn from_label(label: &str) -> AIProvider {
+        match label {
+            "Claude Code" => AIProvider::Claude,
+            "Gemini" => AIProvider::Gemini,
+            "OpenCode" => AIProvider::OpenCode,
+            "Kilo" => AIProvider::Kilo,
+            "Codex" => AIProvider::Codex,
+            _ => AIProvider::Claude,
+        }
+    }
+
+    /// Providers that can be dispatched as agents
+    pub fn dispatchable() -> &'static [AIProvider] {
+        &[
+            AIProvider::Claude,
+            AIProvider::Gemini,
+            AIProvider::OpenCode,
+            AIProvider::Kilo,
+            AIProvider::Codex,
+        ]
+    }
+
+    /// CLI arguments to pass a prompt/task to this provider
+    pub fn prompt_args(&self, prompt: &str) -> Vec<String> {
+        if prompt.is_empty() {
+            return Vec::new();
+        }
+        match self {
+            AIProvider::Claude | AIProvider::Gemini | AIProvider::Codex | AIProvider::OpenCode => {
+                vec![prompt.to_string()]
+            }
+            AIProvider::Kilo => vec!["--prompt".to_string(), prompt.to_string()],
+            _ => Vec::new(),
+        }
+    }
 }
 
 /// Status of the process in a workspace
@@ -138,6 +175,15 @@ pub struct WorkspaceInfo {
     /// Persistent display order (lower values appear first)
     #[serde(default)]
     pub order: u32,
+    /// Card ID from the kanban board that triggered this workspace dispatch
+    #[serde(default)]
+    pub dispatch_card_id: Option<String>,
+    /// Kanban board path of the source workspace (for card lifecycle management)
+    #[serde(default)]
+    pub dispatch_source_kanban: Option<String>,
+    /// Name of the agent profile used for dispatch
+    #[serde(default)]
+    pub dispatch_agent_name: Option<String>,
 }
 
 impl WorkspaceInfo {
@@ -166,6 +212,9 @@ impl WorkspaceInfo {
             workspace_type: WorkspaceType::default(),
             group: None,
             order: 0,
+            dispatch_card_id: None,
+            dispatch_source_kanban: None,
+            dispatch_agent_name: None,
         }
     }
 }

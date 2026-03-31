@@ -1,8 +1,8 @@
-# agent-multi (v1.1.0)
+# agent-multi
 
 A terminal UI for orchestrating multiple [Claude Code](https://docs.anthropic.com/en/docs/claude-code) instances in parallel — each running in its own isolated git worktree, pointing to an existing directory, or managing a multi-service project root.
 
-Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](https://github.com/supermaven-inc/superset.sh).
+Built with Rust and [ratatui](https://ratatui.rs/).
 
 ### Navigation & Interaction
 
@@ -43,6 +43,7 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 - **Parallel workspaces** — Run multiple AI coding sessions simultaneously, each in an isolated git worktree, pointing directly to an existing directory (Simple mode), or managing a multi-service project root (Project mode)
 - **Dynamic tabs** — Workspaces start empty; create tabs on demand (`t`) organized in categories: Shell (direct), AI Agents (Claude Code, Gemini, OpenCode, Kilo, Codex), and Tools (Kanban Board, Code Review, API Explorer); close tabs with `w`; cycle with `g`/`G`
 - **Workspace dashboard** — Press `D` for a bird's-eye overview of all workspaces with their tabs, status (idle/busy/done), changed files, and ahead/behind; `j`/`k` to navigate, `Enter` to switch, `Esc` to close
+- **Git log viewer** — Press `L` in navigation mode to open a scrollable overlay showing `git log --oneline --graph --decorate --all -50`; navigate with `j`/`k`, `Ctrl+d`/`Ctrl+u` for page, `g`/`G` for top/bottom; press `Enter` on a commit to view its diff (piped through delta if available); `Esc` to close
 - **Live terminal rendering** — See AI assistant output in real-time with full ANSI color support via `tui-term`
 - **Interactive input** — Type directly into any AI session (Enter on the terminal pane to interact)
 - **Git branch-style naming** — Workspace names support `/`, `.`, `-`, `_` (e.g. `feature/login`, `bugfix/issue-42`)
@@ -55,15 +56,21 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 - **Ahead/behind indicator** — STATUS panel border and status bar show `↑N to push` / `↓N behind` relative to upstream tracking branch
 - **Side-by-side diffs** — View diffs as a floating overlay rendered by [delta](https://github.com/dandavison/delta) with ANSI colors preserved (terminal stays visible behind)
 - **Deterministic workspace ordering** — Workspaces persist their display order via an `order` field; new workspaces append to the end; order is stable across restarts
-- **Tab navigation** — Switch between workspaces with Tab, Shift+Tab, or number keys 1-9; Tab cycling follows sidebar visual order, skipping workspaces in collapsed groups
-- **Vim-style navigation** — j/k for movement, Enter to activate, Esc to go back
+- **Context-aware Tab** — Tab/Shift+Tab behavior depends on the active pane: cycles workspaces in the sidebar, cycles subtabs in the main panel, and cycles files in the status panel; number keys 1-9 (shown as badges) always jump to a workspace; backtick (`` ` ``) toggles to previous workspace (Alt-Tab style)
+- **Scrollbar indicators** — Thin scrollbars appear on the right edge of scrollable areas (terminal, diff, markdown, file list, workspace list) when content overflows the viewport
+- **Fuzzy workspace switcher** — Press `Space` to open a fuzzy search overlay for instant workspace switching by name, group, or branch
+- **Vim-style navigation** — j/k for movement, Enter to activate, Esc to go back (non-terminal panes), Ctrl+G for terminal panes; h from main panel goes to workspace list; j/k from main panel reach GitStatus/WorkspaceList; Enter on a workspace switches and auto-focuses the main panel
 - **Fuzzy file search** — Search all files in the active worktree with fuzzy matching powered by [nucleo](https://github.com/helix-editor/nucleo) (same engine as Helix editor), respects `.gitignore`
 - **$EDITOR integration** — Open any file in your preferred editor (`$EDITOR` or `vi`); TUI suspends and resumes automatically
-- **Inline editor** — Edit files directly inside the TUI with a built-in text editor (cursor movement, line numbers, scroll)
+- **Inline editor** — Edit files directly inside the TUI with a built-in text editor (cursor movement, line numbers, scroll); syntax-highlighted via `syntect`
+- **Syntax highlighting** — Language-aware syntax coloring powered by [syntect](https://github.com/trishume/syntect) across three surfaces: code review diffs (per-line highlighting merged with add/delete coloring), inline editor (with cursor overlay), and markdown fenced code blocks (with language hints like ` ```rust `); configurable theme via `syntax_theme` in `config.toml` (default: `base16-ocean.dark`)
+- **Terminal search** — Press `Ctrl+Shift+F` in terminal interaction mode to search within terminal output; type to filter, `Enter`/`Shift+Enter` to navigate matches, `Esc` to close
+- **Undo stage/unstage** — Press `Ctrl+Z` in navigation mode to undo the last stage or unstage operation (up to 20 entries); status bar shows `[C-z undo]` hint after each operation
 - **Clipboard support** — Paste from clipboard (`Ctrl+Shift+V`), copy visible terminal (`Ctrl+Shift+C`), and mouse drag-to-select with auto-copy; cross-platform (Wayland, X11, macOS, Windows)
 - **Workspace prompts** — Optionally provide an initial prompt when creating a workspace, stored for reference and used when spawning AI tabs
-- **Git operations** — Stage (`s`), unstage (`u`), commit (`c`), push (`P`), and merge (`M`) directly from the TUI; commit dialog with inline message input
-- **Merge/Apply changes** — Merge or rebase workspace branches into main directly from the TUI (`M`); supports merge commit and rebase strategies with conflict detection
+- **Git operations** — Stage (`s`), unstage (`u`), commit (`c`), push (`P`), merge (`M`), and stash (`S`) directly from the TUI; commit dialog with inline message input; stash overlay supports save/pop/apply/drop/show
+- **Merge/Apply changes** — Merge or rebase workspace branches into main directly from the TUI (`M`); supports merge commit and rebase strategies with conflict detection and resolution
+- **Conflict resolution** — Interactive overlay (`X`) for resolving merge/rebase conflicts: select conflicted files and resolve with ours (`o`), theirs (`t`), mark resolved (`m`), or edit in `$EDITOR` (`e`); auto-opens when merge/rebase produces conflicts; abort merge/rebase with `A`
 - **System status header** — Live CPU%, RAM usage, battery level, and date/time displayed in a top header bar (powered by `systemstat`)
 - **Full mouse support** — Click to focus panes, select workspaces/files, switch tabs, close tabs (×), scroll anywhere contextually; mouse scroll forwarded to TUI apps (OpenCode, Kilo) in alternate screen mode; drag to resize borders or select text; overlays dismiss on click
 - **Resizable panes** — Resize sidebar and workspace/file split with keyboard (`<`/`>`, `+`/`-`) or mouse drag on borders
@@ -71,9 +78,11 @@ Built with Rust and [ratatui](https://ratatui.rs/). Inspired by [superset.sh](ht
 - **Customizable configuration** — Keybindings and themes loaded from `~/.config/piki-multi/config.toml`
 - **Customizable themes** — Colors loaded from TOML files; supports named colors and hex `#rrggbb`
 - **Pre-flight checks** — Validates required (git >= 2.20) and optional dependencies (delta) at startup with clear error/warning messages; `gh` CLI availability is checked lazily on first Code Review use
-- **Command palette** — Press `Ctrl+p` to open a VS Code-style searchable command palette; fuzzy-filter ~25 commands across 7 categories (Workspace, Git, Tabs, Search, View, Layout, App) with match highlighting and keybinding hints; powered by [nucleo](https://github.com/helix-editor/nucleo)
+- **Command palette** — Press `Ctrl+p` to open a VS Code-style searchable command palette; fuzzy-filter 26+ commands across 9 categories (Workspace, Git, Tabs, Search, View, Layout, Clipboard, App, Switch) with match highlighting and keybinding hints; includes dynamic "Switch to" entries for all workspaces; powered by [nucleo](https://github.com/helix-editor/nucleo)
 - **In-app log viewer** — Press `Ctrl+l` to open a scrollable overlay showing the last 500 log entries from the current session; color-coded by level (ERROR=red, WARN=yellow, INFO=green, DEBUG=cyan, TRACE=gray); filter by level with `0`-`5` keys; select lines with `j`/`k` (highlighted), horizontal scroll with `h`/`l`, page with `Ctrl+d`/`Ctrl+u`, `g`/`G` top/bottom; `Enter`/`y` copies selected line to clipboard; mouse scroll and click to select
 - **Structured logging** — File-based structured logging via `tracing` with daily rotation to `~/.local/share/piki-multi/logs/`; configurable via `--log-level` flag (trace/debug/info/warn/error)
+- **Agent Profiles** — Configure named agents per project (`A` key, Simple workspaces only) with a two-step wizard: step 1 selects name + provider, step 2 opens a large floating editor for the agent's role/instructions; agents are stored in SQLite per `source_repo` with version tracking; press `p` to sync agent config to the repo as provider-native subagent files (e.g., `.claude/agents/<name>.md`); press `i` to import agents from repo files (reverse sync) — scans all provider directories for `.md` files, shows a checklist with `(new)`/`(exists)` status, and imports selected agents marked as synced; version indicator shows sync status (`v3 ✓` synced, `v2 ✗` pending); editing an agent increments its version and resets sync status; falls back to raw provider selector when no agents are configured
+- **Agent Dispatch** — Select a kanban card, press `D` to dispatch a configured agent or raw provider: the agent selector includes a `(None)` option to dispatch without a profile; when no agent is selected, a second step asks whether to create a new worktree workspace or use the current one; with an agent selected, automatically creates a git worktree with a convention-based branch (`feature/`, `bug/`, or `spike/` based on card priority), a workspace grouped under `<parent>-AGENTS`, inherits the parent's kanban board, and launches the agent with an auto-composed prompt (`Use the <agent> agent to plan and then implement the task: <card title>` + card description + optional additional prompt); the agent's role is materialized as a provider-native subagent file in the worktree; card moves to "in progress" with assignee set to agent name; deleting the agent workspace moves the card back to "todo" and clears the assignee
 - **Code Review** — Full-screen PR review tab powered by `gh` CLI; browse changed files, view diffs with line numbers and a cursor, add inline comments on any line (`c`), delete comments (`d`), submit reviews (approve/request changes/comment) with inline comments via GitHub API; persistent draft overlay; tab only opens if the current branch has an open PR; locked mode prevents accidental workspace switching — press `q` to close or `s` to submit; `gh` availability and authentication are checked lazily on first use and cached for the session
 - **API Explorer** — Interactive HTTP client tab (`t` then `9`) with Hurl-like syntax; write `METHOD URL`, headers, and body in a built-in editor (starts empty); `Ctrl+S` to send; response displayed with status code, elapsed time, and pretty-printed JSON; `Ctrl+J`/`Ctrl+K` to scroll response; `Ctrl+F` to search response; contextual footer hints for API-specific shortcuts; errors (parse failures, client init, network errors) and successful requests are logged to the in-app log viewer (`Ctrl+L`)
 
@@ -113,6 +122,7 @@ piki-multi-ai [COMMAND]
 - `-h`, `--help`: Print help
 - `-V`, `--version`: Print version
 - `--log-level <LEVEL>`: Set logging verbosity — `trace`, `debug`, `info` (default), `warn`, `error`. Logs are written to `~/.local/share/piki-multi/logs/`
+- `--data-dir <PATH>`: Override the data directory. When set, **all** app state is stored under this path: database, worktrees, logs, and config. Useful for running a nightly/test instance alongside stable (e.g. `piki-multi-ai --data-dir /tmp/piki-nightly`)
 
 ### Commands
 
@@ -185,7 +195,7 @@ Workspace configurations are saved automatically and restored on startup using a
 |  ▼ frontend (2)  |                                                       |
 |  ▶ ws-1 (active) |  AI assistant live terminal output                    |
 |    3 files       |  (Press [t] to open a new tab)                        |
-|    ⌂ my-project  |  (diff opens as floating overlay)                     |
+|    Fix auth bug  |  (diff opens as floating overlay)                     |
 |                  |                                                       |
 |    ws-2          |                                                       |
 |  ▸ backend (1)   |                                                       |
@@ -197,9 +207,9 @@ Workspace configurations are saved automatically and restored on startup using a
 | ↑1 to push      |
 +------------------+--------------------------------------------------------+
   Footer keys change per active pane. Examples:
-  Workspace list: [hjkl] navigate [enter] interact [n] new ws [r] clone ws [e] edit ws [d] delete ws [tab] switch ws [</> ] resize [?] help [q] quit
-  Git status:     [hjkl] navigate [enter] interact [/] search [c] commit [P] push [M] merge [ctrl-z] undo [</> ] resize [?] help [q] quit
-  Main panel:     [hjkl] navigate [enter] interact [t] new tab [w] close tab [g/G] next/prev tab [</> ] resize [?] help [q] quit
+  Workspace list: [hjkl] navigate [enter] interact [n] new ws [r] clone ws [e] edit ws [d] delete ws [tab] switch ws [^P] commands [space] switch ws [?] help [q] quit
+  Git status:     [hjkl] navigate [enter] interact [/] search [c] commit [P] push [M] merge [ctrl-z] undo [^P] commands [space] switch ws [?] help [q] quit
+  Main panel:     [hjkl] navigate [enter] interact [t] new tab [w] close tab [g/G] next/prev tab [^P] commands [space] switch ws [?] help [q] quit
 ```
 
 For **Project workspaces**, the STATUS panel is replaced by a SERVICES panel showing sub-directories:
@@ -238,16 +248,20 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 
 | Key | Action |
 |-----|--------|
-| `h` / `j` / `k` / `l` | Move between panes |
+| `h` / `j` / `k` / `l` | Move between panes (`h` from main panel goes to workspace list) |
 | `Enter` | Interact with selected pane |
 | `n` | Create new workspace |
 | `r` | Clone workspace (new workspace pre-filled with directory, prompt, and kanban path) |
 | `e` | Edit workspace options (Kanban path, Prompt) |
 | `d` | Delete selected workspace |
-| `Tab` / `Shift+Tab` | Next / previous workspace |
-| `1`-`9` | Jump to workspace N |
+| `Tab` / `Shift+Tab` | Context-aware: cycle workspaces (sidebar), subtabs (main), files (status) |
+| `1`-`9` | Jump to workspace N (numbers shown in sidebar) |
+| `Space` | Fuzzy workspace switcher (search by name/group/branch) |
+| `` ` `` | Toggle to previous workspace |
 | `t` | New tab (opens category menu: 1=Shell, 2=AI Agents →, 3=Tools →; submenus for agent/tool selection) |
 | `w` | Close current tab (with confirmation dialog) |
+| `b` | Open kanban board for current workspace |
+| `A` | Manage agent profiles (create/edit/delete agents for this project) |
 | `D` | Workspace dashboard overlay (bird's-eye view of all workspaces and tabs) |
 | `Ctrl+p` | Command palette (fuzzy-searchable list of all commands) |
 | `Ctrl+l` | Log viewer overlay (last 500 log entries, color-coded, filterable by level) |
@@ -255,8 +269,16 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `<` / `>` | Resize sidebar width (±5%) |
 | `+` / `-` | Resize workspace/file split (±10%) |
 | `/` or `Ctrl+f` | Fuzzy file search |
+| `J` / `K` | Scroll main panel down/up |
+| `PageUp` / `PageDown` | Page scroll |
+| `Ctrl+z` | Undo last stage/unstage operation |
+| `s` | Quick stage file (when file list focused) |
+| `u` | Quick unstage file (when file list focused) |
 | `c` | Commit (opens dialog) — not available for Project workspaces |
 | `P` | Push — not available for Project workspaces |
+| `S` | Git stash overlay (save/pop/apply/drop/show) — not available for Project workspaces |
+| `L` | Git log overlay (scrollable graph with commit diffs via Enter) |
+| `X` | Conflict resolution overlay (ours/theirs/edit/mark-resolved/abort) — not available for Project workspaces |
 | `M` | Merge workspace branch into main — not available for Project workspaces |
 | `i` | Workspace info overlay (branch, paths, description, prompt; mouse-copyable) |
 | `?` | Help overlay |
@@ -267,15 +289,17 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 
 | Key | Action |
 |-----|--------|
-| `Ctrl+g` | Back to navigation mode |
+| `Ctrl+g` | Back to navigation mode (all panes) |
+| `Esc` | Back to navigation mode (non-terminal panes only) |
+| `Ctrl+Shift+f` | Search in terminal output (terminal pane) |
 | *Terminal pane* | All keys forwarded to active tab |
-| *Workspace list* | `j`/`k` select, `Enter` switch, `d` delete |
-| *File list* | `j`/`k` select, `Enter` open diff, `e` open in $EDITOR, `v` inline editor, `s` stage, `u` unstage |
+| *Workspace list* | `j`/`k` select, `Enter` switch + focus main panel, `d` delete |
+| *File list* | `j`/`k` select, `Space` toggle multi-select, `a` select/deselect all, `Enter` open diff, `e` open in $EDITOR, `v` inline editor, `s` stage, `u` unstage (bulk when multi-selected) |
 | *Services list (Project)* | `j`/`k` select, `Enter` open New Workspace dialog pre-filled with sub-directory |
 | *Markdown tab* | `j`/`k` scroll, `Ctrl+d`/`Ctrl+u` page, `g`/`G` top/bottom (read-only) |
-| *Kanban tab* | `h/l/j/k` navigate, `H/L` move card, `n` new card, `e` edit card, `d` delete, `Enter` details, `Esc` close modal |
+| *Kanban tab* | `h/l/j/k` navigate, `H/L` move card, `n` new card, `e` edit card, `d` delete, `D` dispatch agent, `Enter` details, `r` refresh, `Esc` close modal |
 | *Code Review tab* | Locked mode — see Code Review section below |
-| *API Explorer tab* | `Ctrl+S` send request, `Ctrl+J`/`Ctrl+K` scroll response, `Ctrl+F` search response, `Ctrl+C` copy response, mouse scroll in editor/response |
+| *API Explorer tab* | `Ctrl+S` send request, `Ctrl+J`/`Ctrl+K` scroll response, `Ctrl+F` search response, `Ctrl+H` API history, `Ctrl+C` copy response, mouse scroll in editor/response |
 
 **In kanban card editor** (after pressing `e` or `n`):
 
@@ -288,6 +312,59 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `Enter` | Save card |
 | `Esc` | Cancel editing |
 
+**In dispatch agent dialog** (after pressing `D` on a kanban card):
+
+| Key | Action |
+|-----|--------|
+| `Left` / `Right` | Cycle agent/provider; includes `(None)` option when agents are configured |
+| `Tab` | Next agent/provider |
+| Any text | Type additional prompt (appended to card description) |
+| `Enter` | With agent: dispatch to new worktree. With `(None)` or raw provider: choose workspace destination (New/Current) |
+| `Esc` | Cancel (step 1) or Back (step 2) |
+
+**In manage agents overlay** (after pressing `A`):
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Navigate agent list |
+| `n` | Create new agent profile |
+| `e` / `Enter` | Edit selected agent |
+| `d` | Delete selected agent |
+| `p` | Sync agent to repo (write `.{provider}/agents/<name>.md`) |
+| `i` | Import agents from repo files into app |
+| `Esc` | Close |
+
+**In import agents overlay** (after pressing `i` in manage agents):
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Navigate discovered agents |
+| `Space` | Toggle selection (checkbox) |
+| `a` | Toggle select all / deselect all |
+| `Enter` | Import selected agents |
+| `Esc` | Cancel, return to manage agents |
+
+**In edit agent dialog — step 1** (name + provider):
+
+| Key | Action |
+|-----|--------|
+| `Tab` | Switch between Name and Provider fields |
+| `Left` / `Right` | Cycle provider (on Provider field) |
+| `Enter` | Next — open role editor (step 2) |
+| `Esc` | Cancel |
+
+**In edit agent dialog — step 2** (role editor, large floating window):
+
+| Key | Action |
+|-----|--------|
+| Any text | Edit agent role/instructions (multiline with Enter) |
+| `Up` / `Down` | Move cursor between lines |
+| `PageUp` / `PageDown` | Jump 10 lines |
+| Mouse scroll | Scroll 3 lines up/down |
+| `Ctrl+D` | Clear all text |
+| `Ctrl+S` | Save agent and close |
+| `Esc` | Back to step 1 without saving |
+
 **In diff view:**
 
 | Key | Action |
@@ -297,6 +374,48 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `g` / `G` | Top / bottom |
 | `n` / `p` | Next / previous file |
 | `Esc` | Close diff |
+
+**In git log viewer** (`L`):
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Select next/previous commit |
+| `Ctrl+d` / `Ctrl+u` | Page down/up |
+| `g` / `G` | Top / bottom |
+| `Enter` | View diff for selected commit (piped through delta if available) |
+| `Esc` or `L` | Close git log |
+
+**In git stash overlay** (`S`):
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Select next/previous stash entry |
+| `s` | Save new stash |
+| `p` | Pop selected stash |
+| `a` | Apply selected stash |
+| `d` | Drop selected stash |
+| `Enter` | Show selected stash diff |
+| `Esc` or `S` | Close stash overlay |
+
+**In conflict resolution** (`X`):
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Select next/previous conflicted file |
+| `o` | Resolve with ours (`git checkout --ours` + stage) |
+| `t` | Resolve with theirs (`git checkout --theirs` + stage) |
+| `m` | Mark resolved (`git add`) |
+| `e` | Open in `$EDITOR` |
+| `A` | Abort merge/rebase |
+| `Esc` or `X` | Close conflict resolution |
+
+**In merge dialog** (`M`):
+
+| Key | Action |
+|-----|--------|
+| `m` | Merge (merge commit strategy) |
+| `r` | Rebase |
+| `Esc` | Cancel |
 
 **In log viewer** (`Ctrl+l`):
 
@@ -460,6 +579,8 @@ You can override any default keybinding in the `[keybindings]` section of `confi
 - `new_tab`: New tab dialog controls
 - `dashboard`: Dashboard overlay controls
 - `logs`: Log viewer overlay controls
+- `git_stash`: Git stash overlay controls
+- `conflict_resolution`: Conflict resolution overlay controls
 - `help` / `about` / `workspace_info`: Overlay controls
 
 Example:
@@ -522,17 +643,22 @@ crates/
     src/
       domain.rs          # AIProvider, FileStatus, ChangedFile, WorkspaceStatus, WorkspaceInfo, WorkspaceType
       git.rs             # Git status parsing, ahead/behind detection
-      github.rs          # GitHub PR operations via gh CLI (PR info, files, unified diff parser, inline comments, submit review); all calls logged via tracing (visible in Ctrl+L log viewer)
+      github.rs          # GitHub PR operations via gh CLI (PR info, files, unified diff parser, inline comments, submit review)
+      paths.rs           # DataPaths struct — centralized directory resolution (database, worktrees, logs, config)
+      sysinfo.rs         # System info poller (CPU, RAM, battery via systemstat + chrono)
+      preflight.rs       # Pre-flight dependency checks (git version, optional tools)
       pty/
         session.rs       # PTY management (portable-pty + vt100 parser)
       workspace/
         manager.rs       # Git worktree CRUD
-        config.rs        # Workspace config persistence (JSON)
+        config.rs        # Workspace config persistence
         watcher.rs       # File system watcher (notify)
       diff/
         runner.rs        # git diff | delta pipeline (with untracked file support)
-      sysinfo.rs         # System info poller (CPU, RAM, battery via systemstat + chrono)
-      preflight.rs       # Pre-flight dependency checks (git version, optional tools)
+      storage/
+        mod.rs           # Storage traits (WorkspaceStorage, ApiHistoryStorage, UiPrefsStorage) + factory
+        json.rs          # Legacy JSON storage backend (migration source)
+        sqlite.rs        # SQLite backend (WAL mode, FTS5 for API history, upsert dedup)
   api-client/            # piki-api-client — HTTP/API client (independent, no TUI/core deps)
     src/
       lib.rs             # Public re-exports
@@ -540,29 +666,58 @@ crates/
       config.rs          # ClientConfig, Auth
       request.rs         # ApiRequest builder, Method enum
       response.rs        # ApiResponse (status, headers, body)
+      parser.rs          # Hurl-like syntax parser (METHOD URL\nHeaders\n\nBody → ParsedRequest)
+      protocol.rs        # Protocol enum (HTTP, prepared for future gRPC)
       http/
         client.rs        # HttpClient (reqwest-based ApiClient impl)
   tui/                   # TUI binary (piki-multi-ai) — depends on piki-core
     src/
-      main.rs            # Tokio main loop, event handling, action dispatch
+      main.rs            # Entry point, CLI args, tokio runtime setup
+      event_loop.rs      # Async event loop (crossterm::EventStream + tokio::select!)
+      action.rs          # Action enum + async action dispatch (git ops, diffs, stash, conflicts, API)
       app.rs             # TUI app state, Workspace wrapper, UI-specific types
+      dialog_state.rs    # DialogState enum (GitLog, GitStash, NewTab, ConflictResolution, etc.)
       code_review.rs     # Code review state (PR info, files, cached diffs, persistent draft)
       clipboard.rs       # System clipboard read/write (Wayland, X11, macOS, Windows)
       theme.rs           # Theme loading from TOML, color parsing (ratatui)
       config.rs          # Global configuration and keybindings (TOML, crossterm)
+      syntax.rs          # SyntaxHighlighter wrapping syntect for ratatui integration
       log_buffer.rs      # In-memory ring buffer tracing layer for log viewer
+      command_palette.rs # Command palette types, registry, nucleo state
+      workspace_switcher.rs # Fuzzy workspace switcher state (nucleo-powered)
+      helpers.rs         # Shared utility functions
       pty/
         input.rs         # Crossterm key events -> PTY bytes
-      command_palette.rs # Command palette types, registry, nucleo state
+      input/
+        mod.rs           # Main input dispatcher (mode routing)
+        interaction.rs   # Interaction-mode handlers (API, markdown, filelist, terminal, workspace, kanban)
+        dialog.rs        # Dialog input handlers (git_log, stash, commit, merge, conflict resolution)
+        mouse.rs         # Mouse events (click, scroll, drag-to-select, resize, PTY forwarding)
+        editor_input.rs  # Inline editor keyboard handling
+        code_review_input.rs   # Code review locked-mode input
+        command_palette_input.rs # Command palette search & selection
+        fuzzy_input.rs   # Fuzzy file search input
+        workspace_switcher_input.rs # Workspace switcher modal input
+        text_field_common.rs  # Shared text field input utilities
+        fuzzy_common.rs  # Shared fuzzy matching utilities
+        confirm_common.rs # Y/N confirmation dialog utilities
       ui/
         layout.rs        # Full TUI layout (all panels, overlays)
+        panels.rs        # Panel frame rendering
+        sidebar.rs       # Workspace list sidebar
+        statusbar.rs     # Footer bar and status line rendering
         terminal.rs      # Live PTY rendering (tui-term)
         diff.rs          # Diff rendering (ansi-to-tui)
         fuzzy.rs         # Fuzzy search overlay (nucleo matching + ignore walker)
         command_palette.rs # Command palette overlay renderer
         markdown.rs      # Markdown file viewer (tui-markdown)
-        editor.rs        # Inline file editor renderer
+        editor.rs        # Inline file editor renderer (syntax-highlighted)
         code_review.rs   # Full-screen code review layout (side-by-side split diff) + submit overlay
+        api.rs           # API Explorer tab renderer (editor + response panes)
+        dialogs.rs       # Dialog and overlay renderers (git log, stash, conflict, dashboard, etc.)
+        scrollbar.rs     # Shared vertical scrollbar helper (thin indicators)
+        subtabs.rs       # Sub-tab bar rendering (dynamic tabs with × close buttons)
+        workspace_switcher.rs # Workspace switcher overlay renderer
 ```
 
 ### Sequence diagram
@@ -652,7 +807,7 @@ sequenceDiagram
 - **ansi-to-tui** converts delta's ANSI output to `ratatui::text::Text` for the diff view
 - Workspaces start with no tabs; all tabs (Claude, Gemini, OpenCode, Kilo, Codex, Shell, Kanban, Code Review, API Explorer) are created on demand via `t` which opens a categorized menu (Shell, AI Agents, Tools); PTY-backed tabs each have their own session, while Kanban, Code Review, and API Explorer tabs manage their own state without PTY
 - Worktrees are stored in `~/.local/share/piki-multi/worktrees/<project>/<name>` with branch names matching the workspace name exactly; Simple workspaces point directly to their source directory; Project workspaces scan sub-directories instead of running git operations
-- Event-driven architecture: `crossterm::EventStream` + `tokio::select!` for truly async event loop; key handlers return `Option<Action>`, main loop executes actions asynchronously
+- Event-driven architecture: `crossterm::EventStream` + `tokio::select!` in `event_loop.rs` for truly async event loop; key handlers return `Option<Action>`, `action.rs` executes actions asynchronously
 - STATUS panel uses `git status --porcelain=v1` for full coverage of untracked, staged, conflicted, and renamed files
 - Diff runner uses `git diff --no-index /dev/null <file>` for untracked files
 - **Structured logging** to file via `tracing` (not to terminal) — TUI output is unaffected; logs rotate daily in `~/.local/share/piki-multi/logs/`

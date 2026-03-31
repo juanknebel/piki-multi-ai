@@ -36,23 +36,33 @@ cargo clippy             # Lint
 cargo fmt --check        # Check formatting
 ```
 
+**TUI Snapshot tests** (`crates/tui/src/ui/mod.rs`): Use `insta` crate for visual snapshot testing of rendered UI. Snapshots live in `crates/tui/src/ui/snapshots/`. When adding new UI tests, render to a `TestBackend` buffer and call `insta::assert_snapshot!`. After first run, accept new snapshots with `cargo insta review` or rename `.snap.new` files to `.snap`.
+
 Requires Rust >= 1.85 (edition 2024). Runtime deps: `claude` CLI in PATH, git >= 2.20, optionally `delta` for side-by-side diffs, optionally `gh` CLI for code review feature.
 
 ## Architecture
 
 **Event loop** (`main.rs`): Single tokio async loop at 50ms tick rate. Key events produce `Action` variants, which are executed asynchronously. File watcher events are polled each tick with 500ms debounce.
 
-**App state** (`app.rs`): Centralized state in `App` struct. Modal UI with `AppMode` (Normal/Diff/NewWorkspace/Help) and `interacting` flag that toggles between navigation mode (hjkl between panes) and interaction mode (keys forwarded to active pane). Three panes: `WorkspaceList`, `GitStatus`, `MainPanel`.
+**App state** (`app.rs`): Centralized state in `App` struct. Modal UI with `AppMode` (Normal/Diff/NewWorkspace/Help/WorkspaceSwitcher/etc.) and `interacting` flag that toggles between navigation mode (hjkl between panes) and interaction mode (keys forwarded to active pane). Three panes: `WorkspaceList`, `GitStatus`, `MainPanel`. Navigation mode supports symmetric pane movement (up/down from MainPanel reaches left panes). `previous_workspace` tracks the last-visited workspace for quick toggle via backtick. Non-terminal panes accept `Esc` as alternative to `Ctrl+G` for exiting interaction mode. Quick-action shortcuts (`s`/`u`) work from navigation mode when GitStatus is focused; when files are multi-selected, these dispatch `GitStageSelected`/`GitUnstageSelected` bulk actions instead. Tab/Shift+Tab is context-aware: cycles workspaces in sidebar, subtabs in main panel, files in status panel. Multi-select: `selected_files: HashSet<String>` stores selected file paths (cleared on workspace switch, pruned on refresh). In interaction mode on GitStatus: Space toggles selection (advances cursor), `a` toggles select-all/deselect-all. Selected files show `>` marker and subtle background highlight; block title shows count. Bulk stage/unstage runs a single `git add`/`git reset HEAD` with all paths.
 
 **PTY** (`pty/`): `PtySession` wraps portable-pty (sync) with `spawn_blocking` for non-blocking reads. `vt100::Parser` accumulates terminal state, rendered by `tui-term`. `input.rs` converts crossterm key events to PTY byte sequences.
 
-**Workspace management** (`workspace/`): `WorkspaceManager` handles git worktree CRUD. Worktrees stored in `.agent-multi/worktrees/<name>` with branches `agent-multi/<name>`. `FileWatcher` uses `notify` crate with mpsc channels. Each workspace has a persistent `order: u32` field that controls deterministic display ordering across restarts; new workspaces get `max_order + 1`. Tab/Shift+Tab cycling follows sidebar visual order, skipping workspaces in collapsed groups.
+**Data paths** (`paths.rs`): `DataPaths` struct centralizes all directory paths (database, worktrees, logs, config). Constructed once in `main()` from `--data-dir` CLI flag or platform defaults. When `--data-dir` is set, ALL paths (including config) resolve under that directory for full isolation. Threaded to `event_loop::run()`, `App::new()`, `WorkspaceManager`, `create_storage()`, `Config::load_from()`, and `theme::load_from()`.
 
-**Diff pipeline** (`diff/runner.rs`): Runs `git diff | delta` (with plain `git diff` fallback), converts ANSI output to ratatui `Text` via `ansi-to-tui`.
+**Workspace management** (`workspace/`): `WorkspaceManager` handles git worktree CRUD. Carries a `DataPaths` instance for worktree path resolution. Worktrees stored in `<data_dir>/worktrees/<project>/<name>` with branches matching the workspace name. `FileWatcher` uses `notify` crate with mpsc channels. Each workspace has a persistent `order: u32` field that controls deterministic display ordering across restarts; new workspaces get `max_order + 1`. Tab/Shift+Tab cycling follows sidebar visual order, skipping workspaces in collapsed groups. Workspace switching: Tab/Shift+Tab cycle, 1-9 jump (with number badges in sidebar), Space opens fuzzy workspace switcher (`workspace_switcher.rs`), backtick toggles to previous workspace. Workspaces are also searchable via the command palette (Ctrl+P).
+
+**Diff pipeline** (`diff/runner.rs`): Runs `git diff | delta` (with plain `git diff` fallback), converts ANSI output to ratatui `Text` via `ansi-to-tui`. `run_commit_diff_with_delta` in `action.rs` does the same for `git show <sha>` (used by Git Log viewer).
+
+**Git Log viewer** (`L` in navigation mode): Overlay showing `git log --oneline --graph --decorate --all -50`. State stored in `DialogState::GitLog` (`dialog_state.rs`). Input handled by `handle_git_log_input` in `input/dialog.rs`. Rendered by `render_git_log_overlay` in `ui/dialogs.rs`. Enter on a commit triggers `Action::ViewCommitDiff(sha)` which pipes `git show` through delta and opens the diff overlay.
+
+**Conflict resolution** (`X` in navigation mode, or auto-opens after merge/rebase conflict): Overlay showing conflicted files with resolve actions. State stored in `DialogState::ConflictResolution` (`dialog_state.rs`). Types: `ConflictFile` (path + status), `ConflictStrategy` (Ours/Theirs/MarkResolved). Input handled by `handle_conflict_resolution_input` in `input/dialog.rs`. Rendered by `render_conflict_resolution_overlay` in `ui/dialogs.rs`. Actions: `o` = checkout --ours + add, `t` = checkout --theirs + add, `m` = git add (mark resolved), `e` = open in $EDITOR, `A` = abort merge/rebase. When all conflicts resolved, overlay closes with toast prompting commit. The `GitMerge` action handler detects conflicts (via `git status --porcelain=v1`) instead of auto-aborting on failure, opening this overlay automatically.
 
 **GitHub integration** (`github.rs`): Async wrappers around `gh` CLI for PR operations: view PR info/files, get per-file diffs as parsed unified diffs with line numbers (`parse_unified_diff`), submit reviews with inline comments via `gh api`. Used by the Code Review tab.
 
-**UI** (`ui/`): `layout.rs` is the main render function composing all panels. Sub-modules render individual components (terminal, diff, workspaces, files, tabs, statusbar).
+**UI** (`ui/`): `layout.rs` is the main render function composing all panels. Sub-modules render individual components (terminal, diff, workspaces, files, tabs, statusbar). `scrollbar.rs` provides a shared `render_vertical()` helper used by all scrollable panels (terminal, diff, markdown, file list, workspace list) — only shown when content overflows. `ui/mod.rs` contains insta snapshot tests for dialogs, overlays, and the full layout; snapshots stored in `ui/snapshots/`.
+
+**Syntax highlighting** (`syntax.rs`): `SyntaxHighlighter` wraps `syntect` for ratatui integration. Provides `find_syntax(path)` (by file extension), `find_syntax_by_name(name)` (by language token), `highlighter_for(syntax)`, and `highlight_line(hl, line, base_style) -> Vec<Span>`. Stored on `App` as `app.syntax`. Integrated in three rendering surfaces: code review diffs (`ui/code_review.rs` — per-line highlighting merged with add/delete base styles), inline editor (`ui/editor.rs` — with cursor overlay splitting), and markdown fenced code blocks (`ui/markdown.rs` — language hint extraction from opening fence). Theme configurable via `syntax_theme` in `config.toml` (default: `base16-ocean.dark`).
 
 **API client** (`crates/api-client/`): Independent crate (`piki-api-client`) for HTTP API calls. `ApiClient` trait abstracts the transport layer; `HttpClient` implements it via `reqwest`. Includes a Hurl-like syntax parser (`parser.rs`) that converts `METHOD URL\nHeaders\n\nBody` text into `ParsedRequest` structs. `Protocol` enum (`protocol.rs`) prepared for future gRPC support. Does not depend on `piki-core` or `piki-tui`.
 
@@ -62,7 +72,7 @@ Requires Rust >= 1.85 (edition 2024). Runtime deps: `claude` CLI in PATH, git >=
 
 ## Task Tracking
 
-Use `flow` CLI with the project board to track tasks. Always set the env var:
+Use `flow-cli` to manage the project kanban board. Always set the env var:
 
 ```bash
 export FLOW_BOARD_PATH=/home/zero/git/agent-multi/.board
@@ -71,13 +81,16 @@ export FLOW_BOARD_PATH=/home/zero/git/agent-multi/.board
 Common commands:
 
 ```bash
-flow list                              # See all cards by column
-flow show <card_id>                    # Card details
-flow create <column> "title" --body "description" --priority medium  # Create card
-flow move <card_id> <column>           # Move card between columns
-flow edit <card_id> --title "..." --body "..." --priority high       # Update card
-flow delete <card_id>                  # Delete card
+flow-cli list                              # See all cards by column
+flow-cli show <card_id>                    # Card details
+flow-cli create <column> "title" --body "description" --priority medium  # Create card
+flow-cli move <card_id> <column>           # Move card between columns
+flow-cli edit <card_id> --title "..." --body "..." --priority high       # Update card
+flow-cli delete <card_id>                  # Delete card
+flow-cli columns                           # List column ids and card counts
 ```
+
+Output format can be changed with `-f`: `plain` (default), `json`, `xml`, `csv`, `table`, `markdown`.
 
 Priority values: `low`, `medium` (default), `high`, `bug`, `wishlist`.
 
@@ -87,7 +100,7 @@ Columns: `todo`, `in_progress`, `in_review`, `done`.
 
 **ALWAYS** keep the board in sync with your work:
 
-1. **Before implementing**: Search the board (`flow list`) for an existing card matching the task. If none exists, create one with `flow create todo "Title" --body "description" --priority <level>`.
+1. **Before implementing**: Search the board (`flow-cli list`) for an existing card matching the task. If none exists, create one with `flow-cli create todo "Title" --body "description" --priority <level>`.
 2. **Starting work**: Move the card to `in_progress` before writing any code.
 3. **Implementation done**: Move the card to `in_review` once the code is complete and tests pass.
 4. **After commit**: Move the card to `done` only after the git commit is created.
