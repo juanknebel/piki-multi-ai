@@ -97,6 +97,7 @@ pub(crate) enum Action {
         agent_name: Option<String>,
         agent_role: Option<String>,
         additional_prompt: String,
+        use_current_ws: bool,
     },
     /// Save an agent profile to storage
     SaveAgent {
@@ -107,6 +108,10 @@ pub(crate) enum Action {
     DeleteAgent(i64),
     /// Persist agent config file to the repo (Simple workspace only)
     SyncAgentToRepo(i64),
+    /// Scan repo for agent files and open import dialog
+    ScanRepoAgents,
+    /// Import selected agents from repo files into storage: Vec<(name, provider_label, role)>
+    ImportAgents(Vec<(String, String, String)>),
 }
 
 pub(crate) async fn execute_action(
@@ -1958,6 +1963,7 @@ pub(crate) async fn execute_action(
             agent_name,
             agent_role,
             additional_prompt,
+            use_current_ws,
         } => {
             // 1. Extract source workspace data
             let (source_dir, source_ws_name) = match app.workspaces.get(source_ws) {
@@ -1972,26 +1978,7 @@ pub(crate) async fn execute_action(
                 .get(source_ws)
                 .and_then(|ws| ws.kanban_path.clone());
 
-            // 2. Build branch name: <type>/<sanitized_card_id>
-            let type_prefix = match card_priority {
-                flow_core::Priority::Bug => "bug",
-                flow_core::Priority::Wishlist => "spike",
-                _ => "feature",
-            };
-            let sanitized_id: String = card_id
-                .chars()
-                .map(|c| {
-                    if c.is_alphanumeric() || c == '-' || c == '_' || c == '.' {
-                        c
-                    } else {
-                        '-'
-                    }
-                })
-                .collect();
-            let ws_name = format!("{}/{}", type_prefix, sanitized_id);
-            let group_name = format!("{}-AGENTS", source_ws_name);
-
-            // 3. Compose task prompt: always include card title so the agent starts working
+            // 2. Compose task prompt: always include card title so the agent starts working
             let task_prompt = if let Some(ref name) = agent_name {
                 let mut parts = vec![format!(
                     "Use the {} agent to plan and then implement the task: {}",
@@ -2015,92 +2002,160 @@ pub(crate) async fn execute_action(
                 parts.join("\n\n")
             };
 
-            // 4. Create worktree workspace
-            let result = manager
-                .create(&ws_name, &card_title, &task_prompt, kanban_path.clone(), &source_dir)
-                .await;
-
-            match result {
-                Ok(mut info) => {
-                    info.group = Some(group_name);
-                    info.dispatch_card_id = Some(card_id.clone());
-                    info.dispatch_source_kanban = kanban_path;
-                    info.dispatch_agent_name = agent_name.clone();
-                    info.order = app
-                        .workspaces
-                        .iter()
-                        .map(|w| w.info.order)
-                        .max()
-                        .map(|m| m + 1)
-                        .unwrap_or(0);
-
-                    // 5. Materialize agent config files in worktree
-                    if let (Some(name), Some(role)) = (&agent_name, &agent_role) {
-                        let _ = materialize_agent_config(&info.path, name, provider, role);
-                    }
-
-                    // 6. Update kanban card: set assignee and move to IN PROGRESS
-                    let assignee_label = agent_name
-                        .as_deref()
-                        .unwrap_or(provider.label());
-                    if let Some(src_ws) = app.workspaces.get_mut(source_ws)
-                        && let Some(ref mut kp) = src_ws.kanban_provider
-                    {
-                        let _ = kp.update_card(
-                            &card_id,
-                            &card_title,
-                            &card_description,
-                            card_priority,
-                            assignee_label,
-                        );
-                        let _ = kp.move_card(&card_id, "in_progress");
-                        // Reload board
-                        if let Some(ref mut ka) = src_ws.kanban_app
-                            && let Ok(board) = kp.load_board()
-                        {
-                            ka.board = board;
-                            ka.clamp();
-                        }
-                    }
-
-                    // 6. Create workspace and switch to it
-                    app.workspaces.push(app::Workspace::from_info(info));
-                    let new_idx = app.workspaces.len() - 1;
-                    app.switch_workspace(new_idx);
-
-                    // 7. Start file watcher
-                    let ws = &mut app.workspaces[new_idx];
-                    match FileWatcher::new(ws.path.clone(), ws.name.clone()) {
-                        Ok(watcher) => ws.watcher = Some(watcher),
-                        Err(e) => {
-                            app.status_message = Some(format!("Watcher error: {}", e));
-                        }
-                    }
-
-                    // 8. Spawn AI provider tab with task prompt
-                    let ws = &mut app.workspaces[new_idx];
-                    let idx =
-                        spawn_tab(ws, provider, app.pty_rows, app.pty_cols, Some(&task_prompt))
-                            .await;
-                    ws.active_tab = idx;
-
-                    // 9. Persist config async
-                    {
-                        let source = app.workspaces[new_idx].source_repo.clone();
-                        let infos: Vec<_> = app.workspaces.iter().map(|w| w.info.clone()).collect();
-                        let storage = Arc::clone(&app.storage);
-                        tokio::spawn(async move {
-                            let _ = storage.workspaces.save_workspaces(&source, &infos);
-                        });
-                    }
-
-                    app.set_toast(
-                        format!("Agent dispatched: {} via {}", card_title, provider.label()),
-                        ToastLevel::Success,
+            if use_current_ws {
+                // Use current workspace — just spawn a new tab, no worktree
+                // Update kanban card
+                let assignee_label = agent_name.as_deref().unwrap_or(provider.label());
+                if let Some(src_ws) = app.workspaces.get_mut(source_ws)
+                    && let Some(ref mut kp) = src_ws.kanban_provider
+                {
+                    let _ = kp.update_card(
+                        &card_id,
+                        &card_title,
+                        &card_description,
+                        card_priority,
+                        assignee_label,
                     );
+                    let _ = kp.move_card(&card_id, "in_progress");
+                    if let Some(ref mut ka) = src_ws.kanban_app
+                        && let Ok(board) = kp.load_board()
+                    {
+                        ka.board = board;
+                        ka.clamp();
+                    }
                 }
-                Err(e) => {
-                    app.status_message = Some(format!("Dispatch failed: {}", e));
+
+                // Spawn tab in current workspace
+                let ws = &mut app.workspaces[source_ws];
+                let idx =
+                    spawn_tab(ws, provider, app.pty_rows, app.pty_cols, Some(&task_prompt)).await;
+                ws.active_tab = idx;
+
+                app.set_toast(
+                    format!("Task started: {} via {}", card_title, provider.label()),
+                    ToastLevel::Success,
+                );
+            } else {
+                // Create new worktree workspace (original flow)
+                // Build branch name: <type>/<sanitized_card_id>
+                let type_prefix = match card_priority {
+                    flow_core::Priority::Bug => "bug",
+                    flow_core::Priority::Wishlist => "spike",
+                    _ => "feature",
+                };
+                let sanitized_id: String = card_id
+                    .chars()
+                    .map(|c| {
+                        if c.is_alphanumeric() || c == '-' || c == '_' || c == '.' {
+                            c
+                        } else {
+                            '-'
+                        }
+                    })
+                    .collect();
+                let ws_name = format!("{}/{}", type_prefix, sanitized_id);
+                let group_name = format!("{}-AGENTS", source_ws_name);
+
+                let result = manager
+                    .create(
+                        &ws_name,
+                        &card_title,
+                        &task_prompt,
+                        kanban_path.clone(),
+                        &source_dir,
+                    )
+                    .await;
+
+                match result {
+                    Ok(mut info) => {
+                        info.group = Some(group_name);
+                        info.dispatch_card_id = Some(card_id.clone());
+                        info.dispatch_source_kanban = kanban_path;
+                        info.dispatch_agent_name = agent_name.clone();
+                        info.order = app
+                            .workspaces
+                            .iter()
+                            .map(|w| w.info.order)
+                            .max()
+                            .map(|m| m + 1)
+                            .unwrap_or(0);
+
+                        // Materialize agent config files in worktree
+                        if let (Some(name), Some(role)) = (&agent_name, &agent_role) {
+                            let _ = materialize_agent_config(&info.path, name, provider, role);
+                        }
+
+                        // Update kanban card: set assignee and move to IN PROGRESS
+                        let assignee_label =
+                            agent_name.as_deref().unwrap_or(provider.label());
+                        if let Some(src_ws) = app.workspaces.get_mut(source_ws)
+                            && let Some(ref mut kp) = src_ws.kanban_provider
+                        {
+                            let _ = kp.update_card(
+                                &card_id,
+                                &card_title,
+                                &card_description,
+                                card_priority,
+                                assignee_label,
+                            );
+                            let _ = kp.move_card(&card_id, "in_progress");
+                            if let Some(ref mut ka) = src_ws.kanban_app
+                                && let Ok(board) = kp.load_board()
+                            {
+                                ka.board = board;
+                                ka.clamp();
+                            }
+                        }
+
+                        // Create workspace and switch to it
+                        app.workspaces.push(app::Workspace::from_info(info));
+                        let new_idx = app.workspaces.len() - 1;
+                        app.switch_workspace(new_idx);
+
+                        // Start file watcher
+                        let ws = &mut app.workspaces[new_idx];
+                        match FileWatcher::new(ws.path.clone(), ws.name.clone()) {
+                            Ok(watcher) => ws.watcher = Some(watcher),
+                            Err(e) => {
+                                app.status_message = Some(format!("Watcher error: {}", e));
+                            }
+                        }
+
+                        // Spawn AI provider tab with task prompt
+                        let ws = &mut app.workspaces[new_idx];
+                        let idx = spawn_tab(
+                            ws,
+                            provider,
+                            app.pty_rows,
+                            app.pty_cols,
+                            Some(&task_prompt),
+                        )
+                        .await;
+                        ws.active_tab = idx;
+
+                        // Persist config async
+                        {
+                            let source = app.workspaces[new_idx].source_repo.clone();
+                            let infos: Vec<_> =
+                                app.workspaces.iter().map(|w| w.info.clone()).collect();
+                            let storage = Arc::clone(&app.storage);
+                            tokio::spawn(async move {
+                                let _ = storage.workspaces.save_workspaces(&source, &infos);
+                            });
+                        }
+
+                        app.set_toast(
+                            format!(
+                                "Agent dispatched: {} via {}",
+                                card_title,
+                                provider.label()
+                            ),
+                            ToastLevel::Success,
+                        );
+                    }
+                    Err(e) => {
+                        app.status_message = Some(format!("Dispatch failed: {}", e));
+                    }
                 }
             }
         }
@@ -2170,6 +2225,106 @@ pub(crate) async fn execute_action(
                     }
                 }
             }
+        }
+        Action::ScanRepoAgents => {
+            if let Some(ws) = app.current_workspace() {
+                let source_repo = ws.source_repo.clone();
+
+                // Scan provider agent directories for .md files
+                let provider_dirs: &[(&str, &str)] = &[
+                    (".claude/agents", "Claude Code"),
+                    (".gemini/agents", "Gemini"),
+                    (".opencode/agents", "OpenCode"),
+                    (".kilo/agents", "Kilo"),
+                    (".codex/agents", "Codex"),
+                ];
+
+                let mut discovered: Vec<(String, String, String, bool)> = Vec::new();
+
+                for &(dir, provider_label) in provider_dirs {
+                    let agent_dir = source_repo.join(dir);
+                    if let Ok(entries) = std::fs::read_dir(&agent_dir) {
+                        for entry in entries.flatten() {
+                            let path = entry.path();
+                            if path.extension().is_some_and(|e| e == "md")
+                                && let Some(stem) = path.file_stem()
+                            {
+                                let name = stem.to_string_lossy().to_string();
+                                let role =
+                                    std::fs::read_to_string(&path).unwrap_or_default();
+                                let exists = app.agent_profiles.iter().any(|a| {
+                                    a.name == name && a.provider == provider_label
+                                });
+                                discovered.push((
+                                    name,
+                                    provider_label.to_string(),
+                                    role,
+                                    exists,
+                                ));
+                            }
+                        }
+                    }
+                }
+
+                if discovered.is_empty() {
+                    app.set_toast(
+                        "No agent files found in repo".to_string(),
+                        ToastLevel::Info,
+                    );
+                } else {
+                    // Pre-select only new agents (not already in DB)
+                    let selected: Vec<bool> =
+                        discovered.iter().map(|(_, _, _, exists)| !exists).collect();
+                    app.active_dialog = Some(DialogState::ImportAgents {
+                        discovered,
+                        selected,
+                        cursor: 0,
+                    });
+                    app.mode = AppMode::ImportAgents;
+                }
+            }
+        }
+        Action::ImportAgents(agents_to_import) => {
+            if let Some(ws) = app.current_workspace() {
+                let source_repo = ws.source_repo.clone();
+                if let Some(ref storage) = app.storage.agent_profiles {
+                    let mut imported = 0;
+                    for (name, provider_label, role) in &agents_to_import {
+                        let profile = piki_core::storage::AgentProfile {
+                            id: None,
+                            source_repo: source_repo.to_string_lossy().to_string(),
+                            name: name.clone(),
+                            provider: provider_label.clone(),
+                            role: role.clone(),
+                            version: 0,
+                            last_synced_at: None,
+                        };
+                        if storage.save_agent(&profile).is_ok() {
+                            imported += 1;
+                            // Mark as synced — the file already exists in repo
+                            if let Ok(agents) = storage.load_agents(&source_repo)
+                                && let Some(saved) = agents
+                                    .iter()
+                                    .find(|a| a.name == *name && a.provider == *provider_label)
+                                && let Some(id) = saved.id
+                            {
+                                let _ = storage.mark_synced(id);
+                            }
+                        }
+                    }
+                    // Reload agents
+                    if let Ok(agents) = storage.load_agents(&source_repo) {
+                        app.agent_profiles = agents;
+                    }
+                    app.set_toast(
+                        format!("Imported {} agent(s)", imported),
+                        ToastLevel::Success,
+                    );
+                }
+            }
+            // Return to manage agents dialog
+            app.active_dialog = Some(DialogState::ManageAgents { selected: 0 });
+            app.mode = AppMode::ManageAgents;
         }
     }
     Ok(())

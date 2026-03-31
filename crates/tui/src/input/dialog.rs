@@ -923,60 +923,109 @@ pub(super) fn handle_dispatch_agent_input(app: &mut App, key: KeyEvent) -> Optio
         ref agents,
         ref mut additional_prompt,
         ref mut additional_prompt_cursor,
+        ref mut step,
+        ref mut use_current_ws,
     }) = app.active_dialog
     else {
         return None;
     };
 
-    let count = if agents.is_empty() {
-        AIProvider::dispatchable().len()
+    if *step == 1 {
+        // Step 2: workspace destination selection
+        match key.code {
+            KeyCode::Left | KeyCode::Right | KeyCode::Tab => {
+                *use_current_ws = !*use_current_ws;
+                None
+            }
+            KeyCode::Enter => {
+                let (provider, agent_name, agent_role) = if agents.is_empty() {
+                    let p = AIProvider::dispatchable()[*agent_idx];
+                    (p, None, None)
+                } else if *agent_idx == agents.len() {
+                    (AIProvider::Claude, None, None)
+                } else {
+                    let (name, prov_str, role) = &agents[*agent_idx];
+                    let p = AIProvider::from_label(prov_str);
+                    (p, Some(name.clone()), Some(role.clone()))
+                };
+                let action = Action::DispatchAgent {
+                    source_ws,
+                    card_id: card_id.clone(),
+                    card_title: card_title.clone(),
+                    card_description: card_description.clone(),
+                    card_priority,
+                    provider,
+                    agent_name,
+                    agent_role,
+                    additional_prompt: additional_prompt.clone(),
+                    use_current_ws: *use_current_ws,
+                };
+                app.active_dialog = None;
+                app.mode = AppMode::Normal;
+                Some(action)
+            }
+            _ if is_cancel(key) => {
+                // Back to step 0
+                *step = 0;
+                None
+            }
+            _ => None,
+        }
     } else {
-        agents.len()
-    };
+        // Step 0: agent/provider selection
+        let count = if agents.is_empty() {
+            AIProvider::dispatchable().len()
+        } else {
+            agents.len() + 1 // +1 for "(None)" option
+        };
 
-    match key.code {
-        KeyCode::Left => {
-            *agent_idx = (*agent_idx + count - 1) % count;
-            None
-        }
-        KeyCode::Right | KeyCode::Tab => {
-            *agent_idx = (*agent_idx + 1) % count;
-            None
-        }
-        KeyCode::Enter => {
-            let (provider, agent_name, agent_role) = if agents.is_empty() {
-                let p = AIProvider::dispatchable()[*agent_idx];
-                (p, None, None)
-            } else {
-                let (name, prov_str, role) = &agents[*agent_idx];
-                let p = AIProvider::from_label(prov_str);
-                (p, Some(name.clone()), Some(role.clone()))
-            };
-            let action = Action::DispatchAgent {
-                source_ws,
-                card_id: card_id.clone(),
-                card_title: card_title.clone(),
-                card_description: card_description.clone(),
-                card_priority,
-                provider,
-                agent_name,
-                agent_role,
-                additional_prompt: additional_prompt.clone(),
-            };
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
-            Some(action)
-        }
-        _ if is_cancel(key) => {
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
-            None
-        }
-        _ => {
-            handle_text_input(additional_prompt, additional_prompt_cursor, key, |c| {
-                !c.is_control()
-            });
-            None
+        match key.code {
+            KeyCode::Left => {
+                *agent_idx = (*agent_idx + count - 1) % count;
+                None
+            }
+            KeyCode::Right | KeyCode::Tab => {
+                *agent_idx = (*agent_idx + 1) % count;
+                None
+            }
+            KeyCode::Enter => {
+                let no_agent = agents.is_empty() || *agent_idx == agents.len();
+                if no_agent {
+                    // No agent selected — ask about workspace destination
+                    *step = 1;
+                    None
+                } else {
+                    // Agent selected — dispatch directly to new worktree
+                    let (name, prov_str, role) = &agents[*agent_idx];
+                    let p = AIProvider::from_label(prov_str);
+                    let action = Action::DispatchAgent {
+                        source_ws,
+                        card_id: card_id.clone(),
+                        card_title: card_title.clone(),
+                        card_description: card_description.clone(),
+                        card_priority,
+                        provider: p,
+                        agent_name: Some(name.clone()),
+                        agent_role: Some(role.clone()),
+                        additional_prompt: additional_prompt.clone(),
+                        use_current_ws: false,
+                    };
+                    app.active_dialog = None;
+                    app.mode = AppMode::Normal;
+                    Some(action)
+                }
+            }
+            _ if is_cancel(key) => {
+                app.active_dialog = None;
+                app.mode = AppMode::Normal;
+                None
+            }
+            _ => {
+                handle_text_input(additional_prompt, additional_prompt_cursor, key, |c| {
+                    !c.is_control()
+                });
+                None
+            }
         }
     }
 }
@@ -1060,6 +1109,10 @@ pub(super) fn handle_manage_agents_input(app: &mut App, key: KeyEvent) -> Option
                 return Some(Action::SyncAgentToRepo(id));
             }
             None
+        }
+        KeyCode::Char('i') => {
+            // Import agents from repo files
+            Some(Action::ScanRepoAgents)
         }
         _ if is_cancel(key) => {
             app.active_dialog = None;
@@ -1175,8 +1228,8 @@ pub(super) fn handle_edit_agent_role_input(app: &mut App, key: KeyEvent) -> Opti
         return Some(action);
     }
 
-    // Ctrl+X: go back to step 1 without saving
-    if key.code == KeyCode::Char('x') && key.modifiers.contains(KeyModifiers::CONTROL) {
+    // Esc: go back to step 1 without saving
+    if is_cancel(key) {
         app.active_dialog = Some(DialogState::EditAgent {
             editing_id,
             name: name.clone(),
@@ -1283,5 +1336,77 @@ fn char_count(text: &str) -> usize {
         text.len()
     } else {
         text.chars().count()
+    }
+}
+
+pub(super) fn handle_import_agents_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::ImportAgents {
+        ref discovered,
+        ref mut selected,
+        ref mut cursor,
+    }) = app.active_dialog
+    else {
+        return None;
+    };
+
+    let count = discovered.len();
+    if count == 0 {
+        if is_cancel(key) || key.code == KeyCode::Enter {
+            app.active_dialog = Some(DialogState::ManageAgents { selected: 0 });
+            app.mode = AppMode::ManageAgents;
+        }
+        return None;
+    }
+
+    match key.code {
+        KeyCode::Char('j') | KeyCode::Down => {
+            *cursor = (*cursor + 1) % count;
+            None
+        }
+        KeyCode::Char('k') | KeyCode::Up => {
+            *cursor = (*cursor + count - 1) % count;
+            None
+        }
+        KeyCode::Char(' ') => {
+            selected[*cursor] = !selected[*cursor];
+            if *cursor + 1 < count {
+                *cursor += 1;
+            }
+            None
+        }
+        KeyCode::Char('a') => {
+            let all_selected = selected.iter().all(|&s| s);
+            for s in selected.iter_mut() {
+                *s = !all_selected;
+            }
+            None
+        }
+        KeyCode::Enter => {
+            // Collect selected agents for import
+            let to_import: Vec<(String, String, String)> = discovered
+                .iter()
+                .zip(selected.iter())
+                .filter(|(_, sel)| **sel)
+                .map(|((name, provider, role, _), _)| {
+                    (name.clone(), provider.clone(), role.clone())
+                })
+                .collect();
+            if to_import.is_empty() {
+                // Nothing selected, go back
+                app.active_dialog = Some(DialogState::ManageAgents { selected: 0 });
+                app.mode = AppMode::ManageAgents;
+                None
+            } else {
+                app.active_dialog = None;
+                app.mode = AppMode::Normal;
+                Some(Action::ImportAgents(to_import))
+            }
+        }
+        _ if is_cancel(key) => {
+            app.active_dialog = Some(DialogState::ManageAgents { selected: 0 });
+            app.mode = AppMode::ManageAgents;
+            None
+        }
+        _ => None,
     }
 }

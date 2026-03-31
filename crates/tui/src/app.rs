@@ -132,6 +132,8 @@ pub enum AppMode {
     EditAgent,
     /// Edit agent role (step 2: large floating text editor)
     EditAgentRole,
+    /// Import agents from repo files overlay
+    ImportAgents,
 }
 
 /// Which pane is currently selected / focused

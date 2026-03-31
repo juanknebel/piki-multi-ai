@@ -1,5 +1,6 @@
 ---
 source: crates/tui/src/ui/mod.rs
+assertion_line: 204
 expression: content
 ---
             ┌ Help ───────────────────────────────────────────────┐
@@ -41,4 +42,4 @@ expression: content
             │    Mouse scroll  Scroll up/down                     │
             │                                                     │
             │  Terminal pane (interaction mode)                   │
-            └────────────────────────────────────── [1/110 ↑k/j↓] ┘
+            └────────────────────────────────────── [1/124 ↑k/j↓] ┘

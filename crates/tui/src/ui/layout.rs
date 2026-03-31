@@ -268,6 +268,9 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         AppMode::EditAgentRole => {
             super::dialogs::render_edit_agent_role_dialog(frame, area, app)
         }
+        AppMode::ImportAgents => {
+            super::dialogs::render_import_agents_dialog(frame, area, app)
+        }
         AppMode::InlineEdit => {}   // handled by main content render
         AppMode::SubmitReview => {} // handled by full-screen code review bypass above
     }

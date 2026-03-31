@@ -81,8 +81,8 @@ Built with Rust and [ratatui](https://ratatui.rs/).
 - **Command palette** — Press `Ctrl+p` to open a VS Code-style searchable command palette; fuzzy-filter 26+ commands across 9 categories (Workspace, Git, Tabs, Search, View, Layout, Clipboard, App, Switch) with match highlighting and keybinding hints; includes dynamic "Switch to" entries for all workspaces; powered by [nucleo](https://github.com/helix-editor/nucleo)
 - **In-app log viewer** — Press `Ctrl+l` to open a scrollable overlay showing the last 500 log entries from the current session; color-coded by level (ERROR=red, WARN=yellow, INFO=green, DEBUG=cyan, TRACE=gray); filter by level with `0`-`5` keys; select lines with `j`/`k` (highlighted), horizontal scroll with `h`/`l`, page with `Ctrl+d`/`Ctrl+u`, `g`/`G` top/bottom; `Enter`/`y` copies selected line to clipboard; mouse scroll and click to select
 - **Structured logging** — File-based structured logging via `tracing` with daily rotation to `~/.local/share/piki-multi/logs/`; configurable via `--log-level` flag (trace/debug/info/warn/error)
-- **Agent Profiles** — Configure named agents per project (`A` key, Simple workspaces only) with a two-step wizard: step 1 selects name + provider, step 2 opens a large floating editor for the agent's role/instructions; agents are stored in SQLite per `source_repo` with version tracking; press `p` to sync agent config to the repo as provider-native subagent files (e.g., `.claude/agents/<name>.md`); version indicator shows sync status (`v3 ✓` synced, `v2 ✗` pending); editing an agent increments its version and resets sync status; falls back to raw provider selector when no agents are configured
-- **Agent Dispatch** — Select a kanban card, press `D` to dispatch a configured agent or raw provider: automatically creates a git worktree with a convention-based branch (`feature/`, `bug/`, or `spike/` based on card priority), a workspace grouped under `<parent>-AGENTS`, inherits the parent's kanban board, and launches the agent with an auto-composed prompt (`Use the <agent> agent to plan and then implement the task: <card title>` + card description + optional additional prompt); the agent's role is materialized as a provider-native subagent file in the worktree; card moves to "in progress" with assignee set to agent name; deleting the agent workspace moves the card back to "todo" and clears the assignee
+- **Agent Profiles** — Configure named agents per project (`A` key, Simple workspaces only) with a two-step wizard: step 1 selects name + provider, step 2 opens a large floating editor for the agent's role/instructions; agents are stored in SQLite per `source_repo` with version tracking; press `p` to sync agent config to the repo as provider-native subagent files (e.g., `.claude/agents/<name>.md`); press `i` to import agents from repo files (reverse sync) — scans all provider directories for `.md` files, shows a checklist with `(new)`/`(exists)` status, and imports selected agents marked as synced; version indicator shows sync status (`v3 ✓` synced, `v2 ✗` pending); editing an agent increments its version and resets sync status; falls back to raw provider selector when no agents are configured
+- **Agent Dispatch** — Select a kanban card, press `D` to dispatch a configured agent or raw provider: the agent selector includes a `(None)` option to dispatch without a profile; when no agent is selected, a second step asks whether to create a new worktree workspace or use the current one; with an agent selected, automatically creates a git worktree with a convention-based branch (`feature/`, `bug/`, or `spike/` based on card priority), a workspace grouped under `<parent>-AGENTS`, inherits the parent's kanban board, and launches the agent with an auto-composed prompt (`Use the <agent> agent to plan and then implement the task: <card title>` + card description + optional additional prompt); the agent's role is materialized as a provider-native subagent file in the worktree; card moves to "in progress" with assignee set to agent name; deleting the agent workspace moves the card back to "todo" and clears the assignee
 - **Code Review** — Full-screen PR review tab powered by `gh` CLI; browse changed files, view diffs with line numbers and a cursor, add inline comments on any line (`c`), delete comments (`d`), submit reviews (approve/request changes/comment) with inline comments via GitHub API; persistent draft overlay; tab only opens if the current branch has an open PR; locked mode prevents accidental workspace switching — press `q` to close or `s` to submit; `gh` availability and authentication are checked lazily on first use and cached for the session
 - **API Explorer** — Interactive HTTP client tab (`t` then `9`) with Hurl-like syntax; write `METHOD URL`, headers, and body in a built-in editor (starts empty); `Ctrl+S` to send; response displayed with status code, elapsed time, and pretty-printed JSON; `Ctrl+J`/`Ctrl+K` to scroll response; `Ctrl+F` to search response; contextual footer hints for API-specific shortcuts; errors (parse failures, client init, network errors) and successful requests are logged to the in-app log viewer (`Ctrl+L`)
 
@@ -316,11 +316,11 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 
 | Key | Action |
 |-----|--------|
-| `Left` / `Right` | Cycle AI provider (Claude, Gemini, OpenCode, Kilo, Codex) |
-| `Tab` | Next provider |
+| `Left` / `Right` | Cycle agent/provider; includes `(None)` option when agents are configured |
+| `Tab` | Next agent/provider |
 | Any text | Type additional prompt (appended to card description) |
-| `Enter` | Dispatch (creates worktree with `feature/`/`bug/`/`spike/` branch, workspace in `<parent>-AGENTS` group, launches agent) |
-| `Esc` | Cancel |
+| `Enter` | With agent: dispatch to new worktree. With `(None)` or raw provider: choose workspace destination (New/Current) |
+| `Esc` | Cancel (step 1) or Back (step 2) |
 
 **In manage agents overlay** (after pressing `A`):
 
@@ -330,7 +330,19 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `n` | Create new agent profile |
 | `e` / `Enter` | Edit selected agent |
 | `d` | Delete selected agent |
+| `p` | Sync agent to repo (write `.{provider}/agents/<name>.md`) |
+| `i` | Import agents from repo files into app |
 | `Esc` | Close |
+
+**In import agents overlay** (after pressing `i` in manage agents):
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Navigate discovered agents |
+| `Space` | Toggle selection (checkbox) |
+| `a` | Toggle select all / deselect all |
+| `Enter` | Import selected agents |
+| `Esc` | Cancel, return to manage agents |
 
 **In edit agent dialog — step 1** (name + provider):
 
@@ -351,7 +363,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | Mouse scroll | Scroll 3 lines up/down |
 | `Ctrl+D` | Clear all text |
 | `Ctrl+S` | Save agent and close |
-| `Ctrl+X` | Back to step 1 without saving |
+| `Esc` | Back to step 1 without saving |
 
 **In diff view:**
 

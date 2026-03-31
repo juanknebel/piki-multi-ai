@@ -125,6 +125,10 @@ pub enum DialogState {
         agents: Vec<(String, String, String)>,
         additional_prompt: String,
         additional_prompt_cursor: usize,
+        /// 0 = agent/provider select, 1 = workspace destination select
+        step: u8,
+        /// When step==1: false = new worktree, true = use current workspace
+        use_current_ws: bool,
     },
     ManageAgents {
         selected: usize,
@@ -149,6 +153,14 @@ pub enum DialogState {
         role_cursor: usize,
         /// Vertical scroll offset
         scroll: usize,
+    },
+    /// Import agent files from repo into app storage
+    ImportAgents {
+        /// Discovered: (name, provider_label, role_content, already_exists_in_db)
+        discovered: Vec<(String, String, String, bool)>,
+        /// Checkbox state per discovered agent
+        selected: Vec<bool>,
+        cursor: usize,
     },
 }
 

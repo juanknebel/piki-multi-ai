@@ -677,15 +677,29 @@ pub(super) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         "    r           Refresh board".to_string(),
         "    Esc         Close".to_string(),
         "".to_string(),
+        "  Dispatch agent dialog (D on kanban card)".to_string(),
+        "    ◄/►/Tab     Cycle agent/provider (includes (None))".to_string(),
+        "    Enter       With agent: dispatch to new worktree".to_string(),
+        "                With (None): choose workspace (New/Current)".to_string(),
+        "    Esc         Cancel / Back".to_string(),
+        "".to_string(),
         "  Manage agents (A in navigation mode)".to_string(),
         "    j/k         Navigate agent list".to_string(),
         "    n           New agent (step 1: name + provider)".to_string(),
         "    e / Enter   Edit selected agent".to_string(),
         "    d           Delete selected agent".to_string(),
+        "    p           Sync agent to repo".to_string(),
+        "    i           Import agents from repo".to_string(),
         "    Esc         Close".to_string(),
+        "  Import agents overlay (i in manage agents)".to_string(),
+        "    j/k         Navigate discovered agents".to_string(),
+        "    Space       Toggle selection".to_string(),
+        "    a           Toggle select all".to_string(),
+        "    Enter       Import selected".to_string(),
+        "    Esc         Cancel".to_string(),
         "  Agent role editor (step 2)".to_string(),
         "    Ctrl+S      Save agent and close".to_string(),
-        "    Ctrl+X      Back to step 1 without saving".to_string(),
+        "    Esc         Back to step 1 without saving".to_string(),
         "".to_string(),
         "  Inline editor".to_string(),
         format!("    {:<13} Save", cfg.get_binding("editor", "save")),
@@ -1805,6 +1819,8 @@ pub(super) fn render_dispatch_agent_dialog(frame: &mut Frame, area: Rect, app: &
         ref agents,
         ref additional_prompt,
         additional_prompt_cursor,
+        step,
+        use_current_ws,
         ..
     }) = app.active_dialog
     else {
@@ -1846,7 +1862,7 @@ pub(super) fn render_dispatch_agent_dialog(frame: &mut Frame, area: Rect, app: &
             .collect::<Vec<_>>()
             .join(" ")
     } else {
-        agents
+        let mut items: Vec<String> = agents
             .iter()
             .enumerate()
             .map(|(i, (name, _, _))| {
@@ -1856,11 +1872,17 @@ pub(super) fn render_dispatch_agent_dialog(frame: &mut Frame, area: Rect, app: &
                     format!(" {} ", name)
                 }
             })
-            .collect::<Vec<_>>()
-            .join(" ")
+            .collect();
+        // Append "(None)" option
+        if agent_idx == agents.len() {
+            items.push("[(None)]".to_string());
+        } else {
+            items.push(" (None) ".to_string());
+        }
+        items.join(" ")
     };
 
-    let lines = vec![
+    let mut lines = vec![
         Line::from(""),
         Line::from(vec![
             Span::styled("  Card:     ", Style::default().fg(inactive_c)),
@@ -1880,24 +1902,55 @@ pub(super) fn render_dispatch_agent_dialog(frame: &mut Frame, area: Rect, app: &
             Style::default().fg(Color::DarkGray),
         )),
         Line::from(""),
-        render_text_field(
+    ];
+
+    if step == 1 {
+        // Step 2: workspace destination selector
+        let ws_selector = if use_current_ws {
+            " New   [Current]"
+        } else {
+            "[New]   Current "
+        };
+        lines.push(Line::from(vec![
+            Span::styled("  Workspace:", Style::default().fg(active_c)),
+            Span::styled(
+                format!(" {}", ws_selector),
+                Style::default().fg(active_c),
+            ),
+        ]));
+        lines.push(Line::from(Span::styled(
+            "              ◄/► to change",
+            Style::default().fg(Color::DarkGray),
+        )));
+        lines.push(Line::from(""));
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled(
+                "  [Enter] Dispatch    ",
+                Style::default().fg(active_c).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("[Esc] Back", Style::default().fg(inactive_c)),
+        ]));
+    } else {
+        // Step 0: agent selection + prompt
+        lines.push(render_text_field(
             "  Prompt:   ",
             additional_prompt,
             true,
             additional_prompt_cursor,
             fmax,
             field_style(true, active_c, inactive_c),
-        ),
-        Line::from(""),
-        Line::from(""),
-        Line::from(vec![
+        ));
+        lines.push(Line::from(""));
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
             Span::styled(
                 "  [Enter] Dispatch    ",
                 Style::default().fg(active_c).add_modifier(Modifier::BOLD),
             ),
             Span::styled("[Esc] Cancel", Style::default().fg(inactive_c)),
-        ]),
-    ];
+        ]));
+    }
 
     let text = Paragraph::new(lines).block(popup_block("Dispatch Agent", Color::Yellow));
     frame.render_widget(text, popup);
@@ -1958,6 +2011,7 @@ pub(super) fn render_manage_agents_dialog(frame: &mut Frame, area: Rect, app: &A
         Span::styled("[e] Edit  ", Style::default().fg(active_c)),
         Span::styled("[d] Delete  ", Style::default().fg(active_c)),
         Span::styled("[p] Sync to repo  ", Style::default().fg(active_c)),
+        Span::styled("[i] Import from repo  ", Style::default().fg(active_c)),
         Span::styled("[Esc] Close", Style::default().fg(inactive_c)),
     ]));
 
@@ -2179,9 +2233,75 @@ pub(super) fn render_edit_agent_role_dialog(frame: &mut Frame, area: Rect, app: 
             Style::default().fg(active_c).add_modifier(Modifier::BOLD),
         ),
         Span::styled("[Ctrl+D] Clear all    ", Style::default().fg(inactive_c)),
-        Span::styled("[Ctrl+X] Back", Style::default().fg(inactive_c)),
+        Span::styled("[Esc] Back", Style::default().fg(inactive_c)),
     ]));
 
     let text = Paragraph::new(lines).block(popup_block(&title, Color::Cyan));
+    frame.render_widget(text, popup);
+}
+
+pub(super) fn render_import_agents_dialog(frame: &mut Frame, area: Rect, app: &App) {
+    let Some(DialogState::ImportAgents {
+        ref discovered,
+        ref selected,
+        cursor,
+    }) = app.active_dialog
+    else {
+        return;
+    };
+
+    let popup_width = (area.width * 60 / 100).max(50);
+    let popup_height = (discovered.len() as u16 + 6).min(area.height - 4).max(8);
+    let popup = clear_popup(frame, area, popup_width, popup_height);
+    let active_c = app.theme.dialog.new_ws_active;
+    let inactive_c = app.theme.dialog.new_ws_inactive;
+
+    let mut lines = vec![Line::from("")];
+
+    if discovered.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "  No agent files found in repo.",
+            Style::default().fg(Color::DarkGray),
+        )));
+    } else {
+        for (i, (name, provider, _role, exists)) in discovered.iter().enumerate() {
+            let checkbox = if selected.get(i).copied().unwrap_or(false) {
+                "[x] "
+            } else {
+                "[ ] "
+            };
+            let marker = if i == cursor { "▸ " } else { "  " };
+            let style = if i == cursor {
+                Style::default().fg(active_c).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::White)
+            };
+            let status = if *exists {
+                Span::styled(" (exists)", Style::default().fg(Color::DarkGray))
+            } else {
+                Span::styled(" (new)", Style::default().fg(Color::Green))
+            };
+            lines.push(Line::from(vec![
+                Span::styled(format!("  {}{}", marker, checkbox), style),
+                Span::styled(format!("{:<18}", name), style),
+                Span::styled(
+                    format!("{:<13}", provider),
+                    Style::default().fg(inactive_c),
+                ),
+                status,
+            ]));
+        }
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled("  [Space] Toggle  ", Style::default().fg(active_c)),
+        Span::styled("[a] All  ", Style::default().fg(active_c)),
+        Span::styled("[Enter] Import  ", Style::default().fg(active_c)),
+        Span::styled("[Esc] Cancel", Style::default().fg(inactive_c)),
+    ]));
+
+    let text =
+        Paragraph::new(lines).block(popup_block("Import Agents from Repo", Color::Cyan));
     frame.render_widget(text, popup);
 }

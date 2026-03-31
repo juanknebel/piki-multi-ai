@@ -156,6 +156,8 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
                 agents,
                 additional_prompt: String::new(),
                 additional_prompt_cursor: 0,
+                step: 0,
+                use_current_ws: false,
             });
             app.mode = AppMode::DispatchAgent;
             app.interacting = false;
