@@ -1,0 +1,61 @@
+#activity-bar {
+  background: var(--activity-bar-bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 4px;
+  gap: 2px;
+  border-right: 1px solid var(--border-primary);
+}
+
+.activity-item {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--activity-bar-inactive);
+  position: relative;
+  cursor: pointer;
+}
+
+.activity-item:hover {
+  color: var(--activity-bar-fg);
+}
+
+.activity-item.active {
+  color: var(--activity-bar-fg);
+}
+
+.activity-item.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  background: var(--activity-bar-fg);
+  border-radius: 0 1px 1px 0;
+}
+
+.activity-item svg {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+}
+
+.activity-badge {
+  position: absolute;
+  top: 8px;
+  right: 6px;
+  background: var(--activity-bar-badge);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  min-width: 16px;
+  height: 16px;
+  line-height: 16px;
+  text-align: center;
+  border-radius: 8px;
+  padding: 0 4px;
+}

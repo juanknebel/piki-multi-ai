@@ -1,0 +1,83 @@
+#app {
+  display: grid;
+  grid-template-columns: var(--activity-bar-width) var(--sidebar-width) 1fr;
+  grid-template-rows: 1fr var(--statusbar-height);
+  grid-template-areas:
+    "activity sidebar editor"
+    "status   status  status";
+  height: 100vh;
+  width: 100vw;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+#activity-bar {
+  grid-area: activity;
+}
+
+#sidebar {
+  grid-area: sidebar;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border-primary);
+  overflow: hidden;
+  position: relative;
+}
+
+#explorer-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+#workspace-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+#editor-area {
+  grid-area: editor;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#tab-bar {
+  flex: 0 0 var(--tab-height);
+  overflow: hidden;
+}
+
+#main-content {
+  flex: 1 1 auto;
+  overflow: hidden;
+  position: relative;
+}
+
+#status-bar {
+  grid-area: status;
+}
+
+#overlay-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 100;
+  pointer-events: none;
+}
+
+#overlay-container.active {
+  pointer-events: auto;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+#toast-container {
+  position: fixed;
+  bottom: calc(var(--statusbar-height) + 8px);
+  right: 16px;
+  z-index: 200;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 8px;
+}

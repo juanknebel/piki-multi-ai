@@ -56,6 +56,13 @@ pub fn spawn_sysinfo_poller() -> Arc<Mutex<String>> {
     formatted
 }
 
+/// Sample system info and return a formatted string. Blocking — suitable for
+/// `spawn_blocking`. This is the public entry point for callers that manage
+/// their own async runtime (e.g. the Tauri desktop app).
+pub fn sample_formatted() -> String {
+    sample_system_info().format()
+}
+
 fn sample_system_info() -> SystemInfo {
     let sys = System::new();
     let mut info = SystemInfo::default();

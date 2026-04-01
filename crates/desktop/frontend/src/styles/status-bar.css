@@ -1,0 +1,47 @@
+#status-bar {
+  display: flex;
+  align-items: center;
+  background: var(--statusbar-bg);
+  color: var(--statusbar-fg);
+  font-size: 12px;
+  padding: 0 8px;
+  gap: 0;
+  overflow: hidden;
+  user-select: none;
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  height: 100%;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.status-item:hover {
+  background: var(--statusbar-item-hover);
+}
+
+.status-item svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+.status-spacer {
+  flex: 1;
+}
+
+.status-item.clickable {
+  cursor: pointer;
+}
+
+.status-item.warning {
+  color: #e2c08d;
+}
+
+.status-item.error {
+  color: #f48771;
+}

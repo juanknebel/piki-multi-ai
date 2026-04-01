@@ -1,0 +1,139 @@
+// Prevents additional console window on Windows in release
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// Many items are prepared for Phase 2/3 features
+#![allow(dead_code)]
+
+mod commands;
+mod events;
+mod pty_raw;
+mod state;
+
+use std::sync::Arc;
+
+use parking_lot::Mutex;
+use tauri::Manager;
+
+use piki_core::WorkspaceStatus;
+use piki_core::paths::DataPaths;
+use piki_core::storage::create_storage;
+use piki_core::workspace::manager::WorkspaceManager;
+use piki_core::workspace::watcher::FileWatcher;
+
+use state::{DesktopApp, DesktopWorkspace};
+
+fn main() {
+    // Initialize tracing
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
+        .init();
+
+    tauri::Builder::default()
+        .plugin(tauri_plugin_shell::init())
+        .setup(|app| {
+            let app_handle = app.handle().clone();
+
+            // Initialize paths and storage
+            let paths = DataPaths::default_paths();
+            let storage = create_storage(&paths).expect("Failed to initialize storage");
+            let storage = Arc::new(storage);
+            let manager = WorkspaceManager::with_paths(paths.clone());
+
+            // Load existing workspaces from storage
+            let entries = storage.workspaces.load_all_workspaces();
+            let workspaces: Vec<DesktopWorkspace> = entries
+                .into_iter()
+                .map(|entry| {
+                    let info = entry.into_info();
+                    let watcher =
+                        FileWatcher::new(info.path.clone(), info.name.clone()).ok();
+                    DesktopWorkspace {
+                        info,
+                        status: WorkspaceStatus::Idle,
+                        changed_files: Vec::new(),
+                        ahead_behind: None,
+                        tabs: Vec::new(),
+                        active_tab: 0,
+                        watcher,
+                    }
+                })
+                .collect();
+
+            tracing::info!(count = workspaces.len(), "Loaded workspaces");
+
+            // Initialize sysinfo with an empty string — the background task will fill it.
+            // We cannot call spawn_sysinfo_poller() here because Tauri's setup() runs
+            // outside the tokio runtime context. Instead, we start our own updater.
+            let sysinfo = Arc::new(parking_lot::Mutex::new(String::new()));
+            let sysinfo_for_updater = Arc::clone(&sysinfo);
+            let sysinfo_for_emitter = Arc::clone(&sysinfo);
+
+            // Spawn a background sysinfo updater on Tauri's async runtime
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    let snapshot =
+                        tokio::task::spawn_blocking(piki_core::sysinfo::sample_formatted)
+                            .await
+                            .unwrap_or_default();
+                    *sysinfo_for_updater.lock() = snapshot;
+                    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                }
+            });
+
+            // Create app state
+            let desktop_app = DesktopApp {
+                workspaces,
+                active_workspace: 0,
+                storage,
+                paths,
+                manager,
+                sysinfo,
+            };
+
+            // Start sysinfo event emitter
+            events::spawn_sysinfo_emitter(app_handle, sysinfo_for_emitter);
+
+            app.manage(Mutex::new(desktop_app));
+
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            commands::workspace::list_workspaces,
+            commands::workspace::switch_workspace,
+            commands::workspace::create_workspace,
+            commands::workspace::delete_workspace,
+            commands::workspace::update_workspace,
+            commands::pty::spawn_tab,
+            commands::pty::write_pty,
+            commands::pty::resize_pty,
+            commands::pty::close_tab,
+            commands::git::get_changed_files,
+            commands::git::git_stage,
+            commands::git::git_unstage,
+            commands::git::git_commit,
+            commands::git::git_push,
+            commands::git::git_merge,
+            commands::git::git_abort_merge,
+            commands::git::git_resolve_conflict,
+            commands::git::git_continue_merge,
+            commands::git::git_stage_all,
+            commands::git::git_unstage_all,
+            commands::diff::get_file_diff,
+            commands::diff::get_commit_diff,
+            commands::diff::get_side_by_side_diff,
+            commands::diff::get_commit_side_by_side_diff,
+            commands::diff::get_conflict_diff,
+            commands::gitlog::get_git_log,
+            commands::stash::git_stash_list,
+            commands::stash::git_stash_save,
+            commands::stash::git_stash_pop,
+            commands::stash::git_stash_apply,
+            commands::stash::git_stash_drop,
+            commands::search::fuzzy_file_list,
+            commands::system::get_sysinfo,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running piki-desktop");
+}

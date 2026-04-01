@@ -86,6 +86,22 @@ Built with Rust and [ratatui](https://ratatui.rs/).
 - **Code Review** — Full-screen PR review tab powered by `gh` CLI; browse changed files, view diffs with line numbers and a cursor, add inline comments on any line (`c`), delete comments (`d`), submit reviews (approve/request changes/comment) with inline comments via GitHub API; persistent draft overlay; tab only opens if the current branch has an open PR; locked mode prevents accidental workspace switching — press `q` to close or `s` to submit; `gh` availability and authentication are checked lazily on first use and cached for the session
 - **API Explorer** — Interactive HTTP client tab (`t` then `9`) with Hurl-like syntax; write `METHOD URL`, headers, and body in a built-in editor (starts empty); `Ctrl+S` to send; response displayed with status code, elapsed time, and pretty-printed JSON; `Ctrl+J`/`Ctrl+K` to scroll response; `Ctrl+F` to search response; contextual footer hints for API-specific shortcuts; errors (parse failures, client init, network errors) and successful requests are logged to the in-app log viewer (`Ctrl+L`)
 
+## Desktop Application (Tauri)
+
+A modern desktop GUI is available via `piki-desktop`, built with [Tauri v2](https://v2.tauri.app/). It reuses the same `piki-core` business logic as the TUI and provides a VSCode-inspired interface with xterm.js terminal rendering.
+
+### Building the Desktop App
+
+```bash
+# Install frontend dependencies
+cd crates/desktop/frontend && npm install && cd -
+
+# Build (includes both Rust backend and web frontend)
+cargo build -p piki-desktop --release
+```
+
+The desktop app shares the same SQLite database (`~/.local/share/piki-multi/piki.db`) as the TUI, so workspaces created in either interface are visible in the other.
+
 ## Prerequisites
 
 - [Rust](https://rustup.rs/) >= 1.85 (edition 2024)
@@ -93,6 +109,8 @@ Built with Rust and [ratatui](https://ratatui.rs/).
 - [git](https://git-scm.com/) >= 2.20 (worktree support)
 - [delta](https://github.com/dandavison/delta) (optional, for side-by-side diffs — falls back to plain git diff)
 - [gh](https://cli.github.com/) (optional, required for code review feature — run `gh auth login` to authenticate)
+- [Node.js](https://nodejs.org/) >= 18 (optional, required for building the desktop app)
+- System libraries for Tauri (optional, for desktop app): `libwebkit2gtk-4.1-dev`, `libappindicator3-dev` on Linux
 
 ## Installation
 

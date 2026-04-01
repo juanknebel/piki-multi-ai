@@ -1,0 +1,293 @@
+/* ── Diff overlay container ──────────────────────────── */
+.diff-viewer {
+  width: 90vw;
+  max-height: 88vh;
+  background: var(--bg-primary);
+  border: 1px solid var(--dialog-border);
+  border-radius: 6px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.diff-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-primary);
+  flex-shrink: 0;
+}
+
+.diff-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-bright);
+  font-family: "JetBrainsMono NF Mono", monospace;
+}
+
+.diff-content {
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── DiffPanel root ─────────────────────────────────── */
+.dp-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  font-family: "JetBrainsMono NF Mono", monospace;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* Stats bar */
+.dp-stats {
+  display: flex;
+  gap: 12px;
+  padding: 4px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-primary);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.dp-stat-add { color: var(--git-added); }
+.dp-stat-del { color: var(--git-deleted); }
+
+/* Column headers */
+.dp-headers {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.dp-headers-3way {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.dp-col-header {
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+}
+
+.dp-left-header { border-right: 1px solid var(--border-primary); }
+.dp-center-header {
+  border-right: 1px solid var(--border-primary);
+  text-align: center;
+  color: var(--text-accent);
+}
+
+/* Scrollable area */
+.dp-scroll {
+  flex: 1;
+  overflow: auto;
+}
+
+/* ── Side-by-side rows ──────────────────────────────── */
+.dp-table {
+  min-width: 100%;
+}
+
+.dp-row {
+  display: grid;
+  grid-template-columns: 48px 1fr 48px 1fr;
+  min-height: 1.6em;
+}
+
+/* Gutter (line numbers) */
+.dp-gutter {
+  padding: 0 6px;
+  text-align: right;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  user-select: none;
+  border-right: 1px solid var(--border-primary);
+  flex-shrink: 0;
+}
+
+.dp-gutter-right {
+  border-left: 1px solid var(--border-primary);
+}
+
+/* Content cells */
+.dp-cell {
+  padding: 0 8px;
+  white-space: pre;
+  overflow: hidden;
+}
+
+.dp-empty-cell {
+  padding: 0 8px;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 4px,
+    rgba(128, 128, 128, 0.05) 4px,
+    rgba(128, 128, 128, 0.05) 8px
+  );
+}
+
+/* Color coding */
+.dp-add {
+  background: rgba(35, 134, 54, 0.12);
+  color: var(--text-primary);
+}
+
+.dp-del {
+  background: rgba(218, 54, 51, 0.12);
+  color: var(--text-primary);
+}
+
+/* Char-level highlights */
+.dp-char-add {
+  background: rgba(35, 134, 54, 0.35);
+  border-radius: 2px;
+}
+
+.dp-char-del {
+  background: rgba(218, 54, 51, 0.35);
+  border-radius: 2px;
+}
+
+/* Hunk header */
+.dp-hunk-row {
+  display: block;
+}
+
+.dp-hunk-header {
+  padding: 4px 12px;
+  background: rgba(0, 122, 204, 0.08);
+  color: var(--text-accent);
+  border-top: 1px solid var(--border-primary);
+  border-bottom: 1px solid var(--border-primary);
+  font-size: 11px;
+}
+
+/* File header (multi-file commit view) */
+.dp-file-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border-top: 2px solid var(--border-primary);
+  border-bottom: 1px solid var(--border-primary);
+  font-weight: 600;
+  color: var(--text-bright);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.dp-file-path { flex: 1; }
+
+.dp-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+/* ── 3-way merge ────────────────────────────────────── */
+.dp-3way-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  min-height: 1.6em;
+}
+
+.dp-3way-cell {
+  padding: 0 8px;
+  white-space: pre;
+  overflow: hidden;
+  border-right: 1px solid var(--border-primary);
+}
+
+.dp-3way-cell:last-child {
+  border-right: none;
+}
+
+.dp-context-row .dp-3way-cell {
+  color: var(--text-secondary);
+}
+
+/* Conflict block */
+.dp-conflict-block {
+  border: 1px solid var(--git-conflicted);
+  border-left: 3px solid var(--git-conflicted);
+  margin: 4px 0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.dp-conflict-block.dp-resolved {
+  border-color: var(--git-added);
+  border-left-color: var(--git-added);
+}
+
+.dp-conflict-actions {
+  display: flex;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(228, 103, 107, 0.08);
+  border-bottom: 1px solid var(--border-primary);
+  justify-content: center;
+}
+
+.dp-resolved .dp-conflict-actions {
+  display: none;
+}
+
+.dp-accept-btn {
+  padding: 3px 10px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.dp-accept-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-bright);
+}
+
+.dp-accept-ours:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+.dp-accept-theirs:hover { border-color: var(--git-added); color: var(--git-added); }
+.dp-accept-both:hover { border-color: var(--git-modified); color: var(--git-modified); }
+
+/* Conflict side colors */
+.dp-ours {
+  background: rgba(0, 122, 204, 0.08);
+}
+
+.dp-theirs {
+  background: rgba(35, 134, 54, 0.08);
+}
+
+.dp-result {
+  background: rgba(228, 103, 107, 0.06);
+  color: var(--text-muted);
+  text-align: center;
+  font-style: italic;
+}
+
+.dp-resolved-content {
+  background: rgba(35, 134, 54, 0.12);
+  color: var(--text-primary);
+  text-align: left;
+  font-style: normal;
+}
+
+.dp-resolved-row .dp-3way-cell {
+  color: var(--text-primary);
+}

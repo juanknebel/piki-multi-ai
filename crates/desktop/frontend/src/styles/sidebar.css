@@ -1,0 +1,288 @@
+/* Workspace list */
+#workspace-list {
+  background: var(--sidebar-bg);
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  height: var(--sidebar-header-height);
+  padding: 0 12px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sidebar-header-fg);
+  background: var(--sidebar-header-bg);
+  user-select: none;
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.group-header:hover {
+  background: var(--sidebar-item-hover);
+}
+
+.group-chevron {
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
+  transition: transform 0.12s ease;
+  fill: currentColor;
+}
+
+.group-chevron.collapsed {
+  transform: rotate(-90deg);
+}
+
+.workspace-item {
+  display: flex;
+  align-items: center;
+  padding: 4px 12px 4px 20px;
+  cursor: pointer;
+  user-select: none;
+  gap: 6px;
+}
+
+.workspace-item:hover {
+  background: var(--sidebar-item-hover);
+}
+
+.workspace-item.active {
+  background: var(--sidebar-item-active);
+}
+
+.workspace-item.focused {
+  background: var(--sidebar-item-focus);
+}
+
+.workspace-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.workspace-active-marker {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  flex-shrink: 0;
+}
+
+.workspace-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.workspace-item.active .workspace-name {
+  color: var(--text-bright);
+  font-weight: 500;
+}
+
+.workspace-actions {
+  display: none;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.workspace-item:hover .workspace-actions {
+  display: flex;
+}
+
+.ws-action-btn {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.ws-action-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-bright);
+}
+
+.ws-action-delete:hover {
+  color: var(--git-deleted);
+}
+
+.workspace-status {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.workspace-status.busy {
+  color: var(--accent-primary);
+}
+
+.workspace-status.done {
+  color: var(--git-added);
+}
+
+.workspace-status.error {
+  color: var(--git-deleted);
+}
+
+/* Git panel */
+#git-panel {
+  background: var(--sidebar-bg);
+  border-top: 1px solid var(--border-primary);
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  padding: 2px 12px 2px 20px;
+  cursor: pointer;
+  user-select: none;
+  gap: 6px;
+  font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", "Consolas",
+    monospace;
+  font-size: 12px;
+}
+
+.file-item:hover {
+  background: var(--sidebar-item-hover);
+}
+
+.file-item.selected {
+  background: var(--sidebar-item-active);
+}
+
+.file-status {
+  width: 16px;
+  text-align: center;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.file-status.modified {
+  color: var(--git-modified);
+}
+.file-status.added {
+  color: var(--git-added);
+}
+.file-status.deleted {
+  color: var(--git-deleted);
+}
+.file-status.renamed {
+  color: var(--git-renamed);
+}
+.file-status.untracked {
+  color: var(--git-untracked);
+}
+.file-status.conflicted {
+  color: var(--git-conflicted);
+}
+.file-status.staged {
+  color: var(--git-staged);
+}
+.file-status.staged-modified {
+  color: var(--git-staged-modified);
+}
+
+.file-path {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.file-actions {
+  display: none;
+  gap: 2px;
+}
+
+.file-item:hover .file-actions {
+  display: flex;
+}
+
+.file-action-btn {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.file-action-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-bright);
+}
+
+/* Delete confirmation */
+.ws-delete-confirm {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.ws-delete-dialog {
+  background: var(--dialog-bg);
+  border: 1px solid var(--dialog-border);
+  border-radius: 6px;
+  box-shadow: 0 8px 32px var(--dialog-shadow);
+  padding: 16px 20px;
+  min-width: 280px;
+  text-align: center;
+}
+
+.ws-delete-dialog p {
+  margin-bottom: 8px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.ws-delete-hint {
+  color: var(--text-muted) !important;
+  font-size: 12px !important;
+}
+
+.ws-delete-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.empty-message {
+  padding: 12px 20px;
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: 12px;
+}

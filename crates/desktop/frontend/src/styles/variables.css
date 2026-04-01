@@ -1,0 +1,93 @@
+:root {
+  /* Base colors (VSCode Dark+ inspired) */
+  --bg-primary: #1e1e1e;
+  --bg-secondary: #252526;
+  --bg-tertiary: #2d2d2d;
+  --bg-hover: #2a2d2e;
+  --bg-active: #37373d;
+  --bg-input: #3c3c3c;
+  --bg-dropdown: #3c3c3c;
+
+  /* Text */
+  --text-primary: #cccccc;
+  --text-secondary: #969696;
+  --text-muted: #5a5a5a;
+  --text-accent: #569cd6;
+  --text-bright: #ffffff;
+
+  /* Borders */
+  --border-primary: #3c3c3c;
+  --border-active: #007acc;
+  --border-inactive: #3c3c3c;
+
+  /* Activity bar */
+  --activity-bar-bg: #333333;
+  --activity-bar-fg: #ffffff;
+  --activity-bar-inactive: #858585;
+  --activity-bar-badge: #007acc;
+
+  /* Sidebar */
+  --sidebar-bg: #252526;
+  --sidebar-header-bg: #383838;
+  --sidebar-header-fg: #bbbbbb;
+  --sidebar-item-hover: #2a2d2e;
+  --sidebar-item-active: #37373d;
+  --sidebar-item-focus: #094771;
+
+  /* Tab bar */
+  --tab-active-bg: #1e1e1e;
+  --tab-active-fg: #ffffff;
+  --tab-inactive-bg: #2d2d2d;
+  --tab-inactive-fg: #969696;
+  --tab-border: #252526;
+  --tab-active-border-top: #007acc;
+
+  /* Terminal */
+  --terminal-bg: #1e1e1e;
+  --terminal-fg: #cccccc;
+  --terminal-cursor: #ffffff;
+  --terminal-selection: rgba(38, 79, 120, 0.5);
+
+  /* Status bar */
+  --statusbar-bg: #007acc;
+  --statusbar-fg: #ffffff;
+  --statusbar-item-hover: rgba(255, 255, 255, 0.12);
+  --statusbar-no-folder: #68217a;
+
+  /* Git status colors */
+  --git-modified: #e2c08d;
+  --git-added: #73c991;
+  --git-deleted: #c74e39;
+  --git-renamed: #73c991;
+  --git-untracked: #73c991;
+  --git-conflicted: #e4676b;
+  --git-staged: #73c991;
+  --git-staged-modified: #e2c08d;
+
+  /* Accent */
+  --accent-primary: #007acc;
+  --accent-hover: #1c97ea;
+  --accent-focus: #007acc;
+
+  /* Scrollbar */
+  --scrollbar-thumb: rgba(121, 121, 121, 0.4);
+  --scrollbar-thumb-hover: rgba(100, 100, 100, 0.7);
+
+  /* Dialog */
+  --dialog-bg: #252526;
+  --dialog-border: #454545;
+  --dialog-shadow: rgba(0, 0, 0, 0.36);
+
+  /* Toast */
+  --toast-info-bg: #007acc;
+  --toast-success-bg: #16825d;
+  --toast-error-bg: #c74e39;
+  --toast-fg: #ffffff;
+
+  /* Sizing */
+  --activity-bar-width: 48px;
+  --sidebar-width: 250px;
+  --statusbar-height: 24px;
+  --tab-height: 36px;
+  --sidebar-header-height: 24px;
+}
