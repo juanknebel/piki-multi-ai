@@ -262,9 +262,9 @@ export function showWorkspaceInfo(index: number) {
 
 function infoRow(label: string, value: string): string {
   return `
-    <div class="dialog-field" style="flex-direction:row;gap:8px;align-items:baseline">
-      <span class="dialog-label" style="min-width:90px;flex-shrink:0">${label}</span>
-      <span style="color:var(--text-primary);word-break:break-all;font-size:12px;font-family:monospace">${escapeHtml(value)}</span>
+    <div class="info-row">
+      <span class="info-row-label">${label}</span>
+      <span class="info-row-value">${escapeHtml(value)}</span>
     </div>
   `;
 }

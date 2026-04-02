@@ -36,7 +36,7 @@ export function renderAgentsPanel(container: HTMLElement) {
 
     // Dispatch button
     const dispatchBtn = document.createElement("div");
-    dispatchBtn.style.cssText = "padding:8px 12px;border-bottom:1px solid var(--border-primary);";
+    dispatchBtn.className = "agent-dispatch-area";
     dispatchBtn.innerHTML = `
       <button class="sc-commit-btn" id="ag-dispatch-btn">
         <span class="sc-commit-icon">▶</span> Dispatch Agent
@@ -79,16 +79,21 @@ export function renderAgentsPanel(container: HTMLElement) {
         });
 
         // Delete
-        item.querySelector(".ag-act-delete")!.addEventListener("click", async () => {
+        item.querySelector(".ag-act-delete")!.addEventListener("click", () => {
           if (!agent.id) return;
-          if (!confirm(`Delete agent "${agent.name}"?`)) return;
-          try {
-            await ipc.deleteAgent(agent.id);
-            toast(`Agent "${agent.name}" deleted`, "info");
-            loadAndRender();
-          } catch (err) {
-            toast(`Delete failed: ${err}`, "error");
-          }
+          showConfirmDialog(
+            `Delete agent "${agent.name}"?`,
+            "This cannot be undone.",
+            async () => {
+              try {
+                await ipc.deleteAgent(agent.id!);
+                toast(`Agent "${agent.name}" deleted`, "info");
+                loadAndRender();
+              } catch (err) {
+                toast(`Delete failed: ${err}`, "error");
+              }
+            },
+          );
         });
 
         container.appendChild(item);
@@ -221,11 +226,11 @@ async function handleImport(onDone: () => void) {
     </div>
     <div class="dialog-body">
       ${scanned.map((a, i) => `
-        <label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer">
+        <label class="import-check-item">
           <input type="checkbox" class="ag-check" data-idx="${i}" ${selected.has(i) ? "checked" : ""} />
-          <strong>${esc(a.name)}</strong>
-          <span style="color:var(--text-muted);font-size:11px">${esc(a.provider)}</span>
-          ${a.exists ? '<span style="color:var(--git-modified);font-size:10px">(exists)</span>' : '<span style="color:var(--git-added);font-size:10px">(new)</span>'}
+          <span class="import-check-name">${esc(a.name)}</span>
+          <span class="import-check-provider">${esc(a.provider)}</span>
+          ${a.exists ? '<span class="import-check-badge exists">(exists)</span>' : '<span class="import-check-badge new">(new)</span>'}
         </label>
       `).join("")}
     </div>
@@ -261,6 +266,26 @@ async function handleImport(onDone: () => void) {
   backdrop.appendChild(dialog);
   backdrop.addEventListener("click", (e) => { if (e.target === backdrop) close(); });
   document.body.appendChild(backdrop);
+}
+
+function showConfirmDialog(message: string, hint: string, onConfirm: () => void) {
+  document.querySelector(".ws-delete-confirm")?.remove();
+  const overlay = document.createElement("div");
+  overlay.className = "ws-delete-confirm";
+  overlay.innerHTML = `
+    <div class="ws-delete-dialog">
+      <p>${esc(message)}</p>
+      <p class="ws-delete-hint">${esc(hint)}</p>
+      <div class="ws-delete-buttons">
+        <button class="dialog-btn dialog-btn-danger ws-confirm-yes">Delete</button>
+        <button class="dialog-btn dialog-btn-secondary ws-confirm-no">Cancel</button>
+      </div>
+    </div>
+  `;
+  overlay.querySelector(".ws-confirm-yes")!.addEventListener("click", () => { overlay.remove(); onConfirm(); });
+  overlay.querySelector(".ws-confirm-no")!.addEventListener("click", () => overlay.remove());
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
 }
 
 function esc(t: string): string {

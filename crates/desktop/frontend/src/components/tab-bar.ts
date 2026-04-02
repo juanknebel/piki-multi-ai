@@ -79,15 +79,16 @@ function showNewTabMenu(anchor: HTMLElement) {
   menu.className = "tab-new-menu";
   menu.style.cssText = `
     position: absolute;
-    top: ${anchor.getBoundingClientRect().bottom}px;
+    top: ${anchor.getBoundingClientRect().bottom + 2}px;
     left: ${anchor.getBoundingClientRect().left}px;
     background: var(--bg-dropdown);
-    border: 1px solid var(--border-primary);
-    border-radius: 4px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    border: 1px solid var(--dialog-border);
+    border-radius: var(--radius-md);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5), 0 0 1px rgba(255,255,255,0.05);
     padding: 4px 0;
     z-index: 50;
-    min-width: 160px;
+    min-width: 180px;
+    animation: dialog-enter 0.12s cubic-bezier(0.16,1,0.3,1);
   `;
 
   for (const provider of NEW_TAB_PROVIDERS) {
@@ -95,15 +96,17 @@ function showNewTabMenu(anchor: HTMLElement) {
     item.style.cssText = `
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
       width: 100%;
-      padding: 6px 12px;
-      font-size: 13px;
+      padding: 7px 14px;
+      font-size: 12px;
       color: var(--text-primary);
       text-align: left;
+      transition: background 0.1s, color 0.1s;
+      border-radius: 0;
     `;
     item.innerHTML = `
-      <span style="width:16px;text-align:center;color:var(--text-muted)">${PROVIDER_ICONS[provider]}</span>
+      <span style="width:16px;text-align:center;color:var(--text-muted);font-size:11px">${PROVIDER_ICONS[provider]}</span>
       ${PROVIDER_LABELS[provider]}
     `;
     item.addEventListener("click", async () => {
@@ -123,10 +126,12 @@ function showNewTabMenu(anchor: HTMLElement) {
       }
     });
     item.addEventListener("mouseenter", () => {
-      item.style.background = "var(--sidebar-item-hover)";
+      item.style.background = "var(--bg-active)";
+      item.style.color = "var(--text-bright)";
     });
     item.addEventListener("mouseleave", () => {
       item.style.background = "";
+      item.style.color = "";
     });
     menu.appendChild(item);
   }

@@ -22,6 +22,7 @@
   border-right: 1px solid var(--border-primary);
   overflow: hidden;
   position: relative;
+  background: var(--sidebar-bg);
 }
 
 #explorer-view {
@@ -38,13 +39,29 @@
 #sidebar-resize-v {
   grid-area: resize;
   cursor: ew-resize;
-  background: var(--border-primary);
-  transition: background 0.1s;
+  background: transparent;
+  position: relative;
+  transition: background var(--transition-normal);
 }
 
-#sidebar-resize-v:hover,
-#sidebar-resize-v.dragging {
+#sidebar-resize-v::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 1px;
+  width: 1px;
+  height: 100%;
+  background: var(--border-primary);
+  transition: all var(--transition-normal);
+}
+
+#sidebar-resize-v:hover::after,
+#sidebar-resize-v.dragging::after {
+  left: 0;
+  width: 3px;
   background: var(--accent-primary);
+  box-shadow: var(--accent-glow);
+  border-radius: 2px;
 }
 
 #editor-area {
@@ -52,6 +69,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: var(--bg-primary);
 }
 
 #tab-bar {
@@ -69,6 +87,7 @@
   grid-area: status;
 }
 
+/* ── Overlays ────────────────────────────────────── */
 #overlay-container {
   position: fixed;
   top: 0;
@@ -81,12 +100,21 @@
 
 #overlay-container.active {
   pointer-events: auto;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: overlay-in 0.2s var(--ease-out);
 }
 
+@keyframes overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ── Toasts ──────────────────────────────────────── */
 #toast-container {
   position: fixed;
-  bottom: calc(var(--statusbar-height) + 8px);
+  bottom: calc(var(--statusbar-height) + 12px);
   right: 16px;
   z-index: 200;
   display: flex;

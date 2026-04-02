@@ -49,23 +49,30 @@ async function init() {
   });
 
   // Confirm quit when PTYs are active
+  let closeConfirmPending = false;
   const win = getCurrentWindow();
-  win.onCloseRequested(async (event) => {
-    let activeCount = 0;
-    for (const ws of appState.workspaces) {
-      for (const tab of ws.tabs) {
-        if (tab.alive) activeCount++;
+  try {
+    await win.onCloseRequested((event) => {
+      let activeCount = 0;
+      for (const ws of appState.workspaces) {
+        for (const tab of ws.tabs) {
+          if (tab.alive) activeCount++;
+        }
       }
-    }
-    if (activeCount > 0) {
-      const ok = confirm(
-        `${activeCount} terminal session${activeCount > 1 ? "s are" : " is"} still running. Close anyway?`,
-      );
-      if (!ok) {
+      if (activeCount > 0 && !closeConfirmPending) {
         event.preventDefault();
+        closeConfirmPending = true;
+        showCloseConfirm(activeCount, () => {
+          win.destroy();
+        }, () => {
+          closeConfirmPending = false;
+        });
       }
-    }
-  });
+      // activeCount === 0: don't preventDefault, window closes normally
+    });
+  } catch (err) {
+    console.error("Failed to register close handler:", err);
+  }
 
   // Global keyboard shortcuts
   document.addEventListener("keydown", (e) => {
@@ -110,14 +117,14 @@ async function init() {
       openTerminalSearch();
       return;
     }
-    // Ctrl+L: Git log
-    if (e.ctrlKey && e.key === "l") {
+    // Alt+L: Git log
+    if (e.altKey && !e.ctrlKey && e.key === "l") {
       e.preventDefault();
       showGitLog();
       return;
     }
-    // Ctrl+Shift+W: Dashboard
-    if (e.ctrlKey && e.shiftKey && e.key === "W") {
+    // Alt+D: Dashboard
+    if (e.altKey && !e.ctrlKey && e.key === "d") {
       e.preventDefault();
       showDashboard();
       return;
@@ -191,6 +198,43 @@ async function handleUndo() {
   } catch (err) {
     toast(`Undo failed: ${err}`, "error");
   }
+}
+
+function showCloseConfirm(activeCount: number, onConfirm: () => void, onCancel: () => void) {
+  document.querySelector(".ws-delete-confirm")?.remove();
+
+  const overlay = document.createElement("div");
+  overlay.className = "ws-delete-confirm";
+  const label = activeCount === 1 ? "1 terminal session is" : `${activeCount} terminal sessions are`;
+  overlay.innerHTML = `
+    <div class="ws-delete-dialog">
+      <p>${label} still running.</p>
+      <p class="ws-delete-hint">Close anyway?</p>
+      <div class="ws-delete-buttons">
+        <button class="dialog-btn dialog-btn-danger ws-confirm-yes">Close</button>
+        <button class="dialog-btn dialog-btn-secondary ws-confirm-no">Cancel</button>
+      </div>
+    </div>
+  `;
+
+  overlay.querySelector(".ws-confirm-yes")!.addEventListener("click", () => {
+    overlay.remove();
+    onConfirm();
+  });
+
+  overlay.querySelector(".ws-confirm-no")!.addEventListener("click", () => {
+    overlay.remove();
+    onCancel();
+  });
+
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) {
+      overlay.remove();
+      onCancel();
+    }
+  });
+
+  document.body.appendChild(overlay);
 }
 
 document.addEventListener("DOMContentLoaded", init);

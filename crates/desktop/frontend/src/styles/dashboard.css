@@ -1,8 +1,8 @@
 .dash-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 10px;
-  padding: 12px;
+  padding: 14px;
   overflow-y: auto;
   max-height: 65vh;
 }
@@ -10,31 +10,50 @@
 .dash-card {
   background: var(--bg-tertiary);
   border: 1px solid var(--border-primary);
-  border-radius: 6px;
-  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
   cursor: pointer;
-  transition: border-color 0.1s, background 0.1s;
+  transition: all var(--transition-normal);
+  position: relative;
+  overflow: hidden;
+}
+
+.dash-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: transparent;
+  transition: background var(--transition-normal);
 }
 
 .dash-card:hover {
-  border-color: var(--accent-primary);
+  border-color: var(--text-muted);
   background: var(--bg-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 
 .dash-card.dash-active {
   border-color: var(--accent-primary);
-  border-left: 3px solid var(--accent-primary);
+}
+
+.dash-card.dash-active::before {
+  background: var(--accent-primary);
+  box-shadow: var(--accent-glow);
 }
 
 .dash-card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .dash-card-name {
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--text-bright);
   overflow: hidden;
@@ -43,21 +62,37 @@
 }
 
 .dash-card-status {
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 9px;
+  font-weight: 700;
   text-transform: uppercase;
+  letter-spacing: 0.08em;
   flex-shrink: 0;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
 }
 
-.dash-card-status.idle { color: var(--text-muted); }
-.dash-card-status.busy { color: var(--accent-primary); }
-.dash-card-status.done { color: var(--git-added); }
-.dash-card-status.error { color: var(--git-deleted); }
+.dash-card-status.idle {
+  color: var(--text-muted);
+}
+
+.dash-card-status.busy {
+  color: var(--accent-primary);
+  background: var(--accent-muted);
+}
+
+.dash-card-status.done {
+  color: var(--git-added);
+  background: rgba(63, 185, 80, 0.1);
+}
+
+.dash-card-status.error {
+  color: var(--git-deleted);
+  background: rgba(248, 81, 73, 0.1);
+}
 
 .dash-card-branch {
   font-size: 11px;
   color: var(--text-secondary);
-  font-family: "JetBrainsMono NF Mono", monospace;
   margin-bottom: 4px;
 }
 
@@ -69,15 +104,15 @@
 
 .dash-card-meta {
   display: flex;
-  gap: 12px;
-  font-size: 11px;
+  gap: 14px;
+  font-size: 10px;
   color: var(--text-muted);
 }
 
 .dash-card-desc {
   font-size: 11px;
   color: var(--text-secondary);
-  margin-top: 4px;
+  margin-top: 6px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

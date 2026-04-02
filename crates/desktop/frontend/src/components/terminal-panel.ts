@@ -74,30 +74,33 @@ export function createTerminal(tabId: string): TerminalInstance {
   const terminal = new Terminal({
     fontFamily: '"JetBrainsMono NF Mono", monospace',
     fontSize: 14,
-    lineHeight: 1.2,
+    lineHeight: 1.25,
     theme: {
-      background: "#1e1e1e",
-      foreground: "#cccccc",
-      cursor: "#ffffff",
-      selectionBackground: "rgba(38, 79, 120, 0.5)",
-      black: "#000000",
-      red: "#cd3131",
-      green: "#0dbc79",
-      yellow: "#e5e510",
-      blue: "#2472c8",
-      magenta: "#bc3fbc",
-      cyan: "#11a8cd",
-      white: "#e5e5e5",
-      brightBlack: "#666666",
-      brightRed: "#f14c4c",
-      brightGreen: "#23d18b",
-      brightYellow: "#f5f543",
-      brightBlue: "#3b8eea",
-      brightMagenta: "#d670d6",
-      brightCyan: "#29b8db",
-      brightWhite: "#e5e5e5",
+      background: "#0b0f14",
+      foreground: "#adbac7",
+      cursor: "#39bae6",
+      cursorAccent: "#0b0f14",
+      selectionBackground: "rgba(57, 186, 230, 0.18)",
+      selectionForeground: "#e6edf3",
+      black: "#0b0f14",
+      red: "#f85149",
+      green: "#3fb950",
+      yellow: "#d4a12e",
+      blue: "#39bae6",
+      magenta: "#bc8cff",
+      cyan: "#39bae6",
+      white: "#adbac7",
+      brightBlack: "#4d5566",
+      brightRed: "#ff7b72",
+      brightGreen: "#56d364",
+      brightYellow: "#e3b341",
+      brightBlue: "#5cc8f0",
+      brightMagenta: "#d2a8ff",
+      brightCyan: "#5cc8f0",
+      brightWhite: "#e6edf3",
     },
     cursorBlink: true,
+    cursorStyle: "bar",
     scrollback: 5000,
     allowProposedApi: true,
   });
@@ -199,9 +202,15 @@ function showWelcome() {
   const welcome = document.createElement("div");
   welcome.className = "terminal-welcome";
   welcome.innerHTML = `
-    <h2>Piki Desktop</h2>
-    <p>Select a workspace from the sidebar to get started, or create a new one.</p>
-    <p>Use <kbd>+</kbd> in the tab bar to open a new terminal session.</p>
+    <div class="welcome-logo">PIKI</div>
+    <div class="welcome-subtitle">Multi-Agent Workspace</div>
+    <p>Select a workspace or create one to begin.</p>
+    <div class="welcome-shortcuts">
+      <div class="shortcut-item"><span class="shortcut-key">Ctrl+N</span><span class="shortcut-label">New workspace</span></div>
+      <div class="shortcut-item"><span class="shortcut-key">Ctrl+P</span><span class="shortcut-label">Command palette</span></div>
+      <div class="shortcut-item"><span class="shortcut-key">Ctrl+Space</span><span class="shortcut-label">Switch workspace</span></div>
+      <div class="shortcut-item"><span class="shortcut-key">?</span><span class="shortcut-label">All shortcuts</span></div>
+    </div>
   `;
   mainContent.appendChild(welcome);
 }

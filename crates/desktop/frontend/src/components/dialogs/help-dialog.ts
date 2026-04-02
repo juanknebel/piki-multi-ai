@@ -5,7 +5,7 @@ const SHORTCUTS: { category: string; items: [string, string][] }[] = [
       ["Ctrl+P", "Command Palette"],
       ["Ctrl+N", "New Workspace"],
       ["Ctrl+Space", "Workspace Switcher"],
-      ["Ctrl+Shift+W", "Dashboard"],
+      ["Alt+D", "Dashboard"],
       ["Ctrl+Tab", "Next Tab"],
       ["Ctrl+Shift+Tab", "Previous Tab"],
       ["?", "Keyboard Shortcuts"],
@@ -16,7 +16,7 @@ const SHORTCUTS: { category: string; items: [string, string][] }[] = [
     category: "Git",
     items: [
       ["Ctrl+F", "Find File"],
-      ["Ctrl+L", "Git Log"],
+      ["Alt+L", "Git Log"],
       ["Ctrl+M", "Merge / Rebase"],
       ["Ctrl+Shift+S", "Git Stash"],
       ["Ctrl+Shift+F", "Search in Terminal"],
@@ -53,13 +53,13 @@ export function showHelpDialog() {
   `;
 
   for (const group of SHORTCUTS) {
-    html += `<div style="margin-bottom:12px">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-secondary);margin-bottom:6px">${group.category}</div>`;
+    html += `<div class="shortcut-group">
+      <div class="shortcut-group-title">${group.category}</div>`;
     for (const [key, desc] of group.items) {
       html += `
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0">
-          <span style="color:var(--text-primary);font-size:13px">${desc}</span>
-          <kbd style="padding:2px 6px;background:var(--bg-tertiary);border:1px solid var(--border-primary);border-radius:3px;font-size:11px;color:var(--text-secondary);font-family:inherit">${key}</kbd>
+        <div class="shortcut-row">
+          <span class="shortcut-row-label">${desc}</span>
+          <kbd class="shortcut-row-key">${key}</kbd>
         </div>`;
     }
     html += `</div>`;

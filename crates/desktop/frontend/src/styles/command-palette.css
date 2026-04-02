@@ -7,30 +7,36 @@
   z-index: 150;
   display: flex;
   justify-content: center;
-  padding-top: 15vh;
+  padding-top: 14vh;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  animation: overlay-in 0.1s var(--ease-out);
 }
 
 .palette {
-  width: 520px;
+  width: 540px;
   max-width: 90vw;
-  max-height: 60vh;
+  max-height: 55vh;
   background: var(--dialog-bg);
   border: 1px solid var(--dialog-border);
-  border-radius: 8px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6), 0 0 1px rgba(255, 255, 255, 0.05);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  animation: dialog-enter 0.15s var(--ease-out);
 }
 
 .palette-input {
-  padding: 10px 14px;
+  padding: 12px 16px;
   background: var(--bg-input);
   border: none;
   border-bottom: 1px solid var(--border-primary);
-  color: var(--text-primary);
-  font-size: 14px;
+  color: var(--text-bright);
+  font-size: 13px;
   outline: none;
+  letter-spacing: 0.02em;
 }
 
 .palette-input::placeholder {
@@ -46,10 +52,11 @@
 .palette-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
+  gap: 10px;
+  padding: 8px 16px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
+  transition: background var(--transition-fast);
 }
 
 .palette-item:hover,
@@ -57,11 +64,18 @@
   background: var(--sidebar-item-focus);
 }
 
+.palette-item.selected {
+  border-left: 2px solid var(--accent-primary);
+  padding-left: 14px;
+}
+
 .palette-category {
   color: var(--text-muted);
-  font-size: 11px;
-  min-width: 60px;
+  font-size: 10px;
+  min-width: 56px;
   flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .palette-label {
@@ -79,17 +93,18 @@
 
 .palette-key {
   color: var(--text-muted);
-  font-size: 11px;
-  padding: 1px 5px;
+  font-size: 10px;
+  padding: 2px 6px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-primary);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   flex-shrink: 0;
+  letter-spacing: 0.02em;
 }
 
 .palette-empty {
-  padding: 16px 14px;
+  padding: 20px 16px;
   color: var(--text-muted);
   text-align: center;
-  font-size: 13px;
+  font-size: 12px;
 }

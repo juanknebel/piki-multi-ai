@@ -1,4 +1,4 @@
-/* Source Control view */
+/* ── Source Control view ─────────────────────────── */
 #source-control-view {
   flex-direction: column;
   height: 100%;
@@ -15,48 +15,51 @@
 
 .sc-header-actions {
   display: flex;
-  gap: 2px;
+  gap: 1px;
 }
 
 .sc-header-btn {
-  padding: 2px 6px;
-  border-radius: 3px;
+  padding: 3px 7px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
   color: var(--text-secondary);
+  transition: all var(--transition-fast);
 }
 
 .sc-header-btn:hover {
-  background: var(--bg-hover);
+  background: var(--bg-active);
   color: var(--text-bright);
 }
 
-/* Commit area */
+/* ── Commit area ─────────────────────────────────── */
 .sc-commit-area {
-  padding: 8px 12px;
+  padding: 10px 14px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-primary);
 }
 
 .sc-commit-input {
   width: 100%;
-  padding: 6px 8px;
+  padding: 7px 10px;
   background: var(--bg-input);
   border: 1px solid var(--border-primary);
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   color: var(--text-primary);
   font-family: inherit;
   font-size: 12px;
   resize: vertical;
-  min-height: 40px;
+  min-height: 42px;
   max-height: 120px;
-  line-height: 1.4;
+  line-height: 1.5;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .sc-commit-input:focus {
   border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px var(--accent-muted);
   outline: none;
 }
 
@@ -68,30 +71,33 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  padding: 5px 12px;
+  gap: 6px;
+  padding: 6px 14px;
   background: var(--accent-primary);
-  color: #fff;
-  border-radius: 4px;
+  color: #000;
+  border-radius: var(--radius-md);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   width: 100%;
+  letter-spacing: 0.02em;
+  transition: all var(--transition-fast);
 }
 
 .sc-commit-btn:hover:not(:disabled) {
   background: var(--accent-hover);
+  box-shadow: var(--accent-glow);
 }
 
 .sc-commit-btn:disabled {
-  opacity: 0.5;
+  opacity: 0.35;
   cursor: not-allowed;
 }
 
 .sc-commit-icon {
-  font-size: 14px;
+  font-size: 13px;
 }
 
-/* Sections */
+/* ── Sections ────────────────────────────────────── */
 .sc-section {
   border-bottom: 1px solid var(--border-primary);
 }
@@ -100,11 +106,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 12px;
-  font-size: 11px;
-  font-weight: 600;
+  padding: 5px 14px;
+  font-size: 10px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.1em;
   color: var(--text-secondary);
   user-select: none;
 }
@@ -112,9 +118,10 @@
 .sc-section-toggle {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 3px;
   cursor: pointer;
   flex: 1;
+  transition: color var(--transition-fast);
 }
 
 .sc-section-toggle:hover {
@@ -127,19 +134,20 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 3px;
-  font-size: 16px;
+  border-radius: var(--radius-sm);
+  font-size: 15px;
   font-weight: 700;
   color: var(--text-secondary);
   flex-shrink: 0;
+  transition: all var(--transition-fast);
 }
 
 .sc-section-action:hover {
-  background: var(--bg-hover);
+  background: var(--bg-active);
   color: var(--text-bright);
 }
 
-/* File list inside section */
+/* ── File list inside section ────────────────────── */
 .sc-file-list {
   padding-bottom: 4px;
 }

@@ -170,16 +170,20 @@ function buildCommands(): Command[] {
       id: "ws-delete",
       label: `Delete "${ws.info.name}"`,
       category: "Workspace",
-      action: async () => {
-        if (confirm(`Delete workspace "${ws.info.name}"?`)) {
-          try {
-            await ipc.deleteWorkspace(wsIdx);
-            appState.removeWorkspace(wsIdx);
-            toast(`Deleted "${ws.info.name}"`, "info");
-          } catch (err) {
-            toast(`Delete failed: ${err}`, "error");
-          }
-        }
+      action: () => {
+        showConfirmDialog(
+          `Delete workspace "${ws.info.name}"?`,
+          "This will remove the worktree and branch.",
+          async () => {
+            try {
+              await ipc.deleteWorkspace(wsIdx);
+              appState.removeWorkspace(wsIdx);
+              toast(`Deleted "${ws.info.name}"`, "info");
+            } catch (err) {
+              toast(`Delete failed: ${err}`, "error");
+            }
+          },
+        );
       },
     });
   }
@@ -288,7 +292,7 @@ function buildCommands(): Command[] {
       id: "git-log",
       label: "Git Log",
       category: "Git",
-      keybinding: "Ctrl+L",
+      keybinding: "Alt+L",
       action: () => showGitLog(),
     });
     cmds.push({
@@ -368,7 +372,7 @@ function buildCommands(): Command[] {
     id: "view-dashboard",
     label: "Dashboard",
     category: "View",
-    keybinding: "Ctrl+Shift+W",
+    keybinding: "Alt+D",
     action: () => showDashboard(),
   });
   cmds.push({
@@ -414,6 +418,26 @@ function highlightMatch(text: string, query: string): string {
 function scrollToSelected(container: HTMLElement) {
   const selected = container.querySelector(".palette-item.selected");
   selected?.scrollIntoView({ block: "nearest" });
+}
+
+function showConfirmDialog(message: string, hint: string, onConfirm: () => void) {
+  document.querySelector(".ws-delete-confirm")?.remove();
+  const overlay = document.createElement("div");
+  overlay.className = "ws-delete-confirm";
+  overlay.innerHTML = `
+    <div class="ws-delete-dialog">
+      <p>${escapeHtml(message)}</p>
+      <p class="ws-delete-hint">${escapeHtml(hint)}</p>
+      <div class="ws-delete-buttons">
+        <button class="dialog-btn dialog-btn-danger ws-confirm-yes">Delete</button>
+        <button class="dialog-btn dialog-btn-secondary ws-confirm-no">Cancel</button>
+      </div>
+    </div>
+  `;
+  overlay.querySelector(".ws-confirm-yes")!.addEventListener("click", () => { overlay.remove(); onConfirm(); });
+  overlay.querySelector(".ws-confirm-no")!.addEventListener("click", () => overlay.remove());
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
 }
 
 function escapeHtml(text: string): string {

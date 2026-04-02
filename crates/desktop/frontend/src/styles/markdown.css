@@ -1,53 +1,62 @@
 .md-content {
-  padding: 20px 24px;
+  padding: 24px 28px;
   overflow-y: auto;
   flex: 1;
   color: var(--text-primary);
-  font-size: 14px;
-  line-height: 1.7;
+  font-size: 13px;
+  line-height: 1.75;
 }
 
 .md-h {
   color: var(--text-bright);
-  margin: 16px 0 8px;
+  margin: 20px 0 10px;
   font-weight: 600;
 }
 
-h1.md-h { font-size: 22px; border-bottom: 1px solid var(--border-primary); padding-bottom: 8px; }
-h2.md-h { font-size: 18px; border-bottom: 1px solid var(--border-primary); padding-bottom: 6px; }
-h3.md-h { font-size: 15px; }
-h4.md-h { font-size: 14px; }
+h1.md-h {
+  font-size: 20px;
+  border-bottom: 1px solid var(--border-primary);
+  padding-bottom: 10px;
+}
 
-.md-p { margin: 4px 0; }
+h2.md-h {
+  font-size: 17px;
+  border-bottom: 1px solid var(--border-primary);
+  padding-bottom: 8px;
+}
+
+h3.md-h { font-size: 14px; }
+h4.md-h { font-size: 13px; }
+
+.md-p { margin: 6px 0; }
 
 .md-code {
   background: var(--bg-tertiary);
   border: 1px solid var(--border-primary);
-  border-radius: 4px;
-  padding: 12px 16px;
-  margin: 8px 0;
+  border-radius: var(--radius-md);
+  padding: 14px 18px;
+  margin: 10px 0;
   overflow-x: auto;
-  font-family: "JetBrainsMono NF Mono", monospace;
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.6;
   color: var(--text-primary);
 }
 
 .md-inline-code {
   background: var(--bg-tertiary);
-  padding: 1px 5px;
-  border-radius: 3px;
-  font-family: "JetBrainsMono NF Mono", monospace;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
   font-size: 0.9em;
+  color: var(--text-accent);
 }
 
 .md-list {
-  margin: 4px 0;
+  margin: 6px 0;
   padding-left: 24px;
 }
 
 .md-list li {
-  margin: 2px 0;
+  margin: 3px 0;
   list-style: disc;
 }
 
@@ -58,14 +67,16 @@ ol.md-list li {
 .md-hr {
   border: none;
   border-top: 1px solid var(--border-primary);
-  margin: 12px 0;
+  margin: 16px 0;
 }
 
 .md-link {
   color: var(--text-accent);
   text-decoration: none;
+  transition: color var(--transition-fast);
 }
 
 .md-link:hover {
+  color: var(--accent-hover);
   text-decoration: underline;
 }

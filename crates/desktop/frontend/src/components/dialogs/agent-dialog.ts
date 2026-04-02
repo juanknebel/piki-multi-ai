@@ -30,25 +30,25 @@ export async function showAgentManager() {
     dialog.innerHTML = `
       <div class="dialog-header">
         <span class="dialog-title">Agent Profiles</span>
-        <span style="display:flex;gap:6px">
-          <button class="dialog-btn dialog-btn-secondary" id="ag-import" style="font-size:11px;padding:3px 8px">Import from repo</button>
-          <button class="dialog-btn dialog-btn-primary" id="ag-new" style="font-size:11px;padding:3px 8px">+ New Agent</button>
+        <span style="display:flex;gap:6px;align-items:center">
+          <button class="dialog-btn dialog-btn-secondary dialog-btn-sm" id="ag-import">Import from repo</button>
+          <button class="dialog-btn dialog-btn-primary dialog-btn-sm" id="ag-new">+ New Agent</button>
           <button class="dialog-close">×</button>
         </span>
       </div>
       <div class="dialog-body" style="max-height:60vh;overflow-y:auto">
         ${agents.length === 0 ? '<div class="empty-message">No agent profiles configured for this project.</div>' : ""}
         ${agents.map((a) => `
-          <div class="agent-item" data-id="${a.id}">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-              <strong style="color:var(--text-bright)">${esc(a.name)}</strong>
-              <span style="font-size:11px;color:var(--text-muted)">${esc(a.provider)}</span>
-              <span style="font-size:10px;color:var(--text-muted);margin-left:auto">v${a.version}${a.last_synced_at ? " ✓" : ""}</span>
+          <div class="agent-manager-item" data-id="${a.id}">
+            <div class="agent-manager-item-header">
+              <span class="agent-manager-item-name">${esc(a.name)}</span>
+              <span class="agent-manager-item-provider">${esc(a.provider)}</span>
+              <span class="agent-manager-item-version">v${a.version}${a.last_synced_at ? " ✓" : ""}</span>
             </div>
-            <div style="font-size:12px;color:var(--text-secondary);max-height:60px;overflow:hidden;text-overflow:ellipsis;white-space:pre-wrap">${esc(a.role.slice(0, 200))}${a.role.length > 200 ? "..." : ""}</div>
-            <div style="display:flex;gap:6px;margin-top:6px">
-              <button class="dialog-btn dialog-btn-secondary ag-edit" data-id="${a.id}" style="font-size:11px;padding:2px 8px">Edit</button>
-              <button class="dialog-btn dialog-btn-danger ag-delete" data-id="${a.id}" style="font-size:11px;padding:2px 8px">Delete</button>
+            <div class="agent-manager-item-role">${esc(a.role.slice(0, 200))}${a.role.length > 200 ? "..." : ""}</div>
+            <div class="agent-manager-item-actions">
+              <button class="dialog-btn dialog-btn-secondary dialog-btn-sm ag-edit" data-id="${a.id}">Edit</button>
+              <button class="dialog-btn dialog-btn-danger dialog-btn-sm ag-delete" data-id="${a.id}">Delete</button>
             </div>
           </div>
         `).join("")}
@@ -76,16 +76,18 @@ export async function showAgentManager() {
 
     // Delete buttons
     dialog.querySelectorAll<HTMLButtonElement>(".ag-delete").forEach((btn) => {
-      btn.addEventListener("click", async () => {
+      btn.addEventListener("click", () => {
         const id = parseInt(btn.dataset.id!, 10);
-        if (!confirm("Delete this agent?")) return;
-        try {
-          await ipc.deleteAgent(id);
-          toast("Agent deleted", "info");
-          await reload();
-        } catch (err) {
-          toast(`Delete failed: ${err}`, "error");
-        }
+        const agent = agents.find((a) => a.id === id);
+        showDeleteConfirm(agent?.name ?? "this agent", async () => {
+          try {
+            await ipc.deleteAgent(id);
+            toast("Agent deleted", "info");
+            await reload();
+          } catch (err) {
+            toast(`Delete failed: ${err}`, "error");
+          }
+        });
       });
     });
 
@@ -207,11 +209,11 @@ async function showImportDialog(onImported: () => void) {
       </div>
       <div class="dialog-body">
         ${scanned.map((a, i) => `
-          <label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer">
+          <label class="import-check-item">
             <input type="checkbox" class="ag-import-check" data-idx="${i}" ${selected.has(i) ? "checked" : ""} />
-            <span style="color:var(--text-bright)">${esc(a.name)}</span>
-            <span style="font-size:11px;color:var(--text-muted)">${esc(a.provider)}</span>
-            ${a.exists ? '<span style="font-size:10px;color:var(--git-modified)">(exists)</span>' : '<span style="font-size:10px;color:var(--git-added)">(new)</span>'}
+            <span class="import-check-name">${esc(a.name)}</span>
+            <span class="import-check-provider">${esc(a.provider)}</span>
+            ${a.exists ? '<span class="import-check-badge exists">(exists)</span>' : '<span class="import-check-badge new">(new)</span>'}
           </label>
         `).join("")}
       </div>
@@ -251,6 +253,26 @@ async function showImportDialog(onImported: () => void) {
 
   document.body.appendChild(backdrop);
   render();
+}
+
+function showDeleteConfirm(name: string, onConfirm: () => void) {
+  document.querySelector(".ws-delete-confirm")?.remove();
+  const overlay = document.createElement("div");
+  overlay.className = "ws-delete-confirm";
+  overlay.innerHTML = `
+    <div class="ws-delete-dialog">
+      <p>Delete <strong>${esc(name)}</strong>?</p>
+      <p class="ws-delete-hint">This cannot be undone.</p>
+      <div class="ws-delete-buttons">
+        <button class="dialog-btn dialog-btn-danger ws-confirm-yes">Delete</button>
+        <button class="dialog-btn dialog-btn-secondary ws-confirm-no">Cancel</button>
+      </div>
+    </div>
+  `;
+  overlay.querySelector(".ws-confirm-yes")!.addEventListener("click", () => { overlay.remove(); onConfirm(); });
+  overlay.querySelector(".ws-confirm-no")!.addEventListener("click", () => overlay.remove());
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
 }
 
 function esc(t: string): string {

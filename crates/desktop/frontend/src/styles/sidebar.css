@@ -1,4 +1,4 @@
-/* Workspace list */
+/* ── Workspace list ──────────────────────────────── */
 #workspace-list {
   background: var(--sidebar-bg);
 }
@@ -6,38 +6,43 @@
 .sidebar-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   height: var(--sidebar-header-height);
-  padding: 0 12px;
-  font-size: 11px;
+  padding: 0 14px;
+  font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.1em;
   color: var(--sidebar-header-fg);
   background: var(--sidebar-header-bg);
   user-select: none;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .group-header {
   display: flex;
   align-items: center;
-  padding: 4px 12px;
-  font-size: 12px;
+  padding: 6px 14px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text-secondary);
   cursor: pointer;
   user-select: none;
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .group-header:hover {
   background: var(--sidebar-item-hover);
+  color: var(--text-primary);
 }
 
 .group-chevron {
-  width: 16px;
-  height: 16px;
-  margin-right: 4px;
-  transition: transform 0.12s ease;
+  width: 14px;
+  height: 14px;
+  margin-right: 6px;
+  transition: transform 0.15s var(--ease-out);
   fill: currentColor;
+  opacity: 0.6;
 }
 
 .group-chevron.collapsed {
@@ -47,10 +52,13 @@
 .workspace-item {
   display: flex;
   align-items: center;
-  padding: 4px 12px 4px 20px;
+  padding: 5px 14px 5px 18px;
   cursor: pointer;
   user-select: none;
-  gap: 6px;
+  gap: 8px;
+  position: relative;
+  transition: background var(--transition-fast);
+  border-left: 2px solid transparent;
 }
 
 .workspace-item:hover {
@@ -59,10 +67,12 @@
 
 .workspace-item.active {
   background: var(--sidebar-item-active);
+  border-left-color: var(--accent-primary);
 }
 
 .workspace-item.focused {
   background: var(--sidebar-item-focus);
+  border-left-color: var(--accent-primary);
 }
 
 .workspace-badge {
@@ -71,7 +81,7 @@
   justify-content: center;
   width: 18px;
   height: 18px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   font-size: 10px;
   font-weight: 700;
   color: var(--text-muted);
@@ -84,6 +94,13 @@
   border-radius: 50%;
   background: var(--accent-primary);
   flex-shrink: 0;
+  box-shadow: var(--accent-glow);
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 .workspace-name {
@@ -91,7 +108,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: 12.5px;
+  transition: color var(--transition-fast);
 }
 
 .workspace-item.active .workspace-name {
@@ -101,7 +119,7 @@
 
 .workspace-actions {
   display: none;
-  gap: 2px;
+  gap: 1px;
   flex-shrink: 0;
 }
 
@@ -110,33 +128,37 @@
 }
 
 .ws-action-btn {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 3px;
-  font-size: 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
   color: var(--text-muted);
+  transition: all var(--transition-fast);
 }
 
 .ws-action-btn:hover {
-  background: var(--bg-hover);
+  background: var(--bg-active);
   color: var(--text-bright);
 }
 
 .ws-action-delete:hover {
   color: var(--git-deleted);
+  background: rgba(248, 81, 73, 0.1);
 }
 
 .workspace-status {
   font-size: 10px;
   color: var(--text-muted);
   flex-shrink: 0;
+  transition: color var(--transition-fast);
 }
 
 .workspace-status.busy {
   color: var(--accent-primary);
+  animation: pulse-dot 1.5s ease-in-out infinite;
 }
 
 .workspace-status.done {
@@ -147,7 +169,7 @@
   color: var(--git-deleted);
 }
 
-/* Git panel */
+/* ── Git panel ──────────────────────────────────── */
 #git-panel {
   background: var(--sidebar-bg);
   border-top: 1px solid var(--border-primary);
@@ -156,13 +178,12 @@
 .file-item {
   display: flex;
   align-items: center;
-  padding: 2px 12px 2px 20px;
+  padding: 3px 14px 3px 20px;
   cursor: pointer;
   user-select: none;
-  gap: 6px;
-  font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", "Consolas",
-    monospace;
+  gap: 8px;
   font-size: 12px;
+  transition: background var(--transition-fast);
 }
 
 .file-item:hover {
@@ -177,33 +198,18 @@
   width: 16px;
   text-align: center;
   font-weight: 700;
+  font-size: 11px;
   flex-shrink: 0;
 }
 
-.file-status.modified {
-  color: var(--git-modified);
-}
-.file-status.added {
-  color: var(--git-added);
-}
-.file-status.deleted {
-  color: var(--git-deleted);
-}
-.file-status.renamed {
-  color: var(--git-renamed);
-}
-.file-status.untracked {
-  color: var(--git-untracked);
-}
-.file-status.conflicted {
-  color: var(--git-conflicted);
-}
-.file-status.staged {
-  color: var(--git-staged);
-}
-.file-status.staged-modified {
-  color: var(--git-staged-modified);
-}
+.file-status.modified { color: var(--git-modified); }
+.file-status.added { color: var(--git-added); }
+.file-status.deleted { color: var(--git-deleted); }
+.file-status.renamed { color: var(--git-renamed); }
+.file-status.untracked { color: var(--git-untracked); }
+.file-status.conflicted { color: var(--git-conflicted); }
+.file-status.staged { color: var(--git-staged); }
+.file-status.staged-modified { color: var(--git-staged-modified); }
 
 .file-path {
   flex: 1;
@@ -223,43 +229,53 @@
 }
 
 .file-action-btn {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   color: var(--text-secondary);
-  font-size: 14px;
+  font-size: 13px;
+  transition: all var(--transition-fast);
 }
 
 .file-action-btn:hover {
-  background: var(--bg-hover);
+  background: var(--bg-active);
   color: var(--text-bright);
 }
 
-/* Delete confirmation */
+/* ── Delete confirmation ────────────────────────── */
 .ws-delete-confirm {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 100;
+  animation: overlay-in 0.15s var(--ease-out);
 }
 
 .ws-delete-dialog {
   background: var(--dialog-bg);
   border: 1px solid var(--dialog-border);
-  border-radius: 6px;
-  box-shadow: 0 8px 32px var(--dialog-shadow);
-  padding: 16px 20px;
-  min-width: 280px;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 16px 48px var(--dialog-shadow);
+  padding: 20px 24px;
+  min-width: 300px;
   text-align: center;
+  animation: dialog-enter 0.2s var(--ease-out);
+}
+
+@keyframes dialog-enter {
+  from { opacity: 0; transform: scale(0.96) translateY(-8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 .ws-delete-dialog p {
@@ -270,25 +286,34 @@
 
 .ws-delete-hint {
   color: var(--text-muted) !important;
-  font-size: 12px !important;
+  font-size: 11px !important;
 }
 
 .ws-delete-buttons {
   display: flex;
   gap: 8px;
   justify-content: center;
-  margin-top: 12px;
+  margin-top: 16px;
 }
 
-/* Agent panel items */
-.agent-panel-item {
-  padding: 8px 12px;
+/* ── Agent dispatch action bar ───────────────────── */
+.agent-dispatch-area {
+  padding: 8px 14px;
   border-bottom: 1px solid var(--border-primary);
+}
+
+/* ── Agent panel items ──────────────────────────── */
+.agent-panel-item {
+  padding: 8px 14px 8px 18px;
+  border-bottom: 1px solid var(--border-subtle);
+  border-left: 2px solid transparent;
   position: relative;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
 }
 
 .agent-panel-item:hover {
   background: var(--sidebar-item-hover);
+  border-left-color: var(--accent-muted);
 }
 
 .agent-panel-header {
@@ -299,21 +324,26 @@
 }
 
 .agent-panel-name {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 12.5px;
+  font-weight: 600;
   color: var(--text-bright);
 }
 
 .agent-panel-provider {
-  font-size: 11px;
-  color: var(--text-muted);
+  font-size: 10px;
+  color: var(--text-secondary);
+  padding: 1px 6px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.02em;
 }
 
 .agent-panel-role {
   font-size: 11px;
   color: var(--text-secondary);
-  line-height: 1.4;
-  max-height: 40px;
+  line-height: 1.5;
+  max-height: 34px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: pre-wrap;
@@ -323,17 +353,19 @@
   display: none;
   gap: 2px;
   position: absolute;
-  top: 6px;
-  right: 8px;
+  top: 7px;
+  right: 10px;
 }
 
 .agent-panel-item:hover .agent-panel-actions {
   display: flex;
 }
 
+/* ── Empty state ────────────────────────────────── */
 .empty-message {
-  padding: 12px 20px;
+  padding: 20px;
   color: var(--text-muted);
-  font-style: italic;
-  font-size: 12px;
+  font-size: 11px;
+  text-align: center;
+  line-height: 1.7;
 }

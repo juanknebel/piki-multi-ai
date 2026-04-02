@@ -1,93 +1,117 @@
 :root {
-  /* Base colors (VSCode Dark+ inspired) */
-  --bg-primary: #1e1e1e;
-  --bg-secondary: #252526;
-  --bg-tertiary: #2d2d2d;
-  --bg-hover: #2a2d2e;
-  --bg-active: #37373d;
-  --bg-input: #3c3c3c;
-  --bg-dropdown: #3c3c3c;
+  /* ── Obsidian base tones ───────────────────────── */
+  --bg-primary: #0b0f14;
+  --bg-secondary: #0e1319;
+  --bg-tertiary: #151c25;
+  --bg-hover: #182030;
+  --bg-active: #1e2a3c;
+  --bg-input: #111820;
+  --bg-dropdown: #151c25;
+  --bg-surface: #0d1117;
+  --bg-elevated: #1a2332;
 
-  /* Text */
-  --text-primary: #cccccc;
-  --text-secondary: #969696;
-  --text-muted: #5a5a5a;
-  --text-accent: #569cd6;
-  --text-bright: #ffffff;
+  /* ── Text ──────────────────────────────────────── */
+  --text-primary: #adbac7;
+  --text-secondary: #768390;
+  --text-muted: #3d4957;
+  --text-accent: #39bae6;
+  --text-bright: #e6edf3;
 
-  /* Borders */
-  --border-primary: #3c3c3c;
-  --border-active: #007acc;
-  --border-inactive: #3c3c3c;
+  /* ── Borders ───────────────────────────────────── */
+  --border-primary: #1a2231;
+  --border-active: #39bae6;
+  --border-inactive: #1a2231;
+  --border-subtle: rgba(255, 255, 255, 0.03);
 
-  /* Activity bar */
-  --activity-bar-bg: #333333;
-  --activity-bar-fg: #ffffff;
-  --activity-bar-inactive: #858585;
-  --activity-bar-badge: #007acc;
+  /* ── Accent — Cyan ─────────────────────────────── */
+  --accent-primary: #39bae6;
+  --accent-hover: #5cc8f0;
+  --accent-focus: #39bae6;
+  --accent-muted: rgba(57, 186, 230, 0.12);
+  --accent-glow: 0 0 10px rgba(57, 186, 230, 0.3);
+  --accent-glow-lg: 0 0 20px rgba(57, 186, 230, 0.2), 0 0 40px rgba(57, 186, 230, 0.06);
 
-  /* Sidebar */
-  --sidebar-bg: #252526;
-  --sidebar-header-bg: #383838;
-  --sidebar-header-fg: #bbbbbb;
-  --sidebar-item-hover: #2a2d2e;
-  --sidebar-item-active: #37373d;
-  --sidebar-item-focus: #094771;
+  /* ── Accent — Amber (status / warm) ────────────── */
+  --accent-warm: #e6a730;
+  --accent-warm-muted: rgba(230, 167, 48, 0.12);
+  --accent-warm-glow: 0 0 10px rgba(230, 167, 48, 0.2);
 
-  /* Tab bar */
-  --tab-active-bg: #1e1e1e;
-  --tab-active-fg: #ffffff;
-  --tab-inactive-bg: #2d2d2d;
-  --tab-inactive-fg: #969696;
-  --tab-border: #252526;
-  --tab-active-border-top: #007acc;
+  /* ── Activity bar ──────────────────────────────── */
+  --activity-bar-bg: #080b0f;
+  --activity-bar-fg: #e6edf3;
+  --activity-bar-inactive: #4d5768;
+  --activity-bar-badge: #39bae6;
 
-  /* Terminal */
-  --terminal-bg: #1e1e1e;
-  --terminal-fg: #cccccc;
-  --terminal-cursor: #ffffff;
-  --terminal-selection: rgba(38, 79, 120, 0.5);
+  /* ── Sidebar ───────────────────────────────────── */
+  --sidebar-bg: #0d1117;
+  --sidebar-header-bg: #0b0f14;
+  --sidebar-header-fg: #768390;
+  --sidebar-item-hover: #131a23;
+  --sidebar-item-active: #182030;
+  --sidebar-item-focus: rgba(57, 186, 230, 0.08);
 
-  /* Status bar */
-  --statusbar-bg: #007acc;
-  --statusbar-fg: #ffffff;
-  --statusbar-item-hover: rgba(255, 255, 255, 0.12);
-  --statusbar-no-folder: #68217a;
+  /* ── Tab bar ───────────────────────────────────── */
+  --tab-active-bg: #0b0f14;
+  --tab-active-fg: #e6edf3;
+  --tab-inactive-bg: #0d1117;
+  --tab-inactive-fg: #768390;
+  --tab-border: #151c25;
+  --tab-active-border-top: #39bae6;
 
-  /* Git status colors */
-  --git-modified: #e2c08d;
-  --git-added: #73c991;
-  --git-deleted: #c74e39;
-  --git-renamed: #73c991;
-  --git-untracked: #73c991;
-  --git-conflicted: #e4676b;
-  --git-staged: #73c991;
-  --git-staged-modified: #e2c08d;
+  /* ── Terminal ──────────────────────────────────── */
+  --terminal-bg: #0b0f14;
+  --terminal-fg: #adbac7;
+  --terminal-cursor: #39bae6;
+  --terminal-selection: rgba(57, 186, 230, 0.18);
 
-  /* Accent */
-  --accent-primary: #007acc;
-  --accent-hover: #1c97ea;
-  --accent-focus: #007acc;
+  /* ── Status bar ────────────────────────────────── */
+  --statusbar-bg: #080b0f;
+  --statusbar-fg: #8b95a1;
+  --statusbar-item-hover: rgba(57, 186, 230, 0.06);
+  --statusbar-no-folder: #5a2d72;
 
-  /* Scrollbar */
-  --scrollbar-thumb: rgba(121, 121, 121, 0.4);
-  --scrollbar-thumb-hover: rgba(100, 100, 100, 0.7);
+  /* ── Git status ────────────────────────────────── */
+  --git-modified: #d4a12e;
+  --git-added: #3fb950;
+  --git-deleted: #f85149;
+  --git-renamed: #3fb950;
+  --git-untracked: #7ee787;
+  --git-conflicted: #f47067;
+  --git-staged: #3fb950;
+  --git-staged-modified: #d4a12e;
 
-  /* Dialog */
-  --dialog-bg: #252526;
-  --dialog-border: #454545;
-  --dialog-shadow: rgba(0, 0, 0, 0.36);
+  /* ── Scrollbar ─────────────────────────────────── */
+  --scrollbar-thumb: rgba(57, 186, 230, 0.08);
+  --scrollbar-thumb-hover: rgba(57, 186, 230, 0.22);
 
-  /* Toast */
-  --toast-info-bg: #007acc;
-  --toast-success-bg: #16825d;
-  --toast-error-bg: #c74e39;
-  --toast-fg: #ffffff;
+  /* ── Dialog ────────────────────────────────────── */
+  --dialog-bg: #111820;
+  --dialog-border: #253040;
+  --dialog-shadow: rgba(0, 0, 0, 0.65);
 
-  /* Sizing */
-  --activity-bar-width: 48px;
-  --sidebar-width: 250px;
-  --statusbar-height: 24px;
-  --tab-height: 36px;
-  --sidebar-header-height: 24px;
+  /* ── Toast ─────────────────────────────────────── */
+  --toast-info-bg: #122a3e;
+  --toast-success-bg: #0f2818;
+  --toast-error-bg: #2d1215;
+  --toast-fg: #e6edf3;
+
+  /* ── Sizing ────────────────────────────────────── */
+  --activity-bar-width: 50px;
+  --sidebar-width: 260px;
+  --statusbar-height: 28px;
+  --tab-height: 38px;
+  --sidebar-header-height: 30px;
+
+  /* ── Motion ────────────────────────────────────── */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-fast: 0.1s var(--ease-in-out);
+  --transition-normal: 0.2s var(--ease-out);
+  --transition-slow: 0.35s var(--ease-out);
+
+  /* ── Radius ────────────────────────────────────── */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
 }

@@ -10,73 +10,112 @@
 
 .terminal-container .xterm {
   height: 100%;
-  padding: 4px 0 4px 8px;
+  padding: 6px 0 6px 10px;
 }
 
 .terminal-container .xterm-viewport::-webkit-scrollbar {
-  width: 8px;
+  width: 7px;
 }
 
 .terminal-container .xterm-viewport::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb);
-  border-radius: 4px;
+  border-radius: 99px;
 }
 
-/* Terminal search bar */
+.terminal-container .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+/* ── Terminal search bar ─────────────────────────── */
 .term-search-bar {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 8px;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-primary);
+  padding: 5px 10px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-top: none;
+  border-right: none;
   position: absolute;
   top: 0;
   right: 0;
   z-index: 10;
-  border-radius: 0 0 0 6px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  border-radius: 0 0 0 var(--radius-md);
+  box-shadow: -2px 2px 12px rgba(0, 0, 0, 0.4);
+  animation: search-slide 0.15s var(--ease-out);
+}
+
+@keyframes search-slide {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .term-search-input {
-  padding: 3px 8px;
+  padding: 4px 10px;
   background: var(--bg-input);
   border: 1px solid var(--border-primary);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   color: var(--text-primary);
   font-size: 12px;
-  width: 180px;
+  width: 200px;
+  transition: border-color var(--transition-fast);
 }
 
 .term-search-input:focus {
   border-color: var(--accent-primary);
-  outline: none;
+  box-shadow: 0 0 0 1px var(--accent-muted);
 }
 
 .term-search-btn {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   color: var(--text-secondary);
+  transition: all var(--transition-fast);
 }
 
 .term-search-btn:hover {
-  background: var(--bg-hover);
+  background: var(--bg-active);
   color: var(--text-bright);
 }
 
+/* ── Welcome screen ──────────────────────────────── */
 .terminal-welcome {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: var(--text-muted);
-  gap: 12px;
+  gap: 16px;
+  animation: welcome-in 0.4s var(--ease-out);
+}
+
+@keyframes welcome-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.terminal-welcome .welcome-logo {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  background: linear-gradient(135deg, var(--accent-primary), #a78bfa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 4px;
+}
+
+.terminal-welcome .welcome-subtitle {
+  font-size: 12px;
+  color: var(--text-secondary);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  margin-bottom: 20px;
 }
 
 .terminal-welcome h2 {
@@ -86,19 +125,53 @@
 }
 
 .terminal-welcome p {
-  font-size: 13px;
-  max-width: 400px;
+  font-size: 12px;
+  color: var(--text-muted);
+  max-width: 420px;
   text-align: center;
-  line-height: 1.6;
+  line-height: 1.7;
+}
+
+.terminal-welcome .welcome-shortcuts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 24px;
+  margin-top: 8px;
+}
+
+.terminal-welcome .shortcut-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.terminal-welcome .shortcut-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  padding: 2px 7px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.terminal-welcome .shortcut-label {
+  color: var(--text-secondary);
 }
 
 .terminal-welcome kbd {
   display: inline-block;
-  padding: 2px 6px;
+  padding: 2px 7px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-primary);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   font-family: inherit;
-  font-size: 12px;
-  color: var(--text-primary);
+  font-size: 11px;
+  color: var(--text-secondary);
 }
