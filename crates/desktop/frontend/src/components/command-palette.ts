@@ -15,6 +15,7 @@ import { showDashboard } from "./dialogs/dashboard-dialog";
 import { openTerminalSearch } from "./terminal-panel";
 import { showThemeDialog } from "./dialogs/theme-dialog";
 import { showLogsDialog } from "./dialogs/logs-dialog";
+import { showAboutDialog } from "./dialogs/about-dialog";
 import { PROVIDER_LABELS, type AIProvider } from "../types";
 import { themeEngine } from "../theme";
 
@@ -391,6 +392,14 @@ function buildCommands(): Command[] {
     category: "Search",
     keybinding: "Ctrl+Shift+F",
     action: () => openTerminalSearch(),
+  });
+
+  // About
+  cmds.push({
+    id: "about",
+    label: "About Piki Desktop",
+    category: "Help",
+    action: () => showAboutDialog(),
   });
 
   // Logs

@@ -1,0 +1,127 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0b0f14"/>
+      <stop offset="100%" stop-color="#151c25"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#39bae6"/>
+      <stop offset="100%" stop-color="#7aa2f7"/>
+    </linearGradient>
+    <filter id="blur">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="12"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="180" fill="url(#bg)"/>
+
+  <!-- Subtle border -->
+  <rect x="4" y="4" width="1016" height="1016" rx="176" fill="none" stroke="#1a2231" stroke-width="8"/>
+
+  <!-- Scanlines overlay -->
+  <g opacity="0.04">
+    <line x1="0" y1="0" x2="1024" y2="0" stroke="#fff" stroke-width="2" transform="translate(0,80)"/>
+    <line x1="0" y1="0" x2="1024" y2="0" stroke="#fff" stroke-width="2" transform="translate(0,84)"/>
+    <line x1="0" y1="0" x2="1024" y2="0" stroke="#fff" stroke-width="2" transform="translate(0,160)"/>
+    <line x1="0" y1="0" x2="1024" y2="0" stroke="#fff" stroke-width="2" transform="translate(0,164)"/>
+    <line x1="0" y1="0" x2="1024" y2="0" stroke="#fff" stroke-width="2" transform="translate(0,240)"/>
+    <line x1="0" y1="0" x2="1024" y2="0" stroke="#fff" stroke-width="2" transform="translate(0,244)"/>
+    <line x1="0" y1="0" x2="1024" y2="0" stroke="#fff" stroke-width="2" transform="translate(0,320)"/>
+    <line x1="0" y1="0" x2="1024" y2="0" stroke="#fff" stroke-width="2" transform="translate(0,324)"/>
+    <line x1="0" y1="0" x2="1024" y2="0" stroke="#fff" stroke-width="2" transform="translate(0,400)"/>
+    <line x1="0" y1="0" x2="1024" y2="0" stroke="#fff" stroke-width="2" transform="translate(0,404)"/>
+    <line x1="0" y1="0" x2="1024" y2="0" stroke="#fff" stroke-width="2" transform="translate(0,480)"/>
+    <line x1="0" y1="0" x2="1024" y2="0" stroke="#fff" stroke-width="2" transform="translate(0,484)"/>
+    <line x1="0" y1="0" x2="1024" y2="0" stroke="#fff" stroke-width="2" transform="translate(0,560)"/>
+    <line x1="0" y1="0" x2="1024" y2="0" stroke="#fff" stroke-width="2" transform="translate(0,564)"/>
+    <line x1="0" y1="0" x2="1024" y2="0" stroke="#fff" stroke-width="2" transform="translate(0,640)"/>
+    <line x1="0" y1="0" x2="1024" y2="0" stroke="#fff" stroke-width="2" transform="translate(0,644)"/>
+    <line x1="0" y1="0" x2="1024" y2="0" stroke="#fff" stroke-width="2" transform="translate(0,720)"/>
+    <line x1="0" y1="0" x2="1024" y2="0" stroke="#fff" stroke-width="2" transform="translate(0,724)"/>
+    <line x1="0" y1="0" x2="1024" y2="0" stroke="#fff" stroke-width="2" transform="translate(0,800)"/>
+    <line x1="0" y1="0" x2="1024" y2="0" stroke="#fff" stroke-width="2" transform="translate(0,804)"/>
+    <line x1="0" y1="0" x2="1024" y2="0" stroke="#fff" stroke-width="2" transform="translate(0,880)"/>
+    <line x1="0" y1="0" x2="1024" y2="0" stroke="#fff" stroke-width="2" transform="translate(0,884)"/>
+    <line x1="0" y1="0" x2="1024" y2="0" stroke="#fff" stroke-width="2" transform="translate(0,960)"/>
+    <line x1="0" y1="0" x2="1024" y2="0" stroke="#fff" stroke-width="2" transform="translate(0,964)"/>
+  </g>
+
+  <!-- Glow behind the K -->
+  <text x="512" y="600" font-family="monospace" font-size="620" font-weight="900"
+        text-anchor="middle" fill="url(#glow)" filter="url(#blur)" opacity="0.35">K</text>
+
+  <!-- Pixel-style K built from blocks (8x12 grid, each block 52x52 with 4px gap) -->
+  <!-- This creates an ASCII/retro blocky K character -->
+  <g transform="translate(248, 180)" fill="url(#glow)">
+    <!-- Column 1 (left vertical bar of K) -->
+    <rect x="0"   y="0"   width="52" height="52" rx="4"/>
+    <rect x="0"   y="56"  width="52" height="52" rx="4"/>
+    <rect x="0"   y="112" width="52" height="52" rx="4"/>
+    <rect x="0"   y="168" width="52" height="52" rx="4"/>
+    <rect x="0"   y="224" width="52" height="52" rx="4"/>
+    <rect x="0"   y="280" width="52" height="52" rx="4"/>
+    <rect x="0"   y="336" width="52" height="52" rx="4"/>
+    <rect x="0"   y="392" width="52" height="52" rx="4"/>
+    <rect x="0"   y="448" width="52" height="52" rx="4"/>
+    <rect x="0"   y="504" width="52" height="52" rx="4"/>
+    <rect x="0"   y="560" width="52" height="52" rx="4"/>
+    <rect x="0"   y="616" width="52" height="52" rx="4"/>
+
+    <!-- Column 2 (second bar, same as col 1) -->
+    <rect x="56"  y="0"   width="52" height="52" rx="4"/>
+    <rect x="56"  y="56"  width="52" height="52" rx="4"/>
+    <rect x="56"  y="112" width="52" height="52" rx="4"/>
+    <rect x="56"  y="168" width="52" height="52" rx="4"/>
+    <rect x="56"  y="224" width="52" height="52" rx="4"/>
+    <rect x="56"  y="280" width="52" height="52" rx="4"/>
+    <rect x="56"  y="336" width="52" height="52" rx="4"/>
+    <rect x="56"  y="392" width="52" height="52" rx="4"/>
+    <rect x="56"  y="448" width="52" height="52" rx="4"/>
+    <rect x="56"  y="504" width="52" height="52" rx="4"/>
+    <rect x="56"  y="560" width="52" height="52" rx="4"/>
+    <rect x="56"  y="616" width="52" height="52" rx="4"/>
+
+    <!-- Diagonal upper-right arm (going up-right from center) -->
+    <rect x="336" y="0"   width="52" height="52" rx="4"/>
+    <rect x="392" y="0"   width="52" height="52" rx="4"/>
+    <rect x="280" y="56"  width="52" height="52" rx="4"/>
+    <rect x="336" y="56"  width="52" height="52" rx="4"/>
+    <rect x="224" y="112" width="52" height="52" rx="4"/>
+    <rect x="280" y="112" width="52" height="52" rx="4"/>
+    <rect x="168" y="168" width="52" height="52" rx="4"/>
+    <rect x="224" y="168" width="52" height="52" rx="4"/>
+    <rect x="112" y="224" width="52" height="52" rx="4"/>
+    <rect x="168" y="224" width="52" height="52" rx="4"/>
+
+    <!-- Center junction -->
+    <rect x="112" y="280" width="52" height="52" rx="4"/>
+    <rect x="168" y="280" width="52" height="52" rx="4"/>
+    <rect x="112" y="336" width="52" height="52" rx="4"/>
+    <rect x="168" y="336" width="52" height="52" rx="4"/>
+
+    <!-- Diagonal lower-right arm (going down-right from center) -->
+    <rect x="112" y="392" width="52" height="52" rx="4"/>
+    <rect x="168" y="392" width="52" height="52" rx="4"/>
+    <rect x="168" y="448" width="52" height="52" rx="4"/>
+    <rect x="224" y="448" width="52" height="52" rx="4"/>
+    <rect x="224" y="504" width="52" height="52" rx="4"/>
+    <rect x="280" y="504" width="52" height="52" rx="4"/>
+    <rect x="280" y="560" width="52" height="52" rx="4"/>
+    <rect x="336" y="560" width="52" height="52" rx="4"/>
+    <rect x="336" y="616" width="52" height="52" rx="4"/>
+    <rect x="392" y="616" width="52" height="52" rx="4"/>
+
+    <!-- Extra blocks for top-right corner -->
+    <rect x="448" y="0"   width="52" height="52" rx="4"/>
+    <rect x="448" y="616" width="52" height="52" rx="4"/>
+  </g>
+
+  <!-- Blinking cursor block -->
+  <rect x="756" y="688" width="32" height="52" rx="2" fill="#39bae6" opacity="0.8">
+    <animate attributeName="opacity" values="0.8;0.2;0.8" dur="1.2s" repeatCount="indefinite"/>
+  </rect>
+
+  <!-- Bottom accent line -->
+  <rect x="120" y="900" width="784" height="3" rx="1.5" fill="url(#glow)" opacity="0.4"/>
+</svg>

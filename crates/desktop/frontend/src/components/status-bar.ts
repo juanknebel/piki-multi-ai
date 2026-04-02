@@ -1,10 +1,20 @@
 import { appState } from "../state";
 import { PROVIDER_LABELS } from "../types";
+import { showAboutDialog } from "./dialogs/about-dialog";
 
 export function renderStatusBar(container: HTMLElement) {
   function render() {
     const ws = appState.activeWs;
     container.innerHTML = "";
+
+    // App name (clickable → About)
+    const appName = document.createElement("div");
+    appName.className = "status-item clickable";
+    appName.textContent = "Piki Desktop";
+    appName.style.fontWeight = "600";
+    appName.style.color = "var(--accent-primary)";
+    appName.addEventListener("click", showAboutDialog);
+    container.appendChild(appName);
 
     // Left side
     const branch = ws?.info.branch ?? "—";
