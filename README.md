@@ -88,19 +88,65 @@ Built with Rust and [ratatui](https://ratatui.rs/).
 
 ## Desktop Application (Tauri)
 
-A modern desktop GUI is available via `piki-desktop`, built with [Tauri v2](https://v2.tauri.app/). It reuses the same `piki-core` business logic as the TUI and provides a VSCode-inspired interface with xterm.js terminal rendering.
+A modern desktop GUI is available via `piki-desktop`, built with [Tauri v2](https://v2.tauri.app/). It reuses the same `piki-core` business logic as the TUI and shares the same SQLite database, so workspaces created in either interface are visible in the other.
 
-### Building the Desktop App
+### Features
+
+- **Obsidian Glow theme** — Distinctive dark UI with deep blue-black backgrounds, cyan/amber dual-accent system, glow effects, and monospace-forward typography
+- **5 built-in theme presets** — Obsidian Dark, Nord, Catppuccin Mocha, Solarized Light, Tokyo Night; switch instantly via `Alt+T` or command palette
+- **Full theme customization** — Individual color pickers for ~60 variables across 13 groups, live preview, import/export themes as JSON, persisted in SQLite
+- **xterm.js terminals** — Full terminal emulation with WebGL rendering, copy on selection, `Ctrl+Shift+C/V` for clipboard, terminal search (`Ctrl+Shift+F`)
+- **Activity bar + sidebar** — Explorer (workspace list with groups), Source Control (git staging/committing), Agents panel (manage/dispatch AI agents)
+- **Multi-provider tabs** — Open Claude, Gemini, OpenCode, Kilo, Codex, or Shell tabs per workspace
+- **Git integration** — Stage/unstage files, commit, push, merge/rebase, stash, conflict resolution, git log viewer
+- **Side-by-side diff viewer** — With char-level highlights, 3-way merge view, and conflict resolution buttons
+- **Code review** — PR info, per-file diffs, inline comments, submit reviews via `gh` CLI
+- **Agent management** — Create/edit/delete agent profiles, import from repo, dispatch agents to workspaces
+- **Command palette** — `Ctrl+P` for fuzzy search across all commands, workspaces, and theme presets
+- **Dashboard** — `Alt+D` for bird's-eye view of all workspaces with status, tabs, and file counts
+- **Application log viewer** — `Alt+Shift+L` for in-memory ring buffer (500 entries), filterable by level
+- **About dialog** — Click "Piki Desktop" in status bar or via command palette
+- **Workspace switcher** — `Ctrl+Space` for quick fuzzy workspace switching
+- **Resizable sidebar** — Drag the divider or use the resize handle
+- **Confirm dialogs** — HTML-based confirmations (not browser `confirm()`) for all destructive actions
+
+### Keyboard Shortcuts
+
+| Shortcut | Action |
+|---|---|
+| `Ctrl+P` | Command palette |
+| `Ctrl+N` | New workspace |
+| `Ctrl+Space` | Workspace switcher |
+| `Ctrl+M` | Merge / Rebase |
+| `Ctrl+F` | Fuzzy file search |
+| `Ctrl+Shift+F` | Terminal search |
+| `Ctrl+Shift+R` | Code review |
+| `Ctrl+Shift+A` | Manage agents |
+| `Ctrl+Shift+D` | Dispatch agent |
+| `Ctrl+Shift+S` | Git stash |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Switch tabs |
+| `Ctrl+Z` | Undo stage/unstage |
+| `Alt+D` | Dashboard |
+| `Alt+L` | Git log |
+| `Alt+T` | Theme settings |
+| `Alt+Shift+L` | Application logs |
+| `Ctrl+Shift+C` | Copy selection |
+| `Ctrl+Shift+V` | Paste from clipboard |
+| `?` | Help / all shortcuts |
+
+### Building & Installing
 
 ```bash
-# Install frontend dependencies
-cd crates/desktop/frontend && npm install && cd -
+# Quick install (builds release binary + desktop entry + icons)
+./scripts/install-desktop.sh
 
-# Build (includes both Rust backend and web frontend)
-cargo build -p piki-desktop --release
+# Or manually:
+cd crates/desktop/frontend && npm install && cd -
+cd crates/desktop && cargo tauri build
+# Binary at: target/release/piki-desktop
 ```
 
-The desktop app shares the same SQLite database (`~/.local/share/piki-multi/piki.db`) as the TUI, so workspaces created in either interface are visible in the other.
+The install script places the binary in `~/.local/bin/`, installs icons to `~/.local/share/icons/hicolor/`, and creates a `.desktop` entry so Piki Desktop appears in Linux application menus.
 
 ## Prerequisites
 
@@ -122,11 +168,15 @@ cargo build --release
 
 The binary will be at `target/release/piki-multi-ai`.
 
-Or use the install script:
+Or use the install scripts:
 
 ```bash
-./install.sh              # installs to ~/.local/bin
-./install.sh -d /usr/local/bin  # custom directory
+# TUI version
+./scripts/install.sh              # installs to ~/.local/bin
+./scripts/install.sh -d /usr/local/bin  # custom directory
+
+# Desktop version (Tauri GUI)
+./scripts/install-desktop.sh      # builds, installs binary + desktop entry + icons
 ```
 
 ## Usage
@@ -677,6 +727,36 @@ crates/
         mod.rs           # Storage traits (WorkspaceStorage, ApiHistoryStorage, UiPrefsStorage) + factory
         json.rs          # Legacy JSON storage backend (migration source)
         sqlite.rs        # SQLite backend (WAL mode, FTS5 for API history, upsert dedup)
+  desktop/               # piki-desktop — Tauri v2 desktop GUI (depends on piki-core)
+    src/
+      main.rs            # Tauri entry point, setup, command registration
+      state.rs           # DesktopApp, DesktopWorkspace, DesktopTab state structs
+      pty_raw.rs         # RawPtySession — raw PTY bytes streamed via Tauri events (base64)
+      events.rs          # Tauri event emission (sysinfo, git refresh, toast)
+      log_buffer.rs      # In-memory tracing ring buffer (500 entries) for log viewer
+      commands/
+        workspace.rs     # Workspace CRUD IPC commands
+        pty.rs           # PTY spawn/write/resize/close
+        git.rs           # Git stage/unstage/commit/push/merge/resolve
+        diff.rs          # Side-by-side diff generation
+        gitlog.rs        # Git log history
+        stash.rs         # Git stash operations
+        agents.rs        # Agent profiles CRUD + dispatch
+        review.rs        # PR info + code review via gh CLI
+        theme.rs         # Theme get/set via SQLite preferences
+        logs.rs          # Application log retrieval + clear
+        search.rs        # Fuzzy file list
+        markdown.rs      # Markdown file reading
+        system.rs        # System info
+    frontend/            # Vanilla TypeScript + xterm.js (Vite build)
+      src/
+        main.ts          # App init, global keyboard shortcuts
+        state.ts         # AppState (EventTarget-based singleton)
+        ipc.ts           # Tauri IPC command wrappers
+        types.ts         # TypeScript type definitions
+        theme.ts         # ThemeEngine — 5 presets, CSS variable application, xterm sync
+        components/      # UI components (activity-bar, sidebar, tab-bar, terminal-panel, etc.)
+        styles/          # CSS modules (variables.css, layout.css, dialog.css, theme-dialog.css, etc.)
   api-client/            # piki-api-client — HTTP/API client (independent, no TUI/core deps)
     src/
       lib.rs             # Public re-exports

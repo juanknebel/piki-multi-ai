@@ -30,7 +30,8 @@ while getopts "d:h" opt; do
 done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DESKTOP_DIR="$SCRIPT_DIR/crates/desktop"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+DESKTOP_DIR="$PROJECT_ROOT/crates/desktop"
 FRONTEND_DIR="$DESKTOP_DIR/frontend"
 ICONS_SRC="$DESKTOP_DIR/icons"
 
@@ -46,7 +47,7 @@ cargo tauri build 2>&1 | tail -5
 
 # Step 3: Install binary
 mkdir -p "$DEST_DIR"
-cp "$SCRIPT_DIR/target/release/$BINARY_NAME" "$DEST_DIR/$BINARY_NAME"
+cp "$PROJECT_ROOT/target/release/$BINARY_NAME" "$DEST_DIR/$BINARY_NAME"
 chmod +x "$DEST_DIR/$BINARY_NAME"
 echo "Installed binary to $DEST_DIR/$BINARY_NAME"
 
