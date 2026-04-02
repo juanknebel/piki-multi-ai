@@ -1,6 +1,7 @@
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
+import { SearchAddon } from "@xterm/addon-search";
 import { appState } from "../state";
 import * as ipc from "../ipc";
 
@@ -8,6 +9,7 @@ interface TerminalInstance {
   tabId: string;
   terminal: Terminal;
   fitAddon: FitAddon;
+  searchAddon: SearchAddon;
   element: HTMLDivElement;
   opened: boolean;
 }
@@ -103,6 +105,9 @@ export function createTerminal(tabId: string): TerminalInstance {
   const fitAddon = new FitAddon();
   terminal.loadAddon(fitAddon);
 
+  const searchAddon = new SearchAddon();
+  terminal.loadAddon(searchAddon);
+
   mainContent.appendChild(element);
   // NOTE: terminal.open() is NOT called here — deferred until visible
 
@@ -117,6 +122,7 @@ export function createTerminal(tabId: string): TerminalInstance {
   const instance: TerminalInstance = {
     tabId,
     terminal,
+    searchAddon,
     fitAddon,
     element,
     opened: false,
@@ -206,4 +212,63 @@ export function destroyTerminal(tabId: string) {
   instance.terminal.dispose();
   instance.element.remove();
   terminals.delete(tabId);
+}
+
+/** Open a search bar for the active terminal */
+export function openTerminalSearch() {
+  const ws = appState.activeWs;
+  if (!ws || ws.tabs.length === 0) return;
+  const tab = ws.tabs[ws.activeTab];
+  if (!tab) return;
+  const instance = terminals.get(tab.id);
+  if (!instance || !instance.opened) return;
+
+  // Remove existing search bar
+  instance.element.querySelector(".term-search-bar")?.remove();
+
+  const bar = document.createElement("div");
+  bar.className = "term-search-bar";
+  bar.innerHTML = `
+    <input class="term-search-input" type="text" placeholder="Search..." autofocus />
+    <button class="term-search-btn" id="ts-prev" title="Previous">↑</button>
+    <button class="term-search-btn" id="ts-next" title="Next">↓</button>
+    <button class="term-search-btn" id="ts-close" title="Close">×</button>
+  `;
+  instance.element.prepend(bar);
+
+  const input = bar.querySelector<HTMLInputElement>(".term-search-input")!;
+
+  input.addEventListener("input", () => {
+    instance.searchAddon.findNext(input.value, { regex: false, caseSensitive: false });
+  });
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (e.shiftKey) {
+        instance.searchAddon.findPrevious(input.value);
+      } else {
+        instance.searchAddon.findNext(input.value);
+      }
+    }
+    if (e.key === "Escape") {
+      bar.remove();
+      instance.searchAddon.clearDecorations();
+      instance.terminal.focus();
+    }
+  });
+
+  bar.querySelector("#ts-next")!.addEventListener("click", () => {
+    instance.searchAddon.findNext(input.value);
+  });
+  bar.querySelector("#ts-prev")!.addEventListener("click", () => {
+    instance.searchAddon.findPrevious(input.value);
+  });
+  bar.querySelector("#ts-close")!.addEventListener("click", () => {
+    bar.remove();
+    instance.searchAddon.clearDecorations();
+    instance.terminal.focus();
+  });
+
+  input.focus();
 }

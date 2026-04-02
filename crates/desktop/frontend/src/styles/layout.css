@@ -1,10 +1,10 @@
 #app {
   display: grid;
-  grid-template-columns: var(--activity-bar-width) var(--sidebar-width) 1fr;
+  grid-template-columns: var(--activity-bar-width) var(--sidebar-width) 4px 1fr;
   grid-template-rows: 1fr var(--statusbar-height);
   grid-template-areas:
-    "activity sidebar editor"
-    "status   status  status";
+    "activity sidebar resize editor"
+    "status   status  status status";
   height: 100vh;
   width: 100vw;
   background: var(--bg-primary);
@@ -33,6 +33,18 @@
 #workspace-list {
   flex: 1;
   overflow-y: auto;
+}
+
+#sidebar-resize-v {
+  grid-area: resize;
+  cursor: ew-resize;
+  background: var(--border-primary);
+  transition: background 0.1s;
+}
+
+#sidebar-resize-v:hover,
+#sidebar-resize-v.dragging {
+  background: var(--accent-primary);
 }
 
 #editor-area {

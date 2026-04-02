@@ -1,0 +1,84 @@
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+  padding: 12px;
+  overflow-y: auto;
+  max-height: 65vh;
+}
+
+.dash-card {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: border-color 0.1s, background 0.1s;
+}
+
+.dash-card:hover {
+  border-color: var(--accent-primary);
+  background: var(--bg-hover);
+}
+
+.dash-card.dash-active {
+  border-color: var(--accent-primary);
+  border-left: 3px solid var(--accent-primary);
+}
+
+.dash-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.dash-card-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-bright);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dash-card-status {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.dash-card-status.idle { color: var(--text-muted); }
+.dash-card-status.busy { color: var(--accent-primary); }
+.dash-card-status.done { color: var(--git-added); }
+.dash-card-status.error { color: var(--git-deleted); }
+
+.dash-card-branch {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-family: "JetBrainsMono NF Mono", monospace;
+  margin-bottom: 4px;
+}
+
+.dash-card-group {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.dash-card-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.dash-card-desc {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -5,7 +5,7 @@ import { toast } from "./components/toast";
 import { renderActivityBar } from "./components/activity-bar";
 import { initSidebar } from "./components/sidebar";
 import { renderTabBar } from "./components/tab-bar";
-import { initTerminalPanel } from "./components/terminal-panel";
+import { initTerminalPanel, openTerminalSearch } from "./components/terminal-panel";
 import { renderStatusBar } from "./components/status-bar";
 import { initToasts } from "./components/toast";
 import { openCommandPalette } from "./components/command-palette";
@@ -18,6 +18,9 @@ import { showStashDialog } from "./components/dialogs/stash-dialog";
 import { showCodeReview } from "./components/code-review";
 import { showAgentManager } from "./components/dialogs/agent-dialog";
 import { showDispatchDialog } from "./components/dialogs/dispatch-dialog";
+import { showHelpDialog } from "./components/dialogs/help-dialog";
+import { showDashboard } from "./components/dialogs/dashboard-dialog";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 async function init() {
   renderActivityBar(document.getElementById("activity-bar")!);
@@ -45,7 +48,32 @@ async function init() {
     appState.setSysinfo(formatted);
   });
 
+  // Confirm quit when PTYs are active
+  const win = getCurrentWindow();
+  win.onCloseRequested(async (event) => {
+    let activeCount = 0;
+    for (const ws of appState.workspaces) {
+      for (const tab of ws.tabs) {
+        if (tab.alive) activeCount++;
+      }
+    }
+    if (activeCount > 0) {
+      const ok = confirm(
+        `${activeCount} terminal session${activeCount > 1 ? "s are" : " is"} still running. Close anyway?`,
+      );
+      if (!ok) {
+        event.preventDefault();
+      }
+    }
+  });
+
+  // Global keyboard shortcuts
   document.addEventListener("keydown", (e) => {
+    const inTerminal = !!document.activeElement?.closest(".xterm");
+    const inInput =
+      document.activeElement?.tagName === "INPUT" ||
+      document.activeElement?.tagName === "TEXTAREA";
+
     // Ctrl+P: Command palette
     if (e.ctrlKey && (e.key === "p" || e.key === "P")) {
       e.preventDefault();
@@ -71,9 +99,15 @@ async function init() {
       return;
     }
     // Ctrl+F: Fuzzy file search
-    if (e.ctrlKey && e.key === "f") {
+    if (e.ctrlKey && !e.shiftKey && e.key === "f") {
       e.preventDefault();
       openFuzzySearch();
+      return;
+    }
+    // Ctrl+Shift+F: Terminal search
+    if (e.ctrlKey && e.shiftKey && e.key === "F") {
+      e.preventDefault();
+      openTerminalSearch();
       return;
     }
     // Ctrl+L: Git log
@@ -82,10 +116,22 @@ async function init() {
       showGitLog();
       return;
     }
+    // Ctrl+Shift+W: Dashboard
+    if (e.ctrlKey && e.shiftKey && e.key === "W") {
+      e.preventDefault();
+      showDashboard();
+      return;
+    }
     // Ctrl+Shift+S: Git stash
     if (e.ctrlKey && e.shiftKey && e.key === "S") {
       e.preventDefault();
       showStashDialog();
+      return;
+    }
+    // Ctrl+Shift+R: Code review
+    if (e.ctrlKey && e.shiftKey && e.key === "R") {
+      e.preventDefault();
+      showCodeReview();
       return;
     }
     // Ctrl+Shift+A: Agent management
@@ -100,20 +146,16 @@ async function init() {
       showDispatchDialog();
       return;
     }
-    // Ctrl+Shift+R: Code review
-    if (e.ctrlKey && e.shiftKey && e.key === "R") {
-      e.preventDefault();
-      showCodeReview();
-      return;
-    }
-    // Ctrl+Z: Undo stage/unstage
-    if (e.ctrlKey && e.key === "z" && !e.shiftKey) {
-      // Only intercept when not focused on a terminal/input
-      const active = document.activeElement;
-      if (active?.tagName === "TEXTAREA" || active?.tagName === "INPUT") return;
-      if (active?.closest(".xterm")) return;
+    // Ctrl+Z: Undo stage/unstage (not in terminal/input)
+    if (e.ctrlKey && e.key === "z" && !e.shiftKey && !inTerminal && !inInput) {
       e.preventDefault();
       handleUndo();
+      return;
+    }
+    // ?: Help (not in terminal/input)
+    if (e.key === "?" && !inTerminal && !inInput) {
+      e.preventDefault();
+      showHelpDialog();
       return;
     }
     // Ctrl+Tab / Ctrl+Shift+Tab: switch tabs
@@ -134,7 +176,6 @@ async function handleUndo() {
     toast("Nothing to undo", "info");
     return;
   }
-
   const wsIdx = appState.activeWorkspace;
   try {
     for (const file of entry.files) {

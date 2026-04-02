@@ -22,6 +22,53 @@
   border-radius: 4px;
 }
 
+/* Terminal search bar */
+.term-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-primary);
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 10;
+  border-radius: 0 0 0 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.term-search-input {
+  padding: 3px 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-primary);
+  border-radius: 3px;
+  color: var(--text-primary);
+  font-size: 12px;
+  width: 180px;
+}
+
+.term-search-input:focus {
+  border-color: var(--accent-primary);
+  outline: none;
+}
+
+.term-search-btn {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.term-search-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-bright);
+}
+
 .terminal-welcome {
   display: flex;
   flex-direction: column;

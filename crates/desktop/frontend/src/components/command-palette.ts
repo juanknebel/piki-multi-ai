@@ -10,6 +10,9 @@ import { openFuzzySearch } from "./fuzzy-search";
 import { openWorkspaceSwitcher } from "./workspace-switcher";
 import { showAgentManager } from "./dialogs/agent-dialog";
 import { showDispatchDialog } from "./dialogs/dispatch-dialog";
+import { showHelpDialog } from "./dialogs/help-dialog";
+import { showDashboard } from "./dialogs/dashboard-dialog";
+import { openTerminalSearch } from "./terminal-panel";
 import { PROVIDER_LABELS, type AIProvider } from "../types";
 
 interface Command {
@@ -354,6 +357,33 @@ function buildCommands(): Command[] {
     label: "Show Source Control",
     category: "View",
     action: () => appState.setActiveView("git"),
+  });
+  cmds.push({
+    id: "view-agents",
+    label: "Show Agents",
+    category: "View",
+    action: () => appState.setActiveView("agents"),
+  });
+  cmds.push({
+    id: "view-dashboard",
+    label: "Dashboard",
+    category: "View",
+    keybinding: "Ctrl+Shift+W",
+    action: () => showDashboard(),
+  });
+  cmds.push({
+    id: "view-help",
+    label: "Keyboard Shortcuts",
+    category: "Help",
+    keybinding: "?",
+    action: () => showHelpDialog(),
+  });
+  cmds.push({
+    id: "terminal-search",
+    label: "Search in Terminal",
+    category: "Search",
+    keybinding: "Ctrl+Shift+F",
+    action: () => openTerminalSearch(),
   });
 
   return cmds;

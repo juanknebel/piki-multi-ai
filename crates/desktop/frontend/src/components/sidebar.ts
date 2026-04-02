@@ -22,4 +22,36 @@ export function initSidebar() {
 
   appState.on("view-changed", updateView);
   updateView();
+
+  // Vertical sidebar resize
+  const handle = document.getElementById("sidebar-resize-v")!;
+  const root = document.documentElement;
+  let dragging = false;
+  let startX = 0;
+  let startWidth = 0;
+
+  handle.addEventListener("mousedown", (e) => {
+    dragging = true;
+    startX = e.clientX;
+    startWidth = document.getElementById("sidebar")!.offsetWidth;
+    handle.classList.add("dragging");
+    document.body.style.cursor = "ew-resize";
+    document.body.style.userSelect = "none";
+    e.preventDefault();
+  });
+
+  document.addEventListener("mousemove", (e) => {
+    if (!dragging) return;
+    const delta = e.clientX - startX;
+    const newWidth = Math.max(150, Math.min(window.innerWidth * 0.5, startWidth + delta));
+    root.style.setProperty("--sidebar-width", `${newWidth}px`);
+  });
+
+  document.addEventListener("mouseup", () => {
+    if (!dragging) return;
+    dragging = false;
+    handle.classList.remove("dragging");
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+  });
 }
