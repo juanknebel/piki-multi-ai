@@ -1,7 +1,9 @@
 pub mod diff;
 pub mod git;
 pub mod gitlog;
+pub mod markdown;
 pub mod pty;
+pub mod review;
 pub mod search;
 pub mod stash;
 pub mod system;

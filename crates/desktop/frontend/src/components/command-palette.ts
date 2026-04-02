@@ -5,6 +5,7 @@ import { showWorkspaceDialog, showWorkspaceInfo } from "./dialogs/workspace-dial
 import { showMergeDialog } from "./dialogs/merge-dialog";
 import { showGitLog } from "./dialogs/gitlog-dialog";
 import { showStashDialog } from "./dialogs/stash-dialog";
+import { showCodeReview } from "./code-review";
 import { openFuzzySearch } from "./fuzzy-search";
 import { openWorkspaceSwitcher } from "./workspace-switcher";
 import { PROVIDER_LABELS, type AIProvider } from "../types";
@@ -291,6 +292,17 @@ function buildCommands(): Command[] {
       category: "Git",
       keybinding: "Ctrl+Shift+S",
       action: () => showStashDialog(),
+    });
+  }
+
+  // Code review
+  if (ws) {
+    cmds.push({
+      id: "code-review",
+      label: "Code Review (PR)",
+      category: "Review",
+      keybinding: "Ctrl+Shift+R",
+      action: () => showCodeReview(),
     });
   }
 

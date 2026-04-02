@@ -1,6 +1,7 @@
 import "@xterm/xterm/css/xterm.css";
 import { appState } from "./state";
 import * as ipc from "./ipc";
+import { toast } from "./components/toast";
 import { renderActivityBar } from "./components/activity-bar";
 import { initSidebar } from "./components/sidebar";
 import { renderTabBar } from "./components/tab-bar";
@@ -14,6 +15,7 @@ import { showMergeDialog } from "./components/dialogs/merge-dialog";
 import { openFuzzySearch } from "./components/fuzzy-search";
 import { showGitLog } from "./components/dialogs/gitlog-dialog";
 import { showStashDialog } from "./components/dialogs/stash-dialog";
+import { showCodeReview } from "./components/code-review";
 
 async function init() {
   renderActivityBar(document.getElementById("activity-bar")!);
@@ -41,7 +43,6 @@ async function init() {
     appState.setSysinfo(formatted);
   });
 
-  // Global keyboard shortcuts
   document.addEventListener("keydown", (e) => {
     // Ctrl+P: Command palette
     if (e.ctrlKey && (e.key === "p" || e.key === "P")) {
@@ -79,10 +80,26 @@ async function init() {
       showGitLog();
       return;
     }
-    // Ctrl+S: Git stash (only when not in terminal)
+    // Ctrl+Shift+S: Git stash
     if (e.ctrlKey && e.shiftKey && e.key === "S") {
       e.preventDefault();
       showStashDialog();
+      return;
+    }
+    // Ctrl+Shift+R: Code review
+    if (e.ctrlKey && e.shiftKey && e.key === "R") {
+      e.preventDefault();
+      showCodeReview();
+      return;
+    }
+    // Ctrl+Z: Undo stage/unstage
+    if (e.ctrlKey && e.key === "z" && !e.shiftKey) {
+      // Only intercept when not focused on a terminal/input
+      const active = document.activeElement;
+      if (active?.tagName === "TEXTAREA" || active?.tagName === "INPUT") return;
+      if (active?.closest(".xterm")) return;
+      e.preventDefault();
+      handleUndo();
       return;
     }
     // Ctrl+Tab / Ctrl+Shift+Tab: switch tabs
@@ -95,6 +112,30 @@ async function init() {
       appState.setActiveTab(next);
     }
   });
+}
+
+async function handleUndo() {
+  const entry = appState.popUndo();
+  if (!entry) {
+    toast("Nothing to undo", "info");
+    return;
+  }
+
+  const wsIdx = appState.activeWorkspace;
+  try {
+    for (const file of entry.files) {
+      if (entry.action === "stage") {
+        await ipc.gitUnstage(wsIdx, file);
+      } else {
+        await ipc.gitStage(wsIdx, file);
+      }
+    }
+    const files = await ipc.getChangedFiles(wsIdx);
+    appState.updateFiles(wsIdx, files, appState.activeWs?.aheadBehind ?? null);
+    toast(`Undid ${entry.action} of ${entry.files.length} file(s)`, "info");
+  } catch (err) {
+    toast(`Undo failed: ${err}`, "error");
+  }
 }
 
 document.addEventListener("DOMContentLoaded", init);

@@ -132,6 +132,10 @@ fn main() {
             commands::stash::git_stash_apply,
             commands::stash::git_stash_drop,
             commands::search::fuzzy_file_list,
+            commands::review::get_pr_info,
+            commands::review::get_pr_file_diff,
+            commands::review::submit_pr_review,
+            commands::markdown::read_markdown_file,
             commands::system::get_sysinfo,
         ])
         .run(tauri::generate_context!())

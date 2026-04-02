@@ -116,7 +116,9 @@ export function renderSourceControl(container: HTMLElement) {
       },
       "unstage",
       async () => {
+        const paths = staged.map(f => f.path);
         await ipc.gitUnstageAll(appState.activeWorkspace);
+        appState.pushUndo({ action: "unstage", files: paths });
         await refreshFiles();
       },
     );
@@ -133,7 +135,9 @@ export function renderSourceControl(container: HTMLElement) {
       },
       "stage",
       async () => {
+        const paths = unstaged.map(f => f.path);
         await ipc.gitStageAll(appState.activeWorkspace);
+        appState.pushUndo({ action: "stage", files: paths });
         await refreshFiles();
       },
     );
@@ -249,8 +253,10 @@ function renderSection(
             const wsIdx = appState.activeWorkspace;
             if (action === "stage") {
               await ipc.gitStage(wsIdx, file.path);
+              appState.pushUndo({ action: "stage", files: [file.path] });
             } else {
               await ipc.gitUnstage(wsIdx, file.path);
+              appState.pushUndo({ action: "unstage", files: [file.path] });
             }
             await refreshFiles();
           } catch (err) {

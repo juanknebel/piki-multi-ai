@@ -8,6 +8,13 @@ import type {
 
 export type SidebarView = "explorer" | "git";
 
+export interface UndoEntry {
+  action: "stage" | "unstage";
+  files: string[];
+}
+
+const MAX_UNDO = 20;
+
 export type StateEvent =
   | "workspaces-changed"
   | "active-workspace-changed"
@@ -31,6 +38,8 @@ class AppState extends EventTarget {
   private _activeWorkspace = 0;
   private _sysinfo = "";
   private _activeView: SidebarView = "explorer";
+  private _selectedFiles = new Set<string>();
+  private _undoStack: UndoEntry[] = [];
 
   get workspaces(): readonly WorkspaceState[] {
     return this._workspaces;
@@ -57,6 +66,23 @@ class AppState extends EventTarget {
     this._activeView = view;
     this.emit("view-changed");
   }
+
+  get selectedFiles(): ReadonlySet<string> { return this._selectedFiles; }
+
+  toggleFileSelection(path: string) {
+    if (this._selectedFiles.has(path)) this._selectedFiles.delete(path);
+    else this._selectedFiles.add(path);
+    this.emit("files-changed");
+  }
+
+  clearSelection() { this._selectedFiles.clear(); }
+
+  pushUndo(entry: UndoEntry) {
+    this._undoStack.push(entry);
+    if (this._undoStack.length > MAX_UNDO) this._undoStack.shift();
+  }
+
+  popUndo(): UndoEntry | undefined { return this._undoStack.pop(); }
 
   setWorkspaces(infos: WorkspaceInfo[]) {
     this._workspaces = infos.map((info) => ({

@@ -269,6 +269,58 @@ export function fuzzyFileList(workspaceIdx: number): Promise<string[]> {
   return invoke("fuzzy_file_list", { workspaceIdx });
 }
 
+// Code Review commands
+export interface PrInfo {
+  number: number;
+  title: string;
+  body: string;
+  state: string;
+  review_decision: string | null;
+  url: string;
+  head_ref_name: string;
+  base_ref_name: string;
+  additions: number;
+  deletions: number;
+}
+
+export interface PrFile {
+  path: string;
+  additions: number;
+  deletions: number;
+}
+
+export interface PrDetail {
+  info: PrInfo;
+  files: PrFile[];
+}
+
+export function getPrInfo(workspaceIdx: number): Promise<PrDetail | null> {
+  return invoke("get_pr_info", { workspaceIdx });
+}
+
+export function getPrFileDiff(
+  workspaceIdx: number,
+  file: string,
+  baseRef: string,
+): Promise<{ path: string; lines: { line_type: string; content: string; old_line: number | null; new_line: number | null }[] }> {
+  return invoke("get_pr_file_diff", { workspaceIdx, file, baseRef });
+}
+
+export function submitPrReview(
+  workspaceIdx: number,
+  prNumber: number,
+  verdict: string,
+  body: string,
+  comments: { path: string; line: number; side: string; body: string }[],
+): Promise<string> {
+  return invoke("submit_pr_review", { workspaceIdx, prNumber, verdict, body, comments });
+}
+
+// Markdown commands
+export function readMarkdownFile(workspaceIdx: number, filePath: string): Promise<string> {
+  return invoke("read_markdown_file", { workspaceIdx, filePath });
+}
+
 // System commands
 export function getSysinfo(): Promise<string> {
   return invoke("get_sysinfo");

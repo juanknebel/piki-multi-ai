@@ -1,7 +1,7 @@
 /* ── Diff overlay container ──────────────────────────── */
 .diff-viewer {
   width: 90vw;
-  max-height: 88vh;
+  height: 88vh;
   background: var(--bg-primary);
   border: 1px solid var(--dialog-border);
   border-radius: 6px;
@@ -31,6 +31,7 @@
 .diff-content {
   flex: 1;
   overflow: hidden;
+  min-height: 0;
 }
 
 /* ── DiffPanel root ─────────────────────────────────── */
@@ -90,6 +91,7 @@
 .dp-scroll {
   flex: 1;
   overflow: auto;
+  min-height: 0;
 }
 
 /* ── Side-by-side rows ──────────────────────────────── */

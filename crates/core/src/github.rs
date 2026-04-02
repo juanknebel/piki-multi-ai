@@ -1,9 +1,9 @@
 use std::path::Path;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// PR metadata from `gh pr view --json ...`
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PrInfo {
     pub number: u64,
@@ -21,7 +21,7 @@ pub struct PrInfo {
 }
 
 /// A file changed in the PR
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PrFile {
     pub path: String,
     pub additions: u64,
