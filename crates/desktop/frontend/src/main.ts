@@ -16,6 +16,8 @@ import { openFuzzySearch } from "./components/fuzzy-search";
 import { showGitLog } from "./components/dialogs/gitlog-dialog";
 import { showStashDialog } from "./components/dialogs/stash-dialog";
 import { showCodeReview } from "./components/code-review";
+import { showAgentManager } from "./components/dialogs/agent-dialog";
+import { showDispatchDialog } from "./components/dialogs/dispatch-dialog";
 
 async function init() {
   renderActivityBar(document.getElementById("activity-bar")!);
@@ -84,6 +86,18 @@ async function init() {
     if (e.ctrlKey && e.shiftKey && e.key === "S") {
       e.preventDefault();
       showStashDialog();
+      return;
+    }
+    // Ctrl+Shift+A: Agent management
+    if (e.ctrlKey && e.shiftKey && e.key === "A") {
+      e.preventDefault();
+      showAgentManager();
+      return;
+    }
+    // Ctrl+Shift+D: Dispatch agent
+    if (e.ctrlKey && e.shiftKey && e.key === "D") {
+      e.preventDefault();
+      showDispatchDialog();
       return;
     }
     // Ctrl+Shift+R: Code review

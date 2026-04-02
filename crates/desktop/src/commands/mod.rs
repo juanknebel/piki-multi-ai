@@ -1,3 +1,4 @@
+pub mod agents;
 pub mod diff;
 pub mod git;
 pub mod gitlog;

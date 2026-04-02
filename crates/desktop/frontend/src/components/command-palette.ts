@@ -8,6 +8,8 @@ import { showStashDialog } from "./dialogs/stash-dialog";
 import { showCodeReview } from "./code-review";
 import { openFuzzySearch } from "./fuzzy-search";
 import { openWorkspaceSwitcher } from "./workspace-switcher";
+import { showAgentManager } from "./dialogs/agent-dialog";
+import { showDispatchDialog } from "./dialogs/dispatch-dialog";
 import { PROVIDER_LABELS, type AIProvider } from "../types";
 
 interface Command {
@@ -303,6 +305,24 @@ function buildCommands(): Command[] {
       category: "Review",
       keybinding: "Ctrl+Shift+R",
       action: () => showCodeReview(),
+    });
+  }
+
+  // Agent commands
+  cmds.push({
+    id: "agent-manage",
+    label: "Manage Agents",
+    category: "Agents",
+    keybinding: "Ctrl+Shift+A",
+    action: () => showAgentManager(),
+  });
+  if (ws) {
+    cmds.push({
+      id: "agent-dispatch",
+      label: "Dispatch Agent",
+      category: "Agents",
+      keybinding: "Ctrl+Shift+D",
+      action: () => showDispatchDialog(),
     });
   }
 

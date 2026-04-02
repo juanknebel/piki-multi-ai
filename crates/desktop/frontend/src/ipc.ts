@@ -321,6 +321,62 @@ export function readMarkdownFile(workspaceIdx: number, filePath: string): Promis
   return invoke("read_markdown_file", { workspaceIdx, filePath });
 }
 
+// Agent commands
+export interface AgentInfo {
+  id: number | null;
+  name: string;
+  provider: string;
+  role: string;
+  version: number;
+  last_synced_at: string | null;
+}
+
+export interface ScannedAgent {
+  name: string;
+  provider: string;
+  role: string;
+  exists: boolean;
+}
+
+export function listAgents(workspaceIdx: number): Promise<AgentInfo[]> {
+  return invoke("list_agents", { workspaceIdx });
+}
+
+export function saveAgent(
+  workspaceIdx: number,
+  name: string,
+  provider: string,
+  role: string,
+  id?: number | null,
+): Promise<void> {
+  return invoke("save_agent", { workspaceIdx, name, provider, role, id });
+}
+
+export function deleteAgent(agentId: number): Promise<void> {
+  return invoke("delete_agent", { agentId });
+}
+
+export function scanRepoAgents(workspaceIdx: number): Promise<ScannedAgent[]> {
+  return invoke("scan_repo_agents", { workspaceIdx });
+}
+
+export function importAgents(
+  workspaceIdx: number,
+  agents: { name: string; provider: string; role: string }[],
+): Promise<number> {
+  return invoke("import_agents", { workspaceIdx, agents });
+}
+
+export function dispatchAgent(
+  workspaceIdx: number,
+  provider: string,
+  prompt: string,
+  createWorktree: boolean,
+  wsName?: string,
+): Promise<string> {
+  return invoke("dispatch_agent", { workspaceIdx, provider, prompt, createWorktree, wsName });
+}
+
 // System commands
 export function getSysinfo(): Promise<string> {
   return invoke("get_sysinfo");

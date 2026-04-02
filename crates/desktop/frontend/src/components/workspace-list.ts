@@ -5,6 +5,7 @@ import {
   showWorkspaceDialog,
   showWorkspaceInfo,
 } from "./dialogs/workspace-dialog";
+import { showAgentManager } from "./dialogs/agent-dialog";
 import type { WorkspaceInfo } from "../types";
 
 export function renderWorkspaceList(container: HTMLElement) {
@@ -76,6 +77,7 @@ export function renderWorkspaceList(container: HTMLElement) {
           ${idx === activeIdx ? '<span class="workspace-active-marker"></span>' : ""}
           <span class="workspace-name">${escapeHtml(info.name)}</span>
           <span class="workspace-actions">
+            <button class="ws-action-btn" data-action="agents" title="Manage Agents">⚙</button>
             <button class="ws-action-btn" data-action="info" title="Info">i</button>
             <button class="ws-action-btn" data-action="edit" title="Edit">✎</button>
             <button class="ws-action-btn" data-action="clone" title="Clone">⧉</button>
@@ -100,7 +102,9 @@ export function renderWorkspaceList(container: HTMLElement) {
           btn.addEventListener("click", (e) => {
             e.stopPropagation();
             const action = btn.dataset.action;
-            if (action === "info") {
+            if (action === "agents") {
+              showAgentManager();
+            } else if (action === "info") {
               showWorkspaceInfo(idx);
             } else if (action === "edit") {
               showWorkspaceDialog({ mode: "edit", editIndex: idx });

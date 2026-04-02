@@ -280,6 +280,57 @@
   margin-top: 12px;
 }
 
+/* Agent panel items */
+.agent-panel-item {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-primary);
+  position: relative;
+}
+
+.agent-panel-item:hover {
+  background: var(--sidebar-item-hover);
+}
+
+.agent-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.agent-panel-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-bright);
+}
+
+.agent-panel-provider {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.agent-panel-role {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  max-height: 40px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre-wrap;
+}
+
+.agent-panel-actions {
+  display: none;
+  gap: 2px;
+  position: absolute;
+  top: 6px;
+  right: 8px;
+}
+
+.agent-panel-item:hover .agent-panel-actions {
+  display: flex;
+}
+
 .empty-message {
   padding: 12px 20px;
   color: var(--text-muted);
