@@ -24,6 +24,9 @@ use piki_core::workspace::watcher::FileWatcher;
 use state::{DesktopApp, DesktopWorkspace};
 
 fn main() {
+    // Parse --data-dir flag before Tauri takes over args
+    let data_dir = parse_data_dir();
+
     // Initialize tracing with in-memory log buffer + stderr output
     let log_buf = log_buffer::new_buffer();
     let memory_layer = log_buffer::MemoryLayer::new(Arc::clone(&log_buf));
@@ -41,11 +44,14 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(log_buf)
-        .setup(|app| {
+        .setup(move |app| {
             let app_handle = app.handle().clone();
 
             // Initialize paths and storage
-            let paths = DataPaths::default_paths();
+            let paths = match data_dir {
+                Some(ref dir) => DataPaths::new(dir.into()),
+                None => DataPaths::default_paths(),
+            };
             let storage = create_storage(&paths).expect("Failed to initialize storage");
             let storage = Arc::new(storage);
             let manager = WorkspaceManager::with_paths(paths.clone());
@@ -159,4 +165,18 @@ fn main() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running piki-desktop");
+}
+
+/// Parse `--data-dir <PATH>` from CLI args (before Tauri consumes them).
+fn parse_data_dir() -> Option<String> {
+    let args: Vec<String> = std::env::args().collect();
+    for (i, arg) in args.iter().enumerate() {
+        if arg == "--data-dir" {
+            return args.get(i + 1).cloned();
+        }
+        if let Some(val) = arg.strip_prefix("--data-dir=") {
+            return Some(val.to_string());
+        }
+    }
+    None
 }
