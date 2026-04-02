@@ -127,6 +127,7 @@ export function showWorkspaceDialog(opts: DialogOptions) {
   backdrop.addEventListener("keydown", (e) => {
     if (e.key === "Escape") close();
   });
+  backdrop.setAttribute("tabindex", "0");
 
   // Submit
   backdrop.querySelector("#ws-submit")!.addEventListener("click", async () => {
@@ -258,6 +259,8 @@ export function showWorkspaceInfo(index: number) {
   backdrop.addEventListener("keydown", (e) => {
     if (e.key === "Escape") close();
   });
+  backdrop.setAttribute("tabindex", "0");
+  backdrop.focus();
 }
 
 function infoRow(label: string, value: string): string {

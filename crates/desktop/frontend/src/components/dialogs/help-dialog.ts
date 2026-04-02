@@ -29,6 +29,8 @@ const SHORTCUTS: { category: string; items: [string, string][] }[] = [
       ["Ctrl+Shift+R", "Code Review (PR)"],
       ["Ctrl+Shift+A", "Manage Agents"],
       ["Ctrl+Shift+D", "Dispatch Agent"],
+      ["Alt+T", "Theme Settings"],
+      ["Alt+Shift+L", "Application Logs"],
     ],
   },
 ];

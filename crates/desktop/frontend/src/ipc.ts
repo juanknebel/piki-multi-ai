@@ -377,6 +377,31 @@ export function dispatchAgent(
   return invoke("dispatch_agent", { workspaceIdx, provider, prompt, createWorktree, wsName });
 }
 
+// Log commands
+export interface LogEntry {
+  timestamp: string;
+  level: string;
+  target: string;
+  message: string;
+}
+
+export function getLogs(levelFilter?: number): Promise<LogEntry[]> {
+  return invoke("get_logs", { levelFilter: levelFilter ?? null });
+}
+
+export function clearLogs(): Promise<void> {
+  return invoke("clear_logs");
+}
+
+// Theme commands
+export function getTheme(): Promise<[string | null, string | null]> {
+  return invoke("get_theme");
+}
+
+export function setTheme(preset: string, overrides: string): Promise<void> {
+  return invoke("set_theme", { preset, overrides });
+}
+
 // System commands
 export function getSysinfo(): Promise<string> {
   return invoke("get_sysinfo");

@@ -162,6 +162,8 @@ function showEditForm(existing: AgentInfo | null, onSaved: () => void) {
   backdrop.querySelector(".dialog-close")!.addEventListener("click", close);
   backdrop.querySelector("#af-cancel")!.addEventListener("click", close);
   backdrop.addEventListener("click", (e) => { if (e.target === backdrop) close(); });
+  backdrop.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+  backdrop.setAttribute("tabindex", "0");
 
   backdrop.querySelector("#af-save")!.addEventListener("click", async () => {
     const name = (backdrop.querySelector("#af-name") as HTMLInputElement).value.trim();
@@ -265,7 +267,10 @@ async function handleImport(onDone: () => void) {
 
   backdrop.appendChild(dialog);
   backdrop.addEventListener("click", (e) => { if (e.target === backdrop) close(); });
+  backdrop.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+  backdrop.setAttribute("tabindex", "0");
   document.body.appendChild(backdrop);
+  backdrop.focus();
 }
 
 function showConfirmDialog(message: string, hint: string, onConfirm: () => void) {

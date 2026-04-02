@@ -107,9 +107,11 @@ export async function showAgentManager() {
   const close = () => backdrop.remove();
   backdrop.addEventListener("click", (e) => { if (e.target === backdrop) close(); });
   backdrop.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+  backdrop.setAttribute("tabindex", "0");
 
   document.body.appendChild(backdrop);
   render();
+  backdrop.focus();
 }
 
 function showAgentForm(existing: AgentInfo | null, onSaved: () => void) {

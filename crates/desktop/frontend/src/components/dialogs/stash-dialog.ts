@@ -126,8 +126,10 @@ export async function showStashDialog() {
     if (e.key === "Escape") close();
   });
 
+  backdrop.setAttribute("tabindex", "0");
   document.body.appendChild(backdrop);
   render();
+  backdrop.focus();
 }
 
 async function refreshFiles() {

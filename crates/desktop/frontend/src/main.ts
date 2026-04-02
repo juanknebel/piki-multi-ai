@@ -20,9 +20,15 @@ import { showAgentManager } from "./components/dialogs/agent-dialog";
 import { showDispatchDialog } from "./components/dialogs/dispatch-dialog";
 import { showHelpDialog } from "./components/dialogs/help-dialog";
 import { showDashboard } from "./components/dialogs/dashboard-dialog";
+import { showThemeDialog } from "./components/dialogs/theme-dialog";
+import { showLogsDialog } from "./components/dialogs/logs-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { themeEngine } from "./theme";
 
 async function init() {
+  // Load theme before rendering to avoid flash
+  await themeEngine.loadFromStorage();
+
   renderActivityBar(document.getElementById("activity-bar")!);
   initSidebar();
   renderTabBar(document.getElementById("tab-bar")!);
@@ -118,7 +124,7 @@ async function init() {
       return;
     }
     // Alt+L: Git log
-    if (e.altKey && !e.ctrlKey && e.key === "l") {
+    if (e.altKey && !e.ctrlKey && !e.shiftKey && (e.key === "l" || e.key === "L")) {
       e.preventDefault();
       showGitLog();
       return;
@@ -151,6 +157,18 @@ async function init() {
     if (e.ctrlKey && e.shiftKey && e.key === "D") {
       e.preventDefault();
       showDispatchDialog();
+      return;
+    }
+    // Alt+T: Theme settings
+    if (e.altKey && !e.ctrlKey && (e.key === "t" || e.key === "T") && !e.shiftKey) {
+      e.preventDefault();
+      showThemeDialog();
+      return;
+    }
+    // Alt+Shift+L: Application logs
+    if (e.altKey && e.shiftKey && (e.key === "L" || e.key === "l")) {
+      e.preventDefault();
+      showLogsDialog();
       return;
     }
     // Ctrl+Z: Undo stage/unstage (not in terminal/input)

@@ -43,6 +43,9 @@ export function showMergeDialog() {
   backdrop.addEventListener("click", (e) => {
     if (e.target === backdrop) close();
   });
+  backdrop.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+  backdrop.setAttribute("tabindex", "0");
+  backdrop.focus();
 
   const strategySelect = backdrop.querySelector<HTMLSelectElement>("#merge-strategy")!;
   const submitBtn = backdrop.querySelector<HTMLButtonElement>("#merge-submit")!;
@@ -208,9 +211,12 @@ function showConflictResolution(conflicts: string[]) {
   backdrop.addEventListener("click", (e) => {
     if (e.target === backdrop) closeDialog();
   });
+  backdrop.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDialog(); });
+  backdrop.setAttribute("tabindex", "0");
 
   document.body.appendChild(backdrop);
   render();
+  backdrop.focus();
 }
 
 function escapeHtml(text: string): string {

@@ -4,8 +4,9 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { SearchAddon } from "@xterm/addon-search";
 import { appState } from "../state";
 import * as ipc from "../ipc";
+import { themeEngine } from "../theme";
 
-interface TerminalInstance {
+export interface TerminalInstance {
   tabId: string;
   terminal: Terminal;
   fitAddon: FitAddon;
@@ -14,7 +15,7 @@ interface TerminalInstance {
   opened: boolean;
 }
 
-const terminals = new Map<string, TerminalInstance>();
+export const terminals = new Map<string, TerminalInstance>();
 let mainContent: HTMLElement;
 
 /**
@@ -75,30 +76,7 @@ export function createTerminal(tabId: string): TerminalInstance {
     fontFamily: '"JetBrainsMono NF Mono", monospace',
     fontSize: 14,
     lineHeight: 1.25,
-    theme: {
-      background: "#0b0f14",
-      foreground: "#adbac7",
-      cursor: "#39bae6",
-      cursorAccent: "#0b0f14",
-      selectionBackground: "rgba(57, 186, 230, 0.18)",
-      selectionForeground: "#e6edf3",
-      black: "#0b0f14",
-      red: "#f85149",
-      green: "#3fb950",
-      yellow: "#d4a12e",
-      blue: "#39bae6",
-      magenta: "#bc8cff",
-      cyan: "#39bae6",
-      white: "#adbac7",
-      brightBlack: "#4d5566",
-      brightRed: "#ff7b72",
-      brightGreen: "#56d364",
-      brightYellow: "#e3b341",
-      brightBlue: "#5cc8f0",
-      brightMagenta: "#d2a8ff",
-      brightCyan: "#5cc8f0",
-      brightWhite: "#e6edf3",
-    },
+    theme: themeEngine.buildXtermTheme(),
     cursorBlink: true,
     cursorStyle: "bar",
     scrollback: 5000,
@@ -113,6 +91,33 @@ export function createTerminal(tabId: string): TerminalInstance {
 
   mainContent.appendChild(element);
   // NOTE: terminal.open() is NOT called here — deferred until visible
+
+  // Copy on selection (auto-copy like most terminal emulators)
+  terminal.onSelectionChange(() => {
+    const sel = terminal.getSelection();
+    if (sel) {
+      navigator.clipboard.writeText(sel).catch(() => {});
+    }
+  });
+
+  // Ctrl+Shift+C = copy, Ctrl+Shift+V = paste
+  // These must be caught before xterm processes them
+  terminal.attachCustomKeyEventHandler((e) => {
+    if (e.ctrlKey && e.shiftKey && e.type === "keydown") {
+      if (e.key === "C") {
+        const sel = terminal.getSelection();
+        if (sel) navigator.clipboard.writeText(sel).catch(() => {});
+        return false; // prevent xterm from handling
+      }
+      if (e.key === "V") {
+        navigator.clipboard.readText().then((text) => {
+          if (text) terminal.paste(text);
+        }).catch(() => {});
+        return false;
+      }
+    }
+    return true; // let xterm handle all other keys
+  });
 
   // Send keystrokes to backend
   terminal.onData((data) => {

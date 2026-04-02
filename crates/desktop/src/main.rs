@@ -5,6 +5,7 @@
 
 mod commands;
 mod events;
+mod log_buffer;
 mod pty_raw;
 mod state;
 
@@ -12,6 +13,7 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 use tauri::Manager;
+use tracing_subscriber::prelude::*;
 
 use piki_core::WorkspaceStatus;
 use piki_core::paths::DataPaths;
@@ -22,16 +24,23 @@ use piki_core::workspace::watcher::FileWatcher;
 use state::{DesktopApp, DesktopWorkspace};
 
 fn main() {
-    // Initialize tracing
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-        )
+    // Initialize tracing with in-memory log buffer + stderr output
+    let log_buf = log_buffer::new_buffer();
+    let memory_layer = log_buffer::MemoryLayer::new(Arc::clone(&log_buf));
+
+    let fmt_layer = tracing_subscriber::fmt::layer().with_filter(
+        tracing_subscriber::EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+    );
+
+    tracing_subscriber::registry()
+        .with(fmt_layer)
+        .with(memory_layer)
         .init();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .manage(log_buf)
         .setup(|app| {
             let app_handle = app.handle().clone();
 
@@ -143,6 +152,10 @@ fn main() {
             commands::review::submit_pr_review,
             commands::markdown::read_markdown_file,
             commands::system::get_sysinfo,
+            commands::theme::get_theme,
+            commands::theme::set_theme,
+            commands::logs::get_logs,
+            commands::logs::clear_logs,
         ])
         .run(tauri::generate_context!())
         .expect("error while running piki-desktop");

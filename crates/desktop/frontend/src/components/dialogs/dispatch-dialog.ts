@@ -87,6 +87,8 @@ export async function showDispatchDialog() {
   backdrop.querySelector("#dp-cancel")!.addEventListener("click", close);
   backdrop.addEventListener("click", (e) => { if (e.target === backdrop) close(); });
   backdrop.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+  backdrop.setAttribute("tabindex", "0");
+  agentSelect.focus();
 
   backdrop.querySelector("#dp-dispatch")!.addEventListener("click", async () => {
     const agentOpt = agentSelect.selectedOptions[0];

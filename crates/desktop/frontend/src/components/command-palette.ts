@@ -13,7 +13,10 @@ import { showDispatchDialog } from "./dialogs/dispatch-dialog";
 import { showHelpDialog } from "./dialogs/help-dialog";
 import { showDashboard } from "./dialogs/dashboard-dialog";
 import { openTerminalSearch } from "./terminal-panel";
+import { showThemeDialog } from "./dialogs/theme-dialog";
+import { showLogsDialog } from "./dialogs/logs-dialog";
 import { PROVIDER_LABELS, type AIProvider } from "../types";
+import { themeEngine } from "../theme";
 
 interface Command {
   id: string;
@@ -389,6 +392,32 @@ function buildCommands(): Command[] {
     keybinding: "Ctrl+Shift+F",
     action: () => openTerminalSearch(),
   });
+
+  // Logs
+  cmds.push({
+    id: "app-logs",
+    label: "Application Logs",
+    category: "View",
+    keybinding: "Alt+Shift+L",
+    action: () => showLogsDialog(),
+  });
+
+  // Theme commands
+  cmds.push({
+    id: "theme-settings",
+    label: "Theme Settings",
+    category: "Theme",
+    keybinding: "Alt+T",
+    action: () => showThemeDialog(),
+  });
+  for (const preset of themeEngine.getPresets()) {
+    cmds.push({
+      id: `theme-${preset.id}`,
+      label: `Theme: ${preset.name}`,
+      category: "Theme",
+      action: () => themeEngine.setPreset(preset.id),
+    });
+  }
 
   return cmds;
 }
