@@ -53,6 +53,7 @@ pub async fn create_workspace(
     dir: String,
     ws_type: String,
     group: Option<String>,
+    kanban_path: Option<String>,
 ) -> Result<WorkspaceInfo, String> {
     // Extract manager info with scoped lock
     let (manager, storage) = {
@@ -68,19 +69,19 @@ pub async fn create_workspace(
     let info = match ws_type.as_str() {
         "Simple" => {
             manager
-                .create_simple(&name, &description, &prompt, None, &source_repo)
+                .create_simple(&name, &description, &prompt, kanban_path.clone(), &source_repo)
                 .await
                 .map_err(|e| e.to_string())?
         }
         "Project" => {
             manager
-                .create_project(&name, &description, &prompt, None, &source_repo)
+                .create_project(&name, &description, &prompt, kanban_path.clone(), &source_repo)
                 .await
                 .map_err(|e| e.to_string())?
         }
         _ => {
             manager
-                .create(&name, &description, &prompt, None, &source_repo)
+                .create(&name, &description, &prompt, kanban_path, &source_repo)
                 .await
                 .map_err(|e| e.to_string())?
         }
@@ -166,6 +167,7 @@ pub async fn update_workspace(
     prompt: Option<String>,
     group: Option<String>,
     description: Option<String>,
+    kanban_path: Option<String>,
 ) -> Result<(), String> {
     let mut app = state.lock();
     if index >= app.workspaces.len() {
@@ -181,6 +183,9 @@ pub async fn update_workspace(
     }
     if let Some(d) = description {
         ws.info.description = d;
+    }
+    if let Some(k) = kanban_path {
+        ws.info.kanban_path = if k.is_empty() { None } else { Some(k) };
     }
 
     // Persist

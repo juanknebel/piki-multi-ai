@@ -23,6 +23,7 @@ export function createWorkspace(
   dir: string,
   wsType: string,
   group: string | null,
+  kanbanPath: string | null = null,
 ): Promise<WorkspaceInfo> {
   return invoke("create_workspace", {
     name,
@@ -31,6 +32,7 @@ export function createWorkspace(
     dir,
     wsType,
     group,
+    kanbanPath,
   });
 }
 
@@ -43,8 +45,9 @@ export function updateWorkspace(
   prompt?: string,
   group?: string,
   description?: string,
+  kanbanPath?: string,
 ): Promise<void> {
-  return invoke("update_workspace", { index, prompt, group, description });
+  return invoke("update_workspace", { index, prompt, group, description, kanbanPath });
 }
 
 export function switchWorkspace(index: number): Promise<WorkspaceDetail> {

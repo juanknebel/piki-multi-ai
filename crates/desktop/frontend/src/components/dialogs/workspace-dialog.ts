@@ -86,6 +86,10 @@ export function showWorkspaceDialog(opts: DialogOptions) {
           <input class="dialog-input" id="ws-group" placeholder="Optional group name" value="${escapeAttr(prefill?.group ?? "")}" />
         </div>
         <div class="dialog-field">
+          <label class="dialog-label">Kanban Path</label>
+          <input class="dialog-input" id="ws-kanban" placeholder="Path to .board directory (optional)" value="${escapeAttr(prefill?.kanban_path ?? "")}" />
+        </div>
+        <div class="dialog-field">
           <label class="dialog-label">Prompt</label>
           <textarea class="dialog-textarea" id="ws-prompt" placeholder="Initial prompt for AI tabs" rows="3">${escapeHtml(prefill?.prompt ?? "")}</textarea>
         </div>
@@ -150,6 +154,8 @@ async function submitCreate(backdrop: HTMLElement) {
     backdrop.querySelector<HTMLInputElement>("#ws-desc")?.value.trim() ?? "";
   const group =
     backdrop.querySelector<HTMLInputElement>("#ws-group")?.value.trim() ?? "";
+  const kanban =
+    backdrop.querySelector<HTMLInputElement>("#ws-kanban")?.value.trim() ?? "";
   const prompt =
     backdrop.querySelector<HTMLTextAreaElement>("#ws-prompt")?.value.trim() ??
     "";
@@ -175,6 +181,7 @@ async function submitCreate(backdrop: HTMLElement) {
       dir,
       type,
       group || null,
+      kanban || null,
     );
     appState.addWorkspace(info);
     toast(`Workspace "${info.name}" created`, "success");
@@ -191,6 +198,8 @@ async function submitEdit(backdrop: HTMLElement, index: number) {
     backdrop.querySelector<HTMLInputElement>("#ws-desc")?.value.trim();
   const group =
     backdrop.querySelector<HTMLInputElement>("#ws-group")?.value.trim();
+  const kanban =
+    backdrop.querySelector<HTMLInputElement>("#ws-kanban")?.value.trim();
   const prompt =
     backdrop.querySelector<HTMLTextAreaElement>("#ws-prompt")?.value.trim();
 
@@ -199,7 +208,7 @@ async function submitEdit(backdrop: HTMLElement, index: number) {
   btn.textContent = "Saving...";
 
   try {
-    await ipc.updateWorkspace(index, prompt, group, desc);
+    await ipc.updateWorkspace(index, prompt, group, desc, kanban);
     // Update local state
     const ws = appState.workspaces[index];
     if (ws) {
@@ -207,6 +216,8 @@ async function submitEdit(backdrop: HTMLElement, index: number) {
       if (group !== undefined)
         ws.info.group = group === "" ? null : group;
       if (desc !== undefined) ws.info.description = desc;
+      if (kanban !== undefined)
+        ws.info.kanban_path = kanban === "" ? null : kanban;
     }
     toast("Workspace updated", "success");
     backdrop.remove();
@@ -239,6 +250,7 @@ export function showWorkspaceInfo(index: number) {
         ${infoRow("Path", String(info.path))}
         ${infoRow("Source Repo", info.source_repo_display)}
         ${infoRow("Group", info.group || "—")}
+        ${infoRow("Kanban Path", info.kanban_path || "—")}
         ${infoRow("Description", info.description || "—")}
         ${infoRow("Prompt", info.prompt || "—")}
       </div>
