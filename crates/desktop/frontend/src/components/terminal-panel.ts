@@ -2,7 +2,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { SearchAddon } from "@xterm/addon-search";
-import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { appState } from "../state";
 import * as ipc from "../ipc";
 import { themeEngine } from "../theme";
@@ -101,23 +101,14 @@ export function createTerminal(tabId: string): TerminalInstance {
     }
   });
 
-  // Ctrl+Shift+C = copy, Ctrl+Shift+V = paste
-  // These must be caught before xterm processes them
+  // Ctrl+Shift+C = copy (paste is handled natively by xterm.js)
   terminal.attachCustomKeyEventHandler((e) => {
-    if (e.ctrlKey && e.shiftKey && e.type === "keydown") {
-      if (e.key === "C") {
-        const sel = terminal.getSelection();
-        if (sel) writeText(sel).catch(() => {});
-        return false; // prevent xterm from handling
-      }
-      if (e.key === "V") {
-        readText().then((text) => {
-          if (text) terminal.paste(text);
-        }).catch(() => {});
-        return false;
-      }
+    if (e.ctrlKey && e.shiftKey && e.type === "keydown" && e.key === "C") {
+      const sel = terminal.getSelection();
+      if (sel) writeText(sel).catch(() => {});
+      return false;
     }
-    return true; // let xterm handle all other keys
+    return true;
   });
 
   // Send keystrokes to backend
