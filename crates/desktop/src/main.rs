@@ -109,7 +109,10 @@ fn main() {
             };
 
             // Start sysinfo event emitter
-            events::spawn_sysinfo_emitter(app_handle, sysinfo_for_emitter);
+            events::spawn_sysinfo_emitter(app_handle.clone(), sysinfo_for_emitter);
+
+            // Start file watcher poller for git auto-refresh
+            events::spawn_git_watcher(app_handle);
 
             app.manage(Mutex::new(desktop_app));
 

@@ -147,7 +147,7 @@ pub enum FileStatus {
 }
 
 /// A file that has been changed in a workspace
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChangedFile {
     pub path: String,
     pub status: FileStatus,

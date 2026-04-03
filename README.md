@@ -95,10 +95,10 @@ A modern desktop GUI is available via `piki-desktop`, built with [Tauri v2](http
 - **Obsidian Glow theme** — Distinctive dark UI with deep blue-black backgrounds, cyan/amber dual-accent system, glow effects, and monospace-forward typography
 - **5 built-in theme presets** — Obsidian Dark, Nord, Catppuccin Mocha, Solarized Light, Tokyo Night; switch instantly via `Alt+T` or command palette
 - **Full theme customization** — Individual color pickers for ~60 variables across 13 groups, live preview, import/export themes as JSON, persisted in SQLite
-- **xterm.js terminals** — Full terminal emulation with WebGL rendering, copy on selection, `Ctrl+Shift+C/V` for clipboard, terminal search (`Ctrl+Shift+F`)
+- **xterm.js terminals** — Full terminal emulation with WebGL rendering, block cursor, native clipboard via `tauri-plugin-clipboard-manager` (copy on selection, `Ctrl+Shift+C/V`), terminal search (`Ctrl+Shift+F`)
 - **Activity bar + sidebar** — Explorer (workspace list with groups), Source Control (git staging/committing), Agents panel (manage/dispatch AI agents)
 - **Multi-provider tabs** — Open Claude, Gemini, OpenCode, Kilo, Codex, or Shell tabs per workspace
-- **Git integration** — Stage/unstage files, commit, push, merge/rebase, stash, conflict resolution, git log viewer
+- **Git integration** — Stage/unstage files, commit, push, merge/rebase, stash, conflict resolution, git log viewer; auto-refresh via hybrid file watcher (500ms) + periodic git status poll (2s) + background `git fetch` (60s) for live ahead/behind tracking
 - **Side-by-side diff viewer** — With char-level highlights, 3-way merge view, and conflict resolution buttons
 - **Code review** — PR info, per-file diffs, inline comments, submit reviews via `gh` CLI
 - **Agent management** — Create/edit/delete agent profiles, import from repo, dispatch agents to workspaces
