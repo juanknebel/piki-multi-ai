@@ -151,6 +151,8 @@ fn main() {
             commands::stash::git_stash_apply,
             commands::stash::git_stash_drop,
             commands::search::fuzzy_file_list,
+            commands::search::read_file_content,
+            commands::search::project_search,
             commands::agents::list_agents,
             commands::agents::save_agent,
             commands::agents::delete_agent,

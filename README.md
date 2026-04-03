@@ -96,7 +96,9 @@ A modern desktop GUI is available via `piki-desktop`, built with [Tauri v2](http
 - **Obsidian Glow theme** — Distinctive dark UI with deep blue-black backgrounds, cyan/amber dual-accent system, glow effects, and monospace-forward typography
 - **5 built-in theme presets** — Obsidian Dark, Nord, Catppuccin Mocha, Solarized Light, Tokyo Night; switch instantly via `Alt+T` or command palette
 - **Full theme customization** — Individual color pickers for ~60 variables across 13 groups, live preview, import/export themes as JSON, persisted in SQLite
-- **xterm.js terminals** — Full terminal emulation with WebGL rendering, block cursor, native clipboard via `tauri-plugin-clipboard-manager` (copy on selection, `Ctrl+Shift+C/V`), terminal search (`Ctrl+Shift+F`)
+- **xterm.js terminals** — Full terminal emulation with WebGL rendering, block cursor, native clipboard via `tauri-plugin-clipboard-manager` (copy on selection, `Ctrl+Shift+C/V`), terminal search (`Ctrl+Shift+B`)
+- **Project search** — `Ctrl+Shift+F` to grep file contents across the workspace using ripgrep (`rg`); debounced search with file path, line number, and highlighted match snippet; Enter opens file viewer with scroll and copy support
+- **File viewer** — Read-only modal for viewing file contents; opened from fuzzy file search (`Ctrl+F`) or project search; monospace rendering with scroll and copy-to-clipboard button
 - **Activity bar + sidebar** — Explorer (workspace list with groups), Source Control (git staging/committing), Agents panel (manage/dispatch AI agents), Kanban Board (quick access via activity bar icon)
 - **Multi-provider tabs** — Open Claude, Gemini, OpenCode, Kilo, Codex, Shell, or Kanban Board tabs per workspace
 - **Kanban Board** — Integrated kanban board powered by [flow-core](https://github.com/juanknebel/flow); columns (TODO, IN PROGRESS, IN REVIEW, DONE) with drag-and-drop card movement, inline card actions (edit, move, delete), priority badges (Bug/High/Medium/Low/Wishlist), edit modal with title/description/priority/assignee fields; configurable column colors (right-click header to pick from 16-color palette, persisted in localStorage); auto-creates board if none exists; open via `Alt+K`, activity bar, command palette, or View menu
@@ -121,7 +123,8 @@ A modern desktop GUI is available via `piki-desktop`, built with [Tauri v2](http
 | `Ctrl+Space` | Workspace switcher |
 | `Ctrl+M` | Merge / Rebase |
 | `Ctrl+F` | Fuzzy file search |
-| `Ctrl+Shift+F` | Terminal search |
+| `Ctrl+Shift+F` | Search in project (grep) |
+| `Ctrl+Shift+B` | Search in terminal |
 | `Ctrl+Shift+R` | Code review |
 | `Ctrl+Shift+A` | Manage agents |
 | `Ctrl+Shift+D` | Dispatch agent |
@@ -158,6 +161,7 @@ The install script places the binary in `~/.local/bin/`, installs icons to `~/.l
 - [git](https://git-scm.com/) >= 2.20 (worktree support)
 - [delta](https://github.com/dandavison/delta) (optional, for side-by-side diffs — falls back to plain git diff)
 - [gh](https://cli.github.com/) (optional, required for code review feature — run `gh auth login` to authenticate)
+- [ripgrep](https://github.com/BurntSushi/ripgrep) (optional, recommended for project search — falls back to `grep -rn`)
 - [Node.js](https://nodejs.org/) >= 18 (optional, required for building the desktop app)
 - System libraries for Tauri (optional, for desktop app): `libwebkit2gtk-4.1-dev`, `libappindicator3-dev` on Linux
 

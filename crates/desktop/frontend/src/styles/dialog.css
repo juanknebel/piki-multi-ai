@@ -422,3 +422,106 @@
     transform: translateY(0) scale(1);
   }
 }
+
+/* ── File Viewer ─────────────────────────────── */
+
+.file-viewer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  animation: overlay-in 0.1s var(--ease-out);
+}
+
+.file-viewer-dialog {
+  background: var(--dialog-bg);
+  border: 1px solid var(--dialog-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 20px 60px var(--dialog-shadow);
+  width: 80vw;
+  max-width: 900px;
+  height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: dialog-enter 0.15s var(--ease-out);
+}
+
+.file-viewer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+}
+
+.file-viewer-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-bright);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-viewer-path {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: 8px;
+  font-weight: 400;
+}
+
+.file-viewer-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.file-viewer-btn {
+  font-size: 11px;
+  padding: 4px 10px;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.file-viewer-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-active);
+}
+
+.file-viewer-close {
+  font-size: 16px;
+  padding: 2px 8px;
+}
+
+.file-viewer-body {
+  flex: 1;
+  overflow: auto;
+  background: var(--bg-primary);
+}
+
+.file-viewer-content {
+  margin: 0;
+  padding: 12px 16px;
+  font-family: "JetBrainsMono NF Mono", monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  tab-size: 4;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.file-viewer-content code {
+  font-family: inherit;
+  color: inherit;
+}

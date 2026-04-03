@@ -7,6 +7,7 @@ import { showGitLog } from "./dialogs/gitlog-dialog";
 import { showStashDialog } from "./dialogs/stash-dialog";
 import { showCodeReview } from "./code-review";
 import { openFuzzySearch } from "./fuzzy-search";
+import { openProjectSearch } from "./project-search";
 import { openWorkspaceSwitcher } from "./workspace-switcher";
 import { showAgentManager } from "./dialogs/agent-dialog";
 import { showDispatchDialog } from "./dialogs/dispatch-dialog";
@@ -375,6 +376,13 @@ function buildCommands(): Command[] {
     action: () => openFuzzySearch(),
   });
   cmds.push({
+    id: "search-project",
+    label: "Search in Project",
+    category: "Search",
+    keybinding: "Ctrl+Shift+F",
+    action: () => openProjectSearch(),
+  });
+  cmds.push({
     id: "search-workspace",
     label: "Switch Workspace",
     category: "Search",
@@ -426,7 +434,7 @@ function buildCommands(): Command[] {
     id: "terminal-search",
     label: "Search in Terminal",
     category: "Search",
-    keybinding: "Ctrl+Shift+F",
+    keybinding: "Ctrl+Shift+B",
     action: () => openTerminalSearch(),
   });
 

@@ -273,6 +273,20 @@ export function fuzzyFileList(workspaceIdx: number): Promise<string[]> {
   return invoke("fuzzy_file_list", { workspaceIdx });
 }
 
+export function readFileContent(workspaceIdx: number, path: string): Promise<string> {
+  return invoke("read_file_content", { workspaceIdx, path });
+}
+
+export interface SearchMatch {
+  path: string;
+  line_num: number;
+  text: string;
+}
+
+export function projectSearch(workspaceIdx: number, query: string): Promise<SearchMatch[]> {
+  return invoke("project_search", { workspaceIdx, query });
+}
+
 // Code Review commands
 export interface PrInfo {
   number: number;

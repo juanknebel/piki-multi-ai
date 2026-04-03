@@ -9,6 +9,7 @@ import { showCodeReview } from "./code-review";
 import { openFuzzySearch } from "./fuzzy-search";
 import { openWorkspaceSwitcher } from "./workspace-switcher";
 import { openTerminalSearch } from "./terminal-panel";
+import { openProjectSearch } from "./project-search";
 import { openCommandPalette } from "./command-palette";
 import { showAgentManager } from "./dialogs/agent-dialog";
 import { showDispatchDialog } from "./dialogs/dispatch-dialog";
@@ -112,7 +113,8 @@ const MENUS: MenuDefinition[] = [
       },
       SEP,
       { label: "Find File", shortcut: "Ctrl+F", action: () => openFuzzySearch() },
-      { label: "Search in Terminal", shortcut: "Ctrl+Shift+F", action: () => openTerminalSearch() },
+      { label: "Search in Project", shortcut: "Ctrl+Shift+F", action: () => openProjectSearch() },
+      { label: "Search in Terminal", shortcut: "Ctrl+Shift+B", action: () => openTerminalSearch() },
       SEP,
       { label: "Theme Settings", shortcut: "Alt+T", action: () => showThemeDialog() },
     ],

@@ -6,7 +6,7 @@
 
 **ALWAYS** update documentation when making changes:
 
-1. Update `README.md` if the change affects user-facing behavior, CLI usage, architecture, or project structure
+1. **Before every commit (including amends)**, review `README.md` and update it to reflect the changes being committed. This is mandatory — no exceptions. Check keyboard shortcuts, feature descriptions, prerequisites, and architecture sections.
 2. Update `AGENTS.md` if the change affects build commands, architecture descriptions, or developer workflow
 3. Update inline code comments only where logic is not self-evident
 4. Documentation must be updated in the **same task** as the code change — never leave it for later

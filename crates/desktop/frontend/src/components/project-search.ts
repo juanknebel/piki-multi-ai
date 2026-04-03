@@ -1,23 +1,19 @@
 import { appState } from "../state";
 import * as ipc from "../ipc";
 import { showFileViewer } from "./file-viewer";
+import type { SearchMatch } from "../ipc";
 
 let searchEl: HTMLElement | null = null;
+let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-export async function openFuzzySearch() {
+export function openProjectSearch() {
   if (searchEl) {
-    closeFuzzySearch();
+    closeProjectSearch();
     return;
   }
 
   const wsIdx = appState.activeWorkspace;
-  let allFiles: string[];
-  try {
-    allFiles = await ipc.fuzzyFileList(wsIdx);
-  } catch (err) {
-    console.error("Failed to list files:", err);
-    return;
-  }
+  if (wsIdx < 0 || !appState.activeWs) return;
 
   const backdrop = document.createElement("div");
   backdrop.className = "palette-backdrop";
@@ -25,7 +21,7 @@ export async function openFuzzySearch() {
   const palette = document.createElement("div");
   palette.className = "palette";
   palette.innerHTML = `
-    <input class="palette-input" type="text" placeholder="Search files... (${allFiles.length} files)" autofocus />
+    <input class="palette-input" type="text" placeholder="Search in project (grep)..." autofocus />
     <div class="palette-results"></div>
   `;
 
@@ -36,26 +32,38 @@ export async function openFuzzySearch() {
   const input = palette.querySelector<HTMLInputElement>(".palette-input")!;
   const results = palette.querySelector<HTMLElement>(".palette-results")!;
   let selectedIdx = 0;
-  let filtered: string[] = allFiles.slice(0, 50);
+  let matches: SearchMatch[] = [];
 
   function renderResults() {
     results.innerHTML = "";
-    const shown = filtered.slice(0, 50);
-    shown.forEach((file, i) => {
+
+    if (matches.length === 0 && input.value.trim()) {
+      results.innerHTML = '<div class="palette-empty">No matches found</div>';
+      return;
+    }
+
+    if (!input.value.trim()) {
+      results.innerHTML = '<div class="palette-empty">Type to search file contents...</div>';
+      return;
+    }
+
+    matches.forEach((m, i) => {
       const el = document.createElement("div");
       el.className = `palette-item${i === selectedIdx ? " selected" : ""}`;
 
-      const fileName = file.split("/").pop() || file;
-      const dirPath = file.includes("/") ? file.substring(0, file.lastIndexOf("/")) : "";
+      const fileName = m.path.split("/").pop() || m.path;
+      const dirPath = m.path.includes("/") ? m.path.substring(0, m.path.lastIndexOf("/")) : "";
 
       el.innerHTML = `
-        <span class="palette-label">
-          ${highlightMatch(fileName, input.value)}
-          ${dirPath ? ` <span style="color:var(--text-muted);font-size:11px">${escapeHtml(dirPath)}</span>` : ""}
+        <span class="palette-category" style="min-width:32px;text-align:right">${m.line_num}</span>
+        <span class="palette-label" style="flex:1;overflow:hidden">
+          <span style="color:var(--text-bright)">${escapeHtml(fileName)}</span>
+          ${dirPath ? `<span style="color:var(--text-muted);font-size:10px;margin-left:6px">${escapeHtml(dirPath)}</span>` : ""}
+          <div style="color:var(--text-secondary);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;font-family:'JetBrainsMono NF Mono',monospace">${highlightMatch(m.text.trim(), input.value)}</div>
         </span>
       `;
 
-      el.addEventListener("click", () => selectFile(file));
+      el.addEventListener("click", () => selectMatch(m));
       el.addEventListener("mouseenter", () => {
         selectedIdx = i;
         renderResults();
@@ -63,39 +71,46 @@ export async function openFuzzySearch() {
       results.appendChild(el);
     });
 
-    if (filtered.length > 50) {
+    if (matches.length === 100) {
       const more = document.createElement("div");
       more.className = "palette-empty";
-      more.textContent = `${filtered.length - 50} more files...`;
+      more.textContent = "Showing first 100 results...";
       results.appendChild(more);
-    }
-
-    if (filtered.length === 0) {
-      results.innerHTML = '<div class="palette-empty">No matching files</div>';
     }
   }
 
-  function filter() {
-    const q = input.value.toLowerCase();
+  async function doSearch() {
+    const q = input.value.trim();
     if (!q) {
-      filtered = allFiles.slice(0, 200);
-    } else {
-      filtered = allFiles.filter((f) => f.toLowerCase().includes(q));
+      matches = [];
+      selectedIdx = 0;
+      renderResults();
+      return;
+    }
+
+    try {
+      matches = await ipc.projectSearch(wsIdx, q);
+    } catch {
+      matches = [];
     }
     selectedIdx = 0;
     renderResults();
   }
 
-  function selectFile(file: string) {
-    closeFuzzySearch();
-    showFileViewer(wsIdx, file);
+  function selectMatch(m: SearchMatch) {
+    closeProjectSearch();
+    showFileViewer(wsIdx, m.path);
   }
 
-  input.addEventListener("input", filter);
+  input.addEventListener("input", () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(doSearch, 300);
+  });
+
   input.addEventListener("keydown", (e) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      selectedIdx = Math.min(selectedIdx + 1, Math.min(filtered.length, 50) - 1);
+      selectedIdx = Math.min(selectedIdx + 1, matches.length - 1);
       renderResults();
       results.querySelector(".palette-item.selected")?.scrollIntoView({ block: "nearest" });
     } else if (e.key === "ArrowUp") {
@@ -105,22 +120,22 @@ export async function openFuzzySearch() {
       results.querySelector(".palette-item.selected")?.scrollIntoView({ block: "nearest" });
     } else if (e.key === "Enter") {
       e.preventDefault();
-      const shown = filtered.slice(0, 50);
-      if (shown[selectedIdx]) selectFile(shown[selectedIdx]);
+      if (matches[selectedIdx]) selectMatch(matches[selectedIdx]);
     } else if (e.key === "Escape") {
-      closeFuzzySearch();
+      closeProjectSearch();
     }
   });
 
   backdrop.addEventListener("click", (e) => {
-    if (e.target === backdrop) closeFuzzySearch();
+    if (e.target === backdrop) closeProjectSearch();
   });
 
   renderResults();
   input.focus();
 }
 
-export function closeFuzzySearch() {
+export function closeProjectSearch() {
+  if (debounceTimer) clearTimeout(debounceTimer);
   searchEl?.remove();
   searchEl = null;
 }
@@ -133,7 +148,7 @@ function highlightMatch(text: string, query: string): string {
   const before = text.slice(0, idx);
   const match = text.slice(idx, idx + query.length);
   const after = text.slice(idx + query.length);
-  return `${escapeHtml(before)}<strong>${escapeHtml(match)}</strong>${escapeHtml(after)}`;
+  return `${escapeHtml(before)}<strong style="color:var(--accent-primary)">${escapeHtml(match)}</strong>${escapeHtml(after)}`;
 }
 
 function escapeHtml(text: string): string {

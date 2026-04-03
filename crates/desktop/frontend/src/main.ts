@@ -14,6 +14,7 @@ import { showWorkspaceDialog } from "./components/dialogs/workspace-dialog";
 import { openWorkspaceSwitcher } from "./components/workspace-switcher";
 import { showMergeDialog } from "./components/dialogs/merge-dialog";
 import { openFuzzySearch } from "./components/fuzzy-search";
+import { openProjectSearch } from "./components/project-search";
 import { showGitLog } from "./components/dialogs/gitlog-dialog";
 import { showStashDialog } from "./components/dialogs/stash-dialog";
 import { showCodeReview } from "./components/code-review";
@@ -126,8 +127,14 @@ async function init() {
       openFuzzySearch();
       return;
     }
-    // Ctrl+Shift+F: Terminal search
+    // Ctrl+Shift+F: Search in project (grep)
     if (e.ctrlKey && e.shiftKey && e.key === "F") {
+      intercept();
+      openProjectSearch();
+      return;
+    }
+    // Ctrl+Shift+B: Terminal search
+    if (e.ctrlKey && e.shiftKey && e.key === "B") {
       intercept();
       openTerminalSearch();
       return;
