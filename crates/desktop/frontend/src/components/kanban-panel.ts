@@ -10,6 +10,41 @@ interface KanbanInstance {
   board: KanbanBoard | null;
 }
 
+// ── Column colors ────────────────────────────────
+
+const DEFAULT_COLUMN_COLORS: Record<string, string> = {
+  todo: "#39bae6",
+  in_progress: "#e6a730",
+  in_review: "#7b61ff",
+  done: "#3fb950",
+};
+
+const COLOR_PALETTE = [
+  "#39bae6", "#e6a730", "#7b61ff", "#3fb950",
+  "#f85149", "#f778ba", "#d2a8ff", "#79c0ff",
+  "#56d4dd", "#a5d6ff", "#ffa657", "#ff7b72",
+  "#8b949e", "#c9d1d9", "#e3b341", "#7ee787",
+];
+
+const STORAGE_KEY = "kanban-column-colors";
+
+function loadColumnColors(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch { /* ignore */ }
+  return {};
+}
+
+function saveColumnColors(colors: Record<string, string>) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(colors));
+}
+
+function getColumnColor(colId: string): string {
+  const saved = loadColumnColors();
+  return saved[colId] ?? DEFAULT_COLUMN_COLORS[colId] ?? "";
+}
+
 const instances = new Map<string, KanbanInstance>();
 let mainContent: HTMLElement;
 
@@ -88,6 +123,12 @@ function renderBoard(inst: KanbanInstance) {
     const colEl = document.createElement("div");
     colEl.className = "kanban-column";
 
+    // Apply column color
+    const colColor = getColumnColor(col.id);
+    if (colColor) {
+      colEl.style.setProperty("--kanban-col-color", colColor);
+    }
+
     // Column header
     const header = document.createElement("div");
     header.className = "kanban-column-header";
@@ -106,6 +147,12 @@ function renderBoard(inst: KanbanInstance) {
       </span>
       <button class="kanban-column-add" title="Add card">+</button>
     `;
+
+    // Right-click header to pick column color
+    header.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      showColorPicker(inst, col.id, colEl, e.clientX, e.clientY);
+    });
 
     header.querySelector(".kanban-column-add")!.addEventListener("click", async () => {
       try {
@@ -356,6 +403,67 @@ function showEditModal(inst: KanbanInstance, card: KanbanCard) {
       modal.querySelector<HTMLButtonElement>(".kanban-edit-save")!.click();
     }
   });
+}
+
+function showColorPicker(
+  inst: KanbanInstance,
+  colId: string,
+  colEl: HTMLDivElement,
+  x: number,
+  y: number,
+) {
+  // Remove any existing picker
+  document.querySelector(".kanban-color-picker")?.remove();
+
+  const picker = document.createElement("div");
+  picker.className = "kanban-color-picker";
+  picker.style.left = `${x}px`;
+  picker.style.top = `${y}px`;
+
+  const currentColor = getColumnColor(colId);
+
+  for (const color of COLOR_PALETTE) {
+    const swatch = document.createElement("div");
+    swatch.className = "kanban-color-swatch";
+    if (color === currentColor) swatch.classList.add("active");
+    swatch.style.background = color;
+    swatch.addEventListener("click", () => {
+      const colors = loadColumnColors();
+      colors[colId] = color;
+      saveColumnColors(colors);
+      colEl.style.setProperty("--kanban-col-color", color);
+      picker.remove();
+    });
+    picker.appendChild(swatch);
+  }
+
+  const resetBtn = document.createElement("button");
+  resetBtn.className = "kanban-color-reset";
+  resetBtn.textContent = "Reset to default";
+  resetBtn.addEventListener("click", () => {
+    const colors = loadColumnColors();
+    delete colors[colId];
+    saveColumnColors(colors);
+    const def = DEFAULT_COLUMN_COLORS[colId] ?? "";
+    if (def) {
+      colEl.style.setProperty("--kanban-col-color", def);
+    } else {
+      colEl.style.removeProperty("--kanban-col-color");
+    }
+    picker.remove();
+  });
+  picker.appendChild(resetBtn);
+
+  document.body.appendChild(picker);
+
+  // Close on click outside
+  const close = (e: MouseEvent) => {
+    if (!picker.contains(e.target as Node)) {
+      picker.remove();
+      document.removeEventListener("mousedown", close);
+    }
+  };
+  setTimeout(() => document.addEventListener("mousedown", close), 0);
 }
 
 function esc(s: string): string {
