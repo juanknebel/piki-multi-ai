@@ -92,6 +92,7 @@ A modern desktop GUI is available via `piki-desktop`, built with [Tauri v2](http
 
 ### Features
 
+- **Custom menu bar** — Classic desktop-style menu (File, Edit, View, Git, Agents, Help) with keyboard shortcuts, submenus, disabled-state awareness, and integrated window controls (minimize/maximize/close); replaces native title bar for a compact, themed look; drag region for window movement, double-click to maximize
 - **Obsidian Glow theme** — Distinctive dark UI with deep blue-black backgrounds, cyan/amber dual-accent system, glow effects, and monospace-forward typography
 - **5 built-in theme presets** — Obsidian Dark, Nord, Catppuccin Mocha, Solarized Light, Tokyo Night; switch instantly via `Alt+T` or command palette
 - **Full theme customization** — Individual color pickers for ~60 variables across 13 groups, live preview, import/export themes as JSON, persisted in SQLite
@@ -750,7 +751,7 @@ crates/
         system.rs        # System info
     frontend/            # Vanilla TypeScript + xterm.js (Vite build)
       src/
-        main.ts          # App init, global keyboard shortcuts
+        main.ts          # App init, global keyboard shortcuts, window close handler
         state.ts         # AppState (EventTarget-based singleton)
         ipc.ts           # Tauri IPC command wrappers
         types.ts         # TypeScript type definitions

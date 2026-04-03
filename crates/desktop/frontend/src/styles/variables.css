@@ -98,6 +98,7 @@
   /* ── Sizing ────────────────────────────────────── */
   --activity-bar-width: 50px;
   --sidebar-width: 260px;
+  --menubar-height: 30px;
   --statusbar-height: 28px;
   --tab-height: 38px;
   --sidebar-header-height: 30px;

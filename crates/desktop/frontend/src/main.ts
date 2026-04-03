@@ -22,6 +22,7 @@ import { showHelpDialog } from "./components/dialogs/help-dialog";
 import { showDashboard } from "./components/dialogs/dashboard-dialog";
 import { showThemeDialog } from "./components/dialogs/theme-dialog";
 import { showLogsDialog } from "./components/dialogs/logs-dialog";
+import { initMenuBar } from "./components/menu-bar";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { themeEngine } from "./theme";
 
@@ -29,6 +30,7 @@ async function init() {
   // Load theme before rendering to avoid flash
   await themeEngine.loadFromStorage();
 
+  initMenuBar(document.getElementById("menu-bar")!);
   renderActivityBar(document.getElementById("activity-bar")!);
   initSidebar();
   renderTabBar(document.getElementById("tab-bar")!);

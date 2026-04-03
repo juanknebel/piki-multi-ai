@@ -1,0 +1,148 @@
+/* ── Menu Bar ─────────────────────────────────── */
+#menu-bar {
+  display: flex;
+  align-items: center;
+  height: var(--menubar-height);
+  background: var(--statusbar-bg);
+  border-bottom: 1px solid var(--border-primary);
+  padding: 0 4px;
+  user-select: none;
+}
+
+/* ── Drag region (fills space between menus and window controls) */
+.menu-drag-region {
+  flex: 1;
+  height: 100%;
+  cursor: default;
+}
+
+/* ── Top-level items ─────────────────────────── */
+.menu-top-item {
+  display: flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  white-space: nowrap;
+}
+
+.menu-top-item:hover,
+.menu-top-item.open {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* ── Dropdown ────────────────────────────────── */
+.menu-dropdown {
+  position: fixed;
+  z-index: 80;
+  min-width: 220px;
+  background: var(--bg-dropdown);
+  border: 1px solid var(--dialog-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  padding: 4px 0;
+  animation: menu-enter 0.1s var(--ease-out);
+}
+
+@keyframes menu-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Menu item ───────────────────────────────── */
+.menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 16px 6px 24px;
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  white-space: nowrap;
+}
+
+.menu-item:hover,
+.menu-item.highlighted {
+  background: var(--accent-muted);
+}
+
+.menu-item.disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+/* ── Shortcut badge ──────────────────────────── */
+.menu-shortcut {
+  margin-left: 32px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ── Submenu arrow ───────────────────────────── */
+.menu-submenu-arrow {
+  margin-left: 32px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* ── Separator ───────────────────────────────── */
+.menu-separator {
+  border-top: 1px solid var(--border-primary);
+  margin: 4px 8px;
+}
+
+/* ── Backdrop ────────────────────────────────── */
+.menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 79;
+}
+
+/* ── Window controls ─────────────────────────── */
+.window-controls {
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  height: 100%;
+}
+
+.wc-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.wc-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.wc-close:hover {
+  background: #c42b1c;
+  color: #fff;
+}
