@@ -108,7 +108,7 @@ A modern desktop GUI is available via `piki-desktop`, built with [Tauri v2](http
 - **Dashboard** — `Alt+D` for bird's-eye view of all workspaces with status, tabs, and file counts
 - **Application log viewer** — `Alt+Shift+L` for in-memory ring buffer (500 entries), filterable by level
 - **About dialog** — Click "Piki Desktop" in status bar or via command palette
-- **Workspace switcher** — `Ctrl+Space` for quick fuzzy workspace switching
+- **Workspace switcher** — `Ctrl+Space` for quick fuzzy workspace switching; results grouped by group name with headers, sorted alphabetically (ungrouped first), items ordered within each group
 - **Resizable sidebar** — Drag the divider or use the resize handle
 - **Confirm dialogs** — HTML-based confirmations (not browser `confirm()`) for all destructive actions
 
