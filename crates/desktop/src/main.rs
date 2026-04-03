@@ -43,6 +43,7 @@ fn main() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .manage(log_buf)
         .setup(move |app| {
             let app_handle = app.handle().clone();

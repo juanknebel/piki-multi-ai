@@ -337,6 +337,34 @@ function buildCommands(): Command[] {
     });
   }
 
+  // Undo
+  if (ws) {
+    cmds.push({
+      id: "git-undo",
+      label: "Undo Stage / Unstage",
+      category: "Git",
+      keybinding: "Ctrl+Z",
+      action: async () => {
+        const entry = appState.popUndo();
+        if (!entry) { toast("Nothing to undo", "info"); return; }
+        try {
+          for (const file of entry.files) {
+            if (entry.action === "stage") {
+              await ipc.gitUnstage(wsIdx, file);
+            } else {
+              await ipc.gitStage(wsIdx, file);
+            }
+          }
+          const files = await ipc.getChangedFiles(wsIdx);
+          appState.updateFiles(wsIdx, files, ws.aheadBehind);
+          toast(`Undid ${entry.action} of ${entry.files.length} file(s)`, "info");
+        } catch (err) {
+          toast(`Undo failed: ${err}`, "error");
+        }
+      },
+    });
+  }
+
   // Search commands
   cmds.push({
     id: "search-files",

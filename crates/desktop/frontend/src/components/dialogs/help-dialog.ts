@@ -33,6 +33,14 @@ const SHORTCUTS: { category: string; items: [string, string][] }[] = [
       ["Alt+Shift+L", "Application Logs"],
     ],
   },
+  {
+    category: "Terminal",
+    items: [
+      ["Ctrl+Shift+C", "Copy Selection"],
+      ["Ctrl+Shift+V", "Paste from Clipboard"],
+      ["Select text", "Auto-copy to Clipboard"],
+    ],
+  },
 ];
 
 export function showHelpDialog() {

@@ -11,6 +11,8 @@
     "core:window:allow-close",
     "core:window:allow-destroy",
     "core:app:default",
-    "shell:allow-open"
+    "shell:allow-open",
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-write-text"
   ]
 }

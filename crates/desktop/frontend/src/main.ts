@@ -80,119 +80,123 @@ async function init() {
     console.error("Failed to register close handler:", err);
   }
 
-  // Global keyboard shortcuts
+  // Global keyboard shortcuts — capture phase so they fire before xterm.js
+  // consumes the event. stopPropagation prevents the key from also reaching
+  // the terminal PTY.
   document.addEventListener("keydown", (e) => {
     const inTerminal = !!document.activeElement?.closest(".xterm");
     const inInput =
       document.activeElement?.tagName === "INPUT" ||
       document.activeElement?.tagName === "TEXTAREA";
 
+    const intercept = () => { e.preventDefault(); e.stopPropagation(); };
+
     // Ctrl+P: Command palette
     if (e.ctrlKey && (e.key === "p" || e.key === "P")) {
-      e.preventDefault();
+      intercept();
       openCommandPalette();
       return;
     }
     // Ctrl+N: New workspace
     if (e.ctrlKey && e.key === "n") {
-      e.preventDefault();
+      intercept();
       showWorkspaceDialog({ mode: "create" });
       return;
     }
     // Ctrl+M: Merge/Rebase
     if (e.ctrlKey && e.key === "m") {
-      e.preventDefault();
+      intercept();
       showMergeDialog();
       return;
     }
     // Ctrl+Space: Workspace switcher
     if (e.ctrlKey && e.key === " ") {
-      e.preventDefault();
+      intercept();
       openWorkspaceSwitcher();
       return;
     }
     // Ctrl+F: Fuzzy file search
     if (e.ctrlKey && !e.shiftKey && e.key === "f") {
-      e.preventDefault();
+      intercept();
       openFuzzySearch();
       return;
     }
     // Ctrl+Shift+F: Terminal search
     if (e.ctrlKey && e.shiftKey && e.key === "F") {
-      e.preventDefault();
+      intercept();
       openTerminalSearch();
       return;
     }
     // Alt+L: Git log
     if (e.altKey && !e.ctrlKey && !e.shiftKey && (e.key === "l" || e.key === "L")) {
-      e.preventDefault();
+      intercept();
       showGitLog();
       return;
     }
     // Alt+D: Dashboard
     if (e.altKey && !e.ctrlKey && e.key === "d") {
-      e.preventDefault();
+      intercept();
       showDashboard();
       return;
     }
     // Ctrl+Shift+S: Git stash
     if (e.ctrlKey && e.shiftKey && e.key === "S") {
-      e.preventDefault();
+      intercept();
       showStashDialog();
       return;
     }
     // Ctrl+Shift+R: Code review
     if (e.ctrlKey && e.shiftKey && e.key === "R") {
-      e.preventDefault();
+      intercept();
       showCodeReview();
       return;
     }
     // Ctrl+Shift+A: Agent management
     if (e.ctrlKey && e.shiftKey && e.key === "A") {
-      e.preventDefault();
+      intercept();
       showAgentManager();
       return;
     }
     // Ctrl+Shift+D: Dispatch agent
     if (e.ctrlKey && e.shiftKey && e.key === "D") {
-      e.preventDefault();
+      intercept();
       showDispatchDialog();
       return;
     }
     // Alt+T: Theme settings
     if (e.altKey && !e.ctrlKey && (e.key === "t" || e.key === "T") && !e.shiftKey) {
-      e.preventDefault();
+      intercept();
       showThemeDialog();
       return;
     }
     // Alt+Shift+L: Application logs
     if (e.altKey && e.shiftKey && (e.key === "L" || e.key === "l")) {
-      e.preventDefault();
+      intercept();
       showLogsDialog();
       return;
     }
     // Ctrl+Z: Undo stage/unstage (not in terminal/input)
     if (e.ctrlKey && e.key === "z" && !e.shiftKey && !inTerminal && !inInput) {
-      e.preventDefault();
+      intercept();
       handleUndo();
       return;
     }
     // ?: Help (not in terminal/input)
     if (e.key === "?" && !inTerminal && !inInput) {
-      e.preventDefault();
+      intercept();
       showHelpDialog();
       return;
     }
     // Ctrl+Tab / Ctrl+Shift+Tab: switch tabs
     if (e.ctrlKey && e.key === "Tab") {
-      e.preventDefault();
+      intercept();
       const ws = appState.activeWs;
       if (!ws || ws.tabs.length <= 1) return;
       const dir = e.shiftKey ? -1 : 1;
       const next = (ws.activeTab + dir + ws.tabs.length) % ws.tabs.length;
       appState.setActiveTab(next);
     }
-  });
+  }, true);
 }
 
 async function handleUndo() {
@@ -254,5 +258,8 @@ function showCloseConfirm(activeCount: number, onConfirm: () => void, onCancel: 
 
   document.body.appendChild(overlay);
 }
+
+// Disable browser context menu so the app feels native
+document.addEventListener("contextmenu", (e) => e.preventDefault());
 
 document.addEventListener("DOMContentLoaded", init);

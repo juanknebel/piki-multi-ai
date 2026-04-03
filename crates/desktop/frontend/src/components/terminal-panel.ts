@@ -2,6 +2,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { SearchAddon } from "@xterm/addon-search";
+import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { appState } from "../state";
 import * as ipc from "../ipc";
 import { themeEngine } from "../theme";
@@ -78,7 +79,7 @@ export function createTerminal(tabId: string): TerminalInstance {
     lineHeight: 1.25,
     theme: themeEngine.buildXtermTheme(),
     cursorBlink: true,
-    cursorStyle: "bar",
+    cursorStyle: "block",
     scrollback: 5000,
     allowProposedApi: true,
   });
@@ -96,7 +97,7 @@ export function createTerminal(tabId: string): TerminalInstance {
   terminal.onSelectionChange(() => {
     const sel = terminal.getSelection();
     if (sel) {
-      navigator.clipboard.writeText(sel).catch(() => {});
+      writeText(sel).catch(() => {});
     }
   });
 
@@ -106,11 +107,11 @@ export function createTerminal(tabId: string): TerminalInstance {
     if (e.ctrlKey && e.shiftKey && e.type === "keydown") {
       if (e.key === "C") {
         const sel = terminal.getSelection();
-        if (sel) navigator.clipboard.writeText(sel).catch(() => {});
+        if (sel) writeText(sel).catch(() => {});
         return false; // prevent xterm from handling
       }
       if (e.key === "V") {
-        navigator.clipboard.readText().then((text) => {
+        readText().then((text) => {
           if (text) terminal.paste(text);
         }).catch(() => {});
         return false;
