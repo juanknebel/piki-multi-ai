@@ -2,6 +2,7 @@ pub mod agents;
 pub mod diff;
 pub mod git;
 pub mod gitlog;
+pub mod kanban;
 pub mod logs;
 pub mod markdown;
 pub mod pty;

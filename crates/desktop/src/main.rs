@@ -166,6 +166,11 @@ fn main() {
             commands::theme::set_theme,
             commands::logs::get_logs,
             commands::logs::clear_logs,
+            commands::kanban::kanban_load_board,
+            commands::kanban::kanban_create_card,
+            commands::kanban::kanban_update_card,
+            commands::kanban::kanban_move_card,
+            commands::kanban::kanban_delete_card,
         ])
         .run(tauri::generate_context!())
         .expect("error while running piki-desktop");

@@ -97,8 +97,9 @@ A modern desktop GUI is available via `piki-desktop`, built with [Tauri v2](http
 - **5 built-in theme presets** — Obsidian Dark, Nord, Catppuccin Mocha, Solarized Light, Tokyo Night; switch instantly via `Alt+T` or command palette
 - **Full theme customization** — Individual color pickers for ~60 variables across 13 groups, live preview, import/export themes as JSON, persisted in SQLite
 - **xterm.js terminals** — Full terminal emulation with WebGL rendering, block cursor, native clipboard via `tauri-plugin-clipboard-manager` (copy on selection, `Ctrl+Shift+C/V`), terminal search (`Ctrl+Shift+F`)
-- **Activity bar + sidebar** — Explorer (workspace list with groups), Source Control (git staging/committing), Agents panel (manage/dispatch AI agents)
-- **Multi-provider tabs** — Open Claude, Gemini, OpenCode, Kilo, Codex, or Shell tabs per workspace
+- **Activity bar + sidebar** — Explorer (workspace list with groups), Source Control (git staging/committing), Agents panel (manage/dispatch AI agents), Kanban Board (quick access via activity bar icon)
+- **Multi-provider tabs** — Open Claude, Gemini, OpenCode, Kilo, Codex, Shell, or Kanban Board tabs per workspace
+- **Kanban Board** — Integrated kanban board powered by [flow-core](https://github.com/juanknebel/flow); columns (TODO, IN PROGRESS, IN REVIEW, DONE) with drag-and-drop card movement, inline card actions (edit, move, delete), priority badges (Bug/High/Medium/Low/Wishlist), edit modal with title/description/priority/assignee fields; auto-creates board if none exists; open via `Alt+K`, activity bar, command palette, or View menu
 - **Git integration** — Stage/unstage files, commit, push, merge/rebase, stash, conflict resolution, git log viewer; auto-refresh via hybrid file watcher (500ms) + periodic git status poll (2s) + background `git fetch` (60s) for live ahead/behind tracking
 - **Side-by-side diff viewer** — With char-level highlights, 3-way merge view, and conflict resolution buttons
 - **Code review** — PR info, per-file diffs, inline comments, submit reviews via `gh` CLI
@@ -128,6 +129,7 @@ A modern desktop GUI is available via `piki-desktop`, built with [Tauri v2](http
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | Switch tabs |
 | `Ctrl+Z` | Undo stage/unstage |
 | `Alt+D` | Dashboard |
+| `Alt+K` | Kanban Board |
 | `Alt+L` | Git log |
 | `Alt+T` | Theme settings |
 | `Alt+Shift+L` | Application logs |

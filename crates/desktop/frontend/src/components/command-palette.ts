@@ -219,6 +219,7 @@ function buildCommands(): Command[] {
     "OpenCode",
     "Kilo",
     "Codex",
+    "Kanban",
   ];
   for (const provider of tabProviders) {
     cmds.push({
@@ -399,6 +400,13 @@ function buildCommands(): Command[] {
     label: "Show Agents",
     category: "View",
     action: () => appState.setActiveView("agents"),
+  });
+  cmds.push({
+    id: "view-kanban",
+    label: "Show Kanban Board",
+    category: "View",
+    keybinding: "Alt+K",
+    action: () => appState.setActiveView("kanban"),
   });
   cmds.push({
     id: "view-dashboard",

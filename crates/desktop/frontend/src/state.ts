@@ -6,7 +6,7 @@ import type {
   WorkspaceStatus,
 } from "./types";
 
-export type SidebarView = "explorer" | "git" | "agents";
+export type SidebarView = "explorer" | "git" | "agents" | "kanban";
 
 export interface UndoEntry {
   action: "stage" | "unstage";

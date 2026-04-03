@@ -6,6 +6,7 @@ import { renderActivityBar } from "./components/activity-bar";
 import { initSidebar } from "./components/sidebar";
 import { renderTabBar } from "./components/tab-bar";
 import { initTerminalPanel, openTerminalSearch } from "./components/terminal-panel";
+import { initKanbanPanel } from "./components/kanban-panel";
 import { renderStatusBar } from "./components/status-bar";
 import { initToasts } from "./components/toast";
 import { openCommandPalette } from "./components/command-palette";
@@ -34,7 +35,9 @@ async function init() {
   renderActivityBar(document.getElementById("activity-bar")!);
   initSidebar();
   renderTabBar(document.getElementById("tab-bar")!);
-  await initTerminalPanel(document.getElementById("main-content")!);
+  const mainContentEl = document.getElementById("main-content")!;
+  await initTerminalPanel(mainContentEl);
+  initKanbanPanel(mainContentEl);
   renderStatusBar(document.getElementById("status-bar")!);
   initToasts();
 
@@ -163,6 +166,12 @@ async function init() {
     if (e.ctrlKey && e.shiftKey && e.key === "D") {
       intercept();
       showDispatchDialog();
+      return;
+    }
+    // Alt+K: Kanban board
+    if (e.altKey && !e.ctrlKey && (e.key === "k" || e.key === "K") && !e.shiftKey) {
+      intercept();
+      appState.setActiveView("kanban");
       return;
     }
     // Alt+T: Theme settings

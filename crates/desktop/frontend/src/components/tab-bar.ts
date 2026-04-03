@@ -69,6 +69,7 @@ const NEW_TAB_PROVIDERS: AIProvider[] = [
   "Kilo",
   "Codex",
   "Shell",
+  "Kanban",
 ];
 
 function showNewTabMenu(anchor: HTMLElement) {

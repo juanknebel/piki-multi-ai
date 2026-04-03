@@ -3677,6 +3677,8 @@ dependencies = [
  "anyhow",
  "base64 0.22.1",
  "chrono",
+ "dirs",
+ "flow-core",
  "parking_lot",
  "piki-api-client",
  "piki-core",

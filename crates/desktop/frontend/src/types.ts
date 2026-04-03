@@ -105,6 +105,32 @@ export const PROVIDER_ICONS: Record<AIProvider, string> = {
   Api: "A",
 };
 
+// Kanban types
+export interface KanbanCard {
+  id: string;
+  title: string;
+  description: string;
+  priority: string;
+  assignee: string;
+}
+
+export interface KanbanColumn {
+  id: string;
+  cards: KanbanCard[];
+}
+
+export interface KanbanBoard {
+  columns: KanbanColumn[];
+}
+
+export const PRIORITY_CSS: Record<string, string> = {
+  Bug: "priority-bug",
+  High: "priority-high",
+  Medium: "priority-medium",
+  Low: "priority-low",
+  Wishlist: "priority-wishlist",
+};
+
 export const FILE_STATUS_LABELS: Record<FileStatus, string> = {
   Modified: "M",
   Added: "A",

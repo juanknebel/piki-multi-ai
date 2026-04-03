@@ -8,6 +8,7 @@ import type {
   PtyExitEvent,
   GitRefreshEvent,
   ToastEvent,
+  KanbanBoard,
 } from "./types";
 
 // Workspace commands
@@ -405,6 +406,34 @@ export function setTheme(preset: string, overrides: string): Promise<void> {
 // System commands
 export function getSysinfo(): Promise<string> {
   return invoke("get_sysinfo");
+}
+
+// Kanban commands
+export function kanbanLoadBoard(workspaceIdx: number): Promise<KanbanBoard> {
+  return invoke("kanban_load_board", { workspaceIdx });
+}
+
+export function kanbanCreateCard(workspaceIdx: number, columnId: string): Promise<string> {
+  return invoke("kanban_create_card", { workspaceIdx, columnId });
+}
+
+export function kanbanUpdateCard(
+  workspaceIdx: number,
+  cardId: string,
+  title: string,
+  description: string,
+  priority: string,
+  assignee: string,
+): Promise<void> {
+  return invoke("kanban_update_card", { workspaceIdx, cardId, title, description, priority, assignee });
+}
+
+export function kanbanMoveCard(workspaceIdx: number, cardId: string, toColumnId: string): Promise<void> {
+  return invoke("kanban_move_card", { workspaceIdx, cardId, toColumnId });
+}
+
+export function kanbanDeleteCard(workspaceIdx: number, cardId: string): Promise<void> {
+  return invoke("kanban_delete_card", { workspaceIdx, cardId });
 }
 
 // Event listeners

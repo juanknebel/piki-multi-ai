@@ -1,4 +1,5 @@
 import { appState } from "../state";
+import * as ipc from "../ipc";
 import { renderWorkspaceList } from "./workspace-list";
 import { renderSourceControl } from "./source-control";
 import { renderAgentsPanel } from "./agents-panel";
@@ -13,11 +14,42 @@ export function initSidebar() {
   renderSourceControl(scView);
   renderAgentsPanel(agentsView);
 
+  // Track last non-kanban view so we can restore sidebar when switching away
+  let lastSidebarView: "explorer" | "git" | "agents" = "explorer";
+
   function updateView() {
     const view = appState.activeView;
+
+    if (view === "kanban") {
+      // Kanban opens as a tab, not a sidebar panel — spawn a tab and restore sidebar
+      spawnKanbanTab();
+      // Restore previous sidebar view
+      appState.setActiveView(lastSidebarView);
+      return;
+    }
+
+    lastSidebarView = view;
     explorerView.style.display = view === "explorer" ? "flex" : "none";
     scView.style.display = view === "git" ? "flex" : "none";
     agentsView.style.display = view === "agents" ? "flex" : "none";
+  }
+
+  async function spawnKanbanTab() {
+    // Check if there's already a Kanban tab open in the active workspace
+    const ws = appState.activeWs;
+    if (ws) {
+      const existingIdx = ws.tabs.findIndex((t) => t.provider === "Kanban");
+      if (existingIdx >= 0) {
+        appState.setActiveTab(existingIdx);
+        return;
+      }
+    }
+    try {
+      const tabId = await ipc.spawnTab(appState.activeWorkspace, "Kanban");
+      appState.addTab(appState.activeWorkspace, { id: tabId, provider: "Kanban", alive: true });
+    } catch (err) {
+      console.error("Failed to open Kanban tab:", err);
+    }
   }
 
   appState.on("view-changed", updateView);

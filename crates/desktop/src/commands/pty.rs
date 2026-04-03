@@ -17,7 +17,22 @@ pub async fn spawn_tab(
 ) -> Result<String, String> {
     let ai_provider = parse_provider(&provider)?;
 
-    // Non-PTY providers (Kanban, CodeReview, Api) are handled in Phase 2+
+    // Kanban tabs don't need a PTY session
+    if ai_provider == AIProvider::Kanban {
+        let mut tab = DesktopTab::new(ai_provider);
+        let tab_id = tab.id.clone();
+        tab.alive = true;
+        let mut app = state.lock();
+        if workspace_idx >= app.workspaces.len() {
+            return Err("Workspace index out of range".to_string());
+        }
+        app.workspaces[workspace_idx].tabs.push(tab);
+        app.workspaces[workspace_idx].active_tab =
+            app.workspaces[workspace_idx].tabs.len() - 1;
+        return Ok(tab_id);
+    }
+
+    // Non-PTY providers (CodeReview, Api) are handled in Phase 2+
     let command = ai_provider.resolved_command();
     if command.is_empty() {
         return Err(format!("{provider} does not use a terminal session"));

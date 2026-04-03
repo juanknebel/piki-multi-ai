@@ -6,6 +6,7 @@ import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { appState } from "../state";
 import * as ipc from "../ipc";
 import { themeEngine } from "../theme";
+import { hideKanbanPanels, showKanbanPanel } from "./kanban-panel";
 
 export interface TerminalInstance {
   tabId: string;
@@ -133,10 +134,11 @@ export function createTerminal(tabId: string): TerminalInstance {
 }
 
 function showActiveTerminal() {
-  // Hide all terminals
+  // Hide all terminals and kanban panels
   for (const instance of terminals.values()) {
     instance.element.style.display = "none";
   }
+  hideKanbanPanels();
 
   // Remove welcome message if present
   mainContent.querySelector(".terminal-welcome")?.remove();
@@ -150,6 +152,12 @@ function showActiveTerminal() {
   const tab = ws.tabs[ws.activeTab];
   if (!tab) {
     showWelcome();
+    return;
+  }
+
+  // Route Kanban tabs to the kanban panel
+  if (tab.provider === "Kanban") {
+    showKanbanPanel(tab.id);
     return;
   }
 
