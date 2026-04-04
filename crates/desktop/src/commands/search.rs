@@ -71,6 +71,27 @@ pub async fn read_file_content(
         .map_err(|e| format!("Failed to read file: {e}"))
 }
 
+#[tauri::command]
+pub async fn write_file_content(
+    state: State<'_, Mutex<DesktopApp>>,
+    workspace_idx: usize,
+    path: String,
+    content: String,
+) -> Result<(), String> {
+    let ws_path = {
+        let app = state.lock();
+        if workspace_idx >= app.workspaces.len() {
+            return Err("Workspace index out of range".to_string());
+        }
+        app.workspaces[workspace_idx].info.path.clone()
+    };
+
+    let full_path = ws_path.join(&path);
+    tokio::fs::write(&full_path, content.as_bytes())
+        .await
+        .map_err(|e| format!("Failed to write file: {e}"))
+}
+
 #[derive(Serialize, Clone)]
 pub struct SearchMatch {
     pub path: String,

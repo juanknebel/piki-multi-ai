@@ -18,7 +18,7 @@ use tauri::Emitter;
 /// user's login shell captures the full environment.
 ///
 /// The result is computed once and cached for the process lifetime.
-fn user_login_env() -> &'static HashMap<String, String> {
+pub(crate) fn user_login_env() -> &'static HashMap<String, String> {
     static ENV: OnceLock<HashMap<String, String>> = OnceLock::new();
     ENV.get_or_init(|| {
         let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());

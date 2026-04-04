@@ -170,6 +170,84 @@ pub async fn close_tab(
     Ok(())
 }
 
+#[tauri::command]
+pub async fn spawn_editor_tab(
+    app_handle: AppHandle,
+    state: State<'_, Mutex<DesktopApp>>,
+    workspace_idx: usize,
+    file_path: String,
+) -> Result<String, String> {
+    // Resolve shell command (same logic as Shell provider in spawn_tab)
+    let shell_command = {
+        let app = state.lock();
+        let custom_shell = app
+            .storage
+            .ui_prefs
+            .as_ref()
+            .and_then(|p| p.get_preference("settings").ok().flatten())
+            .and_then(|json| {
+                serde_json::from_str::<serde_json::Value>(&json)
+                    .ok()?
+                    .get("shell")?
+                    .as_str()
+                    .filter(|s| !s.is_empty())
+                    .map(String::from)
+            });
+        drop(app);
+        custom_shell.unwrap_or_else(|| AIProvider::Shell.resolved_command())
+    };
+
+    // Resolve $EDITOR from login environment
+    let editor = crate::pty_raw::user_login_env()
+        .get("EDITOR")
+        .cloned()
+        .unwrap_or_else(|| "vi".to_string());
+
+    let mut tab = DesktopTab::new(AIProvider::Shell);
+    let tab_id = tab.id.clone();
+
+    let worktree_path = {
+        let app = state.lock();
+        if workspace_idx >= app.workspaces.len() {
+            return Err("Workspace index out of range".to_string());
+        }
+        app.workspaces[workspace_idx].info.path.clone()
+    };
+
+    let args: Vec<String> = Vec::new();
+    let mut pty = RawPtySession::spawn(
+        app_handle,
+        tab_id.clone(),
+        &worktree_path,
+        24,
+        80,
+        &shell_command,
+        &args,
+    )
+    .map_err(|e| format!("Failed to spawn PTY: {e}"))?;
+
+    // Write editor command to PTY stdin
+    let cmd = format!("{} {}\n", editor, shell_quote(&file_path));
+    pty.write(cmd.as_bytes())
+        .map_err(|e| format!("Failed to write editor command: {e}"))?;
+
+    tab.pty = Some(pty);
+    tab.alive = true;
+
+    let mut app = state.lock();
+    if workspace_idx < app.workspaces.len() {
+        app.workspaces[workspace_idx].tabs.push(tab);
+        app.workspaces[workspace_idx].active_tab =
+            app.workspaces[workspace_idx].tabs.len() - 1;
+    }
+
+    Ok(tab_id)
+}
+
+fn shell_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "'\\''"))
+}
+
 fn parse_provider(s: &str) -> Result<AIProvider, String> {
     match s {
         "Claude" => Ok(AIProvider::Claude),

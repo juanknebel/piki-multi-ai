@@ -1,6 +1,7 @@
 import { appState } from "../state";
 import * as ipc from "../ipc";
 import { showFileViewer } from "./file-viewer";
+import { toast } from "./toast";
 import type { SearchMatch } from "../ipc";
 
 let searchEl: HTMLElement | null = null;
@@ -102,6 +103,16 @@ export function openProjectSearch() {
     showFileViewer(wsIdx, m.path);
   }
 
+  async function editMatch(m: SearchMatch) {
+    closeProjectSearch();
+    try {
+      const tabId = await ipc.spawnEditorTab(wsIdx, m.path);
+      appState.addTab(wsIdx, { id: tabId, provider: "Shell", alive: true });
+    } catch (err) {
+      toast(`Failed to open editor: ${err}`, "error");
+    }
+  }
+
   input.addEventListener("input", () => {
     if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(doSearch, 300);
@@ -121,6 +132,9 @@ export function openProjectSearch() {
     } else if (e.key === "Enter") {
       e.preventDefault();
       if (matches[selectedIdx]) selectMatch(matches[selectedIdx]);
+    } else if (e.key === "e" && e.ctrlKey) {
+      e.preventDefault();
+      if (matches[selectedIdx]) editMatch(matches[selectedIdx]);
     } else if (e.key === "Escape") {
       closeProjectSearch();
     }

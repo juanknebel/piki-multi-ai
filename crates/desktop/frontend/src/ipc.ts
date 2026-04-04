@@ -62,6 +62,13 @@ export function spawnTab(
   return invoke("spawn_tab", { workspaceIdx, provider });
 }
 
+export function spawnEditorTab(
+  workspaceIdx: number,
+  filePath: string,
+): Promise<string> {
+  return invoke("spawn_editor_tab", { workspaceIdx, filePath });
+}
+
 export function writePty(tabId: string, data: string): Promise<void> {
   return invoke("write_pty", { tabId, data });
 }
@@ -275,6 +282,10 @@ export function fuzzyFileList(workspaceIdx: number): Promise<string[]> {
 
 export function readFileContent(workspaceIdx: number, path: string): Promise<string> {
   return invoke("read_file_content", { workspaceIdx, path });
+}
+
+export function writeFileContent(workspaceIdx: number, path: string, content: string): Promise<void> {
+  return invoke("write_file_content", { workspaceIdx, path, content });
 }
 
 export interface SearchMatch {

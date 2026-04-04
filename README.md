@@ -98,7 +98,7 @@ A modern desktop GUI is available via `piki-desktop`, built with [Tauri v2](http
 - **Full theme customization** — Individual color pickers for ~60 variables across 13 groups, live preview, import/export themes as JSON, persisted in SQLite
 - **xterm.js terminals** — Full terminal emulation with WebGL rendering, block cursor, native clipboard via `tauri-plugin-clipboard-manager` (copy on selection, `Ctrl+Shift+C/V`), terminal search (`Ctrl+Shift+B`)
 - **Project search** — `Ctrl+Shift+F` to grep file contents across the workspace using ripgrep (`rg`); debounced search with file path, line number, and highlighted match snippet; Enter opens file viewer with scroll and copy support
-- **File viewer** — Read-only modal for viewing file contents; opened from fuzzy file search (`Ctrl+F`) or project search; monospace rendering with scroll and copy-to-clipboard button
+- **File viewer** — Modal for viewing file contents; opened from fuzzy file search (`Ctrl+F`) or project search; monospace rendering with scroll, copy-to-clipboard, Edit button (`Ctrl+E`) to open in `$EDITOR` in a new terminal tab, and Quick Edit (`Ctrl+I`) for inline editing with Save/Cancel directly in the overlay
 - **Activity bar + sidebar** — Explorer (workspace list with groups), Source Control (git staging/committing), Agents panel (manage/dispatch AI agents), Kanban Board (quick access via activity bar icon)
 - **Multi-provider tabs** — Open Claude, Gemini, OpenCode, Kilo, Codex, Shell, or Kanban Board tabs per workspace
 - **Kanban Board** — Integrated kanban board powered by [flow-core](https://github.com/juanknebel/flow); columns (TODO, IN PROGRESS, IN REVIEW, DONE) with drag-and-drop card movement, inline card actions (edit, move, delete), priority badges (Bug/High/Medium/Low/Wishlist), edit modal with title/description/priority/assignee fields; configurable column colors (right-click header to pick from 16-color palette, persisted in localStorage); auto-creates board if none exists; open via `Alt+K`, activity bar, command palette, or View menu
@@ -125,6 +125,8 @@ A modern desktop GUI is available via `piki-desktop`, built with [Tauri v2](http
 | `Ctrl+M` | Merge / Rebase |
 | `Ctrl+F` | Fuzzy file search |
 | `Ctrl+Shift+F` | Search in project (grep) |
+| `Ctrl+E` | Edit file in $EDITOR (in file search / project search / file viewer) |
+| `Ctrl+I` | Quick Edit inline (in file viewer) |
 | `Ctrl+Shift+B` | Search in terminal |
 | `Ctrl+Shift+R` | Code review |
 | `Ctrl+Shift+A` | Manage agents |

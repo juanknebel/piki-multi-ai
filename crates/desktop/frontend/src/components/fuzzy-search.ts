@@ -1,6 +1,7 @@
 import { appState } from "../state";
 import * as ipc from "../ipc";
 import { showFileViewer } from "./file-viewer";
+import { toast } from "./toast";
 
 let searchEl: HTMLElement | null = null;
 
@@ -91,6 +92,16 @@ export async function openFuzzySearch() {
     showFileViewer(wsIdx, file);
   }
 
+  async function editFile(file: string) {
+    closeFuzzySearch();
+    try {
+      const tabId = await ipc.spawnEditorTab(wsIdx, file);
+      appState.addTab(wsIdx, { id: tabId, provider: "Shell", alive: true });
+    } catch (err) {
+      toast(`Failed to open editor: ${err}`, "error");
+    }
+  }
+
   input.addEventListener("input", filter);
   input.addEventListener("keydown", (e) => {
     if (e.key === "ArrowDown") {
@@ -107,6 +118,10 @@ export async function openFuzzySearch() {
       e.preventDefault();
       const shown = filtered.slice(0, 50);
       if (shown[selectedIdx]) selectFile(shown[selectedIdx]);
+    } else if (e.key === "e" && e.ctrlKey) {
+      e.preventDefault();
+      const shown = filtered.slice(0, 50);
+      if (shown[selectedIdx]) editFile(shown[selectedIdx]);
     } else if (e.key === "Escape") {
       closeFuzzySearch();
     }
