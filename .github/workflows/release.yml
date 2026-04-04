@@ -104,6 +104,9 @@ jobs:
           mkdir -p desktop-bundles
           cp target/${{ matrix.target }}/release/bundle/deb/*.deb desktop-bundles/ 2>/dev/null || true
           cp target/${{ matrix.target }}/release/bundle/dmg/*.dmg desktop-bundles/ 2>/dev/null || true
+          if [ -f target/${{ matrix.target }}/release/piki-desktop ]; then
+            tar czf desktop-bundles/piki-desktop-linux-amd64.tar.gz -C target/${{ matrix.target }}/release piki-desktop
+          fi
           ls -la desktop-bundles/
 
       - name: Upload desktop artifacts
@@ -117,15 +120,35 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           merge-multiple: true
 
+      - name: Package Linux bundle
+        run: |
+          mkdir -p piki-linux-amd64
+          tar xzf piki-multi-ai-linux-amd64.tar.gz -C piki-linux-amd64/
+          tar xzf piki-desktop-linux-amd64.tar.gz -C piki-linux-amd64/
+          cp packaging/linux/install.sh piki-linux-amd64/
+          cp packaging/linux/README.md piki-linux-amd64/
+          cp crates/desktop/icons/icon.png piki-linux-amd64/
+          chmod +x piki-linux-amd64/install.sh
+          tar czf piki-linux-amd64.tar.gz piki-linux-amd64/
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+          body: |
+            ### macOS
+            The `.dmg` is not signed. After mounting and dragging to Applications, remove the quarantine attribute:
+            ```
+            xattr -cr /Applications/Piki\ Desktop.app
+            ```
+            Or right-click the app and select **Open** to bypass Gatekeeper.
           files: |
             *.tar.gz
             *.deb
