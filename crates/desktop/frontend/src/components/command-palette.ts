@@ -8,6 +8,7 @@ import { showStashDialog } from "./dialogs/stash-dialog";
 import { showCodeReview } from "./code-review";
 import { openFuzzySearch } from "./fuzzy-search";
 import { openProjectSearch } from "./project-search";
+import { showSettingsDialog } from "./dialogs/settings-dialog";
 import { openWorkspaceSwitcher } from "./workspace-switcher";
 import { showAgentManager } from "./dialogs/agent-dialog";
 import { showDispatchDialog } from "./dialogs/dispatch-dialog";
@@ -429,6 +430,13 @@ function buildCommands(): Command[] {
     category: "Help",
     keybinding: "?",
     action: () => showHelpDialog(),
+  });
+  cmds.push({
+    id: "settings",
+    label: "Settings",
+    category: "Edit",
+    keybinding: "Alt+S",
+    action: () => showSettingsDialog(),
   });
   cmds.push({
     id: "terminal-search",

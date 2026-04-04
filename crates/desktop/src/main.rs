@@ -153,6 +153,8 @@ fn main() {
             commands::search::fuzzy_file_list,
             commands::search::read_file_content,
             commands::search::project_search,
+            commands::settings::get_settings,
+            commands::settings::set_settings,
             commands::agents::list_agents,
             commands::agents::save_agent,
             commands::agents::delete_agent,

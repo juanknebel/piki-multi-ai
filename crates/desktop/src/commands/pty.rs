@@ -33,7 +33,27 @@ pub async fn spawn_tab(
     }
 
     // Non-PTY providers (CodeReview, Api) are handled in Phase 2+
-    let command = ai_provider.resolved_command();
+    let command = if ai_provider == AIProvider::Shell {
+        // Check user-configured shell from settings
+        let app = state.lock();
+        let custom_shell = app
+            .storage
+            .ui_prefs
+            .as_ref()
+            .and_then(|p| p.get_preference("settings").ok().flatten())
+            .and_then(|json| {
+                serde_json::from_str::<serde_json::Value>(&json)
+                    .ok()?
+                    .get("shell")?
+                    .as_str()
+                    .filter(|s| !s.is_empty())
+                    .map(String::from)
+            });
+        drop(app);
+        custom_shell.unwrap_or_else(|| ai_provider.resolved_command())
+    } else {
+        ai_provider.resolved_command()
+    };
     if command.is_empty() {
         return Err(format!("{provider} does not use a terminal session"));
     }

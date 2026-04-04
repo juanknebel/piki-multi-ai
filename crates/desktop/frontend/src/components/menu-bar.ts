@@ -10,6 +10,7 @@ import { openFuzzySearch } from "./fuzzy-search";
 import { openWorkspaceSwitcher } from "./workspace-switcher";
 import { openTerminalSearch } from "./terminal-panel";
 import { openProjectSearch } from "./project-search";
+import { showSettingsDialog } from "./dialogs/settings-dialog";
 import { openCommandPalette } from "./command-palette";
 import { showAgentManager } from "./dialogs/agent-dialog";
 import { showDispatchDialog } from "./dialogs/dispatch-dialog";
@@ -117,6 +118,7 @@ const MENUS: MenuDefinition[] = [
       { label: "Search in Terminal", shortcut: "Ctrl+Shift+B", action: () => openTerminalSearch() },
       SEP,
       { label: "Theme Settings", shortcut: "Alt+T", action: () => showThemeDialog() },
+      { label: "Settings", shortcut: "Alt+S", action: () => showSettingsDialog() },
     ],
   },
   {

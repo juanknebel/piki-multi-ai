@@ -16,8 +16,8 @@ const SHORTCUTS: { category: string; items: [string, string][] }[] = [
     category: "Git",
     items: [
       ["Ctrl+F", "Find File"],
-      ["Alt+L", "Git Log"],
       ["Ctrl+M", "Merge / Rebase"],
+      ["Alt+L", "Git Log"],
       ["Ctrl+Shift+S", "Git Stash"],
       ["Ctrl+Shift+F", "Search in Project"],
       ["Ctrl+Shift+B", "Search in Terminal"],
@@ -32,6 +32,7 @@ const SHORTCUTS: { category: string; items: [string, string][] }[] = [
       ["Ctrl+Shift+D", "Dispatch Agent"],
       ["Alt+K", "Kanban Board"],
       ["Alt+T", "Theme Settings"],
+      ["Alt+S", "Settings"],
       ["Alt+Shift+L", "Application Logs"],
     ],
   },

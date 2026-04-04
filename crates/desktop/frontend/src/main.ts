@@ -7,6 +7,8 @@ import { initSidebar } from "./components/sidebar";
 import { renderTabBar } from "./components/tab-bar";
 import { initTerminalPanel, openTerminalSearch } from "./components/terminal-panel";
 import { initKanbanPanel } from "./components/kanban-panel";
+import { bindAction, handleGlobalKeydown, loadShortcuts } from "./shortcuts";
+import { showSettingsDialog } from "./components/dialogs/settings-dialog";
 import { renderStatusBar } from "./components/status-bar";
 import { initToasts } from "./components/toast";
 import { openCommandPalette } from "./components/command-palette";
@@ -86,135 +88,40 @@ async function init() {
     console.error("Failed to register close handler:", err);
   }
 
+  // Bind actions to the shortcut system
+  bindAction("command-palette", () => openCommandPalette());
+  bindAction("new-workspace", () => showWorkspaceDialog({ mode: "create" }));
+  bindAction("merge-rebase", () => showMergeDialog());
+  bindAction("workspace-switcher", () => openWorkspaceSwitcher());
+  bindAction("fuzzy-search", () => openFuzzySearch());
+  bindAction("project-search", () => openProjectSearch());
+  bindAction("terminal-search", () => openTerminalSearch());
+  bindAction("git-log", () => showGitLog());
+  bindAction("dashboard", () => showDashboard());
+  bindAction("git-stash", () => showStashDialog());
+  bindAction("code-review", () => showCodeReview());
+  bindAction("agent-manager", () => showAgentManager());
+  bindAction("dispatch-agent", () => showDispatchDialog());
+  bindAction("kanban", () => appState.setActiveView("kanban"));
+  bindAction("theme", () => showThemeDialog());
+  bindAction("settings", () => showSettingsDialog());
+  bindAction("logs", () => showLogsDialog());
+  bindAction("undo", () => handleUndo());
+  bindAction("help", () => showHelpDialog());
+
+  // Load user shortcut overrides from storage
+  await loadShortcuts();
+
+  // Tab switching via custom event from shortcut system
+  document.addEventListener("switch-tab", ((e: CustomEvent) => {
+    const ws = appState.activeWs;
+    if (!ws || ws.tabs.length <= 1) return;
+    const next = (ws.activeTab + e.detail.direction + ws.tabs.length) % ws.tabs.length;
+    appState.setActiveTab(next);
+  }) as EventListener);
+
   // Global keyboard shortcuts — capture phase so they fire before xterm.js
-  // consumes the event. stopPropagation prevents the key from also reaching
-  // the terminal PTY.
-  document.addEventListener("keydown", (e) => {
-    const inTerminal = !!document.activeElement?.closest(".xterm");
-    const inInput =
-      document.activeElement?.tagName === "INPUT" ||
-      document.activeElement?.tagName === "TEXTAREA";
-
-    const intercept = () => { e.preventDefault(); e.stopPropagation(); };
-
-    // Ctrl+P: Command palette
-    if (e.ctrlKey && (e.key === "p" || e.key === "P")) {
-      intercept();
-      openCommandPalette();
-      return;
-    }
-    // Ctrl+N: New workspace
-    if (e.ctrlKey && e.key === "n") {
-      intercept();
-      showWorkspaceDialog({ mode: "create" });
-      return;
-    }
-    // Ctrl+M: Merge/Rebase
-    if (e.ctrlKey && e.key === "m") {
-      intercept();
-      showMergeDialog();
-      return;
-    }
-    // Ctrl+Space: Workspace switcher
-    if (e.ctrlKey && e.key === " ") {
-      intercept();
-      openWorkspaceSwitcher();
-      return;
-    }
-    // Ctrl+F: Fuzzy file search
-    if (e.ctrlKey && !e.shiftKey && e.key === "f") {
-      intercept();
-      openFuzzySearch();
-      return;
-    }
-    // Ctrl+Shift+F: Search in project (grep)
-    if (e.ctrlKey && e.shiftKey && e.key === "F") {
-      intercept();
-      openProjectSearch();
-      return;
-    }
-    // Ctrl+Shift+B: Terminal search
-    if (e.ctrlKey && e.shiftKey && e.key === "B") {
-      intercept();
-      openTerminalSearch();
-      return;
-    }
-    // Alt+L: Git log
-    if (e.altKey && !e.ctrlKey && !e.shiftKey && (e.key === "l" || e.key === "L")) {
-      intercept();
-      showGitLog();
-      return;
-    }
-    // Alt+D: Dashboard
-    if (e.altKey && !e.ctrlKey && e.key === "d") {
-      intercept();
-      showDashboard();
-      return;
-    }
-    // Ctrl+Shift+S: Git stash
-    if (e.ctrlKey && e.shiftKey && e.key === "S") {
-      intercept();
-      showStashDialog();
-      return;
-    }
-    // Ctrl+Shift+R: Code review
-    if (e.ctrlKey && e.shiftKey && e.key === "R") {
-      intercept();
-      showCodeReview();
-      return;
-    }
-    // Ctrl+Shift+A: Agent management
-    if (e.ctrlKey && e.shiftKey && e.key === "A") {
-      intercept();
-      showAgentManager();
-      return;
-    }
-    // Ctrl+Shift+D: Dispatch agent
-    if (e.ctrlKey && e.shiftKey && e.key === "D") {
-      intercept();
-      showDispatchDialog();
-      return;
-    }
-    // Alt+K: Kanban board
-    if (e.altKey && !e.ctrlKey && (e.key === "k" || e.key === "K") && !e.shiftKey) {
-      intercept();
-      appState.setActiveView("kanban");
-      return;
-    }
-    // Alt+T: Theme settings
-    if (e.altKey && !e.ctrlKey && (e.key === "t" || e.key === "T") && !e.shiftKey) {
-      intercept();
-      showThemeDialog();
-      return;
-    }
-    // Alt+Shift+L: Application logs
-    if (e.altKey && e.shiftKey && (e.key === "L" || e.key === "l")) {
-      intercept();
-      showLogsDialog();
-      return;
-    }
-    // Ctrl+Z: Undo stage/unstage (not in terminal/input)
-    if (e.ctrlKey && e.key === "z" && !e.shiftKey && !inTerminal && !inInput) {
-      intercept();
-      handleUndo();
-      return;
-    }
-    // ?: Help (not in terminal/input)
-    if (e.key === "?" && !inTerminal && !inInput) {
-      intercept();
-      showHelpDialog();
-      return;
-    }
-    // Ctrl+Tab / Ctrl+Shift+Tab: switch tabs
-    if (e.ctrlKey && e.key === "Tab") {
-      intercept();
-      const ws = appState.activeWs;
-      if (!ws || ws.tabs.length <= 1) return;
-      const dir = e.shiftKey ? -1 : 1;
-      const next = (ws.activeTab + dir + ws.tabs.length) % ws.tabs.length;
-      appState.setActiveTab(next);
-    }
-  }, true);
+  document.addEventListener("keydown", handleGlobalKeydown, true);
 }
 
 async function handleUndo() {

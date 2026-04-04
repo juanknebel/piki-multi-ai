@@ -453,6 +453,15 @@ export function kanbanDeleteCard(workspaceIdx: number, cardId: string): Promise<
   return invoke("kanban_delete_card", { workspaceIdx, cardId });
 }
 
+// Settings commands
+export function getSettings(): Promise<string | null> {
+  return invoke("get_settings");
+}
+
+export function setSettings(value: string): Promise<void> {
+  return invoke("set_settings", { value });
+}
+
 // Event listeners
 export function onPtyOutput(
   callback: (event: PtyOutputEvent) => void,

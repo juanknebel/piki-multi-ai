@@ -111,6 +111,7 @@ A modern desktop GUI is available via `piki-desktop`, built with [Tauri v2](http
 - **Application log viewer** — `Alt+Shift+L` for in-memory ring buffer (500 entries), filterable by level
 - **About dialog** — Click "Piki Desktop" in status bar or via command palette
 - **Workspace switcher** — `Ctrl+Space` for quick fuzzy workspace switching; results grouped by group name with headers, sorted alphabetically (ungrouped first), items ordered within each group
+- **Settings** — `Alt+S` to open settings dialog; all keyboard shortcuts are editable at runtime (click a shortcut, press new key combo) with two-column display (Default / Current); configure the terminal shell command; changes persist in SQLite and take effect immediately without restart; "Restore Defaults" button resets everything
 - **Resizable sidebar** — Drag the divider or use the resize handle
 - **Confirm dialogs** — HTML-based confirmations (not browser `confirm()`) for all destructive actions
 
@@ -134,6 +135,7 @@ A modern desktop GUI is available via `piki-desktop`, built with [Tauri v2](http
 | `Alt+D` | Dashboard |
 | `Alt+K` | Kanban Board |
 | `Alt+L` | Git log |
+| `Alt+S` | Settings |
 | `Alt+T` | Theme settings |
 | `Alt+Shift+L` | Application logs |
 | `Ctrl+Shift+C` | Copy selection |

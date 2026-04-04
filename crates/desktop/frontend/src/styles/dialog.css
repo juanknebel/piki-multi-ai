@@ -525,3 +525,143 @@
   font-family: inherit;
   color: inherit;
 }
+
+/* ── Settings Dialog ─────────────────────────── */
+
+.settings-section {
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.settings-section:last-child {
+  border-bottom: none;
+}
+
+.settings-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.settings-shell-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-label {
+  font-size: 12px;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.settings-shell-input {
+  flex: 1;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text-bright);
+  font-size: 12px;
+  font-family: "JetBrainsMono NF Mono", monospace;
+  outline: none;
+}
+
+.settings-shell-input:focus {
+  border-color: var(--accent-primary);
+}
+
+.settings-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+.settings-shortcuts-table {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-shortcut-row {
+  display: flex;
+  align-items: center;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.settings-shortcut-row:last-child {
+  border-bottom: none;
+}
+
+.settings-shortcut-header {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-primary);
+  padding-bottom: 6px;
+  margin-bottom: 2px;
+}
+
+.settings-col-action {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.settings-col-default {
+  width: 130px;
+  text-align: center;
+}
+
+.settings-col-default kbd {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  color: var(--text-secondary);
+  font-family: inherit;
+}
+
+.settings-col-current {
+  width: 130px;
+  text-align: center;
+}
+
+.settings-key-btn {
+  font-size: 11px;
+  padding: 3px 10px;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text-bright);
+  cursor: pointer;
+  font-family: inherit;
+  min-width: 80px;
+}
+
+.settings-key-btn:hover {
+  border-color: var(--accent-primary);
+}
+
+.settings-key-btn.recording {
+  border-color: var(--accent-warm);
+  color: var(--accent-warm);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.settings-key-btn.modified {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
