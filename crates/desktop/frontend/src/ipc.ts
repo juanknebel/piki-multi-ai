@@ -298,6 +298,48 @@ export function projectSearch(workspaceIdx: number, query: string): Promise<Sear
   return invoke("project_search", { workspaceIdx, query });
 }
 
+// API Explorer commands
+export interface ApiResponseResult {
+  status: number;
+  elapsed_ms: number;
+  body: string;
+  headers: string;
+  method: string;
+  url: string;
+}
+
+export interface ApiHistoryEntryDto {
+  id: number | null;
+  created_at: string;
+  request_text: string;
+  method: string;
+  url: string;
+  status: number;
+  elapsed_ms: number;
+  response_body: string;
+  response_headers: string;
+}
+
+export function sendApiRequest(workspaceIdx: number, requestText: string): Promise<ApiResponseResult[]> {
+  return invoke("send_api_request", { workspaceIdx, requestText });
+}
+
+export function loadApiHistory(workspaceIdx: number, limit: number): Promise<ApiHistoryEntryDto[]> {
+  return invoke("load_api_history", { workspaceIdx, limit });
+}
+
+export function searchApiHistory(workspaceIdx: number, query: string, limit: number): Promise<ApiHistoryEntryDto[]> {
+  return invoke("search_api_history", { workspaceIdx, query, limit });
+}
+
+export function deleteApiHistoryEntry(entryId: number): Promise<void> {
+  return invoke("delete_api_history_entry", { entryId });
+}
+
+export function jqFilter(input: string, filter: string): Promise<string> {
+  return invoke("jq_filter", { input, filter });
+}
+
 // Code Review commands
 export interface PrInfo {
   number: number;

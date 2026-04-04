@@ -23,7 +23,13 @@ export function initSidebar() {
     if (view === "kanban") {
       // Kanban opens as a tab, not a sidebar panel — spawn a tab and restore sidebar
       spawnKanbanTab();
-      // Restore previous sidebar view
+      appState.setActiveView(lastSidebarView);
+      return;
+    }
+
+    if (view === "api") {
+      // API Explorer opens as a tab, same as Kanban
+      spawnApiTab();
       appState.setActiveView(lastSidebarView);
       return;
     }
@@ -49,6 +55,23 @@ export function initSidebar() {
       appState.addTab(appState.activeWorkspace, { id: tabId, provider: "Kanban", alive: true });
     } catch (err) {
       console.error("Failed to open Kanban tab:", err);
+    }
+  }
+
+  async function spawnApiTab() {
+    const ws = appState.activeWs;
+    if (ws) {
+      const existingIdx = ws.tabs.findIndex((t) => t.provider === "Api");
+      if (existingIdx >= 0) {
+        appState.setActiveTab(existingIdx);
+        return;
+      }
+    }
+    try {
+      const tabId = await ipc.spawnTab(appState.activeWorkspace, "Api");
+      appState.addTab(appState.activeWorkspace, { id: tabId, provider: "Api", alive: true });
+    } catch (err) {
+      console.error("Failed to open API Explorer tab:", err);
     }
   }
 

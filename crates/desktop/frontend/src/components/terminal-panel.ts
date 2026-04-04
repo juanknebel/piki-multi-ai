@@ -7,6 +7,7 @@ import { appState } from "../state";
 import * as ipc from "../ipc";
 import { themeEngine } from "../theme";
 import { hideKanbanPanels, showKanbanPanel } from "./kanban-panel";
+import { hideApiPanels, showApiPanel } from "./api-panel";
 
 export interface TerminalInstance {
   tabId: string;
@@ -139,6 +140,7 @@ function showActiveTerminal() {
     instance.element.style.display = "none";
   }
   hideKanbanPanels();
+  hideApiPanels();
 
   // Remove welcome message if present
   mainContent.querySelector(".terminal-welcome")?.remove();
@@ -155,9 +157,13 @@ function showActiveTerminal() {
     return;
   }
 
-  // Route Kanban tabs to the kanban panel
+  // Route non-PTY tabs to their panels
   if (tab.provider === "Kanban") {
     showKanbanPanel(tab.id);
+    return;
+  }
+  if (tab.provider === "Api") {
+    showApiPanel(tab.id, appState.activeWorkspace);
     return;
   }
 

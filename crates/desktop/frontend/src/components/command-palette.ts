@@ -222,6 +222,7 @@ function buildCommands(): Command[] {
     "Kilo",
     "Codex",
     "Kanban",
+    "Api",
   ];
   for (const provider of tabProviders) {
     cmds.push({

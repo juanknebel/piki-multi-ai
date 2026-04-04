@@ -21,6 +21,11 @@ const ACTIVITIES: { id: SidebarView; label: string; icon: string }[] = [
     label: "Kanban Board",
     icon: `<svg viewBox="0 0 24 24"><path d="M3 3h6v18H3V3zm12 0h6v12h-6V3zm-6 0h6v8H9V3z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>`,
   },
+  {
+    id: "api",
+    label: "API Explorer",
+    icon: `<svg viewBox="0 0 24 24"><path d="M6 6h12M6 12h12M6 18h8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="19" cy="18" r="2.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M2 3h20v18H2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" rx="2"/></svg>`,
+  },
 ];
 
 export function renderActivityBar(container: HTMLElement) {

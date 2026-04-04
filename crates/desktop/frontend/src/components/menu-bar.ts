@@ -63,7 +63,7 @@ const MENUS: MenuDefinition[] = [
       {
         label: "New Tab",
         disabled: noWs,
-        submenu: (["Shell", "Claude", "Gemini", "OpenCode", "Kilo", "Codex", "Kanban"] as AIProvider[]).map(
+        submenu: (["Shell", "Claude", "Gemini", "OpenCode", "Kilo", "Codex", "Kanban", "Api"] as AIProvider[]).map(
           (p) => ({ label: PROVIDER_LABELS[p], action: () => spawnTab(p) }),
         ),
       },

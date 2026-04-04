@@ -17,8 +17,8 @@ pub async fn spawn_tab(
 ) -> Result<String, String> {
     let ai_provider = parse_provider(&provider)?;
 
-    // Kanban tabs don't need a PTY session
-    if ai_provider == AIProvider::Kanban {
+    // Non-PTY providers don't need a terminal session
+    if ai_provider == AIProvider::Kanban || ai_provider == AIProvider::Api {
         let mut tab = DesktopTab::new(ai_provider);
         let tab_id = tab.id.clone();
         tab.alive = true;

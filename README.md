@@ -100,7 +100,8 @@ A modern desktop GUI is available via `piki-desktop`, built with [Tauri v2](http
 - **Project search** — `Ctrl+Shift+F` to grep file contents across the workspace using ripgrep (`rg`); debounced search with file path, line number, and highlighted match snippet; Enter opens file viewer with scroll and copy support
 - **File viewer** — Modal for viewing file contents; opened from fuzzy file search (`Ctrl+F`) or project search; monospace rendering with scroll, copy-to-clipboard, Edit button (`Ctrl+E`) to open in `$EDITOR` in a new terminal tab, and Quick Edit (`Ctrl+I`) for inline editing with Save/Cancel directly in the overlay
 - **Activity bar + sidebar** — Explorer (workspace list with groups), Source Control (git staging/committing), Agents panel (manage/dispatch AI agents), Kanban Board (quick access via activity bar icon)
-- **Multi-provider tabs** — Open Claude, Gemini, OpenCode, Kilo, Codex, Shell, or Kanban Board tabs per workspace
+- **API Explorer** — Non-PTY tab for writing HTTP requests in Hurl syntax (`METHOD URL\nHeaders\n\nBody`), executing via `piki-api-client`, viewing JSON-highlighted responses with color-coded status badges; request history overlay (`Ctrl+H`) with full-text search, load from history, and delete entries; multiple sequential requests supported; history persisted in SQLite with FTS5
+- **Multi-provider tabs** — Open Claude, Gemini, OpenCode, Kilo, Codex, Shell, Kanban Board, or API Explorer tabs per workspace
 - **Kanban Board** — Integrated kanban board powered by [flow-core](https://github.com/juanknebel/flow); columns (TODO, IN PROGRESS, IN REVIEW, DONE) with drag-and-drop card movement, inline card actions (edit, move, delete), priority badges (Bug/High/Medium/Low/Wishlist), edit modal with title/description/priority/assignee fields; configurable column colors (right-click header to pick from 16-color palette, persisted in localStorage); auto-creates board if none exists; open via `Alt+K`, activity bar, command palette, or View menu
 - **Git integration** — Stage/unstage files, commit, push, merge/rebase, stash, conflict resolution, git log viewer; auto-refresh via hybrid file watcher (500ms) + periodic git status poll (2s) + background `git fetch` (60s) for live ahead/behind tracking
 - **Side-by-side diff viewer** — With char-level highlights, 3-way merge view, and conflict resolution buttons
@@ -166,6 +167,7 @@ The install script places the binary in `~/.local/bin/`, installs icons to `~/.l
 - [delta](https://github.com/dandavison/delta) (optional, for side-by-side diffs — falls back to plain git diff)
 - [gh](https://cli.github.com/) (optional, required for code review feature — run `gh auth login` to authenticate)
 - [ripgrep](https://github.com/BurntSushi/ripgrep) (optional, recommended for project search — falls back to `grep -rn`)
+- [jq](https://jqlang.github.io/jq/) (optional, for JSON filtering in API Explorer)
 - [Node.js](https://nodejs.org/) >= 18 (optional, required for building the desktop app)
 - System libraries for Tauri (optional, for desktop app): `libwebkit2gtk-4.1-dev`, `libappindicator3-dev` on Linux
 

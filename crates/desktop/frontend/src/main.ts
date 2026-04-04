@@ -7,6 +7,7 @@ import { initSidebar } from "./components/sidebar";
 import { renderTabBar } from "./components/tab-bar";
 import { initTerminalPanel, openTerminalSearch } from "./components/terminal-panel";
 import { initKanbanPanel } from "./components/kanban-panel";
+import { initApiPanel } from "./components/api-panel";
 import { bindAction, handleGlobalKeydown, loadShortcuts } from "./shortcuts";
 import { showSettingsDialog } from "./components/dialogs/settings-dialog";
 import { renderStatusBar } from "./components/status-bar";
@@ -41,6 +42,7 @@ async function init() {
   const mainContentEl = document.getElementById("main-content")!;
   await initTerminalPanel(mainContentEl);
   initKanbanPanel(mainContentEl);
+  initApiPanel(mainContentEl);
   renderStatusBar(document.getElementById("status-bar")!);
   initToasts();
 

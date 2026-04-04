@@ -177,6 +177,11 @@ fn main() {
             commands::kanban::kanban_update_card,
             commands::kanban::kanban_move_card,
             commands::kanban::kanban_delete_card,
+            commands::api::send_api_request,
+            commands::api::load_api_history,
+            commands::api::search_api_history,
+            commands::api::delete_api_history_entry,
+            commands::api::jq_filter,
         ])
         .run(tauri::generate_context!())
         .expect("error while running piki-desktop");
