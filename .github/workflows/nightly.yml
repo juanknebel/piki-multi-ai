@@ -78,6 +78,9 @@ jobs:
       - name: Build frontend
         run: cd crates/desktop/frontend && npm install && npm run build
 
+      - name: Generate platform icons
+        run: npx @tauri-apps/cli icon crates/desktop/icons/icon.png --output crates/desktop/icons
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
