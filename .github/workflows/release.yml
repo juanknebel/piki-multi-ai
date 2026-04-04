@@ -38,7 +38,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y musl-tools
 
       - name: Build
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --release --target ${{ matrix.target }} -p agent-multi
 
       - name: Package binary
         run: |
@@ -75,8 +75,8 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install frontend dependencies
-        run: cd crates/desktop/frontend && npm install
+      - name: Build frontend
+        run: cd crates/desktop/frontend && npm install && npm run build
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -94,7 +94,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: crates/desktop
-          args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+          args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --config '{"build":{"beforeBuildCommand":""}}'
 
       - name: Collect desktop bundles
         run: |
