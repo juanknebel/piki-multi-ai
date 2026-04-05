@@ -221,7 +221,6 @@ function buildCommands(): Command[] {
     "OpenCode",
     "Kilo",
     "Codex",
-    "Kanban",
     "Api",
   ];
   for (const provider of tabProviders) {

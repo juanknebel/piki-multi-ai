@@ -69,7 +69,6 @@ const NEW_TAB_PROVIDERS: AIProvider[] = [
   "Kilo",
   "Codex",
   "Shell",
-  "Kanban",
   "Api",
 ];
 
