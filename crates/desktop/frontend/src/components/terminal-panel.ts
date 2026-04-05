@@ -2,7 +2,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { SearchAddon } from "@xterm/addon-search";
-import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { writeText, readText } from "@tauri-apps/plugin-clipboard-manager";
 import { appState } from "../state";
 import * as ipc from "../ipc";
 import { themeEngine } from "../theme";
@@ -103,15 +103,27 @@ export function createTerminal(tabId: string): TerminalInstance {
     }
   });
 
-  // Ctrl+Shift+C = copy (paste is handled natively by xterm.js)
+  // Ctrl+Shift+C = copy, Ctrl+Shift+V = paste via Tauri system clipboard
   terminal.attachCustomKeyEventHandler((e) => {
     if (e.ctrlKey && e.shiftKey && e.type === "keydown" && e.key === "C") {
       const sel = terminal.getSelection();
       if (sel) writeText(sel).catch(() => {});
       return false;
     }
+    if (e.ctrlKey && e.shiftKey && e.type === "keydown" && e.key === "V") {
+      readText().then((text) => {
+        if (text) terminal.paste(text);
+      }).catch(() => {});
+      return false;
+    }
     return true;
   });
+
+  // Block native paste events so xterm.js doesn't double-paste
+  element.addEventListener("paste", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, true);
 
   // Send keystrokes to backend
   terminal.onData((data) => {
