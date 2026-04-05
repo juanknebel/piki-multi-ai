@@ -6,8 +6,8 @@
   "build": {
     "frontendDist": "frontend/dist",
     "devUrl": "http://localhost:1420",
-    "beforeDevCommand": "cd frontend && npm run dev",
-    "beforeBuildCommand": "cd frontend && npm run build"
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
   },
   "bundle": {
     "icon": [
