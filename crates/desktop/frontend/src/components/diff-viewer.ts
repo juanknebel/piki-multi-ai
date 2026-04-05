@@ -88,7 +88,19 @@ function openOverlay(title: string, renderFn: (container: HTMLElement) => void) 
     if (e.key === "Escape") closeDiffViewer();
   });
   backdrop.setAttribute("tabindex", "0");
-  backdrop.focus();
+
+  // Focus the scroll container so arrow keys scroll natively
+  const scrollEl = content.querySelector(".dp-scroll") as HTMLElement | null;
+  if (scrollEl) {
+    scrollEl.setAttribute("tabindex", "0");
+    scrollEl.style.outline = "none";
+    scrollEl.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeDiffViewer();
+    });
+    scrollEl.focus();
+  } else {
+    backdrop.focus();
+  }
 }
 
 export function closeDiffViewer() {

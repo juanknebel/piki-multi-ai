@@ -97,11 +97,13 @@
 /* ── Side-by-side rows ──────────────────────────── */
 .dp-table {
   min-width: 100%;
+  width: max-content;
 }
 
 .dp-row {
   display: grid;
-  grid-template-columns: 48px 1fr 48px 1fr;
+  grid-template-columns: 48px minmax(0, 1fr) 48px minmax(0, 1fr);
+  min-width: max-content;
   min-height: 1.6em;
 }
 
@@ -125,7 +127,6 @@
 .dp-cell {
   padding: 0 10px;
   white-space: pre;
-  overflow: hidden;
 }
 
 .dp-empty-cell {
@@ -173,6 +174,7 @@
   border-top: 1px solid var(--border-primary);
   border-bottom: 1px solid var(--border-primary);
   font-size: 11px;
+  min-width: max-content;
 }
 
 /* File header (multi-file commit view) */
