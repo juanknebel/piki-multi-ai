@@ -127,6 +127,7 @@
 .dp-cell {
   padding: 0 10px;
   white-space: pre;
+  color: var(--text-secondary);
 }
 
 .dp-empty-cell {
