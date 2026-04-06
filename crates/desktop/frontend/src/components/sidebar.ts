@@ -4,7 +4,18 @@ import { renderWorkspaceList } from "./workspace-list";
 import { renderSourceControl } from "./source-control";
 import { showAgentManager } from "./dialogs/agent-dialog";
 
-export function initSidebar() {
+export async function initSidebar() {
+  // Restore persisted sidebar width
+  try {
+    const raw = await ipc.getSettings();
+    if (raw) {
+      const settings = JSON.parse(raw);
+      if (settings.sidebarWidth) {
+        document.documentElement.style.setProperty("--sidebar-width", `${settings.sidebarWidth}px`);
+      }
+    }
+  } catch { /* ignore */ }
+
   const explorerView = document.getElementById("explorer-view")!;
   const workspaceList = document.getElementById("workspace-list")!;
   const scView = document.getElementById("source-control-view")!;
@@ -109,5 +120,15 @@ export function initSidebar() {
     handle.classList.remove("dragging");
     document.body.style.cursor = "";
     document.body.style.userSelect = "";
+
+    // Persist sidebar width
+    const width = parseInt(getComputedStyle(root).getPropertyValue("--sidebar-width"));
+    if (width) {
+      ipc.getSettings().then((raw) => {
+        const settings = raw ? JSON.parse(raw) : {};
+        settings.sidebarWidth = width;
+        ipc.setSettings(JSON.stringify(settings)).catch(() => {});
+      }).catch(() => {});
+    }
   });
 }

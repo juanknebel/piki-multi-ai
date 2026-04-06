@@ -116,6 +116,13 @@ export function createTerminal(tabId: string): TerminalInstance {
       }).catch(() => {});
       return false;
     }
+    // Shift+PageUp/Down/Home/End for scrollback navigation
+    if (e.shiftKey && e.type === "keydown") {
+      if (e.key === "PageUp") { terminal.scrollPages(-1); return false; }
+      if (e.key === "PageDown") { terminal.scrollPages(1); return false; }
+      if (e.key === "Home") { terminal.scrollToTop(); return false; }
+      if (e.key === "End") { terminal.scrollToBottom(); return false; }
+    }
     return true;
   });
 
