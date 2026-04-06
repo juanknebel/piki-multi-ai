@@ -207,6 +207,21 @@
   padding: 2px 10px;
 }
 
+.api-jq-run:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.api-jq-badge {
+  padding: 3px 10px;
+  font-size: 10px;
+  font-family: "JetBrainsMono NF Mono", monospace;
+  color: var(--accent-primary);
+  background: rgba(57, 186, 230, 0.08);
+  border-bottom: 1px solid var(--accent-primary);
+  letter-spacing: 0.02em;
+}
+
 .api-search-match {
   background: rgba(230, 167, 48, 0.3);
   border-radius: 2px;

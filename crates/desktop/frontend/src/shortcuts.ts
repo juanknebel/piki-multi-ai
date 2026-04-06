@@ -30,6 +30,7 @@ const shortcuts: ShortcutDef[] = [
   { id: "settings", label: "Settings", defaultKey: "Alt+S", key: "Alt+S", action: () => {} },
   { id: "logs", label: "Application Logs", defaultKey: "Alt+Shift+L", key: "Alt+Shift+L", action: () => {} },
   { id: "undo", label: "Undo Stage/Unstage", defaultKey: "Ctrl+Z", key: "Ctrl+Z", action: () => {}, outsideOnly: true },
+  { id: "api-jq-filter", label: "API jq Filter", defaultKey: "Ctrl+J", key: "Ctrl+J", action: () => {}, outsideOnly: true },
   { id: "help", label: "Keyboard Shortcuts", defaultKey: "?", key: "?", action: () => {}, outsideOnly: true },
 ];
 

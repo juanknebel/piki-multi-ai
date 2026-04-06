@@ -108,6 +108,7 @@ async function init() {
   bindAction("theme", () => showThemeDialog());
   bindAction("settings", () => showSettingsDialog());
   bindAction("logs", () => showLogsDialog());
+  bindAction("api-jq-filter", () => document.dispatchEvent(new CustomEvent("toggle-jq")));
   bindAction("undo", () => handleUndo());
   bindAction("help", () => showHelpDialog());
 

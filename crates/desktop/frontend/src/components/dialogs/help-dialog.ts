@@ -21,6 +21,7 @@ const SHORTCUTS: { category: string; items: [string, string][] }[] = [
       ["Ctrl+Shift+S", "Git Stash"],
       ["Ctrl+Shift+F", "Search in Project"],
       ["Ctrl+Shift+B", "Search in Terminal"],
+      ["Ctrl+J", "API jq Filter"],
       ["Ctrl+Z", "Undo Stage / Unstage"],
     ],
   },

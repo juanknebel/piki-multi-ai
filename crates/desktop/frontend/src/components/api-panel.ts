@@ -2,6 +2,7 @@ import { appState } from "../state";
 import * as ipc from "../ipc";
 import { toast } from "./toast";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { getShortcutKey } from "../shortcuts";
 import type { ApiResponseResult, ApiHistoryEntryDto } from "../ipc";
 
 interface ApiInstance {
@@ -16,6 +17,7 @@ interface ApiInstance {
   responses: ApiResponseResult[];
   searchActive: boolean;
   jqActive: boolean;
+  jqFilter: string;
 }
 
 const instances = new Map<string, ApiInstance>();
@@ -70,7 +72,7 @@ function createApiPanel(tabId: string, wsIdx: number): ApiInstance {
           <div class="api-response-actions">
             <button class="api-resp-btn api-copy-btn" title="Copy body (Ctrl+C)">Copy</button>
             <button class="api-resp-btn api-search-btn" title="Search (Ctrl+F)">Search</button>
-            <button class="api-resp-btn api-jq-btn" title="jq filter (Ctrl+J)">jq</button>
+            <button class="api-resp-btn api-jq-btn" title="jq filter (${getShortcutKey("api-jq-filter")})">jq</button>
           </div>
         </div>
         <div class="api-search-bar" style="display:none">
@@ -110,6 +112,7 @@ function createApiPanel(tabId: string, wsIdx: number): ApiInstance {
     responses: [],
     searchActive: false,
     jqActive: false,
+    jqFilter: "",
   };
 
   // Send button
@@ -157,10 +160,12 @@ function createApiPanel(tabId: string, wsIdx: number): ApiInstance {
     } else if (e.key === "f" && e.ctrlKey) {
       e.preventDefault();
       toggleSearch(inst);
-    } else if (e.key === "j" && e.ctrlKey && !isEditorOrInput) {
-      e.preventDefault();
-      toggleJq(inst);
     }
+  });
+
+  // Listen for global jq shortcut
+  document.addEventListener("toggle-jq", () => {
+    if (inst.element.style.display !== "none") toggleJq(inst);
   });
 
   return inst;
@@ -223,6 +228,14 @@ function renderResponses(inst: ApiInstance, bodyOverride?: string) {
       headersToggle.className = "api-response-headers-toggle";
       headersToggle.innerHTML = `<summary>Headers</summary><pre class="api-response-headers-content">${escapeHtml(r.headers)}</pre>`;
       section.appendChild(headersToggle);
+    }
+
+    // jq badge when filtered
+    if (i === 0 && bodyOverride !== undefined && inst.jqFilter) {
+      const badge = document.createElement("div");
+      badge.className = "api-jq-badge";
+      badge.textContent = `jq: ${inst.jqFilter}`;
+      section.appendChild(badge);
     }
 
     // Body (use override for jq-filtered output, only for first response)
@@ -404,25 +417,36 @@ function setupJqBar(inst: ApiInstance) {
   const bar = inst.element.querySelector<HTMLDivElement>(".api-jq-bar")!;
   const input = bar.querySelector<HTMLInputElement>(".api-jq-input")!;
 
+  const runBtn = bar.querySelector<HTMLButtonElement>(".api-jq-run")!;
+
   async function runJq() {
     if (inst.responses.length === 0) return;
     const filter = input.value.trim();
     if (!filter) {
+      inst.jqFilter = "";
       renderResponses(inst);
       return;
     }
 
+    runBtn.disabled = true;
+    runBtn.textContent = "Running...";
+
     const body = inst.responses[0].body;
     try {
       const result = await ipc.jqFilter(body, filter);
+      inst.jqFilter = filter;
       renderResponses(inst, result);
     } catch (err) {
       toast(`jq error: ${err}`, "error");
+    } finally {
+      runBtn.disabled = false;
+      runBtn.textContent = "Run";
     }
   }
 
   function resetJq() {
     input.value = "";
+    inst.jqFilter = "";
     renderResponses(inst);
   }
 

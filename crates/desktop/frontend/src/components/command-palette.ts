@@ -20,6 +20,7 @@ import { showLogsDialog } from "./dialogs/logs-dialog";
 import { showAboutDialog } from "./dialogs/about-dialog";
 import { PROVIDER_LABELS, type AIProvider } from "../types";
 import { themeEngine } from "../theme";
+import { getShortcutKey } from "../shortcuts";
 
 interface Command {
   id: string;
@@ -444,6 +445,13 @@ function buildCommands(): Command[] {
     category: "Search",
     keybinding: "Ctrl+Shift+B",
     action: () => openTerminalSearch(),
+  });
+  cmds.push({
+    id: "api-jq-filter",
+    label: "API jq Filter",
+    category: "Search",
+    keybinding: getShortcutKey("api-jq-filter"),
+    action: () => { document.dispatchEvent(new CustomEvent("toggle-jq")); },
   });
 
   // About

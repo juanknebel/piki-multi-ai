@@ -21,6 +21,7 @@ import { showLogsDialog } from "./dialogs/logs-dialog";
 import { showAboutDialog } from "./dialogs/about-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { PROVIDER_LABELS, type AIProvider } from "../types";
+import { getShortcutKey } from "../shortcuts";
 
 // ── Types ───────────────────────────────────────
 
@@ -116,6 +117,7 @@ const MENUS: MenuDefinition[] = [
       { label: "Find File", shortcut: "Ctrl+F", action: () => openFuzzySearch() },
       { label: "Search in Project", shortcut: "Ctrl+Shift+F", action: () => openProjectSearch() },
       { label: "Search in Terminal", shortcut: "Ctrl+Shift+B", action: () => openTerminalSearch() },
+      { label: "API jq Filter", shortcut: getShortcutKey("api-jq-filter"), action: () => document.dispatchEvent(new CustomEvent("toggle-jq")) },
       SEP,
       { label: "Theme Settings", shortcut: "Alt+T", action: () => showThemeDialog() },
       { label: "Settings", shortcut: "Alt+S", action: () => showSettingsDialog() },

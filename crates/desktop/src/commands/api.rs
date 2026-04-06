@@ -260,10 +260,13 @@ pub async fn jq_filter(input: String, filter: String) -> Result<String, String> 
             .map_err(|e| format!("Failed to write to jq: {e}"))?;
     }
 
-    let output = child
-        .wait_with_output()
-        .await
-        .map_err(|e| format!("jq failed: {e}"))?;
+    let output = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        child.wait_with_output(),
+    )
+    .await
+    .map_err(|_| "jq timed out after 10s".to_string())?
+    .map_err(|e| format!("jq failed: {e}"))?;
 
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
