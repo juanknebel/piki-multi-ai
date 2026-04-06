@@ -123,6 +123,54 @@ pub async fn delete_agent(
 }
 
 #[tauri::command]
+pub async fn sync_agent_to_repo(
+    state: State<'_, Mutex<DesktopApp>>,
+    workspace_idx: usize,
+    agent_id: i64,
+) -> Result<(), String> {
+    let (storage, source_repo) = {
+        let app = state.lock();
+        if workspace_idx >= app.workspaces.len() {
+            return Err("Workspace index out of range".to_string());
+        }
+        (
+            std::sync::Arc::clone(&app.storage),
+            app.workspaces[workspace_idx].info.source_repo.clone(),
+        )
+    };
+
+    let s = storage
+        .agent_profiles
+        .as_ref()
+        .ok_or("Agent storage not available")?;
+
+    let agents = s.load_agents(&source_repo).map_err(|e| e.to_string())?;
+    let agent = agents
+        .iter()
+        .find(|a| a.id == Some(agent_id))
+        .ok_or("Agent not found")?;
+
+    let dir = match agent.provider.as_str() {
+        "Claude Code" => ".claude/agents",
+        "Gemini" => ".gemini/agents",
+        "OpenCode" => ".opencode/agents",
+        "Kilo" => ".kilo/agents",
+        "Codex" => ".codex/agents",
+        _ => return Err(format!("Unknown provider: {}", agent.provider)),
+    };
+
+    let agent_dir = source_repo.join(dir);
+    std::fs::create_dir_all(&agent_dir)
+        .map_err(|e| format!("Failed to create directory: {e}"))?;
+    std::fs::write(agent_dir.join(format!("{}.md", agent.name)), &agent.role)
+        .map_err(|e| format!("Failed to write agent file: {e}"))?;
+
+    s.mark_synced(agent_id).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn scan_repo_agents(
     state: State<'_, Mutex<DesktopApp>>,
     workspace_idx: usize,

@@ -407,9 +407,9 @@ function buildCommands(): Command[] {
   });
   cmds.push({
     id: "view-agents",
-    label: "Show Agents",
+    label: "Manage Agents",
     category: "View",
-    action: () => appState.setActiveView("agents"),
+    action: () => showAgentManager(),
   });
   cmds.push({
     id: "view-kanban",

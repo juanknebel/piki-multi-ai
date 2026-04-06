@@ -7,6 +7,7 @@ import type {
 } from "./types";
 
 export type SidebarView = "explorer" | "git" | "agents" | "kanban" | "api";
+// Note: "agents" opens the modal dialog, "kanban"/"api" open tabs — none are real sidebar views
 
 export interface UndoEntry {
   action: "stage" | "unstage";

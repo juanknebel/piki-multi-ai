@@ -427,6 +427,10 @@ export function deleteAgent(agentId: number): Promise<void> {
   return invoke("delete_agent", { agentId });
 }
 
+export function syncAgentToRepo(workspaceIdx: number, agentId: number): Promise<void> {
+  return invoke("sync_agent_to_repo", { workspaceIdx, agentId });
+}
+
 export function scanRepoAgents(workspaceIdx: number): Promise<ScannedAgent[]> {
   return invoke("scan_repo_agents", { workspaceIdx });
 }

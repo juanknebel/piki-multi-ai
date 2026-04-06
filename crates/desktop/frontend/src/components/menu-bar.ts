@@ -128,7 +128,7 @@ const MENUS: MenuDefinition[] = [
     items: () => [
       { label: "Explorer", action: () => appState.setActiveView("explorer") },
       { label: "Source Control", action: () => appState.setActiveView("git") },
-      { label: "Agents", action: () => appState.setActiveView("agents") },
+      { label: "Agents", shortcut: "Ctrl+Shift+A", action: () => showAgentManager() },
       { label: "Kanban Board", shortcut: "Alt+K", action: () => appState.setActiveView("kanban") },
       SEP,
       { label: "Command Palette", shortcut: "Ctrl+P", action: () => openCommandPalette() },

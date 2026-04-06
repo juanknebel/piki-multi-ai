@@ -48,6 +48,7 @@ export async function showAgentManager() {
             <div class="agent-manager-item-role">${esc(a.role.slice(0, 200))}${a.role.length > 200 ? "..." : ""}</div>
             <div class="agent-manager-item-actions">
               <button class="dialog-btn dialog-btn-secondary dialog-btn-sm ag-edit" data-id="${a.id}">Edit</button>
+              <button class="dialog-btn dialog-btn-secondary dialog-btn-sm ag-sync" data-id="${a.id}">Sync</button>
               <button class="dialog-btn dialog-btn-danger dialog-btn-sm ag-delete" data-id="${a.id}">Delete</button>
             </div>
           </div>
@@ -71,6 +72,20 @@ export async function showAgentManager() {
         const id = parseInt(btn.dataset.id!, 10);
         const agent = agents.find((a) => a.id === id);
         if (agent) showAgentForm(agent, () => reload());
+      });
+    });
+
+    // Sync buttons
+    dialog.querySelectorAll<HTMLButtonElement>(".ag-sync").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const id = parseInt(btn.dataset.id!, 10);
+        try {
+          await ipc.syncAgentToRepo(wsIdx, id);
+          toast("Agent synced to repo", "success");
+          await reload();
+        } catch (err) {
+          toast(`Sync failed: ${err}`, "error");
+        }
       });
     });
 

@@ -160,6 +160,7 @@ fn main() {
             commands::agents::list_agents,
             commands::agents::save_agent,
             commands::agents::delete_agent,
+            commands::agents::sync_agent_to_repo,
             commands::agents::scan_repo_agents,
             commands::agents::import_agents,
             commands::agents::dispatch_agent,

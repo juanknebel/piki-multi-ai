@@ -2,34 +2,36 @@ import { appState } from "../state";
 import * as ipc from "../ipc";
 import { renderWorkspaceList } from "./workspace-list";
 import { renderSourceControl } from "./source-control";
-import { renderAgentsPanel } from "./agents-panel";
+import { showAgentManager } from "./dialogs/agent-dialog";
 
 export function initSidebar() {
   const explorerView = document.getElementById("explorer-view")!;
   const workspaceList = document.getElementById("workspace-list")!;
   const scView = document.getElementById("source-control-view")!;
-  const agentsView = document.getElementById("agents-view")!;
 
   renderWorkspaceList(workspaceList);
   renderSourceControl(scView);
-  renderAgentsPanel(agentsView);
 
-  // Track last non-kanban view so we can restore sidebar when switching away
-  let lastSidebarView: "explorer" | "git" | "agents" = "explorer";
+  // Track last sidebar view so we can restore when a non-sidebar action triggers
+  let lastSidebarView: "explorer" | "git" = "explorer";
 
   function updateView() {
     const view = appState.activeView;
 
     if (view === "kanban") {
-      // Kanban opens as a tab, not a sidebar panel — spawn a tab and restore sidebar
       spawnKanbanTab();
       appState.setActiveView(lastSidebarView);
       return;
     }
 
     if (view === "api") {
-      // API Explorer opens as a tab, same as Kanban
       spawnApiTab();
+      appState.setActiveView(lastSidebarView);
+      return;
+    }
+
+    if (view === "agents") {
+      showAgentManager();
       appState.setActiveView(lastSidebarView);
       return;
     }
@@ -37,7 +39,6 @@ export function initSidebar() {
     lastSidebarView = view;
     explorerView.style.display = view === "explorer" ? "flex" : "none";
     scView.style.display = view === "git" ? "flex" : "none";
-    agentsView.style.display = view === "agents" ? "flex" : "none";
   }
 
   async function spawnKanbanTab() {
