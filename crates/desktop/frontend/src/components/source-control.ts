@@ -168,6 +168,8 @@ function renderSection(
 ) {
   if (files.length === 0) return;
 
+  const selected = new Set<string>();
+
   const section = document.createElement("div");
   section.className = "sc-section";
 
@@ -181,21 +183,57 @@ function renderSection(
       </svg>
       ${escapeHtml(title)} (${files.length})
     </span>
-    <button class="sc-section-action" title="${action === "stage" ? "Stage All" : "Unstage All"}">
-      ${action === "stage" ? "+" : "−"}
-    </button>
+    <span class="sc-section-actions">
+      <button class="sc-section-action sc-selected-action" style="display:none" title="${action === "stage" ? "Stage Selected" : "Unstage Selected"}">
+        ${action === "stage" ? "+" : "−"}<span class="sc-selected-count"></span>
+      </button>
+      <button class="sc-section-action" title="${action === "stage" ? "Stage All" : "Unstage All"}">
+        ${action === "stage" ? "++" : "−−"}
+      </button>
+    </span>
   `;
 
   header.querySelector(".sc-section-toggle")!.addEventListener("click", () => {
     onToggle(!collapsed);
   });
 
-  header.querySelector(".sc-section-action")!.addEventListener("click", async (e) => {
+  // Bulk all action
+  header.querySelectorAll<HTMLButtonElement>(".sc-section-action")[1].addEventListener("click", async (e) => {
     e.stopPropagation();
     try {
       await onBulkAction();
     } catch (err) {
       console.error(`Bulk ${action} error:`, err);
+    }
+  });
+
+  // Bulk selected action
+  const selectedBtn = header.querySelector<HTMLButtonElement>(".sc-selected-action")!;
+  const selectedCount = selectedBtn.querySelector<HTMLSpanElement>(".sc-selected-count")!;
+
+  function updateSelectedBtn() {
+    if (selected.size > 0) {
+      selectedBtn.style.display = "";
+      selectedCount.textContent = `${selected.size}`;
+    } else {
+      selectedBtn.style.display = "none";
+    }
+  }
+
+  selectedBtn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    if (selected.size === 0) return;
+    const paths = [...selected];
+    try {
+      const wsIdx = appState.activeWorkspace;
+      for (const p of paths) {
+        if (action === "stage") await ipc.gitStage(wsIdx, p);
+        else await ipc.gitUnstage(wsIdx, p);
+      }
+      appState.pushUndo({ action, files: paths });
+      await refreshFiles();
+    } catch (err) {
+      console.error(`Bulk selected ${action} error:`, err);
     }
   });
 
@@ -218,6 +256,7 @@ function renderSection(
         : "";
 
       item.innerHTML = `
+        <input type="checkbox" class="file-check" title="Select" />
         <span class="file-status ${statusCss}">${statusLabel}</span>
         <span class="file-path" title="${escapeAttr(file.path)}">
           ${escapeHtml(fileName)}${dirPath ? ` <span style="color:var(--text-muted)">${escapeHtml(dirPath)}</span>` : ""}
@@ -229,9 +268,24 @@ function renderSection(
         </span>
       `;
 
+      // Checkbox toggle
+      const checkbox = item.querySelector<HTMLInputElement>(".file-check")!;
+      checkbox.addEventListener("click", (e) => e.stopPropagation());
+      checkbox.addEventListener("change", () => {
+        if (checkbox.checked) {
+          selected.add(file.path);
+          item.classList.add("selected");
+        } else {
+          selected.delete(file.path);
+          item.classList.remove("selected");
+        }
+        updateSelectedBtn();
+      });
+
       // Click file to show diff
       item.addEventListener("click", (e) => {
         if ((e.target as HTMLElement).closest(".file-action-btn")) return;
+        if ((e.target as HTMLElement).closest(".file-check")) return;
         const isStaged = action === "unstage";
         showFileDiff(appState.activeWorkspace, file.path, isStaged);
       });

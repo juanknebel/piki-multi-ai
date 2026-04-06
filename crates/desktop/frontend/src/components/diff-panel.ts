@@ -34,21 +34,23 @@ export class DiffPanel {
     `;
     this.container.appendChild(stats);
 
-    // Column headers
-    const headers = document.createElement("div");
-    headers.className = "dp-headers";
-    headers.innerHTML = `
-      <div class="dp-col-header dp-left-header">${esc(diff.left_title)}</div>
-      <div class="dp-col-header dp-right-header">${esc(diff.right_title)}</div>
-    `;
-    this.container.appendChild(headers);
-
     // Scrollable content
     const scroll = document.createElement("div");
     scroll.className = "dp-scroll";
 
     const table = document.createElement("div");
     table.className = "dp-table";
+
+    // Column headers as first row of the table (same grid)
+    const headerRow = document.createElement("div");
+    headerRow.className = "dp-row dp-header-row";
+    headerRow.innerHTML = `
+      <div class="dp-gutter dp-col-header"></div>
+      <div class="dp-cell dp-col-header">${esc(diff.left_title)}</div>
+      <div class="dp-gutter dp-gutter-right dp-col-header"></div>
+      <div class="dp-cell dp-col-header">${esc(diff.right_title)}</div>
+    `;
+    table.appendChild(headerRow);
 
     for (const hunk of diff.hunks) {
       // Hunk header row
@@ -116,18 +118,18 @@ export class DiffPanel {
     this.container.innerHTML = "";
     this.container.className = "dp-root dp-three-way";
 
-    // Column headers
-    const headers = document.createElement("div");
-    headers.className = "dp-headers dp-headers-3way";
-    headers.innerHTML = `
-      <div class="dp-col-header dp-left-header">${esc(conflict.ours_title)}</div>
-      <div class="dp-col-header dp-center-header">RESULT</div>
-      <div class="dp-col-header dp-right-header">${esc(conflict.theirs_title)}</div>
-    `;
-    this.container.appendChild(headers);
-
     const scroll = document.createElement("div");
     scroll.className = "dp-scroll";
+
+    // 3-way header row
+    const headerRow = document.createElement("div");
+    headerRow.className = "dp-3way-row dp-header-row";
+    headerRow.innerHTML = `
+      <div class="dp-3way-cell dp-col-header">${esc(conflict.ours_title)}</div>
+      <div class="dp-3way-cell dp-col-header dp-center-header">RESULT</div>
+      <div class="dp-3way-cell dp-col-header">${esc(conflict.theirs_title)}</div>
+    `;
+    scroll.appendChild(headerRow);
 
     conflict.regions.forEach((region, regionIdx) => {
       if (region.region_type === "common") {

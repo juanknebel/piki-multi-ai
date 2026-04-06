@@ -58,20 +58,14 @@
 .dp-stat-add { color: var(--git-added); }
 .dp-stat-del { color: var(--git-deleted); }
 
-/* Column headers */
-.dp-headers {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  flex-shrink: 0;
-  border-bottom: 1px solid var(--border-primary);
-}
-
-.dp-headers-3way {
-  grid-template-columns: 1fr 1fr 1fr;
+/* Column headers (rendered as a dp-row inside dp-table) */
+.dp-header-row {
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 
 .dp-col-header {
-  padding: 5px 14px;
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
@@ -79,8 +73,6 @@
   color: var(--text-secondary);
   background: var(--bg-tertiary);
 }
-
-.dp-left-header { border-right: 1px solid var(--border-primary); }
 .dp-center-header {
   border-right: 1px solid var(--border-primary);
   text-align: center;
