@@ -43,7 +43,8 @@ export function showDashboard() {
 
   let cardsHtml = "";
   for (const section of sortedGroups) {
-    if (section.group) {
+    const showHeader = section.group && section.items.length > 1;
+    if (showHeader) {
       cardsHtml += `<div class="dash-group-header">${esc(section.group)}</div>`;
     }
     for (const entry of section.items) {
@@ -57,6 +58,7 @@ export function showDashboard() {
       const tabLabels = ws.tabs.map(t => PROVIDER_LABELS[t.provider] || t.provider).join(", ");
       const ab = ws.aheadBehind;
       const syncInfo = ab ? `↑${ab[0]} ↓${ab[1]}` : "";
+      const inlineGroup = section.group && !showHeader ? `<div class="dash-card-group">${esc(section.group)}</div>` : "";
 
       cardsHtml += `
         <div class="dash-card${isActive ? " dash-active" : ""}" data-idx="${entry.idx}">
@@ -64,7 +66,8 @@ export function showDashboard() {
             <span class="dash-card-name">${esc(info.name)}</span>
             <span class="dash-card-status ${statusClass}">${statusLabel}</span>
           </div>
-          <div class="dash-card-branch">⎇ ${esc(info.branch)} ${syncInfo}</div>
+          ${info.branch || syncInfo ? `<div class="dash-card-branch">${info.branch ? "⎇ " + esc(info.branch) : ""}${syncInfo ? (info.branch ? " " : "") + syncInfo : ""}</div>` : ""}
+          ${inlineGroup}
           <div class="dash-card-meta">
             <span>${fileCount} change${fileCount !== 1 ? "s" : ""}</span>
             <span>${tabCount} tab${tabCount !== 1 ? "s" : ""}${tabLabels ? ": " + esc(tabLabels) : ""}</span>

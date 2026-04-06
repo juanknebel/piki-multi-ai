@@ -1,8 +1,8 @@
 .dash-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 10px;
-  padding: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+  padding: 10px;
   overflow-y: auto;
   max-height: 65vh;
 }
@@ -11,7 +11,7 @@
   background: var(--bg-tertiary);
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-md);
-  padding: 12px 14px;
+  padding: 8px 10px;
   cursor: pointer;
   transition: all var(--transition-normal);
   position: relative;
@@ -49,7 +49,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 6px;
+  margin-bottom: 3px;
 }
 
 .dash-card-name {
@@ -93,28 +93,40 @@
 .dash-card-branch {
   font-size: 11px;
   color: var(--text-secondary);
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .dash-group-header {
   grid-column: 1 / -1;
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   color: var(--text-muted);
-  padding: 8px 0 2px;
-  border-bottom: 1px solid var(--border-primary);
-  margin-bottom: -4px;
+  padding: 4px 0 1px;
+  margin-bottom: -6px;
 }
 
 .dash-group-header:first-child {
   padding-top: 0;
 }
 
+.dash-group-header:not(:first-child) {
+  margin-top: 2px;
+}
+
+.dash-card-group {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
 .dash-card-meta {
   display: flex;
-  gap: 14px;
+  gap: 10px;
   font-size: 10px;
   color: var(--text-muted);
 }
@@ -122,7 +134,7 @@
 .dash-card-desc {
   font-size: 11px;
   color: var(--text-secondary);
-  margin-top: 6px;
+  margin-top: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
