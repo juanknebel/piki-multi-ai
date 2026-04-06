@@ -201,3 +201,25 @@ pub fn kanban_delete_card(
         .delete_card(&card_id)
         .map_err(|e| format!("Failed to delete card: {e}"))
 }
+
+#[tauri::command]
+pub fn kanban_load_board_by_path(board_path: String) -> Result<KanbanBoard, String> {
+    let mut provider = create_provider(PathBuf::from(board_path))?;
+    let board = provider
+        .load_board()
+        .map_err(|e| format!("Failed to load board: {e}"))?;
+    Ok(map_board(&board))
+}
+
+#[tauri::command]
+pub fn kanban_move_card_by_path(
+    board_path: String,
+    card_id: String,
+    to_column_id: String,
+) -> Result<(), String> {
+    let mut provider = create_provider(PathBuf::from(board_path))?;
+    provider
+        .move_card(&card_id, &to_column_id)
+        .map_err(|e| format!("Failed to move card: {e}"))?;
+    Ok(())
+}

@@ -127,8 +127,34 @@ export function renderWorkspaceList(container: HTMLElement) {
   render();
 }
 
-function showDeleteConfirm(idx: number, name: string) {
+async function showDeleteConfirm(idx: number, name: string) {
   document.querySelector(".ws-delete-confirm")?.remove();
+
+  const ws = appState.workspaces[idx];
+  const cardId = ws?.info.dispatch_card_id;
+  const boardPath = ws?.info.dispatch_source_kanban;
+
+  // If workspace was created via dispatch, load kanban columns for card move options
+  let columnsHtml = "";
+  if (cardId && boardPath) {
+    try {
+      const board = await ipc.kanbanLoadBoardByPath(boardPath);
+      const options = board.columns.map(
+        (col) => `<option value="${escapeHtml(col.id)}">${escapeHtml(col.id)}</option>`
+      ).join("");
+      columnsHtml = `
+        <div class="ws-delete-card-move">
+          <label class="dialog-label">Move task card to:</label>
+          <select class="dialog-select" id="ws-delete-col">
+            <option value="">(Leave where it is)</option>
+            ${options}
+          </select>
+        </div>
+      `;
+    } catch {
+      // Board not available, skip card move
+    }
+  }
 
   const overlay = document.createElement("div");
   overlay.className = "ws-delete-confirm";
@@ -136,6 +162,7 @@ function showDeleteConfirm(idx: number, name: string) {
     <div class="ws-delete-dialog">
       <p>Delete <strong>${escapeHtml(name)}</strong>?</p>
       <p class="ws-delete-hint">This will remove the worktree and branch.</p>
+      ${columnsHtml}
       <div class="ws-delete-buttons">
         <button class="dialog-btn dialog-btn-danger ws-confirm-yes">Delete</button>
         <button class="dialog-btn dialog-btn-secondary ws-confirm-no">Cancel</button>
@@ -144,6 +171,19 @@ function showDeleteConfirm(idx: number, name: string) {
   `;
 
   overlay.querySelector(".ws-confirm-yes")!.addEventListener("click", async () => {
+    // Move kanban card if user selected a column
+    if (cardId && boardPath) {
+      const colSelect = overlay.querySelector<HTMLSelectElement>("#ws-delete-col");
+      const targetCol = colSelect?.value;
+      if (targetCol) {
+        try {
+          await ipc.kanbanMoveCardByPath(boardPath, cardId, targetCol);
+        } catch {
+          // Non-critical
+        }
+      }
+    }
+
     overlay.remove();
     try {
       await ipc.deleteWorkspace(idx);

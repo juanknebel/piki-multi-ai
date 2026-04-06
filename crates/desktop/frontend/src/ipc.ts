@@ -444,8 +444,21 @@ export function dispatchAgent(
   prompt: string,
   createWorktree: boolean,
   wsName?: string,
+  group?: string,
+  dispatchCardId?: string,
+  dispatchSourceKanban?: string,
+  dispatchAgentName?: string,
+  dispatchCardTitle?: string,
 ): Promise<string> {
-  return invoke("dispatch_agent", { workspaceIdx, provider, prompt, createWorktree, wsName });
+  return invoke("dispatch_agent", { workspaceIdx, provider, prompt, createWorktree, wsName, group, dispatchCardId, dispatchSourceKanban, dispatchAgentName, dispatchCardTitle });
+}
+
+export function kanbanLoadBoardByPath(boardPath: string): Promise<KanbanBoard> {
+  return invoke("kanban_load_board_by_path", { boardPath });
+}
+
+export function kanbanMoveCardByPath(boardPath: string, cardId: string, toColumnId: string): Promise<void> {
+  return invoke("kanban_move_card_by_path", { boardPath, cardId, toColumnId });
 }
 
 // Log commands

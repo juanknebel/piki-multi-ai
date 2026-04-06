@@ -17,34 +17,62 @@ export function showDashboard() {
   const workspaces = appState.workspaces;
   const activeIdx = appState.activeWorkspace;
 
-  let cardsHtml = "";
-  for (let i = 0; i < workspaces.length; i++) {
-    const ws = workspaces[i];
-    const info = ws.info;
-    const isActive = i === activeIdx;
-    const statusLabel = typeof ws.status === "string" ? ws.status : "Error";
-    const statusClass = statusLabel.toLowerCase();
-    const fileCount = ws.changedFiles.length;
-    const tabCount = ws.tabs.length;
-    const tabLabels = ws.tabs.map(t => PROVIDER_LABELS[t.provider] || t.provider).join(", ");
-    const ab = ws.aheadBehind;
-    const syncInfo = ab ? `↑${ab[0]} ↓${ab[1]}` : "";
+  // Group workspaces by group field
+  type WsEntry = { idx: number; group: string; order: number };
+  const entries: WsEntry[] = workspaces.map((ws, i) => ({
+    idx: i,
+    group: ws.info.group || "",
+    order: ws.info.order,
+  }));
 
-    cardsHtml += `
-      <div class="dash-card${isActive ? " dash-active" : ""}" data-idx="${i}">
-        <div class="dash-card-header">
-          <span class="dash-card-name">${esc(info.name)}</span>
-          <span class="dash-card-status ${statusClass}">${statusLabel}</span>
+  const groups = new Map<string, WsEntry[]>();
+  for (const entry of entries) {
+    if (!groups.has(entry.group)) groups.set(entry.group, []);
+    groups.get(entry.group)!.push(entry);
+  }
+  const sortedGroups = [...groups.entries()]
+    .sort(([a], [b]) => {
+      if (a === "" && b !== "") return -1;
+      if (a !== "" && b === "") return 1;
+      return a.localeCompare(b);
+    })
+    .map(([group, items]) => ({
+      group,
+      items: items.sort((a, b) => a.order - b.order),
+    }));
+
+  let cardsHtml = "";
+  for (const section of sortedGroups) {
+    if (section.group) {
+      cardsHtml += `<div class="dash-group-header">${esc(section.group)}</div>`;
+    }
+    for (const entry of section.items) {
+      const ws = workspaces[entry.idx];
+      const info = ws.info;
+      const isActive = entry.idx === activeIdx;
+      const statusLabel = typeof ws.status === "string" ? ws.status : "Error";
+      const statusClass = statusLabel.toLowerCase();
+      const fileCount = ws.changedFiles.length;
+      const tabCount = ws.tabs.length;
+      const tabLabels = ws.tabs.map(t => PROVIDER_LABELS[t.provider] || t.provider).join(", ");
+      const ab = ws.aheadBehind;
+      const syncInfo = ab ? `↑${ab[0]} ↓${ab[1]}` : "";
+
+      cardsHtml += `
+        <div class="dash-card${isActive ? " dash-active" : ""}" data-idx="${entry.idx}">
+          <div class="dash-card-header">
+            <span class="dash-card-name">${esc(info.name)}</span>
+            <span class="dash-card-status ${statusClass}">${statusLabel}</span>
+          </div>
+          <div class="dash-card-branch">⎇ ${esc(info.branch)} ${syncInfo}</div>
+          <div class="dash-card-meta">
+            <span>${fileCount} change${fileCount !== 1 ? "s" : ""}</span>
+            <span>${tabCount} tab${tabCount !== 1 ? "s" : ""}${tabLabels ? ": " + esc(tabLabels) : ""}</span>
+          </div>
+          ${info.description ? `<div class="dash-card-desc">${esc(info.description)}</div>` : ""}
         </div>
-        <div class="dash-card-branch">⎇ ${esc(info.branch)} ${syncInfo}</div>
-        ${info.group ? `<div class="dash-card-group">${esc(info.group)}</div>` : ""}
-        <div class="dash-card-meta">
-          <span>${fileCount} change${fileCount !== 1 ? "s" : ""}</span>
-          <span>${tabCount} tab${tabCount !== 1 ? "s" : ""}${tabLabels ? ": " + esc(tabLabels) : ""}</span>
-        </div>
-        ${info.description ? `<div class="dash-card-desc">${esc(info.description)}</div>` : ""}
-      </div>
-    `;
+      `;
+    }
   }
 
   dialog.innerHTML = `

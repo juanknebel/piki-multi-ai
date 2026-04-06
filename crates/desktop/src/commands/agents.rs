@@ -250,6 +250,11 @@ pub async fn dispatch_agent(
     prompt: String,
     create_worktree: bool,
     ws_name: Option<String>,
+    group: Option<String>,
+    dispatch_card_id: Option<String>,
+    dispatch_source_kanban: Option<String>,
+    dispatch_agent_name: Option<String>,
+    dispatch_card_title: Option<String>,
 ) -> Result<String, String> {
     let ai_provider = match provider.as_str() {
         "Claude Code" | "Claude" => piki_core::AIProvider::Claude,
@@ -267,19 +272,24 @@ pub async fn dispatch_agent(
 
     // If creating a new worktree workspace
     let target_ws_idx = if create_worktree {
-        let (manager, source_dir) = {
+        let (manager, source_dir, source_kanban_path) = {
             let app = state.lock();
             if workspace_idx >= app.workspaces.len() {
                 return Err("Workspace index out of range".to_string());
             }
             let m = piki_core::workspace::manager::WorkspaceManager::with_paths(app.paths.clone());
             let dir = app.workspaces[workspace_idx].info.source_repo.clone();
-            (m, dir)
+            let kanban = app.workspaces[workspace_idx].info.kanban_path.clone();
+            (m, dir, kanban)
         };
+
+        let description = dispatch_card_title
+            .as_deref()
+            .unwrap_or("Agent dispatch");
 
         let name = ws_name.unwrap_or_else(|| format!("agent-{}", uuid::Uuid::new_v4().to_string().split('-').next().unwrap_or("x")));
         let info = manager
-            .create(&name, "Agent dispatch", &prompt, None, &source_dir)
+            .create(&name, &description, &prompt, source_kanban_path, &source_dir)
             .await
             .map_err(|e| format!("Failed to create workspace: {e}"))?;
 
@@ -291,6 +301,12 @@ pub async fn dispatch_agent(
         let order = app.workspaces.iter().map(|ws| ws.info.order).max().unwrap_or(0) + 1;
         let mut ws_info = info;
         ws_info.order = order;
+        if let Some(ref g) = group {
+            ws_info.group = Some(g.clone());
+        }
+        ws_info.dispatch_card_id = dispatch_card_id;
+        ws_info.dispatch_source_kanban = dispatch_source_kanban;
+        ws_info.dispatch_agent_name = dispatch_agent_name;
 
         app.workspaces.push(crate::state::DesktopWorkspace {
             info: ws_info,

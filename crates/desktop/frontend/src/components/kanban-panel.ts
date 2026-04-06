@@ -1,6 +1,7 @@
 import { appState } from "../state";
 import * as ipc from "../ipc";
 import { toast } from "./toast";
+import { showDispatchDialog } from "./dialogs/dispatch-dialog";
 import type { KanbanBoard, KanbanCard } from "../types";
 import { PRIORITY_CSS } from "../types";
 
@@ -248,6 +249,7 @@ function renderCard(
     <div class="kanban-card-actions">
       ${colIdx > 0 ? `<button class="kanban-card-btn kanban-move-left" title="Move left">&larr;</button>` : ""}
       <button class="kanban-card-btn kanban-edit" title="Edit">Edit</button>
+      <button class="kanban-card-btn kanban-dispatch" title="Dispatch agent">Dispatch</button>
       <button class="kanban-card-btn kanban-delete" title="Delete">Del</button>
       ${colIdx < board.columns.length - 1 ? `<button class="kanban-card-btn kanban-move-right" title="Move right">&rarr;</button>` : ""}
     </div>
@@ -279,6 +281,17 @@ function renderCard(
   el.querySelector(".kanban-edit")!.addEventListener("click", (e) => {
     e.stopPropagation();
     showEditModal(inst, card);
+  });
+
+  // Dispatch
+  el.querySelector(".kanban-dispatch")!.addEventListener("click", (e) => {
+    e.stopPropagation();
+    showDispatchDialog({
+      id: card.id,
+      title: card.title,
+      description: card.description,
+      priority: card.priority,
+    }).then(() => loadAndRender(inst));
   });
 
   // Delete

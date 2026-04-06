@@ -3,7 +3,14 @@ import * as ipc from "../../ipc";
 import { toast } from "../toast";
 import type { AgentInfo } from "../../ipc";
 
-export async function showDispatchDialog() {
+export interface CardContext {
+  id: string;
+  title: string;
+  description: string;
+  priority: string;
+}
+
+export async function showDispatchDialog(cardContext?: CardContext) {
   document.querySelector(".dialog-backdrop")?.remove();
 
   const wsIdx = appState.activeWorkspace;
@@ -19,7 +26,7 @@ export async function showDispatchDialog() {
   backdrop.innerHTML = `
     <div class="dialog" style="max-width:520px">
       <div class="dialog-header">
-        <span class="dialog-title">Dispatch Agent</span>
+        <span class="dialog-title">Dispatch Agent${cardContext ? ` — ${esc(cardContext.title)}` : ""}</span>
         <button class="dialog-close">×</button>
       </div>
       <div class="dialog-body">
@@ -42,7 +49,7 @@ export async function showDispatchDialog() {
         </div>
         <div class="dialog-field">
           <label class="dialog-label">Additional prompt</label>
-          <textarea class="dialog-textarea" id="dp-prompt" rows="4" placeholder="Optional: additional instructions"></textarea>
+          <textarea class="dialog-textarea" id="dp-prompt" rows="4" placeholder="Optional: additional instructions">${cardContext ? esc(`Task: ${cardContext.title}\n\n${cardContext.description}`) : ""}</textarea>
         </div>
         <div class="dialog-field">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
@@ -112,7 +119,14 @@ export async function showDispatchDialog() {
     btn.textContent = "Dispatching...";
 
     try {
-      const tabId = await ipc.dispatchAgent(wsIdx, provider, prompt, createWorktree, wsName);
+      // Pass the current workspace's group and dispatch metadata so new worktrees inherit them
+      const currentGroup = appState.activeWs?.info.group || undefined;
+      const sourceKanban = appState.activeWs?.info.kanban_path || undefined;
+      const agentName = agentOpt?.textContent?.split(" (")[0] || provider;
+      const tabId = await ipc.dispatchAgent(
+        wsIdx, provider, prompt, createWorktree, wsName, currentGroup,
+        cardContext?.id, sourceKanban, agentName, cardContext?.title,
+      );
 
       if (createWorktree) {
         // Reload workspaces to pick up the new one
@@ -132,6 +146,17 @@ export async function showDispatchDialog() {
             provider: mapProviderToAI(provider),
             alive: true,
           });
+        }
+      }
+
+      // Update kanban card if dispatched from card
+      if (cardContext) {
+        const agentName = agentOpt?.textContent?.split(" (")[0] || provider;
+        try {
+          await ipc.kanbanUpdateCard(wsIdx, cardContext.id, cardContext.title, cardContext.description, cardContext.priority, agentName);
+          await ipc.kanbanMoveCard(wsIdx, cardContext.id, "in_progress");
+        } catch {
+          // Non-critical: card update failure shouldn't block dispatch
         }
       }
 

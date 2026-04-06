@@ -177,6 +177,8 @@ fn main() {
             commands::kanban::kanban_update_card,
             commands::kanban::kanban_move_card,
             commands::kanban::kanban_delete_card,
+            commands::kanban::kanban_load_board_by_path,
+            commands::kanban::kanban_move_card_by_path,
             commands::api::send_api_request,
             commands::api::load_api_history,
             commands::api::search_api_history,
