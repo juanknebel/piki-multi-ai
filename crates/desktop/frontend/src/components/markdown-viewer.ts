@@ -2,8 +2,7 @@ import * as ipc from "../ipc";
 import { appState } from "../state";
 import { toast } from "./toast";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
-import EasyMDE from "easymde";
-import "easymde/dist/easymde.min.css";
+import { registerMarkdownFile } from "./markdown-editor-panel";
 
 let overlayEl: HTMLElement | null = null;
 
@@ -55,14 +54,11 @@ export async function showMarkdown(filePath: string) {
 
     header.querySelector(".dialog-close")!.addEventListener("click", close);
     header.querySelector(".md-quick-edit")!.addEventListener("click", enterEditMode);
-    header.querySelector(".md-edit")!.addEventListener("click", async () => {
+    header.querySelector(".md-edit")!.addEventListener("click", () => {
       close();
-      try {
-        const tabId = await ipc.spawnEditorTab(wsIdx, filePath);
-        appState.addTab(wsIdx, { id: tabId, provider: "Shell", alive: true });
-      } catch (err) {
-        toast(`Failed to open editor: ${err}`, "error");
-      }
+      const tabId = `md-${Date.now()}`;
+      registerMarkdownFile(tabId, filePath);
+      appState.addTab(wsIdx, { id: tabId, provider: "Markdown", alive: true });
     });
     header.querySelector(".md-copy")!.addEventListener("click", () => {
       writeText(content).then(() => toast("Copied to clipboard", "success")).catch(() => {});
@@ -84,24 +80,16 @@ export async function showMarkdown(filePath: string) {
     const body = viewer.querySelector(".md-body") as HTMLElement;
     body.innerHTML = "";
     const textarea = document.createElement("textarea");
+    textarea.className = "file-viewer-textarea";
+    textarea.value = content;
+    textarea.spellcheck = false;
     body.appendChild(textarea);
-
-    const easyMde = new EasyMDE({
-      element: textarea,
-      initialValue: content,
-      spellChecker: false,
-      status: false,
-      toolbar: ["bold", "italic", "heading", "|", "code", "quote", "unordered-list", "ordered-list", "|", "link", "image", "|", "preview", "side-by-side"],
-      sideBySideFullscreen: false,
-      minHeight: "100%",
-    });
+    textarea.focus();
 
     header.querySelector(".md-save")!.addEventListener("click", async () => {
       try {
-        const newContent = easyMde.value();
-        await ipc.writeFileContent(wsIdx, filePath, newContent);
-        content = newContent;
-        easyMde.toTextArea();
+        await ipc.writeFileContent(wsIdx, filePath, textarea.value);
+        content = textarea.value;
         toast("File saved", "success");
         editing = false;
         renderViewMode();
@@ -110,7 +98,6 @@ export async function showMarkdown(filePath: string) {
       }
     });
     header.querySelector(".md-cancel")!.addEventListener("click", () => {
-      easyMde.toTextArea();
       editing = false;
       renderViewMode();
     });

@@ -8,6 +8,7 @@ import { renderTabBar } from "./components/tab-bar";
 import { initTerminalPanel, openTerminalSearch } from "./components/terminal-panel";
 import { initKanbanPanel } from "./components/kanban-panel";
 import { initApiPanel } from "./components/api-panel";
+import { initMarkdownEditorPanel } from "./components/markdown-editor-panel";
 import { bindAction, handleGlobalKeydown, loadShortcuts } from "./shortcuts";
 import { showSettingsDialog } from "./components/dialogs/settings-dialog";
 import { renderStatusBar } from "./components/status-bar";
@@ -43,6 +44,7 @@ async function init() {
   await initTerminalPanel(mainContentEl);
   initKanbanPanel(mainContentEl);
   initApiPanel(mainContentEl);
+  initMarkdownEditorPanel(mainContentEl);
   renderStatusBar(document.getElementById("status-bar")!);
   initToasts();
 

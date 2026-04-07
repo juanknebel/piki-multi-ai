@@ -3,6 +3,7 @@ import * as ipc from "../ipc";
 import { toast } from "./toast";
 import { PROVIDER_LABELS, PROVIDER_ICONS } from "../types";
 import type { AIProvider } from "../types";
+import { destroyMarkdownEditorPanel } from "./markdown-editor-panel";
 
 export function renderTabBar(container: HTMLElement) {
   function render() {
@@ -35,6 +36,13 @@ export function renderTabBar(container: HTMLElement) {
       if (closeBtn) {
         closeBtn.addEventListener("click", async (e) => {
           e.stopPropagation();
+          const tab = tabs[idx];
+          // Frontend-only tabs (no backend PTY) — just remove from state
+          if (tab.provider === "Markdown") {
+            destroyMarkdownEditorPanel(tab.id);
+            appState.removeTab(appState.activeWorkspace, idx);
+            return;
+          }
           try {
             await ipc.closeTab(appState.activeWorkspace, idx);
             appState.removeTab(appState.activeWorkspace, idx);

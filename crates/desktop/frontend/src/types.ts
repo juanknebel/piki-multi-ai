@@ -7,7 +7,8 @@ export type AIProvider =
   | "Shell"
   | "Kanban"
   | "CodeReview"
-  | "Api";
+  | "Api"
+  | "Markdown";
 
 export type WorkspaceStatus = "Idle" | "Busy" | "Done" | { Error: string };
 
@@ -91,6 +92,7 @@ export const PROVIDER_LABELS: Record<AIProvider, string> = {
   Kanban: "Kanban Board",
   CodeReview: "Code Review",
   Api: "API Explorer",
+  Markdown: "Markdown",
 };
 
 export const PROVIDER_ICONS: Record<AIProvider, string> = {
@@ -103,6 +105,7 @@ export const PROVIDER_ICONS: Record<AIProvider, string> = {
   Kanban: "B",
   CodeReview: "R",
   Api: "A",
+  Markdown: "M",
 };
 
 // Kanban types

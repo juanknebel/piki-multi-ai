@@ -8,6 +8,7 @@ import * as ipc from "../ipc";
 import { themeEngine } from "../theme";
 import { hideKanbanPanels, showKanbanPanel } from "./kanban-panel";
 import { hideApiPanels, showApiPanel } from "./api-panel";
+import { hideMarkdownEditorPanels, showMarkdownEditorPanel } from "./markdown-editor-panel";
 
 export interface TerminalInstance {
   tabId: string;
@@ -160,6 +161,7 @@ function showActiveTerminal() {
   }
   hideKanbanPanels();
   hideApiPanels();
+  hideMarkdownEditorPanels();
 
   // Remove welcome message if present
   mainContent.querySelector(".terminal-welcome")?.remove();
@@ -183,6 +185,10 @@ function showActiveTerminal() {
   }
   if (tab.provider === "Api") {
     showApiPanel(tab.id, appState.activeWorkspace);
+    return;
+  }
+  if (tab.provider === "Markdown") {
+    showMarkdownEditorPanel(tab.id);
     return;
   }
 
