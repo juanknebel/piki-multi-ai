@@ -292,3 +292,55 @@
 .dp-resolved-row .dp-3way-cell {
   color: var(--text-primary);
 }
+
+/* ── Code Review inline comments ───────────────── */
+.cr-diff-line {
+  padding: 0 8px;
+  white-space: pre;
+  min-height: 1.5em;
+  line-height: 1.5;
+}
+
+.cr-comment-form {
+  padding: 6px 12px 6px 52px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-primary);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.cr-comment-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: "JetBrainsMono NF Mono", monospace;
+  color: var(--text-bright);
+  background: var(--bg-input);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  resize: vertical;
+  outline: none;
+}
+
+.cr-comment-textarea:focus {
+  border-color: var(--accent-primary);
+}
+
+.cr-comment-form-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.cr-comment-badge {
+  padding: 4px 12px 4px 52px;
+  background: rgba(57, 186, 230, 0.06);
+  border-left: 3px solid var(--accent-primary);
+  font-size: 12px;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.cr-comment-body {
+  white-space: pre-wrap;
+}

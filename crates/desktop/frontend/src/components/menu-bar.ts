@@ -200,6 +200,8 @@ const MENUS: MenuDefinition[] = [
       { label: "Merge / Rebase", shortcut: "Ctrl+M", disabled: noWs, action: () => showMergeDialog() },
       { label: "Git Log", shortcut: "Alt+L", disabled: noWs, action: () => showGitLog() },
       { label: "Git Stash", shortcut: "Ctrl+Shift+S", disabled: noWs, action: () => showStashDialog() },
+      SEP,
+      { label: "Code Review (PR)", shortcut: "Ctrl+Shift+R", disabled: noWs, action: () => showCodeReview() },
     ],
   },
   {
@@ -213,7 +215,6 @@ const MENUS: MenuDefinition[] = [
     label: "Help",
     items: () => [
       { label: "Keyboard Shortcuts", shortcut: "?", action: () => showHelpDialog() },
-      { label: "Code Review", shortcut: "Ctrl+Shift+R", disabled: noWs, action: () => showCodeReview() },
       SEP,
       { label: "About Piki Desktop", action: () => showAboutDialog() },
     ],

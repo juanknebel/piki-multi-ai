@@ -346,10 +346,10 @@ export interface PrInfo {
   title: string;
   body: string;
   state: string;
-  review_decision: string | null;
+  reviewDecision: string | null;
   url: string;
-  head_ref_name: string;
-  base_ref_name: string;
+  headRefName: string;
+  baseRefName: string;
   additions: number;
   deletions: number;
 }
