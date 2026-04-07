@@ -533,6 +533,15 @@ export function setSettings(value: string): Promise<void> {
   return invoke("set_settings", { value });
 }
 
+// Clipboard commands (use system tools, not Tauri plugin — fixes non-ASCII on Wayland)
+export function clipboardCopy(text: string): Promise<void> {
+  return invoke("clipboard_copy", { text });
+}
+
+export function clipboardPaste(): Promise<string> {
+  return invoke("clipboard_paste");
+}
+
 // Event listeners
 export function onPtyOutput(
   callback: (event: PtyOutputEvent) => void,

@@ -185,6 +185,8 @@ fn main() {
             commands::api::search_api_history,
             commands::api::delete_api_history_entry,
             commands::api::jq_filter,
+            commands::clipboard::clipboard_copy,
+            commands::clipboard::clipboard_paste,
         ])
         .run(tauri::generate_context!())
         .expect("error while running piki-desktop");

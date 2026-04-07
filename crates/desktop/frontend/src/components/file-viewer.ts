@@ -1,7 +1,6 @@
 import * as ipc from "../ipc";
 import { appState } from "../state";
 import { toast } from "./toast";
-import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 
 export async function showFileViewer(workspaceIdx: number, path: string) {
   // Remove existing viewer
@@ -64,7 +63,7 @@ export async function showFileViewer(workspaceIdx: number, path: string) {
   });
 
   dialog.querySelector(".file-viewer-copy")!.addEventListener("click", () => {
-    writeText(content).then(() => toast("Copied to clipboard", "success")).catch(() => {});
+    ipc.clipboardCopy(content).then(() => toast("Copied to clipboard", "success")).catch(() => {});
   });
 
   // ── Inline edit mode ──────────────────────
@@ -133,7 +132,7 @@ export async function showFileViewer(workspaceIdx: number, path: string) {
       }
     });
     actionsDiv.querySelector(".file-viewer-copy")!.addEventListener("click", () => {
-      writeText(content).then(() => toast("Copied to clipboard", "success")).catch(() => {});
+      ipc.clipboardCopy(content).then(() => toast("Copied to clipboard", "success")).catch(() => {});
     });
     actionsDiv.querySelector(".file-viewer-close")!.addEventListener("click", close);
 

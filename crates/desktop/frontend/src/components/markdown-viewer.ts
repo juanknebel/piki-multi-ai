@@ -1,7 +1,6 @@
 import * as ipc from "../ipc";
 import { appState } from "../state";
 import { toast } from "./toast";
-import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { registerMarkdownFile } from "./markdown-editor-panel";
 
 let overlayEl: HTMLElement | null = null;
@@ -61,7 +60,7 @@ export async function showMarkdown(filePath: string) {
       appState.addTab(wsIdx, { id: tabId, provider: "Markdown", alive: true });
     });
     header.querySelector(".md-copy")!.addEventListener("click", () => {
-      writeText(content).then(() => toast("Copied to clipboard", "success")).catch(() => {});
+      ipc.clipboardCopy(content).then(() => toast("Copied to clipboard", "success")).catch(() => {});
     });
   }
 

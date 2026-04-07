@@ -1,7 +1,6 @@
 import { appState } from "../state";
 import * as ipc from "../ipc";
 import { toast } from "./toast";
-import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { getShortcutKey } from "../shortcuts";
 import type { ApiResponseResult, ApiHistoryEntryDto } from "../ipc";
 
@@ -267,7 +266,7 @@ function statusCssClass(status: number): string {
 function copyResponseBody(inst: ApiInstance) {
   if (inst.responses.length === 0) return;
   const allBodies = inst.responses.map((r) => r.body).join("\n\n---\n\n");
-  writeText(allBodies)
+  ipc.clipboardCopy(allBodies)
     .then(() => toast("Response copied", "success"))
     .catch(() => {});
 }

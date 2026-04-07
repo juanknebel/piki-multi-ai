@@ -2,9 +2,9 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { SearchAddon } from "@xterm/addon-search";
-import { writeText, readText } from "@tauri-apps/plugin-clipboard-manager";
 import { appState } from "../state";
 import * as ipc from "../ipc";
+import { toast } from "./toast";
 import { themeEngine } from "../theme";
 import { hideKanbanPanels, showKanbanPanel } from "./kanban-panel";
 import { hideApiPanels, showApiPanel } from "./api-panel";
@@ -100,21 +100,32 @@ export function createTerminal(tabId: string): TerminalInstance {
   terminal.onSelectionChange(() => {
     const sel = terminal.getSelection();
     if (sel) {
-      writeText(sel).catch(() => {});
+      ipc.clipboardCopy(sel).catch((e) => {
+        console.error("clipboard copy failed:", e);
+        toast(`Copy failed: ${e}`, "error");
+      });
     }
   });
 
-  // Ctrl+Shift+C = copy, Ctrl+Shift+V = paste via Tauri system clipboard
+  // Ctrl+Shift+C = copy, Ctrl+Shift+V = paste via backend system clipboard
   terminal.attachCustomKeyEventHandler((e) => {
     if (e.ctrlKey && e.shiftKey && e.type === "keydown" && e.key === "C") {
       const sel = terminal.getSelection();
-      if (sel) writeText(sel).catch(() => {});
+      if (sel) {
+        ipc.clipboardCopy(sel).catch((err) => {
+          console.error("clipboard copy failed:", err);
+          toast(`Copy failed: ${err}`, "error");
+        });
+      }
       return false;
     }
     if (e.ctrlKey && e.shiftKey && e.type === "keydown" && e.key === "V") {
-      readText().then((text) => {
+      ipc.clipboardPaste().then((text) => {
         if (text) terminal.paste(text);
-      }).catch(() => {});
+      }).catch((err) => {
+        console.error("clipboard paste failed:", err);
+        toast(`Paste failed: ${err}`, "error");
+      });
       return false;
     }
     // Shift+PageUp/Down/Home/End for scrollback navigation
@@ -133,9 +144,12 @@ export function createTerminal(tabId: string): TerminalInstance {
     e.stopPropagation();
   }, true);
 
-  // Send keystrokes to backend
+  // Send keystrokes to backend (UTF-8 safe base64 encoding)
   terminal.onData((data) => {
-    const encoded = btoa(data);
+    const bytes = new TextEncoder().encode(data);
+    let binary = "";
+    for (const b of bytes) binary += String.fromCharCode(b);
+    const encoded = btoa(binary);
     ipc.writePty(tabId, encoded).catch((err) =>
       console.error("PTY write error:", err),
     );
