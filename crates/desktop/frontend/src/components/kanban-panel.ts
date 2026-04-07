@@ -5,10 +5,16 @@ import { showDispatchDialog } from "./dialogs/dispatch-dialog";
 import type { KanbanBoard, KanbanCard } from "../types";
 import { PRIORITY_CSS } from "../types";
 
+type SortOrder = "none" | "asc" | "desc";
+
 interface KanbanInstance {
   tabId: string;
   element: HTMLDivElement;
   board: KanbanBoard | null;
+  allProjects: string[]; // all projects (unfiltered) for the dropdown
+  searchQuery: string;
+  sortOrder: SortOrder;
+  projectFilter: string[]; // empty = show all
 }
 
 // ── Column colors ────────────────────────────────
@@ -65,7 +71,7 @@ export async function showKanbanPanel(tabId: string) {
     const el = document.createElement("div");
     el.className = "kanban-board";
     mainContent.appendChild(el);
-    inst = { tabId, element: el, board: null };
+    inst = { tabId, element: el, board: null, allProjects: [], searchQuery: "", sortOrder: "none", projectFilter: [] };
     instances.set(tabId, inst);
   }
 
@@ -84,7 +90,14 @@ export function destroyKanbanPanel(tabId: string) {
 async function loadAndRender(inst: KanbanInstance) {
   const wsIdx = appState.activeWorkspace;
   try {
-    inst.board = await ipc.kanbanLoadBoard(wsIdx);
+    // Load unfiltered board first to get all projects for the dropdown
+    const fullBoard = await ipc.kanbanLoadBoard(wsIdx);
+    inst.allProjects = getUniqueProjects(fullBoard);
+
+    // Load with sort + project filter applied by flow-core
+    const sort = inst.sortOrder !== "none" ? inst.sortOrder : undefined;
+    const pf = inst.projectFilter.length > 0 ? inst.projectFilter : undefined;
+    inst.board = (sort || pf) ? await ipc.kanbanLoadBoard(wsIdx, sort, pf) : fullBoard;
   } catch (err) {
     inst.element.innerHTML = `
       <div class="kanban-empty">
@@ -98,6 +111,32 @@ async function loadAndRender(inst: KanbanInstance) {
   renderBoard(inst);
 }
 
+function getUniqueProjects(board: KanbanBoard): string[] {
+  const set = new Set<string>();
+  for (const col of board.columns) {
+    for (const card of col.cards) {
+      if (card.project) set.add(card.project);
+    }
+  }
+  return [...set].sort();
+}
+
+function applySearch(board: KanbanBoard, query: string): KanbanBoard {
+  const q = query.toLowerCase();
+  if (!q) return board;
+
+  return {
+    columns: board.columns.map((col) => ({
+      ...col,
+      cards: col.cards.filter((card) =>
+        card.title.toLowerCase().includes(q)
+        || card.description.toLowerCase().includes(q)
+        || card.assignee.toLowerCase().includes(q)
+        || card.project.toLowerCase().includes(q)),
+    })),
+  };
+}
+
 function renderBoard(inst: KanbanInstance) {
   const board = inst.board;
   if (!board) return;
@@ -109,18 +148,94 @@ function renderBoard(inst: KanbanInstance) {
   // Toolbar
   const toolbar = document.createElement("div");
   toolbar.className = "kanban-toolbar";
+
+  const sortLabel = inst.sortOrder === "none" ? "Sort" : inst.sortOrder === "asc" ? "Sort ↑" : "Sort ↓";
+  const projects = inst.allProjects;
+  const filterActive = inst.projectFilter.length > 0;
+
   toolbar.innerHTML = `
     <span class="kanban-toolbar-title">Kanban Board</span>
-    <button class="kanban-btn kanban-refresh" title="Refresh">Refresh</button>
+    <div class="kanban-toolbar-controls">
+      <input class="kanban-search-input" type="text" placeholder="Search..." value="${escAttr(inst.searchQuery)}" />
+      <button class="kanban-btn kanban-sort-btn${inst.sortOrder !== "none" ? " active" : ""}" title="Sort by priority">${sortLabel}</button>
+      <div class="kanban-filter-wrapper">
+        <button class="kanban-btn kanban-filter-btn${filterActive ? " active" : ""}" title="Filter by project">Project${filterActive ? ` (${inst.projectFilter.length})` : ""}</button>
+        <div class="kanban-filter-dropdown hidden">
+          ${projects.map((p) => `<label class="kanban-filter-option"><input type="checkbox" value="${escAttr(p)}" ${inst.projectFilter.length === 0 || inst.projectFilter.includes(p) ? "checked" : ""} /> ${esc(p)}</label>`).join("")}
+          <div class="kanban-filter-actions">
+            <button class="kanban-btn kanban-filter-all">All</button>
+            <button class="kanban-btn kanban-filter-none">None</button>
+            <button class="kanban-btn kanban-btn-primary kanban-filter-apply">Apply</button>
+          </div>
+        </div>
+      </div>
+      <button class="kanban-btn kanban-refresh" title="Refresh">Refresh</button>
+    </div>
   `;
+
+  // Search
+  const searchInput = toolbar.querySelector(".kanban-search-input") as HTMLInputElement;
+  searchInput.addEventListener("input", () => {
+    inst.searchQuery = searchInput.value;
+    renderBoard(inst);
+  });
+
+  // Sort toggle — reload from backend with sort applied by flow-core
+  toolbar.querySelector(".kanban-sort-btn")!.addEventListener("click", () => {
+    const cycle: SortOrder[] = ["none", "asc", "desc"];
+    const idx = cycle.indexOf(inst.sortOrder);
+    inst.sortOrder = cycle[(idx + 1) % cycle.length];
+    loadAndRender(inst);
+  });
+
+  // Project filter dropdown
+  const filterBtn = toolbar.querySelector(".kanban-filter-btn")!;
+  const dropdown = toolbar.querySelector(".kanban-filter-dropdown")!;
+  filterBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    dropdown.classList.toggle("hidden");
+  });
+  dropdown.addEventListener("click", (e) => e.stopPropagation());
+  toolbar.querySelector(".kanban-filter-all")?.addEventListener("click", () => {
+    dropdown.querySelectorAll<HTMLInputElement>("input[type=checkbox]").forEach((cb) => (cb.checked = true));
+  });
+  toolbar.querySelector(".kanban-filter-none")?.addEventListener("click", () => {
+    dropdown.querySelectorAll<HTMLInputElement>("input[type=checkbox]").forEach((cb) => (cb.checked = false));
+  });
+  toolbar.querySelector(".kanban-filter-apply")?.addEventListener("click", () => {
+    const checked: string[] = [];
+    dropdown.querySelectorAll<HTMLInputElement>("input[type=checkbox]").forEach((cb) => {
+      if (cb.checked) checked.push(cb.value);
+    });
+    inst.projectFilter = checked.length === projects.length ? [] : checked;
+    dropdown.classList.add("hidden");
+    loadAndRender(inst);
+  });
+  // Close dropdown when clicking outside
+  document.addEventListener("click", () => dropdown.classList.add("hidden"), { once: true });
+
   toolbar.querySelector(".kanban-refresh")!.addEventListener("click", () => loadAndRender(inst));
   el.appendChild(toolbar);
+
+  // Re-focus search input and restore cursor
+  if (inst.searchQuery) {
+    requestAnimationFrame(() => {
+      const input = el.querySelector(".kanban-search-input") as HTMLInputElement | null;
+      if (input) {
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+      }
+    });
+  }
+
+  // Apply filters/sort to a view copy (don't mutate inst.board)
+  const viewBoard = applySearch(board, inst.searchQuery);
 
   // Columns container
   const colsContainer = document.createElement("div");
   colsContainer.className = "kanban-columns";
 
-  board.columns.forEach((col, colIdx) => {
+  viewBoard.columns.forEach((col, colIdx) => {
     const colEl = document.createElement("div");
     colEl.className = "kanban-column";
 
@@ -155,18 +270,8 @@ function renderBoard(inst: KanbanInstance) {
       showColorPicker(inst, col.id, colEl, e.clientX, e.clientY);
     });
 
-    header.querySelector(".kanban-column-add")!.addEventListener("click", async () => {
-      try {
-        const cardId = await ipc.kanbanCreateCard(wsIdx, col.id);
-        await loadAndRender(inst);
-        // Open edit for the new card
-        const newCard = inst.board?.columns
-          .flatMap((c) => c.cards)
-          .find((c) => c.id === cardId);
-        if (newCard) showEditModal(inst, newCard);
-      } catch (err) {
-        toast(`Failed to create card: ${err}`, "error");
-      }
+    header.querySelector(".kanban-column-add")!.addEventListener("click", () => {
+      showNewCardModal(inst, col.id);
     });
     colEl.appendChild(header);
 
@@ -240,6 +345,7 @@ function renderCard(
   const shortId = card.id.length > 18 ? card.id.slice(0, 18) + "..." : card.id;
 
   el.innerHTML = `
+    ${card.project ? `<div class="kanban-card-project">${esc(card.project)}</div>` : ""}
     <div class="kanban-card-header">
       <span class="kanban-card-title">${esc(card.title)}</span>
       <span class="kanban-priority ${prioClass}">${esc(card.priority)}</span>
@@ -347,8 +453,11 @@ function showEditModal(inst: KanbanInstance, card: KanbanCard) {
       <button class="kanban-edit-close">&times;</button>
     </div>
     <div class="kanban-edit-body">
-      <label class="kanban-edit-label">Title</label>
+      <label class="kanban-edit-label">Title <span style="color:var(--error-color,#e06c75)">(required)</span></label>
       <input class="kanban-edit-input" id="ke-title" type="text" value="${escAttr(card.title)}" />
+
+      <label class="kanban-edit-label">Project <span style="color:var(--error-color,#e06c75)">(required)</span></label>
+      <input class="kanban-edit-input" id="ke-project" type="text" value="${escAttr(card.project)}" />
 
       <label class="kanban-edit-label">Priority</label>
       <select class="kanban-edit-select" id="ke-priority">
@@ -374,12 +483,10 @@ function showEditModal(inst: KanbanInstance, card: KanbanCard) {
   backdrop.appendChild(modal);
   document.body.appendChild(backdrop);
 
-  // Focus title input
   const titleInput = modal.querySelector("#ke-title") as HTMLInputElement;
   titleInput.focus();
   titleInput.select();
 
-  // Close handlers
   const close = () => backdrop.remove();
   backdrop.addEventListener("click", (e) => {
     if (e.target === backdrop) close();
@@ -390,17 +497,24 @@ function showEditModal(inst: KanbanInstance, card: KanbanCard) {
   // Save
   modal.querySelector(".kanban-edit-save")!.addEventListener("click", async () => {
     const title = (modal.querySelector("#ke-title") as HTMLInputElement).value.trim();
+    const project = (modal.querySelector("#ke-project") as HTMLInputElement).value.trim();
     const priority = (modal.querySelector("#ke-priority") as HTMLSelectElement).value;
     const assignee = (modal.querySelector("#ke-assignee") as HTMLInputElement).value.trim();
     const desc = (modal.querySelector("#ke-desc") as HTMLTextAreaElement).value;
 
     if (!title) {
-      toast("Title cannot be empty", "error");
+      toast("Title is required", "error");
+      (modal.querySelector("#ke-title") as HTMLInputElement).focus();
+      return;
+    }
+    if (!project) {
+      toast("Project is required", "error");
+      (modal.querySelector("#ke-project") as HTMLInputElement).focus();
       return;
     }
 
     try {
-      await ipc.kanbanUpdateCard(wsIdx, card.id, title, desc, priority, assignee);
+      await ipc.kanbanUpdateCard(wsIdx, card.id, title, desc, priority, assignee, project);
       close();
       await loadAndRender(inst);
     } catch (err) {
@@ -409,6 +523,97 @@ function showEditModal(inst: KanbanInstance, card: KanbanCard) {
   });
 
   // Ctrl+Enter to save
+  modal.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      close();
+    } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      modal.querySelector<HTMLButtonElement>(".kanban-edit-save")!.click();
+    }
+  });
+}
+
+function showNewCardModal(inst: KanbanInstance, columnId: string) {
+  const wsIdx = appState.activeWorkspace;
+  document.querySelector(".kanban-edit-backdrop")?.remove();
+
+  const backdrop = document.createElement("div");
+  backdrop.className = "kanban-edit-backdrop";
+
+  const modal = document.createElement("div");
+  modal.className = "kanban-edit-modal";
+  modal.innerHTML = `
+    <div class="kanban-edit-header">
+      <span>New Card</span>
+      <button class="kanban-edit-close">&times;</button>
+    </div>
+    <div class="kanban-edit-body">
+      <label class="kanban-edit-label">Project <span style="color:var(--error-color,#e06c75)">(required)</span></label>
+      <input class="kanban-edit-input" id="ke-project" type="text" value="" placeholder="e.g. HUMAN, INFRA, API" />
+
+      <label class="kanban-edit-label">Title <span style="color:var(--error-color,#e06c75)">(required)</span></label>
+      <input class="kanban-edit-input" id="ke-title" type="text" value="New card" />
+
+      <label class="kanban-edit-label">Priority</label>
+      <select class="kanban-edit-select" id="ke-priority">
+        <option value="Bug">Bug</option>
+        <option value="High">High</option>
+        <option value="Medium" selected>Medium</option>
+        <option value="Low">Low</option>
+        <option value="Wishlist">Wishlist</option>
+      </select>
+
+      <label class="kanban-edit-label">Assignee</label>
+      <input class="kanban-edit-input" id="ke-assignee" type="text" value="" />
+
+      <label class="kanban-edit-label">Description</label>
+      <textarea class="kanban-edit-textarea" id="ke-desc" rows="6"></textarea>
+    </div>
+    <div class="kanban-edit-footer">
+      <button class="kanban-btn kanban-edit-cancel">Cancel</button>
+      <button class="kanban-btn kanban-btn-primary kanban-edit-save">Create</button>
+    </div>
+  `;
+
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
+
+  (modal.querySelector("#ke-project") as HTMLInputElement).focus();
+
+  const close = () => backdrop.remove();
+  backdrop.addEventListener("click", (e) => {
+    if (e.target === backdrop) close();
+  });
+  modal.querySelector(".kanban-edit-close")!.addEventListener("click", close);
+  modal.querySelector(".kanban-edit-cancel")!.addEventListener("click", close);
+
+  modal.querySelector(".kanban-edit-save")!.addEventListener("click", async () => {
+    const project = (modal.querySelector("#ke-project") as HTMLInputElement).value.trim();
+    const title = (modal.querySelector("#ke-title") as HTMLInputElement).value.trim();
+    const priority = (modal.querySelector("#ke-priority") as HTMLSelectElement).value;
+    const assignee = (modal.querySelector("#ke-assignee") as HTMLInputElement).value.trim();
+    const desc = (modal.querySelector("#ke-desc") as HTMLTextAreaElement).value;
+
+    if (!project) {
+      toast("Project is required", "error");
+      (modal.querySelector("#ke-project") as HTMLInputElement).focus();
+      return;
+    }
+    if (!title) {
+      toast("Title is required", "error");
+      (modal.querySelector("#ke-title") as HTMLInputElement).focus();
+      return;
+    }
+
+    try {
+      const cardId = await ipc.kanbanCreateCard(wsIdx, columnId, project);
+      await ipc.kanbanUpdateCard(wsIdx, cardId, title, desc, priority, assignee, project);
+      close();
+      await loadAndRender(inst);
+    } catch (err) {
+      toast(`Failed to create card: ${err}`, "error");
+    }
+  });
+
   modal.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       close();

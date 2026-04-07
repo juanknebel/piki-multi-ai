@@ -13,6 +13,7 @@ pub struct KanbanCard {
     pub description: String,
     pub priority: String,
     pub assignee: String,
+    pub project: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -83,6 +84,7 @@ fn map_card(card: &flow_core::Card) -> KanbanCard {
         description: card.description.clone(),
         priority: card.priority.label().to_string(),
         assignee: card.assignee.clone(),
+        project: card.project.clone(),
     }
 }
 
@@ -114,6 +116,8 @@ fn parse_priority(s: &str) -> flow_core::Priority {
 pub fn kanban_load_board(
     state: State<'_, Mutex<DesktopApp>>,
     workspace_idx: usize,
+    sort: Option<String>,
+    project_filter: Option<Vec<String>>,
 ) -> Result<KanbanBoard, String> {
     let board_path = {
         let app = state.lock();
@@ -121,9 +125,20 @@ pub fn kanban_load_board(
     };
 
     let mut provider = create_provider(board_path)?;
-    let board = provider
+    let mut board = provider
         .load_board()
         .map_err(|e| format!("Failed to load board: {e}"))?;
+
+    if let Some(ref pf) = project_filter {
+        board.apply_project_filter(pf);
+    }
+
+    match sort.as_deref() {
+        Some("asc") => board.sort_cards_with(flow_core::SortOrder::Asc),
+        Some("desc") => board.sort_cards_with(flow_core::SortOrder::Desc),
+        _ => {}
+    }
+
     Ok(map_board(&board))
 }
 
@@ -132,6 +147,7 @@ pub fn kanban_create_card(
     state: State<'_, Mutex<DesktopApp>>,
     workspace_idx: usize,
     column_id: String,
+    project: String,
 ) -> Result<String, String> {
     let board_path = {
         let app = state.lock();
@@ -140,7 +156,7 @@ pub fn kanban_create_card(
 
     let mut provider = create_provider(board_path)?;
     let card_id = provider
-        .create_card(&column_id)
+        .create_card(&column_id, &project)
         .map_err(|e| format!("Failed to create card: {e}"))?;
     Ok(card_id)
 }
@@ -154,7 +170,14 @@ pub fn kanban_update_card(
     description: String,
     priority: String,
     assignee: String,
+    project: String,
 ) -> Result<(), String> {
+    if title.trim().is_empty() {
+        return Err("Title is required".to_string());
+    }
+    if project.trim().is_empty() {
+        return Err("Project is required".to_string());
+    }
     let board_path = {
         let app = state.lock();
         resolve_board_path(&app, workspace_idx)?
@@ -163,7 +186,7 @@ pub fn kanban_update_card(
     let mut provider = create_provider(board_path)?;
     let prio = parse_priority(&priority);
     provider
-        .update_card(&card_id, &title, &description, prio, &assignee)
+        .update_card(&card_id, &title, &description, prio, &assignee, &project)
         .map_err(|e| format!("Failed to update card: {e}"))
 }
 

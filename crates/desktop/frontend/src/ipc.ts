@@ -496,12 +496,12 @@ export function getSysinfo(): Promise<string> {
 }
 
 // Kanban commands
-export function kanbanLoadBoard(workspaceIdx: number): Promise<KanbanBoard> {
-  return invoke("kanban_load_board", { workspaceIdx });
+export function kanbanLoadBoard(workspaceIdx: number, sort?: string, projectFilter?: string[]): Promise<KanbanBoard> {
+  return invoke("kanban_load_board", { workspaceIdx, sort: sort ?? null, projectFilter: projectFilter ?? null });
 }
 
-export function kanbanCreateCard(workspaceIdx: number, columnId: string): Promise<string> {
-  return invoke("kanban_create_card", { workspaceIdx, columnId });
+export function kanbanCreateCard(workspaceIdx: number, columnId: string, project: string): Promise<string> {
+  return invoke("kanban_create_card", { workspaceIdx, columnId, project });
 }
 
 export function kanbanUpdateCard(
@@ -511,8 +511,9 @@ export function kanbanUpdateCard(
   description: string,
   priority: string,
   assignee: string,
+  project: string,
 ): Promise<void> {
-  return invoke("kanban_update_card", { workspaceIdx, cardId, title, description, priority, assignee });
+  return invoke("kanban_update_card", { workspaceIdx, cardId, title, description, priority, assignee, project });
 }
 
 export function kanbanMoveCard(workspaceIdx: number, cardId: string, toColumnId: string): Promise<void> {

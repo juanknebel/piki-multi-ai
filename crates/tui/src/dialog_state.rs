@@ -119,6 +119,7 @@ pub enum DialogState {
         card_title: String,
         card_description: String,
         card_priority: flow_core::Priority,
+        card_project: String,
         /// When agents exist: index into agents vec. When empty: index into AIProvider::dispatchable()
         agent_idx: usize,
         /// Snapshot of configured agents (name, provider, role). Empty = fallback to raw providers

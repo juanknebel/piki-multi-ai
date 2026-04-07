@@ -211,7 +211,8 @@ fn priority_color(p: flow_core::Priority) -> Color {
 fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditState) {
     use flow_tui::app::EditFocus;
 
-    let area = flow_tui::ui::centered(70, 60, parent);
+    // chunks: [0] header, [1] title, [2] project, [3] priority, [4] assignee, [5] description, [6] footer
+    let area = flow_tui::ui::centered(70, 70, parent);
     f.render_widget(Clear, area);
 
     let chunks = Layout::default()
@@ -219,6 +220,7 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
         .margin(1)
         .constraints([
             Constraint::Length(1),
+            Constraint::Length(3),
             Constraint::Length(3),
             Constraint::Length(3),
             Constraint::Length(3),
@@ -240,14 +242,39 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
     } else {
         Style::default()
     };
+    let title_content = if edit.title.is_empty() {
+        Line::from(Span::styled("(required)", Style::default().fg(Color::DarkGray)))
+    } else {
+        Line::from(edit.title.clone())
+    };
     f.render_widget(
-        Paragraph::new(edit.title.clone()).block(
+        Paragraph::new(title_content).block(
             Block::default()
-                .title("Title")
+                .title("Title *")
                 .borders(Borders::ALL)
                 .border_style(title_style),
         ),
         chunks[1],
+    );
+
+    let project_style = if edit.focus == EditFocus::Project {
+        Style::default().fg(Color::Cyan)
+    } else {
+        Style::default()
+    };
+    let project_label = if edit.project.is_empty() {
+        Span::styled("(required)", Style::default().fg(Color::DarkGray))
+    } else {
+        Span::raw(edit.project.clone())
+    };
+    f.render_widget(
+        Paragraph::new(Line::from(project_label)).block(
+            Block::default()
+                .title("Project *")
+                .borders(Borders::ALL)
+                .border_style(project_style),
+        ),
+        chunks[2],
     );
 
     let priority_focused = edit.focus == EditFocus::Priority;
@@ -277,7 +304,7 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
                 .borders(Borders::ALL)
                 .border_style(priority_style),
         ),
-        chunks[2],
+        chunks[3],
     );
 
     let assignee_style = if edit.focus == EditFocus::Assignee {
@@ -292,7 +319,7 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
                 .borders(Borders::ALL)
                 .border_style(assignee_style),
         ),
-        chunks[3],
+        chunks[4],
     );
 
     let desc_style = if edit.focus == EditFocus::Description {
@@ -300,7 +327,7 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
     } else {
         Style::default()
     };
-    let inner_width = chunks[4].width.saturating_sub(2).max(1) as usize;
+    let inner_width = chunks[5].width.saturating_sub(2).max(1) as usize;
     let wrapped: Vec<Line> = char_wrap(&edit.description, inner_width)
         .into_iter()
         .map(Line::from)
@@ -312,14 +339,14 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
                 .borders(Borders::ALL)
                 .border_style(desc_style),
         ),
-        chunks[4],
+        chunks[5],
     );
 
     f.render_widget(
         Paragraph::new("Tab: switch field  ←/→: priority  Enter: save  Esc: cancel")
             .style(Style::default().fg(Color::DarkGray))
             .alignment(ratatui::layout::Alignment::Center),
-        chunks[5],
+        chunks[6],
     );
 
     // Position cursor
@@ -330,6 +357,12 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
                 .count();
             f.set_cursor_position((chunks[1].x + 1 + char_pos as u16, chunks[1].y + 1));
         }
+        EditFocus::Project => {
+            let char_pos = edit.project[..edit.cursor_pos.min(edit.project.len())]
+                .chars()
+                .count();
+            f.set_cursor_position((chunks[2].x + 1 + char_pos as u16, chunks[2].y + 1));
+        }
         EditFocus::Priority => {
             // No text cursor for priority field
         }
@@ -337,14 +370,14 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
             let char_pos = edit.assignee[..edit.cursor_pos.min(edit.assignee.len())]
                 .chars()
                 .count();
-            f.set_cursor_position((chunks[3].x + 1 + char_pos as u16, chunks[3].y + 1));
+            f.set_cursor_position((chunks[4].x + 1 + char_pos as u16, chunks[4].y + 1));
         }
         EditFocus::Description => {
             let char_pos = edit.description[..edit.cursor_pos.min(edit.description.len())]
                 .chars()
                 .count();
             let (row, col) = cursor_visual_pos(&edit.description, char_pos, inner_width);
-            f.set_cursor_position((chunks[4].x + 1 + col, chunks[4].y + 1 + row));
+            f.set_cursor_position((chunks[5].x + 1 + col, chunks[5].y + 1 + row));
         }
     }
 

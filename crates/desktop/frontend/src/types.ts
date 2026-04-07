@@ -115,6 +115,7 @@ export interface KanbanCard {
   description: string;
   priority: string;
   assignee: string;
+  project: string;
 }
 
 export interface KanbanColumn {

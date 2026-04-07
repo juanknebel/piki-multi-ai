@@ -93,6 +93,7 @@ pub(crate) enum Action {
         card_title: String,
         card_description: String,
         card_priority: flow_core::Priority,
+        card_project: String,
         provider: AIProvider,
         agent_name: Option<String>,
         agent_role: Option<String>,
@@ -231,6 +232,7 @@ pub(crate) async fn execute_action(
                                             &card.description,
                                             card.priority,
                                             "",
+                                            &card.project,
                                         );
                                         break;
                                     }
@@ -1959,6 +1961,7 @@ pub(crate) async fn execute_action(
             card_title,
             card_description,
             card_priority,
+            card_project,
             provider,
             agent_name,
             agent_role,
@@ -2015,6 +2018,7 @@ pub(crate) async fn execute_action(
                         &card_description,
                         card_priority,
                         assignee_label,
+                        &card_project,
                     );
                     let _ = kp.move_card(&card_id, "in_progress");
                     if let Some(ref mut ka) = src_ws.kanban_app
@@ -2097,6 +2101,7 @@ pub(crate) async fn execute_action(
                                 &card_description,
                                 card_priority,
                                 assignee_label,
+                                &card_project,
                             );
                             let _ = kp.move_card(&card_id, "in_progress");
                             if let Some(ref mut ka) = src_ws.kanban_app

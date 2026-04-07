@@ -37,13 +37,26 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
                 edit.cursor_pos = edit.current_text().len();
             }
             KeyCode::Enter => {
+                if edit.title.trim().is_empty() {
+                    kanban_app.banner = Some("Title is required".to_string());
+                    edit.focus = flow_tui::app::EditFocus::Title;
+                    edit.cursor_pos = 0;
+                    return None;
+                }
+                if edit.project.trim().is_empty() {
+                    kanban_app.banner = Some("Project is required".to_string());
+                    edit.focus = flow_tui::app::EditFocus::Project;
+                    edit.cursor_pos = 0;
+                    return None;
+                }
                 let card_id = edit.card_id.clone();
                 let title = edit.title.clone();
                 let description = edit.description.clone();
                 let priority = edit.priority;
                 let assignee = edit.assignee.clone();
+                let project = edit.project.clone();
                 if let Err(e) =
-                    kanban_provider.update_card(&card_id, &title, &description, priority, &assignee)
+                    kanban_provider.update_card(&card_id, &title, &description, priority, &assignee, &project)
                 {
                     kanban_app.banner = Some(format!("Save failed: {}", e));
                 } else {
@@ -115,6 +128,104 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
         return None;
     }
 
+    // Search mode: intercept keys while search overlay is active
+    if kanban_app.search_state.is_some() {
+        match key.code {
+            KeyCode::Esc | KeyCode::Enter => {
+                kanban_app.search_state = None;
+            }
+            KeyCode::Char(c) => {
+                if let Some(search) = kanban_app.search_state.as_mut() {
+                    search.insert_char(c);
+                }
+                let matches = kanban_app.search_matches();
+                if !matches.is_empty() {
+                    let current = (kanban_app.col, kanban_app.row);
+                    if !matches.contains(&current) {
+                        kanban_app.col = matches[0].0;
+                        kanban_app.row = matches[0].1;
+                    }
+                }
+            }
+            KeyCode::Backspace => {
+                if let Some(search) = kanban_app.search_state.as_mut() {
+                    search.delete_prev();
+                }
+                let matches = kanban_app.search_matches();
+                if !matches.is_empty() {
+                    let current = (kanban_app.col, kanban_app.row);
+                    if !matches.contains(&current) {
+                        kanban_app.col = matches[0].0;
+                        kanban_app.row = matches[0].1;
+                    }
+                }
+            }
+            KeyCode::Down => {
+                kanban_app.select_next_match();
+            }
+            KeyCode::Up => {
+                kanban_app.select_prev_match();
+            }
+            _ => {}
+        }
+        return None;
+    }
+
+    // Project filter mode
+    if kanban_app.project_filter_state.is_some() {
+        match key.code {
+            KeyCode::Esc => {
+                kanban_app.project_filter_state = None;
+            }
+            KeyCode::Enter | KeyCode::Char(' ') => {
+                if let Some(pf) = kanban_app.project_filter_state.as_mut()
+                    && pf.cursor < pf.projects.len()
+                {
+                    pf.selected[pf.cursor] = !pf.selected[pf.cursor];
+                }
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if let Some(pf) = kanban_app.project_filter_state.as_mut()
+                    && pf.cursor + 1 < pf.projects.len()
+                {
+                    pf.cursor += 1;
+                }
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                if let Some(pf) = kanban_app.project_filter_state.as_mut()
+                    && pf.cursor > 0
+                {
+                    pf.cursor -= 1;
+                }
+            }
+            KeyCode::Char('a') => {
+                if let Some(pf) = kanban_app.project_filter_state.as_mut() {
+                    let all_selected = pf.selected.iter().all(|&s| s);
+                    for s in pf.selected.iter_mut() {
+                        *s = !all_selected;
+                    }
+                }
+            }
+            KeyCode::Tab => {
+                // Apply filter and close
+                if let Some(pf) = kanban_app.project_filter_state.take() {
+                    let selected: Vec<String> = pf
+                        .projects
+                        .iter()
+                        .zip(pf.selected.iter())
+                        .filter(|(_, sel)| **sel)
+                        .map(|(name, _)| name.clone())
+                        .collect();
+                    kanban_app.project_filter = selected;
+                    kanban_app.board.apply_project_filter(&kanban_app.project_filter);
+                    kanban_app.clamp();
+                }
+            }
+            _ => {}
+        }
+        return None;
+    }
+
     // Dispatch agent: extract card data before borrowing app for dialog
     if key.code == KeyCode::Char('D') {
         let card_data = kanban_app
@@ -128,10 +239,11 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
                     card.title.clone(),
                     card.description.clone(),
                     card.priority,
+                    card.project.clone(),
                 )
             });
         let source_ws = app.active_workspace;
-        if let Some((card_id, card_title, card_description, card_priority)) = card_data {
+        if let Some((card_id, card_title, card_description, card_priority, card_project)) = card_data {
             // Load & snapshot configured agents for this project
             if let Some(ref storage) = app.storage.agent_profiles
                 && let Some(ws) = app.current_workspace()
@@ -152,6 +264,7 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
                 card_title,
                 card_description,
                 card_priority,
+                card_project,
                 agent_idx: 0,
                 agents,
                 additional_prompt: String::new(),
@@ -179,6 +292,9 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
         KeyCode::Char('d') => Some(flow_tui::Action::Delete),
         KeyCode::Char('a') | KeyCode::Char('n') => Some(flow_tui::Action::Add),
         KeyCode::Char('e') => Some(flow_tui::Action::Edit),
+        KeyCode::Char('s') => Some(flow_tui::Action::ToggleSort),
+        KeyCode::Char('/') => Some(flow_tui::Action::Search),
+        KeyCode::Char('p') => Some(flow_tui::Action::ProjectFilter),
         _ => None,
     };
 
@@ -189,14 +305,17 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
                     kanban_app.banner = Some("Create failed: no column selected".to_string());
                     return None;
                 };
-                match kanban_provider.create_card(&col.id) {
+                match kanban_provider.create_card(&col.id, "") {
                     Ok(id) => {
                         kanban_app.edit_state = Some(flow_tui::app::EditState {
                             card_id: id,
+                            col_id: col.id.clone(),
+                            is_new: true,
                             title: "New card".to_string(),
                             description: "".to_string(),
                             priority: flow_core::Priority::Medium,
                             assignee: "".to_string(),
+                            project: "".to_string(),
                             cursor_pos: 8,
                             focus: flow_tui::app::EditFocus::Title,
                         });
@@ -214,10 +333,13 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
                 };
                 kanban_app.edit_state = Some(flow_tui::app::EditState {
                     card_id: card.id.clone(),
+                    col_id: col.id.clone(),
+                    is_new: false,
                     title: card.title.clone(),
                     description: card.description.clone(),
                     priority: card.priority,
                     assignee: card.assignee.clone(),
+                    project: card.project.clone(),
                     cursor_pos: card.title.len(),
                     focus: flow_tui::app::EditFocus::Title,
                 });
@@ -258,6 +380,46 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
                     kanban_app.banner = Some(format!("Refresh failed: {}", e));
                 }
             },
+            flow_tui::Action::ToggleSort => {
+                kanban_app.apply(a);
+                let label = kanban_app.sort_order.label();
+                kanban_app.banner = Some(format!("Sorted by priority {}", label));
+            }
+            flow_tui::Action::Search => {
+                kanban_app.search_state =
+                    Some(flow_tui::app::SearchState::new());
+            }
+            flow_tui::Action::ProjectFilter => {
+                let mut all_projects = match kanban_provider.load_board() {
+                    Ok(b) => b.projects(),
+                    Err(_) => kanban_app.board.projects(),
+                };
+                let has_unassigned = kanban_app
+                    .board
+                    .columns
+                    .iter()
+                    .any(|c| c.cards.iter().any(|card| card.project.is_empty()));
+                if has_unassigned {
+                    all_projects.push(String::new());
+                }
+                if all_projects.is_empty() {
+                    kanban_app.banner = Some("No projects found".to_string());
+                } else {
+                    let selected: Vec<bool> = all_projects
+                        .iter()
+                        .map(|p| {
+                            kanban_app.project_filter.is_empty()
+                                || kanban_app.project_filter.contains(p)
+                        })
+                        .collect();
+                    kanban_app.project_filter_state =
+                        Some(flow_tui::app::ProjectFilterState {
+                            projects: all_projects,
+                            selected,
+                            cursor: 0,
+                        });
+                }
+            }
             _ => {
                 let should_quit = kanban_app.apply(a);
                 if should_quit {
