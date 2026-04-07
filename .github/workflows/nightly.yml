@@ -93,8 +93,6 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: crates/desktop
           args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --config '{"build":{"beforeBuildCommand":""}}'
@@ -140,7 +138,12 @@ jobs:
           tar czf piki-linux-amd64.tar.gz piki-linux-amd64/
 
       - name: Delete existing nightly release
-        run: gh release delete nightly --yes --cleanup-tag || true
+        run: |
+          RELEASE_ID=$(gh api repos/${{ github.repository }}/releases --jq '.[] | select(.tag_name=="nightly") | .id' 2>/dev/null || true)
+          if [ -n "$RELEASE_ID" ]; then
+            gh api -X DELETE repos/${{ github.repository }}/releases/$RELEASE_ID
+          fi
+          git push origin :refs/tags/nightly 2>/dev/null || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
