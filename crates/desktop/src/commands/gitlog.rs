@@ -1,8 +1,6 @@
 use parking_lot::Mutex;
 use serde::Serialize;
 use tauri::State;
-use tokio::process::Command;
-
 use crate::state::DesktopApp;
 
 #[derive(Serialize, Clone)]
@@ -24,7 +22,7 @@ pub async fn get_git_log(
         app.workspaces[workspace_idx].info.path.clone()
     };
 
-    let output = Command::new("git")
+    let output = piki_core::shell_env::command("git")
         .args(["log", "--oneline", "--graph", "--decorate", "--all", "-50"])
         .current_dir(&ws_path)
         .output()

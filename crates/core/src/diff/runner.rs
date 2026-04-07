@@ -23,7 +23,7 @@ pub async fn run_diff(
             );
             // Fallback: plain git diff with color
             let output = if *file_status == FileStatus::Untracked {
-                tokio::process::Command::new("git")
+                crate::shell_env::command("git")
                     .args([
                         "diff",
                         "--color=always",
@@ -35,7 +35,7 @@ pub async fn run_diff(
                     .output()
                     .await?
             } else {
-                tokio::process::Command::new("git")
+                crate::shell_env::command("git")
                     .args(["diff", "--color=always", "HEAD", "--", file_path])
                     .current_dir(worktree_path)
                     .output()
@@ -52,7 +52,7 @@ async fn run_diff_with_delta(
     width: u16,
     file_status: &FileStatus,
 ) -> anyhow::Result<Vec<u8>> {
-    let mut cmd = tokio::process::Command::new("git");
+    let mut cmd = crate::shell_env::command("git");
     if *file_status == FileStatus::Untracked {
         cmd.args([
             "diff",
@@ -77,7 +77,7 @@ async fn run_diff_with_delta(
     // Convert tokio ChildStdout to std Stdio for piping
     let git_stdout_std: Stdio = git_stdout.try_into()?;
 
-    let delta_output = tokio::process::Command::new("delta")
+    let delta_output = crate::shell_env::command("delta")
         .args([
             "--side-by-side",
             &format!("--width={}", width),

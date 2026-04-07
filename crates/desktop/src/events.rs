@@ -86,7 +86,7 @@ pub fn spawn_git_watcher(app_handle: AppHandle) {
                     app.workspaces.iter().map(|ws| ws.info.path.clone()).collect()
                 };
                 for path in paths {
-                    let _ = tokio::process::Command::new("git")
+                    let _ = piki_core::shell_env::command("git")
                         .args(["fetch", "--quiet"])
                         .current_dir(&path)
                         .stdout(std::process::Stdio::null())

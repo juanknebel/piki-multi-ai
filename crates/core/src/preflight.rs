@@ -1,4 +1,4 @@
-use std::process::Command;
+use crate::shell_env;
 
 pub struct PreflightResult {
     pub errors: Vec<String>,
@@ -18,7 +18,7 @@ pub fn run_preflight_checks() -> PreflightResult {
     let mut warnings = Vec::new();
 
     // git (required, >= 2.20)
-    match Command::new("git").arg("--version").output() {
+    match shell_env::sync_command("git").arg("--version").output() {
         Ok(output) if output.status.success() => {
             let stdout = String::from_utf8_lossy(&output.stdout);
             if let Some((major, minor)) = parse_git_version(&stdout) {
@@ -41,8 +41,8 @@ pub fn run_preflight_checks() -> PreflightResult {
     }
 
     // delta (optional, affects diff display)
-    if Command::new("delta").arg("--version").output().is_err()
-        || Command::new("delta")
+    if shell_env::sync_command("delta").arg("--version").output().is_err()
+        || shell_env::sync_command("delta")
             .arg("--version")
             .output()
             .map(|o| !o.status.success())

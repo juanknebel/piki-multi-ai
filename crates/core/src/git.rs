@@ -90,7 +90,7 @@ pub fn parse_porcelain_status(output: &str) -> Vec<ChangedFile> {
 
 /// Run `git status --porcelain=v1` in a worktree and return changed files
 pub async fn get_changed_files(worktree_path: &PathBuf) -> anyhow::Result<Vec<ChangedFile>> {
-    let output = tokio::process::Command::new("git")
+    let output = crate::shell_env::command("git")
         .args(["status", "--porcelain=v1"])
         .current_dir(worktree_path)
         .output()
@@ -105,7 +105,7 @@ pub async fn get_changed_files(worktree_path: &PathBuf) -> anyhow::Result<Vec<Ch
 /// Get ahead/behind counts relative to upstream.
 /// Returns None if there's no upstream configured.
 pub async fn get_ahead_behind(worktree_path: &PathBuf) -> Option<(usize, usize)> {
-    let output = tokio::process::Command::new("git")
+    let output = crate::shell_env::command("git")
         .args(["rev-list", "--left-right", "--count", "HEAD...@{upstream}"])
         .current_dir(worktree_path)
         .output()

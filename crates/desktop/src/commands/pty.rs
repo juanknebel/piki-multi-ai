@@ -198,7 +198,7 @@ pub async fn spawn_editor_tab(
     };
 
     // Resolve $EDITOR from login environment
-    let editor = crate::pty_raw::user_login_env()
+    let editor = piki_core::shell_env::user_login_env()
         .get("EDITOR")
         .cloned()
         .unwrap_or_else(|| "vi".to_string());

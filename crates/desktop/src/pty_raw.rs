@@ -1,7 +1,5 @@
-use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::Path;
-use std::sync::OnceLock;
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -9,42 +7,6 @@ use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use serde::Serialize;
 use tauri::AppHandle;
 use tauri::Emitter;
-
-/// Load environment variables from the user's login shell.
-///
-/// When launched from a .desktop entry, the app inherits only a minimal
-/// environment from the desktop session manager — missing PATH extensions,
-/// LANG, and other variables configured in shell profiles.  Running the
-/// user's login shell captures the full environment.
-///
-/// The result is computed once and cached for the process lifetime.
-pub(crate) fn user_login_env() -> &'static HashMap<String, String> {
-    static ENV: OnceLock<HashMap<String, String>> = OnceLock::new();
-    ENV.get_or_init(|| {
-        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
-        let result = std::process::Command::new(&shell)
-            .args(["-l", "-c", "env -0"])
-            .stdin(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .output();
-
-        match result {
-            Ok(out) if out.status.success() => {
-                String::from_utf8_lossy(&out.stdout)
-                    .split('\0')
-                    .filter_map(|entry| {
-                        let (k, v) = entry.split_once('=')?;
-                        Some((k.to_string(), v.to_string()))
-                    })
-                    .collect()
-            }
-            _ => {
-                tracing::warn!("Failed to load login shell environment");
-                HashMap::new()
-            }
-        }
-    })
-}
 
 #[derive(Serialize, Clone)]
 struct PtyOutputPayload {
@@ -93,7 +55,7 @@ impl RawPtySession {
         // Apply user's login shell environment so that PATH, LANG, and other
         // profile-configured variables are available even when launched from
         // a .desktop entry (which provides only a minimal environment).
-        for (key, value) in user_login_env() {
+        for (key, value) in piki_core::shell_env::user_login_env() {
             cmd.env(key, value);
         }
         // Ensure terminal type matches xterm.js capabilities

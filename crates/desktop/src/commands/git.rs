@@ -1,8 +1,6 @@
 use parking_lot::Mutex;
 use serde::Serialize;
 use tauri::State;
-use tokio::process::Command;
-
 use piki_core::ChangedFile;
 use piki_core::workspace::manager::WorkspaceManager;
 
@@ -41,7 +39,7 @@ pub async fn git_stage(
 ) -> Result<(), String> {
     let ws_path = get_ws_path(&state, workspace_idx)?;
 
-    let output = Command::new("git")
+    let output = piki_core::shell_env::command("git")
         .args(["add", "--", &file_path])
         .current_dir(&ws_path)
         .output()
@@ -66,7 +64,7 @@ pub async fn git_unstage(
 ) -> Result<(), String> {
     let ws_path = get_ws_path(&state, workspace_idx)?;
 
-    let output = Command::new("git")
+    let output = piki_core::shell_env::command("git")
         .args(["reset", "HEAD", "--", &file_path])
         .current_dir(&ws_path)
         .output()
@@ -91,7 +89,7 @@ pub async fn git_commit(
 ) -> Result<(), String> {
     let ws_path = get_ws_path(&state, workspace_idx)?;
 
-    let output = Command::new("git")
+    let output = piki_core::shell_env::command("git")
         .args(["commit", "-m", &message])
         .current_dir(&ws_path)
         .output()
@@ -115,7 +113,7 @@ pub async fn git_push(
 ) -> Result<(), String> {
     let ws_path = get_ws_path(&state, workspace_idx)?;
 
-    let output = Command::new("git")
+    let output = piki_core::shell_env::command("git")
         .args(["push"])
         .current_dir(&ws_path)
         .output()
@@ -152,7 +150,7 @@ pub async fn git_merge(
     };
 
     // Check for uncommitted changes
-    let status = Command::new("git")
+    let status = piki_core::shell_env::command("git")
         .args(["status", "--porcelain"])
         .current_dir(&ws_path)
         .output()
@@ -171,7 +169,7 @@ pub async fn git_merge(
 
     if strategy == "rebase" {
         // Rebase workspace branch onto main
-        let rebase = Command::new("git")
+        let rebase = piki_core::shell_env::command("git")
             .args(["rebase", &main_branch])
             .current_dir(&ws_path)
             .output()
@@ -196,7 +194,7 @@ pub async fn git_merge(
         }
 
         // Other rebase error — abort
-        let _ = Command::new("git")
+        let _ = piki_core::shell_env::command("git")
             .args(["rebase", "--abort"])
             .current_dir(&ws_path)
             .output()
@@ -210,7 +208,7 @@ pub async fn git_merge(
     }
 
     // Merge strategy: checkout main in source repo, merge branch
-    let src_status = Command::new("git")
+    let src_status = piki_core::shell_env::command("git")
         .args(["status", "--porcelain"])
         .current_dir(&source_repo)
         .output()
@@ -221,7 +219,7 @@ pub async fn git_merge(
         .is_empty();
 
     if src_dirty {
-        let _ = Command::new("git")
+        let _ = piki_core::shell_env::command("git")
             .args(["stash", "push", "-m", "piki-desktop-merge-temp"])
             .current_dir(&source_repo)
             .output()
@@ -229,7 +227,7 @@ pub async fn git_merge(
     }
 
     // Save current branch
-    let prev_output = Command::new("git")
+    let prev_output = piki_core::shell_env::command("git")
         .args(["rev-parse", "--abbrev-ref", "HEAD"])
         .current_dir(&source_repo)
         .output()
@@ -240,7 +238,7 @@ pub async fn git_merge(
         .to_string();
 
     // Checkout main
-    let checkout = Command::new("git")
+    let checkout = piki_core::shell_env::command("git")
         .args(["checkout", &main_branch])
         .current_dir(&source_repo)
         .output()
@@ -249,7 +247,7 @@ pub async fn git_merge(
 
     if !checkout.status.success() {
         if src_dirty {
-            let _ = Command::new("git")
+            let _ = piki_core::shell_env::command("git")
                 .args(["stash", "pop"])
                 .current_dir(&source_repo)
                 .output()
@@ -264,7 +262,7 @@ pub async fn git_merge(
     }
 
     // Merge
-    let merge = Command::new("git")
+    let merge = piki_core::shell_env::command("git")
         .args(["merge", &branch])
         .current_dir(&source_repo)
         .output()
@@ -274,14 +272,14 @@ pub async fn git_merge(
     if merge.status.success() {
         // Restore previous state
         if prev_branch != main_branch {
-            let _ = Command::new("git")
+            let _ = piki_core::shell_env::command("git")
                 .args(["checkout", &prev_branch])
                 .current_dir(&source_repo)
                 .output()
                 .await;
         }
         if src_dirty {
-            let _ = Command::new("git")
+            let _ = piki_core::shell_env::command("git")
                 .args(["stash", "pop"])
                 .current_dir(&source_repo)
                 .output()
@@ -308,20 +306,20 @@ pub async fn git_merge(
     }
 
     // Other error — abort and restore
-    let _ = Command::new("git")
+    let _ = piki_core::shell_env::command("git")
         .args(["merge", "--abort"])
         .current_dir(&source_repo)
         .output()
         .await;
     if prev_branch != main_branch {
-        let _ = Command::new("git")
+        let _ = piki_core::shell_env::command("git")
             .args(["checkout", &prev_branch])
             .current_dir(&source_repo)
             .output()
             .await;
     }
     if src_dirty {
-        let _ = Command::new("git")
+        let _ = piki_core::shell_env::command("git")
             .args(["stash", "pop"])
             .current_dir(&source_repo)
             .output()
@@ -350,12 +348,12 @@ pub async fn git_abort_merge(
     };
 
     // Try both merge and rebase abort
-    let _ = Command::new("git")
+    let _ = piki_core::shell_env::command("git")
         .args(["merge", "--abort"])
         .current_dir(&source_repo)
         .output()
         .await;
-    let _ = Command::new("git")
+    let _ = piki_core::shell_env::command("git")
         .args(["rebase", "--abort"])
         .current_dir(&ws_path)
         .output()
@@ -389,7 +387,7 @@ pub async fn git_resolve_conflict(
 
     match resolution.as_str() {
         "ours" => {
-            let _ = Command::new("git")
+            let _ = piki_core::shell_env::command("git")
                 .args(["checkout", "--ours", "--", &file_path])
                 .current_dir(dir)
                 .output()
@@ -397,7 +395,7 @@ pub async fn git_resolve_conflict(
                 .map_err(|e| e.to_string())?;
         }
         "theirs" => {
-            let _ = Command::new("git")
+            let _ = piki_core::shell_env::command("git")
                 .args(["checkout", "--theirs", "--", &file_path])
                 .current_dir(dir)
                 .output()
@@ -408,7 +406,7 @@ pub async fn git_resolve_conflict(
     }
 
     // Stage the resolved file
-    let output = Command::new("git")
+    let output = piki_core::shell_env::command("git")
         .args(["add", "--", &file_path])
         .current_dir(dir)
         .output()
@@ -440,7 +438,7 @@ pub async fn git_continue_merge(
     };
 
     // Try rebase --continue first (in workspace path)
-    let rebase = Command::new("git")
+    let rebase = piki_core::shell_env::command("git")
         .args(["rebase", "--continue"])
         .current_dir(&ws_path)
         .output()
@@ -452,7 +450,7 @@ pub async fn git_continue_merge(
     }
 
     // Try merge --continue (commit in source repo)
-    let merge = Command::new("git")
+    let merge = piki_core::shell_env::command("git")
         .args(["commit", "--no-edit"])
         .current_dir(&source_repo)
         .output()
@@ -470,7 +468,7 @@ pub async fn git_continue_merge(
 }
 
 async fn detect_conflict_files(dir: &std::path::Path) -> Vec<String> {
-    let output = Command::new("git")
+    let output = piki_core::shell_env::command("git")
         .args(["status", "--porcelain=v1"])
         .current_dir(dir)
         .output()
@@ -495,7 +493,7 @@ pub async fn git_stage_all(
 ) -> Result<(), String> {
     let ws_path = get_ws_path(&state, workspace_idx)?;
 
-    let output = Command::new("git")
+    let output = piki_core::shell_env::command("git")
         .args(["add", "-A"])
         .current_dir(&ws_path)
         .output()
@@ -519,7 +517,7 @@ pub async fn git_unstage_all(
 ) -> Result<(), String> {
     let ws_path = get_ws_path(&state, workspace_idx)?;
 
-    let output = Command::new("git")
+    let output = piki_core::shell_env::command("git")
         .args(["reset", "HEAD"])
         .current_dir(&ws_path)
         .output()

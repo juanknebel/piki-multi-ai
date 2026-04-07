@@ -1,8 +1,6 @@
 use parking_lot::Mutex;
 use serde::Serialize;
 use tauri::State;
-use tokio::process::Command;
-
 use crate::state::DesktopApp;
 
 // ── Types ──────────────────────────────────────────────
@@ -82,7 +80,7 @@ pub async fn get_side_by_side_diff(
     args.push("--".to_string());
     args.push(file_path.clone());
 
-    let output = Command::new("git")
+    let output = piki_core::shell_env::command("git")
         .args(&args)
         .current_dir(&ws_path)
         .output()
@@ -93,7 +91,7 @@ pub async fn get_side_by_side_diff(
 
     // For untracked/new files, use --no-index
     let diff_text = if stdout.is_empty() {
-        let show = Command::new("git")
+        let show = piki_core::shell_env::command("git")
             .args(["diff", "--no-color", "-U3", "--no-index", "/dev/null", &file_path])
             .current_dir(&ws_path)
             .output()
@@ -129,7 +127,7 @@ pub async fn get_commit_side_by_side_diff(
         app.workspaces[workspace_idx].info.path.clone()
     };
 
-    let output = Command::new("git")
+    let output = piki_core::shell_env::command("git")
         .args(["show", "--no-color", "-U3", "-p", "--format=", &sha])
         .current_dir(&ws_path)
         .output()
@@ -237,7 +235,7 @@ pub async fn get_file_diff(
     args.push("--");
     args.push(&file_path);
 
-    let output = Command::new("git")
+    let output = piki_core::shell_env::command("git")
         .args(&args)
         .current_dir(&ws_path)
         .output()
@@ -246,7 +244,7 @@ pub async fn get_file_diff(
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     if stdout.is_empty() {
-        let show = Command::new("git")
+        let show = piki_core::shell_env::command("git")
             .args(["diff", "--no-color", "--no-index", "/dev/null", &file_path])
             .current_dir(&ws_path)
             .output()
@@ -272,7 +270,7 @@ pub async fn get_commit_diff(
         app.workspaces[workspace_idx].info.path.clone()
     };
 
-    let output = Command::new("git")
+    let output = piki_core::shell_env::command("git")
         .args(["show", "--no-color", "--stat", "-p", &sha])
         .current_dir(&ws_path)
         .output()

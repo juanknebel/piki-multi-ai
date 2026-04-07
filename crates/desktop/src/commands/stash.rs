@@ -1,8 +1,6 @@
 use parking_lot::Mutex;
 use serde::Serialize;
 use tauri::State;
-use tokio::process::Command;
-
 use crate::state::DesktopApp;
 
 #[derive(Serialize, Clone)]
@@ -19,7 +17,7 @@ pub async fn git_stash_list(
 ) -> Result<Vec<StashEntry>, String> {
     let ws_path = get_ws_path(&state, workspace_idx)?;
 
-    let output = Command::new("git")
+    let output = piki_core::shell_env::command("git")
         .args(["stash", "list"])
         .current_dir(&ws_path)
         .output()
@@ -56,7 +54,7 @@ pub async fn git_stash_save(
 ) -> Result<String, String> {
     let ws_path = get_ws_path(&state, workspace_idx)?;
 
-    let output = Command::new("git")
+    let output = piki_core::shell_env::command("git")
         .args(["stash", "push", "-m", &message])
         .current_dir(&ws_path)
         .output()
@@ -82,7 +80,7 @@ pub async fn git_stash_pop(
     let ws_path = get_ws_path(&state, workspace_idx)?;
     let stash_ref = format!("stash@{{{stash_index}}}");
 
-    let output = Command::new("git")
+    let output = piki_core::shell_env::command("git")
         .args(["stash", "pop", &stash_ref])
         .current_dir(&ws_path)
         .output()
@@ -108,7 +106,7 @@ pub async fn git_stash_apply(
     let ws_path = get_ws_path(&state, workspace_idx)?;
     let stash_ref = format!("stash@{{{stash_index}}}");
 
-    let output = Command::new("git")
+    let output = piki_core::shell_env::command("git")
         .args(["stash", "apply", &stash_ref])
         .current_dir(&ws_path)
         .output()
@@ -134,7 +132,7 @@ pub async fn git_stash_drop(
     let ws_path = get_ws_path(&state, workspace_idx)?;
     let stash_ref = format!("stash@{{{stash_index}}}");
 
-    let output = Command::new("git")
+    let output = piki_core::shell_env::command("git")
         .args(["stash", "drop", &stash_ref])
         .current_dir(&ws_path)
         .output()
