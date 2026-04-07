@@ -50,6 +50,33 @@ pub fn command(program: &str) -> tokio::process::Command {
     cmd
 }
 
+/// Resolve a command name to its absolute path using the user's login shell
+/// environment.  Falls back to the original name if not found.
+///
+/// This is useful when `portable-pty`'s built-in PATH search fails because the
+/// PTY spawner uses the parent process's inherited (minimal) PATH instead of
+/// the overridden env vars.
+pub fn resolve_command(name: &str) -> String {
+    use std::os::unix::fs::PermissionsExt;
+
+    let env = user_login_env();
+    if let Some(path_var) = env.get("PATH") {
+        for dir in std::env::split_paths(&std::ffi::OsString::from(path_var)) {
+            let candidate = dir.join(name);
+            if let Ok(meta) = std::fs::metadata(&candidate)
+                && meta.is_file()
+                && meta.permissions().mode() & 0o111 != 0
+                && let Some(s) = candidate.to_str()
+            {
+                tracing::debug!(command = name, resolved = s, "Resolved command via login env PATH");
+                return s.to_string();
+            }
+        }
+    }
+    tracing::warn!(command = name, "Could not resolve command in login env PATH, using bare name");
+    name.to_string()
+}
+
 /// Same as [`command`] but returns a synchronous `std::process::Command`.
 pub fn sync_command(program: &str) -> std::process::Command {
     let mut cmd = std::process::Command::new(program);

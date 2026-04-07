@@ -48,7 +48,12 @@ impl RawPtySession {
 
         let pair = pty_system.openpty(size)?;
 
-        let mut cmd = CommandBuilder::new(command);
+        // Resolve the command to an absolute path using the user's login shell
+        // environment.  portable-pty's built-in PATH search can fail when the
+        // app inherits a minimal PATH from a .desktop entry, even after we
+        // override the env vars on the CommandBuilder.
+        let resolved = piki_core::shell_env::resolve_command(command);
+        let mut cmd = CommandBuilder::new(&resolved);
         cmd.args(args);
         cmd.cwd(worktree_path);
 
