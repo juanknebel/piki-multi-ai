@@ -1,5 +1,9 @@
 import * as ipc from "../ipc";
 import { appState } from "../state";
+import { toast } from "./toast";
+import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+import EasyMDE from "easymde";
+import "easymde/dist/easymde.min.css";
 
 let overlayEl: HTMLElement | null = null;
 
@@ -25,25 +29,126 @@ export async function showMarkdown(filePath: string) {
 
   const header = document.createElement("div");
   header.className = "diff-header";
-  header.innerHTML = `
-    <span class="diff-title">${esc(filePath)}</span>
-    <button class="dialog-close">×</button>
-  `;
+
+  const fileName = filePath.split("/").pop() || filePath;
+
+  const close = () => { overlayEl?.remove(); overlayEl = null; };
+  let editing = false;
+
+  function renderViewMode() {
+    header.innerHTML = `
+      <span class="diff-title">${esc(fileName)}<span style="color:var(--text-muted);font-weight:400;margin-left:8px;font-size:11px">${esc(filePath)}</span></span>
+      <div style="display:flex;gap:4px;align-items:center">
+        <button class="file-viewer-btn md-quick-edit" title="Quick Edit (Ctrl+I)">Quick Edit</button>
+        <button class="file-viewer-btn md-edit" title="Open in $EDITOR (Ctrl+E)">Edit</button>
+        <button class="file-viewer-btn md-copy" title="Copy to clipboard">Copy</button>
+        <button class="dialog-close">×</button>
+      </div>
+    `;
+
+    const body = viewer.querySelector(".md-body") as HTMLElement;
+    body.innerHTML = "";
+    const mdContent = document.createElement("div");
+    mdContent.className = "md-content";
+    mdContent.innerHTML = renderMarkdown(content);
+    body.appendChild(mdContent);
+
+    header.querySelector(".dialog-close")!.addEventListener("click", close);
+    header.querySelector(".md-quick-edit")!.addEventListener("click", enterEditMode);
+    header.querySelector(".md-edit")!.addEventListener("click", async () => {
+      close();
+      try {
+        const tabId = await ipc.spawnEditorTab(wsIdx, filePath);
+        appState.addTab(wsIdx, { id: tabId, provider: "Shell", alive: true });
+      } catch (err) {
+        toast(`Failed to open editor: ${err}`, "error");
+      }
+    });
+    header.querySelector(".md-copy")!.addEventListener("click", () => {
+      writeText(content).then(() => toast("Copied to clipboard", "success")).catch(() => {});
+    });
+  }
+
+  function enterEditMode() {
+    if (editing) return;
+    editing = true;
+
+    header.innerHTML = `
+      <span class="diff-title">${esc(fileName)} <span style="color:var(--text-muted);font-weight:400;font-size:11px">(editing)</span></span>
+      <div style="display:flex;gap:4px;align-items:center">
+        <button class="file-viewer-btn md-save">Save</button>
+        <button class="file-viewer-btn md-cancel">Cancel</button>
+      </div>
+    `;
+
+    const body = viewer.querySelector(".md-body") as HTMLElement;
+    body.innerHTML = "";
+    const textarea = document.createElement("textarea");
+    body.appendChild(textarea);
+
+    const easyMde = new EasyMDE({
+      element: textarea,
+      initialValue: content,
+      spellChecker: false,
+      status: false,
+      toolbar: ["bold", "italic", "heading", "|", "code", "quote", "unordered-list", "ordered-list", "|", "link", "image", "|", "preview", "side-by-side"],
+      sideBySideFullscreen: false,
+      minHeight: "100%",
+    });
+
+    header.querySelector(".md-save")!.addEventListener("click", async () => {
+      try {
+        const newContent = easyMde.value();
+        await ipc.writeFileContent(wsIdx, filePath, newContent);
+        content = newContent;
+        easyMde.toTextArea();
+        toast("File saved", "success");
+        editing = false;
+        renderViewMode();
+      } catch (err) {
+        toast(`Failed to save: ${err}`, "error");
+      }
+    });
+    header.querySelector(".md-cancel")!.addEventListener("click", () => {
+      easyMde.toTextArea();
+      editing = false;
+      renderViewMode();
+    });
+  }
+
   viewer.appendChild(header);
 
   const body = document.createElement("div");
-  body.className = "md-content";
-  body.innerHTML = renderMarkdown(content);
+  body.className = "md-body";
+  body.style.cssText = "flex:1;overflow:auto;min-height:0";
   viewer.appendChild(body);
 
   backdrop.appendChild(viewer);
   document.body.appendChild(backdrop);
   overlayEl = backdrop;
 
-  const close = () => { overlayEl?.remove(); overlayEl = null; };
-  header.querySelector(".dialog-close")!.addEventListener("click", close);
-  backdrop.addEventListener("click", (e) => { if (e.target === backdrop) close(); });
-  backdrop.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+  renderViewMode();
+
+  backdrop.addEventListener("click", (e) => { if (e.target === backdrop && !editing) close(); });
+  backdrop.addEventListener("keydown", (e) => {
+    if (editing) {
+      if (e.key === "s" && e.ctrlKey) {
+        e.preventDefault();
+        (header.querySelector(".md-save") as HTMLButtonElement)?.click();
+      }
+      if (e.key === "Escape") { e.preventDefault(); editing = false; renderViewMode(); }
+      return;
+    }
+    if (e.key === "Escape") close();
+    if (e.key === "i" && e.ctrlKey) { e.preventDefault(); enterEditMode(); }
+    if (e.key === "e" && e.ctrlKey) {
+      e.preventDefault();
+      close();
+      ipc.spawnEditorTab(wsIdx, filePath).then((tabId) => {
+        appState.addTab(wsIdx, { id: tabId, provider: "Shell", alive: true });
+      }).catch((err) => toast(`Failed to open editor: ${err}`, "error"));
+    }
+  });
   backdrop.setAttribute("tabindex", "0");
   backdrop.focus();
 }

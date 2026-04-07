@@ -1,6 +1,7 @@
 import { appState } from "../state";
 import * as ipc from "../ipc";
 import { showFileViewer } from "./file-viewer";
+import { showMarkdown } from "./markdown-viewer";
 import { toast } from "./toast";
 
 let searchEl: HTMLElement | null = null;
@@ -89,7 +90,11 @@ export async function openFuzzySearch() {
 
   function selectFile(file: string) {
     closeFuzzySearch();
-    showFileViewer(wsIdx, file);
+    if (file.endsWith(".md") || file.endsWith(".markdown")) {
+      showMarkdown(file);
+    } else {
+      showFileViewer(wsIdx, file);
+    }
   }
 
   async function editFile(file: string) {
