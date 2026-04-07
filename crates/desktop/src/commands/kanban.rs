@@ -78,11 +78,18 @@ fn create_provider(
 }
 
 fn map_card(card: &flow_core::Card) -> KanbanCard {
+    let priority = match card.priority {
+        flow_core::Priority::Bug => "Bug",
+        flow_core::Priority::High => "High",
+        flow_core::Priority::Medium => "Medium",
+        flow_core::Priority::Low => "Low",
+        flow_core::Priority::Wishlist => "Wishlist",
+    };
     KanbanCard {
         id: card.id.clone(),
         title: card.title.clone(),
         description: card.description.clone(),
-        priority: card.priority.label().to_string(),
+        priority: priority.to_string(),
         assignee: card.assignee.clone(),
         project: card.project.clone(),
     }
