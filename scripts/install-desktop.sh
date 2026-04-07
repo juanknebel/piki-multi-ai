@@ -43,7 +43,7 @@ cd "$DESKTOP_DIR"
 
 # Step 2: Build release binary via cargo tauri build
 echo "Building $BINARY_NAME in release mode..."
-cargo tauri build 2>&1 | tail -5
+cargo tauri build --no-bundle
 
 # Step 3: Install binary
 mkdir -p "$DEST_DIR"

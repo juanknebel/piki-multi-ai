@@ -19,7 +19,13 @@
 cargo clippy --all-targets    # Must produce 0 warnings
 ```
 
-Do **not** commit code that introduces new warnings. Fix all warnings before committing.
+If changes touch the desktop frontend (`crates/desktop/frontend/`), also run:
+
+```bash
+cd crates/desktop/frontend && npx tsc --noEmit    # Must produce 0 errors
+```
+
+Do **not** commit code that introduces new warnings or type errors. Fix all warnings before committing.
 
 ## What is this?
 

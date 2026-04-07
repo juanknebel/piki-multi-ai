@@ -397,6 +397,7 @@ function renderCard(
       title: card.title,
       description: card.description,
       priority: card.priority,
+      project: card.project,
     }).then(() => loadAndRender(inst));
   });
 

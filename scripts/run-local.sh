@@ -32,6 +32,11 @@ if [ ! -d "$FRONTEND_DIR/node_modules" ]; then
     npm install --silent
 fi
 
+# Type-check frontend before launching
+echo "Type-checking frontend..."
+cd "$FRONTEND_DIR"
+npx tsc --noEmit
+
 # Run Tauri dev mode
 echo "Starting Piki Desktop in dev mode..."
 cd "$DESKTOP_DIR"

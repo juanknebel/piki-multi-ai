@@ -8,6 +8,7 @@ export interface CardContext {
   title: string;
   description: string;
   priority: string;
+  project: string;
 }
 
 export async function showDispatchDialog(cardContext?: CardContext) {
@@ -153,7 +154,7 @@ export async function showDispatchDialog(cardContext?: CardContext) {
       if (cardContext) {
         const agentName = agentOpt?.textContent?.split(" (")[0] || provider;
         try {
-          await ipc.kanbanUpdateCard(wsIdx, cardContext.id, cardContext.title, cardContext.description, cardContext.priority, agentName);
+          await ipc.kanbanUpdateCard(wsIdx, cardContext.id, cardContext.title, cardContext.description, cardContext.priority, agentName, cardContext.project);
           await ipc.kanbanMoveCard(wsIdx, cardContext.id, "in_progress");
         } catch {
           // Non-critical: card update failure shouldn't block dispatch
