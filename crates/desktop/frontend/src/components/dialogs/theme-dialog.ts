@@ -32,16 +32,27 @@ export function showThemeDialog() {
   body.style.overflowY = "auto";
   body.style.maxHeight = "62vh";
 
-  // Preset selector
+  // Preset selector (custom dropdown — native <select> renders transparent in WebKit)
   const presetRow = document.createElement("div");
   presetRow.className = "theme-preset-row";
   const presets = themeEngine.getPresets();
-  presetRow.innerHTML = `
-    <span class="theme-preset-label">Preset</span>
-    <select class="theme-preset-select" id="theme-preset">
-      ${presets.map((p) => `<option value="${p.id}"${p.id === themeEngine.getActivePresetId() ? " selected" : ""}>${p.name}</option>`).join("")}
-    </select>
-  `;
+
+  const presetLabel = document.createElement("span");
+  presetLabel.className = "theme-preset-label";
+  presetLabel.textContent = "Preset";
+
+  const presetDropdown = document.createElement("div");
+  presetDropdown.className = "theme-preset-dropdown";
+
+  const presetTrigger = document.createElement("button");
+  presetTrigger.className = "theme-preset-trigger";
+  presetTrigger.dataset.value = themeEngine.getActivePresetId();
+  const activePreset = presets.find((p) => p.id === themeEngine.getActivePresetId());
+  presetTrigger.innerHTML = `<span class="theme-preset-trigger-text">${activePreset?.name ?? ""}</span><span class="theme-preset-trigger-arrow">▾</span>`;
+
+  presetDropdown.appendChild(presetTrigger);
+  presetRow.appendChild(presetLabel);
+  presetRow.appendChild(presetDropdown);
   body.appendChild(presetRow);
 
   // Color groups
@@ -128,16 +139,49 @@ export function showThemeDialog() {
     body.appendChild(section);
   }
 
-  // Preset change → update all pickers
-  const presetSelect = presetRow.querySelector<HTMLSelectElement>("#theme-preset")!;
-  presetSelect.addEventListener("change", () => {
-    themeEngine.setPreset(presetSelect.value);
+  // Preset dropdown logic
+  function applyPreset(presetId: string) {
+    themeEngine.setPreset(presetId);
+    const p = presets.find((pr) => pr.id === presetId);
+    presetTrigger.dataset.value = presetId;
+    presetTrigger.querySelector(".theme-preset-trigger-text")!.textContent = p?.name ?? presetId;
     for (const [key, { picker, hex, row }] of colorRows) {
       const val = themeEngine.getEffectiveColor(key);
       picker.value = val;
       hex.value = val;
       row.classList.remove("overridden");
     }
+  }
+
+  presetTrigger.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const existing = presetDropdown.querySelector(".theme-preset-list");
+    if (existing) { existing.remove(); return; }
+
+    const list = document.createElement("div");
+    list.className = "theme-preset-list";
+
+    for (const p of presets) {
+      const item = document.createElement("button");
+      item.className = `theme-preset-item${p.id === presetTrigger.dataset.value ? " active" : ""}`;
+      item.textContent = p.name;
+      item.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        applyPreset(p.id);
+        list.remove();
+      });
+      list.appendChild(item);
+    }
+
+    presetDropdown.appendChild(list);
+
+    const closeList = (ev: MouseEvent) => {
+      if (!list.contains(ev.target as Node) && ev.target !== presetTrigger) {
+        list.remove();
+        document.removeEventListener("click", closeList);
+      }
+    };
+    setTimeout(() => document.addEventListener("click", closeList), 0);
   });
 
   // Footer
@@ -205,7 +249,9 @@ export function showThemeDialog() {
       reader.onload = () => {
         themeEngine.importTheme(reader.result as string);
         // Update UI to reflect imported theme
-        presetSelect.value = themeEngine.getActivePresetId();
+        presetTrigger.dataset.value = themeEngine.getActivePresetId();
+        const importedPreset = presets.find((pr) => pr.id === themeEngine.getActivePresetId());
+        presetTrigger.querySelector(".theme-preset-trigger-text")!.textContent = importedPreset?.name ?? "";
         const overrides = themeEngine.getOverrides();
         for (const [key, { picker, hex, row }] of colorRows) {
           const val = themeEngine.getEffectiveColor(key);
