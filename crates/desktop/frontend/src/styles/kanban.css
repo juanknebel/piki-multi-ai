@@ -306,14 +306,15 @@
 /* ── Card actions (hover) ────────────────────── */
 
 .kanban-card-actions {
-  display: none;
+  display: flex;
   gap: 4px;
   margin-top: 8px;
   align-items: center;
+  visibility: hidden;
 }
 
 .kanban-card:hover .kanban-card-actions {
-  display: flex;
+  visibility: visible;
 }
 
 .kanban-card-btn {
