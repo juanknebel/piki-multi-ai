@@ -166,6 +166,7 @@ fn main() {
             commands::agents::dispatch_agent,
             commands::review::get_pr_info,
             commands::review::get_pr_file_diff,
+            commands::review::get_pr_file_side_by_side_diff,
             commands::review::submit_pr_review,
             commands::markdown::read_markdown_file,
             commands::system::get_sysinfo,

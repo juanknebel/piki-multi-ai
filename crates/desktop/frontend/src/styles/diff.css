@@ -308,6 +308,15 @@
   border-bottom: 1px solid var(--border-primary);
 }
 
+/* Side-by-side comment form spans full width of the diff table */
+.cr-comment-form-sbs {
+  padding: 8px 14px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--accent-primary);
+  border-bottom: 1px solid var(--accent-primary);
+  border-left: 3px solid var(--accent-primary);
+}
+
 .cr-comment-textarea {
   width: 100%;
   box-sizing: border-box;
@@ -341,6 +350,22 @@
   line-height: 1.5;
 }
 
+/* Side-by-side comment badge */
+.cr-comment-badge-sbs {
+  padding: 4px 14px;
+  background: rgba(57, 186, 230, 0.06);
+  border-left: 3px solid var(--accent-primary);
+  font-size: 12px;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
 .cr-comment-body {
   white-space: pre-wrap;
+}
+
+/* Hover effect for clickable diff rows in code review */
+.dp-row[style*="cursor: pointer"]:hover .dp-cell,
+.dp-row[style*="cursor: pointer"]:hover .dp-gutter {
+  background: rgba(57, 186, 230, 0.04);
 }

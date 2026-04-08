@@ -7,6 +7,7 @@ use piki_core::github::{
 };
 
 use crate::state::DesktopApp;
+use super::diff::SideBySideDiff;
 
 #[derive(Serialize, Clone)]
 pub struct PrDetail {
@@ -133,6 +134,33 @@ pub async fn submit_pr_review(
         .await
         .map_err(|e| e.to_string())
     }
+}
+
+#[tauri::command]
+pub async fn get_pr_file_side_by_side_diff(
+    state: State<'_, Mutex<DesktopApp>>,
+    workspace_idx: usize,
+    file: String,
+    base_ref: String,
+) -> Result<SideBySideDiff, String> {
+    let ws_path = get_ws_path(&state, workspace_idx)?;
+
+    let diff_spec = format!("{base_ref}...HEAD");
+    let output = piki_core::shell_env::command("git")
+        .args(["diff", "--no-color", "-U3", &diff_spec, "--", &file])
+        .current_dir(&ws_path)
+        .output()
+        .await
+        .map_err(|e| format!("git diff failed: {e}"))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    Ok(super::diff::parse_side_by_side(
+        &stdout,
+        &base_ref,
+        "HEAD",
+        &file,
+    ))
 }
 
 fn get_ws_path(

@@ -283,7 +283,7 @@ pub async fn get_commit_diff(
 
 // ── Parsers ────────────────────────────────────────────
 
-fn parse_side_by_side(
+pub fn parse_side_by_side(
     raw: &str,
     left_title: &str,
     right_title: &str,

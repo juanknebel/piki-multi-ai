@@ -377,6 +377,14 @@ export function getPrFileDiff(
   return invoke("get_pr_file_diff", { workspaceIdx, file, baseRef });
 }
 
+export function getPrFileSideBySideDiff(
+  workspaceIdx: number,
+  file: string,
+  baseRef: string,
+): Promise<SideBySideDiff> {
+  return invoke("get_pr_file_side_by_side_diff", { workspaceIdx, file, baseRef });
+}
+
 export function submitPrReview(
   workspaceIdx: number,
   prNumber: number,
