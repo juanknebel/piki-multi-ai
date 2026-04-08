@@ -140,7 +140,7 @@ function showNewTabMenu(anchor: HTMLElement) {
     });
     item.addEventListener("mouseleave", () => {
       item.style.background = "";
-      item.style.color = "";
+      item.style.color = "var(--text-primary)";
     });
     menu.appendChild(item);
   }
