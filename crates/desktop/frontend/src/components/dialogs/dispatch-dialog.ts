@@ -1,6 +1,7 @@
 import { appState } from "../../state";
 import * as ipc from "../../ipc";
 import { toast } from "../toast";
+import { createDropdown, type DropdownOption } from "../dropdown";
 import type { AgentInfo } from "../../ipc";
 
 export interface CardContext {
@@ -22,6 +23,27 @@ export async function showDispatchDialog(cardContext?: CardContext) {
     agents = [];
   }
 
+  // Build dropdown options
+  const agentOptions: DropdownOption[] = [
+    { value: "", label: "(None — raw provider)", data: { provider: "", role: "" } },
+    ...agents.map((a) => ({
+      value: String(a.id ?? ""),
+      label: `${a.name} (${a.provider})`,
+      data: { provider: a.provider, role: a.role },
+    })),
+  ];
+
+  const providerOptions: DropdownOption[] = [
+    { value: "Claude Code", label: "Claude Code" },
+    { value: "Gemini", label: "Gemini" },
+    { value: "OpenCode", label: "OpenCode" },
+    { value: "Kilo", label: "Kilo" },
+    { value: "Codex", label: "Codex" },
+  ];
+
+  const agentDropdown = createDropdown(agentOptions, "");
+  const providerDropdown = createDropdown(providerOptions, "Claude Code");
+
   const backdrop = document.createElement("div");
   backdrop.className = "dialog-backdrop";
   backdrop.innerHTML = `
@@ -33,20 +55,11 @@ export async function showDispatchDialog(cardContext?: CardContext) {
       <div class="dialog-body">
         <div class="dialog-field">
           <label class="dialog-label">Agent</label>
-          <select class="dialog-select" id="dp-agent">
-            <option value="">(None — raw provider)</option>
-            ${agents.map((a) => `<option value="${a.id}" data-provider="${esc(a.provider)}" data-role="${esc(a.role)}">${esc(a.name)} (${esc(a.provider)})</option>`).join("")}
-          </select>
+          <span id="dp-agent-slot"></span>
         </div>
         <div class="dialog-field">
           <label class="dialog-label">Provider</label>
-          <select class="dialog-select" id="dp-provider">
-            <option value="Claude Code">Claude Code</option>
-            <option value="Gemini">Gemini</option>
-            <option value="OpenCode">OpenCode</option>
-            <option value="Kilo">Kilo</option>
-            <option value="Codex">Codex</option>
-          </select>
+          <span id="dp-provider-slot"></span>
         </div>
         <div class="dialog-field">
           <label class="dialog-label">Additional prompt</label>
@@ -72,17 +85,18 @@ export async function showDispatchDialog(cardContext?: CardContext) {
 
   document.body.appendChild(backdrop);
 
-  const agentSelect = backdrop.querySelector<HTMLSelectElement>("#dp-agent")!;
-  const providerSelect = backdrop.querySelector<HTMLSelectElement>("#dp-provider")!;
+  // Mount custom dropdowns into their slots
+  backdrop.querySelector("#dp-agent-slot")!.replaceWith(agentDropdown.container);
+  backdrop.querySelector("#dp-provider-slot")!.replaceWith(providerDropdown.container);
+
   const worktreeCheck = backdrop.querySelector<HTMLInputElement>("#dp-worktree")!;
   const nameField = backdrop.querySelector<HTMLElement>("#dp-name-field")!;
 
   // When agent is selected, auto-set provider
-  agentSelect.addEventListener("change", () => {
-    const opt = agentSelect.selectedOptions[0];
-    if (opt?.dataset.provider) {
-      // Map provider label to select value
-      providerSelect.value = opt.dataset.provider;
+  agentDropdown.container.addEventListener("change", () => {
+    const data = agentDropdown.getData();
+    if (data.provider) {
+      providerDropdown.value = data.provider;
     }
   });
 
@@ -96,12 +110,12 @@ export async function showDispatchDialog(cardContext?: CardContext) {
   backdrop.addEventListener("click", (e) => { if (e.target === backdrop) close(); });
   backdrop.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
   backdrop.setAttribute("tabindex", "0");
-  agentSelect.focus();
+  agentDropdown.container.querySelector("button")!.focus();
 
   backdrop.querySelector("#dp-dispatch")!.addEventListener("click", async () => {
-    const agentOpt = agentSelect.selectedOptions[0];
-    const agentRole = agentOpt?.dataset.role || "";
-    const provider = providerSelect.value;
+    const agentData = agentDropdown.getData();
+    const agentRole = agentData.role || "";
+    const provider = providerDropdown.value;
     const additionalPrompt = (backdrop.querySelector("#dp-prompt") as HTMLTextAreaElement).value.trim();
     const createWorktree = worktreeCheck.checked;
     const wsName = (backdrop.querySelector("#dp-ws-name") as HTMLInputElement).value.trim() || undefined;
@@ -120,28 +134,26 @@ export async function showDispatchDialog(cardContext?: CardContext) {
     btn.textContent = "Dispatching...";
 
     try {
-      // Pass the current workspace's group and dispatch metadata so new worktrees inherit them
+      // Derive display name from selected agent
+      const agentLabel = agentOptions.find((o) => o.value === agentDropdown.value)?.label ?? provider;
+      const agentName = agentLabel.split(" (")[0];
+
       const currentGroup = appState.activeWs?.info.group || undefined;
       const sourceKanban = appState.activeWs?.info.kanban_path || undefined;
-      const agentName = agentOpt?.textContent?.split(" (")[0] || provider;
       const tabId = await ipc.dispatchAgent(
         wsIdx, provider, prompt, createWorktree, wsName, currentGroup,
         cardContext?.id, sourceKanban, agentName, cardContext?.title,
       );
 
       if (createWorktree) {
-        // Reload workspaces to pick up the new one
         const workspaces = await ipc.listWorkspaces();
         appState.setWorkspaces(workspaces);
-        // Switch to the new workspace (last one)
         const newIdx = workspaces.length - 1;
         const detail = await ipc.switchWorkspace(newIdx);
         appState.setActiveWorkspace(newIdx, detail);
       } else {
-        // Tab was added to current workspace — update state
         const ws = appState.activeWs;
         if (ws) {
-          const agentName = agentOpt?.textContent?.split(" (")[0] || provider;
           appState.addTab(wsIdx, {
             id: tabId,
             provider: mapProviderToAI(provider),
@@ -152,7 +164,6 @@ export async function showDispatchDialog(cardContext?: CardContext) {
 
       // Update kanban card if dispatched from card
       if (cardContext) {
-        const agentName = agentOpt?.textContent?.split(" (")[0] || provider;
         try {
           await ipc.kanbanUpdateCard(wsIdx, cardContext.id, cardContext.title, cardContext.description, cardContext.priority, agentName, cardContext.project);
           await ipc.kanbanMoveCard(wsIdx, cardContext.id, "in_progress");

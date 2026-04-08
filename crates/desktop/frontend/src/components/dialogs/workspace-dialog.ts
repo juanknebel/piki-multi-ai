@@ -1,6 +1,7 @@
 import { appState } from "../../state";
 import * as ipc from "../../ipc";
 import { toast } from "../toast";
+import { createDropdown } from "../dropdown";
 import type { WorkspaceInfo } from "../../types";
 
 type Mode = "create" | "edit" | "clone";
@@ -48,11 +49,7 @@ export function showWorkspaceDialog(opts: DialogOptions) {
             ? `
         <div class="dialog-field">
           <label class="dialog-label">Type</label>
-          <select class="dialog-select" id="ws-type">
-            <option value="Simple"${prefill?.workspace_type === "Simple" ? " selected" : ""}>Simple (existing directory)</option>
-            <option value="Worktree"${!prefill || prefill.workspace_type === "Worktree" ? " selected" : ""}>Worktree (git branch)</option>
-            <option value="Project"${prefill?.workspace_type === "Project" ? " selected" : ""}>Project (monorepo root)</option>
-          </select>
+          <span id="ws-type-slot"></span>
         </div>
         `
             : ""
@@ -103,21 +100,34 @@ export function showWorkspaceDialog(opts: DialogOptions) {
 
   document.body.appendChild(backdrop);
 
+  // Mount type dropdown if visible
+  let typeDropdown: ReturnType<typeof createDropdown> | null = null;
+  const typeSlot = backdrop.querySelector("#ws-type-slot");
+  if (typeSlot) {
+    const initialType = !prefill || prefill.workspace_type === "Worktree" ? "Worktree"
+      : prefill.workspace_type === "Simple" ? "Simple" : prefill.workspace_type === "Project" ? "Project" : "Worktree";
+    typeDropdown = createDropdown([
+      { value: "Simple", label: "Simple (existing directory)" },
+      { value: "Worktree", label: "Worktree (git branch)" },
+      { value: "Project", label: "Project (monorepo root)" },
+    ], initialType);
+    typeSlot.replaceWith(typeDropdown.container);
+  }
+
   // Auto-focus first input
-  const firstInput = backdrop.querySelector<HTMLInputElement | HTMLSelectElement>(
-    showTypeAndDir ? "#ws-type" : "#ws-desc",
-  );
-  firstInput?.focus();
+  if (typeDropdown) {
+    typeDropdown.container.querySelector("button")?.focus();
+  } else {
+    backdrop.querySelector<HTMLInputElement>("#ws-desc")?.focus();
+  }
 
   // Toggle name field visibility based on type
-  const typeSelect = backdrop.querySelector<HTMLSelectElement>("#ws-type");
   const nameField = backdrop.querySelector<HTMLElement>("#ws-name-field");
-  if (typeSelect && nameField) {
+  if (typeDropdown && nameField) {
     function updateNameVisibility() {
-      const t = typeSelect!.value;
-      nameField!.style.display = t === "Worktree" ? "" : "none";
+      nameField!.style.display = typeDropdown!.value === "Worktree" ? "" : "none";
     }
-    typeSelect.addEventListener("change", updateNameVisibility);
+    typeDropdown.container.addEventListener("change", updateNameVisibility);
     updateNameVisibility();
   }
 
@@ -138,14 +148,12 @@ export function showWorkspaceDialog(opts: DialogOptions) {
     if (mode === "edit" && editIndex !== undefined) {
       await submitEdit(backdrop, editIndex);
     } else {
-      await submitCreate(backdrop);
+      await submitCreate(backdrop, typeDropdown?.value ?? "Simple");
     }
   });
 }
 
-async function submitCreate(backdrop: HTMLElement) {
-  const type =
-    backdrop.querySelector<HTMLSelectElement>("#ws-type")?.value ?? "Simple";
+async function submitCreate(backdrop: HTMLElement, type: string) {
   const name =
     backdrop.querySelector<HTMLInputElement>("#ws-name")?.value.trim() ?? "";
   const dir =

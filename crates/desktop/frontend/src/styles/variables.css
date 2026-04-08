@@ -12,8 +12,8 @@
 
   /* ── Text ──────────────────────────────────────── */
   --text-primary: #adbac7;
-  --text-secondary: #768390;
-  --text-muted: #3d4957;
+  --text-secondary: #8b96a3;
+  --text-muted: #5d7080;
   --text-accent: #39bae6;
   --text-bright: #e6edf3;
 
@@ -39,7 +39,7 @@
   /* ── Activity bar ──────────────────────────────── */
   --activity-bar-bg: #080b0f;
   --activity-bar-fg: #e6edf3;
-  --activity-bar-inactive: #4d5768;
+  --activity-bar-inactive: #64768a;
   --activity-bar-badge: #39bae6;
 
   /* ── Sidebar ───────────────────────────────────── */

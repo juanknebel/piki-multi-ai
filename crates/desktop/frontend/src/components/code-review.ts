@@ -1,6 +1,7 @@
 import { appState } from "../state";
 import * as ipc from "../ipc";
 import { toast } from "./toast";
+import { createDropdown } from "./dropdown";
 
 interface DraftComment {
   path: string;
@@ -67,16 +68,19 @@ export async function showCodeReview() {
       </span>
     </span>
     <span style="display:flex;gap:8px;align-items:center">
-      <select class="dialog-select" id="cr-verdict" style="font-size:11px;padding:3px 6px">
-        <option value="comment">Comment</option>
-        <option value="approve">Approve</option>
-        <option value="request_changes">Request Changes</option>
-      </select>
+      <span id="cr-verdict-slot"></span>
       <button class="dialog-btn dialog-btn-primary" id="cr-submit" style="font-size:11px;padding:4px 10px">Submit</button>
       <button class="dialog-close">×</button>
     </span>
   `;
   panel.appendChild(header);
+
+  const verdictDropdown = createDropdown([
+    { value: "comment", label: "Comment" },
+    { value: "approve", label: "Approve" },
+    { value: "request_changes", label: "Request Changes" },
+  ], "comment", "font-size:11px;padding:3px 6px");
+  header.querySelector("#cr-verdict-slot")!.replaceWith(verdictDropdown.container);
 
   // Review body textarea
   const reviewBodyArea = document.createElement("div");
@@ -248,7 +252,7 @@ export async function showCodeReview() {
 
   // Submit review
   panel.querySelector("#cr-submit")!.addEventListener("click", async () => {
-    const verdict = (panel.querySelector("#cr-verdict") as HTMLSelectElement).value;
+    const verdict = verdictDropdown.value;
     const reviewBody = (panel.querySelector("#cr-body") as HTMLTextAreaElement).value.trim();
     const commentsArray = [...comments.values()].map(c => ({
       path: c.path,

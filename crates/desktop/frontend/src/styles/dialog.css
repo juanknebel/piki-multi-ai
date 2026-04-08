@@ -147,6 +147,77 @@
   color: var(--text-primary);
 }
 
+/* ── Custom dropdown (replaces native select) ───── */
+.dialog-dropdown {
+  position: relative;
+}
+
+.dialog-dropdown-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.dialog-dropdown-trigger:hover,
+.dialog-dropdown-trigger:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px var(--accent-muted);
+  outline: none;
+}
+
+.dialog-dropdown-arrow {
+  color: var(--text-muted);
+  font-size: 11px;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.dialog-dropdown-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--bg-dropdown);
+  border: 1px solid var(--dialog-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px var(--dialog-shadow);
+  padding: 4px 0;
+  z-index: 110;
+  max-height: 200px;
+  overflow-y: auto;
+  animation: dialog-enter 0.12s var(--ease-out);
+}
+
+.dialog-dropdown-item {
+  display: block;
+  width: 100%;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  color: var(--text-primary);
+  text-align: left;
+  transition: background 0.1s, color 0.1s;
+}
+
+.dialog-dropdown-item:hover {
+  background: var(--bg-active);
+  color: var(--text-bright);
+}
+
+.dialog-dropdown-item.active {
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+}
+
 .dialog-footer {
   display: flex;
   align-items: center;

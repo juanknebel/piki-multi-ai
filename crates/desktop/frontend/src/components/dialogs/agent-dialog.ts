@@ -1,6 +1,7 @@
 import { appState } from "../../state";
 import * as ipc from "../../ipc";
 import { toast } from "../toast";
+import { createDropdown } from "../dropdown";
 import type { AgentInfo } from "../../ipc";
 
 const PROVIDERS = ["Claude Code", "Gemini", "OpenCode", "Kilo", "Codex"];
@@ -150,9 +151,7 @@ function showAgentForm(existing: AgentInfo | null, onSaved: () => void) {
         </div>
         <div class="dialog-field">
           <label class="dialog-label">Provider</label>
-          <select class="dialog-select" id="af-provider">
-            ${PROVIDERS.map((p) => `<option value="${p}"${existing?.provider === p ? " selected" : ""}>${p}</option>`).join("")}
-          </select>
+          <span id="af-provider-slot"></span>
         </div>
         <div class="dialog-field">
           <label class="dialog-label">Role / Instructions</label>
@@ -166,6 +165,12 @@ function showAgentForm(existing: AgentInfo | null, onSaved: () => void) {
     </div>
   `;
 
+  const providerDropdown = createDropdown(
+    PROVIDERS.map((p) => ({ value: p, label: p })),
+    existing?.provider ?? PROVIDERS[0],
+  );
+  backdrop.querySelector("#af-provider-slot")!.replaceWith(providerDropdown.container);
+
   const close = () => backdrop.remove();
   backdrop.querySelector(".dialog-close")!.addEventListener("click", close);
   backdrop.querySelector("#af-cancel")!.addEventListener("click", close);
@@ -173,7 +178,7 @@ function showAgentForm(existing: AgentInfo | null, onSaved: () => void) {
 
   backdrop.querySelector("#af-save")!.addEventListener("click", async () => {
     const name = (backdrop.querySelector("#af-name") as HTMLInputElement).value.trim();
-    const provider = (backdrop.querySelector("#af-provider") as HTMLSelectElement).value;
+    const provider = providerDropdown.value;
     const role = (backdrop.querySelector("#af-role") as HTMLTextAreaElement).value.trim();
 
     if (!name) { toast("Name is required", "error"); return; }

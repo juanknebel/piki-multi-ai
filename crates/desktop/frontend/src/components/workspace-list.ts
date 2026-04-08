@@ -1,6 +1,7 @@
 import { appState } from "../state";
 import * as ipc from "../ipc";
 import { toast } from "./toast";
+import { createDropdown } from "./dropdown";
 import {
   showWorkspaceDialog,
   showWorkspaceInfo,
@@ -135,22 +136,17 @@ async function showDeleteConfirm(idx: number, name: string) {
   const boardPath = ws?.info.dispatch_source_kanban;
 
   // If workspace was created via dispatch, load kanban columns for card move options
-  let columnsHtml = "";
+  let colDropdown: ReturnType<typeof createDropdown> | null = null;
   if (cardId && boardPath) {
     try {
       const board = await ipc.kanbanLoadBoardByPath(boardPath);
-      const options = board.columns.map(
-        (col) => `<option value="${escapeHtml(col.id)}">${escapeHtml(col.id)}</option>`
-      ).join("");
-      columnsHtml = `
-        <div class="ws-delete-card-move">
-          <label class="dialog-label">Move task card to:</label>
-          <select class="dialog-select" id="ws-delete-col">
-            <option value="">(Leave where it is)</option>
-            ${options}
-          </select>
-        </div>
-      `;
+      colDropdown = createDropdown(
+        [
+          { value: "", label: "(Leave where it is)" },
+          ...board.columns.map((col) => ({ value: col.id, label: col.id })),
+        ],
+        "",
+      );
     } catch {
       // Board not available, skip card move
     }
@@ -162,7 +158,7 @@ async function showDeleteConfirm(idx: number, name: string) {
     <div class="ws-delete-dialog">
       <p>Delete <strong>${escapeHtml(name)}</strong>?</p>
       <p class="ws-delete-hint">This will remove the worktree and branch.</p>
-      ${columnsHtml}
+      ${colDropdown ? '<div class="ws-delete-card-move"><label class="dialog-label">Move task card to:</label><span id="ws-delete-col-slot"></span></div>' : ""}
       <div class="ws-delete-buttons">
         <button class="dialog-btn dialog-btn-danger ws-confirm-yes">Delete</button>
         <button class="dialog-btn dialog-btn-secondary ws-confirm-no">Cancel</button>
@@ -170,11 +166,16 @@ async function showDeleteConfirm(idx: number, name: string) {
     </div>
   `;
 
+  // Mount dropdown if present
+  if (colDropdown) {
+    const slot = overlay.querySelector("#ws-delete-col-slot");
+    if (slot) slot.replaceWith(colDropdown.container);
+  }
+
   overlay.querySelector(".ws-confirm-yes")!.addEventListener("click", async () => {
     // Move kanban card if user selected a column
-    if (cardId && boardPath) {
-      const colSelect = overlay.querySelector<HTMLSelectElement>("#ws-delete-col");
-      const targetCol = colSelect?.value;
+    if (cardId && boardPath && colDropdown) {
+      const targetCol = colDropdown.value;
       if (targetCol) {
         try {
           await ipc.kanbanMoveCardByPath(boardPath, cardId, targetCol);

@@ -1,6 +1,7 @@
 import { appState } from "../../state";
 import * as ipc from "../../ipc";
 import { toast } from "../toast";
+import { createDropdown } from "../dropdown";
 import { showConflictDiff } from "../diff-viewer";
 
 export function showMergeDialog() {
@@ -23,10 +24,7 @@ export function showMergeDialog() {
         </p>
         <div class="dialog-field">
           <label class="dialog-label">Strategy</label>
-          <select class="dialog-select" id="merge-strategy">
-            <option value="merge" selected>Merge (creates merge commit)</option>
-            <option value="rebase">Rebase (linear history)</option>
-          </select>
+          <span id="merge-strategy-slot"></span>
         </div>
       </div>
       <div class="dialog-footer">
@@ -38,6 +36,12 @@ export function showMergeDialog() {
 
   document.body.appendChild(backdrop);
 
+  const strategyDropdown = createDropdown([
+    { value: "merge", label: "Merge (creates merge commit)" },
+    { value: "rebase", label: "Rebase (linear history)" },
+  ], "merge");
+  backdrop.querySelector("#merge-strategy-slot")!.replaceWith(strategyDropdown.container);
+
   const close = () => backdrop.remove();
   backdrop.querySelector(".dialog-close")!.addEventListener("click", close);
   backdrop.querySelector("#merge-cancel")!.addEventListener("click", close);
@@ -48,15 +52,14 @@ export function showMergeDialog() {
   backdrop.setAttribute("tabindex", "0");
   backdrop.focus();
 
-  const strategySelect = backdrop.querySelector<HTMLSelectElement>("#merge-strategy")!;
   const submitBtn = backdrop.querySelector<HTMLButtonElement>("#merge-submit")!;
 
-  strategySelect.addEventListener("change", () => {
-    submitBtn.textContent = strategySelect.value === "rebase" ? "Rebase" : "Merge";
+  strategyDropdown.container.addEventListener("change", () => {
+    submitBtn.textContent = strategyDropdown.value === "rebase" ? "Rebase" : "Merge";
   });
 
   submitBtn.addEventListener("click", async () => {
-    const strategy = strategySelect.value as "merge" | "rebase";
+    const strategy = strategyDropdown.value as "merge" | "rebase";
     submitBtn.disabled = true;
     submitBtn.textContent = strategy === "rebase" ? "Rebasing..." : "Merging...";
 
