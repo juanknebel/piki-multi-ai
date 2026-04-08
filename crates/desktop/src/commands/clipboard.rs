@@ -62,22 +62,28 @@ fn paste_via_system_tool() -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn clipboard_copy(text: String) -> Result<(), String> {
-    tracing::info!("clipboard_copy called, text len={} bytes", text.len());
-    let clean = sanitize(&text);
-    if clean.trim().is_empty() {
-        tracing::warn!("clipboard_copy: empty after sanitization");
-        return Err("Nothing to copy".into());
-    }
-    let result = copy_via_system_tool(&clean);
-    match &result {
-        Ok(()) => tracing::info!("clipboard_copy: success"),
-        Err(e) => tracing::error!("clipboard_copy: failed: {e}"),
-    }
-    result
+pub async fn clipboard_copy(text: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        tracing::info!("clipboard_copy called, text len={} bytes", text.len());
+        let clean = sanitize(&text);
+        if clean.trim().is_empty() {
+            tracing::warn!("clipboard_copy: empty after sanitization");
+            return Err("Nothing to copy".into());
+        }
+        let result = copy_via_system_tool(&clean);
+        match &result {
+            Ok(()) => tracing::info!("clipboard_copy: success"),
+            Err(e) => tracing::error!("clipboard_copy: failed: {e}"),
+        }
+        result
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-pub fn clipboard_paste() -> Result<String, String> {
-    paste_via_system_tool()
+pub async fn clipboard_paste() -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(paste_via_system_tool)
+        .await
+        .map_err(|e| e.to_string())?
 }

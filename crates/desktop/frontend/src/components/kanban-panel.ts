@@ -454,6 +454,9 @@ function showEditModal(inst: KanbanInstance, card: KanbanCard) {
       <button class="kanban-edit-close">&times;</button>
     </div>
     <div class="kanban-edit-body">
+      <label class="kanban-edit-label">ID</label>
+      <input class="kanban-edit-input" type="text" value="${escAttr(card.id)}" readonly style="opacity:0.6;cursor:default" />
+
       <label class="kanban-edit-label">Title <span style="color:var(--error-color,#e06c75)">(required)</span></label>
       <input class="kanban-edit-input" id="ke-title" type="text" value="${escAttr(card.title)}" />
 
@@ -523,11 +526,11 @@ function showEditModal(inst: KanbanInstance, card: KanbanCard) {
     }
   });
 
-  // Ctrl+Enter to save
   modal.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       close();
-    } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+    } else if (e.key === "Enter" && !(e.target instanceof HTMLTextAreaElement)) {
+      e.preventDefault();
       modal.querySelector<HTMLButtonElement>(".kanban-edit-save")!.click();
     }
   });
@@ -618,7 +621,8 @@ function showNewCardModal(inst: KanbanInstance, columnId: string) {
   modal.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       close();
-    } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+    } else if (e.key === "Enter" && !(e.target instanceof HTMLTextAreaElement)) {
+      e.preventDefault();
       modal.querySelector<HTMLButtonElement>(".kanban-edit-save")!.click();
     }
   });
