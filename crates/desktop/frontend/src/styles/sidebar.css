@@ -220,12 +220,13 @@
 }
 
 .file-actions {
-  display: none;
+  display: flex;
   gap: 2px;
+  visibility: hidden;
 }
 
 .file-item:hover .file-actions {
-  display: flex;
+  visibility: visible;
 }
 
 .file-action-btn {

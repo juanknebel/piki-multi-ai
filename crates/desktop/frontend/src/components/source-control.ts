@@ -19,6 +19,7 @@ const UNSTAGED_STATUSES: FileStatus[] = [
 
 let stagedCollapsed = false;
 let changesCollapsed = false;
+let savedCommitMessage = "";
 
 export function renderSourceControl(container: HTMLElement) {
   function render() {
@@ -28,6 +29,12 @@ export function renderSourceControl(container: HTMLElement) {
 
     const staged = files.filter((f) => STAGED_STATUSES.includes(f.status));
     const unstaged = files.filter((f) => UNSTAGED_STATUSES.includes(f.status));
+
+    // Preserve commit message before clearing the DOM
+    const existingTextarea = container.querySelector<HTMLTextAreaElement>(".sc-commit-input");
+    if (existingTextarea) {
+      savedCommitMessage = existingTextarea.value;
+    }
 
     container.innerHTML = "";
 
@@ -75,6 +82,11 @@ export function renderSourceControl(container: HTMLElement) {
     const textarea = commitArea.querySelector<HTMLTextAreaElement>(".sc-commit-input")!;
     const commitBtn = commitArea.querySelector<HTMLButtonElement>(".sc-commit-btn")!;
 
+    // Restore saved commit message
+    if (savedCommitMessage) {
+      textarea.value = savedCommitMessage;
+    }
+
     textarea.addEventListener("input", () => {
       commitBtn.disabled = textarea.value.trim().length === 0 || staged.length === 0;
     });
@@ -86,7 +98,7 @@ export function renderSourceControl(container: HTMLElement) {
       }
     });
 
-    commitBtn.disabled = staged.length === 0;
+    commitBtn.disabled = textarea.value.trim().length === 0 || staged.length === 0;
 
     commitBtn.addEventListener("click", async () => {
       const msg = textarea.value.trim();
@@ -96,6 +108,7 @@ export function renderSourceControl(container: HTMLElement) {
       try {
         await ipc.gitCommit(appState.activeWorkspace, msg);
         textarea.value = "";
+        savedCommitMessage = "";
         await refreshFiles();
       } catch (err) {
         console.error("Commit error:", err);
@@ -261,7 +274,7 @@ function renderSection(
         <span class="file-path" title="${escapeAttr(file.path)}">
           ${escapeHtml(fileName)}${dirPath ? ` <span style="color:var(--text-muted)">${escapeHtml(dirPath)}</span>` : ""}
         </span>
-        <span class="file-actions" style="display:none">
+        <span class="file-actions">
           <button class="file-action-btn" data-action="${action}" title="${action === "stage" ? "Stage" : "Unstage"}">
             ${action === "stage" ? "+" : "−"}
           </button>
@@ -290,13 +303,7 @@ function renderSection(
         showFileDiff(appState.activeWorkspace, file.path, isStaged);
       });
 
-      // Show actions on hover
-      item.addEventListener("mouseenter", () => {
-        item.querySelector<HTMLElement>(".file-actions")!.style.display = "flex";
-      });
-      item.addEventListener("mouseleave", () => {
-        item.querySelector<HTMLElement>(".file-actions")!.style.display = "none";
-      });
+      // Show actions on hover (handled by CSS visibility)
 
       // Wire action button
       item.querySelector<HTMLButtonElement>(".file-action-btn")!.addEventListener(
