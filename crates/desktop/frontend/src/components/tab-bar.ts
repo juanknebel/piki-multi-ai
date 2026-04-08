@@ -120,6 +120,10 @@ function showNewTabMenu(anchor: HTMLElement) {
     `;
     item.addEventListener("click", async () => {
       menu.remove();
+      if (!appState.activeWs) {
+        toast("Create a workspace first", "error");
+        return;
+      }
       try {
         const tabId = await ipc.spawnTab(appState.activeWorkspace, provider);
         appState.addTab(appState.activeWorkspace, {
