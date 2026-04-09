@@ -24,25 +24,35 @@ pub(crate) fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
             Style::default().bg(theme.error_bg).fg(theme.error_fg),
         )
     } else {
+        let ctrl = if app.config.platform.is_macos() {
+            "⌘"
+        } else {
+            "C"
+        };
         match app.mode {
             AppMode::Diff => Span::styled(
                 format!(
-                    " DIFF: {} | [C-g] back | [↑↓] scroll | [n/p] file",
-                    app.diff_file_path.as_deref().unwrap_or("?")
+                    " DIFF: {} | [{}-g] back | [↑↓] scroll | [n/p] file",
+                    app.diff_file_path.as_deref().unwrap_or("?"),
+                    ctrl,
                 ),
                 Style::default().bg(theme.diff_bg).fg(theme.diff_fg),
             ),
             AppMode::FuzzySearch => Span::styled(
-                " SEARCH | type to filter | Enter = diff | C-e = editor | Esc = close",
+                format!(
+                    " SEARCH | type to filter | Enter = diff | {}-e = editor | Esc = close",
+                    ctrl,
+                ),
                 Style::default().bg(theme.navigate_bg).fg(theme.mode_fg),
             ),
             AppMode::InlineEdit => Span::styled(
                 format!(
-                    " EDIT: {} | C-s = save | Esc = close",
+                    " EDIT: {} | {}-s = save | Esc = close",
                     app.editing_file
                         .as_ref()
                         .map(|p| p.to_string_lossy().to_string())
-                        .unwrap_or_else(|| "?".to_string())
+                        .unwrap_or_else(|| "?".to_string()),
+                    ctrl,
                 ),
                 Style::default().bg(theme.interact_bg).fg(theme.mode_fg),
             ),
@@ -225,7 +235,7 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             ("Tab".to_string(), "cycle verdict"),
             ("enter".to_string(), "submit"),
             ("esc".to_string(), "close"),
-            ("C-d".to_string(), "discard"),
+            (cfg.format_binding("ctrl-d"), "discard"),
         ],
         AppMode::Diff => vec![
             (
@@ -413,13 +423,16 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                         ("esc".to_string(), "close search"),
                     ]
                 } else {
-                    vec![
-                        ("^S".to_string(), "send"),
-                        ("^J/^K".to_string(), "scroll"),
-                        ("^F".to_string(), "search"),
-                        ("^C".to_string(), "copy response"),
-                        (cfg.get_binding("interaction", "exit_interaction"), "back"),
-                    ]
+                    {
+                        let p = if cfg.platform.is_macos() { "⌘" } else { "^" };
+                        vec![
+                            (format!("{}S", p), "send"),
+                            (format!("{}J/{}K", p, p), "scroll"),
+                            (format!("{}F", p), "search"),
+                            (format!("{}C", p), "copy response"),
+                            (cfg.get_binding("interaction", "exit_interaction"), "back"),
+                        ]
+                    }
                 }
             } else if app
                 .current_workspace()

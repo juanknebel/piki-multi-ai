@@ -1,8 +1,9 @@
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::action::Action;
 use crate::app::{App, AppMode};
 use crate::code_review::{EditingComment, ReviewFocus};
+use crate::config::has_ctrl;
 use piki_core::github::{DiffLineType, InlineComment, ReviewVerdict};
 
 /// Check if the active tab is a CodeReview tab with loaded state.
@@ -58,9 +59,10 @@ pub(super) fn handle_code_review_key(app: &mut App, key: KeyEvent) -> Option<Act
     let ws = app.workspaces.get_mut(app.active_workspace)?;
     let cr = ws.code_review.as_mut()?;
 
+    let platform = app.config.platform;
     let result = match cr.focus {
         ReviewFocus::FileList => handle_file_list_keys(cr, key),
-        ReviewFocus::DiffView => handle_diff_view_keys(cr, key),
+        ReviewFocus::DiffView => handle_diff_view_keys(cr, key, platform),
     };
 
     // If show_submit was toggled on, switch to SubmitReview mode
@@ -94,7 +96,7 @@ pub(super) fn handle_submit_review_input(app: &mut App, key: KeyEvent) -> Option
             app.active_dialog = None;
             None
         }
-        KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+        KeyCode::Char('d') if has_ctrl(key.modifiers, app.config.platform) => {
             // Discard draft (including comments)
             cr.draft.verdict = ReviewVerdict::Comment;
             cr.draft.body.clear();
@@ -260,6 +262,7 @@ fn handle_file_list_keys(
 fn handle_diff_view_keys(
     cr: &mut crate::code_review::CodeReviewState,
     key: KeyEvent,
+    platform: crate::config::Platform,
 ) -> Option<Action> {
     let line_count = cr.current_diff().map(|d| d.lines.len()).unwrap_or(0);
 
@@ -276,14 +279,14 @@ fn handle_diff_view_keys(
             ensure_cursor_visible(cr);
             None
         }
-        KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+        KeyCode::Char('d') if has_ctrl(key.modifiers, platform) => {
             if line_count > 0 {
                 cr.cursor_line = (cr.cursor_line + 20).min(line_count.saturating_sub(1));
                 ensure_cursor_visible(cr);
             }
             None
         }
-        KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+        KeyCode::Char('u') if has_ctrl(key.modifiers, platform) => {
             cr.cursor_line = cr.cursor_line.saturating_sub(20);
             ensure_cursor_visible(cr);
             None

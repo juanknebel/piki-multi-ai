@@ -325,6 +325,8 @@ The STATUS panel uses `git status --porcelain=v1` and shows:
 
 The UI uses a **vim-style modal model**: navigate between panes, then press Enter to interact. **All keybindings are customizable** via `config.toml`. Both the footer and the help overlay (`?`) update dynamically to show your current configuration.
 
+**macOS support**: The app auto-detects the operating system. On macOS, all `Ctrl` and `Alt` keybindings also accept `Cmd` (⌘), and the UI displays `cmd-` instead of `ctrl-`/`alt-` in help text, footer hints, and status bar. For example, `Ctrl+G` to exit interaction mode becomes `Cmd+G` on macOS, and `Alt+M` for mdr becomes `Cmd+M`. The `Alt` → `Cmd` mapping exists because macOS Option key sends special characters instead of Alt in most terminals. Both original modifiers are always accepted as a fallback.
+
 **Default Navigation mode** (yellow border):
 
 | Key | Action |

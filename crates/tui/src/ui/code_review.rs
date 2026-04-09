@@ -6,6 +6,7 @@ use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph};
 
 use crate::app::App;
 use crate::code_review::{CodeReviewState, ReviewFocus};
+use crate::config::{Platform, format_binding_for_platform};
 use piki_core::github::{DiffLineType, ParsedDiff, ReviewVerdict};
 
 /// Render the full-screen code review layout
@@ -46,7 +47,7 @@ pub(super) fn render_fullscreen(frame: &mut Frame, area: Rect, app: &App) {
 
     render_file_list(frame, files_area, state);
     render_diff(frame, diff_area, state, &app.syntax);
-    render_footer(frame, footer_area, state);
+    render_footer(frame, footer_area, state, app.config.platform);
 
     // Comment input overlay (on top of everything)
     if state.editing_comment.is_some() {
@@ -789,18 +790,25 @@ fn buf_set_spans_clipped(
 }
 
 /// Render context-sensitive footer keybindings
-fn render_footer(frame: &mut Frame, area: Rect, state: &CodeReviewState) {
+fn render_footer(frame: &mut Frame, area: Rect, state: &CodeReviewState, platform: Platform) {
     let keys = if state.editing_comment.is_some() {
-        "[Enter] save comment  [Esc] cancel"
+        "[Enter] save comment  [Esc] cancel".to_string()
     } else if state.show_submit {
-        "[Tab] cycle verdict  [Enter] submit  [Esc] close  [Ctrl+D] discard"
+        format!(
+            "[Tab] cycle verdict  [Enter] submit  [Esc] close  [{}] discard",
+            format_binding_for_platform("ctrl-d", platform),
+        )
     } else {
         match state.focus {
             ReviewFocus::FileList => {
-                "[j/k] navigate  [Enter] view diff  [l] diff pane  [s] submit  [r] refresh  [q] close"
+                "[j/k] navigate  [Enter] view diff  [l] diff pane  [s] submit  [r] refresh  [q] close".to_string()
             }
             ReviewFocus::DiffView => {
-                "[j/k] cursor  [Ctrl+d/u] page  [g/G] top/bottom  [c] comment  [d] del comment  [h] files  [n/p] next/prev  [s] submit  [q] close"
+                format!(
+                    "[j/k] cursor  [{}/{}] page  [g/G] top/bottom  [c] comment  [d] del comment  [h] files  [n/p] next/prev  [s] submit  [q] close",
+                    format_binding_for_platform("ctrl-d", platform),
+                    format_binding_for_platform("ctrl-u", platform),
+                )
             }
         }
     };
@@ -1006,7 +1014,10 @@ pub(super) fn render_submit_overlay(frame: &mut Frame, area: Rect, app: &App) {
             hint_style,
         )),
         Line::from(Span::styled(
-            " [Esc] close           [Ctrl+D] discard draft ",
+            format!(
+                " [Esc] close           [{}] discard draft ",
+                format_binding_for_platform("ctrl-d", app.config.platform),
+            ),
             hint_style,
         )),
     ];

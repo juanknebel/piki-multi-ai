@@ -3,6 +3,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField};
 use crate::clipboard;
+use crate::config::has_ctrl;
 use crate::dialog_state::DialogState;
 use crate::helpers::copy_visible_terminal;
 
@@ -841,7 +842,7 @@ pub(super) fn handle_api_interaction(app: &mut App, key: KeyEvent) -> Option<Act
     // Ctrl+C / Ctrl+Shift+C: copy entire response body
     // Ctrl+C is safe here (no PTY in API tab); Ctrl+Shift+C may be intercepted by the terminal
     if (key.code == KeyCode::Char('c')
-        && key.modifiers.contains(KeyModifiers::CONTROL)
+        && has_ctrl(key.modifiers, app.config.platform)
         && !key.modifiers.contains(KeyModifiers::SHIFT))
         || app.config.matches_interaction(key, "copy")
     {
@@ -1055,11 +1056,9 @@ pub(super) fn handle_api_interaction(app: &mut App, key: KeyEvent) -> Option<Act
         return None;
     }
 
-    // Ctrl+F: open search in response panel
+    // Ctrl+F (Cmd+F on macOS): open search in response panel
     if key.code == KeyCode::Char('f')
-        && key
-            .modifiers
-            .contains(crossterm::event::KeyModifiers::CONTROL)
+        && has_ctrl(key.modifiers, app.config.platform)
         && !api.responses.is_empty()
     {
         api.search = Some(crate::app::ApiSearchState {
@@ -1071,11 +1070,9 @@ pub(super) fn handle_api_interaction(app: &mut App, key: KeyEvent) -> Option<Act
         return None;
     }
 
-    // Ctrl+H: open API history overlay
+    // Ctrl+H (Cmd+H on macOS): open API history overlay
     if key.code == KeyCode::Char('h')
-        && key
-            .modifiers
-            .contains(crossterm::event::KeyModifiers::CONTROL)
+        && has_ctrl(key.modifiers, app.config.platform)
     {
         if let Some(ref api_storage) = app.storage.api_history {
             let repo = app
@@ -1100,31 +1097,25 @@ pub(super) fn handle_api_interaction(app: &mut App, key: KeyEvent) -> Option<Act
         return None;
     }
 
-    // Ctrl+S: send the request block at cursor
+    // Ctrl+S (Cmd+S on macOS): send the request block at cursor
     if key.code == KeyCode::Char('s')
-        && key
-            .modifiers
-            .contains(crossterm::event::KeyModifiers::CONTROL)
+        && has_ctrl(key.modifiers, app.config.platform)
     {
         let block_text = extract_block_at_cursor(&api.editor);
         return Some(Action::SendApiRequest(block_text));
     }
 
-    // Ctrl+J: scroll response down
+    // Ctrl+J (Cmd+J on macOS): scroll response down
     if key.code == KeyCode::Char('j')
-        && key
-            .modifiers
-            .contains(crossterm::event::KeyModifiers::CONTROL)
+        && has_ctrl(key.modifiers, app.config.platform)
     {
         api.response_scroll = api.response_scroll.saturating_add(1);
         return None;
     }
 
-    // Ctrl+K: scroll response up
+    // Ctrl+K (Cmd+K on macOS): scroll response up
     if key.code == KeyCode::Char('k')
-        && key
-            .modifiers
-            .contains(crossterm::event::KeyModifiers::CONTROL)
+        && has_ctrl(key.modifiers, app.config.platform)
     {
         api.response_scroll = api.response_scroll.saturating_sub(1);
         return None;
@@ -1141,7 +1132,7 @@ pub(super) fn handle_api_interaction(app: &mut App, key: KeyEvent) -> Option<Act
         KeyCode::Char(c)
             if !key
                 .modifiers
-                .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) =>
+                .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SUPER) =>
         {
             api.editor.insert_char(c);
         }

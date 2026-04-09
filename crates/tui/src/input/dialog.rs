@@ -1,9 +1,10 @@
 use std::path::PathBuf;
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField};
+use crate::config::has_ctrl;
 use crate::dialog_state::{ConflictStrategy, DialogState, EditAgentField, NewTabMenu};
 use piki_core::{AIProvider, MergeStrategy, WorkspaceType};
 
@@ -69,7 +70,7 @@ pub(super) fn handle_edit_workspace_input(app: &mut App, key: KeyEvent) -> Optio
                 group_val,
             ));
         }
-        _ if is_cancel(key) => {
+        _ if is_cancel(key, app.config.platform) => {
             app.active_dialog = None;
             app.mode = AppMode::Normal;
             return None;
@@ -210,7 +211,7 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
                 group_val,
             ));
         }
-        _ if is_cancel(key) => {
+        _ if is_cancel(key, app.config.platform) => {
             app.active_dialog = None;
             app.mode = AppMode::Normal;
             app.active_pane = ActivePane::WorkspaceList;
@@ -966,7 +967,7 @@ pub(super) fn handle_dispatch_agent_input(app: &mut App, key: KeyEvent) -> Optio
                 app.mode = AppMode::Normal;
                 Some(action)
             }
-            _ if is_cancel(key) => {
+            _ if is_cancel(key, app.config.platform) => {
                 // Back to step 0
                 *step = 0;
                 None
@@ -1018,7 +1019,7 @@ pub(super) fn handle_dispatch_agent_input(app: &mut App, key: KeyEvent) -> Optio
                     Some(action)
                 }
             }
-            _ if is_cancel(key) => {
+            _ if is_cancel(key, app.config.platform) => {
                 app.active_dialog = None;
                 app.mode = AppMode::Normal;
                 None
@@ -1117,7 +1118,7 @@ pub(super) fn handle_manage_agents_input(app: &mut App, key: KeyEvent) -> Option
             // Import agents from repo files
             Some(Action::ScanRepoAgents)
         }
-        _ if is_cancel(key) => {
+        _ if is_cancel(key, app.config.platform) => {
             app.active_dialog = None;
             app.mode = AppMode::Normal;
             None
@@ -1175,7 +1176,7 @@ pub(super) fn handle_edit_agent_input(app: &mut App, key: KeyEvent) -> Option<Ac
             app.mode = AppMode::EditAgentRole;
             None
         }
-        _ if is_cancel(key) => {
+        _ if is_cancel(key, app.config.platform) => {
             app.active_dialog = Some(DialogState::ManageAgents { selected: 0 });
             app.mode = AppMode::ManageAgents;
             None
@@ -1211,8 +1212,8 @@ pub(super) fn handle_edit_agent_role_input(app: &mut App, key: KeyEvent) -> Opti
 
     let providers = AIProvider::dispatchable();
 
-    // Ctrl+S: save and close
-    if key.code == KeyCode::Char('s') && key.modifiers.contains(KeyModifiers::CONTROL) {
+    // Ctrl+S (Cmd+S on macOS): save and close
+    if key.code == KeyCode::Char('s') && has_ctrl(key.modifiers, app.config.platform) {
         let profile = piki_core::storage::AgentProfile {
             id: editing_id,
             source_repo: source_repo_str.clone(),
@@ -1232,7 +1233,7 @@ pub(super) fn handle_edit_agent_role_input(app: &mut App, key: KeyEvent) -> Opti
     }
 
     // Esc: go back to step 1 without saving
-    if is_cancel(key) {
+    if is_cancel(key, app.config.platform) {
         app.active_dialog = Some(DialogState::EditAgent {
             editing_id,
             name: name.clone(),
@@ -1245,8 +1246,8 @@ pub(super) fn handle_edit_agent_role_input(app: &mut App, key: KeyEvent) -> Opti
         return None;
     }
 
-    // Ctrl+D: clear all text
-    if key.code == KeyCode::Char('d') && key.modifiers.contains(KeyModifiers::CONTROL) {
+    // Ctrl+D (Cmd+D on macOS): clear all text
+    if key.code == KeyCode::Char('d') && has_ctrl(key.modifiers, app.config.platform) {
         role.clear();
         *role_cursor = 0;
         *scroll = 0;
@@ -1354,7 +1355,7 @@ pub(super) fn handle_import_agents_input(app: &mut App, key: KeyEvent) -> Option
 
     let count = discovered.len();
     if count == 0 {
-        if is_cancel(key) || key.code == KeyCode::Enter {
+        if is_cancel(key, app.config.platform) || key.code == KeyCode::Enter {
             app.active_dialog = Some(DialogState::ManageAgents { selected: 0 });
             app.mode = AppMode::ManageAgents;
         }
@@ -1405,7 +1406,7 @@ pub(super) fn handle_import_agents_input(app: &mut App, key: KeyEvent) -> Option
                 Some(Action::ImportAgents(to_import))
             }
         }
-        _ if is_cancel(key) => {
+        _ if is_cancel(key, app.config.platform) => {
             app.active_dialog = Some(DialogState::ManageAgents { selected: 0 });
             app.mode = AppMode::ManageAgents;
             None

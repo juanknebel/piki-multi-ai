@@ -698,7 +698,7 @@ pub(super) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         "    Enter       Import selected".to_string(),
         "    Esc         Cancel".to_string(),
         "  Agent role editor (step 2)".to_string(),
-        "    Ctrl+S      Save agent and close".to_string(),
+        format!("    {:<13} Save agent and close", cfg.format_binding("ctrl-s")),
         "    Esc         Back to step 1 without saving".to_string(),
         "".to_string(),
         "  Inline editor".to_string(),
@@ -730,12 +730,12 @@ pub(super) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         "    h/l           Switch file list / diff pane".to_string(),
         "    n/p           Next/prev file (in diff view)".to_string(),
         "    g/G           Top/bottom of diff".to_string(),
-        "    Ctrl+d/u      Page down/up in diff".to_string(),
+        format!("    {}/{}      Page down/up in diff", cfg.format_binding("ctrl-d"), cfg.format_binding("ctrl-u")),
         "    s             Open submit review dialog".to_string(),
         "    r             Refresh PR data".to_string(),
         "    q             Close review (discard state)".to_string(),
         "    Tab           Cycle verdict (in submit)".to_string(),
-        "    Ctrl+D        Discard draft (in submit)".to_string(),
+        format!("    {:<13} Discard draft (in submit)", cfg.format_binding("ctrl-shift-d")),
         "".to_string(),
         "  Clipboard".to_string(),
         "    Mouse drag    Select text in terminal".to_string(),
@@ -2227,12 +2227,14 @@ pub(super) fn render_edit_agent_role_dialog(frame: &mut Frame, area: Rect, app: 
 
     // Footer
     lines.push(Line::from(""));
+    let save_label = format!("  [{}] Save    ", app.config.format_binding("ctrl-s"));
+    let clear_label = format!("[{}] Clear all    ", app.config.format_binding("ctrl-d"));
     lines.push(Line::from(vec![
         Span::styled(
-            "  [Ctrl+S] Save    ",
+            save_label,
             Style::default().fg(active_c).add_modifier(Modifier::BOLD),
         ),
-        Span::styled("[Ctrl+D] Clear all    ", Style::default().fg(inactive_c)),
+        Span::styled(clear_label, Style::default().fg(inactive_c)),
         Span::styled("[Esc] Back", Style::default().fg(inactive_c)),
     ]));
 

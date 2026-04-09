@@ -14,6 +14,7 @@ fn parse_key_event(s: &str) -> Option<KeyEvent> {
                 "ctrl" => modifiers.insert(KeyModifiers::CONTROL),
                 "alt" => modifiers.insert(KeyModifiers::ALT),
                 "shift" => modifiers.insert(KeyModifiers::SHIFT),
+                "super" | "cmd" => modifiers.insert(KeyModifiers::SUPER),
                 _ => return None,
             }
         }

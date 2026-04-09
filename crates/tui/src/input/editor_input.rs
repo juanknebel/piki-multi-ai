@@ -1,6 +1,7 @@
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::app::{App, AppMode};
+use crate::config::has_ctrl;
 
 pub(super) fn handle_inline_edit_input(app: &mut App, key: KeyEvent) -> Option<super::Action> {
     match key.code {
@@ -9,7 +10,7 @@ pub(super) fn handle_inline_edit_input(app: &mut App, key: KeyEvent) -> Option<s
             app.editing_file = None;
             app.mode = AppMode::Normal;
         }
-        KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+        KeyCode::Char('s') if has_ctrl(key.modifiers, app.config.platform) => {
             // Save file
             if let (Some(editor), Some(path)) = (&app.editor, &app.editing_file) {
                 let content = editor.contents();
