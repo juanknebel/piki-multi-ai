@@ -39,6 +39,10 @@ rusqlite = { version = "0.34", features = ["bundled"] }
 # Home directory resolution
 dirs = "6"
 
+# Unix system calls (getpwuid_r, setsid)
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [dev-dependencies]
 tempfile = "3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "test-util"] }

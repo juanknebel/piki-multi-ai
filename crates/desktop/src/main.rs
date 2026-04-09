@@ -24,6 +24,13 @@ use piki_core::workspace::watcher::FileWatcher;
 use state::{DesktopApp, DesktopWorkspace};
 
 fn main() {
+    // Self-invocation for shell environment capture (Zed-style).
+    // When the login shell re-launches us with --printenv, we dump
+    // std::env::vars() as JSON and exit immediately — no Tauri init.
+    if std::env::args().any(|a| a == "--printenv") {
+        piki_core::shell_env::print_env_and_exit();
+    }
+
     // Parse --data-dir flag before Tauri takes over args
     let data_dir = parse_data_dir();
 

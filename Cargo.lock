@@ -3657,6 +3657,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "dirs",
+ "libc",
  "notify",
  "parking_lot",
  "portable-pty",
