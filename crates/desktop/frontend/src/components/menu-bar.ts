@@ -21,7 +21,7 @@ import { showLogsDialog } from "./dialogs/logs-dialog";
 import { showAboutDialog } from "./dialogs/about-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { PROVIDER_LABELS, type AIProvider } from "../types";
-import { getShortcutKey } from "../shortcuts";
+import { getShortcutKey, formatShortcut } from "../shortcuts";
 
 // ── Types ───────────────────────────────────────
 
@@ -376,7 +376,7 @@ function renderItems(container: HTMLElement, items: MenuItem[], isRoot: boolean)
     } else if (item.shortcut) {
       const badge = document.createElement("span");
       badge.className = "menu-shortcut";
-      badge.textContent = item.shortcut;
+      badge.textContent = formatShortcut(item.shortcut);
       el.appendChild(badge);
     }
 

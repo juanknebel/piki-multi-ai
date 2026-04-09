@@ -1,7 +1,7 @@
 import { appState } from "../state";
 import * as ipc from "../ipc";
 import { toast } from "./toast";
-import { getShortcutKey } from "../shortcuts";
+import { getShortcutKey, modCtrl, formatShortcut } from "../shortcuts";
 import type { ApiResponseResult, ApiHistoryEntryDto } from "../ipc";
 
 interface ApiInstance {
@@ -56,8 +56,8 @@ function createApiPanel(tabId: string, wsIdx: number): ApiInstance {
 
   el.innerHTML = `
     <div class="api-toolbar">
-      <button class="api-btn api-send-btn" title="Send Request (Ctrl+S)">Send</button>
-      <button class="api-btn api-history-btn" title="Request History (Ctrl+H)">History</button>
+      <button class="api-btn api-send-btn" title="Send Request (${formatShortcut("Ctrl+S")})">Send</button>
+      <button class="api-btn api-history-btn" title="Request History (${formatShortcut("Ctrl+H")})">History</button>
       <span class="api-status"></span>
     </div>
     <div class="api-split">
@@ -69,8 +69,8 @@ function createApiPanel(tabId: string, wsIdx: number): ApiInstance {
         <div class="api-pane-header api-response-pane-header">
           <span>Response</span>
           <div class="api-response-actions">
-            <button class="api-resp-btn api-copy-btn" title="Copy body (Ctrl+C)">Copy</button>
-            <button class="api-resp-btn api-search-btn" title="Search (Ctrl+F)">Search</button>
+            <button class="api-resp-btn api-copy-btn" title="Copy body (${formatShortcut("Ctrl+C")})">Copy</button>
+            <button class="api-resp-btn api-search-btn" title="Search (${formatShortcut("Ctrl+F")})">Search</button>
             <button class="api-resp-btn api-jq-btn" title="jq filter (${getShortcutKey("api-jq-filter")})">jq</button>
           </div>
         </div>
@@ -132,10 +132,10 @@ function createApiPanel(tabId: string, wsIdx: number): ApiInstance {
 
   // Keyboard shortcuts on editor
   editorEl.addEventListener("keydown", (e) => {
-    if (e.key === "s" && e.ctrlKey) {
+    if (e.key === "s" && modCtrl(e)) {
       e.preventDefault();
       sendRequest(inst);
-    } else if (e.key === "h" && e.ctrlKey) {
+    } else if (e.key === "h" && modCtrl(e)) {
       e.preventDefault();
       showHistory(inst);
     } else if (e.key === "Tab") {
@@ -153,10 +153,10 @@ function createApiPanel(tabId: string, wsIdx: number): ApiInstance {
     const tag = (e.target as HTMLElement).tagName;
     const isEditorOrInput = tag === "TEXTAREA" || tag === "INPUT";
 
-    if (e.key === "c" && e.ctrlKey && !isEditorOrInput) {
+    if (e.key === "c" && modCtrl(e) && !isEditorOrInput) {
       e.preventDefault();
       copyResponseBody(inst);
-    } else if (e.key === "f" && e.ctrlKey) {
+    } else if (e.key === "f" && modCtrl(e)) {
       e.preventDefault();
       toggleSearch(inst);
     }

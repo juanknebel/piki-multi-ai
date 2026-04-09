@@ -2,6 +2,7 @@ import * as ipc from "../ipc";
 import { appState } from "../state";
 import { toast } from "./toast";
 import { registerMarkdownFile } from "./markdown-editor-panel";
+import { modCtrl, formatShortcut } from "../shortcuts";
 
 let overlayEl: HTMLElement | null = null;
 
@@ -37,8 +38,8 @@ export async function showMarkdown(filePath: string) {
     header.innerHTML = `
       <span class="diff-title">${esc(fileName)}<span style="color:var(--text-muted);font-weight:400;margin-left:8px;font-size:11px">${esc(filePath)}</span></span>
       <div style="display:flex;gap:4px;align-items:center">
-        <button class="file-viewer-btn md-quick-edit" title="Quick Edit (Ctrl+I)">Quick Edit</button>
-        <button class="file-viewer-btn md-edit" title="Open in $EDITOR (Ctrl+E)">Edit</button>
+        <button class="file-viewer-btn md-quick-edit" title="Quick Edit (${formatShortcut("Ctrl+I")})">Quick Edit</button>
+        <button class="file-viewer-btn md-edit" title="Open in $EDITOR (${formatShortcut("Ctrl+E")})">Edit</button>
         <button class="file-viewer-btn md-copy" title="Copy to clipboard">Copy</button>
         <button class="dialog-close">×</button>
       </div>
@@ -118,7 +119,7 @@ export async function showMarkdown(filePath: string) {
   backdrop.addEventListener("click", (e) => { if (e.target === backdrop && !editing) close(); });
   backdrop.addEventListener("keydown", (e) => {
     if (editing) {
-      if (e.key === "s" && e.ctrlKey) {
+      if (e.key === "s" && modCtrl(e)) {
         e.preventDefault();
         (header.querySelector(".md-save") as HTMLButtonElement)?.click();
       }
@@ -126,8 +127,8 @@ export async function showMarkdown(filePath: string) {
       return;
     }
     if (e.key === "Escape") close();
-    if (e.key === "i" && e.ctrlKey) { e.preventDefault(); enterEditMode(); }
-    if (e.key === "e" && e.ctrlKey) {
+    if (e.key === "i" && modCtrl(e)) { e.preventDefault(); enterEditMode(); }
+    if (e.key === "e" && modCtrl(e)) {
       e.preventDefault();
       close();
       ipc.spawnEditorTab(wsIdx, filePath).then((tabId) => {

@@ -3,6 +3,7 @@ import * as ipc from "../ipc";
 import { showFileViewer } from "./file-viewer";
 import { showMarkdown } from "./markdown-viewer";
 import { toast } from "./toast";
+import { modCtrl } from "../shortcuts";
 
 let searchEl: HTMLElement | null = null;
 
@@ -123,7 +124,7 @@ export async function openFuzzySearch() {
       e.preventDefault();
       const shown = filtered.slice(0, 50);
       if (shown[selectedIdx]) selectFile(shown[selectedIdx]);
-    } else if (e.key === "e" && e.ctrlKey) {
+    } else if (e.key === "e" && modCtrl(e)) {
       e.preventDefault();
       const shown = filtered.slice(0, 50);
       if (shown[selectedIdx]) editFile(shown[selectedIdx]);

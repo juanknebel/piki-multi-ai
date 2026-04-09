@@ -2,6 +2,7 @@ import { appState } from "../state";
 import * as ipc from "../ipc";
 import { showFileDiff } from "./diff-viewer";
 import { FILE_STATUS_LABELS, FILE_STATUS_CSS } from "../types";
+import { modCtrl } from "../shortcuts";
 import type { ChangedFile, FileStatus } from "../types";
 
 const STAGED_STATUSES: FileStatus[] = [
@@ -92,7 +93,7 @@ export function renderSourceControl(container: HTMLElement) {
     });
 
     textarea.addEventListener("keydown", (e) => {
-      if (e.ctrlKey && e.key === "Enter") {
+      if (modCtrl(e) && e.key === "Enter") {
         e.preventDefault();
         if (!commitBtn.disabled) commitBtn.click();
       }

@@ -3,6 +3,7 @@ import { appState } from "../state";
 import { toast } from "./toast";
 import EasyMDE from "easymde";
 import "easymde/dist/easymde.min.css";
+import { modCtrl, formatShortcut } from "../shortcuts";
 
 interface MdEditorInstance {
   tabId: string;
@@ -58,7 +59,7 @@ function createPanel(tabId: string, filePath: string): MdEditorInstance {
   el.innerHTML = `
     <div class="md-editor-toolbar">
       <span class="md-editor-path" title="${esc(filePath)}">${esc(filePath)}</span>
-      <button class="api-btn md-editor-save" title="Save (Ctrl+S)">Save</button>
+      <button class="api-btn md-editor-save" title="Save (${formatShortcut("Ctrl+S")})">Save</button>
     </div>
     <div class="md-editor-body"></div>
   `;
@@ -98,7 +99,7 @@ function createPanel(tabId: string, filePath: string): MdEditorInstance {
 
     // Ctrl+S to save
     easyMde.codemirror.on("keydown", (_instance, e: KeyboardEvent) => {
-      if (e.key === "s" && e.ctrlKey) {
+      if (e.key === "s" && modCtrl(e)) {
         e.preventDefault();
         el.querySelector<HTMLButtonElement>(".md-editor-save")?.click();
       }

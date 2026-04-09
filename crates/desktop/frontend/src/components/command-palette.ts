@@ -20,7 +20,7 @@ import { showLogsDialog } from "./dialogs/logs-dialog";
 import { showAboutDialog } from "./dialogs/about-dialog";
 import { PROVIDER_LABELS, type AIProvider } from "../types";
 import { themeEngine } from "../theme";
-import { getShortcutKey } from "../shortcuts";
+import { getShortcutKey, formatShortcut } from "../shortcuts";
 
 interface Command {
   id: string;
@@ -68,7 +68,7 @@ export function openCommandPalette() {
       item.innerHTML = `
         <span class="palette-category">${escapeHtml(cmd.category)}</span>
         <span class="palette-label">${highlightMatch(cmd.label, input.value)}</span>
-        ${cmd.keybinding ? `<span class="palette-key">${cmd.keybinding}</span>` : ""}
+        ${cmd.keybinding ? `<span class="palette-key">${formatShortcut(cmd.keybinding)}</span>` : ""}
       `;
       item.addEventListener("click", () => {
         closeCommandPalette();

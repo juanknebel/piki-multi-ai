@@ -4,6 +4,7 @@ import {
   resetAllShortcuts,
   findConflict,
   eventToCombo,
+  formatShortcut,
   getShellSetting,
   setShellSetting,
 } from "../../shortcuts";
@@ -91,13 +92,13 @@ export async function showSettingsDialog() {
 
     const defaultCol = document.createElement("span");
     defaultCol.className = "settings-col-default";
-    defaultCol.innerHTML = `<kbd>${esc(def.defaultKey)}</kbd>`;
+    defaultCol.innerHTML = `<kbd>${esc(formatShortcut(def.defaultKey))}</kbd>`;
 
     const currentCol = document.createElement("span");
     currentCol.className = "settings-col-current";
     const keyBtn = document.createElement("button");
     keyBtn.className = "settings-key-btn";
-    keyBtn.textContent = def.key;
+    keyBtn.textContent = formatShortcut(def.key);
     if (def.key !== def.defaultKey) keyBtn.classList.add("modified");
 
     keyBtn.addEventListener("click", () => {
@@ -112,7 +113,7 @@ export async function showSettingsDialog() {
         if (!combo) return; // modifier-only press
 
         if (e.key === "Escape") {
-          keyBtn.textContent = def.key;
+          keyBtn.textContent = formatShortcut(def.key);
           keyBtn.classList.remove("recording");
           document.removeEventListener("keydown", handler, true);
           return;
@@ -125,7 +126,7 @@ export async function showSettingsDialog() {
         }
 
         updateShortcut(def.id, combo);
-        keyBtn.textContent = combo;
+        keyBtn.textContent = formatShortcut(combo);
         keyBtn.classList.remove("recording");
         keyBtn.classList.toggle("modified", combo !== def.defaultKey);
         document.removeEventListener("keydown", handler, true);
@@ -171,7 +172,7 @@ export async function showSettingsDialog() {
     // Re-render shortcut keys
     const btns = table.querySelectorAll<HTMLButtonElement>(".settings-key-btn");
     shortcuts.forEach((def, i) => {
-      btns[i].textContent = def.key;
+      btns[i].textContent = formatShortcut(def.key);
       btns[i].classList.remove("modified");
     });
     toast("Settings restored to defaults", "success");

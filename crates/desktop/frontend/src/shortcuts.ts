@@ -1,5 +1,27 @@
 import * as ipc from "./ipc";
 
+/** True when running on macOS — Cmd (Meta) replaces Ctrl/Alt. */
+export const isMac: boolean =
+  typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+
+/** Platform-aware check: returns true if Ctrl (or Cmd on macOS) is held. */
+export function modCtrl(e: KeyboardEvent): boolean {
+  return isMac ? e.metaKey : e.ctrlKey;
+}
+
+/** Platform-aware check: returns true if Alt (or Cmd on macOS) is held.
+ *  macOS Option key sends special characters, so Cmd is used instead. */
+export function modAlt(e: KeyboardEvent): boolean {
+  return isMac ? e.metaKey : e.altKey;
+}
+
+/** Format a shortcut string for the current platform.
+ *  Converts "Ctrl+X" → "⌘+X" and "Alt+X" → "⌘+X" on macOS. */
+export function formatShortcut(combo: string): string {
+  if (!isMac) return combo;
+  return combo.replace(/\bCtrl\b/g, "⌘").replace(/\bAlt\b/g, "⌘");
+}
+
 export interface ShortcutDef {
   id: string;
   label: string;
@@ -45,7 +67,7 @@ export function bindAction(id: string, action: () => void) {
 
 export function getShortcutKey(id: string): string {
   const def = shortcuts.find((s) => s.id === id);
-  return def?.key ?? "";
+  return def ? formatShortcut(def.key) : "";
 }
 
 export function updateShortcut(id: string, newKey: string) {
@@ -120,7 +142,7 @@ function parseCombo(combo: string): { ctrl: boolean; shift: boolean; alt: boolea
   const parts = combo.split("+");
   const key = parts[parts.length - 1];
   return {
-    ctrl: parts.includes("Ctrl"),
+    ctrl: parts.includes("Ctrl") || parts.includes("⌘"),
     shift: parts.includes("Shift"),
     alt: parts.includes("Alt"),
     key,
@@ -129,9 +151,19 @@ function parseCombo(combo: string): { ctrl: boolean; shift: boolean; alt: boolea
 
 function matchesEvent(e: KeyboardEvent, combo: string): boolean {
   const c = parseCombo(combo);
-  if (e.ctrlKey !== c.ctrl) return false;
   if (e.shiftKey !== c.shift) return false;
-  if (e.altKey !== c.alt) return false;
+
+  if (isMac) {
+    // On macOS, both Ctrl and Alt bindings map to Cmd (Meta).
+    const needsMeta = c.ctrl || c.alt;
+    if (e.metaKey !== needsMeta) return false;
+    // Ensure plain Alt/Ctrl aren't spuriously held
+    if (!c.alt && e.altKey) return false;
+    if (!c.ctrl && e.ctrlKey) return false;
+  } else {
+    if (e.ctrlKey !== c.ctrl) return false;
+    if (e.altKey !== c.alt) return false;
+  }
 
   // Handle special keys
   if (c.key === "Space") return e.key === " ";
@@ -158,11 +190,10 @@ export function handleGlobalKeydown(e: KeyboardEvent) {
     }
   }
 
-  // Ctrl+Tab / Ctrl+Shift+Tab: tab switching (not customizable)
-  if (e.ctrlKey && e.key === "Tab") {
+  // Ctrl+Tab / Ctrl+Shift+Tab (Cmd+Tab on macOS): tab switching (not customizable)
+  if (modCtrl(e) && e.key === "Tab") {
     e.preventDefault();
     e.stopPropagation();
-    // This is handled inline because it needs shift-aware direction
     const event = new CustomEvent("switch-tab", { detail: { direction: e.shiftKey ? -1 : 1 } });
     document.dispatchEvent(event);
   }
@@ -170,8 +201,14 @@ export function handleGlobalKeydown(e: KeyboardEvent) {
 
 export function eventToCombo(e: KeyboardEvent): string | null {
   const parts: string[] = [];
-  if (e.ctrlKey) parts.push("Ctrl");
-  if (e.altKey) parts.push("Alt");
+  // On macOS, Meta (Cmd) is recorded as "Ctrl" so combos stay portable.
+  if (isMac) {
+    if (e.metaKey) parts.push("Ctrl");
+    if (e.altKey) parts.push("Alt");
+  } else {
+    if (e.ctrlKey) parts.push("Ctrl");
+    if (e.altKey) parts.push("Alt");
+  }
   if (e.shiftKey) parts.push("Shift");
 
   const key = e.key;

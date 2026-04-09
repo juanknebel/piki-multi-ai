@@ -2,6 +2,7 @@ import { appState } from "../state";
 import * as ipc from "../ipc";
 import { showFileViewer } from "./file-viewer";
 import { toast } from "./toast";
+import { modCtrl } from "../shortcuts";
 import type { SearchMatch } from "../ipc";
 
 let searchEl: HTMLElement | null = null;
@@ -132,7 +133,7 @@ export function openProjectSearch() {
     } else if (e.key === "Enter") {
       e.preventDefault();
       if (matches[selectedIdx]) selectMatch(matches[selectedIdx]);
-    } else if (e.key === "e" && e.ctrlKey) {
+    } else if (e.key === "e" && modCtrl(e)) {
       e.preventDefault();
       if (matches[selectedIdx]) editMatch(matches[selectedIdx]);
     } else if (e.key === "Escape") {

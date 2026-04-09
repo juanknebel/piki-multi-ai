@@ -8,6 +8,7 @@ import { toast } from "./toast";
 import { themeEngine } from "../theme";
 import { hideKanbanPanels, showKanbanPanel } from "./kanban-panel";
 import { hideApiPanels, showApiPanel } from "./api-panel";
+import { modCtrl, formatShortcut } from "../shortcuts";
 import { hideMarkdownEditorPanels, showMarkdownEditorPanel } from "./markdown-editor-panel";
 
 export interface TerminalInstance {
@@ -107,9 +108,9 @@ export function createTerminal(tabId: string): TerminalInstance {
     }
   });
 
-  // Ctrl+Shift+C = copy, Ctrl+Shift+V = paste via backend system clipboard
+  // Ctrl+Shift+C = copy, Ctrl+Shift+V = paste (Cmd+Shift on macOS)
   terminal.attachCustomKeyEventHandler((e) => {
-    if (e.ctrlKey && e.shiftKey && e.type === "keydown" && e.key === "C") {
+    if (modCtrl(e) && e.shiftKey && e.type === "keydown" && e.key === "C") {
       const sel = terminal.getSelection();
       if (sel) {
         ipc.clipboardCopy(sel).catch((err) => {
@@ -119,7 +120,7 @@ export function createTerminal(tabId: string): TerminalInstance {
       }
       return false;
     }
-    if (e.ctrlKey && e.shiftKey && e.type === "keydown" && e.key === "V") {
+    if (modCtrl(e) && e.shiftKey && e.type === "keydown" && e.key === "V") {
       ipc.clipboardPaste().then((text) => {
         if (text) terminal.paste(text);
       }).catch((err) => {
@@ -256,9 +257,9 @@ function showWelcome() {
     <div class="welcome-subtitle">Multi-Agent Workspace</div>
     <p>Select a workspace or create one to begin.</p>
     <div class="welcome-shortcuts">
-      <div class="shortcut-item"><span class="shortcut-key">Ctrl+N</span><span class="shortcut-label">New workspace</span></div>
-      <div class="shortcut-item"><span class="shortcut-key">Ctrl+P</span><span class="shortcut-label">Command palette</span></div>
-      <div class="shortcut-item"><span class="shortcut-key">Ctrl+Space</span><span class="shortcut-label">Switch workspace</span></div>
+      <div class="shortcut-item"><span class="shortcut-key">${formatShortcut("Ctrl+N")}</span><span class="shortcut-label">New workspace</span></div>
+      <div class="shortcut-item"><span class="shortcut-key">${formatShortcut("Ctrl+P")}</span><span class="shortcut-label">Command palette</span></div>
+      <div class="shortcut-item"><span class="shortcut-key">${formatShortcut("Ctrl+Space")}</span><span class="shortcut-label">Switch workspace</span></div>
       <div class="shortcut-item"><span class="shortcut-key">?</span><span class="shortcut-label">All shortcuts</span></div>
     </div>
   `;

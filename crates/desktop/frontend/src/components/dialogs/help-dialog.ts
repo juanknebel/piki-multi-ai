@@ -1,3 +1,5 @@
+import { formatShortcut } from "../../shortcuts";
+
 const SHORTCUTS: { category: string; items: [string, string][] }[] = [
   {
     category: "General",
@@ -73,7 +75,7 @@ export function showHelpDialog() {
       html += `
         <div class="shortcut-row">
           <span class="shortcut-row-label">${desc}</span>
-          <kbd class="shortcut-row-key">${key}</kbd>
+          <kbd class="shortcut-row-key">${formatShortcut(key)}</kbd>
         </div>`;
     }
     html += `</div>`;

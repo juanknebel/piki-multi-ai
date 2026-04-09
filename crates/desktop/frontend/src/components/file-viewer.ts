@@ -1,6 +1,7 @@
 import * as ipc from "../ipc";
 import { appState } from "../state";
 import { toast } from "./toast";
+import { modCtrl, formatShortcut } from "../shortcuts";
 
 export async function showFileViewer(workspaceIdx: number, path: string) {
   // Remove existing viewer
@@ -26,8 +27,8 @@ export async function showFileViewer(workspaceIdx: number, path: string) {
     <div class="file-viewer-header">
       <span class="file-viewer-title" title="${escapeAttr(path)}">${escapeHtml(fileName)}<span class="file-viewer-path">${escapeHtml(path)}</span></span>
       <div class="file-viewer-actions">
-        <button class="file-viewer-btn file-viewer-inline-edit" title="Quick Edit (Ctrl+I)">Quick Edit</button>
-        <button class="file-viewer-btn file-viewer-edit" title="Open in $EDITOR (Ctrl+E)">Edit</button>
+        <button class="file-viewer-btn file-viewer-inline-edit" title="Quick Edit (${formatShortcut("Ctrl+I")})">Quick Edit</button>
+        <button class="file-viewer-btn file-viewer-edit" title="Open in $EDITOR (${formatShortcut("Ctrl+E")})">Edit</button>
         <button class="file-viewer-btn file-viewer-copy" title="Copy to clipboard">Copy</button>
         <button class="file-viewer-btn file-viewer-close">&times;</button>
       </div>
@@ -115,8 +116,8 @@ export async function showFileViewer(workspaceIdx: number, path: string) {
     body.querySelector("code")!.textContent = content;
 
     actionsDiv.innerHTML = `
-      <button class="file-viewer-btn file-viewer-inline-edit" title="Quick Edit (Ctrl+I)">Quick Edit</button>
-      <button class="file-viewer-btn file-viewer-edit" title="Open in $EDITOR (Ctrl+E)">Edit</button>
+      <button class="file-viewer-btn file-viewer-inline-edit" title="Quick Edit (${formatShortcut("Ctrl+I")})">Quick Edit</button>
+      <button class="file-viewer-btn file-viewer-edit" title="Open in $EDITOR (${formatShortcut("Ctrl+E")})">Edit</button>
       <button class="file-viewer-btn file-viewer-copy" title="Copy to clipboard">Copy</button>
       <button class="file-viewer-btn file-viewer-close">&times;</button>
     `;
@@ -150,7 +151,7 @@ export async function showFileViewer(workspaceIdx: number, path: string) {
   backdrop.addEventListener("keydown", (e) => {
     if (editing) {
       // Ctrl+S to save while editing
-      if (e.key === "s" && e.ctrlKey) {
+      if (e.key === "s" && modCtrl(e)) {
         e.preventDefault();
         (actionsDiv.querySelector(".file-viewer-save") as HTMLButtonElement)?.click();
       }
@@ -163,11 +164,11 @@ export async function showFileViewer(workspaceIdx: number, path: string) {
     }
 
     if (e.key === "Escape") close();
-    if (e.key === "i" && e.ctrlKey) {
+    if (e.key === "i" && modCtrl(e)) {
       e.preventDefault();
       enterEditMode();
     }
-    if (e.key === "e" && e.ctrlKey) {
+    if (e.key === "e" && modCtrl(e)) {
       e.preventDefault();
       close();
       ipc.spawnEditorTab(workspaceIdx, path).then((tabId) => {
