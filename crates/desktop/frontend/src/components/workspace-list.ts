@@ -10,6 +10,8 @@ import { showAgentManager } from "./dialogs/agent-dialog";
 import type { WorkspaceInfo } from "../types";
 
 export function renderWorkspaceList(container: HTMLElement) {
+  const collapsedGroups = new Set<string>();
+
   function render() {
     const workspaces = appState.workspaces;
     const activeIdx = appState.activeWorkspace;
@@ -53,72 +55,88 @@ export function renderWorkspaceList(container: HTMLElement) {
 
     let badge = 1;
     for (const [groupName, items] of sortedGroups) {
-      if (groupName) {
+      const isCollapsed = collapsedGroups.has(groupName);
+      const inGroup = !!groupName;
+
+      if (inGroup) {
         const groupHeader = document.createElement("div");
         groupHeader.className = "group-header";
         groupHeader.innerHTML = `
-          <svg class="group-chevron" viewBox="0 0 16 16">
+          <svg class="group-chevron${isCollapsed ? " collapsed" : ""}" viewBox="0 0 16 16">
             <path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5"/>
           </svg>
-          ${escapeHtml(groupName)} (${items.length})
+          <span class="group-label">${escapeHtml(groupName)}</span>
         `;
+        groupHeader.addEventListener("click", () => {
+          if (collapsedGroups.has(groupName)) {
+            collapsedGroups.delete(groupName);
+          } else {
+            collapsedGroups.add(groupName);
+          }
+          render();
+        });
         container.appendChild(groupHeader);
       }
 
-      for (const { idx, info } of items) {
-        const item = document.createElement("div");
-        item.className = `workspace-item${idx === activeIdx ? " active" : ""}`;
-        item.dataset.idx = String(idx);
+      if (!isCollapsed) {
+        for (const { idx, info } of items) {
+          const item = document.createElement("div");
+          item.className = `workspace-item${idx === activeIdx ? " active" : ""}${inGroup ? " grouped" : ""}`;
+          item.dataset.idx = String(idx);
 
-        const ws = workspaces[idx];
-        const statusClass = getStatusClass(ws.status);
+          const ws = workspaces[idx];
+          const statusClass = getStatusClass(ws.status);
 
-        item.innerHTML = `
-          <span class="workspace-badge">${badge <= 9 ? badge : ""}</span>
-          ${idx === activeIdx ? '<span class="workspace-active-marker"></span>' : ""}
-          <span class="workspace-name">${escapeHtml(info.name)}</span>
-          <span class="workspace-actions">
-            <button class="ws-action-btn" data-action="agents" title="Manage Agents">⚙</button>
-            <button class="ws-action-btn" data-action="info" title="Info">i</button>
-            <button class="ws-action-btn" data-action="edit" title="Edit">✎</button>
-            <button class="ws-action-btn" data-action="clone" title="Clone">⧉</button>
-            <button class="ws-action-btn ws-action-delete" data-action="delete" title="Delete">×</button>
-          </span>
-          <span class="workspace-status ${statusClass}">${getStatusIcon(ws.status)}</span>
-        `;
+          item.innerHTML = `
+            <span class="workspace-badge">${badge <= 9 ? badge : ""}</span>
+            ${idx === activeIdx ? '<span class="workspace-active-marker"></span>' : ""}
+            <span class="workspace-name">${escapeHtml(info.name)}</span>
+            <span class="workspace-actions">
+              <button class="ws-action-btn" data-action="agents" title="Manage Agents">⚙</button>
+              <button class="ws-action-btn" data-action="info" title="Info">i</button>
+              <button class="ws-action-btn" data-action="edit" title="Edit">✎</button>
+              <button class="ws-action-btn" data-action="clone" title="Clone">⧉</button>
+              <button class="ws-action-btn ws-action-delete" data-action="delete" title="Delete">×</button>
+            </span>
+            <span class="workspace-status ${statusClass}">${getStatusIcon(ws.status)}</span>
+          `;
 
-        // Click to switch workspace
-        item.addEventListener("click", async (e) => {
-          if ((e.target as HTMLElement).closest(".ws-action-btn")) return;
-          try {
-            const detail = await ipc.switchWorkspace(idx);
-            appState.setActiveWorkspace(idx, detail);
-          } catch (err) {
-            console.error("Failed to switch workspace:", err);
-          }
-        });
-
-        // Action buttons
-        item.querySelectorAll<HTMLButtonElement>(".ws-action-btn").forEach((btn) => {
-          btn.addEventListener("click", (e) => {
-            e.stopPropagation();
-            const action = btn.dataset.action;
-            if (action === "agents") {
-              showAgentManager();
-            } else if (action === "info") {
-              showWorkspaceInfo(idx);
-            } else if (action === "edit") {
-              showWorkspaceDialog({ mode: "edit", editIndex: idx });
-            } else if (action === "clone") {
-              showWorkspaceDialog({ mode: "clone", cloneFrom: info });
-            } else if (action === "delete") {
-              showDeleteConfirm(idx, info.name);
+          // Click to switch workspace
+          item.addEventListener("click", async (e) => {
+            if ((e.target as HTMLElement).closest(".ws-action-btn")) return;
+            try {
+              const detail = await ipc.switchWorkspace(idx);
+              appState.setActiveWorkspace(idx, detail);
+            } catch (err) {
+              console.error("Failed to switch workspace:", err);
             }
           });
-        });
 
-        container.appendChild(item);
-        badge++;
+          // Action buttons
+          item.querySelectorAll<HTMLButtonElement>(".ws-action-btn").forEach((btn) => {
+            btn.addEventListener("click", (e) => {
+              e.stopPropagation();
+              const action = btn.dataset.action;
+              if (action === "agents") {
+                showAgentManager();
+              } else if (action === "info") {
+                showWorkspaceInfo(idx);
+              } else if (action === "edit") {
+                showWorkspaceDialog({ mode: "edit", editIndex: idx });
+              } else if (action === "clone") {
+                showWorkspaceDialog({ mode: "clone", cloneFrom: info });
+              } else if (action === "delete") {
+                showDeleteConfirm(idx, info.name);
+              }
+            });
+          });
+
+          container.appendChild(item);
+          badge++;
+        }
+      } else {
+        // Still count badges for collapsed items
+        badge += items.length;
       }
     }
   }

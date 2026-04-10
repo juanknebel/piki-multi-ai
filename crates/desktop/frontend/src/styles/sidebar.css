@@ -20,26 +20,37 @@
 }
 
 .group-header {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  padding: 6px 14px;
-  font-size: 11px;
+  padding: 2px 8px;
+  margin: 6px 10px 2px;
+  font-size: 13px;
   font-weight: 600;
-  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  background: var(--accent-muted);
+  border-radius: 9px;
   cursor: pointer;
   user-select: none;
   transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .group-header:hover {
-  background: var(--sidebar-item-hover);
-  color: var(--text-primary);
+  background: var(--bg-active);
+  color: var(--text-secondary);
+}
+
+.group-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .group-chevron {
-  width: 14px;
-  height: 14px;
-  margin-right: 6px;
+  width: 10px;
+  height: 10px;
+  margin-right: 4px;
+  flex-shrink: 0;
   transition: transform 0.15s var(--ease-out);
   fill: currentColor;
   opacity: 0.6;
@@ -59,6 +70,10 @@
   position: relative;
   transition: background var(--transition-fast);
   border-left: 2px solid transparent;
+}
+
+.workspace-item.grouped {
+  padding-left: 28px;
 }
 
 .workspace-item:hover {
@@ -118,14 +133,13 @@
 }
 
 .workspace-actions {
-  display: flex;
+  display: none;
   gap: 1px;
   flex-shrink: 0;
-  visibility: hidden;
 }
 
 .workspace-item:hover .workspace-actions {
-  visibility: visible;
+  display: flex;
 }
 
 .ws-action-btn {

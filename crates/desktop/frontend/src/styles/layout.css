@@ -12,6 +12,15 @@
   color: var(--text-primary);
 }
 
+#app.sidebar-hidden {
+  grid-template-columns: var(--activity-bar-width) 0px 0px 1fr;
+}
+
+#app.sidebar-hidden #sidebar,
+#app.sidebar-hidden #sidebar-resize-v {
+  display: none;
+}
+
 #menu-bar {
   grid-area: menubar;
 }

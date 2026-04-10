@@ -28,7 +28,8 @@ import { showHelpDialog } from "./components/dialogs/help-dialog";
 import { showDashboard } from "./components/dialogs/dashboard-dialog";
 import { showThemeDialog } from "./components/dialogs/theme-dialog";
 import { showLogsDialog } from "./components/dialogs/logs-dialog";
-import { initMenuBar } from "./components/menu-bar";
+import { initMenuBar, toggleSidebar } from "./components/menu-bar";
+import { initTooltips } from "./components/tooltip";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { themeEngine } from "./theme";
 
@@ -36,6 +37,7 @@ async function init() {
   // Load theme before rendering to avoid flash
   await themeEngine.loadFromStorage();
 
+  initTooltips();
   initMenuBar(document.getElementById("menu-bar")!);
   renderActivityBar(document.getElementById("activity-bar")!);
   initSidebar();
@@ -112,6 +114,7 @@ async function init() {
   bindAction("logs", () => showLogsDialog());
   bindAction("api-jq-filter", () => document.dispatchEvent(new CustomEvent("toggle-jq")));
   bindAction("undo", () => handleUndo());
+  bindAction("toggle-sidebar", () => toggleSidebar());
   bindAction("help", () => showHelpDialog());
 
   // Load user shortcut overrides from storage

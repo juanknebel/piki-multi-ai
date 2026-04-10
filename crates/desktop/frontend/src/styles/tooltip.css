@@ -1,0 +1,19 @@
+/* ── Custom tooltip ──────────────────────────────── */
+.custom-tooltip {
+  position: fixed;
+  z-index: 300;
+  display: none;
+  padding: 4px 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  white-space: nowrap;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

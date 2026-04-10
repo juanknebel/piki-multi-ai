@@ -113,6 +113,19 @@
   z-index: 79;
 }
 
+/* ── Panel toggle ───────────────────────────── */
+.panel-toggle-btn {
+  width: 32px;
+}
+
+.panel-toggle-btn svg {
+  pointer-events: none;
+}
+
+.sidebar-hidden .panel-toggle-btn {
+  color: var(--text-muted);
+}
+
 /* ── Window controls ─────────────────────────── */
 .window-controls {
   -webkit-app-region: no-drag;

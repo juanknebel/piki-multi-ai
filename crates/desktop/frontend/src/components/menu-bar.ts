@@ -228,6 +228,11 @@ function cycleTab(dir: number) {
   appState.setActiveTab(next);
 }
 
+export function toggleSidebar() {
+  const app = document.getElementById("app")!;
+  app.classList.toggle("sidebar-hidden");
+}
+
 // ── State ───────────────────────────────────────
 
 let openIdx: number | null = null;
@@ -270,6 +275,17 @@ export function initMenuBar(container: HTMLElement) {
   });
   dragRegion.addEventListener("dblclick", () => win.toggleMaximize());
   container.appendChild(dragRegion);
+
+  // Panel toggle (before window controls)
+  const panelToggle = document.createElement("button");
+  panelToggle.className = "wc-btn panel-toggle-btn";
+  panelToggle.title = "Toggle Sidebar (Ctrl+B)";
+  panelToggle.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <rect x="1" y="2" width="14" height="12" rx="1" stroke="currentColor" stroke-width="1.2"/>
+    <line x1="5.5" y1="2" x2="5.5" y2="14" stroke="currentColor" stroke-width="1.2"/>
+  </svg>`;
+  panelToggle.addEventListener("click", () => toggleSidebar());
+  container.appendChild(panelToggle);
 
   // Window controls (right side)
   const controls = document.createElement("div");
