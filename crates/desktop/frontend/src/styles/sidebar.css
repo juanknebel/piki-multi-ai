@@ -305,6 +305,16 @@
   font-size: 11px !important;
 }
 
+.ws-delete-card-move {
+  margin-top: 12px;
+  text-align: left;
+}
+
+.ws-delete-card-move .dialog-label {
+  display: block;
+  margin-bottom: 6px;
+}
+
 .ws-delete-buttons {
   display: flex;
   gap: 8px;

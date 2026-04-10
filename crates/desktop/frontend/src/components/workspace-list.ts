@@ -158,10 +158,16 @@ async function showDeleteConfirm(idx: number, name: string) {
   if (cardId && boardPath) {
     try {
       const board = await ipc.kanbanLoadBoardByPath(boardPath);
+      const COL_LABELS: Record<string, string> = {
+        todo: "To Do",
+        in_progress: "In Progress",
+        in_review: "In Review",
+        done: "Done",
+      };
       colDropdown = createDropdown(
         [
           { value: "", label: "(Leave where it is)" },
-          ...board.columns.map((col) => ({ value: col.id, label: col.id })),
+          ...board.columns.map((col) => ({ value: col.id, label: COL_LABELS[col.id] ?? col.id })),
         ],
         "",
       );
