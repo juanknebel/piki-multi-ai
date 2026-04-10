@@ -2,8 +2,17 @@ import { appState } from "../state";
 import * as ipc from "../ipc";
 import { toast } from "./toast";
 import { showDispatchDialog } from "./dialogs/dispatch-dialog";
+import { createDropdown } from "./dropdown";
 import type { KanbanBoard, KanbanCard } from "../types";
 import { PRIORITY_CSS } from "../types";
+
+const PRIORITY_OPTIONS = [
+  { value: "Bug", label: "Bug" },
+  { value: "High", label: "High" },
+  { value: "Medium", label: "Medium" },
+  { value: "Low", label: "Low" },
+  { value: "Wishlist", label: "Wishlist" },
+];
 
 type SortOrder = "none" | "asc" | "desc";
 
@@ -464,13 +473,7 @@ function showEditModal(inst: KanbanInstance, card: KanbanCard) {
       <input class="kanban-edit-input" id="ke-project" type="text" value="${escAttr(card.project)}" />
 
       <label class="kanban-edit-label">Priority</label>
-      <select class="kanban-edit-select" id="ke-priority">
-        <option value="Bug"${card.priority === "Bug" ? " selected" : ""}>Bug</option>
-        <option value="High"${card.priority === "High" ? " selected" : ""}>High</option>
-        <option value="Medium"${card.priority === "Medium" ? " selected" : ""}>Medium</option>
-        <option value="Low"${card.priority === "Low" ? " selected" : ""}>Low</option>
-        <option value="Wishlist"${card.priority === "Wishlist" ? " selected" : ""}>Wishlist</option>
-      </select>
+      <div id="ke-priority-slot"></div>
 
       <label class="kanban-edit-label">Assignee</label>
       <input class="kanban-edit-input" id="ke-assignee" type="text" value="${escAttr(card.assignee)}" />
@@ -487,6 +490,9 @@ function showEditModal(inst: KanbanInstance, card: KanbanCard) {
   backdrop.appendChild(modal);
   document.body.appendChild(backdrop);
 
+  const priorityDropdown = createDropdown(PRIORITY_OPTIONS, card.priority);
+  modal.querySelector("#ke-priority-slot")!.replaceWith(priorityDropdown.container);
+
   const titleInput = modal.querySelector("#ke-title") as HTMLInputElement;
   titleInput.focus();
   titleInput.select();
@@ -502,7 +508,7 @@ function showEditModal(inst: KanbanInstance, card: KanbanCard) {
   modal.querySelector(".kanban-edit-save")!.addEventListener("click", async () => {
     const title = (modal.querySelector("#ke-title") as HTMLInputElement).value.trim();
     const project = (modal.querySelector("#ke-project") as HTMLInputElement).value.trim();
-    const priority = (modal.querySelector("#ke-priority") as HTMLSelectElement).value;
+    const priority = priorityDropdown.value;
     const assignee = (modal.querySelector("#ke-assignee") as HTMLInputElement).value.trim();
     const desc = (modal.querySelector("#ke-desc") as HTMLTextAreaElement).value;
 
@@ -558,13 +564,7 @@ function showNewCardModal(inst: KanbanInstance, columnId: string) {
       <input class="kanban-edit-input" id="ke-title" type="text" value="New card" />
 
       <label class="kanban-edit-label">Priority</label>
-      <select class="kanban-edit-select" id="ke-priority">
-        <option value="Bug">Bug</option>
-        <option value="High">High</option>
-        <option value="Medium" selected>Medium</option>
-        <option value="Low">Low</option>
-        <option value="Wishlist">Wishlist</option>
-      </select>
+      <div id="ke-priority-slot"></div>
 
       <label class="kanban-edit-label">Assignee</label>
       <input class="kanban-edit-input" id="ke-assignee" type="text" value="" />
@@ -581,6 +581,9 @@ function showNewCardModal(inst: KanbanInstance, columnId: string) {
   backdrop.appendChild(modal);
   document.body.appendChild(backdrop);
 
+  const priorityDropdown = createDropdown(PRIORITY_OPTIONS, "Medium");
+  modal.querySelector("#ke-priority-slot")!.replaceWith(priorityDropdown.container);
+
   (modal.querySelector("#ke-project") as HTMLInputElement).focus();
 
   const close = () => backdrop.remove();
@@ -593,7 +596,7 @@ function showNewCardModal(inst: KanbanInstance, columnId: string) {
   modal.querySelector(".kanban-edit-save")!.addEventListener("click", async () => {
     const project = (modal.querySelector("#ke-project") as HTMLInputElement).value.trim();
     const title = (modal.querySelector("#ke-title") as HTMLInputElement).value.trim();
-    const priority = (modal.querySelector("#ke-priority") as HTMLSelectElement).value;
+    const priority = priorityDropdown.value;
     const assignee = (modal.querySelector("#ke-assignee") as HTMLInputElement).value.trim();
     const desc = (modal.querySelector("#ke-desc") as HTMLTextAreaElement).value;
 
