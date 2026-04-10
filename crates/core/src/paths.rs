@@ -20,17 +20,12 @@ impl DataPaths {
         Self { base, config_base }
     }
 
-    /// Create using the platform defaults:
-    /// - Data: `dirs::data_dir()/piki-multi`
-    /// - Config: `$HOME/.config/piki-multi`
+    /// Create using XDG defaults:
+    /// - Data: `$XDG_DATA_HOME/piki` or `~/.local/share/piki`
+    /// - Config: `$XDG_CONFIG_HOME/piki` or `~/.config/piki`
     pub fn default_paths() -> Self {
-        let base = dirs::data_dir()
-            .unwrap_or_else(|| PathBuf::from("/tmp"))
-            .join("piki-multi");
-        let config_base = {
-            let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-            PathBuf::from(home).join(".config/piki-multi")
-        };
+        let base = crate::xdg::data_dir();
+        let config_base = crate::xdg::config_dir();
         Self { base, config_base }
     }
 

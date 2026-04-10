@@ -42,8 +42,8 @@ fn resolve_board_path(app: &DesktopApp, workspace_idx: usize) -> Result<PathBuf,
 fn expand_tilde(path: PathBuf) -> PathBuf {
     if let Some(path_str) = path.to_str() {
         if path_str.starts_with("~/") {
-            if let Some(home) = dirs::home_dir() {
-                return home.join(path_str.strip_prefix("~/").unwrap());
+            if let Ok(home) = std::env::var("HOME") {
+                return PathBuf::from(home).join(path_str.strip_prefix("~/").unwrap());
             }
         }
     }

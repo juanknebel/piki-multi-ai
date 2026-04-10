@@ -183,8 +183,8 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
 
             // Resolve ~ to home directory
             let dir_str = if dir_raw.starts_with('~') {
-                if let Some(home) = dirs::home_dir() {
-                    dir_raw.replacen('~', &home.to_string_lossy(), 1)
+                if let Ok(home) = std::env::var("HOME") {
+                    dir_raw.replacen('~', &home, 1)
                 } else {
                     dir_raw.clone()
                 }

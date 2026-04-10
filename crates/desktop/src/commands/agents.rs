@@ -356,6 +356,7 @@ pub async fn dispatch_agent(
         ws_info.dispatch_source_kanban = dispatch_source_kanban;
         ws_info.dispatch_agent_name = dispatch_agent_name;
 
+        let ws_source_repo = ws_info.source_repo.clone();
         app.workspaces.push(crate::state::DesktopWorkspace {
             info: ws_info,
             status: piki_core::WorkspaceStatus::Idle,
@@ -368,6 +369,15 @@ pub async fn dispatch_agent(
 
         let idx = app.workspaces.len() - 1;
         app.active_workspace = idx;
+
+        // Persist to storage
+        let all_infos: Vec<piki_core::WorkspaceInfo> =
+            app.workspaces.iter().map(|w| w.info.clone()).collect();
+        let _ = app
+            .storage
+            .workspaces
+            .save_workspaces(&ws_source_repo, &all_infos);
+
         idx
     } else {
         workspace_idx

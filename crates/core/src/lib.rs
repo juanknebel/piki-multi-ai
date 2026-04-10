@@ -9,5 +9,6 @@ pub mod shell_env;
 pub mod storage;
 pub mod sysinfo;
 pub mod workspace;
+pub mod xdg;
 
 pub use domain::*;

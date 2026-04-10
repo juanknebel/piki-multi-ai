@@ -113,11 +113,11 @@ pub async fn create_workspace(
         watcher,
     });
 
-    // Save to storage
+    // Save to storage — use the new workspace's source_repo as the key
     let all_infos: Vec<WorkspaceInfo> = app.workspaces.iter().map(|ws| ws.info.clone()).collect();
-    if let Some(ws) = app.workspaces.first() {
-        let _ = storage.workspaces.save_workspaces(&ws.info.source_repo, &all_infos);
-    }
+    let _ = storage
+        .workspaces
+        .save_workspaces(&result_info.source_repo, &all_infos);
 
     Ok(result_info)
 }
@@ -140,14 +140,12 @@ pub async fn delete_workspace(
             app.active_workspace = app.workspaces.len() - 1;
         }
 
-        // Save to storage
+        // Save to storage — use the removed workspace's source_repo as the key
         let all_infos: Vec<WorkspaceInfo> = app.workspaces.iter().map(|w| w.info.clone()).collect();
-        if let Some(first) = app.workspaces.first() {
-            let _ = app
-                .storage
-                .workspaces
-                .save_workspaces(&first.info.source_repo, &all_infos);
-        }
+        let _ = app
+            .storage
+            .workspaces
+            .save_workspaces(&ws.info.source_repo, &all_infos);
 
         let manager =
             piki_core::workspace::manager::WorkspaceManager::with_paths(app.paths.clone());
@@ -188,14 +186,13 @@ pub async fn update_workspace(
         ws.info.kanban_path = if k.is_empty() { None } else { Some(k) };
     }
 
-    // Persist
+    // Persist — use the updated workspace's source_repo as the key
+    let source_repo = app.workspaces[index].info.source_repo.clone();
     let all_infos: Vec<WorkspaceInfo> = app.workspaces.iter().map(|w| w.info.clone()).collect();
-    if let Some(first) = app.workspaces.first() {
-        let _ = app
-            .storage
-            .workspaces
-            .save_workspaces(&first.info.source_repo, &all_infos);
-    }
+    let _ = app
+        .storage
+        .workspaces
+        .save_workspaces(&source_repo, &all_infos);
 
     Ok(())
 }

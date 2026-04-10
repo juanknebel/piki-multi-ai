@@ -61,8 +61,7 @@ struct ProjectConfig {
 
 /// Base directory for workspace config files.
 fn config_dir() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    PathBuf::from(home).join(".local/share/piki-multi/workspaces")
+    crate::xdg::data_dir().join("workspaces")
 }
 
 /// Config file path for a given git root.
