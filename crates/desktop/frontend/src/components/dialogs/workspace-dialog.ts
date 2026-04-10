@@ -154,7 +154,7 @@ export function showWorkspaceDialog(opts: DialogOptions) {
 }
 
 async function submitCreate(backdrop: HTMLElement, type: string) {
-  const name =
+  let name =
     backdrop.querySelector<HTMLInputElement>("#ws-name")?.value.trim() ?? "";
   const dir =
     backdrop.querySelector<HTMLInputElement>("#ws-dir")?.value.trim() ?? "";
@@ -175,6 +175,11 @@ async function submitCreate(backdrop: HTMLElement, type: string) {
   if (type === "Worktree" && !name) {
     toast("Name is required for worktree workspaces", "error");
     return;
+  }
+
+  // For Simple/Project types the name field is hidden — derive from directory
+  if (!name && dir) {
+    name = dir.replace(/\/+$/, "").split("/").pop() || dir;
   }
 
   const btn = backdrop.querySelector<HTMLButtonElement>("#ws-submit")!;
