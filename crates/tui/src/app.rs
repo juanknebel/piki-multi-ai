@@ -134,6 +134,8 @@ pub enum AppMode {
     EditAgentRole,
     /// Import agents from repo files overlay
     ImportAgents,
+    /// Choose kanban column for dispatched card on workspace deletion
+    DispatchCardMove,
 }
 
 /// Which pane is currently selected / focused

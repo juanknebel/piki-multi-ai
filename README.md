@@ -338,7 +338,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `n` | Create new workspace |
 | `r` | Clone workspace (new workspace pre-filled with directory, prompt, and kanban path) |
 | `e` | Edit workspace options (Kanban path, Prompt) |
-| `d` | Delete selected workspace |
+| `d` | Delete selected workspace (for dispatched workspaces, prompts which kanban column to move the card to) |
 | `Tab` / `Shift+Tab` | Context-aware: cycle workspaces (sidebar), subtabs (main), files (status) |
 | `1`-`9` | Jump to workspace N (numbers shown in sidebar) |
 | `Space` | Fuzzy workspace switcher (search by name/group/branch) |

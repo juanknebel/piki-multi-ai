@@ -22,7 +22,8 @@ pub(crate) enum Action {
         Option<String>,
     ),
     EditWorkspace(usize, Option<String>, String, Option<String>),
-    DeleteWorkspace(usize),
+    /// Second field: optional target kanban column for dispatched cards
+    DeleteWorkspace(usize, Option<String>),
     /// Remove workspace from app list but keep worktree on disk
     RemoveFromList(usize),
     /// Open diff for the file at the given index in the active workspace
@@ -205,15 +206,17 @@ pub(crate) async fn execute_action(
                 app.set_toast("Workspace updated", ToastLevel::Success);
             }
         }
-        Action::DeleteWorkspace(idx) => {
+        Action::DeleteWorkspace(idx, target_column) => {
             if idx < app.workspaces.len() {
-                // If this was a dispatched agent, move card back to todo
+                // If this was a dispatched agent, move card to the chosen column
                 let dispatch_info = app.workspaces[idx]
                     .info
                     .dispatch_card_id
                     .clone()
                     .zip(app.workspaces[idx].info.dispatch_source_kanban.clone());
-                if let Some((card_id, kanban_path)) = dispatch_info {
+                if let Some((card_id, kanban_path)) = dispatch_info
+                    && let Some(target_col) = target_column
+                {
                     let source_ws_idx = app.workspaces.iter().position(|w| {
                         w.kanban_path.as_deref() == Some(kanban_path.as_str())
                             && w.kanban_provider.is_some()
@@ -238,7 +241,7 @@ pub(crate) async fn execute_action(
                                     }
                                 }
                             }
-                            let _ = kp.move_card(&card_id, "todo");
+                            let _ = kp.move_card(&card_id, &target_col);
                             if let Ok(board) = kp.load_board()
                                 && let Some(ref mut ka) = src_ws.kanban_app
                             {

@@ -1130,6 +1130,49 @@ pub(super) fn render_confirm_delete_dialog(frame: &mut Frame, area: Rect, app: &
     frame.render_widget(text, popup);
 }
 
+pub(crate) fn render_dispatch_card_move_dialog(frame: &mut Frame, area: Rect, app: &App) {
+    let Some(DialogState::DispatchCardMove {
+        ref columns,
+        selected,
+        ..
+    }) = app.active_dialog
+    else {
+        return;
+    };
+
+    let theme = &app.theme.dialog;
+    // Height: 1 blank + 1 title line + 1 blank + columns + 1 blank + 2 border = columns.len() + 5
+    let height = (columns.len() as u16) + 5;
+    let popup = clear_popup(frame, area, 50, height);
+
+    let mut lines = vec![
+        Line::from(""),
+        Line::from(Span::styled(
+            "  Move card to which column?",
+            Style::default()
+                .fg(theme.delete_text)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+    ];
+
+    for (i, (_id, title)) in columns.iter().enumerate() {
+        let marker = if i == selected { "▸ " } else { "  " };
+        let style = if i == selected {
+            Style::default()
+                .fg(theme.delete_name)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(theme.delete_text)
+        };
+        lines.push(Line::from(Span::styled(format!("  {marker}{title}"), style)));
+    }
+
+    let text =
+        Paragraph::new(lines).block(popup_block("Card Destination", theme.delete_border));
+    frame.render_widget(text, popup);
+}
+
 pub(crate) fn render_confirm_close_tab_dialog(frame: &mut Frame, area: Rect, app: &App) {
     let theme = &app.theme.dialog;
     let tab_name = match app.active_dialog {

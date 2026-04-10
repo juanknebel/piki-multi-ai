@@ -320,9 +320,25 @@ pub(super) fn handle_confirm_delete_input(app: &mut App, key: KeyEvent) -> Optio
 
     match handle_yn_input(key) {
         ConfirmResult::Yes => {
+            // If this is a dispatched workspace, show column picker instead of deleting immediately
+            let is_dispatched = app
+                .workspaces
+                .get(target)
+                .is_some_and(|ws| ws.info.dispatch_card_id.is_some());
+            if is_dispatched
+                && let Some(columns) = get_dispatch_board_columns(app, target)
+            {
+                app.active_dialog = Some(DialogState::DispatchCardMove {
+                    target,
+                    columns,
+                    selected: 0,
+                });
+                app.mode = AppMode::DispatchCardMove;
+                return None;
+            }
             dismiss_dialog(app);
             app.active_pane = ActivePane::WorkspaceList;
-            Some(Action::DeleteWorkspace(target))
+            Some(Action::DeleteWorkspace(target, None))
         }
         ConfirmResult::No => {
             dismiss_dialog(app);
@@ -335,6 +351,63 @@ pub(super) fn handle_confirm_delete_input(app: &mut App, key: KeyEvent) -> Optio
             None
         }
         ConfirmResult::NotHandled => None,
+    }
+}
+
+/// Load the board columns from the source kanban for a dispatched workspace.
+fn get_dispatch_board_columns(app: &mut App, ws_idx: usize) -> Option<Vec<(String, String)>> {
+    let ws = app.workspaces.get(ws_idx)?;
+    let kanban_path = ws.info.dispatch_source_kanban.as_ref()?;
+    let source_ws_idx = app.workspaces.iter().position(|w| {
+        w.kanban_path.as_deref() == Some(kanban_path.as_str()) && w.kanban_provider.is_some()
+    })?;
+    let src_ws = &mut app.workspaces[source_ws_idx];
+    let kp = src_ws.kanban_provider.as_mut()?;
+    let board = kp.load_board().ok()?;
+    let columns: Vec<(String, String)> = board
+        .columns
+        .iter()
+        .map(|c| (c.id.clone(), c.title.clone()))
+        .collect();
+    if columns.is_empty() { None } else { Some(columns) }
+}
+
+pub(super) fn handle_dispatch_card_move_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::DispatchCardMove {
+        target,
+        ref columns,
+        ref mut selected,
+    }) = app.active_dialog
+    else {
+        return None;
+    };
+    let num_columns = columns.len();
+
+    match key.code {
+        KeyCode::Up | KeyCode::Char('k') => {
+            if *selected > 0 {
+                *selected -= 1;
+            }
+            None
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            if *selected + 1 < num_columns {
+                *selected += 1;
+            }
+            None
+        }
+        KeyCode::Enter => {
+            let col_id = columns[*selected].0.clone();
+            dismiss_dialog(app);
+            app.active_pane = ActivePane::WorkspaceList;
+            Some(Action::DeleteWorkspace(target, Some(col_id)))
+        }
+        KeyCode::Esc => {
+            dismiss_dialog(app);
+            app.active_pane = ActivePane::WorkspaceList;
+            None
+        }
+        _ => None,
     }
 }
 

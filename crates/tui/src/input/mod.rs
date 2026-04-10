@@ -22,7 +22,8 @@ use self::dialog::{
     handle_about_input, handle_commit_message_input, handle_confirm_close_tab_input,
     handle_confirm_delete_input, handle_confirm_merge_input, handle_confirm_quit_input,
     handle_conflict_resolution_input, handle_dashboard_input, handle_dispatch_agent_input,
-    handle_edit_agent_input, handle_edit_agent_role_input, handle_edit_workspace_input,
+    handle_dispatch_card_move_input, handle_edit_agent_input, handle_edit_agent_role_input,
+    handle_edit_workspace_input,
     handle_git_log_input,
     handle_git_stash_input, handle_help_input, handle_import_agents_input, handle_logs_input,
     handle_manage_agents_input, handle_new_tab_input, handle_new_workspace_input,
@@ -154,6 +155,7 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         AppMode::EditAgent => return handle_edit_agent_input(app, key),
         AppMode::EditAgentRole => return handle_edit_agent_role_input(app, key),
         AppMode::ImportAgents => return handle_import_agents_input(app, key),
+        AppMode::DispatchCardMove => return handle_dispatch_card_move_input(app, key),
         // Normal and Diff modes fall through to navigation/interaction handling
         AppMode::Normal | AppMode::Diff => {}
     }

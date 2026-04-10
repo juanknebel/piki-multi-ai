@@ -163,6 +163,15 @@ pub enum DialogState {
         selected: Vec<bool>,
         cursor: usize,
     },
+    /// Choose which kanban column to move a dispatched card to when deleting a workspace
+    DispatchCardMove {
+        /// Workspace index being deleted
+        target: usize,
+        /// Available columns: (id, title)
+        columns: Vec<(String, String)>,
+        /// Currently selected column index
+        selected: usize,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
