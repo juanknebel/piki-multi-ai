@@ -16,6 +16,7 @@ import { showAgentManager } from "./dialogs/agent-dialog";
 import { showDispatchDialog } from "./dialogs/dispatch-dialog";
 import { showHelpDialog } from "./dialogs/help-dialog";
 import { showDashboard } from "./dialogs/dashboard-dialog";
+import { showSysinfoDialog } from "./dialogs/sysinfo-dialog";
 import { showThemeDialog } from "./dialogs/theme-dialog";
 import { showLogsDialog } from "./dialogs/logs-dialog";
 import { showAboutDialog } from "./dialogs/about-dialog";
@@ -134,6 +135,7 @@ const MENUS: MenuDefinition[] = [
       { label: "Command Palette", shortcut: "Ctrl+P", action: () => openCommandPalette() },
       { label: "Workspace Switcher", shortcut: "Ctrl+Space", action: () => openWorkspaceSwitcher() },
       { label: "Dashboard", shortcut: "Alt+D", action: () => showDashboard() },
+      { label: "System Info", shortcut: "Alt+I", action: () => showSysinfoDialog() },
       { label: "Application Logs", shortcut: "Alt+Shift+L", action: () => showLogsDialog() },
       SEP,
       { label: "Next Tab", shortcut: "Ctrl+Tab", action: () => cycleTab(1) },

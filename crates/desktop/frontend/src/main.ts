@@ -26,6 +26,7 @@ import { showAgentManager } from "./components/dialogs/agent-dialog";
 import { showDispatchDialog } from "./components/dialogs/dispatch-dialog";
 import { showHelpDialog } from "./components/dialogs/help-dialog";
 import { showDashboard } from "./components/dialogs/dashboard-dialog";
+import { showSysinfoDialog } from "./components/dialogs/sysinfo-dialog";
 import { showThemeDialog } from "./components/dialogs/theme-dialog";
 import { showLogsDialog } from "./components/dialogs/logs-dialog";
 import { initMenuBar, toggleSidebar } from "./components/menu-bar";
@@ -112,6 +113,7 @@ async function init() {
   bindAction("theme", () => showThemeDialog());
   bindAction("settings", () => showSettingsDialog());
   bindAction("logs", () => showLogsDialog());
+  bindAction("system-info", () => showSysinfoDialog());
   bindAction("api-jq-filter", () => document.dispatchEvent(new CustomEvent("toggle-jq")));
   bindAction("undo", () => handleUndo());
   bindAction("toggle-sidebar", () => toggleSidebar());

@@ -37,6 +37,7 @@ const SHORTCUTS: { category: string; items: [string, string][] }[] = [
       ["Alt+T", "Theme Settings"],
       ["Alt+S", "Settings"],
       ["Alt+Shift+L", "Application Logs"],
+      ["Alt+I", "System Info"],
     ],
   },
   {

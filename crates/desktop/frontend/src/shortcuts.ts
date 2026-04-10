@@ -51,6 +51,7 @@ const shortcuts: ShortcutDef[] = [
   { id: "theme", label: "Theme Settings", defaultKey: "Alt+T", key: "Alt+T", action: () => {} },
   { id: "settings", label: "Settings", defaultKey: "Alt+S", key: "Alt+S", action: () => {} },
   { id: "logs", label: "Application Logs", defaultKey: "Alt+Shift+L", key: "Alt+Shift+L", action: () => {} },
+  { id: "system-info", label: "System Info", defaultKey: "Alt+I", key: "Alt+I", action: () => {} },
   { id: "undo", label: "Undo Stage/Unstage", defaultKey: "Ctrl+Z", key: "Ctrl+Z", action: () => {}, outsideOnly: true },
   { id: "api-jq-filter", label: "API jq Filter", defaultKey: "Ctrl+J", key: "Ctrl+J", action: () => {}, outsideOnly: true },
   { id: "toggle-sidebar", label: "Toggle Sidebar", defaultKey: "Ctrl+B", key: "Ctrl+B", action: () => {} },

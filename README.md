@@ -109,6 +109,7 @@ A modern desktop GUI is available via `piki-desktop`, built with [Tauri v2](http
 - **Agent management** — Create/edit/delete agent profiles, import from repo, dispatch agents to workspaces
 - **Command palette** — `Ctrl+P` for fuzzy search across all commands, workspaces, and theme presets
 - **Dashboard** — `Alt+D` for bird's-eye view of all workspaces with status, tabs, and file counts
+- **System info** — `Alt+I` for live system monitoring: CPU, RAM, disk usage gauges with color thresholds (green/amber/red), battery status, load average, uptime, hostname; auto-refreshes every 3 seconds
 - **Application log viewer** — `Alt+Shift+L` for in-memory ring buffer (500 entries), filterable by level
 - **About dialog** — Click "Piki Desktop" in status bar or via command palette
 - **Workspace switcher** — `Ctrl+Space` for quick fuzzy workspace switching; results grouped by group name with headers, sorted alphabetically (ungrouped first), items ordered within each group
@@ -136,6 +137,7 @@ A modern desktop GUI is available via `piki-desktop`, built with [Tauri v2](http
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | Switch tabs |
 | `Ctrl+Z` | Undo stage/unstage |
 | `Alt+D` | Dashboard |
+| `Alt+I` | System Info |
 | `Alt+K` | Kanban Board |
 | `Alt+L` | Git log |
 | `Alt+S` | Settings |
@@ -728,7 +730,7 @@ crates/
       git.rs             # Git status parsing, ahead/behind detection
       github.rs          # GitHub PR operations via gh CLI (PR info, files, unified diff parser, inline comments, submit review)
       paths.rs           # DataPaths struct — centralized directory resolution (database, worktrees, logs, config)
-      sysinfo.rs         # System info poller (CPU, RAM, battery via systemstat + chrono)
+      sysinfo.rs         # System info poller (CPU, RAM, battery via systemstat + chrono) + structured SysInfoSnapshot for dashboard (disk, uptime, load avg, hostname)
       preflight.rs       # Pre-flight dependency checks (git version, optional tools)
       pty/
         session.rs       # PTY management (portable-pty + vt100 parser)

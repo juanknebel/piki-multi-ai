@@ -177,6 +177,7 @@ fn main() {
             commands::review::submit_pr_review,
             commands::markdown::read_markdown_file,
             commands::system::get_sysinfo,
+            commands::system::get_sysinfo_detailed,
             commands::theme::get_theme,
             commands::theme::set_theme,
             commands::logs::get_logs,

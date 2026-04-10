@@ -1,0 +1,220 @@
+/* ── System Info dialog ───────────────────────── */
+
+.sysinfo-body {
+  padding: 10px;
+  overflow-y: auto;
+  max-height: 68vh;
+}
+
+.sysinfo-loading,
+.sysinfo-error {
+  padding: 16px 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.sysinfo-error {
+  color: var(--git-deleted);
+}
+
+.sysinfo-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 2px 8px;
+  flex-wrap: wrap;
+}
+
+.sysinfo-hostname {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-bright);
+}
+
+.sysinfo-os {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.sysinfo-uptime {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.sysinfo-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+/* ── Gauge cards ─────────────────────────────── */
+
+.sysinfo-gauges {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.sysinfo-gauge {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+}
+
+.sysinfo-gauge-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.sysinfo-gauge-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sysinfo-gauge-pct {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-bright);
+  font-variant-numeric: tabular-nums;
+}
+
+.sysinfo-gauge-track {
+  height: 6px;
+  background: var(--bg-primary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.sysinfo-gauge-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.6s var(--ease-out), background 0.3s;
+  min-width: 2px;
+}
+
+.sysinfo-gauge-fill.gauge-ok {
+  background: var(--git-added);
+  box-shadow: 0 0 6px rgba(63, 185, 80, 0.3);
+}
+
+.sysinfo-gauge-fill.gauge-warn {
+  background: var(--accent-warm);
+  box-shadow: 0 0 6px rgba(230, 167, 48, 0.3);
+}
+
+.sysinfo-gauge-fill.gauge-critical {
+  background: var(--git-deleted);
+  box-shadow: 0 0 6px rgba(248, 81, 73, 0.3);
+}
+
+.sysinfo-gauge-detail {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Per-core CPU breakdown ──────────────────── */
+
+.sysinfo-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  padding: 10px 2px 4px;
+}
+
+.sysinfo-cores {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 4px;
+  padding: 0 2px;
+}
+
+.sysinfo-core {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 20px;
+}
+
+.sysinfo-core-id {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  min-width: 18px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.sysinfo-core-track {
+  flex: 1;
+  height: 4px;
+  background: var(--bg-primary);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.sysinfo-core-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.6s var(--ease-out), background 0.3s;
+  min-width: 1px;
+}
+
+.sysinfo-core-fill.gauge-ok {
+  background: var(--git-added);
+}
+
+.sysinfo-core-fill.gauge-warn {
+  background: var(--accent-warm);
+}
+
+.sysinfo-core-fill.gauge-critical {
+  background: var(--git-deleted);
+}
+
+.sysinfo-core-pct {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  min-width: 28px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Load average ────────────────────────────── */
+
+.sysinfo-load {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 2px 2px;
+}
+
+.sysinfo-load-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.sysinfo-load-val {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  background: var(--bg-tertiary);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+}

@@ -14,6 +14,7 @@ import { showAgentManager } from "./dialogs/agent-dialog";
 import { showDispatchDialog } from "./dialogs/dispatch-dialog";
 import { showHelpDialog } from "./dialogs/help-dialog";
 import { showDashboard } from "./dialogs/dashboard-dialog";
+import { showSysinfoDialog } from "./dialogs/sysinfo-dialog";
 import { openTerminalSearch } from "./terminal-panel";
 import { showThemeDialog } from "./dialogs/theme-dialog";
 import { showLogsDialog } from "./dialogs/logs-dialog";
@@ -424,6 +425,13 @@ function buildCommands(): Command[] {
     category: "View",
     keybinding: "Alt+D",
     action: () => showDashboard(),
+  });
+  cmds.push({
+    id: "view-sysinfo",
+    label: "System Info",
+    category: "View",
+    keybinding: "Alt+I",
+    action: () => showSysinfoDialog(),
   });
   cmds.push({
     id: "view-help",

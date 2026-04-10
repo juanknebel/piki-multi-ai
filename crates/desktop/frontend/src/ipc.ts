@@ -503,6 +503,36 @@ export function getSysinfo(): Promise<string> {
   return invoke("get_sysinfo");
 }
 
+export interface CpuCoreInfo {
+  core: number;
+  percent: number;
+}
+
+export interface DiskInfo {
+  mount: string;
+  total_gb: number;
+  used_gb: number;
+}
+
+export interface SysInfoSnapshot {
+  cpu_percent: number;
+  cpu_cores: CpuCoreInfo[];
+  mem_used_gb: number;
+  mem_total_gb: number;
+  battery_percent: number | null;
+  battery_charging: boolean;
+  disk: DiskInfo | null;
+  uptime_secs: number | null;
+  load_avg: [number, number, number] | null;
+  hostname: string;
+  os_name: string;
+  timestamp: string;
+}
+
+export function getSysinfoDetailed(): Promise<SysInfoSnapshot> {
+  return invoke("get_sysinfo_detailed");
+}
+
 // Kanban commands
 export function kanbanLoadBoard(workspaceIdx: number, sort?: string, projectFilter?: string[]): Promise<KanbanBoard> {
   return invoke("kanban_load_board", { workspaceIdx, sort: sort ?? null, projectFilter: projectFilter ?? null });
