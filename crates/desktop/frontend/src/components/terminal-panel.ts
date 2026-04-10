@@ -8,7 +8,7 @@ import { toast } from "./toast";
 import { themeEngine } from "../theme";
 import { hideKanbanPanels, showKanbanPanel } from "./kanban-panel";
 import { hideApiPanels, showApiPanel } from "./api-panel";
-import { modCtrl, formatShortcut } from "../shortcuts";
+import { isMac, modCtrl, formatShortcut } from "../shortcuts";
 import { hideMarkdownEditorPanels, showMarkdownEditorPanel } from "./markdown-editor-panel";
 
 export interface TerminalInstance {
@@ -108,9 +108,14 @@ export function createTerminal(tabId: string): TerminalInstance {
     }
   });
 
-  // Ctrl+Shift+C = copy, Ctrl+Shift+V = paste (Cmd+Shift on macOS)
+  // Copy/paste: Cmd+C / Cmd+V on macOS, Ctrl+Shift+C / Ctrl+Shift+V on Linux.
+  // macOS terminals (iTerm2, Terminal.app) use Cmd+C without Shift.
+  // Ctrl+C (without Cmd) always sends SIGINT to the terminal.
   terminal.attachCustomKeyEventHandler((e) => {
-    if (modCtrl(e) && e.shiftKey && e.type === "keydown" && e.key === "C") {
+    const key = e.key.toLowerCase();
+    const isCopyPaste = isMac ? modCtrl(e) : modCtrl(e) && e.shiftKey;
+
+    if (isCopyPaste && e.type === "keydown" && key === "c") {
       const sel = terminal.getSelection();
       if (sel) {
         ipc.clipboardCopy(sel).catch((err) => {
@@ -120,7 +125,7 @@ export function createTerminal(tabId: string): TerminalInstance {
       }
       return false;
     }
-    if (modCtrl(e) && e.shiftKey && e.type === "keydown" && e.key === "V") {
+    if (isCopyPaste && e.type === "keydown" && key === "v") {
       ipc.clipboardPaste().then((text) => {
         if (text) terminal.paste(text);
       }).catch((err) => {

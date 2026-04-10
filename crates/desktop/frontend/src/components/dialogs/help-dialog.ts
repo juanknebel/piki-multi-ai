@@ -43,8 +43,8 @@ const SHORTCUTS: { category: string; items: [string, string][] }[] = [
   {
     category: "Terminal",
     items: [
-      ["Ctrl+Shift+C", "Copy Selection"],
-      ["Ctrl+Shift+V", "Paste from Clipboard"],
+      ["Ctrl+C / ⌘C", "Copy Selection"],
+      ["Ctrl+V / ⌘V", "Paste from Clipboard"],
       ["Select text", "Auto-copy to Clipboard"],
     ],
   },
