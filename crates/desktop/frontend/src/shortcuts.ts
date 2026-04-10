@@ -50,6 +50,7 @@ const shortcuts: ShortcutDef[] = [
   { id: "kanban", label: "Kanban Board", defaultKey: "Alt+K", key: "Alt+K", action: () => {} },
   { id: "theme", label: "Theme Settings", defaultKey: "Alt+T", key: "Alt+T", action: () => {} },
   { id: "settings", label: "Settings", defaultKey: "Alt+S", key: "Alt+S", action: () => {} },
+  { id: "manage-providers", label: "Manage Providers", defaultKey: "Alt+P", key: "Alt+P", action: () => {} },
   { id: "logs", label: "Application Logs", defaultKey: "Alt+Shift+L", key: "Alt+Shift+L", action: () => {} },
   { id: "system-info", label: "System Info", defaultKey: "Alt+I", key: "Alt+I", action: () => {} },
   { id: "undo", label: "Undo Stage/Unstage", defaultKey: "Ctrl+Z", key: "Ctrl+Z", action: () => {}, outsideOnly: true },

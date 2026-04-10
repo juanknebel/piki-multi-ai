@@ -32,8 +32,8 @@ pub async fn spawn_tab(
         return Ok(tab_id);
     }
 
-    // Non-PTY providers (CodeReview, Api) are handled in Phase 2+
-    let command = if ai_provider == AIProvider::Shell {
+    // Resolve command: Shell uses $SHELL, Custom uses ProviderManager, built-in uses command()
+    let (command, default_args) = if ai_provider == AIProvider::Shell {
         // Check user-configured shell from settings
         let app = state.lock();
         let custom_shell = app
@@ -50,9 +50,16 @@ pub async fn spawn_tab(
                     .map(String::from)
             });
         drop(app);
-        custom_shell.unwrap_or_else(|| ai_provider.resolved_command())
+        (custom_shell.unwrap_or_else(|| ai_provider.resolved_command()), Vec::new())
+    } else if let AIProvider::Custom(ref name) = ai_provider {
+        let app = state.lock();
+        if let Some(config) = app.provider_manager.get(name) {
+            (config.command.clone(), config.default_args.clone())
+        } else {
+            return Err(format!("Unknown custom provider: {name}"));
+        }
     } else {
-        ai_provider.resolved_command()
+        (ai_provider.resolved_command(), Vec::new())
     };
     if command.is_empty() {
         return Err(format!("{provider} does not use a terminal session"));
@@ -69,8 +76,7 @@ pub async fn spawn_tab(
         app.workspaces[workspace_idx].info.path.clone()
     };
 
-    // Spawn PTY session
-    let args: Vec<String> = Vec::new();
+    // Spawn PTY session (use default_args from provider config)
     let pty = RawPtySession::spawn(
         app_handle,
         tab_id.clone(),
@@ -78,7 +84,7 @@ pub async fn spawn_tab(
         24,
         80,
         &command,
-        &args,
+        &default_args,
     )
     .map_err(|e| format!("Failed to spawn PTY: {e}"))?;
 
@@ -259,6 +265,6 @@ fn parse_provider(s: &str) -> Result<AIProvider, String> {
         "Kanban" => Ok(AIProvider::Kanban),
         "CodeReview" => Ok(AIProvider::CodeReview),
         "Api" => Ok(AIProvider::Api),
-        _ => Err(format!("Unknown provider: {s}")),
+        other => Ok(AIProvider::Custom(other.to_string())),
     }
 }

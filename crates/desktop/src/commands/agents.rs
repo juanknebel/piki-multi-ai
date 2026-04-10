@@ -150,13 +150,24 @@ pub async fn sync_agent_to_repo(
         .find(|a| a.id == Some(agent_id))
         .ok_or("Agent not found")?;
 
-    let dir = match agent.provider.as_str() {
-        "Claude Code" => ".claude/agents",
-        "Gemini" => ".gemini/agents",
-        "OpenCode" => ".opencode/agents",
-        "Kilo" => ".kilo/agents",
-        "Codex" => ".codex/agents",
-        _ => return Err(format!("Unknown provider: {}", agent.provider)),
+    let ai_provider = piki_core::AIProvider::from_label(&agent.provider);
+    let dir = match ai_provider.builtin_agent_dir() {
+        Some(d) => d.to_string(),
+        None => {
+            // Check custom provider for agent_dir
+            if let piki_core::AIProvider::Custom(ref name) = ai_provider {
+                let app = state.lock();
+                if let Some(config) = app.provider_manager.get(name)
+                    && let Some(ref agent_dir) = config.agent_dir
+                {
+                    agent_dir.clone()
+                } else {
+                    return Err(format!("Provider '{}' has no agent_dir configured", agent.provider));
+                }
+            } else {
+                return Err(format!("Provider '{}' does not support agent sync", agent.provider));
+            }
+        }
     };
 
     let agent_dir = source_repo.join(dir);
@@ -197,17 +208,29 @@ pub async fn scan_repo_agents(
         None => Vec::new(),
     };
 
-    let provider_dirs: &[(&str, &str)] = &[
-        (".claude/agents", "Claude Code"),
-        (".gemini/agents", "Gemini"),
-        (".opencode/agents", "OpenCode"),
-        (".kilo/agents", "Kilo"),
-        (".codex/agents", "Codex"),
+    let mut provider_dirs: Vec<(String, String)> = vec![
+        (".claude/agents".into(), "Claude Code".into()),
+        (".gemini/agents".into(), "Gemini".into()),
+        (".opencode/agents".into(), "OpenCode".into()),
+        (".kilo/agents".into(), "Kilo".into()),
+        (".codex/agents".into(), "Codex".into()),
     ];
+    // Add custom providers with agent_dir
+    {
+        let app = state.lock();
+        for config in app.provider_manager.all() {
+            if let Some(ref agent_dir) = config.agent_dir {
+                let already = provider_dirs.iter().any(|(d, _)| d == agent_dir);
+                if !already {
+                    provider_dirs.push((agent_dir.clone(), config.name.clone()));
+                }
+            }
+        }
+    }
 
     let mut discovered = Vec::new();
 
-    for &(dir, provider_label) in provider_dirs {
+    for (dir, provider_label) in &provider_dirs {
         let agent_dir = source_repo.join(dir);
         if !agent_dir.is_dir() {
             continue;
@@ -304,16 +327,19 @@ pub async fn dispatch_agent(
     dispatch_agent_name: Option<String>,
     dispatch_card_title: Option<String>,
 ) -> Result<String, String> {
-    let ai_provider = match provider.as_str() {
-        "Claude Code" | "Claude" => piki_core::AIProvider::Claude,
-        "Gemini" => piki_core::AIProvider::Gemini,
-        "OpenCode" => piki_core::AIProvider::OpenCode,
-        "Kilo" => piki_core::AIProvider::Kilo,
-        "Codex" => piki_core::AIProvider::Codex,
-        _ => piki_core::AIProvider::Claude,
-    };
+    let ai_provider = piki_core::AIProvider::from_label(&provider);
 
-    let command = ai_provider.resolved_command();
+    // Resolve command: built-in providers use resolved_command(), custom use ProviderManager
+    let (command, default_args) = if let piki_core::AIProvider::Custom(ref name) = ai_provider {
+        let app = state.lock();
+        if let Some(config) = app.provider_manager.get(name) {
+            (config.command.clone(), config.default_args.clone())
+        } else {
+            return Err(format!("Unknown custom provider: {name}"));
+        }
+    } else {
+        (ai_provider.resolved_command(), Vec::new())
+    };
     if command.is_empty() {
         return Err(format!("{provider} does not use a terminal session"));
     }
@@ -392,7 +418,20 @@ pub async fn dispatch_agent(
         app.workspaces[target_ws_idx].info.path.clone()
     };
 
-    let args = ai_provider.prompt_args(&prompt);
+    // Build args: default_args + prompt args
+    let prompt_args = if let piki_core::AIProvider::Custom(ref name) = ai_provider {
+        let app = state.lock();
+        if let Some(config) = app.provider_manager.get(name) {
+            piki_core::providers::ProviderManager::prompt_args(config, &prompt)
+        } else {
+            Vec::new()
+        }
+    } else {
+        ai_provider.prompt_args(&prompt)
+    };
+    let mut args = default_args;
+    args.extend(prompt_args);
+
     let mut tab = crate::state::DesktopTab::new(ai_provider);
     let tab_id = tab.id.clone();
 

@@ -240,7 +240,7 @@ mod tests {
         let mut terminal = test_terminal(80, 24);
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
         app.active_dialog = Some(DialogState::NewTab {
-            menu: NewTabMenu::Agents,
+            menu: NewTabMenu::Agents { selected: 0 },
         });
         terminal
             .draw(|frame| {

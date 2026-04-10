@@ -26,10 +26,12 @@ pub struct GitLogEntry {
 }
 
 /// Which level of the new-tab menu is currently shown.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NewTabMenu {
     Main,
-    Agents,
+    /// AI Agents submenu — selected index into the combined list of
+    /// built-in dispatchable providers + custom providers from providers.toml.
+    Agents { selected: usize },
     Tools,
 }
 
@@ -120,7 +122,7 @@ pub enum DialogState {
         card_description: String,
         card_priority: flow_core::Priority,
         card_project: String,
-        /// When agents exist: index into agents vec. When empty: index into AIProvider::dispatchable()
+        /// When agents exist: index into agents vec. When empty: index into dispatchable provider list
         agent_idx: usize,
         /// Snapshot of configured agents (name, provider, role). Empty = fallback to raw providers
         agents: Vec<(String, String, String)>,
@@ -172,6 +174,70 @@ pub enum DialogState {
         /// Currently selected column index
         selected: usize,
     },
+    /// Manage custom providers overlay
+    ManageProviders {
+        selected: usize,
+    },
+    /// Edit/create a custom provider
+    EditProvider {
+        /// Original name when editing (for rename support), None when creating
+        original_name: Option<String>,
+        name: String,
+        name_cursor: usize,
+        description: String,
+        desc_cursor: usize,
+        command: String,
+        command_cursor: usize,
+        default_args: String,
+        args_cursor: usize,
+        prompt_format_idx: usize,
+        prompt_flag: String,
+        flag_cursor: usize,
+        dispatchable: bool,
+        agent_dir: String,
+        agent_dir_cursor: usize,
+        active_field: EditProviderField,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EditProviderField {
+    Name,
+    Description,
+    Command,
+    DefaultArgs,
+    PromptFormat,
+    PromptFlag,
+    Dispatchable,
+    AgentDir,
+}
+
+impl EditProviderField {
+    pub fn next(self) -> Self {
+        match self {
+            Self::Name => Self::Description,
+            Self::Description => Self::Command,
+            Self::Command => Self::DefaultArgs,
+            Self::DefaultArgs => Self::PromptFormat,
+            Self::PromptFormat => Self::PromptFlag,
+            Self::PromptFlag => Self::Dispatchable,
+            Self::Dispatchable => Self::AgentDir,
+            Self::AgentDir => Self::Name,
+        }
+    }
+
+    pub fn prev(self) -> Self {
+        match self {
+            Self::Name => Self::AgentDir,
+            Self::Description => Self::Name,
+            Self::Command => Self::Description,
+            Self::DefaultArgs => Self::Command,
+            Self::PromptFormat => Self::DefaultArgs,
+            Self::PromptFlag => Self::PromptFormat,
+            Self::Dispatchable => Self::PromptFlag,
+            Self::AgentDir => Self::Dispatchable,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

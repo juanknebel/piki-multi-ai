@@ -9,6 +9,7 @@ import { showCodeReview } from "./code-review";
 import { openFuzzySearch } from "./fuzzy-search";
 import { openProjectSearch } from "./project-search";
 import { showSettingsDialog } from "./dialogs/settings-dialog";
+import { showProvidersDialog } from "./dialogs/providers-dialog";
 import { openWorkspaceSwitcher } from "./workspace-switcher";
 import { showAgentManager } from "./dialogs/agent-dialog";
 import { showDispatchDialog } from "./dialogs/dispatch-dialog";
@@ -19,7 +20,7 @@ import { openTerminalSearch } from "./terminal-panel";
 import { showThemeDialog } from "./dialogs/theme-dialog";
 import { showLogsDialog } from "./dialogs/logs-dialog";
 import { showAboutDialog } from "./dialogs/about-dialog";
-import { PROVIDER_LABELS, type AIProvider } from "../types";
+import { getProviderLabel, getProviderKey, type AIProvider } from "../types";
 import { themeEngine } from "../theme";
 import { getShortcutKey, formatShortcut } from "../shortcuts";
 
@@ -228,7 +229,7 @@ function buildCommands(): Command[] {
   for (const provider of tabProviders) {
     cmds.push({
       id: `tab-${provider}`,
-      label: `New ${PROVIDER_LABELS[provider]} Tab`,
+      label: `New ${getProviderLabel(provider)} Tab`,
       category: "Tab",
       action: () => spawnTabSafe(provider),
     });
@@ -331,6 +332,13 @@ function buildCommands(): Command[] {
     category: "Agents",
     keybinding: "Ctrl+Shift+A",
     action: () => showAgentManager(),
+  });
+  cmds.push({
+    id: "manage-providers",
+    label: "Manage Providers",
+    category: "Settings",
+    keybinding: "Alt+P",
+    action: () => showProvidersDialog(),
   });
   if (ws) {
     cmds.push({
@@ -502,10 +510,10 @@ function buildCommands(): Command[] {
 async function spawnTabSafe(provider: AIProvider) {
   const wsIdx = appState.activeWorkspace;
   try {
-    const tabId = await ipc.spawnTab(wsIdx, provider);
+    const tabId = await ipc.spawnTab(wsIdx, getProviderKey(provider));
     appState.addTab(wsIdx, { id: tabId, provider, alive: true });
   } catch (err) {
-    toast(`Failed to open ${PROVIDER_LABELS[provider]}: ${err}`, "error");
+    toast(`Failed to open ${getProviderLabel(provider)}: ${err}`, "error");
   }
 }
 

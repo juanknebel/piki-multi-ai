@@ -105,6 +105,10 @@ fn main() {
                 }
             });
 
+            // Load user-configurable providers from providers.toml
+            let provider_manager =
+                piki_core::providers::ProviderManager::load_or_init(&paths.providers_path());
+
             // Create app state
             let desktop_app = DesktopApp {
                 workspaces,
@@ -113,6 +117,7 @@ fn main() {
                 paths,
                 manager,
                 sysinfo,
+                provider_manager,
             };
 
             // Start sysinfo event emitter
@@ -171,6 +176,9 @@ fn main() {
             commands::agents::scan_repo_agents,
             commands::agents::import_agents,
             commands::agents::dispatch_agent,
+            commands::providers::list_providers,
+            commands::providers::save_provider,
+            commands::providers::delete_provider,
             commands::review::get_pr_info,
             commands::review::get_pr_file_diff,
             commands::review::get_pr_file_side_by_side_diff,

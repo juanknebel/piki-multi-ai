@@ -1,6 +1,6 @@
 import { appState } from "../../state";
 import * as ipc from "../../ipc";
-import { PROVIDER_LABELS } from "../../types";
+import { getProviderLabel } from "../../types";
 
 export function showDashboard() {
   document.querySelector(".dialog-backdrop")?.remove();
@@ -55,7 +55,7 @@ export function showDashboard() {
       const statusClass = statusLabel.toLowerCase();
       const fileCount = ws.changedFiles.length;
       const tabCount = ws.tabs.length;
-      const tabLabels = ws.tabs.map(t => PROVIDER_LABELS[t.provider] || t.provider).join(", ");
+      const tabLabels = ws.tabs.map(t => getProviderLabel(t.provider)).join(", ");
       const ab = ws.aheadBehind;
       const syncInfo = ab ? `↑${ab[0]} ↓${ab[1]}` : "";
       const inlineGroup = section.group && !showHeader ? `<div class="dash-card-group">${esc(section.group)}</div>` : "";

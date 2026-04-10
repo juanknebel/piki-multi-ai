@@ -136,6 +136,10 @@ pub enum AppMode {
     ImportAgents,
     /// Choose kanban column for dispatched card on workspace deletion
     DispatchCardMove,
+    /// Manage custom providers overlay
+    ManageProviders,
+    /// Edit/create a custom provider
+    EditProvider,
 }
 
 /// Which pane is currently selected / focused
@@ -758,6 +762,10 @@ pub struct App {
     pub storage: std::sync::Arc<piki_core::storage::AppStorage>,
     /// Cached agent profiles for the current project
     pub agent_profiles: Vec<piki_core::storage::AgentProfile>,
+    /// User-configurable providers loaded from providers.toml
+    pub provider_manager: piki_core::providers::ProviderManager,
+    /// Data paths for saving config files
+    pub paths: piki_core::paths::DataPaths,
 }
 
 impl App {
@@ -832,6 +840,10 @@ impl App {
             gh_available: None,
             storage,
             agent_profiles: Vec::new(),
+            provider_manager: piki_core::providers::ProviderManager::load_or_init(
+                &paths.providers_path(),
+            ),
+            paths: paths.clone(),
         }
     }
 
@@ -846,6 +858,16 @@ impl App {
     /// Insert a diff into the cache (LRU eviction handles size limit automatically).
     pub fn insert_diff_cache(&mut self, key: String, value: Arc<Text<'static>>) {
         self.diff_cache.put(key, value);
+    }
+
+    /// Build the list of AI providers from providers.toml.
+    /// Maps known names (e.g. "Claude Code") to built-in variants, others to Custom.
+    pub fn new_tab_agent_list(&self) -> Vec<AIProvider> {
+        self.provider_manager
+            .all()
+            .iter()
+            .map(|config| AIProvider::from_label(&config.name))
+            .collect()
     }
 
     /// Set a toast notification, replacing any existing one.

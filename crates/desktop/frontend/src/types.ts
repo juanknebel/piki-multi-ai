@@ -8,7 +8,8 @@ export type AIProvider =
   | "Kanban"
   | "CodeReview"
   | "Api"
-  | "Markdown";
+  | "Markdown"
+  | { Custom: string };
 
 export type WorkspaceStatus = "Idle" | "Busy" | "Done" | { Error: string };
 
@@ -82,7 +83,8 @@ export interface ToastEvent {
   level: "info" | "success" | "error";
 }
 
-export const PROVIDER_LABELS: Record<AIProvider, string> = {
+// Built-in provider labels (Custom providers use their name)
+const BUILTIN_PROVIDER_LABELS: Record<string, string> = {
   Claude: "Claude Code",
   Gemini: "Gemini",
   OpenCode: "OpenCode",
@@ -95,7 +97,7 @@ export const PROVIDER_LABELS: Record<AIProvider, string> = {
   Markdown: "Markdown",
 };
 
-export const PROVIDER_ICONS: Record<AIProvider, string> = {
+const BUILTIN_PROVIDER_ICONS: Record<string, string> = {
   Claude: "C",
   Gemini: "G",
   OpenCode: "O",
@@ -107,6 +109,43 @@ export const PROVIDER_ICONS: Record<AIProvider, string> = {
   Api: "A",
   Markdown: "M",
 };
+
+/** Get the display label for any provider (built-in or custom). */
+export function getProviderLabel(provider: AIProvider): string {
+  if (typeof provider === "string") {
+    return BUILTIN_PROVIDER_LABELS[provider] ?? provider;
+  }
+  return provider.Custom;
+}
+
+/** Get the icon character for any provider (built-in or custom). */
+export function getProviderIcon(provider: AIProvider): string {
+  if (typeof provider === "string") {
+    return BUILTIN_PROVIDER_ICONS[provider] ?? provider.charAt(0).toUpperCase();
+  }
+  return provider.Custom.charAt(0).toUpperCase();
+}
+
+/** Get the provider key for serialization (built-in name or Custom wrapper). */
+export function getProviderKey(provider: AIProvider): string {
+  if (typeof provider === "string") {
+    return provider;
+  }
+  return provider.Custom;
+}
+
+/** User-configurable provider from providers.toml */
+export interface ProviderInfo {
+  name: string;
+  description: string;
+  command: string;
+  dispatchable: boolean;
+  agent_dir: string | null;
+}
+
+// Keep old exports for backwards compatibility with existing code that uses them
+export const PROVIDER_LABELS = BUILTIN_PROVIDER_LABELS;
+export const PROVIDER_ICONS = BUILTIN_PROVIDER_ICONS;
 
 // Kanban types
 export interface KanbanCard {

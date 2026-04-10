@@ -101,7 +101,7 @@ A modern desktop GUI is available via `piki-desktop`, built with [Tauri v2](http
 - **File viewer** — Modal for viewing file contents; opened from fuzzy file search (`Ctrl+F`) or project search; monospace rendering with scroll, copy-to-clipboard, Edit button (`Ctrl+E`) to open in `$EDITOR` in a new terminal tab, and Quick Edit (`Ctrl+I`) for inline editing with Save/Cancel directly in the overlay
 - **Activity bar + sidebar** — Explorer (workspace list with groups), Source Control (git staging/committing), Agents panel (manage/dispatch AI agents), Kanban Board (quick access via activity bar icon)
 - **API Explorer** — Non-PTY tab for writing HTTP requests in Hurl syntax (`METHOD URL\nHeaders\n\nBody`), executing via `piki-api-client`, viewing JSON-highlighted responses with color-coded status badges; request history overlay (`Ctrl+H`) with full-text search, load from history, and delete entries; multiple sequential requests supported; history persisted in SQLite with FTS5
-- **Multi-provider tabs** — Open Claude, Gemini, OpenCode, Kilo, Codex, Shell, Kanban Board, or API Explorer tabs per workspace
+- **Multi-provider tabs** — Open Claude, Gemini, OpenCode, Kilo, Codex, Shell, Kanban Board, or API Explorer tabs per workspace; add custom providers via `~/.config/piki-multi/providers.toml` with configurable binary, arguments, and prompt format; manage providers in-app with `Alt+P` (TUI) or Tools → Providers menu (Desktop)
 - **Kanban Board** — Integrated kanban board powered by [flow-core](https://github.com/juanknebel/flow); columns (TODO, IN PROGRESS, IN REVIEW, DONE) with drag-and-drop card movement, inline card actions (edit, move, delete), priority badges (Bug/High/Medium/Low/Wishlist), edit modal with title/description/priority/assignee fields; configurable column colors (right-click header to pick from 16-color palette, persisted in localStorage); auto-creates board if none exists; open via `Alt+K`, activity bar, command palette, or View menu
 - **Git integration** — Stage/unstage files, commit, push, merge/rebase, stash, conflict resolution, git log viewer; auto-refresh via hybrid file watcher (500ms) + periodic git status poll (2s) + background `git fetch` (60s) for live ahead/behind tracking
 - **Side-by-side diff viewer** — With char-level highlights, 3-way merge view, and conflict resolution buttons
@@ -347,6 +347,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `w` | Close current tab (with confirmation dialog) |
 | `b` | Open kanban board for current workspace |
 | `A` | Manage agent profiles (create/edit/delete agents for this project) |
+| `Alt+P` | Manage providers (add/edit/delete custom AI providers) |
 | `D` | Workspace dashboard overlay (bird's-eye view of all workspaces and tabs) |
 | `Ctrl+p` | Command palette (fuzzy-searchable list of all commands) |
 | `Ctrl+l` | Log viewer overlay (last 500 log entries, color-coded, filterable by level) |
@@ -646,6 +647,49 @@ mkdir -p ~/.config/piki-multi/themes
 echo 'theme = "nord"' > ~/.config/piki-multi/config.toml
 ```
 
+### Custom Providers (`providers.toml`)
+
+Add custom AI providers via `~/.config/piki-multi/providers.toml`. On first startup the file is created with a default Claude entry. Each provider specifies the binary, arguments, and how prompts are passed:
+
+```toml
+[[providers]]
+name = "Claude Code"
+description = "Anthropic's Claude Code CLI agent"
+command = "claude"
+default_args = []
+dispatchable = true
+agent_dir = ".claude/agents"
+
+[providers.prompt_format]
+type = "Positional"
+
+[[providers]]
+name = "My Custom AI"
+description = "A custom AI tool"
+command = "/usr/local/bin/my-ai"
+default_args = ["--json"]
+dispatchable = true
+agent_dir = ".my-ai/agents"
+
+[providers.prompt_format]
+type = "Flag"
+value = "--task"
+```
+
+**Fields:**
+
+| Field | Description |
+|-------|------------|
+| `name` | Display name (shown in tab bar and menus) |
+| `description` | Human-readable description |
+| `command` | Binary path or name (resolved via `$PATH`) |
+| `default_args` | Arguments always passed before prompt args |
+| `prompt_format` | How prompts are passed: `Positional` (bare arg), `Flag` (via flag), or `None` |
+| `dispatchable` | Whether this provider appears in agent dispatch menus |
+| `agent_dir` | Repo subdirectory for agent config files (e.g. `.claude/agents`) |
+
+Custom providers appear alongside built-in providers in the New Tab menu (`t` → AI Agents) and in agent dispatch dialogs. They work in both the TUI and Desktop interfaces.
+
 ### Keybindings
 
 You can override any default keybinding in the `[keybindings]` section of `config.toml`. Keybindings are organized by mode:
@@ -726,10 +770,11 @@ Cargo.toml               # Workspace root
 crates/
   core/                  # piki-core — shared library (no TUI dependencies)
     src/
-      domain.rs          # AIProvider, FileStatus, ChangedFile, WorkspaceStatus, WorkspaceInfo, WorkspaceType
+      domain.rs          # AIProvider (with Custom variant), FileStatus, ChangedFile, WorkspaceStatus, WorkspaceInfo, WorkspaceType
       git.rs             # Git status parsing, ahead/behind detection
       github.rs          # GitHub PR operations via gh CLI (PR info, files, unified diff parser, inline comments, submit review)
       paths.rs           # DataPaths struct — centralized directory resolution (database, worktrees, logs, config)
+      providers.rs       # ProviderConfig, ProviderManager — user-configurable providers from providers.toml
       sysinfo.rs         # System info poller (CPU, RAM, battery via systemstat + chrono) + structured SysInfoSnapshot for dashboard (disk, uptime, load avg, hostname)
       preflight.rs       # Pre-flight dependency checks (git version, optional tools)
       pty/

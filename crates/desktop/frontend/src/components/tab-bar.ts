@@ -1,7 +1,7 @@
 import { appState } from "../state";
 import * as ipc from "../ipc";
 import { toast } from "./toast";
-import { PROVIDER_LABELS, PROVIDER_ICONS } from "../types";
+import { getProviderLabel, getProviderIcon, getProviderKey } from "../types";
 import type { AIProvider } from "../types";
 import { destroyMarkdownEditorPanel } from "./markdown-editor-panel";
 
@@ -18,8 +18,8 @@ export function renderTabBar(container: HTMLElement) {
       el.className = `tab${idx === activeTab ? " active" : ""}`;
       el.dataset.idx = String(idx);
 
-      const icon = PROVIDER_ICONS[tab.provider] || "?";
-      const label = PROVIDER_LABELS[tab.provider] || tab.provider;
+      const icon = getProviderIcon(tab.provider);
+      const label = getProviderLabel(tab.provider);
 
       el.innerHTML = `
         <span class="tab-icon">${icon}</span>
@@ -70,19 +70,35 @@ export function renderTabBar(container: HTMLElement) {
   render();
 }
 
-const NEW_TAB_PROVIDERS: AIProvider[] = [
-  "Claude",
-  "Gemini",
-  "OpenCode",
-  "Kilo",
-  "Codex",
-  "Shell",
-  "Api",
-];
+// Built-in tool tabs always shown in the "+" menu
+const TOOL_TABS: AIProvider[] = ["Shell", "Api"];
 
-function showNewTabMenu(anchor: HTMLElement) {
+async function showNewTabMenu(anchor: HTMLElement) {
   // Remove any existing menu
   document.querySelector(".tab-new-menu")?.remove();
+
+  // Load providers dynamically from providers.toml
+  let configuredProviders: AIProvider[] = [];
+  try {
+    const providerList = await ipc.listProviders();
+    configuredProviders = providerList.map((p): AIProvider => {
+      // Map known names to built-in variants
+      const builtinMap: Record<string, AIProvider> = {
+        "Claude Code": "Claude",
+        "Gemini": "Gemini",
+        "OpenCode": "OpenCode",
+        "Kilo": "Kilo",
+        "Codex": "Codex",
+      };
+      return builtinMap[p.name] ?? { Custom: p.name };
+    });
+  } catch {
+    // Fallback: just Claude
+    configuredProviders = ["Claude"];
+  }
+
+  // Combine: configured providers + tool tabs
+  const allProviders: AIProvider[] = [...configuredProviders, ...TOOL_TABS];
 
   const menu = document.createElement("div");
   menu.className = "tab-new-menu";
@@ -100,7 +116,7 @@ function showNewTabMenu(anchor: HTMLElement) {
     animation: dialog-enter 0.12s cubic-bezier(0.16,1,0.3,1);
   `;
 
-  for (const provider of NEW_TAB_PROVIDERS) {
+  for (const provider of allProviders) {
     const item = document.createElement("button");
     item.style.cssText = `
       display: flex;
@@ -115,8 +131,8 @@ function showNewTabMenu(anchor: HTMLElement) {
       border-radius: 0;
     `;
     item.innerHTML = `
-      <span style="width:16px;text-align:center;color:var(--text-muted);font-size:11px">${PROVIDER_ICONS[provider]}</span>
-      ${PROVIDER_LABELS[provider]}
+      <span style="width:16px;text-align:center;color:var(--text-muted);font-size:11px">${getProviderIcon(provider)}</span>
+      ${getProviderLabel(provider)}
     `;
     item.addEventListener("click", async () => {
       menu.remove();
@@ -125,7 +141,7 @@ function showNewTabMenu(anchor: HTMLElement) {
         return;
       }
       try {
-        const tabId = await ipc.spawnTab(appState.activeWorkspace, provider);
+        const tabId = await ipc.spawnTab(appState.activeWorkspace, getProviderKey(provider));
         appState.addTab(appState.activeWorkspace, {
           id: tabId,
           provider,
@@ -133,7 +149,7 @@ function showNewTabMenu(anchor: HTMLElement) {
         });
       } catch (err) {
         toast(
-          `Failed to open ${PROVIDER_LABELS[provider]}: ${err}`,
+          `Failed to open ${getProviderLabel(provider)}: ${err}`,
           "error",
         );
       }

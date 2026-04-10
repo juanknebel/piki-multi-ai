@@ -22,25 +22,46 @@ pub(crate) fn shutdown(app: &mut App) {
 }
 
 /// Spawn a new tab with the given provider in a workspace.
+/// For Custom providers, `provider_manager` is used to resolve the command and prompt args.
 pub(crate) async fn spawn_tab(
     ws: &mut app::Workspace,
-    provider: AIProvider,
+    provider: &AIProvider,
     rows: u16,
     cols: u16,
     prompt: Option<&str>,
+    provider_manager: Option<&piki_core::providers::ProviderManager>,
 ) -> usize {
-    let idx = ws.add_tab(provider, true);
-    if provider == AIProvider::Kanban || provider == AIProvider::CodeReview {
+    let idx = ws.add_tab(provider.clone(), true);
+    if *provider == AIProvider::Kanban || *provider == AIProvider::CodeReview {
         return idx;
     }
-    if provider == AIProvider::Api {
+    if *provider == AIProvider::Api {
         ws.tabs[idx].api_state = Some(app::ApiTabState::new());
         return idx;
     }
-    let cmd = provider.resolved_command();
-    let args = prompt
-        .map(|p| provider.prompt_args(p))
-        .unwrap_or_default();
+
+    // Resolve command and args: use ProviderManager for Custom providers, built-in methods otherwise
+    let (cmd, args) = if let AIProvider::Custom(name) = provider {
+        if let Some(mgr) = provider_manager
+            && let Some(config) = mgr.get(name)
+        {
+            let prompt_args = prompt
+                .map(|p| piki_core::providers::ProviderManager::prompt_args(config, p))
+                .unwrap_or_default();
+            let mut all_args = config.default_args.clone();
+            all_args.extend(prompt_args);
+            (config.command.clone(), all_args)
+        } else {
+            return idx;
+        }
+    } else {
+        let cmd = provider.resolved_command();
+        let prompt_args = prompt
+            .map(|p| provider.prompt_args(p))
+            .unwrap_or_default();
+        (cmd, prompt_args)
+    };
+
     if let Ok(session) = PtySession::spawn(&ws.path, rows, cols, &cmd, &args).await {
         ws.tabs[idx].pty_parser = Some(Arc::clone(session.parser()));
         ws.tabs[idx].pty_session = Some(session);

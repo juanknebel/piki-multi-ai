@@ -4,7 +4,8 @@ UI-agnostic library crate. **Must NOT depend on `crates/tui` or `crates/api-clie
 
 ## Modules
 
-- `domain.rs` — `AIProvider`, `WorkspaceInfo`, `WorkspaceType` and other shared types. Re-exported from `lib.rs`.
+- `domain.rs` — `AIProvider` (with `Custom(String)` variant), `WorkspaceInfo`, `WorkspaceType` and other shared types. Re-exported from `lib.rs`.
+- `providers.rs` — `ProviderConfig`, `PromptFormat`, `ProviderManager` — user-configurable providers loaded from `providers.toml`. Manages custom provider binaries, args, prompt format, and agent directories.
 - `storage/` — Trait-based storage layer. Traits in `mod.rs` (`WorkspaceStorage`, `ApiHistoryStorage`, `UiPrefsStorage`, `AgentProfileStorage`), SQLite backend in `sqlite.rs`, legacy JSON in `json.rs`.
 - `workspace/` — Git worktree CRUD (`WorkspaceManager`), `FileWatcher` (notify crate), config persistence.
 - `pty/` — `PtySession` wrapping `portable-pty` with `spawn_blocking` for non-blocking reads, `vt100::Parser` for terminal state.

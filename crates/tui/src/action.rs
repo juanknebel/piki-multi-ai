@@ -1145,7 +1145,7 @@ pub(crate) async fn execute_action(
                     ws.kanban_provider = Some(kanban_provider);
                 }
 
-                let idx = spawn_tab(ws, provider, app.pty_rows, app.pty_cols, None).await;
+                let idx = spawn_tab(ws, &provider, app.pty_rows, app.pty_cols, None, Some(&app.provider_manager)).await;
                 ws.active_tab = idx;
                 app.status_message = Some(format!("Opened {} tab", provider.label()));
             }
@@ -2035,7 +2035,7 @@ pub(crate) async fn execute_action(
                 // Spawn tab in current workspace
                 let ws = &mut app.workspaces[source_ws];
                 let idx =
-                    spawn_tab(ws, provider, app.pty_rows, app.pty_cols, Some(&task_prompt)).await;
+                    spawn_tab(ws, &provider, app.pty_rows, app.pty_cols, Some(&task_prompt), Some(&app.provider_manager)).await;
                 ws.active_tab = idx;
 
                 app.set_toast(
@@ -2089,7 +2089,7 @@ pub(crate) async fn execute_action(
 
                         // Materialize agent config files in worktree
                         if let (Some(name), Some(role)) = (&agent_name, &agent_role) {
-                            let _ = materialize_agent_config(&info.path, name, provider, role);
+                            let _ = materialize_agent_config(&info.path, name, &provider, role, Some(&app.provider_manager));
                         }
 
                         // Update kanban card: set assignee and move to IN PROGRESS
@@ -2133,10 +2133,11 @@ pub(crate) async fn execute_action(
                         let ws = &mut app.workspaces[new_idx];
                         let idx = spawn_tab(
                             ws,
-                            provider,
+                            &provider,
                             app.pty_rows,
                             app.pty_cols,
                             Some(&task_prompt),
+                            Some(&app.provider_manager),
                         )
                         .await;
                         ws.active_tab = idx;
@@ -2215,7 +2216,7 @@ pub(crate) async fn execute_action(
                 && let Some((name, provider_str, role)) = agent_data
             {
                 let provider = AIProvider::from_label(&provider_str);
-                match materialize_agent_config(&ws_path, &name, provider, &role) {
+                match materialize_agent_config(&ws_path, &name, &provider, &role, Some(&app.provider_manager)) {
                     Ok(()) => {
                         if let Some(ref storage) = app.storage.agent_profiles {
                             let _ = storage.mark_synced(id);
@@ -2239,17 +2240,26 @@ pub(crate) async fn execute_action(
                 let source_repo = ws.source_repo.clone();
 
                 // Scan provider agent directories for .md files
-                let provider_dirs: &[(&str, &str)] = &[
-                    (".claude/agents", "Claude Code"),
-                    (".gemini/agents", "Gemini"),
-                    (".opencode/agents", "OpenCode"),
-                    (".kilo/agents", "Kilo"),
-                    (".codex/agents", "Codex"),
+                // Start with built-in providers, then add custom providers
+                let mut provider_dirs: Vec<(String, String)> = vec![
+                    (".claude/agents".into(), "Claude Code".into()),
+                    (".gemini/agents".into(), "Gemini".into()),
+                    (".opencode/agents".into(), "OpenCode".into()),
+                    (".kilo/agents".into(), "Kilo".into()),
+                    (".codex/agents".into(), "Codex".into()),
                 ];
+                for config in app.provider_manager.all() {
+                    if let Some(ref agent_dir) = config.agent_dir {
+                        let already = provider_dirs.iter().any(|(d, _)| d == agent_dir);
+                        if !already {
+                            provider_dirs.push((agent_dir.clone(), config.name.clone()));
+                        }
+                    }
+                }
 
                 let mut discovered: Vec<(String, String, String, bool)> = Vec::new();
 
-                for &(dir, provider_label) in provider_dirs {
+                for (dir, provider_label) in &provider_dirs {
                     let agent_dir = source_repo.join(dir);
                     if let Ok(entries) = std::fs::read_dir(&agent_dir) {
                         for entry in entries.flatten() {
@@ -2261,11 +2271,11 @@ pub(crate) async fn execute_action(
                                 let role =
                                     std::fs::read_to_string(&path).unwrap_or_default();
                                 let exists = app.agent_profiles.iter().any(|a| {
-                                    a.name == name && a.provider == provider_label
+                                    a.name == name && a.provider == *provider_label
                                 });
                                 discovered.push((
                                     name,
-                                    provider_label.to_string(),
+                                    provider_label.clone(),
                                     role,
                                     exists,
                                 ));
@@ -2342,17 +2352,25 @@ pub(crate) async fn execute_action(
 fn materialize_agent_config(
     worktree_path: &std::path::Path,
     agent_name: &str,
-    provider: AIProvider,
+    provider: &AIProvider,
     role: &str,
+    provider_manager: Option<&piki_core::providers::ProviderManager>,
 ) -> anyhow::Result<()> {
     let filename = format!("{}.md", agent_name);
-    let dir = match provider {
-        AIProvider::Claude => ".claude/agents",
-        AIProvider::Gemini => ".gemini/agents",
-        AIProvider::OpenCode => ".opencode/agents",
-        AIProvider::Kilo => ".kilo/agents",
-        AIProvider::Codex => ".codex/agents",
-        _ => return Ok(()),
+    let dir = match provider.builtin_agent_dir() {
+        Some(d) => d.to_string(),
+        None => {
+            // Check custom provider for agent_dir
+            if let AIProvider::Custom(name) = provider
+                && let Some(mgr) = provider_manager
+                && let Some(config) = mgr.get(name)
+                && let Some(agent_dir) = &config.agent_dir
+            {
+                agent_dir.clone()
+            } else {
+                return Ok(());
+            }
+        }
     };
     let agent_dir = worktree_path.join(dir);
     std::fs::create_dir_all(&agent_dir)?;

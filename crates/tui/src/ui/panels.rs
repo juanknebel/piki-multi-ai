@@ -64,9 +64,9 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                 return;
             }
 
-            let provider = tab.provider;
+            let provider = &tab.provider;
 
-            if provider == crate::app::AIProvider::CodeReview {
+            if *provider == crate::app::AIProvider::CodeReview {
                 // Code review has its own full-screen layout; show a placeholder here
                 let block = Block::default()
                     .title(" Code Review ")
@@ -80,7 +80,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                 return;
             }
 
-            if provider == crate::app::AIProvider::Api {
+            if *provider == crate::app::AIProvider::Api {
                 if let Some(ref api) = tab.api_state {
                     let response_inner = super::api::render(
                         frame,
@@ -100,7 +100,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                 return;
             }
 
-            if provider == crate::app::AIProvider::Kanban {
+            if *provider == crate::app::AIProvider::Kanban {
                 if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
                     && let Some(kanban_app) = ws.kanban_app.as_mut()
                 {

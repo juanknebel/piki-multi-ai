@@ -11,6 +11,7 @@ import { openWorkspaceSwitcher } from "./workspace-switcher";
 import { openTerminalSearch } from "./terminal-panel";
 import { openProjectSearch } from "./project-search";
 import { showSettingsDialog } from "./dialogs/settings-dialog";
+import { showProvidersDialog } from "./dialogs/providers-dialog";
 import { openCommandPalette } from "./command-palette";
 import { showAgentManager } from "./dialogs/agent-dialog";
 import { showDispatchDialog } from "./dialogs/dispatch-dialog";
@@ -21,7 +22,7 @@ import { showThemeDialog } from "./dialogs/theme-dialog";
 import { showLogsDialog } from "./dialogs/logs-dialog";
 import { showAboutDialog } from "./dialogs/about-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { PROVIDER_LABELS, type AIProvider } from "../types";
+import { getProviderLabel, getProviderKey, type AIProvider } from "../types";
 import { getShortcutKey, formatShortcut } from "../shortcuts";
 
 // ── Types ───────────────────────────────────────
@@ -46,14 +47,39 @@ const noWs = () => !appState.activeWs;
 
 function spawnTab(provider: AIProvider) {
   const wsIdx = appState.activeWorkspace;
-  ipc.spawnTab(wsIdx, provider).then((tabId) => {
+  ipc.spawnTab(wsIdx, getProviderKey(provider)).then((tabId) => {
     appState.addTab(wsIdx, { id: tabId, provider, alive: true });
   }).catch((err) => {
-    toast(`Failed to open ${PROVIDER_LABELS[provider]}: ${err}`, "error");
+    toast(`Failed to open ${getProviderLabel(provider)}: ${err}`, "error");
   });
 }
 
 const SEP: MenuItem = { label: "", separator: true };
+
+// Cached provider list from providers.toml (loaded lazily, refreshed on providers dialog open)
+let _cachedProviderTabs: AIProvider[] | null = null;
+
+function getProviderTabs(): AIProvider[] {
+  if (!_cachedProviderTabs) {
+    // Trigger async load; return fallback for first render
+    ipc.listProviders().then((list) => {
+      _cachedProviderTabs = list.map((p): AIProvider => {
+        const builtinMap: Record<string, AIProvider> = {
+          "Claude Code": "Claude", "Gemini": "Gemini", "OpenCode": "OpenCode",
+          "Kilo": "Kilo", "Codex": "Codex",
+        };
+        return builtinMap[p.name] ?? { Custom: p.name };
+      });
+    }).catch(() => {});
+    return ["Claude"];
+  }
+  return _cachedProviderTabs;
+}
+
+/** Call after saving/deleting providers to refresh the cached list */
+export function invalidateProviderCache() {
+  _cachedProviderTabs = null;
+}
 
 // ── Menu definitions ────────────────────────────
 
@@ -65,8 +91,8 @@ const MENUS: MenuDefinition[] = [
       {
         label: "New Tab",
         disabled: noWs,
-        submenu: (["Shell", "Claude", "Gemini", "OpenCode", "Kilo", "Codex", "Api"] as AIProvider[]).map(
-          (p) => ({ label: PROVIDER_LABELS[p], action: () => spawnTab(p) }),
+        submenu: [...getProviderTabs(), "Shell" as AIProvider, "Api" as AIProvider].map(
+          (p) => ({ label: getProviderLabel(p), action: () => spawnTab(p) }),
         ),
       },
       SEP,
@@ -121,6 +147,7 @@ const MENUS: MenuDefinition[] = [
       { label: "API jq Filter", shortcut: getShortcutKey("api-jq-filter"), action: () => document.dispatchEvent(new CustomEvent("toggle-jq")) },
       SEP,
       { label: "Theme Settings", shortcut: "Alt+T", action: () => showThemeDialog() },
+      { label: "Providers", shortcut: "Alt+P", action: () => showProvidersDialog() },
       { label: "Settings", shortcut: "Alt+S", action: () => showSettingsDialog() },
     ],
   },

@@ -1,5 +1,5 @@
 import { appState } from "../state";
-import { PROVIDER_LABELS } from "../types";
+import { getProviderLabel } from "../types";
 import { showAboutDialog } from "./dialogs/about-dialog";
 
 export function renderStatusBar(container: HTMLElement) {
@@ -42,7 +42,7 @@ export function renderStatusBar(container: HTMLElement) {
     if (ws && ws.tabs.length > 0) {
       const tab = ws.tabs[ws.activeTab];
       if (tab) {
-        const label = PROVIDER_LABELS[tab.provider] || tab.provider;
+        const label = getProviderLabel(tab.provider);
         const alive = tab.alive ? "" : " (exited)";
         addItem(container, `${label}${alive}`);
       }

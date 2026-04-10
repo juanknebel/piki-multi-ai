@@ -20,6 +20,7 @@ pub struct DesktopApp {
     pub paths: DataPaths,
     pub manager: WorkspaceManager,
     pub sysinfo: Arc<PlMutex<String>>,
+    pub provider_manager: piki_core::providers::ProviderManager,
 }
 
 #[allow(dead_code)]
@@ -80,7 +81,7 @@ impl DesktopWorkspace {
                 .iter()
                 .map(|t| TabInfo {
                     id: t.id.clone(),
-                    provider: t.provider,
+                    provider: t.provider.clone(),
                     alive: t.alive,
                 })
                 .collect(),

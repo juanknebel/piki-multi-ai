@@ -26,7 +26,8 @@ use self::dialog::{
     handle_edit_workspace_input,
     handle_git_log_input,
     handle_git_stash_input, handle_help_input, handle_import_agents_input, handle_logs_input,
-    handle_manage_agents_input, handle_new_tab_input, handle_new_workspace_input,
+    handle_manage_agents_input, handle_manage_providers_input, handle_edit_provider_input,
+    handle_new_tab_input, handle_new_workspace_input,
     handle_workspace_info_input,
 };
 use self::editor_input::handle_inline_edit_input;
@@ -156,6 +157,8 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         AppMode::EditAgentRole => return handle_edit_agent_role_input(app, key),
         AppMode::ImportAgents => return handle_import_agents_input(app, key),
         AppMode::DispatchCardMove => return handle_dispatch_card_move_input(app, key),
+        AppMode::ManageProviders => return handle_manage_providers_input(app, key),
+        AppMode::EditProvider => return handle_edit_provider_input(app, key),
         // Normal and Diff modes fall through to navigation/interaction handling
         AppMode::Normal | AppMode::Diff => {}
     }
@@ -356,6 +359,10 @@ pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Act
         }
         app.active_dialog = Some(DialogState::ManageAgents { selected: 0 });
         app.mode = AppMode::ManageAgents;
+    } else if key.code == KeyCode::Char('p') && key.modifiers.contains(crossterm::event::KeyModifiers::ALT) {
+        // Open providers manager (Alt+P)
+        app.active_dialog = Some(DialogState::ManageProviders { selected: 0 });
+        app.mode = AppMode::ManageProviders;
     } else if app.config.matches_navigation(key, "conflicts") {
         if let Some(ws) = app.current_workspace()
             && ws.info.workspace_type != piki_core::WorkspaceType::Project

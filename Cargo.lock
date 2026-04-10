@@ -3665,6 +3665,7 @@ dependencies = [
  "systemstat",
  "tempfile",
  "tokio",
+ "toml 0.8.2",
  "tracing",
  "vt100",
 ]

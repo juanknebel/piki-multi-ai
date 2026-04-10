@@ -785,3 +785,23 @@
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
 }
+
+/* ── Generic dialog form controls ── */
+
+.dialog-body input[type="text"] {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input, var(--bg-tertiary));
+  color: var(--text-bright);
+  font-size: 12px;
+  font-family: "JetBrainsMono NF Mono", monospace;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.dialog-body input[type="text"]:focus {
+  border-color: var(--accent-primary);
+}

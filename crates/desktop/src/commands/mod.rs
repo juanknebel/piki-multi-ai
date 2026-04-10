@@ -7,6 +7,7 @@ pub mod gitlog;
 pub mod kanban;
 pub mod logs;
 pub mod markdown;
+pub mod providers;
 pub mod pty;
 pub mod review;
 pub mod search;

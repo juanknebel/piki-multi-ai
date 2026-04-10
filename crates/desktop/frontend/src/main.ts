@@ -11,6 +11,7 @@ import { initApiPanel } from "./components/api-panel";
 import { initMarkdownEditorPanel } from "./components/markdown-editor-panel";
 import { bindAction, handleGlobalKeydown, loadShortcuts } from "./shortcuts";
 import { showSettingsDialog } from "./components/dialogs/settings-dialog";
+import { showProvidersDialog } from "./components/dialogs/providers-dialog";
 import { renderStatusBar } from "./components/status-bar";
 import { initToasts } from "./components/toast";
 import { openCommandPalette } from "./components/command-palette";
@@ -112,6 +113,7 @@ async function init() {
   bindAction("kanban", () => appState.setActiveView("kanban"));
   bindAction("theme", () => showThemeDialog());
   bindAction("settings", () => showSettingsDialog());
+  bindAction("manage-providers", () => showProvidersDialog());
   bindAction("logs", () => showLogsDialog());
   bindAction("system-info", () => showSysinfoDialog());
   bindAction("api-jq-filter", () => document.dispatchEvent(new CustomEvent("toggle-jq")));

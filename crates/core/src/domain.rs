@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 /// An AI assistant that can be run in a PTY
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AIProvider {
     Claude,
     Gemini,
@@ -14,10 +14,14 @@ pub enum AIProvider {
     Kanban,
     CodeReview,
     Api,
+    /// A user-defined provider loaded from `providers.toml`.
+    /// The string is the provider name (matches `ProviderConfig::name`).
+    Custom(String),
 }
 
 impl AIProvider {
-    /// CLI command to execute
+    /// CLI command to execute.
+    /// For `Custom` providers, returns an empty string — use `ProviderManager` instead.
     pub fn command(&self) -> &str {
         match self {
             AIProvider::Claude => "claude",
@@ -29,10 +33,12 @@ impl AIProvider {
             AIProvider::Kanban => "",
             AIProvider::CodeReview => "gh",
             AIProvider::Api => "",
+            AIProvider::Custom(_) => "",
         }
     }
 
-    /// Resolved command: for Shell, use $SHELL env var with fallback
+    /// Resolved command: for Shell, use $SHELL env var with fallback.
+    /// For `Custom` providers, returns an empty string — use `ProviderManager` instead.
     pub fn resolved_command(&self) -> String {
         match self {
             AIProvider::Shell => std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string()),
@@ -40,7 +46,8 @@ impl AIProvider {
         }
     }
 
-    /// Label for the sub-tab
+    /// Label for the sub-tab.
+    /// For `Custom` providers, returns the provider name.
     pub fn label(&self) -> &str {
         match self {
             AIProvider::Claude => "Claude Code",
@@ -52,10 +59,11 @@ impl AIProvider {
             AIProvider::Kanban => "Kanban Board",
             AIProvider::CodeReview => "Code Review",
             AIProvider::Api => "API Explorer",
+            AIProvider::Custom(name) => name,
         }
     }
 
-    /// All available providers in display order
+    /// Built-in providers in display order (does not include Custom).
     pub fn all() -> &'static [AIProvider] {
         &[
             AIProvider::Claude,
@@ -70,7 +78,8 @@ impl AIProvider {
         ]
     }
 
-    /// Parse a provider from its label string (e.g. "Claude Code" → Claude)
+    /// Parse a provider from its label string (e.g. "Claude Code" -> Claude).
+    /// Unrecognized labels become `Custom(label)`.
     pub fn from_label(label: &str) -> AIProvider {
         match label {
             "Claude Code" => AIProvider::Claude,
@@ -78,11 +87,11 @@ impl AIProvider {
             "OpenCode" => AIProvider::OpenCode,
             "Kilo" => AIProvider::Kilo,
             "Codex" => AIProvider::Codex,
-            _ => AIProvider::Claude,
+            other => AIProvider::Custom(other.to_string()),
         }
     }
 
-    /// Providers that can be dispatched as agents
+    /// Built-in providers that can be dispatched as agents (does not include Custom).
     pub fn dispatchable() -> &'static [AIProvider] {
         &[
             AIProvider::Claude,
@@ -93,7 +102,8 @@ impl AIProvider {
         ]
     }
 
-    /// CLI arguments to pass a prompt/task to this provider
+    /// CLI arguments to pass a prompt/task to this provider.
+    /// For `Custom` providers, returns empty — use `ProviderManager::prompt_args()` instead.
     pub fn prompt_args(&self, prompt: &str) -> Vec<String> {
         if prompt.is_empty() {
             return Vec::new();
@@ -104,6 +114,24 @@ impl AIProvider {
             }
             AIProvider::Kilo => vec!["--prompt".to_string(), prompt.to_string()],
             _ => Vec::new(),
+        }
+    }
+
+    /// Whether this is a built-in provider (not Custom).
+    pub fn is_builtin(&self) -> bool {
+        !matches!(self, AIProvider::Custom(_))
+    }
+
+    /// The agent directory name for built-in providers.
+    /// For `Custom` providers, returns `None` — use `ProviderConfig::agent_dir` instead.
+    pub fn builtin_agent_dir(&self) -> Option<&str> {
+        match self {
+            AIProvider::Claude => Some(".claude/agents"),
+            AIProvider::Gemini => Some(".gemini/agents"),
+            AIProvider::OpenCode => Some(".opencode/agents"),
+            AIProvider::Kilo => Some(".kilo/agents"),
+            AIProvider::Codex => Some(".codex/agents"),
+            _ => None,
         }
     }
 }

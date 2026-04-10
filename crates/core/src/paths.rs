@@ -63,4 +63,9 @@ impl DataPaths {
     pub fn config_dir(&self) -> &Path {
         &self.config_base
     }
+
+    /// Providers configuration file: `<config_base>/providers.toml`.
+    pub fn providers_path(&self) -> PathBuf {
+        self.config_base.join("providers.toml")
+    }
 }

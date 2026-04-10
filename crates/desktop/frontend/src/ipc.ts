@@ -612,3 +612,28 @@ export function onToast(
 ): Promise<UnlistenFn> {
   return listen<ToastEvent>("toast", (e) => callback(e.payload));
 }
+
+// ── Providers ──
+
+export interface ProviderDetail {
+  name: string;
+  description: string;
+  command: string;
+  default_args: string[];
+  prompt_format: string;
+  prompt_flag: string;
+  dispatchable: boolean;
+  agent_dir: string | null;
+}
+
+export function listProviders(): Promise<ProviderDetail[]> {
+  return invoke("list_providers", {});
+}
+
+export function saveProvider(provider: ProviderDetail): Promise<void> {
+  return invoke("save_provider", { provider });
+}
+
+export function deleteProvider(name: string): Promise<boolean> {
+  return invoke("delete_provider", { name });
+}
