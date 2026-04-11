@@ -140,6 +140,8 @@ pub enum AppMode {
     ManageProviders,
     /// Edit/create a custom provider
     EditProvider,
+    /// Global AI chat overlay (persists state when hidden)
+    ChatPanel,
 }
 
 /// Which pane is currently selected / focused
@@ -766,6 +768,58 @@ pub struct App {
     pub provider_manager: piki_core::providers::ProviderManager,
     /// Data paths for saving config files
     pub paths: piki_core::paths::DataPaths,
+    /// Global AI chat panel state (persists when overlay is hidden)
+    pub chat_panel: ChatPanelState,
+    /// Channel for receiving streaming chat tokens from Ollama
+    pub chat_token_tx: tokio::sync::mpsc::UnboundedSender<piki_api_client::ChatStreamEvent>,
+    pub chat_token_rx: tokio::sync::mpsc::UnboundedReceiver<piki_api_client::ChatStreamEvent>,
+}
+
+/// Persistent state for the global AI chat overlay.
+/// Lives as a top-level `App` field (not in `DialogState`) so state survives toggling.
+/// Which sub-view the chat overlay is showing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ChatSubMode {
+    /// Normal chat (message list + input)
+    #[default]
+    Chat,
+    /// Model selector list
+    ModelSelect,
+    /// Settings editor (base URL + system prompt)
+    Settings,
+}
+
+/// Which field is active in the settings editor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ChatSettingsField {
+    #[default]
+    BaseUrl,
+    SystemPrompt,
+}
+
+#[derive(Default)]
+pub struct ChatPanelState {
+    pub messages: Vec<piki_core::chat::ChatMessage>,
+    pub config: piki_core::chat::ChatConfig,
+    pub input: String,
+    pub input_cursor: usize,
+    pub scroll: usize,
+    pub streaming: bool,
+    /// Accumulates tokens during a streaming response
+    pub current_response: String,
+    /// Cached model names from Ollama
+    pub models: Vec<String>,
+    pub model_selected: usize,
+    /// Current sub-mode within the chat overlay
+    pub sub_mode: ChatSubMode,
+    /// Settings editor: editable base URL
+    pub settings_url: String,
+    /// Settings editor: editable system prompt
+    pub settings_prompt: String,
+    /// Settings editor: which field is focused
+    pub settings_field: ChatSettingsField,
+    /// Settings editor: cursor position in the active field
+    pub settings_cursor: usize,
 }
 
 impl App {
@@ -776,6 +830,8 @@ impl App {
         let (refresh_tx, refresh_rx) = tokio::sync::mpsc::unbounded_channel::<RefreshResult>();
         let (status_tx, status_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
         let (undo_tx, undo_rx) = tokio::sync::mpsc::unbounded_channel::<UndoEntry>();
+        let (chat_token_tx, chat_token_rx) =
+            tokio::sync::mpsc::unbounded_channel::<piki_api_client::ChatStreamEvent>();
         let config = crate::config::Config::load_from(paths);
         let syntax = crate::syntax::SyntaxHighlighter::new(&config.syntax_theme);
         Self {
@@ -844,6 +900,9 @@ impl App {
                 &paths.providers_path(),
             ),
             paths: paths.clone(),
+            chat_panel: ChatPanelState::default(),
+            chat_token_tx,
+            chat_token_rx,
         }
     }
 

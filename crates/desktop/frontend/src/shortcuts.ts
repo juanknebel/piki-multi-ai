@@ -56,6 +56,7 @@ const shortcuts: ShortcutDef[] = [
   { id: "undo", label: "Undo Stage/Unstage", defaultKey: "Ctrl+Z", key: "Ctrl+Z", action: () => {}, outsideOnly: true },
   { id: "api-jq-filter", label: "API jq Filter", defaultKey: "Ctrl+J", key: "Ctrl+J", action: () => {}, outsideOnly: true },
   { id: "toggle-sidebar", label: "Toggle Sidebar", defaultKey: "Ctrl+B", key: "Ctrl+B", action: () => {} },
+  { id: "toggle-chat", label: "Toggle AI Chat", defaultKey: "Ctrl+Shift+L", key: "Ctrl+Shift+L", action: () => {} },
   { id: "help", label: "Keyboard Shortcuts", defaultKey: "?", key: "?", action: () => {}, outsideOnly: true },
 ];
 

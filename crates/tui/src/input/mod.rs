@@ -1,3 +1,4 @@
+mod chat_input;
 mod code_review_input;
 mod command_palette_input;
 pub(crate) mod confirm_common;
@@ -159,6 +160,7 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         AppMode::DispatchCardMove => return handle_dispatch_card_move_input(app, key),
         AppMode::ManageProviders => return handle_manage_providers_input(app, key),
         AppMode::EditProvider => return handle_edit_provider_input(app, key),
+        AppMode::ChatPanel => return chat_input::handle_chat_panel_input(app, key),
         // Normal and Diff modes fall through to navigation/interaction handling
         AppMode::Normal | AppMode::Diff => {}
     }
@@ -368,6 +370,11 @@ pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Act
             && ws.info.workspace_type != piki_core::WorkspaceType::Project
         {
             return Some(Action::DetectConflicts);
+        }
+    } else if app.config.matches_navigation(key, "chat_panel") {
+        app.mode = AppMode::ChatPanel;
+        if app.chat_panel.models.is_empty() {
+            return Some(Action::ChatLoadModels);
         }
     } else if app.config.matches_navigation(key, "undo") {
         return Some(Action::Undo);

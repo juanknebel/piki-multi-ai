@@ -282,5 +282,6 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         }
         AppMode::InlineEdit => {}   // handled by main content render
         AppMode::SubmitReview => {} // handled by full-screen code review bypass above
+        AppMode::ChatPanel => super::chat::render_chat_overlay(frame, area, app),
     }
 }

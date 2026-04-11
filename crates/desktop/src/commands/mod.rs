@@ -1,5 +1,6 @@
 pub mod agents;
 pub mod api;
+pub mod chat;
 pub mod clipboard;
 pub mod diff;
 pub mod git;

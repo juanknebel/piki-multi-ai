@@ -131,6 +131,8 @@ fn all_commands() -> Vec<PaletteCommand> {
             "Providers",
             "manage_providers"
         ),
+        // AI Chat
+        cmd!("chat_panel", "AI Chat", "View", "chat_panel"),
         // App
         cmd!("quit", "Quit", "App", "quit"),
     ]

@@ -114,6 +114,10 @@ pub(crate) enum Action {
     ScanRepoAgents,
     /// Import selected agents from repo files into storage: Vec<(name, provider_label, role)>
     ImportAgents(Vec<(String, String, String)>),
+    /// Send the current chat input to Ollama and stream the response
+    ChatSendMessage,
+    /// Load available Ollama models into chat_panel.models
+    ChatLoadModels,
 }
 
 pub(crate) async fn execute_action(
@@ -2343,6 +2347,91 @@ pub(crate) async fn execute_action(
             // Return to manage agents dialog
             app.active_dialog = Some(DialogState::ManageAgents { selected: 0 });
             app.mode = AppMode::ManageAgents;
+        }
+
+        Action::ChatSendMessage => {
+            let input = std::mem::take(&mut app.chat_panel.input);
+            let input = input.trim().to_string();
+            if input.is_empty() || app.chat_panel.streaming || app.chat_panel.config.model.is_empty()
+            {
+                if app.chat_panel.config.model.is_empty() {
+                    app.set_toast("No model selected. Press Tab to pick one.", ToastLevel::Error);
+                }
+                return Ok(());
+            }
+
+            // Append user message
+            app.chat_panel.messages.push(piki_core::chat::ChatMessage {
+                role: piki_core::chat::ChatRole::User,
+                content: input,
+            });
+            app.chat_panel.input_cursor = 0;
+            app.chat_panel.streaming = true;
+            app.chat_panel.current_response.clear();
+
+            // Build Ollama messages
+            let mut ollama_msgs: Vec<piki_api_client::OllamaMessage> = Vec::new();
+            if let Some(ref sys) = app.chat_panel.config.system_prompt
+                && !sys.is_empty()
+            {
+                ollama_msgs.push(piki_api_client::OllamaMessage {
+                    role: "system".to_string(),
+                    content: sys.clone(),
+                });
+            }
+            for msg in &app.chat_panel.messages {
+                ollama_msgs.push(piki_api_client::OllamaMessage {
+                    role: match msg.role {
+                        piki_core::chat::ChatRole::System => "system",
+                        piki_core::chat::ChatRole::User => "user",
+                        piki_core::chat::ChatRole::Assistant => "assistant",
+                    }
+                    .to_string(),
+                    content: msg.content.clone(),
+                });
+            }
+
+            tracing::info!(
+                model = %app.chat_panel.config.model,
+                base_url = %app.chat_panel.config.base_url,
+                msg_count = ollama_msgs.len(),
+                "TUI: sending chat message"
+            );
+
+            let client =
+                piki_api_client::OllamaClient::new(&app.chat_panel.config.base_url);
+            let model = app.chat_panel.config.model.clone();
+            let tx = app.chat_token_tx.clone();
+
+            tokio::spawn(async move {
+                if let Err(e) = client.chat_stream(&model, &ollama_msgs, tx).await {
+                    tracing::error!(error = %e, "Ollama chat_stream error");
+                }
+            });
+        }
+
+        Action::ChatLoadModels => {
+            tracing::debug!(base_url = %app.chat_panel.config.base_url, "TUI: loading Ollama models");
+            let base_url = app.chat_panel.config.base_url.clone();
+            let status_tx = app.status_tx.clone();
+            let chat_tx = app.chat_token_tx.clone();
+
+            tokio::spawn(async move {
+                let client = piki_api_client::OllamaClient::new(&base_url);
+                match client.list_models().await {
+                    Ok(models) => {
+                        let names: Vec<String> = models.into_iter().map(|m| m.name).collect();
+                        // Use a special "models loaded" event via the chat channel
+                        // We pack model names as a Done event with a special prefix
+                        let payload = format!("__MODELS__{}", names.join("\n"));
+                        let _ = chat_tx.send(piki_api_client::ChatStreamEvent::Done(payload));
+                    }
+                    Err(e) => {
+                        let msg = format!("{e}. Is Ollama running? (ollama serve)");
+                        let _ = status_tx.send(msg);
+                    }
+                }
+            });
         }
     }
     Ok(())

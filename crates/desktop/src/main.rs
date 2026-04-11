@@ -109,6 +109,14 @@ fn main() {
             let provider_manager =
                 piki_core::providers::ProviderManager::load_or_init(&paths.providers_path());
 
+            // Load saved chat config from preferences, or use default
+            let chat_config = storage
+                .ui_prefs
+                .as_ref()
+                .and_then(|p| p.get_preference("chat_config").ok().flatten())
+                .and_then(|json| serde_json::from_str::<piki_core::chat::ChatConfig>(&json).ok())
+                .unwrap_or_default();
+
             // Create app state
             let desktop_app = DesktopApp {
                 workspaces,
@@ -118,6 +126,9 @@ fn main() {
                 manager,
                 sysinfo,
                 provider_manager,
+                chat_messages: Vec::new(),
+                chat_config,
+                chat_streaming: false,
             };
 
             // Start sysinfo event emitter
@@ -204,6 +215,13 @@ fn main() {
             commands::api::jq_filter,
             commands::clipboard::clipboard_copy,
             commands::clipboard::clipboard_paste,
+            commands::chat::chat_send_message,
+            commands::chat::chat_get_config,
+            commands::chat::chat_set_config,
+            commands::chat::chat_get_messages,
+            commands::chat::chat_clear,
+            commands::chat::chat_list_models,
+            commands::chat::chat_stop,
         ])
         .run(tauri::generate_context!())
         .expect("error while running piki-desktop");

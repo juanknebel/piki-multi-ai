@@ -21,6 +21,12 @@ pub struct DesktopApp {
     pub manager: WorkspaceManager,
     pub sysinfo: Arc<PlMutex<String>>,
     pub provider_manager: piki_core::providers::ProviderManager,
+    /// Global AI chat messages (not tied to any workspace).
+    pub chat_messages: Vec<piki_core::chat::ChatMessage>,
+    /// Global AI chat configuration (provider, model, base URL).
+    pub chat_config: piki_core::chat::ChatConfig,
+    /// Whether a chat response is currently being streamed.
+    pub chat_streaming: bool,
 }
 
 #[allow(dead_code)]

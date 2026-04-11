@@ -216,6 +216,9 @@ fn default_navigation() -> HashMap<String, String> {
     m.insert("split_up_alt".to_string(), "=".to_string());
     m.insert("split_down".to_string(), "-".to_string());
 
+    // AI Chat
+    m.insert("chat_panel".to_string(), "ctrl-y".to_string());
+
     m
 }
 

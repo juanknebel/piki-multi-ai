@@ -11,6 +11,7 @@ Independent HTTP API client crate. **Must NOT depend on `piki-core` or `crates/t
 - `response.rs` — `ApiResponse` struct.
 - `config.rs` — `ClientConfig`, `Auth` (bearer, basic, custom header).
 - `protocol.rs` — `Protocol` enum (HTTP, prepared for future gRPC).
+- `ollama.rs` — `OllamaClient` for Ollama HTTP API: `list_models()` (GET /api/tags), `chat_stream()` (POST /api/chat with streaming via `mpsc` channels), `chat()` (non-streaming). Types: `OllamaMessage`, `OllamaModel`, `ChatStreamEvent`.
 
 ## Conventions
 

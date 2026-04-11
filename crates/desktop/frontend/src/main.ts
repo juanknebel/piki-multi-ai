@@ -31,6 +31,7 @@ import { showSysinfoDialog } from "./components/dialogs/sysinfo-dialog";
 import { showThemeDialog } from "./components/dialogs/theme-dialog";
 import { showLogsDialog } from "./components/dialogs/logs-dialog";
 import { initMenuBar, toggleSidebar } from "./components/menu-bar";
+import { initChatPanel, initChatResize, toggleChatPanel } from "./components/chat-panel";
 import { initTooltips } from "./components/tooltip";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { themeEngine } from "./theme";
@@ -51,6 +52,8 @@ async function init() {
   initMarkdownEditorPanel(mainContentEl);
   renderStatusBar(document.getElementById("status-bar")!);
   initToasts();
+  await initChatPanel(document.getElementById("chat-panel")!);
+  initChatResize();
 
   try {
     const workspaces = await ipc.listWorkspaces();
@@ -119,6 +122,7 @@ async function init() {
   bindAction("api-jq-filter", () => document.dispatchEvent(new CustomEvent("toggle-jq")));
   bindAction("undo", () => handleUndo());
   bindAction("toggle-sidebar", () => toggleSidebar());
+  bindAction("toggle-chat", () => toggleChatPanel());
   bindAction("help", () => showHelpDialog());
 
   // Load user shortcut overrides from storage

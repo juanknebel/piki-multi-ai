@@ -637,3 +637,59 @@ export function saveProvider(provider: ProviderDetail): Promise<void> {
 export function deleteProvider(name: string): Promise<boolean> {
   return invoke("delete_provider", { name });
 }
+
+// ── Chat commands ──────────────────────────────────
+
+export interface ChatConfig {
+  provider: string;
+  model: string;
+  base_url: string;
+  system_prompt: string | null;
+}
+
+export interface ChatMessage {
+  role: "System" | "User" | "Assistant";
+  content: string;
+}
+
+export interface ChatModelInfo {
+  name: string;
+  size: number;
+  modified_at: string;
+}
+
+export function chatSendMessage(message: string): Promise<void> {
+  return invoke("chat_send_message", { message });
+}
+
+export function chatGetConfig(): Promise<ChatConfig> {
+  return invoke("chat_get_config");
+}
+
+export function chatSetConfig(config: ChatConfig): Promise<void> {
+  return invoke("chat_set_config", { config });
+}
+
+export function chatGetMessages(): Promise<ChatMessage[]> {
+  return invoke("chat_get_messages");
+}
+
+export function chatClear(): Promise<void> {
+  return invoke("chat_clear");
+}
+
+export function chatListModels(baseUrl: string): Promise<ChatModelInfo[]> {
+  return invoke("chat_list_models", { baseUrl });
+}
+
+export function chatStop(): Promise<void> {
+  return invoke("chat_stop");
+}
+
+export function onChatToken(
+  callback: (event: { content: string; done: boolean }) => void,
+): Promise<UnlistenFn> {
+  return listen<{ content: string; done: boolean }>("chat-token", (e) =>
+    callback(e.payload),
+  );
+}

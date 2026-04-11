@@ -86,6 +86,19 @@ pub(crate) async fn run(
         }
     }
 
+    // Load chat config from storage (shared with desktop)
+    if let Some(ref ui_prefs) = storage.ui_prefs
+        && let Ok(Some(json)) = ui_prefs.get_preference("chat_config")
+        && let Ok(cfg) = serde_json::from_str::<piki_core::chat::ChatConfig>(&json)
+    {
+        tracing::info!(
+            model = %cfg.model,
+            base_url = %cfg.base_url,
+            "Loaded chat config from storage"
+        );
+        app.chat_panel.config = cfg;
+    }
+
     // Show preflight warnings in status bar
     if !preflight_warnings.is_empty() {
         app.status_message = Some(preflight_warnings.join(" | "));
@@ -230,6 +243,52 @@ pub(crate) async fn run(
                     };
                     app.set_toast(last_msg, level);
                     app.needs_redraw = true;
+                }
+            }
+
+            chat_event = app.chat_token_rx.recv() => {
+                if let Some(event) = chat_event {
+                    match event {
+                        piki_api_client::ChatStreamEvent::Token(token) => {
+                            app.chat_panel.current_response.push_str(&token);
+                            app.needs_redraw = true;
+                        }
+                        piki_api_client::ChatStreamEvent::Done(content) => {
+                            // Special case: model list response (packed as "__MODELS__" prefix)
+                            if let Some(model_data) = content.strip_prefix("__MODELS__") {
+                                app.chat_panel.models = model_data
+                                    .lines()
+                                    .filter(|l| !l.is_empty())
+                                    .map(|l| l.to_string())
+                                    .collect();
+                                // Auto-select first model if none is set
+                                if app.chat_panel.config.model.is_empty()
+                                    && let Some(first) = app.chat_panel.models.first()
+                                {
+                                    app.chat_panel.config.model = first.clone();
+                                }
+                            } else {
+                                // Normal chat response completion
+                                let response_text = if app.chat_panel.current_response.is_empty() {
+                                    content
+                                } else {
+                                    std::mem::take(&mut app.chat_panel.current_response)
+                                };
+                                app.chat_panel.messages.push(piki_core::chat::ChatMessage {
+                                    role: piki_core::chat::ChatRole::Assistant,
+                                    content: response_text,
+                                });
+                                app.chat_panel.streaming = false;
+                            }
+                            app.needs_redraw = true;
+                        }
+                        piki_api_client::ChatStreamEvent::Error(e) => {
+                            app.set_toast(format!("Chat error: {e}"), app::ToastLevel::Error);
+                            app.chat_panel.streaming = false;
+                            app.chat_panel.current_response.clear();
+                            app.needs_redraw = true;
+                        }
+                    }
                 }
             }
 

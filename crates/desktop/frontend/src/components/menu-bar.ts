@@ -21,6 +21,7 @@ import { showSysinfoDialog } from "./dialogs/sysinfo-dialog";
 import { showThemeDialog } from "./dialogs/theme-dialog";
 import { showLogsDialog } from "./dialogs/logs-dialog";
 import { showAboutDialog } from "./dialogs/about-dialog";
+import { toggleChatPanel } from "./chat-panel";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getProviderLabel, getProviderKey, type AIProvider } from "../types";
 import { getShortcutKey, formatShortcut } from "../shortcuts";
@@ -315,6 +316,19 @@ export function initMenuBar(container: HTMLElement) {
   </svg>`;
   panelToggle.addEventListener("click", () => toggleSidebar());
   container.appendChild(panelToggle);
+
+  // Chat panel toggle
+  const chatToggle = document.createElement("button");
+  chatToggle.className = "wc-btn panel-toggle-btn";
+  chatToggle.title = "Toggle AI Chat (Ctrl+Shift+L)";
+  chatToggle.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <path d="M2 3h12a1 1 0 011 1v7a1 1 0 01-1 1H5l-3 3V4a1 1 0 011-1z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+    <circle cx="5.5" cy="7.5" r="0.8" fill="currentColor"/>
+    <circle cx="8" cy="7.5" r="0.8" fill="currentColor"/>
+    <circle cx="10.5" cy="7.5" r="0.8" fill="currentColor"/>
+  </svg>`;
+  chatToggle.addEventListener("click", () => toggleChatPanel());
+  container.appendChild(chatToggle);
 
   // Window controls (right side)
   const controls = document.createElement("div");

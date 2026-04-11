@@ -1,11 +1,11 @@
 #app {
   display: grid;
-  grid-template-columns: var(--activity-bar-width) var(--sidebar-width) 4px 1fr;
+  grid-template-columns: var(--activity-bar-width) var(--sidebar-width) 4px 1fr 0px 0px;
   grid-template-rows: var(--menubar-height) 1fr var(--statusbar-height);
   grid-template-areas:
-    "menubar  menubar  menubar menubar"
-    "activity sidebar  resize  editor"
-    "status   status   status  status";
+    "menubar  menubar  menubar menubar menubar  menubar"
+    "activity sidebar  resize  editor  chatrsz  chat"
+    "status   status   status  status  status   status";
   height: 100vh;
   width: 100vw;
   background: var(--bg-primary);
@@ -13,12 +13,32 @@
 }
 
 #app.sidebar-hidden {
-  grid-template-columns: var(--activity-bar-width) 0px 0px 1fr;
+  grid-template-columns: var(--activity-bar-width) 0px 0px 1fr 0px 0px;
 }
 
 #app.sidebar-hidden #sidebar,
 #app.sidebar-hidden #sidebar-resize-v {
   display: none;
+}
+
+/* Chat panel visible */
+#app.chat-visible {
+  grid-template-columns: var(--activity-bar-width) var(--sidebar-width) 4px 1fr 4px var(--chat-panel-width);
+}
+
+#app.sidebar-hidden.chat-visible {
+  grid-template-columns: var(--activity-bar-width) 0px 0px 1fr 4px var(--chat-panel-width);
+}
+
+/* Hide chat elements when not visible (default state) */
+#chat-panel,
+#chat-resize-v {
+  display: none;
+}
+
+#app.chat-visible #chat-panel,
+#app.chat-visible #chat-resize-v {
+  display: flex;
 }
 
 #menu-bar {
@@ -72,6 +92,42 @@
 #sidebar-resize-v:hover::after,
 #sidebar-resize-v.dragging::after {
   left: 0;
+  width: 3px;
+  background: var(--accent-primary);
+  box-shadow: var(--accent-glow);
+  border-radius: 2px;
+}
+
+#chat-panel {
+  grid-area: chat;
+  flex-direction: column;
+  border-left: 1px solid var(--border-primary);
+  overflow: hidden;
+  background: var(--sidebar-bg);
+}
+
+#chat-resize-v {
+  grid-area: chatrsz;
+  cursor: ew-resize;
+  background: transparent;
+  position: relative;
+  transition: background var(--transition-normal);
+}
+
+#chat-resize-v::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 1px;
+  width: 1px;
+  height: 100%;
+  background: var(--border-primary);
+  transition: all var(--transition-normal);
+}
+
+#chat-resize-v:hover::after,
+#chat-resize-v.dragging::after {
+  right: 0;
   width: 3px;
   background: var(--accent-primary);
   box-shadow: var(--accent-glow);

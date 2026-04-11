@@ -424,7 +424,18 @@ pub(super) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
             "    {:<13} Git log",
             cfg.get_binding("navigation", "git_log")
         ),
+        format!(
+            "    {:<13} AI Chat",
+            cfg.get_binding("navigation", "chat_panel")
+        ),
         format!("    {:<13} Quit", cfg.get_binding("navigation", "quit")),
+        "".to_string(),
+        "  AI Chat overlay".to_string(),
+        "    Enter         Send message".to_string(),
+        "    Tab           Select model".to_string(),
+        format!("    {:<13} Settings (URL, system prompt)", cfg.format_binding("ctrl-o")),
+        format!("    {:<13} Clear conversation", cfg.format_binding("ctrl-l")),
+        "    Esc           Hide (keeps state)".to_string(),
         "".to_string(),
         "  Interaction mode (green border)".to_string(),
         format!(

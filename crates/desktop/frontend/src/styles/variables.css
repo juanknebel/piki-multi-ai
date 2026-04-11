@@ -102,6 +102,7 @@
   --statusbar-height: 28px;
   --tab-height: 38px;
   --sidebar-header-height: 30px;
+  --chat-panel-width: 360px;
 
   /* ── Motion ────────────────────────────────────── */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);

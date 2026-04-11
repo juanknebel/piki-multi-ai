@@ -185,6 +185,31 @@ export const FILE_STATUS_LABELS: Record<FileStatus, string> = {
   StagedModified: "SM",
 };
 
+// ── Chat types ─────────────────────────────────────
+
+export interface ChatMessage {
+  role: "System" | "User" | "Assistant";
+  content: string;
+}
+
+export interface ChatConfig {
+  provider: string;
+  model: string;
+  base_url: string;
+  system_prompt: string | null;
+}
+
+export interface ChatModelInfo {
+  name: string;
+  size: number;
+  modified_at: string;
+}
+
+export interface ChatTokenEvent {
+  content: string;
+  done: boolean;
+}
+
 export const FILE_STATUS_CSS: Record<FileStatus, string> = {
   Modified: "modified",
   Added: "added",
