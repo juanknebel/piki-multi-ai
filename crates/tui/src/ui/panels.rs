@@ -44,6 +44,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                         label,
                         scroll,
                         border_style,
+                        app.theme.general.scrollbar_thumb,
                     );
                 } else if let (Some(content), Some(label)) =
                     (&tab.markdown_content, &tab.markdown_label)
@@ -59,6 +60,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                         scroll,
                         border_style,
                         Some(&app.syntax),
+                        app.theme.general.scrollbar_thumb,
                     );
                 }
                 return;
@@ -138,6 +140,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                     selection.as_ref(),
                     selection_style,
                     app.term_search.as_ref(),
+                    app.theme.general.scrollbar_thumb,
                 );
             } else {
                 // Provider CLI not found — show fun ASCII art

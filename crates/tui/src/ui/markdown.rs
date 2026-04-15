@@ -97,6 +97,7 @@ pub fn render_cached(
     label: &str,
     scroll: u16,
     border_style: Style,
+    scrollbar_color: Color,
 ) {
     let block = Block::default()
         .title(format!(" {} ", label))
@@ -117,11 +118,12 @@ pub fn render_cached(
         scroll as usize,
         text.lines.len(),
         visible_height,
-        Color::DarkGray,
+        scrollbar_color,
     );
 }
 
 /// Render markdown content in the main panel area (uncached path).
+#[allow(clippy::too_many_arguments)]
 pub fn render(
     frame: &mut Frame,
     area: Rect,
@@ -130,7 +132,8 @@ pub fn render(
     scroll: u16,
     border_style: Style,
     syntax_hl: Option<&SyntaxHighlighter>,
+    scrollbar_color: Color,
 ) {
     let text = parse_to_static(content, syntax_hl);
-    render_cached(frame, area, &text, label, scroll, border_style);
+    render_cached(frame, area, &text, label, scroll, border_style, scrollbar_color);
 }

@@ -208,7 +208,7 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
         scroll_pos,
         total_visual_height,
         visible_height,
-        Color::DarkGray,
+        app.theme.general.scrollbar_thumb,
     );
 }
 
@@ -289,7 +289,7 @@ fn render_project_file_list(
         scroll_offset,
         dirs.len(),
         visible_height,
-        Color::DarkGray,
+        app.theme.general.scrollbar_thumb,
     );
 }
 
@@ -404,6 +404,6 @@ fn render_git_file_list(
         scroll_offset,
         files.len(),
         visible_height,
-        Color::DarkGray,
+        app.theme.general.scrollbar_thumb,
     );
 }

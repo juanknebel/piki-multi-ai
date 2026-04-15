@@ -57,74 +57,126 @@ pub(crate) fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
                 Style::default().bg(theme.interact_bg).fg(theme.mode_fg),
             ),
             _ => {
-                let mode_label = if app.interacting {
-                    "INTERACT"
-                } else {
-                    "NAVIGATE"
-                };
-                let mode_color = if app.interacting {
-                    theme.interact_bg
-                } else {
-                    theme.navigate_bg
-                };
-                if let Some(ws) = app.current_workspace() {
-                    let tab_scroll = ws.current_tab().map(|t| t.term_scroll).unwrap_or(0);
-                    let scroll_info = if tab_scroll > 0 {
-                        format!(" | SCROLL -{}", tab_scroll)
-                    } else {
-                        String::new()
-                    };
-                    let tab_label = ws.current_tab().map(|t| t.provider.label()).unwrap_or("—");
-                    let is_project = ws.info.workspace_type == piki_core::WorkspaceType::Project;
-                    let info_str = if is_project {
-                        format!(
-                            " [{}] project | {} services | {}: {} | ws {}/{}{}",
-                            mode_label,
-                            ws.file_count(),
-                            tab_label,
-                            ws.status_label(),
-                            app.active_workspace + 1,
-                            app.workspaces.len(),
-                            scroll_info,
-                        )
-                    } else {
-                        let sync_info = match ws.ahead_behind {
-                            Some((ahead, behind)) if ahead > 0 && behind > 0 => {
-                                format!(" | ↑{} ↓{}", ahead, behind)
-                            }
-                            Some((ahead, 0)) if ahead > 0 => {
-                                format!(" | ↑{} unpushed", ahead)
-                            }
-                            Some((0, behind)) if behind > 0 => {
-                                format!(" | ↓{} behind", behind)
-                            }
-                            _ => String::new(),
-                        };
-                        format!(
-                            " [{}] branch: {} | {} files{} | {}: {} | ws {}/{}{}",
-                            mode_label,
-                            ws.branch,
-                            ws.file_count(),
-                            sync_info,
-                            tab_label,
-                            ws.status_label(),
-                            app.active_workspace + 1,
-                            app.workspaces.len(),
-                            scroll_info,
-                        )
-                    };
-                    Span::styled(info_str, Style::default().bg(mode_color).fg(theme.mode_fg))
-                } else {
-                    Span::styled(
-                        format!(" [{}] No active workspace", mode_label),
-                        Style::default().bg(mode_color).fg(theme.mode_fg),
-                    )
-                }
+                render_normal_status(frame, area, app);
+                return;
             }
         }
     };
 
     let bar = Paragraph::new(Line::from(content));
+    frame.render_widget(bar, area);
+}
+
+fn render_normal_status(frame: &mut Frame, area: Rect, app: &App) {
+    let theme = &app.theme.status_bar;
+    let mode_label = if app.interacting {
+        "INTERACT"
+    } else {
+        "NAVIGATE"
+    };
+    let mode_bg = if app.interacting {
+        theme.interact_bg
+    } else {
+        theme.navigate_bg
+    };
+    let text_style = Style::default().bg(mode_bg).fg(theme.mode_fg);
+    let sep = Span::styled(" │ ", Style::default().bg(mode_bg).fg(theme.separator_fg));
+
+    let Some(ws) = app.current_workspace() else {
+        let bar = Paragraph::new(Line::from(vec![
+            Span::styled(format!(" [{}]", mode_label), text_style),
+            sep,
+            Span::styled("No active workspace", text_style),
+        ]));
+        frame.render_widget(bar, area);
+        return;
+    };
+
+    let mut left: Vec<Span> = vec![Span::styled(format!(" [{}]", mode_label), text_style)];
+
+    let is_project = ws.info.workspace_type == piki_core::WorkspaceType::Project;
+    if is_project {
+        left.push(sep.clone());
+        left.push(Span::styled("project", text_style));
+        left.push(sep.clone());
+        left.push(Span::styled(
+            format!("{} services", ws.file_count()),
+            text_style,
+        ));
+    } else {
+        left.push(sep.clone());
+        left.push(Span::styled(format!("⎇ {}", ws.branch), text_style));
+        left.push(sep.clone());
+        left.push(Span::styled(
+            format!("{} files", ws.file_count()),
+            text_style,
+        ));
+
+        match ws.ahead_behind {
+            Some((ahead, behind)) if ahead > 0 && behind > 0 => {
+                left.push(sep.clone());
+                left.push(Span::styled(
+                    format!("↑{} ↓{}", ahead, behind),
+                    text_style,
+                ));
+            }
+            Some((ahead, 0)) if ahead > 0 => {
+                left.push(sep.clone());
+                left.push(Span::styled(format!("↑{}", ahead), text_style));
+            }
+            Some((0, behind)) if behind > 0 => {
+                left.push(sep.clone());
+                left.push(Span::styled(format!("↓{}", behind), text_style));
+            }
+            _ => {}
+        }
+    }
+
+    let tab_label = ws
+        .current_tab()
+        .map(|t| t.provider.label())
+        .unwrap_or("—");
+    left.push(sep.clone());
+    left.push(Span::styled(
+        format!("{}: {}", tab_label, ws.status_label()),
+        text_style,
+    ));
+
+    // Right section: workspace counter and scroll indicator
+    let mut right: Vec<Span> = vec![Span::styled(
+        format!("ws {}/{}", app.active_workspace + 1, app.workspaces.len()),
+        text_style,
+    )];
+
+    let tab_scroll = ws.current_tab().map(|t| t.term_scroll).unwrap_or(0);
+    if tab_scroll > 0 {
+        right.push(sep.clone());
+        right.push(Span::styled(
+            format!("SCROLL -{} ", tab_scroll),
+            text_style,
+        ));
+    } else {
+        right.push(Span::styled(" ", text_style));
+    }
+
+    // Pad between left and right to push right section to the edge
+    let left_width: usize = left.iter().map(|s| s.width()).sum();
+    let right_width: usize = right.iter().map(|s| s.width()).sum();
+    let total = area.width as usize;
+
+    let mut spans = left;
+    if total > left_width + right_width {
+        let pad = total - left_width - right_width;
+        spans.push(Span::styled(
+            " ".repeat(pad),
+            Style::default().bg(mode_bg),
+        ));
+    } else {
+        spans.push(sep);
+    }
+    spans.extend(right);
+
+    let bar = Paragraph::new(Line::from(spans));
     frame.render_widget(bar, area);
 }
 

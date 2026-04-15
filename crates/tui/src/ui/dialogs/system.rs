@@ -22,6 +22,7 @@ pub(crate) fn render_diff_overlay(frame: &mut Frame, area: Rect, app: &App) {
         file_path,
         border_style,
         app.theme.diff.empty_text,
+        app.theme.general.scrollbar_thumb,
     );
 }
 

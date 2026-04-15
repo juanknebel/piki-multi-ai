@@ -24,6 +24,6 @@ expression: content
 │              ││                                                              │
 │              ││                                                              │
 │              │└──────────────────────────────────────────────────────────────┘
-└──────────────┘ [NAVIGATE] No active workspace
+└──────────────┘ [NAVIGATE] │ No active workspace
  [kjhl] navigate  [enter] interact  [n] new ws  [r] clone ws  [e] edit ws  [d] d
  [tab] switch ws  [</>] resize  [ctrl-p] commands  [space] switch ws  [?] help

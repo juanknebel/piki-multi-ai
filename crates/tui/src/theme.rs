@@ -117,6 +117,7 @@ struct StatusBarToml {
     interact_bg: Option<String>,
     navigate_bg: Option<String>,
     mode_fg: Option<String>,
+    separator_fg: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -158,6 +159,7 @@ struct HelpToml {
 struct GeneralToml {
     welcome_text: Option<String>,
     muted_text: Option<String>,
+    scrollbar_thumb: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -228,6 +230,7 @@ pub struct StatusBarTheme {
     pub interact_bg: Color,
     pub navigate_bg: Color,
     pub mode_fg: Color,
+    pub separator_fg: Color,
 }
 
 pub struct FooterTheme {
@@ -259,6 +262,7 @@ pub struct HelpTheme {
 pub struct GeneralTheme {
     pub welcome_text: Color,
     pub muted_text: Color,
+    pub scrollbar_thumb: Color,
 }
 
 pub struct FuzzySearchTheme {
@@ -337,6 +341,7 @@ impl Default for Theme {
                 interact_bg: Color::Green,
                 navigate_bg: Color::Yellow,
                 mode_fg: Color::Black,
+                separator_fg: Color::DarkGray,
             },
             footer: FooterTheme {
                 key: Color::Yellow,
@@ -363,6 +368,7 @@ impl Default for Theme {
             general: GeneralTheme {
                 welcome_text: Color::Gray,
                 muted_text: Color::DarkGray,
+                scrollbar_thumb: Color::Gray,
             },
             fuzzy_search: FuzzySearchTheme {
                 border: Color::Cyan,
@@ -439,6 +445,7 @@ impl Theme {
                 interact_bg: resolve(&t.status_bar.interact_bg, d.status_bar.interact_bg),
                 navigate_bg: resolve(&t.status_bar.navigate_bg, d.status_bar.navigate_bg),
                 mode_fg: resolve(&t.status_bar.mode_fg, d.status_bar.mode_fg),
+                separator_fg: resolve(&t.status_bar.separator_fg, d.status_bar.separator_fg),
             },
             footer: FooterTheme {
                 key: resolve(&t.footer.key, d.footer.key),
@@ -465,6 +472,10 @@ impl Theme {
             general: GeneralTheme {
                 welcome_text: resolve(&t.general.welcome_text, d.general.welcome_text),
                 muted_text: resolve(&t.general.muted_text, d.general.muted_text),
+                scrollbar_thumb: resolve(
+                    &t.general.scrollbar_thumb,
+                    d.general.scrollbar_thumb,
+                ),
             },
             fuzzy_search: FuzzySearchTheme {
                 border: resolve(&t.fuzzy_search.border, d.fuzzy_search.border),
