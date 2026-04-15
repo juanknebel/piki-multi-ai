@@ -140,16 +140,19 @@ export async function showMarkdown(filePath: string) {
   backdrop.focus();
 }
 
-/** Simple markdown to HTML renderer — handles headers, code blocks, bold, italic, lists, links */
+/** Simple markdown to HTML renderer — handles headers, code blocks, bold, italic, lists, links, tables */
 function renderMarkdown(src: string): string {
   const lines = src.split("\n");
   const html: string[] = [];
   let inCode = false;
-  let codeLang = "";
   let codeLines: string[] = [];
   let inList = false;
+  let inTable = false;
+  let tableHeaderDone = false;
 
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
     // Code blocks
     if (line.startsWith("```")) {
       if (inCode) {
@@ -158,7 +161,7 @@ function renderMarkdown(src: string): string {
         inCode = false;
       } else {
         if (inList) { html.push("</ul>"); inList = false; }
-        codeLang = line.slice(3).trim();
+        if (inTable) { html.push("</tbody></table>"); inTable = false; tableHeaderDone = false; }
         inCode = true;
       }
       continue;
@@ -166,6 +169,56 @@ function renderMarkdown(src: string): string {
     if (inCode) {
       codeLines.push(line);
       continue;
+    }
+
+    // Table: detect rows starting and ending with |
+    const trimmed = line.trim();
+    if (trimmed.startsWith("|") && trimmed.endsWith("|")) {
+      // Check if this is a separator row (|---|---|)
+      const isSeparator = /^\|[\s\-:|]+\|$/.test(trimmed);
+
+      if (!inTable) {
+        // Start a new table — this line is the header row
+        if (inList) { html.push("</ul>"); inList = false; }
+        inTable = true;
+        tableHeaderDone = false;
+        html.push('<table class="md-table"><thead><tr>');
+        const cells = parsePipeCells(trimmed);
+        for (const cell of cells) {
+          html.push(`<th>${inline(cell.trim())}</th>`);
+        }
+        html.push("</tr></thead>");
+        continue;
+      }
+
+      if (isSeparator) {
+        // Separator row after header — skip it, start tbody
+        tableHeaderDone = true;
+        html.push("<tbody>");
+        continue;
+      }
+
+      // Regular data row
+      if (!tableHeaderDone) {
+        // No separator seen yet — treat as body anyway
+        tableHeaderDone = true;
+        html.push("<tbody>");
+      }
+      html.push("<tr>");
+      const cells = parsePipeCells(trimmed);
+      for (const cell of cells) {
+        html.push(`<td>${inline(cell.trim())}</td>`);
+      }
+      html.push("</tr>");
+      continue;
+    }
+
+    // If we were in a table and hit a non-table line, close it
+    if (inTable) {
+      if (!tableHeaderDone) html.push("<tbody>");
+      html.push("</tbody></table>");
+      inTable = false;
+      tableHeaderDone = false;
     }
 
     // Headers
@@ -203,6 +256,12 @@ function renderMarkdown(src: string): string {
       continue;
     }
 
+    // Inline HTML — pass safe tags through unescaped
+    if (/^\s*<\/?(?:p|div|img|br|hr|span|center|b|i|em|strong|a|table|tr|td|th|thead|tbody|h[1-6]|ul|ol|li|blockquote|pre|code|details|summary|picture|source|figure|figcaption|sub|sup|small|mark|del|ins|kbd|abbr|dl|dt|dd)[\s>/]/i.test(trimmed)) {
+      html.push(line);
+      continue;
+    }
+
     // Empty line
     if (line.trim() === "") {
       html.push("<br/>");
@@ -217,8 +276,17 @@ function renderMarkdown(src: string): string {
     html.push(`<pre class="md-code"><code>${esc(codeLines.join("\n"))}</code></pre>`);
   }
   if (inList) html.push("</ul>");
+  if (inTable) {
+    if (!tableHeaderDone) html.push("<tbody>");
+    html.push("</tbody></table>");
+  }
 
   return html.join("\n");
+}
+
+/** Parse pipe-delimited table cells: |a|b|c| → ["a","b","c"] */
+function parsePipeCells(line: string): string[] {
+  return line.slice(1, -1).split("|");
 }
 
 /** Inline markdown: bold, italic, code, links */

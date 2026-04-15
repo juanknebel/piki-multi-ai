@@ -81,6 +81,29 @@ ol.md-list li {
   text-decoration: underline;
 }
 
+.md-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 10px 0;
+}
+
+.md-table th,
+.md-table td {
+  border: 1px solid var(--border-primary);
+  padding: 6px 12px;
+  text-align: left;
+}
+
+.md-table th {
+  background: var(--bg-secondary);
+  font-weight: 600;
+  color: var(--text-bright);
+}
+
+.md-table tr:nth-child(even) td {
+  background: var(--bg-tertiary);
+}
+
 /* ── Markdown editor panel (tab pane) ──────────── */
 .md-editor-panel {
   display: flex;
@@ -113,69 +136,236 @@ ol.md-list li {
   overflow: hidden;
 }
 
-/* EasyMDE dark theme overrides */
-.md-editor-body .EasyMDEContainer {
-  height: 100%;
+/* ── Milkdown toolbar ──────────────────────────── */
+.mk-toolbar {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin: 0 8px;
 }
 
-.md-editor-body .EasyMDEContainer .CodeMirror {
-  flex: 1;
-  background: var(--bg-primary);
-  color: var(--text-primary);
+.mk-toolbar-btn {
+  background: none;
   border: none;
-  border-radius: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  line-height: 1;
+  font-family: inherit;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.mk-toolbar-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-bright);
+}
+
+.mk-toolbar-btn:active {
+  background: var(--bg-active);
+}
+
+.mk-toolbar-sep {
+  width: 1px;
+  height: 16px;
+  background: var(--border-primary);
+  margin: 0 4px;
+}
+
+/* ── Milkdown / ProseMirror editor ────────────── */
+.md-editor-body .milkdown {
+  height: 100%;
+  overflow: hidden;
+}
+
+.md-editor-body .ProseMirror {
+  height: 100%;
+  overflow-y: auto;
+  outline: none;
+  padding: 16px 20px;
   font-family: "JetBrainsMono NF Mono", monospace;
   font-size: 13px;
+  line-height: 1.75;
+  color: var(--text-primary);
+  caret-color: var(--text-bright);
 }
 
-.md-editor-body .EasyMDEContainer .CodeMirror-cursor {
-  border-left-color: var(--text-bright);
-}
-
-.md-editor-body .EasyMDEContainer .CodeMirror-selected {
+.md-editor-body .ProseMirror ::selection {
   background: var(--bg-active);
 }
 
-.md-editor-body .EasyMDEContainer .editor-toolbar {
-  background: var(--bg-secondary);
+/* Headings */
+.md-editor-body .ProseMirror h1,
+.md-editor-body .ProseMirror h2,
+.md-editor-body .ProseMirror h3,
+.md-editor-body .ProseMirror h4 {
+  color: var(--text-bright);
+  font-weight: 600;
+  margin: 20px 0 10px;
+}
+
+.md-editor-body .ProseMirror h1 {
+  font-size: 20px;
   border-bottom: 1px solid var(--border-primary);
-  border-top: none;
-  opacity: 1;
+  padding-bottom: 10px;
 }
 
-.md-editor-body .EasyMDEContainer .editor-toolbar button {
-  color: var(--text-secondary) !important;
+.md-editor-body .ProseMirror h2 {
+  font-size: 17px;
+  border-bottom: 1px solid var(--border-primary);
+  padding-bottom: 8px;
+}
+
+.md-editor-body .ProseMirror h3 { font-size: 14px; }
+.md-editor-body .ProseMirror h4 { font-size: 13px; }
+
+/* Paragraphs */
+.md-editor-body .ProseMirror p {
+  margin: 6px 0;
+}
+
+/* Links */
+.md-editor-body .ProseMirror a {
+  color: var(--text-accent);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+.md-editor-body .ProseMirror a:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+/* Code blocks */
+.md-editor-body .ProseMirror pre {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  padding: 14px 18px;
+  margin: 10px 0;
+  overflow-x: auto;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+/* Inline code */
+.md-editor-body .ProseMirror code {
+  background: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 0.9em;
+  color: var(--text-accent);
+}
+
+.md-editor-body .ProseMirror pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* Lists */
+.md-editor-body .ProseMirror ul,
+.md-editor-body .ProseMirror ol {
+  margin: 6px 0;
+  padding-left: 24px;
+}
+
+.md-editor-body .ProseMirror li {
+  margin: 3px 0;
+}
+
+.md-editor-body .ProseMirror ul li { list-style: disc; }
+.md-editor-body .ProseMirror ol li { list-style: decimal; }
+
+/* Blockquote */
+.md-editor-body .ProseMirror blockquote {
+  border-left: 3px solid var(--border-primary);
+  padding-left: 16px;
+  margin: 10px 0;
+  color: var(--text-secondary);
+}
+
+/* Horizontal rule */
+.md-editor-body .ProseMirror hr {
   border: none;
+  border-top: 1px solid var(--border-primary);
+  margin: 16px 0;
 }
 
-.md-editor-body .EasyMDEContainer .editor-toolbar button:hover {
-  background: var(--bg-hover);
-  color: var(--text-bright) !important;
+/* Images */
+.md-editor-body .ProseMirror img {
+  max-width: 100%;
+  border-radius: var(--radius-md);
 }
 
-.md-editor-body .EasyMDEContainer .editor-toolbar button.active {
-  background: var(--bg-active);
-  color: var(--text-bright) !important;
+/* Strong & emphasis */
+.md-editor-body .ProseMirror strong {
+  font-weight: 600;
+  color: var(--text-bright);
 }
 
-.md-editor-body .EasyMDEContainer .editor-toolbar i.separator {
-  border-left-color: var(--border-primary);
+.md-editor-body .ProseMirror em {
+  font-style: italic;
 }
 
-.md-editor-body .EasyMDEContainer .editor-preview {
-  background: var(--bg-primary);
-  color: var(--text-primary);
+/* Tables */
+.md-editor-body .ProseMirror table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 10px 0;
+  overflow: auto;
 }
 
-.md-editor-body .EasyMDEContainer .editor-preview-side {
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  border-left: 1px solid var(--border-primary);
+.md-editor-body .ProseMirror th,
+.md-editor-body .ProseMirror td {
+  border: 1px solid var(--border-primary);
+  padding: 6px 12px;
+  text-align: left;
 }
 
-.md-editor-body .CodeMirror-gutters {
+.md-editor-body .ProseMirror th {
   background: var(--bg-secondary);
-  border-right: 1px solid var(--border-primary);
+  font-weight: 600;
+  color: var(--text-bright);
+}
+
+.md-editor-body .ProseMirror tr:nth-child(even) td {
+  background: var(--bg-tertiary);
+}
+
+/* Task list checkboxes (GFM) */
+.md-editor-body .ProseMirror li[data-checked] {
+  list-style: none;
+  position: relative;
+  padding-left: 4px;
+}
+
+.md-editor-body .ProseMirror li[data-checked]::before {
+  position: absolute;
+  left: -20px;
+}
+
+.md-editor-body .ProseMirror li[data-checked="true"]::before {
+  content: "\u2611";
+  color: var(--text-accent);
+}
+
+.md-editor-body .ProseMirror li[data-checked="false"]::before {
+  content: "\u2610";
+  color: var(--text-secondary);
+}
+
+/* Strikethrough (GFM) */
+.md-editor-body .ProseMirror del {
+  text-decoration: line-through;
+  color: var(--text-secondary);
+}
+
+/* Selected node outline */
+.md-editor-body .ProseMirror-selectednode {
+  outline: 2px solid var(--text-accent);
 }

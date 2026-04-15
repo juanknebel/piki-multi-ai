@@ -9,13 +9,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@milkdown/kit": "^7.20.0",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-clipboard-manager": "^2.3.2",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-search": "^0.16.0",
     "@xterm/addon-webgl": "^0.18.0",
-    "@xterm/xterm": "^5.5.0",
-    "easymde": "^2.20.0"
+    "@xterm/xterm": "^5.5.0"
   },
   "devDependencies": {
     "typescript": "^5.6.0",
