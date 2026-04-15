@@ -9,13 +9,13 @@ use crate::app::{ActivePane, App, AppMode, ToastLevel};
 pub(crate) fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
     let theme = &app.theme.status_bar;
     let content = if let Some(ref toast) = app.toast {
-        let (bg, fg) = match toast.level {
-            ToastLevel::Info => (theme.navigate_bg, theme.mode_fg),
-            ToastLevel::Success => (theme.interact_bg, theme.mode_fg),
-            ToastLevel::Error => (theme.error_bg, theme.error_fg),
+        let (bg, fg, icon) = match toast.level {
+            ToastLevel::Info => (theme.navigate_bg, theme.mode_fg, "ℹ"),
+            ToastLevel::Success => (theme.interact_bg, theme.mode_fg, "✓"),
+            ToastLevel::Error => (theme.error_bg, theme.error_fg, "✗"),
         };
         Span::styled(
-            format!(" {} ", toast.message),
+            format!(" {} {} ", icon, toast.message),
             Style::default().bg(bg).fg(fg),
         )
     } else if let Some(msg) = &app.status_message {
