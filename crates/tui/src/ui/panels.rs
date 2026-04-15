@@ -171,14 +171,33 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                 frame.render_widget(text, area);
             }
         } else {
-            // No tabs yet
+            // No tabs yet — centered hints
             let block = Block::default()
                 .title(" Terminal ")
                 .title_style(border_style)
                 .borders(Borders::ALL)
                 .border_style(border_style);
-            let text = Paragraph::new("  Press [t] to open a new tab")
-                .style(Style::default().fg(app.theme.general.muted_text))
+            let key_style = Style::default().fg(app.theme.footer.key);
+            let desc_style = Style::default().fg(app.theme.general.muted_text);
+            let content_lines: Vec<Line> = vec![
+                Line::from(Span::styled("No tabs open", desc_style)),
+                Line::from(""),
+                Line::from(vec![
+                    Span::styled("[t]", key_style),
+                    Span::styled(" Open a new tab", desc_style),
+                ]),
+                Line::from(vec![
+                    Span::styled("[Ctrl+P]", key_style),
+                    Span::styled(" Search commands", desc_style),
+                ]),
+            ];
+            let content_height = content_lines.len() as u16;
+            let inner_height = area.height.saturating_sub(2);
+            let pad = inner_height.saturating_sub(content_height) / 2;
+            let mut lines: Vec<Line> = vec![Line::from(""); pad as usize];
+            lines.extend(content_lines);
+            let text = Paragraph::new(lines)
+                .alignment(ratatui::layout::Alignment::Center)
                 .block(block);
             frame.render_widget(text, area);
         }
@@ -188,11 +207,42 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
             .title_style(border_style)
             .borders(Borders::ALL)
             .border_style(border_style);
-        let text = Paragraph::new(
-            "  Welcome to piki-multi-ai\n\n  Press [n] to create a new workspace\n  Press [?] for help\n  Press [q] to quit",
-        )
-        .style(Style::default().fg(app.theme.general.welcome_text))
-        .block(block);
+        let key_style = Style::default().fg(app.theme.footer.key);
+        let desc_style = Style::default().fg(app.theme.general.welcome_text);
+        let title_style = Style::default()
+            .fg(Color::White)
+            .add_modifier(Modifier::BOLD);
+        let lines = vec![
+            Line::from(""),
+            Line::from(Span::styled(
+                "  Welcome to piki-multi-ai",
+                title_style,
+            )),
+            Line::from(""),
+            Line::from(Span::styled("  Quick Start:", desc_style)),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("  1. ", desc_style),
+                Span::styled("[n]", key_style),
+                Span::styled(" Create your first workspace", desc_style),
+            ]),
+            Line::from(vec![
+                Span::styled("  2. ", desc_style),
+                Span::styled("[Tab]", key_style),
+                Span::styled(" Switch between workspaces", desc_style),
+            ]),
+            Line::from(vec![
+                Span::styled("  3. ", desc_style),
+                Span::styled("[Enter]", key_style),
+                Span::styled(" Interact with the terminal", desc_style),
+            ]),
+            Line::from(vec![
+                Span::styled("  4. ", desc_style),
+                Span::styled("[?]", key_style),
+                Span::styled(" Full help", desc_style),
+            ]),
+        ];
+        let text = Paragraph::new(lines).block(block);
         frame.render_widget(text, area);
     }
     app.selection = selection;

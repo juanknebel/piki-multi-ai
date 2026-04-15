@@ -19,9 +19,16 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
         .border_style(border_style);
 
     if app.workspaces.is_empty() {
-        let text = Paragraph::new("  Press [n] to create")
-            .style(Style::default().fg(theme.empty_text))
-            .block(block);
+        let key_style = Style::default().fg(app.theme.footer.key);
+        let desc_style = Style::default().fg(theme.empty_text);
+        let lines = vec![
+            Line::from(""),
+            Line::from(vec![
+                Span::styled(" [n]", key_style),
+                Span::styled(" New workspace", desc_style),
+            ]),
+        ];
+        let text = Paragraph::new(lines).block(block);
         frame.render_widget(text, area);
         return;
     }
@@ -241,7 +248,7 @@ fn render_project_file_list(
         .unwrap_or(&[]);
 
     if dirs.is_empty() {
-        let text = Paragraph::new("  No sub-directories")
+        let text = Paragraph::new("  No services found")
             .style(Style::default().fg(theme.empty_text))
             .block(block);
         frame.render_widget(text, area);
@@ -334,9 +341,14 @@ fn render_git_file_list(
         .unwrap_or(&[]);
 
     if files.is_empty() {
-        let text = Paragraph::new("  No files changed")
-            .style(Style::default().fg(theme.empty_text))
-            .block(block);
+        let text = Paragraph::new(Line::from(vec![
+            Span::styled("  ✓ ", Style::default().fg(Color::Green)),
+            Span::styled(
+                "Working tree clean",
+                Style::default().fg(theme.empty_text),
+            ),
+        ]))
+        .block(block);
         frame.render_widget(text, area);
         return;
     }
