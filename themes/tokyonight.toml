@@ -13,6 +13,9 @@ name_inactive = "#a9b1d6"     # fg_dark
 detail_selected = "#a9b1d6"
 detail_normal = "#3b4261"
 selected_bg = "#292e42"       # bg_highlight
+group_header_bg = "#292e42"   # bg_highlight
+separator = "#3b4261"
+alt_bg = "#24283b"
 
 [file_list]
 empty_text = "#3b4261"

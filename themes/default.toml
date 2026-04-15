@@ -19,6 +19,9 @@ name_inactive = "Gray"
 detail_selected = "Gray"
 detail_normal = "DarkGray"
 selected_bg = "DarkGray"
+group_header_bg = "#1e1e2d"
+separator = "#32323c"
+alt_bg = "#19191f"
 
 [file_list]
 empty_text = "DarkGray"

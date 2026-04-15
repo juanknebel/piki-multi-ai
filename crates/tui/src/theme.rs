@@ -74,6 +74,9 @@ struct WorkspaceListToml {
     detail_selected: Option<String>,
     detail_normal: Option<String>,
     selected_bg: Option<String>,
+    group_header_bg: Option<String>,
+    separator: Option<String>,
+    alt_bg: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -197,6 +200,9 @@ pub struct WorkspaceListTheme {
     pub detail_selected: Color,
     pub detail_normal: Color,
     pub selected_bg: Color,
+    pub group_header_bg: Color,
+    pub separator: Color,
+    pub alt_bg: Color,
 }
 
 pub struct FileListTheme {
@@ -314,6 +320,9 @@ impl Default for Theme {
                 detail_selected: Color::Gray,
                 detail_normal: Color::DarkGray,
                 selected_bg: Color::DarkGray,
+                group_header_bg: Color::Rgb(30, 30, 45),
+                separator: Color::Rgb(50, 50, 60),
+                alt_bg: Color::Rgb(25, 25, 35),
             },
             file_list: FileListTheme {
                 empty_text: Color::DarkGray,
@@ -417,6 +426,12 @@ impl Theme {
                     d.workspace_list.detail_normal,
                 ),
                 selected_bg: resolve(&t.workspace_list.selected_bg, d.workspace_list.selected_bg),
+                group_header_bg: resolve(
+                    &t.workspace_list.group_header_bg,
+                    d.workspace_list.group_header_bg,
+                ),
+                separator: resolve(&t.workspace_list.separator, d.workspace_list.separator),
+                alt_bg: resolve(&t.workspace_list.alt_bg, d.workspace_list.alt_bg),
             },
             file_list: FileListTheme {
                 empty_text: resolve(&t.file_list.empty_text, d.file_list.empty_text),
