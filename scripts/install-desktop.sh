@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [ "$(uname -s)" != "Linux" ]; then
+    echo "Error: this script only supports Linux." >&2
+    exit 1
+fi
+
 BINARY_NAME="piki-desktop"
 APP_NAME="Piki Desktop"
 APP_ID="com.piki.desktop"
