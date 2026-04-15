@@ -254,6 +254,24 @@ fn shell_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
 }
 
+#[tauri::command]
+pub async fn set_active_tab(
+    state: State<'_, Mutex<DesktopApp>>,
+    workspace_idx: usize,
+    tab_idx: usize,
+) -> Result<(), String> {
+    let mut app = state.lock();
+    if workspace_idx >= app.workspaces.len() {
+        return Err("Workspace index out of range".to_string());
+    }
+    let ws = &mut app.workspaces[workspace_idx];
+    if tab_idx >= ws.tabs.len() {
+        return Err("Tab index out of range".to_string());
+    }
+    ws.active_tab = tab_idx;
+    Ok(())
+}
+
 fn parse_provider(s: &str) -> Result<AIProvider, String> {
     match s {
         "Claude" => Ok(AIProvider::Claude),

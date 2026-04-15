@@ -133,13 +133,14 @@
 }
 
 .workspace-actions {
-  display: none;
+  display: flex;
   gap: 1px;
   flex-shrink: 0;
+  visibility: hidden;
 }
 
 .workspace-item:hover .workspace-actions {
-  display: flex;
+  visibility: visible;
 }
 
 .ws-action-btn {

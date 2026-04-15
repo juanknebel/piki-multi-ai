@@ -88,6 +88,13 @@ export function closeTab(
   return invoke("close_tab", { workspaceIdx, tabIdx });
 }
 
+export function setActiveTab(
+  workspaceIdx: number,
+  tabIdx: number,
+): Promise<void> {
+  return invoke("set_active_tab", { workspaceIdx, tabIdx });
+}
+
 // Git commands
 export function getChangedFiles(
   workspaceIdx: number,

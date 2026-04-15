@@ -5,6 +5,7 @@ import type {
   TabInfo,
   WorkspaceStatus,
 } from "./types";
+import * as ipc from "./ipc";
 
 export type SidebarView = "explorer" | "git" | "agents" | "kanban" | "api";
 // Note: "agents" opens the modal dialog, "kanban"/"api" open tabs — none are real sidebar views
@@ -139,6 +140,8 @@ class AppState extends EventTarget {
     if (!ws) return;
     ws.activeTab = tabIdx;
     this.emit("active-tab-changed");
+    // Sync to backend so switching workspaces preserves the active tab
+    ipc.setActiveTab(this._activeWorkspace, tabIdx).catch(() => {});
   }
 
   removeTab(workspaceIdx: number, tabIdx: number) {
