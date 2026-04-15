@@ -39,7 +39,9 @@ inactive = "DarkGray"
 
 [subtabs]
 active = "Cyan"
-inactive = "DarkGray"
+inactive = "Gray"
+close_marker = "DarkGray"
+divider = "DarkGray"
 
 [status_bar]
 error_bg = "Red"

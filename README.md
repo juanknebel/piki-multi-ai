@@ -276,7 +276,7 @@ Workspace configurations are saved automatically and restored on startup using a
 ```
  [CPU] 12%  [RAM] 4.2/16.0G  [BAT] 85%  [TIME] 2026-03-07 14:32
 +------------------+-------------------------------------------------------+
-| WORKSPACES       |  [ Claude Code × ]  [ Shell × ]   (dynamic sub-tabs)  |
+| WORKSPACES       |  ▸ Claude Code ×│▸ Shell ×  (dynamic sub-tabs w/ icons)|
 |                  |-------------------------------------------------------|
 |  ▼ frontend (2)  |                                                       |
 |  ▶ ws-1 (active) |  AI assistant live terminal output                    |
@@ -879,7 +879,7 @@ crates/
         api.rs           # API Explorer tab renderer (editor + response panes)
         dialogs.rs       # Dialog and overlay renderers (git log, stash, conflict, dashboard, etc.)
         scrollbar.rs     # Shared vertical scrollbar helper (thin indicators)
-        subtabs.rs       # Sub-tab bar rendering (dynamic tabs with × close buttons)
+        subtabs.rs       # Sub-tab bar rendering (dynamic tabs with provider icons and × close buttons)
         workspace_switcher.rs # Workspace switcher overlay renderer
 ```
 

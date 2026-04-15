@@ -142,13 +142,14 @@ pub(crate) fn subtab_index_at(app: &App, col: u16, area: Rect) -> Option<(usize,
             .markdown_label
             .as_deref()
             .unwrap_or(tab.provider.label());
-        // Matches subtabs.rs: format!(" {}{} ", label, close_marker) where close_marker = " ×" or ""
-        // Display widths: " " (1) + label (ascii len) + " ×" (2 display cols) + " " (1) = label.len() + 4
-        // Without close: " " (1) + label + " " (1) = label.len() + 2
+        // Matches subtabs.rs: " icon " (3) + label + " ×" (2, if closable) + " " (1)
+        // Icon is a single-width char padded: " ▸ " = 3 display cols
+        // With close: 3 + label.len() + 2 + 1 = label.len() + 6
+        // Without close: 3 + label.len() + 1 = label.len() + 4
         let tab_display_width = if tab.closable {
-            label.len() as u16 + 4 // " label × "
+            label.len() as u16 + 6
         } else {
-            label.len() as u16 + 2 // " label "
+            label.len() as u16 + 4
         };
         if col >= x && col < x + tab_display_width {
             // Close button is the last 2 display columns before trailing space: "× "

@@ -46,6 +46,22 @@ impl AIProvider {
         }
     }
 
+    /// Icon prefix for sub-tab display.
+    pub fn icon(&self) -> &str {
+        match self {
+            AIProvider::Claude
+            | AIProvider::Gemini
+            | AIProvider::OpenCode
+            | AIProvider::Kilo
+            | AIProvider::Codex
+            | AIProvider::Shell => "▸",
+            AIProvider::Kanban => "▦",
+            AIProvider::CodeReview => "⊙",
+            AIProvider::Api => "⚡",
+            AIProvider::Custom(_) => "▸",
+        }
+    }
+
     /// Label for the sub-tab.
     /// For `Custom` providers, returns the provider name.
     pub fn label(&self) -> &str {
