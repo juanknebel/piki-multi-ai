@@ -40,12 +40,11 @@ fn resolve_board_path(app: &DesktopApp, workspace_idx: usize) -> Result<PathBuf,
 }
 
 fn expand_tilde(path: PathBuf) -> PathBuf {
-    if let Some(path_str) = path.to_str() {
-        if path_str.starts_with("~/") {
-            if let Ok(home) = std::env::var("HOME") {
-                return PathBuf::from(home).join(path_str.strip_prefix("~/").unwrap());
-            }
-        }
+    if let Some(path_str) = path.to_str()
+        && path_str.starts_with("~/")
+        && let Ok(home) = std::env::var("HOME")
+    {
+        return PathBuf::from(home).join(path_str.strip_prefix("~/").unwrap());
     }
     path
 }
@@ -168,6 +167,7 @@ pub fn kanban_create_card(
     Ok(card_id)
 }
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn kanban_update_card(
     state: State<'_, Mutex<DesktopApp>>,

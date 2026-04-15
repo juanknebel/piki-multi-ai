@@ -312,6 +312,7 @@ pub async fn import_agents(
     Ok(imported)
 }
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn dispatch_agent(
     state: State<'_, Mutex<DesktopApp>>,
@@ -363,7 +364,7 @@ pub async fn dispatch_agent(
 
         let name = ws_name.unwrap_or_else(|| format!("agent-{}", uuid::Uuid::new_v4().to_string().split('-').next().unwrap_or("x")));
         let info = manager
-            .create(&name, &description, &prompt, source_kanban_path, &source_dir)
+            .create(&name, description, &prompt, source_kanban_path, &source_dir)
             .await
             .map_err(|e| format!("Failed to create workspace: {e}"))?;
 

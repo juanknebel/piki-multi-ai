@@ -26,10 +26,10 @@ fn copy_via_system_tool(text: &str) -> Result<(), String> {
             if let Some(mut stdin) = child.stdin.take() {
                 let _ = stdin.write_all(text.as_bytes());
             }
-            if let Ok(status) = child.wait() {
-                if status.success() {
-                    return Ok(());
-                }
+            if let Ok(status) = child.wait()
+                && status.success()
+            {
+                return Ok(());
             }
         }
     }
@@ -51,10 +51,9 @@ fn paste_via_system_tool() -> Result<String, String> {
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .output()
+            && output.status.success()
         {
-            if output.status.success() {
-                return Ok(String::from_utf8_lossy(&output.stdout).into_owned());
-            }
+            return Ok(String::from_utf8_lossy(&output.stdout).into_owned());
         }
     }
 

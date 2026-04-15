@@ -1659,10 +1659,10 @@ pub(super) fn handle_edit_provider_input(app: &mut App, key: KeyEvent) -> Option
         if let Some((old_name, config)) = config {
             let saved_name = config.name.clone();
             // If editing and name changed, remove old entry first
-            if let Some(ref old) = old_name {
-                if *old != saved_name {
-                    app.provider_manager.remove(old);
-                }
+            if let Some(ref old) = old_name
+                && *old != saved_name
+            {
+                app.provider_manager.remove(old);
             }
             app.provider_manager.upsert(config);
             let _ = app.provider_manager.save(&app.paths.providers_path());

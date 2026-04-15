@@ -44,6 +44,7 @@ pub async fn switch_workspace(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn create_workspace(
     state: State<'_, Mutex<DesktopApp>>,

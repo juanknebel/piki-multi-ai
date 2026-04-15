@@ -54,10 +54,9 @@ fn paste_via_system_tool() -> anyhow::Result<String> {
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .output()
+            && output.status.success()
         {
-            if output.status.success() {
-                return Ok(String::from_utf8_lossy(&output.stdout).into_owned());
-            }
+            return Ok(String::from_utf8_lossy(&output.stdout).into_owned());
         }
     }
 
@@ -72,10 +71,10 @@ pub fn copy_to_clipboard(text: &str) -> anyhow::Result<()> {
 
     // Prefer system tools on Linux — arboard can silently fail to set
     // clipboard content with non-ASCII characters on Wayland.
-    if cfg!(target_os = "linux") {
-        if let Ok(()) = copy_via_system_tool(&clean) {
-            return Ok(());
-        }
+    if cfg!(target_os = "linux")
+        && let Ok(()) = copy_via_system_tool(&clean)
+    {
+        return Ok(());
     }
 
     // Fallback to arboard (primary on macOS/Windows)
@@ -84,10 +83,10 @@ pub fn copy_to_clipboard(text: &str) -> anyhow::Result<()> {
 }
 
 pub fn paste_from_clipboard() -> anyhow::Result<String> {
-    if cfg!(target_os = "linux") {
-        if let Ok(text) = paste_via_system_tool() {
-            return Ok(text);
-        }
+    if cfg!(target_os = "linux")
+        && let Ok(text) = paste_via_system_tool()
+    {
+        return Ok(text);
     }
 
     Ok(Clipboard::new()?.get_text()?)
