@@ -62,45 +62,64 @@ pub async fn chat_send_message(
     tracing::info!(
         model = %config.model,
         base_url = %config.base_url,
+        server = %config.server_type.label(),
         msg_count = messages.len(),
         "Sending chat message"
     );
 
-    // Convert to Ollama message format
-    let mut ollama_msgs: Vec<piki_api_client::OllamaMessage> = Vec::new();
-
-    // Prepend system prompt if configured
+    // Build role/content pairs with system prompt
+    let mut role_contents: Vec<(&str, String)> = Vec::new();
     if let Some(ref sys) = config.system_prompt
         && !sys.is_empty()
     {
-        ollama_msgs.push(piki_api_client::OllamaMessage {
-            role: "system".to_string(),
-            content: sys.clone(),
-        });
+        role_contents.push(("system", sys.clone()));
     }
-
     for msg in &messages {
-        ollama_msgs.push(piki_api_client::OllamaMessage {
-            role: match msg.role {
-                ChatRole::System => "system",
-                ChatRole::User => "user",
-                ChatRole::Assistant => "assistant",
-            }
-            .to_string(),
-            content: msg.content.clone(),
-        });
+        let role = match msg.role {
+            ChatRole::System => "system",
+            ChatRole::User => "user",
+            ChatRole::Assistant => "assistant",
+        };
+        role_contents.push((role, msg.content.clone()));
     }
 
-    let client = piki_api_client::OllamaClient::new(&config.base_url);
     let model = config.model.clone();
+    let base_url = config.base_url.clone();
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
 
-    // Spawn the streaming request
-    tokio::spawn(async move {
-        if let Err(e) = client.chat_stream(&model, &ollama_msgs, tx).await {
-            tracing::error!(error = %e, "Ollama chat_stream failed");
+    // Spawn the streaming request based on server type
+    match config.server_type {
+        piki_core::chat::ChatServerType::Ollama => {
+            let msgs: Vec<piki_api_client::OllamaMessage> = role_contents
+                .into_iter()
+                .map(|(r, c)| piki_api_client::OllamaMessage {
+                    role: r.to_string(),
+                    content: c,
+                })
+                .collect();
+            let client = piki_api_client::OllamaClient::new(&base_url);
+            tokio::spawn(async move {
+                if let Err(e) = client.chat_stream(&model, &msgs, tx).await {
+                    tracing::error!(error = %e, "Ollama chat_stream failed");
+                }
+            });
         }
-    });
+        piki_core::chat::ChatServerType::LlamaCpp => {
+            let msgs: Vec<piki_api_client::LlamaCppMessage> = role_contents
+                .into_iter()
+                .map(|(r, c)| piki_api_client::LlamaCppMessage {
+                    role: r.to_string(),
+                    content: c,
+                })
+                .collect();
+            let client = piki_api_client::LlamaCppClient::new(&base_url);
+            tokio::spawn(async move {
+                if let Err(e) = client.chat_stream(&model, &msgs, tx).await {
+                    tracing::error!(error = %e, "llama.cpp chat_stream failed");
+                }
+            });
+        }
+    }
 
     // Spawn the event forwarder — uses app_handle to access managed state
     // (State<'_> can't escape the function, but AppHandle is 'static)
@@ -212,29 +231,46 @@ pub async fn chat_clear(
     Ok(())
 }
 
-/// List available Ollama models.
+/// List available models from the configured server.
 #[tauri::command]
 pub async fn chat_list_models(
     base_url: String,
+    server_type: piki_core::chat::ChatServerType,
 ) -> Result<Vec<ChatModelInfo>, String> {
-    tracing::debug!(base_url = %base_url, "Listing Ollama models");
-    let client = piki_api_client::OllamaClient::new(&base_url);
-    let models = client
-        .list_models()
-        .await
-        .map_err(|e| {
-            tracing::error!(base_url = %base_url, error = %e, "Failed to list Ollama models");
-            format!("Failed to connect to Ollama: {e}")
-        })?;
+    tracing::debug!(base_url = %base_url, server = %server_type.label(), "Listing chat models");
 
-    Ok(models
-        .into_iter()
-        .map(|m| ChatModelInfo {
-            name: m.name,
-            size: m.size,
-            modified_at: m.modified_at,
-        })
-        .collect())
+    match server_type {
+        piki_core::chat::ChatServerType::Ollama => {
+            let client = piki_api_client::OllamaClient::new(&base_url);
+            let models = client.list_models().await.map_err(|e| {
+                tracing::error!(base_url = %base_url, error = %e, "Failed to list Ollama models");
+                format!("Failed to connect to Ollama: {e}")
+            })?;
+            Ok(models
+                .into_iter()
+                .map(|m| ChatModelInfo {
+                    name: m.name,
+                    size: m.size,
+                    modified_at: m.modified_at,
+                })
+                .collect())
+        }
+        piki_core::chat::ChatServerType::LlamaCpp => {
+            let client = piki_api_client::LlamaCppClient::new(&base_url);
+            let models = client.list_models().await.map_err(|e| {
+                tracing::error!(base_url = %base_url, error = %e, "Failed to list llama.cpp models");
+                format!("Failed to connect to llama.cpp: {e}")
+            })?;
+            Ok(models
+                .into_iter()
+                .map(|m| ChatModelInfo {
+                    name: m.id,
+                    size: 0,
+                    modified_at: String::new(),
+                })
+                .collect())
+        }
+    }
 }
 
 /// Stop the current streaming response.

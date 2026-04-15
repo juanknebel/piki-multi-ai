@@ -1,6 +1,8 @@
 import { appState } from "../state";
-import { getProviderLabel } from "../types";
+import { getProviderLabel, type FileStatus } from "../types";
 import { showAboutDialog } from "./dialogs/about-dialog";
+
+const STAGED_STATUSES: FileStatus[] = ["Staged", "Added", "Renamed", "StagedModified"];
 
 export function renderStatusBar(container: HTMLElement) {
   function render() {
@@ -28,9 +30,18 @@ export function renderStatusBar(container: HTMLElement) {
       }
     }
 
-    const fileCount = ws?.changedFiles.length ?? 0;
-    if (fileCount > 0) {
-      addItem(container, `${fileCount} change${fileCount !== 1 ? "s" : ""}`);
+    const files = ws?.changedFiles ?? [];
+    if (files.length > 0) {
+      const stagedCount = files.filter((f) => STAGED_STATUSES.includes(f.status)).length;
+      const unstagedCount = files.length - stagedCount;
+      const parts: string[] = [];
+      if (unstagedCount > 0) {
+        parts.push(`${unstagedCount} change${unstagedCount !== 1 ? "s" : ""}`);
+      }
+      if (stagedCount > 0) {
+        parts.push(`${stagedCount} staged`);
+      }
+      addItem(container, parts.join(" · "));
     }
 
     // Spacer

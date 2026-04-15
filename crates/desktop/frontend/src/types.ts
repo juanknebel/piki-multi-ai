@@ -192,8 +192,11 @@ export interface ChatMessage {
   content: string;
 }
 
+export type ChatServerType = "Ollama" | "LlamaCpp";
+
 export interface ChatConfig {
   provider: string;
+  server_type: ChatServerType;
   model: string;
   base_url: string;
   system_prompt: string | null;

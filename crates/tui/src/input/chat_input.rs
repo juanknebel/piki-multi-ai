@@ -40,11 +40,12 @@ pub(super) fn handle_chat_panel_input(app: &mut App, key: KeyEvent) -> Option<Ac
         }
         KeyCode::Char('o') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             // Open settings
+            app.chat_panel.settings_server_type = app.chat_panel.config.server_type;
             app.chat_panel.settings_url = app.chat_panel.config.base_url.clone();
             app.chat_panel.settings_prompt =
                 app.chat_panel.config.system_prompt.clone().unwrap_or_default();
-            app.chat_panel.settings_field = ChatSettingsField::BaseUrl;
-            app.chat_panel.settings_cursor = app.chat_panel.settings_url.len();
+            app.chat_panel.settings_field = ChatSettingsField::ServerType;
+            app.chat_panel.settings_cursor = 0;
             app.chat_panel.sub_mode = ChatSubMode::Settings;
         }
         KeyCode::Up => {
@@ -128,16 +129,68 @@ fn handle_model_select(app: &mut App, key: KeyEvent) -> Option<Action> {
 }
 
 fn handle_settings(app: &mut App, key: KeyEvent) -> Option<Action> {
+    // ServerType field only responds to Enter/Space (toggle) and Tab/arrows (navigate)
+    if app.chat_panel.settings_field == ChatSettingsField::ServerType {
+        match key.code {
+            KeyCode::Esc => {
+                app.chat_panel.sub_mode = ChatSubMode::Chat;
+            }
+            KeyCode::Enter if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                return save_and_close_settings(app);
+            }
+            KeyCode::Enter | KeyCode::Char(' ') => {
+                // Cycle server type and update default URL if it matches the old default
+                let old_type = app.chat_panel.settings_server_type;
+                let new_type = old_type.next();
+                let old_default = old_type.default_url();
+                app.chat_panel.settings_server_type = new_type;
+                // If URL was the old default, swap to new default
+                if app.chat_panel.settings_url == old_default {
+                    app.chat_panel.settings_url = new_type.default_url().to_string();
+                }
+            }
+            KeyCode::Tab | KeyCode::Down => {
+                app.chat_panel.settings_field = ChatSettingsField::BaseUrl;
+                app.chat_panel.settings_cursor = app.chat_panel.settings_url.len();
+            }
+            KeyCode::Up => {
+                app.chat_panel.settings_field = ChatSettingsField::SystemPrompt;
+                app.chat_panel.settings_cursor = app.chat_panel.settings_prompt.len();
+            }
+            _ => {}
+        }
+        return None;
+    }
+
     match key.code {
         KeyCode::Esc => {
             // Discard edits
             app.chat_panel.sub_mode = ChatSubMode::Chat;
         }
-        KeyCode::Tab | KeyCode::Down | KeyCode::Up => {
-            // Toggle between fields
+        KeyCode::Tab | KeyCode::Down => {
+            // Cycle forward: BaseUrl -> SystemPrompt -> ServerType -> ...
             let (new_field, new_cursor) = match app.chat_panel.settings_field {
+                ChatSettingsField::ServerType => {
+                    (ChatSettingsField::BaseUrl, app.chat_panel.settings_url.len())
+                }
                 ChatSettingsField::BaseUrl => {
                     (ChatSettingsField::SystemPrompt, app.chat_panel.settings_prompt.len())
+                }
+                ChatSettingsField::SystemPrompt => {
+                    (ChatSettingsField::ServerType, 0)
+                }
+            };
+            app.chat_panel.settings_field = new_field;
+            app.chat_panel.settings_cursor = new_cursor;
+        }
+        KeyCode::Up => {
+            // Cycle backward: SystemPrompt -> BaseUrl -> ServerType -> ...
+            let (new_field, new_cursor) = match app.chat_panel.settings_field {
+                ChatSettingsField::ServerType => {
+                    (ChatSettingsField::SystemPrompt, app.chat_panel.settings_prompt.len())
+                }
+                ChatSettingsField::BaseUrl => {
+                    (ChatSettingsField::ServerType, 0)
                 }
                 ChatSettingsField::SystemPrompt => {
                     (ChatSettingsField::BaseUrl, app.chat_panel.settings_url.len())
@@ -147,29 +200,7 @@ fn handle_settings(app: &mut App, key: KeyEvent) -> Option<Action> {
             app.chat_panel.settings_cursor = new_cursor;
         }
         KeyCode::Enter if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            // Save settings
-            let url = app.chat_panel.settings_url.trim().to_string();
-            let prompt = app.chat_panel.settings_prompt.trim().to_string();
-            let url_changed = url != app.chat_panel.config.base_url;
-
-            app.chat_panel.config.base_url = if url.is_empty() {
-                "http://localhost:11434".to_string()
-            } else {
-                url
-            };
-            app.chat_panel.config.system_prompt = if prompt.is_empty() {
-                None
-            } else {
-                Some(prompt)
-            };
-            save_chat_config(app);
-            app.chat_panel.sub_mode = ChatSubMode::Chat;
-
-            if url_changed {
-                // Clear models so they reload from the new URL
-                app.chat_panel.models.clear();
-                return Some(Action::ChatLoadModels);
-            }
+            return save_and_close_settings(app);
         }
         KeyCode::Char(c) => {
             let (field, cursor) = active_field_mut(app);
@@ -202,6 +233,7 @@ fn handle_settings(app: &mut App, key: KeyEvent) -> Option<Action> {
         }
         KeyCode::End => {
             let len = match app.chat_panel.settings_field {
+                ChatSettingsField::ServerType => 0,
                 ChatSettingsField::BaseUrl => app.chat_panel.settings_url.len(),
                 ChatSettingsField::SystemPrompt => app.chat_panel.settings_prompt.len(),
             };
@@ -212,11 +244,52 @@ fn handle_settings(app: &mut App, key: KeyEvent) -> Option<Action> {
     None
 }
 
+/// Save settings and close the settings sub-mode. Returns an action if models need reloading.
+fn save_and_close_settings(app: &mut App) -> Option<Action> {
+    let url = app.chat_panel.settings_url.trim().to_string();
+    let prompt = app.chat_panel.settings_prompt.trim().to_string();
+    let new_server_type = app.chat_panel.settings_server_type;
+    let server_changed = new_server_type != app.chat_panel.config.server_type;
+    let url_changed = url != app.chat_panel.config.base_url;
+
+    app.chat_panel.config.server_type = new_server_type;
+    app.chat_panel.config.base_url = if url.is_empty() {
+        new_server_type.default_url().to_string()
+    } else {
+        url
+    };
+    app.chat_panel.config.system_prompt = if prompt.is_empty() {
+        None
+    } else {
+        Some(prompt)
+    };
+
+    if server_changed {
+        // Clear model on server type change since model names differ
+        app.chat_panel.config.model.clear();
+    }
+
+    save_chat_config(app);
+    app.chat_panel.sub_mode = ChatSubMode::Chat;
+
+    if url_changed || server_changed {
+        // Clear models so they reload from the new URL/server
+        app.chat_panel.models.clear();
+        return Some(Action::ChatLoadModels);
+    }
+    None
+}
+
 /// Get a mutable reference to the active settings field and its cursor.
+///
+/// Only called for text-editable fields (BaseUrl, SystemPrompt).
+/// ServerType is handled separately and never reaches this path.
 fn active_field_mut(app: &mut App) -> (&mut String, &mut usize) {
     let cursor = &mut app.chat_panel.settings_cursor as *mut usize;
     let field = match app.chat_panel.settings_field {
-        ChatSettingsField::BaseUrl => &mut app.chat_panel.settings_url,
+        ChatSettingsField::ServerType | ChatSettingsField::BaseUrl => {
+            &mut app.chat_panel.settings_url
+        }
         ChatSettingsField::SystemPrompt => &mut app.chat_panel.settings_prompt,
     };
     // SAFETY: cursor and field point to different fields of the same struct

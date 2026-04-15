@@ -4,7 +4,7 @@ UI-agnostic library crate. **Must NOT depend on `crates/tui` or `crates/api-clie
 
 ## Modules
 
-- `chat.rs` — `ChatMessage`, `ChatRole`, `ChatConfig` — domain types for the global AI chat panel. Used by both TUI and Desktop frontends.
+- `chat.rs` — `ChatMessage`, `ChatRole`, `ChatConfig`, `ChatServerType` — domain types for the global AI chat panel. `ChatServerType` enum (Ollama, LlamaCpp) selects which server backend to use. Used by both TUI and Desktop frontends.
 - `domain.rs` — `AIProvider` (with `Custom(String)` variant), `WorkspaceInfo`, `WorkspaceType` and other shared types. Re-exported from `lib.rs`.
 - `providers.rs` — `ProviderConfig`, `PromptFormat`, `ProviderManager` — user-configurable providers loaded from `providers.toml`. Manages custom provider binaries, args, prompt format, and agent directories.
 - `storage/` — Trait-based storage layer. Traits in `mod.rs` (`WorkspaceStorage`, `ApiHistoryStorage`, `UiPrefsStorage`, `AgentProfileStorage`), SQLite backend in `sqlite.rs`, legacy JSON in `json.rs`.

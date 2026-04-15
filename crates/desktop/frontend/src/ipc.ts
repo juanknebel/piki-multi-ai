@@ -647,8 +647,11 @@ export function deleteProvider(name: string): Promise<boolean> {
 
 // ── Chat commands ──────────────────────────────────
 
+export type ChatServerType = "Ollama" | "LlamaCpp";
+
 export interface ChatConfig {
   provider: string;
+  server_type: ChatServerType;
   model: string;
   base_url: string;
   system_prompt: string | null;
@@ -685,8 +688,8 @@ export function chatClear(): Promise<void> {
   return invoke("chat_clear");
 }
 
-export function chatListModels(baseUrl: string): Promise<ChatModelInfo[]> {
-  return invoke("chat_list_models", { baseUrl });
+export function chatListModels(baseUrl: string, serverType: ChatServerType): Promise<ChatModelInfo[]> {
+  return invoke("chat_list_models", { baseUrl, serverType });
 }
 
 export function chatStop(): Promise<void> {

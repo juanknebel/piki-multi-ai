@@ -793,6 +793,7 @@ pub enum ChatSubMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ChatSettingsField {
     #[default]
+    ServerType,
     BaseUrl,
     SystemPrompt,
 }
@@ -820,6 +821,8 @@ pub struct ChatPanelState {
     pub settings_field: ChatSettingsField,
     /// Settings editor: cursor position in the active field
     pub settings_cursor: usize,
+    /// Settings editor: editable server type
+    pub settings_server_type: piki_core::chat::ChatServerType,
 }
 
 impl App {

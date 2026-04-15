@@ -266,6 +266,31 @@ fn render_settings(frame: &mut Frame, area: Rect, app: &App) {
     )));
     lines.push(Line::from(""));
 
+    // Server type field (cycle with Enter/Space)
+    let server_active = active_field == crate::app::ChatSettingsField::ServerType;
+    let server_label_style = if server_active {
+        Style::default().fg(h)
+    } else {
+        Style::default().fg(theme.general.muted_text)
+    };
+    let server_label = app.chat_panel.settings_server_type.label();
+    let server_value_style = if server_active {
+        Style::default().fg(h).bg(theme.workspace_list.selected_bg)
+    } else {
+        Style::default()
+    };
+    lines.push(Line::from(Span::styled("  Server:", server_label_style)));
+    lines.push(Line::from(vec![
+        Span::raw("    "),
+        Span::styled(server_label, server_value_style),
+        if server_active {
+            Span::styled("  (Enter to switch)", Style::default().fg(theme.general.muted_text))
+        } else {
+            Span::raw("")
+        },
+    ]));
+    lines.push(Line::from(""));
+
     // Base URL field
     let url_active = active_field == crate::app::ChatSettingsField::BaseUrl;
     let url_label_style = if url_active {

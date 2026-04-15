@@ -20,6 +20,7 @@ let messages: ChatMsg[] = [];
 let streaming = false;
 let currentConfig: ipc.ChatConfig = {
   provider: "ollama",
+  server_type: "Ollama",
   model: "",
   base_url: "http://localhost:11434",
   system_prompt: null,
@@ -140,7 +141,7 @@ async function loadModels() {
   replaceDropdown([{ value: "", label: "Loading\u2026" }], "");
 
   try {
-    const models = await ipc.chatListModels(currentConfig.base_url);
+    const models = await ipc.chatListModels(currentConfig.base_url, currentConfig.server_type);
 
     if (models.length === 0) {
       replaceDropdown([{ value: "", label: "No models found" }], "");
@@ -149,7 +150,7 @@ async function loadModels() {
 
     const options = models.map((m) => ({
       value: m.name,
-      label: `${m.name} (${formatSize(m.size)})`,
+      label: m.size > 0 ? `${m.name} (${formatSize(m.size)})` : m.name,
     }));
 
     // Determine initial selection
@@ -164,7 +165,8 @@ async function loadModels() {
 
     replaceDropdown(options, initial);
   } catch {
-    replaceDropdown([{ value: "", label: "Ollama not available" }], "");
+    const serverLabel = currentConfig.server_type === "LlamaCpp" ? "llama.cpp" : "Ollama";
+    replaceDropdown([{ value: "", label: `${serverLabel} not available` }], "");
   }
 }
 
@@ -363,18 +365,32 @@ function showChatSettings() {
   body.className = "dialog-body";
   body.style.padding = "16px";
 
-  // Provider field
-  const providerRow = document.createElement("div");
-  providerRow.className = "chat-settings-row";
-  providerRow.innerHTML = `<label class="chat-settings-label">Provider</label>`;
-  const providerInput = document.createElement("input");
-  providerInput.className = "dialog-input";
-  providerInput.type = "text";
-  providerInput.value = currentConfig.provider;
-  providerInput.readOnly = true;
-  providerInput.title = "Currently only Ollama is supported";
-  providerRow.appendChild(providerInput);
-  body.appendChild(providerRow);
+  // Server type field
+  const serverRow = document.createElement("div");
+  serverRow.className = "chat-settings-row";
+  serverRow.innerHTML = `<label class="chat-settings-label">Server</label>`;
+  const serverDefaults: Record<ipc.ChatServerType, string> = {
+    Ollama: "http://localhost:11434",
+    LlamaCpp: "http://localhost:8080",
+  };
+  const serverDropdown = createDropdown(
+    [
+      { value: "Ollama", label: "Ollama" },
+      { value: "LlamaCpp", label: "llama.cpp" },
+    ],
+    currentConfig.server_type,
+  );
+  serverDropdown.container.addEventListener("change", () => {
+    const newType = serverDropdown.value as ipc.ChatServerType;
+    const oldDefault = serverDefaults[currentConfig.server_type];
+    // If URL matches old default, update to new default
+    if (urlInput.value.trim() === oldDefault || urlInput.value.trim() === "") {
+      urlInput.value = serverDefaults[newType];
+      urlInput.placeholder = serverDefaults[newType];
+    }
+  });
+  serverRow.appendChild(serverDropdown.container);
+  body.appendChild(serverRow);
 
   // Base URL field
   const urlRow = document.createElement("div");
@@ -384,7 +400,7 @@ function showChatSettings() {
   urlInput.className = "dialog-input";
   urlInput.type = "text";
   urlInput.value = currentConfig.base_url;
-  urlInput.placeholder = "http://localhost:11434";
+  urlInput.placeholder = serverDefaults[currentConfig.server_type];
   urlRow.appendChild(urlInput);
   body.appendChild(urlRow);
 
@@ -425,16 +441,24 @@ function showChatSettings() {
   footer.querySelector(".chat-settings-save")!.addEventListener("click", async () => {
     const newUrl = urlInput.value.trim();
     const newPrompt = promptInput.value.trim();
+    const newServerType = serverDropdown.value as ipc.ChatServerType;
+    const serverChanged = newServerType !== currentConfig.server_type;
     const urlChanged = newUrl !== currentConfig.base_url;
 
-    currentConfig.base_url = newUrl || "http://localhost:11434";
+    currentConfig.server_type = newServerType;
+    currentConfig.base_url = newUrl || serverDefaults[newServerType];
     currentConfig.system_prompt = newPrompt || null;
+
+    if (serverChanged) {
+      // Clear model since model names differ between servers
+      currentConfig.model = "";
+    }
 
     await saveConfig();
     close();
 
-    // Reload models if URL changed
-    if (urlChanged) {
+    // Reload models if URL or server type changed
+    if (urlChanged || serverChanged) {
       await loadModels();
     }
   });
