@@ -117,14 +117,38 @@ check_clean() {
 # Version helpers
 # ---------------------------------------------------------------------------
 
+# Files that carry the project version and must be committed together on bump.
+VERSION_FILES=(
+    "Cargo.toml"
+    "crates/desktop/tauri.conf.json"
+    "crates/desktop/frontend/package.json"
+    "crates/desktop/frontend/package-lock.json"
+    "crates/tui/src/ui/snapshots/piki_multi_ai__ui__tests__about_overlay.snap"
+)
+
 set_workspace_version() {
     local dir="$1" version="$2"
+
+    # Cargo workspace version
     sed -i "s/^version = \".*\"/version = \"$version\"/" "$dir/Cargo.toml"
 
-    # Sync frontend version (package.json + package-lock.json) via `npm version`
+    # Tauri bundle version (top-level "version" field)
+    local tauri_conf="$dir/crates/desktop/tauri.conf.json"
+    if [[ -f "$tauri_conf" ]]; then
+        sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$version\"/" "$tauri_conf"
+    fi
+
+    # Frontend version (package.json + package-lock.json) via `npm version`
     local frontend_dir="$dir/crates/desktop/frontend"
     if [[ -f "$frontend_dir/package.json" ]]; then
         (cd "$frontend_dir" && npm version "$version" --no-git-tag-version --allow-same-version >/dev/null)
+    fi
+
+    # About-overlay snapshot: version is rendered via env!("CARGO_PKG_VERSION")
+    # at compile time, so the insta snapshot must be kept in sync manually.
+    local about_snap="$dir/crates/tui/src/ui/snapshots/piki_multi_ai__ui__tests__about_overlay.snap"
+    if [[ -f "$about_snap" ]]; then
+        sed -i "s/piki-multi-ai v[^ ]*/piki-multi-ai v$version/" "$about_snap"
     fi
 }
 
@@ -173,7 +197,7 @@ release_from_nightly() {
     # 2. Bump version in nightly and commit
     info "Setting version to $version in $DEV_BRANCH..."
     run set_workspace_version "$DEV_DIR" "$version"
-    run git -C "$DEV_DIR" add Cargo.toml crates/desktop/frontend/package.json crates/desktop/frontend/package-lock.json
+    run git -C "$DEV_DIR" add "${VERSION_FILES[@]}"
     run git -C "$DEV_DIR" commit -m "chore: bump version to $version for release"
     ok "Version bumped in $DEV_BRANCH"
 
@@ -202,7 +226,7 @@ release_from_nightly() {
     local next_nightly
     next_nightly="$(next_minor "$version")-nightly"
     run set_workspace_version "$DEV_DIR" "$next_nightly"
-    run git -C "$DEV_DIR" add Cargo.toml crates/desktop/frontend/package.json crates/desktop/frontend/package-lock.json
+    run git -C "$DEV_DIR" add "${VERSION_FILES[@]}"
     run git -C "$DEV_DIR" commit -m "chore: bump version to $next_nightly after $tag release"
     run git -C "$DEV_DIR" push origin "$DEV_BRANCH"
     ok "Nightly synced and version reset"
@@ -269,7 +293,7 @@ hotfix() {
 
     # Bump, commit, tag, push
     run set_workspace_version "$MAIN_DIR" "$version"
-    run git -C "$MAIN_DIR" add Cargo.toml crates/desktop/frontend/package.json crates/desktop/frontend/package-lock.json
+    run git -C "$MAIN_DIR" add "${VERSION_FILES[@]}"
     run git -C "$MAIN_DIR" commit -m "chore: bump version to $version for hotfix"
     run git -C "$MAIN_DIR" tag "$tag"
     run git -C "$MAIN_DIR" push origin "$MAIN_BRANCH" --tags
@@ -283,7 +307,7 @@ hotfix() {
     local next_nightly
     next_nightly="$(next_minor "$version")-nightly"
     run set_workspace_version "$DEV_DIR" "$next_nightly"
-    run git -C "$DEV_DIR" add Cargo.toml crates/desktop/frontend/package.json crates/desktop/frontend/package-lock.json
+    run git -C "$DEV_DIR" add "${VERSION_FILES[@]}"
     run git -C "$DEV_DIR" commit -m "chore: bump version to $next_nightly after hotfix $tag"
     run git -C "$DEV_DIR" push origin "$DEV_BRANCH"
     ok "Nightly synced"
