@@ -85,41 +85,32 @@ pub(crate) fn render_dispatch_agent_dialog(frame: &mut Frame, area: Rect, app: &
         card_description.clone()
     };
 
-    // Agent/provider selector — agents mode or fallback to raw providers
-    let selector_text: String = if agents.is_empty() {
-        let providers = app.new_tab_agent_list();
-        providers
-            .iter()
-            .enumerate()
-            .map(|(i, p)| {
-                if i == agent_idx {
-                    format!("[{}]", p.label())
-                } else {
-                    format!(" {} ", p.label())
-                }
-            })
-            .collect::<Vec<_>>()
-            .join(" ")
-    } else {
-        let mut items: Vec<String> = agents
-            .iter()
-            .enumerate()
-            .map(|(i, (name, _, _))| {
-                if i == agent_idx {
-                    format!("[{}]", name)
-                } else {
-                    format!(" {} ", name)
-                }
-            })
-            .collect();
-        // Append "(None)" option
-        if agent_idx == agents.len() {
-            items.push("[(None)]".to_string());
+    // Selector shows agents followed by raw dispatchable providers.
+    // Indices [0..agents.len()) = agents, [agents.len()..) = providers.
+    let providers = app.dispatchable_provider_list();
+    let mut selector_items: Vec<String> = agents
+        .iter()
+        .enumerate()
+        .map(|(i, (name, _, _))| {
+            if i == agent_idx {
+                format!("[{}]", name)
+            } else {
+                format!(" {} ", name)
+            }
+        })
+        .collect();
+    if !agents.is_empty() && !providers.is_empty() {
+        selector_items.push("│".to_string());
+    }
+    for (i, p) in providers.iter().enumerate() {
+        let combined_idx = agents.len() + i;
+        if combined_idx == agent_idx {
+            selector_items.push(format!("[{}]", p.label()));
         } else {
-            items.push(" (None) ".to_string());
+            selector_items.push(format!(" {} ", p.label()));
         }
-        items.join(" ")
-    };
+    }
+    let selector_text = selector_items.join(" ");
 
     let mut lines = vec![
         Line::from(""),

@@ -3,6 +3,16 @@ import * as ipc from "../../ipc";
 import { toast } from "../toast";
 import { createDropdown, type DropdownOption } from "../dropdown";
 import type { AgentInfo } from "../../ipc";
+import type { AIProvider } from "../../types";
+
+const FALLBACK_PROVIDERS = ["Claude Code", "Gemini", "OpenCode", "Kilo", "Codex"];
+const BUILTIN_PROVIDER_MAP: Record<string, AIProvider> = {
+  "Claude Code": "Claude",
+  "Gemini": "Gemini",
+  "OpenCode": "OpenCode",
+  "Kilo": "Kilo",
+  "Codex": "Codex",
+};
 
 export interface CardContext {
   id: string;
@@ -33,16 +43,19 @@ export async function showDispatchDialog(cardContext?: CardContext) {
     })),
   ];
 
-  const providerOptions: DropdownOption[] = [
-    { value: "Claude Code", label: "Claude Code" },
-    { value: "Gemini", label: "Gemini" },
-    { value: "OpenCode", label: "OpenCode" },
-    { value: "Kilo", label: "Kilo" },
-    { value: "Codex", label: "Codex" },
-  ];
+  let providerOptions: DropdownOption[];
+  try {
+    const providerList = await ipc.listProviders();
+    const dispatchable = providerList.filter((p) => p.dispatchable);
+    providerOptions = dispatchable.length > 0
+      ? dispatchable.map((p) => ({ value: p.name, label: p.name }))
+      : FALLBACK_PROVIDERS.map((p) => ({ value: p, label: p }));
+  } catch {
+    providerOptions = FALLBACK_PROVIDERS.map((p) => ({ value: p, label: p }));
+  }
 
   const agentDropdown = createDropdown(agentOptions, "");
-  const providerDropdown = createDropdown(providerOptions, "Claude Code");
+  const providerDropdown = createDropdown(providerOptions, providerOptions[0]?.value ?? "Claude Code");
 
   const backdrop = document.createElement("div");
   backdrop.className = "dialog-backdrop";
@@ -182,15 +195,8 @@ export async function showDispatchDialog(cardContext?: CardContext) {
   });
 }
 
-function mapProviderToAI(label: string): import("../../types").AIProvider {
-  const map: Record<string, import("../../types").AIProvider> = {
-    "Claude Code": "Claude",
-    "Gemini": "Gemini",
-    "OpenCode": "OpenCode",
-    "Kilo": "Kilo",
-    "Codex": "Codex",
-  };
-  return map[label] || "Claude";
+function mapProviderToAI(label: string): AIProvider {
+  return BUILTIN_PROVIDER_MAP[label] ?? { Custom: label };
 }
 
 function esc(t: string): string {

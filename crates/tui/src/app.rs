@@ -945,6 +945,22 @@ impl App {
             .collect()
     }
 
+    /// Providers from providers.toml that are marked `dispatchable`.
+    /// Falls back to built-in dispatchable providers when none are configured.
+    pub fn dispatchable_provider_list(&self) -> Vec<AIProvider> {
+        let list: Vec<AIProvider> = self
+            .provider_manager
+            .dispatchable()
+            .iter()
+            .map(|config| AIProvider::from_label(&config.name))
+            .collect();
+        if list.is_empty() {
+            AIProvider::dispatchable().to_vec()
+        } else {
+            list
+        }
+    }
+
     /// Set a toast notification, replacing any existing one.
     pub fn set_toast(&mut self, message: impl Into<String>, level: ToastLevel) {
         self.toast = Some(Toast::new(message.into(), level));

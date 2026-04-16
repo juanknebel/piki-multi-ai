@@ -1004,7 +1004,7 @@ pub(super) fn handle_conflict_resolution_input(app: &mut App, key: KeyEvent) -> 
 
 pub(super) fn handle_dispatch_agent_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     // Pre-compute provider list before mutably borrowing dialog state
-    let dispatchable_providers = app.new_tab_agent_list();
+    let dispatchable_providers = app.dispatchable_provider_list();
 
     let Some(DialogState::DispatchAgent {
         source_ws,
@@ -1024,6 +1024,28 @@ pub(super) fn handle_dispatch_agent_input(app: &mut App, key: KeyEvent) -> Optio
         return None;
     };
 
+    let agent_count = agents.len();
+    let provider_count = dispatchable_providers.len();
+    let total = agent_count + provider_count;
+
+    let resolve_selection = |idx: usize| -> (AIProvider, Option<String>, Option<String>) {
+        if idx < agent_count {
+            let (name, prov_str, role) = &agents[idx];
+            (
+                AIProvider::from_label(prov_str),
+                Some(name.clone()),
+                Some(role.clone()),
+            )
+        } else {
+            let prov_idx = idx - agent_count;
+            let p = dispatchable_providers
+                .get(prov_idx)
+                .cloned()
+                .unwrap_or(AIProvider::Claude);
+            (p, None, None)
+        }
+    };
+
     if *step == 1 {
         // Step 2: workspace destination selection
         match key.code {
@@ -1032,16 +1054,7 @@ pub(super) fn handle_dispatch_agent_input(app: &mut App, key: KeyEvent) -> Optio
                 None
             }
             KeyCode::Enter => {
-                let (provider, agent_name, agent_role) = if agents.is_empty() {
-                    let p = dispatchable_providers.get(*agent_idx).cloned().unwrap_or(AIProvider::Claude);
-                    (p, None, None)
-                } else if *agent_idx == agents.len() {
-                    (AIProvider::Claude, None, None)
-                } else {
-                    let (name, prov_str, role) = &agents[*agent_idx];
-                    let p = AIProvider::from_label(prov_str);
-                    (p, Some(name.clone()), Some(role.clone()))
-                };
+                let (provider, agent_name, agent_role) = resolve_selection(*agent_idx);
                 let action = Action::DispatchAgent {
                     source_ws,
                     card_id: card_id.clone(),
@@ -1068,48 +1081,23 @@ pub(super) fn handle_dispatch_agent_input(app: &mut App, key: KeyEvent) -> Optio
         }
     } else {
         // Step 0: agent/provider selection
-        let count = if agents.is_empty() {
-            dispatchable_providers.len()
-        } else {
-            agents.len() + 1 // +1 for "(None)" option
-        };
+        if total == 0 {
+            return None;
+        }
 
         match key.code {
             KeyCode::Left => {
-                *agent_idx = (*agent_idx + count - 1) % count;
+                *agent_idx = (*agent_idx + total - 1) % total;
                 None
             }
             KeyCode::Right | KeyCode::Tab => {
-                *agent_idx = (*agent_idx + 1) % count;
+                *agent_idx = (*agent_idx + 1) % total;
                 None
             }
             KeyCode::Enter => {
-                let no_agent = agents.is_empty() || *agent_idx == agents.len();
-                if no_agent {
-                    // No agent selected — ask about workspace destination
-                    *step = 1;
-                    None
-                } else {
-                    // Agent selected — dispatch directly to new worktree
-                    let (name, prov_str, role) = &agents[*agent_idx];
-                    let p = AIProvider::from_label(prov_str);
-                    let action = Action::DispatchAgent {
-                        source_ws,
-                        card_id: card_id.clone(),
-                        card_title: card_title.clone(),
-                        card_description: card_description.clone(),
-                        card_priority,
-                        card_project: card_project.clone(),
-                        provider: p,
-                        agent_name: Some(name.clone()),
-                        agent_role: Some(role.clone()),
-                        additional_prompt: additional_prompt.clone(),
-                        use_current_ws: false,
-                    };
-                    app.active_dialog = None;
-                    app.mode = AppMode::Normal;
-                    Some(action)
-                }
+                // Always advance to workspace destination selection
+                *step = 1;
+                None
             }
             _ if is_cancel(key, app.config.platform) => {
                 app.active_dialog = None;
