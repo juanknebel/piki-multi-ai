@@ -1,7 +1,7 @@
 import { EditorView, basicSetup } from "codemirror";
-import { EditorState, Compartment } from "@codemirror/state";
+import { EditorState, Compartment, Extension } from "@codemirror/state";
 import { oneDark } from "@codemirror/theme-one-dark";
-import { Extension } from "@codemirror/state";
+import { vim } from "@replit/codemirror-vim";
 import * as ipc from "../ipc";
 import { appState } from "../state";
 import { toast } from "./toast";
@@ -57,6 +57,7 @@ export async function showFileViewer(workspaceIdx: number, path: string) {
     state: EditorState.create({
       doc: content,
       extensions: [
+        vim(),
         basicSetup,
         ...(langExt ? [langExt] : []),
         oneDark,

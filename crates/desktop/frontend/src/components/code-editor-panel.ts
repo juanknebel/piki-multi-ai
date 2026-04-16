@@ -1,6 +1,7 @@
 import { EditorView, basicSetup } from "codemirror";
 import { EditorState, Extension } from "@codemirror/state";
 import { oneDark } from "@codemirror/theme-one-dark";
+import { vim } from "@replit/codemirror-vim";
 import { languageServer } from "codemirror-languageserver";
 import * as ipc from "../ipc";
 import { appState } from "../state";
@@ -189,6 +190,7 @@ function createPanel(tabId: string, filePath: string, workspaceIdx: number): Cod
     const state = EditorState.create({
       doc: content,
       extensions: [
+        vim(),
         basicSetup,
         ...(langExt ? [langExt] : []),
         ...lspExtensions,
