@@ -15,6 +15,7 @@ pub struct AgentLoop {
     registry: ToolRegistry,
     context: ToolContext,
     max_iterations: usize,
+    auto_approve: bool,
 }
 
 impl AgentLoop {
@@ -30,6 +31,7 @@ impl AgentLoop {
             registry,
             context,
             max_iterations: 20,
+            auto_approve: false,
         }
     }
 
@@ -141,6 +143,56 @@ impl AgentLoop {
 
                 let result = match self.registry.get(&tc.name) {
                     Some(tool) => {
+                        // Check if tool requires approval
+                        if tool.requires_approval() && !self.auto_approve {
+                            let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
+                            let _ = event_tx.send(AgentEvent::ApprovalRequired(
+                                crate::context::ApprovalRequest {
+                                    tool_call_id: tc.id.clone(),
+                                    tool_name: tc.name.clone(),
+                                    description: format!(
+                                        "{} with args: {}",
+                                        tc.name,
+                                        tc.arguments
+                                    ),
+                                    response_tx: resp_tx,
+                                },
+                            ));
+
+                            // Wait for approval with timeout
+                            let approval = tokio::time::timeout(
+                                std::time::Duration::from_secs(300),
+                                resp_rx,
+                            )
+                            .await;
+
+                            match approval {
+                                Ok(Ok(crate::context::ApprovalResponse::Allow)) => {
+                                    // Proceed with execution
+                                }
+                                Ok(Ok(crate::context::ApprovalResponse::AllowAll)) => {
+                                    self.auto_approve = true;
+                                    // Proceed with execution
+                                }
+                                Ok(Ok(crate::context::ApprovalResponse::Deny)) | Ok(Err(_)) | Err(_) => {
+                                    let err_msg = "User denied tool execution".to_string();
+                                    let _ = event_tx.send(AgentEvent::ToolResult {
+                                        tool_call_id: tc.id.clone(),
+                                        name: tc.name.clone(),
+                                        result: err_msg.clone(),
+                                        is_error: true,
+                                    });
+                                    wire_messages.push(ChatWireMessage {
+                                        role: "tool".to_string(),
+                                        content: err_msg,
+                                        tool_calls: None,
+                                        tool_call_id: Some(tc.id.clone()),
+                                    });
+                                    continue;
+                                }
+                            }
+                        }
+
                         let args: serde_json::Value = serde_json::from_str(&tc.arguments)
                             .unwrap_or(serde_json::Value::Object(Default::default()));
                         match tool.execute(args, &self.context).await {
@@ -153,7 +205,6 @@ impl AgentLoop {
                                     result: err_msg.clone(),
                                     is_error: true,
                                 });
-                                // Add error result as tool message
                                 wire_messages.push(ChatWireMessage {
                                     role: "tool".to_string(),
                                     content: err_msg,

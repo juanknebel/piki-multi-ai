@@ -2406,7 +2406,7 @@ pub(crate) async fn execute_action(
                     }
                 };
 
-                let registry = piki_agent::ToolRegistry::default_read_only();
+                let registry = piki_agent::ToolRegistry::default_all();
                 let context = piki_agent::ToolContext {
                     workspace_path: ws_path,
                     source_repo,

@@ -830,6 +830,8 @@ pub struct ChatPanelState {
     pub agent_mode: bool,
     /// Currently executing tool name (shown during agent loop)
     pub agent_tool_status: Option<String>,
+    /// Pending write-tool approval request from the agent loop
+    pub pending_approval: Option<piki_agent::ApprovalRequest>,
 }
 
 impl App {

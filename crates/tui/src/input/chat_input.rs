@@ -4,6 +4,30 @@ use crate::action::Action;
 use crate::app::{App, AppMode, ChatSettingsField, ChatSubMode};
 
 pub(super) fn handle_chat_panel_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    // Handle pending approval dialog (y/n/a)
+    if app.chat_panel.pending_approval.is_some() {
+        match key.code {
+            KeyCode::Char('y') | KeyCode::Char('Y') => {
+                if let Some(req) = app.chat_panel.pending_approval.take() {
+                    let _ = req.response_tx.send(piki_agent::ApprovalResponse::Allow);
+                }
+            }
+            KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+                if let Some(req) = app.chat_panel.pending_approval.take() {
+                    let _ = req.response_tx.send(piki_agent::ApprovalResponse::Deny);
+                }
+            }
+            KeyCode::Char('a') | KeyCode::Char('A') => {
+                if let Some(req) = app.chat_panel.pending_approval.take() {
+                    let _ = req.response_tx.send(piki_agent::ApprovalResponse::AllowAll);
+                    app.set_toast("Auto-approve enabled for this session", crate::app::ToastLevel::Info);
+                }
+            }
+            _ => {}
+        }
+        return None;
+    }
+
     match app.chat_panel.sub_mode {
         ChatSubMode::ModelSelect => return handle_model_select(app, key),
         ChatSubMode::Settings => return handle_settings(app, key),

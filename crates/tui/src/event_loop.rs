@@ -362,8 +362,8 @@ pub(crate) async fn run(
                             app.chat_panel.current_response.clear();
                             app.needs_redraw = true;
                         }
-                        piki_agent::AgentEvent::ApprovalRequired(_) => {
-                            // Write-tool approval will be handled in F6
+                        piki_agent::AgentEvent::ApprovalRequired(req) => {
+                            app.chat_panel.pending_approval = Some(req);
                             app.needs_redraw = true;
                         }
                     }

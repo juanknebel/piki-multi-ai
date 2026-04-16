@@ -110,6 +110,23 @@ pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &App) {
             Span::styled("[Esc]", Style::default().fg(h)),
             Span::raw(" cancel"),
         ],
+        _ if app.chat_panel.pending_approval.is_some() => {
+            let tool_name = app
+                .chat_panel
+                .pending_approval
+                .as_ref()
+                .map(|r| r.tool_name.as_str())
+                .unwrap_or("?");
+            vec![
+                Span::styled(format!("Approve {tool_name}? "), Style::default().fg(Color::Yellow)),
+                Span::styled("[y]", Style::default().fg(h)),
+                Span::raw(" allow  "),
+                Span::styled("[n]", Style::default().fg(h)),
+                Span::raw(" deny  "),
+                Span::styled("[a]", Style::default().fg(h)),
+                Span::raw(" allow all"),
+            ]
+        }
         crate::app::ChatSubMode::Chat if app.chat_panel.streaming => {
             if let Some(ref tool_name) = app.chat_panel.agent_tool_status {
                 vec![

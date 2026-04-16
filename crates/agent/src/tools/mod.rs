@@ -1,7 +1,10 @@
+pub mod edit_file;
+pub mod git_diff;
 pub mod git_status;
 pub mod list_files;
 pub mod read_file;
 pub mod search_code;
+pub mod shell;
 
 use crate::context::ToolContext;
 
@@ -47,6 +50,15 @@ impl ToolRegistry {
         reg.register(Box::new(read_file::ReadFileTool));
         reg.register(Box::new(list_files::ListFilesTool));
         reg.register(Box::new(search_code::SearchCodeTool));
+        reg.register(Box::new(git_diff::GitDiffTool));
+        reg
+    }
+
+    /// Create a registry with all tools including write tools (edit_file, shell).
+    pub fn default_all() -> Self {
+        let mut reg = Self::default_read_only();
+        reg.register(Box::new(edit_file::EditFileTool));
+        reg.register(Box::new(shell::ShellTool));
         reg
     }
 

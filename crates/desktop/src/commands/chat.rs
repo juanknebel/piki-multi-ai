@@ -354,7 +354,7 @@ pub async fn chat_send_agent_message(
         }
     };
 
-    let registry = piki_agent::ToolRegistry::default_read_only();
+    let registry = piki_agent::ToolRegistry::default_all();
     let context = piki_agent::ToolContext {
         workspace_path: ws_path.clone(),
         source_repo: ws_path,
