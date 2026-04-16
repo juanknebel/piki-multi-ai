@@ -27,6 +27,8 @@ pub struct DesktopApp {
     pub chat_config: piki_core::chat::ChatConfig,
     /// Whether a chat response is currently being streamed.
     pub chat_streaming: bool,
+    /// Whether agent mode (tool-use) is enabled for chat.
+    pub chat_agent_mode: bool,
 }
 
 #[allow(dead_code)]

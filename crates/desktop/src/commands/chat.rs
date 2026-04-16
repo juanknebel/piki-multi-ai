@@ -299,3 +299,199 @@ pub async fn chat_stop(
     app.chat_streaming = false;
     Ok(())
 }
+
+/// Send a user message using the agentic tool-use loop.
+#[tauri::command]
+pub async fn chat_send_agent_message(
+    app_handle: AppHandle,
+    state: State<'_, Mutex<DesktopApp>>,
+    message: String,
+) -> Result<(), String> {
+    let (config, messages, ws_path) = {
+        let mut app = state.lock();
+
+        if app.chat_streaming {
+            return Err("A response is already being streamed".to_string());
+        }
+
+        app.chat_messages.push(ChatMessage {
+            role: ChatRole::User,
+            content: message,
+            tool_calls: None,
+            tool_call_id: None,
+        });
+        app.chat_streaming = true;
+
+        let ws_path = if !app.workspaces.is_empty() {
+            app.workspaces[app.active_workspace].info.path.clone()
+        } else {
+            std::env::current_dir().unwrap_or_default()
+        };
+
+        (app.chat_config.clone(), app.chat_messages.clone(), ws_path)
+    };
+
+    if config.model.is_empty() {
+        let mut app = state.lock();
+        app.chat_streaming = false;
+        return Err("No model selected.".to_string());
+    }
+
+    tracing::info!(
+        model = %config.model,
+        base_url = %config.base_url,
+        server = %config.server_type.label(),
+        agent = true,
+        "Desktop: sending agent message"
+    );
+
+    let client: Box<dyn piki_api_client::ChatClient> = match config.server_type {
+        piki_core::chat::ChatServerType::Ollama => {
+            Box::new(piki_api_client::OllamaClient::new(&config.base_url))
+        }
+        piki_core::chat::ChatServerType::LlamaCpp => {
+            Box::new(piki_api_client::LlamaCppClient::new(&config.base_url))
+        }
+    };
+
+    let registry = piki_agent::ToolRegistry::default_read_only();
+    let context = piki_agent::ToolContext {
+        workspace_path: ws_path.clone(),
+        source_repo: ws_path,
+    };
+
+    let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel();
+    let model = config.model.clone();
+    let system_prompt = config.system_prompt.clone();
+
+    // Spawn the agent loop
+    let event_tx_clone = event_tx.clone();
+    tokio::spawn(async move {
+        let mut agent = piki_agent::AgentLoop::new(client, model, registry, context);
+        if let Err(e) = agent.run(messages, system_prompt, event_tx_clone.clone()).await {
+            tracing::error!(error = %e, "Agent loop error");
+            let _ = event_tx_clone.send(piki_agent::AgentEvent::Error(e.to_string()));
+        }
+    });
+
+    // Spawn the event forwarder
+    let handle_for_events = app_handle.clone();
+    tokio::spawn(async move {
+        let mut full_content = String::new();
+        while let Some(event) = event_rx.recv().await {
+            match event {
+                piki_agent::AgentEvent::Token(token) => {
+                    full_content.push_str(&token);
+                    let _ = handle_for_events.emit(
+                        "chat-token",
+                        ChatTokenPayload { content: token, done: false },
+                    );
+                }
+                piki_agent::AgentEvent::Done(content) => {
+                    let managed: tauri::State<'_, Mutex<DesktopApp>> =
+                        handle_for_events.state();
+                    let mut app = managed.lock();
+                    let final_content = if full_content.is_empty() {
+                        content
+                    } else {
+                        std::mem::take(&mut full_content)
+                    };
+                    app.chat_messages.push(ChatMessage {
+                        role: ChatRole::Assistant,
+                        content: final_content,
+                        tool_calls: None,
+                        tool_call_id: None,
+                    });
+                    let _ = handle_for_events.emit(
+                        "chat-token",
+                        ChatTokenPayload { content: String::new(), done: false },
+                    );
+                }
+                piki_agent::AgentEvent::ToolCallsStarted(_calls) => {
+                    full_content.clear();
+                    let _ = handle_for_events.emit(
+                        "chat-token",
+                        ChatTokenPayload { content: String::new(), done: false },
+                    );
+                }
+                piki_agent::AgentEvent::ToolExecuting { name } => {
+                    let _ = handle_for_events.emit(
+                        "chat-token",
+                        ChatTokenPayload {
+                            content: format!("\n[Running {name}...]\n"),
+                            done: false,
+                        },
+                    );
+                }
+                piki_agent::AgentEvent::ToolResult { name, result, is_error, .. } => {
+                    let prefix = if is_error { "[Error] " } else { "" };
+                    let display = format!("[{name}] {prefix}{result}");
+                    let truncated = if display.len() > 500 {
+                        format!("{}...", &display[..500])
+                    } else {
+                        display
+                    };
+                    let managed: tauri::State<'_, Mutex<DesktopApp>> =
+                        handle_for_events.state();
+                    let mut app = managed.lock();
+                    app.chat_messages.push(ChatMessage {
+                        role: ChatRole::Tool,
+                        content: truncated,
+                        tool_calls: None,
+                        tool_call_id: None,
+                    });
+                }
+                piki_agent::AgentEvent::Finished => {
+                    let _ = handle_for_events.emit(
+                        "chat-token",
+                        ChatTokenPayload { content: String::new(), done: true },
+                    );
+                    let managed: tauri::State<'_, Mutex<DesktopApp>> =
+                        handle_for_events.state();
+                    let mut app = managed.lock();
+                    app.chat_streaming = false;
+                    return;
+                }
+                piki_agent::AgentEvent::Error(e) => {
+                    let _ = handle_for_events.emit(
+                        "chat-token",
+                        ChatTokenPayload {
+                            content: format!("\n\n[Agent Error: {e}]"),
+                            done: true,
+                        },
+                    );
+                    let managed: tauri::State<'_, Mutex<DesktopApp>> =
+                        handle_for_events.state();
+                    let mut app = managed.lock();
+                    app.chat_streaming = false;
+                    return;
+                }
+                piki_agent::AgentEvent::ApprovalRequired(_) => {
+                    // Write-tool approval will be handled in F6
+                }
+            }
+        }
+    });
+
+    Ok(())
+}
+
+/// Set agent mode on/off.
+#[tauri::command]
+pub async fn chat_set_agent_mode(
+    state: State<'_, Mutex<DesktopApp>>,
+    enabled: bool,
+) -> Result<(), String> {
+    let mut app = state.lock();
+    app.chat_agent_mode = enabled;
+    Ok(())
+}
+
+/// Get current agent mode state.
+#[tauri::command]
+pub async fn chat_get_agent_mode(
+    state: State<'_, Mutex<DesktopApp>>,
+) -> Result<bool, String> {
+    let app = state.lock();
+    Ok(app.chat_agent_mode)
+}

@@ -13,6 +13,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 piki-core = { path = "../core", package = "piki-core" }
 piki-api-client = { path = "../api-client", package = "piki-api-client" }
+piki-agent = { path = "../agent", package = "piki-agent" }
 tauri = { version = "2", features = ["devtools"] }
 tauri-plugin-shell = "2"
 tauri-plugin-clipboard-manager = "2"

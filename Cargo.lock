@@ -3695,6 +3695,7 @@ dependencies = [
  "chrono",
  "flow-core",
  "parking_lot",
+ "piki-agent",
  "piki-api-client",
  "piki-core",
  "portable-pty",

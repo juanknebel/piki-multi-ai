@@ -129,6 +129,7 @@ fn main() {
                 chat_messages: Vec::new(),
                 chat_config,
                 chat_streaming: false,
+                chat_agent_mode: false,
             };
 
             // Start sysinfo event emitter
@@ -223,6 +224,9 @@ fn main() {
             commands::chat::chat_clear,
             commands::chat::chat_list_models,
             commands::chat::chat_stop,
+            commands::chat::chat_send_agent_message,
+            commands::chat::chat_set_agent_mode,
+            commands::chat::chat_get_agent_mode,
         ])
         .run(tauri::generate_context!())
         .expect("error while running piki-desktop");

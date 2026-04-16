@@ -1,6 +1,6 @@
 # piki-desktop
 
-Tauri v2 desktop GUI for piki-multi. **Depends on `piki-core` and `piki-api-client`.**
+Tauri v2 desktop GUI for piki-multi. **Depends on `piki-core`, `piki-api-client`, and `piki-agent`.**
 
 ## Architecture
 
@@ -8,7 +8,7 @@ Tauri v2 desktop GUI for piki-multi. **Depends on `piki-core` and `piki-api-clie
 - `src/state.rs` — `DesktopApp`, `DesktopWorkspace`, `DesktopTab` state structs (managed by Tauri).
 - `src/pty_raw.rs` — `RawPtySession`: streams raw PTY bytes to frontend via Tauri events (no `vt100`).
 - `src/events.rs` — Tauri event emission helpers (sysinfo, git refresh, toast).
-- `src/commands/` — Tauri IPC commands: `workspace.rs`, `pty.rs`, `git.rs`, `system.rs`.
+- `src/commands/` — Tauri IPC commands: `workspace.rs`, `pty.rs`, `git.rs`, `system.rs`, `chat.rs` (includes `chat_send_agent_message` for agentic tool-use, `chat_set_agent_mode`/`chat_get_agent_mode`).
 - `frontend/` — Vanilla TypeScript + xterm.js web frontend, built with Vite.
 
 ## Build
