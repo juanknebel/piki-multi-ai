@@ -1,6 +1,7 @@
 import { appState } from "../state";
 import { getProviderLabel, type FileStatus } from "../types";
 import { showAboutDialog } from "./dialogs/about-dialog";
+import * as ipc from "../ipc";
 
 const STAGED_STATUSES: FileStatus[] = ["Staged", "Added", "Renamed", "StagedModified"];
 
@@ -59,6 +60,13 @@ export function renderStatusBar(container: HTMLElement) {
       }
     }
 
+    // LSP status
+    const lspItem = document.createElement("div");
+    lspItem.className = "status-item status-lsp";
+    lspItem.textContent = "";
+    container.appendChild(lspItem);
+    refreshLspStatus(lspItem);
+
     const wsName = ws?.info.name ?? "No workspace";
     addItem(container, wsName);
 
@@ -81,4 +89,26 @@ function addItem(container: HTMLElement, text: string, ...classes: string[]) {
   item.className = ["status-item", ...classes].join(" ");
   item.textContent = text;
   container.appendChild(item);
+}
+
+function refreshLspStatus(el: HTMLElement) {
+  ipc.lspServerStatus().then((servers) => {
+    if (servers.length === 0) {
+      el.textContent = "";
+      return;
+    }
+    const active = servers.filter((s) => s.status === "active");
+    const idle = servers.filter((s) => s.status === "idle");
+    const parts: string[] = [];
+    if (active.length > 0) {
+      parts.push(active.map((s) => s.server_id).join(", "));
+    }
+    if (idle.length > 0) {
+      parts.push(`${idle.length} idle`);
+    }
+    el.textContent = `LSP: ${parts.join(" · ")}`;
+    el.style.color = active.length > 0 ? "var(--git-added)" : "var(--text-muted)";
+  }).catch(() => {
+    el.textContent = "";
+  });
 }

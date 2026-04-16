@@ -89,3 +89,10 @@
   font-family: "JetBrainsMono NF Mono", monospace;
   line-height: 1.6;
 }
+
+/* ── Status bar LSP indicator ───────────────── */
+
+.status-lsp {
+  font-size: 11px;
+  transition: color 0.2s;
+}

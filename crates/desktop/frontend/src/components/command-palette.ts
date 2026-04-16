@@ -487,6 +487,44 @@ function buildCommands(): Command[] {
     action: () => showLogsDialog(),
   });
 
+  // LSP commands
+  cmds.push({
+    id: "lsp-status",
+    label: "LSP: Show Server Status",
+    category: "LSP",
+    action: async () => {
+      try {
+        const servers = await ipc.lspServerStatus();
+        if (servers.length === 0) {
+          toast("No LSP servers running", "info");
+        } else {
+          const lines = servers.map(
+            (s) => `${s.server_id} [${s.status}] ${s.root_path.split("/").pop()}`
+          );
+          toast(lines.join("\n"), "info");
+        }
+      } catch (err) {
+        toast(`LSP status failed: ${err}`, "error");
+      }
+    },
+  });
+  cmds.push({
+    id: "lsp-stop-all",
+    label: "LSP: Stop All Servers",
+    category: "LSP",
+    action: async () => {
+      try {
+        const servers = await ipc.lspServerStatus();
+        for (const s of servers) {
+          await ipc.lspStopServer(s.server_id, s.root_path);
+        }
+        toast(`Stopped ${servers.length} LSP server(s)`, "info");
+      } catch (err) {
+        toast(`LSP stop failed: ${err}`, "error");
+      }
+    },
+  });
+
   // Theme commands
   cmds.push({
     id: "theme-settings",

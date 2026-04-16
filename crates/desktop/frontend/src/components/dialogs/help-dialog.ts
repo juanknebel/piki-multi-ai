@@ -41,6 +41,14 @@ const SHORTCUTS: { category: string; items: [string, string][] }[] = [
     ],
   },
   {
+    category: "Code Editor",
+    items: [
+      ["Ctrl+I", "Quick Edit (in file viewer)"],
+      ["Ctrl+S", "Save file (in editor)"],
+      ["Ctrl+F", "Find in file (CodeMirror)"],
+    ],
+  },
+  {
     category: "Terminal",
     items: [
       ["Ctrl+C / ⌘C", "Copy Selection"],
