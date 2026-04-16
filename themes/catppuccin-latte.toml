@@ -13,6 +13,9 @@ name_inactive = "#6c6f85"     # subtext0
 detail_selected = "#6c6f85"
 detail_normal = "#9ca0b0"
 selected_bg = "#e6e9ef"       # mantle
+group_header_bg = "#e6e9ef"   # mantle
+separator = "#ccd0da"         # surface0
+alt_bg = "#eff1f5"            # base
 
 [file_list]
 empty_text = "#9ca0b0"

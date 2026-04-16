@@ -74,6 +74,9 @@ struct WorkspaceListToml {
     detail_selected: Option<String>,
     detail_normal: Option<String>,
     selected_bg: Option<String>,
+    group_header_bg: Option<String>,
+    separator: Option<String>,
+    alt_bg: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -105,6 +108,8 @@ struct TabsToml {
 struct SubtabsToml {
     active: Option<String>,
     inactive: Option<String>,
+    close_marker: Option<String>,
+    divider: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -117,6 +122,7 @@ struct StatusBarToml {
     interact_bg: Option<String>,
     navigate_bg: Option<String>,
     mode_fg: Option<String>,
+    separator_fg: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -158,6 +164,7 @@ struct HelpToml {
 struct GeneralToml {
     welcome_text: Option<String>,
     muted_text: Option<String>,
+    scrollbar_thumb: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -193,6 +200,9 @@ pub struct WorkspaceListTheme {
     pub detail_selected: Color,
     pub detail_normal: Color,
     pub selected_bg: Color,
+    pub group_header_bg: Color,
+    pub separator: Color,
+    pub alt_bg: Color,
 }
 
 pub struct FileListTheme {
@@ -218,6 +228,8 @@ pub struct TabsTheme {
 pub struct SubtabsTheme {
     pub active: Color,
     pub inactive: Color,
+    pub close_marker: Color,
+    pub divider: Color,
 }
 
 pub struct StatusBarTheme {
@@ -228,6 +240,7 @@ pub struct StatusBarTheme {
     pub interact_bg: Color,
     pub navigate_bg: Color,
     pub mode_fg: Color,
+    pub separator_fg: Color,
 }
 
 pub struct FooterTheme {
@@ -259,6 +272,7 @@ pub struct HelpTheme {
 pub struct GeneralTheme {
     pub welcome_text: Color,
     pub muted_text: Color,
+    pub scrollbar_thumb: Color,
 }
 
 pub struct FuzzySearchTheme {
@@ -306,6 +320,9 @@ impl Default for Theme {
                 detail_selected: Color::Gray,
                 detail_normal: Color::DarkGray,
                 selected_bg: Color::DarkGray,
+                group_header_bg: Color::Rgb(30, 30, 45),
+                separator: Color::Rgb(50, 50, 60),
+                alt_bg: Color::Rgb(25, 25, 35),
             },
             file_list: FileListTheme {
                 empty_text: Color::DarkGray,
@@ -327,7 +344,9 @@ impl Default for Theme {
             },
             subtabs: SubtabsTheme {
                 active: Color::Cyan,
-                inactive: Color::DarkGray,
+                inactive: Color::Gray,
+                close_marker: Color::DarkGray,
+                divider: Color::DarkGray,
             },
             status_bar: StatusBarTheme {
                 error_bg: Color::Red,
@@ -337,6 +356,7 @@ impl Default for Theme {
                 interact_bg: Color::Green,
                 navigate_bg: Color::Yellow,
                 mode_fg: Color::Black,
+                separator_fg: Color::DarkGray,
             },
             footer: FooterTheme {
                 key: Color::Yellow,
@@ -363,6 +383,7 @@ impl Default for Theme {
             general: GeneralTheme {
                 welcome_text: Color::Gray,
                 muted_text: Color::DarkGray,
+                scrollbar_thumb: Color::Gray,
             },
             fuzzy_search: FuzzySearchTheme {
                 border: Color::Cyan,
@@ -405,6 +426,12 @@ impl Theme {
                     d.workspace_list.detail_normal,
                 ),
                 selected_bg: resolve(&t.workspace_list.selected_bg, d.workspace_list.selected_bg),
+                group_header_bg: resolve(
+                    &t.workspace_list.group_header_bg,
+                    d.workspace_list.group_header_bg,
+                ),
+                separator: resolve(&t.workspace_list.separator, d.workspace_list.separator),
+                alt_bg: resolve(&t.workspace_list.alt_bg, d.workspace_list.alt_bg),
             },
             file_list: FileListTheme {
                 empty_text: resolve(&t.file_list.empty_text, d.file_list.empty_text),
@@ -430,6 +457,8 @@ impl Theme {
             subtabs: SubtabsTheme {
                 active: resolve(&t.subtabs.active, d.subtabs.active),
                 inactive: resolve(&t.subtabs.inactive, d.subtabs.inactive),
+                close_marker: resolve(&t.subtabs.close_marker, d.subtabs.close_marker),
+                divider: resolve(&t.subtabs.divider, d.subtabs.divider),
             },
             status_bar: StatusBarTheme {
                 error_bg: resolve(&t.status_bar.error_bg, d.status_bar.error_bg),
@@ -439,6 +468,7 @@ impl Theme {
                 interact_bg: resolve(&t.status_bar.interact_bg, d.status_bar.interact_bg),
                 navigate_bg: resolve(&t.status_bar.navigate_bg, d.status_bar.navigate_bg),
                 mode_fg: resolve(&t.status_bar.mode_fg, d.status_bar.mode_fg),
+                separator_fg: resolve(&t.status_bar.separator_fg, d.status_bar.separator_fg),
             },
             footer: FooterTheme {
                 key: resolve(&t.footer.key, d.footer.key),
@@ -465,6 +495,10 @@ impl Theme {
             general: GeneralTheme {
                 welcome_text: resolve(&t.general.welcome_text, d.general.welcome_text),
                 muted_text: resolve(&t.general.muted_text, d.general.muted_text),
+                scrollbar_thumb: resolve(
+                    &t.general.scrollbar_thumb,
+                    d.general.scrollbar_thumb,
+                ),
             },
             fuzzy_search: FuzzySearchTheme {
                 border: resolve(&t.fuzzy_search.border, d.fuzzy_search.border),

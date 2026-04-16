@@ -13,6 +13,9 @@ name_inactive = "#d8dee9"     # nord4
 detail_selected = "#d8dee9"
 detail_normal = "#4c566a"
 selected_bg = "#3b4252"       # nord1
+group_header_bg = "#3b4252"   # nord1
+separator = "#434c5e"         # nord2
+alt_bg = "#353b49"
 
 [file_list]
 empty_text = "#4c566a"

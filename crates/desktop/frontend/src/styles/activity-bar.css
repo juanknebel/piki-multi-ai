@@ -1,0 +1,90 @@
+#activity-bar {
+  background: var(--activity-bar-bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 6px;
+  gap: 2px;
+  border-right: 1px solid var(--border-primary);
+  position: relative;
+}
+
+/* Subtle top gradient accent */
+#activity-bar::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(57, 186, 230, 0.3),
+    transparent
+  );
+}
+
+.activity-item {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--activity-bar-inactive);
+  position: relative;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  margin: 1px 3px;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.activity-item:hover {
+  color: var(--activity-bar-fg);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.activity-item.active {
+  color: var(--activity-bar-fg);
+}
+
+/* Glowing active indicator */
+.activity-item.active::before {
+  content: "";
+  position: absolute;
+  left: -3px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: var(--accent-primary);
+  border-radius: 0 2px 2px 0;
+  box-shadow: var(--accent-glow);
+}
+
+.activity-item svg {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
+  transition: transform var(--transition-fast);
+}
+
+.activity-item:active svg {
+  transform: scale(0.92);
+}
+
+.activity-badge {
+  position: absolute;
+  top: 6px;
+  right: 4px;
+  background: var(--accent-primary);
+  color: #000;
+  font-size: 9px;
+  font-weight: 700;
+  min-width: 16px;
+  height: 16px;
+  line-height: 16px;
+  text-align: center;
+  border-radius: 8px;
+  padding: 0 4px;
+  box-shadow: var(--accent-glow);
+}

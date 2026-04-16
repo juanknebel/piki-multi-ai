@@ -24,6 +24,7 @@ pub fn render(
     selection: Option<&Selection>,
     selection_style: Style,
     search: Option<&TermSearchState>,
+    scrollbar_color: Color,
 ) {
     let mut parser_guard = parser.lock();
 
@@ -63,7 +64,7 @@ pub fn render(
             position,
             total,
             visible_height,
-            Color::DarkGray,
+            scrollbar_color,
         );
     }
 

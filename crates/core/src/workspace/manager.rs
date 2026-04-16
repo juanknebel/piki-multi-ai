@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, bail};
-use tokio::process::Command;
+use crate::shell_env;
 
 use crate::domain::{WorkspaceInfo, WorkspaceType};
 use crate::paths::DataPaths;
@@ -42,7 +42,7 @@ impl WorkspaceManager {
 
     /// Detect the git root for a given directory
     pub async fn git_root(source_dir: &PathBuf) -> anyhow::Result<PathBuf> {
-        let output = Command::new("git")
+        let output = shell_env::command("git")
             .args(["rev-parse", "--show-toplevel"])
             .current_dir(source_dir)
             .output()
@@ -86,7 +86,7 @@ impl WorkspaceManager {
             .context("failed to create worktrees directory")?;
 
         // Check if branch exists on remote
-        let ls_remote = Command::new("git")
+        let ls_remote = shell_env::command("git")
             .args(["ls-remote", "--heads", "origin", &branch_name])
             .current_dir(&git_root)
             .output()
@@ -97,7 +97,7 @@ impl WorkspaceManager {
 
         let output = if remote_exists {
             // Fetch the remote branch first
-            let fetch = Command::new("git")
+            let fetch = shell_env::command("git")
                 .args(["fetch", "origin", &branch_name])
                 .current_dir(&git_root)
                 .output()
@@ -112,7 +112,7 @@ impl WorkspaceManager {
             }
 
             // Create worktree from remote branch (auto-creates local tracking branch)
-            Command::new("git")
+            shell_env::command("git")
                 .args([
                     "worktree",
                     "add",
@@ -125,7 +125,7 @@ impl WorkspaceManager {
                 .context("failed to create worktree")?
         } else {
             // Create worktree with new branch
-            Command::new("git")
+            shell_env::command("git")
                 .args([
                     "worktree",
                     "add",
@@ -170,7 +170,7 @@ impl WorkspaceManager {
         dir: &PathBuf,
     ) -> anyhow::Result<WorkspaceInfo> {
         let git_root = Self::git_root(dir).await?;
-        let branch_output = Command::new("git")
+        let branch_output = shell_env::command("git")
             .args(["rev-parse", "--abbrev-ref", "HEAD"])
             .current_dir(dir)
             .output()
@@ -225,7 +225,7 @@ impl WorkspaceManager {
     /// Detect the main branch name (main, master, etc.) for a repository.
     pub async fn detect_main_branch(source_repo: &PathBuf) -> String {
         // Try symbolic-ref of origin/HEAD
-        if let Ok(output) = Command::new("git")
+        if let Ok(output) = shell_env::command("git")
             .args(["symbolic-ref", "refs/remotes/origin/HEAD"])
             .current_dir(source_repo)
             .output()
@@ -239,7 +239,7 @@ impl WorkspaceManager {
             }
         }
         // Fallback: check if "main" branch exists, otherwise "master"
-        if let Ok(output) = Command::new("git")
+        if let Ok(output) = shell_env::command("git")
             .args(["rev-parse", "--verify", "refs/heads/main"])
             .current_dir(source_repo)
             .output()
@@ -258,7 +258,7 @@ impl WorkspaceManager {
         let branch_name = name.to_string();
 
         // git worktree remove --force <path>
-        let output = Command::new("git")
+        let output = shell_env::command("git")
             .args([
                 "worktree",
                 "remove",
@@ -278,7 +278,7 @@ impl WorkspaceManager {
         }
 
         // git branch -D <branch>
-        let _ = Command::new("git")
+        let _ = shell_env::command("git")
             .args(["branch", "-D", &branch_name])
             .current_dir(source_repo)
             .output()

@@ -54,6 +54,29 @@ fn execute_palette_command(app: &mut App, id: &str, switch_idx: Option<usize>) -
         return None;
     }
 
+    // Commands with hardcoded keys (not in config)
+    match id {
+        "manage_agents" => {
+            if let Some(ref storage) = app.storage.agent_profiles
+                && let Some(ws) = app.current_workspace()
+            {
+                let repo = ws.source_repo.clone();
+                if let Ok(agents) = storage.load_agents(&repo) {
+                    app.agent_profiles = agents;
+                }
+            }
+            app.active_dialog = Some(crate::dialog_state::DialogState::ManageAgents { selected: 0 });
+            app.mode = crate::app::AppMode::ManageAgents;
+            return None;
+        }
+        "manage_providers" => {
+            app.active_dialog = Some(crate::dialog_state::DialogState::ManageProviders { selected: 0 });
+            app.mode = crate::app::AppMode::ManageProviders;
+            return None;
+        }
+        _ => {}
+    }
+
     let binding = app.config.get_binding("navigation", id);
     if binding == "???" {
         app.status_message = Some(format!("Unknown command: {}", id));

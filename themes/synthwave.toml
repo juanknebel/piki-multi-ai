@@ -12,6 +12,9 @@ name_inactive = "#bbbbbb"
 detail_selected = "#bbbbbb"
 detail_normal = "#495495"
 selected_bg = "#34294f"
+group_header_bg = "#2a2040"
+separator = "#3d3060"
+alt_bg = "#241c3a"
 
 [file_list]
 empty_text = "#495495"

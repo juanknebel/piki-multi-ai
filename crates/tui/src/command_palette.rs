@@ -118,6 +118,21 @@ fn all_commands() -> Vec<PaletteCommand> {
         cmd!("split_down", "Shrink Left Split", "Layout", "split_down"),
         // Clipboard
         cmd!("copy", "Copy Terminal", "Clipboard", "copy"),
+        // Agents / Providers
+        cmd!(
+            "manage_agents",
+            "Manage Agents",
+            "Agents",
+            "manage_agents"
+        ),
+        cmd!(
+            "manage_providers",
+            "Manage Providers",
+            "Providers",
+            "manage_providers"
+        ),
+        // AI Chat
+        cmd!("chat_panel", "AI Chat", "View", "chat_panel"),
         // App
         cmd!("quit", "Quit", "App", "quit"),
     ]

@@ -22,7 +22,8 @@ pub(crate) enum Action {
         Option<String>,
     ),
     EditWorkspace(usize, Option<String>, String, Option<String>),
-    DeleteWorkspace(usize),
+    /// Second field: optional target kanban column for dispatched cards
+    DeleteWorkspace(usize, Option<String>),
     /// Remove workspace from app list but keep worktree on disk
     RemoveFromList(usize),
     /// Open diff for the file at the given index in the active workspace
@@ -93,6 +94,7 @@ pub(crate) enum Action {
         card_title: String,
         card_description: String,
         card_priority: flow_core::Priority,
+        card_project: String,
         provider: AIProvider,
         agent_name: Option<String>,
         agent_role: Option<String>,
@@ -112,6 +114,10 @@ pub(crate) enum Action {
     ScanRepoAgents,
     /// Import selected agents from repo files into storage: Vec<(name, provider_label, role)>
     ImportAgents(Vec<(String, String, String)>),
+    /// Send the current chat input to Ollama and stream the response
+    ChatSendMessage,
+    /// Load available Ollama models into chat_panel.models
+    ChatLoadModels,
 }
 
 pub(crate) async fn execute_action(
@@ -204,15 +210,17 @@ pub(crate) async fn execute_action(
                 app.set_toast("Workspace updated", ToastLevel::Success);
             }
         }
-        Action::DeleteWorkspace(idx) => {
+        Action::DeleteWorkspace(idx, target_column) => {
             if idx < app.workspaces.len() {
-                // If this was a dispatched agent, move card back to todo
+                // If this was a dispatched agent, move card to the chosen column
                 let dispatch_info = app.workspaces[idx]
                     .info
                     .dispatch_card_id
                     .clone()
                     .zip(app.workspaces[idx].info.dispatch_source_kanban.clone());
-                if let Some((card_id, kanban_path)) = dispatch_info {
+                if let Some((card_id, kanban_path)) = dispatch_info
+                    && let Some(target_col) = target_column
+                {
                     let source_ws_idx = app.workspaces.iter().position(|w| {
                         w.kanban_path.as_deref() == Some(kanban_path.as_str())
                             && w.kanban_provider.is_some()
@@ -231,12 +239,13 @@ pub(crate) async fn execute_action(
                                             &card.description,
                                             card.priority,
                                             "",
+                                            &card.project,
                                         );
                                         break;
                                     }
                                 }
                             }
-                            let _ = kp.move_card(&card_id, "todo");
+                            let _ = kp.move_card(&card_id, &target_col);
                             if let Ok(board) = kp.load_board()
                                 && let Some(ref mut ka) = src_ws.kanban_app
                             {
@@ -1083,16 +1092,16 @@ pub(crate) async fn execute_action(
                                     .clone()
                                     .map(std::path::PathBuf::from)
                                     .unwrap_or_else(|| {
-                                        dirs::home_dir()
-                                            .unwrap_or_else(|| std::path::PathBuf::from("."))
+                                        piki_core::xdg::home_dir()
                                             .join(".config/flow/boards/default")
                                     })
                             });
 
                         let expanded_path = if let Some(path_str) = default_path.to_str() {
                             if path_str.starts_with("~/") {
-                                if let Some(home) = dirs::home_dir() {
-                                    home.join(path_str.strip_prefix("~/").unwrap())
+                                if let Ok(home) = std::env::var("HOME") {
+                                    std::path::PathBuf::from(home)
+                                        .join(path_str.strip_prefix("~/").unwrap())
                                 } else {
                                     default_path
                                 }
@@ -1140,7 +1149,7 @@ pub(crate) async fn execute_action(
                     ws.kanban_provider = Some(kanban_provider);
                 }
 
-                let idx = spawn_tab(ws, provider, app.pty_rows, app.pty_cols, None).await;
+                let idx = spawn_tab(ws, &provider, app.pty_rows, app.pty_cols, None, Some(&app.provider_manager)).await;
                 ws.active_tab = idx;
                 app.status_message = Some(format!("Opened {} tab", provider.label()));
             }
@@ -1959,6 +1968,7 @@ pub(crate) async fn execute_action(
             card_title,
             card_description,
             card_priority,
+            card_project,
             provider,
             agent_name,
             agent_role,
@@ -2015,6 +2025,7 @@ pub(crate) async fn execute_action(
                         &card_description,
                         card_priority,
                         assignee_label,
+                        &card_project,
                     );
                     let _ = kp.move_card(&card_id, "in_progress");
                     if let Some(ref mut ka) = src_ws.kanban_app
@@ -2028,7 +2039,7 @@ pub(crate) async fn execute_action(
                 // Spawn tab in current workspace
                 let ws = &mut app.workspaces[source_ws];
                 let idx =
-                    spawn_tab(ws, provider, app.pty_rows, app.pty_cols, Some(&task_prompt)).await;
+                    spawn_tab(ws, &provider, app.pty_rows, app.pty_cols, Some(&task_prompt), Some(&app.provider_manager)).await;
                 ws.active_tab = idx;
 
                 app.set_toast(
@@ -2082,7 +2093,7 @@ pub(crate) async fn execute_action(
 
                         // Materialize agent config files in worktree
                         if let (Some(name), Some(role)) = (&agent_name, &agent_role) {
-                            let _ = materialize_agent_config(&info.path, name, provider, role);
+                            let _ = materialize_agent_config(&info.path, name, &provider, role, Some(&app.provider_manager));
                         }
 
                         // Update kanban card: set assignee and move to IN PROGRESS
@@ -2097,6 +2108,7 @@ pub(crate) async fn execute_action(
                                 &card_description,
                                 card_priority,
                                 assignee_label,
+                                &card_project,
                             );
                             let _ = kp.move_card(&card_id, "in_progress");
                             if let Some(ref mut ka) = src_ws.kanban_app
@@ -2125,10 +2137,11 @@ pub(crate) async fn execute_action(
                         let ws = &mut app.workspaces[new_idx];
                         let idx = spawn_tab(
                             ws,
-                            provider,
+                            &provider,
                             app.pty_rows,
                             app.pty_cols,
                             Some(&task_prompt),
+                            Some(&app.provider_manager),
                         )
                         .await;
                         ws.active_tab = idx;
@@ -2207,7 +2220,7 @@ pub(crate) async fn execute_action(
                 && let Some((name, provider_str, role)) = agent_data
             {
                 let provider = AIProvider::from_label(&provider_str);
-                match materialize_agent_config(&ws_path, &name, provider, &role) {
+                match materialize_agent_config(&ws_path, &name, &provider, &role, Some(&app.provider_manager)) {
                     Ok(()) => {
                         if let Some(ref storage) = app.storage.agent_profiles {
                             let _ = storage.mark_synced(id);
@@ -2231,17 +2244,26 @@ pub(crate) async fn execute_action(
                 let source_repo = ws.source_repo.clone();
 
                 // Scan provider agent directories for .md files
-                let provider_dirs: &[(&str, &str)] = &[
-                    (".claude/agents", "Claude Code"),
-                    (".gemini/agents", "Gemini"),
-                    (".opencode/agents", "OpenCode"),
-                    (".kilo/agents", "Kilo"),
-                    (".codex/agents", "Codex"),
+                // Start with built-in providers, then add custom providers
+                let mut provider_dirs: Vec<(String, String)> = vec![
+                    (".claude/agents".into(), "Claude Code".into()),
+                    (".gemini/agents".into(), "Gemini".into()),
+                    (".opencode/agents".into(), "OpenCode".into()),
+                    (".kilo/agents".into(), "Kilo".into()),
+                    (".codex/agents".into(), "Codex".into()),
                 ];
+                for config in app.provider_manager.all() {
+                    if let Some(ref agent_dir) = config.agent_dir {
+                        let already = provider_dirs.iter().any(|(d, _)| d == agent_dir);
+                        if !already {
+                            provider_dirs.push((agent_dir.clone(), config.name.clone()));
+                        }
+                    }
+                }
 
                 let mut discovered: Vec<(String, String, String, bool)> = Vec::new();
 
-                for &(dir, provider_label) in provider_dirs {
+                for (dir, provider_label) in &provider_dirs {
                     let agent_dir = source_repo.join(dir);
                     if let Ok(entries) = std::fs::read_dir(&agent_dir) {
                         for entry in entries.flatten() {
@@ -2253,11 +2275,11 @@ pub(crate) async fn execute_action(
                                 let role =
                                     std::fs::read_to_string(&path).unwrap_or_default();
                                 let exists = app.agent_profiles.iter().any(|a| {
-                                    a.name == name && a.provider == provider_label
+                                    a.name == name && a.provider == *provider_label
                                 });
                                 discovered.push((
                                     name,
-                                    provider_label.to_string(),
+                                    provider_label.clone(),
                                     role,
                                     exists,
                                 ));
@@ -2326,6 +2348,193 @@ pub(crate) async fn execute_action(
             app.active_dialog = Some(DialogState::ManageAgents { selected: 0 });
             app.mode = AppMode::ManageAgents;
         }
+
+        Action::ChatSendMessage => {
+            let input = std::mem::take(&mut app.chat_panel.input);
+            let input = input.trim().to_string();
+            if input.is_empty() || app.chat_panel.streaming || app.chat_panel.config.model.is_empty()
+            {
+                if app.chat_panel.config.model.is_empty() {
+                    app.set_toast("No model selected. Press Tab to pick one.", ToastLevel::Error);
+                }
+                return Ok(());
+            }
+
+            // Append user message
+            app.chat_panel.messages.push(piki_core::chat::ChatMessage {
+                role: piki_core::chat::ChatRole::User,
+                content: input,
+                tool_calls: None,
+                tool_call_id: None,
+            });
+            app.chat_panel.input_cursor = 0;
+            app.chat_panel.streaming = true;
+            app.chat_panel.current_response.clear();
+
+            let model = app.chat_panel.config.model.clone();
+            let base_url = app.chat_panel.config.base_url.clone();
+            let server_type = app.chat_panel.config.server_type;
+
+            if app.chat_panel.agent_mode {
+                // ── Agent mode: use AgentLoop with tools ──
+                let messages = app.chat_panel.messages.clone();
+                let system_prompt = app.chat_panel.config.system_prompt.clone();
+                let event_tx = app.agent_event_tx.clone();
+
+                // Get workspace path for tool context
+                let ws_path = if !app.workspaces.is_empty() {
+                    app.workspaces[app.active_workspace].info.path.clone()
+                } else {
+                    std::env::current_dir().unwrap_or_default()
+                };
+                let source_repo = ws_path.clone();
+
+                tracing::info!(
+                    model = %model,
+                    base_url = %base_url,
+                    server = %server_type.label(),
+                    agent = true,
+                    "TUI: sending agent message"
+                );
+
+                let client: Box<dyn piki_api_client::ChatClient> = match server_type {
+                    piki_core::chat::ChatServerType::Ollama => {
+                        Box::new(piki_api_client::OllamaClient::new(&base_url))
+                    }
+                    piki_core::chat::ChatServerType::LlamaCpp => {
+                        Box::new(piki_api_client::LlamaCppClient::new(&base_url))
+                    }
+                };
+
+                let registry = piki_agent::ToolRegistry::default_all();
+                let context = piki_agent::ToolContext {
+                    workspace_path: ws_path,
+                    source_repo,
+                };
+
+                tokio::spawn(async move {
+                    let mut agent = piki_agent::AgentLoop::new(
+                        client, model, registry, context,
+                    );
+                    if let Err(e) = agent.run(messages, system_prompt, event_tx.clone()).await {
+                        tracing::error!(error = %e, "Agent loop error");
+                        let _ = event_tx.send(piki_agent::AgentEvent::Error(e.to_string()));
+                    }
+                });
+            } else {
+                // ── Plain chat mode (existing behavior) ──
+                let tx = app.chat_token_tx.clone();
+
+                let mut role_contents: Vec<(&str, String)> = Vec::new();
+                if let Some(ref sys) = app.chat_panel.config.system_prompt
+                    && !sys.is_empty()
+                {
+                    role_contents.push(("system", sys.clone()));
+                }
+                for msg in &app.chat_panel.messages {
+                    let role = match msg.role {
+                        piki_core::chat::ChatRole::System => "system",
+                        piki_core::chat::ChatRole::User => "user",
+                        piki_core::chat::ChatRole::Assistant => "assistant",
+                        piki_core::chat::ChatRole::Tool => "tool",
+                    };
+                    role_contents.push((role, msg.content.clone()));
+                }
+
+                tracing::info!(
+                    model = %model,
+                    base_url = %base_url,
+                    server = %server_type.label(),
+                    msg_count = role_contents.len(),
+                    "TUI: sending chat message"
+                );
+
+                match server_type {
+                    piki_core::chat::ChatServerType::Ollama => {
+                        let msgs: Vec<piki_api_client::OllamaMessage> = role_contents
+                            .into_iter()
+                            .map(|(r, c)| piki_api_client::OllamaMessage {
+                                role: r.to_string(),
+                                content: c,
+                                tool_calls: None,
+                            })
+                            .collect();
+                        let client = piki_api_client::OllamaClient::new(&base_url);
+                        tokio::spawn(async move {
+                            if let Err(e) = client.chat_stream(&model, &msgs, tx).await {
+                                tracing::error!(error = %e, "Ollama chat_stream error");
+                            }
+                        });
+                    }
+                    piki_core::chat::ChatServerType::LlamaCpp => {
+                        let msgs: Vec<piki_api_client::LlamaCppMessage> = role_contents
+                            .into_iter()
+                            .map(|(r, c)| piki_api_client::LlamaCppMessage {
+                                role: r.to_string(),
+                                content: c,
+                                tool_calls: None,
+                                tool_call_id: None,
+                            })
+                            .collect();
+                        let client = piki_api_client::LlamaCppClient::new(&base_url);
+                        tokio::spawn(async move {
+                            if let Err(e) = client.chat_stream(&model, &msgs, tx).await {
+                                tracing::error!(error = %e, "llama.cpp chat_stream error");
+                            }
+                        });
+                    }
+                }
+            }
+        }
+
+        Action::ChatLoadModels => {
+            let base_url = app.chat_panel.config.base_url.clone();
+            let server_type = app.chat_panel.config.server_type;
+            let status_tx = app.status_tx.clone();
+            let chat_tx = app.chat_token_tx.clone();
+            tracing::debug!(base_url = %base_url, server = %server_type.label(), "TUI: loading chat models");
+
+            match server_type {
+                piki_core::chat::ChatServerType::Ollama => {
+                    tokio::spawn(async move {
+                        let client = piki_api_client::OllamaClient::new(&base_url);
+                        match client.list_models().await {
+                            Ok(models) => {
+                                let names: Vec<String> =
+                                    models.into_iter().map(|m| m.name).collect();
+                                let payload = format!("__MODELS__{}", names.join("\n"));
+                                let _ = chat_tx
+                                    .send(piki_api_client::ChatStreamEvent::Done(payload));
+                            }
+                            Err(e) => {
+                                let msg = format!("{e}. Is Ollama running? (ollama serve)");
+                                let _ = status_tx.send(msg);
+                            }
+                        }
+                    });
+                }
+                piki_core::chat::ChatServerType::LlamaCpp => {
+                    tokio::spawn(async move {
+                        let client = piki_api_client::LlamaCppClient::new(&base_url);
+                        match client.list_models().await {
+                            Ok(models) => {
+                                let names: Vec<String> =
+                                    models.into_iter().map(|m| m.id).collect();
+                                let payload = format!("__MODELS__{}", names.join("\n"));
+                                let _ = chat_tx
+                                    .send(piki_api_client::ChatStreamEvent::Done(payload));
+                            }
+                            Err(e) => {
+                                let msg = format!(
+                                    "{e}. Is llama-server running? (llama-server -m model.gguf)"
+                                );
+                                let _ = status_tx.send(msg);
+                            }
+                        }
+                    });
+                }
+            }
+        }
     }
     Ok(())
 }
@@ -2334,17 +2543,25 @@ pub(crate) async fn execute_action(
 fn materialize_agent_config(
     worktree_path: &std::path::Path,
     agent_name: &str,
-    provider: AIProvider,
+    provider: &AIProvider,
     role: &str,
+    provider_manager: Option<&piki_core::providers::ProviderManager>,
 ) -> anyhow::Result<()> {
     let filename = format!("{}.md", agent_name);
-    let dir = match provider {
-        AIProvider::Claude => ".claude/agents",
-        AIProvider::Gemini => ".gemini/agents",
-        AIProvider::OpenCode => ".opencode/agents",
-        AIProvider::Kilo => ".kilo/agents",
-        AIProvider::Codex => ".codex/agents",
-        _ => return Ok(()),
+    let dir = match provider.builtin_agent_dir() {
+        Some(d) => d.to_string(),
+        None => {
+            // Check custom provider for agent_dir
+            if let AIProvider::Custom(name) = provider
+                && let Some(mgr) = provider_manager
+                && let Some(config) = mgr.get(name)
+                && let Some(agent_dir) = &config.agent_dir
+            {
+                agent_dir.clone()
+            } else {
+                return Ok(());
+            }
+        }
     };
     let agent_dir = worktree_path.join(dir);
     std::fs::create_dir_all(&agent_dir)?;

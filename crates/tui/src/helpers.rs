@@ -22,25 +22,46 @@ pub(crate) fn shutdown(app: &mut App) {
 }
 
 /// Spawn a new tab with the given provider in a workspace.
+/// For Custom providers, `provider_manager` is used to resolve the command and prompt args.
 pub(crate) async fn spawn_tab(
     ws: &mut app::Workspace,
-    provider: AIProvider,
+    provider: &AIProvider,
     rows: u16,
     cols: u16,
     prompt: Option<&str>,
+    provider_manager: Option<&piki_core::providers::ProviderManager>,
 ) -> usize {
-    let idx = ws.add_tab(provider, true);
-    if provider == AIProvider::Kanban || provider == AIProvider::CodeReview {
+    let idx = ws.add_tab(provider.clone(), true);
+    if *provider == AIProvider::Kanban || *provider == AIProvider::CodeReview {
         return idx;
     }
-    if provider == AIProvider::Api {
+    if *provider == AIProvider::Api {
         ws.tabs[idx].api_state = Some(app::ApiTabState::new());
         return idx;
     }
-    let cmd = provider.resolved_command();
-    let args = prompt
-        .map(|p| provider.prompt_args(p))
-        .unwrap_or_default();
+
+    // Resolve command and args: use ProviderManager for Custom providers, built-in methods otherwise
+    let (cmd, args) = if let AIProvider::Custom(name) = provider {
+        if let Some(mgr) = provider_manager
+            && let Some(config) = mgr.get(name)
+        {
+            let prompt_args = prompt
+                .map(|p| piki_core::providers::ProviderManager::prompt_args(config, p))
+                .unwrap_or_default();
+            let mut all_args = config.default_args.clone();
+            all_args.extend(prompt_args);
+            (config.command.clone(), all_args)
+        } else {
+            return idx;
+        }
+    } else {
+        let cmd = provider.resolved_command();
+        let prompt_args = prompt
+            .map(|p| provider.prompt_args(p))
+            .unwrap_or_default();
+        (cmd, prompt_args)
+    };
+
     if let Ok(session) = PtySession::spawn(&ws.path, rows, cols, &cmd, &args).await {
         ws.tabs[idx].pty_parser = Some(Arc::clone(session.parser()));
         ws.tabs[idx].pty_session = Some(session);
@@ -121,13 +142,14 @@ pub(crate) fn subtab_index_at(app: &App, col: u16, area: Rect) -> Option<(usize,
             .markdown_label
             .as_deref()
             .unwrap_or(tab.provider.label());
-        // Matches subtabs.rs: format!(" {}{} ", label, close_marker) where close_marker = " ×" or ""
-        // Display widths: " " (1) + label (ascii len) + " ×" (2 display cols) + " " (1) = label.len() + 4
-        // Without close: " " (1) + label + " " (1) = label.len() + 2
+        // Matches subtabs.rs: " icon " (3) + label + " ×" (2, if closable) + " " (1)
+        // Icon is a single-width char padded: " ▸ " = 3 display cols
+        // With close: 3 + label.len() + 2 + 1 = label.len() + 6
+        // Without close: 3 + label.len() + 1 = label.len() + 4
         let tab_display_width = if tab.closable {
-            label.len() as u16 + 4 // " label × "
+            label.len() as u16 + 6
         } else {
-            label.len() as u16 + 2 // " label "
+            label.len() as u16 + 4
         };
         if col >= x && col < x + tab_display_width {
             // Close button is the last 2 display columns before trailing space: "× "

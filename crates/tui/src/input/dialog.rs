@@ -1,10 +1,11 @@
 use std::path::PathBuf;
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField};
-use crate::dialog_state::{ConflictStrategy, DialogState, EditAgentField, NewTabMenu};
+use crate::config::has_ctrl;
+use crate::dialog_state::{ConflictStrategy, DialogState, EditAgentField, EditProviderField, NewTabMenu};
 use piki_core::{AIProvider, MergeStrategy, WorkspaceType};
 
 use super::confirm_common::{ConfirmResult, dismiss_dialog, handle_yn_input};
@@ -69,7 +70,7 @@ pub(super) fn handle_edit_workspace_input(app: &mut App, key: KeyEvent) -> Optio
                 group_val,
             ));
         }
-        _ if is_cancel(key) => {
+        _ if is_cancel(key, app.config.platform) => {
             app.active_dialog = None;
             app.mode = AppMode::Normal;
             return None;
@@ -182,8 +183,8 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
 
             // Resolve ~ to home directory
             let dir_str = if dir_raw.starts_with('~') {
-                if let Some(home) = dirs::home_dir() {
-                    dir_raw.replacen('~', &home.to_string_lossy(), 1)
+                if let Ok(home) = std::env::var("HOME") {
+                    dir_raw.replacen('~', &home, 1)
                 } else {
                     dir_raw.clone()
                 }
@@ -210,7 +211,7 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
                 group_val,
             ));
         }
-        _ if is_cancel(key) => {
+        _ if is_cancel(key, app.config.platform) => {
             app.active_dialog = None;
             app.mode = AppMode::Normal;
             app.active_pane = ActivePane::WorkspaceList;
@@ -319,9 +320,25 @@ pub(super) fn handle_confirm_delete_input(app: &mut App, key: KeyEvent) -> Optio
 
     match handle_yn_input(key) {
         ConfirmResult::Yes => {
+            // If this is a dispatched workspace, show column picker instead of deleting immediately
+            let is_dispatched = app
+                .workspaces
+                .get(target)
+                .is_some_and(|ws| ws.info.dispatch_card_id.is_some());
+            if is_dispatched
+                && let Some(columns) = get_dispatch_board_columns(app, target)
+            {
+                app.active_dialog = Some(DialogState::DispatchCardMove {
+                    target,
+                    columns,
+                    selected: 0,
+                });
+                app.mode = AppMode::DispatchCardMove;
+                return None;
+            }
             dismiss_dialog(app);
             app.active_pane = ActivePane::WorkspaceList;
-            Some(Action::DeleteWorkspace(target))
+            Some(Action::DeleteWorkspace(target, None))
         }
         ConfirmResult::No => {
             dismiss_dialog(app);
@@ -334,6 +351,63 @@ pub(super) fn handle_confirm_delete_input(app: &mut App, key: KeyEvent) -> Optio
             None
         }
         ConfirmResult::NotHandled => None,
+    }
+}
+
+/// Load the board columns from the source kanban for a dispatched workspace.
+fn get_dispatch_board_columns(app: &mut App, ws_idx: usize) -> Option<Vec<(String, String)>> {
+    let ws = app.workspaces.get(ws_idx)?;
+    let kanban_path = ws.info.dispatch_source_kanban.as_ref()?;
+    let source_ws_idx = app.workspaces.iter().position(|w| {
+        w.kanban_path.as_deref() == Some(kanban_path.as_str()) && w.kanban_provider.is_some()
+    })?;
+    let src_ws = &mut app.workspaces[source_ws_idx];
+    let kp = src_ws.kanban_provider.as_mut()?;
+    let board = kp.load_board().ok()?;
+    let columns: Vec<(String, String)> = board
+        .columns
+        .iter()
+        .map(|c| (c.id.clone(), c.title.clone()))
+        .collect();
+    if columns.is_empty() { None } else { Some(columns) }
+}
+
+pub(super) fn handle_dispatch_card_move_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::DispatchCardMove {
+        target,
+        ref columns,
+        ref mut selected,
+    }) = app.active_dialog
+    else {
+        return None;
+    };
+    let num_columns = columns.len();
+
+    match key.code {
+        KeyCode::Up | KeyCode::Char('k') => {
+            if *selected > 0 {
+                *selected -= 1;
+            }
+            None
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            if *selected + 1 < num_columns {
+                *selected += 1;
+            }
+            None
+        }
+        KeyCode::Enter => {
+            let col_id = columns[*selected].0.clone();
+            dismiss_dialog(app);
+            app.active_pane = ActivePane::WorkspaceList;
+            Some(Action::DeleteWorkspace(target, Some(col_id)))
+        }
+        KeyCode::Esc => {
+            dismiss_dialog(app);
+            app.active_pane = ActivePane::WorkspaceList;
+            None
+        }
+        _ => None,
     }
 }
 
@@ -388,7 +462,7 @@ pub(super) fn handle_confirm_merge_input(app: &mut App, key: KeyEvent) -> Option
 
 pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     let menu = match app.active_dialog {
-        Some(DialogState::NewTab { menu }) => menu,
+        Some(DialogState::NewTab { ref menu }) => menu.clone(),
         _ => return None,
     };
 
@@ -401,7 +475,7 @@ pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Actio
             }
             KeyCode::Char('2') => {
                 app.active_dialog = Some(DialogState::NewTab {
-                    menu: NewTabMenu::Agents,
+                    menu: NewTabMenu::Agents { selected: 0 },
                 });
                 None
             }
@@ -418,40 +492,55 @@ pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Actio
             }
             _ => None,
         },
-        NewTabMenu::Agents => match key.code {
-            KeyCode::Char('1') => {
-                app.active_dialog = None;
-                app.mode = AppMode::Normal;
-                Some(Action::SpawnTab(AIProvider::Claude))
+        NewTabMenu::Agents { selected } => {
+            // Build provider list: built-in dispatchable + custom providers
+            let providers = app.new_tab_agent_list();
+            let count = providers.len();
+
+            match key.code {
+                KeyCode::Char('j') | KeyCode::Down => {
+                    let next = if selected + 1 < count { selected + 1 } else { 0 };
+                    app.active_dialog = Some(DialogState::NewTab {
+                        menu: NewTabMenu::Agents { selected: next },
+                    });
+                    None
+                }
+                KeyCode::Char('k') | KeyCode::Up => {
+                    let prev = if selected > 0 { selected - 1 } else { count.saturating_sub(1) };
+                    app.active_dialog = Some(DialogState::NewTab {
+                        menu: NewTabMenu::Agents { selected: prev },
+                    });
+                    None
+                }
+                KeyCode::Enter => {
+                    if let Some(provider) = providers.get(selected) {
+                        app.active_dialog = None;
+                        app.mode = AppMode::Normal;
+                        Some(Action::SpawnTab(provider.clone()))
+                    } else {
+                        None
+                    }
+                }
+                // Digit shortcuts for first 9 providers
+                KeyCode::Char(c @ '1'..='9') => {
+                    let idx = (c as usize) - ('1' as usize);
+                    if let Some(provider) = providers.get(idx) {
+                        app.active_dialog = None;
+                        app.mode = AppMode::Normal;
+                        Some(Action::SpawnTab(provider.clone()))
+                    } else {
+                        None
+                    }
+                }
+                KeyCode::Esc => {
+                    app.active_dialog = Some(DialogState::NewTab {
+                        menu: NewTabMenu::Main,
+                    });
+                    None
+                }
+                _ => None,
             }
-            KeyCode::Char('2') => {
-                app.active_dialog = None;
-                app.mode = AppMode::Normal;
-                Some(Action::SpawnTab(AIProvider::Gemini))
-            }
-            KeyCode::Char('3') => {
-                app.active_dialog = None;
-                app.mode = AppMode::Normal;
-                Some(Action::SpawnTab(AIProvider::OpenCode))
-            }
-            KeyCode::Char('4') => {
-                app.active_dialog = None;
-                app.mode = AppMode::Normal;
-                Some(Action::SpawnTab(AIProvider::Kilo))
-            }
-            KeyCode::Char('5') => {
-                app.active_dialog = None;
-                app.mode = AppMode::Normal;
-                Some(Action::SpawnTab(AIProvider::Codex))
-            }
-            KeyCode::Esc => {
-                app.active_dialog = Some(DialogState::NewTab {
-                    menu: NewTabMenu::Main,
-                });
-                None
-            }
-            _ => None,
-        },
+        }
         NewTabMenu::Tools => match key.code {
             KeyCode::Char('1') => {
                 app.active_dialog = None;
@@ -478,6 +567,7 @@ pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Actio
         },
     }
 }
+
 
 pub(super) fn handle_dashboard_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     let Some(DialogState::Dashboard {
@@ -913,12 +1003,16 @@ pub(super) fn handle_conflict_resolution_input(app: &mut App, key: KeyEvent) -> 
 }
 
 pub(super) fn handle_dispatch_agent_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    // Pre-compute provider list before mutably borrowing dialog state
+    let dispatchable_providers = app.new_tab_agent_list();
+
     let Some(DialogState::DispatchAgent {
         source_ws,
         ref card_id,
         ref card_title,
         ref card_description,
         card_priority,
+        ref card_project,
         ref mut agent_idx,
         ref agents,
         ref mut additional_prompt,
@@ -939,7 +1033,7 @@ pub(super) fn handle_dispatch_agent_input(app: &mut App, key: KeyEvent) -> Optio
             }
             KeyCode::Enter => {
                 let (provider, agent_name, agent_role) = if agents.is_empty() {
-                    let p = AIProvider::dispatchable()[*agent_idx];
+                    let p = dispatchable_providers.get(*agent_idx).cloned().unwrap_or(AIProvider::Claude);
                     (p, None, None)
                 } else if *agent_idx == agents.len() {
                     (AIProvider::Claude, None, None)
@@ -954,6 +1048,7 @@ pub(super) fn handle_dispatch_agent_input(app: &mut App, key: KeyEvent) -> Optio
                     card_title: card_title.clone(),
                     card_description: card_description.clone(),
                     card_priority,
+                    card_project: card_project.clone(),
                     provider,
                     agent_name,
                     agent_role,
@@ -964,7 +1059,7 @@ pub(super) fn handle_dispatch_agent_input(app: &mut App, key: KeyEvent) -> Optio
                 app.mode = AppMode::Normal;
                 Some(action)
             }
-            _ if is_cancel(key) => {
+            _ if is_cancel(key, app.config.platform) => {
                 // Back to step 0
                 *step = 0;
                 None
@@ -974,7 +1069,7 @@ pub(super) fn handle_dispatch_agent_input(app: &mut App, key: KeyEvent) -> Optio
     } else {
         // Step 0: agent/provider selection
         let count = if agents.is_empty() {
-            AIProvider::dispatchable().len()
+            dispatchable_providers.len()
         } else {
             agents.len() + 1 // +1 for "(None)" option
         };
@@ -1004,6 +1099,7 @@ pub(super) fn handle_dispatch_agent_input(app: &mut App, key: KeyEvent) -> Optio
                         card_title: card_title.clone(),
                         card_description: card_description.clone(),
                         card_priority,
+                        card_project: card_project.clone(),
                         provider: p,
                         agent_name: Some(name.clone()),
                         agent_role: Some(role.clone()),
@@ -1015,7 +1111,7 @@ pub(super) fn handle_dispatch_agent_input(app: &mut App, key: KeyEvent) -> Optio
                     Some(action)
                 }
             }
-            _ if is_cancel(key) => {
+            _ if is_cancel(key, app.config.platform) => {
                 app.active_dialog = None;
                 app.mode = AppMode::Normal;
                 None
@@ -1069,7 +1165,7 @@ pub(super) fn handle_manage_agents_input(app: &mut App, key: KeyEvent) -> Option
         KeyCode::Char('e') | KeyCode::Enter => {
             // Edit selected agent
             if let Some(agent) = app.agent_profiles.get(*selected) {
-                let providers = AIProvider::dispatchable();
+                let providers = app.new_tab_agent_list();
                 let provider_idx = providers
                     .iter()
                     .position(|p| p.label() == agent.provider)
@@ -1114,7 +1210,7 @@ pub(super) fn handle_manage_agents_input(app: &mut App, key: KeyEvent) -> Option
             // Import agents from repo files
             Some(Action::ScanRepoAgents)
         }
-        _ if is_cancel(key) => {
+        _ if is_cancel(key, app.config.platform) => {
             app.active_dialog = None;
             app.mode = AppMode::Normal;
             None
@@ -1124,6 +1220,8 @@ pub(super) fn handle_manage_agents_input(app: &mut App, key: KeyEvent) -> Option
 }
 
 pub(super) fn handle_edit_agent_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let providers = app.new_tab_agent_list();
+
     let Some(DialogState::EditAgent {
         editing_id,
         ref mut name,
@@ -1135,8 +1233,6 @@ pub(super) fn handle_edit_agent_input(app: &mut App, key: KeyEvent) -> Option<Ac
     else {
         return None;
     };
-
-    let providers = AIProvider::dispatchable();
 
     match key.code {
         KeyCode::Tab | KeyCode::BackTab => {
@@ -1172,7 +1268,7 @@ pub(super) fn handle_edit_agent_input(app: &mut App, key: KeyEvent) -> Option<Ac
             app.mode = AppMode::EditAgentRole;
             None
         }
-        _ if is_cancel(key) => {
+        _ if is_cancel(key, app.config.platform) => {
             app.active_dialog = Some(DialogState::ManageAgents { selected: 0 });
             app.mode = AppMode::ManageAgents;
             None
@@ -1193,6 +1289,7 @@ pub(super) fn handle_edit_agent_role_input(app: &mut App, key: KeyEvent) -> Opti
         .current_workspace()
         .map(|ws| ws.source_repo.display().to_string())
         .unwrap_or_default();
+    let providers = app.new_tab_agent_list();
 
     let Some(DialogState::EditAgentRole {
         editing_id,
@@ -1206,10 +1303,8 @@ pub(super) fn handle_edit_agent_role_input(app: &mut App, key: KeyEvent) -> Opti
         return None;
     };
 
-    let providers = AIProvider::dispatchable();
-
-    // Ctrl+S: save and close
-    if key.code == KeyCode::Char('s') && key.modifiers.contains(KeyModifiers::CONTROL) {
+    // Ctrl+S (Cmd+S on macOS): save and close
+    if key.code == KeyCode::Char('s') && has_ctrl(key.modifiers, app.config.platform) {
         let profile = piki_core::storage::AgentProfile {
             id: editing_id,
             source_repo: source_repo_str.clone(),
@@ -1229,7 +1324,7 @@ pub(super) fn handle_edit_agent_role_input(app: &mut App, key: KeyEvent) -> Opti
     }
 
     // Esc: go back to step 1 without saving
-    if is_cancel(key) {
+    if is_cancel(key, app.config.platform) {
         app.active_dialog = Some(DialogState::EditAgent {
             editing_id,
             name: name.clone(),
@@ -1242,8 +1337,8 @@ pub(super) fn handle_edit_agent_role_input(app: &mut App, key: KeyEvent) -> Opti
         return None;
     }
 
-    // Ctrl+D: clear all text
-    if key.code == KeyCode::Char('d') && key.modifiers.contains(KeyModifiers::CONTROL) {
+    // Ctrl+D (Cmd+D on macOS): clear all text
+    if key.code == KeyCode::Char('d') && has_ctrl(key.modifiers, app.config.platform) {
         role.clear();
         *role_cursor = 0;
         *scroll = 0;
@@ -1351,7 +1446,7 @@ pub(super) fn handle_import_agents_input(app: &mut App, key: KeyEvent) -> Option
 
     let count = discovered.len();
     if count == 0 {
-        if is_cancel(key) || key.code == KeyCode::Enter {
+        if is_cancel(key, app.config.platform) || key.code == KeyCode::Enter {
             app.active_dialog = Some(DialogState::ManageAgents { selected: 0 });
             app.mode = AppMode::ManageAgents;
         }
@@ -1402,11 +1497,245 @@ pub(super) fn handle_import_agents_input(app: &mut App, key: KeyEvent) -> Option
                 Some(Action::ImportAgents(to_import))
             }
         }
-        _ if is_cancel(key) => {
+        _ if is_cancel(key, app.config.platform) => {
             app.active_dialog = Some(DialogState::ManageAgents { selected: 0 });
             app.mode = AppMode::ManageAgents;
             None
         }
         _ => None,
     }
+}
+
+pub(super) fn handle_manage_providers_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::ManageProviders {
+        ref mut selected, ..
+    }) = app.active_dialog
+    else {
+        return None;
+    };
+
+    let count = app.provider_manager.all().len();
+
+    match key.code {
+        KeyCode::Char('j') | KeyCode::Down => {
+            if count > 0 {
+                *selected = (*selected + 1) % count;
+            }
+            None
+        }
+        KeyCode::Char('k') | KeyCode::Up => {
+            if count > 0 {
+                *selected = (*selected + count - 1) % count;
+            }
+            None
+        }
+        KeyCode::Char('n') => {
+            // New provider
+            app.active_dialog = Some(DialogState::EditProvider {
+                original_name: None,
+                name: String::new(),
+                name_cursor: 0,
+                description: String::new(),
+                desc_cursor: 0,
+                command: String::new(),
+                command_cursor: 0,
+                default_args: String::new(),
+                args_cursor: 0,
+                prompt_format_idx: 0, // Positional
+                prompt_flag: String::new(),
+                flag_cursor: 0,
+                dispatchable: true,
+                agent_dir: String::new(),
+                agent_dir_cursor: 0,
+                active_field: EditProviderField::Name,
+            });
+            app.mode = AppMode::EditProvider;
+            None
+        }
+        KeyCode::Char('e') | KeyCode::Enter => {
+            // Edit selected provider
+            if let Some(config) = app.provider_manager.all().get(*selected) {
+                let prompt_format_idx = match &config.prompt_format {
+                    piki_core::providers::PromptFormat::Positional => 0,
+                    piki_core::providers::PromptFormat::Flag(_) => 1,
+                    piki_core::providers::PromptFormat::None => 2,
+                };
+                let prompt_flag = match &config.prompt_format {
+                    piki_core::providers::PromptFormat::Flag(f) => f.clone(),
+                    _ => String::new(),
+                };
+                let args_str = config.default_args.join(" ");
+                let agent_dir = config.agent_dir.clone().unwrap_or_default();
+                let name = config.name.clone();
+                let desc = config.description.clone();
+                let cmd = config.command.clone();
+                app.active_dialog = Some(DialogState::EditProvider {
+                    original_name: Some(name.clone()),
+                    name_cursor: name.len(),
+                    name,
+                    desc_cursor: desc.len(),
+                    description: desc,
+                    command_cursor: cmd.len(),
+                    command: cmd,
+                    args_cursor: args_str.len(),
+                    default_args: args_str,
+                    prompt_format_idx,
+                    flag_cursor: prompt_flag.len(),
+                    prompt_flag,
+                    dispatchable: config.dispatchable,
+                    agent_dir_cursor: agent_dir.len(),
+                    agent_dir,
+                    active_field: EditProviderField::Name,
+                });
+                app.mode = AppMode::EditProvider;
+            }
+            None
+        }
+        KeyCode::Char('d') => {
+            // Delete selected provider
+            if let Some(config) = app.provider_manager.all().get(*selected) {
+                let name = config.name.clone();
+                app.provider_manager.remove(&name);
+                let _ = app.provider_manager.save(&app.paths.providers_path());
+                if *selected > 0 && *selected >= app.provider_manager.all().len() {
+                    *selected = selected.saturating_sub(1);
+                }
+                app.set_toast(format!("Provider deleted: {}", name), crate::app::ToastLevel::Success);
+            }
+            None
+        }
+        _ if is_cancel(key, app.config.platform) => {
+            app.active_dialog = None;
+            app.mode = AppMode::Normal;
+            None
+        }
+        _ => None,
+    }
+}
+
+pub(super) fn handle_edit_provider_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    // Ctrl+S: collect data from dialog, save, and return to manager
+    if key.code == KeyCode::Char('s') && has_ctrl(key.modifiers, app.config.platform) {
+        let config = if let Some(DialogState::EditProvider {
+            ref original_name,
+            ref name,
+            ref description,
+            ref command,
+            ref default_args,
+            prompt_format_idx,
+            ref prompt_flag,
+            dispatchable,
+            ref agent_dir,
+            ..
+        }) = app.active_dialog
+        {
+            if name.is_empty() || command.is_empty() {
+                app.set_toast("Name and command are required", crate::app::ToastLevel::Error);
+                return None;
+            }
+            let prompt_format = match prompt_format_idx {
+                1 => piki_core::providers::PromptFormat::Flag(prompt_flag.clone()),
+                2 => piki_core::providers::PromptFormat::None,
+                _ => piki_core::providers::PromptFormat::Positional,
+            };
+            let args: Vec<String> = if default_args.trim().is_empty() {
+                Vec::new()
+            } else {
+                default_args.split_whitespace().map(String::from).collect()
+            };
+            let old_name = original_name.clone();
+            Some((old_name, piki_core::providers::ProviderConfig {
+                name: name.clone(),
+                description: description.clone(),
+                command: command.clone(),
+                default_args: args,
+                prompt_format,
+                dispatchable,
+                agent_dir: if agent_dir.is_empty() { None } else { Some(agent_dir.clone()) },
+            }))
+        } else {
+            None
+        };
+        if let Some((old_name, config)) = config {
+            let saved_name = config.name.clone();
+            // If editing and name changed, remove old entry first
+            if let Some(ref old) = old_name
+                && *old != saved_name
+            {
+                app.provider_manager.remove(old);
+            }
+            app.provider_manager.upsert(config);
+            let _ = app.provider_manager.save(&app.paths.providers_path());
+            app.set_toast(format!("Provider saved: {saved_name}"), crate::app::ToastLevel::Success);
+            app.active_dialog = Some(DialogState::ManageProviders { selected: 0 });
+            app.mode = AppMode::ManageProviders;
+        }
+        return None;
+    }
+
+    // Esc: cancel back to manage
+    if is_cancel(key, app.config.platform) {
+        app.active_dialog = Some(DialogState::ManageProviders { selected: 0 });
+        app.mode = AppMode::ManageProviders;
+        return None;
+    }
+
+    let Some(DialogState::EditProvider {
+        ref mut name,
+        ref mut name_cursor,
+        ref mut description,
+        ref mut desc_cursor,
+        ref mut command,
+        ref mut command_cursor,
+        ref mut default_args,
+        ref mut args_cursor,
+        ref mut prompt_format_idx,
+        ref mut prompt_flag,
+        ref mut flag_cursor,
+        ref mut dispatchable,
+        ref mut agent_dir,
+        ref mut agent_dir_cursor,
+        ref mut active_field,
+        ..
+    }) = app.active_dialog
+    else {
+        return None;
+    };
+
+    // Tab / BackTab to cycle fields
+    if key.code == KeyCode::Tab {
+        *active_field = active_field.next();
+        return None;
+    }
+    if key.code == KeyCode::BackTab {
+        *active_field = active_field.prev();
+        return None;
+    }
+
+    // Field-specific handling
+    let accept_any = |c: char| !c.is_control();
+    match *active_field {
+        EditProviderField::Name => { handle_text_input(name, name_cursor, key, accept_any); }
+        EditProviderField::Description => { handle_text_input(description, desc_cursor, key, accept_any); }
+        EditProviderField::Command => { handle_text_input(command, command_cursor, key, accept_any); }
+        EditProviderField::DefaultArgs => { handle_text_input(default_args, args_cursor, key, accept_any); }
+        EditProviderField::PromptFormat => {
+            match key.code {
+                KeyCode::Left => *prompt_format_idx = (*prompt_format_idx + 2) % 3,
+                KeyCode::Right => *prompt_format_idx = (*prompt_format_idx + 1) % 3,
+                _ => {}
+            }
+        }
+        EditProviderField::PromptFlag => { handle_text_input(prompt_flag, flag_cursor, key, accept_any); }
+        EditProviderField::Dispatchable => {
+            match key.code {
+                KeyCode::Left | KeyCode::Right | KeyCode::Char(' ') => {
+                    *dispatchable = !*dispatchable;
+                }
+                _ => {}
+            }
+        }
+        EditProviderField::AgentDir => { handle_text_input(agent_dir, agent_dir_cursor, key, accept_any); }
+    }
+    None
 }

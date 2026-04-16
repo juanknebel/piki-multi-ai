@@ -4,6 +4,27 @@ use anyhow::Context;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use serde::{Deserialize, Serialize};
 
+/// Detected operating system, used for platform-aware keybindings.
+/// On macOS, `ctrl-*` bindings also accept `Cmd` (Super) and display as `cmd-*`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Platform {
+    Linux,
+    MacOs,
+}
+
+impl Platform {
+    pub fn detect() -> Self {
+        match std::env::consts::OS {
+            "macos" => Self::MacOs,
+            _ => Self::Linux,
+        }
+    }
+
+    pub fn is_macos(self) -> bool {
+        self == Self::MacOs
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KanbanConfig {
     pub provider: String,
@@ -29,10 +50,19 @@ pub struct Config {
     pub keybindings: Keybindings,
     #[serde(default)]
     pub kanban: KanbanConfig,
+    /// Runtime-detected platform (not serialized).
+    #[serde(skip)]
+    pub platform: Platform,
 }
 
 fn default_syntax_theme() -> String {
     "base16-ocean.dark".to_string()
+}
+
+impl Default for Platform {
+    fn default() -> Self {
+        Self::detect()
+    }
 }
 
 impl Default for Config {
@@ -42,6 +72,7 @@ impl Default for Config {
             syntax_theme: default_syntax_theme(),
             keybindings: Keybindings::default(),
             kanban: KanbanConfig::default(),
+            platform: Platform::detect(),
         }
     }
 }
@@ -184,6 +215,9 @@ fn default_navigation() -> HashMap<String, String> {
     m.insert("split_up".to_string(), "+".to_string());
     m.insert("split_up_alt".to_string(), "=".to_string());
     m.insert("split_down".to_string(), "-".to_string());
+
+    // AI Chat
+    m.insert("chat_panel".to_string(), "ctrl-y".to_string());
 
     m
 }
@@ -445,72 +479,86 @@ impl Config {
             return default_config;
         }
 
-        std::fs::read_to_string(path)
+        let mut cfg: Self = std::fs::read_to_string(path)
             .context("failed to read config file")
             .and_then(|data| toml::from_str(&data).context("failed to parse config file"))
             .unwrap_or_else(|e| {
                 tracing::warn!(?path, %e, "failed to load config, using defaults");
                 Self::default()
-            })
+            });
+        cfg.platform = Platform::detect();
+        cfg
     }
 
     pub fn matches_navigation(&self, event: KeyEvent, action: &str) -> bool {
         if let Some(binding) = self.keybindings.navigation.get(action) {
-            key_matches(event, binding)
+            key_matches_platform(event, binding, self.platform)
         } else {
             let defaults = default_navigation();
-            defaults.get(action).is_some_and(|b| key_matches(event, b))
+            defaults
+                .get(action)
+                .is_some_and(|b| key_matches_platform(event, b, self.platform))
         }
     }
 
     pub fn matches_interaction(&self, event: KeyEvent, action: &str) -> bool {
         if let Some(binding) = self.keybindings.interaction.get(action) {
-            key_matches(event, binding)
+            key_matches_platform(event, binding, self.platform)
         } else {
             let defaults = default_interaction();
-            defaults.get(action).is_some_and(|b| key_matches(event, b))
+            defaults
+                .get(action)
+                .is_some_and(|b| key_matches_platform(event, b, self.platform))
         }
     }
 
     pub fn matches_markdown(&self, event: KeyEvent, action: &str) -> bool {
         if let Some(binding) = self.keybindings.markdown.get(action) {
-            key_matches(event, binding)
+            key_matches_platform(event, binding, self.platform)
         } else {
             let defaults = default_markdown();
-            defaults.get(action).is_some_and(|b| key_matches(event, b))
+            defaults
+                .get(action)
+                .is_some_and(|b| key_matches_platform(event, b, self.platform))
         }
     }
 
     pub fn matches_diff(&self, event: KeyEvent, action: &str) -> bool {
         if let Some(binding) = self.keybindings.diff.get(action) {
-            key_matches(event, binding)
+            key_matches_platform(event, binding, self.platform)
         } else {
             let defaults = default_diff();
-            defaults.get(action).is_some_and(|b| key_matches(event, b))
+            defaults
+                .get(action)
+                .is_some_and(|b| key_matches_platform(event, b, self.platform))
         }
     }
 
     pub fn matches_workspace_list(&self, event: KeyEvent, action: &str) -> bool {
         if let Some(binding) = self.keybindings.workspace_list.get(action) {
-            key_matches(event, binding)
+            key_matches_platform(event, binding, self.platform)
         } else {
             let defaults = default_workspace_list();
-            defaults.get(action).is_some_and(|b| key_matches(event, b))
+            defaults
+                .get(action)
+                .is_some_and(|b| key_matches_platform(event, b, self.platform))
         }
     }
 
     pub fn matches_file_list(&self, event: KeyEvent, action: &str) -> bool {
         if let Some(binding) = self.keybindings.file_list.get(action) {
-            key_matches(event, binding)
+            key_matches_platform(event, binding, self.platform)
         } else {
             let defaults = default_file_list();
-            defaults.get(action).is_some_and(|b| key_matches(event, b))
+            defaults
+                .get(action)
+                .is_some_and(|b| key_matches_platform(event, b, self.platform))
         }
     }
 
     pub fn matches_help(&self, event: KeyEvent, action: &str) -> bool {
         if let Some(binding) = self.keybindings.help.get(action) {
-            key_matches(event, binding)
+            key_matches_platform(event, binding, self.platform)
         } else {
             false
         }
@@ -518,7 +566,7 @@ impl Config {
 
     pub fn matches_about(&self, event: KeyEvent, action: &str) -> bool {
         if let Some(binding) = self.keybindings.about.get(action) {
-            key_matches(event, binding)
+            key_matches_platform(event, binding, self.platform)
         } else {
             false
         }
@@ -526,7 +574,7 @@ impl Config {
 
     pub fn matches_workspace_info(&self, event: KeyEvent, action: &str) -> bool {
         if let Some(binding) = self.keybindings.workspace_info.get(action) {
-            key_matches(event, binding)
+            key_matches_platform(event, binding, self.platform)
         } else {
             false
         }
@@ -534,7 +582,7 @@ impl Config {
 
     pub fn matches_dashboard(&self, event: KeyEvent, action: &str) -> bool {
         if let Some(binding) = self.keybindings.dashboard.get(action) {
-            key_matches(event, binding)
+            key_matches_platform(event, binding, self.platform)
         } else {
             false
         }
@@ -542,7 +590,7 @@ impl Config {
 
     pub fn matches_logs(&self, event: KeyEvent, action: &str) -> bool {
         if let Some(binding) = self.keybindings.logs.get(action) {
-            key_matches(event, binding)
+            key_matches_platform(event, binding, self.platform)
         } else {
             false
         }
@@ -550,7 +598,7 @@ impl Config {
 
     pub fn matches_git_stash(&self, event: KeyEvent, action: &str) -> bool {
         if let Some(binding) = self.keybindings.git_stash.get(action) {
-            key_matches(event, binding)
+            key_matches_platform(event, binding, self.platform)
         } else {
             false
         }
@@ -558,20 +606,30 @@ impl Config {
 
     pub fn matches_git_log(&self, event: KeyEvent, action: &str) -> bool {
         if let Some(binding) = self.keybindings.git_log.get(action) {
-            key_matches(event, binding)
+            key_matches_platform(event, binding, self.platform)
         } else {
             let defaults = default_git_log();
-            defaults.get(action).is_some_and(|b| key_matches(event, b))
+            defaults
+                .get(action)
+                .is_some_and(|b| key_matches_platform(event, b, self.platform))
         }
     }
 
     pub fn matches_conflict_resolution(&self, event: KeyEvent, action: &str) -> bool {
         if let Some(binding) = self.keybindings.conflict_resolution.get(action) {
-            key_matches(event, binding)
+            key_matches_platform(event, binding, self.platform)
         } else {
             let defaults = default_conflict_resolution();
-            defaults.get(action).is_some_and(|b| key_matches(event, b))
+            defaults
+                .get(action)
+                .is_some_and(|b| key_matches_platform(event, b, self.platform))
         }
+    }
+
+    /// Format a binding string for the current platform.
+    /// On macOS, replaces `ctrl-` with `cmd-` for display.
+    pub fn format_binding(&self, binding: &str) -> String {
+        format_binding_for_platform(binding, self.platform)
     }
 
     pub fn get_binding(&self, section: &str, action: &str) -> String {
@@ -698,9 +756,39 @@ impl Config {
                 .or_else(|| default_conflict_resolution().get(action).cloned()),
             _ => None,
         };
-        binding.unwrap_or_else(|| "???".to_string())
+        binding
+            .map(|b| self.format_binding(&b))
+            .unwrap_or_else(|| "???".to_string())
     }
+}
 
+/// Check if modifiers include Ctrl (or Super on macOS).
+/// Use this instead of `key.modifiers.contains(KeyModifiers::CONTROL)` for
+/// platform-aware key matching in input handlers.
+pub fn has_ctrl(modifiers: KeyModifiers, platform: Platform) -> bool {
+    modifiers.contains(KeyModifiers::CONTROL)
+        || (platform.is_macos() && modifiers.contains(KeyModifiers::SUPER))
+}
+
+/// Check if modifiers include Alt (or Super on macOS, since Option doesn't send ALT).
+pub fn has_alt(modifiers: KeyModifiers, platform: Platform) -> bool {
+    modifiers.contains(KeyModifiers::ALT)
+        || (platform.is_macos() && modifiers.contains(KeyModifiers::SUPER))
+}
+
+/// Format a binding string for display on the given platform.
+/// On macOS, `ctrl-` and `alt-` become `cmd-` so users see the expected modifier.
+pub fn format_binding_for_platform(binding: &str, platform: Platform) -> String {
+    if platform.is_macos() {
+        let lower = binding.to_lowercase();
+        if lower.starts_with("ctrl-") {
+            return format!("cmd-{}", &binding[5..]);
+        }
+        if lower.starts_with("alt-") {
+            return format!("cmd-{}", &binding[4..]);
+        }
+    }
+    binding.to_string()
 }
 
 pub fn parse_key_event(s: &str) -> Option<KeyEvent> {
@@ -717,6 +805,7 @@ pub fn parse_key_event(s: &str) -> Option<KeyEvent> {
                 "ctrl" => modifiers.insert(KeyModifiers::CONTROL),
                 "alt" => modifiers.insert(KeyModifiers::ALT),
                 "shift" => modifiers.insert(KeyModifiers::SHIFT),
+                "super" | "cmd" => modifiers.insert(KeyModifiers::SUPER),
                 _ => return None,
             }
         }
@@ -760,7 +849,16 @@ pub fn parse_key_event(s: &str) -> Option<KeyEvent> {
     Some(KeyEvent::new(code, modifiers))
 }
 
+/// Match a key event against a binding string (uses runtime OS detection).
+/// Prefer `key_matches_platform` when `Platform` is already known.
+#[cfg(test)]
 pub fn key_matches(event: KeyEvent, binding: &str) -> bool {
+    key_matches_platform(event, binding, Platform::detect())
+}
+
+/// Platform-aware key matching. On macOS, `ctrl-*` and `alt-*` bindings also
+/// accept `super-*` (Cmd), because macOS Option key does not send ALT to terminals.
+pub fn key_matches_platform(event: KeyEvent, binding: &str, platform: Platform) -> bool {
     if let Some(target) = parse_key_event(binding) {
         // Compare modifiers and key code. For Char variants, compare case-insensitively
         // because crossterm may send 'C' (uppercase) when Shift is held, while the
@@ -769,7 +867,27 @@ pub fn key_matches(event: KeyEvent, binding: &str) -> bool {
             (KeyCode::Char(a), KeyCode::Char(b)) => a.eq_ignore_ascii_case(&b),
             (a, b) => a == b,
         };
-        code_match && event.modifiers == target.modifiers
+        if code_match && event.modifiers == target.modifiers {
+            return true;
+        }
+        // On macOS, also accept Super (Cmd) where the binding specifies Ctrl.
+        if platform.is_macos() && code_match && target.modifiers.contains(KeyModifiers::CONTROL) {
+            let macos_mods =
+                (target.modifiers - KeyModifiers::CONTROL) | KeyModifiers::SUPER;
+            if event.modifiers == macos_mods {
+                return true;
+            }
+        }
+        // On macOS, also accept Super (Cmd) where the binding specifies Alt,
+        // because macOS Option key sends special characters instead of ALT.
+        if platform.is_macos() && code_match && target.modifiers.contains(KeyModifiers::ALT) {
+            let macos_mods =
+                (target.modifiers - KeyModifiers::ALT) | KeyModifiers::SUPER;
+            if event.modifiers == macos_mods {
+                return true;
+            }
+        }
+        false
     } else {
         false
     }
@@ -913,5 +1031,149 @@ quit = "ctrl-q"
         // Verify key bindings survived the roundtrip
         assert_eq!(cfg.keybindings.navigation.get("quit").unwrap(), "q");
         assert_eq!(cfg.keybindings.navigation.get("help").unwrap(), "?");
+    }
+
+    // --- Platform-aware keybinding tests ---
+
+    #[test]
+    fn test_parse_super_modifier() {
+        let event = parse_key_event("super-s").unwrap();
+        assert_eq!(event.code, KeyCode::Char('s'));
+        assert!(event.modifiers.contains(KeyModifiers::SUPER));
+    }
+
+    #[test]
+    fn test_parse_cmd_modifier() {
+        let event = parse_key_event("cmd-g").unwrap();
+        assert_eq!(event.code, KeyCode::Char('g'));
+        assert!(event.modifiers.contains(KeyModifiers::SUPER));
+    }
+
+    #[test]
+    fn test_macos_ctrl_binding_accepts_super() {
+        // On macOS, a ctrl-g binding should also match Super+g (Cmd+g)
+        let super_event = KeyEvent::new(KeyCode::Char('g'), KeyModifiers::SUPER);
+        assert!(key_matches_platform(super_event, "ctrl-g", Platform::MacOs));
+        // The original ctrl-g should still work on macOS
+        let ctrl_event = KeyEvent::new(KeyCode::Char('g'), KeyModifiers::CONTROL);
+        assert!(key_matches_platform(ctrl_event, "ctrl-g", Platform::MacOs));
+    }
+
+    #[test]
+    fn test_linux_ctrl_binding_does_not_accept_super() {
+        let super_event = KeyEvent::new(KeyCode::Char('g'), KeyModifiers::SUPER);
+        assert!(!key_matches_platform(super_event, "ctrl-g", Platform::Linux));
+        // ctrl-g should still work on Linux
+        let ctrl_event = KeyEvent::new(KeyCode::Char('g'), KeyModifiers::CONTROL);
+        assert!(key_matches_platform(ctrl_event, "ctrl-g", Platform::Linux));
+    }
+
+    #[test]
+    fn test_macos_ctrl_shift_binding_accepts_super_shift() {
+        // ctrl-shift-c on macOS should match Super+Shift+c (Cmd+Shift+c)
+        let event = KeyEvent::new(
+            KeyCode::Char('c'),
+            KeyModifiers::SUPER | KeyModifiers::SHIFT,
+        );
+        assert!(key_matches_platform(event, "ctrl-shift-c", Platform::MacOs));
+    }
+
+    #[test]
+    fn test_plain_bindings_unaffected_by_platform() {
+        let q_event = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::empty());
+        assert!(key_matches_platform(q_event, "q", Platform::Linux));
+        assert!(key_matches_platform(q_event, "q", Platform::MacOs));
+    }
+
+    #[test]
+    fn test_macos_alt_binding_accepts_super() {
+        // On macOS, alt-m should also match Super+m (Cmd+m) because Option
+        // sends special characters instead of ALT in most terminals.
+        let super_event = KeyEvent::new(KeyCode::Char('m'), KeyModifiers::SUPER);
+        assert!(key_matches_platform(super_event, "alt-m", Platform::MacOs));
+        // Original ALT should still work on macOS (for terminals configured with Option as Meta)
+        let alt_event = KeyEvent::new(KeyCode::Char('m'), KeyModifiers::ALT);
+        assert!(key_matches_platform(alt_event, "alt-m", Platform::MacOs));
+    }
+
+    #[test]
+    fn test_linux_alt_binding_does_not_accept_super() {
+        let super_event = KeyEvent::new(KeyCode::Char('m'), KeyModifiers::SUPER);
+        assert!(!key_matches_platform(super_event, "alt-m", Platform::Linux));
+        // ALT should work on Linux
+        let alt_event = KeyEvent::new(KeyCode::Char('m'), KeyModifiers::ALT);
+        assert!(key_matches_platform(alt_event, "alt-m", Platform::Linux));
+    }
+
+    #[test]
+    fn test_format_binding_for_platform_linux() {
+        assert_eq!(
+            format_binding_for_platform("ctrl-g", Platform::Linux),
+            "ctrl-g"
+        );
+        assert_eq!(
+            format_binding_for_platform("ctrl-shift-c", Platform::Linux),
+            "ctrl-shift-c"
+        );
+        assert_eq!(format_binding_for_platform("q", Platform::Linux), "q");
+    }
+
+    #[test]
+    fn test_format_binding_for_platform_macos() {
+        assert_eq!(
+            format_binding_for_platform("ctrl-g", Platform::MacOs),
+            "cmd-g"
+        );
+        assert_eq!(
+            format_binding_for_platform("ctrl-shift-c", Platform::MacOs),
+            "cmd-shift-c"
+        );
+        // alt-* also maps to cmd-* on macOS (Option doesn't send ALT)
+        assert_eq!(
+            format_binding_for_platform("alt-m", Platform::MacOs),
+            "cmd-m"
+        );
+        // Plain bindings unchanged
+        assert_eq!(format_binding_for_platform("q", Platform::MacOs), "q");
+    }
+
+    #[test]
+    fn test_has_ctrl_linux() {
+        assert!(has_ctrl(KeyModifiers::CONTROL, Platform::Linux));
+        assert!(!has_ctrl(KeyModifiers::SUPER, Platform::Linux));
+        assert!(!has_ctrl(KeyModifiers::ALT, Platform::Linux));
+    }
+
+    #[test]
+    fn test_has_ctrl_macos() {
+        assert!(has_ctrl(KeyModifiers::CONTROL, Platform::MacOs));
+        assert!(has_ctrl(KeyModifiers::SUPER, Platform::MacOs));
+        assert!(!has_ctrl(KeyModifiers::ALT, Platform::MacOs));
+    }
+
+    #[test]
+    fn test_has_alt_linux() {
+        assert!(has_alt(KeyModifiers::ALT, Platform::Linux));
+        assert!(!has_alt(KeyModifiers::SUPER, Platform::Linux));
+        assert!(!has_alt(KeyModifiers::CONTROL, Platform::Linux));
+    }
+
+    #[test]
+    fn test_has_alt_macos() {
+        assert!(has_alt(KeyModifiers::ALT, Platform::MacOs));
+        assert!(has_alt(KeyModifiers::SUPER, Platform::MacOs));
+        assert!(!has_alt(KeyModifiers::CONTROL, Platform::MacOs));
+    }
+
+    #[test]
+    fn test_config_get_binding_macos_display() {
+        let cfg = Config {
+            platform: Platform::MacOs,
+            ..Config::default()
+        };
+        // ctrl-g should display as cmd-g on macOS
+        assert_eq!(cfg.get_binding("interaction", "exit_interaction"), "cmd-g");
+        // Non-ctrl bindings unchanged
+        assert_eq!(cfg.get_binding("navigation", "quit"), "q");
     }
 }

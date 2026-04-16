@@ -45,7 +45,8 @@ esac
 mkdir -p "$THEMES_DIR"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-THEME_SRC="$SCRIPT_DIR/themes"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+THEME_SRC="$PROJECT_ROOT/themes"
 
 if [ -d "$THEME_SRC" ]; then
     for theme_file in "$THEME_SRC"/*.toml; do

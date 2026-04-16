@@ -1,0 +1,124 @@
+.palette-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 150;
+  display: flex;
+  justify-content: center;
+  padding-top: 14vh;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  animation: overlay-in 0.1s var(--ease-out);
+}
+
+.palette {
+  width: 540px;
+  max-width: 90vw;
+  max-height: 55vh;
+  background: var(--dialog-bg);
+  border: 1px solid var(--dialog-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6), 0 0 1px rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: dialog-enter 0.15s var(--ease-out);
+}
+
+.palette-input {
+  padding: 12px 16px;
+  background: var(--bg-input);
+  border: none;
+  border-bottom: 1px solid var(--border-primary);
+  color: var(--text-bright);
+  font-size: 13px;
+  outline: none;
+  letter-spacing: 0.02em;
+}
+
+.palette-input::placeholder {
+  color: var(--text-muted);
+}
+
+.palette-results {
+  overflow-y: auto;
+  flex: 1;
+  padding: 4px 0;
+}
+
+.palette-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background var(--transition-fast);
+}
+
+.palette-item:hover,
+.palette-item.selected {
+  background: var(--sidebar-item-focus);
+}
+
+.palette-item.selected {
+  border-left: 2px solid var(--accent-primary);
+  padding-left: 14px;
+}
+
+.palette-category {
+  color: var(--text-muted);
+  font-size: 10px;
+  min-width: 56px;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.palette-label {
+  flex: 1;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.palette-label strong {
+  color: var(--text-accent);
+  font-weight: 600;
+}
+
+.palette-key {
+  color: var(--text-muted);
+  font-size: 10px;
+  padding: 2px 6px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+
+.palette-empty {
+  padding: 20px 16px;
+  color: var(--text-muted);
+  text-align: center;
+  font-size: 12px;
+}
+
+.palette-group-header {
+  padding: 6px 14px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border-primary);
+}
+
+.palette-group-header:first-child {
+  border-top: none;
+}

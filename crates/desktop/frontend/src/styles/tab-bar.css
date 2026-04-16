@@ -1,0 +1,114 @@
+#tab-bar {
+  display: flex;
+  align-items: stretch;
+  background: var(--tab-inactive-bg);
+  border-bottom: 1px solid var(--border-primary);
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+#tab-bar::-webkit-scrollbar {
+  height: 0;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  height: var(--tab-height);
+  border-right: 1px solid var(--tab-border);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--tab-inactive-fg);
+  background: var(--tab-inactive-bg);
+  position: relative;
+  min-width: 0;
+  flex-shrink: 0;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.tab.active {
+  color: var(--tab-active-fg);
+  background: var(--tab-active-bg);
+}
+
+/* Glowing top accent on active tab */
+.tab.active::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--tab-active-border-top);
+  box-shadow: var(--accent-glow);
+}
+
+.tab-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.tab.active .tab-icon {
+  opacity: 1;
+}
+
+.tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.02em;
+}
+
+.tab-close {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  color: var(--text-muted);
+  opacity: 0;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+.tab:hover .tab-close {
+  opacity: 1;
+}
+
+.tab-close:hover {
+  background: rgba(248, 81, 73, 0.12);
+  color: var(--git-deleted);
+}
+
+.tab-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: var(--tab-height);
+  color: var(--text-muted);
+  font-size: 18px;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+.tab-add:hover {
+  background: var(--bg-hover);
+  color: var(--accent-primary);
+}

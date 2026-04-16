@@ -99,9 +99,9 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         None => 0,
     };
     let new_tab_menu: u8 = match app.active_dialog {
-        Some(crate::dialog_state::DialogState::NewTab { menu }) => match menu {
+        Some(crate::dialog_state::DialogState::NewTab { ref menu }) => match menu {
             crate::dialog_state::NewTabMenu::Main => 1,
-            crate::dialog_state::NewTabMenu::Agents => 2,
+            crate::dialog_state::NewTabMenu::Agents { .. } => 2,
             crate::dialog_state::NewTabMenu::Tools => 3,
         },
         _ => 0,
@@ -271,7 +271,17 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         AppMode::ImportAgents => {
             super::dialogs::render_import_agents_dialog(frame, area, app)
         }
+        AppMode::DispatchCardMove => {
+            super::dialogs::render_dispatch_card_move_dialog(frame, area, app)
+        }
+        AppMode::ManageProviders => {
+            super::dialogs::render_manage_providers_dialog(frame, area, app)
+        }
+        AppMode::EditProvider => {
+            super::dialogs::render_edit_provider_dialog(frame, area, app)
+        }
         AppMode::InlineEdit => {}   // handled by main content render
         AppMode::SubmitReview => {} // handled by full-screen code review bypass above
+        AppMode::ChatPanel => super::chat::render_chat_overlay(frame, area, app),
     }
 }

@@ -1,0 +1,141 @@
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+  padding: 10px;
+  overflow-y: auto;
+  max-height: 65vh;
+}
+
+.dash-card {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  position: relative;
+  overflow: hidden;
+}
+
+.dash-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: transparent;
+  transition: background var(--transition-normal);
+}
+
+.dash-card:hover {
+  border-color: var(--text-muted);
+  background: var(--bg-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.dash-card.dash-active {
+  border-color: var(--accent-primary);
+}
+
+.dash-card.dash-active::before {
+  background: var(--accent-primary);
+  box-shadow: var(--accent-glow);
+}
+
+.dash-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 3px;
+}
+
+.dash-card-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-bright);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dash-card-status {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.dash-card-status.idle {
+  color: var(--text-muted);
+}
+
+.dash-card-status.busy {
+  color: var(--accent-primary);
+  background: var(--accent-muted);
+}
+
+.dash-card-status.done {
+  color: var(--git-added);
+  background: rgba(63, 185, 80, 0.1);
+}
+
+.dash-card-status.error {
+  color: var(--git-deleted);
+  background: rgba(248, 81, 73, 0.1);
+}
+
+.dash-card-branch {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 2px;
+}
+
+.dash-group-header {
+  grid-column: 1 / -1;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding: 4px 0 1px;
+  margin-bottom: -6px;
+}
+
+.dash-group-header:first-child {
+  padding-top: 0;
+}
+
+.dash-group-header:not(:first-child) {
+  margin-top: 2px;
+}
+
+.dash-card-group {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.dash-card-meta {
+  display: flex;
+  gap: 10px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.dash-card-desc {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

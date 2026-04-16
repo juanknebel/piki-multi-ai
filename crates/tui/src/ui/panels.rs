@@ -44,6 +44,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                         label,
                         scroll,
                         border_style,
+                        app.theme.general.scrollbar_thumb,
                     );
                 } else if let (Some(content), Some(label)) =
                     (&tab.markdown_content, &tab.markdown_label)
@@ -59,14 +60,15 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                         scroll,
                         border_style,
                         Some(&app.syntax),
+                        app.theme.general.scrollbar_thumb,
                     );
                 }
                 return;
             }
 
-            let provider = tab.provider;
+            let provider = &tab.provider;
 
-            if provider == crate::app::AIProvider::CodeReview {
+            if *provider == crate::app::AIProvider::CodeReview {
                 // Code review has its own full-screen layout; show a placeholder here
                 let block = Block::default()
                     .title(" Code Review ")
@@ -80,7 +82,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                 return;
             }
 
-            if provider == crate::app::AIProvider::Api {
+            if *provider == crate::app::AIProvider::Api {
                 if let Some(ref api) = tab.api_state {
                     let response_inner = super::api::render(
                         frame,
@@ -100,7 +102,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                 return;
             }
 
-            if provider == crate::app::AIProvider::Kanban {
+            if *provider == crate::app::AIProvider::Kanban {
                 if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
                     && let Some(kanban_app) = ws.kanban_app.as_mut()
                 {
@@ -138,6 +140,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                     selection.as_ref(),
                     selection_style,
                     app.term_search.as_ref(),
+                    app.theme.general.scrollbar_thumb,
                 );
             } else {
                 // Provider CLI not found — show fun ASCII art
@@ -171,14 +174,33 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                 frame.render_widget(text, area);
             }
         } else {
-            // No tabs yet
+            // No tabs yet — centered hints
             let block = Block::default()
                 .title(" Terminal ")
                 .title_style(border_style)
                 .borders(Borders::ALL)
                 .border_style(border_style);
-            let text = Paragraph::new("  Press [t] to open a new tab")
-                .style(Style::default().fg(app.theme.general.muted_text))
+            let key_style = Style::default().fg(app.theme.footer.key);
+            let desc_style = Style::default().fg(app.theme.general.muted_text);
+            let content_lines: Vec<Line> = vec![
+                Line::from(Span::styled("No tabs open", desc_style)),
+                Line::from(""),
+                Line::from(vec![
+                    Span::styled("[t]", key_style),
+                    Span::styled(" Open a new tab", desc_style),
+                ]),
+                Line::from(vec![
+                    Span::styled("[Ctrl+P]", key_style),
+                    Span::styled(" Search commands", desc_style),
+                ]),
+            ];
+            let content_height = content_lines.len() as u16;
+            let inner_height = area.height.saturating_sub(2);
+            let pad = inner_height.saturating_sub(content_height) / 2;
+            let mut lines: Vec<Line> = vec![Line::from(""); pad as usize];
+            lines.extend(content_lines);
+            let text = Paragraph::new(lines)
+                .alignment(ratatui::layout::Alignment::Center)
                 .block(block);
             frame.render_widget(text, area);
         }
@@ -188,11 +210,42 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
             .title_style(border_style)
             .borders(Borders::ALL)
             .border_style(border_style);
-        let text = Paragraph::new(
-            "  Welcome to piki-multi-ai\n\n  Press [n] to create a new workspace\n  Press [?] for help\n  Press [q] to quit",
-        )
-        .style(Style::default().fg(app.theme.general.welcome_text))
-        .block(block);
+        let key_style = Style::default().fg(app.theme.footer.key);
+        let desc_style = Style::default().fg(app.theme.general.welcome_text);
+        let title_style = Style::default()
+            .fg(Color::White)
+            .add_modifier(Modifier::BOLD);
+        let lines = vec![
+            Line::from(""),
+            Line::from(Span::styled(
+                "  Welcome to piki-multi-ai",
+                title_style,
+            )),
+            Line::from(""),
+            Line::from(Span::styled("  Quick Start:", desc_style)),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("  1. ", desc_style),
+                Span::styled("[n]", key_style),
+                Span::styled(" Create your first workspace", desc_style),
+            ]),
+            Line::from(vec![
+                Span::styled("  2. ", desc_style),
+                Span::styled("[Tab]", key_style),
+                Span::styled(" Switch between workspaces", desc_style),
+            ]),
+            Line::from(vec![
+                Span::styled("  3. ", desc_style),
+                Span::styled("[Enter]", key_style),
+                Span::styled(" Interact with the terminal", desc_style),
+            ]),
+            Line::from(vec![
+                Span::styled("  4. ", desc_style),
+                Span::styled("[?]", key_style),
+                Span::styled(" Full help", desc_style),
+            ]),
+        ];
+        let text = Paragraph::new(lines).block(block);
         frame.render_widget(text, area);
     }
     app.selection = selection;
@@ -211,7 +264,8 @@ fn priority_color(p: flow_core::Priority) -> Color {
 fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditState) {
     use flow_tui::app::EditFocus;
 
-    let area = flow_tui::ui::centered(70, 60, parent);
+    // chunks: [0] header, [1] title, [2] project, [3] priority, [4] assignee, [5] description, [6] footer
+    let area = flow_tui::ui::centered(70, 70, parent);
     f.render_widget(Clear, area);
 
     let chunks = Layout::default()
@@ -219,6 +273,7 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
         .margin(1)
         .constraints([
             Constraint::Length(1),
+            Constraint::Length(3),
             Constraint::Length(3),
             Constraint::Length(3),
             Constraint::Length(3),
@@ -240,14 +295,39 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
     } else {
         Style::default()
     };
+    let title_content = if edit.title.is_empty() {
+        Line::from(Span::styled("(required)", Style::default().fg(Color::DarkGray)))
+    } else {
+        Line::from(edit.title.clone())
+    };
     f.render_widget(
-        Paragraph::new(edit.title.clone()).block(
+        Paragraph::new(title_content).block(
             Block::default()
-                .title("Title")
+                .title("Title *")
                 .borders(Borders::ALL)
                 .border_style(title_style),
         ),
         chunks[1],
+    );
+
+    let project_style = if edit.focus == EditFocus::Project {
+        Style::default().fg(Color::Cyan)
+    } else {
+        Style::default()
+    };
+    let project_label = if edit.project.is_empty() {
+        Span::styled("(required)", Style::default().fg(Color::DarkGray))
+    } else {
+        Span::raw(edit.project.clone())
+    };
+    f.render_widget(
+        Paragraph::new(Line::from(project_label)).block(
+            Block::default()
+                .title("Project *")
+                .borders(Borders::ALL)
+                .border_style(project_style),
+        ),
+        chunks[2],
     );
 
     let priority_focused = edit.focus == EditFocus::Priority;
@@ -277,7 +357,7 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
                 .borders(Borders::ALL)
                 .border_style(priority_style),
         ),
-        chunks[2],
+        chunks[3],
     );
 
     let assignee_style = if edit.focus == EditFocus::Assignee {
@@ -292,7 +372,7 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
                 .borders(Borders::ALL)
                 .border_style(assignee_style),
         ),
-        chunks[3],
+        chunks[4],
     );
 
     let desc_style = if edit.focus == EditFocus::Description {
@@ -300,7 +380,7 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
     } else {
         Style::default()
     };
-    let inner_width = chunks[4].width.saturating_sub(2).max(1) as usize;
+    let inner_width = chunks[5].width.saturating_sub(2).max(1) as usize;
     let wrapped: Vec<Line> = char_wrap(&edit.description, inner_width)
         .into_iter()
         .map(Line::from)
@@ -312,14 +392,14 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
                 .borders(Borders::ALL)
                 .border_style(desc_style),
         ),
-        chunks[4],
+        chunks[5],
     );
 
     f.render_widget(
         Paragraph::new("Tab: switch field  ←/→: priority  Enter: save  Esc: cancel")
             .style(Style::default().fg(Color::DarkGray))
             .alignment(ratatui::layout::Alignment::Center),
-        chunks[5],
+        chunks[6],
     );
 
     // Position cursor
@@ -330,6 +410,12 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
                 .count();
             f.set_cursor_position((chunks[1].x + 1 + char_pos as u16, chunks[1].y + 1));
         }
+        EditFocus::Project => {
+            let char_pos = edit.project[..edit.cursor_pos.min(edit.project.len())]
+                .chars()
+                .count();
+            f.set_cursor_position((chunks[2].x + 1 + char_pos as u16, chunks[2].y + 1));
+        }
         EditFocus::Priority => {
             // No text cursor for priority field
         }
@@ -337,14 +423,14 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
             let char_pos = edit.assignee[..edit.cursor_pos.min(edit.assignee.len())]
                 .chars()
                 .count();
-            f.set_cursor_position((chunks[3].x + 1 + char_pos as u16, chunks[3].y + 1));
+            f.set_cursor_position((chunks[4].x + 1 + char_pos as u16, chunks[4].y + 1));
         }
         EditFocus::Description => {
             let char_pos = edit.description[..edit.cursor_pos.min(edit.description.len())]
                 .chars()
                 .count();
             let (row, col) = cursor_visual_pos(&edit.description, char_pos, inner_width);
-            f.set_cursor_position((chunks[4].x + 1 + col, chunks[4].y + 1 + row));
+            f.set_cursor_position((chunks[5].x + 1 + col, chunks[5].y + 1 + row));
         }
     }
 

@@ -1,15 +1,16 @@
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::action::Action;
 use crate::app::{App, AppMode};
+use crate::config::{has_alt, has_ctrl};
 
 use super::fuzzy_common::{FuzzyAction, handle_fuzzy_input};
 
 pub(super) fn handle_fuzzy_search_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     // Handle fuzzy-specific keybindings first (before common keys)
     match key.code {
-        // Ctrl+O: open markdown file in a new tab
-        KeyCode::Char('o') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+        // Ctrl+O (Cmd+O on macOS): open markdown file in a new tab
+        KeyCode::Char('o') if has_ctrl(key.modifiers, app.config.platform) => {
             let selected_path = app
                 .fuzzy
                 .as_ref()
@@ -28,8 +29,8 @@ pub(super) fn handle_fuzzy_search_input(app: &mut App, key: KeyEvent) -> Option<
             }
             return None;
         }
-        // Alt+M: open markdown file in external mdr viewer
-        KeyCode::Char('m') if key.modifiers.contains(KeyModifiers::ALT) => {
+        // Alt+M (Cmd+M on macOS): open markdown file in external mdr viewer
+        KeyCode::Char('m') if has_alt(key.modifiers, app.config.platform) => {
             let selected_path = app
                 .fuzzy
                 .as_ref()
@@ -46,8 +47,8 @@ pub(super) fn handle_fuzzy_search_input(app: &mut App, key: KeyEvent) -> Option<
             }
             return None;
         }
-        // Ctrl+E: open in $EDITOR
-        KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+        // Ctrl+E (Cmd+E on macOS): open in $EDITOR
+        KeyCode::Char('e') if has_ctrl(key.modifiers, app.config.platform) => {
             let selected_path = app
                 .fuzzy
                 .as_ref()
@@ -60,8 +61,8 @@ pub(super) fn handle_fuzzy_search_input(app: &mut App, key: KeyEvent) -> Option<
             }
             return None;
         }
-        // Ctrl+V: open inline editor
-        KeyCode::Char('v') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+        // Ctrl+V (Cmd+V on macOS): open inline editor
+        KeyCode::Char('v') if has_ctrl(key.modifiers, app.config.platform) => {
             let selected_path = app
                 .fuzzy
                 .as_ref()

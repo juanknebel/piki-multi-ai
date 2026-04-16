@@ -19,6 +19,7 @@ notify = "8"
 # Serialization
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+toml = "0.8"
 
 # Fast synchronization primitives
 parking_lot = "0.12"
@@ -36,8 +37,9 @@ chrono = "0.4.44"
 # SQLite storage backend
 rusqlite = { version = "0.34", features = ["bundled"] }
 
-# Home directory resolution
-dirs = "6"
+# Unix system calls (getpwuid_r, setsid)
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [dev-dependencies]
 tempfile = "3"

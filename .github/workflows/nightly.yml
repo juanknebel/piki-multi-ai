@@ -38,7 +38,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y musl-tools
 
       - name: Build
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --release --target ${{ matrix.target }} -p agent-multi
 
       - name: Package binary
         run: |
@@ -52,8 +52,70 @@ jobs:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}.tar.gz
 
+  build-desktop:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            bundles: deb
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            bundles: dmg
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            bundles: dmg
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build frontend
+        run: cd crates/desktop/frontend && npm install && npm run build
+
+      - name: Generate platform icons
+        run: npx @tauri-apps/cli icon crates/desktop/icons/icon.png --output crates/desktop/icons
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - uses: tauri-apps/tauri-action@v0
+        with:
+          projectPath: crates/desktop
+          args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --config '{"build":{"beforeBuildCommand":""}}'
+
+      - name: Collect desktop bundles
+        run: |
+          mkdir -p desktop-bundles
+          cp target/${{ matrix.target }}/release/bundle/deb/*.deb desktop-bundles/ 2>/dev/null || true
+          cp target/${{ matrix.target }}/release/bundle/dmg/*.dmg desktop-bundles/ 2>/dev/null || true
+          ls -la desktop-bundles/
+
+      - name: Package desktop binary (Linux only)
+        if: matrix.os == 'ubuntu-latest'
+        run: tar czf desktop-bundles/piki-desktop-linux-amd64.tar.gz -C target/${{ matrix.target }}/release piki-desktop
+
+      - name: Upload desktop artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.target }}
+          path: desktop-bundles/
+
   release:
-    needs: build
+    needs: [build, build-desktop]
     runs-on: ubuntu-latest
 
     steps:
@@ -64,8 +126,24 @@ jobs:
         with:
           merge-multiple: true
 
+      - name: Package Linux bundle
+        run: |
+          mkdir -p piki-linux-amd64
+          tar xzf piki-multi-ai-linux-amd64.tar.gz -C piki-linux-amd64/
+          tar xzf piki-desktop-linux-amd64.tar.gz -C piki-linux-amd64/
+          cp packaging/linux/install.sh piki-linux-amd64/
+          cp packaging/linux/README.md piki-linux-amd64/
+          cp crates/desktop/icons/icon.png piki-linux-amd64/
+          chmod +x piki-linux-amd64/install.sh
+          tar czf piki-linux-amd64.tar.gz piki-linux-amd64/
+
       - name: Delete existing nightly release
-        run: gh release delete nightly --yes --cleanup-tag || true
+        run: |
+          RELEASE_ID=$(gh api repos/${{ github.repository }}/releases --jq '.[] | select(.tag_name=="nightly") | .id' 2>/dev/null || true)
+          if [ -n "$RELEASE_ID" ]; then
+            gh api -X DELETE repos/${{ github.repository }}/releases/$RELEASE_ID
+          fi
+          git push origin :refs/tags/nightly 2>/dev/null || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -73,13 +151,23 @@ jobs:
         run: |
           gh release create nightly \
             --title "Nightly $(date -u +%Y-%m-%d)" \
-            --notes "Automated nightly build from the \`nightly\` branch.
+            --notes "$(cat <<'NOTES'
+          Automated nightly build from the `nightly` branch.
 
           **Commit:** ${{ github.sha }}
           **Built at:** $(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-          > This is a pre-release. For stable versions, see the [latest release](../../releases/latest)." \
+          ### macOS
+          The `.dmg` is not signed. After mounting and dragging to Applications, remove the quarantine attribute:
+          ```
+          xattr -cr /Applications/Piki\ Desktop.app
+          ```
+          Or right-click the app and select **Open** to bypass Gatekeeper.
+
+          > This is a pre-release. For stable versions, see the [latest release](../../releases/latest).
+          NOTES
+          )" \
             --prerelease \
-            *.tar.gz
+            *.tar.gz *.deb *.dmg
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,98 @@
+/* ── Code Editor (CodeMirror 6) ──────────────── */
+
+/* File viewer modal: CodeMirror fills the body */
+.file-viewer-body .cm-editor {
+  height: 100%;
+  font-family: "JetBrainsMono NF Mono", monospace;
+  font-size: 12px;
+}
+
+.file-viewer-body .cm-editor .cm-scroller {
+  font-family: "JetBrainsMono NF Mono", monospace;
+  line-height: 1.6;
+}
+
+/* ── Code editor tab panel ──────────────────── */
+
+.code-editor-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.code-editor-toolbar {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.code-editor-path {
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.code-editor-dirty {
+  font-size: 10px;
+  color: var(--accent-warm);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.code-editor-lsp-status {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.code-editor-lsp-status.connected {
+  color: var(--git-added);
+}
+
+.code-editor-lsp-status.error {
+  color: var(--git-deleted);
+}
+
+.code-editor-save {
+  font-size: 11px;
+  padding: 3px 10px;
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--radius-sm);
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.code-editor-save:hover {
+  opacity: 0.9;
+}
+
+.code-editor-body {
+  flex: 1;
+  overflow: hidden;
+}
+
+.code-editor-body .cm-editor {
+  height: 100%;
+  font-family: "JetBrainsMono NF Mono", monospace;
+  font-size: 12px;
+}
+
+.code-editor-body .cm-editor .cm-scroller {
+  font-family: "JetBrainsMono NF Mono", monospace;
+  line-height: 1.6;
+}
+
+/* ── Status bar LSP indicator ───────────────── */
+
+.status-lsp {
+  font-size: 11px;
+  transition: color 0.2s;
+}

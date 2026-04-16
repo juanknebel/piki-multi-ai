@@ -1,4 +1,6 @@
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent};
+
+use crate::config::{Platform, has_ctrl};
 
 /// Result of processing a text input key event
 pub(crate) enum TextInputResult {
@@ -182,7 +184,7 @@ pub(crate) fn handle_bulk_insert(app: &mut crate::app::App, text: &str) {
     }
 }
 
-pub(crate) fn is_cancel(key: KeyEvent) -> bool {
+pub(crate) fn is_cancel(key: KeyEvent, platform: Platform) -> bool {
     key.code == KeyCode::Esc
-        || (key.code == KeyCode::Char('g') && key.modifiers.contains(KeyModifiers::CONTROL))
+        || (key.code == KeyCode::Char('g') && has_ctrl(key.modifiers, platform))
 }

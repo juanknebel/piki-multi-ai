@@ -1,0 +1,213 @@
+/* ── Theme settings dialog ────────────────────────── */
+.theme-preset-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-primary);
+  margin-bottom: 4px;
+}
+
+.theme-preset-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  flex-shrink: 0;
+}
+
+.theme-preset-dropdown {
+  flex: 1;
+  position: relative;
+}
+
+.theme-preset-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 6px 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+}
+
+.theme-preset-trigger:hover,
+.theme-preset-trigger:focus {
+  border-color: var(--accent-primary);
+  outline: none;
+}
+
+.theme-preset-trigger-arrow {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.theme-preset-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--bg-dropdown);
+  border: 1px solid var(--dialog-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  padding: 4px 0;
+  z-index: 60;
+  animation: dialog-enter 0.12s var(--ease-out);
+}
+
+.theme-preset-item {
+  display: block;
+  width: 100%;
+  padding: 7px 14px;
+  font-size: 12px;
+  color: var(--text-primary);
+  text-align: left;
+  transition: background 0.1s, color 0.1s;
+}
+
+.theme-preset-item:hover {
+  background: var(--bg-active);
+  color: var(--text-bright);
+}
+
+.theme-preset-item.active {
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+}
+
+/* ── Color group (collapsible) ───────────────────── */
+.theme-color-group {
+  margin-bottom: 6px;
+}
+
+.theme-group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  cursor: pointer;
+  user-select: none;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  transition: color var(--transition-fast);
+}
+
+.theme-group-header:hover {
+  color: var(--text-primary);
+}
+
+.theme-group-chevron {
+  width: 12px;
+  height: 12px;
+  fill: currentColor;
+  transition: transform 0.15s var(--ease-out);
+  flex-shrink: 0;
+}
+
+.theme-group-chevron.collapsed {
+  transform: rotate(-90deg);
+}
+
+.theme-group-body {
+  padding: 4px 0;
+}
+
+.theme-group-body.collapsed {
+  display: none;
+}
+
+/* ── Individual color row ────────────────────────── */
+.theme-color-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0 3px 18px;
+}
+
+.theme-color-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  min-width: 100px;
+  flex-shrink: 0;
+}
+
+.theme-color-picker {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  padding: 0;
+  cursor: pointer;
+  background: none;
+  -webkit-appearance: none;
+  appearance: none;
+  flex-shrink: 0;
+}
+
+.theme-color-picker::-webkit-color-swatch-wrapper {
+  padding: 1px;
+}
+
+.theme-color-picker::-webkit-color-swatch {
+  border: none;
+  border-radius: 2px;
+}
+
+.theme-color-hex {
+  width: 72px;
+  padding: 3px 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-family: inherit;
+  text-transform: uppercase;
+}
+
+.theme-color-hex:focus {
+  border-color: var(--accent-primary);
+  outline: none;
+}
+
+.theme-color-reset {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--text-muted);
+  visibility: hidden;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+.theme-color-row.overridden .theme-color-reset {
+  visibility: visible;
+}
+
+.theme-color-reset:hover {
+  background: var(--bg-active);
+  color: var(--text-bright);
+}
+
+/* ── Footer actions ──────────────────────────────── */
+.theme-footer-left {
+  display: flex;
+  gap: 6px;
+  margin-right: auto;
+}

@@ -1,9 +1,9 @@
 use std::path::Path;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// PR metadata from `gh pr view --json ...`
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PrInfo {
     pub number: u64,
@@ -21,7 +21,7 @@ pub struct PrInfo {
 }
 
 /// A file changed in the PR
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PrFile {
     pub path: String,
     pub additions: u64,
@@ -196,7 +196,7 @@ pub fn parse_unified_diff(raw: &str) -> ParsedDiff {
 /// Fetch PR info for the current branch. Returns `None` if no open PR exists.
 pub async fn get_pr_for_branch(worktree_path: &Path) -> anyhow::Result<Option<PrInfo>> {
     tracing::info!(path = %worktree_path.display(), "gh: fetching PR info for branch");
-    let output = tokio::process::Command::new("gh")
+    let output = crate::shell_env::command("gh")
         .args([
             "pr",
             "view",
@@ -225,7 +225,7 @@ pub async fn get_pr_for_branch(worktree_path: &Path) -> anyhow::Result<Option<Pr
 /// Fetch the list of changed files in the PR.
 pub async fn get_pr_files(worktree_path: &Path) -> anyhow::Result<Vec<PrFile>> {
     tracing::info!(path = %worktree_path.display(), "gh: fetching PR files");
-    let output = tokio::process::Command::new("gh")
+    let output = crate::shell_env::command("gh")
         .args(["pr", "view", "--json", "files"])
         .current_dir(worktree_path)
         .output()
@@ -251,7 +251,7 @@ pub async fn get_pr_file_diff_raw(
 ) -> anyhow::Result<ParsedDiff> {
     let diff_spec = format!("{base_ref}...HEAD");
     tracing::debug!(file, diff_spec = %diff_spec, "gh: fetching raw diff for file");
-    let output = tokio::process::Command::new("git")
+    let output = crate::shell_env::command("git")
         .args(["diff", "--no-color", &diff_spec, "--", file])
         .current_dir(worktree_path)
         .output()
@@ -272,7 +272,7 @@ pub async fn get_pr_file_diff_raw(
 /// Get the repository owner/name (e.g. "owner/repo") via `gh`.
 pub async fn get_repo_nwo(worktree_path: &Path) -> anyhow::Result<String> {
     tracing::debug!(path = %worktree_path.display(), "gh: fetching repo nwo");
-    let output = tokio::process::Command::new("gh")
+    let output = crate::shell_env::command("gh")
         .args([
             "repo",
             "view",
@@ -347,7 +347,7 @@ pub async fn submit_review_with_comments(
     // Spawn the process with piped stdin, write synchronously via spawn_blocking
     let worktree_owned = worktree_path.to_path_buf();
     let output = tokio::task::spawn_blocking(move || -> anyhow::Result<std::process::Output> {
-        let mut child = std::process::Command::new("gh")
+        let mut child = crate::shell_env::sync_command("gh")
             .args(["api", &endpoint, "--method", "POST", "--input", "-"])
             .current_dir(&worktree_owned)
             .stdin(std::process::Stdio::piped())
@@ -400,7 +400,7 @@ pub async fn submit_review(
     }
 
     tracing::debug!(args = ?args, "gh: running gh pr review");
-    let output = tokio::process::Command::new("gh")
+    let output = crate::shell_env::command("gh")
         .args(&args)
         .current_dir(worktree_path)
         .output()

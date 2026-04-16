@@ -50,7 +50,7 @@ Built with Rust and [ratatui](https://ratatui.rs/).
 - **Workspace groups** — Organize workspaces into named groups with collapsible headers (`▼`/`▸`) in the sidebar; assign groups when creating or editing workspaces
 - **Simple workspaces** — Create workspaces that point directly to an existing directory without creating a git worktree or branch; name is auto-derived from the directory
 - **Project workspaces** — Point to a multi-service directory root (e.g. monorepo with `frontend/`, `backend/`, `infra/`); STATUS panel shows navigable sub-directories as services; double-click or Enter to spawn a new workspace from any sub-directory, pre-filled with parent's prompt, kanban path, and group
-- **Rich workspace list** — Each workspace shows name, file count, and parent project; press `i` to view full details (branch, paths, type, group, description, prompt) in a copyable overlay
+- **Rich workspace list** — Each workspace shows type icon (⎇ worktree, ▣ project, ○ simple), name, file count, and branch/description; thin separators and alternating backgrounds improve visual hierarchy; group headers use uppercase labels with background tint; press `i` to view full details (branch, paths, type, group, description, prompt) in a copyable overlay
 - **File watching** — Automatically detects file changes in each worktree using `notify`, with periodic refresh every 3s to catch commits and rebases
 - **Full git status** — STATUS panel shows all file states: modified, staged, untracked, conflicted, renamed, and more via `git status --porcelain=v1`
 - **Ahead/behind indicator** — STATUS panel border and status bar show `↑N to push` / `↓N behind` relative to upstream tracking branch
@@ -83,8 +83,87 @@ Built with Rust and [ratatui](https://ratatui.rs/).
 - **Structured logging** — File-based structured logging via `tracing` with daily rotation to `~/.local/share/piki-multi/logs/`; configurable via `--log-level` flag (trace/debug/info/warn/error)
 - **Agent Profiles** — Configure named agents per project (`A` key, Simple workspaces only) with a two-step wizard: step 1 selects name + provider, step 2 opens a large floating editor for the agent's role/instructions; agents are stored in SQLite per `source_repo` with version tracking; press `p` to sync agent config to the repo as provider-native subagent files (e.g., `.claude/agents/<name>.md`); press `i` to import agents from repo files (reverse sync) — scans all provider directories for `.md` files, shows a checklist with `(new)`/`(exists)` status, and imports selected agents marked as synced; version indicator shows sync status (`v3 ✓` synced, `v2 ✗` pending); editing an agent increments its version and resets sync status; falls back to raw provider selector when no agents are configured
 - **Agent Dispatch** — Select a kanban card, press `D` to dispatch a configured agent or raw provider: the agent selector includes a `(None)` option to dispatch without a profile; when no agent is selected, a second step asks whether to create a new worktree workspace or use the current one; with an agent selected, automatically creates a git worktree with a convention-based branch (`feature/`, `bug/`, or `spike/` based on card priority), a workspace grouped under `<parent>-AGENTS`, inherits the parent's kanban board, and launches the agent with an auto-composed prompt (`Use the <agent> agent to plan and then implement the task: <card title>` + card description + optional additional prompt); the agent's role is materialized as a provider-native subagent file in the worktree; card moves to "in progress" with assignee set to agent name; deleting the agent workspace moves the card back to "todo" and clears the assignee
+- **AI Chat** — Global chat panel powered by local LLMs via [Ollama](https://ollama.ai/) or [llama.cpp](https://github.com/ggerganov/llama.cpp) server; `Ctrl+Y` in TUI opens a centered floating overlay, `Ctrl+Shift+L` in desktop toggles a right-side panel; not tied to any workspace — conversation persists across workspace switches; select server type (Ollama / llama.cpp) in settings (`Ctrl+O` in TUI, gear icon in Desktop), then choose from available models via Tab (TUI) or dropdown (Desktop); streaming responses with token-by-token rendering; clear with `Ctrl+L`; config (server type, model, base URL, system prompt) persisted in settings; **Agent Mode** (`Ctrl+A` in TUI) enables agentic tool-use — the LLM can call tools (`git_status`, `read_file`, `list_files`, `search_code`) to inspect the active workspace and iterate until the question is resolved; tool results are displayed inline in the chat; powered by `piki-agent` crate
 - **Code Review** — Full-screen PR review tab powered by `gh` CLI; browse changed files, view diffs with line numbers and a cursor, add inline comments on any line (`c`), delete comments (`d`), submit reviews (approve/request changes/comment) with inline comments via GitHub API; persistent draft overlay; tab only opens if the current branch has an open PR; locked mode prevents accidental workspace switching — press `q` to close or `s` to submit; `gh` availability and authentication are checked lazily on first use and cached for the session
 - **API Explorer** — Interactive HTTP client tab (`t` then `9`) with Hurl-like syntax; write `METHOD URL`, headers, and body in a built-in editor (starts empty); `Ctrl+S` to send; response displayed with status code, elapsed time, and pretty-printed JSON; `Ctrl+J`/`Ctrl+K` to scroll response; `Ctrl+F` to search response; contextual footer hints for API-specific shortcuts; errors (parse failures, client init, network errors) and successful requests are logged to the in-app log viewer (`Ctrl+L`)
+
+## Desktop Application (Tauri)
+
+A modern desktop GUI is available via `piki-desktop`, built with [Tauri v2](https://v2.tauri.app/). It reuses the same `piki-core` business logic as the TUI and shares the same SQLite database, so workspaces created in either interface are visible in the other.
+
+### Features
+
+- **Custom menu bar** — Classic desktop-style menu (File, Edit, View, Git, Agents, Help) with keyboard shortcuts, submenus, disabled-state awareness, and integrated window controls (minimize/maximize/close); replaces native title bar for a compact, themed look; drag region for window movement, double-click to maximize
+- **Obsidian Glow theme** — Distinctive dark UI with deep blue-black backgrounds, cyan/amber dual-accent system, glow effects, and monospace-forward typography
+- **5 built-in theme presets** — Obsidian Dark, Nord, Catppuccin Mocha, Solarized Light, Tokyo Night; switch instantly via `Alt+T` or command palette
+- **Full theme customization** — Individual color pickers for ~60 variables across 13 groups, live preview, import/export themes as JSON, persisted in SQLite
+- **xterm.js terminals** — Full terminal emulation with WebGL rendering, block cursor, native clipboard via `tauri-plugin-clipboard-manager` (copy on selection, `Ctrl+Shift+C/V`), terminal search (`Ctrl+Shift+B`)
+- **Project search** — `Ctrl+Shift+F` to grep file contents across the workspace using ripgrep (`rg`); debounced search with file path, line number, and highlighted match snippet; Enter opens file viewer with scroll and copy support
+- **File viewer** — Modal for viewing file contents; opened from fuzzy file search (`Ctrl+F`) or project search; CodeMirror 6 with language-aware syntax highlighting (Rust, TypeScript, Python, JSON, HTML, CSS, Markdown, and more), copy-to-clipboard, Edit button (`Ctrl+E`) to open in `$EDITOR` in a new terminal tab, Quick Edit (`Ctrl+I`) for inline editing, and "Open in Editor" to open as a full tabbed editor panel
+- **Code editor tabs** — Full CodeMirror 6 editor in a dedicated tab panel (like Markdown tabs); opened from the file viewer's "Open in Editor" button; syntax highlighting, dirty indicator, Ctrl+S save; connects to language servers via LSP for diagnostics, completion, hover, and go-to-definition when available
+- **LSP support** — Built-in Language Server Protocol proxy; spawns language servers (rust-analyzer, typescript-language-server, pyright, etc.) as child processes and bridges JSON-RPC to the frontend via WebSocket; configurable server registry in `lsp.toml`; TTL-based idle shutdown (default 5min) when switching workspaces; max concurrent server cap to manage memory
+- **Activity bar + sidebar** — Explorer (workspace list with groups), Source Control (git staging/committing), Agents panel (manage/dispatch AI agents), Kanban Board (quick access via activity bar icon)
+- **API Explorer** — Non-PTY tab for writing HTTP requests in Hurl syntax (`METHOD URL\nHeaders\n\nBody`), executing via `piki-api-client`, viewing JSON-highlighted responses with color-coded status badges; request history overlay (`Ctrl+H`) with full-text search, load from history, and delete entries; multiple sequential requests supported; history persisted in SQLite with FTS5
+- **Multi-provider tabs** — Open Claude, Gemini, OpenCode, Kilo, Codex, Shell, Kanban Board, or API Explorer tabs per workspace; add custom providers via `~/.config/piki-multi/providers.toml` with configurable binary, arguments, and prompt format; manage providers in-app with `Alt+P` (TUI) or Tools → Providers menu (Desktop)
+- **Kanban Board** — Integrated kanban board powered by [flow-core](https://github.com/juanknebel/flow); columns (TODO, IN PROGRESS, IN REVIEW, DONE) with drag-and-drop card movement, inline card actions (edit, move, delete), priority badges (Bug/High/Medium/Low/Wishlist), edit modal with title/description/priority/assignee fields; configurable column colors (right-click header to pick from 16-color palette, persisted in localStorage); auto-creates board if none exists; open via `Alt+K`, activity bar, command palette, or View menu
+- **Git integration** — Stage/unstage files, commit, push, merge/rebase, stash, conflict resolution, git log viewer; auto-refresh via hybrid file watcher (500ms) + periodic git status poll (2s) + background `git fetch` (60s) for live ahead/behind tracking
+- **Side-by-side diff viewer** — With char-level highlights, 3-way merge view, and conflict resolution buttons
+- **Code review** — PR info, per-file diffs, inline comments, submit reviews via `gh` CLI
+- **Agent management** — Create/edit/delete agent profiles, import from repo, dispatch agents to workspaces
+- **Command palette** — `Ctrl+P` for fuzzy search across all commands, workspaces, and theme presets
+- **Dashboard** — `Alt+D` for bird's-eye view of all workspaces with status, tabs, and file counts
+- **System info** — `Alt+I` for live system monitoring: CPU, RAM, disk usage gauges with color thresholds (green/amber/red), battery status, load average, uptime, hostname; auto-refreshes every 3 seconds
+- **Application log viewer** — `Alt+Shift+L` for in-memory ring buffer (500 entries), filterable by level
+- **About dialog** — Click "Piki Desktop" in status bar or via command palette
+- **Workspace switcher** — `Ctrl+Space` for quick fuzzy workspace switching; results grouped by group name with headers, sorted alphabetically (ungrouped first), items ordered within each group
+- **Settings** — `Alt+S` to open settings dialog; all keyboard shortcuts are editable at runtime (click a shortcut, press new key combo) with two-column display (Default / Current); configure the terminal shell command; changes persist in SQLite and take effect immediately without restart; "Restore Defaults" button resets everything
+- **AI Chat panel** — Right-side chat panel (`Ctrl+Shift+L`) for chatting with local LLMs via Ollama or llama.cpp server; server type selectable in settings dialog (gear icon), model selector dropdown populated from the selected server, streaming responses, resizable panel, conversation persists when hidden; config saved to settings
+- **Resizable sidebar** — Drag the divider or use the resize handle
+- **Confirm dialogs** — HTML-based confirmations (not browser `confirm()`) for all destructive actions
+
+### Keyboard Shortcuts
+
+| Shortcut | Action |
+|---|---|
+| `Ctrl+P` | Command palette |
+| `Ctrl+N` | New workspace |
+| `Ctrl+Space` | Workspace switcher |
+| `Ctrl+M` | Merge / Rebase |
+| `Ctrl+F` | Fuzzy file search |
+| `Ctrl+Shift+F` | Search in project (grep) |
+| `Ctrl+E` | Edit file in $EDITOR (in file search / project search / file viewer) |
+| `Ctrl+I` | Quick Edit inline (in file viewer) |
+| `Ctrl+Shift+B` | Search in terminal |
+| `Ctrl+Shift+R` | Code review |
+| `Ctrl+Shift+A` | Manage agents |
+| `Ctrl+Shift+D` | Dispatch agent |
+| `Ctrl+Shift+S` | Git stash |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Switch tabs |
+| `Ctrl+Z` | Undo stage/unstage |
+| `Alt+D` | Dashboard |
+| `Alt+I` | System Info |
+| `Alt+K` | Kanban Board |
+| `Alt+L` | Git log |
+| `Alt+S` | Settings |
+| `Alt+T` | Theme settings |
+| `Alt+Shift+L` | Application logs |
+| `Ctrl+Shift+C` | Copy selection |
+| `Ctrl+Shift+V` | Paste from clipboard |
+| `?` | Help / all shortcuts |
+
+### Building & Installing
+
+```bash
+# Quick install (builds release binary + desktop entry + icons)
+./scripts/install-desktop.sh
+
+# Or manually:
+cd crates/desktop/frontend && npm install && cd -
+cd crates/desktop && cargo tauri build
+# Binary at: target/release/piki-desktop
+```
+
+The install script places the binary in `~/.local/bin/`, installs icons to `~/.local/share/icons/hicolor/`, and creates a `.desktop` entry so Piki Desktop appears in Linux application menus.
 
 ## Prerequisites
 
@@ -93,6 +172,12 @@ Built with Rust and [ratatui](https://ratatui.rs/).
 - [git](https://git-scm.com/) >= 2.20 (worktree support)
 - [delta](https://github.com/dandavison/delta) (optional, for side-by-side diffs — falls back to plain git diff)
 - [gh](https://cli.github.com/) (optional, required for code review feature — run `gh auth login` to authenticate)
+- [ripgrep](https://github.com/BurntSushi/ripgrep) (optional, recommended for project search — falls back to `grep -rn`)
+- [jq](https://jqlang.github.io/jq/) (optional, for JSON filtering in API Explorer)
+- [Ollama](https://ollama.ai/) (optional, for AI Chat panel — install and run `ollama serve`, then `ollama pull <model>`)
+- [llama.cpp](https://github.com/ggerganov/llama.cpp) (optional, alternative for AI Chat panel — run `llama-server -m <model.gguf>`)
+- [Node.js](https://nodejs.org/) >= 18 (optional, required for building the desktop app)
+- System libraries for Tauri (optional, for desktop app): `libwebkit2gtk-4.1-dev`, `libappindicator3-dev` on Linux
 
 ## Installation
 
@@ -104,11 +189,15 @@ cargo build --release
 
 The binary will be at `target/release/piki-multi-ai`.
 
-Or use the install script:
+Or use the install scripts:
 
 ```bash
-./install.sh              # installs to ~/.local/bin
-./install.sh -d /usr/local/bin  # custom directory
+# TUI version
+./scripts/install.sh              # installs to ~/.local/bin
+./scripts/install.sh -d /usr/local/bin  # custom directory
+
+# Desktop version (Tauri GUI)
+./scripts/install-desktop.sh      # builds, installs binary + desktop entry + icons
 ```
 
 ## Usage
@@ -190,7 +279,7 @@ Workspace configurations are saved automatically and restored on startup using a
 ```
  [CPU] 12%  [RAM] 4.2/16.0G  [BAT] 85%  [TIME] 2026-03-07 14:32
 +------------------+-------------------------------------------------------+
-| WORKSPACES       |  [ Claude Code × ]  [ Shell × ]   (dynamic sub-tabs)  |
+| WORKSPACES       |  ▸ Claude Code ×│▸ Shell ×  (dynamic sub-tabs w/ icons)|
 |                  |-------------------------------------------------------|
 |  ▼ frontend (2)  |                                                       |
 |  ▶ ws-1 (active) |  AI assistant live terminal output                    |
@@ -244,6 +333,8 @@ The STATUS panel uses `git status --porcelain=v1` and shows:
 
 The UI uses a **vim-style modal model**: navigate between panes, then press Enter to interact. **All keybindings are customizable** via `config.toml`. Both the footer and the help overlay (`?`) update dynamically to show your current configuration.
 
+**macOS support**: The app auto-detects the operating system. On macOS, all `Ctrl` and `Alt` keybindings also accept `Cmd` (⌘), and the UI displays `cmd-` instead of `ctrl-`/`alt-` in help text, footer hints, and status bar. For example, `Ctrl+G` to exit interaction mode becomes `Cmd+G` on macOS, and `Alt+M` for mdr becomes `Cmd+M`. The `Alt` → `Cmd` mapping exists because macOS Option key sends special characters instead of Alt in most terminals. Both original modifiers are always accepted as a fallback.
+
 **Default Navigation mode** (yellow border):
 
 | Key | Action |
@@ -253,7 +344,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `n` | Create new workspace |
 | `r` | Clone workspace (new workspace pre-filled with directory, prompt, and kanban path) |
 | `e` | Edit workspace options (Kanban path, Prompt) |
-| `d` | Delete selected workspace |
+| `d` | Delete selected workspace (for dispatched workspaces, prompts which kanban column to move the card to) |
 | `Tab` / `Shift+Tab` | Context-aware: cycle workspaces (sidebar), subtabs (main), files (status) |
 | `1`-`9` | Jump to workspace N (numbers shown in sidebar) |
 | `Space` | Fuzzy workspace switcher (search by name/group/branch) |
@@ -262,6 +353,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `w` | Close current tab (with confirmation dialog) |
 | `b` | Open kanban board for current workspace |
 | `A` | Manage agent profiles (create/edit/delete agents for this project) |
+| `Alt+P` | Manage providers (add/edit/delete custom AI providers) |
 | `D` | Workspace dashboard overlay (bird's-eye view of all workspaces and tabs) |
 | `Ctrl+p` | Command palette (fuzzy-searchable list of all commands) |
 | `Ctrl+l` | Log viewer overlay (last 500 log entries, color-coded, filterable by level) |
@@ -561,6 +653,49 @@ mkdir -p ~/.config/piki-multi/themes
 echo 'theme = "nord"' > ~/.config/piki-multi/config.toml
 ```
 
+### Custom Providers (`providers.toml`)
+
+Add custom AI providers via `~/.config/piki-multi/providers.toml`. On first startup the file is created with a default Claude entry. Each provider specifies the binary, arguments, and how prompts are passed:
+
+```toml
+[[providers]]
+name = "Claude Code"
+description = "Anthropic's Claude Code CLI agent"
+command = "claude"
+default_args = []
+dispatchable = true
+agent_dir = ".claude/agents"
+
+[providers.prompt_format]
+type = "Positional"
+
+[[providers]]
+name = "My Custom AI"
+description = "A custom AI tool"
+command = "/usr/local/bin/my-ai"
+default_args = ["--json"]
+dispatchable = true
+agent_dir = ".my-ai/agents"
+
+[providers.prompt_format]
+type = "Flag"
+value = "--task"
+```
+
+**Fields:**
+
+| Field | Description |
+|-------|------------|
+| `name` | Display name (shown in tab bar and menus) |
+| `description` | Human-readable description |
+| `command` | Binary path or name (resolved via `$PATH`) |
+| `default_args` | Arguments always passed before prompt args |
+| `prompt_format` | How prompts are passed: `Positional` (bare arg), `Flag` (via flag), or `None` |
+| `dispatchable` | Whether this provider appears in agent dispatch menus |
+| `agent_dir` | Repo subdirectory for agent config files (e.g. `.claude/agents`) |
+
+Custom providers appear alongside built-in providers in the New Tab menu (`t` → AI Agents) and in agent dispatch dialogs. They work in both the TUI and Desktop interfaces.
+
 ### Keybindings
 
 You can override any default keybinding in the `[keybindings]` section of `config.toml`. Keybindings are organized by mode:
@@ -641,11 +776,12 @@ Cargo.toml               # Workspace root
 crates/
   core/                  # piki-core — shared library (no TUI dependencies)
     src/
-      domain.rs          # AIProvider, FileStatus, ChangedFile, WorkspaceStatus, WorkspaceInfo, WorkspaceType
+      domain.rs          # AIProvider (with Custom variant), FileStatus, ChangedFile, WorkspaceStatus, WorkspaceInfo, WorkspaceType
       git.rs             # Git status parsing, ahead/behind detection
       github.rs          # GitHub PR operations via gh CLI (PR info, files, unified diff parser, inline comments, submit review)
       paths.rs           # DataPaths struct — centralized directory resolution (database, worktrees, logs, config)
-      sysinfo.rs         # System info poller (CPU, RAM, battery via systemstat + chrono)
+      providers.rs       # ProviderConfig, ProviderManager — user-configurable providers from providers.toml
+      sysinfo.rs         # System info poller (CPU, RAM, battery via systemstat + chrono) + structured SysInfoSnapshot for dashboard (disk, uptime, load avg, hostname)
       preflight.rs       # Pre-flight dependency checks (git version, optional tools)
       pty/
         session.rs       # PTY management (portable-pty + vt100 parser)
@@ -659,6 +795,36 @@ crates/
         mod.rs           # Storage traits (WorkspaceStorage, ApiHistoryStorage, UiPrefsStorage) + factory
         json.rs          # Legacy JSON storage backend (migration source)
         sqlite.rs        # SQLite backend (WAL mode, FTS5 for API history, upsert dedup)
+  desktop/               # piki-desktop — Tauri v2 desktop GUI (depends on piki-core)
+    src/
+      main.rs            # Tauri entry point, setup, command registration
+      state.rs           # DesktopApp, DesktopWorkspace, DesktopTab state structs
+      pty_raw.rs         # RawPtySession — raw PTY bytes streamed via Tauri events (base64)
+      events.rs          # Tauri event emission (sysinfo, git refresh, toast)
+      log_buffer.rs      # In-memory tracing ring buffer (500 entries) for log viewer
+      commands/
+        workspace.rs     # Workspace CRUD IPC commands
+        pty.rs           # PTY spawn/write/resize/close
+        git.rs           # Git stage/unstage/commit/push/merge/resolve
+        diff.rs          # Side-by-side diff generation
+        gitlog.rs        # Git log history
+        stash.rs         # Git stash operations
+        agents.rs        # Agent profiles CRUD + dispatch
+        review.rs        # PR info + code review via gh CLI
+        theme.rs         # Theme get/set via SQLite preferences
+        logs.rs          # Application log retrieval + clear
+        search.rs        # Fuzzy file list
+        markdown.rs      # Markdown file reading
+        system.rs        # System info
+    frontend/            # Vanilla TypeScript + xterm.js (Vite build)
+      src/
+        main.ts          # App init, global keyboard shortcuts, window close handler
+        state.ts         # AppState (EventTarget-based singleton)
+        ipc.ts           # Tauri IPC command wrappers
+        types.ts         # TypeScript type definitions
+        theme.ts         # ThemeEngine — 5 presets, CSS variable application, xterm sync
+        components/      # UI components (activity-bar, sidebar, tab-bar, terminal-panel, etc.)
+        styles/          # CSS modules (variables.css, layout.css, dialog.css, theme-dialog.css, etc.)
   api-client/            # piki-api-client — HTTP/API client (independent, no TUI/core deps)
     src/
       lib.rs             # Public re-exports
@@ -716,7 +882,7 @@ crates/
         api.rs           # API Explorer tab renderer (editor + response panes)
         dialogs.rs       # Dialog and overlay renderers (git log, stash, conflict, dashboard, etc.)
         scrollbar.rs     # Shared vertical scrollbar helper (thin indicators)
-        subtabs.rs       # Sub-tab bar rendering (dynamic tabs with × close buttons)
+        subtabs.rs       # Sub-tab bar rendering (dynamic tabs with provider icons and × close buttons)
         workspace_switcher.rs # Workspace switcher overlay renderer
 ```
 

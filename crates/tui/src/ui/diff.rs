@@ -57,6 +57,7 @@ impl Widget for BorrowedDiff<'_> {
 }
 
 /// Render the side-by-side diff view in the given area.
+#[allow(clippy::too_many_arguments)]
 pub fn render(
     frame: &mut Frame,
     area: Rect,
@@ -65,6 +66,7 @@ pub fn render(
     file_path: &str,
     border_style: Style,
     empty_text_color: Color,
+    scrollbar_color: Color,
 ) {
     if let Some(text) = content {
         let title = format!(" DIFF: {} ", file_path);
@@ -85,7 +87,7 @@ pub fn render(
             scroll as usize,
             text.lines.len(),
             visible_height,
-            Color::DarkGray,
+            scrollbar_color,
         );
     } else {
         let paragraph = Paragraph::new("  Select a file and press Enter to view diff")

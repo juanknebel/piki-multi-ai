@@ -1,0 +1,371 @@
+/* ── Diff overlay container ──────────────────────── */
+.diff-viewer {
+  width: 90vw;
+  height: 88vh;
+  background: var(--bg-primary);
+  border: 1px solid var(--dialog-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: dialog-enter 0.2s var(--ease-out);
+}
+
+.diff-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 18px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-primary);
+  flex-shrink: 0;
+}
+
+.diff-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-bright);
+  letter-spacing: 0.02em;
+}
+
+.diff-content {
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ── DiffPanel root ─────────────────────────────── */
+.dp-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* Stats bar */
+.dp-stats {
+  display: flex;
+  gap: 14px;
+  padding: 5px 18px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-primary);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.dp-stat-add { color: var(--git-added); }
+.dp-stat-del { color: var(--git-deleted); }
+
+/* Column headers (rendered as a dp-row inside dp-table) */
+.dp-header-row {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.dp-col-header {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+}
+.dp-center-header {
+  border-right: 1px solid var(--border-primary);
+  text-align: center;
+  color: var(--text-accent);
+}
+
+/* Scrollable area */
+.dp-scroll {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+
+/* ── Side-by-side rows ──────────────────────────── */
+.dp-table {
+  min-width: 100%;
+  width: max-content;
+}
+
+.dp-row {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) 48px minmax(0, 1fr);
+  min-width: max-content;
+  min-height: 1.6em;
+}
+
+/* Gutter (line numbers) */
+.dp-gutter {
+  padding: 0 8px;
+  text-align: right;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  user-select: none;
+  border-right: 1px solid var(--border-primary);
+  flex-shrink: 0;
+  font-size: 11px;
+}
+
+.dp-gutter-right {
+  border-left: 1px solid var(--border-primary);
+}
+
+/* Content cells */
+.dp-cell {
+  padding: 0 10px;
+  white-space: pre;
+  color: var(--text-secondary);
+}
+
+.dp-empty-cell {
+  padding: 0 10px;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 4px,
+    rgba(128, 128, 128, 0.03) 4px,
+    rgba(128, 128, 128, 0.03) 8px
+  );
+}
+
+/* Color coding */
+.dp-add {
+  background: rgba(63, 185, 80, 0.08);
+  color: var(--text-primary);
+}
+
+.dp-del {
+  background: rgba(248, 81, 73, 0.08);
+  color: var(--text-primary);
+}
+
+/* Char-level highlights */
+.dp-char-add {
+  background: rgba(63, 185, 80, 0.3);
+  border-radius: 2px;
+}
+
+.dp-char-del {
+  background: rgba(248, 81, 73, 0.3);
+  border-radius: 2px;
+}
+
+/* Hunk header */
+.dp-hunk-row {
+  display: block;
+}
+
+.dp-hunk-header {
+  padding: 5px 14px;
+  background: rgba(57, 186, 230, 0.05);
+  color: var(--text-accent);
+  border-top: 1px solid var(--border-primary);
+  border-bottom: 1px solid var(--border-primary);
+  font-size: 11px;
+  min-width: max-content;
+}
+
+/* File header (multi-file commit view) */
+.dp-file-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  background: var(--bg-tertiary);
+  border-top: 2px solid var(--border-primary);
+  border-bottom: 1px solid var(--border-primary);
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-bright);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.dp-file-path { flex: 1; }
+
+.dp-empty {
+  padding: 28px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+/* ── 3-way merge ────────────────────────────────── */
+.dp-3way-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  min-height: 1.6em;
+}
+
+.dp-3way-cell {
+  padding: 0 10px;
+  white-space: pre;
+  overflow: hidden;
+  border-right: 1px solid var(--border-primary);
+}
+
+.dp-3way-cell:last-child {
+  border-right: none;
+}
+
+.dp-context-row .dp-3way-cell {
+  color: var(--text-secondary);
+}
+
+/* Conflict block */
+.dp-conflict-block {
+  border: 1px solid var(--git-conflicted);
+  border-left: 3px solid var(--git-conflicted);
+  margin: 4px 0;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.dp-conflict-block.dp-resolved {
+  border-color: var(--git-added);
+  border-left-color: var(--git-added);
+}
+
+.dp-conflict-actions {
+  display: flex;
+  gap: 8px;
+  padding: 6px 14px;
+  background: rgba(244, 112, 103, 0.06);
+  border-bottom: 1px solid var(--border-primary);
+  justify-content: center;
+}
+
+.dp-resolved .dp-conflict-actions {
+  display: none;
+}
+
+.dp-accept-btn {
+  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
+  transition: all var(--transition-fast);
+}
+
+.dp-accept-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-bright);
+}
+
+.dp-accept-ours:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+.dp-accept-theirs:hover { border-color: var(--git-added); color: var(--git-added); }
+.dp-accept-both:hover { border-color: var(--accent-warm); color: var(--accent-warm); }
+
+/* Conflict side colors */
+.dp-ours {
+  background: rgba(57, 186, 230, 0.06);
+}
+
+.dp-theirs {
+  background: rgba(63, 185, 80, 0.06);
+}
+
+.dp-result {
+  background: rgba(244, 112, 103, 0.04);
+  color: var(--text-muted);
+  text-align: center;
+  font-style: italic;
+}
+
+.dp-resolved-content {
+  background: rgba(63, 185, 80, 0.08);
+  color: var(--text-primary);
+  text-align: left;
+  font-style: normal;
+}
+
+.dp-resolved-row .dp-3way-cell {
+  color: var(--text-primary);
+}
+
+/* ── Code Review inline comments ───────────────── */
+.cr-diff-line {
+  padding: 0 8px;
+  white-space: pre;
+  min-height: 1.5em;
+  line-height: 1.5;
+}
+
+.cr-comment-form {
+  padding: 6px 12px 6px 52px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-primary);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+/* Side-by-side comment form spans full width of the diff table */
+.cr-comment-form-sbs {
+  padding: 8px 14px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--accent-primary);
+  border-bottom: 1px solid var(--accent-primary);
+  border-left: 3px solid var(--accent-primary);
+}
+
+.cr-comment-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: "JetBrainsMono NF Mono", monospace;
+  color: var(--text-bright);
+  background: var(--bg-input);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  resize: vertical;
+  outline: none;
+}
+
+.cr-comment-textarea:focus {
+  border-color: var(--accent-primary);
+}
+
+.cr-comment-form-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.cr-comment-badge {
+  padding: 4px 12px 4px 52px;
+  background: rgba(57, 186, 230, 0.06);
+  border-left: 3px solid var(--accent-primary);
+  font-size: 12px;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+/* Side-by-side comment badge */
+.cr-comment-badge-sbs {
+  padding: 4px 14px;
+  background: rgba(57, 186, 230, 0.06);
+  border-left: 3px solid var(--accent-primary);
+  font-size: 12px;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.cr-comment-body {
+  white-space: pre-wrap;
+}
+
+/* Hover effect for clickable diff rows in code review */
+.dp-row[style*="cursor: pointer"]:hover .dp-cell,
+.dp-row[style*="cursor: pointer"]:hover .dp-gutter {
+  background: rgba(57, 186, 230, 0.04);
+}

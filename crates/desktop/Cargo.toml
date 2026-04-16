@@ -1,0 +1,34 @@
+[package]
+name = "piki-desktop"
+version.workspace = true
+edition = "2024"
+
+[[bin]]
+name = "piki-desktop"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+piki-core = { path = "../core", package = "piki-core" }
+piki-api-client = { path = "../api-client", package = "piki-api-client" }
+piki-agent = { path = "../agent", package = "piki-agent" }
+tauri = { version = "2", features = ["devtools"] }
+tauri-plugin-shell = "2"
+tauri-plugin-clipboard-manager = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+portable-pty = "0.9"
+parking_lot = "0.12"
+uuid = { version = "1", features = ["v4"] }
+base64 = "0.22"
+chrono = "0.4"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+flow-core = { git = "https://github.com/juanknebel/flow", tag = "0.6.0" }
+tokio-tungstenite = "0.26"
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
+toml = "0.8"

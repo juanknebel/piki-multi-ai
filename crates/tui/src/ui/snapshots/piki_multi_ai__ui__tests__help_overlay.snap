@@ -1,6 +1,6 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 204
+assertion_line: 205
 expression: content
 ---
             ┌ Help ───────────────────────────────────────────────┐
@@ -30,16 +30,16 @@ expression: content
             │    D             Dashboard                          │
             │    ctrl-l        Logs                               │
             │    L             Git log                            │
+            │    ctrl-y        AI Chat                            │
             │    q             Quit                               │
+            │                                                     │
+            │  AI Chat overlay                                    │
+            │    Enter         Send message                       │
+            │    Tab           Select model                       │
+            │    ctrl-o        Settings (URL, system prompt)      │
+            │    ctrl-l        Clear conversation                 │
+            │    Esc           Hide (keeps state)                 │
             │                                                     │
             │  Interaction mode (green border)                    │
             │    ctrl-g        Back to navigation                 │
-            │    Esc           Back (non-terminal panes)          │
-            │                                                     │
-            │  Terminal pane (navigation mode)                    │
-            │    K/J           Scroll up/down (3 lines)           │
-            │    pageup/pagedown Scroll by page                   │
-            │    Mouse scroll  Scroll up/down                     │
-            │                                                     │
-            │  Terminal pane (interaction mode)                   │
-            └────────────────────────────────────── [1/124 ↑k/j↓] ┘
+            └────────────────────────────────────── [1/139 ↑k/j↓] ┘
