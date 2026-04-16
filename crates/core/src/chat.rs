@@ -5,12 +5,44 @@ pub enum ChatRole {
     System,
     User,
     Assistant,
+    Tool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
     pub role: ChatRole,
     pub content: String,
+    /// Tool calls requested by the assistant (present when role == Assistant).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<ToolCall>>,
+    /// ID of the tool call this message is a response to (present when role == Tool).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+}
+
+/// Schema definition for a tool the LLM can invoke.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolDefinition {
+    pub name: String,
+    pub description: String,
+    /// JSON Schema describing the tool's parameters.
+    pub parameters: serde_json::Value,
+}
+
+/// A tool invocation requested by the LLM.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCall {
+    pub id: String,
+    pub name: String,
+    pub arguments: serde_json::Value,
+}
+
+/// The result of executing a tool call.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolResult {
+    pub tool_call_id: String,
+    pub content: String,
+    pub is_error: bool,
 }
 
 /// Which LLM server backend to use for chat.

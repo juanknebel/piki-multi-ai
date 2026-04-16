@@ -59,6 +59,15 @@ pub(super) fn handle_chat_panel_input(app: &mut App, key: KeyEvent) -> Option<Ac
             app.chat_panel.current_response.clear();
             app.chat_panel.scroll = 0;
         }
+        KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            app.chat_panel.agent_mode = !app.chat_panel.agent_mode;
+            let label = if app.chat_panel.agent_mode {
+                "Agent mode ON"
+            } else {
+                "Agent mode OFF"
+            };
+            app.set_toast(label, crate::app::ToastLevel::Info);
+        }
         KeyCode::Char(c) => {
             app.chat_panel.input.insert(app.chat_panel.input_cursor, c);
             app.chat_panel.input_cursor += c.len_utf8();

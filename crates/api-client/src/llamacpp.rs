@@ -8,13 +8,36 @@ use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
-use crate::ollama::ChatStreamEvent;
+use crate::ollama::{ChatStreamEvent, RawToolCall};
 
 /// A chat message in OpenAI-compatible format (used by llama.cpp).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LlamaCppMessage {
     pub role: String,
+    #[serde(default)]
     pub content: String,
+    /// Tool calls from the assistant response (for multi-turn tool use).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<LlamaCppToolCallRef>>,
+    /// ID of the tool call this message responds to (role=tool).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+}
+
+/// Tool call reference in OpenAI format.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LlamaCppToolCallRef {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub call_type: String,
+    pub function: LlamaCppFunctionRef,
+}
+
+/// Function reference within a tool call.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LlamaCppFunctionRef {
+    pub name: String,
+    pub arguments: String,
 }
 
 /// A model entry returned by llama.cpp's `/v1/models` endpoint.
@@ -94,13 +117,26 @@ impl LlamaCppClient {
         messages: &[LlamaCppMessage],
         tx: mpsc::UnboundedSender<ChatStreamEvent>,
     ) -> anyhow::Result<()> {
+        self.chat_stream_with_tools(model, messages, None, tx).await
+    }
+
+    /// Send a chat completion request with optional tool definitions and stream the response.
+    pub async fn chat_stream_with_tools(
+        &self,
+        model: &str,
+        messages: &[LlamaCppMessage],
+        tools: Option<&[serde_json::Value]>,
+        tx: mpsc::UnboundedSender<ChatStreamEvent>,
+    ) -> anyhow::Result<()> {
         let url = format!("{}/v1/chat/completions", self.base_url);
-        tracing::info!(model, msg_count = messages.len(), "Starting llama.cpp chat stream");
+        tracing::info!(model, msg_count = messages.len(), has_tools = tools.is_some(), "Starting llama.cpp chat stream");
 
         let payload = ChatCompletionRequest {
             model: model.to_string(),
             messages: messages.to_vec(),
             stream: true,
+            tools: tools.map(|t| t.to_vec()),
+            tool_choice: tools.map(|_| "auto".to_string()),
         };
 
         let resp = match self.client.post(&url).json(&payload).send().await {
@@ -126,6 +162,7 @@ impl LlamaCppClient {
         tracing::debug!("llama.cpp chat stream connected, reading SSE events");
         let mut stream = resp.bytes_stream();
         let mut full_content = String::new();
+        let mut pending_tool_calls: Vec<PendingToolCall> = Vec::new();
         let mut buffer = String::new();
 
         while let Some(chunk) = stream.next().await {
@@ -163,17 +200,58 @@ impl LlamaCppClient {
                 match serde_json::from_str::<ChatCompletionChunk>(data) {
                     Ok(parsed) => {
                         for choice in &parsed.choices {
+                            // Accumulate streamed tool call fragments
+                            if let Some(ref tcs) = choice.delta.tool_calls {
+                                for tc in tcs {
+                                    let idx = tc.index;
+                                    // Grow the accumulator if needed
+                                    while pending_tool_calls.len() <= idx {
+                                        pending_tool_calls.push(PendingToolCall::default());
+                                    }
+                                    if let Some(ref id) = tc.id {
+                                        pending_tool_calls[idx].id.clone_from(id);
+                                    }
+                                    if let Some(ref f) = tc.function {
+                                        if let Some(ref name) = f.name {
+                                            pending_tool_calls[idx].name.clone_from(name);
+                                        }
+                                        if let Some(ref args) = f.arguments {
+                                            pending_tool_calls[idx].arguments.push_str(args);
+                                        }
+                                    }
+                                }
+                            }
+
                             if let Some(ref content) = choice.delta.content
                                 && !content.is_empty()
                             {
                                 full_content.push_str(content);
                                 let _ = tx.send(ChatStreamEvent::Token(content.clone()));
                             }
-                            if let Some(ref reason) = choice.finish_reason
-                                && reason == "stop"
-                            {
-                                let _ = tx.send(ChatStreamEvent::Done(full_content));
-                                return Ok(());
+
+                            if let Some(ref reason) = choice.finish_reason {
+                                if reason == "tool_calls" && !pending_tool_calls.is_empty() {
+                                    let raw_calls: Vec<RawToolCall> = pending_tool_calls
+                                        .drain(..)
+                                        .enumerate()
+                                        .map(|(i, ptc)| RawToolCall {
+                                            id: if ptc.id.is_empty() {
+                                                format!("call_{i}")
+                                            } else {
+                                                ptc.id
+                                            },
+                                            name: ptc.name,
+                                            arguments: ptc.arguments,
+                                        })
+                                        .collect();
+                                    tracing::info!(count = raw_calls.len(), "llama.cpp returned tool calls");
+                                    let _ = tx.send(ChatStreamEvent::ToolCalls(raw_calls));
+                                    return Ok(());
+                                }
+                                if reason == "stop" {
+                                    let _ = tx.send(ChatStreamEvent::Done(full_content));
+                                    return Ok(());
+                                }
                             }
                         }
                     }
@@ -206,6 +284,10 @@ struct ChatCompletionRequest {
     model: String,
     messages: Vec<LlamaCppMessage>,
     stream: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tools: Option<Vec<serde_json::Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_choice: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -226,6 +308,35 @@ struct ChunkChoice {
 struct ChunkDelta {
     #[serde(default)]
     content: Option<String>,
+    #[serde(default)]
+    tool_calls: Option<Vec<ChunkDeltaToolCall>>,
+}
+
+/// Streamed tool call fragment in OpenAI format.
+#[derive(Deserialize)]
+struct ChunkDeltaToolCall {
+    #[serde(default)]
+    index: usize,
+    #[serde(default)]
+    id: Option<String>,
+    #[serde(default)]
+    function: Option<ChunkDeltaFunction>,
+}
+
+#[derive(Deserialize)]
+struct ChunkDeltaFunction {
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    arguments: Option<String>,
+}
+
+/// Accumulator for streamed tool call fragments.
+#[derive(Default)]
+struct PendingToolCall {
+    id: String,
+    name: String,
+    arguments: String,
 }
 
 #[derive(Deserialize)]

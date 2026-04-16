@@ -12,7 +12,33 @@ use tokio::sync::mpsc;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OllamaMessage {
     pub role: String,
+    #[serde(default)]
     pub content: String,
+    /// Tool calls returned by the assistant (for multi-turn tool use).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<OllamaToolCallRef>>,
+}
+
+/// Reference to a tool call, used when sending tool-call messages back to Ollama.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OllamaToolCallRef {
+    pub function: OllamaFunctionRef,
+}
+
+/// Function reference within a tool call.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OllamaFunctionRef {
+    pub name: String,
+    pub arguments: serde_json::Value,
+}
+
+/// A raw tool call parsed from an LLM response (provider-agnostic).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RawToolCall {
+    pub id: String,
+    pub name: String,
+    /// JSON string of the arguments.
+    pub arguments: String,
 }
 
 /// Events emitted during a streaming chat response.
@@ -22,6 +48,8 @@ pub enum ChatStreamEvent {
     Token(String),
     /// Streaming is complete; carries the full assembled response.
     Done(String),
+    /// The LLM requested tool calls instead of (or in addition to) content.
+    ToolCalls(Vec<RawToolCall>),
     /// An error occurred during streaming.
     Error(String),
 }
@@ -105,13 +133,25 @@ impl OllamaClient {
         messages: &[OllamaMessage],
         tx: mpsc::UnboundedSender<ChatStreamEvent>,
     ) -> anyhow::Result<()> {
+        self.chat_stream_with_tools(model, messages, None, tx).await
+    }
+
+    /// Send a chat request with optional tool definitions and stream the response.
+    pub async fn chat_stream_with_tools(
+        &self,
+        model: &str,
+        messages: &[OllamaMessage],
+        tools: Option<&[serde_json::Value]>,
+        tx: mpsc::UnboundedSender<ChatStreamEvent>,
+    ) -> anyhow::Result<()> {
         let url = format!("{}/api/chat", self.base_url);
-        tracing::info!(model, msg_count = messages.len(), "Starting Ollama chat stream");
+        tracing::info!(model, msg_count = messages.len(), has_tools = tools.is_some(), "Starting Ollama chat stream");
 
         let payload = ChatRequest {
             model: model.to_string(),
             messages: messages.to_vec(),
             stream: true,
+            tools: tools.map(|t| t.to_vec()),
         };
 
         let resp = match self.client.post(&url).json(&payload).send().await {
@@ -162,6 +202,25 @@ impl OllamaClient {
 
                 match serde_json::from_str::<ChatStreamResponse>(&line) {
                     Ok(parsed) => {
+                        // Check for tool calls in the response
+                        if let Some(ref tool_calls) = parsed.message.tool_calls
+                            && !tool_calls.is_empty()
+                        {
+                            let raw_calls: Vec<RawToolCall> = tool_calls
+                                .iter()
+                                .enumerate()
+                                .map(|(i, tc)| RawToolCall {
+                                    id: format!("call_{i}"),
+                                    name: tc.function.name.clone(),
+                                    arguments: serde_json::to_string(&tc.function.arguments)
+                                        .unwrap_or_default(),
+                                })
+                                .collect();
+                            tracing::info!(count = raw_calls.len(), "Ollama returned tool calls");
+                            let _ = tx.send(ChatStreamEvent::ToolCalls(raw_calls));
+                            return Ok(());
+                        }
+
                         let token = parsed.message.content;
                         if !token.is_empty() {
                             full_content.push_str(&token);
@@ -206,6 +265,7 @@ impl OllamaClient {
             model: model.to_string(),
             messages: messages.to_vec(),
             stream: false,
+            tools: None,
         };
 
         let resp = self.client.post(&url).json(&payload).send().await
@@ -234,6 +294,8 @@ struct ChatRequest {
     model: String,
     messages: Vec<OllamaMessage>,
     stream: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tools: Option<Vec<serde_json::Value>>,
 }
 
 #[derive(Deserialize)]
@@ -247,6 +309,21 @@ struct ChatStreamResponse {
 struct ChatStreamResponseMessage {
     #[serde(default)]
     content: String,
+    #[serde(default)]
+    tool_calls: Option<Vec<OllamaToolCallResponse>>,
+}
+
+/// Tool call as returned by Ollama in the streaming response.
+#[derive(Deserialize)]
+struct OllamaToolCallResponse {
+    function: OllamaFunctionResponse,
+}
+
+#[derive(Deserialize)]
+struct OllamaFunctionResponse {
+    name: String,
+    #[serde(default)]
+    arguments: serde_json::Value,
 }
 
 #[derive(Deserialize)]

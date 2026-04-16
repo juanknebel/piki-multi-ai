@@ -46,6 +46,8 @@ pub async fn chat_send_message(
         app.chat_messages.push(ChatMessage {
             role: ChatRole::User,
             content: message,
+            tool_calls: None,
+            tool_call_id: None,
         });
         app.chat_streaming = true;
 
@@ -79,6 +81,7 @@ pub async fn chat_send_message(
             ChatRole::System => "system",
             ChatRole::User => "user",
             ChatRole::Assistant => "assistant",
+            ChatRole::Tool => "tool",
         };
         role_contents.push((role, msg.content.clone()));
     }
@@ -95,6 +98,7 @@ pub async fn chat_send_message(
                 .map(|(r, c)| piki_api_client::OllamaMessage {
                     role: r.to_string(),
                     content: c,
+                    tool_calls: None,
                 })
                 .collect();
             let client = piki_api_client::OllamaClient::new(&base_url);
@@ -110,6 +114,8 @@ pub async fn chat_send_message(
                 .map(|(r, c)| piki_api_client::LlamaCppMessage {
                     role: r.to_string(),
                     content: c,
+                    tool_calls: None,
+                    tool_call_id: None,
                 })
                 .collect();
             let client = piki_api_client::LlamaCppClient::new(&base_url);
@@ -153,7 +159,18 @@ pub async fn chat_send_message(
                     app.chat_messages.push(ChatMessage {
                         role: ChatRole::Assistant,
                         content: full_content,
+                        tool_calls: None,
+                        tool_call_id: None,
                     });
+                    app.chat_streaming = false;
+                    return;
+                }
+                piki_api_client::ChatStreamEvent::ToolCalls(_calls) => {
+                    // Tool calls will be handled by agent loop (F5).
+                    // In plain chat mode, treat as end of stream.
+                    let managed: tauri::State<'_, Mutex<DesktopApp>> =
+                        handle_for_events.state();
+                    let mut app = managed.lock();
                     app.chat_streaming = false;
                     return;
                 }

@@ -277,15 +277,93 @@ pub(crate) async fn run(
                                 app.chat_panel.messages.push(piki_core::chat::ChatMessage {
                                     role: piki_core::chat::ChatRole::Assistant,
                                     content: response_text,
+                                    tool_calls: None,
+                                    tool_call_id: None,
                                 });
                                 app.chat_panel.streaming = false;
                             }
+                            app.needs_redraw = true;
+                        }
+                        piki_api_client::ChatStreamEvent::ToolCalls(_calls) => {
+                            // Tool calls are handled by the agent loop (F4).
+                            // In plain chat mode, treat as end of response.
+                            app.chat_panel.streaming = false;
                             app.needs_redraw = true;
                         }
                         piki_api_client::ChatStreamEvent::Error(e) => {
                             app.set_toast(format!("Chat error: {e}"), app::ToastLevel::Error);
                             app.chat_panel.streaming = false;
                             app.chat_panel.current_response.clear();
+                            app.needs_redraw = true;
+                        }
+                    }
+                }
+            }
+
+            agent_event = app.agent_event_rx.recv() => {
+                if let Some(event) = agent_event {
+                    match event {
+                        piki_agent::AgentEvent::Token(token) => {
+                            app.chat_panel.current_response.push_str(&token);
+                            app.needs_redraw = true;
+                        }
+                        piki_agent::AgentEvent::Done(content) => {
+                            let response_text = if app.chat_panel.current_response.is_empty() {
+                                content
+                            } else {
+                                std::mem::take(&mut app.chat_panel.current_response)
+                            };
+                            app.chat_panel.messages.push(piki_core::chat::ChatMessage {
+                                role: piki_core::chat::ChatRole::Assistant,
+                                content: response_text,
+                                tool_calls: None,
+                                tool_call_id: None,
+                            });
+                            app.needs_redraw = true;
+                        }
+                        piki_agent::AgentEvent::ToolCallsStarted(calls) => {
+                            let names: Vec<&str> = calls.iter().map(|c| c.name.as_str()).collect();
+                            app.chat_panel.agent_tool_status = Some(names.join(", "));
+                            app.chat_panel.current_response.clear();
+                            app.needs_redraw = true;
+                        }
+                        piki_agent::AgentEvent::ToolExecuting { name } => {
+                            app.chat_panel.agent_tool_status = Some(name);
+                            app.needs_redraw = true;
+                        }
+                        piki_agent::AgentEvent::ToolResult { name, result, is_error, .. } => {
+                            // Show tool result as a Tool message in the chat
+                            let prefix = if is_error { "[Error] " } else { "" };
+                            let display = format!("[{name}] {prefix}{result}");
+                            // Truncate long results for display
+                            let truncated = if display.len() > 500 {
+                                format!("{}...", &display[..500])
+                            } else {
+                                display
+                            };
+                            app.chat_panel.messages.push(piki_core::chat::ChatMessage {
+                                role: piki_core::chat::ChatRole::Tool,
+                                content: truncated,
+                                tool_calls: None,
+                                tool_call_id: None,
+                            });
+                            app.chat_panel.agent_tool_status = None;
+                            app.needs_redraw = true;
+                        }
+                        piki_agent::AgentEvent::Finished => {
+                            app.chat_panel.streaming = false;
+                            app.chat_panel.agent_tool_status = None;
+                            app.needs_redraw = true;
+                        }
+                        piki_agent::AgentEvent::Error(e) => {
+                            app.set_toast(format!("Agent error: {e}"), app::ToastLevel::Error);
+                            app.chat_panel.streaming = false;
+                            app.chat_panel.agent_tool_status = None;
+                            app.chat_panel.current_response.clear();
+                            app.needs_redraw = true;
+                        }
+                        piki_agent::AgentEvent::ApprovalRequired(_) => {
+                            // Write-tool approval will be handled in F6
                             app.needs_redraw = true;
                         }
                     }

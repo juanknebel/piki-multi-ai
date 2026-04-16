@@ -24,7 +24,8 @@ pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &App) {
     } else {
         app.chat_panel.config.model.clone()
     };
-    let title = format!(" AI Chat [{}] ", model_label);
+    let agent_indicator = if app.chat_panel.agent_mode { " Agent" } else { "" };
+    let title = format!(" AI Chat{} [{}] ", agent_indicator, model_label);
 
     let block = Block::default()
         .title(title)
@@ -109,22 +110,40 @@ pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &App) {
             Span::styled("[Esc]", Style::default().fg(h)),
             Span::raw(" cancel"),
         ],
-        crate::app::ChatSubMode::Chat if app.chat_panel.streaming => vec![
-            Span::styled("streaming", Style::default().fg(h)),
-            Span::raw("..."),
-        ],
-        crate::app::ChatSubMode::Chat => vec![
-            Span::styled("[Enter]", Style::default().fg(h)),
-            Span::raw(" send  "),
-            Span::styled("[Tab]", Style::default().fg(h)),
-            Span::raw(" model  "),
-            Span::styled("[C-o]", Style::default().fg(h)),
-            Span::raw(" settings  "),
-            Span::styled("[C-l]", Style::default().fg(h)),
-            Span::raw(" clear  "),
-            Span::styled("[Esc]", Style::default().fg(h)),
-            Span::raw(" hide"),
-        ],
+        crate::app::ChatSubMode::Chat if app.chat_panel.streaming => {
+            if let Some(ref tool_name) = app.chat_panel.agent_tool_status {
+                vec![
+                    Span::styled("running ", Style::default().fg(h)),
+                    Span::raw(tool_name.clone()),
+                    Span::raw("..."),
+                ]
+            } else {
+                vec![
+                    Span::styled("streaming", Style::default().fg(h)),
+                    Span::raw("..."),
+                ]
+            }
+        }
+        crate::app::ChatSubMode::Chat => {
+            let agent_hint = if app.chat_panel.agent_mode {
+                " [C-a] agent:ON "
+            } else {
+                " [C-a] agent "
+            };
+            vec![
+                Span::styled("[Enter]", Style::default().fg(h)),
+                Span::raw(" send  "),
+                Span::styled("[Tab]", Style::default().fg(h)),
+                Span::raw(" model  "),
+                Span::styled("[C-o]", Style::default().fg(h)),
+                Span::raw(" settings  "),
+                Span::styled("[C-l]", Style::default().fg(h)),
+                Span::raw(" clear"),
+                Span::styled(agent_hint, Style::default().fg(h)),
+                Span::styled("[Esc]", Style::default().fg(h)),
+                Span::raw(" hide"),
+            ]
+        }
     };
     frame.render_widget(Paragraph::new(Line::from(hints)), footer_area);
 }
@@ -164,6 +183,7 @@ fn render_messages(frame: &mut Frame, area: Rect, app: &App) {
                 piki_core::chat::ChatRole::User => ("You", theme.help.border),
                 piki_core::chat::ChatRole::Assistant => ("AI", theme.workspace_list.name_active),
                 piki_core::chat::ChatRole::System => ("System", theme.workspace_list.detail_normal),
+                piki_core::chat::ChatRole::Tool => ("Tool", theme.workspace_list.detail_normal),
             };
 
             lines.push(Line::from(Span::styled(

@@ -773,6 +773,9 @@ pub struct App {
     /// Channel for receiving streaming chat tokens from Ollama
     pub chat_token_tx: tokio::sync::mpsc::UnboundedSender<piki_api_client::ChatStreamEvent>,
     pub chat_token_rx: tokio::sync::mpsc::UnboundedReceiver<piki_api_client::ChatStreamEvent>,
+    /// Channel for receiving agent loop events
+    pub agent_event_tx: tokio::sync::mpsc::UnboundedSender<piki_agent::AgentEvent>,
+    pub agent_event_rx: tokio::sync::mpsc::UnboundedReceiver<piki_agent::AgentEvent>,
 }
 
 /// Persistent state for the global AI chat overlay.
@@ -823,6 +826,10 @@ pub struct ChatPanelState {
     pub settings_cursor: usize,
     /// Settings editor: editable server type
     pub settings_server_type: piki_core::chat::ChatServerType,
+    /// Whether to use the agentic tool-use loop instead of plain chat
+    pub agent_mode: bool,
+    /// Currently executing tool name (shown during agent loop)
+    pub agent_tool_status: Option<String>,
 }
 
 impl App {
@@ -835,6 +842,8 @@ impl App {
         let (undo_tx, undo_rx) = tokio::sync::mpsc::unbounded_channel::<UndoEntry>();
         let (chat_token_tx, chat_token_rx) =
             tokio::sync::mpsc::unbounded_channel::<piki_api_client::ChatStreamEvent>();
+        let (agent_event_tx, agent_event_rx) =
+            tokio::sync::mpsc::unbounded_channel::<piki_agent::AgentEvent>();
         let config = crate::config::Config::load_from(paths);
         let syntax = crate::syntax::SyntaxHighlighter::new(&config.syntax_theme);
         Self {
@@ -906,6 +915,8 @@ impl App {
             chat_panel: ChatPanelState::default(),
             chat_token_tx,
             chat_token_rx,
+            agent_event_tx,
+            agent_event_rx,
         }
     }
 
