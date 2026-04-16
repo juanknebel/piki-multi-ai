@@ -3,4 +3,4 @@ members = ["crates/core", "crates/tui", "crates/api-client", "crates/agent", "cr
 resolver = "3"
 
 [workspace.package]
-version = "1.3.0"
+version = "1.4.0-nightly"
