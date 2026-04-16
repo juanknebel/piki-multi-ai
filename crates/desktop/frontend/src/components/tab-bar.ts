@@ -4,6 +4,7 @@ import { toast } from "./toast";
 import { getProviderLabel, getProviderIcon, getProviderKey } from "../types";
 import type { AIProvider } from "../types";
 import { destroyMarkdownEditorPanel } from "./markdown-editor-panel";
+import { destroyCodeEditorPanel } from "./code-editor-panel";
 
 export function renderTabBar(container: HTMLElement) {
   function render() {
@@ -40,6 +41,11 @@ export function renderTabBar(container: HTMLElement) {
           // Frontend-only tabs (no backend PTY) — just remove from state
           if (tab.provider === "Markdown") {
             destroyMarkdownEditorPanel(tab.id);
+            appState.removeTab(appState.activeWorkspace, idx);
+            return;
+          }
+          if (tab.provider === "CodeEditor") {
+            destroyCodeEditorPanel(tab.id);
             appState.removeTab(appState.activeWorkspace, idx);
             return;
           }

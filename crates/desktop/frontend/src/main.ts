@@ -9,6 +9,7 @@ import { initTerminalPanel, openTerminalSearch } from "./components/terminal-pan
 import { initKanbanPanel } from "./components/kanban-panel";
 import { initApiPanel } from "./components/api-panel";
 import { initMarkdownEditorPanel } from "./components/markdown-editor-panel";
+import { initCodeEditorPanel } from "./components/code-editor-panel";
 import { bindAction, handleGlobalKeydown, loadShortcuts } from "./shortcuts";
 import { showSettingsDialog } from "./components/dialogs/settings-dialog";
 import { showProvidersDialog } from "./components/dialogs/providers-dialog";
@@ -50,6 +51,7 @@ async function init() {
   initKanbanPanel(mainContentEl);
   initApiPanel(mainContentEl);
   initMarkdownEditorPanel(mainContentEl);
+  initCodeEditorPanel(mainContentEl);
   renderStatusBar(document.getElementById("status-bar")!);
   initToasts();
   await initChatPanel(document.getElementById("chat-panel")!);
@@ -65,6 +67,17 @@ async function init() {
   } catch (err) {
     console.error("Failed to load workspaces:", err);
   }
+
+  // Notify LSP backend when workspace focus changes
+  let lastFocusedWorkspace = -1;
+  appState.on("active-workspace-changed", () => {
+    const newIdx = appState.activeWorkspace;
+    if (lastFocusedWorkspace >= 0 && lastFocusedWorkspace !== newIdx) {
+      ipc.lspNotifyWorkspaceFocus(lastFocusedWorkspace, false).catch(() => {});
+    }
+    ipc.lspNotifyWorkspaceFocus(newIdx, true).catch(() => {});
+    lastFocusedWorkspace = newIdx;
+  });
 
   ipc.onGitRefresh((event) => {
     appState.updateFiles(event.workspace_idx, event.files, event.ahead_behind);

@@ -715,3 +715,34 @@ export function onChatToken(
     callback(e.payload),
   );
 }
+
+// ── LSP commands ─────────────────────────────────────
+
+export interface LspConnectionInfo {
+  ws_port: number;
+  ws_path: string;
+  server_id: string;
+}
+
+export interface LspServerStatusInfo {
+  server_id: string;
+  root_path: string;
+  status: string;
+  ws_path: string;
+}
+
+export function lspEnsureServer(workspaceIdx: number, filePath: string): Promise<LspConnectionInfo | null> {
+  return invoke("lsp_ensure_server", { workspaceIdx, filePath });
+}
+
+export function lspNotifyWorkspaceFocus(workspaceIdx: number, focused: boolean): Promise<void> {
+  return invoke("lsp_notify_workspace_focus", { workspaceIdx, focused });
+}
+
+export function lspServerStatus(): Promise<LspServerStatusInfo[]> {
+  return invoke("lsp_server_status");
+}
+
+export function lspStopServer(serverId: string, rootPath: string): Promise<void> {
+  return invoke("lsp_stop_server", { serverId, rootPath });
+}

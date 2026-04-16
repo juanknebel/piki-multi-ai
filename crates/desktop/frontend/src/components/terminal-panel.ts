@@ -10,6 +10,7 @@ import { hideKanbanPanels, showKanbanPanel } from "./kanban-panel";
 import { hideApiPanels, showApiPanel } from "./api-panel";
 import { isMac, modCtrl, formatShortcut } from "../shortcuts";
 import { hideMarkdownEditorPanels, showMarkdownEditorPanel } from "./markdown-editor-panel";
+import { hideCodeEditorPanels, showCodeEditorPanel } from "./code-editor-panel";
 
 export interface TerminalInstance {
   tabId: string;
@@ -182,6 +183,7 @@ function showActiveTerminal() {
   hideKanbanPanels();
   hideApiPanels();
   hideMarkdownEditorPanels();
+  hideCodeEditorPanels();
 
   // Remove welcome message if present
   mainContent.querySelector(".terminal-welcome")?.remove();
@@ -209,6 +211,10 @@ function showActiveTerminal() {
   }
   if (tab.provider === "Markdown") {
     showMarkdownEditorPanel(tab.id);
+    return;
+  }
+  if (tab.provider === "CodeEditor") {
+    showCodeEditorPanel(tab.id);
     return;
   }
 

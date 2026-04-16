@@ -6,6 +6,7 @@
 mod commands;
 mod events;
 mod log_buffer;
+mod lsp;
 mod pty_raw;
 mod state;
 
@@ -132,6 +133,37 @@ fn main() {
                 chat_agent_mode: false,
             };
 
+            // Initialize LSP manager and WebSocket proxy
+            let lsp_config_path = desktop_app.paths.config_dir().join("lsp.toml");
+            let lsp_registry = lsp::registry::LspRegistry::load_or_default(&lsp_config_path);
+            let lsp_manager = lsp::server::LspManager::new(lsp_registry);
+            let lsp_manager_arc = Arc::new(tokio::sync::Mutex::new(lsp_manager));
+
+            // Start the WebSocket server (sets ws_port on the manager)
+            let lsp_for_ws = Arc::clone(&lsp_manager_arc);
+            tauri::async_runtime::spawn(async move {
+                match lsp::proxy::start_ws_server(lsp_for_ws.clone()).await {
+                    Ok(port) => {
+                        let mut mgr = lsp_for_ws.lock().await;
+                        mgr.ws_port = port;
+                        tracing::info!(port, "LSP WebSocket proxy ready");
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to start LSP WebSocket server: {e}");
+                    }
+                }
+            });
+
+            // Spawn TTL reaper for idle LSP servers (every 30s)
+            let lsp_for_reaper = Arc::clone(&lsp_manager_arc);
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                    let mut mgr = lsp_for_reaper.lock().await;
+                    mgr.reap_idle_servers().await;
+                }
+            });
+
             // Start sysinfo event emitter
             events::spawn_sysinfo_emitter(app_handle.clone(), sysinfo_for_emitter);
 
@@ -139,6 +171,7 @@ fn main() {
             events::spawn_git_watcher(app_handle);
 
             app.manage(Mutex::new(desktop_app));
+            app.manage(lsp_manager_arc);
 
             Ok(())
         })
@@ -227,6 +260,12 @@ fn main() {
             commands::chat::chat_send_agent_message,
             commands::chat::chat_set_agent_mode,
             commands::chat::chat_get_agent_mode,
+            commands::lsp::lsp_ensure_server,
+            commands::lsp::lsp_notify_workspace_focus,
+            commands::lsp::lsp_server_status,
+            commands::lsp::lsp_stop_server,
+            commands::lsp::lsp_get_config,
+            commands::lsp::lsp_set_config,
         ])
         .run(tauri::generate_context!())
         .expect("error while running piki-desktop");

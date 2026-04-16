@@ -9,6 +9,7 @@ export type AIProvider =
   | "CodeReview"
   | "Api"
   | "Markdown"
+  | "CodeEditor"
   | { Custom: string };
 
 export type WorkspaceStatus = "Idle" | "Busy" | "Done" | { Error: string };
@@ -95,6 +96,7 @@ const BUILTIN_PROVIDER_LABELS: Record<string, string> = {
   CodeReview: "Code Review",
   Api: "API Explorer",
   Markdown: "Markdown",
+  CodeEditor: "Code Editor",
 };
 
 const BUILTIN_PROVIDER_ICONS: Record<string, string> = {
@@ -108,6 +110,7 @@ const BUILTIN_PROVIDER_ICONS: Record<string, string> = {
   CodeReview: "R",
   Api: "A",
   Markdown: "M",
+  CodeEditor: "E",
 };
 
 /** Get the display label for any provider (built-in or custom). */
