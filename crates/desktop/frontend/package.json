@@ -1,7 +1,7 @@
 {
   "name": "piki-desktop-frontend",
   "private": true,
-  "version": "1.3.0-nightly",
+  "version": "1.4.0-nightly",
   "type": "module",
   "scripts": {
     "dev": "vite",
