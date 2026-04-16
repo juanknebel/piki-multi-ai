@@ -208,7 +208,8 @@
   transition: background 0.1s, color 0.1s;
 }
 
-.dialog-dropdown-item:hover {
+.dialog-dropdown-item:hover,
+.dialog-dropdown-item.highlight {
   background: var(--bg-active);
   color: var(--text-bright);
 }
@@ -216,6 +217,12 @@
 .dialog-dropdown-item.active {
   background: var(--accent-primary);
   color: var(--bg-primary);
+}
+
+.dialog-dropdown-item.active.highlight {
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+  box-shadow: inset 2px 0 0 var(--text-bright);
 }
 
 .dialog-footer {
