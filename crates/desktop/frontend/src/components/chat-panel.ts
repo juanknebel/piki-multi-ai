@@ -4,7 +4,7 @@ import { createDropdown, type DropdownHandle } from "./dropdown";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 
 interface ChatMsg {
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "tool";
   content: string;
 }
 
@@ -16,8 +16,10 @@ let modelDropdown: DropdownHandle | null = null;
 let modelBarEl: HTMLDivElement;
 let streamingEl: HTMLDivElement | null = null;
 let unlistenToken: UnlistenFn | null = null;
+let agentToggleBtn: HTMLButtonElement;
 let messages: ChatMsg[] = [];
 let streaming = false;
+let agentMode = false;
 let currentConfig: ipc.ChatConfig = {
   provider: "ollama",
   server_type: "Ollama",
@@ -46,6 +48,14 @@ export async function initChatPanel(el: HTMLElement) {
       </svg>
     </button>
   `;
+  // Agent mode toggle button
+  agentToggleBtn = document.createElement("button");
+  agentToggleBtn.className = "chat-header-btn chat-agent-btn";
+  agentToggleBtn.title = "Toggle Agent mode (tool-use)";
+  agentToggleBtn.textContent = "Agent";
+  agentToggleBtn.addEventListener("click", toggleAgentMode);
+  header.insertBefore(agentToggleBtn, header.querySelector(".chat-settings-btn")!);
+
   header.querySelector(".chat-settings-btn")!.addEventListener("click", showChatSettings);
   header.querySelector(".chat-clear-btn")!.addEventListener("click", clearChat);
   container.appendChild(header);
@@ -116,11 +126,9 @@ export async function initChatPanel(el: HTMLElement) {
   try {
     const existing = await ipc.chatGetMessages();
     for (const msg of existing) {
-      if (msg.role === "User" || msg.role === "Assistant") {
-        messages.push({
-          role: msg.role === "User" ? "user" : "assistant",
-          content: msg.content,
-        });
+      if (msg.role === "User" || msg.role === "Assistant" || msg.role === "Tool") {
+        const role = msg.role === "User" ? "user" : msg.role === "Tool" ? "tool" : "assistant";
+        messages.push({ role, content: msg.content });
       }
     }
     if (messages.length > 0) {
@@ -131,6 +139,14 @@ export async function initChatPanel(el: HTMLElement) {
   }
 
   await loadModels();
+
+  // Load agent mode state
+  try {
+    agentMode = await ipc.chatGetAgentMode();
+    updateAgentButton();
+  } catch {
+    // ignore
+  }
 
   // Subscribe to streaming tokens
   unlistenToken = await ipc.onChatToken(onToken);
@@ -225,7 +241,11 @@ async function sendMessage() {
   scrollToBottom();
 
   try {
-    await ipc.chatSendMessage(text);
+    if (agentMode) {
+      await ipc.chatSendAgentMessage(text);
+    } else {
+      await ipc.chatSendMessage(text);
+    }
   } catch (err) {
     onStreamEnd();
     toast(`Chat error: ${err}`, "error");
@@ -465,6 +485,24 @@ function showChatSettings() {
 
   document.body.appendChild(backdrop);
   urlInput.focus();
+}
+
+// ── Agent mode ────────────────────────────────────
+
+async function toggleAgentMode() {
+  agentMode = !agentMode;
+  await ipc.chatSetAgentMode(agentMode).catch(() => {});
+  updateAgentButton();
+  toast(agentMode ? "Agent mode ON" : "Agent mode OFF", "info");
+}
+
+function updateAgentButton() {
+  if (agentToggleBtn) {
+    agentToggleBtn.classList.toggle("active", agentMode);
+    agentToggleBtn.title = agentMode
+      ? "Agent mode ON (tool-use enabled)"
+      : "Agent mode OFF (plain chat)";
+  }
 }
 
 // ── Toggle ─────────────────────────────────────────

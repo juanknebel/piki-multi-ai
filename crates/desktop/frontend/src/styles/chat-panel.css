@@ -39,6 +39,22 @@
   color: var(--text-primary);
 }
 
+.chat-agent-btn {
+  width: auto;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: 1px solid var(--border-subtle);
+}
+
+.chat-agent-btn.active {
+  background: rgba(57, 186, 230, 0.15);
+  color: rgb(57, 186, 230);
+  border-color: rgba(57, 186, 230, 0.3);
+}
+
 /* ── Model selector ─────────────────────────────── */
 
 .chat-model-bar {
@@ -150,6 +166,21 @@
   background: var(--bg-tertiary);
   color: var(--text-primary);
   border: 1px solid var(--border-subtle);
+}
+
+.chat-msg.tool {
+  align-self: flex-start;
+}
+
+.chat-msg.tool .chat-msg-content {
+  background: rgba(80, 120, 60, 0.15);
+  color: var(--text-secondary);
+  border: 1px solid rgba(80, 120, 60, 0.25);
+  font-family: monospace;
+  font-size: 11px;
+  white-space: pre-wrap;
+  max-height: 200px;
+  overflow-y: auto;
 }
 
 .chat-msg-content code {

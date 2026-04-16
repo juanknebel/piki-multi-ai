@@ -188,7 +188,7 @@ export const FILE_STATUS_LABELS: Record<FileStatus, string> = {
 // ── Chat types ─────────────────────────────────────
 
 export interface ChatMessage {
-  role: "System" | "User" | "Assistant";
+  role: "System" | "User" | "Assistant" | "Tool";
   content: string;
 }
 

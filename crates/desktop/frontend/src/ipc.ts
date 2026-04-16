@@ -658,7 +658,7 @@ export interface ChatConfig {
 }
 
 export interface ChatMessage {
-  role: "System" | "User" | "Assistant";
+  role: "System" | "User" | "Assistant" | "Tool";
   content: string;
 }
 
@@ -694,6 +694,18 @@ export function chatListModels(baseUrl: string, serverType: ChatServerType): Pro
 
 export function chatStop(): Promise<void> {
   return invoke("chat_stop");
+}
+
+export function chatSendAgentMessage(message: string): Promise<void> {
+  return invoke("chat_send_agent_message", { message });
+}
+
+export function chatSetAgentMode(enabled: boolean): Promise<void> {
+  return invoke("chat_set_agent_mode", { enabled });
+}
+
+export function chatGetAgentMode(): Promise<boolean> {
+  return invoke("chat_get_agent_mode");
 }
 
 export function onChatToken(
