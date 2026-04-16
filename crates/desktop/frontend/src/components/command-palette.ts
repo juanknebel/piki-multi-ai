@@ -34,13 +34,14 @@ interface Command {
 
 let paletteEl: HTMLElement | null = null;
 
-export function openCommandPalette() {
+export async function openCommandPalette() {
   if (paletteEl) {
     closeCommandPalette();
     return;
   }
 
-  const commands = buildCommands();
+  const providerTabs = await loadProviderTabs();
+  const commands = buildCommands(providerTabs);
 
   const backdrop = document.createElement("div");
   backdrop.className = "palette-backdrop";
@@ -147,7 +148,29 @@ export function closeCommandPalette() {
   paletteEl = null;
 }
 
-function buildCommands(): Command[] {
+// Built-in tool tabs always available regardless of providers.toml
+const TOOL_TABS: AIProvider[] = ["Shell", "Api"];
+
+async function loadProviderTabs(): Promise<AIProvider[]> {
+  try {
+    const providerList = await ipc.listProviders();
+    const configured = providerList.map((p): AIProvider => {
+      const builtinMap: Record<string, AIProvider> = {
+        "Claude Code": "Claude",
+        "Gemini": "Gemini",
+        "OpenCode": "OpenCode",
+        "Kilo": "Kilo",
+        "Codex": "Codex",
+      };
+      return builtinMap[p.name] ?? { Custom: p.name };
+    });
+    return [...configured, ...TOOL_TABS];
+  } catch {
+    return [...TOOL_TABS];
+  }
+}
+
+function buildCommands(providerTabs: AIProvider[]): Command[] {
   const cmds: Command[] = [];
 
   // Workspace commands
@@ -223,19 +246,11 @@ function buildCommands(): Command[] {
     });
   });
 
-  // Tab commands
-  const tabProviders: AIProvider[] = [
-    "Shell",
-    "Claude",
-    "Gemini",
-    "OpenCode",
-    "Kilo",
-    "Codex",
-    "Api",
-  ];
-  for (const provider of tabProviders) {
+  // Tab commands (only configured providers + built-in tools)
+  for (const provider of providerTabs) {
+    const key = typeof provider === "string" ? provider : `custom-${provider.Custom}`;
     cmds.push({
-      id: `tab-${provider}`,
+      id: `tab-${key}`,
       label: `New ${getProviderLabel(provider)} Tab`,
       category: "Tab",
       action: () => spawnTabSafe(provider),
