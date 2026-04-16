@@ -86,6 +86,7 @@ clear_lock() {
 check_tools() {
     command -v gh    >/dev/null 2>&1 || die "gh CLI not found. Install: https://cli.github.com"
     command -v cargo >/dev/null 2>&1 || die "cargo not found"
+    command -v npm   >/dev/null 2>&1 || die "npm not found (required to sync desktop frontend version)"
     gh auth status   >/dev/null 2>&1 || die "gh not authenticated. Run: gh auth login"
 }
 
@@ -119,6 +120,12 @@ check_clean() {
 set_workspace_version() {
     local dir="$1" version="$2"
     sed -i "s/^version = \".*\"/version = \"$version\"/" "$dir/Cargo.toml"
+
+    # Sync frontend version (package.json + package-lock.json) via `npm version`
+    local frontend_dir="$dir/crates/desktop/frontend"
+    if [[ -f "$frontend_dir/package.json" ]]; then
+        (cd "$frontend_dir" && npm version "$version" --no-git-tag-version --allow-same-version >/dev/null)
+    fi
 }
 
 # 1.2.0 → 1.3.0, 2.0.1 → 2.1.0
@@ -166,7 +173,7 @@ release_from_nightly() {
     # 2. Bump version in nightly and commit
     info "Setting version to $version in $DEV_BRANCH..."
     run set_workspace_version "$DEV_DIR" "$version"
-    run git -C "$DEV_DIR" add Cargo.toml
+    run git -C "$DEV_DIR" add Cargo.toml crates/desktop/frontend/package.json crates/desktop/frontend/package-lock.json
     run git -C "$DEV_DIR" commit -m "chore: bump version to $version for release"
     ok "Version bumped in $DEV_BRANCH"
 
@@ -195,7 +202,7 @@ release_from_nightly() {
     local next_nightly
     next_nightly="$(next_minor "$version")-nightly"
     run set_workspace_version "$DEV_DIR" "$next_nightly"
-    run git -C "$DEV_DIR" add Cargo.toml
+    run git -C "$DEV_DIR" add Cargo.toml crates/desktop/frontend/package.json crates/desktop/frontend/package-lock.json
     run git -C "$DEV_DIR" commit -m "chore: bump version to $next_nightly after $tag release"
     run git -C "$DEV_DIR" push origin "$DEV_BRANCH"
     ok "Nightly synced and version reset"
@@ -262,7 +269,7 @@ hotfix() {
 
     # Bump, commit, tag, push
     run set_workspace_version "$MAIN_DIR" "$version"
-    run git -C "$MAIN_DIR" add Cargo.toml
+    run git -C "$MAIN_DIR" add Cargo.toml crates/desktop/frontend/package.json crates/desktop/frontend/package-lock.json
     run git -C "$MAIN_DIR" commit -m "chore: bump version to $version for hotfix"
     run git -C "$MAIN_DIR" tag "$tag"
     run git -C "$MAIN_DIR" push origin "$MAIN_BRANCH" --tags
@@ -276,7 +283,7 @@ hotfix() {
     local next_nightly
     next_nightly="$(next_minor "$version")-nightly"
     run set_workspace_version "$DEV_DIR" "$next_nightly"
-    run git -C "$DEV_DIR" add Cargo.toml
+    run git -C "$DEV_DIR" add Cargo.toml crates/desktop/frontend/package.json crates/desktop/frontend/package-lock.json
     run git -C "$DEV_DIR" commit -m "chore: bump version to $next_nightly after hotfix $tag"
     run git -C "$DEV_DIR" push origin "$DEV_BRANCH"
     ok "Nightly synced"
