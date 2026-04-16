@@ -60,8 +60,9 @@ export async function openFuzzySearch() {
 
       el.addEventListener("click", () => selectFile(file));
       el.addEventListener("mouseenter", () => {
+        if (selectedIdx === i) return;
         selectedIdx = i;
-        renderResults();
+        updateSelection();
       });
       results.appendChild(el);
     });
@@ -76,6 +77,12 @@ export async function openFuzzySearch() {
     if (filtered.length === 0) {
       results.innerHTML = '<div class="palette-empty">No matching files</div>';
     }
+  }
+
+  function updateSelection() {
+    results.querySelectorAll<HTMLElement>(".palette-item").forEach((el, i) => {
+      el.classList.toggle("selected", i === selectedIdx);
+    });
   }
 
   function filter() {
@@ -113,12 +120,12 @@ export async function openFuzzySearch() {
     if (e.key === "ArrowDown") {
       e.preventDefault();
       selectedIdx = Math.min(selectedIdx + 1, Math.min(filtered.length, 50) - 1);
-      renderResults();
+      updateSelection();
       results.querySelector(".palette-item.selected")?.scrollIntoView({ block: "nearest" });
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       selectedIdx = Math.max(selectedIdx - 1, 0);
-      renderResults();
+      updateSelection();
       results.querySelector(".palette-item.selected")?.scrollIntoView({ block: "nearest" });
     } else if (e.key === "Enter") {
       e.preventDefault();
