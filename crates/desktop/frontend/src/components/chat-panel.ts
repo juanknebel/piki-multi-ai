@@ -138,15 +138,14 @@ export async function initChatPanel(el: HTMLElement) {
     // No messages
   }
 
-  await loadModels();
+  // Load models in the background — don't block app init
+  loadModels().catch(() => {});
 
-  // Load agent mode state
-  try {
-    agentMode = await ipc.chatGetAgentMode();
+  // Load agent mode state in the background
+  ipc.chatGetAgentMode().then((enabled) => {
+    agentMode = enabled;
     updateAgentButton();
-  } catch {
-    // ignore
-  }
+  }).catch(() => {});
 
   // Subscribe to streaming tokens
   unlistenToken = await ipc.onChatToken(onToken);
