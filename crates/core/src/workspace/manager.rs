@@ -85,6 +85,16 @@ impl WorkspaceManager {
             .await
             .context("failed to create worktrees directory")?;
 
+        // Check if branch exists locally
+        let local_check = shell_env::command("git")
+            .args(["rev-parse", "--verify", &format!("refs/heads/{}", branch_name)])
+            .current_dir(&git_root)
+            .output()
+            .await
+            .context("failed to check local branches")?;
+
+        let local_exists = local_check.status.success();
+
         // Check if branch exists on remote
         let ls_remote = shell_env::command("git")
             .args(["ls-remote", "--heads", "origin", &branch_name])
@@ -96,22 +106,58 @@ impl WorkspaceManager {
         let remote_exists = ls_remote.status.success() && !ls_remote.stdout.is_empty();
 
         let output = if remote_exists {
-            // Fetch the remote branch first
+            // Fetch the remote branch and set up tracking
             let fetch = shell_env::command("git")
-                .args(["fetch", "origin", &branch_name])
+                .args(["fetch", "origin", &format!("{}:{}", branch_name, branch_name)])
                 .current_dir(&git_root)
                 .output()
                 .await
                 .context("failed to fetch remote branch")?;
 
             if !fetch.status.success() {
-                bail!(
-                    "git fetch failed: {}",
-                    String::from_utf8_lossy(&fetch.stderr).trim()
-                );
+                // If the local branch already exists and diverged, fall back to simple fetch
+                let fetch_simple = shell_env::command("git")
+                    .args(["fetch", "origin", &branch_name])
+                    .current_dir(&git_root)
+                    .output()
+                    .await
+                    .context("failed to fetch remote branch")?;
+
+                if !fetch_simple.status.success() {
+                    bail!(
+                        "git fetch failed: {}",
+                        String::from_utf8_lossy(&fetch_simple.stderr).trim()
+                    );
+                }
             }
 
-            // Create worktree from remote branch (auto-creates local tracking branch)
+            // Create worktree from the branch
+            let worktree_output = shell_env::command("git")
+                .args([
+                    "worktree",
+                    "add",
+                    worktree_path.to_str().unwrap(),
+                    &branch_name,
+                ])
+                .current_dir(&git_root)
+                .output()
+                .await
+                .context("failed to create worktree")?;
+
+            // Set upstream tracking
+            let _ = shell_env::command("git")
+                .args([
+                    "branch",
+                    &format!("--set-upstream-to=origin/{}", branch_name),
+                    &branch_name,
+                ])
+                .current_dir(&git_root)
+                .output()
+                .await;
+
+            worktree_output
+        } else if local_exists {
+            // Branch exists locally but not on remote — reuse it
             shell_env::command("git")
                 .args([
                     "worktree",
@@ -124,7 +170,7 @@ impl WorkspaceManager {
                 .await
                 .context("failed to create worktree")?
         } else {
-            // Create worktree with new branch
+            // Branch doesn't exist anywhere — create new
             shell_env::command("git")
                 .args([
                     "worktree",
