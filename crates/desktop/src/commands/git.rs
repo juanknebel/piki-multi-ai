@@ -13,6 +13,12 @@ pub struct MergeResult {
     pub conflicts: Vec<String>,
 }
 
+#[derive(Serialize, Clone)]
+pub struct WorkspaceGitStatus {
+    pub files: Vec<ChangedFile>,
+    pub ahead_behind: Option<(usize, usize)>,
+}
+
 #[tauri::command]
 pub async fn get_changed_files(
     state: State<'_, Mutex<DesktopApp>>,
@@ -29,6 +35,35 @@ pub async fn get_changed_files(
     piki_core::git::get_changed_files(&ws_path)
         .await
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_workspace_git_status(
+    state: State<'_, Mutex<DesktopApp>>,
+    workspace_idx: usize,
+) -> Result<WorkspaceGitStatus, String> {
+    let ws_path = {
+        let app = state.lock();
+        if workspace_idx >= app.workspaces.len() {
+            return Err("Workspace index out of range".to_string());
+        }
+        app.workspaces[workspace_idx].info.path.clone()
+    };
+
+    let files = piki_core::git::get_changed_files(&ws_path)
+        .await
+        .map_err(|e| e.to_string())?;
+    let ahead_behind = piki_core::git::get_ahead_behind(&ws_path).await;
+
+    {
+        let mut app = state.lock();
+        if workspace_idx < app.workspaces.len() {
+            app.workspaces[workspace_idx].changed_files = files.clone();
+            app.workspaces[workspace_idx].ahead_behind = ahead_behind;
+        }
+    }
+
+    Ok(WorkspaceGitStatus { files, ahead_behind })
 }
 
 #[tauri::command]

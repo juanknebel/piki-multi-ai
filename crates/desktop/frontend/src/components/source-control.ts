@@ -59,9 +59,11 @@ export function renderSourceControl(container: HTMLElement) {
         try {
           if (action === "push") {
             await ipc.gitPush(wsIdx);
+            const status = await ipc.getWorkspaceGitStatus(wsIdx);
+            appState.updateFiles(wsIdx, status.files, status.ahead_behind);
           } else if (action === "refresh") {
-            const newFiles = await ipc.getChangedFiles(wsIdx);
-            appState.updateFiles(wsIdx, newFiles, ws?.aheadBehind ?? null);
+            const status = await ipc.getWorkspaceGitStatus(wsIdx);
+            appState.updateFiles(wsIdx, status.files, status.ahead_behind);
           }
         } catch (err) {
           console.error(`Source control ${action} error:`, err);
@@ -107,10 +109,12 @@ export function renderSourceControl(container: HTMLElement) {
       commitBtn.disabled = true;
       commitBtn.textContent = "Committing...";
       try {
-        await ipc.gitCommit(appState.activeWorkspace, msg);
+        const wsIdx = appState.activeWorkspace;
+        await ipc.gitCommit(wsIdx, msg);
         textarea.value = "";
         savedCommitMessage = "";
-        await refreshFiles();
+        const status = await ipc.getWorkspaceGitStatus(wsIdx);
+        appState.updateFiles(wsIdx, status.files, status.ahead_behind);
       } catch (err) {
         console.error("Commit error:", err);
         commitBtn.textContent = "✓ Commit";

@@ -102,6 +102,17 @@ export function getChangedFiles(
   return invoke("get_changed_files", { workspaceIdx });
 }
 
+export interface WorkspaceGitStatus {
+  files: ChangedFile[];
+  ahead_behind: [number, number] | null;
+}
+
+export function getWorkspaceGitStatus(
+  workspaceIdx: number,
+): Promise<WorkspaceGitStatus> {
+  return invoke("get_workspace_git_status", { workspaceIdx });
+}
+
 export function gitStage(
   workspaceIdx: number,
   filePath: string,
