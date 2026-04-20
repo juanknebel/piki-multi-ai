@@ -3,6 +3,9 @@ import * as ipc from "../../ipc";
 import { toast } from "../toast";
 import { createDropdown, type DropdownOption } from "../dropdown";
 import type { AgentInfo } from "../../ipc";
+import type { AIProvider } from "../../types";
+
+// All AI agent providers live in providers.toml — loaded via ipc.listProviders().
 
 export interface CardContext {
   id: string;
@@ -33,16 +36,23 @@ export async function showDispatchDialog(cardContext?: CardContext) {
     })),
   ];
 
-  const providerOptions: DropdownOption[] = [
-    { value: "Claude Code", label: "Claude Code" },
-    { value: "Gemini", label: "Gemini" },
-    { value: "OpenCode", label: "OpenCode" },
-    { value: "Kilo", label: "Kilo" },
-    { value: "Codex", label: "Codex" },
-  ];
+  let providerOptions: DropdownOption[];
+  try {
+    const providerList = await ipc.listProviders();
+    providerOptions = providerList
+      .filter((p) => p.dispatchable)
+      .map((p) => ({ value: p.name, label: p.name }));
+  } catch {
+    providerOptions = [];
+  }
+
+  if (providerOptions.length === 0) {
+    toast("No dispatchable providers configured. Add one in the Providers dialog.", "error");
+    return;
+  }
 
   const agentDropdown = createDropdown(agentOptions, "");
-  const providerDropdown = createDropdown(providerOptions, "Claude Code");
+  const providerDropdown = createDropdown(providerOptions, providerOptions[0].value);
 
   const backdrop = document.createElement("div");
   backdrop.className = "dialog-backdrop";
@@ -182,15 +192,8 @@ export async function showDispatchDialog(cardContext?: CardContext) {
   });
 }
 
-function mapProviderToAI(label: string): import("../../types").AIProvider {
-  const map: Record<string, import("../../types").AIProvider> = {
-    "Claude Code": "Claude",
-    "Gemini": "Gemini",
-    "OpenCode": "OpenCode",
-    "Kilo": "Kilo",
-    "Codex": "Codex",
-  };
-  return map[label] || "Claude";
+function mapProviderToAI(label: string): AIProvider {
+  return { Custom: label };
 }
 
 function esc(t: string): string {

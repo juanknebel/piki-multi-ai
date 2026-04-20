@@ -67,8 +67,9 @@ export function openProjectSearch() {
 
       el.addEventListener("click", () => selectMatch(m));
       el.addEventListener("mouseenter", () => {
+        if (selectedIdx === i) return;
         selectedIdx = i;
-        renderResults();
+        updateSelection();
       });
       results.appendChild(el);
     });
@@ -79,6 +80,12 @@ export function openProjectSearch() {
       more.textContent = "Showing first 100 results...";
       results.appendChild(more);
     }
+  }
+
+  function updateSelection() {
+    results.querySelectorAll<HTMLElement>(".palette-item").forEach((el, i) => {
+      el.classList.toggle("selected", i === selectedIdx);
+    });
   }
 
   async function doSearch() {
@@ -123,12 +130,12 @@ export function openProjectSearch() {
     if (e.key === "ArrowDown") {
       e.preventDefault();
       selectedIdx = Math.min(selectedIdx + 1, matches.length - 1);
-      renderResults();
+      updateSelection();
       results.querySelector(".palette-item.selected")?.scrollIntoView({ block: "nearest" });
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       selectedIdx = Math.max(selectedIdx - 1, 0);
-      renderResults();
+      updateSelection();
       results.querySelector(".palette-item.selected")?.scrollIntoView({ block: "nearest" });
     } else if (e.key === "Enter") {
       e.preventDefault();

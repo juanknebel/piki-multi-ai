@@ -89,8 +89,9 @@ export function openWorkspaceSwitcher() {
 
         el.addEventListener("click", () => switchTo(item.idx));
         el.addEventListener("mouseenter", () => {
+          if (selectedIdx === idx) return;
           selectedIdx = idx;
-          renderResults();
+          updateSelection();
         });
         results.appendChild(el);
       }
@@ -99,6 +100,12 @@ export function openWorkspaceSwitcher() {
     if (filtered.length === 0) {
       results.innerHTML = '<div class="palette-empty">No matching workspaces</div>';
     }
+  }
+
+  function updateSelection() {
+    results.querySelectorAll<HTMLElement>(".palette-item").forEach((el, i) => {
+      el.classList.toggle("selected", i === selectedIdx);
+    });
   }
 
   function filter() {
@@ -132,12 +139,12 @@ export function openWorkspaceSwitcher() {
     if (e.key === "ArrowDown") {
       e.preventDefault();
       selectedIdx = Math.min(selectedIdx + 1, renderedItems.length - 1);
-      renderResults();
+      updateSelection();
       results.querySelector(".palette-item.selected")?.scrollIntoView({ block: "nearest" });
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       selectedIdx = Math.max(selectedIdx - 1, 0);
-      renderResults();
+      updateSelection();
       results.querySelector(".palette-item.selected")?.scrollIntoView({ block: "nearest" });
     } else if (e.key === "Enter") {
       e.preventDefault();

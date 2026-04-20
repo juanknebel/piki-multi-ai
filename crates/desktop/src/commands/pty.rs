@@ -274,11 +274,6 @@ pub async fn set_active_tab(
 
 fn parse_provider(s: &str) -> Result<AIProvider, String> {
     match s {
-        "Claude" => Ok(AIProvider::Claude),
-        "Gemini" => Ok(AIProvider::Gemini),
-        "OpenCode" => Ok(AIProvider::OpenCode),
-        "Kilo" => Ok(AIProvider::Kilo),
-        "Codex" => Ok(AIProvider::Codex),
         "Shell" => Ok(AIProvider::Shell),
         "Kanban" => Ok(AIProvider::Kanban),
         "CodeReview" => Ok(AIProvider::CodeReview),

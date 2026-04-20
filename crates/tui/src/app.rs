@@ -936,12 +936,20 @@ impl App {
     }
 
     /// Build the list of AI providers from providers.toml.
-    /// Maps known names (e.g. "Claude Code") to built-in variants, others to Custom.
     pub fn new_tab_agent_list(&self) -> Vec<AIProvider> {
         self.provider_manager
             .all()
             .iter()
-            .map(|config| AIProvider::from_label(&config.name))
+            .map(|config| AIProvider::Custom(config.name.clone()))
+            .collect()
+    }
+
+    /// Providers from providers.toml that are marked `dispatchable`.
+    pub fn dispatchable_provider_list(&self) -> Vec<AIProvider> {
+        self.provider_manager
+            .dispatchable()
+            .iter()
+            .map(|config| AIProvider::Custom(config.name.clone()))
             .collect()
     }
 

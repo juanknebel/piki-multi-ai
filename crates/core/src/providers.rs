@@ -139,17 +139,28 @@ impl ProviderManager {
         }
     }
 
-    /// Default provider configurations matching the built-in AIProvider variants.
+    /// Default provider configurations seeded on first run.
     fn default_providers() -> Vec<ProviderConfig> {
-        vec![ProviderConfig {
-            name: "Claude Code".to_string(),
-            description: "Anthropic's Claude Code CLI agent".to_string(),
-            command: "claude".to_string(),
-            default_args: Vec::new(),
-            prompt_format: PromptFormat::Positional,
-            dispatchable: true,
-            agent_dir: Some(".claude/agents".to_string()),
-        }]
+        vec![
+            ProviderConfig {
+                name: "Claude Code".to_string(),
+                description: "Anthropic's Claude Code CLI agent".to_string(),
+                command: "claude".to_string(),
+                default_args: Vec::new(),
+                prompt_format: PromptFormat::Positional,
+                dispatchable: true,
+                agent_dir: Some(".claude/agents".to_string()),
+            },
+            ProviderConfig {
+                name: "Gemini".to_string(),
+                description: "Google Gemini CLI agent".to_string(),
+                command: "gemini".to_string(),
+                default_args: Vec::new(),
+                prompt_format: PromptFormat::Positional,
+                dispatchable: true,
+                agent_dir: Some(".gemini/agents".to_string()),
+            },
+        ]
     }
 }
 
@@ -160,10 +171,14 @@ mod tests {
     #[test]
     fn test_default_providers() {
         let defaults = ProviderManager::default_providers();
-        assert_eq!(defaults.len(), 1);
+        assert_eq!(defaults.len(), 2);
         assert_eq!(defaults[0].name, "Claude Code");
         assert_eq!(defaults[0].command, "claude");
         assert!(defaults[0].dispatchable);
+        assert_eq!(defaults[1].name, "Gemini");
+        assert_eq!(defaults[1].command, "gemini");
+        assert!(defaults[1].dispatchable);
+        assert_eq!(defaults[1].agent_dir.as_deref(), Some(".gemini/agents"));
     }
 
     #[test]
@@ -254,8 +269,9 @@ mod tests {
 
         // File doesn't exist — should bootstrap
         let manager = ProviderManager::load_or_init(&path);
-        assert_eq!(manager.providers.len(), 1);
+        assert_eq!(manager.providers.len(), 2);
         assert_eq!(manager.providers[0].name, "Claude Code");
+        assert_eq!(manager.providers[1].name, "Gemini");
 
         // File should now exist on disk
         assert!(path.exists());
@@ -268,8 +284,9 @@ mod tests {
         std::fs::write(&path, "").unwrap();
 
         let manager = ProviderManager::load_or_init(&path);
-        assert_eq!(manager.providers.len(), 1);
+        assert_eq!(manager.providers.len(), 2);
         assert_eq!(manager.providers[0].name, "Claude Code");
+        assert_eq!(manager.providers[1].name, "Gemini");
     }
 
     #[test]

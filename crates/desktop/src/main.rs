@@ -188,6 +188,7 @@ fn main() {
             commands::pty::set_active_tab,
             commands::pty::spawn_editor_tab,
             commands::git::get_changed_files,
+            commands::git::get_workspace_git_status,
             commands::git::git_stage,
             commands::git::git_unstage,
             commands::git::git_commit,

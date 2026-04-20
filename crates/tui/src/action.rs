@@ -2243,23 +2243,18 @@ pub(crate) async fn execute_action(
             if let Some(ws) = app.current_workspace() {
                 let source_repo = ws.source_repo.clone();
 
-                // Scan provider agent directories for .md files
-                // Start with built-in providers, then add custom providers
-                let mut provider_dirs: Vec<(String, String)> = vec![
-                    (".claude/agents".into(), "Claude Code".into()),
-                    (".gemini/agents".into(), "Gemini".into()),
-                    (".opencode/agents".into(), "OpenCode".into()),
-                    (".kilo/agents".into(), "Kilo".into()),
-                    (".codex/agents".into(), "Codex".into()),
-                ];
-                for config in app.provider_manager.all() {
-                    if let Some(ref agent_dir) = config.agent_dir {
-                        let already = provider_dirs.iter().any(|(d, _)| d == agent_dir);
-                        if !already {
-                            provider_dirs.push((agent_dir.clone(), config.name.clone()));
-                        }
-                    }
-                }
+                // Scan provider agent directories for .md files — all come from ProviderManager.
+                let provider_dirs: Vec<(String, String)> = app
+                    .provider_manager
+                    .all()
+                    .iter()
+                    .filter_map(|config| {
+                        config
+                            .agent_dir
+                            .as_ref()
+                            .map(|d| (d.clone(), config.name.clone()))
+                    })
+                    .collect();
 
                 let mut discovered: Vec<(String, String, String, bool)> = Vec::new();
 
@@ -2548,20 +2543,14 @@ fn materialize_agent_config(
     provider_manager: Option<&piki_core::providers::ProviderManager>,
 ) -> anyhow::Result<()> {
     let filename = format!("{}.md", agent_name);
-    let dir = match provider.builtin_agent_dir() {
-        Some(d) => d.to_string(),
-        None => {
-            // Check custom provider for agent_dir
-            if let AIProvider::Custom(name) = provider
-                && let Some(mgr) = provider_manager
-                && let Some(config) = mgr.get(name)
-                && let Some(agent_dir) = &config.agent_dir
-            {
-                agent_dir.clone()
-            } else {
-                return Ok(());
-            }
-        }
+    let dir = if let AIProvider::Custom(name) = provider
+        && let Some(mgr) = provider_manager
+        && let Some(config) = mgr.get(name)
+        && let Some(agent_dir) = &config.agent_dir
+    {
+        agent_dir.clone()
+    } else {
+        return Ok(());
     };
     let agent_dir = worktree_path.join(dir);
     std::fs::create_dir_all(&agent_dir)?;

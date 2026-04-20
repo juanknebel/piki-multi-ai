@@ -34,13 +34,14 @@ interface Command {
 
 let paletteEl: HTMLElement | null = null;
 
-export function openCommandPalette() {
+export async function openCommandPalette() {
   if (paletteEl) {
     closeCommandPalette();
     return;
   }
 
-  const commands = buildCommands();
+  const providerTabs = await loadProviderTabs();
+  const commands = buildCommands(providerTabs);
 
   const backdrop = document.createElement("div");
   backdrop.className = "palette-backdrop";
@@ -77,8 +78,9 @@ export function openCommandPalette() {
         cmd.action();
       });
       item.addEventListener("mouseenter", () => {
+        if (selectedIdx === idx) return;
         selectedIdx = idx;
-        renderResults();
+        updateSelection();
       });
       results.appendChild(item);
     });
@@ -86,6 +88,12 @@ export function openCommandPalette() {
     if (filtered.length === 0) {
       results.innerHTML = '<div class="palette-empty">No matching commands</div>';
     }
+  }
+
+  function updateSelection() {
+    results.querySelectorAll<HTMLElement>(".palette-item").forEach((el, i) => {
+      el.classList.toggle("selected", i === selectedIdx);
+    });
   }
 
   function filter() {
@@ -109,12 +117,12 @@ export function openCommandPalette() {
     if (e.key === "ArrowDown") {
       e.preventDefault();
       selectedIdx = Math.min(selectedIdx + 1, filtered.length - 1);
-      renderResults();
+      updateSelection();
       scrollToSelected(results);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       selectedIdx = Math.max(selectedIdx - 1, 0);
-      renderResults();
+      updateSelection();
       scrollToSelected(results);
     } else if (e.key === "Enter") {
       e.preventDefault();
@@ -140,7 +148,20 @@ export function closeCommandPalette() {
   paletteEl = null;
 }
 
-function buildCommands(): Command[] {
+// Built-in tool tabs always available regardless of providers.toml
+const TOOL_TABS: AIProvider[] = ["Shell", "Api"];
+
+async function loadProviderTabs(): Promise<AIProvider[]> {
+  try {
+    const providerList = await ipc.listProviders();
+    const configured = providerList.map((p): AIProvider => ({ Custom: p.name }));
+    return [...configured, ...TOOL_TABS];
+  } catch {
+    return [...TOOL_TABS];
+  }
+}
+
+function buildCommands(providerTabs: AIProvider[]): Command[] {
   const cmds: Command[] = [];
 
   // Workspace commands
@@ -216,19 +237,11 @@ function buildCommands(): Command[] {
     });
   });
 
-  // Tab commands
-  const tabProviders: AIProvider[] = [
-    "Shell",
-    "Claude",
-    "Gemini",
-    "OpenCode",
-    "Kilo",
-    "Codex",
-    "Api",
-  ];
-  for (const provider of tabProviders) {
+  // Tab commands (only configured providers + built-in tools)
+  for (const provider of providerTabs) {
+    const key = typeof provider === "string" ? provider : `custom-${provider.Custom}`;
     cmds.push({
-      id: `tab-${provider}`,
+      id: `tab-${key}`,
       label: `New ${getProviderLabel(provider)} Tab`,
       category: "Tab",
       action: () => spawnTabSafe(provider),
