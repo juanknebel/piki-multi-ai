@@ -4,7 +4,14 @@ import { toast } from "../toast";
 import { createDropdown } from "../dropdown";
 import type { AgentInfo } from "../../ipc";
 
-const PROVIDERS = ["Claude Code", "Gemini", "OpenCode", "Kilo", "Codex"];
+async function loadProviderNames(): Promise<string[]> {
+  try {
+    const list = await ipc.listProviders();
+    return list.map((p) => p.name);
+  } catch {
+    return [];
+  }
+}
 
 export async function showAgentManager() {
   document.querySelector(".dialog-backdrop")?.remove();
@@ -130,8 +137,14 @@ export async function showAgentManager() {
   backdrop.focus();
 }
 
-function showAgentForm(existing: AgentInfo | null, onSaved: () => void) {
+async function showAgentForm(existing: AgentInfo | null, onSaved: () => void) {
   document.querySelector(".agent-form-backdrop")?.remove();
+
+  const providerNames = await loadProviderNames();
+  if (providerNames.length === 0) {
+    toast("No providers configured. Add one in the Providers dialog.", "error");
+    return;
+  }
 
   const backdrop = document.createElement("div");
   backdrop.className = "dialog-backdrop agent-form-backdrop";
@@ -166,8 +179,8 @@ function showAgentForm(existing: AgentInfo | null, onSaved: () => void) {
   `;
 
   const providerDropdown = createDropdown(
-    PROVIDERS.map((p) => ({ value: p, label: p })),
-    existing?.provider ?? PROVIDERS[0],
+    providerNames.map((p) => ({ value: p, label: p })),
+    existing?.provider ?? providerNames[0],
   );
   backdrop.querySelector("#af-provider-slot")!.replaceWith(providerDropdown.container);
 

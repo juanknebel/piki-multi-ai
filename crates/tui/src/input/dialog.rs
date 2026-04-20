@@ -1041,7 +1041,7 @@ pub(super) fn handle_dispatch_agent_input(app: &mut App, key: KeyEvent) -> Optio
             let p = dispatchable_providers
                 .get(prov_idx)
                 .cloned()
-                .unwrap_or(AIProvider::Claude);
+                .unwrap_or_else(|| AIProvider::Custom(String::new()));
             (p, None, None)
         }
     };

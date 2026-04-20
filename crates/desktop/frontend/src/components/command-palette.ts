@@ -154,16 +154,7 @@ const TOOL_TABS: AIProvider[] = ["Shell", "Api"];
 async function loadProviderTabs(): Promise<AIProvider[]> {
   try {
     const providerList = await ipc.listProviders();
-    const configured = providerList.map((p): AIProvider => {
-      const builtinMap: Record<string, AIProvider> = {
-        "Claude Code": "Claude",
-        "Gemini": "Gemini",
-        "OpenCode": "OpenCode",
-        "Kilo": "Kilo",
-        "Codex": "Codex",
-      };
-      return builtinMap[p.name] ?? { Custom: p.name };
-    });
+    const configured = providerList.map((p): AIProvider => ({ Custom: p.name }));
     return [...configured, ...TOOL_TABS];
   } catch {
     return [...TOOL_TABS];

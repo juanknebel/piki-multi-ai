@@ -150,24 +150,12 @@ pub async fn sync_agent_to_repo(
         .find(|a| a.id == Some(agent_id))
         .ok_or("Agent not found")?;
 
-    let ai_provider = piki_core::AIProvider::from_label(&agent.provider);
-    let dir = match ai_provider.builtin_agent_dir() {
-        Some(d) => d.to_string(),
-        None => {
-            // Check custom provider for agent_dir
-            if let piki_core::AIProvider::Custom(ref name) = ai_provider {
-                let app = state.lock();
-                if let Some(config) = app.provider_manager.get(name)
-                    && let Some(ref agent_dir) = config.agent_dir
-                {
-                    agent_dir.clone()
-                } else {
-                    return Err(format!("Provider '{}' has no agent_dir configured", agent.provider));
-                }
-            } else {
-                return Err(format!("Provider '{}' does not support agent sync", agent.provider));
-            }
-        }
+    let dir = {
+        let app = state.lock();
+        app.provider_manager
+            .get(&agent.provider)
+            .and_then(|c| c.agent_dir.clone())
+            .ok_or_else(|| format!("Provider '{}' has no agent_dir configured", agent.provider))?
     };
 
     let agent_dir = source_repo.join(dir);
@@ -328,18 +316,19 @@ pub async fn dispatch_agent(
     dispatch_agent_name: Option<String>,
     dispatch_card_title: Option<String>,
 ) -> Result<String, String> {
-    let ai_provider = piki_core::AIProvider::from_label(&provider);
-
-    // Resolve command: built-in providers use resolved_command(), custom use ProviderManager
-    let (command, default_args) = if let piki_core::AIProvider::Custom(ref name) = ai_provider {
+    // All dispatchable providers live in ProviderManager (providers.toml).
+    let (ai_provider, command, default_args, prompt_format) = {
         let app = state.lock();
-        if let Some(config) = app.provider_manager.get(name) {
-            (config.command.clone(), config.default_args.clone())
-        } else {
-            return Err(format!("Unknown custom provider: {name}"));
-        }
-    } else {
-        (ai_provider.resolved_command(), Vec::new())
+        let config = app
+            .provider_manager
+            .get(&provider)
+            .ok_or_else(|| format!("Unknown provider: {provider}"))?;
+        (
+            piki_core::AIProvider::Custom(provider.clone()),
+            config.command.clone(),
+            config.default_args.clone(),
+            config.prompt_format.clone(),
+        )
     };
     if command.is_empty() {
         return Err(format!("{provider} does not use a terminal session"));
@@ -420,15 +409,14 @@ pub async fn dispatch_agent(
     };
 
     // Build args: default_args + prompt args
-    let prompt_args = if let piki_core::AIProvider::Custom(ref name) = ai_provider {
-        let app = state.lock();
-        if let Some(config) = app.provider_manager.get(name) {
-            piki_core::providers::ProviderManager::prompt_args(config, &prompt)
-        } else {
-            Vec::new()
-        }
+    let prompt_args = if prompt.is_empty() {
+        Vec::new()
     } else {
-        ai_provider.prompt_args(&prompt)
+        match &prompt_format {
+            piki_core::providers::PromptFormat::Positional => vec![prompt.clone()],
+            piki_core::providers::PromptFormat::Flag(flag) => vec![flag.clone(), prompt.clone()],
+            piki_core::providers::PromptFormat::None => Vec::new(),
+        }
     };
     let mut args = default_args;
     args.extend(prompt_args);

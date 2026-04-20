@@ -2,14 +2,13 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-/// An AI assistant that can be run in a PTY
+/// A session target that can be opened in a PTY or dedicated tab.
+///
+/// AI agent providers are **not** built-in here — they live in `providers.toml`
+/// and are resolved via `ProviderManager`. Only non-AI utility targets remain
+/// as built-in variants.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AIProvider {
-    Claude,
-    Gemini,
-    OpenCode,
-    Kilo,
-    Codex,
     Shell,
     Kanban,
     CodeReview,
@@ -24,11 +23,6 @@ impl AIProvider {
     /// For `Custom` providers, returns an empty string — use `ProviderManager` instead.
     pub fn command(&self) -> &str {
         match self {
-            AIProvider::Claude => "claude",
-            AIProvider::Gemini => "gemini",
-            AIProvider::OpenCode => "opencode",
-            AIProvider::Kilo => "kilo",
-            AIProvider::Codex => "codex",
             AIProvider::Shell => "/bin/sh",
             AIProvider::Kanban => "",
             AIProvider::CodeReview => "gh",
@@ -49,12 +43,7 @@ impl AIProvider {
     /// Icon prefix for sub-tab display.
     pub fn icon(&self) -> &str {
         match self {
-            AIProvider::Claude
-            | AIProvider::Gemini
-            | AIProvider::OpenCode
-            | AIProvider::Kilo
-            | AIProvider::Codex
-            | AIProvider::Shell => "▸",
+            AIProvider::Shell => "▸",
             AIProvider::Kanban => "▦",
             AIProvider::CodeReview => "⊙",
             AIProvider::Api => "⚡",
@@ -66,11 +55,6 @@ impl AIProvider {
     /// For `Custom` providers, returns the provider name.
     pub fn label(&self) -> &str {
         match self {
-            AIProvider::Claude => "Claude Code",
-            AIProvider::Gemini => "Gemini",
-            AIProvider::OpenCode => "OpenCode",
-            AIProvider::Kilo => "Kilo",
-            AIProvider::Codex => "Codex",
             AIProvider::Shell => "Shell",
             AIProvider::Kanban => "Kanban Board",
             AIProvider::CodeReview => "Code Review",
@@ -82,11 +66,6 @@ impl AIProvider {
     /// Built-in providers in display order (does not include Custom).
     pub fn all() -> &'static [AIProvider] {
         &[
-            AIProvider::Claude,
-            AIProvider::Gemini,
-            AIProvider::OpenCode,
-            AIProvider::Kilo,
-            AIProvider::Codex,
             AIProvider::Shell,
             AIProvider::Kanban,
             AIProvider::CodeReview,
@@ -94,61 +73,27 @@ impl AIProvider {
         ]
     }
 
-    /// Parse a provider from its label string (e.g. "Claude Code" -> Claude).
+    /// Parse a provider from its label string.
     /// Unrecognized labels become `Custom(label)`.
     pub fn from_label(label: &str) -> AIProvider {
         match label {
-            "Claude Code" => AIProvider::Claude,
-            "Gemini" => AIProvider::Gemini,
-            "OpenCode" => AIProvider::OpenCode,
-            "Kilo" => AIProvider::Kilo,
-            "Codex" => AIProvider::Codex,
+            "Shell" => AIProvider::Shell,
+            "Kanban Board" => AIProvider::Kanban,
+            "Code Review" => AIProvider::CodeReview,
+            "API Explorer" => AIProvider::Api,
             other => AIProvider::Custom(other.to_string()),
         }
     }
 
-    /// Built-in providers that can be dispatched as agents (does not include Custom).
-    pub fn dispatchable() -> &'static [AIProvider] {
-        &[
-            AIProvider::Claude,
-            AIProvider::Gemini,
-            AIProvider::OpenCode,
-            AIProvider::Kilo,
-            AIProvider::Codex,
-        ]
-    }
-
     /// CLI arguments to pass a prompt/task to this provider.
     /// For `Custom` providers, returns empty — use `ProviderManager::prompt_args()` instead.
-    pub fn prompt_args(&self, prompt: &str) -> Vec<String> {
-        if prompt.is_empty() {
-            return Vec::new();
-        }
-        match self {
-            AIProvider::Claude | AIProvider::Gemini | AIProvider::Codex | AIProvider::OpenCode => {
-                vec![prompt.to_string()]
-            }
-            AIProvider::Kilo => vec!["--prompt".to_string(), prompt.to_string()],
-            _ => Vec::new(),
-        }
+    pub fn prompt_args(&self, _prompt: &str) -> Vec<String> {
+        Vec::new()
     }
 
     /// Whether this is a built-in provider (not Custom).
     pub fn is_builtin(&self) -> bool {
         !matches!(self, AIProvider::Custom(_))
-    }
-
-    /// The agent directory name for built-in providers.
-    /// For `Custom` providers, returns `None` — use `ProviderConfig::agent_dir` instead.
-    pub fn builtin_agent_dir(&self) -> Option<&str> {
-        match self {
-            AIProvider::Claude => Some(".claude/agents"),
-            AIProvider::Gemini => Some(".gemini/agents"),
-            AIProvider::OpenCode => Some(".opencode/agents"),
-            AIProvider::Kilo => Some(".kilo/agents"),
-            AIProvider::Codex => Some(".codex/agents"),
-            _ => None,
-        }
     }
 }
 

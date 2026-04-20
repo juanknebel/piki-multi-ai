@@ -5,14 +5,7 @@ import { createDropdown, type DropdownOption } from "../dropdown";
 import type { AgentInfo } from "../../ipc";
 import type { AIProvider } from "../../types";
 
-const FALLBACK_PROVIDERS = ["Claude Code", "Gemini", "OpenCode", "Kilo", "Codex"];
-const BUILTIN_PROVIDER_MAP: Record<string, AIProvider> = {
-  "Claude Code": "Claude",
-  "Gemini": "Gemini",
-  "OpenCode": "OpenCode",
-  "Kilo": "Kilo",
-  "Codex": "Codex",
-};
+// All AI agent providers live in providers.toml — loaded via ipc.listProviders().
 
 export interface CardContext {
   id: string;
@@ -46,16 +39,20 @@ export async function showDispatchDialog(cardContext?: CardContext) {
   let providerOptions: DropdownOption[];
   try {
     const providerList = await ipc.listProviders();
-    const dispatchable = providerList.filter((p) => p.dispatchable);
-    providerOptions = dispatchable.length > 0
-      ? dispatchable.map((p) => ({ value: p.name, label: p.name }))
-      : FALLBACK_PROVIDERS.map((p) => ({ value: p, label: p }));
+    providerOptions = providerList
+      .filter((p) => p.dispatchable)
+      .map((p) => ({ value: p.name, label: p.name }));
   } catch {
-    providerOptions = FALLBACK_PROVIDERS.map((p) => ({ value: p, label: p }));
+    providerOptions = [];
+  }
+
+  if (providerOptions.length === 0) {
+    toast("No dispatchable providers configured. Add one in the Providers dialog.", "error");
+    return;
   }
 
   const agentDropdown = createDropdown(agentOptions, "");
-  const providerDropdown = createDropdown(providerOptions, providerOptions[0]?.value ?? "Claude Code");
+  const providerDropdown = createDropdown(providerOptions, providerOptions[0].value);
 
   const backdrop = document.createElement("div");
   backdrop.className = "dialog-backdrop";
@@ -196,7 +193,7 @@ export async function showDispatchDialog(cardContext?: CardContext) {
 }
 
 function mapProviderToAI(label: string): AIProvider {
-  return BUILTIN_PROVIDER_MAP[label] ?? { Custom: label };
+  return { Custom: label };
 }
 
 function esc(t: string): string {

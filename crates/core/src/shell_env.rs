@@ -372,6 +372,11 @@ fn augment_path_with_common_dirs(env: &mut HashMap<String, String>) {
         format!("{home}/.cargo/bin"),
         format!("{home}/.volta/bin"),
         format!("{home}/.local/share/mise/shims"),
+        format!("{home}/.npm-global/bin"),
+        format!("{home}/.bun/bin"),
+        format!("{home}/.deno/bin"),
+        format!("{home}/go/bin"),
+        format!("{home}/.yarn/bin"),
     ];
 
     let current_path = env.get("PATH").cloned().unwrap_or_default();
@@ -483,5 +488,45 @@ mod tests {
         if let Some(shell) = shell_from_passwd() {
             assert!(shell.starts_with('/'));
         }
+    }
+
+    #[test]
+    fn test_augment_path_includes_npm_global_when_present() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path();
+        let npm_bin = home.join(".npm-global").join("bin");
+        std::fs::create_dir_all(&npm_bin).unwrap();
+
+        let mut env = HashMap::new();
+        env.insert("HOME".to_string(), home.to_string_lossy().to_string());
+        env.insert("PATH".to_string(), "/usr/bin".to_string());
+
+        augment_path_with_common_dirs(&mut env);
+
+        let path = env.get("PATH").unwrap();
+        let npm_bin_str = npm_bin.to_string_lossy().to_string();
+        assert!(
+            path.split(':').any(|p| p == npm_bin_str),
+            "PATH {path} should include {npm_bin_str}"
+        );
+    }
+
+    #[test]
+    fn test_augment_path_skips_missing_dirs() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path();
+
+        let mut env = HashMap::new();
+        env.insert("HOME".to_string(), home.to_string_lossy().to_string());
+        env.insert("PATH".to_string(), "/usr/bin".to_string());
+
+        augment_path_with_common_dirs(&mut env);
+
+        let path = env.get("PATH").unwrap();
+        let npm_bin_str = home.join(".npm-global").join("bin").to_string_lossy().to_string();
+        assert!(
+            !path.split(':').any(|p| p == npm_bin_str),
+            "PATH {path} should NOT include missing dir {npm_bin_str}"
+        );
     }
 }

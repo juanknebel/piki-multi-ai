@@ -87,20 +87,9 @@ async function showNewTabMenu(anchor: HTMLElement) {
   let configuredProviders: AIProvider[] = [];
   try {
     const providerList = await ipc.listProviders();
-    configuredProviders = providerList.map((p): AIProvider => {
-      // Map known names to built-in variants
-      const builtinMap: Record<string, AIProvider> = {
-        "Claude Code": "Claude",
-        "Gemini": "Gemini",
-        "OpenCode": "OpenCode",
-        "Kilo": "Kilo",
-        "Codex": "Codex",
-      };
-      return builtinMap[p.name] ?? { Custom: p.name };
-    });
+    configuredProviders = providerList.map((p): AIProvider => ({ Custom: p.name }));
   } catch {
-    // Fallback: just Claude
-    configuredProviders = ["Claude"];
+    configuredProviders = [];
   }
 
   // Combine: configured providers + tool tabs

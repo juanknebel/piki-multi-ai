@@ -1,9 +1,4 @@
 export type AIProvider =
-  | "Claude"
-  | "Gemini"
-  | "OpenCode"
-  | "Kilo"
-  | "Codex"
   | "Shell"
   | "Kanban"
   | "CodeReview"
@@ -86,11 +81,6 @@ export interface ToastEvent {
 
 // Built-in provider labels (Custom providers use their name)
 const BUILTIN_PROVIDER_LABELS: Record<string, string> = {
-  Claude: "Claude Code",
-  Gemini: "Gemini",
-  OpenCode: "OpenCode",
-  Kilo: "Kilo",
-  Codex: "Codex",
   Shell: "Shell",
   Kanban: "Kanban Board",
   CodeReview: "Code Review",
@@ -100,11 +90,6 @@ const BUILTIN_PROVIDER_LABELS: Record<string, string> = {
 };
 
 const BUILTIN_PROVIDER_ICONS: Record<string, string> = {
-  Claude: "C",
-  Gemini: "G",
-  OpenCode: "O",
-  Kilo: "K",
-  Codex: "X",
   Shell: "$",
   Kanban: "B",
   CodeReview: "R",

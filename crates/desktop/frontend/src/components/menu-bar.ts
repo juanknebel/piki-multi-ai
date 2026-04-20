@@ -62,17 +62,11 @@ let _cachedProviderTabs: AIProvider[] | null = null;
 
 function getProviderTabs(): AIProvider[] {
   if (!_cachedProviderTabs) {
-    // Trigger async load; return fallback for first render
+    // Trigger async load; return empty list for first render
     ipc.listProviders().then((list) => {
-      _cachedProviderTabs = list.map((p): AIProvider => {
-        const builtinMap: Record<string, AIProvider> = {
-          "Claude Code": "Claude", "Gemini": "Gemini", "OpenCode": "OpenCode",
-          "Kilo": "Kilo", "Codex": "Codex",
-        };
-        return builtinMap[p.name] ?? { Custom: p.name };
-      });
+      _cachedProviderTabs = list.map((p): AIProvider => ({ Custom: p.name }));
     }).catch(() => {});
-    return ["Claude"];
+    return [];
   }
   return _cachedProviderTabs;
 }

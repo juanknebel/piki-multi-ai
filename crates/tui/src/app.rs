@@ -936,29 +936,21 @@ impl App {
     }
 
     /// Build the list of AI providers from providers.toml.
-    /// Maps known names (e.g. "Claude Code") to built-in variants, others to Custom.
     pub fn new_tab_agent_list(&self) -> Vec<AIProvider> {
         self.provider_manager
             .all()
             .iter()
-            .map(|config| AIProvider::from_label(&config.name))
+            .map(|config| AIProvider::Custom(config.name.clone()))
             .collect()
     }
 
     /// Providers from providers.toml that are marked `dispatchable`.
-    /// Falls back to built-in dispatchable providers when none are configured.
     pub fn dispatchable_provider_list(&self) -> Vec<AIProvider> {
-        let list: Vec<AIProvider> = self
-            .provider_manager
+        self.provider_manager
             .dispatchable()
             .iter()
-            .map(|config| AIProvider::from_label(&config.name))
-            .collect();
-        if list.is_empty() {
-            AIProvider::dispatchable().to_vec()
-        } else {
-            list
-        }
+            .map(|config| AIProvider::Custom(config.name.clone()))
+            .collect()
     }
 
     /// Set a toast notification, replacing any existing one.
