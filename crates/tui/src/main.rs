@@ -11,6 +11,8 @@ mod input;
 mod log_buffer;
 mod pty;
 mod syntax;
+#[cfg(test)]
+mod test_support;
 mod theme;
 mod ui;
 mod workspace_switcher;

@@ -4,7 +4,7 @@ use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField};
 use crate::clipboard;
 use crate::config::has_ctrl;
-use crate::dialog_state::DialogState;
+use crate::dialog_state::{DialogState, EditWorkspaceField};
 use crate::helpers::copy_visible_terminal;
 
 pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
@@ -730,7 +730,7 @@ pub(super) fn handle_workspace_interaction(app: &mut App, key: KeyEvent) -> Opti
             prompt,
             group_cursor: group.chars().count(),
             group,
-            active_field: DialogField::KanbanPath,
+            active_field: EditWorkspaceField::KanbanPath,
         });
         app.mode = AppMode::EditWorkspace;
         app.interacting = false;

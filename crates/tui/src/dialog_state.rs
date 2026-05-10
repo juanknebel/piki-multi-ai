@@ -1,6 +1,15 @@
 use crate::app::DialogField;
 use piki_core::WorkspaceType;
 
+/// Field-cycling behavior for tab-navigation in multi-field dialogs.
+/// Implemented by per-dialog field enums (`EditWorkspaceField`,
+/// `EditProviderField`, `EditAgentField`) so handlers can call
+/// `*active_field = active_field.next()` instead of hard-coding match arms.
+pub trait CycleField: Copy {
+    fn next(self) -> Self;
+    fn prev(self) -> Self;
+}
+
 /// Strategy for resolving a merge conflict on a single file.
 #[derive(Debug, Clone)]
 pub enum ConflictStrategy {
@@ -63,7 +72,7 @@ pub enum DialogState {
         prompt_cursor: usize,
         group: String,
         group_cursor: usize,
-        active_field: DialogField,
+        active_field: EditWorkspaceField,
     },
     CommitMessage {
         buffer: String,
@@ -212,8 +221,8 @@ pub enum EditProviderField {
     AgentDir,
 }
 
-impl EditProviderField {
-    pub fn next(self) -> Self {
+impl CycleField for EditProviderField {
+    fn next(self) -> Self {
         match self {
             Self::Name => Self::Description,
             Self::Description => Self::Command,
@@ -226,7 +235,7 @@ impl EditProviderField {
         }
     }
 
-    pub fn prev(self) -> Self {
+    fn prev(self) -> Self {
         match self {
             Self::Name => Self::AgentDir,
             Self::Description => Self::Name,
@@ -244,4 +253,45 @@ impl EditProviderField {
 pub enum EditAgentField {
     Name,
     Provider,
+}
+
+impl CycleField for EditAgentField {
+    fn next(self) -> Self {
+        match self {
+            Self::Name => Self::Provider,
+            Self::Provider => Self::Name,
+        }
+    }
+
+    fn prev(self) -> Self {
+        // Two-variant cycle: prev == next.
+        self.next()
+    }
+}
+
+/// Active field in the EditWorkspace dialog. Restricted to the three editable
+/// fields (the workspace's name/dir/type are immutable at edit time).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EditWorkspaceField {
+    KanbanPath,
+    Prompt,
+    Group,
+}
+
+impl CycleField for EditWorkspaceField {
+    fn next(self) -> Self {
+        match self {
+            Self::KanbanPath => Self::Prompt,
+            Self::Prompt => Self::Group,
+            Self::Group => Self::KanbanPath,
+        }
+    }
+
+    fn prev(self) -> Self {
+        match self {
+            Self::KanbanPath => Self::Group,
+            Self::Group => Self::Prompt,
+            Self::Prompt => Self::KanbanPath,
+        }
+    }
 }

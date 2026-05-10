@@ -2,7 +2,9 @@ mod chat_input;
 mod code_review_input;
 mod command_palette_input;
 pub(crate) mod confirm_common;
-mod dialog;
+pub(super) mod dialog;
+#[cfg(test)]
+mod dialog_tests;
 mod editor_input;
 pub(crate) mod fuzzy_common;
 mod fuzzy_input;
@@ -15,7 +17,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField};
-use crate::dialog_state::DialogState;
+use crate::dialog_state::{DialogState, EditWorkspaceField};
 use crate::helpers::{copy_visible_terminal, resize_all_ptys, scrollback_max};
 
 use self::command_palette_input::handle_command_palette_input;
@@ -258,7 +260,7 @@ pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Act
                 prompt,
                 group_cursor: group.chars().count(),
                 group,
-                active_field: DialogField::KanbanPath,
+                active_field: EditWorkspaceField::KanbanPath,
             });
             app.mode = AppMode::EditWorkspace;
         }

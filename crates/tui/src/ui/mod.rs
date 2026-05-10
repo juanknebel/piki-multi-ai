@@ -18,44 +18,10 @@ pub mod workspace_switcher;
 
 #[cfg(test)]
 mod tests {
-    use ratatui::Terminal;
-    use ratatui::backend::TestBackend;
-
     use crate::app::App;
     use crate::dialog_state::{DialogState, NewTabMenu};
+    use crate::test_support::{buffer_to_snapshot, test_storage, test_terminal};
     use crate::theme::Theme;
-
-    fn test_storage() -> std::sync::Arc<piki_core::storage::AppStorage> {
-        std::sync::Arc::new(piki_core::storage::AppStorage {
-            workspaces: Box::new(piki_core::storage::json::JsonStorage),
-            api_history: None,
-            ui_prefs: None,
-            agent_profiles: None,
-        })
-    }
-
-    fn test_terminal(w: u16, h: u16) -> Terminal<TestBackend> {
-        Terminal::new(TestBackend::new(w, h)).unwrap()
-    }
-
-    /// Convert buffer to snapshot-friendly string (trimmed trailing whitespace per line).
-    fn buffer_to_snapshot(buf: &ratatui::buffer::Buffer) -> String {
-        let area = buf.area();
-        let mut lines = Vec::new();
-        for y in 0..area.height {
-            let mut line = String::new();
-            for x in 0..area.width {
-                let cell = &buf[(x, y)];
-                line.push_str(cell.symbol());
-            }
-            lines.push(line.trim_end().to_string());
-        }
-        // Remove trailing empty lines
-        while lines.last().is_some_and(|l| l.is_empty()) {
-            lines.pop();
-        }
-        lines.join("\n")
-    }
 
     // ── Existing tests converted to insta snapshots ──
 

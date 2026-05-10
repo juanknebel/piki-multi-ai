@@ -5,88 +5,80 @@ use crossterm::event::{KeyCode, KeyEvent};
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField};
 use crate::config::has_ctrl;
-use crate::dialog_state::{ConflictStrategy, DialogState, EditAgentField, EditProviderField, NewTabMenu};
+use crate::dialog_state::{
+    ConflictStrategy, CycleField, DialogState, EditAgentField, EditProviderField,
+    EditWorkspaceField, NewTabMenu,
+};
 use piki_core::{AIProvider, MergeStrategy, WorkspaceType};
 
-use super::confirm_common::{ConfirmResult, dismiss_dialog, handle_yn_input};
+use super::confirm_common::{ConfirmResult, dismiss_dialog, dismiss_dialog_to_pane, handle_yn_input, with_dialog_mut};
 use super::text_field_common::{handle_text_input, is_cancel};
 
 pub(super) fn handle_edit_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
-    let Some(DialogState::EditWorkspace {
-        ref mut target,
-        ref mut kanban,
-        ref mut kanban_cursor,
-        ref mut prompt,
-        ref mut prompt_cursor,
-        ref mut group,
-        ref mut group_cursor,
-        ref mut active_field,
-    }) = app.active_dialog
-    else {
-        return None;
-    };
-
-    match key.code {
-        KeyCode::Tab => {
-            *active_field = match *active_field {
-                DialogField::KanbanPath => DialogField::Prompt,
-                DialogField::Prompt => DialogField::Group,
-                DialogField::Group => DialogField::KanbanPath,
-                _ => DialogField::KanbanPath,
-            };
-            return None;
-        }
-        KeyCode::BackTab => {
-            *active_field = match *active_field {
-                DialogField::KanbanPath => DialogField::Group,
-                DialogField::Prompt => DialogField::KanbanPath,
-                DialogField::Group => DialogField::Prompt,
-                _ => DialogField::KanbanPath,
-            };
-            return None;
-        }
-        KeyCode::Enter => {
-            let kanban_path_raw = kanban.trim();
-            let kanban_path = if kanban_path_raw.is_empty() {
-                None
-            } else {
-                Some(kanban_path_raw.to_string())
-            };
-            let prompt_val = prompt.clone();
-            let group_raw = group.trim();
-            let group_val = if group_raw.is_empty() {
-                None
-            } else {
-                Some(group_raw.to_string())
-            };
-            let idx = *target;
-
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
-            return Some(Action::EditWorkspace(
-                idx,
-                kanban_path,
-                prompt_val,
-                group_val,
-            ));
-        }
-        _ if is_cancel(key, app.config.platform) => {
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
-            return None;
-        }
-        _ => {}
+    /// What to do once the dialog body finishes — keeps `dismiss_dialog`
+    /// outside the `with_dialog_mut!` borrow scope.
+    enum Step {
+        Stay,
+        Cancel,
+        Submit(Box<Action>),
     }
 
-    // Text input for the active field
-    let (buf, cursor) = match *active_field {
-        DialogField::KanbanPath => (kanban as &mut String, kanban_cursor as &mut usize),
-        DialogField::Prompt => (prompt, prompt_cursor),
-        DialogField::Group => (group, group_cursor),
-        _ => return None,
+    let trim_some = |s: &str| -> Option<String> {
+        let t = s.trim();
+        if t.is_empty() { None } else { Some(t.to_string()) }
     };
-    handle_text_input(buf, cursor, key, |c| !c.is_control());
-    None
+
+    let step = with_dialog_mut!(app, EditWorkspace {
+        target,
+        kanban,
+        kanban_cursor,
+        prompt,
+        prompt_cursor,
+        group,
+        group_cursor,
+        active_field,
+    } => {
+        match key.code {
+            KeyCode::Tab => {
+                *active_field = active_field.next();
+                Some(Step::Stay)
+            }
+            KeyCode::BackTab => {
+                *active_field = active_field.prev();
+                Some(Step::Stay)
+            }
+            KeyCode::Enter => Some(Step::Submit(Box::new(Action::EditWorkspace(
+                *target,
+                trim_some(kanban),
+                prompt.clone(),
+                trim_some(group),
+            )))),
+            _ if is_cancel(key, app.config.platform) => Some(Step::Cancel),
+            _ => {
+                let (buf, cursor) = match *active_field {
+                    EditWorkspaceField::KanbanPath => {
+                        (kanban as &mut String, kanban_cursor as &mut usize)
+                    }
+                    EditWorkspaceField::Prompt => (prompt, prompt_cursor),
+                    EditWorkspaceField::Group => (group, group_cursor),
+                };
+                handle_text_input(buf, cursor, key, |c| !c.is_control());
+                Some(Step::Stay)
+            }
+        }
+    });
+
+    match step {
+        Some(Step::Stay) | None => None,
+        Some(Step::Cancel) => {
+            dismiss_dialog(app);
+            None
+        }
+        Some(Step::Submit(action)) => {
+            dismiss_dialog(app);
+            Some(*action)
+        }
+    }
 }
 
 pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
@@ -336,18 +328,15 @@ pub(super) fn handle_confirm_delete_input(app: &mut App, key: KeyEvent) -> Optio
                 app.mode = AppMode::DispatchCardMove;
                 return None;
             }
-            dismiss_dialog(app);
-            app.active_pane = ActivePane::WorkspaceList;
+            dismiss_dialog_to_pane(app, ActivePane::WorkspaceList);
             Some(Action::DeleteWorkspace(target, None))
         }
         ConfirmResult::No => {
-            dismiss_dialog(app);
-            app.active_pane = ActivePane::WorkspaceList;
+            dismiss_dialog_to_pane(app, ActivePane::WorkspaceList);
             Some(Action::RemoveFromList(target))
         }
         ConfirmResult::Cancel => {
-            dismiss_dialog(app);
-            app.active_pane = ActivePane::WorkspaceList;
+            dismiss_dialog_to_pane(app, ActivePane::WorkspaceList);
             None
         }
         ConfirmResult::NotHandled => None,
@@ -418,25 +407,24 @@ pub(super) fn handle_commit_message_input(app: &mut App, key: KeyEvent) -> Optio
 
     match key.code {
         KeyCode::Enter => {
-            let message = buffer.clone();
-            if message.is_empty() {
+            if buffer.is_empty() {
                 app.status_message = Some("Commit message cannot be empty".into());
                 return None;
             }
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
-            return Some(Action::GitCommit(message));
+            let message = buffer.clone();
+            dismiss_dialog(app);
+            Some(Action::GitCommit(message))
         }
         KeyCode::Esc => {
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
+            dismiss_dialog(app);
+            None
         }
         _ => {
             let mut cursor = buffer.chars().count();
             handle_text_input(buffer, &mut cursor, key, |c| !c.is_control());
+            None
         }
     }
-    None
 }
 
 pub(super) fn handle_confirm_merge_input(app: &mut App, key: KeyEvent) -> Option<Action> {

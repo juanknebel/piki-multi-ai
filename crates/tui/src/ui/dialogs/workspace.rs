@@ -5,7 +5,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
 use crate::app::{App, DialogField, WorkspaceType};
-use crate::dialog_state::DialogState;
+use crate::dialog_state::{DialogState, EditWorkspaceField};
 
 pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
     let Some(DialogState::NewWorkspace {
@@ -156,9 +156,9 @@ pub(crate) fn render_edit_workspace_dialog(frame: &mut Frame, area: Rect, app: &
     let label_width = 10_u16;
     let fmax = popup.width.saturating_sub(label_width + 2) as usize;
 
-    let kanban_active = active_field == DialogField::KanbanPath;
-    let prompt_active = active_field == DialogField::Prompt;
-    let group_active = active_field == DialogField::Group;
+    let kanban_active = active_field == EditWorkspaceField::KanbanPath;
+    let prompt_active = active_field == EditWorkspaceField::Prompt;
+    let group_active = active_field == EditWorkspaceField::Group;
 
     let lines = vec![
         super::render_text_field(
