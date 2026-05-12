@@ -44,6 +44,7 @@ pub trait ApiHistoryStorage: Send + Sync {
 }
 
 /// A configured agent profile with a specific role, associated to a project
+#[derive(Debug, Clone)]
 pub struct AgentProfile {
     pub id: Option<i64>,
     pub source_repo: String,

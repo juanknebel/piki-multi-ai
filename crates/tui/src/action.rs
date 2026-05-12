@@ -11,6 +11,7 @@ use piki_core::workspace::{FileWatcher, WorkspaceManager};
 use piki_core::{AIProvider, MergeStrategy, WorkspaceType};
 
 /// Async actions triggered by key events
+#[derive(Debug)]
 pub(crate) enum Action {
     CreateWorkspace(
         String,
@@ -619,39 +620,54 @@ pub(crate) async fn execute_action(
             }
         }
         Action::GitCommit(message) => {
-            if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+            let toast = if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
                 let worktree = ws.path.clone();
                 let output = tokio::process::Command::new("git")
                     .args(["commit", "-m", &message])
                     .current_dir(&worktree)
                     .output()
                     .await?;
-                if output.status.success() {
+                let result = if output.status.success() {
                     let stdout = String::from_utf8_lossy(&output.stdout);
-                    let first_line = stdout.lines().next().unwrap_or("Committed");
-                    app.status_message = Some(format!("✓ {}", first_line));
+                    let first_line = stdout.lines().next().unwrap_or("Committed").to_string();
+                    (format!("✓ {}", first_line), ToastLevel::Success)
                 } else {
                     let stderr = String::from_utf8_lossy(&output.stderr);
-                    app.status_message = Some(format!("Commit failed: {}", stderr.trim()));
-                }
+                    (
+                        format!("Commit failed: {}", stderr.trim()),
+                        ToastLevel::Error,
+                    )
+                };
                 ws.dirty = true;
                 ws.last_refresh = None;
+                Some(result)
+            } else {
+                None
+            };
+            if let Some((msg, lvl)) = toast {
+                app.set_toast(msg, lvl);
             }
         }
         Action::GitPush => {
-            if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+            let toast = if let Some(ws) = app.workspaces.get(app.active_workspace) {
                 let worktree = ws.path.clone();
                 let output = tokio::process::Command::new("git")
                     .args(["push"])
                     .current_dir(&worktree)
                     .output()
                     .await?;
-                if output.status.success() {
-                    app.status_message = Some("✓ Pushed successfully".into());
+                let result = if output.status.success() {
+                    ("✓ Pushed successfully".to_string(), ToastLevel::Success)
                 } else {
                     let stderr = String::from_utf8_lossy(&output.stderr);
-                    app.status_message = Some(format!("Push failed: {}", stderr.trim()));
-                }
+                    (format!("Push failed: {}", stderr.trim()), ToastLevel::Error)
+                };
+                Some(result)
+            } else {
+                None
+            };
+            if let Some((msg, lvl)) = toast {
+                app.set_toast(msg, lvl);
             }
         }
         Action::GitMerge(strategy) => {
@@ -672,8 +688,10 @@ pub(crate) async fn execute_action(
                     .await?;
                 let status_str = String::from_utf8_lossy(&status_output.stdout);
                 if !status_str.trim().is_empty() {
-                    app.status_message =
-                        Some("Merge aborted: workspace has uncommitted changes".into());
+                    app.set_toast(
+                        "Merge aborted: workspace has uncommitted changes",
+                        ToastLevel::Error,
+                    );
                     return Ok(());
                 }
 
@@ -717,11 +735,10 @@ pub(crate) async fn execute_action(
                             .await?;
                         if !checkout.status.success() {
                             let stderr = String::from_utf8_lossy(&checkout.stderr);
-                            app.status_message = Some(format!(
-                                "Checkout {} failed: {}",
-                                main_branch,
-                                stderr.trim()
-                            ));
+                            app.set_toast(
+                                format!("Checkout {} failed: {}", main_branch, stderr.trim()),
+                                ToastLevel::Error,
+                            );
                             if src_dirty {
                                 let _ = tokio::process::Command::new("git")
                                     .args(["stash", "pop"])
@@ -743,10 +760,10 @@ pub(crate) async fn execute_action(
                         if merge.status.success() {
                             let stdout = String::from_utf8_lossy(&merge.stdout);
                             let first = stdout.lines().next().unwrap_or("Merged");
-                            app.status_message = Some(format!(
-                                "✓ Merged '{}' into {}: {}",
-                                branch, main_branch, first
-                            ));
+                            app.set_toast(
+                                format!("✓ Merged '{}' into {}: {}", branch, main_branch, first),
+                                ToastLevel::Success,
+                            );
                         } else {
                             // Check for conflict markers in git status
                             let conflict_check = tokio::process::Command::new("git")
@@ -789,10 +806,10 @@ pub(crate) async fn execute_action(
                                     .output()
                                     .await;
                                 let stderr = String::from_utf8_lossy(&merge.stderr);
-                                app.status_message = Some(format!(
-                                    "Merge failed: {}",
-                                    stderr.trim()
-                                ));
+                                app.set_toast(
+                                    format!("Merge failed: {}", stderr.trim()),
+                                    ToastLevel::Error,
+                                );
                             }
                         }
 
@@ -861,10 +878,10 @@ pub(crate) async fn execute_action(
                                     .current_dir(&ws_path)
                                     .output()
                                     .await;
-                                app.status_message = Some(format!(
-                                    "Rebase failed: {}",
-                                    stderr.trim()
-                                ));
+                                app.set_toast(
+                                    format!("Rebase failed: {}", stderr.trim()),
+                                    ToastLevel::Error,
+                                );
                             }
                             return Ok(());
                         }
@@ -892,14 +909,16 @@ pub(crate) async fn execute_action(
                             .await?;
 
                         if ff.status.success() {
-                            app.status_message = Some(format!(
-                                "✓ Rebased and merged '{}' into {}",
-                                branch, main_branch
-                            ));
+                            app.set_toast(
+                                format!("✓ Rebased and merged '{}' into {}", branch, main_branch),
+                                ToastLevel::Success,
+                            );
                         } else {
                             let stderr = String::from_utf8_lossy(&ff.stderr);
-                            app.status_message =
-                                Some(format!("Fast-forward failed: {}", stderr.trim()));
+                            app.set_toast(
+                                format!("Fast-forward failed: {}", stderr.trim()),
+                                ToastLevel::Error,
+                            );
                         }
 
                         // Restore previous branch

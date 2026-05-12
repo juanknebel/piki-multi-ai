@@ -54,7 +54,7 @@ Conventions:
 - Per dialog, write small accessor helpers (`current_<thing>(app)`) that pattern-match the dialog state and panic if absent — keeps assertions terse.
 - Cover: each key path (navigation, action, submit, cancel), edge cases (empty list, no-dialog-active returns None), and any sub-mode transitions.
 - For state requiring app population: `app.agent_profiles` is a plain Vec — push mocks directly. `app.log_buffer.lock().push_back(LogEntry { ... })` for log entries. Don't try to populate `app.workspaces` — `Workspace` requires PTY/git setup and isn't unit-testable.
-- Use `matches!(action, Some(Action::Variant(_)))` to assert on actions (Action doesn't `derive(Debug)`).
+- Use `matches!(action, Some(Action::Variant(_)))` to assert on actions. `Action` derives `Debug`, so `assert_eq!(format!("{action:?}"), ...)` works too when you need to compare payloads.
 - Snapshot tests for rendering live in `ui/mod.rs` (`insta::assert_snapshot!` with `TestBackend`); they assert on the rendered buffer, not handler state.
 
 ## Key modules
