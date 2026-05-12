@@ -6,7 +6,7 @@ use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField};
 use crate::config::has_ctrl;
 use crate::dialog_state::{
-    ConflictStrategy, CycleField, DialogState, EditAgentField, EditProviderField,
+    ConflictStrategy, CycleField, CycleFieldCtx, DialogState, EditAgentField, EditProviderField,
     EditWorkspaceField, NewTabMenu,
 };
 use piki_core::{AIProvider, MergeStrategy, WorkspaceType};
@@ -105,31 +105,11 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
 
     match key.code {
         KeyCode::Tab => {
-            let hide_name = *ws_type != WorkspaceType::Worktree;
-            *active_field = match *active_field {
-                DialogField::Type if hide_name => DialogField::Directory,
-                DialogField::Type => DialogField::Name,
-                DialogField::Name => DialogField::Directory,
-                DialogField::Directory => DialogField::Description,
-                DialogField::Description => DialogField::Prompt,
-                DialogField::Prompt => DialogField::KanbanPath,
-                DialogField::KanbanPath => DialogField::Group,
-                DialogField::Group => DialogField::Type,
-            };
+            *active_field = active_field.next_ctx(ws_type);
             return None;
         }
         KeyCode::BackTab => {
-            let hide_name = *ws_type != WorkspaceType::Worktree;
-            *active_field = match *active_field {
-                DialogField::Type => DialogField::Group,
-                DialogField::Name => DialogField::Type,
-                DialogField::Directory if hide_name => DialogField::Type,
-                DialogField::Directory => DialogField::Name,
-                DialogField::Description => DialogField::Directory,
-                DialogField::Prompt => DialogField::Description,
-                DialogField::KanbanPath => DialogField::Prompt,
-                DialogField::Group => DialogField::KanbanPath,
-            };
+            *active_field = active_field.prev_ctx(ws_type);
             return None;
         }
         KeyCode::Enter => {

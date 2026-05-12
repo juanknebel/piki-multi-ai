@@ -36,6 +36,7 @@ When implementing a new dialog input handler, prefer these instead of inlining b
 | `is_cancel(key, platform)` | Returns true for Esc and Ctrl+G (platform-aware). Use in handlers that accept both. |
 | `move_selection(selected: &mut usize, total, delta, wrap)` | Move a list cursor with clamp or wrap-around. Empty lists (`total==0`) are a no-op (no panic). Use for j/k/Up/Down arms in list-style dialogs. |
 | `CycleField` trait (in `dialog_state.rs`) | `next()`/`prev()` for cycling between fields on Tab/BackTab. Implemented by `EditWorkspaceField`, `EditAgentField`, `EditProviderField`. Add a per-dialog enum + impl when introducing a new multi-field dialog. |
+| `CycleFieldCtx<Ctx>` trait (in `dialog_state.rs`) | `next_ctx(&ctx)`/`prev_ctx(&ctx)` for cycling when the next/prev field depends on a runtime value (e.g. `DialogField` skipping `Name` when `WorkspaceType != Worktree`). Use this instead of `CycleField` when a field is conditionally hidden by another field in the same dialog. Implemented by `DialogField` with context `WorkspaceType`. |
 
 The borrow checker around `with_dialog_mut!` + `dismiss_dialog(app)` works because NLL releases the `&mut app.active_dialog` borrow once the field bindings stop being used. If you need to mutate other `app` fields *and* keep using the bindings, copy values out into locals first, then call `dismiss_dialog`. See `handle_edit_workspace_input` for an example using a local `Step { Stay, Cancel, Submit(Box<Action>) }` enum to defer the dismiss outside the macro scope.
 

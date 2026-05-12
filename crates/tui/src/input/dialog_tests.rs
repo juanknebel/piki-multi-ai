@@ -17,14 +17,15 @@ use super::dialog::{
     handle_edit_provider_input, handle_edit_workspace_input, handle_git_log_input,
     handle_git_stash_input, handle_help_input, handle_import_agents_input, handle_logs_input,
     handle_manage_agents_input, handle_manage_providers_input, handle_new_tab_input,
-    handle_workspace_info_input,
+    handle_new_workspace_input, handle_workspace_info_input,
 };
 use crate::action::Action;
-use crate::app::{ActivePane, App, AppMode};
+use crate::app::{ActivePane, App, AppMode, DialogField};
 use crate::dialog_state::{
-    ConflictFile, ConflictStrategy, DialogState, EditAgentField, EditProviderField,
+    ConflictFile, ConflictStrategy, CycleFieldCtx, DialogState, EditAgentField, EditProviderField,
     EditWorkspaceField, GitLogEntry, NewTabMenu,
 };
+use piki_core::WorkspaceType;
 use crate::log_buffer::LogEntry;
 use crate::test_support::{key, key_with_mods, test_app, test_app_isolated};
 use piki_core::AIProvider;
@@ -3203,5 +3204,451 @@ fn dispatch_step0_with_no_entries_at_all_is_noop() {
 fn dispatch_returns_none_when_dialog_not_active() {
     let mut app = test_app();
     let action = handle_dispatch_agent_input(&mut app, key(KeyCode::Enter));
+    assert!(action.is_none());
+}
+
+// ── NewWorkspace + CycleFieldCtx<WorkspaceType> ───────────────────────────
+//
+// The largest dialog handler. Cycling is conditional on the WorkspaceType
+// context: `Name` is skipped when `ws_type != Worktree`. Cycling is
+// delegated to the `CycleFieldCtx<WorkspaceType>` impl on `DialogField`.
+// Enter dispatches `Action::CreateWorkspace`, with validation on empty
+// name/dir and dir existence; `~` is expanded to `$HOME`.
+
+fn open_new_workspace(app: &mut App, ws_type: WorkspaceType, active_field: DialogField) {
+    app.mode = AppMode::NewWorkspace;
+    app.active_pane = ActivePane::WorkspaceList;
+    app.active_dialog = Some(DialogState::NewWorkspace {
+        name: String::new(),
+        name_cursor: 0,
+        dir: String::new(),
+        dir_cursor: 0,
+        desc: String::new(),
+        desc_cursor: 0,
+        prompt: String::new(),
+        prompt_cursor: 0,
+        kanban: String::new(),
+        kanban_cursor: 0,
+        group: String::new(),
+        group_cursor: 0,
+        ws_type,
+        active_field,
+    });
+}
+
+fn current_new_workspace_field(app: &App) -> DialogField {
+    match app.active_dialog {
+        Some(DialogState::NewWorkspace { active_field, .. }) => active_field,
+        _ => panic!("expected NewWorkspace dialog"),
+    }
+}
+
+fn current_new_workspace_ws_type(app: &App) -> WorkspaceType {
+    match app.active_dialog {
+        Some(DialogState::NewWorkspace { ws_type, .. }) => ws_type,
+        _ => panic!("expected NewWorkspace dialog"),
+    }
+}
+
+fn current_new_workspace_text(app: &App, field: DialogField) -> String {
+    match app.active_dialog {
+        Some(DialogState::NewWorkspace {
+            ref name,
+            ref dir,
+            ref desc,
+            ref prompt,
+            ref kanban,
+            ref group,
+            ..
+        }) => match field {
+            DialogField::Name => name.clone(),
+            DialogField::Directory => dir.clone(),
+            DialogField::Description => desc.clone(),
+            DialogField::Prompt => prompt.clone(),
+            DialogField::KanbanPath => kanban.clone(),
+            DialogField::Group => group.clone(),
+            DialogField::Type => panic!("Type field has no text buffer"),
+        },
+        _ => panic!("expected NewWorkspace dialog"),
+    }
+}
+
+fn set_new_workspace_buffer(app: &mut App, field: DialogField, value: &str) {
+    match app.active_dialog {
+        Some(DialogState::NewWorkspace {
+            ref mut name,
+            ref mut name_cursor,
+            ref mut dir,
+            ref mut dir_cursor,
+            ref mut desc,
+            ref mut desc_cursor,
+            ref mut prompt,
+            ref mut prompt_cursor,
+            ref mut kanban,
+            ref mut kanban_cursor,
+            ref mut group,
+            ref mut group_cursor,
+            ..
+        }) => {
+            let (buf, cursor) = match field {
+                DialogField::Name => (name, name_cursor),
+                DialogField::Directory => (dir, dir_cursor),
+                DialogField::Description => (desc, desc_cursor),
+                DialogField::Prompt => (prompt, prompt_cursor),
+                DialogField::KanbanPath => (kanban, kanban_cursor),
+                DialogField::Group => (group, group_cursor),
+                DialogField::Type => return,
+            };
+            *buf = value.to_string();
+            *cursor = value.chars().count();
+        }
+        _ => panic!("expected NewWorkspace dialog"),
+    }
+}
+
+// ── Unit tests for the CycleFieldCtx<WorkspaceType> impl ──────────────────
+
+#[test]
+fn cycle_field_ctx_next_on_worktree_includes_name() {
+    let order = [
+        DialogField::Type,
+        DialogField::Name,
+        DialogField::Directory,
+        DialogField::Description,
+        DialogField::Prompt,
+        DialogField::KanbanPath,
+        DialogField::Group,
+    ];
+    for w in order.windows(2) {
+        assert_eq!(
+            w[0].next_ctx(&WorkspaceType::Worktree),
+            w[1],
+            "next_ctx({:?}, Worktree)",
+            w[0]
+        );
+    }
+    // Cycle back to Type from Group
+    assert_eq!(
+        DialogField::Group.next_ctx(&WorkspaceType::Worktree),
+        DialogField::Type
+    );
+}
+
+#[test]
+fn cycle_field_ctx_next_on_simple_skips_name() {
+    assert_eq!(
+        DialogField::Type.next_ctx(&WorkspaceType::Simple),
+        DialogField::Directory
+    );
+    assert_eq!(
+        DialogField::Type.next_ctx(&WorkspaceType::Project),
+        DialogField::Directory
+    );
+}
+
+#[test]
+fn cycle_field_ctx_prev_on_simple_skips_name() {
+    assert_eq!(
+        DialogField::Directory.prev_ctx(&WorkspaceType::Simple),
+        DialogField::Type
+    );
+    assert_eq!(
+        DialogField::Directory.prev_ctx(&WorkspaceType::Project),
+        DialogField::Type
+    );
+}
+
+#[test]
+fn cycle_field_ctx_prev_on_worktree_visits_name() {
+    assert_eq!(
+        DialogField::Directory.prev_ctx(&WorkspaceType::Worktree),
+        DialogField::Name
+    );
+}
+
+// ── Handler tests ─────────────────────────────────────────────────────────
+
+#[test]
+fn new_workspace_tab_full_cycle_on_worktree() {
+    let mut app = test_app();
+    open_new_workspace(&mut app, WorkspaceType::Worktree, DialogField::Type);
+
+    let expected = [
+        DialogField::Name,
+        DialogField::Directory,
+        DialogField::Description,
+        DialogField::Prompt,
+        DialogField::KanbanPath,
+        DialogField::Group,
+        DialogField::Type,
+    ];
+    for target in expected {
+        handle_new_workspace_input(&mut app, key(KeyCode::Tab));
+        assert_eq!(current_new_workspace_field(&app), target);
+    }
+}
+
+#[test]
+fn new_workspace_tab_skips_name_on_simple() {
+    let mut app = test_app();
+    open_new_workspace(&mut app, WorkspaceType::Simple, DialogField::Type);
+
+    handle_new_workspace_input(&mut app, key(KeyCode::Tab));
+    assert_eq!(current_new_workspace_field(&app), DialogField::Directory);
+}
+
+#[test]
+fn new_workspace_backtab_skips_name_on_project() {
+    let mut app = test_app();
+    open_new_workspace(&mut app, WorkspaceType::Project, DialogField::Directory);
+
+    handle_new_workspace_input(&mut app, key(KeyCode::BackTab));
+    assert_eq!(current_new_workspace_field(&app), DialogField::Type);
+}
+
+#[test]
+fn new_workspace_type_field_right_cycles_ws_type_forward() {
+    let mut app = test_app();
+    open_new_workspace(&mut app, WorkspaceType::Simple, DialogField::Type);
+
+    handle_new_workspace_input(&mut app, key(KeyCode::Right));
+    assert_eq!(current_new_workspace_ws_type(&app), WorkspaceType::Worktree);
+
+    handle_new_workspace_input(&mut app, key(KeyCode::Right));
+    assert_eq!(current_new_workspace_ws_type(&app), WorkspaceType::Project);
+
+    handle_new_workspace_input(&mut app, key(KeyCode::Right));
+    assert_eq!(current_new_workspace_ws_type(&app), WorkspaceType::Simple);
+}
+
+#[test]
+fn new_workspace_type_field_space_cycles_like_right() {
+    let mut app = test_app();
+    open_new_workspace(&mut app, WorkspaceType::Simple, DialogField::Type);
+
+    handle_new_workspace_input(&mut app, key(KeyCode::Char(' ')));
+    assert_eq!(current_new_workspace_ws_type(&app), WorkspaceType::Worktree);
+}
+
+#[test]
+fn new_workspace_type_field_left_cycles_backward() {
+    let mut app = test_app();
+    open_new_workspace(&mut app, WorkspaceType::Simple, DialogField::Type);
+
+    handle_new_workspace_input(&mut app, key(KeyCode::Left));
+    assert_eq!(current_new_workspace_ws_type(&app), WorkspaceType::Project);
+}
+
+#[test]
+fn new_workspace_switching_to_non_worktree_clears_name() {
+    let mut app = test_app();
+    open_new_workspace(&mut app, WorkspaceType::Worktree, DialogField::Type);
+    set_new_workspace_buffer(&mut app, DialogField::Name, "preset");
+    assert_eq!(current_new_workspace_text(&app, DialogField::Name), "preset");
+
+    // Worktree → Project clears Name
+    handle_new_workspace_input(&mut app, key(KeyCode::Right));
+    assert_eq!(current_new_workspace_text(&app, DialogField::Name), "");
+}
+
+#[test]
+fn new_workspace_name_field_accepts_alphanumeric_dash_underscore_dot_slash() {
+    let mut app = test_app();
+    open_new_workspace(&mut app, WorkspaceType::Worktree, DialogField::Name);
+
+    for c in "feat-1_v.2/x".chars() {
+        handle_new_workspace_input(&mut app, key(KeyCode::Char(c)));
+    }
+    assert_eq!(
+        current_new_workspace_text(&app, DialogField::Name),
+        "feat-1_v.2/x"
+    );
+}
+
+#[test]
+fn new_workspace_name_field_rejects_punctuation() {
+    let mut app = test_app();
+    open_new_workspace(&mut app, WorkspaceType::Worktree, DialogField::Name);
+
+    for c in "a b!c@".chars() {
+        handle_new_workspace_input(&mut app, key(KeyCode::Char(c)));
+    }
+    assert_eq!(current_new_workspace_text(&app, DialogField::Name), "abc");
+}
+
+#[test]
+fn new_workspace_description_field_accepts_any_non_control_char() {
+    let mut app = test_app();
+    open_new_workspace(&mut app, WorkspaceType::Worktree, DialogField::Description);
+
+    for c in "Hello, world! 🚀".chars() {
+        handle_new_workspace_input(&mut app, key(KeyCode::Char(c)));
+    }
+    assert_eq!(
+        current_new_workspace_text(&app, DialogField::Description),
+        "Hello, world! 🚀"
+    );
+}
+
+#[test]
+fn new_workspace_enter_with_empty_name_on_worktree_keeps_dialog_open() {
+    let mut app = test_app();
+    open_new_workspace(&mut app, WorkspaceType::Worktree, DialogField::Name);
+    set_new_workspace_buffer(&mut app, DialogField::Directory, "/tmp");
+
+    let action = handle_new_workspace_input(&mut app, key(KeyCode::Enter));
+
+    assert!(action.is_none());
+    assert!(matches!(
+        app.active_dialog,
+        Some(DialogState::NewWorkspace { .. })
+    ));
+    assert!(app.status_message.is_some());
+}
+
+#[test]
+fn new_workspace_enter_with_empty_dir_keeps_dialog_open() {
+    let mut app = test_app();
+    open_new_workspace(&mut app, WorkspaceType::Worktree, DialogField::Directory);
+    set_new_workspace_buffer(&mut app, DialogField::Name, "feat");
+
+    let action = handle_new_workspace_input(&mut app, key(KeyCode::Enter));
+
+    assert!(action.is_none());
+    assert!(matches!(
+        app.active_dialog,
+        Some(DialogState::NewWorkspace { .. })
+    ));
+}
+
+#[test]
+fn new_workspace_enter_with_nonexistent_dir_keeps_dialog_open() {
+    let mut app = test_app();
+    open_new_workspace(&mut app, WorkspaceType::Worktree, DialogField::Directory);
+    set_new_workspace_buffer(&mut app, DialogField::Name, "feat");
+    set_new_workspace_buffer(
+        &mut app,
+        DialogField::Directory,
+        "/this/path/does/not/exist/zzz",
+    );
+
+    let action = handle_new_workspace_input(&mut app, key(KeyCode::Enter));
+
+    assert!(action.is_none());
+    assert!(matches!(
+        app.active_dialog,
+        Some(DialogState::NewWorkspace { .. })
+    ));
+    assert!(
+        app.status_message
+            .as_deref()
+            .is_some_and(|m| m.contains("does not exist"))
+    );
+}
+
+#[test]
+fn new_workspace_enter_with_valid_inputs_dispatches_create_action() {
+    let mut app = test_app();
+    let tmp = tempfile::tempdir().expect("create temp dir");
+    let dir_str = tmp.path().to_string_lossy().to_string();
+    open_new_workspace(&mut app, WorkspaceType::Worktree, DialogField::Group);
+    set_new_workspace_buffer(&mut app, DialogField::Name, "feat-x");
+    set_new_workspace_buffer(&mut app, DialogField::Directory, &dir_str);
+    set_new_workspace_buffer(&mut app, DialogField::Description, "desc text");
+    set_new_workspace_buffer(&mut app, DialogField::Prompt, "go");
+    set_new_workspace_buffer(&mut app, DialogField::KanbanPath, "kanban.toml");
+    set_new_workspace_buffer(&mut app, DialogField::Group, "backend");
+
+    let action = handle_new_workspace_input(&mut app, key(KeyCode::Enter));
+
+    match action {
+        Some(Action::CreateWorkspace(
+            name,
+            desc,
+            prompt,
+            kanban,
+            dir_path,
+            ws_type,
+            group,
+        )) => {
+            assert_eq!(name, "feat-x");
+            assert_eq!(desc, "desc text");
+            assert_eq!(prompt, "go");
+            assert_eq!(kanban.as_deref(), Some("kanban.toml"));
+            assert_eq!(dir_path, std::path::PathBuf::from(&dir_str));
+            assert_eq!(ws_type, WorkspaceType::Worktree);
+            assert_eq!(group.as_deref(), Some("backend"));
+        }
+        other => panic!("expected CreateWorkspace, got {other:?}"),
+    }
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+#[test]
+fn new_workspace_enter_on_simple_derives_name_from_dir_basename() {
+    let mut app = test_app();
+    let tmp = tempfile::tempdir().expect("create temp dir");
+    let dir_path = tmp.path().to_path_buf();
+    let basename = dir_path
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
+    open_new_workspace(&mut app, WorkspaceType::Simple, DialogField::Directory);
+    set_new_workspace_buffer(
+        &mut app,
+        DialogField::Directory,
+        &dir_path.to_string_lossy(),
+    );
+
+    let action = handle_new_workspace_input(&mut app, key(KeyCode::Enter));
+
+    match action {
+        Some(Action::CreateWorkspace(name, _, _, _, _, ws_type, _)) => {
+            assert_eq!(name, basename);
+            assert_eq!(ws_type, WorkspaceType::Simple);
+        }
+        other => panic!("expected CreateWorkspace, got {other:?}"),
+    }
+}
+
+#[test]
+fn new_workspace_enter_expands_tilde_in_directory() {
+    let home =
+        std::env::var("HOME").expect("HOME must be set for tilde-expansion test");
+    let mut app = test_app();
+    open_new_workspace(&mut app, WorkspaceType::Worktree, DialogField::Directory);
+    set_new_workspace_buffer(&mut app, DialogField::Name, "feat");
+    set_new_workspace_buffer(&mut app, DialogField::Directory, "~");
+
+    let action = handle_new_workspace_input(&mut app, key(KeyCode::Enter));
+
+    match action {
+        Some(Action::CreateWorkspace(_, _, _, _, dir_path, _, _)) => {
+            assert_eq!(dir_path, std::path::PathBuf::from(&home));
+        }
+        other => panic!("expected CreateWorkspace, got {other:?}"),
+    }
+}
+
+#[test]
+fn new_workspace_esc_dismisses_and_focuses_workspace_list() {
+    let mut app = test_app();
+    app.active_pane = ActivePane::MainPanel;
+    open_new_workspace(&mut app, WorkspaceType::Worktree, DialogField::Name);
+
+    let action = handle_new_workspace_input(&mut app, key(KeyCode::Esc));
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+    assert_eq!(app.active_pane, ActivePane::WorkspaceList);
+}
+
+#[test]
+fn new_workspace_returns_none_when_dialog_not_active() {
+    let mut app = test_app();
+    let action = handle_new_workspace_input(&mut app, key(KeyCode::Tab));
     assert!(action.is_none());
 }

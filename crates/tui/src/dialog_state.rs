@@ -10,6 +10,45 @@ pub trait CycleField: Copy {
     fn prev(self) -> Self;
 }
 
+/// Field-cycling that depends on a contextual value. Use this when the
+/// next/prev field depends on some runtime state (e.g. `NewWorkspace`
+/// skipping the `Name` field when `WorkspaceType != Worktree`). For static
+/// cycles, prefer the plain `CycleField` trait.
+pub trait CycleFieldCtx<Ctx>: Copy {
+    fn next_ctx(self, ctx: &Ctx) -> Self;
+    fn prev_ctx(self, ctx: &Ctx) -> Self;
+}
+
+impl CycleFieldCtx<WorkspaceType> for DialogField {
+    fn next_ctx(self, ws_type: &WorkspaceType) -> Self {
+        let hide_name = *ws_type != WorkspaceType::Worktree;
+        match self {
+            Self::Type if hide_name => Self::Directory,
+            Self::Type => Self::Name,
+            Self::Name => Self::Directory,
+            Self::Directory => Self::Description,
+            Self::Description => Self::Prompt,
+            Self::Prompt => Self::KanbanPath,
+            Self::KanbanPath => Self::Group,
+            Self::Group => Self::Type,
+        }
+    }
+
+    fn prev_ctx(self, ws_type: &WorkspaceType) -> Self {
+        let hide_name = *ws_type != WorkspaceType::Worktree;
+        match self {
+            Self::Type => Self::Group,
+            Self::Name => Self::Type,
+            Self::Directory if hide_name => Self::Type,
+            Self::Directory => Self::Name,
+            Self::Description => Self::Directory,
+            Self::Prompt => Self::Description,
+            Self::KanbanPath => Self::Prompt,
+            Self::Group => Self::KanbanPath,
+        }
+    }
+}
+
 /// Strategy for resolving a merge conflict on a single file.
 #[derive(Debug, Clone)]
 pub enum ConflictStrategy {
