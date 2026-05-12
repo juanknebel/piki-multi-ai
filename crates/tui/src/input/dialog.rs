@@ -631,16 +631,14 @@ pub(super) fn handle_help_input(app: &mut App, key: KeyEvent) -> Option<Action> 
         || app.config.matches_help(key, "exit_alt")
         || app.config.matches_help(key, "exit_help")
     {
-        app.active_dialog = None;
-        app.mode = AppMode::Normal;
+        dismiss_dialog(app);
     }
     None
 }
 
 pub(super) fn handle_about_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     if app.config.matches_about(key, "exit") {
-        app.active_dialog = None;
-        app.mode = AppMode::Normal;
+        dismiss_dialog(app);
     }
     None
 }
@@ -776,8 +774,7 @@ pub(super) fn handle_workspace_info_input(app: &mut App, key: KeyEvent) -> Optio
     } else if app.config.matches_workspace_info(key, "exit")
         || app.config.matches_workspace_info(key, "exit_info")
     {
-        app.active_dialog = None;
-        app.mode = AppMode::Normal;
+        dismiss_dialog(app);
         let _ = crossterm::execute!(std::io::stderr(), crossterm::event::EnableMouseCapture);
     }
     None

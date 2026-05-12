@@ -1,13 +1,15 @@
 //! Unit tests for the dialog input handlers in `input/dialog.rs`.
 //! Covered so far: `ConfirmDelete`, `EditWorkspace`, `CommitMessage`,
-//! `ConfirmCloseTab`, `ConfirmQuit`, `ConfirmMerge`.
+//! `ConfirmCloseTab`, `ConfirmQuit`, `ConfirmMerge`, `Help`, `About`,
+//! `WorkspaceInfo`.
 
 use crossterm::event::{KeyCode, KeyModifiers};
 use piki_core::MergeStrategy;
 
 use super::dialog::{
-    handle_commit_message_input, handle_confirm_close_tab_input, handle_confirm_delete_input,
-    handle_confirm_merge_input, handle_confirm_quit_input, handle_edit_workspace_input,
+    handle_about_input, handle_commit_message_input, handle_confirm_close_tab_input,
+    handle_confirm_delete_input, handle_confirm_merge_input, handle_confirm_quit_input,
+    handle_edit_workspace_input, handle_help_input, handle_workspace_info_input,
 };
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode};
@@ -56,6 +58,35 @@ fn open_confirm_quit(app: &mut App) {
 fn open_confirm_merge(app: &mut App) {
     app.mode = AppMode::ConfirmMerge;
     app.active_dialog = Some(DialogState::ConfirmMerge);
+}
+
+fn open_help(app: &mut App, scroll: u16) {
+    app.mode = AppMode::Help;
+    app.active_dialog = Some(DialogState::Help { scroll });
+}
+
+fn open_about(app: &mut App) {
+    app.mode = AppMode::About;
+    app.active_dialog = Some(DialogState::About);
+}
+
+fn open_workspace_info(app: &mut App, hscroll: u16) {
+    app.mode = AppMode::WorkspaceInfo;
+    app.active_dialog = Some(DialogState::WorkspaceInfo { hscroll });
+}
+
+fn current_help_scroll(app: &App) -> u16 {
+    match app.active_dialog {
+        Some(DialogState::Help { scroll }) => scroll,
+        _ => panic!("not in Help dialog"),
+    }
+}
+
+fn current_workspace_info_hscroll(app: &App) -> u16 {
+    match app.active_dialog {
+        Some(DialogState::WorkspaceInfo { hscroll }) => hscroll,
+        _ => panic!("not in WorkspaceInfo dialog"),
+    }
 }
 
 fn current_active_field(app: &App) -> EditWorkspaceField {
@@ -584,4 +615,196 @@ fn confirm_merge_irrelevant_key_keeps_dialog_open() {
     assert!(action.is_none());
     assert!(matches!(app.active_dialog, Some(DialogState::ConfirmMerge)));
     assert_eq!(app.mode, AppMode::ConfirmMerge);
+}
+
+// ── Help (scroll dialog) ────────────────────────────────────────────────
+
+#[test]
+fn help_j_increments_scroll() {
+    let mut app = test_app();
+    open_help(&mut app, 0);
+
+    let action = handle_help_input(&mut app, key(KeyCode::Char('j')));
+
+    assert!(action.is_none());
+    assert_eq!(current_help_scroll(&app), 1);
+}
+
+#[test]
+fn help_down_arrow_increments_scroll() {
+    let mut app = test_app();
+    open_help(&mut app, 3);
+
+    handle_help_input(&mut app, key(KeyCode::Down));
+
+    assert_eq!(current_help_scroll(&app), 4);
+}
+
+#[test]
+fn help_k_decrements_scroll_with_saturating_floor() {
+    let mut app = test_app();
+    open_help(&mut app, 0);
+
+    handle_help_input(&mut app, key(KeyCode::Char('k')));
+
+    assert_eq!(current_help_scroll(&app), 0);
+}
+
+#[test]
+fn help_page_down_jumps_ten_lines() {
+    let mut app = test_app();
+    open_help(&mut app, 5);
+
+    let action = handle_help_input(
+        &mut app,
+        key_with_mods(KeyCode::Char('d'), KeyModifiers::CONTROL),
+    );
+
+    assert!(action.is_none());
+    assert_eq!(current_help_scroll(&app), 15);
+}
+
+#[test]
+fn help_page_up_saturates_at_zero() {
+    let mut app = test_app();
+    open_help(&mut app, 3);
+
+    handle_help_input(
+        &mut app,
+        key_with_mods(KeyCode::Char('u'), KeyModifiers::CONTROL),
+    );
+
+    assert_eq!(current_help_scroll(&app), 0);
+}
+
+#[test]
+fn help_scroll_top_resets_to_zero() {
+    let mut app = test_app();
+    open_help(&mut app, 100);
+
+    handle_help_input(&mut app, key(KeyCode::Char('g')));
+
+    assert_eq!(current_help_scroll(&app), 0);
+}
+
+#[test]
+fn help_scroll_bottom_jumps_to_max() {
+    let mut app = test_app();
+    open_help(&mut app, 0);
+
+    handle_help_input(
+        &mut app,
+        key_with_mods(KeyCode::Char('G'), KeyModifiers::SHIFT),
+    );
+
+    assert_eq!(current_help_scroll(&app), u16::MAX);
+}
+
+#[test]
+fn help_esc_dismisses() {
+    let mut app = test_app();
+    open_help(&mut app, 10);
+
+    let action = handle_help_input(&mut app, key(KeyCode::Esc));
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+#[test]
+fn help_q_also_dismisses() {
+    let mut app = test_app();
+    open_help(&mut app, 0);
+
+    handle_help_input(&mut app, key(KeyCode::Char('q')));
+
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+#[test]
+fn help_returns_none_when_dialog_not_active() {
+    let mut app = test_app();
+    let action = handle_help_input(&mut app, key(KeyCode::Char('j')));
+    assert!(action.is_none());
+}
+
+// ── About (dismiss-only dialog) ────────────────────────────────────────
+
+#[test]
+fn about_esc_dismisses() {
+    let mut app = test_app();
+    open_about(&mut app);
+
+    let action = handle_about_input(&mut app, key(KeyCode::Esc));
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+#[test]
+fn about_irrelevant_key_keeps_dialog_open() {
+    let mut app = test_app();
+    open_about(&mut app);
+
+    let action = handle_about_input(&mut app, key(KeyCode::Char('x')));
+
+    assert!(action.is_none());
+    assert!(matches!(app.active_dialog, Some(DialogState::About)));
+    assert_eq!(app.mode, AppMode::About);
+}
+
+// ── WorkspaceInfo (horizontal scroll dialog) ───────────────────────────
+
+#[test]
+fn workspace_info_l_increments_hscroll_by_four() {
+    let mut app = test_app();
+    open_workspace_info(&mut app, 0);
+
+    let action = handle_workspace_info_input(&mut app, key(KeyCode::Char('l')));
+
+    assert!(action.is_none());
+    assert_eq!(current_workspace_info_hscroll(&app), 4);
+}
+
+#[test]
+fn workspace_info_right_arrow_increments_hscroll() {
+    let mut app = test_app();
+    open_workspace_info(&mut app, 8);
+
+    handle_workspace_info_input(&mut app, key(KeyCode::Right));
+
+    assert_eq!(current_workspace_info_hscroll(&app), 12);
+}
+
+#[test]
+fn workspace_info_h_decrements_hscroll_with_saturating_floor() {
+    let mut app = test_app();
+    open_workspace_info(&mut app, 2);
+
+    handle_workspace_info_input(&mut app, key(KeyCode::Char('h')));
+
+    // 2 - 4 saturates to 0
+    assert_eq!(current_workspace_info_hscroll(&app), 0);
+}
+
+#[test]
+fn workspace_info_esc_dismisses() {
+    let mut app = test_app();
+    open_workspace_info(&mut app, 12);
+
+    let action = handle_workspace_info_input(&mut app, key(KeyCode::Esc));
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+#[test]
+fn workspace_info_returns_none_when_dialog_not_active() {
+    let mut app = test_app();
+    let action = handle_workspace_info_input(&mut app, key(KeyCode::Char('l')));
+    assert!(action.is_none());
 }
