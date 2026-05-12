@@ -1,8 +1,26 @@
+import { Marked } from "marked";
+import { markedHighlight } from "marked-highlight";
+import hljs from "highlight.js/lib/common";
+import "highlight.js/styles/atom-one-dark.css";
 import * as ipc from "../ipc";
 import { appState } from "../state";
 import { toast } from "./toast";
 import { registerMarkdownFile } from "./markdown-editor-panel";
 import { modCtrl, formatShortcut } from "../shortcuts";
+
+// CommonMark + GFM (tables, strikethrough, task lists) with syntax-highlighted
+// code fences via highlight.js. Instantiated once and reused for every render.
+const md = new Marked(
+  markedHighlight({
+    emptyLangClass: "hljs",
+    langPrefix: "hljs language-",
+    highlight(code, lang) {
+      const language = hljs.getLanguage(lang) ? lang : "plaintext";
+      return hljs.highlight(code, { language, ignoreIllegals: true }).value;
+    },
+  }),
+);
+md.setOptions({ gfm: true, breaks: false });
 
 let overlayEl: HTMLElement | null = null;
 
@@ -140,163 +158,12 @@ export async function showMarkdown(filePath: string) {
   backdrop.focus();
 }
 
-/** Simple markdown to HTML renderer — handles headers, code blocks, bold, italic, lists, links, tables */
+/** Render markdown source to HTML via marked (GFM) + highlight.js fences. */
 function renderMarkdown(src: string): string {
-  const lines = src.split("\n");
-  const html: string[] = [];
-  let inCode = false;
-  let codeLines: string[] = [];
-  let inList = false;
-  let inTable = false;
-  let tableHeaderDone = false;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-
-    // Code blocks
-    if (line.startsWith("```")) {
-      if (inCode) {
-        html.push(`<pre class="md-code"><code>${esc(codeLines.join("\n"))}</code></pre>`);
-        codeLines = [];
-        inCode = false;
-      } else {
-        if (inList) { html.push("</ul>"); inList = false; }
-        if (inTable) { html.push("</tbody></table>"); inTable = false; tableHeaderDone = false; }
-        inCode = true;
-      }
-      continue;
-    }
-    if (inCode) {
-      codeLines.push(line);
-      continue;
-    }
-
-    // Table: detect rows starting and ending with |
-    const trimmed = line.trim();
-    if (trimmed.startsWith("|") && trimmed.endsWith("|")) {
-      // Check if this is a separator row (|---|---|)
-      const isSeparator = /^\|[\s\-:|]+\|$/.test(trimmed);
-
-      if (!inTable) {
-        // Start a new table — this line is the header row
-        if (inList) { html.push("</ul>"); inList = false; }
-        inTable = true;
-        tableHeaderDone = false;
-        html.push('<table class="md-table"><thead><tr>');
-        const cells = parsePipeCells(trimmed);
-        for (const cell of cells) {
-          html.push(`<th>${inline(cell.trim())}</th>`);
-        }
-        html.push("</tr></thead>");
-        continue;
-      }
-
-      if (isSeparator) {
-        // Separator row after header — skip it, start tbody
-        tableHeaderDone = true;
-        html.push("<tbody>");
-        continue;
-      }
-
-      // Regular data row
-      if (!tableHeaderDone) {
-        // No separator seen yet — treat as body anyway
-        tableHeaderDone = true;
-        html.push("<tbody>");
-      }
-      html.push("<tr>");
-      const cells = parsePipeCells(trimmed);
-      for (const cell of cells) {
-        html.push(`<td>${inline(cell.trim())}</td>`);
-      }
-      html.push("</tr>");
-      continue;
-    }
-
-    // If we were in a table and hit a non-table line, close it
-    if (inTable) {
-      if (!tableHeaderDone) html.push("<tbody>");
-      html.push("</tbody></table>");
-      inTable = false;
-      tableHeaderDone = false;
-    }
-
-    // Headers
-    const headerMatch = line.match(/^(#{1,6})\s+(.+)/);
-    if (headerMatch) {
-      if (inList) { html.push("</ul>"); inList = false; }
-      const level = headerMatch[1].length;
-      html.push(`<h${level} class="md-h">${inline(headerMatch[2])}</h${level}>`);
-      continue;
-    }
-
-    // Unordered list
-    if (line.match(/^\s*[-*+]\s+/)) {
-      if (!inList) { html.push("<ul class='md-list'>"); inList = true; }
-      html.push(`<li>${inline(line.replace(/^\s*[-*+]\s+/, ""))}</li>`);
-      continue;
-    }
-
-    // Ordered list
-    if (line.match(/^\s*\d+\.\s+/)) {
-      if (!inList) { html.push("<ol class='md-list'>"); inList = true; }
-      html.push(`<li>${inline(line.replace(/^\s*\d+\.\s+/, ""))}</li>`);
-      continue;
-    }
-
-    if (inList && line.trim() === "") {
-      html.push("</ul>");
-      inList = false;
-      continue;
-    }
-
-    // Horizontal rule
-    if (line.match(/^---+$/)) {
-      html.push("<hr class='md-hr'/>");
-      continue;
-    }
-
-    // Inline HTML — pass safe tags through unescaped
-    if (/^\s*<\/?(?:p|div|img|br|hr|span|center|b|i|em|strong|a|table|tr|td|th|thead|tbody|h[1-6]|ul|ol|li|blockquote|pre|code|details|summary|picture|source|figure|figcaption|sub|sup|small|mark|del|ins|kbd|abbr|dl|dt|dd)[\s>/]/i.test(trimmed)) {
-      html.push(line);
-      continue;
-    }
-
-    // Empty line
-    if (line.trim() === "") {
-      html.push("<br/>");
-      continue;
-    }
-
-    // Paragraph
-    html.push(`<p class="md-p">${inline(line)}</p>`);
-  }
-
-  if (inCode) {
-    html.push(`<pre class="md-code"><code>${esc(codeLines.join("\n"))}</code></pre>`);
-  }
-  if (inList) html.push("</ul>");
-  if (inTable) {
-    if (!tableHeaderDone) html.push("<tbody>");
-    html.push("</tbody></table>");
-  }
-
-  return html.join("\n");
-}
-
-/** Parse pipe-delimited table cells: |a|b|c| → ["a","b","c"] */
-function parsePipeCells(line: string): string[] {
-  return line.slice(1, -1).split("|");
-}
-
-/** Inline markdown: bold, italic, code, links */
-function inline(text: string): string {
-  let s = esc(text);
-  s = s.replace(/`([^`]+)`/g, '<code class="md-inline-code">$1</code>');
-  s = s.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-  s = s.replace(/\*(.+?)\*/g, "<em>$1</em>");
-  s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a class="md-link" href="$2">$1</a>');
-  return s;
+  // `marked.parse` is synchronous when no async extensions are registered;
+  // the Marked typings still surface a Promise type, so we coerce. The cast
+  // is safe because we only configure synchronous extensions above.
+  return md.parse(src, { async: false }) as string;
 }
 
 function esc(t: string): string {

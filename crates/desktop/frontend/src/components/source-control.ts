@@ -1,6 +1,7 @@
 import { appState } from "../state";
 import * as ipc from "../ipc";
 import { showFileDiff } from "./diff-viewer";
+import { showMarkdown } from "./markdown-viewer";
 import { FILE_STATUS_LABELS, FILE_STATUS_CSS } from "../types";
 import { modCtrl } from "../shortcuts";
 import type { ChangedFile, FileStatus } from "../types";
@@ -273,6 +274,11 @@ function renderSection(
         ? file.path.substring(0, file.path.lastIndexOf("/"))
         : "";
 
+      const isMarkdown = /\.(md|markdown)$/i.test(file.path);
+      const previewBtn = isMarkdown
+        ? `<button class="file-action-btn" data-action="preview" title="Preview rendered markdown">👁</button>`
+        : "";
+
       item.innerHTML = `
         <input type="checkbox" class="file-check" title="Select" />
         <span class="file-status ${statusCss}">${statusLabel}</span>
@@ -280,11 +286,22 @@ function renderSection(
           ${escapeHtml(fileName)}${dirPath ? ` <span style="color:var(--text-muted)">${escapeHtml(dirPath)}</span>` : ""}
         </span>
         <span class="file-actions">
+          ${previewBtn}
           <button class="file-action-btn" data-action="${action}" title="${action === "stage" ? "Stage" : "Unstage"}">
             ${action === "stage" ? "+" : "−"}
           </button>
         </span>
       `;
+
+      // Wire preview button (markdown files only)
+      if (isMarkdown) {
+        item
+          .querySelector<HTMLButtonElement>('.file-action-btn[data-action="preview"]')!
+          .addEventListener("click", (e) => {
+            e.stopPropagation();
+            showMarkdown(file.path);
+          });
+      }
 
       // Checkbox toggle
       const checkbox = item.querySelector<HTMLInputElement>(".file-check")!;
