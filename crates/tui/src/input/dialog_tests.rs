@@ -13,10 +13,10 @@ use super::dialog::{
     handle_about_input, handle_commit_message_input, handle_confirm_close_tab_input,
     handle_confirm_delete_input, handle_confirm_merge_input, handle_confirm_quit_input,
     handle_conflict_resolution_input, handle_dashboard_input, handle_dispatch_card_move_input,
-    handle_edit_agent_input, handle_edit_provider_input, handle_edit_workspace_input,
-    handle_git_log_input, handle_git_stash_input, handle_help_input, handle_import_agents_input,
-    handle_logs_input, handle_manage_agents_input, handle_manage_providers_input,
-    handle_new_tab_input, handle_workspace_info_input,
+    handle_edit_agent_input, handle_edit_agent_role_input, handle_edit_provider_input,
+    handle_edit_workspace_input, handle_git_log_input, handle_git_stash_input, handle_help_input,
+    handle_import_agents_input, handle_logs_input, handle_manage_agents_input,
+    handle_manage_providers_input, handle_new_tab_input, handle_workspace_info_input,
 };
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode};
@@ -2688,5 +2688,258 @@ fn edit_agent_esc_returns_to_manage_agents() {
 fn edit_agent_returns_none_when_dialog_not_active() {
     let mut app = test_app();
     let action = handle_edit_agent_input(&mut app, key(KeyCode::Tab));
+    assert!(action.is_none());
+}
+
+// ── EditAgentRole (step 2: large floating editor) ─────────────────────────
+//
+// Cursor positions are char-indexed (handler uses `cursor_to_byte` to map to
+// bytes for `String::insert`). Default 2 providers seeded by
+// `test_app_isolated()` make `providers[provider_idx].label()` resolvable.
+
+fn open_edit_agent_role(
+    app: &mut App,
+    editing_id: Option<i64>,
+    name: &str,
+    provider_idx: usize,
+    role: &str,
+    role_cursor: usize,
+    scroll: usize,
+) {
+    app.mode = AppMode::EditAgentRole;
+    app.active_dialog = Some(DialogState::EditAgentRole {
+        editing_id,
+        name: name.to_string(),
+        provider_idx,
+        role: role.to_string(),
+        role_cursor,
+        scroll,
+    });
+}
+
+fn current_edit_agent_role(app: &App) -> (String, usize, usize) {
+    match app.active_dialog {
+        Some(DialogState::EditAgentRole {
+            ref role,
+            role_cursor,
+            scroll,
+            ..
+        }) => (role.clone(), role_cursor, scroll),
+        _ => panic!("expected EditAgentRole dialog"),
+    }
+}
+
+#[test]
+fn edit_agent_role_ctrl_s_saves_and_returns_to_manage_agents() {
+    let (mut app, _tmp) = test_app_isolated();
+    let providers = app.new_tab_agent_list();
+    let expected_label = providers[1].label().to_string();
+    open_edit_agent_role(&mut app, Some(42), "pilot", 1, "you are a pilot", 15, 0);
+
+    let action = handle_edit_agent_role_input(
+        &mut app,
+        key_with_mods(KeyCode::Char('s'), KeyModifiers::CONTROL),
+    );
+
+    match action {
+        Some(Action::SaveAgent {
+            source_repo,
+            profile,
+        }) => {
+            // No active workspace in test_app — source_repo collapses to empty path.
+            assert_eq!(source_repo, std::path::PathBuf::from(""));
+            assert_eq!(profile.id, Some(42));
+            assert_eq!(profile.name, "pilot");
+            assert_eq!(profile.provider, expected_label);
+            assert_eq!(profile.role, "you are a pilot");
+        }
+        other => panic!("expected SaveAgent, got {other:?}"),
+    }
+    assert_eq!(app.mode, AppMode::ManageAgents);
+}
+
+#[test]
+fn edit_agent_role_ctrl_s_with_empty_role_still_saves() {
+    let (mut app, _tmp) = test_app_isolated();
+    open_edit_agent_role(&mut app, None, "pilot", 0, "", 0, 0);
+
+    let action = handle_edit_agent_role_input(
+        &mut app,
+        key_with_mods(KeyCode::Char('s'), KeyModifiers::CONTROL),
+    );
+
+    match action {
+        Some(Action::SaveAgent { profile, .. }) => {
+            assert_eq!(profile.role, "");
+            assert_eq!(profile.id, None);
+        }
+        other => panic!("expected SaveAgent, got {other:?}"),
+    }
+}
+
+#[test]
+fn edit_agent_role_esc_returns_to_edit_agent_preserving_state() {
+    let (mut app, _tmp) = test_app_isolated();
+    open_edit_agent_role(&mut app, Some(9), "pilot", 1, "some role", 4, 0);
+
+    let action = handle_edit_agent_role_input(&mut app, key(KeyCode::Esc));
+
+    assert!(action.is_none());
+    assert_eq!(app.mode, AppMode::EditAgent);
+    match app.active_dialog {
+        Some(DialogState::EditAgent {
+            editing_id,
+            ref name,
+            provider_idx,
+            ref role,
+            active_field,
+            name_cursor,
+        }) => {
+            assert_eq!(editing_id, Some(9));
+            assert_eq!(name, "pilot");
+            assert_eq!(provider_idx, 1);
+            assert_eq!(role, "some role");
+            assert_eq!(name_cursor, "pilot".len());
+            assert_eq!(active_field, EditAgentField::Name);
+        }
+        ref other => panic!("expected EditAgent, got {other:?}"),
+    }
+}
+
+#[test]
+fn edit_agent_role_ctrl_d_clears_role_and_resets_cursor() {
+    let (mut app, _tmp) = test_app_isolated();
+    open_edit_agent_role(&mut app, None, "pilot", 0, "hello\nworld", 5, 3);
+
+    let action = handle_edit_agent_role_input(
+        &mut app,
+        key_with_mods(KeyCode::Char('d'), KeyModifiers::CONTROL),
+    );
+
+    assert!(action.is_none());
+    let (role, cursor, scroll) = current_edit_agent_role(&app);
+    assert_eq!(role, "");
+    assert_eq!(cursor, 0);
+    assert_eq!(scroll, 0);
+}
+
+#[test]
+fn edit_agent_role_enter_inserts_newline_at_cursor() {
+    let (mut app, _tmp) = test_app_isolated();
+    // Cursor at index 3 ("abc|def")
+    open_edit_agent_role(&mut app, None, "pilot", 0, "abcdef", 3, 0);
+
+    handle_edit_agent_role_input(&mut app, key(KeyCode::Enter));
+
+    let (role, cursor, _) = current_edit_agent_role(&app);
+    assert_eq!(role, "abc\ndef");
+    assert_eq!(cursor, 4);
+}
+
+#[test]
+fn edit_agent_role_char_appends_at_cursor() {
+    let (mut app, _tmp) = test_app_isolated();
+    open_edit_agent_role(&mut app, None, "pilot", 0, "abc", 3, 0);
+
+    handle_edit_agent_role_input(&mut app, key(KeyCode::Char('X')));
+
+    let (role, cursor, _) = current_edit_agent_role(&app);
+    assert_eq!(role, "abcX");
+    assert_eq!(cursor, 4);
+}
+
+#[test]
+fn edit_agent_role_backspace_removes_previous_char() {
+    let (mut app, _tmp) = test_app_isolated();
+    open_edit_agent_role(&mut app, None, "pilot", 0, "abc", 3, 0);
+
+    handle_edit_agent_role_input(&mut app, key(KeyCode::Backspace));
+
+    let (role, cursor, _) = current_edit_agent_role(&app);
+    assert_eq!(role, "ab");
+    assert_eq!(cursor, 2);
+}
+
+#[test]
+fn edit_agent_role_tab_is_rejected() {
+    let (mut app, _tmp) = test_app_isolated();
+    open_edit_agent_role(&mut app, None, "pilot", 0, "abc", 3, 0);
+
+    handle_edit_agent_role_input(&mut app, key(KeyCode::Tab));
+
+    let (role, cursor, _) = current_edit_agent_role(&app);
+    assert_eq!(role, "abc");
+    assert_eq!(cursor, 3);
+}
+
+#[test]
+fn edit_agent_role_down_moves_cursor_to_next_line() {
+    let (mut app, _tmp) = test_app_isolated();
+    // "abc\ndef": cursor at col 2 on line 0
+    open_edit_agent_role(&mut app, None, "pilot", 0, "abc\ndef", 2, 0);
+
+    handle_edit_agent_role_input(&mut app, key(KeyCode::Down));
+
+    let (_, cursor, _) = current_edit_agent_role(&app);
+    // Line 1 starts at char 4 ("d"); col 2 → cursor 6
+    assert_eq!(cursor, 6);
+}
+
+#[test]
+fn edit_agent_role_up_moves_cursor_to_previous_line() {
+    let (mut app, _tmp) = test_app_isolated();
+    // Cursor at col 2 on line 1
+    open_edit_agent_role(&mut app, None, "pilot", 0, "abc\ndef", 6, 0);
+
+    handle_edit_agent_role_input(&mut app, key(KeyCode::Up));
+
+    let (_, cursor, _) = current_edit_agent_role(&app);
+    // Line 0 col 2 → cursor 2
+    assert_eq!(cursor, 2);
+}
+
+#[test]
+fn edit_agent_role_pageup_clamps_at_start() {
+    let (mut app, _tmp) = test_app_isolated();
+    // 3-line text, cursor in the middle line
+    open_edit_agent_role(&mut app, None, "pilot", 0, "a\nb\nc", 2, 0);
+
+    handle_edit_agent_role_input(&mut app, key(KeyCode::PageUp));
+
+    let (_, cursor, _) = current_edit_agent_role(&app);
+    // PageUp jumps -10 lines → clamped to start
+    assert_eq!(cursor, 0);
+}
+
+#[test]
+fn edit_agent_role_pagedown_clamps_at_last_line() {
+    let (mut app, _tmp) = test_app_isolated();
+    open_edit_agent_role(&mut app, None, "pilot", 0, "a\nb\nc", 0, 0);
+
+    handle_edit_agent_role_input(&mut app, key(KeyCode::PageDown));
+
+    let (_, cursor, _) = current_edit_agent_role(&app);
+    // PageDown jumps +10 lines → clamped to last line; column 0 preserved →
+    // cursor lands at the start of line 2 (`c`) which is char index 4.
+    assert_eq!(cursor, 4);
+}
+
+#[test]
+fn edit_agent_role_pagedown_from_last_line_jumps_to_end_of_text() {
+    let (mut app, _tmp) = test_app_isolated();
+    // Already on line 2 ("c"), col 0
+    open_edit_agent_role(&mut app, None, "pilot", 0, "a\nb\nc", 4, 0);
+
+    handle_edit_agent_role_input(&mut app, key(KeyCode::PageDown));
+
+    let (_, cursor, _) = current_edit_agent_role(&app);
+    // At boundary, delta > 0 → cursor jumps to end of text (char_count)
+    assert_eq!(cursor, 5);
+}
+
+#[test]
+fn edit_agent_role_returns_none_when_dialog_not_active() {
+    let mut app = test_app();
+    let action = handle_edit_agent_role_input(&mut app, key(KeyCode::Enter));
     assert!(action.is_none());
 }
