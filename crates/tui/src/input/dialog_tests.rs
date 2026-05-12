@@ -1,12 +1,13 @@
-//! Unit tests for the pilot dialog input handlers in `input/dialog.rs`.
-//! Covered: `ConfirmDelete`, `EditWorkspace`, `CommitMessage`. Acts as the
-//! safety net before refactoring those handlers in phase 3 of the
-//! quality-improvement plan.
+//! Unit tests for the dialog input handlers in `input/dialog.rs`.
+//! Covered so far: `ConfirmDelete`, `EditWorkspace`, `CommitMessage`,
+//! `ConfirmCloseTab`, `ConfirmQuit`, `ConfirmMerge`.
 
 use crossterm::event::{KeyCode, KeyModifiers};
+use piki_core::MergeStrategy;
 
 use super::dialog::{
-    handle_commit_message_input, handle_confirm_delete_input, handle_edit_workspace_input,
+    handle_commit_message_input, handle_confirm_close_tab_input, handle_confirm_delete_input,
+    handle_confirm_merge_input, handle_confirm_quit_input, handle_edit_workspace_input,
 };
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode};
@@ -40,6 +41,21 @@ fn open_commit_message(app: &mut App, buffer: &str) {
     app.active_dialog = Some(DialogState::CommitMessage {
         buffer: buffer.to_string(),
     });
+}
+
+fn open_confirm_close_tab(app: &mut App, target: usize) {
+    app.mode = AppMode::ConfirmCloseTab;
+    app.active_dialog = Some(DialogState::ConfirmCloseTab { target });
+}
+
+fn open_confirm_quit(app: &mut App) {
+    app.mode = AppMode::ConfirmQuit;
+    app.active_dialog = Some(DialogState::ConfirmQuit);
+}
+
+fn open_confirm_merge(app: &mut App) {
+    app.mode = AppMode::ConfirmMerge;
+    app.active_dialog = Some(DialogState::ConfirmMerge);
 }
 
 fn current_active_field(app: &App) -> EditWorkspaceField {
@@ -386,4 +402,186 @@ fn commit_message_returns_none_when_dialog_not_active() {
     // No dialog set
     let action = handle_commit_message_input(&mut app, key(KeyCode::Char('x')));
     assert!(action.is_none());
+}
+
+// ── ConfirmCloseTab ──────────────────────────────────────────────────────
+
+#[test]
+fn confirm_close_tab_yes_dismisses_without_panicking_on_empty_workspaces() {
+    let mut app = test_app();
+    assert!(app.workspaces.is_empty());
+    open_confirm_close_tab(&mut app, 0);
+
+    let action = handle_confirm_close_tab_input(&mut app, key(KeyCode::Char('y')));
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+#[test]
+fn confirm_close_tab_no_dismisses() {
+    let mut app = test_app();
+    open_confirm_close_tab(&mut app, 2);
+
+    let action = handle_confirm_close_tab_input(&mut app, key(KeyCode::Char('n')));
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+#[test]
+fn confirm_close_tab_esc_dismisses() {
+    let mut app = test_app();
+    open_confirm_close_tab(&mut app, 0);
+
+    let action = handle_confirm_close_tab_input(&mut app, key(KeyCode::Esc));
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+#[test]
+fn confirm_close_tab_irrelevant_key_keeps_dialog_open() {
+    let mut app = test_app();
+    open_confirm_close_tab(&mut app, 0);
+
+    let action = handle_confirm_close_tab_input(&mut app, key(KeyCode::Char('a')));
+
+    assert!(action.is_none());
+    assert!(matches!(
+        app.active_dialog,
+        Some(DialogState::ConfirmCloseTab { target: 0 })
+    ));
+    assert_eq!(app.mode, AppMode::ConfirmCloseTab);
+}
+
+#[test]
+fn confirm_close_tab_returns_none_when_dialog_not_active() {
+    let mut app = test_app();
+    let action = handle_confirm_close_tab_input(&mut app, key(KeyCode::Char('y')));
+    assert!(action.is_none());
+}
+
+// ── ConfirmQuit ──────────────────────────────────────────────────────────
+
+#[test]
+fn confirm_quit_enter_sets_should_quit_and_dismisses() {
+    let mut app = test_app();
+    assert!(!app.should_quit);
+    open_confirm_quit(&mut app);
+
+    let action = handle_confirm_quit_input(&mut app, key(KeyCode::Enter));
+
+    assert!(action.is_none());
+    assert!(app.should_quit);
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+#[test]
+fn confirm_quit_yes_sets_should_quit_and_dismisses() {
+    let mut app = test_app();
+    open_confirm_quit(&mut app);
+
+    let action = handle_confirm_quit_input(&mut app, key(KeyCode::Char('y')));
+
+    assert!(action.is_none());
+    assert!(app.should_quit);
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+#[test]
+fn confirm_quit_no_dismisses_without_quitting() {
+    let mut app = test_app();
+    open_confirm_quit(&mut app);
+
+    let action = handle_confirm_quit_input(&mut app, key(KeyCode::Char('n')));
+
+    assert!(action.is_none());
+    assert!(!app.should_quit);
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+#[test]
+fn confirm_quit_esc_dismisses_without_quitting() {
+    let mut app = test_app();
+    open_confirm_quit(&mut app);
+
+    let action = handle_confirm_quit_input(&mut app, key(KeyCode::Esc));
+
+    assert!(action.is_none());
+    assert!(!app.should_quit);
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+#[test]
+fn confirm_quit_irrelevant_key_keeps_dialog_open() {
+    let mut app = test_app();
+    open_confirm_quit(&mut app);
+
+    let action = handle_confirm_quit_input(&mut app, key(KeyCode::Char('a')));
+
+    assert!(action.is_none());
+    assert!(!app.should_quit);
+    assert!(matches!(app.active_dialog, Some(DialogState::ConfirmQuit)));
+    assert_eq!(app.mode, AppMode::ConfirmQuit);
+}
+
+// ── ConfirmMerge ─────────────────────────────────────────────────────────
+
+#[test]
+fn confirm_merge_m_emits_merge_strategy_and_dismisses() {
+    let mut app = test_app();
+    open_confirm_merge(&mut app);
+
+    let action = handle_confirm_merge_input(&mut app, key(KeyCode::Char('m')));
+
+    assert!(matches!(action, Some(Action::GitMerge(MergeStrategy::Merge))));
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+#[test]
+fn confirm_merge_r_emits_rebase_strategy_and_dismisses() {
+    let mut app = test_app();
+    open_confirm_merge(&mut app);
+
+    let action = handle_confirm_merge_input(&mut app, key(KeyCode::Char('r')));
+
+    assert!(matches!(
+        action,
+        Some(Action::GitMerge(MergeStrategy::Rebase))
+    ));
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+#[test]
+fn confirm_merge_esc_dismisses_without_action() {
+    let mut app = test_app();
+    open_confirm_merge(&mut app);
+
+    let action = handle_confirm_merge_input(&mut app, key(KeyCode::Esc));
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+#[test]
+fn confirm_merge_irrelevant_key_keeps_dialog_open() {
+    let mut app = test_app();
+    open_confirm_merge(&mut app);
+
+    let action = handle_confirm_merge_input(&mut app, key(KeyCode::Char('x')));
+
+    assert!(action.is_none());
+    assert!(matches!(app.active_dialog, Some(DialogState::ConfirmMerge)));
+    assert_eq!(app.mode, AppMode::ConfirmMerge);
 }

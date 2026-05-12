@@ -430,18 +430,15 @@ pub(super) fn handle_commit_message_input(app: &mut App, key: KeyEvent) -> Optio
 pub(super) fn handle_confirm_merge_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     match key.code {
         KeyCode::Char('m') => {
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
+            dismiss_dialog(app);
             Some(Action::GitMerge(MergeStrategy::Merge))
         }
         KeyCode::Char('r') => {
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
+            dismiss_dialog(app);
             Some(Action::GitMerge(MergeStrategy::Rebase))
         }
         KeyCode::Esc => {
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
+            dismiss_dialog(app);
             None
         }
         _ => None,
