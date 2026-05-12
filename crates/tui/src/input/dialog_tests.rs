@@ -15,11 +15,14 @@ use super::dialog::{
     handle_dashboard_input, handle_dispatch_card_move_input, handle_edit_provider_input,
     handle_edit_workspace_input, handle_git_log_input, handle_git_stash_input, handle_help_input,
     handle_import_agents_input, handle_logs_input, handle_manage_agents_input,
-    handle_manage_providers_input, handle_workspace_info_input,
+    handle_manage_providers_input, handle_new_tab_input, handle_workspace_info_input,
 };
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode};
-use crate::dialog_state::{DialogState, EditProviderField, EditWorkspaceField, GitLogEntry};
+use crate::dialog_state::{
+    DialogState, EditProviderField, EditWorkspaceField, GitLogEntry, NewTabMenu,
+};
+use piki_core::AIProvider;
 use crate::log_buffer::LogEntry;
 use crate::test_support::{key, key_with_mods, test_app, test_app_isolated};
 
@@ -1883,5 +1886,269 @@ fn edit_provider_ctrl_s_with_valid_data_saves_and_returns_to_manager() {
 fn edit_provider_returns_none_when_dialog_not_active() {
     let mut app = test_app();
     let action = handle_edit_provider_input(&mut app, key(KeyCode::Tab));
+    assert!(action.is_none());
+}
+
+// ── NewTab ────────────────────────────────────────────────────────────────
+//
+// Hierarchical menu: Main → Agents/Tools. `test_app_isolated()` bootstraps
+// providers.toml with the two defaults (Claude Code + Gemini), so the Agents
+// submenu has a deterministic 2-entry list from `app.new_tab_agent_list()`.
+
+fn open_new_tab_main(app: &mut App) {
+    app.mode = AppMode::NewTab;
+    app.active_dialog = Some(DialogState::NewTab {
+        menu: NewTabMenu::Main,
+    });
+}
+
+fn open_new_tab_agents(app: &mut App, selected: usize) {
+    app.mode = AppMode::NewTab;
+    app.active_dialog = Some(DialogState::NewTab {
+        menu: NewTabMenu::Agents { selected },
+    });
+}
+
+fn open_new_tab_tools(app: &mut App) {
+    app.mode = AppMode::NewTab;
+    app.active_dialog = Some(DialogState::NewTab {
+        menu: NewTabMenu::Tools,
+    });
+}
+
+fn current_new_tab_menu(app: &App) -> NewTabMenu {
+    match app.active_dialog {
+        Some(DialogState::NewTab { ref menu }) => menu.clone(),
+        _ => panic!("expected NewTab dialog"),
+    }
+}
+
+#[test]
+fn new_tab_main_key_1_spawns_shell() {
+    let mut app = test_app();
+    open_new_tab_main(&mut app);
+
+    let action = handle_new_tab_input(&mut app, key(KeyCode::Char('1')));
+
+    assert!(matches!(action, Some(Action::SpawnTab(AIProvider::Shell))));
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+#[test]
+fn new_tab_main_key_2_opens_agents_submenu() {
+    let mut app = test_app();
+    open_new_tab_main(&mut app);
+
+    let action = handle_new_tab_input(&mut app, key(KeyCode::Char('2')));
+
+    assert!(action.is_none());
+    assert_eq!(
+        current_new_tab_menu(&app),
+        NewTabMenu::Agents { selected: 0 }
+    );
+}
+
+#[test]
+fn new_tab_main_key_3_opens_tools_submenu() {
+    let mut app = test_app();
+    open_new_tab_main(&mut app);
+
+    let action = handle_new_tab_input(&mut app, key(KeyCode::Char('3')));
+
+    assert!(action.is_none());
+    assert_eq!(current_new_tab_menu(&app), NewTabMenu::Tools);
+}
+
+#[test]
+fn new_tab_main_esc_dismisses() {
+    let mut app = test_app();
+    open_new_tab_main(&mut app);
+
+    let action = handle_new_tab_input(&mut app, key(KeyCode::Esc));
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+#[test]
+fn new_tab_main_unknown_key_is_noop() {
+    let mut app = test_app();
+    open_new_tab_main(&mut app);
+
+    let action = handle_new_tab_input(&mut app, key(KeyCode::Char('x')));
+
+    assert!(action.is_none());
+    assert_eq!(current_new_tab_menu(&app), NewTabMenu::Main);
+}
+
+#[test]
+fn new_tab_agents_j_advances_selection_with_wrap() {
+    let (mut app, _tmp) = test_app_isolated();
+    let count = app.new_tab_agent_list().len();
+    assert!(count >= 2, "default providers.toml seeds at least 2 entries");
+    open_new_tab_agents(&mut app, 0);
+
+    handle_new_tab_input(&mut app, key(KeyCode::Char('j')));
+    assert_eq!(
+        current_new_tab_menu(&app),
+        NewTabMenu::Agents { selected: 1 }
+    );
+
+    // Wrap to 0 at the end
+    open_new_tab_agents(&mut app, count - 1);
+    handle_new_tab_input(&mut app, key(KeyCode::Char('j')));
+    assert_eq!(
+        current_new_tab_menu(&app),
+        NewTabMenu::Agents { selected: 0 }
+    );
+}
+
+#[test]
+fn new_tab_agents_k_retreats_selection_with_wrap() {
+    let (mut app, _tmp) = test_app_isolated();
+    let count = app.new_tab_agent_list().len();
+    open_new_tab_agents(&mut app, 1);
+
+    handle_new_tab_input(&mut app, key(KeyCode::Char('k')));
+    assert_eq!(
+        current_new_tab_menu(&app),
+        NewTabMenu::Agents { selected: 0 }
+    );
+
+    // Wrap to last from 0
+    handle_new_tab_input(&mut app, key(KeyCode::Char('k')));
+    assert_eq!(
+        current_new_tab_menu(&app),
+        NewTabMenu::Agents {
+            selected: count - 1
+        }
+    );
+}
+
+#[test]
+fn new_tab_agents_enter_spawns_selected_provider() {
+    let (mut app, _tmp) = test_app_isolated();
+    let providers = app.new_tab_agent_list();
+    let expected = providers
+        .first()
+        .cloned()
+        .expect("providers.toml has at least one entry");
+    open_new_tab_agents(&mut app, 0);
+
+    let action = handle_new_tab_input(&mut app, key(KeyCode::Enter));
+
+    match action {
+        Some(Action::SpawnTab(p)) => assert_eq!(p, expected),
+        other => panic!("expected SpawnTab({expected:?}), got {other:?}"),
+    }
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+#[test]
+fn new_tab_agents_digit_shortcut_spawns_indexed_provider() {
+    let (mut app, _tmp) = test_app_isolated();
+    let providers = app.new_tab_agent_list();
+    let second = providers
+        .get(1)
+        .cloned()
+        .expect("at least 2 default providers");
+    open_new_tab_agents(&mut app, 0);
+
+    // '2' selects index 1 regardless of current selection
+    let action = handle_new_tab_input(&mut app, key(KeyCode::Char('2')));
+
+    match action {
+        Some(Action::SpawnTab(p)) => assert_eq!(p, second),
+        other => panic!("expected SpawnTab({second:?}), got {other:?}"),
+    }
+    assert!(app.active_dialog.is_none());
+}
+
+#[test]
+fn new_tab_agents_digit_out_of_range_is_noop() {
+    let (mut app, _tmp) = test_app_isolated();
+    let count = app.new_tab_agent_list().len();
+    assert!(count < 9, "this test assumes fewer than 9 default providers");
+    open_new_tab_agents(&mut app, 0);
+
+    let action = handle_new_tab_input(&mut app, key(KeyCode::Char('9')));
+
+    assert!(action.is_none());
+    // Dialog still open with selection unchanged
+    assert_eq!(
+        current_new_tab_menu(&app),
+        NewTabMenu::Agents { selected: 0 }
+    );
+}
+
+#[test]
+fn new_tab_agents_esc_returns_to_main() {
+    let (mut app, _tmp) = test_app_isolated();
+    open_new_tab_agents(&mut app, 0);
+
+    let action = handle_new_tab_input(&mut app, key(KeyCode::Esc));
+
+    assert!(action.is_none());
+    assert_eq!(current_new_tab_menu(&app), NewTabMenu::Main);
+}
+
+#[test]
+fn new_tab_tools_key_1_spawns_kanban() {
+    let mut app = test_app();
+    open_new_tab_tools(&mut app);
+
+    let action = handle_new_tab_input(&mut app, key(KeyCode::Char('1')));
+
+    assert!(matches!(
+        action,
+        Some(Action::SpawnTab(AIProvider::Kanban))
+    ));
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+#[test]
+fn new_tab_tools_key_2_spawns_code_review() {
+    let mut app = test_app();
+    open_new_tab_tools(&mut app);
+
+    let action = handle_new_tab_input(&mut app, key(KeyCode::Char('2')));
+
+    assert!(matches!(
+        action,
+        Some(Action::SpawnTab(AIProvider::CodeReview))
+    ));
+    assert!(app.active_dialog.is_none());
+}
+
+#[test]
+fn new_tab_tools_key_3_spawns_api() {
+    let mut app = test_app();
+    open_new_tab_tools(&mut app);
+
+    let action = handle_new_tab_input(&mut app, key(KeyCode::Char('3')));
+
+    assert!(matches!(action, Some(Action::SpawnTab(AIProvider::Api))));
+    assert!(app.active_dialog.is_none());
+}
+
+#[test]
+fn new_tab_tools_esc_returns_to_main() {
+    let mut app = test_app();
+    open_new_tab_tools(&mut app);
+
+    let action = handle_new_tab_input(&mut app, key(KeyCode::Esc));
+
+    assert!(action.is_none());
+    assert_eq!(current_new_tab_menu(&app), NewTabMenu::Main);
+}
+
+#[test]
+fn new_tab_returns_none_when_dialog_not_active() {
+    let mut app = test_app();
+    let action = handle_new_tab_input(&mut app, key(KeyCode::Char('1')));
     assert!(action.is_none());
 }
