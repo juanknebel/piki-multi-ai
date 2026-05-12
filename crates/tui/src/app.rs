@@ -245,6 +245,12 @@ pub struct Tab {
     pub term_scroll: usize,
     /// Last byte count from PTY for auto-scroll detection
     pub last_bytes_processed: u64,
+    /// Wall-clock of the last observed PTY output (None before first byte).
+    /// Drives idle detection — see `event_loop` tick handler.
+    pub last_output_time: Option<Instant>,
+    /// True once an idle notification has been emitted for the current idle
+    /// period. Reset on the next observed output.
+    pub idle_notified: bool,
     /// Markdown content (when this tab displays a markdown file instead of a PTY)
     pub markdown_content: Option<String>,
     /// Label for markdown tabs (filename)
@@ -284,6 +290,10 @@ pub struct Workspace {
     pub kanban_provider: Option<Box<dyn flow_core::provider::Provider>>,
     /// Code review state
     pub code_review: Option<crate::code_review::CodeReviewState>,
+    /// True when at least one tab in this workspace has emitted an idle
+    /// notification that the user has not yet acknowledged. Cleared when the
+    /// user switches to this workspace. Drives the sidebar idle badge.
+    pub has_idle_notification: bool,
 }
 
 impl std::ops::Deref for Workspace {
@@ -317,6 +327,7 @@ impl Workspace {
             kanban_app: None,
             kanban_provider: None,
             code_review: None,
+            has_idle_notification: false,
         }
     }
 
@@ -340,6 +351,8 @@ impl Workspace {
             closable,
             term_scroll: 0,
             last_bytes_processed: 0,
+            last_output_time: None,
+            idle_notified: false,
             markdown_content: None,
             markdown_label: None,
             markdown_scroll: 0,
@@ -382,6 +395,8 @@ impl Workspace {
             closable: true,
             term_scroll: 0,
             last_bytes_processed: 0,
+            last_output_time: None,
+            idle_notified: false,
             markdown_content: Some(content),
             markdown_label: Some(label),
             markdown_scroll: 0,
@@ -1035,6 +1050,8 @@ impl App {
             // Trigger immediate background refresh for the new workspace
             self.workspaces[index].dirty = true;
             self.workspaces[index].last_refresh = None;
+            // User acknowledged any pending idle notifications by visiting.
+            self.workspaces[index].has_idle_notification = false;
             if let Some(tab) = self.workspaces[index].current_tab_mut() {
                 tab.term_scroll = 0;
             }
@@ -1803,6 +1820,37 @@ mod tests {
         assert_eq!(app.active_workspace, 1);
         assert_eq!(app.active_pane, ActivePane::MainPanel);
         assert!(!app.interacting);
+    }
+
+    // ── PTY idle notifications ──
+
+    #[test]
+    fn switch_workspace_clears_has_idle_notification() {
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let a = add_test_workspace(&mut app);
+        let b = add_test_workspace(&mut app);
+        app.active_workspace = a;
+        app.workspaces[b].has_idle_notification = true;
+
+        app.switch_workspace(b);
+
+        assert!(!app.workspaces[b].has_idle_notification);
+        assert_eq!(app.active_workspace, b);
+    }
+
+    #[test]
+    fn switch_workspace_to_same_index_still_clears_badge() {
+        // Edge case: re-entering the active workspace acknowledges any
+        // notifications that fired while it was visible (e.g. the active
+        // tab went idle while the user was in another pane).
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let a = add_test_workspace(&mut app);
+        app.active_workspace = a;
+        app.workspaces[a].has_idle_notification = true;
+
+        app.switch_workspace(a);
+
+        assert!(!app.workspaces[a].has_idle_notification);
     }
 
     // ── Number key invalid workspace tests ──

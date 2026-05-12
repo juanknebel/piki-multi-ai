@@ -171,13 +171,10 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
 
                     let type_icon = workspace_type_icon(ws.info.workspace_type);
 
-                    let line1 = Line::from(vec![
+                    let mut line1_spans = vec![
                         Span::styled(number_badge.to_string(), Style::default().fg(detail_color)),
                         Span::raw(format!("{} ", marker)),
-                        Span::styled(
-                            type_icon,
-                            Style::default().fg(detail_color),
-                        ),
+                        Span::styled(type_icon, Style::default().fg(detail_color)),
                         Span::styled(
                             ws.name.clone(),
                             if *index == app.active_workspace {
@@ -188,7 +185,16 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                                 Style::default().fg(theme.name_inactive)
                             },
                         ),
-                    ]);
+                    ];
+                    if ws.has_idle_notification {
+                        line1_spans.push(Span::styled(
+                            " ●",
+                            Style::default()
+                                .fg(ratatui::style::Color::Yellow)
+                                .add_modifier(Modifier::BOLD),
+                        ));
+                    }
+                    let line1 = Line::from(line1_spans);
                     let count_label = if ws.info.workspace_type == WorkspaceType::Project {
                         format!("{} services", ws.file_count())
                     } else {
