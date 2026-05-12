@@ -54,6 +54,10 @@ export function switchWorkspace(index: number): Promise<WorkspaceDetail> {
   return invoke("switch_workspace", { index });
 }
 
+export function listProjectSubdirs(index: number): Promise<string[]> {
+  return invoke("list_project_subdirs", { index });
+}
+
 // PTY commands
 export function spawnTab(
   workspaceIdx: number,
@@ -359,6 +363,23 @@ export function jqFilter(input: string, filter: string): Promise<string> {
 }
 
 // Code Review commands
+export interface ReviewRequest {
+  login: string;
+  name: string;
+  __typename: string;
+}
+
+export interface ReviewAuthor {
+  login: string;
+}
+
+export interface PrReviewSummary {
+  author: ReviewAuthor;
+  state: string;
+  body: string;
+  submittedAt: string;
+}
+
 export interface PrInfo {
   number: number;
   title: string;
@@ -370,6 +391,20 @@ export interface PrInfo {
   baseRefName: string;
   additions: number;
   deletions: number;
+  reviewRequests: ReviewRequest[];
+  latestReviews: PrReviewSummary[];
+}
+
+export interface ExistingComment {
+  id: number;
+  path: string;
+  line: number | null;
+  original_line: number | null;
+  side: string;
+  body: string;
+  author: string;
+  created_at: string;
+  in_reply_to_id: number | null;
 }
 
 export interface PrFile {
@@ -411,6 +446,22 @@ export function submitPrReview(
   comments: { path: string; line: number; side: string; body: string }[],
 ): Promise<string> {
   return invoke("submit_pr_review", { workspaceIdx, prNumber, verdict, body, comments });
+}
+
+export function getPrReviewComments(
+  workspaceIdx: number,
+  prNumber: number,
+): Promise<ExistingComment[]> {
+  return invoke("get_pr_review_comments", { workspaceIdx, prNumber });
+}
+
+export function submitReviewReply(
+  workspaceIdx: number,
+  prNumber: number,
+  inReplyToId: number,
+  body: string,
+): Promise<void> {
+  return invoke("submit_review_reply", { workspaceIdx, prNumber, inReplyToId, body });
 }
 
 // Markdown commands
@@ -615,6 +666,17 @@ export function onGitRefresh(
   callback: (event: GitRefreshEvent) => void,
 ): Promise<UnlistenFn> {
   return listen<GitRefreshEvent>("git-refresh", (e) => callback(e.payload));
+}
+
+export interface FileChangedEvent {
+  workspace_idx: number;
+  paths: string[];
+}
+
+export function onFileChanged(
+  callback: (event: FileChangedEvent) => void,
+): Promise<UnlistenFn> {
+  return listen<FileChangedEvent>("file-changed", (e) => callback(e.payload));
 }
 
 export function onSysinfoUpdate(

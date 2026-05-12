@@ -1,13 +1,17 @@
-#tab-bar {
+#tab-bar,
+.pane-tab-bar {
   display: flex;
   align-items: stretch;
   background: var(--tab-inactive-bg);
   border-bottom: 1px solid var(--border-primary);
   overflow-x: auto;
   overflow-y: hidden;
+  flex: 0 0 var(--tab-height);
+  min-height: var(--tab-height);
 }
 
-#tab-bar::-webkit-scrollbar {
+#tab-bar::-webkit-scrollbar,
+.pane-tab-bar::-webkit-scrollbar {
   height: 0;
 }
 
@@ -73,7 +77,8 @@
   letter-spacing: 0.02em;
 }
 
-.tab-close {
+.tab-close,
+.tab-menu {
   width: 20px;
   height: 20px;
   display: flex;
@@ -87,13 +92,24 @@
   transition: all var(--transition-fast);
 }
 
-.tab:hover .tab-close {
+.tab:hover .tab-close,
+.tab:hover .tab-menu,
+.tab.active .tab-menu {
   opacity: 1;
 }
 
 .tab-close:hover {
   background: rgba(248, 81, 73, 0.12);
   color: var(--git-deleted);
+}
+
+.tab-menu {
+  font-size: 11px;
+}
+
+.tab-menu:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .tab-add {

@@ -58,6 +58,9 @@ const shortcuts: ShortcutDef[] = [
   { id: "toggle-sidebar", label: "Toggle Sidebar", defaultKey: "Ctrl+B", key: "Ctrl+B", action: () => {} },
   { id: "toggle-chat", label: "Toggle AI Chat", defaultKey: "Ctrl+Shift+L", key: "Ctrl+Shift+L", action: () => {} },
   { id: "help", label: "Keyboard Shortcuts", defaultKey: "?", key: "?", action: () => {}, outsideOnly: true },
+  { id: "split-right", label: "Split Pane Right", defaultKey: "Ctrl+\\", key: "Ctrl+\\", action: () => {}, outsideOnly: true },
+  { id: "split-down", label: "Split Pane Down", defaultKey: "Ctrl+Shift+\\", key: "Ctrl+Shift+\\", action: () => {}, outsideOnly: true },
+  { id: "close-pane", label: "Close Active Pane", defaultKey: "Ctrl+Shift+Q", key: "Ctrl+Shift+Q", action: () => {}, outsideOnly: true },
 ];
 
 export function getShortcuts(): ShortcutDef[] {

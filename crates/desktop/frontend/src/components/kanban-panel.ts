@@ -75,17 +75,28 @@ export function hideKanbanPanels() {
 }
 
 export async function showKanbanPanel(tabId: string) {
+  await mountKanbanInto(tabId, mainContent);
+}
+
+export async function mountKanbanInto(tabId: string, host: HTMLElement) {
   let inst = instances.get(tabId);
   if (!inst) {
     const el = document.createElement("div");
     el.className = "kanban-board";
-    mainContent.appendChild(el);
+    host.appendChild(el);
     inst = { tabId, element: el, board: null, allProjects: [], searchQuery: "", sortOrder: "none", projectFilter: [] };
     instances.set(tabId, inst);
+  } else if (inst.element.parentElement !== host) {
+    host.appendChild(inst.element);
   }
 
   inst.element.style.display = "flex";
   await loadAndRender(inst);
+}
+
+export function unmountKanban(tabId: string) {
+  const inst = instances.get(tabId);
+  if (inst) inst.element.style.display = "none";
 }
 
 export function destroyKanbanPanel(tabId: string) {

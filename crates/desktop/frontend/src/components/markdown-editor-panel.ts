@@ -54,6 +54,10 @@ export function destroyMarkdownEditorPanel(tabId: string) {
 }
 
 export function showMarkdownEditorPanel(tabId: string) {
+  mountMarkdownEditorInto(tabId, mainContent);
+}
+
+export function mountMarkdownEditorInto(tabId: string, host: HTMLElement) {
   let inst = instances.get(tabId);
   if (!inst) {
     const filePath = pendingFiles.get(tabId);
@@ -62,7 +66,15 @@ export function showMarkdownEditorPanel(tabId: string) {
     instances.set(tabId, inst);
     pendingFiles.delete(tabId);
   }
+  if (inst.element.parentElement !== host) {
+    host.appendChild(inst.element);
+  }
   inst.element.style.display = "flex";
+}
+
+export function unmountMarkdownEditor(tabId: string) {
+  const inst = instances.get(tabId);
+  if (inst) inst.element.style.display = "none";
 }
 
 function getMarkdownFromEditor(editor: Editor): string {

@@ -41,13 +41,25 @@ export function destroyApiPanel(tabId: string) {
 }
 
 export function showApiPanel(tabId: string, wsIdx: number) {
+  mountApiInto(tabId, wsIdx, mainContent);
+}
+
+export function mountApiInto(tabId: string, wsIdx: number, host: HTMLElement) {
   let inst = instances.get(tabId);
   if (!inst) {
     inst = createApiPanel(tabId, wsIdx);
     instances.set(tabId, inst);
   }
+  if (inst.element.parentElement !== host) {
+    host.appendChild(inst.element);
+  }
   inst.wsIdx = wsIdx;
   inst.element.style.display = "flex";
+}
+
+export function unmountApi(tabId: string) {
+  const inst = instances.get(tabId);
+  if (inst) inst.element.style.display = "none";
 }
 
 function createApiPanel(tabId: string, wsIdx: number): ApiInstance {

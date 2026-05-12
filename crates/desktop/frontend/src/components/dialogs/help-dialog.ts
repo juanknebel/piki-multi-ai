@@ -56,6 +56,16 @@ const SHORTCUTS: { category: string; items: [string, string][] }[] = [
       ["Select text", "Auto-copy to Clipboard"],
     ],
   },
+  {
+    category: "Pane Layout",
+    items: [
+      ["Ctrl+\\", "Split Active Pane Right"],
+      ["Ctrl+Shift+\\", "Split Active Pane Down"],
+      ["Ctrl+Shift+Q", "Close Active Pane"],
+      ["▾ on tab / Right-click", "Tab options menu"],
+      ["Drag divider", "Resize split"],
+    ],
+  },
 ];
 
 export function showHelpDialog() {

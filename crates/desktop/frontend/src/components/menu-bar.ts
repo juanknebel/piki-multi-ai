@@ -108,6 +108,28 @@ const MENUS: MenuDefinition[] = [
         },
       },
       SEP,
+      {
+        label: "Split Pane Right",
+        shortcut: "Ctrl+\\",
+        disabled: noWs,
+        action: () => { appState.splitActivePane("right"); },
+      },
+      {
+        label: "Split Pane Down",
+        shortcut: "Ctrl+Shift+\\",
+        disabled: noWs,
+        action: () => { appState.splitActivePane("down"); },
+      },
+      {
+        label: "Close Active Pane",
+        shortcut: "Ctrl+Shift+Q",
+        disabled: noWs,
+        action: () => {
+          const id = appState.activePaneId;
+          if (id) appState.closePane(id);
+        },
+      },
+      SEP,
       { label: "Quit", action: () => getCurrentWindow().close() },
     ],
   },

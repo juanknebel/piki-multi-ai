@@ -248,6 +248,32 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
     });
   }
 
+  // Pane layout commands
+  cmds.push({
+    id: "split-right",
+    label: "Split Pane Right",
+    category: "Tab",
+    keybinding: getShortcutKey("split-right"),
+    action: () => { appState.splitActivePane("right"); },
+  });
+  cmds.push({
+    id: "split-down",
+    label: "Split Pane Down",
+    category: "Tab",
+    keybinding: getShortcutKey("split-down"),
+    action: () => { appState.splitActivePane("down"); },
+  });
+  cmds.push({
+    id: "close-pane",
+    label: "Close Active Pane",
+    category: "Tab",
+    keybinding: getShortcutKey("close-pane"),
+    action: () => {
+      const id = appState.activePaneId;
+      if (id) appState.closePane(id);
+    },
+  });
+
   // Git commands
   if (ws) {
     cmds.push({

@@ -43,6 +43,44 @@ let mainContent: HTMLElement;
 
 export function initCodeEditorPanel(container: HTMLElement) {
   mainContent = container;
+
+  // React to per-path file changes from the backend file watcher.
+  // The event fires with the exact paths that changed, so we only re-read
+  // the buffers that are actually affected.
+  void ipc.onFileChanged((event) => {
+    const changedSet = new Set(event.paths);
+    for (const inst of instances.values()) {
+      if (inst.workspaceIdx === event.workspace_idx && changedSet.has(inst.filePath)) {
+        void checkSingleInstance(inst);
+      }
+    }
+  });
+
+  // Fallback: also react to coarse files-changed (git status refresh) so we
+  // catch branch switches and commits that the path watcher may miss.
+  appState.on("files-changed", () => {
+    void checkExternalChanges();
+  });
+}
+
+export function isCodeEditorDirty(tabId: string): boolean {
+  const inst = instances.get(tabId);
+  if (!inst?.editorView) return false;
+  return inst.editorView.state.doc.toString() !== inst.originalContent;
+}
+
+export async function saveCodeEditor(tabId: string): Promise<void> {
+  const inst = instances.get(tabId);
+  if (!inst?.editorView) return;
+  await saveInstance(inst);
+}
+
+async function saveInstance(inst: CodeEditorInstance): Promise<void> {
+  if (!inst.editorView) return;
+  const newContent = inst.editorView.state.doc.toString();
+  await ipc.writeFileContent(inst.workspaceIdx, inst.filePath, newContent);
+  inst.originalContent = newContent;
+  inst.element.querySelector<HTMLElement>(".code-editor-dirty")!.style.display = "none";
 }
 
 export function registerCodeFile(tabId: string, filePath: string, workspaceIdx: number) {
@@ -66,6 +104,10 @@ export function destroyCodeEditorPanel(tabId: string) {
 }
 
 export function showCodeEditorPanel(tabId: string) {
+  mountCodeEditorInto(tabId, mainContent);
+}
+
+export function mountCodeEditorInto(tabId: string, host: HTMLElement) {
   let inst = instances.get(tabId);
   if (!inst) {
     const pending = pendingFiles.get(tabId);
@@ -74,7 +116,17 @@ export function showCodeEditorPanel(tabId: string) {
     instances.set(tabId, inst);
     pendingFiles.delete(tabId);
   }
+  if (inst.element.parentElement !== host) {
+    host.appendChild(inst.element);
+    // Force CodeMirror to recompute its viewport for the new host size.
+    inst.editorView?.requestMeasure();
+  }
   inst.element.style.display = "flex";
+}
+
+export function unmountCodeEditor(tabId: string) {
+  const inst = instances.get(tabId);
+  if (inst) inst.element.style.display = "none";
 }
 
 async function getLanguageExtension(filePath: string): Promise<Extension | null> {
@@ -213,12 +265,8 @@ function createPanel(tabId: string, filePath: string, workspaceIdx: number): Cod
 
     // Save button
     el.querySelector(".code-editor-save")!.addEventListener("click", async () => {
-      if (!inst.editorView) return;
-      const newContent = inst.editorView.state.doc.toString();
       try {
-        await ipc.writeFileContent(workspaceIdx, filePath, newContent);
-        inst.originalContent = newContent;
-        el.querySelector<HTMLElement>(".code-editor-dirty")!.style.display = "none";
+        await saveInstance(inst);
         toast("File saved", "success");
       } catch (err) {
         toast(`Save failed: ${err}`, "error");
@@ -237,6 +285,140 @@ function createPanel(tabId: string, filePath: string, workspaceIdx: number): Cod
   });
 
   return inst;
+}
+
+async function checkSingleInstance(inst: CodeEditorInstance): Promise<void> {
+  if (!inst.editorView) return;
+  let onDisk: string;
+  try {
+    onDisk = await ipc.readFileContent(inst.workspaceIdx, inst.filePath);
+  } catch {
+    return;
+  }
+  if (onDisk === inst.originalContent) return;
+
+  const editorContent = inst.editorView.state.doc.toString();
+  const localDirty = editorContent !== inst.originalContent;
+
+  if (!localDirty) {
+    inst.editorView.dispatch({
+      changes: { from: 0, to: inst.editorView.state.doc.length, insert: onDisk },
+    });
+    inst.originalContent = onDisk;
+    toast(`Reloaded ${shortName(inst.filePath)} from disk`, "info");
+  } else {
+    showReloadConflictPrompt(inst, onDisk);
+  }
+}
+
+async function checkExternalChanges(): Promise<void> {
+  for (const inst of instances.values()) {
+    await checkSingleInstance(inst);
+  }
+}
+
+function showReloadConflictPrompt(inst: CodeEditorInstance, onDisk: string): void {
+  if (inst.element.querySelector(".code-editor-reload-prompt")) return;
+
+  const fileName = shortName(inst.filePath);
+  const overlay = document.createElement("div");
+  overlay.className = "ws-delete-confirm code-editor-reload-prompt";
+  overlay.innerHTML = `
+    <div class="ws-delete-dialog">
+      <p><strong>${esc(fileName)}</strong> changed on disk</p>
+      <p class="ws-delete-hint">You have unsaved local changes. What would you like to do?</p>
+      <div class="ws-delete-buttons">
+        <button class="dialog-btn dialog-btn-secondary keep-yours">Keep yours</button>
+        <button class="dialog-btn dialog-btn-danger reload-disk">Reload from disk</button>
+      </div>
+    </div>
+  `;
+
+  overlay.querySelector(".reload-disk")!.addEventListener("click", () => {
+    if (inst.editorView) {
+      inst.editorView.dispatch({
+        changes: { from: 0, to: inst.editorView.state.doc.length, insert: onDisk },
+      });
+    }
+    inst.originalContent = onDisk;
+    inst.element.querySelector<HTMLElement>(".code-editor-dirty")!.style.display = "none";
+    overlay.remove();
+    toast(`Reloaded ${fileName} from disk`, "info");
+  });
+
+  overlay.querySelector(".keep-yours")!.addEventListener("click", () => {
+    // Rebase the dirty baseline so the indicator contrasts with the new disk content.
+    // On next save, the user's buffer wins (last-write-wins semantics).
+    inst.originalContent = onDisk;
+    // Dirty indicator was already showing; keep it on since editor still differs.
+    overlay.remove();
+  });
+
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+
+  document.body.appendChild(overlay);
+}
+
+export function showUnsavedChangesPrompt(
+  tabId: string,
+  onResolve: (action: "save" | "discard" | "cancel") => void,
+): void {
+  const inst = instances.get(tabId);
+  if (!inst) {
+    onResolve("discard");
+    return;
+  }
+  const fileName = shortName(inst.filePath);
+
+  const overlay = document.createElement("div");
+  overlay.className = "ws-delete-confirm code-editor-unsaved-prompt";
+  overlay.innerHTML = `
+    <div class="ws-delete-dialog">
+      <p>Unsaved changes in <strong>${esc(fileName)}</strong></p>
+      <p class="ws-delete-hint">What would you like to do?</p>
+      <div class="ws-delete-buttons">
+        <button class="dialog-btn dialog-btn-primary action-save">Save</button>
+        <button class="dialog-btn dialog-btn-danger action-discard">Discard</button>
+        <button class="dialog-btn dialog-btn-secondary action-cancel">Cancel</button>
+      </div>
+    </div>
+  `;
+
+  overlay.querySelector(".action-save")!.addEventListener("click", async () => {
+    try {
+      await saveInstance(inst);
+      toast("File saved", "success");
+      overlay.remove();
+      onResolve("save");
+    } catch (err) {
+      toast(`Save failed: ${err}`, "error");
+    }
+  });
+
+  overlay.querySelector(".action-discard")!.addEventListener("click", () => {
+    overlay.remove();
+    onResolve("discard");
+  });
+
+  overlay.querySelector(".action-cancel")!.addEventListener("click", () => {
+    overlay.remove();
+    onResolve("cancel");
+  });
+
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) {
+      overlay.remove();
+      onResolve("cancel");
+    }
+  });
+
+  document.body.appendChild(overlay);
+}
+
+function shortName(filePath: string): string {
+  return filePath.split("/").pop() || filePath;
 }
 
 function esc(t: string): string {
