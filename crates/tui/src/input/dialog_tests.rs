@@ -12,16 +12,16 @@ use piki_core::storage::AgentProfile;
 use super::dialog::{
     handle_about_input, handle_commit_message_input, handle_confirm_close_tab_input,
     handle_confirm_delete_input, handle_confirm_merge_input, handle_confirm_quit_input,
-    handle_dashboard_input, handle_dispatch_card_move_input, handle_edit_workspace_input,
-    handle_git_log_input, handle_git_stash_input, handle_help_input, handle_import_agents_input,
-    handle_logs_input, handle_manage_agents_input, handle_manage_providers_input,
-    handle_workspace_info_input,
+    handle_dashboard_input, handle_dispatch_card_move_input, handle_edit_provider_input,
+    handle_edit_workspace_input, handle_git_log_input, handle_git_stash_input, handle_help_input,
+    handle_import_agents_input, handle_logs_input, handle_manage_agents_input,
+    handle_manage_providers_input, handle_workspace_info_input,
 };
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode};
-use crate::dialog_state::{DialogState, EditWorkspaceField, GitLogEntry};
+use crate::dialog_state::{DialogState, EditProviderField, EditWorkspaceField, GitLogEntry};
 use crate::log_buffer::LogEntry;
-use crate::test_support::{key, key_with_mods, test_app};
+use crate::test_support::{key, key_with_mods, test_app, test_app_isolated};
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -238,6 +238,50 @@ fn manage_agents_selected(app: &App) -> usize {
 fn open_manage_providers(app: &mut App, selected: usize) {
     app.mode = AppMode::ManageProviders;
     app.active_dialog = Some(DialogState::ManageProviders { selected });
+}
+
+fn open_edit_provider(app: &mut App) {
+    app.mode = AppMode::EditProvider;
+    app.active_dialog = Some(DialogState::EditProvider {
+        original_name: None,
+        name: String::new(),
+        name_cursor: 0,
+        description: String::new(),
+        desc_cursor: 0,
+        command: String::new(),
+        command_cursor: 0,
+        default_args: String::new(),
+        args_cursor: 0,
+        prompt_format_idx: 0,
+        prompt_flag: String::new(),
+        flag_cursor: 0,
+        dispatchable: true,
+        agent_dir: String::new(),
+        agent_dir_cursor: 0,
+        active_field: EditProviderField::Name,
+    });
+}
+
+fn edit_provider_active_field(app: &App) -> EditProviderField {
+    match &app.active_dialog {
+        Some(DialogState::EditProvider { active_field, .. }) => *active_field,
+        _ => panic!("not in EditProvider dialog"),
+    }
+}
+
+fn edit_provider_field_state(app: &App) -> (String, usize, usize, bool) {
+    // (name, prompt_format_idx, name_cursor, dispatchable) — the bits exercised
+    // by the tests below.
+    match &app.active_dialog {
+        Some(DialogState::EditProvider {
+            name,
+            name_cursor,
+            prompt_format_idx,
+            dispatchable,
+            ..
+        }) => (name.clone(), *prompt_format_idx, *name_cursor, *dispatchable),
+        _ => panic!("not in EditProvider dialog"),
+    }
 }
 
 fn current_active_field(app: &App) -> EditWorkspaceField {
@@ -1595,5 +1639,249 @@ fn manage_providers_esc_dismisses() {
 fn manage_providers_returns_none_when_dialog_not_active() {
     let mut app = test_app();
     let action = handle_manage_providers_input(&mut app, key(KeyCode::Char('j')));
+    assert!(action.is_none());
+}
+
+// ── EditProvider ───────────────────────────────────────────────────────
+
+#[test]
+fn edit_provider_tab_cycles_eight_fields_forward() {
+    let mut app = test_app();
+    open_edit_provider(&mut app);
+
+    let sequence = [
+        EditProviderField::Description,
+        EditProviderField::Command,
+        EditProviderField::DefaultArgs,
+        EditProviderField::PromptFormat,
+        EditProviderField::PromptFlag,
+        EditProviderField::Dispatchable,
+        EditProviderField::AgentDir,
+        EditProviderField::Name, // wrap
+    ];
+    for expected in sequence {
+        handle_edit_provider_input(&mut app, key(KeyCode::Tab));
+        assert_eq!(edit_provider_active_field(&app), expected);
+    }
+}
+
+#[test]
+fn edit_provider_back_tab_cycles_in_reverse() {
+    let mut app = test_app();
+    open_edit_provider(&mut app);
+
+    handle_edit_provider_input(&mut app, key(KeyCode::BackTab));
+    assert_eq!(edit_provider_active_field(&app), EditProviderField::AgentDir);
+
+    handle_edit_provider_input(&mut app, key(KeyCode::BackTab));
+    assert_eq!(
+        edit_provider_active_field(&app),
+        EditProviderField::Dispatchable
+    );
+}
+
+#[test]
+fn edit_provider_text_input_writes_to_active_field() {
+    let mut app = test_app();
+    open_edit_provider(&mut app);
+
+    for c in "claude".chars() {
+        handle_edit_provider_input(&mut app, key(KeyCode::Char(c)));
+    }
+
+    let (name, _, cursor, _) = edit_provider_field_state(&app);
+    assert_eq!(name, "claude");
+    assert_eq!(cursor, 6);
+}
+
+#[test]
+fn edit_provider_backspace_deletes_previous_char() {
+    let mut app = test_app();
+    open_edit_provider(&mut app);
+    for c in "abc".chars() {
+        handle_edit_provider_input(&mut app, key(KeyCode::Char(c)));
+    }
+
+    handle_edit_provider_input(&mut app, key(KeyCode::Backspace));
+
+    let (name, _, cursor, _) = edit_provider_field_state(&app);
+    assert_eq!(name, "ab");
+    assert_eq!(cursor, 2);
+}
+
+#[test]
+fn edit_provider_prompt_format_right_cycles_through_three_values() {
+    let mut app = test_app();
+    open_edit_provider(&mut app);
+    // Move to PromptFormat (Tab x4: Name → Desc → Cmd → Args → PromptFormat)
+    for _ in 0..4 {
+        handle_edit_provider_input(&mut app, key(KeyCode::Tab));
+    }
+    assert_eq!(
+        edit_provider_active_field(&app),
+        EditProviderField::PromptFormat
+    );
+
+    handle_edit_provider_input(&mut app, key(KeyCode::Right));
+    assert_eq!(edit_provider_field_state(&app).1, 1);
+
+    handle_edit_provider_input(&mut app, key(KeyCode::Right));
+    assert_eq!(edit_provider_field_state(&app).1, 2);
+
+    handle_edit_provider_input(&mut app, key(KeyCode::Right));
+    assert_eq!(edit_provider_field_state(&app).1, 0); // wrap
+}
+
+#[test]
+fn edit_provider_prompt_format_left_cycles_backwards() {
+    let mut app = test_app();
+    open_edit_provider(&mut app);
+    for _ in 0..4 {
+        handle_edit_provider_input(&mut app, key(KeyCode::Tab));
+    }
+
+    handle_edit_provider_input(&mut app, key(KeyCode::Left));
+    assert_eq!(edit_provider_field_state(&app).1, 2); // wraps to 2
+}
+
+#[test]
+fn edit_provider_dispatchable_space_toggles() {
+    let mut app = test_app();
+    open_edit_provider(&mut app);
+    // Move to Dispatchable (Tab x6: Name → ... → Dispatchable)
+    for _ in 0..6 {
+        handle_edit_provider_input(&mut app, key(KeyCode::Tab));
+    }
+    assert_eq!(
+        edit_provider_active_field(&app),
+        EditProviderField::Dispatchable
+    );
+    let (_, _, _, initial) = edit_provider_field_state(&app);
+
+    handle_edit_provider_input(&mut app, key(KeyCode::Char(' ')));
+
+    let (_, _, _, after) = edit_provider_field_state(&app);
+    assert_eq!(after, !initial);
+}
+
+#[test]
+fn edit_provider_dispatchable_arrow_keys_also_toggle() {
+    let mut app = test_app();
+    open_edit_provider(&mut app);
+    for _ in 0..6 {
+        handle_edit_provider_input(&mut app, key(KeyCode::Tab));
+    }
+    let (_, _, _, initial) = edit_provider_field_state(&app);
+
+    handle_edit_provider_input(&mut app, key(KeyCode::Left));
+    let (_, _, _, after_left) = edit_provider_field_state(&app);
+    assert_eq!(after_left, !initial);
+
+    handle_edit_provider_input(&mut app, key(KeyCode::Right));
+    let (_, _, _, after_right) = edit_provider_field_state(&app);
+    assert_eq!(after_right, initial);
+}
+
+#[test]
+fn edit_provider_esc_returns_to_manage_providers_not_normal() {
+    let mut app = test_app();
+    open_edit_provider(&mut app);
+
+    let action = handle_edit_provider_input(&mut app, key(KeyCode::Esc));
+
+    assert!(action.is_none());
+    // Esc transitions back to manager, NOT Normal — distinct from most dialogs.
+    assert_eq!(app.mode, AppMode::ManageProviders);
+    assert!(matches!(
+        app.active_dialog,
+        Some(DialogState::ManageProviders { .. })
+    ));
+}
+
+#[test]
+fn edit_provider_ctrl_s_with_empty_name_shows_error_toast_and_does_not_save() {
+    let mut app = test_app();
+    let before_count = app.provider_manager.all().len();
+    open_edit_provider(&mut app);
+    // Fill command but leave name empty
+    for _ in 0..2 {
+        handle_edit_provider_input(&mut app, key(KeyCode::Tab));
+    }
+    for c in "cmd".chars() {
+        handle_edit_provider_input(&mut app, key(KeyCode::Char(c)));
+    }
+
+    let action = handle_edit_provider_input(
+        &mut app,
+        key_with_mods(KeyCode::Char('s'), KeyModifiers::CONTROL),
+    );
+
+    assert!(action.is_none());
+    assert!(app.toast.is_some());
+    assert_eq!(app.provider_manager.all().len(), before_count);
+    // Dialog stays open
+    assert!(matches!(
+        app.active_dialog,
+        Some(DialogState::EditProvider { .. })
+    ));
+}
+
+#[test]
+fn edit_provider_ctrl_s_with_empty_command_shows_error_toast() {
+    let mut app = test_app();
+    let before_count = app.provider_manager.all().len();
+    open_edit_provider(&mut app);
+    // Fill name but leave command empty
+    for c in "my-provider".chars() {
+        handle_edit_provider_input(&mut app, key(KeyCode::Char(c)));
+    }
+
+    let action = handle_edit_provider_input(
+        &mut app,
+        key_with_mods(KeyCode::Char('s'), KeyModifiers::CONTROL),
+    );
+
+    assert!(action.is_none());
+    assert!(app.toast.is_some());
+    assert_eq!(app.provider_manager.all().len(), before_count);
+}
+
+#[test]
+fn edit_provider_ctrl_s_with_valid_data_saves_and_returns_to_manager() {
+    // Uses isolated paths because Ctrl+S persists providers.toml to disk.
+    // _tmp keeps the temp dir alive until the test ends.
+    let (mut app, _tmp) = test_app_isolated();
+    open_edit_provider(&mut app);
+    // Fill name
+    for c in "test-pilot".chars() {
+        handle_edit_provider_input(&mut app, key(KeyCode::Char(c)));
+    }
+    // Tab to Command (Name → Desc → Cmd)
+    handle_edit_provider_input(&mut app, key(KeyCode::Tab));
+    handle_edit_provider_input(&mut app, key(KeyCode::Tab));
+    for c in "/usr/bin/echo".chars() {
+        handle_edit_provider_input(&mut app, key(KeyCode::Char(c)));
+    }
+
+    let action = handle_edit_provider_input(
+        &mut app,
+        key_with_mods(KeyCode::Char('s'), KeyModifiers::CONTROL),
+    );
+
+    assert!(action.is_none());
+    assert_eq!(app.mode, AppMode::ManageProviders);
+    // Provider got persisted into the manager
+    assert!(
+        app.provider_manager
+            .all()
+            .iter()
+            .any(|p| p.name == "test-pilot")
+    );
+}
+
+#[test]
+fn edit_provider_returns_none_when_dialog_not_active() {
+    let mut app = test_app();
+    let action = handle_edit_provider_input(&mut app, key(KeyCode::Tab));
     assert!(action.is_none());
 }

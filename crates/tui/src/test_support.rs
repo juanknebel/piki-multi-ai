@@ -24,6 +24,19 @@ pub(crate) fn test_app() -> App {
     App::new(test_storage(), &piki_core::paths::DataPaths::default_paths())
 }
 
+/// Build an `App` whose `DataPaths` resolve under an isolated temp directory.
+/// Use this for tests that exercise handler paths writing to `providers.toml`,
+/// the SQLite DB, or any other on-disk state — otherwise they pollute the
+/// real user config dir (`~/.config/piki-multi`) and break other tests'
+/// snapshots. Returns the `App` together with the `TempDir` guard; keep the
+/// guard alive for the duration of the test or paths will be deleted.
+pub(crate) fn test_app_isolated() -> (App, tempfile::TempDir) {
+    let tmp = tempfile::tempdir().expect("create temp dir for test");
+    let paths = piki_core::paths::DataPaths::new(tmp.path().to_path_buf());
+    let app = App::new(test_storage(), &paths);
+    (app, tmp)
+}
+
 pub(crate) fn test_terminal(w: u16, h: u16) -> Terminal<TestBackend> {
     Terminal::new(TestBackend::new(w, h)).unwrap()
 }
