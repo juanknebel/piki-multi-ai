@@ -9,6 +9,7 @@ mod editor_input;
 pub(crate) mod fuzzy_common;
 mod fuzzy_input;
 mod interaction;
+pub(crate) mod list_nav;
 pub(crate) mod mouse;
 pub(crate) mod text_field_common;
 mod workspace_switcher_input;

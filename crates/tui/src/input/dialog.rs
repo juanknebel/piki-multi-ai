@@ -12,6 +12,7 @@ use crate::dialog_state::{
 use piki_core::{AIProvider, MergeStrategy, WorkspaceType};
 
 use super::confirm_common::{ConfirmResult, dismiss_dialog, dismiss_dialog_to_pane, handle_yn_input, with_dialog_mut};
+use super::list_nav::move_selection;
 use super::text_field_common::{handle_text_input, is_cancel};
 
 pub(super) fn handle_edit_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
@@ -374,26 +375,20 @@ pub(super) fn handle_dispatch_card_move_input(app: &mut App, key: KeyEvent) -> O
 
     match key.code {
         KeyCode::Up | KeyCode::Char('k') => {
-            if *selected > 0 {
-                *selected -= 1;
-            }
+            move_selection(selected, num_columns, -1, false);
             None
         }
         KeyCode::Down | KeyCode::Char('j') => {
-            if *selected + 1 < num_columns {
-                *selected += 1;
-            }
+            move_selection(selected, num_columns, 1, false);
             None
         }
         KeyCode::Enter => {
             let col_id = columns[*selected].0.clone();
-            dismiss_dialog(app);
-            app.active_pane = ActivePane::WorkspaceList;
+            dismiss_dialog_to_pane(app, ActivePane::WorkspaceList);
             Some(Action::DeleteWorkspace(target, Some(col_id)))
         }
         KeyCode::Esc => {
-            dismiss_dialog(app);
-            app.active_pane = ActivePane::WorkspaceList;
+            dismiss_dialog_to_pane(app, ActivePane::WorkspaceList);
             None
         }
         _ => None,
@@ -870,13 +865,13 @@ pub(super) fn handle_git_log_input(app: &mut App, key: KeyEvent) -> Option<Actio
     let last = total.saturating_sub(1);
 
     if app.config.matches_git_log(key, "down") || app.config.matches_git_log(key, "down_alt") {
-        *selected = (*selected + 1).min(last);
+        move_selection(selected, total, 1, false);
     } else if app.config.matches_git_log(key, "up") || app.config.matches_git_log(key, "up_alt") {
-        *selected = selected.saturating_sub(1);
+        move_selection(selected, total, -1, false);
     } else if app.config.matches_git_log(key, "page_down") {
-        *selected = (*selected + 10).min(last);
+        move_selection(selected, total, 10, false);
     } else if app.config.matches_git_log(key, "page_up") {
-        *selected = selected.saturating_sub(10);
+        move_selection(selected, total, -10, false);
     } else if app.config.matches_git_log(key, "scroll_top") {
         *selected = 0;
         *scroll = 0;
@@ -891,8 +886,7 @@ pub(super) fn handle_git_log_input(app: &mut App, key: KeyEvent) -> Option<Actio
         }
     } else if app.config.matches_git_log(key, "exit") || app.config.matches_git_log(key, "exit_alt")
     {
-        app.active_dialog = None;
-        app.mode = AppMode::Normal;
+        dismiss_dialog(app);
     }
     None
 }
@@ -1108,15 +1102,11 @@ pub(super) fn handle_manage_agents_input(app: &mut App, key: KeyEvent) -> Option
 
     match key.code {
         KeyCode::Char('j') | KeyCode::Down => {
-            if count > 0 {
-                *selected = (*selected + 1) % count;
-            }
+            move_selection(selected, count, 1, true);
             None
         }
         KeyCode::Char('k') | KeyCode::Up => {
-            if count > 0 {
-                *selected = (*selected + count - 1) % count;
-            }
+            move_selection(selected, count, -1, true);
             None
         }
         KeyCode::Char('n') => {
@@ -1181,8 +1171,7 @@ pub(super) fn handle_manage_agents_input(app: &mut App, key: KeyEvent) -> Option
             Some(Action::ScanRepoAgents)
         }
         _ if is_cancel(key, app.config.platform) => {
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
+            dismiss_dialog(app);
             None
         }
         _ => None,
@@ -1425,11 +1414,11 @@ pub(super) fn handle_import_agents_input(app: &mut App, key: KeyEvent) -> Option
 
     match key.code {
         KeyCode::Char('j') | KeyCode::Down => {
-            *cursor = (*cursor + 1) % count;
+            move_selection(cursor, count, 1, true);
             None
         }
         KeyCode::Char('k') | KeyCode::Up => {
-            *cursor = (*cursor + count - 1) % count;
+            move_selection(cursor, count, -1, true);
             None
         }
         KeyCode::Char(' ') => {
@@ -1488,15 +1477,11 @@ pub(super) fn handle_manage_providers_input(app: &mut App, key: KeyEvent) -> Opt
 
     match key.code {
         KeyCode::Char('j') | KeyCode::Down => {
-            if count > 0 {
-                *selected = (*selected + 1) % count;
-            }
+            move_selection(selected, count, 1, true);
             None
         }
         KeyCode::Char('k') | KeyCode::Up => {
-            if count > 0 {
-                *selected = (*selected + count - 1) % count;
-            }
+            move_selection(selected, count, -1, true);
             None
         }
         KeyCode::Char('n') => {
@@ -1575,8 +1560,7 @@ pub(super) fn handle_manage_providers_input(app: &mut App, key: KeyEvent) -> Opt
             None
         }
         _ if is_cancel(key, app.config.platform) => {
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
+            dismiss_dialog(app);
             None
         }
         _ => None,
