@@ -13,16 +13,16 @@ use super::dialog::{
     handle_about_input, handle_commit_message_input, handle_confirm_close_tab_input,
     handle_confirm_delete_input, handle_confirm_merge_input, handle_confirm_quit_input,
     handle_conflict_resolution_input, handle_dashboard_input, handle_dispatch_card_move_input,
-    handle_edit_provider_input, handle_edit_workspace_input, handle_git_log_input,
-    handle_git_stash_input, handle_help_input, handle_import_agents_input, handle_logs_input,
-    handle_manage_agents_input, handle_manage_providers_input, handle_new_tab_input,
-    handle_workspace_info_input,
+    handle_edit_agent_input, handle_edit_provider_input, handle_edit_workspace_input,
+    handle_git_log_input, handle_git_stash_input, handle_help_input, handle_import_agents_input,
+    handle_logs_input, handle_manage_agents_input, handle_manage_providers_input,
+    handle_new_tab_input, handle_workspace_info_input,
 };
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode};
 use crate::dialog_state::{
-    ConflictFile, ConflictStrategy, DialogState, EditProviderField, EditWorkspaceField,
-    GitLogEntry, NewTabMenu,
+    ConflictFile, ConflictStrategy, DialogState, EditAgentField, EditProviderField,
+    EditWorkspaceField, GitLogEntry, NewTabMenu,
 };
 use crate::log_buffer::LogEntry;
 use crate::test_support::{key, key_with_mods, test_app, test_app_isolated};
@@ -2449,5 +2449,244 @@ fn conflict_action_on_empty_list_returns_none() {
 fn conflict_returns_none_when_dialog_not_active() {
     let mut app = test_app();
     let action = handle_conflict_resolution_input(&mut app, key(KeyCode::Char('o')));
+    assert!(action.is_none());
+}
+
+// ── EditAgent (step 1: name + provider) ───────────────────────────────────
+//
+// Two-field dialog with Tab/BackTab cycling between Name and Provider,
+// Left/Right cycling provider_idx when on Provider, alphanumeric+`-_` text
+// input on Name, Enter advancing to EditAgentRole, and Esc going back to
+// ManageAgents. `test_app_isolated()` seeds 2 default providers.
+
+fn open_edit_agent(
+    app: &mut App,
+    editing_id: Option<i64>,
+    name: &str,
+    provider_idx: usize,
+    role: &str,
+    active_field: EditAgentField,
+) {
+    app.mode = AppMode::EditAgent;
+    app.active_dialog = Some(DialogState::EditAgent {
+        editing_id,
+        name: name.to_string(),
+        name_cursor: name.len(),
+        provider_idx,
+        role: role.to_string(),
+        active_field,
+    });
+}
+
+fn current_edit_agent_field(app: &App) -> EditAgentField {
+    match app.active_dialog {
+        Some(DialogState::EditAgent { active_field, .. }) => active_field,
+        _ => panic!("expected EditAgent dialog"),
+    }
+}
+
+fn current_edit_agent_provider_idx(app: &App) -> usize {
+    match app.active_dialog {
+        Some(DialogState::EditAgent { provider_idx, .. }) => provider_idx,
+        _ => panic!("expected EditAgent dialog"),
+    }
+}
+
+fn current_edit_agent_name(app: &App) -> String {
+    match app.active_dialog {
+        Some(DialogState::EditAgent { ref name, .. }) => name.clone(),
+        _ => panic!("expected EditAgent dialog"),
+    }
+}
+
+#[test]
+fn edit_agent_tab_cycles_name_to_provider() {
+    let (mut app, _tmp) = test_app_isolated();
+    open_edit_agent(&mut app, None, "agent", 0, "role", EditAgentField::Name);
+
+    handle_edit_agent_input(&mut app, key(KeyCode::Tab));
+    assert_eq!(current_edit_agent_field(&app), EditAgentField::Provider);
+
+    handle_edit_agent_input(&mut app, key(KeyCode::Tab));
+    assert_eq!(current_edit_agent_field(&app), EditAgentField::Name);
+}
+
+#[test]
+fn edit_agent_backtab_cycles_same_as_tab_two_variants() {
+    let (mut app, _tmp) = test_app_isolated();
+    open_edit_agent(&mut app, None, "agent", 0, "", EditAgentField::Name);
+
+    handle_edit_agent_input(&mut app, key(KeyCode::BackTab));
+    assert_eq!(current_edit_agent_field(&app), EditAgentField::Provider);
+}
+
+#[test]
+fn edit_agent_right_on_provider_wraps_forward() {
+    let (mut app, _tmp) = test_app_isolated();
+    let count = app.new_tab_agent_list().len();
+    assert!(count >= 2);
+    open_edit_agent(&mut app, None, "agent", 0, "", EditAgentField::Provider);
+
+    handle_edit_agent_input(&mut app, key(KeyCode::Right));
+    assert_eq!(current_edit_agent_provider_idx(&app), 1);
+
+    // Wrap around at the end
+    open_edit_agent(
+        &mut app,
+        None,
+        "agent",
+        count - 1,
+        "",
+        EditAgentField::Provider,
+    );
+    handle_edit_agent_input(&mut app, key(KeyCode::Right));
+    assert_eq!(current_edit_agent_provider_idx(&app), 0);
+}
+
+#[test]
+fn edit_agent_left_on_provider_wraps_backward() {
+    let (mut app, _tmp) = test_app_isolated();
+    let count = app.new_tab_agent_list().len();
+    open_edit_agent(&mut app, None, "agent", 1, "", EditAgentField::Provider);
+
+    handle_edit_agent_input(&mut app, key(KeyCode::Left));
+    assert_eq!(current_edit_agent_provider_idx(&app), 0);
+
+    // Wrap to last from 0
+    handle_edit_agent_input(&mut app, key(KeyCode::Left));
+    assert_eq!(current_edit_agent_provider_idx(&app), count - 1);
+}
+
+#[test]
+fn edit_agent_left_right_on_name_do_not_change_provider() {
+    let (mut app, _tmp) = test_app_isolated();
+    open_edit_agent(&mut app, None, "agent", 0, "", EditAgentField::Name);
+
+    handle_edit_agent_input(&mut app, key(KeyCode::Right));
+    assert_eq!(current_edit_agent_provider_idx(&app), 0);
+
+    handle_edit_agent_input(&mut app, key(KeyCode::Left));
+    assert_eq!(current_edit_agent_provider_idx(&app), 0);
+}
+
+#[test]
+fn edit_agent_text_input_on_name_accepts_alphanumeric_and_dash_underscore() {
+    let (mut app, _tmp) = test_app_isolated();
+    open_edit_agent(&mut app, None, "", 0, "", EditAgentField::Name);
+
+    for c in "code-pilot_42".chars() {
+        handle_edit_agent_input(&mut app, key(KeyCode::Char(c)));
+    }
+
+    assert_eq!(current_edit_agent_name(&app), "code-pilot_42");
+}
+
+#[test]
+fn edit_agent_text_input_on_name_rejects_spaces_and_punctuation() {
+    let (mut app, _tmp) = test_app_isolated();
+    open_edit_agent(&mut app, None, "", 0, "", EditAgentField::Name);
+
+    for c in "a b.c/d!".chars() {
+        handle_edit_agent_input(&mut app, key(KeyCode::Char(c)));
+    }
+
+    // Only alphanumeric + `-_` allowed
+    assert_eq!(current_edit_agent_name(&app), "abcd");
+}
+
+#[test]
+fn edit_agent_text_input_ignored_when_provider_field_active() {
+    let (mut app, _tmp) = test_app_isolated();
+    open_edit_agent(&mut app, None, "init", 0, "", EditAgentField::Provider);
+
+    handle_edit_agent_input(&mut app, key(KeyCode::Char('x')));
+
+    assert_eq!(current_edit_agent_name(&app), "init");
+}
+
+#[test]
+fn edit_agent_enter_with_empty_name_does_not_transition() {
+    let (mut app, _tmp) = test_app_isolated();
+    open_edit_agent(&mut app, None, "", 0, "role text", EditAgentField::Name);
+
+    let action = handle_edit_agent_input(&mut app, key(KeyCode::Enter));
+
+    assert!(action.is_none());
+    assert_eq!(app.mode, AppMode::EditAgent);
+    assert!(matches!(
+        app.active_dialog,
+        Some(DialogState::EditAgent { .. })
+    ));
+}
+
+#[test]
+fn edit_agent_enter_with_whitespace_name_does_not_transition() {
+    let (mut app, _tmp) = test_app_isolated();
+    open_edit_agent(&mut app, None, "   ", 0, "", EditAgentField::Name);
+
+    let action = handle_edit_agent_input(&mut app, key(KeyCode::Enter));
+
+    assert!(action.is_none());
+    assert!(matches!(
+        app.active_dialog,
+        Some(DialogState::EditAgent { .. })
+    ));
+}
+
+#[test]
+fn edit_agent_enter_with_valid_name_advances_to_role_editor() {
+    let (mut app, _tmp) = test_app_isolated();
+    open_edit_agent(
+        &mut app,
+        Some(7),
+        "  agent  ",
+        1,
+        "previous role",
+        EditAgentField::Name,
+    );
+
+    let action = handle_edit_agent_input(&mut app, key(KeyCode::Enter));
+
+    assert!(action.is_none());
+    assert_eq!(app.mode, AppMode::EditAgentRole);
+    match app.active_dialog {
+        Some(DialogState::EditAgentRole {
+            editing_id,
+            ref name,
+            provider_idx,
+            ref role,
+            role_cursor,
+            scroll,
+        }) => {
+            assert_eq!(editing_id, Some(7));
+            assert_eq!(name, "agent"); // trimmed
+            assert_eq!(provider_idx, 1);
+            assert_eq!(role, "previous role");
+            assert_eq!(role_cursor, "previous role".len());
+            assert_eq!(scroll, 0);
+        }
+        ref other => panic!("expected EditAgentRole, got {other:?}"),
+    }
+}
+
+#[test]
+fn edit_agent_esc_returns_to_manage_agents() {
+    let (mut app, _tmp) = test_app_isolated();
+    open_edit_agent(&mut app, None, "agent", 0, "", EditAgentField::Name);
+
+    let action = handle_edit_agent_input(&mut app, key(KeyCode::Esc));
+
+    assert!(action.is_none());
+    assert_eq!(app.mode, AppMode::ManageAgents);
+    assert!(matches!(
+        app.active_dialog,
+        Some(DialogState::ManageAgents { .. })
+    ));
+}
+
+#[test]
+fn edit_agent_returns_none_when_dialog_not_active() {
+    let mut app = test_app();
+    let action = handle_edit_agent_input(&mut app, key(KeyCode::Tab));
     assert!(action.is_none());
 }
