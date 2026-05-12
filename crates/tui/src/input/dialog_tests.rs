@@ -12,19 +12,21 @@ use piki_core::storage::AgentProfile;
 use super::dialog::{
     handle_about_input, handle_commit_message_input, handle_confirm_close_tab_input,
     handle_confirm_delete_input, handle_confirm_merge_input, handle_confirm_quit_input,
-    handle_dashboard_input, handle_dispatch_card_move_input, handle_edit_provider_input,
-    handle_edit_workspace_input, handle_git_log_input, handle_git_stash_input, handle_help_input,
-    handle_import_agents_input, handle_logs_input, handle_manage_agents_input,
-    handle_manage_providers_input, handle_new_tab_input, handle_workspace_info_input,
+    handle_conflict_resolution_input, handle_dashboard_input, handle_dispatch_card_move_input,
+    handle_edit_provider_input, handle_edit_workspace_input, handle_git_log_input,
+    handle_git_stash_input, handle_help_input, handle_import_agents_input, handle_logs_input,
+    handle_manage_agents_input, handle_manage_providers_input, handle_new_tab_input,
+    handle_workspace_info_input,
 };
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode};
 use crate::dialog_state::{
-    DialogState, EditProviderField, EditWorkspaceField, GitLogEntry, NewTabMenu,
+    ConflictFile, ConflictStrategy, DialogState, EditProviderField, EditWorkspaceField,
+    GitLogEntry, NewTabMenu,
 };
-use piki_core::AIProvider;
 use crate::log_buffer::LogEntry;
 use crate::test_support::{key, key_with_mods, test_app, test_app_isolated};
+use piki_core::AIProvider;
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -2150,5 +2152,302 @@ fn new_tab_tools_esc_returns_to_main() {
 fn new_tab_returns_none_when_dialog_not_active() {
     let mut app = test_app();
     let action = handle_new_tab_input(&mut app, key(KeyCode::Char('1')));
+    assert!(action.is_none());
+}
+
+// ── ConflictResolution ────────────────────────────────────────────────────
+//
+// List of conflicted files with action keys (o/t/m/e/A/Enter) and j/k
+// navigation. Keybindings come from `app.config.matches_conflict_resolution`,
+// which falls back to the defaults in `default_conflict_resolution()`:
+// down=j, up=k, ours=o, theirs=t, mark_resolved=m, edit=e, abort=A,
+// select=enter (view diff), exit=esc, exit_alt=X.
+
+fn sample_conflict_files() -> Vec<ConflictFile> {
+    vec![
+        ConflictFile {
+            path: "src/a.rs".into(),
+            status: "Conflicted".into(),
+        },
+        ConflictFile {
+            path: "src/b.rs".into(),
+            status: "Conflicted".into(),
+        },
+        ConflictFile {
+            path: "src/c.rs".into(),
+            status: "Conflicted".into(),
+        },
+    ]
+}
+
+fn open_conflict_resolution(
+    app: &mut App,
+    files: Vec<ConflictFile>,
+    repo_path: std::path::PathBuf,
+    selected: usize,
+) {
+    app.mode = AppMode::ConflictResolution;
+    app.active_dialog = Some(DialogState::ConflictResolution {
+        files,
+        selected,
+        repo_path,
+    });
+}
+
+fn current_conflict_selected(app: &App) -> usize {
+    match app.active_dialog {
+        Some(DialogState::ConflictResolution { selected, .. }) => selected,
+        _ => panic!("expected ConflictResolution dialog"),
+    }
+}
+
+#[test]
+fn conflict_down_advances_with_clamp() {
+    let mut app = test_app();
+    open_conflict_resolution(
+        &mut app,
+        sample_conflict_files(),
+        "/tmp/repo".into(),
+        0,
+    );
+
+    handle_conflict_resolution_input(&mut app, key(KeyCode::Char('j')));
+    assert_eq!(current_conflict_selected(&app), 1);
+    handle_conflict_resolution_input(&mut app, key(KeyCode::Char('j')));
+    assert_eq!(current_conflict_selected(&app), 2);
+    // Clamp at last
+    handle_conflict_resolution_input(&mut app, key(KeyCode::Char('j')));
+    assert_eq!(current_conflict_selected(&app), 2);
+}
+
+#[test]
+fn conflict_up_retreats_with_clamp() {
+    let mut app = test_app();
+    open_conflict_resolution(
+        &mut app,
+        sample_conflict_files(),
+        "/tmp/repo".into(),
+        2,
+    );
+
+    handle_conflict_resolution_input(&mut app, key(KeyCode::Char('k')));
+    assert_eq!(current_conflict_selected(&app), 1);
+    handle_conflict_resolution_input(&mut app, key(KeyCode::Char('k')));
+    assert_eq!(current_conflict_selected(&app), 0);
+    // Clamp at 0 (saturating_sub)
+    handle_conflict_resolution_input(&mut app, key(KeyCode::Char('k')));
+    assert_eq!(current_conflict_selected(&app), 0);
+}
+
+#[test]
+fn conflict_arrow_keys_navigate_as_alt_bindings() {
+    let mut app = test_app();
+    open_conflict_resolution(
+        &mut app,
+        sample_conflict_files(),
+        "/tmp/repo".into(),
+        0,
+    );
+
+    handle_conflict_resolution_input(&mut app, key(KeyCode::Down));
+    assert_eq!(current_conflict_selected(&app), 1);
+    handle_conflict_resolution_input(&mut app, key(KeyCode::Up));
+    assert_eq!(current_conflict_selected(&app), 0);
+}
+
+#[test]
+fn conflict_empty_list_navigation_is_noop() {
+    let mut app = test_app();
+    open_conflict_resolution(&mut app, vec![], "/tmp/repo".into(), 0);
+
+    handle_conflict_resolution_input(&mut app, key(KeyCode::Char('j')));
+    assert_eq!(current_conflict_selected(&app), 0);
+    handle_conflict_resolution_input(&mut app, key(KeyCode::Char('k')));
+    assert_eq!(current_conflict_selected(&app), 0);
+}
+
+#[test]
+fn conflict_ours_returns_resolve_action_for_selected() {
+    let mut app = test_app();
+    open_conflict_resolution(
+        &mut app,
+        sample_conflict_files(),
+        "/tmp/repo".into(),
+        1,
+    );
+
+    let action = handle_conflict_resolution_input(&mut app, key(KeyCode::Char('o')));
+
+    match action {
+        Some(Action::ResolveConflict {
+            file,
+            strategy: ConflictStrategy::Ours,
+        }) => assert_eq!(file, "src/b.rs"),
+        other => panic!("expected ResolveConflict(b.rs, Ours), got {other:?}"),
+    }
+}
+
+#[test]
+fn conflict_theirs_returns_resolve_action_for_selected() {
+    let mut app = test_app();
+    open_conflict_resolution(
+        &mut app,
+        sample_conflict_files(),
+        "/tmp/repo".into(),
+        0,
+    );
+
+    let action = handle_conflict_resolution_input(&mut app, key(KeyCode::Char('t')));
+
+    match action {
+        Some(Action::ResolveConflict {
+            file,
+            strategy: ConflictStrategy::Theirs,
+        }) => assert_eq!(file, "src/a.rs"),
+        other => panic!("expected ResolveConflict(a.rs, Theirs), got {other:?}"),
+    }
+}
+
+#[test]
+fn conflict_mark_resolved_returns_resolve_action() {
+    let mut app = test_app();
+    open_conflict_resolution(
+        &mut app,
+        sample_conflict_files(),
+        "/tmp/repo".into(),
+        2,
+    );
+
+    let action = handle_conflict_resolution_input(&mut app, key(KeyCode::Char('m')));
+
+    match action {
+        Some(Action::ResolveConflict {
+            file,
+            strategy: ConflictStrategy::MarkResolved,
+        }) => assert_eq!(file, "src/c.rs"),
+        other => panic!("expected ResolveConflict(c.rs, MarkResolved), got {other:?}"),
+    }
+}
+
+#[test]
+fn conflict_enter_returns_view_diff_action() {
+    let mut app = test_app();
+    open_conflict_resolution(
+        &mut app,
+        sample_conflict_files(),
+        "/tmp/repo".into(),
+        1,
+    );
+
+    let action = handle_conflict_resolution_input(&mut app, key(KeyCode::Enter));
+
+    match action {
+        Some(Action::ViewConflictDiff(file)) => assert_eq!(file, "src/b.rs"),
+        other => panic!("expected ViewConflictDiff(b.rs), got {other:?}"),
+    }
+}
+
+#[test]
+fn conflict_edit_returns_open_editor_with_full_path() {
+    let mut app = test_app();
+    open_conflict_resolution(
+        &mut app,
+        sample_conflict_files(),
+        "/tmp/repo".into(),
+        0,
+    );
+
+    let action = handle_conflict_resolution_input(&mut app, key(KeyCode::Char('e')));
+
+    match action {
+        Some(Action::OpenEditor(path)) => {
+            assert_eq!(path, std::path::PathBuf::from("/tmp/repo/src/a.rs"));
+        }
+        other => panic!("expected OpenEditor(/tmp/repo/src/a.rs), got {other:?}"),
+    }
+}
+
+#[test]
+fn conflict_abort_returns_abort_merge() {
+    let mut app = test_app();
+    open_conflict_resolution(
+        &mut app,
+        sample_conflict_files(),
+        "/tmp/repo".into(),
+        0,
+    );
+
+    // Default `abort` binding is "A" — uppercase parses with SHIFT modifier.
+    let action = handle_conflict_resolution_input(
+        &mut app,
+        key_with_mods(KeyCode::Char('A'), KeyModifiers::SHIFT),
+    );
+
+    assert!(matches!(action, Some(Action::AbortMerge)));
+    // Dialog stays open — caller decides what to do next.
+    assert!(matches!(
+        app.active_dialog,
+        Some(DialogState::ConflictResolution { .. })
+    ));
+}
+
+#[test]
+fn conflict_esc_dismisses_and_clears_diff() {
+    let mut app = test_app();
+    app.diff_content = Some(std::sync::Arc::new(ratatui::text::Text::raw("x")));
+    app.diff_file_path = Some("src/a.rs".into());
+    app.interacting = true;
+    open_conflict_resolution(
+        &mut app,
+        sample_conflict_files(),
+        "/tmp/repo".into(),
+        0,
+    );
+
+    let action = handle_conflict_resolution_input(&mut app, key(KeyCode::Esc));
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+    assert!(!app.interacting);
+    assert!(app.diff_content.is_none());
+    assert!(app.diff_file_path.is_none());
+}
+
+#[test]
+fn conflict_exit_alt_capital_x_also_dismisses() {
+    let mut app = test_app();
+    open_conflict_resolution(
+        &mut app,
+        sample_conflict_files(),
+        "/tmp/repo".into(),
+        0,
+    );
+
+    // Default `exit_alt` binding is "X" — uppercase parses with SHIFT modifier.
+    let action = handle_conflict_resolution_input(
+        &mut app,
+        key_with_mods(KeyCode::Char('X'), KeyModifiers::SHIFT),
+    );
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+#[test]
+fn conflict_action_on_empty_list_returns_none() {
+    let mut app = test_app();
+    open_conflict_resolution(&mut app, vec![], "/tmp/repo".into(), 0);
+
+    let action = handle_conflict_resolution_input(&mut app, key(KeyCode::Char('o')));
+
+    assert!(action.is_none());
+}
+
+#[test]
+fn conflict_returns_none_when_dialog_not_active() {
+    let mut app = test_app();
+    let action = handle_conflict_resolution_input(&mut app, key(KeyCode::Char('o')));
     assert!(action.is_none());
 }
