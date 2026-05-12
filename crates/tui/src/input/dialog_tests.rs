@@ -12,11 +12,12 @@ use piki_core::storage::AgentProfile;
 use super::dialog::{
     handle_about_input, handle_commit_message_input, handle_confirm_close_tab_input,
     handle_confirm_delete_input, handle_confirm_merge_input, handle_confirm_quit_input,
-    handle_conflict_resolution_input, handle_dashboard_input, handle_dispatch_card_move_input,
-    handle_edit_agent_input, handle_edit_agent_role_input, handle_edit_provider_input,
-    handle_edit_workspace_input, handle_git_log_input, handle_git_stash_input, handle_help_input,
-    handle_import_agents_input, handle_logs_input, handle_manage_agents_input,
-    handle_manage_providers_input, handle_new_tab_input, handle_workspace_info_input,
+    handle_conflict_resolution_input, handle_dashboard_input, handle_dispatch_agent_input,
+    handle_dispatch_card_move_input, handle_edit_agent_input, handle_edit_agent_role_input,
+    handle_edit_provider_input, handle_edit_workspace_input, handle_git_log_input,
+    handle_git_stash_input, handle_help_input, handle_import_agents_input, handle_logs_input,
+    handle_manage_agents_input, handle_manage_providers_input, handle_new_tab_input,
+    handle_workspace_info_input,
 };
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode};
@@ -2941,5 +2942,266 @@ fn edit_agent_role_pagedown_from_last_line_jumps_to_end_of_text() {
 fn edit_agent_role_returns_none_when_dialog_not_active() {
     let mut app = test_app();
     let action = handle_edit_agent_role_input(&mut app, key(KeyCode::Enter));
+    assert!(action.is_none());
+}
+
+// ── DispatchAgent ─────────────────────────────────────────────────────────
+//
+// Two-step dialog. Step 0 cycles `agent_idx` through `agents.len() +
+// dispatchable_providers.len()` entries (Left/Right/Tab). Enter on step 0
+// advances to step 1. Step 1 toggles `use_current_ws` via Left/Right/Tab,
+// Enter dispatches an Action::DispatchAgent, Esc returns to step 0.
+
+fn sample_dispatch_agents() -> Vec<(String, String, String)> {
+    vec![
+        ("alpha".to_string(), "Claude Code".to_string(), "role-a".to_string()),
+        ("beta".to_string(), "Gemini".to_string(), "role-b".to_string()),
+    ]
+}
+
+fn open_dispatch_agent(
+    app: &mut App,
+    agents: Vec<(String, String, String)>,
+    step: u8,
+    agent_idx: usize,
+    use_current_ws: bool,
+) {
+    app.mode = AppMode::DispatchAgent;
+    app.active_dialog = Some(DialogState::DispatchAgent {
+        source_ws: 0,
+        card_id: "CARD-7".to_string(),
+        card_title: "Ship feature".to_string(),
+        card_description: "Implement and test".to_string(),
+        card_priority: flow_core::Priority::High,
+        card_project: "piki".to_string(),
+        agent_idx,
+        agents,
+        additional_prompt: String::new(),
+        additional_prompt_cursor: 0,
+        step,
+        use_current_ws,
+    });
+}
+
+fn current_dispatch_state(app: &App) -> (u8, usize, bool, String) {
+    match app.active_dialog {
+        Some(DialogState::DispatchAgent {
+            step,
+            agent_idx,
+            use_current_ws,
+            ref additional_prompt,
+            ..
+        }) => (step, agent_idx, use_current_ws, additional_prompt.clone()),
+        _ => panic!("expected DispatchAgent dialog"),
+    }
+}
+
+#[test]
+fn dispatch_step0_right_cycles_forward_through_agents_then_providers() {
+    let (mut app, _tmp) = test_app_isolated();
+    let provider_count = app.dispatchable_provider_list().len();
+    let agents = sample_dispatch_agents();
+    let agent_count = agents.len();
+    let total = agent_count + provider_count;
+    open_dispatch_agent(&mut app, agents, 0, agent_count - 1, false);
+
+    handle_dispatch_agent_input(&mut app, key(KeyCode::Right));
+    // Crossed the agent/provider boundary
+    assert_eq!(current_dispatch_state(&app).1, agent_count);
+
+    // Wrap-around at the end
+    open_dispatch_agent(
+        &mut app,
+        sample_dispatch_agents(),
+        0,
+        total - 1,
+        false,
+    );
+    handle_dispatch_agent_input(&mut app, key(KeyCode::Right));
+    assert_eq!(current_dispatch_state(&app).1, 0);
+}
+
+#[test]
+fn dispatch_step0_tab_acts_as_right() {
+    let (mut app, _tmp) = test_app_isolated();
+    open_dispatch_agent(&mut app, sample_dispatch_agents(), 0, 0, false);
+
+    handle_dispatch_agent_input(&mut app, key(KeyCode::Tab));
+    assert_eq!(current_dispatch_state(&app).1, 1);
+}
+
+#[test]
+fn dispatch_step0_left_cycles_backward_with_wrap() {
+    let (mut app, _tmp) = test_app_isolated();
+    let provider_count = app.dispatchable_provider_list().len();
+    let agents = sample_dispatch_agents();
+    let total = agents.len() + provider_count;
+    open_dispatch_agent(&mut app, agents, 0, 0, false);
+
+    handle_dispatch_agent_input(&mut app, key(KeyCode::Left));
+    // Wraps to last (provider) entry
+    assert_eq!(current_dispatch_state(&app).1, total - 1);
+}
+
+#[test]
+fn dispatch_step0_typed_chars_append_to_additional_prompt() {
+    let (mut app, _tmp) = test_app_isolated();
+    open_dispatch_agent(&mut app, sample_dispatch_agents(), 0, 0, false);
+
+    for c in "hi!".chars() {
+        handle_dispatch_agent_input(&mut app, key(KeyCode::Char(c)));
+    }
+
+    let (_, _, _, prompt) = current_dispatch_state(&app);
+    assert_eq!(prompt, "hi!");
+}
+
+#[test]
+fn dispatch_step0_enter_advances_to_step1_without_action() {
+    let (mut app, _tmp) = test_app_isolated();
+    open_dispatch_agent(&mut app, sample_dispatch_agents(), 0, 0, false);
+
+    let action = handle_dispatch_agent_input(&mut app, key(KeyCode::Enter));
+
+    assert!(action.is_none());
+    assert_eq!(current_dispatch_state(&app).0, 1);
+}
+
+#[test]
+fn dispatch_step0_esc_dismisses() {
+    let (mut app, _tmp) = test_app_isolated();
+    open_dispatch_agent(&mut app, sample_dispatch_agents(), 0, 0, false);
+
+    let action = handle_dispatch_agent_input(&mut app, key(KeyCode::Esc));
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+#[test]
+fn dispatch_step1_left_right_tab_toggle_use_current_ws() {
+    let (mut app, _tmp) = test_app_isolated();
+    open_dispatch_agent(&mut app, sample_dispatch_agents(), 1, 0, false);
+
+    handle_dispatch_agent_input(&mut app, key(KeyCode::Right));
+    assert!(current_dispatch_state(&app).2);
+    handle_dispatch_agent_input(&mut app, key(KeyCode::Left));
+    assert!(!current_dispatch_state(&app).2);
+    handle_dispatch_agent_input(&mut app, key(KeyCode::Tab));
+    assert!(current_dispatch_state(&app).2);
+}
+
+#[test]
+fn dispatch_step1_enter_with_agent_dispatches_with_resolved_name_and_role() {
+    let (mut app, _tmp) = test_app_isolated();
+    let agents = sample_dispatch_agents();
+    // Select the second agent (idx=1: "beta", Gemini, role-b)
+    open_dispatch_agent(&mut app, agents, 1, 1, true);
+
+    let action = handle_dispatch_agent_input(&mut app, key(KeyCode::Enter));
+
+    match action {
+        Some(Action::DispatchAgent {
+            source_ws,
+            card_id,
+            card_title,
+            card_priority,
+            card_project,
+            provider,
+            agent_name,
+            agent_role,
+            use_current_ws,
+            ..
+        }) => {
+            assert_eq!(source_ws, 0);
+            assert_eq!(card_id, "CARD-7");
+            assert_eq!(card_title, "Ship feature");
+            assert_eq!(card_priority, flow_core::Priority::High);
+            assert_eq!(card_project, "piki");
+            assert_eq!(provider, AIProvider::Custom("Gemini".to_string()));
+            assert_eq!(agent_name, Some("beta".to_string()));
+            assert_eq!(agent_role, Some("role-b".to_string()));
+            assert!(use_current_ws);
+        }
+        other => panic!("expected DispatchAgent action, got {other:?}"),
+    }
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+#[test]
+fn dispatch_step1_enter_with_provider_only_dispatches_without_name_or_role() {
+    let (mut app, _tmp) = test_app_isolated();
+    let agents = sample_dispatch_agents();
+    let agent_count = agents.len();
+    let providers = app.dispatchable_provider_list();
+    let first_provider = providers[0].clone();
+    // Select the first provider entry (idx == agent_count)
+    open_dispatch_agent(&mut app, agents, 1, agent_count, false);
+
+    let action = handle_dispatch_agent_input(&mut app, key(KeyCode::Enter));
+
+    match action {
+        Some(Action::DispatchAgent {
+            provider,
+            agent_name,
+            agent_role,
+            use_current_ws,
+            ..
+        }) => {
+            assert_eq!(provider, first_provider);
+            assert_eq!(agent_name, None);
+            assert_eq!(agent_role, None);
+            assert!(!use_current_ws);
+        }
+        other => panic!("expected DispatchAgent, got {other:?}"),
+    }
+}
+
+#[test]
+fn dispatch_step1_esc_returns_to_step0() {
+    let (mut app, _tmp) = test_app_isolated();
+    open_dispatch_agent(&mut app, sample_dispatch_agents(), 1, 0, true);
+
+    let action = handle_dispatch_agent_input(&mut app, key(KeyCode::Esc));
+
+    assert!(action.is_none());
+    let (step, _, use_current_ws, _) = current_dispatch_state(&app);
+    assert_eq!(step, 0);
+    // use_current_ws is NOT reset when going back
+    assert!(use_current_ws);
+}
+
+#[test]
+fn dispatch_step0_with_no_entries_at_all_is_noop() {
+    let (mut app, _tmp) = test_app_isolated();
+    // Drain all providers so total = 0 when agents is also empty
+    let names: Vec<String> = app
+        .provider_manager
+        .all()
+        .iter()
+        .map(|p| p.name.clone())
+        .collect();
+    for name in &names {
+        app.provider_manager.remove(name);
+    }
+    assert_eq!(app.dispatchable_provider_list().len(), 0);
+    open_dispatch_agent(&mut app, vec![], 0, 0, false);
+
+    let action = handle_dispatch_agent_input(&mut app, key(KeyCode::Right));
+
+    assert!(action.is_none());
+    // Dialog still open
+    assert!(matches!(
+        app.active_dialog,
+        Some(DialogState::DispatchAgent { .. })
+    ));
+}
+
+#[test]
+fn dispatch_returns_none_when_dialog_not_active() {
+    let mut app = test_app();
+    let action = handle_dispatch_agent_input(&mut app, key(KeyCode::Enter));
     assert!(action.is_none());
 }
