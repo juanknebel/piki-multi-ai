@@ -17,6 +17,13 @@ pub struct GitRefreshPayload {
 }
 
 #[derive(Serialize, Clone)]
+pub struct FileChangedPayload {
+    pub workspace_idx: usize,
+    /// Paths relative to the workspace root that the watcher reported as changed.
+    pub paths: Vec<String>,
+}
+
+#[derive(Serialize, Clone)]
 pub struct SysinfoPayload {
     pub formatted: String,
 }
@@ -62,22 +69,49 @@ pub fn spawn_git_watcher(app_handle: AppHandle) {
 
             let state = app_handle.state::<Mutex<DesktopApp>>();
 
-            // Drain file watcher events — instant trigger for file edits
-            let watcher_triggered: Vec<(usize, PathBuf)> = {
+            // Drain file watcher events — instant trigger for file edits.
+            // Also collect the per-path changes so we can emit `file-changed` events
+            // for editor reload-on-external-change.
+            let (watcher_triggered, file_change_payloads): (Vec<(usize, PathBuf)>, Vec<FileChangedPayload>) = {
                 let mut app = state.lock();
-                app.workspaces
-                    .iter_mut()
-                    .enumerate()
-                    .filter_map(|(idx, ws)| {
-                        let watcher = ws.watcher.as_mut()?;
-                        if watcher.drain().is_empty() {
-                            None
-                        } else {
-                            Some((idx, ws.info.path.clone()))
+                let mut triggered = Vec::new();
+                let mut payloads = Vec::new();
+                for (idx, ws) in app.workspaces.iter_mut().enumerate() {
+                    let Some(watcher) = ws.watcher.as_mut() else { continue };
+                    let events = watcher.drain();
+                    if events.is_empty() {
+                        continue;
+                    }
+                    triggered.push((idx, ws.info.path.clone()));
+
+                    // Collect changed paths relative to the workspace, deduplicated.
+                    use std::collections::BTreeSet;
+                    let mut rel_paths = BTreeSet::new();
+                    for ev in events {
+                        for abs in ev.paths {
+                            let rel = abs
+                                .strip_prefix(&ws.info.path)
+                                .unwrap_or(&abs)
+                                .to_string_lossy()
+                                .to_string();
+                            if !rel.is_empty() {
+                                rel_paths.insert(rel);
+                            }
                         }
-                    })
-                    .collect()
+                    }
+                    if !rel_paths.is_empty() {
+                        payloads.push(FileChangedPayload {
+                            workspace_idx: idx,
+                            paths: rel_paths.into_iter().collect(),
+                        });
+                    }
+                }
+                (triggered, payloads)
             };
+
+            for payload in file_change_payloads {
+                let _ = app_handle.emit("file-changed", payload);
+            }
 
             // Every 120th tick (~60s): git fetch for all workspaces
             if tick.is_multiple_of(120) {
