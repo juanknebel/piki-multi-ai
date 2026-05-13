@@ -78,15 +78,11 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
             KeyCode::Right => {
                 edit.move_cursor_right();
             }
-            KeyCode::Home => {
-                if edit.focus != flow_tui::app::EditFocus::Priority {
-                    edit.cursor_pos = 0;
-                }
+            KeyCode::Home if edit.focus != flow_tui::app::EditFocus::Priority => {
+                edit.cursor_pos = 0;
             }
-            KeyCode::End => {
-                if edit.focus != flow_tui::app::EditFocus::Priority {
-                    edit.cursor_pos = edit.current_text().len();
-                }
+            KeyCode::End if edit.focus != flow_tui::app::EditFocus::Priority => {
+                edit.cursor_pos = edit.current_text().len();
             }
             KeyCode::Delete => {
                 edit.delete_curr();
