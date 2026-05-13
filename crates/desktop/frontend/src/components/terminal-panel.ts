@@ -214,6 +214,14 @@ export function unmountTerminal(tabId: string) {
 
 function fitTerminal(instance: TerminalInstance) {
   if (!instance.opened) return;
+  // Skip when the element is hidden or detached — its clientWidth is 0 so
+  // `fitAddon.fit()` would shrink the PTY to its minimum cols (~2). The
+  // ResizeObserver fires on display:none transitions, so without this guard
+  // every tab switch resizes the inactive PTY down to nothing, and when the
+  // tab is shown again Claude's already-rendered output wraps at ~2 cols.
+  if (instance.element.offsetWidth === 0 || instance.element.offsetHeight === 0) {
+    return;
+  }
   try {
     instance.fitAddon.fit();
     const dims = instance.fitAddon.proposeDimensions();
