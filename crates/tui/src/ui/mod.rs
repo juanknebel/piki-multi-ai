@@ -161,6 +161,9 @@ mod tests {
     fn test_snapshot_help_overlay() {
         let mut terminal = test_terminal(80, 40);
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        // Force Linux so the snapshot is stable across CI runners. On macOS
+        // the footer renders `cmd-*` instead of `ctrl-*`.
+        app.config.platform = crate::config::Platform::Linux;
         app.active_dialog = Some(DialogState::Help { scroll: 0 });
         terminal
             .draw(|frame| {
@@ -205,7 +208,12 @@ mod tests {
     #[test]
     fn test_snapshot_new_tab_dialog_agents_menu() {
         let mut terminal = test_terminal(80, 24);
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        // Use an isolated `DataPaths` so the snapshot doesn't depend on the
+        // user's real `providers.toml` (which may have been customized).
+        // The default seed for a fresh providers.toml is Claude Code + Gemini.
+        let tmp = tempfile::tempdir().expect("create temp dir");
+        let paths = piki_core::paths::DataPaths::new(tmp.path().to_path_buf());
+        let mut app = App::new(test_storage(), &paths);
         app.active_dialog = Some(DialogState::NewTab {
             menu: NewTabMenu::Agents { selected: 0 },
         });
@@ -224,6 +232,8 @@ mod tests {
     fn test_snapshot_empty_app_layout() {
         let mut terminal = test_terminal(80, 24);
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        // Force Linux so the snapshot is stable across CI runners.
+        app.config.platform = crate::config::Platform::Linux;
         terminal
             .draw(|frame| {
                 super::layout::render(frame, &mut app);
