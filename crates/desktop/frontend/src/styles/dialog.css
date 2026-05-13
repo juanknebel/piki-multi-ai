@@ -147,6 +147,47 @@
   color: var(--text-primary);
 }
 
+.path-picker-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.path-picker-row > .dialog-input,
+.path-picker-row > input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.path-picker-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  flex: 0 0 auto;
+  padding: 0;
+  background: var(--bg-input);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
+}
+
+.path-picker-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+}
+
+.path-picker-btn:focus-visible {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px var(--accent-muted);
+  outline: none;
+}
+
 /* ── Custom dropdown (replaces native select) ───── */
 .dialog-dropdown {
   position: relative;

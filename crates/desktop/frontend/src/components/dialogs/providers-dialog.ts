@@ -2,6 +2,7 @@ import { listProviders, saveProvider, deleteProvider, ProviderDetail } from "../
 import { toast } from "../toast";
 import { invalidateProviderCache } from "../menu-bar";
 import { createDropdown, type DropdownHandle } from "../dropdown";
+import { attachPathPicker } from "../path-picker";
 
 export async function showProvidersDialog() {
   document.querySelector(".providers-backdrop")?.remove();
@@ -189,6 +190,12 @@ export async function showProvidersDialog() {
         </div>
       </div>
     `;
+
+    // Native pickers for command (binary) and agent dir
+    const cmdInput = body.querySelector<HTMLInputElement>(".f-cmd");
+    if (cmdInput) attachPathPicker(cmdInput, { directory: false, title: "Select provider binary" });
+    const agentDirInput = body.querySelector<HTMLInputElement>(".f-agentdir");
+    if (agentDirInput) attachPathPicker(agentDirInput, { title: "Select agent directory" });
 
     // Custom dropdown for prompt format (native <select> ignores dark theme styling)
     const formatDropdown: DropdownHandle = createDropdown(

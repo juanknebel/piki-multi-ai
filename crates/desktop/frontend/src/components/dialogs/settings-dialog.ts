@@ -9,6 +9,7 @@ import {
   setShellSetting,
 } from "../../shortcuts";
 import { toast } from "../toast";
+import { attachPathPicker } from "../path-picker";
 
 export async function showSettingsDialog() {
   document.querySelector(".settings-backdrop")?.remove();
@@ -52,6 +53,7 @@ export async function showSettingsDialog() {
   `;
 
   const shellInput = shellSection.querySelector<HTMLInputElement>(".settings-shell-input")!;
+  attachPathPicker(shellInput, { directory: false, title: "Select shell binary" });
   let shellTimer: ReturnType<typeof setTimeout> | null = null;
   shellInput.addEventListener("input", () => {
     if (shellTimer) clearTimeout(shellTimer);

@@ -2,6 +2,7 @@ import { appState } from "../../state";
 import * as ipc from "../../ipc";
 import { toast } from "../toast";
 import { createDropdown } from "../dropdown";
+import { attachPathPicker } from "../path-picker";
 import type { WorkspaceInfo } from "../../types";
 
 type Mode = "create" | "edit" | "clone";
@@ -108,6 +109,12 @@ export function showWorkspaceDialog(opts: DialogOptions) {
   `;
 
   document.body.appendChild(backdrop);
+
+  // Attach native folder pickers to path inputs
+  const dirInput = backdrop.querySelector<HTMLInputElement>("#ws-dir");
+  if (dirInput) attachPathPicker(dirInput, { title: "Select workspace directory" });
+  const kanbanInput = backdrop.querySelector<HTMLInputElement>("#ws-kanban");
+  if (kanbanInput) attachPathPicker(kanbanInput, { title: "Select kanban directory" });
 
   // Mount type dropdown if visible
   let typeDropdown: ReturnType<typeof createDropdown> | null = null;
