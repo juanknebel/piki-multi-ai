@@ -321,13 +321,10 @@ class AppState extends EventTarget {
     this._schedulePaneSave();
   }
 
-  splitActivePane(dir: SplitDir, withTabId?: string): PaneId | null {
+  splitActivePane(dir: SplitDir): PaneId | null {
     const ws = this.activeWs;
     if (!ws) return null;
-    const tabId = withTabId
-      ?? (findPane(ws.paneTree, ws.activePaneId) as { activeTabId?: string } | null)?.activeTabId
-      ?? undefined;
-    const { root, newPaneId } = splitPaneTree(ws.paneTree, ws.activePaneId, dir, tabId);
+    const { root, newPaneId } = splitPaneTree(ws.paneTree, ws.activePaneId, dir);
     if (root === ws.paneTree) return null;
     ws.paneTree = root;
     ws.activePaneId = newPaneId;
@@ -337,17 +334,32 @@ class AppState extends EventTarget {
     return newPaneId;
   }
 
+  /**
+   * Split `paneId` and optionally move `withTabId` into the new (empty) pane.
+   * The new pane is always created on the right/bottom side; the move (when
+   * requested) is applied as a separate step so the visual order is consistent
+   * whether or not a tab is moved. The move is skipped when it would empty
+   * the source pane — otherwise `removeTab` collapses the split and the
+   * user sees no visible change.
+   */
   splitPane(paneId: PaneId, dir: SplitDir, withTabId?: string): PaneId | null {
     const ws = this.activeWs;
     if (!ws) return null;
-    const { root, newPaneId } = splitPaneTree(ws.paneTree, paneId, dir, withTabId);
-    if (root === ws.paneTree) return null;
-    ws.paneTree = root;
-    ws.activePaneId = newPaneId;
+    const split = splitPaneTree(ws.paneTree, paneId, dir);
+    if (split.root === ws.paneTree) return null;
+    let tree = split.root;
+    if (withTabId) {
+      const source = findTabPane(tree, withTabId);
+      if (source && source.tabIds.length > 1) {
+        tree = moveTabBetweenPanes(tree, withTabId, split.newPaneId);
+      }
+    }
+    ws.paneTree = tree;
+    ws.activePaneId = split.newPaneId;
     this.emit("pane-tree-changed");
     this.emit("active-pane-changed");
     this._schedulePaneSave();
-    return newPaneId;
+    return split.newPaneId;
   }
 
   closePane(paneId: PaneId) {

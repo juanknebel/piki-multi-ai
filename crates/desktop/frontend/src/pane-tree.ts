@@ -72,34 +72,24 @@ export function splitPane(
   root: PaneNode,
   paneId: PaneId,
   dir: SplitDir,
-  withTabId?: string,
 ): { root: PaneNode; newPaneId: PaneId } {
   const target = findPane(root, paneId);
   if (!target || target.kind !== "leaf") {
     return { root, newPaneId: paneId };
   }
 
-  // Build the new leaf. If withTabId is provided, move it from the source.
-  const sourceTabIds = withTabId
-    ? target.tabIds.filter((t) => t !== withTabId)
-    : [...target.tabIds];
-  const sourceActive = target.activeTabId === withTabId
-    ? (sourceTabIds[0] ?? null)
-    : target.activeTabId;
-  const updatedSource: LeafNode = {
-    ...target,
-    tabIds: sourceTabIds,
-    activeTabId: sourceActive,
-  };
-  const newPane = newLeaf(withTabId ? [withTabId] : [], withTabId ?? null);
-
+  // Always: existing tabs stay in the source pane (left/top); a fresh empty
+  // pane appears on the new side (right/bottom). Callers that want to also
+  // move a specific tab into the new pane should follow up with
+  // `moveTabToPane(newPaneId, tabId)`.
+  const newPane = newLeaf([], null);
   const orientation: SplitNode["orientation"] = dir === "right" ? "horiz" : "vert";
   const split: SplitNode = {
     kind: "split",
     id: genId(),
     orientation,
     ratio: 0.5,
-    first: updatedSource,
+    first: target,
     second: newPane,
   };
 
