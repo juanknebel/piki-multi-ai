@@ -18,6 +18,58 @@ pub struct PrInfo {
     pub base_ref_name: String,
     pub additions: u64,
     pub deletions: u64,
+    #[serde(default)]
+    pub review_requests: Vec<ReviewRequest>,
+    #[serde(default)]
+    pub latest_reviews: Vec<PrReviewSummary>,
+}
+
+/// A reviewer requested on the PR. For users `login` is set; for teams `name`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewRequest {
+    #[serde(default)]
+    pub login: String,
+    /// For team requests `gh` exposes `name`/`slug` instead of `login`.
+    #[serde(default)]
+    pub name: String,
+    /// "User" or "Team"
+    #[serde(default, rename = "__typename")]
+    pub typename: String,
+}
+
+/// Summary of a previously-submitted review on the PR.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrReviewSummary {
+    #[serde(default)]
+    pub author: ReviewAuthor,
+    /// APPROVED / CHANGES_REQUESTED / COMMENTED / DISMISSED / PENDING
+    pub state: String,
+    #[serde(default)]
+    pub body: String,
+    #[serde(default)]
+    pub submitted_at: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReviewAuthor {
+    #[serde(default)]
+    pub login: String,
+}
+
+/// An existing review comment on the PR (returned by GitHub REST API).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExistingComment {
+    pub id: u64,
+    pub path: String,
+    pub line: Option<u32>,
+    pub original_line: Option<u32>,
+    pub side: String,
+    pub body: String,
+    pub author: String,
+    pub created_at: String,
+    pub in_reply_to_id: Option<u64>,
 }
 
 /// A file changed in the PR
@@ -201,7 +253,7 @@ pub async fn get_pr_for_branch(worktree_path: &Path) -> anyhow::Result<Option<Pr
             "pr",
             "view",
             "--json",
-            "number,title,body,state,reviewDecision,url,headRefName,baseRefName,additions,deletions",
+            "number,title,body,state,reviewDecision,url,headRefName,baseRefName,additions,deletions,reviewRequests,latestReviews",
         ])
         .current_dir(worktree_path)
         .output()
@@ -380,6 +432,125 @@ pub async fn submit_review_with_comments(
     tracing::info!("gh: review submitted successfully");
     tracing::debug!(response = %stdout.trim(), "gh: review response");
     Ok(stdout.trim().to_string())
+}
+
+/// Fetch existing review comments on the PR (`gh api pulls/N/comments`).
+///
+/// Outdated comments (whose anchor line no longer exists) keep `original_line`
+/// but have `line == None`; callers may skip these.
+pub async fn get_pr_review_comments(
+    worktree_path: &Path,
+    pr_number: u64,
+) -> anyhow::Result<Vec<ExistingComment>> {
+    #[derive(Deserialize)]
+    struct ApiUser {
+        #[serde(default)]
+        login: String,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "snake_case")]
+    struct ApiComment {
+        id: u64,
+        path: String,
+        #[serde(default)]
+        line: Option<u32>,
+        #[serde(default)]
+        original_line: Option<u32>,
+        #[serde(default)]
+        side: Option<String>,
+        body: String,
+        #[serde(default)]
+        user: Option<ApiUser>,
+        #[serde(default)]
+        created_at: String,
+        #[serde(default)]
+        in_reply_to_id: Option<u64>,
+    }
+
+    let nwo = get_repo_nwo(worktree_path).await?;
+    let endpoint = format!("repos/{nwo}/pulls/{pr_number}/comments");
+    tracing::info!(endpoint = %endpoint, "gh: fetching PR review comments");
+
+    let output = crate::shell_env::command("gh")
+        .args(["api", "--paginate", &endpoint])
+        .current_dir(worktree_path)
+        .output()
+        .await?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        tracing::error!(stderr = %stderr.trim(), "gh api pulls/N/comments failed");
+        anyhow::bail!("gh api pulls/{}/comments failed: {}", pr_number, stderr.trim());
+    }
+
+    // `--paginate` concatenates JSON arrays as separate documents. Read them all.
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut comments = Vec::new();
+    let mut de = serde_json::Deserializer::from_str(&stdout).into_iter::<Vec<ApiComment>>();
+    for page in &mut de {
+        let page = page?;
+        for c in page {
+            comments.push(ExistingComment {
+                id: c.id,
+                path: c.path,
+                line: c.line,
+                original_line: c.original_line,
+                side: c.side.unwrap_or_else(|| "RIGHT".to_string()),
+                body: c.body,
+                author: c.user.map(|u| u.login).unwrap_or_default(),
+                created_at: c.created_at,
+                in_reply_to_id: c.in_reply_to_id,
+            });
+        }
+    }
+
+    tracing::info!(count = comments.len(), "gh: PR review comments loaded");
+    Ok(comments)
+}
+
+/// Submit a reply to an existing review comment on the PR.
+///
+/// GitHub's `/pulls/N/reviews` endpoint does not accept `in_reply_to` —
+/// replies must be POSTed individually to `/pulls/N/comments`.
+pub async fn submit_comment_reply(
+    worktree_path: &Path,
+    pr_number: u64,
+    in_reply_to_id: u64,
+    body: &str,
+) -> anyhow::Result<()> {
+    let nwo = get_repo_nwo(worktree_path).await?;
+    let endpoint = format!("repos/{nwo}/pulls/{pr_number}/comments/{in_reply_to_id}/replies");
+
+    tracing::info!(endpoint = %endpoint, body_len = body.len(), "gh: posting reply to review comment");
+
+    let payload = serde_json::json!({ "body": body });
+    let payload_str = serde_json::to_string(&payload)?;
+
+    let worktree_owned = worktree_path.to_path_buf();
+    let output = tokio::task::spawn_blocking(move || -> anyhow::Result<std::process::Output> {
+        let mut child = crate::shell_env::sync_command("gh")
+            .args(["api", &endpoint, "--method", "POST", "--input", "-"])
+            .current_dir(&worktree_owned)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()?;
+        if let Some(mut stdin) = child.stdin.take() {
+            use std::io::Write;
+            stdin.write_all(payload_str.as_bytes())?;
+        }
+        Ok(child.wait_with_output()?)
+    })
+    .await??;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        tracing::error!(stderr = %stderr.trim(), "gh api reply failed");
+        anyhow::bail!("gh api reply failed: {}", stderr.trim());
+    }
+
+    Ok(())
 }
 
 /// Submit a review on the current PR (no inline comments).

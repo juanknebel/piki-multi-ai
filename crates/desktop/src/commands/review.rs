@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use piki_core::github::{
-    self, InlineComment, PrFile, PrInfo, ReviewVerdict,
+    self, ExistingComment, InlineComment, PrFile, PrInfo, ReviewVerdict,
 };
 
 use crate::state::DesktopApp;
@@ -91,6 +91,32 @@ pub struct InlineCommentPayload {
     pub line: u32,
     pub side: String,
     pub body: String,
+}
+
+#[tauri::command]
+pub async fn get_pr_review_comments(
+    state: State<'_, Mutex<DesktopApp>>,
+    workspace_idx: usize,
+    pr_number: u64,
+) -> Result<Vec<ExistingComment>, String> {
+    let ws_path = get_ws_path(&state, workspace_idx)?;
+    github::get_pr_review_comments(&ws_path, pr_number)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn submit_review_reply(
+    state: State<'_, Mutex<DesktopApp>>,
+    workspace_idx: usize,
+    pr_number: u64,
+    in_reply_to_id: u64,
+    body: String,
+) -> Result<(), String> {
+    let ws_path = get_ws_path(&state, workspace_idx)?;
+    github::submit_comment_reply(&ws_path, pr_number, in_reply_to_id, &body)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

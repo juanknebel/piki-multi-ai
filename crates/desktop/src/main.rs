@@ -230,6 +230,8 @@ fn main() {
             commands::review::get_pr_file_diff,
             commands::review::get_pr_file_side_by_side_diff,
             commands::review::submit_pr_review,
+            commands::review::get_pr_review_comments,
+            commands::review::submit_review_reply,
             commands::markdown::read_markdown_file,
             commands::system::get_sysinfo,
             commands::system::get_sysinfo_detailed,
