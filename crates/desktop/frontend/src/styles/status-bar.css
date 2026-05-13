@@ -65,3 +65,9 @@
 .status-item.error {
   color: var(--git-deleted);
 }
+
+.status-item.status-cwd {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: 11px;
+}

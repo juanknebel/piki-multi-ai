@@ -1,3 +1,3 @@
 pub mod session;
 
-pub use session::PtySession;
+pub use session::{PtySession, ShellSession};

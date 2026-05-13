@@ -245,12 +245,11 @@ pub struct Tab {
     pub term_scroll: usize,
     /// Last byte count from PTY for auto-scroll detection
     pub last_bytes_processed: u64,
-    /// Wall-clock of the last observed PTY output (None before first byte).
-    /// Drives idle detection — see `event_loop` tick handler.
-    pub last_output_time: Option<Instant>,
-    /// True once an idle notification has been emitted for the current idle
-    /// period. Reset on the next observed output.
-    pub idle_notified: bool,
+    /// Idle watcher for provider tabs. `Some` only for `AIProvider::Custom(_)`
+    /// tabs (built-in tabs are interactive and never "idle"). The TUI ticks
+    /// this every 50 ms and surfaces a notification + sidebar badge when it
+    /// fires.
+    pub idle_watcher: Option<piki_core::idle_watcher::IdleWatcher>,
     /// Markdown content (when this tab displays a markdown file instead of a PTY)
     pub markdown_content: Option<String>,
     /// Label for markdown tabs (filename)
@@ -343,6 +342,8 @@ impl Workspace {
 
     /// Add a new tab and return its index
     pub fn add_tab(&mut self, provider: AIProvider, closable: bool) -> usize {
+        let idle_watcher = matches!(provider, AIProvider::Custom(_))
+            .then(piki_core::idle_watcher::IdleWatcher::default_for_provider);
         let tab = Tab {
             id: self.next_tab_id,
             provider,
@@ -351,8 +352,7 @@ impl Workspace {
             closable,
             term_scroll: 0,
             last_bytes_processed: 0,
-            last_output_time: None,
-            idle_notified: false,
+            idle_watcher,
             markdown_content: None,
             markdown_label: None,
             markdown_scroll: 0,
@@ -395,8 +395,7 @@ impl Workspace {
             closable: true,
             term_scroll: 0,
             last_bytes_processed: 0,
-            last_output_time: None,
-            idle_notified: false,
+            idle_watcher: None,
             markdown_content: Some(content),
             markdown_label: Some(label),
             markdown_scroll: 0,
@@ -1037,7 +1036,13 @@ impl App {
             self.workspaces[index].dirty = true;
             self.workspaces[index].last_refresh = None;
             // User acknowledged any pending idle notifications by visiting.
+            // Reset each watcher so the next idle period can re-fire.
             self.workspaces[index].has_idle_notification = false;
+            for tab in &mut self.workspaces[index].tabs {
+                if let Some(ref mut watcher) = tab.idle_watcher {
+                    watcher.reset();
+                }
+            }
             if let Some(tab) = self.workspaces[index].current_tab_mut() {
                 tab.term_scroll = 0;
             }

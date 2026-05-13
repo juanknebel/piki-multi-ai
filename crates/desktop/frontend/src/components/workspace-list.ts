@@ -87,10 +87,15 @@ export function renderWorkspaceList(container: HTMLElement) {
           const ws = workspaces[idx];
           const statusClass = getStatusClass(ws.status);
 
+          const attentionDot = ws.needsAttention
+            ? '<span class="workspace-attention" title="Needs attention">●</span>'
+            : "";
+
           item.innerHTML = `
             <span class="workspace-badge">${badge <= 9 ? badge : ""}</span>
             ${idx === activeIdx ? '<span class="workspace-active-marker"></span>' : ""}
             <span class="workspace-name">${escapeHtml(info.name)}</span>
+            ${attentionDot}
             <span class="workspace-actions">
               <button class="ws-action-btn" data-action="agents" title="Manage Agents">⚙</button>
               <button class="ws-action-btn" data-action="info" title="Info">i</button>
@@ -143,6 +148,7 @@ export function renderWorkspaceList(container: HTMLElement) {
 
   appState.on("workspaces-changed", render);
   appState.on("active-workspace-changed", render);
+  appState.on("workspace-attention-changed", render);
   render();
 }
 

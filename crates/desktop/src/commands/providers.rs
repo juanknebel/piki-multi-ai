@@ -72,6 +72,8 @@ pub async fn save_provider(
         prompt_format,
         dispatchable: provider.dispatchable,
         agent_dir: provider.agent_dir.filter(|s| !s.is_empty()),
+        idle_threshold_secs: None,
+        idle_notify: true,
     };
     let mut app = state.lock();
     app.provider_manager.upsert(config);

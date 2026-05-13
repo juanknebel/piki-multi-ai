@@ -46,7 +46,9 @@ export type StateEvent =
   | "sysinfo-changed"
   | "view-changed"
   | "pane-tree-changed"
-  | "active-pane-changed";
+  | "active-pane-changed"
+  | "tab-shell-state-changed"
+  | "workspace-attention-changed";
 
 interface WorkspaceState {
   info: WorkspaceInfo;
@@ -57,6 +59,17 @@ interface WorkspaceState {
   activeTab: number;
   paneTree: PaneNode;
   activePaneId: PaneId;
+  /** True when at least one tab in this workspace has fired a `pty-attention`
+   *  event the user hasn't acknowledged. Cleared on `setActiveWorkspace`. */
+  needsAttention: boolean;
+}
+
+/** Per-tab state derived from `pty-shell-event`s. Keyed by tab id. */
+export interface TabShellState {
+  cwd?: string;
+  /** Exit code of the last command finished by this shell tab. `undefined`
+   *  before the first command completes. */
+  lastExitCode?: number;
 }
 
 interface SavedPaneTreeEntry {
@@ -74,6 +87,7 @@ class AppState extends EventTarget {
   private _savedPaneTrees: Record<string, SavedPaneTreeEntry> = {};
   private _paneTreesLoaded = false;
   private _paneSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  private _tabShellStates = new Map<string, TabShellState>();
 
   get workspaces(): readonly WorkspaceState[] {
     return this._workspaces;
@@ -130,6 +144,7 @@ class AppState extends EventTarget {
         activeTab: 0,
         paneTree: root,
         activePaneId: root.id,
+        needsAttention: false,
       };
     });
     this.emit("workspaces-changed");
@@ -148,6 +163,12 @@ class AppState extends EventTarget {
       const restored = this._hydratePaneTree(ws);
       ws.paneTree = restored.tree;
       ws.activePaneId = restored.activePaneId;
+    }
+    // Visiting a workspace acknowledges any pending attention badge.
+    const ws = this._workspaces[index];
+    if (ws?.needsAttention) {
+      ws.needsAttention = false;
+      this.emit("workspace-attention-changed");
     }
     this.emit("active-workspace-changed");
     this.emit("files-changed");
@@ -266,8 +287,53 @@ class AppState extends EventTarget {
       activeTab: 0,
       paneTree: root,
       activePaneId: root.id,
+      needsAttention: false,
     });
     this.emit("workspaces-changed");
+  }
+
+  // ── Shell integration & attention ─────────────────
+
+  /** Per-tab shell state (cwd + last exit code). `undefined` until the tab
+   *  emits its first OSC 7 / OSC 133;D. */
+  getTabShellState(tabId: string): TabShellState | undefined {
+    return this._tabShellStates.get(tabId);
+  }
+
+  /** Apply a `pty-shell-event` to per-tab state. Emits
+   *  `tab-shell-state-changed` on every meaningful update so consumers
+   *  (status bar, tab badge) re-render. */
+  applyShellEvent(event: { tab_id: string; kind: string; exit_code?: number; cwd?: string }) {
+    const existing = this._tabShellStates.get(event.tab_id) ?? {};
+    let next: TabShellState = existing;
+    if (event.kind === "cwd-changed" && event.cwd) {
+      next = { ...existing, cwd: event.cwd };
+    } else if (event.kind === "command-end") {
+      next = { ...existing, lastExitCode: event.exit_code ?? undefined };
+    } else {
+      return; // prompt-start / command-input/output-start: no UI-visible change
+    }
+    this._tabShellStates.set(event.tab_id, next);
+    this.emit("tab-shell-state-changed");
+  }
+
+  /** Mark a workspace as needing user attention (sidebar badge). No-op if
+   *  it's already the active workspace — the user is already looking. */
+  markWorkspaceAttention(workspaceIdx: number) {
+    if (workspaceIdx === this._activeWorkspace) return;
+    const ws = this._workspaces[workspaceIdx];
+    if (!ws || ws.needsAttention) return;
+    ws.needsAttention = true;
+    this.emit("workspace-attention-changed");
+  }
+
+  /** Tab id → workspace index, useful for routing per-tab events back to a
+   *  workspace badge. Returns -1 if not found. */
+  workspaceIndexForTab(tabId: string): number {
+    for (let i = 0; i < this._workspaces.length; i++) {
+      if (this._workspaces[i].tabs.some((t) => t.id === tabId)) return i;
+    }
+    return -1;
   }
 
   removeWorkspace(index: number) {

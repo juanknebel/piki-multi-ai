@@ -28,11 +28,90 @@ pub struct SysinfoPayload {
     pub formatted: String,
 }
 
+/// Tauri event payload emitted when a tab needs the user's attention.
+/// Sources today:
+/// - `provider-idle`: a provider tab's PTY went silent past its threshold.
+/// - `shell-command-end`: a shell tab finished a command (forwarded from the
+///   per-PTY OSC parser; carries `exit_code`).
+#[derive(Serialize, Clone)]
+pub struct PtyAttentionPayload {
+    pub workspace_idx: usize,
+    pub tab_id: String,
+    pub source: &'static str,
+}
+
 #[allow(dead_code)]
 #[derive(Serialize, Clone)]
 pub struct ToastPayload {
     pub message: String,
     pub level: String,
+}
+
+/// Background loop polling every 250 ms over all provider tabs, ticking each
+/// tab's `IdleWatcher` against its current PTY byte count. When a watcher
+/// fires, emits a `pty-attention` Tauri event for the frontend (sidebar
+/// badge) and spawns a `notify-rust` notification when the workspace isn't
+/// the active one.
+pub fn spawn_idle_watcher_loop(app_handle: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_millis(250));
+        loop {
+            interval.tick().await;
+            let Some(state) = app_handle.try_state::<Mutex<DesktopApp>>() else {
+                continue;
+            };
+            let mut events: Vec<PtyAttentionPayload> = Vec::new();
+            let mut notifications: Vec<(String, String)> = Vec::new();
+            {
+                let mut app = state.lock();
+                let active_idx = app.active_workspace;
+                for (ws_idx, ws) in app.workspaces.iter_mut().enumerate() {
+                    let is_active = ws_idx == active_idx;
+                    let ws_name = ws.info.name.clone();
+                    for tab in &mut ws.tabs {
+                        let Some(ref pty) = tab.pty else { continue };
+                        let Some(ref mut watcher) = tab.idle_watcher else {
+                            continue;
+                        };
+                        if !pty.peek_alive() {
+                            continue;
+                        }
+                        if watcher.poll(pty.bytes_processed()).is_some() {
+                            events.push(PtyAttentionPayload {
+                                workspace_idx: ws_idx,
+                                tab_id: tab.id.clone(),
+                                source: "provider-idle",
+                            });
+                            if !is_active {
+                                notifications.push((ws_name.clone(), tab.provider.label().to_string()));
+                            }
+                        }
+                    }
+                }
+            }
+            for ev in events {
+                let _ = app_handle.emit("pty-attention", ev);
+            }
+            for (ws_name, provider_label) in notifications {
+                spawn_idle_notification(&ws_name, &provider_label);
+            }
+        }
+    });
+}
+
+fn spawn_idle_notification(workspace_name: &str, provider_label: &str) {
+    let summary = format!("Agent idle: {provider_label}");
+    let body = format!("{workspace_name} — {provider_label} stopped producing output");
+    std::thread::spawn(move || {
+        if let Err(e) = notify_rust::Notification::new()
+            .summary(&summary)
+            .body(&body)
+            .appname("piki-desktop")
+            .show()
+        {
+            tracing::warn!("PTY idle notification failed: {e}");
+        }
+    });
 }
 
 /// Spawn a background task that emits sysinfo updates every 3 seconds.

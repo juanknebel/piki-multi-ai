@@ -71,6 +71,19 @@
   opacity: 1;
 }
 
+.tab-exit-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  margin-right: 2px;
+}
+.tab-exit-badge.ok {
+  color: var(--git-added);
+}
+.tab-exit-badge.fail {
+  color: var(--git-deleted);
+}
+
 .tab-label {
   overflow: hidden;
   text-overflow: ellipsis;

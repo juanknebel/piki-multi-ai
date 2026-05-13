@@ -54,6 +54,13 @@ export function renderStatusBar(container: HTMLElement) {
     if (ws && ws.tabs.length > 0) {
       const tab = ws.tabs[ws.activeTab];
       if (tab) {
+        // Shell tabs with shell-integration: show cwd before the tab label.
+        if (tab.provider === "Shell") {
+          const shellState = appState.getTabShellState(tab.id);
+          if (shellState?.cwd) {
+            addItem(container, `📁 ${formatHomeRelative(shellState.cwd)}`, "status-cwd");
+          }
+        }
         const label = getProviderLabel(tab.provider);
         const alive = tab.alive ? "" : " (exited)";
         addItem(container, `${label}${alive}`);
@@ -81,7 +88,17 @@ export function renderStatusBar(container: HTMLElement) {
   appState.on("tabs-changed", render);
   appState.on("active-tab-changed", render);
   appState.on("sysinfo-changed", render);
+  appState.on("tab-shell-state-changed", render);
   render();
+}
+
+/** Replace a leading `$HOME` segment with `~` so the bar stays compact. */
+function formatHomeRelative(path: string): string {
+  // No HOME env on the frontend; we accept whatever the backend sent verbatim.
+  // Keep last 3 segments so very deep paths don't dominate the status bar.
+  const parts = path.split("/").filter(Boolean);
+  if (parts.length <= 3) return path;
+  return ".../" + parts.slice(-3).join("/");
 }
 
 function addItem(container: HTMLElement, text: string, ...classes: string[]) {

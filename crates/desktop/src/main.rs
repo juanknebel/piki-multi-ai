@@ -169,7 +169,10 @@ fn main() {
             events::spawn_sysinfo_emitter(app_handle.clone(), sysinfo_for_emitter);
 
             // Start file watcher poller for git auto-refresh
-            events::spawn_git_watcher(app_handle);
+            events::spawn_git_watcher(app_handle.clone());
+
+            // Background idle-watcher loop for provider tabs.
+            events::spawn_idle_watcher_loop(app_handle);
 
             app.manage(Mutex::new(desktop_app));
             app.manage(lsp_manager_arc);

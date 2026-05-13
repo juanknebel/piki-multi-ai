@@ -1168,7 +1168,7 @@ pub(crate) async fn execute_action(
                     ws.kanban_provider = Some(kanban_provider);
                 }
 
-                let idx = spawn_tab(ws, &provider, app.pty_rows, app.pty_cols, None, Some(&app.provider_manager)).await;
+                let idx = spawn_tab(ws, &provider, app.pty_rows, app.pty_cols, None, Some(&app.provider_manager), &app.paths).await;
                 ws.active_tab = idx;
                 app.status_message = Some(format!("Opened {} tab", provider.label()));
             }
@@ -2058,7 +2058,7 @@ pub(crate) async fn execute_action(
                 // Spawn tab in current workspace
                 let ws = &mut app.workspaces[source_ws];
                 let idx =
-                    spawn_tab(ws, &provider, app.pty_rows, app.pty_cols, Some(&task_prompt), Some(&app.provider_manager)).await;
+                    spawn_tab(ws, &provider, app.pty_rows, app.pty_cols, Some(&task_prompt), Some(&app.provider_manager), &app.paths).await;
                 ws.active_tab = idx;
 
                 app.set_toast(
@@ -2161,6 +2161,7 @@ pub(crate) async fn execute_action(
                             app.pty_cols,
                             Some(&task_prompt),
                             Some(&app.provider_manager),
+                            &app.paths,
                         )
                         .await;
                         ws.active_tab = idx;

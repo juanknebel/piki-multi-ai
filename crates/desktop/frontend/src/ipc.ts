@@ -687,6 +687,22 @@ export function onSysinfoUpdate(
   );
 }
 
+export function onPtyShellEvent(
+  callback: (event: import("./types").PtyShellEvent) => void,
+): Promise<UnlistenFn> {
+  return listen<import("./types").PtyShellEvent>("pty-shell-event", (e) =>
+    callback(e.payload),
+  );
+}
+
+export function onPtyAttention(
+  callback: (event: import("./types").PtyAttentionEvent) => void,
+): Promise<UnlistenFn> {
+  return listen<import("./types").PtyAttentionEvent>("pty-attention", (e) =>
+    callback(e.payload),
+  );
+}
+
 export function onToast(
   callback: (event: ToastEvent) => void,
 ): Promise<UnlistenFn> {

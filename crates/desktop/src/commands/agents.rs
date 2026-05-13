@@ -424,6 +424,8 @@ pub async fn dispatch_agent(
     let mut tab = crate::state::DesktopTab::new(ai_provider);
     let tab_id = tab.id.clone();
 
+    // Agent dispatch goes through provider tabs (Claude/Gemini/etc.) — no
+    // shell wrapper, so shell integration doesn't apply.
     let pty = crate::pty_raw::RawPtySession::spawn(
         app_handle,
         tab_id.clone(),
@@ -432,6 +434,9 @@ pub async fn dispatch_agent(
         80,
         &command,
         &args,
+        &[],
+        &[],
+        false,
     )
     .map_err(|e| format!("Failed to spawn PTY: {e}"))?;
 

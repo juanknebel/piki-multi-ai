@@ -185,6 +185,15 @@
   color: var(--git-deleted);
 }
 
+.workspace-attention {
+  flex-shrink: 0;
+  margin-left: 6px;
+  font-size: 10px;
+  color: var(--accent-warm);
+  text-shadow: var(--accent-warm-glow);
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
 /* ── Git panel ──────────────────────────────────── */
 #git-panel {
   background: var(--sidebar-bg);

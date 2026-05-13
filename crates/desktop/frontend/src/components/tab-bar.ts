@@ -36,8 +36,21 @@ export function renderPaneTabBar(container: HTMLElement, leaf: LeafNode) {
     const icon = getProviderIcon(tab.provider);
     const label = getProviderLabel(tab.provider);
 
+    // Shell tabs with shell integration get a small exit-code dot:
+    // green ✓ when the last command exited 0, red ✗ otherwise. Hidden
+    // until a command has actually run.
+    let exitBadge = "";
+    if (tab.provider === "Shell") {
+      const shellState = appState.getTabShellState(tab.id);
+      if (shellState?.lastExitCode !== undefined) {
+        const ok = shellState.lastExitCode === 0;
+        exitBadge = `<span class="tab-exit-badge ${ok ? "ok" : "fail"}" title="Last command exit ${shellState.lastExitCode}">${ok ? "✓" : "✗"}</span>`;
+      }
+    }
+
     el.innerHTML = `
       <span class="tab-icon">${icon}</span>
+      ${exitBadge}
       <span class="tab-label">${escapeHtml(label)}</span>
       <button class="tab-menu" title="Tab Options">▾</button>
       <button class="tab-close" title="Close">×</button>

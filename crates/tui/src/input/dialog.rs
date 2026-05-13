@@ -1586,6 +1586,8 @@ pub(super) fn handle_edit_provider_input(app: &mut App, key: KeyEvent) -> Option
                 prompt_format,
                 dispatchable,
                 agent_dir: if agent_dir.is_empty() { None } else { Some(agent_dir.clone()) },
+                idle_threshold_secs: None,
+                idle_notify: true,
             }))
         } else {
             None

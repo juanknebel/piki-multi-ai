@@ -15,9 +15,6 @@ use piki_core::workspace::FileWatcher;
 const TICK_RATE: Duration = Duration::from_millis(50);
 const DEBOUNCE: Duration = Duration::from_millis(500);
 const PERIODIC_REFRESH: Duration = Duration::from_secs(3);
-/// How long a PTY must produce no output (after producing some) before it's
-/// considered idle and an OS notification is fired.
-const IDLE_THRESHOLD: Duration = Duration::from_secs(3);
 
 fn process_refresh_result(app: &mut App, result: app::RefreshResult) {
     if let Some(ref sub_dirs) = result.sub_directories {
@@ -432,13 +429,12 @@ pub(crate) async fn run(
 
         // PTY idle detection across ALL workspaces (every tick).
         //
-        // Compares `pty.bytes_processed()` (cheap atomic load) against
-        // `tab.last_bytes_processed` per tab. Output moved → record
-        // `last_output_time`. No output for IDLE_THRESHOLD after the last
-        // output → fire one notification (gated by `idle_notified`). Only
-        // fires for custom-provider tabs (AI agents); Shell/Kanban/etc are
-        // left alone. Skips the active workspace's notification (the user is
-        // already looking at it) but still marks the badge for consistency.
+        // Each provider tab carries its own `IdleWatcher` (`tab.idle_watcher`,
+        // `Some` only for `AIProvider::Custom(_)`). The watcher tracks the
+        // PTY byte counter and emits a one-shot signal when bytes have been
+        // still for the configured threshold (default 3s). The active
+        // workspace's notification is suppressed (user is already looking),
+        // but its badge is still set for visual consistency.
         {
             let active_idx = app.active_workspace;
             let mut idle_events: Vec<IdleEvent> = Vec::new();
@@ -448,26 +444,17 @@ pub(crate) async fn run(
                     let Some(ref pty) = tab.pty_session else {
                         continue;
                     };
-                    let current_bytes = pty.bytes_processed();
-                    if current_bytes != tab.last_bytes_processed {
-                        // Output moved — record activity, reset idle flag.
-                        // The active workspace's current tab is also tracked
-                        // by the block above; this update is idempotent.
-                        tab.last_bytes_processed = current_bytes;
-                        tab.last_output_time = Some(now);
-                        tab.idle_notified = false;
-                    } else if !tab.idle_notified
-                        && pty.peek_alive()
-                        && tab
-                            .last_output_time
-                            .is_some_and(|t| now.duration_since(t) >= IDLE_THRESHOLD)
-                        && is_idle_notifiable(&tab.provider)
-                    {
-                        tab.idle_notified = true;
+                    let Some(ref mut watcher) = tab.idle_watcher else {
+                        continue;
+                    };
+                    if !pty.peek_alive() {
+                        continue;
+                    }
+                    if watcher.poll(pty.bytes_processed()).is_some() {
                         idle_events.push(IdleEvent {
                             workspace_idx: ws_idx,
                             workspace_name: ws.info.name.clone(),
-                            provider_label: provider_label(&tab.provider),
+                            provider_label: tab.provider.label().to_string(),
                             is_active,
                         });
                     }
@@ -638,17 +625,6 @@ struct IdleEvent {
     is_active: bool,
 }
 
-/// Idle notifications only fire for user-configured LLM providers; built-in
-/// utility tabs (Shell, Kanban, CodeReview, Api) are interactive or
-/// non-PTY-backed and shouldn't pester the user.
-fn is_idle_notifiable(provider: &piki_core::AIProvider) -> bool {
-    matches!(provider, piki_core::AIProvider::Custom(_))
-}
-
-fn provider_label(provider: &piki_core::AIProvider) -> String {
-    provider.label().to_string()
-}
-
 /// Fire-and-forget OS notification via `notify-rust`. Failures are logged
 /// (tracing) but never propagated — a missing notification daemon should not
 /// stop the TUI.
@@ -667,28 +643,3 @@ fn spawn_idle_notification(workspace_name: &str, provider_label: &str) {
     });
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use piki_core::AIProvider;
-
-    #[test]
-    fn is_idle_notifiable_only_for_custom_providers() {
-        assert!(is_idle_notifiable(&AIProvider::Custom(
-            "Claude Code".into()
-        )));
-        assert!(!is_idle_notifiable(&AIProvider::Shell));
-        assert!(!is_idle_notifiable(&AIProvider::Kanban));
-        assert!(!is_idle_notifiable(&AIProvider::CodeReview));
-        assert!(!is_idle_notifiable(&AIProvider::Api));
-    }
-
-    #[test]
-    fn provider_label_returns_custom_name_or_built_in_label() {
-        assert_eq!(
-            provider_label(&AIProvider::Custom("Gemini".into())),
-            "Gemini"
-        );
-        assert_eq!(provider_label(&AIProvider::Shell), "Shell");
-    }
-}

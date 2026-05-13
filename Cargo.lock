@@ -4055,6 +4055,7 @@ dependencies = [
  "chrono",
  "flow-core",
  "futures-util",
+ "notify-rust",
  "parking_lot",
  "piki-agent",
  "piki-api-client",

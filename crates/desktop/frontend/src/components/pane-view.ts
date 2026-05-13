@@ -28,6 +28,19 @@ export function initPaneView(container: HTMLElement) {
   // a full DOM rebuild that would reparent every terminal element and
   // run fit() before the new host's layout has settled.
   appState.on("active-tab-changed", syncActiveTabUpdate);
+  // Re-render the per-pane tab bars when shell-integration state changes so
+  // exit-code badges update without a full pane-tree rebuild.
+  appState.on("tab-shell-state-changed", () => {
+    const ws = appState.activeWs;
+    if (!ws) return;
+    for (const leaf of allLeaves(ws.paneTree)) {
+      const pane = rootEl.querySelector<HTMLElement>(
+        `.pane[data-pane-id="${CSS.escape(leaf.id)}"]`,
+      );
+      const bar = pane?.querySelector<HTMLElement>(".pane-tab-bar");
+      if (bar) renderPaneTabBar(bar, leaf);
+    }
+  });
 }
 
 function render() {

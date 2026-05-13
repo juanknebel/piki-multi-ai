@@ -89,6 +89,20 @@ async function init() {
     appState.setSysinfo(formatted);
   });
 
+  // Shell-integration events from shell tabs (cwd + exit code).
+  ipc.onPtyShellEvent((event) => {
+    appState.applyShellEvent(event);
+    if (event.kind === "command-end") {
+      const wsIdx = appState.workspaceIndexForTab(event.tab_id);
+      if (wsIdx >= 0) appState.markWorkspaceAttention(wsIdx);
+    }
+  });
+
+  // Provider-tab idle notifications (and any other backend "needs attention").
+  ipc.onPtyAttention((event) => {
+    appState.markWorkspaceAttention(event.workspace_idx);
+  });
+
   // Confirm quit when PTYs are active
   let closeConfirmPending = false;
   const win = getCurrentWindow();
