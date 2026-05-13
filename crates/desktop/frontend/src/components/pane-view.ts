@@ -39,7 +39,7 @@ function render() {
   detachPanelElements(rootEl);
   rootEl.innerHTML = "";
 
-  if (!ws || ws.tabs.length === 0) {
+  if (!ws) {
     renderWelcome(rootEl);
     return;
   }
@@ -48,6 +48,20 @@ function render() {
   rootEl.appendChild(renderNode(tree));
   syncMounts(ws.paneTree, ws.tabs);
   updateActivePaneHighlight();
+
+  // Leaves with no tabs get a welcome message inside their content host so
+  // the user still sees the "+" button on the mini tab bar and the keyboard
+  // hints — the most common case is a workspace that was just opened or
+  // had all its tabs closed.
+  for (const leaf of allLeaves(tree)) {
+    if (leaf.tabIds.length > 0) continue;
+    const host = rootEl.querySelector<HTMLElement>(
+      `.pane[data-pane-id="${cssEscape(leaf.id)}"] > .pane-content`,
+    );
+    if (host && host.children.length === 0) {
+      renderWelcome(host);
+    }
+  }
 }
 
 function renderNode(node: PaneNode): HTMLElement {
@@ -169,10 +183,16 @@ function detachPanelElements(container: HTMLElement) {
   // Panel elements live in `.pane-content`. Detach them so they're not removed
   // when we wipe the container — panel modules keep their references alive.
   container.querySelectorAll<HTMLElement>(".pane-content").forEach((host) => {
-    while (host.firstChild) {
-      const child = host.firstChild as HTMLElement;
+    const children = Array.from(host.children) as HTMLElement[];
+    for (const child of children) {
+      // Welcome divs are stateless throwaways — drop them so they don't
+      // accumulate in the holding area on every rebuild.
+      if (child.classList.contains("terminal-welcome")) {
+        host.removeChild(child);
+        continue;
+      }
       // Hide and detach; mounted again later by syncMounts if still active.
-      if (child instanceof HTMLElement) child.style.display = "none";
+      child.style.display = "none";
       host.removeChild(child);
       // Move to a hidden holding area under the root so the element stays in
       // the document (some libraries depend on document-attached state).
