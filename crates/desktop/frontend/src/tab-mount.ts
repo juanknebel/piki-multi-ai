@@ -10,6 +10,7 @@ import { mountKanbanInto, unmountKanban } from "./components/kanban-panel";
 import { mountApiInto, unmountApi } from "./components/api-panel";
 import { mountMarkdownEditorInto, unmountMarkdownEditor } from "./components/markdown-editor-panel";
 import { mountCodeEditorInto, unmountCodeEditor } from "./components/code-editor-panel";
+import { mountWebPreviewInto, unmountWebPreview } from "./components/web-preview-panel";
 
 function isTerminalProvider(tab: TabInfo): boolean {
   if (tab.provider === "Shell") return true;
@@ -29,6 +30,8 @@ export function mountTab(tab: TabInfo, host: HTMLElement, wsIdx: number) {
     mountMarkdownEditorInto(tab.id, host);
   } else if (tab.provider === "CodeEditor") {
     mountCodeEditorInto(tab.id, host);
+  } else if (tab.provider === "WebPreview") {
+    mountWebPreviewInto(tab.id, host);
   }
 }
 
@@ -44,5 +47,7 @@ export function unmountTab(tab: TabInfo) {
     unmountMarkdownEditor(tab.id);
   } else if (tab.provider === "CodeEditor") {
     unmountCodeEditor(tab.id);
+  } else if (tab.provider === "WebPreview") {
+    unmountWebPreview(tab.id);
   }
 }

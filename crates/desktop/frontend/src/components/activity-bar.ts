@@ -26,6 +26,11 @@ const ACTIVITIES: { id: SidebarView; label: string; icon: string }[] = [
     label: "API Explorer",
     icon: `<svg viewBox="0 0 24 24"><path d="M6 6h12M6 12h12M6 18h8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="19" cy="18" r="2.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M2 3h20v18H2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" rx="2"/></svg>`,
   },
+  {
+    id: "web-preview",
+    label: "Web Preview",
+    icon: `<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="3" y1="9" x2="21" y2="9" stroke="currentColor" stroke-width="1.5"/><circle cx="6" cy="6.5" r="0.8" fill="currentColor"/><circle cx="8.5" cy="6.5" r="0.8" fill="currentColor"/><circle cx="11" cy="6.5" r="0.8" fill="currentColor"/></svg>`,
+  },
 ];
 
 export function renderActivityBar(container: HTMLElement) {

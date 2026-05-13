@@ -25,6 +25,7 @@ import { toggleChatPanel } from "./chat-panel";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getProviderLabel, getProviderKey, type AIProvider } from "../types";
 import { getShortcutKey, formatShortcut } from "../shortcuts";
+import { openWebPreviewTab } from "./web-preview-panel";
 
 // ── Types ───────────────────────────────────────
 
@@ -86,9 +87,12 @@ const MENUS: MenuDefinition[] = [
       {
         label: "New Tab",
         disabled: noWs,
-        submenu: [...getProviderTabs(), "Shell" as AIProvider, "Api" as AIProvider].map(
-          (p) => ({ label: getProviderLabel(p), action: () => spawnTab(p) }),
-        ),
+        submenu: [
+          ...[...getProviderTabs(), "Shell" as AIProvider, "Api" as AIProvider].map(
+            (p): MenuItem => ({ label: getProviderLabel(p), action: () => spawnTab(p) }),
+          ),
+          { label: "Web Preview", shortcut: getShortcutKey("web-preview"), action: () => openWebPreviewTab() },
+        ],
       },
       SEP,
       {

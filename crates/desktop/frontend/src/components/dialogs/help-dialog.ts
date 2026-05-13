@@ -34,6 +34,7 @@ const SHORTCUTS: { category: string; items: [string, string][] }[] = [
       ["Ctrl+Shift+A", "Manage Agents"],
       ["Ctrl+Shift+D", "Dispatch Agent"],
       ["Alt+K", "Kanban Board"],
+      ["Alt+Shift+W", "Open Web Preview"],
       ["Alt+T", "Theme Settings"],
       ["Alt+S", "Settings"],
       ["Alt+Shift+L", "Application Logs"],

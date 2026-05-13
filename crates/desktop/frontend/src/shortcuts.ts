@@ -48,6 +48,7 @@ const shortcuts: ShortcutDef[] = [
   { id: "agent-manager", label: "Manage Agents", defaultKey: "Ctrl+Shift+A", key: "Ctrl+Shift+A", action: () => {} },
   { id: "dispatch-agent", label: "Dispatch Agent", defaultKey: "Ctrl+Shift+D", key: "Ctrl+Shift+D", action: () => {} },
   { id: "kanban", label: "Kanban Board", defaultKey: "Alt+K", key: "Alt+K", action: () => {} },
+  { id: "web-preview", label: "Open Web Preview", defaultKey: "Alt+Shift+W", key: "Alt+Shift+W", action: () => {} },
   { id: "theme", label: "Theme Settings", defaultKey: "Alt+T", key: "Alt+T", action: () => {} },
   { id: "settings", label: "Settings", defaultKey: "Alt+S", key: "Alt+S", action: () => {} },
   { id: "manage-providers", label: "Manage Providers", defaultKey: "Alt+P", key: "Alt+P", action: () => {} },

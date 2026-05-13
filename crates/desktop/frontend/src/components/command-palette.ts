@@ -21,6 +21,7 @@ import { showThemeDialog } from "./dialogs/theme-dialog";
 import { showLogsDialog } from "./dialogs/logs-dialog";
 import { showAboutDialog } from "./dialogs/about-dialog";
 import { getProviderLabel, getProviderKey, type AIProvider } from "../types";
+import { openWebPreviewTab } from "./web-preview-panel";
 import { themeEngine } from "../theme";
 import { getShortcutKey, formatShortcut } from "../shortcuts";
 
@@ -247,6 +248,15 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
       action: () => spawnTabSafe(provider),
     });
   }
+
+  // Frontend-only tab: Web Preview
+  cmds.push({
+    id: "tab-web-preview",
+    label: "Open Web Preview",
+    category: "Tab",
+    keybinding: getShortcutKey("web-preview"),
+    action: () => openWebPreviewTab(),
+  });
 
   // Pane layout commands
   cmds.push({

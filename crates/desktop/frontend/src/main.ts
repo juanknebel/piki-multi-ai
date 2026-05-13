@@ -9,6 +9,7 @@ import { initKanbanPanel } from "./components/kanban-panel";
 import { initApiPanel } from "./components/api-panel";
 import { initMarkdownEditorPanel } from "./components/markdown-editor-panel";
 import { initCodeEditorPanel } from "./components/code-editor-panel";
+import { initWebPreviewPanel, openWebPreviewTab } from "./components/web-preview-panel";
 import { initPaneView } from "./components/pane-view";
 import { bindAction, handleGlobalKeydown, loadShortcuts } from "./shortcuts";
 import { showSettingsDialog } from "./components/dialogs/settings-dialog";
@@ -51,6 +52,7 @@ async function init() {
   initApiPanel(mainContentEl);
   initMarkdownEditorPanel(mainContentEl);
   initCodeEditorPanel(mainContentEl);
+  initWebPreviewPanel(mainContentEl);
   initPaneView(mainContentEl);
   renderStatusBar(document.getElementById("status-bar")!);
   initToasts();
@@ -128,6 +130,7 @@ async function init() {
   bindAction("agent-manager", () => showAgentManager());
   bindAction("dispatch-agent", () => showDispatchDialog());
   bindAction("kanban", () => appState.setActiveView("kanban"));
+  bindAction("web-preview", () => openWebPreviewTab());
   bindAction("theme", () => showThemeDialog());
   bindAction("settings", () => showSettingsDialog());
   bindAction("manage-providers", () => showProvidersDialog());

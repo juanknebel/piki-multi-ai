@@ -21,6 +21,9 @@
   },
   "app": {
     "withGlobalTauri": true,
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost ws://localhost:* wss://localhost:* http://localhost:* http://127.0.0.1:* http://[::1]:* https:; frame-src 'self' http://localhost:* http://127.0.0.1:* http://[::1]:* http://*.localhost:*; worker-src 'self' blob:; object-src 'none'; base-uri 'self'"
+    },
     "windows": [
       {
         "title": "Piki Desktop",

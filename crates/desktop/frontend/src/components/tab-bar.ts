@@ -11,6 +11,7 @@ import {
   isCodeEditorDirty,
   showUnsavedChangesPrompt,
 } from "./code-editor-panel";
+import { destroyWebPreviewPanel } from "./web-preview-panel";
 
 /**
  * Render a pane's mini tab bar into `container`. Each leaf calls this with its
@@ -95,6 +96,11 @@ async function closeTab(tab: { id: string; provider: AIProvider }) {
   // Frontend-only tabs (no backend PTY) — just remove from state
   if (tab.provider === "Markdown") {
     destroyMarkdownEditorPanel(tab.id);
+    appState.removeTab(appState.activeWorkspace, idx);
+    return;
+  }
+  if (tab.provider === "WebPreview") {
+    destroyWebPreviewPanel(tab.id);
     appState.removeTab(appState.activeWorkspace, idx);
     return;
   }

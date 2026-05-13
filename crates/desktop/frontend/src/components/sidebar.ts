@@ -3,6 +3,7 @@ import * as ipc from "../ipc";
 import { renderWorkspaceList } from "./workspace-list";
 import { renderSourceControl } from "./source-control";
 import { showAgentManager } from "./dialogs/agent-dialog";
+import { openWebPreviewTab } from "./web-preview-panel";
 
 export async function initSidebar() {
   // Restore persisted sidebar width
@@ -37,6 +38,12 @@ export async function initSidebar() {
 
     if (view === "api") {
       spawnApiTab();
+      appState.setActiveView(lastSidebarView);
+      return;
+    }
+
+    if (view === "web-preview") {
+      openWebPreviewTab();
       appState.setActiveView(lastSidebarView);
       return;
     }
