@@ -23,6 +23,11 @@ export function initPaneView(container: HTMLElement) {
   appState.on("active-pane-changed", updateActivePaneHighlight);
   appState.on("active-workspace-changed", render);
   appState.on("tabs-changed", render);
+  // Tab switches within a pane don't change the tree structure — re-render
+  // only the affected mini tab bars and remount the new active tab. Avoids
+  // a full DOM rebuild that would reparent every terminal element and
+  // run fit() before the new host's layout has settled.
+  appState.on("active-tab-changed", syncActiveTabUpdate);
 }
 
 function render() {
@@ -122,6 +127,31 @@ function syncMounts(tree: PaneNode, tabs: TabInfo[]) {
       mountTab(tab, host, wsIdx);
     }
   }
+}
+
+function syncActiveTabUpdate() {
+  const ws = appState.activeWs;
+  if (!ws || ws.tabs.length === 0) {
+    // Falling back to a welcome / rebuild path here — defer to render().
+    render();
+    return;
+  }
+  // If the DOM structure doesn't reflect every leaf in the tree (e.g.
+  // initial load before the first render), do a full rebuild.
+  for (const leaf of allLeaves(ws.paneTree)) {
+    if (!rootEl.querySelector(`.pane[data-pane-id="${cssEscape(leaf.id)}"]`)) {
+      render();
+      return;
+    }
+  }
+  // Re-render each leaf's mini tab bar so the active highlight follows.
+  for (const leaf of allLeaves(ws.paneTree)) {
+    const bar = rootEl.querySelector<HTMLElement>(
+      `.pane[data-pane-id="${cssEscape(leaf.id)}"] > .pane-tab-bar`,
+    );
+    if (bar) renderPaneTabBar(bar, leaf);
+  }
+  syncMounts(ws.paneTree, ws.tabs);
 }
 
 function updateActivePaneHighlight() {

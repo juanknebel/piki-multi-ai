@@ -192,8 +192,16 @@ export function mountTerminalInto(tabId: string, host: HTMLElement) {
     }
   }
 
-  fitTerminal(instance);
-  instance.terminal.focus();
+  // Defer the fit until the browser has laid out the new host. Calling
+  // `fitAddon.fit()` synchronously right after a reparent reads stale
+  // (often near-zero) dimensions and resizes the PTY to ~10 cols, which
+  // shows up as text wrapping every word or two when the tab is shown
+  // again.
+  const inst = instance;
+  requestAnimationFrame(() => {
+    fitTerminal(inst);
+    inst.terminal.focus();
+  });
 }
 
 /** Hide a terminal tab without destroying its state. */

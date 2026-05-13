@@ -200,7 +200,6 @@ class AppState extends EventTarget {
       }
     }
     this.emit("active-tab-changed");
-    this.emit("pane-tree-changed");
     this._schedulePaneSave();
     // Sync to backend so switching workspaces preserves the active tab
     ipc.setActiveTab(this._activeWorkspace, tabIdx).catch(() => {});
@@ -319,7 +318,6 @@ class AppState extends EventTarget {
       ipc.setActiveTab(this._activeWorkspace, idx).catch(() => {});
     }
     this.emit("active-tab-changed");
-    this.emit("pane-tree-changed");
     this._schedulePaneSave();
   }
 
