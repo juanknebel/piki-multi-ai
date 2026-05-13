@@ -339,6 +339,27 @@
   margin-top: 8px;
 }
 
+/* ── Import dialog toolbar ───────────────────────── */
+.import-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.import-toolbar .import-filter {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.import-toolbar .import-count {
+  color: var(--text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 /* ── Import check items ──────────────────────────── */
 .import-check-item {
   display: flex;
@@ -379,6 +400,31 @@
 .import-check-badge.exists {
   color: var(--git-modified);
   background: var(--accent-warm-muted);
+}
+
+/* ── Logs dialog ──────────────────────────────────── */
+.log-search {
+  width: 220px;
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+.log-row {
+  padding: 2px 14px;
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.log-row:hover {
+  background: var(--bg-hover);
+}
+
+.log-row-selected,
+.log-row.log-row-selected:hover {
+  background: var(--bg-active);
 }
 
 /* ── Help / shortcut dialog ──────────────────────── */
