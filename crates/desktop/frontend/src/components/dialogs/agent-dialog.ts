@@ -230,64 +230,111 @@ async function showImportDialog(onImported: () => void) {
   backdrop.className = "dialog-backdrop agent-form-backdrop";
   backdrop.style.zIndex = "110";
 
-  const selected = new Set(scanned.filter((a) => !a.exists).map((_, i) => i));
-
-  function render() {
-    backdrop.querySelector(".dialog")?.remove();
-    const dialog = document.createElement("div");
-    dialog.className = "dialog";
-    dialog.style.maxWidth = "500px";
-    dialog.innerHTML = `
-      <div class="dialog-header">
-        <span class="dialog-title">Import Agents from Repo</span>
-        <button class="dialog-close">×</button>
-      </div>
-      <div class="dialog-body">
-        ${scanned.map((a, i) => `
-          <label class="import-check-item">
-            <input type="checkbox" class="ag-import-check" data-idx="${i}" ${selected.has(i) ? "checked" : ""} />
-            <span class="import-check-name">${esc(a.name)}</span>
-            <span class="import-check-provider">${esc(a.provider)}</span>
-            ${a.exists ? '<span class="import-check-badge exists">(exists)</span>' : '<span class="import-check-badge new">(new)</span>'}
-          </label>
-        `).join("")}
-      </div>
-      <div class="dialog-footer">
-        <button class="dialog-btn dialog-btn-secondary" id="ai-cancel">Cancel</button>
-        <button class="dialog-btn dialog-btn-primary" id="ai-import">Import (${selected.size})</button>
-      </div>
-    `;
-
-    dialog.querySelectorAll<HTMLInputElement>(".ag-import-check").forEach((cb) => {
-      cb.addEventListener("change", () => {
-        const idx = parseInt(cb.dataset.idx!, 10);
-        if (cb.checked) selected.add(idx); else selected.delete(idx);
-        dialog.querySelector<HTMLButtonElement>("#ai-import")!.textContent = `Import (${selected.size})`;
-      });
-    });
-
-    dialog.querySelector(".dialog-close")!.addEventListener("click", close);
-    dialog.querySelector("#ai-cancel")!.addEventListener("click", close);
-    dialog.querySelector("#ai-import")!.addEventListener("click", async () => {
-      const toImport = [...selected].map((i) => scanned[i]);
-      try {
-        const count = await ipc.importAgents(wsIdx, toImport);
-        toast(`Imported ${count} agent(s)`, "success");
-        close();
-        onImported();
-      } catch (err) {
-        toast(`Import failed: ${err}`, "error");
-      }
-    });
-
-    backdrop.appendChild(dialog);
-  }
+  const selected = new Set(
+    scanned.map((a, i) => (a.exists ? -1 : i)).filter((i) => i >= 0),
+  );
+  let filterText = "";
 
   const close = () => backdrop.remove();
   backdrop.addEventListener("click", (e) => { if (e.target === backdrop) close(); });
 
+  const dialog = document.createElement("div");
+  dialog.className = "dialog";
+  dialog.style.maxWidth = "500px";
+  dialog.innerHTML = `
+    <div class="dialog-header">
+      <span class="dialog-title">Import Agents from Repo</span>
+      <button class="dialog-close">×</button>
+    </div>
+    <div class="dialog-toolbar import-toolbar">
+      <input type="text" class="dialog-input import-filter" placeholder="Filter agents..." />
+      <button class="dialog-btn dialog-btn-secondary dialog-btn-sm" id="ai-select-all">Select all</button>
+      <button class="dialog-btn dialog-btn-secondary dialog-btn-sm" id="ai-select-none">Select none</button>
+      <span class="import-count"></span>
+    </div>
+    <div class="dialog-body" id="ai-list"></div>
+    <div class="dialog-footer">
+      <button class="dialog-btn dialog-btn-secondary" id="ai-cancel">Cancel</button>
+      <button class="dialog-btn dialog-btn-primary" id="ai-import">Import (${selected.size})</button>
+    </div>
+  `;
+  backdrop.appendChild(dialog);
+
+  const listEl = dialog.querySelector<HTMLDivElement>("#ai-list")!;
+  const importBtn = dialog.querySelector<HTMLButtonElement>("#ai-import")!;
+  const countEl = dialog.querySelector<HTMLSpanElement>(".import-count")!;
+  const filterEl = dialog.querySelector<HTMLInputElement>(".import-filter")!;
+
+  function visibleIndices(): number[] {
+    const q = filterText.trim().toLowerCase();
+    if (!q) return scanned.map((_, i) => i);
+    return scanned
+      .map((a, i) => (a.name.toLowerCase().includes(q) || a.provider.toLowerCase().includes(q) ? i : -1))
+      .filter((i) => i >= 0);
+  }
+
+  function renderList() {
+    const vis = visibleIndices();
+    listEl.innerHTML = vis.length === 0
+      ? '<div class="empty-message">No agents match the filter.</div>'
+      : vis.map((i) => {
+          const a = scanned[i];
+          return `
+            <label class="import-check-item">
+              <input type="checkbox" class="ag-import-check" data-idx="${i}" ${selected.has(i) ? "checked" : ""} />
+              <span class="import-check-name">${esc(a.name)}</span>
+              <span class="import-check-provider">${esc(a.provider)}</span>
+              ${a.exists ? '<span class="import-check-badge exists">(exists)</span>' : '<span class="import-check-badge new">(new)</span>'}
+            </label>
+          `;
+        }).join("");
+
+    listEl.querySelectorAll<HTMLInputElement>(".ag-import-check").forEach((cb) => {
+      cb.addEventListener("change", () => {
+        const idx = parseInt(cb.dataset.idx!, 10);
+        if (cb.checked) selected.add(idx); else selected.delete(idx);
+        updateCounts();
+      });
+    });
+    updateCounts();
+  }
+
+  function updateCounts() {
+    importBtn.textContent = `Import (${selected.size})`;
+    countEl.textContent = `${selected.size}/${scanned.length} selected`;
+  }
+
+  filterEl.addEventListener("input", () => {
+    filterText = filterEl.value;
+    renderList();
+  });
+
+  dialog.querySelector("#ai-select-all")!.addEventListener("click", () => {
+    for (const i of visibleIndices()) selected.add(i);
+    renderList();
+  });
+  dialog.querySelector("#ai-select-none")!.addEventListener("click", () => {
+    for (const i of visibleIndices()) selected.delete(i);
+    renderList();
+  });
+
+  dialog.querySelector(".dialog-close")!.addEventListener("click", close);
+  dialog.querySelector("#ai-cancel")!.addEventListener("click", close);
+  importBtn.addEventListener("click", async () => {
+    const toImport = [...selected].map((i) => scanned[i]);
+    try {
+      const count = await ipc.importAgents(wsIdx, toImport);
+      toast(`Imported ${count} agent(s)`, "success");
+      close();
+      onImported();
+    } catch (err) {
+      toast(`Import failed: ${err}`, "error");
+    }
+  });
+
   document.body.appendChild(backdrop);
-  render();
+  renderList();
+  filterEl.focus();
 }
 
 function showDeleteConfirm(name: string, onConfirm: () => void) {

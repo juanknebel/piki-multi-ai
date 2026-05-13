@@ -181,6 +181,7 @@ fn main() {
             commands::workspace::create_workspace,
             commands::workspace::delete_workspace,
             commands::workspace::update_workspace,
+            commands::workspace::list_project_subdirs,
             commands::pty::spawn_tab,
             commands::pty::write_pty,
             commands::pty::resize_pty,

@@ -335,3 +335,24 @@ impl WorkspaceManager {
         Ok(())
     }
 }
+
+/// List immediate sub-directories of `path`, excluding hidden directories
+/// (those whose name starts with `.`). Result is sorted lexicographically.
+///
+/// Used by Project-type workspaces to surface navigable child directories.
+pub async fn list_subdirs(path: &std::path::Path) -> Vec<String> {
+    let mut dirs = Vec::new();
+    if let Ok(mut entries) = tokio::fs::read_dir(path).await {
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            if let Ok(ft) = entry.file_type().await
+                && ft.is_dir()
+                && let Some(name) = entry.file_name().to_str()
+                && !name.starts_with('.')
+            {
+                dirs.push(name.to_string());
+            }
+        }
+    }
+    dirs.sort();
+    dirs
+}

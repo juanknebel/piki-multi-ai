@@ -160,6 +160,22 @@ pub async fn delete_workspace(
 }
 
 #[tauri::command]
+pub async fn list_project_subdirs(
+    state: State<'_, Mutex<DesktopApp>>,
+    index: usize,
+) -> Result<Vec<String>, String> {
+    let ws_path = {
+        let app = state.lock();
+        if index >= app.workspaces.len() {
+            return Err("Workspace index out of range".to_string());
+        }
+        app.workspaces[index].info.path.clone()
+    };
+
+    Ok(piki_core::workspace::manager::list_subdirs(&ws_path).await)
+}
+
+#[tauri::command]
 pub async fn update_workspace(
     state: State<'_, Mutex<DesktopApp>>,
     index: usize,

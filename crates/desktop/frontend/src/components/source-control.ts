@@ -2,6 +2,8 @@ import { appState } from "../state";
 import * as ipc from "../ipc";
 import { showFileDiff } from "./diff-viewer";
 import { showMarkdown } from "./markdown-viewer";
+import { showWorkspaceDialog } from "./dialogs/workspace-dialog";
+import { registerCodeFile } from "./code-editor-panel";
 import { FILE_STATUS_LABELS, FILE_STATUS_CSS } from "../types";
 import { modCtrl } from "../shortcuts";
 import type { ChangedFile, FileStatus } from "../types";
@@ -22,10 +24,32 @@ const UNSTAGED_STATUSES: FileStatus[] = [
 let stagedCollapsed = false;
 let changesCollapsed = false;
 let savedCommitMessage = "";
+let scStagedHeightRestored = false;
+
+async function restoreScStagedHeight() {
+  if (scStagedHeightRestored) return;
+  scStagedHeightRestored = true;
+  try {
+    const raw = await ipc.getSettings();
+    if (raw) {
+      const settings = JSON.parse(raw);
+      if (typeof settings.scStagedHeightPct === "number") {
+        document.documentElement.style.setProperty("--sc-staged-height", `${settings.scStagedHeightPct}%`);
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+}
 
 export function renderSourceControl(container: HTMLElement) {
+  void restoreScStagedHeight();
   function render() {
     const ws = appState.activeWs;
+    if (ws?.info.workspace_type === "Project") {
+      renderProjectView(container, ws.info.path);
+      return;
+    }
     const files = ws?.changedFiles ?? [];
     const aheadBehind = ws?.aheadBehind;
 
@@ -169,11 +193,102 @@ export function renderSourceControl(container: HTMLElement) {
       empty.textContent = "No changes in this workspace.";
       container.appendChild(empty);
     }
+
+    // If both sections are visible, install a draggable splitter between them
+    const sections = container.querySelectorAll<HTMLElement>(".sc-section");
+    if (sections.length === 2) {
+      sections[0].classList.add("sc-staged");
+      sections[1].classList.add("sc-changes");
+      const handle = document.createElement("div");
+      handle.className = "sc-section-resize";
+      handle.title = "Drag to resize";
+      sections[1].before(handle);
+      wireSectionSplitter(container, handle, sections[0]);
+    }
   }
 
   appState.on("files-changed", render);
   appState.on("active-workspace-changed", render);
   render();
+}
+
+const projectSubdirCache = new Map<number, string[]>();
+
+function renderProjectView(container: HTMLElement, projectPath: string) {
+  const wsIdx = appState.activeWorkspace;
+  container.innerHTML = "";
+
+  // Header
+  const header = document.createElement("div");
+  header.className = "sidebar-header sc-header";
+  header.innerHTML = `
+    <span>PROJECT</span>
+    <span class="sc-header-actions">
+      <button class="sc-header-btn" data-action="refresh" title="Refresh">↻</button>
+    </span>
+  `;
+  container.appendChild(header);
+
+  // List container
+  const listWrap = document.createElement("div");
+  listWrap.className = "sc-subdir-wrap";
+  container.appendChild(listWrap);
+
+  function paint(subdirs: string[]) {
+    listWrap.innerHTML = "";
+    if (subdirs.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "empty-message";
+      empty.style.padding = "16px 20px";
+      empty.textContent = "No sub-directories found.";
+      listWrap.appendChild(empty);
+      return;
+    }
+    const list = document.createElement("div");
+    list.className = "sc-subdir-list";
+    for (const name of subdirs) {
+      const item = document.createElement("div");
+      item.className = "sc-subdir-item";
+      item.innerHTML = `<span class="sc-subdir-icon">📁</span><span class="sc-subdir-name"></span>`;
+      item.querySelector(".sc-subdir-name")!.textContent = name;
+      item.title = `${projectPath}/${name}`;
+      item.addEventListener("click", () => {
+        showWorkspaceDialog({
+          mode: "create",
+          prefill: {
+            dir: `${projectPath.replace(/\/+$/, "")}/${name}`,
+            workspaceType: "Simple",
+          },
+        });
+      });
+      list.appendChild(item);
+    }
+    listWrap.appendChild(list);
+  }
+
+  async function load() {
+    listWrap.innerHTML = '<div class="empty-message" style="padding:16px 20px">Loading...</div>';
+    try {
+      const subdirs = await ipc.listProjectSubdirs(wsIdx);
+      projectSubdirCache.set(wsIdx, subdirs);
+      paint(subdirs);
+    } catch (err) {
+      listWrap.innerHTML = `<div class="empty-message" style="padding:16px 20px;color:var(--git-deleted)">Failed to load: ${String(err)}</div>`;
+    }
+  }
+
+  header.querySelector<HTMLButtonElement>('.sc-header-btn[data-action="refresh"]')!
+    .addEventListener("click", () => {
+      projectSubdirCache.delete(wsIdx);
+      void load();
+    });
+
+  const cached = projectSubdirCache.get(wsIdx);
+  if (cached) {
+    paint(cached);
+  } else {
+    void load();
+  }
 }
 
 function renderSection(
@@ -188,6 +303,7 @@ function renderSection(
   if (files.length === 0) return;
 
   const selected = new Set<string>();
+  let lastClickedIdx: number | null = null;
 
   const section = document.createElement("div");
   section.className = "sc-section";
@@ -200,7 +316,8 @@ function renderSection(
       <svg class="group-chevron${collapsed ? " collapsed" : ""}" viewBox="0 0 16 16">
         <path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5"/>
       </svg>
-      ${escapeHtml(title)} (${files.length})
+      <input type="checkbox" class="sc-section-check" title="Toggle all" />
+      <span class="sc-section-title">${escapeHtml(title)} (${files.length})</span>
     </span>
     <span class="sc-section-actions">
       <button class="sc-section-action sc-selected-action" style="display:none" title="${action === "stage" ? "Stage Selected" : "Unstage Selected"}">
@@ -212,8 +329,44 @@ function renderSection(
     </span>
   `;
 
-  header.querySelector(".sc-section-toggle")!.addEventListener("click", () => {
+  // Chevron toggles collapse; clicking the section title (not the checkbox) also toggles
+  header.querySelector(".sc-section-title")!.addEventListener("click", () => {
     onToggle(!collapsed);
+  });
+  header.querySelector(".group-chevron")!.addEventListener("click", () => {
+    onToggle(!collapsed);
+  });
+
+  // Section-level select-all checkbox (tri-state)
+  const sectionCheck = header.querySelector<HTMLInputElement>(".sc-section-check")!;
+  sectionCheck.addEventListener("click", (e) => e.stopPropagation());
+  function updateSectionCheck() {
+    if (selected.size === 0) {
+      sectionCheck.checked = false;
+      sectionCheck.indeterminate = false;
+    } else if (selected.size === files.length) {
+      sectionCheck.checked = true;
+      sectionCheck.indeterminate = false;
+    } else {
+      sectionCheck.checked = false;
+      sectionCheck.indeterminate = true;
+    }
+  }
+  sectionCheck.addEventListener("change", () => {
+    const checkAll = selected.size < files.length;
+    selected.clear();
+    if (checkAll) {
+      for (const f of files) selected.add(f.path);
+    }
+    // Sync per-item checkboxes
+    section.querySelectorAll<HTMLInputElement>(".file-check").forEach((cb) => {
+      const path = cb.dataset.path!;
+      cb.checked = selected.has(path);
+      cb.closest(".file-item")?.classList.toggle("selected", selected.has(path));
+    });
+    updateSelectedBtn();
+    updateSectionCheck();
+    lastClickedIdx = null;
   });
 
   // Bulk all action
@@ -262,8 +415,25 @@ function renderSection(
   if (!collapsed) {
     const list = document.createElement("div");
     list.className = "sc-file-list";
+    list.tabIndex = 0;
 
+    // Ctrl+A inside the list selects all files in the section
+    list.addEventListener("keydown", (e) => {
+      if (modCtrl(e) && e.key.toLowerCase() === "a") {
+        e.preventDefault();
+        for (const f of files) selected.add(f.path);
+        list.querySelectorAll<HTMLInputElement>(".file-check").forEach((cb) => {
+          cb.checked = true;
+          cb.closest(".file-item")?.classList.add("selected");
+        });
+        updateSelectedBtn();
+        updateSectionCheck();
+      }
+    });
+
+    let fileIdx = -1;
     for (const file of files) {
+      fileIdx++;
       const item = document.createElement("div");
       item.className = "file-item";
 
@@ -278,15 +448,21 @@ function renderSection(
       const previewBtn = isMarkdown
         ? `<button class="file-action-btn" data-action="preview" title="Preview rendered markdown">👁</button>`
         : "";
+      const isDeleted = file.status === "Deleted";
+      const editBtn = isDeleted
+        ? ""
+        : `<button class="file-action-btn" data-action="edit" title="Edit in inline editor">✏️</button>`;
 
+      const itemIdx = fileIdx;
       item.innerHTML = `
-        <input type="checkbox" class="file-check" title="Select" />
+        <input type="checkbox" class="file-check" data-path="${escapeAttr(file.path)}" data-idx="${itemIdx}" title="Select" />
         <span class="file-status ${statusCss}">${statusLabel}</span>
         <span class="file-path" title="${escapeAttr(file.path)}">
           ${escapeHtml(fileName)}${dirPath ? ` <span style="color:var(--text-muted)">${escapeHtml(dirPath)}</span>` : ""}
         </span>
         <span class="file-actions">
           ${previewBtn}
+          ${editBtn}
           <button class="file-action-btn" data-action="${action}" title="${action === "stage" ? "Stage" : "Unstage"}">
             ${action === "stage" ? "+" : "−"}
           </button>
@@ -303,18 +479,52 @@ function renderSection(
           });
       }
 
-      // Checkbox toggle
+      // Wire edit button (skip for deleted files)
+      if (!isDeleted) {
+        item
+          .querySelector<HTMLButtonElement>('.file-action-btn[data-action="edit"]')!
+          .addEventListener("click", (e) => {
+            e.stopPropagation();
+            const wsIdx = appState.activeWorkspace;
+            const tabId = crypto.randomUUID();
+            registerCodeFile(tabId, file.path, wsIdx);
+            appState.addTab(wsIdx, { id: tabId, provider: "CodeEditor", alive: true });
+          });
+      }
+
+      // Checkbox toggle (supports shift+click for range select)
       const checkbox = item.querySelector<HTMLInputElement>(".file-check")!;
-      checkbox.addEventListener("click", (e) => e.stopPropagation());
-      checkbox.addEventListener("change", () => {
-        if (checkbox.checked) {
-          selected.add(file.path);
-          item.classList.add("selected");
+      checkbox.addEventListener("click", (e) => {
+        e.stopPropagation();
+        // After native click the checkbox state has already toggled; capture target state
+        const targetChecked = checkbox.checked;
+        const me = e as MouseEvent;
+        if (me.shiftKey && lastClickedIdx !== null && lastClickedIdx !== itemIdx) {
+          const [lo, hi] = lastClickedIdx < itemIdx
+            ? [lastClickedIdx, itemIdx]
+            : [itemIdx, lastClickedIdx];
+          for (let k = lo; k <= hi; k++) {
+            const path = files[k].path;
+            if (targetChecked) selected.add(path);
+            else selected.delete(path);
+            const cb = list.querySelector<HTMLInputElement>(`.file-check[data-idx="${k}"]`);
+            if (cb) {
+              cb.checked = targetChecked;
+              cb.closest(".file-item")?.classList.toggle("selected", targetChecked);
+            }
+          }
         } else {
-          selected.delete(file.path);
-          item.classList.remove("selected");
+          if (targetChecked) {
+            selected.add(file.path);
+            item.classList.add("selected");
+          } else {
+            selected.delete(file.path);
+            item.classList.remove("selected");
+          }
         }
+        lastClickedIdx = itemIdx;
         updateSelectedBtn();
+        updateSectionCheck();
       });
 
       // Click file to show diff
@@ -327,8 +537,8 @@ function renderSection(
 
       // Show actions on hover (handled by CSS visibility)
 
-      // Wire action button
-      item.querySelector<HTMLButtonElement>(".file-action-btn")!.addEventListener(
+      // Wire action button (stage/unstage)
+      item.querySelector<HTMLButtonElement>(`.file-action-btn[data-action="${action}"]`)!.addEventListener(
         "click",
         async (e) => {
           e.stopPropagation();
@@ -365,6 +575,50 @@ async function refreshFiles() {
   } catch (err) {
     console.error("Failed to refresh files:", err);
   }
+}
+
+function wireSectionSplitter(
+  container: HTMLElement,
+  handle: HTMLElement,
+  topSection: HTMLElement,
+) {
+  handle.addEventListener("mousedown", (e) => {
+    const startY = e.clientY;
+    const startTopHeight = topSection.offsetHeight;
+    const containerHeight = container.clientHeight;
+    handle.classList.add("dragging");
+    document.body.style.cursor = "ns-resize";
+    document.body.style.userSelect = "none";
+    e.preventDefault();
+
+    function onMove(ev: MouseEvent) {
+      const delta = ev.clientY - startY;
+      const minPx = 60;
+      const maxPx = Math.max(minPx, containerHeight - 120);
+      const newPx = Math.max(minPx, Math.min(maxPx, startTopHeight + delta));
+      const pct = (newPx / containerHeight) * 100;
+      document.documentElement.style.setProperty("--sc-staged-height", `${pct.toFixed(2)}%`);
+    }
+
+    function onUp() {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      handle.classList.remove("dragging");
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      const pct = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sc-staged-height"));
+      if (!isNaN(pct)) {
+        ipc.getSettings().then((raw) => {
+          const settings = raw ? JSON.parse(raw) : {};
+          settings.scStagedHeightPct = pct;
+          ipc.setSettings(JSON.stringify(settings)).catch(() => {});
+        }).catch(() => {});
+      }
+    }
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  });
 }
 
 function escapeHtml(text: string): string {

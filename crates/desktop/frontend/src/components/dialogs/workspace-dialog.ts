@@ -6,18 +6,27 @@ import type { WorkspaceInfo } from "../../types";
 
 type Mode = "create" | "edit" | "clone";
 
+export interface WorkspacePrefill {
+  /** Pre-fill the directory field */
+  dir?: string;
+  /** Pre-select the workspace type (default Worktree) */
+  workspaceType?: "Simple" | "Worktree" | "Project";
+}
+
 interface DialogOptions {
   mode: Mode;
   /** Index of workspace being edited (edit mode) */
   editIndex?: number;
   /** Workspace to clone from (clone mode) */
   cloneFrom?: WorkspaceInfo;
+  /** Optional prefill for create mode (e.g. when launching from a Project sub-dir) */
+  prefill?: WorkspacePrefill;
 }
 
 export function showWorkspaceDialog(opts: DialogOptions) {
   document.querySelector(".dialog-backdrop")?.remove();
 
-  const { mode, editIndex, cloneFrom } = opts;
+  const { mode, editIndex, cloneFrom, prefill: createPrefill } = opts;
   const editWs =
     mode === "edit" && editIndex !== undefined
       ? appState.workspaces[editIndex]?.info
@@ -69,7 +78,7 @@ export function showWorkspaceDialog(opts: DialogOptions) {
             ? `
         <div class="dialog-field">
           <label class="dialog-label">Directory</label>
-          <input class="dialog-input" id="ws-dir" placeholder="/path/to/repo" value="${escapeAttr(prefill?.source_repo ?? prefill?.path ?? "")}" />
+          <input class="dialog-input" id="ws-dir" placeholder="/path/to/repo" value="${escapeAttr(createPrefill?.dir ?? prefill?.source_repo ?? prefill?.path ?? "")}" />
         </div>
         `
             : ""
@@ -104,8 +113,9 @@ export function showWorkspaceDialog(opts: DialogOptions) {
   let typeDropdown: ReturnType<typeof createDropdown> | null = null;
   const typeSlot = backdrop.querySelector("#ws-type-slot");
   if (typeSlot) {
-    const initialType = !prefill || prefill.workspace_type === "Worktree" ? "Worktree"
-      : prefill.workspace_type === "Simple" ? "Simple" : prefill.workspace_type === "Project" ? "Project" : "Worktree";
+    const initialType = createPrefill?.workspaceType
+      ?? (!prefill || prefill.workspace_type === "Worktree" ? "Worktree"
+        : prefill.workspace_type === "Simple" ? "Simple" : prefill.workspace_type === "Project" ? "Project" : "Worktree");
     typeDropdown = createDropdown([
       { value: "Simple", label: "Simple (existing directory)" },
       { value: "Worktree", label: "Worktree (git branch)" },

@@ -437,21 +437,7 @@ impl Workspace {
 
     /// Refresh the list of immediate sub-directories (for Project workspaces).
     pub async fn refresh_sub_directories(&mut self) {
-        let path = self.info.path.clone();
-        let mut dirs = Vec::new();
-        if let Ok(mut entries) = tokio::fs::read_dir(&path).await {
-            while let Ok(Some(entry)) = entries.next_entry().await {
-                if let Ok(ft) = entry.file_type().await
-                    && ft.is_dir()
-                    && let Some(name) = entry.file_name().to_str()
-                    && !name.starts_with('.')
-                {
-                    dirs.push(name.to_string());
-                }
-            }
-        }
-        dirs.sort();
-        self.sub_directories = dirs;
+        self.sub_directories = piki_core::workspace::manager::list_subdirs(&self.info.path).await;
         self.dirty = false;
     }
 }
