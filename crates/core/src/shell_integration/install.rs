@@ -154,7 +154,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let setup = setup_for("/bin/bash", dir.path()).unwrap().unwrap();
         assert_eq!(setup.env.get("PIKI_SHELL_INTEGRATION").unwrap(), "1");
-        assert!(setup.env.get("ZDOTDIR").is_none());
+        assert!(!setup.env.contains_key("ZDOTDIR"));
         assert_eq!(setup.extra_args.len(), 2);
         assert_eq!(setup.extra_args[0], "--rcfile");
         assert!(Path::new(&setup.extra_args[1]).exists());
