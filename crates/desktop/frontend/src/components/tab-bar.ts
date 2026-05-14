@@ -258,7 +258,7 @@ function showTabActionMenu(anchor: HTMLElement, tab: { id: string; provider: AIP
 }
 
 // Built-in tool tabs always shown in the "+" menu
-const TOOL_TABS: AIProvider[] = ["Shell", "Api"];
+const TOOL_TABS: AIProvider[] = ["Shell"];
 
 async function showNewTabMenu(anchor: HTMLElement) {
   // Remove any existing menu
