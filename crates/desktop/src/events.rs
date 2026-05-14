@@ -50,8 +50,8 @@ pub struct ToastPayload {
 /// Background loop polling every 250 ms over all provider tabs, ticking each
 /// tab's `IdleWatcher` against its current PTY byte count. When a watcher
 /// fires, emits a `pty-attention` Tauri event for the frontend (sidebar
-/// badge) and spawns a `notify-rust` notification when the workspace isn't
-/// the active one.
+/// badge) and spawns a `notify-rust` notification regardless of whether the
+/// workspace is the active one.
 pub fn spawn_idle_watcher_loop(app_handle: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_millis(250));
@@ -64,9 +64,7 @@ pub fn spawn_idle_watcher_loop(app_handle: AppHandle) {
             let mut notifications: Vec<(String, String)> = Vec::new();
             {
                 let mut app = state.lock();
-                let active_idx = app.active_workspace;
                 for (ws_idx, ws) in app.workspaces.iter_mut().enumerate() {
-                    let is_active = ws_idx == active_idx;
                     let ws_name = ws.info.name.clone();
                     for tab in &mut ws.tabs {
                         let Some(ref pty) = tab.pty else { continue };
@@ -82,9 +80,7 @@ pub fn spawn_idle_watcher_loop(app_handle: AppHandle) {
                                 tab_id: tab.id.clone(),
                                 source: "provider-idle",
                             });
-                            if !is_active {
-                                notifications.push((ws_name.clone(), tab.provider.label().to_string()));
-                            }
+                            notifications.push((ws_name.clone(), tab.provider.label().to_string()));
                         }
                     }
                 }
@@ -110,6 +106,36 @@ fn spawn_idle_notification(workspace_name: &str, provider_label: &str) {
             .show()
         {
             tracing::warn!("PTY idle notification failed: {e}");
+        }
+    });
+}
+
+/// Fire-and-forget OS notification when a shell tab finishes a command
+/// (OSC 133 `command-end` marker). Exit code is included in the body when
+/// known. Failures are logged but never propagated.
+pub fn spawn_command_end_notification(workspace_name: &str, exit_code: Option<i32>) {
+    let (summary, body) = match exit_code {
+        Some(0) => (
+            "Command finished".to_string(),
+            format!("{workspace_name} — exit 0"),
+        ),
+        Some(code) => (
+            format!("Command failed (exit {code})"),
+            format!("{workspace_name} — exit {code}"),
+        ),
+        None => (
+            "Command finished".to_string(),
+            format!("{workspace_name} — exit unknown"),
+        ),
+    };
+    std::thread::spawn(move || {
+        if let Err(e) = notify_rust::Notification::new()
+            .summary(&summary)
+            .body(&body)
+            .appname("piki-desktop")
+            .show()
+        {
+            tracing::warn!("Shell command-end notification failed: {e}");
         }
     });
 }

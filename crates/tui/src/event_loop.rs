@@ -432,14 +432,11 @@ pub(crate) async fn run(
         // Each provider tab carries its own `IdleWatcher` (`tab.idle_watcher`,
         // `Some` only for `AIProvider::Custom(_)`). The watcher tracks the
         // PTY byte counter and emits a one-shot signal when bytes have been
-        // still for the configured threshold (default 3s). The active
-        // workspace's notification is suppressed (user is already looking),
-        // but its badge is still set for visual consistency.
+        // still for the configured threshold (default 3s). The OS
+        // notification fires regardless of whether the workspace is active.
         {
-            let active_idx = app.active_workspace;
             let mut idle_events: Vec<IdleEvent> = Vec::new();
             for (ws_idx, ws) in app.workspaces.iter_mut().enumerate() {
-                let is_active = ws_idx == active_idx;
                 for tab in &mut ws.tabs {
                     let Some(ref pty) = tab.pty_session else {
                         continue;
@@ -455,7 +452,6 @@ pub(crate) async fn run(
                             workspace_idx: ws_idx,
                             workspace_name: ws.info.name.clone(),
                             provider_label: tab.provider.label().to_string(),
-                            is_active,
                         });
                     }
                 }
@@ -465,9 +461,7 @@ pub(crate) async fn run(
                     ws.has_idle_notification = true;
                 }
                 app.needs_redraw = true;
-                if !event.is_active {
-                    spawn_idle_notification(&event.workspace_name, &event.provider_label);
-                }
+                spawn_idle_notification(&event.workspace_name, &event.provider_label);
             }
         }
 
@@ -620,9 +614,6 @@ struct IdleEvent {
     workspace_idx: usize,
     workspace_name: String,
     provider_label: String,
-    /// True when the user is already viewing this workspace — suppresses the
-    /// OS notification but still records the badge.
-    is_active: bool,
 }
 
 /// Fire-and-forget OS notification via `notify-rust`. Failures are logged

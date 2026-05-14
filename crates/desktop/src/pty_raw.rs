@@ -9,11 +9,14 @@ use parking_lot::Mutex;
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use serde::Serialize;
 use tauri::AppHandle;
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 use piki_core::pty::ShellSession;
 use piki_core::shell_integration::ShellEvent;
 use piki_core::shell_integration::parser::OscParser;
+
+use crate::events::{PtyAttentionPayload, spawn_command_end_notification};
+use crate::state::DesktopApp;
 
 #[derive(Serialize, Clone)]
 struct PtyOutputPayload {
@@ -153,6 +156,13 @@ impl RawPtySession {
                                     }
                                 }
                                 for ev in events {
+                                    if let ShellEvent::CommandEnd { exit_code } = &ev {
+                                        handle_shell_command_end(
+                                            &app_handle,
+                                            &emit_tab_id,
+                                            *exit_code,
+                                        );
+                                    }
                                     let _ = app_handle.emit(
                                         "pty-shell-event",
                                         shell_event_payload(&emit_tab_id, ev),
@@ -242,6 +252,38 @@ impl Drop for RawPtySession {
         let _ = self.child.kill();
         self.reader_handle.abort();
     }
+}
+
+/// Handle an OSC 133 `command-end` marker on a shell tab: emit a
+/// `pty-attention` event for the sidebar badge and fire an OS notification
+/// (always, regardless of which workspace is active). Workspace lookup walks
+/// `DesktopApp.workspaces` by `tab_id`; if the tab can't be found (e.g. it
+/// was closed between read and dispatch) only the attention event is skipped.
+fn handle_shell_command_end(app_handle: &AppHandle, tab_id: &str, exit_code: Option<i32>) {
+    let Some(state) = app_handle.try_state::<Mutex<DesktopApp>>() else {
+        return;
+    };
+    let (workspace_idx, workspace_name) = {
+        let app = state.lock();
+        let Some((idx, ws)) = app
+            .workspaces
+            .iter()
+            .enumerate()
+            .find(|(_, ws)| ws.tabs.iter().any(|t| t.id == tab_id))
+        else {
+            return;
+        };
+        (idx, ws.info.name.clone())
+    };
+    let _ = app_handle.emit(
+        "pty-attention",
+        PtyAttentionPayload {
+            workspace_idx,
+            tab_id: tab_id.to_string(),
+            source: "shell-command-end",
+        },
+    );
+    spawn_command_end_notification(&workspace_name, exit_code);
 }
 
 fn shell_event_payload(tab_id: &str, event: ShellEvent) -> PtyShellEventPayload {

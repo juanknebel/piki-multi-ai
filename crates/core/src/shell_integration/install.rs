@@ -2,7 +2,7 @@
 //! extra CLI args that, when merged into a `portable_pty::CommandBuilder`,
 //! cause the shell to load piki's shell integration on startup.
 //!
-//! Only `zsh` and `bash` are supported. Other shells (sh, dash, fish, etc.)
+//! `zsh`, `bash`, and `fish` are supported. Other shells (sh, dash, etc.)
 //! return `None` and the caller spawns them as before — without integration.
 
 use std::collections::HashMap;
@@ -10,12 +10,14 @@ use std::path::{Path, PathBuf};
 
 const SCRIPT_ZSH: &str = include_str!("scripts/integration.zsh");
 const SCRIPT_BASH: &str = include_str!("scripts/integration.bash");
+const SCRIPT_FISH: &str = include_str!("scripts/integration.fish");
 
 /// The shell families piki knows how to inject integration into.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShellFamily {
     Zsh,
     Bash,
+    Fish,
 }
 
 impl ShellFamily {
@@ -26,6 +28,7 @@ impl ShellFamily {
         match basename {
             "zsh" => Some(Self::Zsh),
             "bash" => Some(Self::Bash),
+            "fish" => Some(Self::Fish),
             _ => None,
         }
     }
@@ -72,6 +75,16 @@ pub fn setup_for(shell_path: &str, base_dir: &Path) -> std::io::Result<Option<In
                 .extra_args
                 .push(bash_bridge_path(base_dir).display().to_string());
         }
+        ShellFamily::Fish => {
+            // fish: `-C 'source <path>'` runs after user's config.fish so
+            // event handlers stack on top of any user setup. Single-quote the
+            // path to handle spaces — fish single quotes are fully literal.
+            setup.extra_args.push("-C".to_string());
+            setup.extra_args.push(format!(
+                "source '{}'",
+                fish_integration_path(base_dir).display()
+            ));
+        }
     }
     Ok(Some(setup))
 }
@@ -105,6 +118,11 @@ fn materialize(base_dir: &Path, family: ShellFamily) -> std::io::Result<()> {
             );
             std::fs::write(&bridge, bridge_rc)?;
         }
+        ShellFamily::Fish => {
+            // No bridge file needed — fish's `-C 'source <path>'` runs after
+            // config.fish already sourced the user's setup.
+            std::fs::write(fish_integration_path(base_dir), SCRIPT_FISH)?;
+        }
     }
     Ok(())
 }
@@ -115,6 +133,10 @@ fn zsh_bridge_dir(base_dir: &Path) -> PathBuf {
 
 fn bash_bridge_path(base_dir: &Path) -> PathBuf {
     base_dir.join("bash-bridge.sh")
+}
+
+fn fish_integration_path(base_dir: &Path) -> PathBuf {
+    base_dir.join("integration.fish")
 }
 
 #[cfg(test)]
@@ -128,13 +150,14 @@ mod tests {
             ShellFamily::detect("/usr/local/bin/bash"),
             Some(ShellFamily::Bash)
         );
+        assert_eq!(ShellFamily::detect("/usr/bin/fish"), Some(ShellFamily::Fish));
         assert_eq!(ShellFamily::detect("zsh"), Some(ShellFamily::Zsh));
+        assert_eq!(ShellFamily::detect("fish"), Some(ShellFamily::Fish));
     }
 
     #[test]
     fn detect_unknown_shells_returns_none() {
         assert_eq!(ShellFamily::detect("/bin/sh"), None);
-        assert_eq!(ShellFamily::detect("/usr/bin/fish"), None);
         assert_eq!(ShellFamily::detect("/bin/dash"), None);
     }
 
@@ -159,6 +182,19 @@ mod tests {
         assert_eq!(setup.extra_args[0], "--rcfile");
         assert!(Path::new(&setup.extra_args[1]).exists());
         assert!(dir.path().join("integration.bash").exists());
+    }
+
+    #[test]
+    fn setup_fish_writes_script_and_returns_init_command_args() {
+        let dir = tempfile::tempdir().unwrap();
+        let setup = setup_for("/usr/bin/fish", dir.path()).unwrap().unwrap();
+        assert_eq!(setup.env.get("PIKI_SHELL_INTEGRATION").unwrap(), "1");
+        assert!(!setup.env.contains_key("ZDOTDIR"));
+        assert_eq!(setup.extra_args.len(), 2);
+        assert_eq!(setup.extra_args[0], "-C");
+        assert!(setup.extra_args[1].starts_with("source '"));
+        assert!(setup.extra_args[1].contains("integration.fish"));
+        assert!(dir.path().join("integration.fish").exists());
     }
 
     #[test]
