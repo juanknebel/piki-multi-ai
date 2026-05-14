@@ -454,6 +454,7 @@ pub(crate) async fn run(
                             workspace_idx: ws_idx,
                             workspace_name: ws.info.name.clone(),
                             provider_label: tab.provider.label().to_string(),
+                            origin: format!("ws-{ws_idx}#tab-{}", tab.id),
                         });
                     }
                 }
@@ -463,7 +464,11 @@ pub(crate) async fn run(
                     ws.has_idle_notification = true;
                 }
                 app.needs_redraw = true;
-                notifications::notify_agent_idle(&event.workspace_name, &event.provider_label);
+                notifications::notify_agent_idle(
+                    &event.origin,
+                    &event.workspace_name,
+                    &event.provider_label,
+                );
             }
         }
 
@@ -475,8 +480,8 @@ pub(crate) async fn run(
         // the workspace name + exit code. Non-`CommandEnd` events are
         // discarded — the TUI has no per-tab shell-state UI today.
         {
-            let mut command_end_events: Vec<(String, Option<i32>)> = Vec::new();
-            for ws in app.workspaces.iter_mut() {
+            let mut command_end_events: Vec<(String, String, Option<i32>)> = Vec::new();
+            for (ws_idx, ws) in app.workspaces.iter_mut().enumerate() {
                 let ws_name = ws.info.name.clone();
                 for tab in &mut ws.tabs {
                     let Some(ref pty) = tab.pty_session else {
@@ -486,13 +491,17 @@ pub(crate) async fn run(
                     let drained = shell.lock().drain_events();
                     for ev in drained {
                         if let ShellEvent::CommandEnd { exit_code } = ev {
-                            command_end_events.push((ws_name.clone(), exit_code));
+                            command_end_events.push((
+                                format!("ws-{ws_idx}#tab-{}", tab.id),
+                                ws_name.clone(),
+                                exit_code,
+                            ));
                         }
                     }
                 }
             }
-            for (ws_name, exit_code) in command_end_events {
-                notifications::notify_command_end(&ws_name, exit_code);
+            for (origin, ws_name, exit_code) in command_end_events {
+                notifications::notify_command_end(&origin, &ws_name, exit_code);
             }
         }
 
@@ -645,4 +654,6 @@ struct IdleEvent {
     workspace_idx: usize,
     workspace_name: String,
     provider_label: String,
+    /// Mailbox dedup key — stable per (workspace, tab) tuple.
+    origin: String,
 }

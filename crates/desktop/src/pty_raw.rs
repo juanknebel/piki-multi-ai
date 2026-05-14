@@ -284,7 +284,8 @@ fn handle_shell_command_end(app_handle: &AppHandle, tab_id: &str, exit_code: Opt
             source: "shell-command-end",
         },
     );
-    notifications::notify_command_end(&workspace_name, exit_code);
+    // `tab_id` is the desktop UUID — globally unique → perfect mailbox origin.
+    notifications::notify_command_end(tab_id, &workspace_name, exit_code);
 }
 
 fn shell_event_payload(tab_id: &str, event: ShellEvent) -> PtyShellEventPayload {

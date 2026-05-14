@@ -62,7 +62,9 @@ pub fn spawn_idle_watcher_loop(app_handle: AppHandle) {
                 continue;
             };
             let mut events: Vec<PtyAttentionPayload> = Vec::new();
-            let mut pending_idle: Vec<(String, String)> = Vec::new();
+            // (origin, workspace_name, provider_label) — origin is the tab UUID
+            // which is already globally unique within the desktop process.
+            let mut pending_idle: Vec<(String, String, String)> = Vec::new();
             {
                 let mut app = state.lock();
                 for (ws_idx, ws) in app.workspaces.iter_mut().enumerate() {
@@ -81,7 +83,11 @@ pub fn spawn_idle_watcher_loop(app_handle: AppHandle) {
                                 tab_id: tab.id.clone(),
                                 source: "provider-idle",
                             });
-                            pending_idle.push((ws_name.clone(), tab.provider.label().to_string()));
+                            pending_idle.push((
+                                tab.id.clone(),
+                                ws_name.clone(),
+                                tab.provider.label().to_string(),
+                            ));
                         }
                     }
                 }
@@ -89,8 +95,8 @@ pub fn spawn_idle_watcher_loop(app_handle: AppHandle) {
             for ev in events {
                 let _ = app_handle.emit("pty-attention", ev);
             }
-            for (ws_name, provider_label) in pending_idle {
-                notifications::notify_agent_idle(&ws_name, &provider_label);
+            for (origin, ws_name, provider_label) in pending_idle {
+                notifications::notify_agent_idle(&origin, &ws_name, &provider_label);
             }
         }
     });
