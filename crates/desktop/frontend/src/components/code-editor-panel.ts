@@ -87,6 +87,14 @@ export function registerCodeFile(tabId: string, filePath: string, workspaceIdx: 
   pendingFiles.set(tabId, { filePath, workspaceIdx });
 }
 
+export function getCodeEditorFileName(tabId: string): string | null {
+  const inst = instances.get(tabId);
+  if (inst) return shortName(inst.filePath);
+  const pending = pendingFiles.get(tabId);
+  if (pending) return shortName(pending.filePath);
+  return null;
+}
+
 export function hideCodeEditorPanels() {
   for (const inst of instances.values()) {
     inst.element.style.display = "none";

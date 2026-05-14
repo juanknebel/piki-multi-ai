@@ -37,6 +37,12 @@ export function registerMarkdownFile(tabId: string, filePath: string) {
   pendingFiles.set(tabId, filePath);
 }
 
+export function getMarkdownEditorFileName(tabId: string): string | null {
+  const fp = instances.get(tabId)?.filePath ?? pendingFiles.get(tabId);
+  if (!fp) return null;
+  return fp.split("/").pop() || fp;
+}
+
 export function hideMarkdownEditorPanels() {
   for (const inst of instances.values()) {
     inst.element.style.display = "none";

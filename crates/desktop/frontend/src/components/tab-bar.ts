@@ -4,9 +4,13 @@ import { toast } from "./toast";
 import { getProviderLabel, getProviderIcon, getProviderKey } from "../types";
 import type { AIProvider } from "../types";
 import type { LeafNode } from "../pane-tree";
-import { destroyMarkdownEditorPanel } from "./markdown-editor-panel";
+import {
+  destroyMarkdownEditorPanel,
+  getMarkdownEditorFileName,
+} from "./markdown-editor-panel";
 import {
   destroyCodeEditorPanel,
+  getCodeEditorFileName,
   isCodeEditorDirty,
   showUnsavedChangesPrompt,
 } from "./code-editor-panel";
@@ -33,7 +37,12 @@ export function renderPaneTabBar(container: HTMLElement, leaf: LeafNode) {
     el.dataset.tabId = tabId;
 
     const icon = getProviderIcon(tab.provider);
-    const label = getProviderLabel(tab.provider);
+    let label = getProviderLabel(tab.provider);
+    if (tab.provider === "CodeEditor") {
+      label = getCodeEditorFileName(tab.id) ?? label;
+    } else if (tab.provider === "Markdown") {
+      label = getMarkdownEditorFileName(tab.id) ?? label;
+    }
 
     // Shell tabs with shell integration get a small exit-code dot:
     // green ✓ when the last command exited 0, red ✗ otherwise. Hidden
