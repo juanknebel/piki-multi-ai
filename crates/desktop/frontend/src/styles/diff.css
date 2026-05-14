@@ -301,6 +301,42 @@
   line-height: 1.5;
 }
 
+.cr-file-list {
+  width: 220px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+}
+
+.cr-resize-handle {
+  flex: 0 0 4px;
+  cursor: ew-resize;
+  background: transparent;
+  position: relative;
+  transition: background var(--transition-normal);
+}
+
+.cr-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 1px;
+  width: 1px;
+  height: 100%;
+  background: var(--border-primary);
+  transition: all var(--transition-normal);
+}
+
+.cr-resize-handle:hover::after,
+.cr-resize-handle.dragging::after {
+  left: 0;
+  width: 3px;
+  background: var(--accent-primary);
+  box-shadow: var(--accent-glow);
+  border-radius: 2px;
+}
+
 .cr-comment-form {
   padding: 6px 12px 6px 52px;
   background: var(--bg-secondary);

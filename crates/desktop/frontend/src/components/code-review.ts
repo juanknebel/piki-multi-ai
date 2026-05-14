@@ -114,9 +114,12 @@ export async function showCodeReview() {
   const body = document.createElement("div");
   body.style.cssText = "display:flex;flex:1;overflow:hidden;";
 
-  // File list
+  // File list (resizable via the handle inserted between fileList and diffArea)
   const fileList = document.createElement("div");
-  fileList.style.cssText = "width:220px;flex-shrink:0;overflow-y:auto;border-right:1px solid var(--border-primary);background:var(--bg-secondary);";
+  fileList.className = "cr-file-list";
+
+  const resizeHandle = document.createElement("div");
+  resizeHandle.className = "cr-resize-handle";
 
   const fileListHeader = document.createElement("div");
   fileListHeader.className = "sidebar-header";
@@ -448,12 +451,42 @@ export async function showCodeReview() {
   }
 
   body.appendChild(fileList);
+  body.appendChild(resizeHandle);
   body.appendChild(diffArea);
   panel.appendChild(body);
 
   backdrop.appendChild(panel);
   document.body.appendChild(backdrop);
   overlayEl = backdrop;
+
+  // Drag-to-resize: clamp width between 150px and half the dialog width.
+  {
+    let dragging = false;
+    let startX = 0;
+    let startWidth = 0;
+    resizeHandle.addEventListener("mousedown", (e) => {
+      dragging = true;
+      startX = e.clientX;
+      startWidth = fileList.offsetWidth;
+      resizeHandle.classList.add("dragging");
+      document.body.style.cursor = "ew-resize";
+      document.body.style.userSelect = "none";
+      e.preventDefault();
+    });
+    document.addEventListener("mousemove", (e) => {
+      if (!dragging) return;
+      const max = Math.max(300, panel.offsetWidth * 0.5);
+      const newWidth = Math.max(150, Math.min(max, startWidth + (e.clientX - startX)));
+      fileList.style.width = `${newWidth}px`;
+    });
+    document.addEventListener("mouseup", () => {
+      if (!dragging) return;
+      dragging = false;
+      resizeHandle.classList.remove("dragging");
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    });
+  }
 
   renderFileList();
   if (files.length > 0) loadFileDiff(files[0].path);
