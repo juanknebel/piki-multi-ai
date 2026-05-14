@@ -4,7 +4,6 @@ import { toast } from "./toast";
 import { getProviderLabel, getProviderIcon, getProviderKey } from "../types";
 import type { AIProvider } from "../types";
 import type { LeafNode } from "../pane-tree";
-import { allLeaves } from "../pane-tree";
 import { destroyMarkdownEditorPanel } from "./markdown-editor-panel";
 import {
   destroyCodeEditorPanel,
@@ -52,27 +51,13 @@ export function renderPaneTabBar(container: HTMLElement, leaf: LeafNode) {
       <span class="tab-icon">${icon}</span>
       ${exitBadge}
       <span class="tab-label">${escapeHtml(label)}</span>
-      <button class="tab-menu" title="Tab Options">▾</button>
       <button class="tab-close" title="Close">×</button>
     `;
 
     el.addEventListener("click", (e) => {
       const target = e.target as HTMLElement;
-      if (target.closest(".tab-close") || target.closest(".tab-menu")) return;
+      if (target.closest(".tab-close")) return;
       appState.setActiveTabInPane(leaf.id, tabId);
-    });
-
-    const menuBtn = el.querySelector<HTMLButtonElement>(".tab-menu");
-    if (menuBtn) {
-      menuBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        showTabActionMenu(menuBtn, tab, leaf);
-      });
-    }
-
-    el.addEventListener("contextmenu", (e) => {
-      e.preventDefault();
-      showTabActionMenu(el, tab, leaf);
     });
 
     const closeBtn = el.querySelector(".tab-close");
@@ -95,7 +80,7 @@ export function renderPaneTabBar(container: HTMLElement, leaf: LeafNode) {
   addBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     appState.setActivePane(leaf.id);
-    showNewTabMenu(addBtn);
+    showNewTabMenu(addBtn, leaf);
   });
   container.appendChild(addBtn);
 }
@@ -145,122 +130,10 @@ async function closeTab(tab: { id: string; provider: AIProvider }) {
   }
 }
 
-interface ActionMenuItem {
-  label: string;
-  onSelect?: () => void;
-  disabled?: boolean;
-  submenu?: ActionMenuItem[];
-}
-
-function showActionMenu(anchor: HTMLElement, items: ActionMenuItem[]) {
-  document.querySelectorAll(".tab-action-menu").forEach((m) => m.remove());
-
-  const rect = anchor.getBoundingClientRect();
-  const menu = document.createElement("div");
-  menu.className = "tab-action-menu";
-  menu.style.cssText = `
-    position: absolute;
-    top: ${rect.bottom + 2}px;
-    left: ${rect.left}px;
-    background: var(--bg-dropdown);
-    border: 1px solid var(--dialog-border);
-    border-radius: var(--radius-md);
-    box-shadow: 0 8px 24px rgba(0,0,0,0.5), 0 0 1px rgba(255,255,255,0.05);
-    padding: 4px 0;
-    z-index: 50;
-    min-width: 180px;
-    animation: dialog-enter 0.12s cubic-bezier(0.16,1,0.3,1);
-  `;
-
-  for (const item of items) {
-    const btn = document.createElement("button");
-    btn.style.cssText = `
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      width: 100%;
-      padding: 7px 14px;
-      font-size: 12px;
-      color: var(--text-primary);
-      text-align: left;
-      transition: background 0.1s, color 0.1s;
-      border-radius: 0;
-      ${item.disabled ? "opacity: 0.4; pointer-events: none;" : ""}
-    `;
-    btn.innerHTML = item.submenu
-      ? `<span>${escapeHtml(item.label)}</span><span style="color:var(--text-muted)">›</span>`
-      : `<span>${escapeHtml(item.label)}</span>`;
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      if (item.submenu) {
-        showActionMenu(btn, item.submenu);
-        return;
-      }
-      menu.remove();
-      document.removeEventListener("click", close);
-      item.onSelect?.();
-    });
-    btn.addEventListener("mouseenter", () => {
-      btn.style.background = "var(--bg-active)";
-      btn.style.color = "var(--text-bright)";
-    });
-    btn.addEventListener("mouseleave", () => {
-      btn.style.background = "";
-      btn.style.color = "var(--text-primary)";
-    });
-    menu.appendChild(btn);
-  }
-
-  document.body.appendChild(menu);
-
-  const close = (e: MouseEvent) => {
-    if (!menu.contains(e.target as Node)) {
-      document.querySelectorAll(".tab-action-menu").forEach((m) => m.remove());
-      document.removeEventListener("click", close);
-    }
-  };
-  setTimeout(() => document.addEventListener("click", close), 0);
-}
-
-function showTabActionMenu(anchor: HTMLElement, tab: { id: string; provider: AIProvider }, leaf: LeafNode) {
-  const ws = appState.activeWs;
-  if (!ws) return;
-  const leaves = allLeaves(ws.paneTree).filter((l) => l.id !== leaf.id);
-
-  const items: ActionMenuItem[] = [
-    {
-      label: "Split Right",
-      onSelect: () => appState.splitPane(leaf.id, "right", tab.id),
-    },
-    {
-      label: "Split Down",
-      onSelect: () => appState.splitPane(leaf.id, "down", tab.id),
-    },
-  ];
-
-  if (leaves.length > 0) {
-    items.push({
-      label: "Move to Pane",
-      submenu: leaves.map((l, idx) => ({
-        label: `Pane ${idx + 2}`,
-        onSelect: () => appState.moveTabToPane(tab.id, l.id),
-      })),
-    });
-  }
-
-  items.push({
-    label: "Close",
-    onSelect: () => { void closeTab(tab); },
-  });
-
-  showActionMenu(anchor, items);
-}
-
 // Built-in tool tabs always shown in the "+" menu
 const TOOL_TABS: AIProvider[] = ["Shell"];
 
-async function showNewTabMenu(anchor: HTMLElement) {
+async function showNewTabMenu(anchor: HTMLElement, leaf: LeafNode) {
   // Remove any existing menu
   document.querySelector(".tab-new-menu")?.remove();
 
@@ -275,6 +148,11 @@ async function showNewTabMenu(anchor: HTMLElement) {
 
   // Combine: configured providers + tool tabs
   const allProviders: AIProvider[] = [...configuredProviders, ...TOOL_TABS];
+
+  const splitActions: { label: string; icon: string; dir: "right" | "down" }[] = [
+    { label: "Split Right", icon: "⇥", dir: "right" },
+    { label: "Split Down", icon: "⤓", dir: "down" },
+  ];
 
   const menu = document.createElement("div");
   menu.className = "tab-new-menu";
@@ -329,6 +207,43 @@ async function showNewTabMenu(anchor: HTMLElement) {
           "error",
         );
       }
+    });
+    item.addEventListener("mouseenter", () => {
+      item.style.background = "var(--bg-active)";
+      item.style.color = "var(--text-bright)";
+    });
+    item.addEventListener("mouseleave", () => {
+      item.style.background = "";
+      item.style.color = "var(--text-primary)";
+    });
+    menu.appendChild(item);
+  }
+
+  const divider = document.createElement("div");
+  divider.style.cssText = "height:1px;background:var(--dialog-border);margin:4px 0;";
+  menu.appendChild(divider);
+
+  for (const action of splitActions) {
+    const item = document.createElement("button");
+    item.style.cssText = `
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 7px 14px;
+      font-size: 12px;
+      color: var(--text-primary);
+      text-align: left;
+      transition: background 0.1s, color 0.1s;
+      border-radius: 0;
+    `;
+    item.innerHTML = `
+      <span style="width:16px;text-align:center;color:var(--text-muted);font-size:11px">${action.icon}</span>
+      ${action.label}
+    `;
+    item.addEventListener("click", () => {
+      menu.remove();
+      appState.splitPane(leaf.id, action.dir);
     });
     item.addEventListener("mouseenter", () => {
       item.style.background = "var(--bg-active)";
