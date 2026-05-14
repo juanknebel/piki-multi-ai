@@ -1035,14 +1035,10 @@ impl App {
             // Trigger immediate background refresh for the new workspace
             self.workspaces[index].dirty = true;
             self.workspaces[index].last_refresh = None;
-            // User acknowledged any pending idle notifications by visiting.
-            // Reset each watcher so the next idle period can re-fire.
+            // User acknowledged any pending idle notification badge by
+            // visiting; re-fires happen naturally on the next real burst of
+            // agent output (gated by `IdleWatcher::rearm_bytes`).
             self.workspaces[index].has_idle_notification = false;
-            for tab in &mut self.workspaces[index].tabs {
-                if let Some(ref mut watcher) = tab.idle_watcher {
-                    watcher.reset();
-                }
-            }
             if let Some(tab) = self.workspaces[index].current_tab_mut() {
                 tab.term_scroll = 0;
             }
