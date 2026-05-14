@@ -157,11 +157,12 @@ impl RawPtySession {
                                     }
                                 }
                                 for ev in events {
-                                    if let ShellEvent::CommandEnd { exit_code } = &ev {
+                                    if let ShellEvent::CommandEnd { exit_code, command } = &ev {
                                         handle_shell_command_end(
                                             &app_handle,
                                             &emit_tab_id,
                                             *exit_code,
+                                            command.clone(),
                                         );
                                     }
                                     let _ = app_handle.emit(
@@ -260,7 +261,12 @@ impl Drop for RawPtySession {
 /// (always, regardless of which workspace is active). Workspace lookup walks
 /// `DesktopApp.workspaces` by `tab_id`; if the tab can't be found (e.g. it
 /// was closed between read and dispatch) only the attention event is skipped.
-fn handle_shell_command_end(app_handle: &AppHandle, tab_id: &str, exit_code: Option<i32>) {
+fn handle_shell_command_end(
+    app_handle: &AppHandle,
+    tab_id: &str,
+    exit_code: Option<i32>,
+    command: Option<String>,
+) {
     let Some(state) = app_handle.try_state::<Mutex<DesktopApp>>() else {
         return;
     };
@@ -285,7 +291,12 @@ fn handle_shell_command_end(app_handle: &AppHandle, tab_id: &str, exit_code: Opt
         },
     );
     // `tab_id` is the desktop UUID — globally unique → perfect mailbox origin.
-    notifications::notify_command_end(tab_id, &workspace_name, exit_code);
+    notifications::notify_command_end(
+        tab_id,
+        &workspace_name,
+        exit_code,
+        command.as_deref(),
+    );
 }
 
 fn shell_event_payload(tab_id: &str, event: ShellEvent) -> PtyShellEventPayload {
@@ -299,7 +310,7 @@ fn shell_event_payload(tab_id: &str, event: ShellEvent) -> PtyShellEventPayload 
         ShellEvent::PromptStart => p.kind = "prompt-start",
         ShellEvent::CommandInputStart => p.kind = "command-input-start",
         ShellEvent::CommandOutputStart => p.kind = "command-output-start",
-        ShellEvent::CommandEnd { exit_code } => {
+        ShellEvent::CommandEnd { exit_code, .. } => {
             p.kind = "command-end";
             p.exit_code = exit_code;
         }

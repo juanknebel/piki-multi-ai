@@ -19,7 +19,7 @@
 //! that don't initialize fall back to a generic `"piki-multi"`.
 
 use std::sync::OnceLock;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
 
@@ -124,13 +124,29 @@ pub fn _reset_mailbox_for_test() {
 /// `IdleWatcher` reports the PTY has been silent past its threshold.
 /// Origin should uniquely identify the tab so repeated idle events from
 /// the same agent replace each other instead of stacking.
-pub fn notify_agent_idle(origin: &str, workspace_name: &str, agent_label: &str) {
+///
+/// `silent_for` is the duration the PTY was silent before the watcher
+/// fired (lifted from `IdleSignal::silent_for`) — included in the body
+/// as a hint of how long the agent has been quiet. `icon` (if any) is
+/// prepended to the title; typically sourced from
+/// `ProviderConfig.icon`.
+pub fn notify_agent_idle(
+    origin: &str,
+    workspace_name: &str,
+    agent_label: &str,
+    silent_for: Duration,
+    icon: Option<&str>,
+) {
+    let icon_prefix = icon.map(|i| format!("{i} ")).unwrap_or_default();
+    let idle_secs = silent_for.as_secs().max(1);
     let item = NotificationItem {
         origin: origin.to_string(),
         workspace: workspace_name.to_string(),
         category: NotificationCategory::Complete,
-        title: format!("Agent idle: {agent_label}"),
-        body: format!("{workspace_name} — {agent_label} finished the task"),
+        title: format!("{icon_prefix}Agent idle: {agent_label}"),
+        body: format!(
+            "{workspace_name} — {agent_label} finished the task (idle {idle_secs}s)"
+        ),
         created_at: Instant::now(),
     };
     push_and_toast(item);
@@ -138,22 +154,33 @@ pub fn notify_agent_idle(origin: &str, workspace_name: &str, agent_label: &str) 
 
 /// Notification for a shell tab whose OSC 133 `command-end` marker just
 /// arrived. Non-zero exit codes are tagged [`NotificationCategory::Error`].
-pub fn notify_command_end(origin: &str, workspace_name: &str, exit_code: Option<i32>) {
+/// `command` is the user-typed text captured by the OSC parser (may be
+/// `None` if capture was empty / disabled); when present, it's quoted in
+/// the body so the user can tell which command just finished.
+pub fn notify_command_end(
+    origin: &str,
+    workspace_name: &str,
+    exit_code: Option<i32>,
+    command: Option<&str>,
+) {
+    let cmd_suffix = command
+        .map(|c| format!(" `{c}`"))
+        .unwrap_or_default();
     let (category, title, body) = match exit_code {
         Some(0) => (
             NotificationCategory::Complete,
             "Command finished".to_string(),
-            format!("{workspace_name} — exit 0"),
+            format!("{workspace_name} — exit 0{cmd_suffix}"),
         ),
         Some(code) => (
             NotificationCategory::Error,
             format!("Command failed (exit {code})"),
-            format!("{workspace_name} — exit {code}"),
+            format!("{workspace_name} — exit {code}{cmd_suffix}"),
         ),
         None => (
             NotificationCategory::Complete,
             "Command finished".to_string(),
-            format!("{workspace_name} — exit unknown"),
+            format!("{workspace_name} — exit unknown{cmd_suffix}"),
         ),
     };
     let item = NotificationItem {

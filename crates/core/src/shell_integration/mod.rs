@@ -29,8 +29,14 @@ pub enum ShellEvent {
     CommandInputStart,
     /// `\x1b]133;C\x07` — command output begins.
     CommandOutputStart,
-    /// `\x1b]133;D[;<exit_code>]\x07` — command finished.
-    CommandEnd { exit_code: Option<i32> },
+    /// `\x1b]133;D[;<exit_code>]\x07` — command finished. `command` is the
+    /// ANSI-stripped text the user typed (captured between `B` and `C`),
+    /// best-effort: terminal redraws and multi-line edits can degrade the
+    /// fidelity. `None` when capture was disabled or yielded nothing.
+    CommandEnd {
+        exit_code: Option<i32>,
+        command: Option<String>,
+    },
     /// `\x1b]7;file://<host>/<path>\x07` — cwd changed.
     CwdChanged(PathBuf),
 }
@@ -78,7 +84,7 @@ impl ShellTabState {
             ShellEvent::CommandOutputStart => {
                 self.in_flight_started_at = Some(Instant::now());
             }
-            ShellEvent::CommandEnd { exit_code } => {
+            ShellEvent::CommandEnd { exit_code, .. } => {
                 let now = Instant::now();
                 let started = self.in_flight_started_at.take().unwrap_or(now);
                 self.last_command = Some(CommandRecord {
@@ -110,7 +116,7 @@ mod tests {
         let mut s = ShellTabState::new();
         s.apply(&ShellEvent::CommandOutputStart);
         std::thread::sleep(Duration::from_millis(5));
-        s.apply(&ShellEvent::CommandEnd { exit_code: Some(0) });
+        s.apply(&ShellEvent::CommandEnd { exit_code: Some(0), command: None });
         let cmd = s.last_command.expect("command recorded");
         assert!(cmd.ok());
         assert!(cmd.duration >= Duration::from_millis(5));
@@ -128,7 +134,7 @@ mod tests {
     fn acknowledge_clears_attention() {
         let mut s = ShellTabState::new();
         s.apply(&ShellEvent::CommandOutputStart);
-        s.apply(&ShellEvent::CommandEnd { exit_code: Some(1) });
+        s.apply(&ShellEvent::CommandEnd { exit_code: Some(1), command: None });
         assert!(s.last_attention_at.is_some());
         s.acknowledge();
         assert!(s.last_attention_at.is_none());
@@ -137,7 +143,7 @@ mod tests {
     #[test]
     fn command_end_without_start_still_records() {
         let mut s = ShellTabState::new();
-        s.apply(&ShellEvent::CommandEnd { exit_code: Some(2) });
+        s.apply(&ShellEvent::CommandEnd { exit_code: Some(2), command: None });
         let cmd = s.last_command.expect("command recorded");
         assert_eq!(cmd.exit_code, Some(2));
         assert_eq!(cmd.duration, Duration::ZERO);

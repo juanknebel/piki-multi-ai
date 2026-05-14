@@ -62,11 +62,26 @@ pub fn spawn_idle_watcher_loop(app_handle: AppHandle) {
                 continue;
             };
             let mut events: Vec<PtyAttentionPayload> = Vec::new();
-            // (origin, workspace_name, provider_label) — origin is the tab UUID
-            // which is already globally unique within the desktop process.
-            let mut pending_idle: Vec<(String, String, String)> = Vec::new();
+            // (origin, workspace_name, provider_label, silent_for, icon) — origin
+            // is the tab UUID (globally unique within the desktop process).
+            let mut pending_idle: Vec<(
+                String,
+                String,
+                String,
+                std::time::Duration,
+                Option<String>,
+            )> = Vec::new();
             {
                 let mut app = state.lock();
+                // Snapshot the icon map up-front — we can't borrow
+                // `app.provider_manager` immutably while `app.workspaces` is
+                // borrowed mutably for iteration.
+                let icons: std::collections::HashMap<String, String> = app
+                    .provider_manager
+                    .all()
+                    .iter()
+                    .filter_map(|c| c.icon.clone().map(|i| (c.name.clone(), i)))
+                    .collect();
                 for (ws_idx, ws) in app.workspaces.iter_mut().enumerate() {
                     let ws_name = ws.info.name.clone();
                     for tab in &mut ws.tabs {
@@ -77,16 +92,20 @@ pub fn spawn_idle_watcher_loop(app_handle: AppHandle) {
                         if !pty.peek_alive() {
                             continue;
                         }
-                        if watcher.poll(pty.bytes_processed()).is_some() {
+                        if let Some(sig) = watcher.poll(pty.bytes_processed()) {
                             events.push(PtyAttentionPayload {
                                 workspace_idx: ws_idx,
                                 tab_id: tab.id.clone(),
                                 source: "provider-idle",
                             });
+                            let provider_label = tab.provider.label().to_string();
+                            let icon = icons.get(&provider_label).cloned();
                             pending_idle.push((
                                 tab.id.clone(),
                                 ws_name.clone(),
-                                tab.provider.label().to_string(),
+                                provider_label,
+                                sig.silent_for,
+                                icon,
                             ));
                         }
                     }
@@ -95,8 +114,14 @@ pub fn spawn_idle_watcher_loop(app_handle: AppHandle) {
             for ev in events {
                 let _ = app_handle.emit("pty-attention", ev);
             }
-            for (origin, ws_name, provider_label) in pending_idle {
-                notifications::notify_agent_idle(&origin, &ws_name, &provider_label);
+            for (origin, ws_name, provider_label, silent_for, icon) in pending_idle {
+                notifications::notify_agent_idle(
+                    &origin,
+                    &ws_name,
+                    &provider_label,
+                    silent_for,
+                    icon.as_deref(),
+                );
             }
         }
     });

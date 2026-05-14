@@ -449,12 +449,13 @@ pub(crate) async fn run(
                     if !pty.peek_alive() {
                         continue;
                     }
-                    if watcher.poll(pty.bytes_processed()).is_some() {
+                    if let Some(sig) = watcher.poll(pty.bytes_processed()) {
                         idle_events.push(IdleEvent {
                             workspace_idx: ws_idx,
                             workspace_name: ws.info.name.clone(),
                             provider_label: tab.provider.label().to_string(),
                             origin: format!("ws-{ws_idx}#tab-{}", tab.id),
+                            silent_for: sig.silent_for,
                         });
                     }
                 }
@@ -464,10 +465,16 @@ pub(crate) async fn run(
                     ws.has_idle_notification = true;
                 }
                 app.needs_redraw = true;
+                let icon = app
+                    .provider_manager
+                    .get(&event.provider_label)
+                    .and_then(|c| c.icon.clone());
                 notifications::notify_agent_idle(
                     &event.origin,
                     &event.workspace_name,
                     &event.provider_label,
+                    event.silent_for,
+                    icon.as_deref(),
                 );
             }
         }
@@ -480,7 +487,8 @@ pub(crate) async fn run(
         // the workspace name + exit code. Non-`CommandEnd` events are
         // discarded — the TUI has no per-tab shell-state UI today.
         {
-            let mut command_end_events: Vec<(String, String, Option<i32>)> = Vec::new();
+            let mut command_end_events: Vec<(String, String, Option<i32>, Option<String>)> =
+                Vec::new();
             for (ws_idx, ws) in app.workspaces.iter_mut().enumerate() {
                 let ws_name = ws.info.name.clone();
                 for tab in &mut ws.tabs {
@@ -490,18 +498,24 @@ pub(crate) async fn run(
                     let Some(shell) = pty.shell() else { continue };
                     let drained = shell.lock().drain_events();
                     for ev in drained {
-                        if let ShellEvent::CommandEnd { exit_code } = ev {
+                        if let ShellEvent::CommandEnd { exit_code, command } = ev {
                             command_end_events.push((
                                 format!("ws-{ws_idx}#tab-{}", tab.id),
                                 ws_name.clone(),
                                 exit_code,
+                                command,
                             ));
                         }
                     }
                 }
             }
-            for (origin, ws_name, exit_code) in command_end_events {
-                notifications::notify_command_end(&origin, &ws_name, exit_code);
+            for (origin, ws_name, exit_code, command) in command_end_events {
+                notifications::notify_command_end(
+                    &origin,
+                    &ws_name,
+                    exit_code,
+                    command.as_deref(),
+                );
             }
         }
 
@@ -656,4 +670,7 @@ struct IdleEvent {
     provider_label: String,
     /// Mailbox dedup key — stable per (workspace, tab) tuple.
     origin: String,
+    /// How long the PTY was silent before the watcher fired. Surfaced in
+    /// the notification body as `(idle Ns)`.
+    silent_for: Duration,
 }

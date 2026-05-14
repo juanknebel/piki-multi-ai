@@ -1578,6 +1578,12 @@ pub(super) fn handle_edit_provider_input(app: &mut App, key: KeyEvent) -> Option
                 default_args.split_whitespace().map(String::from).collect()
             };
             let old_name = original_name.clone();
+            // Preserve the existing icon when editing — the dialog form
+            // doesn't expose it as a field today, so blindly setting `None`
+            // would wipe Claude's ✦ / Gemini's ✧ on every save.
+            let preserved_icon = old_name
+                .as_deref()
+                .and_then(|n| app.provider_manager.get(n).and_then(|c| c.icon.clone()));
             Some((old_name, piki_core::providers::ProviderConfig {
                 name: name.clone(),
                 description: description.clone(),
@@ -1588,6 +1594,7 @@ pub(super) fn handle_edit_provider_input(app: &mut App, key: KeyEvent) -> Option
                 agent_dir: if agent_dir.is_empty() { None } else { Some(agent_dir.clone()) },
                 idle_threshold_secs: None,
                 idle_notify: true,
+                icon: preserved_icon,
             }))
         } else {
             None

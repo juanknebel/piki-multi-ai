@@ -48,6 +48,11 @@ pub struct ProviderConfig {
     /// than useful.
     #[serde(default = "default_idle_notify")]
     pub idle_notify: bool,
+    /// Optional emoji / unicode glyph prepended to the agent-idle
+    /// notification title for this provider (e.g. `"✦"` for Claude,
+    /// `"✧"` for Gemini). `None` falls back to no decoration.
+    #[serde(default)]
+    pub icon: Option<String>,
 }
 
 fn default_idle_notify() -> bool {
@@ -167,6 +172,7 @@ impl ProviderManager {
                 agent_dir: Some(".claude/agents".to_string()),
                 idle_threshold_secs: None,
                 idle_notify: true,
+                icon: Some("✦".to_string()),
             },
             ProviderConfig {
                 name: "Gemini".to_string(),
@@ -178,6 +184,7 @@ impl ProviderManager {
                 agent_dir: Some(".gemini/agents".to_string()),
                 idle_threshold_secs: None,
                 idle_notify: true,
+                icon: Some("✧".to_string()),
             },
         ]
     }
@@ -212,6 +219,7 @@ mod tests {
             agent_dir: None,
             idle_threshold_secs: None,
             idle_notify: true,
+            icon: None,
         };
         let args = ProviderManager::prompt_args(&config, "hello");
         assert_eq!(args, vec!["hello"]);
@@ -229,6 +237,7 @@ mod tests {
             agent_dir: None,
             idle_threshold_secs: None,
             idle_notify: true,
+            icon: None,
         };
         let args = ProviderManager::prompt_args(&config, "hello");
         assert_eq!(args, vec!["--prompt", "hello"]);
@@ -246,6 +255,7 @@ mod tests {
             agent_dir: None,
             idle_threshold_secs: None,
             idle_notify: true,
+            icon: None,
         };
         let args = ProviderManager::prompt_args(&config, "hello");
         assert!(args.is_empty());
@@ -268,6 +278,7 @@ mod tests {
                     agent_dir: Some(".my-ai/agents".into()),
                     idle_threshold_secs: None,
                     idle_notify: true,
+                    icon: None,
                 },
             ],
         };
@@ -330,6 +341,7 @@ mod tests {
                     agent_dir: None,
                     idle_threshold_secs: None,
                     idle_notify: true,
+                    icon: None,
                 },
                 ProviderConfig {
                     name: "B".into(),
@@ -341,6 +353,7 @@ mod tests {
                     agent_dir: None,
                     idle_threshold_secs: None,
                     idle_notify: true,
+                    icon: None,
                 },
             ],
         };

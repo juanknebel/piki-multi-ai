@@ -16,11 +16,25 @@ use crate::shell_integration::ShellEvent;
 /// buffer means a malformed sequence without a terminator can never wedge us.
 const MAX_OSC_PAYLOAD: usize = 8 * 1024;
 
+/// Soft cap on bytes captured between [`ShellEvent::CommandInputStart`] and
+/// [`ShellEvent::CommandOutputStart`]. Pathological cases (vim-style line
+/// editors, huge pastes) shouldn't grow this unbounded; once exceeded we
+/// stop appending until the next `B` resets the buffer.
+const MAX_CMD_BUF: usize = 4 * 1024;
+
 /// Streaming OSC parser. Maintains state across [`feed`](Self::feed) calls so
 /// sequences can be split across PTY chunks.
 pub struct OscParser {
     state: State,
     buf: Vec<u8>,
+    /// Raw bytes captured between `B` and `C` (the user-typed command, with
+    /// the shell's echo / syntax-highlight ANSI codes mixed in). Cleared on
+    /// `B`, finalised on `C` into [`pending_command`](Self::pending_command).
+    command_buf: Vec<u8>,
+    capturing_command: bool,
+    /// Finalised (ANSI-stripped, trimmed) command waiting to be attached to
+    /// the next [`ShellEvent::CommandEnd`]. Cleared once emitted.
+    pending_command: Option<String>,
 }
 
 #[derive(Debug)]
@@ -40,6 +54,9 @@ impl OscParser {
         Self {
             state: State::Normal,
             buf: Vec::new(),
+            command_buf: Vec::new(),
+            capturing_command: false,
+            pending_command: None,
         }
     }
 
@@ -53,6 +70,16 @@ impl OscParser {
     }
 
     fn step(&mut self, b: u8, out: &mut Vec<ShellEvent>) {
+        // Capture command-input bytes: any byte arriving while we're between
+        // `B` and `C` AND not inside an OSC payload (those bytes belong to
+        // the OSC sequence, not the user's command). We include `\x1b` too —
+        // the ANSI stripper at finalise time handles CSI/OSC residue.
+        if self.capturing_command
+            && !matches!(self.state, State::OscPayload | State::OscMaybeSt)
+            && self.command_buf.len() < MAX_CMD_BUF
+        {
+            self.command_buf.push(b);
+        }
         match self.state {
             State::Normal => {
                 if b == 0x1b {
@@ -103,8 +130,26 @@ impl OscParser {
     fn flush(&mut self, out: &mut Vec<ShellEvent>) {
         let payload = std::mem::take(&mut self.buf);
         self.state = State::Normal;
-        if let Some(event) = parse_payload(&payload) {
-            out.push(event);
+        let Some(event) = parse_payload(&payload) else {
+            return;
+        };
+        match event {
+            ShellEvent::CommandInputStart => {
+                self.command_buf.clear();
+                self.capturing_command = true;
+                out.push(ShellEvent::CommandInputStart);
+            }
+            ShellEvent::CommandOutputStart => {
+                self.capturing_command = false;
+                let raw = std::mem::take(&mut self.command_buf);
+                self.pending_command = finalise_command(&raw);
+                out.push(ShellEvent::CommandOutputStart);
+            }
+            ShellEvent::CommandEnd { exit_code, .. } => {
+                let command = self.pending_command.take();
+                out.push(ShellEvent::CommandEnd { exit_code, command });
+            }
+            other => out.push(other),
         }
     }
 }
@@ -133,13 +178,17 @@ fn parse_osc_133(rest: &str) -> Option<ShellEvent> {
         "B" => Some(ShellEvent::CommandInputStart),
         "C" => Some(ShellEvent::CommandOutputStart),
         "D" => {
-            // Optional exit code is the first numeric arg.
+            // Optional exit code is the first numeric arg. `command` is
+            // injected by `OscParser::flush` from `pending_command`.
             let exit_code = args
                 .split([';', ' '])
                 .next()
                 .filter(|s| !s.is_empty())
                 .and_then(|s| s.parse::<i32>().ok());
-            Some(ShellEvent::CommandEnd { exit_code })
+            Some(ShellEvent::CommandEnd {
+                exit_code,
+                command: None,
+            })
         }
         _ => None,
     }
@@ -184,6 +233,87 @@ fn hex_digit(b: u8) -> Option<u8> {
     }
 }
 
+/// Convert the raw byte buffer captured between `B` and `C` into a clean,
+/// human-readable command string suitable for a notification body.
+///
+/// Best-effort: strips CSI/OSC escape sequences (color codes, cursor moves),
+/// drops control chars, splits on CR/LF and keeps the *last* non-empty line
+/// (line-editor redraws overwrite earlier states), trims whitespace, and
+/// truncates to 80 visible chars. Returns `None` when the result is empty.
+fn finalise_command(raw: &[u8]) -> Option<String> {
+    let stripped = strip_ansi(raw);
+    // CR (0x0D) is used by shells to redraw the line in place. Split on it
+    // (and on \n) and take the last non-empty segment.
+    let last_segment = stripped
+        .split(|b: &u8| *b == b'\r' || *b == b'\n')
+        .rfind(|s| !s.is_empty() && s.iter().any(|b| !b.is_ascii_whitespace()))?;
+    let text = String::from_utf8_lossy(last_segment).trim().to_string();
+    if text.is_empty() {
+        return None;
+    }
+    // Truncate to keep notification bodies readable.
+    const MAX_LEN: usize = 80;
+    let truncated = if text.chars().count() > MAX_LEN {
+        let cutoff: String = text.chars().take(MAX_LEN - 1).collect();
+        format!("{cutoff}…")
+    } else {
+        text
+    };
+    Some(truncated)
+}
+
+/// Strip CSI (`\x1b[...`), OSC (`\x1b]...`), and other ESC-prefixed
+/// sequences from a byte buffer. Keeps regular printable text and UTF-8
+/// continuation bytes. Skips backspace (0x08) and BEL (0x07) but preserves
+/// CR/LF so `finalise_command` can split on them.
+fn strip_ansi(bytes: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if b == 0x1b && i + 1 < bytes.len() {
+            match bytes[i + 1] {
+                b'[' => {
+                    // CSI: skip until final byte in 0x40..=0x7E.
+                    i += 2;
+                    while i < bytes.len() && !(0x40..=0x7E).contains(&bytes[i]) {
+                        i += 1;
+                    }
+                    if i < bytes.len() {
+                        i += 1;
+                    }
+                }
+                b']' => {
+                    // OSC: skip until BEL (0x07) or ST (`\x1b\\`).
+                    i += 2;
+                    while i < bytes.len() {
+                        if bytes[i] == 0x07 {
+                            i += 1;
+                            break;
+                        }
+                        if bytes[i] == 0x1b && i + 1 < bytes.len() && bytes[i + 1] == b'\\' {
+                            i += 2;
+                            break;
+                        }
+                        i += 1;
+                    }
+                }
+                _ => {
+                    // Other two-byte ESC sequence.
+                    i += 2;
+                }
+            }
+        } else if b == 0x08 || b == 0x07 {
+            // Backspace / BEL: drop.
+            i += 1;
+        } else {
+            out.push(b);
+            i += 1;
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -214,19 +344,34 @@ mod tests {
     #[test]
     fn osc_133_d_with_exit_code() {
         let events = parse_one(b"\x1b]133;D;0\x07");
-        assert_eq!(events, vec![ShellEvent::CommandEnd { exit_code: Some(0) }]);
+        assert_eq!(
+            events,
+            vec![ShellEvent::CommandEnd {
+                exit_code: Some(0),
+                command: None,
+            }]
+        );
 
         let events = parse_one(b"\x1b]133;D;127\x07");
         assert_eq!(
             events,
-            vec![ShellEvent::CommandEnd { exit_code: Some(127) }]
+            vec![ShellEvent::CommandEnd {
+                exit_code: Some(127),
+                command: None,
+            }]
         );
     }
 
     #[test]
     fn osc_133_d_without_exit_code() {
         let events = parse_one(b"\x1b]133;D\x07");
-        assert_eq!(events, vec![ShellEvent::CommandEnd { exit_code: None }]);
+        assert_eq!(
+            events,
+            vec![ShellEvent::CommandEnd {
+                exit_code: None,
+                command: None,
+            }]
+        );
     }
 
     #[test]
@@ -270,7 +415,13 @@ mod tests {
         for chunk in full.chunks(1) {
             all.extend(p.feed(chunk));
         }
-        assert_eq!(all, vec![ShellEvent::CommandEnd { exit_code: Some(42) }]);
+        assert_eq!(
+            all,
+            vec![ShellEvent::CommandEnd {
+                exit_code: Some(42),
+                command: None,
+            }]
+        );
     }
 
     #[test]
@@ -288,7 +439,13 @@ mod tests {
     fn csi_passes_through_without_event() {
         // Color SGR followed by an OSC marker.
         let events = parse_one(b"\x1b[31mred\x1b[0m\x1b]133;D;0\x07");
-        assert_eq!(events, vec![ShellEvent::CommandEnd { exit_code: Some(0) }]);
+        assert_eq!(
+            events,
+            vec![ShellEvent::CommandEnd {
+                exit_code: Some(0),
+                command: None,
+            }]
+        );
     }
 
     #[test]
@@ -329,5 +486,90 @@ mod tests {
         // out of Esc state without consuming the next OSC.
         let events = parse_one(b"\x1bM\x1b]133;A\x07");
         assert_eq!(events, vec![ShellEvent::PromptStart]);
+    }
+
+    #[test]
+    fn captures_command_text_between_b_and_c() {
+        // Simulate: prompt-input-start, user types "git status", output-start,
+        // command runs, output-end with exit 0.
+        let mut p = OscParser::new();
+        let events = p.feed(b"\x1b]133;B\x07git status\x1b]133;C\x07hello\n\x1b]133;D;0\x07");
+        // CommandEnd should carry the captured command.
+        let end = events
+            .iter()
+            .find_map(|e| match e {
+                ShellEvent::CommandEnd { command, exit_code } => Some((command.clone(), *exit_code)),
+                _ => None,
+            })
+            .expect("CommandEnd emitted");
+        assert_eq!(end, (Some("git status".to_string()), Some(0)));
+    }
+
+    #[test]
+    fn captures_command_strips_csi_color_codes() {
+        // Shell syntax-highlights "git" in blue: `\x1b[34mgit\x1b[0m status`.
+        let mut p = OscParser::new();
+        let events = p.feed(
+            b"\x1b]133;B\x07\x1b[34mgit\x1b[0m status\x1b]133;C\x07\x1b]133;D;0\x07",
+        );
+        let end = events
+            .iter()
+            .find_map(|e| match e {
+                ShellEvent::CommandEnd { command, .. } => Some(command.clone()),
+                _ => None,
+            })
+            .expect("CommandEnd emitted");
+        assert_eq!(end, Some("git status".to_string()));
+    }
+
+    #[test]
+    fn captures_command_handles_cr_redraw() {
+        // Shell line editor emits CR + final rewritten line.
+        let mut p = OscParser::new();
+        let events = p.feed(
+            b"\x1b]133;B\x07ls\rls -la\x1b]133;C\x07\x1b]133;D;0\x07",
+        );
+        let end = events
+            .iter()
+            .find_map(|e| match e {
+                ShellEvent::CommandEnd { command, .. } => Some(command.clone()),
+                _ => None,
+            })
+            .expect("CommandEnd emitted");
+        // After CR-redraw, the final line is "ls -la".
+        assert_eq!(end, Some("ls -la".to_string()));
+    }
+
+    #[test]
+    fn command_capture_resets_between_runs() {
+        let mut p = OscParser::new();
+        // First command.
+        p.feed(b"\x1b]133;B\x07first\x1b]133;C\x07\x1b]133;D;0\x07");
+        // Second command on the same parser.
+        let events = p.feed(b"\x1b]133;B\x07second\x1b]133;C\x07\x1b]133;D;0\x07");
+        let cmd = events
+            .iter()
+            .find_map(|e| match e {
+                ShellEvent::CommandEnd { command, .. } => Some(command.clone()),
+                _ => None,
+            })
+            .expect("CommandEnd emitted");
+        assert_eq!(cmd, Some("second".to_string()));
+    }
+
+    #[test]
+    fn finalise_command_truncates_long_input() {
+        let long = "x".repeat(200);
+        let stripped = finalise_command(long.as_bytes()).expect("non-empty");
+        // 80 chars max, with an ellipsis sentinel on overflow.
+        assert!(stripped.chars().count() <= 80);
+        assert!(stripped.ends_with('…'));
+    }
+
+    #[test]
+    fn finalise_command_empty_returns_none() {
+        assert!(finalise_command(b"").is_none());
+        assert!(finalise_command(b"   \t  ").is_none());
+        assert!(finalise_command(b"\x1b[31m\x1b[0m").is_none());
     }
 }
