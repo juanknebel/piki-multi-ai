@@ -29,7 +29,6 @@ chrono = "0.4"
 anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-notify-rust = "4"
 flow-core = { git = "https://github.com/juanknebel/flow", tag = "0.6.0" }
 tokio-tungstenite = "0.26"
 futures-util = { version = "0.3", default-features = false, features = ["sink"] }

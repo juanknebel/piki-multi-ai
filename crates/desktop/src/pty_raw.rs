@@ -11,11 +11,12 @@ use serde::Serialize;
 use tauri::AppHandle;
 use tauri::{Emitter, Manager};
 
+use piki_core::notifications;
 use piki_core::pty::ShellSession;
 use piki_core::shell_integration::ShellEvent;
 use piki_core::shell_integration::parser::OscParser;
 
-use crate::events::{PtyAttentionPayload, spawn_command_end_notification};
+use crate::events::PtyAttentionPayload;
 use crate::state::DesktopApp;
 
 #[derive(Serialize, Clone)]
@@ -283,7 +284,7 @@ fn handle_shell_command_end(app_handle: &AppHandle, tab_id: &str, exit_code: Opt
             source: "shell-command-end",
         },
     );
-    spawn_command_end_notification(&workspace_name, exit_code);
+    notifications::notify_command_end(&workspace_name, exit_code);
 }
 
 fn shell_event_payload(tab_id: &str, event: ShellEvent) -> PtyShellEventPayload {

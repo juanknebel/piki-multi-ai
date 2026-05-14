@@ -10,6 +10,8 @@ use crate::app::{self, App};
 use crate::helpers::shutdown;
 use crate::input;
 use crate::{theme, ui};
+use piki_core::notifications;
+use piki_core::shell_integration::ShellEvent;
 use piki_core::workspace::FileWatcher;
 
 const TICK_RATE: Duration = Duration::from_millis(50);
@@ -461,7 +463,36 @@ pub(crate) async fn run(
                     ws.has_idle_notification = true;
                 }
                 app.needs_redraw = true;
-                spawn_idle_notification(&event.workspace_name, &event.provider_label);
+                notifications::notify_agent_idle(&event.workspace_name, &event.provider_label);
+            }
+        }
+
+        // Shell-tab OSC 133 `command-end` drain (every tick).
+        //
+        // Shell tabs spawned with shell integration enabled accumulate
+        // `ShellEvent`s on `PtySession.shell().pending_events`. Drain them
+        // here so each finished command surfaces as an OS notification with
+        // the workspace name + exit code. Non-`CommandEnd` events are
+        // discarded — the TUI has no per-tab shell-state UI today.
+        {
+            let mut command_end_events: Vec<(String, Option<i32>)> = Vec::new();
+            for ws in app.workspaces.iter_mut() {
+                let ws_name = ws.info.name.clone();
+                for tab in &mut ws.tabs {
+                    let Some(ref pty) = tab.pty_session else {
+                        continue;
+                    };
+                    let Some(shell) = pty.shell() else { continue };
+                    let drained = shell.lock().drain_events();
+                    for ev in drained {
+                        if let ShellEvent::CommandEnd { exit_code } = ev {
+                            command_end_events.push((ws_name.clone(), exit_code));
+                        }
+                    }
+                }
+            }
+            for (ws_name, exit_code) in command_end_events {
+                notifications::notify_command_end(&ws_name, exit_code);
             }
         }
 
@@ -615,22 +646,3 @@ struct IdleEvent {
     workspace_name: String,
     provider_label: String,
 }
-
-/// Fire-and-forget OS notification via `notify-rust`. Failures are logged
-/// (tracing) but never propagated — a missing notification daemon should not
-/// stop the TUI.
-fn spawn_idle_notification(workspace_name: &str, provider_label: &str) {
-    let summary = format!("Agent idle: {provider_label}");
-    let body = format!("{workspace_name} — {provider_label} stopped producing output");
-    std::thread::spawn(move || {
-        if let Err(e) = notify_rust::Notification::new()
-            .summary(&summary)
-            .body(&body)
-            .appname("piki-multi-ai")
-            .show()
-        {
-            tracing::warn!("PTY idle notification failed: {e}");
-        }
-    });
-}
-

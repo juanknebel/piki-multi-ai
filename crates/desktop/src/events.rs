@@ -6,6 +6,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
 use piki_core::ChangedFile;
+use piki_core::notifications;
 
 use crate::state::DesktopApp;
 
@@ -61,7 +62,7 @@ pub fn spawn_idle_watcher_loop(app_handle: AppHandle) {
                 continue;
             };
             let mut events: Vec<PtyAttentionPayload> = Vec::new();
-            let mut notifications: Vec<(String, String)> = Vec::new();
+            let mut pending_idle: Vec<(String, String)> = Vec::new();
             {
                 let mut app = state.lock();
                 for (ws_idx, ws) in app.workspaces.iter_mut().enumerate() {
@@ -80,7 +81,7 @@ pub fn spawn_idle_watcher_loop(app_handle: AppHandle) {
                                 tab_id: tab.id.clone(),
                                 source: "provider-idle",
                             });
-                            notifications.push((ws_name.clone(), tab.provider.label().to_string()));
+                            pending_idle.push((ws_name.clone(), tab.provider.label().to_string()));
                         }
                     }
                 }
@@ -88,54 +89,9 @@ pub fn spawn_idle_watcher_loop(app_handle: AppHandle) {
             for ev in events {
                 let _ = app_handle.emit("pty-attention", ev);
             }
-            for (ws_name, provider_label) in notifications {
-                spawn_idle_notification(&ws_name, &provider_label);
+            for (ws_name, provider_label) in pending_idle {
+                notifications::notify_agent_idle(&ws_name, &provider_label);
             }
-        }
-    });
-}
-
-fn spawn_idle_notification(workspace_name: &str, provider_label: &str) {
-    let summary = format!("Agent idle: {provider_label}");
-    let body = format!("{workspace_name} — {provider_label} stopped producing output");
-    std::thread::spawn(move || {
-        if let Err(e) = notify_rust::Notification::new()
-            .summary(&summary)
-            .body(&body)
-            .appname("piki-desktop")
-            .show()
-        {
-            tracing::warn!("PTY idle notification failed: {e}");
-        }
-    });
-}
-
-/// Fire-and-forget OS notification when a shell tab finishes a command
-/// (OSC 133 `command-end` marker). Exit code is included in the body when
-/// known. Failures are logged but never propagated.
-pub fn spawn_command_end_notification(workspace_name: &str, exit_code: Option<i32>) {
-    let (summary, body) = match exit_code {
-        Some(0) => (
-            "Command finished".to_string(),
-            format!("{workspace_name} — exit 0"),
-        ),
-        Some(code) => (
-            format!("Command failed (exit {code})"),
-            format!("{workspace_name} — exit {code}"),
-        ),
-        None => (
-            "Command finished".to_string(),
-            format!("{workspace_name} — exit unknown"),
-        ),
-    };
-    std::thread::spawn(move || {
-        if let Err(e) = notify_rust::Notification::new()
-            .summary(&summary)
-            .body(&body)
-            .appname("piki-desktop")
-            .show()
-        {
-            tracing::warn!("Shell command-end notification failed: {e}");
         }
     });
 }

@@ -32,6 +32,8 @@ fn main() {
         piki_core::shell_env::print_env_and_exit();
     }
 
+    piki_core::notifications::set_appname("piki-desktop");
+
     // Parse --data-dir flag before Tauri takes over args
     let data_dir = parse_data_dir();
 

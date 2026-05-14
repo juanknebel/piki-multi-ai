@@ -34,6 +34,10 @@ tracing = "0.1"
 systemstat = "0.2.6"
 chrono = "0.4.44"
 
+# Desktop notifications (OS-level via libnotify / NSUserNotification / WinRT).
+# Used by `notifications` module — fire-and-forget, failures logged via tracing.
+notify-rust = "4"
+
 # SQLite storage backend
 rusqlite = { version = "0.34", features = ["bundled"] }
 

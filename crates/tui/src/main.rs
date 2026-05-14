@@ -51,6 +51,7 @@ enum Commands {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    piki_core::notifications::set_appname("piki-multi-ai");
     let cli = Cli::parse();
 
     let paths = match cli.data_dir {

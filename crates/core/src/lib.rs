@@ -4,6 +4,7 @@ pub mod domain;
 pub mod git;
 pub mod github;
 pub mod idle_watcher;
+pub mod notifications;
 pub mod paths;
 pub mod preflight;
 pub mod providers;
