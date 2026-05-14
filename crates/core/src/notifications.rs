@@ -130,7 +130,7 @@ pub fn notify_agent_idle(origin: &str, workspace_name: &str, agent_label: &str) 
         workspace: workspace_name.to_string(),
         category: NotificationCategory::Complete,
         title: format!("Agent idle: {agent_label}"),
-        body: format!("{workspace_name} — {agent_label} stopped producing output"),
+        body: format!("{workspace_name} — {agent_label} finished the task"),
         created_at: Instant::now(),
     };
     push_and_toast(item);
