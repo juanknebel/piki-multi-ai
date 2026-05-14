@@ -1,4 +1,5 @@
 import type {
+  AIProvider,
   WorkspaceInfo,
   WorkspaceDetail,
   ChangedFile,
@@ -203,6 +204,26 @@ class AppState extends EventTarget {
       this.emit("pane-tree-changed");
     }
     this._schedulePaneSave();
+  }
+
+  /** Providers that must exist at most once per workspace regardless of how
+   *  many panes are open. The "+" menu, sidebar, menu bar, and command palette
+   *  all route through `focusSingletonTab` to enforce this. */
+  isSingletonProvider(provider: AIProvider): boolean {
+    return provider === "Kanban" || provider === "Api" || provider === "WebPreview";
+  }
+
+  /** If a singleton tab for `provider` is already open in the active workspace,
+   *  focus it (jumping to whichever pane owns it) and return true. Callers
+   *  should skip their normal spawn flow when this returns true. */
+  focusSingletonTab(provider: AIProvider): boolean {
+    if (!this.isSingletonProvider(provider)) return false;
+    const ws = this.activeWs;
+    if (!ws) return false;
+    const idx = ws.tabs.findIndex((t) => t.provider === provider);
+    if (idx < 0) return false;
+    this.setActiveTab(idx);
+    return true;
   }
 
   setActiveTab(tabIdx: number) {

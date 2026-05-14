@@ -595,6 +595,7 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
 }
 
 async function spawnTabSafe(provider: AIProvider) {
+  if (appState.focusSingletonTab(provider)) return;
   const wsIdx = appState.activeWorkspace;
   try {
     const tabId = await ipc.spawnTab(wsIdx, getProviderKey(provider));

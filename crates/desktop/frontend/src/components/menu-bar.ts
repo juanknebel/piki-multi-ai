@@ -48,6 +48,7 @@ interface MenuDefinition {
 const noWs = () => !appState.activeWs;
 
 function spawnTab(provider: AIProvider) {
+  if (appState.focusSingletonTab(provider)) return;
   const wsIdx = appState.activeWorkspace;
   ipc.spawnTab(wsIdx, getProviderKey(provider)).then((tabId) => {
     appState.addTab(wsIdx, { id: tabId, provider, alive: true });
