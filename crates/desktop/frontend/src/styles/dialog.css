@@ -323,6 +323,99 @@
   border-radius: var(--radius-sm);
 }
 
+/* ── Reusable yes/no & status badge ──────────────── */
+.dialog-badge {
+  display: inline-block;
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dialog-badge.success {
+  color: var(--git-added);
+  background: rgba(63, 185, 80, 0.12);
+}
+
+.dialog-badge.muted {
+  color: var(--text-muted);
+  background: var(--bg-hover);
+}
+
+/* ── Providers dialog ────────────────────────────── */
+.providers-dialog {
+  width: 720px;
+}
+
+.providers-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.providers-table thead th {
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.providers-table tbody tr {
+  transition: background var(--transition-fast);
+}
+
+.providers-table tbody tr:hover {
+  background: var(--bg-hover);
+}
+
+.providers-table tbody td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-primary);
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+
+.providers-table .col-muted {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.providers-table .col-actions {
+  text-align: right;
+  white-space: nowrap;
+  width: 1%;
+}
+
+.providers-table .col-actions .dialog-btn {
+  margin-left: 6px;
+}
+
+.providers-empty {
+  padding: 24px 12px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.providers-confirm {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 4px;
+}
+
+.providers-confirm-text {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
 /* ── Agent manager items ─────────────────────────── */
 .agent-manager-item {
   padding: 10px 12px;

@@ -11,9 +11,7 @@ export async function showProvidersDialog() {
   backdrop.className = "dialog-backdrop providers-backdrop";
 
   const dialog = document.createElement("div");
-  dialog.className = "dialog";
-  dialog.style.maxWidth = "700px";
-  dialog.style.maxHeight = "80vh";
+  dialog.className = "dialog providers-dialog";
 
   const header = document.createElement("div");
   header.className = "dialog-header";
@@ -24,8 +22,6 @@ export async function showProvidersDialog() {
 
   const body = document.createElement("div");
   body.className = "dialog-body";
-  body.style.overflowY = "auto";
-  body.style.padding = "12px";
 
   dialog.appendChild(header);
   dialog.appendChild(body);
@@ -50,36 +46,40 @@ export async function showProvidersDialog() {
 
     body.innerHTML = "";
 
-    // Provider list
     if (providers.length === 0) {
-      body.innerHTML = `<div style="color:var(--text-muted);padding:12px">No providers configured.</div>`;
+      const empty = document.createElement("div");
+      empty.className = "providers-empty";
+      empty.textContent = "No providers configured.";
+      body.appendChild(empty);
     } else {
       const table = document.createElement("table");
-      table.style.width = "100%";
-      table.style.borderCollapse = "collapse";
+      table.className = "providers-table";
       table.innerHTML = `
         <thead>
-          <tr style="text-align:left;color:var(--text-muted);font-size:12px;border-bottom:1px solid var(--border)">
-            <th style="padding:4px 8px">Name</th>
-            <th style="padding:4px 8px">Command</th>
-            <th style="padding:4px 8px">Format</th>
-            <th style="padding:4px 8px">Dispatch</th>
-            <th style="padding:4px 8px"></th>
+          <tr>
+            <th>Name</th>
+            <th>Command</th>
+            <th>Format</th>
+            <th>Dispatch</th>
+            <th class="col-actions"></th>
           </tr>
         </thead>
       `;
       const tbody = document.createElement("tbody");
       for (const p of providers) {
         const tr = document.createElement("tr");
-        tr.style.borderBottom = "1px solid var(--border)";
         tr.innerHTML = `
-          <td style="padding:6px 8px">${esc(p.name)}</td>
-          <td style="padding:6px 8px;color:var(--text-muted)">${esc(p.command)}</td>
-          <td style="padding:6px 8px;color:var(--text-muted)">${esc(p.prompt_format)}</td>
-          <td style="padding:6px 8px">${p.dispatchable ? "Yes" : "No"}</td>
-          <td style="padding:6px 8px;text-align:right">
-            <button class="btn-edit" data-name="${escAttr(p.name)}" style="margin-right:4px">Edit</button>
-            <button class="btn-delete" data-name="${escAttr(p.name)}">Delete</button>
+          <td>${esc(p.name)}</td>
+          <td class="col-muted">${esc(p.command)}</td>
+          <td class="col-muted">${esc(p.prompt_format)}</td>
+          <td>
+            <span class="dialog-badge ${p.dispatchable ? "success" : "muted"}">
+              ${p.dispatchable ? "Yes" : "No"}
+            </span>
+          </td>
+          <td class="col-actions">
+            <button class="dialog-btn dialog-btn-secondary dialog-btn-sm btn-edit" data-name="${escAttr(p.name)}">Edit</button>
+            <button class="dialog-btn dialog-btn-danger dialog-btn-sm btn-delete" data-name="${escAttr(p.name)}">Delete</button>
           </td>
         `;
         tbody.appendChild(tr);
@@ -88,15 +88,11 @@ export async function showProvidersDialog() {
       body.appendChild(table);
     }
 
-    // Action buttons
-    const actions = document.createElement("div");
-    actions.style.marginTop = "12px";
-    actions.style.display = "flex";
-    actions.style.gap = "8px";
-    actions.innerHTML = `<button class="btn-new" style="padding:6px 16px">New Provider</button>`;
-    body.appendChild(actions);
+    const footer = document.createElement("div");
+    footer.className = "dialog-footer";
+    footer.innerHTML = `<button class="dialog-btn dialog-btn-primary btn-new">New Provider</button>`;
+    body.appendChild(footer);
 
-    // Wire events
     body.querySelectorAll<HTMLButtonElement>(".btn-edit").forEach((btn) => {
       btn.addEventListener("click", async () => {
         const name = btn.dataset.name!;
@@ -119,11 +115,11 @@ export async function showProvidersDialog() {
 
   function showDeleteConfirm(name: string) {
     body.innerHTML = `
-      <div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:24px 12px">
-        <span style="font-size:13px;color:var(--text-primary)">Delete provider <strong>${esc(name)}</strong>?</span>
-        <div style="display:flex;gap:8px">
-          <button class="confirm-cancel" style="padding:6px 20px">Cancel</button>
-          <button class="confirm-ok" style="padding:6px 20px;background:var(--status-error,#bf616a);color:#fff;border-color:transparent">Delete</button>
+      <div class="providers-confirm">
+        <span class="providers-confirm-text">Delete provider <strong>${esc(name)}</strong>?</span>
+        <div class="dialog-footer" style="border:none;padding:0;background:none">
+          <button class="dialog-btn dialog-btn-secondary confirm-cancel">Cancel</button>
+          <button class="dialog-btn dialog-btn-danger confirm-ok">Delete</button>
         </div>
       </div>
     `;
@@ -150,54 +146,50 @@ export async function showProvidersDialog() {
     };
 
     body.innerHTML = `
-      <div style="display:flex;flex-direction:column;gap:8px">
-        <div class="form-title" style="font-weight:bold;margin-bottom:4px">${isEdit ? "Edit" : "New"} Provider</div>
-        <label style="display:flex;flex-direction:column;gap:2px">
-          <span style="color:var(--text-muted);font-size:12px">Name</span>
-          <input class="f-name" type="text" value="${escAttr(p.name)}" ${isEdit ? "readonly" : ""} />
-        </label>
-        <label style="display:flex;flex-direction:column;gap:2px">
-          <span style="color:var(--text-muted);font-size:12px">Description</span>
-          <input class="f-desc" type="text" value="${escAttr(p.description)}" />
-        </label>
-        <label style="display:flex;flex-direction:column;gap:2px">
-          <span style="color:var(--text-muted);font-size:12px">Command (binary path or name)</span>
-          <input class="f-cmd" type="text" value="${escAttr(p.command)}" />
-        </label>
-        <label style="display:flex;flex-direction:column;gap:2px">
-          <span style="color:var(--text-muted);font-size:12px">Default Args (space-separated)</span>
-          <input class="f-args" type="text" value="${escAttr(p.default_args.join(" "))}" />
-        </label>
-        <div style="display:flex;flex-direction:column;gap:2px">
-          <span style="color:var(--text-muted);font-size:12px">Prompt Format</span>
-          <div class="f-format-slot"></div>
-        </div>
-        <label class="flag-row" style="display:flex;flex-direction:column;gap:2px;${p.prompt_format !== "Flag" ? "display:none" : ""}">
-          <span style="color:var(--text-muted);font-size:12px">Flag (e.g. --prompt)</span>
-          <input class="f-flag" type="text" value="${escAttr(p.prompt_flag)}" />
-        </label>
-        <label style="display:flex;align-items:center;gap:8px">
-          <input class="f-dispatch" type="checkbox" ${p.dispatchable ? "checked" : ""} />
-          <span style="color:var(--text-muted);font-size:12px">Dispatchable (available as agent provider)</span>
-        </label>
-        <label style="display:flex;flex-direction:column;gap:2px">
-          <span style="color:var(--text-muted);font-size:12px">Agent Dir (e.g. .my-ai/agents)</span>
-          <input class="f-agentdir" type="text" value="${escAttr(p.agent_dir ?? "")}" />
-        </label>
-        <div style="display:flex;gap:8px;margin-top:8px">
-          <button class="btn-save" style="padding:6px 16px">Save</button>
-          <button class="btn-cancel" style="padding:6px 16px">Cancel</button>
-        </div>
+      <div class="dialog-title" style="margin-bottom:4px">${isEdit ? "Edit" : "New"} Provider</div>
+      <div class="dialog-field">
+        <label class="dialog-label">Name</label>
+        <input class="dialog-input f-name" type="text" value="${escAttr(p.name)}" ${isEdit ? "readonly" : ""} />
+      </div>
+      <div class="dialog-field">
+        <label class="dialog-label">Description</label>
+        <input class="dialog-input f-desc" type="text" value="${escAttr(p.description)}" />
+      </div>
+      <div class="dialog-field">
+        <label class="dialog-label">Command (binary path or name)</label>
+        <input class="dialog-input f-cmd" type="text" value="${escAttr(p.command)}" />
+      </div>
+      <div class="dialog-field">
+        <label class="dialog-label">Default Args (space-separated)</label>
+        <input class="dialog-input f-args" type="text" value="${escAttr(p.default_args.join(" "))}" />
+      </div>
+      <div class="dialog-field">
+        <label class="dialog-label">Prompt Format</label>
+        <div class="f-format-slot"></div>
+      </div>
+      <div class="dialog-field flag-row" ${p.prompt_format !== "Flag" ? `style="display:none"` : ""}>
+        <label class="dialog-label">Flag (e.g. --prompt)</label>
+        <input class="dialog-input f-flag" type="text" value="${escAttr(p.prompt_flag)}" />
+      </div>
+      <label class="dialog-field" style="flex-direction:row;align-items:center;gap:8px">
+        <input class="f-dispatch" type="checkbox" ${p.dispatchable ? "checked" : ""} />
+        <span class="dialog-label" style="margin:0">Dispatchable (available as agent provider)</span>
+      </label>
+      <div class="dialog-field">
+        <label class="dialog-label">Agent Dir (e.g. .my-ai/agents)</label>
+        <input class="dialog-input f-agentdir" type="text" value="${escAttr(p.agent_dir ?? "")}" />
+      </div>
+      <div class="dialog-footer" style="border:none;padding:0;background:none;margin-top:6px">
+        <button class="dialog-btn dialog-btn-secondary btn-cancel">Cancel</button>
+        <button class="dialog-btn dialog-btn-primary btn-save">Save</button>
       </div>
     `;
 
-    // Native pickers for command (binary) and agent dir
     const cmdInput = body.querySelector<HTMLInputElement>(".f-cmd");
     if (cmdInput) attachPathPicker(cmdInput, { directory: false, title: "Select provider binary" });
     const agentDirInput = body.querySelector<HTMLInputElement>(".f-agentdir");
     if (agentDirInput) attachPathPicker(agentDirInput, { title: "Select agent directory" });
 
-    // Custom dropdown for prompt format (native <select> ignores dark theme styling)
     const formatDropdown: DropdownHandle = createDropdown(
       [
         { value: "Positional", label: "Positional" },
