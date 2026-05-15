@@ -14,7 +14,8 @@ impl CycleField for DialogField {
     fn next(self) -> Self {
         match self {
             Self::Source => Self::Directory,
-            Self::Directory => Self::Name,
+            Self::Directory => Self::Destination,
+            Self::Destination => Self::Name,
             Self::Name => Self::Description,
             Self::Description => Self::Prompt,
             Self::Prompt => Self::KanbanPath,
@@ -27,11 +28,35 @@ impl CycleField for DialogField {
         match self {
             Self::Source => Self::Group,
             Self::Directory => Self::Source,
-            Self::Name => Self::Directory,
+            Self::Destination => Self::Directory,
+            Self::Name => Self::Destination,
             Self::Description => Self::Name,
             Self::Prompt => Self::Description,
             Self::KanbanPath => Self::Prompt,
             Self::Group => Self::KanbanPath,
+        }
+    }
+}
+
+impl DialogField {
+    /// Source-aware cycling: when `source = Local`, the `Destination`
+    /// field is irrelevant (it's only used for GitHub clones) and Tab
+    /// should jump over it.
+    pub fn next_with(self, source: NewWorkspaceSource) -> Self {
+        let n = self.next();
+        if n == Self::Destination && source == NewWorkspaceSource::Local {
+            n.next()
+        } else {
+            n
+        }
+    }
+
+    pub fn prev_with(self, source: NewWorkspaceSource) -> Self {
+        let p = self.prev();
+        if p == Self::Destination && source == NewWorkspaceSource::Local {
+            p.prev()
+        } else {
+            p
         }
     }
 }
@@ -82,6 +107,11 @@ pub enum DialogState {
         /// between "Folder:" and "URL:" based on `source`.
         dir: String,
         dir_cursor: usize,
+        /// Parent directory where the GitHub clone will land. Only used
+        /// when source=GitHub; the dialog seeds it with `paths.repos_dir()`
+        /// as a hint, but the user can change it before submit.
+        destination: String,
+        destination_cursor: usize,
         desc: String,
         desc_cursor: usize,
         prompt: String,

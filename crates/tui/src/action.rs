@@ -22,14 +22,16 @@ pub(crate) enum Action {
         WorkspaceType,
         Option<String>,
     ),
-    /// Clone a GitHub URL into the managed worktrees dir and register as Simple.
-    /// Args: (name, description, prompt, kanban_path, github_url, group)
+    /// Clone a GitHub URL into a user-chosen destination directory and
+    /// register as Simple. Args:
+    /// (name, description, prompt, kanban_path, github_url, destination_dir, group)
     CreateGithubWorkspace(
         String,
         String,
         String,
         Option<String>,
         String,
+        std::path::PathBuf,
         Option<String>,
     ),
     EditWorkspace(usize, Option<String>, String, Option<String>),
@@ -201,9 +203,24 @@ pub(crate) async fn execute_action(
                 }
             }
         }
-        Action::CreateGithubWorkspace(name, description, prompt, kanban_path, github_url, group) => {
+        Action::CreateGithubWorkspace(
+            name,
+            description,
+            prompt,
+            kanban_path,
+            github_url,
+            destination_dir,
+            group,
+        ) => {
             let result = manager
-                .create_from_github(&name, &description, &prompt, kanban_path, &github_url)
+                .create_from_github(
+                    &name,
+                    &description,
+                    &prompt,
+                    kanban_path,
+                    &github_url,
+                    &destination_dir,
+                )
                 .await;
             match result {
                 Ok(mut info) => {

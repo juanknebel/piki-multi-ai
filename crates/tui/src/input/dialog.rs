@@ -89,6 +89,8 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
         ref mut name_cursor,
         ref mut dir,
         ref mut dir_cursor,
+        ref mut destination,
+        ref mut destination_cursor,
         ref mut desc,
         ref mut desc_cursor,
         ref mut prompt,
@@ -106,11 +108,11 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
 
     match key.code {
         KeyCode::Tab => {
-            *active_field = active_field.next();
+            *active_field = active_field.next_with(*source);
             return None;
         }
         KeyCode::BackTab => {
-            *active_field = active_field.prev();
+            *active_field = active_field.prev_with(*source);
             return None;
         }
         KeyCode::Enter => {
@@ -175,6 +177,22 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
                 }
                 NewWorkspaceSource::GitHub => {
                     let url = dir_raw;
+                    let dest_raw = destination.trim().to_string();
+                    if dest_raw.is_empty() {
+                        app.status_message =
+                            Some("Destination folder is required".into());
+                        return None;
+                    }
+                    let dest_expanded = if dest_raw.starts_with('~') {
+                        if let Ok(home) = std::env::var("HOME") {
+                            dest_raw.replacen('~', &home, 1)
+                        } else {
+                            dest_raw.clone()
+                        }
+                    } else {
+                        dest_raw.clone()
+                    };
+                    let dest_path = PathBuf::from(&dest_expanded);
                     let ws_name = if name_trimmed.is_empty() {
                         parse_github_repo_name(&url).unwrap_or_default()
                     } else {
@@ -194,6 +212,7 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
                         prompt_val,
                         kanban_path,
                         url,
+                        dest_path,
                         group_val,
                     ));
                 }
@@ -229,6 +248,7 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
     let (buf, cursor) = match field {
         DialogField::Name => (name as &mut String, name_cursor as &mut usize),
         DialogField::Directory => (dir, dir_cursor),
+        DialogField::Destination => (destination, destination_cursor),
         DialogField::Description => (desc, desc_cursor),
         DialogField::Prompt => (prompt, prompt_cursor),
         DialogField::KanbanPath => (kanban, kanban_cursor),

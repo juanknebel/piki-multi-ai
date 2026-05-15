@@ -142,6 +142,8 @@ pub(crate) fn handle_bulk_insert(app: &mut crate::app::App, text: &str) {
                         name_cursor,
                         dir,
                         dir_cursor,
+                        destination,
+                        destination_cursor,
                         desc,
                         desc_cursor,
                         prompt,
@@ -153,6 +155,9 @@ pub(crate) fn handle_bulk_insert(app: &mut crate::app::App, text: &str) {
                         match active_field {
                             DialogField::Name => bulk_insert(name, name_cursor, text),
                             DialogField::Directory => bulk_insert(dir, dir_cursor, text),
+                            DialogField::Destination => {
+                                bulk_insert(destination, destination_cursor, text)
+                            }
                             DialogField::Description => bulk_insert(desc, desc_cursor, text),
                             DialogField::Prompt => bulk_insert(prompt, prompt_cursor, text),
                             _ => {}

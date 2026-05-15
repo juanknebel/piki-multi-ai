@@ -41,6 +41,7 @@ export function createGithubWorkspace(
   description: string,
   prompt: string,
   githubUrl: string,
+  destinationDir: string,
   group: string | null,
   kanbanPath: string | null = null,
 ): Promise<WorkspaceInfo> {
@@ -49,9 +50,14 @@ export function createGithubWorkspace(
     description,
     prompt,
     githubUrl,
+    destinationDir,
     group,
     kanbanPath,
   });
+}
+
+export function defaultCloneDestination(): Promise<string> {
+  return invoke("default_clone_destination");
 }
 
 export function deleteWorkspace(index: number): Promise<void> {

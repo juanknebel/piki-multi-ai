@@ -301,11 +301,15 @@ pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Act
             }
         }
     } else if app.config.matches_navigation(key, "new_workspace") {
+        let default_dest = app.paths.repos_dir().to_string_lossy().to_string();
+        let default_dest_cursor = default_dest.len();
         app.active_dialog = Some(DialogState::NewWorkspace {
             name: String::new(),
             name_cursor: 0,
             dir: String::new(),
             dir_cursor: 0,
+            destination: default_dest,
+            destination_cursor: default_dest_cursor,
             desc: String::new(),
             desc_cursor: 0,
             prompt: String::new(),

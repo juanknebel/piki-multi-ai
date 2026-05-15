@@ -486,11 +486,15 @@ pub(crate) fn handle_mouse_event(
                             if let Some((full_dir, prompt, kanban, group)) = click_data {
                                 app.selected_file = relative_row;
                                 if is_double_click {
+                                    let dest = app.paths.repos_dir().to_string_lossy().to_string();
+                                    let dest_cursor = dest.chars().count();
                                     app.active_dialog = Some(DialogState::NewWorkspace {
                                         name: String::new(),
                                         name_cursor: 0,
                                         dir_cursor: full_dir.chars().count(),
                                         dir: full_dir,
+                                        destination: dest,
+                                        destination_cursor: dest_cursor,
                                         desc: String::new(),
                                         desc_cursor: 0,
                                         prompt_cursor: prompt.chars().count(),

@@ -162,6 +162,9 @@ pub enum DialogField {
     Name,
     /// Folder path (when source = Local) or URL (when source = GitHub).
     Directory,
+    /// Parent directory the GitHub clone will land into. Only used when
+    /// source = GitHub; cycling skips this field for Local.
+    Destination,
     Description,
     Prompt,
     KanbanPath,

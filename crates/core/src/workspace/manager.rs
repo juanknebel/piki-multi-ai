@@ -258,11 +258,12 @@ impl WorkspaceManager {
         Ok(info)
     }
 
-    /// Clone a GitHub repository into a managed destination under the data
-    /// directory and register it as a Simple workspace tagged with
-    /// `WorkspaceOrigin::GitHub`. The destination is
-    /// `<data_dir>/worktrees/<repo_name>/`, where `repo_name` is parsed from
-    /// the URL.
+    /// Clone a GitHub repository into a user-chosen destination directory
+    /// and register it as a Simple workspace tagged with
+    /// `WorkspaceOrigin::GitHub`. The actual clone lands at
+    /// `destination_dir.join(repo_name)`, where `repo_name` is parsed from
+    /// the URL. The dialog typically pre-fills `destination_dir` with
+    /// [`DataPaths::repos_dir`] as a hint.
     pub async fn create_from_github(
         &self,
         name: &str,
@@ -270,21 +271,40 @@ impl WorkspaceManager {
         prompt: &str,
         kanban_path: Option<String>,
         github_url: &str,
+        destination_dir: &std::path::Path,
     ) -> anyhow::Result<WorkspaceInfo> {
         let repo_name = parse_github_repo_name(github_url)
             .ok_or_else(|| anyhow::anyhow!("invalid GitHub URL: {}", github_url))?;
-        let destination = self.paths.worktrees_dir(&repo_name);
 
-        if destination.exists() {
+        // Auto-create the dialog-default `<data_dir>/repos` parent so the
+        // first-run flow Just Works; for any other user-chosen path we
+        // require it to exist already — surfacing a typo rather than
+        // silently creating an unrelated directory tree.
+        let is_default_repos_dir = destination_dir == self.paths.repos_dir();
+        if !destination_dir.exists() {
+            if is_default_repos_dir {
+                tokio::fs::create_dir_all(destination_dir)
+                    .await
+                    .context("failed to create default repos directory")?;
+            } else {
+                bail!(
+                    "destination folder '{}' does not exist",
+                    destination_dir.display()
+                );
+            }
+        } else if !destination_dir.is_dir() {
             bail!(
-                "destination '{}' already exists; refusing to overwrite",
-                destination.display()
+                "destination '{}' is not a directory",
+                destination_dir.display()
             );
         }
-        if let Some(parent) = destination.parent() {
-            tokio::fs::create_dir_all(parent)
-                .await
-                .context("failed to create worktrees parent directory")?;
+
+        let destination = destination_dir.join(&repo_name);
+        if destination.exists() {
+            bail!(
+                "'{}' already exists; refusing to overwrite",
+                destination.display()
+            );
         }
 
         let output = shell_env::command("git")

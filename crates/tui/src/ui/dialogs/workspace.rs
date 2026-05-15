@@ -13,6 +13,8 @@ pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
         name_cursor,
         ref dir,
         dir_cursor,
+        ref destination,
+        destination_cursor,
         ref desc,
         desc_cursor,
         ref prompt,
@@ -29,8 +31,11 @@ pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
     };
 
     let popup_width = area.width * 70 / 100;
-    // 7 fields × 2 lines (field + blank) + cancel hint
-    let popup_height = 19_u16;
+    // Layout: Source, Directory/URL, [Destination (GitHub only)], Name,
+    // Desc, Prompt, Kanban, Group → 7 fields for Local (19 lines), 8 for
+    // GitHub (21 lines including the extra "Clone into" row).
+    let is_github = source == NewWorkspaceSource::GitHub;
+    let popup_height: u16 = if is_github { 21 } else { 19 };
     let popup = super::clear_popup(frame, area, popup_width.max(40), popup_height);
     let theme = &app.theme.dialog;
 
@@ -41,6 +46,7 @@ pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
 
     let source_active = active_field == DialogField::Source;
     let dir_active = active_field == DialogField::Directory;
+    let destination_active = active_field == DialogField::Destination;
     let name_active = active_field == DialogField::Name;
     let desc_active = active_field == DialogField::Description;
     let prompt_active = active_field == DialogField::Prompt;
@@ -56,7 +62,7 @@ pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
         NewWorkspaceSource::GitHub => "  URL:     ",
     };
 
-    let lines: Vec<Line<'_>> = vec![
+    let mut lines: Vec<Line<'_>> = vec![
         Line::from(vec![
             Span::styled(
                 "  Source:  ",
@@ -77,6 +83,21 @@ pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
             super::field_style(dir_active, active_c, inactive_c),
         ),
         Line::from(""),
+    ];
+
+    if is_github {
+        lines.push(super::render_text_field(
+            "  Clone:  ",
+            destination,
+            destination_active,
+            destination_cursor,
+            fmax,
+            super::field_style(destination_active, active_c, inactive_c),
+        ));
+        lines.push(Line::from(""));
+    }
+
+    lines.extend([
         super::render_text_field(
             "  Name:    ",
             name,
@@ -126,7 +147,7 @@ pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
             "  [Esc] Cancel",
             Style::default().fg(theme.new_ws_inactive),
         )]),
-    ];
+    ]);
 
     let text = Paragraph::new(lines).block(super::popup_block("New Workspace", theme.new_ws_border));
     frame.render_widget(text, popup);

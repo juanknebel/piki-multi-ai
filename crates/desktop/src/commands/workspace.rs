@@ -12,6 +12,17 @@ pub async fn list_workspaces(state: State<'_, Mutex<DesktopApp>>) -> Result<Vec<
     Ok(app.workspaces.iter().map(|ws| ws.info.clone()).collect())
 }
 
+/// Returns the suggested default destination folder for a GitHub clone:
+/// `<data_dir>/repos`. The dialog pre-fills its "Clone into" input with
+/// this so the user has a sensible starting point, but can override.
+#[tauri::command]
+pub async fn default_clone_destination(
+    state: State<'_, Mutex<DesktopApp>>,
+) -> Result<String, String> {
+    let app = state.lock();
+    Ok(app.paths.repos_dir().to_string_lossy().to_string())
+}
+
 #[tauri::command]
 pub async fn switch_workspace(
     state: State<'_, Mutex<DesktopApp>>,
@@ -137,6 +148,7 @@ pub async fn create_github_workspace(
     description: String,
     prompt: String,
     github_url: String,
+    destination_dir: String,
     group: Option<String>,
     kanban_path: Option<String>,
 ) -> Result<WorkspaceInfo, String> {
@@ -148,8 +160,16 @@ pub async fn create_github_workspace(
         (manager, storage)
     };
 
+    let destination_path = std::path::PathBuf::from(destination_dir);
     let info = manager
-        .create_from_github(&name, &description, &prompt, kanban_path, &github_url)
+        .create_from_github(
+            &name,
+            &description,
+            &prompt,
+            kanban_path,
+            &github_url,
+            &destination_path,
+        )
         .await
         .map_err(|e| e.to_string())?;
 

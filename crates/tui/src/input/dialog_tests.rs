@@ -3225,11 +3225,15 @@ use crate::dialog_state::CycleField;
 fn open_new_workspace(app: &mut App, source: NewWorkspaceSource, active_field: DialogField) {
     app.mode = AppMode::NewWorkspace;
     app.active_pane = ActivePane::WorkspaceList;
+    let dest = app.paths.repos_dir().to_string_lossy().to_string();
+    let dest_cursor = dest.chars().count();
     app.active_dialog = Some(DialogState::NewWorkspace {
         name: String::new(),
         name_cursor: 0,
         dir: String::new(),
         dir_cursor: 0,
+        destination: dest,
+        destination_cursor: dest_cursor,
         desc: String::new(),
         desc_cursor: 0,
         prompt: String::new(),
@@ -3262,6 +3266,7 @@ fn current_new_workspace_text(app: &App, field: DialogField) -> String {
         Some(DialogState::NewWorkspace {
             ref name,
             ref dir,
+            ref destination,
             ref desc,
             ref prompt,
             ref kanban,
@@ -3270,6 +3275,7 @@ fn current_new_workspace_text(app: &App, field: DialogField) -> String {
         }) => match field {
             DialogField::Name => name.clone(),
             DialogField::Directory => dir.clone(),
+            DialogField::Destination => destination.clone(),
             DialogField::Description => desc.clone(),
             DialogField::Prompt => prompt.clone(),
             DialogField::KanbanPath => kanban.clone(),
@@ -3287,6 +3293,8 @@ fn set_new_workspace_buffer(app: &mut App, field: DialogField, value: &str) {
             ref mut name_cursor,
             ref mut dir,
             ref mut dir_cursor,
+            ref mut destination,
+            ref mut destination_cursor,
             ref mut desc,
             ref mut desc_cursor,
             ref mut prompt,
@@ -3300,6 +3308,7 @@ fn set_new_workspace_buffer(app: &mut App, field: DialogField, value: &str) {
             let (buf, cursor) = match field {
                 DialogField::Name => (name, name_cursor),
                 DialogField::Directory => (dir, dir_cursor),
+                DialogField::Destination => (destination, destination_cursor),
                 DialogField::Description => (desc, desc_cursor),
                 DialogField::Prompt => (prompt, prompt_cursor),
                 DialogField::KanbanPath => (kanban, kanban_cursor),
@@ -3316,10 +3325,11 @@ fn set_new_workspace_buffer(app: &mut App, field: DialogField, value: &str) {
 // ── Unit tests for the CycleField impl on DialogField ─────────────────────
 
 #[test]
-fn cycle_field_next_visits_all_seven_fields() {
+fn cycle_field_next_visits_all_eight_fields() {
     let order = [
         DialogField::Source,
         DialogField::Directory,
+        DialogField::Destination,
         DialogField::Name,
         DialogField::Description,
         DialogField::Prompt,
@@ -3337,6 +3347,7 @@ fn cycle_field_prev_is_inverse_of_next() {
     let all = [
         DialogField::Source,
         DialogField::Directory,
+        DialogField::Destination,
         DialogField::Name,
         DialogField::Description,
         DialogField::Prompt,
@@ -3349,6 +3360,32 @@ fn cycle_field_prev_is_inverse_of_next() {
     }
 }
 
+#[test]
+fn cycle_field_next_with_local_source_skips_destination() {
+    // Local source has no use for Destination — Tab should skip it.
+    assert_eq!(
+        DialogField::Directory.next_with(NewWorkspaceSource::Local),
+        DialogField::Name,
+    );
+    assert_eq!(
+        DialogField::Name.prev_with(NewWorkspaceSource::Local),
+        DialogField::Directory,
+    );
+}
+
+#[test]
+fn cycle_field_next_with_github_source_visits_destination() {
+    // GitHub source includes Destination in the rotation.
+    assert_eq!(
+        DialogField::Directory.next_with(NewWorkspaceSource::GitHub),
+        DialogField::Destination,
+    );
+    assert_eq!(
+        DialogField::Name.prev_with(NewWorkspaceSource::GitHub),
+        DialogField::Destination,
+    );
+}
+
 // ── Handler tests ─────────────────────────────────────────────────────────
 
 #[test]
@@ -3356,8 +3393,30 @@ fn new_workspace_tab_full_cycle() {
     let mut app = test_app();
     open_new_workspace(&mut app, NewWorkspaceSource::Local, DialogField::Source);
 
+    // Local source skips Destination.
     let expected = [
         DialogField::Directory,
+        DialogField::Name,
+        DialogField::Description,
+        DialogField::Prompt,
+        DialogField::KanbanPath,
+        DialogField::Group,
+        DialogField::Source,
+    ];
+    for target in expected {
+        handle_new_workspace_input(&mut app, key(KeyCode::Tab));
+        assert_eq!(current_new_workspace_field(&app), target);
+    }
+}
+
+#[test]
+fn new_workspace_tab_full_cycle_github_includes_destination() {
+    let mut app = test_app();
+    open_new_workspace(&mut app, NewWorkspaceSource::GitHub, DialogField::Source);
+
+    let expected = [
+        DialogField::Directory,
+        DialogField::Destination,
         DialogField::Name,
         DialogField::Description,
         DialogField::Prompt,
@@ -3588,12 +3647,14 @@ fn new_workspace_enter_github_dispatches_create_github_action() {
     let action = handle_new_workspace_input(&mut app, key(KeyCode::Enter));
 
     match action {
-        Some(Action::CreateGithubWorkspace(name, desc, prompt, kanban, url, group)) => {
+        Some(Action::CreateGithubWorkspace(name, desc, prompt, kanban, url, dest, group)) => {
             assert_eq!(name, "myrepo");
             assert_eq!(desc, "d");
             assert_eq!(prompt, "p");
             assert!(kanban.is_none());
             assert_eq!(url, "https://github.com/owner/myrepo.git");
+            // open_new_workspace seeds destination with paths.repos_dir() as a hint.
+            assert_eq!(dest, app.paths.repos_dir());
             assert_eq!(group.as_deref(), Some("g"));
         }
         other => panic!("expected CreateGithubWorkspace, got {other:?}"),
