@@ -276,7 +276,6 @@ pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Act
             let kanban = ws.kanban_path.clone().unwrap_or_default();
             let prompt = ws.prompt.clone();
             let group = ws.info.group.clone().unwrap_or_default();
-            let ws_type = ws.info.workspace_type;
             app.active_dialog = Some(DialogState::NewWorkspace {
                 name: String::new(),
                 name_cursor: 0,
@@ -290,8 +289,8 @@ pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Act
                 kanban,
                 group_cursor: group.chars().count(),
                 group,
-                ws_type,
-                active_field: DialogField::Type,
+                source: crate::app::NewWorkspaceSource::Local,
+                active_field: DialogField::Source,
             });
             app.mode = AppMode::NewWorkspace;
         }
@@ -309,8 +308,8 @@ pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Act
             kanban_cursor: 0,
             group: String::new(),
             group_cursor: 0,
-            ws_type: piki_core::WorkspaceType::default(),
-            active_field: DialogField::Type,
+            source: crate::app::NewWorkspaceSource::default(),
+            active_field: DialogField::Source,
         });
         app.mode = AppMode::NewWorkspace;
     } else if app.config.matches_navigation(key, "delete_workspace") {

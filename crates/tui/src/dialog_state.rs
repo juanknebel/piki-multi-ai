@@ -1,47 +1,34 @@
-use crate::app::DialogField;
-use piki_core::WorkspaceType;
+use crate::app::{DialogField, NewWorkspaceSource};
 
 /// Field-cycling behavior for tab-navigation in multi-field dialogs.
 /// Implemented by per-dialog field enums (`EditWorkspaceField`,
-/// `EditProviderField`, `EditAgentField`) so handlers can call
-/// `*active_field = active_field.next()` instead of hard-coding match arms.
+/// `EditProviderField`, `EditAgentField`, `DialogField`) so handlers can
+/// call `*active_field = active_field.next()` instead of hard-coding match
+/// arms.
 pub trait CycleField: Copy {
     fn next(self) -> Self;
     fn prev(self) -> Self;
 }
 
-/// Field-cycling that depends on a contextual value. Use this when the
-/// next/prev field depends on some runtime state (e.g. `NewWorkspace`
-/// skipping the `Name` field when `WorkspaceType != Worktree`). For static
-/// cycles, prefer the plain `CycleField` trait.
-pub trait CycleFieldCtx<Ctx>: Copy {
-    fn next_ctx(self, ctx: &Ctx) -> Self;
-    fn prev_ctx(self, ctx: &Ctx) -> Self;
-}
-
-impl CycleFieldCtx<WorkspaceType> for DialogField {
-    fn next_ctx(self, ws_type: &WorkspaceType) -> Self {
-        let hide_name = *ws_type != WorkspaceType::Worktree;
+impl CycleField for DialogField {
+    fn next(self) -> Self {
         match self {
-            Self::Type if hide_name => Self::Directory,
-            Self::Type => Self::Name,
-            Self::Name => Self::Directory,
-            Self::Directory => Self::Description,
+            Self::Source => Self::Directory,
+            Self::Directory => Self::Name,
+            Self::Name => Self::Description,
             Self::Description => Self::Prompt,
             Self::Prompt => Self::KanbanPath,
             Self::KanbanPath => Self::Group,
-            Self::Group => Self::Type,
+            Self::Group => Self::Source,
         }
     }
 
-    fn prev_ctx(self, ws_type: &WorkspaceType) -> Self {
-        let hide_name = *ws_type != WorkspaceType::Worktree;
+    fn prev(self) -> Self {
         match self {
-            Self::Type => Self::Group,
-            Self::Name => Self::Type,
-            Self::Directory if hide_name => Self::Type,
-            Self::Directory => Self::Name,
-            Self::Description => Self::Directory,
+            Self::Source => Self::Group,
+            Self::Directory => Self::Source,
+            Self::Name => Self::Directory,
+            Self::Description => Self::Name,
             Self::Prompt => Self::Description,
             Self::KanbanPath => Self::Prompt,
             Self::Group => Self::KanbanPath,
@@ -90,6 +77,9 @@ pub enum DialogState {
     NewWorkspace {
         name: String,
         name_cursor: usize,
+        /// Holds either the folder path (source=Local) or the GitHub URL
+        /// (source=GitHub). The label rendered above this field switches
+        /// between "Folder:" and "URL:" based on `source`.
         dir: String,
         dir_cursor: usize,
         desc: String,
@@ -100,7 +90,7 @@ pub enum DialogState {
         kanban_cursor: usize,
         group: String,
         group_cursor: usize,
-        ws_type: WorkspaceType,
+        source: NewWorkspaceSource,
         active_field: DialogField,
     },
     EditWorkspace {

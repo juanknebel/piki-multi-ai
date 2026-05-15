@@ -36,6 +36,24 @@ export function createWorkspace(
   });
 }
 
+export function createGithubWorkspace(
+  name: string,
+  description: string,
+  prompt: string,
+  githubUrl: string,
+  group: string | null,
+  kanbanPath: string | null = null,
+): Promise<WorkspaceInfo> {
+  return invoke("create_github_workspace", {
+    name,
+    description,
+    prompt,
+    githubUrl,
+    group,
+    kanbanPath,
+  });
+}
+
 export function deleteWorkspace(index: number): Promise<void> {
   return invoke("delete_workspace", { index });
 }

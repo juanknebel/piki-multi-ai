@@ -499,8 +499,8 @@ pub(crate) fn handle_mouse_event(
                                         kanban,
                                         group_cursor: group.chars().count(),
                                         group,
-                                        ws_type: piki_core::WorkspaceType::Simple,
-                                        active_field: crate::app::DialogField::Type,
+                                        source: crate::app::NewWorkspaceSource::Local,
+                                        active_field: crate::app::DialogField::Source,
                                     });
                                     app.mode = AppMode::NewWorkspace;
                                 }

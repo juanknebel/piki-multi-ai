@@ -4,7 +4,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
-use crate::app::{App, DialogField, WorkspaceType};
+use crate::app::{App, DialogField, NewWorkspaceSource, WorkspaceType};
 use crate::dialog_state::{DialogState, EditWorkspaceField};
 
 pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
@@ -21,7 +21,7 @@ pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
         kanban_cursor,
         ref group,
         group_cursor,
-        ws_type,
+        source,
         active_field,
     }) = app.active_dialog
     else {
@@ -29,8 +29,8 @@ pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
     };
 
     let popup_width = area.width * 70 / 100;
-    let hide_name = ws_type != WorkspaceType::Worktree;
-    let popup_height = if hide_name { 17 } else { 19 };
+    // 7 fields × 2 lines (field + blank) + cancel hint
+    let popup_height = 19_u16;
     let popup = super::clear_popup(frame, area, popup_width.max(40), popup_height);
     let theme = &app.theme.dialog;
 
@@ -39,94 +39,94 @@ pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
     let label_width = 10_u16;
     let fmax = popup.width.saturating_sub(label_width + 2) as usize;
 
-    let type_active = active_field == DialogField::Type;
+    let source_active = active_field == DialogField::Source;
     let dir_active = active_field == DialogField::Directory;
+    let name_active = active_field == DialogField::Name;
     let desc_active = active_field == DialogField::Description;
     let prompt_active = active_field == DialogField::Prompt;
     let kanban_active = active_field == DialogField::KanbanPath;
     let group_active = active_field == DialogField::Group;
 
-    let type_text = match ws_type {
-        WorkspaceType::Simple => "[Simple]  Worktree   Project",
-        WorkspaceType::Worktree => " Simple  [Worktree]  Project",
-        WorkspaceType::Project => " Simple   Worktree  [Project]",
+    let source_text = match source {
+        NewWorkspaceSource::Local => "[Local folder]  GitHub URL",
+        NewWorkspaceSource::GitHub => " Local folder  [GitHub URL]",
+    };
+    let dir_label = match source {
+        NewWorkspaceSource::Local => "  Folder:  ",
+        NewWorkspaceSource::GitHub => "  URL:     ",
     };
 
-    let mut lines: Vec<Line<'_>> = Vec::new();
-
-    lines.push(Line::from(vec![
-        Span::styled("  Type:   ", super::field_style(type_active, active_c, inactive_c)),
-        Span::styled(type_text, super::field_style(type_active, active_c, inactive_c)),
-    ]));
-    lines.push(Line::from(""));
-
-    if !hide_name {
-        let name_active = active_field == DialogField::Name;
-        lines.push(super::render_text_field(
-            "  Name:   ",
+    let lines: Vec<Line<'_>> = vec![
+        Line::from(vec![
+            Span::styled(
+                "  Source:  ",
+                super::field_style(source_active, active_c, inactive_c),
+            ),
+            Span::styled(
+                source_text,
+                super::field_style(source_active, active_c, inactive_c),
+            ),
+        ]),
+        Line::from(""),
+        super::render_text_field(
+            dir_label,
+            dir,
+            dir_active,
+            dir_cursor,
+            fmax,
+            super::field_style(dir_active, active_c, inactive_c),
+        ),
+        Line::from(""),
+        super::render_text_field(
+            "  Name:    ",
             name,
             name_active,
             name_cursor,
             fmax,
             super::field_style(name_active, active_c, inactive_c),
-        ));
-        lines.push(Line::from(""));
-    }
-
-    lines.push(super::render_text_field(
-        "  Dir:    ",
-        dir,
-        dir_active,
-        dir_cursor,
-        fmax,
-        super::field_style(dir_active, active_c, inactive_c),
-    ));
-    lines.push(Line::from(""));
-
-    lines.push(super::render_text_field(
-        "  Desc:   ",
-        desc,
-        desc_active,
-        desc_cursor,
-        fmax,
-        super::field_style(desc_active, active_c, inactive_c),
-    ));
-    lines.push(Line::from(""));
-
-    lines.push(super::render_text_field(
-        "  Prompt: ",
-        prompt,
-        prompt_active,
-        prompt_cursor,
-        fmax,
-        super::field_style(prompt_active, active_c, inactive_c),
-    ));
-    lines.push(Line::from(""));
-
-    lines.push(super::render_text_field(
-        "  Kanban: ",
-        kanban,
-        kanban_active,
-        kanban_cursor,
-        fmax,
-        super::field_style(kanban_active, active_c, inactive_c),
-    ));
-    lines.push(Line::from(""));
-
-    lines.push(super::render_text_field(
-        "  Group:  ",
-        group,
-        group_active,
-        group_cursor,
-        fmax,
-        super::field_style(group_active, active_c, inactive_c),
-    ));
-    lines.push(Line::from(""));
-
-    lines.push(Line::from(vec![Span::styled(
-        "  [Esc] Cancel",
-        Style::default().fg(theme.new_ws_inactive),
-    )]));
+        ),
+        Line::from(""),
+        super::render_text_field(
+            "  Desc:   ",
+            desc,
+            desc_active,
+            desc_cursor,
+            fmax,
+            super::field_style(desc_active, active_c, inactive_c),
+        ),
+        Line::from(""),
+        super::render_text_field(
+            "  Prompt: ",
+            prompt,
+            prompt_active,
+            prompt_cursor,
+            fmax,
+            super::field_style(prompt_active, active_c, inactive_c),
+        ),
+        Line::from(""),
+        super::render_text_field(
+            "  Kanban: ",
+            kanban,
+            kanban_active,
+            kanban_cursor,
+            fmax,
+            super::field_style(kanban_active, active_c, inactive_c),
+        ),
+        Line::from(""),
+        super::render_text_field(
+            "  Group:  ",
+            group,
+            group_active,
+            group_cursor,
+            fmax,
+            super::field_style(group_active, active_c, inactive_c),
+        ),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  [Esc] Cancel",
+            Style::default().fg(theme.new_ws_inactive),
+        )]),
+    ];
 
     let text = Paragraph::new(lines).block(super::popup_block("New Workspace", theme.new_ws_border));
     frame.render_widget(text, popup);

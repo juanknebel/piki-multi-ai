@@ -253,9 +253,9 @@ piki-multi-ai migrate
 ### Creating Workspaces
 
 Press `n` to open the New Workspace dialog. Provide:
-- **Type:** Cycle between `Simple`, `Worktree`, and `Project` using `Space`, `Left`, or `Right`. Worktree creates an isolated git worktree+branch; Simple points to an existing directory; Project manages a multi-service directory root.
-- **Name:** The git branch name (supports `/`, `.`, `-`, `_`). Hidden for Simple and Project workspaces — name is auto-derived from the directory.
-- **Dir:** The path to the source git repository (Worktree), the target directory (Simple), or the project root containing sub-directories (Project).
+- **Source:** Toggle between `Local folder` and `GitHub URL` using `Space`, `Left`, or `Right`. Local folder points to any existing directory on disk (git not required); GitHub URL clones a public/private GitHub repo into `<data_dir>/worktrees/<repo>/`. The resulting workspace is always a Simple workspace internally; worktrees are spawned later from a GitHub-origin workspace via the "Create Worktree" action.
+- **Folder / URL:** When Source = Local folder, this is the path to the directory (`~` expands to `$HOME`). When Source = GitHub URL, paste the clone URL (HTTPS, SSH, or `git@github.com:owner/repo.git`).
+- **Name:** *(optional)* Auto-derived when blank — folder basename for Local, repo name for GitHub. Provide your own value to disambiguate workspaces.
 - **Desc:** (Optional) A brief description of the task.
 - **Prompt:** (Optional) An initial prompt stored with the workspace.
 - **Kanban Path:** (Optional) Path to the Kanban board for this workspace (defaults to `~/.config/flow/boards/default`). If a local path is provided and no `board.txt` exists there, a default board with 4 columns (`todo`, `in_progress`, `in_review`, `done`) will be created automatically.

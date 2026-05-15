@@ -1189,8 +1189,8 @@ pub(super) fn handle_filelist_interaction(app: &mut App, key: KeyEvent) -> Optio
                 kanban,
                 group_cursor: group.chars().count(),
                 group,
-                ws_type: piki_core::WorkspaceType::Simple,
-                active_field: DialogField::Type,
+                source: crate::app::NewWorkspaceSource::Local,
+                active_field: DialogField::Source,
             });
             app.mode = AppMode::NewWorkspace;
             app.interacting = false;

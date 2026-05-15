@@ -3,12 +3,13 @@ use std::path::PathBuf;
 use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::action::Action;
-use crate::app::{ActivePane, App, AppMode, DialogField};
+use crate::app::{ActivePane, App, AppMode, DialogField, NewWorkspaceSource};
 use crate::config::has_ctrl;
 use crate::dialog_state::{
-    ConflictStrategy, CycleField, CycleFieldCtx, DialogState, EditAgentField, EditProviderField,
+    ConflictStrategy, CycleField, DialogState, EditAgentField, EditProviderField,
     EditWorkspaceField, NewTabMenu,
 };
+use piki_core::workspace::manager::parse_github_repo_name;
 use piki_core::{AIProvider, MergeStrategy, WorkspaceType};
 
 use super::confirm_common::{ConfirmResult, dismiss_dialog, dismiss_dialog_to_pane, handle_yn_input, with_dialog_mut};
@@ -96,7 +97,7 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
         ref mut kanban_cursor,
         ref mut group,
         ref mut group_cursor,
-        ref mut ws_type,
+        ref mut source,
         ref mut active_field,
     }) = app.active_dialog
     else {
@@ -105,84 +106,98 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
 
     match key.code {
         KeyCode::Tab => {
-            *active_field = active_field.next_ctx(ws_type);
+            *active_field = active_field.next();
             return None;
         }
         KeyCode::BackTab => {
-            *active_field = active_field.prev_ctx(ws_type);
+            *active_field = active_field.prev();
             return None;
         }
         KeyCode::Enter => {
-            let dir_raw = dir.clone();
+            let dir_raw = dir.trim().to_string();
             let description = desc.clone();
             let prompt_val = prompt.clone();
-            let kanban_path_raw = kanban.trim();
-            let kanban_path = if kanban_path_raw.is_empty() {
-                None
-            } else {
-                Some(kanban_path_raw.to_string())
-            };
-            let group_raw = group.trim();
-            let group_val = if group_raw.is_empty() {
-                None
-            } else {
-                Some(group_raw.to_string())
-            };
-            let ws_type_val = *ws_type;
+            let kanban_path = opt_trimmed(kanban);
+            let group_val = opt_trimmed(group);
+            let name_trimmed = name.trim();
+            let source_val = *source;
 
-            // For Simple/Project workspaces, derive name from directory basename
-            let ws_name = if ws_type_val != WorkspaceType::Worktree {
-                if name.is_empty() {
-                    PathBuf::from(&dir_raw)
-                        .file_name()
-                        .map(|n| n.to_string_lossy().to_string())
-                        .unwrap_or_default()
-                } else {
-                    name.clone()
-                }
-            } else {
-                name.clone()
-            };
-
-            if ws_name.is_empty() || dir_raw.is_empty() {
-                let msg = if ws_type_val != WorkspaceType::Worktree {
-                    "Directory is required"
-                } else {
-                    "Name and directory are required"
-                };
-                app.status_message = Some(msg.into());
+            if dir_raw.is_empty() {
+                app.status_message = Some(match source_val {
+                    NewWorkspaceSource::Local => "Folder is required".into(),
+                    NewWorkspaceSource::GitHub => "GitHub URL is required".into(),
+                });
                 return None;
             }
 
-            // Resolve ~ to home directory
-            let dir_str = if dir_raw.starts_with('~') {
-                if let Ok(home) = std::env::var("HOME") {
-                    dir_raw.replacen('~', &home, 1)
-                } else {
-                    dir_raw.clone()
+            match source_val {
+                NewWorkspaceSource::Local => {
+                    let dir_str = if dir_raw.starts_with('~') {
+                        if let Ok(home) = std::env::var("HOME") {
+                            dir_raw.replacen('~', &home, 1)
+                        } else {
+                            dir_raw.clone()
+                        }
+                    } else {
+                        dir_raw.clone()
+                    };
+                    let dir_path = PathBuf::from(&dir_str);
+                    if !dir_path.exists() {
+                        app.status_message =
+                            Some(format!("Folder does not exist: {}", dir_str));
+                        return None;
+                    }
+                    let ws_name = if name_trimmed.is_empty() {
+                        dir_path
+                            .file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_default()
+                    } else {
+                        name_trimmed.to_string()
+                    };
+                    if ws_name.is_empty() {
+                        app.status_message =
+                            Some("Could not derive workspace name from folder".into());
+                        return None;
+                    }
+                    app.active_dialog = None;
+                    app.mode = AppMode::Normal;
+                    app.active_pane = ActivePane::WorkspaceList;
+                    return Some(Action::CreateWorkspace(
+                        ws_name,
+                        description,
+                        prompt_val,
+                        kanban_path,
+                        dir_path,
+                        WorkspaceType::Simple,
+                        group_val,
+                    ));
                 }
-            } else {
-                dir_raw.clone()
-            };
-
-            let dir_path = PathBuf::from(&dir_str);
-            if !dir_path.exists() {
-                app.status_message = Some(format!("Directory does not exist: {}", dir_str));
-                return None;
+                NewWorkspaceSource::GitHub => {
+                    let url = dir_raw;
+                    let ws_name = if name_trimmed.is_empty() {
+                        parse_github_repo_name(&url).unwrap_or_default()
+                    } else {
+                        name_trimmed.to_string()
+                    };
+                    if ws_name.is_empty() {
+                        app.status_message =
+                            Some("Could not parse repo name from URL".into());
+                        return None;
+                    }
+                    app.active_dialog = None;
+                    app.mode = AppMode::Normal;
+                    app.active_pane = ActivePane::WorkspaceList;
+                    return Some(Action::CreateGithubWorkspace(
+                        ws_name,
+                        description,
+                        prompt_val,
+                        kanban_path,
+                        url,
+                        group_val,
+                    ));
+                }
             }
-
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
-            app.active_pane = ActivePane::WorkspaceList;
-            return Some(Action::CreateWorkspace(
-                ws_name,
-                description,
-                prompt_val,
-                kanban_path,
-                dir_path,
-                ws_type_val,
-                group_val,
-            ));
         }
         _ if is_cancel(key, app.config.platform) => {
             app.active_dialog = None;
@@ -193,31 +208,17 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
         _ => {}
     }
 
-    // Type field: cycle with Space/Right (visual left→right) or Left (reverse)
-    // Visual order: Simple  Worktree  Project
-    if *active_field == DialogField::Type {
+    // Source field: toggle Local ↔ GitHub with Space/Left/Right.
+    if *active_field == DialogField::Source {
         match key.code {
-            KeyCode::Char(' ') | KeyCode::Right => {
-                *ws_type = match *ws_type {
-                    WorkspaceType::Simple => WorkspaceType::Worktree,
-                    WorkspaceType::Worktree => WorkspaceType::Project,
-                    WorkspaceType::Project => WorkspaceType::Simple,
+            KeyCode::Char(' ') | KeyCode::Right | KeyCode::Left => {
+                *source = match *source {
+                    NewWorkspaceSource::Local => NewWorkspaceSource::GitHub,
+                    NewWorkspaceSource::GitHub => NewWorkspaceSource::Local,
                 };
-                if *ws_type != WorkspaceType::Worktree {
-                    name.clear();
-                    *name_cursor = 0;
-                }
-            }
-            KeyCode::Left => {
-                *ws_type = match *ws_type {
-                    WorkspaceType::Simple => WorkspaceType::Project,
-                    WorkspaceType::Worktree => WorkspaceType::Simple,
-                    WorkspaceType::Project => WorkspaceType::Worktree,
-                };
-                if *ws_type != WorkspaceType::Worktree {
-                    name.clear();
-                    *name_cursor = 0;
-                }
+                // Avoid carrying a stale path into a URL field (or vice versa)
+                dir.clear();
+                *dir_cursor = 0;
             }
             _ => {}
         }
@@ -232,7 +233,7 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
         DialogField::Prompt => (prompt, prompt_cursor),
         DialogField::KanbanPath => (kanban, kanban_cursor),
         DialogField::Group => (group, group_cursor),
-        DialogField::Type => return None,
+        DialogField::Source => return None,
     };
     let validator = |c: char| -> bool {
         match field {
@@ -1444,6 +1445,17 @@ fn char_count(text: &str) -> usize {
         text.len()
     } else {
         text.chars().count()
+    }
+}
+
+/// Trim a dialog buffer; return `None` when empty, `Some(trimmed)` otherwise.
+/// Used by the new-workspace handler to skip blank `kanban`/`group` fields.
+fn opt_trimmed(buf: &str) -> Option<String> {
+    let trimmed = buf.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
     }
 }
 

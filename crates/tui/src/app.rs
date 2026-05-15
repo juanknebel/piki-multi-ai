@@ -155,13 +155,25 @@ pub enum ActivePane {
 /// Which field is active in the New Workspace dialog
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DialogField {
-    Type,
+    /// Source toggle: Local folder vs GitHub URL.
+    Source,
     Name,
+    /// Folder path (when source = Local) or URL (when source = GitHub).
     Directory,
     Description,
     Prompt,
     KanbanPath,
     Group,
+}
+
+/// Source mode for the New Workspace dialog. Drives whether the dialog asks
+/// for a folder path or a GitHub URL, and which workspace-creation action is
+/// dispatched on Enter.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum NewWorkspaceSource {
+    #[default]
+    Local,
+    GitHub,
 }
 
 /// An item in the sidebar workspace list
@@ -1431,14 +1443,14 @@ mod tests {
             }
         };
 
-        // Dialog opens on Type field
-        assert_eq!(get_field(&app), DialogField::Type);
-
-        crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
-        assert_eq!(get_field(&app), DialogField::Name);
+        // Dialog opens on Source field
+        assert_eq!(get_field(&app), DialogField::Source);
 
         crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
         assert_eq!(get_field(&app), DialogField::Directory);
+
+        crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
+        assert_eq!(get_field(&app), DialogField::Name);
 
         crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
         assert_eq!(get_field(&app), DialogField::Description);
@@ -1453,7 +1465,7 @@ mod tests {
         assert_eq!(get_field(&app), DialogField::Group);
 
         crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
-        assert_eq!(get_field(&app), DialogField::Type);
+        assert_eq!(get_field(&app), DialogField::Source);
     }
 
     #[test]
@@ -1463,7 +1475,8 @@ mod tests {
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('n')));
         assert_eq!(app.mode, AppMode::NewWorkspace);
 
-        // Tab from Type to Name field first
+        // Tab from Source → Directory → Name to reach the Name field
+        crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
         crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
 
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('a')));

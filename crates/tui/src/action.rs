@@ -24,7 +24,6 @@ pub(crate) enum Action {
     ),
     /// Clone a GitHub URL into the managed worktrees dir and register as Simple.
     /// Args: (name, description, prompt, kanban_path, github_url, group)
-    #[allow(dead_code)] // wired by the new-workspace dialog in Layer 2
     CreateGithubWorkspace(
         String,
         String,

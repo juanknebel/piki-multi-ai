@@ -460,7 +460,7 @@ async fn detect_origin_from_repo(root: &std::path::Path) -> WorkspaceOrigin {
 ///
 /// Handles HTTPS (`https://github.com/foo/bar[.git][/]`), SCP-style SSH
 /// (`git@github.com:foo/bar.git`), and `ssh://` URLs.
-fn parse_github_repo_name(url: &str) -> Option<String> {
+pub fn parse_github_repo_name(url: &str) -> Option<String> {
     let trimmed = url.trim().trim_end_matches('/');
     let trimmed = trimmed.split(['?', '#']).next().unwrap_or(trimmed);
     let last = trimmed.rsplit(['/', ':']).next()?;

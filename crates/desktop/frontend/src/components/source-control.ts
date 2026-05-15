@@ -257,7 +257,6 @@ function renderProjectView(container: HTMLElement, projectPath: string) {
           mode: "create",
           prefill: {
             dir: `${projectPath.replace(/\/+$/, "")}/${name}`,
-            workspaceType: "Simple",
           },
         });
       });

@@ -12,6 +12,13 @@ export type WorkspaceStatus = "Idle" | "Busy" | "Done" | { Error: string };
 
 export type WorkspaceType = "Worktree" | "Simple" | "Project";
 
+/** Where a workspace's files originated. Drives source-control visibility
+ *  and the "Create Worktree" action (GitHub-only). Mirrors
+ *  `piki_core::WorkspaceOrigin`. */
+export type WorkspaceOrigin =
+  | { kind: "Local" }
+  | { kind: "GitHub"; url: string };
+
 export type FileStatus =
   | "Modified"
   | "Added"
@@ -42,6 +49,7 @@ export interface WorkspaceInfo {
   dispatch_card_id: string | null;
   dispatch_source_kanban: string | null;
   dispatch_agent_name: string | null;
+  origin: WorkspaceOrigin;
 }
 
 export interface TabInfo {
