@@ -1,5 +1,6 @@
 ---
 source: crates/tui/src/ui/mod.rs
+assertion_line: 188
 expression: content
 ---
 
@@ -17,7 +18,7 @@ expression: content
                │             ██║     ██║██║  ██╗██║             │
                │             ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝             │
                │                                                │
-               │          piki-multi-ai v1.5.0          │
+               │              piki-multi-ai v1.5.0              │
                │                                                │
                │               Author: Juan Knebel              │
                │          Contact: juanknebel@gmail.com         │
