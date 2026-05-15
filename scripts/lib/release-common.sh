@@ -160,20 +160,37 @@ set_workspace_version() {
             || die "frontend package.json bump failed"
     fi
 
-    # 4. About-overlay snapshot: version is rendered via env!("CARGO_PKG_VERSION")
-    # at compile time, so the insta snapshot must be kept in sync manually.
-    local about_snap="$dir/crates/tui/src/ui/snapshots/piki_multi_ai__ui__tests__about_overlay.snap"
-    if [[ -f "$about_snap" ]]; then
-        sed -i "s/piki-multi-ai v[^ ]*/piki-multi-ai v$version/" "$about_snap"
-        grep -q "piki-multi-ai v$version" "$about_snap" \
-            || die "about_overlay snapshot bump failed"
-    fi
-
-    # 5. Regenerate Cargo.lock so workspace crate entries match the new version.
-    # Without this the lockfile stays out of sync and the next `cargo build`
-    # silently rewrites it, breaking `--locked` builds and tag reproducibility.
+    # 4. Refresh Cargo.lock so workspace crate entries match the new version.
+    # Has to happen BEFORE the snapshot-regen step below because that runs
+    # `cargo test`, which would otherwise fail under `--locked` or silently
+    # rewrite Cargo.lock and break tag reproducibility.
     (cd "$dir" && cargo update --workspace --quiet) \
         || die "cargo update --workspace failed"
+
+    # 5. About-overlay snapshot: the version is rendered via
+    # env!("CARGO_PKG_VERSION") and then centered inside a fixed-width box,
+    # so a plain `sed` of the version string leaves stale padding when the
+    # version length changes (e.g. 1.5.0-nightly → 1.5.0). Instead, let insta
+    # regenerate the file from the actual rendered output: the test will fail
+    # under the old snapshot, drop a `.snap.new` next to it, and we accept
+    # that as the new ground truth.
+    local about_snap="$dir/crates/tui/src/ui/snapshots/piki_multi_ai__ui__tests__about_overlay.snap"
+    if [[ -f "$about_snap" ]]; then
+        rm -f "$about_snap.new"
+        # Failure is expected (old snapshot vs. new version) — we want the
+        # side-effect (.snap.new) and discard the exit status.
+        (cd "$dir" && cargo test -p agent-multi --bin piki-multi-ai \
+            test_snapshot_about_overlay --quiet >/dev/null 2>&1) || true
+        [[ -f "$about_snap.new" ]] \
+            || die "about_overlay regeneration: insta did not produce $about_snap.new (is the test still in agent-multi?)"
+        mv "$about_snap.new" "$about_snap"
+        grep -q "piki-multi-ai v$version" "$about_snap" \
+            || die "about_overlay regeneration produced wrong version (expected v$version)"
+        # Sanity-check: with the new snapshot in place the test must pass.
+        (cd "$dir" && cargo test -p agent-multi --bin piki-multi-ai \
+            test_snapshot_about_overlay --quiet >/dev/null 2>&1) \
+            || die "about_overlay snapshot still fails after regeneration"
+    fi
 }
 
 # Abort unless release.yml for $tag completed successfully AND the GitHub
