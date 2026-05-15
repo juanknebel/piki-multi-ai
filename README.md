@@ -1,6 +1,6 @@
 # agent-multi
 
-[![CI](https://github.com/juanknebel/piki-multi-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/juanknebel/piki-multi-ai/actions/workflows/ci.yml)
+[![Nightly](https://github.com/juanknebel/piki-multi-ai/actions/workflows/nightly.yml/badge.svg)](https://github.com/juanknebel/piki-multi-ai/actions/workflows/nightly.yml)
 
 A terminal UI for orchestrating multiple [Claude Code](https://docs.anthropic.com/en/docs/claude-code) instances in parallel — each running in its own isolated git worktree, pointing to an existing directory, or managing a multi-service project root.
 
