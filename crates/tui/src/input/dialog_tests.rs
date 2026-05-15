@@ -3643,3 +3643,220 @@ fn new_workspace_returns_none_when_dialog_not_active() {
     let action = handle_new_workspace_input(&mut app, key(KeyCode::Tab));
     assert!(action.is_none());
 }
+
+// ── Layer 3: CreateWorktree dialog + clone_workspace keybinding gating ────
+
+use crate::app::Workspace;
+use crate::dialog_state::CreateWorktreeField;
+use piki_core::WorkspaceOrigin;
+use super::dialog::handle_create_worktree_input;
+
+fn push_test_ws(app: &mut App, name: &str, origin: WorkspaceOrigin) -> usize {
+    let mut info = piki_core::WorkspaceInfo::new(
+        name.to_string(),
+        String::new(),
+        String::new(),
+        None,
+        "main".to_string(),
+        std::path::PathBuf::from("/tmp/test"),
+        std::path::PathBuf::from("/tmp/test/parent"),
+    );
+    info.origin = origin;
+    info.workspace_type = piki_core::WorkspaceType::Simple;
+    app.workspaces.push(Workspace::from_info(info));
+    app.workspaces.len() - 1
+}
+
+#[test]
+fn clone_keybinding_on_github_workspace_opens_create_worktree() {
+    let mut app = test_app();
+    let idx = push_test_ws(
+        &mut app,
+        "gh-ws",
+        WorkspaceOrigin::GitHub {
+            url: "https://github.com/owner/repo".into(),
+        },
+    );
+    app.selected_workspace = idx;
+
+    crate::input::handle_key_event(&mut app, key(KeyCode::Char('r')));
+
+    assert_eq!(app.mode, AppMode::CreateWorktree);
+    assert!(matches!(
+        app.active_dialog,
+        Some(DialogState::CreateWorktree { .. })
+    ));
+}
+
+#[test]
+fn clone_keybinding_on_local_workspace_shows_status_message() {
+    let mut app = test_app();
+    let idx = push_test_ws(&mut app, "local-ws", WorkspaceOrigin::Local);
+    app.selected_workspace = idx;
+
+    crate::input::handle_key_event(&mut app, key(KeyCode::Char('r')));
+
+    assert_eq!(app.mode, AppMode::Normal);
+    assert!(app.active_dialog.is_none());
+    assert!(
+        app.status_message
+            .as_deref()
+            .is_some_and(|m| m.contains("GitHub"))
+    );
+}
+
+#[test]
+fn create_worktree_tab_cycles_four_fields() {
+    let mut app = test_app();
+    let idx = push_test_ws(
+        &mut app,
+        "gh",
+        WorkspaceOrigin::GitHub {
+            url: "https://github.com/o/r".into(),
+        },
+    );
+    app.active_dialog = Some(DialogState::CreateWorktree {
+        parent_idx: idx,
+        name: String::new(),
+        name_cursor: 0,
+        prompt: String::new(),
+        prompt_cursor: 0,
+        kanban: String::new(),
+        kanban_cursor: 0,
+        group: String::new(),
+        group_cursor: 0,
+        active_field: CreateWorktreeField::Name,
+    });
+    app.mode = AppMode::CreateWorktree;
+
+    let cycle = [
+        CreateWorktreeField::Prompt,
+        CreateWorktreeField::KanbanPath,
+        CreateWorktreeField::Group,
+        CreateWorktreeField::Name,
+    ];
+    for expected in cycle {
+        handle_create_worktree_input(&mut app, key(KeyCode::Tab));
+        let actual = match app.active_dialog {
+            Some(DialogState::CreateWorktree { active_field, .. }) => active_field,
+            _ => panic!("expected CreateWorktree dialog"),
+        };
+        assert_eq!(actual, expected);
+    }
+}
+
+#[test]
+fn create_worktree_enter_with_empty_name_keeps_dialog_open() {
+    let mut app = test_app();
+    let idx = push_test_ws(
+        &mut app,
+        "gh",
+        WorkspaceOrigin::GitHub {
+            url: "https://github.com/o/r".into(),
+        },
+    );
+    app.active_dialog = Some(DialogState::CreateWorktree {
+        parent_idx: idx,
+        name: String::new(),
+        name_cursor: 0,
+        prompt: String::new(),
+        prompt_cursor: 0,
+        kanban: String::new(),
+        kanban_cursor: 0,
+        group: String::new(),
+        group_cursor: 0,
+        active_field: CreateWorktreeField::Name,
+    });
+    app.mode = AppMode::CreateWorktree;
+
+    let action = handle_create_worktree_input(&mut app, key(KeyCode::Enter));
+
+    assert!(action.is_none());
+    assert!(matches!(
+        app.active_dialog,
+        Some(DialogState::CreateWorktree { .. })
+    ));
+    assert!(app.status_message.is_some());
+}
+
+#[test]
+fn create_worktree_enter_dispatches_create_workspace_with_worktree_type() {
+    let mut app = test_app();
+    let parent_repo = std::path::PathBuf::from("/tmp/parent-repo");
+    let idx = {
+        let mut info = piki_core::WorkspaceInfo::new(
+            "gh-parent".into(),
+            String::new(),
+            String::new(),
+            None,
+            "main".into(),
+            parent_repo.clone(),
+            parent_repo.clone(),
+        );
+        info.origin = WorkspaceOrigin::GitHub {
+            url: "https://github.com/o/r".into(),
+        };
+        app.workspaces.push(Workspace::from_info(info));
+        app.workspaces.len() - 1
+    };
+    app.active_dialog = Some(DialogState::CreateWorktree {
+        parent_idx: idx,
+        name: "feature/x".into(),
+        name_cursor: 0,
+        prompt: "do the thing".into(),
+        prompt_cursor: 0,
+        kanban: "  ".into(),
+        kanban_cursor: 0,
+        group: "agents".into(),
+        group_cursor: 0,
+        active_field: CreateWorktreeField::Name,
+    });
+    app.mode = AppMode::CreateWorktree;
+
+    let action = handle_create_worktree_input(&mut app, key(KeyCode::Enter));
+
+    match action {
+        Some(Action::CreateWorkspace(name, _, prompt, kanban, dir, ws_type, group)) => {
+            assert_eq!(name, "feature/x");
+            assert_eq!(prompt, "do the thing");
+            assert!(kanban.is_none());
+            assert_eq!(dir, parent_repo);
+            assert_eq!(ws_type, WorkspaceType::Worktree);
+            assert_eq!(group.as_deref(), Some("agents"));
+        }
+        other => panic!("expected CreateWorkspace(Worktree), got {other:?}"),
+    }
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+#[test]
+fn create_worktree_esc_dismisses() {
+    let mut app = test_app();
+    let idx = push_test_ws(
+        &mut app,
+        "gh",
+        WorkspaceOrigin::GitHub {
+            url: "https://github.com/o/r".into(),
+        },
+    );
+    app.active_dialog = Some(DialogState::CreateWorktree {
+        parent_idx: idx,
+        name: String::new(),
+        name_cursor: 0,
+        prompt: String::new(),
+        prompt_cursor: 0,
+        kanban: String::new(),
+        kanban_cursor: 0,
+        group: String::new(),
+        group_cursor: 0,
+        active_field: CreateWorktreeField::Name,
+    });
+    app.mode = AppMode::CreateWorktree;
+
+    let action = handle_create_worktree_input(&mut app, key(KeyCode::Esc));
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}

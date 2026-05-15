@@ -50,6 +50,10 @@ export function renderSourceControl(container: HTMLElement) {
       renderProjectView(container, ws.info.path);
       return;
     }
+    if (ws && ws.info.origin?.kind === "Local") {
+      renderLocalOriginPlaceholder(container);
+      return;
+    }
     const files = ws?.changedFiles ?? [];
     const aheadBehind = ws?.aheadBehind;
 
@@ -213,6 +217,23 @@ export function renderSourceControl(container: HTMLElement) {
 }
 
 const projectSubdirCache = new Map<number, string[]>();
+
+function renderLocalOriginPlaceholder(container: HTMLElement) {
+  container.innerHTML = "";
+  const header = document.createElement("div");
+  header.className = "sidebar-header sc-header";
+  header.innerHTML = `<span>SOURCE CONTROL</span>`;
+  container.appendChild(header);
+
+  const empty = document.createElement("div");
+  empty.className = "empty-message";
+  empty.style.padding = "16px 20px";
+  empty.style.color = "var(--color-text-muted)";
+  empty.style.lineHeight = "1.5";
+  empty.textContent =
+    "Source control is unavailable for local-folder workspaces. Recreate the workspace from a GitHub URL to enable git operations.";
+  container.appendChild(empty);
+}
 
 function renderProjectView(container: HTMLElement, projectPath: string) {
   const wsIdx = appState.activeWorkspace;

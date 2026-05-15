@@ -103,6 +103,22 @@ pub enum DialogState {
         group_cursor: usize,
         active_field: EditWorkspaceField,
     },
+    /// Create a git worktree from a GitHub-origin parent workspace. The parent
+    /// is identified by index; the dialog only captures the worktree branch
+    /// name (required) and optional overrides for prompt/kanban/group
+    /// (pre-filled from the parent).
+    CreateWorktree {
+        parent_idx: usize,
+        name: String,
+        name_cursor: usize,
+        prompt: String,
+        prompt_cursor: usize,
+        kanban: String,
+        kanban_cursor: usize,
+        group: String,
+        group_cursor: usize,
+        active_field: CreateWorktreeField,
+    },
     CommitMessage {
         buffer: String,
     },
@@ -325,6 +341,35 @@ impl CycleField for EditWorkspaceField {
             Self::KanbanPath => Self::Group,
             Self::Group => Self::Prompt,
             Self::Prompt => Self::KanbanPath,
+        }
+    }
+}
+
+/// Active field in the CreateWorktree dialog (Layer 3 GitHub-only flow).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CreateWorktreeField {
+    Name,
+    Prompt,
+    KanbanPath,
+    Group,
+}
+
+impl CycleField for CreateWorktreeField {
+    fn next(self) -> Self {
+        match self {
+            Self::Name => Self::Prompt,
+            Self::Prompt => Self::KanbanPath,
+            Self::KanbanPath => Self::Group,
+            Self::Group => Self::Name,
+        }
+    }
+
+    fn prev(self) -> Self {
+        match self {
+            Self::Name => Self::Group,
+            Self::Prompt => Self::Name,
+            Self::KanbanPath => Self::Prompt,
+            Self::Group => Self::KanbanPath,
         }
     }
 }

@@ -86,6 +86,8 @@ pub enum AppMode {
     NewWorkspace,
     /// Input dialog for editing a workspace
     EditWorkspace,
+    /// Input dialog for creating a git worktree from a GitHub-origin parent
+    CreateWorktree,
     /// Confirmation dialog for deleting a workspace
     ConfirmDelete,
     /// Help overlay

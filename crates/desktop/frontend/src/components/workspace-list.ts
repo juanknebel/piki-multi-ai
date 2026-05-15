@@ -3,6 +3,7 @@ import * as ipc from "../ipc";
 import { toast } from "./toast";
 import { createDropdown } from "./dropdown";
 import {
+  showCreateWorktreeDialog,
   showWorkspaceDialog,
   showWorkspaceInfo,
 } from "./dialogs/workspace-dialog";
@@ -100,7 +101,7 @@ export function renderWorkspaceList(container: HTMLElement) {
               <button class="ws-action-btn" data-action="agents" title="Manage Agents">⚙</button>
               <button class="ws-action-btn" data-action="info" title="Info">i</button>
               <button class="ws-action-btn" data-action="edit" title="Edit">✎</button>
-              <button class="ws-action-btn" data-action="clone" title="Clone">⧉</button>
+              ${info.origin?.kind === "GitHub" ? `<button class="ws-action-btn" data-action="create-worktree" title="Create Worktree">⧉</button>` : ""}
               <button class="ws-action-btn ws-action-delete" data-action="delete" title="Delete">×</button>
             </span>
             <span class="workspace-status ${statusClass}">${getStatusIcon(ws.status)}</span>
@@ -128,8 +129,8 @@ export function renderWorkspaceList(container: HTMLElement) {
                 showWorkspaceInfo(idx);
               } else if (action === "edit") {
                 showWorkspaceDialog({ mode: "edit", editIndex: idx });
-              } else if (action === "clone") {
-                showWorkspaceDialog({ mode: "clone", cloneFrom: info });
+              } else if (action === "create-worktree") {
+                showCreateWorktreeDialog(info);
               } else if (action === "delete") {
                 showDeleteConfirm(idx, info.name);
               }

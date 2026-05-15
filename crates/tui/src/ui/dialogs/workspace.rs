@@ -5,7 +5,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
 use crate::app::{App, DialogField, NewWorkspaceSource, WorkspaceType};
-use crate::dialog_state::{DialogState, EditWorkspaceField};
+use crate::dialog_state::{CreateWorktreeField, DialogState, EditWorkspaceField};
 
 pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
     let Some(DialogState::NewWorkspace {
@@ -195,6 +195,99 @@ pub(crate) fn render_edit_workspace_dialog(frame: &mut Frame, area: Rect, app: &
     ];
 
     let text = Paragraph::new(lines).block(super::popup_block("Edit Workspace", theme.new_ws_border));
+    frame.render_widget(text, popup);
+}
+
+pub(crate) fn render_create_worktree_dialog(frame: &mut Frame, area: Rect, app: &App) {
+    let Some(DialogState::CreateWorktree {
+        parent_idx,
+        ref name,
+        name_cursor,
+        ref prompt,
+        prompt_cursor,
+        ref kanban,
+        kanban_cursor,
+        ref group,
+        group_cursor,
+        active_field,
+    }) = app.active_dialog
+    else {
+        return;
+    };
+
+    let popup_width = area.width * 70 / 100;
+    let popup = super::clear_popup(frame, area, popup_width.max(40), 15);
+    let theme = &app.theme.dialog;
+
+    let active_c = theme.new_ws_active;
+    let inactive_c = theme.new_ws_inactive;
+    let label_width = 10_u16;
+    let fmax = popup.width.saturating_sub(label_width + 2) as usize;
+
+    let name_active = active_field == CreateWorktreeField::Name;
+    let prompt_active = active_field == CreateWorktreeField::Prompt;
+    let kanban_active = active_field == CreateWorktreeField::KanbanPath;
+    let group_active = active_field == CreateWorktreeField::Group;
+
+    let parent_label = app
+        .workspaces
+        .get(parent_idx)
+        .map(|w| w.info.source_repo_display.as_str())
+        .unwrap_or("?");
+
+    let lines = vec![
+        Line::from(vec![
+            Span::styled(
+                "  Parent: ",
+                Style::default().fg(inactive_c),
+            ),
+            Span::raw(parent_label.to_string()),
+        ]),
+        Line::from(""),
+        super::render_text_field(
+            "  Name:   ",
+            name,
+            name_active,
+            name_cursor,
+            fmax,
+            super::field_style(name_active, active_c, inactive_c),
+        ),
+        Line::from(""),
+        super::render_text_field(
+            "  Prompt: ",
+            prompt,
+            prompt_active,
+            prompt_cursor,
+            fmax,
+            super::field_style(prompt_active, active_c, inactive_c),
+        ),
+        Line::from(""),
+        super::render_text_field(
+            "  Kanban: ",
+            kanban,
+            kanban_active,
+            kanban_cursor,
+            fmax,
+            super::field_style(kanban_active, active_c, inactive_c),
+        ),
+        Line::from(""),
+        super::render_text_field(
+            "  Group:  ",
+            group,
+            group_active,
+            group_cursor,
+            fmax,
+            super::field_style(group_active, active_c, inactive_c),
+        ),
+        Line::from(""),
+        Line::from(vec![Span::styled(
+            "  [Esc] Cancel",
+            Style::default().fg(theme.new_ws_inactive),
+        )]),
+    ];
+
+    let text =
+        Paragraph::new(lines).block(super::popup_block("Create Worktree", theme.new_ws_border));
     frame.render_widget(text, popup);
 }
 

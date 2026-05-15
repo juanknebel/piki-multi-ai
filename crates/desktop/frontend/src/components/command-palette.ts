@@ -1,7 +1,11 @@
 import { appState } from "../state";
 import * as ipc from "../ipc";
 import { toast } from "./toast";
-import { showWorkspaceDialog, showWorkspaceInfo } from "./dialogs/workspace-dialog";
+import {
+  showCreateWorktreeDialog,
+  showWorkspaceDialog,
+  showWorkspaceInfo,
+} from "./dialogs/workspace-dialog";
 import { showMergeDialog } from "./dialogs/merge-dialog";
 import { showGitLog } from "./dialogs/gitlog-dialog";
 import { showStashDialog } from "./dialogs/stash-dialog";
@@ -190,13 +194,14 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
       category: "Workspace",
       action: () => showWorkspaceInfo(wsIdx),
     });
-    cmds.push({
-      id: "ws-clone",
-      label: `Clone "${ws.info.name}"`,
-      category: "Workspace",
-      action: () =>
-        showWorkspaceDialog({ mode: "clone", cloneFrom: ws.info }),
-    });
+    if (ws.info.origin?.kind === "GitHub") {
+      cmds.push({
+        id: "ws-create-worktree",
+        label: `Create Worktree from "${ws.info.name}"`,
+        category: "Workspace",
+        action: () => showCreateWorktreeDialog(ws.info),
+      });
+    }
     cmds.push({
       id: "ws-delete",
       label: `Delete "${ws.info.name}"`,

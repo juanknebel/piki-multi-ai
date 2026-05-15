@@ -57,7 +57,7 @@ fn all_commands() -> Vec<PaletteCommand> {
         ),
         cmd!(
             "clone_workspace",
-            "Clone Workspace",
+            "Create Worktree (GitHub-only)",
             "Workspace",
             "clone_workspace"
         ),

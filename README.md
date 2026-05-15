@@ -353,7 +353,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `h` / `j` / `k` / `l` | Move between panes (`h` from main panel goes to workspace list) |
 | `Enter` | Interact with selected pane |
 | `n` | Create new workspace |
-| `r` | Clone workspace (new workspace pre-filled with directory, prompt, and kanban path) |
+| `r` | Create Worktree (GitHub-only): spawn a git worktree from the selected GitHub-origin workspace, inheriting prompt/kanban/group |
 | `e` | Edit workspace options (Kanban path, Prompt) |
 | `d` | Delete selected workspace (for dispatched workspaces, prompts which kanban column to move the card to) |
 | `Tab` / `Shift+Tab` | Context-aware: cycle workspaces (sidebar), subtabs (main), files (status) |

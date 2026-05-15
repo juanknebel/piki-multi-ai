@@ -555,7 +555,7 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             match app.active_pane {
                 ActivePane::WorkspaceList => {
                     keys.push((cfg.get_binding("navigation", "new_workspace"), "new ws"));
-                    keys.push((cfg.get_binding("navigation", "clone_workspace"), "clone ws"));
+                    keys.push((cfg.get_binding("navigation", "clone_workspace"), "create worktree"));
                     keys.push((cfg.get_binding("navigation", "edit_workspace"), "edit ws"));
                     keys.push((
                         cfg.get_binding("navigation", "delete_workspace"),

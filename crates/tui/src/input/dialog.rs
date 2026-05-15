@@ -6,8 +6,8 @@ use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField, NewWorkspaceSource};
 use crate::config::has_ctrl;
 use crate::dialog_state::{
-    ConflictStrategy, CycleField, DialogState, EditAgentField, EditProviderField,
-    EditWorkspaceField, NewTabMenu,
+    ConflictStrategy, CreateWorktreeField, CycleField, DialogState, EditAgentField,
+    EditProviderField, EditWorkspaceField, NewTabMenu,
 };
 use piki_core::workspace::manager::parse_github_repo_name;
 use piki_core::{AIProvider, MergeStrategy, WorkspaceType};
@@ -238,6 +238,90 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
     let validator = |c: char| -> bool {
         match field {
             DialogField::Name => {
+                c.is_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '/'
+            }
+            _ => !c.is_control(),
+        }
+    };
+    handle_text_input(buf, cursor, key, validator);
+    None
+}
+
+pub(super) fn handle_create_worktree_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::CreateWorktree {
+        parent_idx,
+        ref mut name,
+        ref mut name_cursor,
+        ref mut prompt,
+        ref mut prompt_cursor,
+        ref mut kanban,
+        ref mut kanban_cursor,
+        ref mut group,
+        ref mut group_cursor,
+        ref mut active_field,
+    }) = app.active_dialog
+    else {
+        return None;
+    };
+
+    match key.code {
+        KeyCode::Tab => {
+            *active_field = active_field.next();
+            return None;
+        }
+        KeyCode::BackTab => {
+            *active_field = active_field.prev();
+            return None;
+        }
+        KeyCode::Enter => {
+            let branch = name.trim().to_string();
+            if branch.is_empty() {
+                app.status_message = Some("Worktree name is required".into());
+                return None;
+            }
+            let prompt_val = prompt.clone();
+            let kanban_opt = opt_trimmed(kanban);
+            let group_opt = opt_trimmed(group);
+            let Some(parent) = app.workspaces.get(parent_idx) else {
+                app.status_message = Some("Parent workspace no longer exists".into());
+                app.active_dialog = None;
+                app.mode = AppMode::Normal;
+                app.active_pane = ActivePane::WorkspaceList;
+                return None;
+            };
+            let parent_dir = parent.info.source_repo.clone();
+            app.active_dialog = None;
+            app.mode = AppMode::Normal;
+            app.active_pane = ActivePane::WorkspaceList;
+            return Some(Action::CreateWorkspace(
+                branch,
+                String::new(),
+                prompt_val,
+                kanban_opt,
+                parent_dir,
+                WorkspaceType::Worktree,
+                group_opt,
+            ));
+        }
+        _ if is_cancel(key, app.config.platform) => {
+            app.active_dialog = None;
+            app.mode = AppMode::Normal;
+            app.active_pane = ActivePane::WorkspaceList;
+            return None;
+        }
+        _ => {}
+    }
+
+    let field = *active_field;
+    let (buf, cursor) = match field {
+        CreateWorktreeField::Name => (name as &mut String, name_cursor as &mut usize),
+        CreateWorktreeField::Prompt => (prompt, prompt_cursor),
+        CreateWorktreeField::KanbanPath => (kanban, kanban_cursor),
+        CreateWorktreeField::Group => (group, group_cursor),
+    };
+    let validator = |c: char| -> bool {
+        match field {
+            CreateWorktreeField::Name => {
                 c.is_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '/'
             }
             _ => !c.is_control(),

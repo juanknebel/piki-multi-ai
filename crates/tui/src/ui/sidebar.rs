@@ -274,15 +274,36 @@ pub(super) fn render_file_list(frame: &mut Frame, area: Rect, app: &App) {
     let border_style = pane_border_style(app, ActivePane::GitStatus);
     let theme = &app.theme.file_list;
 
-    let is_project = app
-        .current_workspace()
-        .is_some_and(|ws| ws.info.workspace_type == piki_core::WorkspaceType::Project);
+    let ws = app.current_workspace();
+    let is_project = ws
+        .is_some_and(|w| w.info.workspace_type == piki_core::WorkspaceType::Project);
+    let is_local_origin =
+        ws.is_some_and(|w| matches!(w.info.origin, piki_core::WorkspaceOrigin::Local));
 
     if is_project {
         render_project_file_list(frame, area, app, is_active, border_style, theme);
+    } else if is_local_origin {
+        render_local_origin_placeholder(frame, area, border_style, theme);
     } else {
         render_git_file_list(frame, area, app, is_active, border_style, theme);
     }
+}
+
+fn render_local_origin_placeholder(
+    frame: &mut Frame,
+    area: Rect,
+    border_style: Style,
+    theme: &crate::theme::FileListTheme,
+) {
+    let block = Block::default()
+        .title(" STATUS ")
+        .title_style(border_style)
+        .borders(Borders::ALL)
+        .border_style(border_style);
+    let text = Paragraph::new("  Source control unavailable for local-folder workspaces")
+        .style(Style::default().fg(theme.empty_text))
+        .block(block);
+    frame.render_widget(text, area);
 }
 
 fn render_project_file_list(

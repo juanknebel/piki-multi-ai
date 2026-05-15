@@ -31,7 +31,7 @@ use self::dialog::{
     handle_git_log_input,
     handle_git_stash_input, handle_help_input, handle_import_agents_input, handle_logs_input,
     handle_manage_agents_input, handle_manage_providers_input, handle_edit_provider_input,
-    handle_new_tab_input, handle_new_workspace_input,
+    handle_create_worktree_input, handle_new_tab_input, handle_new_workspace_input,
     handle_workspace_info_input,
 };
 use self::editor_input::handle_inline_edit_input;
@@ -139,6 +139,7 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         AppMode::InlineEdit => return handle_inline_edit_input(app, key),
         AppMode::NewWorkspace => return handle_new_workspace_input(app, key),
         AppMode::EditWorkspace => return handle_edit_workspace_input(app, key),
+        AppMode::CreateWorktree => return handle_create_worktree_input(app, key),
         AppMode::CommitMessage => return handle_commit_message_input(app, key),
         AppMode::ConfirmMerge => return handle_confirm_merge_input(app, key),
         AppMode::NewTab => return handle_new_tab_input(app, key),
@@ -270,29 +271,34 @@ pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Act
             app.mode = AppMode::EditWorkspace;
         }
     } else if app.config.matches_navigation(key, "clone_workspace") {
-        if !app.workspaces.is_empty() {
-            let ws = &app.workspaces[app.selected_workspace];
-            let dir = ws.source_repo.display().to_string();
-            let kanban = ws.kanban_path.clone().unwrap_or_default();
-            let prompt = ws.prompt.clone();
-            let group = ws.info.group.clone().unwrap_or_default();
-            app.active_dialog = Some(DialogState::NewWorkspace {
-                name: String::new(),
-                name_cursor: 0,
-                dir_cursor: dir.chars().count(),
-                dir,
-                desc: String::new(),
-                desc_cursor: 0,
-                prompt_cursor: prompt.chars().count(),
-                prompt,
-                kanban_cursor: kanban.chars().count(),
-                kanban,
-                group_cursor: group.chars().count(),
-                group,
-                source: crate::app::NewWorkspaceSource::Local,
-                active_field: DialogField::Source,
-            });
-            app.mode = AppMode::NewWorkspace;
+        // Layer 3: the former "Clone workspace" action is now "Create Worktree",
+        // available only when the selected workspace has a GitHub origin.
+        if let Some(ws) = app.workspaces.get(app.selected_workspace) {
+            match &ws.info.origin {
+                piki_core::WorkspaceOrigin::GitHub { .. } => {
+                    let kanban = ws.kanban_path.clone().unwrap_or_default();
+                    let prompt = ws.prompt.clone();
+                    let group = ws.info.group.clone().unwrap_or_default();
+                    app.active_dialog = Some(crate::dialog_state::DialogState::CreateWorktree {
+                        parent_idx: app.selected_workspace,
+                        name: String::new(),
+                        name_cursor: 0,
+                        prompt_cursor: prompt.chars().count(),
+                        prompt,
+                        kanban_cursor: kanban.chars().count(),
+                        kanban,
+                        group_cursor: group.chars().count(),
+                        group,
+                        active_field: crate::dialog_state::CreateWorktreeField::Name,
+                    });
+                    app.mode = AppMode::CreateWorktree;
+                }
+                piki_core::WorkspaceOrigin::Local => {
+                    app.status_message = Some(
+                        "Create Worktree is available only for GitHub workspaces".into(),
+                    );
+                }
+            }
         }
     } else if app.config.matches_navigation(key, "new_workspace") {
         app.active_dialog = Some(DialogState::NewWorkspace {

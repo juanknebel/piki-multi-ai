@@ -1,6 +1,6 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 205
+assertion_line: 174
 expression: content
 ---
             ┌ Help ───────────────────────────────────────────────┐
@@ -9,7 +9,7 @@ expression: content
             │    k/j/h/l       Move between panes (h→ws list)     │
             │    enter         Interact with pane                 │
             │    n             New workspace                      │
-            │    r             Clone workspace                    │
+            │    r             Create worktree (GitHub-only)      │
             │    e             Edit workspace                     │
             │    d             Delete workspace                   │
             │    tab/shift-tab Next/Prev workspace                │

@@ -365,3 +365,107 @@ function escapeHtml(text: string): string {
 function escapeAttr(text: string): string {
   return (text ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;");
 }
+
+/** Layer 3: GitHub-only "Create Worktree" dialog. Spawns a worktree
+ *  workspace anchored at the parent's source_repo. Only the branch name is
+ *  required; prompt/kanban/group default to the parent's values. */
+export function showCreateWorktreeDialog(parent: WorkspaceInfo) {
+  document.querySelector(".dialog-backdrop")?.remove();
+
+  if (parent.origin?.kind !== "GitHub") {
+    toast("Create Worktree is available only for GitHub workspaces", "error");
+    return;
+  }
+
+  const backdrop = document.createElement("div");
+  backdrop.className = "dialog-backdrop";
+  backdrop.innerHTML = `
+    <div class="dialog">
+      <div class="dialog-header">
+        <span class="dialog-title">Create Worktree</span>
+        <button class="dialog-close">×</button>
+      </div>
+      <div class="dialog-body">
+        <div class="dialog-field">
+          <label class="dialog-label">Parent</label>
+          <input class="dialog-input" value="${escapeAttr(parent.source_repo_display || parent.name)}" disabled />
+        </div>
+        <div class="dialog-field">
+          <label class="dialog-label">Branch name</label>
+          <input class="dialog-input" id="wt-name" placeholder="feature/my-branch" />
+        </div>
+        <div class="dialog-field">
+          <label class="dialog-label">Prompt</label>
+          <textarea class="dialog-textarea" id="wt-prompt" placeholder="Initial prompt for AI tabs" rows="3">${escapeHtml(parent.prompt ?? "")}</textarea>
+        </div>
+        <div class="dialog-field">
+          <label class="dialog-label">Kanban Path</label>
+          <input class="dialog-input" id="wt-kanban" placeholder="Path to .board directory (optional)" value="${escapeAttr(parent.kanban_path ?? "")}" />
+        </div>
+        <div class="dialog-field">
+          <label class="dialog-label">Group</label>
+          <input class="dialog-input" id="wt-group" placeholder="Optional group name" value="${escapeAttr(parent.group ?? "")}" />
+        </div>
+      </div>
+      <div class="dialog-footer">
+        <button class="dialog-btn dialog-btn-secondary" id="wt-cancel">Cancel</button>
+        <button class="dialog-btn dialog-btn-primary" id="wt-submit">Create</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(backdrop);
+
+  const kanbanInput = backdrop.querySelector<HTMLInputElement>("#wt-kanban");
+  if (kanbanInput) attachPathPicker(kanbanInput, { title: "Select kanban directory" });
+  backdrop.querySelector<HTMLInputElement>("#wt-name")?.focus();
+
+  const close = () => backdrop.remove();
+  backdrop.querySelector(".dialog-close")!.addEventListener("click", close);
+  backdrop.querySelector("#wt-cancel")!.addEventListener("click", close);
+  backdrop.addEventListener("click", (e) => {
+    if (e.target === backdrop) close();
+  });
+  backdrop.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") close();
+  });
+  backdrop.setAttribute("tabindex", "0");
+
+  backdrop.querySelector("#wt-submit")!.addEventListener("click", async () => {
+    const name =
+      backdrop.querySelector<HTMLInputElement>("#wt-name")?.value.trim() ?? "";
+    const prompt =
+      backdrop.querySelector<HTMLTextAreaElement>("#wt-prompt")?.value.trim() ?? "";
+    const kanban =
+      backdrop.querySelector<HTMLInputElement>("#wt-kanban")?.value.trim() ?? "";
+    const group =
+      backdrop.querySelector<HTMLInputElement>("#wt-group")?.value.trim() ?? "";
+
+    if (!name) {
+      toast("Branch name is required", "error");
+      return;
+    }
+
+    const btn = backdrop.querySelector<HTMLButtonElement>("#wt-submit")!;
+    btn.disabled = true;
+    btn.textContent = "Creating...";
+    try {
+      const info = await ipc.createWorkspace(
+        name,
+        "",
+        prompt,
+        parent.source_repo,
+        "Worktree",
+        group || null,
+        kanban || null,
+      );
+      appState.addWorkspace(info);
+      toast(`Worktree "${info.name}" created`, "success");
+      backdrop.remove();
+    } catch (err) {
+      toast(`Failed to create worktree: ${err}`, "error");
+      btn.disabled = false;
+      btn.textContent = "Create";
+    }
+  });
+}

@@ -58,7 +58,7 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
             cfg.get_binding("navigation", "new_workspace")
         ),
         format!(
-            "    {:<13} Clone workspace",
+            "    {:<13} Create worktree (GitHub-only)",
             cfg.get_binding("navigation", "clone_workspace")
         ),
         format!(
