@@ -85,7 +85,15 @@ async fn test_create_simple_in_git_folder_no_remote_is_local() {
         .expect("create_simple should accept a git folder with no remote");
 
     assert_eq!(info.origin, WorkspaceOrigin::Local);
-    assert_eq!(info.source_repo, repo_path);
+    // macOS resolves `/tmp` to `/private/tmp`, so `git rev-parse
+    // --show-toplevel` returns the canonical path while `TempDir` reports
+    // the symlink path. Compare canonical forms to be cross-platform.
+    let expected = repo_path.canonicalize().unwrap_or(repo_path.clone());
+    let actual = info
+        .source_repo
+        .canonicalize()
+        .unwrap_or(info.source_repo.clone());
+    assert_eq!(actual, expected);
 }
 
 #[tokio::test]
