@@ -60,18 +60,6 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
 
     let sidebar_items = app.sidebar_items();
 
-    // Pre-compute visual position (0-based) for each workspace index in sidebar order.
-    // This maps workspace_index → visual_position so 1-9 badges reflect display order.
-    let mut ws_visual_pos: std::collections::HashMap<usize, usize> =
-        std::collections::HashMap::new();
-    let mut visual_counter = 0;
-    for item in &sidebar_items {
-        if let SidebarItem::Workspace { index } = item {
-            ws_visual_pos.insert(*index, visual_counter);
-            visual_counter += 1;
-        }
-    }
-
     // Compute scroll offset for mixed-height items
     let visible_height = area.height.saturating_sub(2) as usize;
     let mut scroll_offset = 0;
@@ -161,23 +149,12 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                     } else {
                         " "
                     };
-                    // Show 1-9 badge matching visual order for quick-jump shortcuts
-                    let visual_pos = ws_visual_pos.get(index).copied().unwrap_or(usize::MAX);
-                    let number_badge = if visual_pos < 9 {
-                        format!("{}", visual_pos + 1)
-                    } else {
-                        " ".to_string()
-                    };
 
                     let type_icon = workspace_type_icon(ws.info.workspace_type);
 
-                    let line1 = Line::from(vec![
-                        Span::styled(number_badge.to_string(), Style::default().fg(detail_color)),
-                        Span::raw(format!("{} ", marker)),
-                        Span::styled(
-                            type_icon,
-                            Style::default().fg(detail_color),
-                        ),
+                    let mut line1_spans = vec![
+                        Span::raw(format!(" {} ", marker)),
+                        Span::styled(type_icon, Style::default().fg(detail_color)),
                         Span::styled(
                             ws.name.clone(),
                             if *index == app.active_workspace {
@@ -188,7 +165,16 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                                 Style::default().fg(theme.name_inactive)
                             },
                         ),
-                    ]);
+                    ];
+                    if ws.has_idle_notification {
+                        line1_spans.push(Span::styled(
+                            " ●",
+                            Style::default()
+                                .fg(ratatui::style::Color::Yellow)
+                                .add_modifier(Modifier::BOLD),
+                        ));
+                    }
+                    let line1 = Line::from(line1_spans);
                     let count_label = if ws.info.workspace_type == WorkspaceType::Project {
                         format!("{} services", ws.file_count())
                     } else {
@@ -268,15 +254,36 @@ pub(super) fn render_file_list(frame: &mut Frame, area: Rect, app: &App) {
     let border_style = pane_border_style(app, ActivePane::GitStatus);
     let theme = &app.theme.file_list;
 
-    let is_project = app
-        .current_workspace()
-        .is_some_and(|ws| ws.info.workspace_type == piki_core::WorkspaceType::Project);
+    let ws = app.current_workspace();
+    let is_project = ws
+        .is_some_and(|w| w.info.workspace_type == piki_core::WorkspaceType::Project);
+    let is_local_origin =
+        ws.is_some_and(|w| matches!(w.info.origin, piki_core::WorkspaceOrigin::Local));
 
     if is_project {
         render_project_file_list(frame, area, app, is_active, border_style, theme);
+    } else if is_local_origin {
+        render_local_origin_placeholder(frame, area, border_style, theme);
     } else {
         render_git_file_list(frame, area, app, is_active, border_style, theme);
     }
+}
+
+fn render_local_origin_placeholder(
+    frame: &mut Frame,
+    area: Rect,
+    border_style: Style,
+    theme: &crate::theme::FileListTheme,
+) {
+    let block = Block::default()
+        .title(" STATUS ")
+        .title_style(border_style)
+        .borders(Borders::ALL)
+        .border_style(border_style);
+    let text = Paragraph::new("  Source control unavailable for local-folder workspaces")
+        .style(Style::default().fg(theme.empty_text))
+        .block(block);
+    frame.render_widget(text, area);
 }
 
 fn render_project_file_list(

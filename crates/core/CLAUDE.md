@@ -9,7 +9,9 @@ UI-agnostic library crate. **Must NOT depend on `crates/tui` or `crates/api-clie
 - `providers.rs` — `ProviderConfig`, `PromptFormat`, `ProviderManager` — user-configurable providers loaded from `providers.toml`. Manages custom provider binaries, args, prompt format, and agent directories.
 - `storage/` — Trait-based storage layer. Traits in `mod.rs` (`WorkspaceStorage`, `ApiHistoryStorage`, `UiPrefsStorage`, `AgentProfileStorage`), SQLite backend in `sqlite.rs`, legacy JSON in `json.rs`.
 - `workspace/` — Git worktree CRUD (`WorkspaceManager`), `FileWatcher` (notify crate), config persistence.
-- `pty/` — `PtySession` wrapping `portable-pty` with `spawn_blocking` for non-blocking reads, `vt100::Parser` for terminal state.
+- `pty/` — `PtySession` wrapping `portable-pty` with `spawn_blocking` for non-blocking reads, `vt100::Parser` for terminal state. The reader optionally feeds bytes through `shell_integration::parser::OscParser` and updates per-session `ShellSession` state (cwd, last command exit code).
+- `shell_integration/` — Init scripts (zsh, bash) embedded via `include_str!`, `OscParser` (streaming OSC 133/7 state machine), `install` module that detects shell family and prepares env vars + extra args (`ZDOTDIR` / `--rcfile`) so the user's shell sources our bridge before its real dotfiles. Linux/macOS only.
+- `idle_watcher.rs` — Per-tab `IdleWatcher` for provider tabs (Custom providers). Replaces the inline byte-poll heuristic that used to live in the TUI's event loop; now shared by TUI and Desktop. Threshold is per-provider (`ProviderConfig.idle_threshold_secs`).
 - `diff/` — Git diff pipeline: `git diff | delta` with plain fallback, ANSI output handling.
 - `git.rs` — Low-level git helpers via `tokio::process::Command`.
 - `github.rs` — `gh` CLI wrappers for PR operations and unified diff parsing.

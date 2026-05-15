@@ -6,6 +6,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
 use piki_core::ChangedFile;
+use piki_core::notifications;
 
 use crate::state::DesktopApp;
 
@@ -17,8 +18,27 @@ pub struct GitRefreshPayload {
 }
 
 #[derive(Serialize, Clone)]
+pub struct FileChangedPayload {
+    pub workspace_idx: usize,
+    /// Paths relative to the workspace root that the watcher reported as changed.
+    pub paths: Vec<String>,
+}
+
+#[derive(Serialize, Clone)]
 pub struct SysinfoPayload {
     pub formatted: String,
+}
+
+/// Tauri event payload emitted when a tab needs the user's attention.
+/// Sources today:
+/// - `provider-idle`: a provider tab's PTY went silent past its threshold.
+/// - `shell-command-end`: a shell tab finished a command (forwarded from the
+///   per-PTY OSC parser; carries `exit_code`).
+#[derive(Serialize, Clone)]
+pub struct PtyAttentionPayload {
+    pub workspace_idx: usize,
+    pub tab_id: String,
+    pub source: &'static str,
 }
 
 #[allow(dead_code)]
@@ -26,6 +46,85 @@ pub struct SysinfoPayload {
 pub struct ToastPayload {
     pub message: String,
     pub level: String,
+}
+
+/// Background loop polling every 250 ms over all provider tabs, ticking each
+/// tab's `IdleWatcher` against its current PTY byte count. When a watcher
+/// fires, emits a `pty-attention` Tauri event for the frontend (sidebar
+/// badge) and spawns a `notify-rust` notification regardless of whether the
+/// workspace is the active one.
+pub fn spawn_idle_watcher_loop(app_handle: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_millis(250));
+        loop {
+            interval.tick().await;
+            let Some(state) = app_handle.try_state::<Mutex<DesktopApp>>() else {
+                continue;
+            };
+            let mut events: Vec<PtyAttentionPayload> = Vec::new();
+            // (origin, workspace_name, provider_label, silent_for, icon) — origin
+            // is the tab UUID (globally unique within the desktop process).
+            let mut pending_idle: Vec<(
+                String,
+                String,
+                String,
+                std::time::Duration,
+                Option<String>,
+            )> = Vec::new();
+            {
+                let mut app = state.lock();
+                // Snapshot the icon map up-front — we can't borrow
+                // `app.provider_manager` immutably while `app.workspaces` is
+                // borrowed mutably for iteration.
+                let icons: std::collections::HashMap<String, String> = app
+                    .provider_manager
+                    .all()
+                    .iter()
+                    .filter_map(|c| c.icon.clone().map(|i| (c.name.clone(), i)))
+                    .collect();
+                for (ws_idx, ws) in app.workspaces.iter_mut().enumerate() {
+                    let ws_name = ws.info.name.clone();
+                    for tab in &mut ws.tabs {
+                        let Some(ref pty) = tab.pty else { continue };
+                        let Some(ref mut watcher) = tab.idle_watcher else {
+                            continue;
+                        };
+                        if !pty.peek_alive() {
+                            continue;
+                        }
+                        if let Some(sig) = watcher.poll(pty.bytes_processed()) {
+                            events.push(PtyAttentionPayload {
+                                workspace_idx: ws_idx,
+                                tab_id: tab.id.clone(),
+                                source: "provider-idle",
+                            });
+                            let provider_label = tab.provider.label().to_string();
+                            let icon = icons.get(&provider_label).cloned();
+                            pending_idle.push((
+                                tab.id.clone(),
+                                ws_name.clone(),
+                                provider_label,
+                                sig.silent_for,
+                                icon,
+                            ));
+                        }
+                    }
+                }
+            }
+            for ev in events {
+                let _ = app_handle.emit("pty-attention", ev);
+            }
+            for (origin, ws_name, provider_label, silent_for, icon) in pending_idle {
+                notifications::notify_agent_idle(
+                    &origin,
+                    &ws_name,
+                    &provider_label,
+                    silent_for,
+                    icon.as_deref(),
+                );
+            }
+        }
+    });
 }
 
 /// Spawn a background task that emits sysinfo updates every 3 seconds.
@@ -62,22 +161,49 @@ pub fn spawn_git_watcher(app_handle: AppHandle) {
 
             let state = app_handle.state::<Mutex<DesktopApp>>();
 
-            // Drain file watcher events — instant trigger for file edits
-            let watcher_triggered: Vec<(usize, PathBuf)> = {
+            // Drain file watcher events — instant trigger for file edits.
+            // Also collect the per-path changes so we can emit `file-changed` events
+            // for editor reload-on-external-change.
+            let (watcher_triggered, file_change_payloads): (Vec<(usize, PathBuf)>, Vec<FileChangedPayload>) = {
                 let mut app = state.lock();
-                app.workspaces
-                    .iter_mut()
-                    .enumerate()
-                    .filter_map(|(idx, ws)| {
-                        let watcher = ws.watcher.as_mut()?;
-                        if watcher.drain().is_empty() {
-                            None
-                        } else {
-                            Some((idx, ws.info.path.clone()))
+                let mut triggered = Vec::new();
+                let mut payloads = Vec::new();
+                for (idx, ws) in app.workspaces.iter_mut().enumerate() {
+                    let Some(watcher) = ws.watcher.as_mut() else { continue };
+                    let events = watcher.drain();
+                    if events.is_empty() {
+                        continue;
+                    }
+                    triggered.push((idx, ws.info.path.clone()));
+
+                    // Collect changed paths relative to the workspace, deduplicated.
+                    use std::collections::BTreeSet;
+                    let mut rel_paths = BTreeSet::new();
+                    for ev in events {
+                        for abs in ev.paths {
+                            let rel = abs
+                                .strip_prefix(&ws.info.path)
+                                .unwrap_or(&abs)
+                                .to_string_lossy()
+                                .to_string();
+                            if !rel.is_empty() {
+                                rel_paths.insert(rel);
+                            }
                         }
-                    })
-                    .collect()
+                    }
+                    if !rel_paths.is_empty() {
+                        payloads.push(FileChangedPayload {
+                            workspace_idx: idx,
+                            paths: rel_paths.into_iter().collect(),
+                        });
+                    }
+                }
+                (triggered, payloads)
             };
+
+            for payload in file_change_payloads {
+                let _ = app_handle.emit("file-changed", payload);
+            }
 
             // Every 120th tick (~60s): git fetch for all workspaces
             if tick.is_multiple_of(120) {

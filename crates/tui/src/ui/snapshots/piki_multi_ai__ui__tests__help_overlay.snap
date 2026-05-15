@@ -1,6 +1,6 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 205
+assertion_line: 174
 expression: content
 ---
             ┌ Help ───────────────────────────────────────────────┐
@@ -9,11 +9,10 @@ expression: content
             │    k/j/h/l       Move between panes (h→ws list)     │
             │    enter         Interact with pane                 │
             │    n             New workspace                      │
-            │    r             Clone workspace                    │
+            │    r             Create worktree (GitHub-only)      │
             │    e             Edit workspace                     │
             │    d             Delete workspace                   │
             │    tab/shift-tab Next/Prev workspace                │
-            │    1-9           Go to workspace N                  │
             │    space         Fuzzy workspace search             │
             │    `             Previous workspace                 │
             │    ctrl-p        Command palette                    │
@@ -42,4 +41,5 @@ expression: content
             │                                                     │
             │  Interaction mode (green border)                    │
             │    ctrl-g        Back to navigation                 │
-            └────────────────────────────────────── [1/139 ↑k/j↓] ┘
+            │    Esc           Back (non-terminal panes)          │
+            └────────────────────────────────────── [1/138 ↑k/j↓] ┘

@@ -6,11 +6,7 @@ import { appState } from "../state";
 import * as ipc from "../ipc";
 import { toast } from "./toast";
 import { themeEngine } from "../theme";
-import { hideKanbanPanels, showKanbanPanel } from "./kanban-panel";
-import { hideApiPanels, showApiPanel } from "./api-panel";
-import { isMac, modCtrl, formatShortcut } from "../shortcuts";
-import { hideMarkdownEditorPanels, showMarkdownEditorPanel } from "./markdown-editor-panel";
-import { hideCodeEditorPanels, showCodeEditorPanel } from "./code-editor-panel";
+import { isMac, modCtrl } from "../shortcuts";
 
 export interface TerminalInstance {
   tabId: string;
@@ -19,18 +15,19 @@ export interface TerminalInstance {
   searchAddon: SearchAddon;
   element: HTMLDivElement;
   opened: boolean;
+  resizeObserver: ResizeObserver | null;
 }
 
 export const terminals = new Map<string, TerminalInstance>();
-let mainContent: HTMLElement;
 
 /**
  * Initialize the terminal panel. Must be awaited so event listeners
  * are registered before any PTY can be spawned.
+ *
+ * Tab rendering and visibility are handled by `pane-view.ts`; this module only
+ * owns PTY I/O and the per-instance xterm lifecycle.
  */
-export async function initTerminalPanel(container: HTMLElement) {
-  mainContent = container;
-
+export async function initTerminalPanel(_container: HTMLElement) {
   // Await listener registration so no PTY events are missed
   await ipc.onPtyOutput((event) => {
     const instance = terminals.get(event.tab_id);
@@ -48,30 +45,16 @@ export async function initTerminalPanel(container: HTMLElement) {
       `\r\n\x1b[90m[Process exited with code ${code}]\x1b[0m`,
     );
   });
-
-  // Show/hide terminals when active tab changes
-  appState.on("active-tab-changed", showActiveTerminal);
-  appState.on("tabs-changed", showActiveTerminal);
-  appState.on("active-workspace-changed", showActiveTerminal);
-
-  // Handle window resizes
-  const resizeObserver = new ResizeObserver(() => {
-    const ws = appState.activeWs;
-    if (!ws) return;
-    const tab = ws.tabs[ws.activeTab];
-    if (!tab) return;
-    const instance = terminals.get(tab.id);
-    if (instance && instance.opened) fitTerminal(instance);
-  });
-  resizeObserver.observe(container);
-
-  showActiveTerminal();
 }
 
 /**
  * Pre-create a Terminal instance for a tab. The xterm.js `open()` call
- * is deferred until the element is visible (in showActiveTerminal),
+ * is deferred until the element is visible (in mountTerminalInto),
  * because xterm.js needs a non-zero-size container to render.
+ *
+ * The element starts detached from the DOM. Calling
+ * `mountTerminalInto(tabId, host)` later attaches it into `host` and runs
+ * post-mount work (including the deferred `terminal.open(host)`).
  */
 export function createTerminal(tabId: string): TerminalInstance {
   const element = document.createElement("div");
@@ -95,8 +78,9 @@ export function createTerminal(tabId: string): TerminalInstance {
   const searchAddon = new SearchAddon();
   terminal.loadAddon(searchAddon);
 
-  mainContent.appendChild(element);
-  // NOTE: terminal.open() is NOT called here — deferred until visible
+  // The element is NOT attached anywhere yet — `mountTerminalInto` attaches it
+  // to the active pane's content host on demand. xterm.js's `terminal.open()`
+  // is also deferred until the element is in the DOM and visible.
 
   // Copy on selection (auto-copy like most terminal emulators)
   terminal.onSelectionChange(() => {
@@ -169,69 +153,38 @@ export function createTerminal(tabId: string): TerminalInstance {
     fitAddon,
     element,
     opened: false,
+    resizeObserver: null,
   };
   terminals.set(tabId, instance);
+
+  // Refit whenever the host element resizes — covers split-handle drags and
+  // window resizes, since the terminal element is sized by its parent flex.
+  instance.resizeObserver = new ResizeObserver(() => {
+    if (instance.opened) fitTerminal(instance);
+  });
+  instance.resizeObserver.observe(element);
 
   return instance;
 }
 
-function showActiveTerminal() {
-  // Hide all terminals and kanban panels
-  for (const instance of terminals.values()) {
-    instance.element.style.display = "none";
-  }
-  hideKanbanPanels();
-  hideApiPanels();
-  hideMarkdownEditorPanels();
-  hideCodeEditorPanels();
-
-  // Remove welcome message if present
-  mainContent.querySelector(".terminal-welcome")?.remove();
-
-  const ws = appState.activeWs;
-  if (!ws || ws.tabs.length === 0) {
-    showWelcome();
-    return;
-  }
-
-  const tab = ws.tabs[ws.activeTab];
-  if (!tab) {
-    showWelcome();
-    return;
-  }
-
-  // Route non-PTY tabs to their panels
-  if (tab.provider === "Kanban") {
-    showKanbanPanel(tab.id);
-    return;
-  }
-  if (tab.provider === "Api") {
-    showApiPanel(tab.id, appState.activeWorkspace);
-    return;
-  }
-  if (tab.provider === "Markdown") {
-    showMarkdownEditorPanel(tab.id);
-    return;
-  }
-  if (tab.provider === "CodeEditor") {
-    showCodeEditorPanel(tab.id);
-    return;
-  }
-
-  let instance = terminals.get(tab.id);
+/**
+ * Mount a terminal tab into the given host element. Creates the xterm instance
+ * if needed, reparents it into `host`, opens xterm on first mount, fits the PTY,
+ * and focuses. Idempotent — safe to call when already mounted.
+ */
+export function mountTerminalInto(tabId: string, host: HTMLElement) {
+  let instance = terminals.get(tabId);
   if (!instance) {
-    instance = createTerminal(tab.id);
+    instance = createTerminal(tabId);
   }
-
-  // Make visible BEFORE opening xterm (it needs a non-zero container)
+  if (instance.element.parentElement !== host) {
+    host.appendChild(instance.element);
+  }
   instance.element.style.display = "block";
 
-  // Deferred open: xterm.js needs a visible, sized container
   if (!instance.opened) {
     instance.terminal.open(instance.element);
     instance.opened = true;
-
-    // Try WebGL addon for performance
     try {
       instance.terminal.loadAddon(new WebglAddon());
     } catch {
@@ -239,12 +192,36 @@ function showActiveTerminal() {
     }
   }
 
-  fitTerminal(instance);
-  instance.terminal.focus();
+  // Defer the fit until the browser has laid out the new host. Calling
+  // `fitAddon.fit()` synchronously right after a reparent reads stale
+  // (often near-zero) dimensions and resizes the PTY to ~10 cols, which
+  // shows up as text wrapping every word or two when the tab is shown
+  // again.
+  const inst = instance;
+  requestAnimationFrame(() => {
+    fitTerminal(inst);
+    inst.terminal.focus();
+  });
 }
+
+/** Hide a terminal tab without destroying its state. */
+export function unmountTerminal(tabId: string) {
+  const instance = terminals.get(tabId);
+  if (!instance) return;
+  instance.element.style.display = "none";
+}
+
 
 function fitTerminal(instance: TerminalInstance) {
   if (!instance.opened) return;
+  // Skip when the element is hidden or detached — its clientWidth is 0 so
+  // `fitAddon.fit()` would shrink the PTY to its minimum cols (~2). The
+  // ResizeObserver fires on display:none transitions, so without this guard
+  // every tab switch resizes the inactive PTY down to nothing, and when the
+  // tab is shown again Claude's already-rendered output wraps at ~2 cols.
+  if (instance.element.offsetWidth === 0 || instance.element.offsetHeight === 0) {
+    return;
+  }
   try {
     instance.fitAddon.fit();
     const dims = instance.fitAddon.proposeDimensions();
@@ -258,28 +235,10 @@ function fitTerminal(instance: TerminalInstance) {
   }
 }
 
-function showWelcome() {
-  if (mainContent.querySelector(".terminal-welcome")) return;
-
-  const welcome = document.createElement("div");
-  welcome.className = "terminal-welcome";
-  welcome.innerHTML = `
-    <div class="welcome-logo">PIKI</div>
-    <div class="welcome-subtitle">Multi-Agent Workspace</div>
-    <p>Select a workspace or create one to begin.</p>
-    <div class="welcome-shortcuts">
-      <div class="shortcut-item"><span class="shortcut-key">${formatShortcut("Ctrl+N")}</span><span class="shortcut-label">New workspace</span></div>
-      <div class="shortcut-item"><span class="shortcut-key">${formatShortcut("Ctrl+P")}</span><span class="shortcut-label">Command palette</span></div>
-      <div class="shortcut-item"><span class="shortcut-key">${formatShortcut("Ctrl+Space")}</span><span class="shortcut-label">Switch workspace</span></div>
-      <div class="shortcut-item"><span class="shortcut-key">?</span><span class="shortcut-label">All shortcuts</span></div>
-    </div>
-  `;
-  mainContent.appendChild(welcome);
-}
-
 export function destroyTerminal(tabId: string) {
   const instance = terminals.get(tabId);
   if (!instance) return;
+  instance.resizeObserver?.disconnect();
   instance.terminal.dispose();
   instance.element.remove();
   terminals.delete(tabId);

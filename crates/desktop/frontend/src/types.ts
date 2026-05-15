@@ -5,11 +5,19 @@ export type AIProvider =
   | "Api"
   | "Markdown"
   | "CodeEditor"
+  | "WebPreview"
   | { Custom: string };
 
 export type WorkspaceStatus = "Idle" | "Busy" | "Done" | { Error: string };
 
 export type WorkspaceType = "Worktree" | "Simple" | "Project";
+
+/** Where a workspace's files originated. Drives source-control visibility
+ *  and the "Create Worktree" action (GitHub-only). Mirrors
+ *  `piki_core::WorkspaceOrigin`. */
+export type WorkspaceOrigin =
+  | { kind: "Local" }
+  | { kind: "GitHub"; url: string };
 
 export type FileStatus =
   | "Modified"
@@ -41,6 +49,7 @@ export interface WorkspaceInfo {
   dispatch_card_id: string | null;
   dispatch_source_kanban: string | null;
   dispatch_agent_name: string | null;
+  origin: WorkspaceOrigin;
 }
 
 export interface TabInfo {
@@ -79,6 +88,31 @@ export interface ToastEvent {
   level: "info" | "success" | "error";
 }
 
+/** Shell-integration events extracted from PTY OSC 133/7 markers. */
+export type PtyShellEventKind =
+  | "prompt-start"
+  | "command-input-start"
+  | "command-output-start"
+  | "command-end"
+  | "cwd-changed";
+
+export interface PtyShellEvent {
+  tab_id: string;
+  kind: PtyShellEventKind;
+  exit_code?: number;
+  cwd?: string;
+}
+
+/** Workspace-level "needs attention" signal. Sources: `provider-idle` (a
+ *  provider tab fell silent), `shell-command-end` (a shell tab finished a
+ *  command — emitted by the frontend when it observes a `pty-shell-event` of
+ *  kind `command-end`). */
+export interface PtyAttentionEvent {
+  workspace_idx: number;
+  tab_id: string;
+  source: "provider-idle" | "shell-command-end";
+}
+
 // Built-in provider labels (Custom providers use their name)
 const BUILTIN_PROVIDER_LABELS: Record<string, string> = {
   Shell: "Shell",
@@ -87,6 +121,7 @@ const BUILTIN_PROVIDER_LABELS: Record<string, string> = {
   Api: "API Explorer",
   Markdown: "Markdown",
   CodeEditor: "Code Editor",
+  WebPreview: "Web Preview",
 };
 
 const BUILTIN_PROVIDER_ICONS: Record<string, string> = {
@@ -96,6 +131,7 @@ const BUILTIN_PROVIDER_ICONS: Record<string, string> = {
   Api: "A",
   Markdown: "M",
   CodeEditor: "E",
+  WebPreview: "W",
 };
 
 /** Get the display label for any provider (built-in or custom). */

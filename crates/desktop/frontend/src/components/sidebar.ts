@@ -3,6 +3,7 @@ import * as ipc from "../ipc";
 import { renderWorkspaceList } from "./workspace-list";
 import { renderSourceControl } from "./source-control";
 import { showAgentManager } from "./dialogs/agent-dialog";
+import { openWebPreviewTab } from "./web-preview-panel";
 
 export async function initSidebar() {
   // Restore persisted sidebar width
@@ -41,6 +42,12 @@ export async function initSidebar() {
       return;
     }
 
+    if (view === "web-preview") {
+      openWebPreviewTab();
+      appState.setActiveView(lastSidebarView);
+      return;
+    }
+
     if (view === "agents") {
       showAgentManager();
       appState.setActiveView(lastSidebarView);
@@ -53,15 +60,7 @@ export async function initSidebar() {
   }
 
   async function spawnKanbanTab() {
-    // Check if there's already a Kanban tab open in the active workspace
-    const ws = appState.activeWs;
-    if (ws) {
-      const existingIdx = ws.tabs.findIndex((t) => t.provider === "Kanban");
-      if (existingIdx >= 0) {
-        appState.setActiveTab(existingIdx);
-        return;
-      }
-    }
+    if (appState.focusSingletonTab("Kanban")) return;
     try {
       const tabId = await ipc.spawnTab(appState.activeWorkspace, "Kanban");
       appState.addTab(appState.activeWorkspace, { id: tabId, provider: "Kanban", alive: true });
@@ -71,14 +70,7 @@ export async function initSidebar() {
   }
 
   async function spawnApiTab() {
-    const ws = appState.activeWs;
-    if (ws) {
-      const existingIdx = ws.tabs.findIndex((t) => t.provider === "Api");
-      if (existingIdx >= 0) {
-        appState.setActiveTab(existingIdx);
-        return;
-      }
-    }
+    if (appState.focusSingletonTab("Api")) return;
     try {
       const tabId = await ipc.spawnTab(appState.activeWorkspace, "Api");
       appState.addTab(appState.activeWorkspace, { id: tabId, provider: "Api", alive: true });

@@ -86,6 +86,8 @@ pub enum AppMode {
     NewWorkspace,
     /// Input dialog for editing a workspace
     EditWorkspace,
+    /// Input dialog for creating a git worktree from a GitHub-origin parent
+    CreateWorktree,
     /// Confirmation dialog for deleting a workspace
     ConfirmDelete,
     /// Help overlay
@@ -155,13 +157,25 @@ pub enum ActivePane {
 /// Which field is active in the New Workspace dialog
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DialogField {
-    Type,
+    /// Source toggle: Local folder vs GitHub URL.
+    Source,
     Name,
+    /// Folder path (when source = Local) or URL (when source = GitHub).
     Directory,
     Description,
     Prompt,
     KanbanPath,
     Group,
+}
+
+/// Source mode for the New Workspace dialog. Drives whether the dialog asks
+/// for a folder path or a GitHub URL, and which workspace-creation action is
+/// dispatched on Enter.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum NewWorkspaceSource {
+    #[default]
+    Local,
+    GitHub,
 }
 
 /// An item in the sidebar workspace list
@@ -245,6 +259,11 @@ pub struct Tab {
     pub term_scroll: usize,
     /// Last byte count from PTY for auto-scroll detection
     pub last_bytes_processed: u64,
+    /// Idle watcher for provider tabs. `Some` only for `AIProvider::Custom(_)`
+    /// tabs (built-in tabs are interactive and never "idle"). The TUI ticks
+    /// this every 50 ms and surfaces a notification + sidebar badge when it
+    /// fires.
+    pub idle_watcher: Option<piki_core::idle_watcher::IdleWatcher>,
     /// Markdown content (when this tab displays a markdown file instead of a PTY)
     pub markdown_content: Option<String>,
     /// Label for markdown tabs (filename)
@@ -284,6 +303,10 @@ pub struct Workspace {
     pub kanban_provider: Option<Box<dyn flow_core::provider::Provider>>,
     /// Code review state
     pub code_review: Option<crate::code_review::CodeReviewState>,
+    /// True when at least one tab in this workspace has emitted an idle
+    /// notification that the user has not yet acknowledged. Cleared when the
+    /// user switches to this workspace. Drives the sidebar idle badge.
+    pub has_idle_notification: bool,
 }
 
 impl std::ops::Deref for Workspace {
@@ -317,6 +340,7 @@ impl Workspace {
             kanban_app: None,
             kanban_provider: None,
             code_review: None,
+            has_idle_notification: false,
         }
     }
 
@@ -332,6 +356,8 @@ impl Workspace {
 
     /// Add a new tab and return its index
     pub fn add_tab(&mut self, provider: AIProvider, closable: bool) -> usize {
+        let idle_watcher = matches!(provider, AIProvider::Custom(_))
+            .then(piki_core::idle_watcher::IdleWatcher::default_for_provider);
         let tab = Tab {
             id: self.next_tab_id,
             provider,
@@ -340,6 +366,7 @@ impl Workspace {
             closable,
             term_scroll: 0,
             last_bytes_processed: 0,
+            idle_watcher,
             markdown_content: None,
             markdown_label: None,
             markdown_scroll: 0,
@@ -382,6 +409,7 @@ impl Workspace {
             closable: true,
             term_scroll: 0,
             last_bytes_processed: 0,
+            idle_watcher: None,
             markdown_content: Some(content),
             markdown_label: Some(label),
             markdown_scroll: 0,
@@ -422,21 +450,7 @@ impl Workspace {
 
     /// Refresh the list of immediate sub-directories (for Project workspaces).
     pub async fn refresh_sub_directories(&mut self) {
-        let path = self.info.path.clone();
-        let mut dirs = Vec::new();
-        if let Ok(mut entries) = tokio::fs::read_dir(&path).await {
-            while let Ok(Some(entry)) = entries.next_entry().await {
-                if let Ok(ft) = entry.file_type().await
-                    && ft.is_dir()
-                    && let Some(name) = entry.file_name().to_str()
-                    && !name.starts_with('.')
-                {
-                    dirs.push(name.to_string());
-                }
-            }
-        }
-        dirs.sort();
-        self.sub_directories = dirs;
+        self.sub_directories = piki_core::workspace::manager::list_subdirs(&self.info.path).await;
         self.dirty = false;
     }
 }
@@ -641,6 +655,8 @@ pub enum ResizeDrag {
     Sidebar,
     /// Horizontal border between workspace list and file list
     LeftSplit,
+    /// Vertical border between file list and diff in code review
+    CodeReviewSplit,
 }
 
 /// Terminal search overlay state
@@ -718,6 +734,8 @@ pub struct App {
     pub sidebar_pct: u16,
     /// Left panel vertical split: workspace list percentage (10..=90)
     pub left_split_pct: u16,
+    /// Code review file-list width as percentage (10..=90)
+    pub code_review_split_pct: u16,
     /// Mouse drag-resize state
     pub resize_drag: Option<ResizeDrag>,
     /// X coordinate of the vertical border between sidebar and main panel
@@ -726,6 +744,10 @@ pub struct App {
     pub left_split_y: u16,
     /// Rect of the left sidebar area (for resize calculations)
     pub left_area_rect: Rect,
+    /// X coordinate of the vertical border in code review (file list | diff)
+    pub code_review_divider_x: u16,
+    /// Body area of the code review layout (for relative drag calculation)
+    pub code_review_body_rect: Rect,
     /// Whether the UI needs to be redrawn
     pub needs_redraw: bool,
     pub config: crate::config::Config,
@@ -883,10 +905,13 @@ impl App {
             sysinfo: std::sync::Arc::new(parking_lot::Mutex::new(String::new())),
             sidebar_pct: 20,
             left_split_pct: 50,
+            code_review_split_pct: 25,
             resize_drag: None,
             sidebar_x: 0,
             left_split_y: 0,
             left_area_rect: Rect::default(),
+            code_review_divider_x: 0,
+            code_review_body_rect: Rect::default(),
             needs_redraw: true,
             config,
             refresh_tx,
@@ -927,6 +952,7 @@ impl App {
         if let Some(ref ui_prefs) = self.storage.ui_prefs {
             let _ = ui_prefs.set_preference("sidebar_pct", &self.sidebar_pct.to_string());
             let _ = ui_prefs.set_preference("left_split_pct", &self.left_split_pct.to_string());
+            let _ = ui_prefs.set_preference("code_review_split_pct", &self.code_review_split_pct.to_string());
         }
     }
 
@@ -1035,8 +1061,18 @@ impl App {
             // Trigger immediate background refresh for the new workspace
             self.workspaces[index].dirty = true;
             self.workspaces[index].last_refresh = None;
+            // User acknowledged any pending idle notification badge by
+            // visiting; re-fires happen naturally on the next real burst of
+            // agent output (gated by `IdleWatcher::rearm_bytes`).
+            self.workspaces[index].has_idle_notification = false;
             if let Some(tab) = self.workspaces[index].current_tab_mut() {
                 tab.term_scroll = 0;
+            }
+            // Persist the active workspace so the next startup focuses it.
+            // Path is the canonical key (unique + stable across restarts).
+            if let Some(prefs) = self.storage.ui_prefs.as_ref() {
+                let path_str = self.workspaces[index].info.path.to_string_lossy().to_string();
+                let _ = prefs.set_preference("last_focused_workspace", &path_str);
             }
         }
     }
@@ -1415,14 +1451,14 @@ mod tests {
             }
         };
 
-        // Dialog opens on Type field
-        assert_eq!(get_field(&app), DialogField::Type);
-
-        crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
-        assert_eq!(get_field(&app), DialogField::Name);
+        // Dialog opens on Source field
+        assert_eq!(get_field(&app), DialogField::Source);
 
         crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
         assert_eq!(get_field(&app), DialogField::Directory);
+
+        crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
+        assert_eq!(get_field(&app), DialogField::Name);
 
         crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
         assert_eq!(get_field(&app), DialogField::Description);
@@ -1437,7 +1473,7 @@ mod tests {
         assert_eq!(get_field(&app), DialogField::Group);
 
         crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
-        assert_eq!(get_field(&app), DialogField::Type);
+        assert_eq!(get_field(&app), DialogField::Source);
     }
 
     #[test]
@@ -1447,7 +1483,8 @@ mod tests {
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('n')));
         assert_eq!(app.mode, AppMode::NewWorkspace);
 
-        // Tab from Type to Name field first
+        // Tab from Source → Directory → Name to reach the Name field
+        crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
         crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
 
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('a')));
@@ -1568,15 +1605,6 @@ mod tests {
     }
 
     #[test]
-    fn test_workspace_number_keys_with_empty_list() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
-        // Pressing '1' with no workspaces should not panic
-        crate::input::handle_key_event(&mut app, key(KeyCode::Char('1')));
-        assert_eq!(app.active_workspace, 0);
-        assert_eq!(app.mode, AppMode::Normal);
-    }
-
-    #[test]
     fn test_commit_requires_workspace() {
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('c')));
@@ -1601,6 +1629,7 @@ mod tests {
             dispatch_card_id: None,
             dispatch_source_kanban: None,
             dispatch_agent_name: None,
+            origin: piki_core::WorkspaceOrigin::default(),
         };
         let ws = Workspace::from_info(info);
         app.workspaces.push(ws);
@@ -1805,17 +1834,35 @@ mod tests {
         assert!(!app.interacting);
     }
 
-    // ── Number key invalid workspace tests ──
+    // ── PTY idle notifications ──
 
     #[test]
-    fn test_workspace_number_keys_toast_invalid() {
+    fn switch_workspace_clears_has_idle_notification() {
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
-        add_test_workspace(&mut app); // index 0
-        add_test_workspace(&mut app); // index 1
+        let a = add_test_workspace(&mut app);
+        let b = add_test_workspace(&mut app);
+        app.active_workspace = a;
+        app.workspaces[b].has_idle_notification = true;
 
-        // Press '5' — no workspace at that position
-        crate::input::handle_key_event(&mut app, key(KeyCode::Char('5')));
-        assert!(app.toast.is_some());
-        assert!(app.toast.as_ref().unwrap().message.contains("No workspace"));
+        app.switch_workspace(b);
+
+        assert!(!app.workspaces[b].has_idle_notification);
+        assert_eq!(app.active_workspace, b);
     }
+
+    #[test]
+    fn switch_workspace_to_same_index_still_clears_badge() {
+        // Edge case: re-entering the active workspace acknowledges any
+        // notifications that fired while it was visible (e.g. the active
+        // tab went idle while the user was in another pane).
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let a = add_test_workspace(&mut app);
+        app.active_workspace = a;
+        app.workspaces[a].has_idle_notification = true;
+
+        app.switch_workspace(a);
+
+        assert!(!app.workspaces[a].has_idle_notification);
+    }
+
 }

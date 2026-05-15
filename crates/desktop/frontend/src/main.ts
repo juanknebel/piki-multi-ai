@@ -4,12 +4,13 @@ import * as ipc from "./ipc";
 import { toast } from "./components/toast";
 import { renderActivityBar } from "./components/activity-bar";
 import { initSidebar } from "./components/sidebar";
-import { renderTabBar } from "./components/tab-bar";
 import { initTerminalPanel, openTerminalSearch } from "./components/terminal-panel";
 import { initKanbanPanel } from "./components/kanban-panel";
 import { initApiPanel } from "./components/api-panel";
 import { initMarkdownEditorPanel } from "./components/markdown-editor-panel";
 import { initCodeEditorPanel } from "./components/code-editor-panel";
+import { initWebPreviewPanel, openWebPreviewTab } from "./components/web-preview-panel";
+import { initPaneView } from "./components/pane-view";
 import { bindAction, handleGlobalKeydown, loadShortcuts } from "./shortcuts";
 import { showSettingsDialog } from "./components/dialogs/settings-dialog";
 import { showProvidersDialog } from "./components/dialogs/providers-dialog";
@@ -45,19 +46,21 @@ async function init() {
   initMenuBar(document.getElementById("menu-bar")!);
   renderActivityBar(document.getElementById("activity-bar")!);
   initSidebar();
-  renderTabBar(document.getElementById("tab-bar")!);
   const mainContentEl = document.getElementById("main-content")!;
   await initTerminalPanel(mainContentEl);
   initKanbanPanel(mainContentEl);
   initApiPanel(mainContentEl);
   initMarkdownEditorPanel(mainContentEl);
   initCodeEditorPanel(mainContentEl);
+  initWebPreviewPanel(mainContentEl);
+  initPaneView(mainContentEl);
   renderStatusBar(document.getElementById("status-bar")!);
   initToasts();
   await initChatPanel(document.getElementById("chat-panel")!);
   initChatResize();
 
   try {
+    await appState.loadPaneTrees();
     const workspaces = await ipc.listWorkspaces();
     appState.setWorkspaces(workspaces);
     if (workspaces.length > 0) {
@@ -84,6 +87,20 @@ async function init() {
   });
   ipc.onSysinfoUpdate((formatted) => {
     appState.setSysinfo(formatted);
+  });
+
+  // Shell-integration events from shell tabs (cwd + exit code).
+  ipc.onPtyShellEvent((event) => {
+    appState.applyShellEvent(event);
+    if (event.kind === "command-end") {
+      const wsIdx = appState.workspaceIndexForTab(event.tab_id);
+      if (wsIdx >= 0) appState.markWorkspaceAttention(wsIdx);
+    }
+  });
+
+  // Provider-tab idle notifications (and any other backend "needs attention").
+  ipc.onPtyAttention((event) => {
+    appState.markWorkspaceAttention(event.workspace_idx);
   });
 
   // Confirm quit when PTYs are active
@@ -127,6 +144,7 @@ async function init() {
   bindAction("agent-manager", () => showAgentManager());
   bindAction("dispatch-agent", () => showDispatchDialog());
   bindAction("kanban", () => appState.setActiveView("kanban"));
+  bindAction("web-preview", () => openWebPreviewTab());
   bindAction("theme", () => showThemeDialog());
   bindAction("settings", () => showSettingsDialog());
   bindAction("manage-providers", () => showProvidersDialog());
@@ -137,6 +155,12 @@ async function init() {
   bindAction("toggle-sidebar", () => toggleSidebar());
   bindAction("toggle-chat", () => toggleChatPanel());
   bindAction("help", () => showHelpDialog());
+  bindAction("split-right", () => appState.splitActivePane("right"));
+  bindAction("split-down", () => appState.splitActivePane("down"));
+  bindAction("close-pane", () => {
+    const id = appState.activePaneId;
+    if (id) appState.closePane(id);
+  });
 
   // Load user shortcut overrides from storage
   await loadShortcuts();

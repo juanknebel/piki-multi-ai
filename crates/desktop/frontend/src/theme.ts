@@ -1,4 +1,5 @@
 import * as ipc from "./ipc";
+import { terminals } from "./components/terminal-panel";
 
 // ── Types ────────────────────────────────────────────
 
@@ -525,15 +526,17 @@ class ThemeEngine {
   }
 
   updateAllTerminals(): void {
-    // Dynamic import to avoid circular dependency (theme ↔ terminal-panel)
-    import("./components/terminal-panel").then(({ terminals }) => {
-      const theme = this.buildXtermTheme();
-      for (const instance of terminals.values()) {
-        if (instance.opened) {
-          instance.terminal.options.theme = theme;
-        }
+    // terminal-panel <-> theme is a circular import, but neither module
+    // touches the other's exports at module-init time (themeEngine is read
+    // inside terminal callbacks, `terminals` is read here from a method),
+    // so the static import is safe and lets Vite keep both files in the
+    // same app chunk instead of warning about a contradicted dynamic import.
+    const theme = this.buildXtermTheme();
+    for (const instance of terminals.values()) {
+      if (instance.opened) {
+        instance.terminal.options.theme = theme;
       }
-    }).catch(() => { /* terminal-panel not loaded yet */ });
+    }
   }
 }
 

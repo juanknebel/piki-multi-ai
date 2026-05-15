@@ -2,9 +2,15 @@ import { appState } from "../../state";
 import * as ipc from "../../ipc";
 import { toast } from "../toast";
 import { createDropdown } from "../dropdown";
+import { attachPathPicker } from "../path-picker";
 import type { WorkspaceInfo } from "../../types";
 
 type Mode = "create" | "edit" | "clone";
+
+export interface WorkspacePrefill {
+  /** Pre-fill the folder field (used when source=local). */
+  dir?: string;
+}
 
 interface DialogOptions {
   mode: Mode;
@@ -12,12 +18,14 @@ interface DialogOptions {
   editIndex?: number;
   /** Workspace to clone from (clone mode) */
   cloneFrom?: WorkspaceInfo;
+  /** Optional prefill for create mode (e.g. when launching from a Project sub-dir) */
+  prefill?: WorkspacePrefill;
 }
 
 export function showWorkspaceDialog(opts: DialogOptions) {
   document.querySelector(".dialog-backdrop")?.remove();
 
-  const { mode, editIndex, cloneFrom } = opts;
+  const { mode, editIndex, cloneFrom, prefill: createPrefill } = opts;
   const editWs =
     mode === "edit" && editIndex !== undefined
       ? appState.workspaces[editIndex]?.info
@@ -34,7 +42,7 @@ export function showWorkspaceDialog(opts: DialogOptions) {
   const backdrop = document.createElement("div");
   backdrop.className = "dialog-backdrop";
 
-  const showTypeAndDir = mode !== "edit";
+  const showSourceAndDir = mode !== "edit";
   const showName = mode !== "edit";
 
   backdrop.innerHTML = `
@@ -45,11 +53,19 @@ export function showWorkspaceDialog(opts: DialogOptions) {
       </div>
       <div class="dialog-body">
         ${
-          showTypeAndDir
+          showSourceAndDir
             ? `
         <div class="dialog-field">
-          <label class="dialog-label">Type</label>
-          <span id="ws-type-slot"></span>
+          <label class="dialog-label">Source</label>
+          <span id="ws-source-slot"></span>
+        </div>
+        <div class="dialog-field" id="ws-folder-field">
+          <label class="dialog-label">Folder</label>
+          <input class="dialog-input" id="ws-dir" placeholder="/path/to/folder" value="${escapeAttr(createPrefill?.dir ?? prefill?.source_repo ?? prefill?.path ?? "")}" />
+        </div>
+        <div class="dialog-field" id="ws-url-field" style="display:none">
+          <label class="dialog-label">GitHub URL</label>
+          <input class="dialog-input" id="ws-url" placeholder="https://github.com/owner/repo[.git]" value="" />
         </div>
         `
             : ""
@@ -58,18 +74,8 @@ export function showWorkspaceDialog(opts: DialogOptions) {
           showName
             ? `
         <div class="dialog-field" id="ws-name-field">
-          <label class="dialog-label">Name</label>
-          <input class="dialog-input" id="ws-name" placeholder="feature/my-feature" value="${escapeAttr(mode === "clone" ? "" : prefill?.name ?? "")}" />
-        </div>
-        `
-            : ""
-        }
-        ${
-          showTypeAndDir
-            ? `
-        <div class="dialog-field">
-          <label class="dialog-label">Directory</label>
-          <input class="dialog-input" id="ws-dir" placeholder="/path/to/repo" value="${escapeAttr(prefill?.source_repo ?? prefill?.path ?? "")}" />
+          <label class="dialog-label">Name <span style="opacity:0.6;font-weight:normal">(optional)</span></label>
+          <input class="dialog-input" id="ws-name" placeholder="auto-derived if empty" value="${escapeAttr(mode === "clone" ? "" : prefill?.name ?? "")}" />
         </div>
         `
             : ""
@@ -100,35 +106,44 @@ export function showWorkspaceDialog(opts: DialogOptions) {
 
   document.body.appendChild(backdrop);
 
-  // Mount type dropdown if visible
-  let typeDropdown: ReturnType<typeof createDropdown> | null = null;
-  const typeSlot = backdrop.querySelector("#ws-type-slot");
-  if (typeSlot) {
-    const initialType = !prefill || prefill.workspace_type === "Worktree" ? "Worktree"
-      : prefill.workspace_type === "Simple" ? "Simple" : prefill.workspace_type === "Project" ? "Project" : "Worktree";
-    typeDropdown = createDropdown([
-      { value: "Simple", label: "Simple (existing directory)" },
-      { value: "Worktree", label: "Worktree (git branch)" },
-      { value: "Project", label: "Project (monorepo root)" },
-    ], initialType);
-    typeSlot.replaceWith(typeDropdown.container);
+  // Attach native folder pickers to path inputs
+  const dirInput = backdrop.querySelector<HTMLInputElement>("#ws-dir");
+  if (dirInput) attachPathPicker(dirInput, { title: "Select workspace directory" });
+  const kanbanInput = backdrop.querySelector<HTMLInputElement>("#ws-kanban");
+  if (kanbanInput) attachPathPicker(kanbanInput, { title: "Select kanban directory" });
+
+  // Mount source dropdown (replaces the old workspace-type dropdown)
+  let sourceDropdown: ReturnType<typeof createDropdown> | null = null;
+  const sourceSlot = backdrop.querySelector("#ws-source-slot");
+  if (sourceSlot) {
+    sourceDropdown = createDropdown(
+      [
+        { value: "local", label: "Local folder" },
+        { value: "github", label: "GitHub URL" },
+      ],
+      "local",
+    );
+    sourceSlot.replaceWith(sourceDropdown.container);
+  }
+
+  // Toggle Folder/URL field visibility on source change
+  const folderField = backdrop.querySelector<HTMLElement>("#ws-folder-field");
+  const urlField = backdrop.querySelector<HTMLElement>("#ws-url-field");
+  if (sourceDropdown && folderField && urlField) {
+    const updateSourceFields = () => {
+      const isGithub = sourceDropdown!.value === "github";
+      folderField.style.display = isGithub ? "none" : "";
+      urlField.style.display = isGithub ? "" : "none";
+    };
+    sourceDropdown.container.addEventListener("change", updateSourceFields);
+    updateSourceFields();
   }
 
   // Auto-focus first input
-  if (typeDropdown) {
-    typeDropdown.container.querySelector("button")?.focus();
+  if (sourceDropdown) {
+    sourceDropdown.container.querySelector("button")?.focus();
   } else {
     backdrop.querySelector<HTMLInputElement>("#ws-desc")?.focus();
-  }
-
-  // Toggle name field visibility based on type
-  const nameField = backdrop.querySelector<HTMLElement>("#ws-name-field");
-  if (typeDropdown && nameField) {
-    function updateNameVisibility() {
-      nameField!.style.display = typeDropdown!.value === "Worktree" ? "" : "none";
-    }
-    typeDropdown.container.addEventListener("change", updateNameVisibility);
-    updateNameVisibility();
   }
 
   // Close
@@ -148,16 +163,14 @@ export function showWorkspaceDialog(opts: DialogOptions) {
     if (mode === "edit" && editIndex !== undefined) {
       await submitEdit(backdrop, editIndex);
     } else {
-      await submitCreate(backdrop, typeDropdown?.value ?? "Simple");
+      await submitCreate(backdrop, sourceDropdown?.value ?? "local");
     }
   });
 }
 
-async function submitCreate(backdrop: HTMLElement, type: string) {
-  let name =
+async function submitCreate(backdrop: HTMLElement, source: string) {
+  const name =
     backdrop.querySelector<HTMLInputElement>("#ws-name")?.value.trim() ?? "";
-  const dir =
-    backdrop.querySelector<HTMLInputElement>("#ws-dir")?.value.trim() ?? "";
   const desc =
     backdrop.querySelector<HTMLInputElement>("#ws-desc")?.value.trim() ?? "";
   const group =
@@ -168,31 +181,64 @@ async function submitCreate(backdrop: HTMLElement, type: string) {
     backdrop.querySelector<HTMLTextAreaElement>("#ws-prompt")?.value.trim() ??
     "";
 
-  if (!dir) {
-    toast("Directory is required", "error");
-    return;
-  }
-  if (type === "Worktree" && !name) {
-    toast("Name is required for worktree workspaces", "error");
-    return;
-  }
-
-  // For Simple/Project types the name field is hidden — derive from directory
-  if (!name && dir) {
-    name = dir.replace(/\/+$/, "").split("/").pop() || dir;
-  }
-
   const btn = backdrop.querySelector<HTMLButtonElement>("#ws-submit")!;
+
+  if (source === "github") {
+    const url =
+      backdrop.querySelector<HTMLInputElement>("#ws-url")?.value.trim() ?? "";
+    if (!url) {
+      toast("GitHub URL is required", "error");
+      return;
+    }
+    const finalName = name || parseGithubRepoNameFromUrl(url);
+    if (!finalName) {
+      toast("Could not parse repo name from URL", "error");
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = "Cloning...";
+    try {
+      const info = await ipc.createGithubWorkspace(
+        finalName,
+        desc,
+        prompt,
+        url,
+        group || null,
+        kanban || null,
+      );
+      appState.addWorkspace(info);
+      toast(`Workspace "${info.name}" cloned`, "success");
+      backdrop.remove();
+    } catch (err) {
+      toast(`Failed to clone: ${err}`, "error");
+      btn.disabled = false;
+      btn.textContent = "Create";
+    }
+    return;
+  }
+
+  // source === "local"
+  const dir =
+    backdrop.querySelector<HTMLInputElement>("#ws-dir")?.value.trim() ?? "";
+  if (!dir) {
+    toast("Folder is required", "error");
+    return;
+  }
+  const finalName = name || basenameFromPath(dir);
+  if (!finalName) {
+    toast("Could not derive workspace name from folder", "error");
+    return;
+  }
   btn.disabled = true;
   btn.textContent = "Creating...";
 
   try {
     const info = await ipc.createWorkspace(
-      name,
+      finalName,
       desc,
       prompt,
       dir,
-      type,
+      "Simple",
       group || null,
       kanban || null,
     );
@@ -204,6 +250,19 @@ async function submitCreate(backdrop: HTMLElement, type: string) {
     btn.disabled = false;
     btn.textContent = "Create";
   }
+}
+
+/** Mirrors `piki_core::workspace::manager::parse_github_repo_name`. Extracts
+ *  the trailing segment of a clone-style URL, stripping `.git` if present.
+ *  Returns "" when the input is empty or trims to nothing usable. */
+function parseGithubRepoNameFromUrl(url: string): string {
+  const trimmed = url.trim().replace(/\/+$/, "").split(/[?#]/)[0] ?? "";
+  const last = trimmed.split(/[/:]/).pop() ?? "";
+  return last.replace(/\.git$/, "");
+}
+
+function basenameFromPath(path: string): string {
+  return path.replace(/\/+$/, "").split("/").pop() ?? "";
 }
 
 async function submitEdit(backdrop: HTMLElement, index: number) {
@@ -305,4 +364,108 @@ function escapeHtml(text: string): string {
 
 function escapeAttr(text: string): string {
   return (text ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+}
+
+/** Layer 3: GitHub-only "Create Worktree" dialog. Spawns a worktree
+ *  workspace anchored at the parent's source_repo. Only the branch name is
+ *  required; prompt/kanban/group default to the parent's values. */
+export function showCreateWorktreeDialog(parent: WorkspaceInfo) {
+  document.querySelector(".dialog-backdrop")?.remove();
+
+  if (parent.origin?.kind !== "GitHub") {
+    toast("Create Worktree is available only for GitHub workspaces", "error");
+    return;
+  }
+
+  const backdrop = document.createElement("div");
+  backdrop.className = "dialog-backdrop";
+  backdrop.innerHTML = `
+    <div class="dialog">
+      <div class="dialog-header">
+        <span class="dialog-title">Create Worktree</span>
+        <button class="dialog-close">×</button>
+      </div>
+      <div class="dialog-body">
+        <div class="dialog-field">
+          <label class="dialog-label">Parent</label>
+          <input class="dialog-input" value="${escapeAttr(parent.source_repo_display || parent.name)}" disabled />
+        </div>
+        <div class="dialog-field">
+          <label class="dialog-label">Branch name</label>
+          <input class="dialog-input" id="wt-name" placeholder="feature/my-branch" />
+        </div>
+        <div class="dialog-field">
+          <label class="dialog-label">Prompt</label>
+          <textarea class="dialog-textarea" id="wt-prompt" placeholder="Initial prompt for AI tabs" rows="3">${escapeHtml(parent.prompt ?? "")}</textarea>
+        </div>
+        <div class="dialog-field">
+          <label class="dialog-label">Kanban Path</label>
+          <input class="dialog-input" id="wt-kanban" placeholder="Path to .board directory (optional)" value="${escapeAttr(parent.kanban_path ?? "")}" />
+        </div>
+        <div class="dialog-field">
+          <label class="dialog-label">Group</label>
+          <input class="dialog-input" id="wt-group" placeholder="Optional group name" value="${escapeAttr(parent.group ?? "")}" />
+        </div>
+      </div>
+      <div class="dialog-footer">
+        <button class="dialog-btn dialog-btn-secondary" id="wt-cancel">Cancel</button>
+        <button class="dialog-btn dialog-btn-primary" id="wt-submit">Create</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(backdrop);
+
+  const kanbanInput = backdrop.querySelector<HTMLInputElement>("#wt-kanban");
+  if (kanbanInput) attachPathPicker(kanbanInput, { title: "Select kanban directory" });
+  backdrop.querySelector<HTMLInputElement>("#wt-name")?.focus();
+
+  const close = () => backdrop.remove();
+  backdrop.querySelector(".dialog-close")!.addEventListener("click", close);
+  backdrop.querySelector("#wt-cancel")!.addEventListener("click", close);
+  backdrop.addEventListener("click", (e) => {
+    if (e.target === backdrop) close();
+  });
+  backdrop.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") close();
+  });
+  backdrop.setAttribute("tabindex", "0");
+
+  backdrop.querySelector("#wt-submit")!.addEventListener("click", async () => {
+    const name =
+      backdrop.querySelector<HTMLInputElement>("#wt-name")?.value.trim() ?? "";
+    const prompt =
+      backdrop.querySelector<HTMLTextAreaElement>("#wt-prompt")?.value.trim() ?? "";
+    const kanban =
+      backdrop.querySelector<HTMLInputElement>("#wt-kanban")?.value.trim() ?? "";
+    const group =
+      backdrop.querySelector<HTMLInputElement>("#wt-group")?.value.trim() ?? "";
+
+    if (!name) {
+      toast("Branch name is required", "error");
+      return;
+    }
+
+    const btn = backdrop.querySelector<HTMLButtonElement>("#wt-submit")!;
+    btn.disabled = true;
+    btn.textContent = "Creating...";
+    try {
+      const info = await ipc.createWorkspace(
+        name,
+        "",
+        prompt,
+        parent.source_repo,
+        "Worktree",
+        group || null,
+        kanban || null,
+      );
+      appState.addWorkspace(info);
+      toast(`Worktree "${info.name}" created`, "success");
+      backdrop.remove();
+    } catch (err) {
+      toast(`Failed to create worktree: ${err}`, "error");
+      btn.disabled = false;
+      btn.textContent = "Create";
+    }
+  });
 }

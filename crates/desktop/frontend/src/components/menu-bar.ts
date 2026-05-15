@@ -25,6 +25,7 @@ import { toggleChatPanel } from "./chat-panel";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getProviderLabel, getProviderKey, type AIProvider } from "../types";
 import { getShortcutKey, formatShortcut } from "../shortcuts";
+import { openWebPreviewTab } from "./web-preview-panel";
 
 // ── Types ───────────────────────────────────────
 
@@ -47,6 +48,7 @@ interface MenuDefinition {
 const noWs = () => !appState.activeWs;
 
 function spawnTab(provider: AIProvider) {
+  if (appState.focusSingletonTab(provider)) return;
   const wsIdx = appState.activeWorkspace;
   ipc.spawnTab(wsIdx, getProviderKey(provider)).then((tabId) => {
     appState.addTab(wsIdx, { id: tabId, provider, alive: true });
@@ -86,9 +88,12 @@ const MENUS: MenuDefinition[] = [
       {
         label: "New Tab",
         disabled: noWs,
-        submenu: [...getProviderTabs(), "Shell" as AIProvider, "Api" as AIProvider].map(
-          (p) => ({ label: getProviderLabel(p), action: () => spawnTab(p) }),
-        ),
+        submenu: [
+          ...[...getProviderTabs(), "Shell" as AIProvider, "Api" as AIProvider].map(
+            (p): MenuItem => ({ label: getProviderLabel(p), action: () => spawnTab(p) }),
+          ),
+          { label: "Web Preview", shortcut: getShortcutKey("web-preview"), action: () => openWebPreviewTab() },
+        ],
       },
       SEP,
       {
@@ -105,6 +110,28 @@ const MENUS: MenuDefinition[] = [
           const wsIdx = appState.activeWorkspace;
           ipc.closeTab(wsIdx, ws.activeTab).catch(() => {});
           appState.removeTab(wsIdx, ws.activeTab);
+        },
+      },
+      SEP,
+      {
+        label: "Split Pane Right",
+        shortcut: "Ctrl+\\",
+        disabled: noWs,
+        action: () => { appState.splitActivePane("right"); },
+      },
+      {
+        label: "Split Pane Down",
+        shortcut: "Ctrl+Shift+\\",
+        disabled: noWs,
+        action: () => { appState.splitActivePane("down"); },
+      },
+      {
+        label: "Close Active Pane",
+        shortcut: "Ctrl+Shift+Q",
+        disabled: noWs,
+        action: () => {
+          const id = appState.activePaneId;
+          if (id) appState.closePane(id);
         },
       },
       SEP,

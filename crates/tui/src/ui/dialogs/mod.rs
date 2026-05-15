@@ -21,8 +21,8 @@ pub(crate) use self::system::{
     render_diff_overlay, render_help_overlay, render_logs_overlay, render_new_tab_dialog,
 };
 pub(crate) use self::workspace::{
-    render_confirm_delete_dialog, render_edit_workspace_dialog, render_new_workspace_dialog,
-    render_workspace_info_overlay,
+    render_confirm_delete_dialog, render_create_worktree_dialog, render_edit_workspace_dialog,
+    render_new_workspace_dialog, render_workspace_info_overlay,
 };
 
 use ratatui::Frame;

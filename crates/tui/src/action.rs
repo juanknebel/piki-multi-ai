@@ -11,6 +11,7 @@ use piki_core::workspace::{FileWatcher, WorkspaceManager};
 use piki_core::{AIProvider, MergeStrategy, WorkspaceType};
 
 /// Async actions triggered by key events
+#[derive(Debug)]
 pub(crate) enum Action {
     CreateWorkspace(
         String,
@@ -19,6 +20,16 @@ pub(crate) enum Action {
         Option<String>,
         PathBuf,
         WorkspaceType,
+        Option<String>,
+    ),
+    /// Clone a GitHub URL into the managed worktrees dir and register as Simple.
+    /// Args: (name, description, prompt, kanban_path, github_url, group)
+    CreateGithubWorkspace(
+        String,
+        String,
+        String,
+        Option<String>,
+        String,
         Option<String>,
     ),
     EditWorkspace(usize, Option<String>, String, Option<String>),
@@ -179,6 +190,49 @@ pub(crate) async fn execute_action(
                     {
                         let source = app.workspaces[new_idx].source_repo.clone();
                         let infos: Vec<_> = app.workspaces.iter().map(|w| w.info.clone()).collect();
+                        let storage = Arc::clone(&app.storage);
+                        tokio::spawn(async move {
+                            let _ = storage.workspaces.save_workspaces(&source, &infos);
+                        });
+                    }
+                }
+                Err(e) => {
+                    app.status_message = Some(format!("Error: {}", e));
+                }
+            }
+        }
+        Action::CreateGithubWorkspace(name, description, prompt, kanban_path, github_url, group) => {
+            let result = manager
+                .create_from_github(&name, &description, &prompt, kanban_path, &github_url)
+                .await;
+            match result {
+                Ok(mut info) => {
+                    info.group = group;
+                    info.order = app
+                        .workspaces
+                        .iter()
+                        .map(|w| w.info.order)
+                        .max()
+                        .map(|m| m + 1)
+                        .unwrap_or(0);
+                    app.workspaces.push(app::Workspace::from_info(info));
+                    let new_idx = app.workspaces.len() - 1;
+                    app.switch_workspace(new_idx);
+
+                    let ws = &mut app.workspaces[new_idx];
+                    match FileWatcher::new(ws.path.clone(), ws.name.clone()) {
+                        Ok(watcher) => {
+                            ws.watcher = Some(watcher);
+                        }
+                        Err(e) => {
+                            app.status_message = Some(format!("Watcher error: {}", e));
+                        }
+                    }
+
+                    {
+                        let source = app.workspaces[new_idx].source_repo.clone();
+                        let infos: Vec<_> =
+                            app.workspaces.iter().map(|w| w.info.clone()).collect();
                         let storage = Arc::clone(&app.storage);
                         tokio::spawn(async move {
                             let _ = storage.workspaces.save_workspaces(&source, &infos);
@@ -619,39 +673,54 @@ pub(crate) async fn execute_action(
             }
         }
         Action::GitCommit(message) => {
-            if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+            let toast = if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
                 let worktree = ws.path.clone();
                 let output = tokio::process::Command::new("git")
                     .args(["commit", "-m", &message])
                     .current_dir(&worktree)
                     .output()
                     .await?;
-                if output.status.success() {
+                let result = if output.status.success() {
                     let stdout = String::from_utf8_lossy(&output.stdout);
-                    let first_line = stdout.lines().next().unwrap_or("Committed");
-                    app.status_message = Some(format!("✓ {}", first_line));
+                    let first_line = stdout.lines().next().unwrap_or("Committed").to_string();
+                    (format!("✓ {}", first_line), ToastLevel::Success)
                 } else {
                     let stderr = String::from_utf8_lossy(&output.stderr);
-                    app.status_message = Some(format!("Commit failed: {}", stderr.trim()));
-                }
+                    (
+                        format!("Commit failed: {}", stderr.trim()),
+                        ToastLevel::Error,
+                    )
+                };
                 ws.dirty = true;
                 ws.last_refresh = None;
+                Some(result)
+            } else {
+                None
+            };
+            if let Some((msg, lvl)) = toast {
+                app.set_toast(msg, lvl);
             }
         }
         Action::GitPush => {
-            if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
+            let toast = if let Some(ws) = app.workspaces.get(app.active_workspace) {
                 let worktree = ws.path.clone();
                 let output = tokio::process::Command::new("git")
                     .args(["push"])
                     .current_dir(&worktree)
                     .output()
                     .await?;
-                if output.status.success() {
-                    app.status_message = Some("✓ Pushed successfully".into());
+                let result = if output.status.success() {
+                    ("✓ Pushed successfully".to_string(), ToastLevel::Success)
                 } else {
                     let stderr = String::from_utf8_lossy(&output.stderr);
-                    app.status_message = Some(format!("Push failed: {}", stderr.trim()));
-                }
+                    (format!("Push failed: {}", stderr.trim()), ToastLevel::Error)
+                };
+                Some(result)
+            } else {
+                None
+            };
+            if let Some((msg, lvl)) = toast {
+                app.set_toast(msg, lvl);
             }
         }
         Action::GitMerge(strategy) => {
@@ -672,8 +741,10 @@ pub(crate) async fn execute_action(
                     .await?;
                 let status_str = String::from_utf8_lossy(&status_output.stdout);
                 if !status_str.trim().is_empty() {
-                    app.status_message =
-                        Some("Merge aborted: workspace has uncommitted changes".into());
+                    app.set_toast(
+                        "Merge aborted: workspace has uncommitted changes",
+                        ToastLevel::Error,
+                    );
                     return Ok(());
                 }
 
@@ -717,11 +788,10 @@ pub(crate) async fn execute_action(
                             .await?;
                         if !checkout.status.success() {
                             let stderr = String::from_utf8_lossy(&checkout.stderr);
-                            app.status_message = Some(format!(
-                                "Checkout {} failed: {}",
-                                main_branch,
-                                stderr.trim()
-                            ));
+                            app.set_toast(
+                                format!("Checkout {} failed: {}", main_branch, stderr.trim()),
+                                ToastLevel::Error,
+                            );
                             if src_dirty {
                                 let _ = tokio::process::Command::new("git")
                                     .args(["stash", "pop"])
@@ -743,10 +813,10 @@ pub(crate) async fn execute_action(
                         if merge.status.success() {
                             let stdout = String::from_utf8_lossy(&merge.stdout);
                             let first = stdout.lines().next().unwrap_or("Merged");
-                            app.status_message = Some(format!(
-                                "✓ Merged '{}' into {}: {}",
-                                branch, main_branch, first
-                            ));
+                            app.set_toast(
+                                format!("✓ Merged '{}' into {}: {}", branch, main_branch, first),
+                                ToastLevel::Success,
+                            );
                         } else {
                             // Check for conflict markers in git status
                             let conflict_check = tokio::process::Command::new("git")
@@ -789,10 +859,10 @@ pub(crate) async fn execute_action(
                                     .output()
                                     .await;
                                 let stderr = String::from_utf8_lossy(&merge.stderr);
-                                app.status_message = Some(format!(
-                                    "Merge failed: {}",
-                                    stderr.trim()
-                                ));
+                                app.set_toast(
+                                    format!("Merge failed: {}", stderr.trim()),
+                                    ToastLevel::Error,
+                                );
                             }
                         }
 
@@ -861,10 +931,10 @@ pub(crate) async fn execute_action(
                                     .current_dir(&ws_path)
                                     .output()
                                     .await;
-                                app.status_message = Some(format!(
-                                    "Rebase failed: {}",
-                                    stderr.trim()
-                                ));
+                                app.set_toast(
+                                    format!("Rebase failed: {}", stderr.trim()),
+                                    ToastLevel::Error,
+                                );
                             }
                             return Ok(());
                         }
@@ -892,14 +962,16 @@ pub(crate) async fn execute_action(
                             .await?;
 
                         if ff.status.success() {
-                            app.status_message = Some(format!(
-                                "✓ Rebased and merged '{}' into {}",
-                                branch, main_branch
-                            ));
+                            app.set_toast(
+                                format!("✓ Rebased and merged '{}' into {}", branch, main_branch),
+                                ToastLevel::Success,
+                            );
                         } else {
                             let stderr = String::from_utf8_lossy(&ff.stderr);
-                            app.status_message =
-                                Some(format!("Fast-forward failed: {}", stderr.trim()));
+                            app.set_toast(
+                                format!("Fast-forward failed: {}", stderr.trim()),
+                                ToastLevel::Error,
+                            );
                         }
 
                         // Restore previous branch
@@ -1149,7 +1221,15 @@ pub(crate) async fn execute_action(
                     ws.kanban_provider = Some(kanban_provider);
                 }
 
-                let idx = spawn_tab(ws, &provider, app.pty_rows, app.pty_cols, None, Some(&app.provider_manager)).await;
+                // Singleton guard: Kanban and Api tabs must not be duplicated
+                if matches!(provider, AIProvider::Kanban | AIProvider::Api)
+                    && let Some(idx) = ws.tabs.iter().position(|t| t.provider == provider)
+                {
+                    ws.active_tab = idx;
+                    return Ok(());
+                }
+
+                let idx = spawn_tab(ws, &provider, app.pty_rows, app.pty_cols, None, Some(&app.provider_manager), &app.paths).await;
                 ws.active_tab = idx;
                 app.status_message = Some(format!("Opened {} tab", provider.label()));
             }
@@ -2039,7 +2119,7 @@ pub(crate) async fn execute_action(
                 // Spawn tab in current workspace
                 let ws = &mut app.workspaces[source_ws];
                 let idx =
-                    spawn_tab(ws, &provider, app.pty_rows, app.pty_cols, Some(&task_prompt), Some(&app.provider_manager)).await;
+                    spawn_tab(ws, &provider, app.pty_rows, app.pty_cols, Some(&task_prompt), Some(&app.provider_manager), &app.paths).await;
                 ws.active_tab = idx;
 
                 app.set_toast(
@@ -2142,6 +2222,7 @@ pub(crate) async fn execute_action(
                             app.pty_cols,
                             Some(&task_prompt),
                             Some(&app.provider_manager),
+                            &app.paths,
                         )
                         .await;
                         ws.active_tab = idx;

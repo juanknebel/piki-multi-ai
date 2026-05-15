@@ -142,15 +142,12 @@
   background: var(--bg-primary);
 }
 
-#tab-bar {
-  flex: 0 0 var(--tab-height);
-  overflow: hidden;
-}
-
 #main-content {
   flex: 1 1 auto;
   overflow: hidden;
   position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
 #status-bar {

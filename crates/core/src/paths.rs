@@ -68,4 +68,11 @@ impl DataPaths {
     pub fn providers_path(&self) -> PathBuf {
         self.config_base.join("providers.toml")
     }
+
+    /// Shell integration directory: `<base>/shell-integration`. Holds the
+    /// materialized init scripts and bridge files that piki tells the user's
+    /// shell to source on startup.
+    pub fn shell_integration_dir(&self) -> PathBuf {
+        self.base.join("shell-integration")
+    }
 }

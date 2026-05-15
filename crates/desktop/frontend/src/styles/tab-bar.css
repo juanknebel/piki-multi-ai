@@ -1,13 +1,17 @@
-#tab-bar {
+#tab-bar,
+.pane-tab-bar {
   display: flex;
   align-items: stretch;
   background: var(--tab-inactive-bg);
   border-bottom: 1px solid var(--border-primary);
   overflow-x: auto;
   overflow-y: hidden;
+  flex: 0 0 var(--tab-height);
+  min-height: var(--tab-height);
 }
 
-#tab-bar::-webkit-scrollbar {
+#tab-bar::-webkit-scrollbar,
+.pane-tab-bar::-webkit-scrollbar {
   height: 0;
 }
 
@@ -65,6 +69,19 @@
 
 .tab.active .tab-icon {
   opacity: 1;
+}
+
+.tab-exit-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  margin-right: 2px;
+}
+.tab-exit-badge.ok {
+  color: var(--git-added);
+}
+.tab-exit-badge.fail {
+  color: var(--git-deleted);
 }
 
 .tab-label {

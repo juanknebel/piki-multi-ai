@@ -7,6 +7,7 @@ use crate::clipboard;
 use crate::ui;
 use piki_core::AIProvider;
 use piki_core::pty::PtySession;
+use piki_core::shell_integration::install as shell_install;
 
 /// Kill all PTY sessions and drop watchers for a clean exit.
 pub(crate) fn shutdown(app: &mut App) {
@@ -30,6 +31,7 @@ pub(crate) async fn spawn_tab(
     cols: u16,
     prompt: Option<&str>,
     provider_manager: Option<&piki_core::providers::ProviderManager>,
+    paths: &piki_core::paths::DataPaths,
 ) -> usize {
     let idx = ws.add_tab(provider.clone(), true);
     if *provider == AIProvider::Kanban || *provider == AIProvider::CodeReview {
@@ -62,7 +64,36 @@ pub(crate) async fn spawn_tab(
         (cmd, prompt_args)
     };
 
-    if let Ok(session) = PtySession::spawn(&ws.path, rows, cols, &cmd, &args).await {
+    // Shell integration only applies to Shell tabs (provider tabs run their
+    // binary directly with no shell wrapper to emit OSC markers).
+    let (extra_env, extra_args, integration_on) = if *provider == AIProvider::Shell {
+        match shell_install::setup_for(&cmd, &paths.shell_integration_dir()) {
+            Ok(Some(setup)) => {
+                let env: Vec<(String, String)> = setup.env.into_iter().collect();
+                (env, setup.extra_args, true)
+            }
+            Ok(None) => (Vec::new(), Vec::new(), false),
+            Err(e) => {
+                tracing::warn!(error = %e, shell = %cmd, "shell integration setup failed");
+                (Vec::new(), Vec::new(), false)
+            }
+        }
+    } else {
+        (Vec::new(), Vec::new(), false)
+    };
+
+    if let Ok(session) = PtySession::spawn(
+        &ws.path,
+        rows,
+        cols,
+        &cmd,
+        &args,
+        &extra_env,
+        &extra_args,
+        integration_on,
+    )
+    .await
+    {
         ws.tabs[idx].pty_parser = Some(Arc::clone(session.parser()));
         ws.tabs[idx].pty_session = Some(session);
         ws.status = app::WorkspaceStatus::Busy;

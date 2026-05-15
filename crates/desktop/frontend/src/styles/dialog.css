@@ -147,6 +147,47 @@
   color: var(--text-primary);
 }
 
+.path-picker-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.path-picker-row > .dialog-input,
+.path-picker-row > input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.path-picker-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  flex: 0 0 auto;
+  padding: 0;
+  background: var(--bg-input);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
+}
+
+.path-picker-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+}
+
+.path-picker-btn:focus-visible {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px var(--accent-muted);
+  outline: none;
+}
+
 /* ── Custom dropdown (replaces native select) ───── */
 .dialog-dropdown {
   position: relative;
@@ -282,6 +323,99 @@
   border-radius: var(--radius-sm);
 }
 
+/* ── Reusable yes/no & status badge ──────────────── */
+.dialog-badge {
+  display: inline-block;
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dialog-badge.success {
+  color: var(--git-added);
+  background: rgba(63, 185, 80, 0.12);
+}
+
+.dialog-badge.muted {
+  color: var(--text-muted);
+  background: var(--bg-hover);
+}
+
+/* ── Providers dialog ────────────────────────────── */
+.providers-dialog {
+  width: 720px;
+}
+
+.providers-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.providers-table thead th {
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.providers-table tbody tr {
+  transition: background var(--transition-fast);
+}
+
+.providers-table tbody tr:hover {
+  background: var(--bg-hover);
+}
+
+.providers-table tbody td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-primary);
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+
+.providers-table .col-muted {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.providers-table .col-actions {
+  text-align: right;
+  white-space: nowrap;
+  width: 1%;
+}
+
+.providers-table .col-actions .dialog-btn {
+  margin-left: 6px;
+}
+
+.providers-empty {
+  padding: 24px 12px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.providers-confirm {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 4px;
+}
+
+.providers-confirm-text {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
 /* ── Agent manager items ─────────────────────────── */
 .agent-manager-item {
   padding: 10px 12px;
@@ -339,6 +473,27 @@
   margin-top: 8px;
 }
 
+/* ── Import dialog toolbar ───────────────────────── */
+.import-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.import-toolbar .import-filter {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.import-toolbar .import-count {
+  color: var(--text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 /* ── Import check items ──────────────────────────── */
 .import-check-item {
   display: flex;
@@ -379,6 +534,31 @@
 .import-check-badge.exists {
   color: var(--git-modified);
   background: var(--accent-warm-muted);
+}
+
+/* ── Logs dialog ──────────────────────────────────── */
+.log-search {
+  width: 220px;
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+.log-row {
+  padding: 2px 14px;
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.log-row:hover {
+  background: var(--bg-hover);
+}
+
+.log-row-selected,
+.log-row.log-row-selected:hover {
+  background: var(--bg-active);
 }
 
 /* ── Help / shortcut dialog ──────────────────────── */

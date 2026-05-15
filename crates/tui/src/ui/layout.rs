@@ -235,6 +235,9 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         AppMode::Diff => super::dialogs::render_diff_overlay(frame, area, app),
         AppMode::NewWorkspace => super::dialogs::render_new_workspace_dialog(frame, area, app),
         AppMode::EditWorkspace => super::dialogs::render_edit_workspace_dialog(frame, area, app),
+        AppMode::CreateWorktree => {
+            super::dialogs::render_create_worktree_dialog(frame, area, app)
+        }
         AppMode::Help => super::dialogs::render_help_overlay(frame, area, app),
         AppMode::ConfirmDelete => super::dialogs::render_confirm_delete_dialog(frame, area, app),
         AppMode::CommitMessage => super::dialogs::render_commit_dialog(frame, area, app),

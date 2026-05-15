@@ -2,6 +2,7 @@ import { appState } from "../state";
 import * as ipc from "../ipc";
 import { toast } from "./toast";
 import { createDropdown } from "./dropdown";
+import { modCtrl } from "../shortcuts";
 
 interface DraftComment {
   path: string;
@@ -31,7 +32,23 @@ export async function showCodeReview() {
 
   const { info, files } = prDetail;
   const comments = new Map<string, DraftComment>();
+  /** Drafted replies, keyed by the existing comment ID being replied to */
+  const replies = new Map<number, string>();
   let currentFilePath = files.length > 0 ? files[0].path : "";
+
+  // Load existing PR review comments (best-effort — modal still opens if this fails)
+  const existingByLine = new Map<string, ipc.ExistingComment[]>();
+  try {
+    const existing = await ipc.getPrReviewComments(wsIdx, info.number);
+    for (const c of existing) {
+      if (c.line === null) continue; // skip outdated
+      const key = `${c.path}:${c.line}:${c.side || "RIGHT"}`;
+      if (!existingByLine.has(key)) existingByLine.set(key, []);
+      existingByLine.get(key)!.push(c);
+    }
+  } catch (err) {
+    console.warn("Failed to load existing review comments:", err);
+  }
 
   function commentKey(path: string, line: number, side: string): string {
     return `${path}:${line}:${side}`;
@@ -59,17 +76,20 @@ export async function showCodeReview() {
   header.className = "diff-header";
   header.innerHTML = `
     <span class="diff-title">
-      <span style="color:var(--text-accent)">PR #${info.number}</span>
-      ${esc(info.title)}
-      <span style="color:var(--text-muted);font-size:11px;margin-left:8px">
-        ${esc(info.baseRefName)} ← ${esc(info.headRefName)}
-        <span style="color:var(--git-added)">+${info.additions}</span>
-        <span style="color:var(--git-deleted)">-${info.deletions}</span>
-      </span>
+      <div>
+        <span style="color:var(--text-accent)">PR #${info.number}</span>
+        ${esc(info.title)}
+        <span style="color:var(--text-muted);font-size:11px;margin-left:8px">
+          ${esc(info.baseRefName)} ← ${esc(info.headRefName)}
+          <span style="color:var(--git-added)">+${info.additions}</span>
+          <span style="color:var(--git-deleted)">-${info.deletions}</span>
+        </span>
+      </div>
+      <div class="cr-reviewers">${renderReviewers(info)}</div>
     </span>
     <span style="display:flex;gap:8px;align-items:center">
       <span id="cr-verdict-slot"></span>
-      <button class="dialog-btn dialog-btn-primary" id="cr-submit" style="font-size:11px;padding:4px 10px">Submit</button>
+      <button class="dialog-btn dialog-btn-primary dialog-btn-sm" id="cr-submit" title="Submit (${modCtrlLabel()}+Enter)">Submit</button>
       <button class="dialog-close">×</button>
     </span>
   `;
@@ -94,9 +114,12 @@ export async function showCodeReview() {
   const body = document.createElement("div");
   body.style.cssText = "display:flex;flex:1;overflow:hidden;";
 
-  // File list
+  // File list (resizable via the handle inserted between fileList and diffArea)
   const fileList = document.createElement("div");
-  fileList.style.cssText = "width:220px;flex-shrink:0;overflow-y:auto;border-right:1px solid var(--border-primary);background:var(--bg-secondary);";
+  fileList.className = "cr-file-list";
+
+  const resizeHandle = document.createElement("div");
+  resizeHandle.className = "cr-resize-handle";
 
   const fileListHeader = document.createElement("div");
   fileListHeader.className = "sidebar-header";
@@ -305,9 +328,111 @@ export async function showCodeReview() {
     if (!commentLine) return;
     const commentSide = (pair.pair_type === "deleted") ? "LEFT" : "RIGHT";
     const key = commentKey(filePath, commentLine, commentSide);
+
+    // Server-side review comments (read-only) with Reply affordance
+    const serverComments = existingByLine.get(key);
+    if (serverComments) {
+      let anchor: HTMLElement = row;
+      for (const c of serverComments) {
+        const badge = document.createElement("div");
+        badge.className = "cr-comment-badge cr-existing-badge cr-comment-badge-sbs";
+        if (c.in_reply_to_id !== null) {
+          badge.classList.add("cr-thread-reply");
+        }
+        badge.innerHTML = `
+          <div class="cr-comment-header">
+            <span class="cr-comment-author">${esc(c.author)}</span>
+            <button class="dialog-btn dialog-btn-secondary dialog-btn-sm cr-reply-btn" type="button">Reply</button>
+          </div>
+          <span class="cr-comment-body">${esc(c.body)}</span>
+        `;
+        anchor.after(badge);
+        anchor = badge;
+
+        const replyAnchor = badge;
+        badge.querySelector<HTMLButtonElement>(".cr-reply-btn")!
+          .addEventListener("click", (e) => {
+            e.stopPropagation();
+            openReplyForm(replyAnchor, c.id);
+          });
+
+        // If there's a drafted reply for this comment, render its preview badge
+        if (replies.has(c.id)) {
+          const draftBadge = renderReplyDraftBadge(c.id);
+          anchor.after(draftBadge);
+          anchor = draftBadge;
+        }
+      }
+    }
+
+    // User's draft (editable)
     if (comments.has(key)) {
       insertBadgeAfter(row, key);
     }
+  }
+
+  function renderReplyDraftBadge(commentId: number): HTMLElement {
+    const badge = document.createElement("div");
+    badge.className = "cr-comment-badge cr-reply-draft cr-comment-badge-sbs";
+    badge.dataset.replyTo = String(commentId);
+    const body = replies.get(commentId) ?? "";
+    badge.innerHTML = `
+      <div class="cr-comment-header">
+        <span class="cr-comment-author">You (reply, pending)</span>
+        <span style="display:flex;gap:4px">
+          <button class="dialog-btn dialog-btn-secondary dialog-btn-sm cr-reply-edit" type="button">Edit</button>
+          <button class="dialog-btn dialog-btn-danger dialog-btn-sm cr-reply-delete" type="button">Delete</button>
+        </span>
+      </div>
+      <span class="cr-comment-body"></span>
+    `;
+    badge.querySelector(".cr-comment-body")!.textContent = body;
+    badge.querySelector<HTMLButtonElement>(".cr-reply-edit")!.addEventListener("click", (e) => {
+      e.stopPropagation();
+      // Edit reuses the form, anchored just before this draft badge
+      const anchor = badge.previousElementSibling as HTMLElement | null;
+      if (anchor) openReplyForm(anchor, commentId);
+    });
+    badge.querySelector<HTMLButtonElement>(".cr-reply-delete")!.addEventListener("click", (e) => {
+      e.stopPropagation();
+      replies.delete(commentId);
+      badge.remove();
+    });
+    return badge;
+  }
+
+  function openReplyForm(anchor: HTMLElement, commentId: number) {
+    // Remove any other open reply form first
+    document.querySelectorAll(".cr-reply-form").forEach((el) => el.remove());
+
+    const existingBody = replies.get(commentId) ?? "";
+
+    const form = document.createElement("div");
+    form.className = "cr-reply-form cr-comment-form cr-comment-form-sbs";
+    form.innerHTML = `
+      <textarea class="cr-comment-textarea" rows="2" placeholder="Reply to this comment..."></textarea>
+      <div class="cr-comment-form-actions">
+        <button class="dialog-btn dialog-btn-primary dialog-btn-sm cr-reply-save" type="button">Save</button>
+        <button class="dialog-btn dialog-btn-secondary dialog-btn-sm cr-reply-cancel" type="button">Cancel</button>
+      </div>
+    `;
+    (form.querySelector(".cr-comment-textarea") as HTMLTextAreaElement).value = existingBody;
+
+    form.querySelector(".cr-reply-save")!.addEventListener("click", () => {
+      const body = (form.querySelector(".cr-comment-textarea") as HTMLTextAreaElement).value.trim();
+      form.remove();
+      if (!body) { replies.delete(commentId); return; }
+      replies.set(commentId, body);
+      // Remove any existing draft badge for this comment and re-insert
+      const existing = document.querySelector(`.cr-reply-draft[data-reply-to="${commentId}"]`);
+      existing?.remove();
+      const draftBadge = renderReplyDraftBadge(commentId);
+      anchor.after(draftBadge);
+    });
+    form.querySelector(".cr-reply-cancel")!.addEventListener("click", () => form.remove());
+
+    anchor.after(form);
+    (form.querySelector(".cr-comment-textarea") as HTMLTextAreaElement).focus();
   }
 
   function insertBadgeAfter(row: HTMLElement, key: string) {
@@ -326,12 +451,42 @@ export async function showCodeReview() {
   }
 
   body.appendChild(fileList);
+  body.appendChild(resizeHandle);
   body.appendChild(diffArea);
   panel.appendChild(body);
 
   backdrop.appendChild(panel);
   document.body.appendChild(backdrop);
   overlayEl = backdrop;
+
+  // Drag-to-resize: clamp width between 150px and half the dialog width.
+  {
+    let dragging = false;
+    let startX = 0;
+    let startWidth = 0;
+    resizeHandle.addEventListener("mousedown", (e) => {
+      dragging = true;
+      startX = e.clientX;
+      startWidth = fileList.offsetWidth;
+      resizeHandle.classList.add("dragging");
+      document.body.style.cursor = "ew-resize";
+      document.body.style.userSelect = "none";
+      e.preventDefault();
+    });
+    document.addEventListener("mousemove", (e) => {
+      if (!dragging) return;
+      const max = Math.max(300, panel.offsetWidth * 0.5);
+      const newWidth = Math.max(150, Math.min(max, startWidth + (e.clientX - startX)));
+      fileList.style.width = `${newWidth}px`;
+    });
+    document.addEventListener("mouseup", () => {
+      if (!dragging) return;
+      dragging = false;
+      resizeHandle.classList.remove("dragging");
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    });
+  }
 
   renderFileList();
   if (files.length > 0) loadFileDiff(files[0].path);
@@ -340,6 +495,14 @@ export async function showCodeReview() {
   panel.querySelector("#cr-submit")!.addEventListener("click", async () => {
     const verdict = verdictDropdown.value;
     const reviewBody = (panel.querySelector("#cr-body") as HTMLTextAreaElement).value.trim();
+
+    // GitHub requires a body for Request Changes
+    if (verdict === "request_changes" && !reviewBody) {
+      toast("Request Changes requires a review summary message", "error");
+      (panel.querySelector("#cr-body") as HTMLTextAreaElement).focus();
+      return;
+    }
+
     const commentsArray = [...comments.values()].map(c => ({
       path: c.path,
       line: c.line,
@@ -352,8 +515,27 @@ export async function showCodeReview() {
     btn.textContent = "Submitting...";
 
     try {
+      // Step 1: review verdict + new draft comments (single POST to /reviews)
       const msg = await ipc.submitPrReview(wsIdx, info.number, verdict, reviewBody, commentsArray);
-      toast(msg || "Review submitted", "success");
+
+      // Step 2: replies to existing comments (one POST each to /comments/{id}/replies).
+      // Reviewers expect replies even if the verdict submit failed individually, so we
+      // attempt all and surface partial failures.
+      const replyFailures: string[] = [];
+      for (const [commentId, body] of replies.entries()) {
+        try {
+          await ipc.submitReviewReply(wsIdx, info.number, commentId, body);
+        } catch (err) {
+          replyFailures.push(`#${commentId}: ${err}`);
+        }
+      }
+
+      if (replyFailures.length > 0) {
+        toast(`Review submitted, but ${replyFailures.length} replies failed`, "error");
+        console.error("Reply failures:", replyFailures);
+      } else {
+        toast(msg || "Review submitted", "success");
+      }
       close();
     } catch (err) {
       toast(`Submit failed: ${err}`, "error");
@@ -365,9 +547,56 @@ export async function showCodeReview() {
   const close = () => { overlayEl?.remove(); overlayEl = null; };
   panel.querySelector(".dialog-close")!.addEventListener("click", close);
   backdrop.addEventListener("click", (e) => { if (e.target === backdrop) close(); });
-  backdrop.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+  backdrop.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      close();
+      return;
+    }
+    if (e.key === "Enter" && modCtrl(e)) {
+      e.preventDefault();
+      panel.querySelector<HTMLButtonElement>("#cr-submit")?.click();
+    }
+  });
   backdrop.setAttribute("tabindex", "0");
   backdrop.focus();
+}
+
+function renderReviewers(info: ipc.PrInfo): string {
+  const requested = info.reviewRequests
+    .map((r) => r.login || r.name)
+    .filter((s) => !!s);
+  const reviews = info.latestReviews ?? [];
+
+  const grouped = new Map<string, string[]>();
+  for (const r of reviews) {
+    const login = r.author?.login;
+    if (!login) continue;
+    if (!grouped.has(r.state)) grouped.set(r.state, []);
+    grouped.get(r.state)!.push(login);
+  }
+
+  const parts: string[] = [];
+  if (requested.length > 0) {
+    parts.push(`Reviewers: ${requested.map(esc).join(", ")}`);
+  }
+  const labels: Array<[string, string]> = [
+    ["APPROVED", "Approved by"],
+    ["CHANGES_REQUESTED", "Changes requested by"],
+    ["COMMENTED", "Commented by"],
+    ["DISMISSED", "Dismissed:"],
+  ];
+  for (const [state, label] of labels) {
+    const users = grouped.get(state);
+    if (users && users.length > 0) {
+      parts.push(`${label} ${users.map(esc).join(", ")}`);
+    }
+  }
+  if (parts.length === 0) return "No reviewers requested";
+  return parts.join(" · ");
+}
+
+function modCtrlLabel(): string {
+  return navigator.platform.toLowerCase().includes("mac") ? "⌘" : "Ctrl";
 }
 
 /** Character-level diff: find common prefix/suffix and highlight the changed middle */

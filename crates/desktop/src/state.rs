@@ -47,15 +47,21 @@ pub struct DesktopTab {
     pub provider: AIProvider,
     pub pty: Option<RawPtySession>,
     pub alive: bool,
+    /// Idle watcher for provider tabs (`AIProvider::Custom(_)`). Polled by
+    /// the background tick loop in `main.rs`. `None` for Shell, Kanban, etc.
+    pub idle_watcher: Option<piki_core::idle_watcher::IdleWatcher>,
 }
 
 impl DesktopTab {
     pub fn new(provider: AIProvider) -> Self {
+        let idle_watcher = matches!(provider, AIProvider::Custom(_))
+            .then(piki_core::idle_watcher::IdleWatcher::default_for_provider);
         Self {
             id: Uuid::new_v4().to_string(),
             provider,
             pty: None,
             alive: false,
+            idle_watcher,
         }
     }
 }

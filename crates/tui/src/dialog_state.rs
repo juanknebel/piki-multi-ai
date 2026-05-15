@@ -1,5 +1,40 @@
-use crate::app::DialogField;
-use piki_core::WorkspaceType;
+use crate::app::{DialogField, NewWorkspaceSource};
+
+/// Field-cycling behavior for tab-navigation in multi-field dialogs.
+/// Implemented by per-dialog field enums (`EditWorkspaceField`,
+/// `EditProviderField`, `EditAgentField`, `DialogField`) so handlers can
+/// call `*active_field = active_field.next()` instead of hard-coding match
+/// arms.
+pub trait CycleField: Copy {
+    fn next(self) -> Self;
+    fn prev(self) -> Self;
+}
+
+impl CycleField for DialogField {
+    fn next(self) -> Self {
+        match self {
+            Self::Source => Self::Directory,
+            Self::Directory => Self::Name,
+            Self::Name => Self::Description,
+            Self::Description => Self::Prompt,
+            Self::Prompt => Self::KanbanPath,
+            Self::KanbanPath => Self::Group,
+            Self::Group => Self::Source,
+        }
+    }
+
+    fn prev(self) -> Self {
+        match self {
+            Self::Source => Self::Group,
+            Self::Directory => Self::Source,
+            Self::Name => Self::Directory,
+            Self::Description => Self::Name,
+            Self::Prompt => Self::Description,
+            Self::KanbanPath => Self::Prompt,
+            Self::Group => Self::KanbanPath,
+        }
+    }
+}
 
 /// Strategy for resolving a merge conflict on a single file.
 #[derive(Debug, Clone)]
@@ -42,6 +77,9 @@ pub enum DialogState {
     NewWorkspace {
         name: String,
         name_cursor: usize,
+        /// Holds either the folder path (source=Local) or the GitHub URL
+        /// (source=GitHub). The label rendered above this field switches
+        /// between "Folder:" and "URL:" based on `source`.
         dir: String,
         dir_cursor: usize,
         desc: String,
@@ -52,7 +90,7 @@ pub enum DialogState {
         kanban_cursor: usize,
         group: String,
         group_cursor: usize,
-        ws_type: WorkspaceType,
+        source: NewWorkspaceSource,
         active_field: DialogField,
     },
     EditWorkspace {
@@ -63,7 +101,23 @@ pub enum DialogState {
         prompt_cursor: usize,
         group: String,
         group_cursor: usize,
-        active_field: DialogField,
+        active_field: EditWorkspaceField,
+    },
+    /// Create a git worktree from a GitHub-origin parent workspace. The parent
+    /// is identified by index; the dialog only captures the worktree branch
+    /// name (required) and optional overrides for prompt/kanban/group
+    /// (pre-filled from the parent).
+    CreateWorktree {
+        parent_idx: usize,
+        name: String,
+        name_cursor: usize,
+        prompt: String,
+        prompt_cursor: usize,
+        kanban: String,
+        kanban_cursor: usize,
+        group: String,
+        group_cursor: usize,
+        active_field: CreateWorktreeField,
     },
     CommitMessage {
         buffer: String,
@@ -95,6 +149,10 @@ pub enum DialogState {
         level_filter: u8,
         selected: usize,
         hscroll: u16,
+        search_active: bool,
+        search_buffer: String,
+        search_cursor: usize,
+        auto_refresh: bool,
     },
     GitLog {
         lines: Vec<GitLogEntry>,
@@ -212,8 +270,8 @@ pub enum EditProviderField {
     AgentDir,
 }
 
-impl EditProviderField {
-    pub fn next(self) -> Self {
+impl CycleField for EditProviderField {
+    fn next(self) -> Self {
         match self {
             Self::Name => Self::Description,
             Self::Description => Self::Command,
@@ -226,7 +284,7 @@ impl EditProviderField {
         }
     }
 
-    pub fn prev(self) -> Self {
+    fn prev(self) -> Self {
         match self {
             Self::Name => Self::AgentDir,
             Self::Description => Self::Name,
@@ -244,4 +302,74 @@ impl EditProviderField {
 pub enum EditAgentField {
     Name,
     Provider,
+}
+
+impl CycleField for EditAgentField {
+    fn next(self) -> Self {
+        match self {
+            Self::Name => Self::Provider,
+            Self::Provider => Self::Name,
+        }
+    }
+
+    fn prev(self) -> Self {
+        // Two-variant cycle: prev == next.
+        self.next()
+    }
+}
+
+/// Active field in the EditWorkspace dialog. Restricted to the three editable
+/// fields (the workspace's name/dir/type are immutable at edit time).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EditWorkspaceField {
+    KanbanPath,
+    Prompt,
+    Group,
+}
+
+impl CycleField for EditWorkspaceField {
+    fn next(self) -> Self {
+        match self {
+            Self::KanbanPath => Self::Prompt,
+            Self::Prompt => Self::Group,
+            Self::Group => Self::KanbanPath,
+        }
+    }
+
+    fn prev(self) -> Self {
+        match self {
+            Self::KanbanPath => Self::Group,
+            Self::Group => Self::Prompt,
+            Self::Prompt => Self::KanbanPath,
+        }
+    }
+}
+
+/// Active field in the CreateWorktree dialog (Layer 3 GitHub-only flow).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CreateWorktreeField {
+    Name,
+    Prompt,
+    KanbanPath,
+    Group,
+}
+
+impl CycleField for CreateWorktreeField {
+    fn next(self) -> Self {
+        match self {
+            Self::Name => Self::Prompt,
+            Self::Prompt => Self::KanbanPath,
+            Self::KanbanPath => Self::Group,
+            Self::Group => Self::Name,
+        }
+    }
+
+    fn prev(self) -> Self {
+        match self {
+            Self::Name => Self::Group,
+            Self::Prompt => Self::Name,
+            Self::KanbanPath => Self::Prompt,
+            Self::Group => Self::KanbanPath,
+        }
+    }
 }

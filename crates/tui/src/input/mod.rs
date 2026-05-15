@@ -2,11 +2,14 @@ mod chat_input;
 mod code_review_input;
 mod command_palette_input;
 pub(crate) mod confirm_common;
-mod dialog;
+pub(super) mod dialog;
+#[cfg(test)]
+mod dialog_tests;
 mod editor_input;
 pub(crate) mod fuzzy_common;
 mod fuzzy_input;
 mod interaction;
+pub(crate) mod list_nav;
 pub(crate) mod mouse;
 pub(crate) mod text_field_common;
 mod workspace_switcher_input;
@@ -15,7 +18,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField};
-use crate::dialog_state::DialogState;
+use crate::dialog_state::{DialogState, EditWorkspaceField};
 use crate::helpers::{copy_visible_terminal, resize_all_ptys, scrollback_max};
 
 use self::command_palette_input::handle_command_palette_input;
@@ -28,7 +31,7 @@ use self::dialog::{
     handle_git_log_input,
     handle_git_stash_input, handle_help_input, handle_import_agents_input, handle_logs_input,
     handle_manage_agents_input, handle_manage_providers_input, handle_edit_provider_input,
-    handle_new_tab_input, handle_new_workspace_input,
+    handle_create_worktree_input, handle_new_tab_input, handle_new_workspace_input,
     handle_workspace_info_input,
 };
 use self::editor_input::handle_inline_edit_input;
@@ -136,6 +139,7 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         AppMode::InlineEdit => return handle_inline_edit_input(app, key),
         AppMode::NewWorkspace => return handle_new_workspace_input(app, key),
         AppMode::EditWorkspace => return handle_edit_workspace_input(app, key),
+        AppMode::CreateWorktree => return handle_create_worktree_input(app, key),
         AppMode::CommitMessage => return handle_commit_message_input(app, key),
         AppMode::ConfirmMerge => return handle_confirm_merge_input(app, key),
         AppMode::NewTab => return handle_new_tab_input(app, key),
@@ -236,6 +240,10 @@ pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Act
             level_filter: 0,
             selected: usize::MAX,
             hscroll: 0,
+            search_active: false,
+            search_buffer: String::new(),
+            search_cursor: 0,
+            auto_refresh: true,
         });
         app.mode = AppMode::Logs;
     } else if app.config.matches_navigation(key, "workspace_info") {
@@ -258,35 +266,39 @@ pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Act
                 prompt,
                 group_cursor: group.chars().count(),
                 group,
-                active_field: DialogField::KanbanPath,
+                active_field: EditWorkspaceField::KanbanPath,
             });
             app.mode = AppMode::EditWorkspace;
         }
     } else if app.config.matches_navigation(key, "clone_workspace") {
-        if !app.workspaces.is_empty() {
-            let ws = &app.workspaces[app.selected_workspace];
-            let dir = ws.source_repo.display().to_string();
-            let kanban = ws.kanban_path.clone().unwrap_or_default();
-            let prompt = ws.prompt.clone();
-            let group = ws.info.group.clone().unwrap_or_default();
-            let ws_type = ws.info.workspace_type;
-            app.active_dialog = Some(DialogState::NewWorkspace {
-                name: String::new(),
-                name_cursor: 0,
-                dir_cursor: dir.chars().count(),
-                dir,
-                desc: String::new(),
-                desc_cursor: 0,
-                prompt_cursor: prompt.chars().count(),
-                prompt,
-                kanban_cursor: kanban.chars().count(),
-                kanban,
-                group_cursor: group.chars().count(),
-                group,
-                ws_type,
-                active_field: DialogField::Type,
-            });
-            app.mode = AppMode::NewWorkspace;
+        // Layer 3: the former "Clone workspace" action is now "Create Worktree",
+        // available only when the selected workspace has a GitHub origin.
+        if let Some(ws) = app.workspaces.get(app.selected_workspace) {
+            match &ws.info.origin {
+                piki_core::WorkspaceOrigin::GitHub { .. } => {
+                    let kanban = ws.kanban_path.clone().unwrap_or_default();
+                    let prompt = ws.prompt.clone();
+                    let group = ws.info.group.clone().unwrap_or_default();
+                    app.active_dialog = Some(crate::dialog_state::DialogState::CreateWorktree {
+                        parent_idx: app.selected_workspace,
+                        name: String::new(),
+                        name_cursor: 0,
+                        prompt_cursor: prompt.chars().count(),
+                        prompt,
+                        kanban_cursor: kanban.chars().count(),
+                        kanban,
+                        group_cursor: group.chars().count(),
+                        group,
+                        active_field: crate::dialog_state::CreateWorktreeField::Name,
+                    });
+                    app.mode = AppMode::CreateWorktree;
+                }
+                piki_core::WorkspaceOrigin::Local => {
+                    app.status_message = Some(
+                        "Create Worktree is available only for GitHub workspaces".into(),
+                    );
+                }
+            }
         }
     } else if app.config.matches_navigation(key, "new_workspace") {
         app.active_dialog = Some(DialogState::NewWorkspace {
@@ -302,8 +314,8 @@ pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Act
             kanban_cursor: 0,
             group: String::new(),
             group_cursor: 0,
-            ws_type: piki_core::WorkspaceType::default(),
-            active_field: DialogField::Type,
+            source: crate::app::NewWorkspaceSource::default(),
+            active_field: DialogField::Source,
         });
         app.mode = AppMode::NewWorkspace;
     } else if app.config.matches_navigation(key, "delete_workspace") {
@@ -521,29 +533,6 @@ pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Act
             } else {
                 return Some(Action::GitUnstageSelected);
             }
-        }
-    } else if let KeyCode::Char(c @ '1'..='9') = key.code {
-        let visual_pos = (c as usize) - ('1' as usize);
-        // Map visual position to actual workspace index via sidebar order
-        let ws_indices: Vec<usize> = app
-            .sidebar_items()
-            .iter()
-            .filter_map(|item| match item {
-                crate::app::SidebarItem::Workspace { index } => Some(*index),
-                _ => None,
-            })
-            .collect();
-        if let Some(&ws_idx) = ws_indices.get(visual_pos) {
-            app.switch_workspace(ws_idx);
-        } else {
-            app.set_toast(
-                format!(
-                    "No workspace {} (have {})",
-                    visual_pos + 1,
-                    ws_indices.len()
-                ),
-                crate::app::ToastLevel::Info,
-            );
         }
     }
     None

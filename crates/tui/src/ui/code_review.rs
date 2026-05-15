@@ -10,7 +10,25 @@ use crate::config::{Platform, format_binding_for_platform};
 use piki_core::github::{DiffLineType, ParsedDiff, ReviewVerdict};
 
 /// Render the full-screen code review layout
-pub(super) fn render_fullscreen(frame: &mut Frame, area: Rect, app: &App) {
+pub(super) fn render_fullscreen(frame: &mut Frame, area: Rect, app: &mut App) {
+    // Pre-compute and cache layout geometry for mouse hit-testing (before borrowing state).
+    {
+        let [_, body_area, _] = Layout::vertical([
+            Constraint::Length(2),
+            Constraint::Min(0),
+            Constraint::Length(1),
+        ])
+        .areas(area);
+        let split_pct = app.code_review_split_pct;
+        let [files_area, _] = Layout::horizontal([
+            Constraint::Percentage(split_pct),
+            Constraint::Percentage(100 - split_pct),
+        ])
+        .areas(body_area);
+        app.code_review_divider_x = files_area.x + files_area.width;
+        app.code_review_body_rect = body_area;
+    }
+
     let ws = match app.current_workspace() {
         Some(ws) => ws,
         None => return,
@@ -40,10 +58,13 @@ pub(super) fn render_fullscreen(frame: &mut Frame, area: Rect, app: &App) {
 
     render_pr_header(frame, header_area, state);
 
-    // Body: file list (25%) | diff (75%)
-    let [files_area, diff_area] =
-        Layout::horizontal([Constraint::Percentage(25), Constraint::Percentage(75)])
-            .areas(body_area);
+    // Body: file list | diff (split ratio from app state)
+    let split_pct = app.code_review_split_pct;
+    let [files_area, diff_area] = Layout::horizontal([
+        Constraint::Percentage(split_pct),
+        Constraint::Percentage(100 - split_pct),
+    ])
+    .areas(body_area);
 
     render_file_list(frame, files_area, state);
     render_diff(frame, diff_area, state, &app.syntax);
@@ -801,7 +822,7 @@ fn render_footer(frame: &mut Frame, area: Rect, state: &CodeReviewState, platfor
     } else {
         match state.focus {
             ReviewFocus::FileList => {
-                "[j/k] navigate  [Enter] view diff  [l] diff pane  [s] submit  [r] refresh  [q] close".to_string()
+                "[j/k] navigate  [Enter] view diff  [l] diff pane  [s] submit  [r] refresh  [q] close  [[ /]] resize".to_string()
             }
             ReviewFocus::DiffView => {
                 format!(

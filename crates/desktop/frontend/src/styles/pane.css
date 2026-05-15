@@ -1,0 +1,125 @@
+/* Recursive pane tree styles. The pane view is mounted into #main-content. */
+
+.pane-root {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.pane-root > .pane,
+.pane-root > .pane-split {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-primary);
+  position: relative;
+}
+
+.pane.active > .pane-tab-bar {
+  background: var(--bg-active, var(--tab-inactive-bg));
+}
+
+.pane-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Children of a leaf's content host are sized to fill */
+.pane-content > * {
+  width: 100%;
+  height: 100%;
+}
+
+/* ── Splits ────────────────────────────────────────── */
+
+.pane-split {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.pane-split.horiz {
+  flex-direction: row;
+}
+
+.pane-split.vert {
+  flex-direction: column;
+}
+
+.pane-split > .pane,
+.pane-split > .pane-split {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── Resize handle ─────────────────────────────────── */
+
+.pane-resize-handle {
+  flex: 0 0 4px;
+  position: relative;
+  background: transparent;
+  z-index: 5;
+  transition: background var(--transition-normal);
+}
+
+.pane-split.horiz > .pane-resize-handle {
+  cursor: ew-resize;
+}
+
+.pane-split.vert > .pane-resize-handle {
+  cursor: ns-resize;
+}
+
+.pane-resize-handle::after {
+  content: "";
+  position: absolute;
+  background: var(--border-primary);
+  transition: all var(--transition-normal);
+}
+
+.pane-split.horiz > .pane-resize-handle::after {
+  top: 0;
+  left: 1px;
+  width: 1px;
+  height: 100%;
+}
+
+.pane-split.vert > .pane-resize-handle::after {
+  left: 0;
+  top: 1px;
+  height: 1px;
+  width: 100%;
+}
+
+.pane-resize-handle:hover::after,
+.pane-resize-handle.dragging::after {
+  background: var(--accent-primary);
+  box-shadow: var(--accent-glow);
+  border-radius: 2px;
+}
+
+.pane-split.horiz > .pane-resize-handle:hover::after,
+.pane-split.horiz > .pane-resize-handle.dragging::after {
+  left: 0;
+  width: 3px;
+}
+
+.pane-split.vert > .pane-resize-handle:hover::after,
+.pane-split.vert > .pane-resize-handle.dragging::after {
+  top: 0;
+  height: 3px;
+}

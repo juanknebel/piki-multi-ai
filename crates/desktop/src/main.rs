@@ -32,6 +32,8 @@ fn main() {
         piki_core::shell_env::print_env_and_exit();
     }
 
+    piki_core::notifications::set_appname("piki-desktop");
+
     // Parse --data-dir flag before Tauri takes over args
     let data_dir = parse_data_dir();
 
@@ -52,6 +54,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(log_buf)
         .setup(move |app| {
             let app_handle = app.handle().clone();
@@ -87,6 +90,20 @@ fn main() {
 
             tracing::info!(count = workspaces.len(), "Loaded workspaces");
 
+            // Restore the last focused workspace from UiPrefs (matched by path).
+            // Falls back to index 0 if no preference is set or the workspace
+            // has been removed since the last session.
+            let initial_active_workspace = storage
+                .ui_prefs
+                .as_ref()
+                .and_then(|p| p.get_preference("last_focused_workspace").ok().flatten())
+                .and_then(|saved_path| {
+                    workspaces
+                        .iter()
+                        .position(|ws| ws.info.path.to_string_lossy() == saved_path)
+                })
+                .unwrap_or(0);
+
             // Initialize sysinfo with an empty string — the background task will fill it.
             // We cannot call spawn_sysinfo_poller() here because Tauri's setup() runs
             // outside the tokio runtime context. Instead, we start our own updater.
@@ -121,7 +138,7 @@ fn main() {
             // Create app state
             let desktop_app = DesktopApp {
                 workspaces,
-                active_workspace: 0,
+                active_workspace: initial_active_workspace,
                 storage,
                 paths,
                 manager,
@@ -168,7 +185,23 @@ fn main() {
             events::spawn_sysinfo_emitter(app_handle.clone(), sysinfo_for_emitter);
 
             // Start file watcher poller for git auto-refresh
-            events::spawn_git_watcher(app_handle);
+            events::spawn_git_watcher(app_handle.clone());
+
+            // Background idle-watcher loop for provider tabs.
+            events::spawn_idle_watcher_loop(app_handle);
+
+            // Track main-window OS focus so piki-core::notifications can gate
+            // OS toasts: while piki has focus, the in-app toast is enough.
+            if let Some(window) = app.get_webview_window("main") {
+                piki_core::notifications::set_window_focused(
+                    window.is_focused().unwrap_or(false),
+                );
+                window.on_window_event(|event| {
+                    if let tauri::WindowEvent::Focused(focused) = event {
+                        piki_core::notifications::set_window_focused(*focused);
+                    }
+                });
+            }
 
             app.manage(Mutex::new(desktop_app));
             app.manage(lsp_manager_arc);
@@ -179,8 +212,10 @@ fn main() {
             commands::workspace::list_workspaces,
             commands::workspace::switch_workspace,
             commands::workspace::create_workspace,
+            commands::workspace::create_github_workspace,
             commands::workspace::delete_workspace,
             commands::workspace::update_workspace,
+            commands::workspace::list_project_subdirs,
             commands::pty::spawn_tab,
             commands::pty::write_pty,
             commands::pty::resize_pty,
@@ -230,6 +265,8 @@ fn main() {
             commands::review::get_pr_file_diff,
             commands::review::get_pr_file_side_by_side_diff,
             commands::review::submit_pr_review,
+            commands::review::get_pr_review_comments,
+            commands::review::submit_review_reply,
             commands::markdown::read_markdown_file,
             commands::system::get_sysinfo,
             commands::system::get_sysinfo_detailed,

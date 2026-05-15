@@ -39,10 +39,12 @@ pub(super) fn handle_chat_panel_input(app: &mut App, key: KeyEvent) -> Option<Ac
             // Hide overlay — state is preserved
             app.mode = AppMode::Normal;
         }
-        KeyCode::Enter if !key.modifiers.contains(KeyModifiers::SHIFT) => {
-            if !app.chat_panel.streaming && !app.chat_panel.input.trim().is_empty() {
-                return Some(Action::ChatSendMessage);
-            }
+        KeyCode::Enter
+            if !key.modifiers.contains(KeyModifiers::SHIFT)
+                && !app.chat_panel.streaming
+                && !app.chat_panel.input.trim().is_empty() =>
+        {
+            return Some(Action::ChatSendMessage);
         }
         KeyCode::Tab => {
             // Open model selector
@@ -96,30 +98,22 @@ pub(super) fn handle_chat_panel_input(app: &mut App, key: KeyEvent) -> Option<Ac
             app.chat_panel.input.insert(app.chat_panel.input_cursor, c);
             app.chat_panel.input_cursor += c.len_utf8();
         }
-        KeyCode::Backspace => {
-            if app.chat_panel.input_cursor > 0 {
-                let prev = prev_char_boundary(&app.chat_panel.input, app.chat_panel.input_cursor);
-                app.chat_panel.input.drain(prev..app.chat_panel.input_cursor);
-                app.chat_panel.input_cursor = prev;
-            }
+        KeyCode::Backspace if app.chat_panel.input_cursor > 0 => {
+            let prev = prev_char_boundary(&app.chat_panel.input, app.chat_panel.input_cursor);
+            app.chat_panel.input.drain(prev..app.chat_panel.input_cursor);
+            app.chat_panel.input_cursor = prev;
         }
-        KeyCode::Delete => {
-            if app.chat_panel.input_cursor < app.chat_panel.input.len() {
-                let next = next_char_boundary(&app.chat_panel.input, app.chat_panel.input_cursor);
-                app.chat_panel.input.drain(app.chat_panel.input_cursor..next);
-            }
+        KeyCode::Delete if app.chat_panel.input_cursor < app.chat_panel.input.len() => {
+            let next = next_char_boundary(&app.chat_panel.input, app.chat_panel.input_cursor);
+            app.chat_panel.input.drain(app.chat_panel.input_cursor..next);
         }
-        KeyCode::Left => {
-            if app.chat_panel.input_cursor > 0 {
-                app.chat_panel.input_cursor =
-                    prev_char_boundary(&app.chat_panel.input, app.chat_panel.input_cursor);
-            }
+        KeyCode::Left if app.chat_panel.input_cursor > 0 => {
+            app.chat_panel.input_cursor =
+                prev_char_boundary(&app.chat_panel.input, app.chat_panel.input_cursor);
         }
-        KeyCode::Right => {
-            if app.chat_panel.input_cursor < app.chat_panel.input.len() {
-                app.chat_panel.input_cursor =
-                    next_char_boundary(&app.chat_panel.input, app.chat_panel.input_cursor);
-            }
+        KeyCode::Right if app.chat_panel.input_cursor < app.chat_panel.input.len() => {
+            app.chat_panel.input_cursor =
+                next_char_boundary(&app.chat_panel.input, app.chat_panel.input_cursor);
         }
         KeyCode::Home => {
             app.chat_panel.input_cursor = 0;
@@ -139,15 +133,11 @@ fn handle_model_select(app: &mut App, key: KeyEvent) -> Option<Action> {
         KeyCode::Esc | KeyCode::Tab => {
             app.chat_panel.sub_mode = ChatSubMode::Chat;
         }
-        KeyCode::Up | KeyCode::Char('k') => {
-            if app.chat_panel.model_selected > 0 {
-                app.chat_panel.model_selected -= 1;
-            }
+        KeyCode::Up | KeyCode::Char('k') if app.chat_panel.model_selected > 0 => {
+            app.chat_panel.model_selected -= 1;
         }
-        KeyCode::Down | KeyCode::Char('j') => {
-            if app.chat_panel.model_selected + 1 < total {
-                app.chat_panel.model_selected += 1;
-            }
+        KeyCode::Down | KeyCode::Char('j') if app.chat_panel.model_selected + 1 < total => {
+            app.chat_panel.model_selected += 1;
         }
         KeyCode::Enter => {
             if let Some(name) = app.chat_panel.models.get(app.chat_panel.model_selected) {

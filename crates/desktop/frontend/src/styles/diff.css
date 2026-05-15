@@ -301,6 +301,42 @@
   line-height: 1.5;
 }
 
+.cr-file-list {
+  width: 220px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+}
+
+.cr-resize-handle {
+  flex: 0 0 4px;
+  cursor: ew-resize;
+  background: transparent;
+  position: relative;
+  transition: background var(--transition-normal);
+}
+
+.cr-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 1px;
+  width: 1px;
+  height: 100%;
+  background: var(--border-primary);
+  transition: all var(--transition-normal);
+}
+
+.cr-resize-handle:hover::after,
+.cr-resize-handle.dragging::after {
+  left: 0;
+  width: 3px;
+  background: var(--accent-primary);
+  box-shadow: var(--accent-glow);
+  border-radius: 2px;
+}
+
 .cr-comment-form {
   padding: 6px 12px 6px 52px;
   background: var(--bg-secondary);
@@ -362,6 +398,58 @@
 
 .cr-comment-body {
   white-space: pre-wrap;
+}
+
+.cr-comment-author {
+  font-weight: 600;
+  color: var(--text-bright);
+  margin-right: 8px;
+}
+
+/* Existing server-side review comments — muted styling to distinguish from drafts */
+.cr-existing-badge {
+  background: rgba(125, 133, 144, 0.08);
+  border-left-color: var(--text-muted);
+}
+
+/* Replies in a thread are indented to show the conversation hierarchy. */
+.cr-thread-reply {
+  margin-left: 24px;
+}
+
+/* Drafted (not yet submitted) reply to an existing comment. */
+.cr-reply-draft {
+  background: rgba(57, 186, 230, 0.10);
+  border-left-color: var(--accent-primary);
+  margin-left: 24px;
+}
+
+.cr-comment-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.cr-reply-btn,
+.cr-reply-edit,
+.cr-reply-delete {
+  font-size: 10px;
+  padding: 1px 6px;
+  height: auto;
+}
+
+.cr-reply-form {
+  margin-left: 24px;
+}
+
+.cr-reviewers {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  font-weight: normal;
 }
 
 /* Hover effect for clickable diff rows in code review */

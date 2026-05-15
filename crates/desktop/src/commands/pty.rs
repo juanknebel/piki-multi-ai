@@ -4,9 +4,35 @@ use parking_lot::Mutex;
 use tauri::{AppHandle, State};
 
 use piki_core::AIProvider;
+use piki_core::shell_integration::install as shell_install;
 
 use crate::pty_raw::RawPtySession;
 use crate::state::{DesktopApp, DesktopTab};
+
+/// Decide if a shell tab should run with shell integration. Returns the
+/// `(extra_env, extra_args, enabled)` triple to pass to `RawPtySession::spawn`.
+/// Provider tabs always get `(empty, empty, false)` since they run binaries
+/// directly without a shell wrapper.
+fn shell_integration_setup(
+    provider: &AIProvider,
+    shell_command: &str,
+    integration_dir: &std::path::Path,
+) -> (Vec<(String, String)>, Vec<String>, bool) {
+    if *provider != AIProvider::Shell {
+        return (Vec::new(), Vec::new(), false);
+    }
+    match shell_install::setup_for(shell_command, integration_dir) {
+        Ok(Some(setup)) => {
+            let env: Vec<(String, String)> = setup.env.into_iter().collect();
+            (env, setup.extra_args, true)
+        }
+        Ok(None) => (Vec::new(), Vec::new(), false),
+        Err(e) => {
+            tracing::warn!(error = %e, shell = %shell_command, "shell integration setup failed");
+            (Vec::new(), Vec::new(), false)
+        }
+    }
+}
 
 #[tauri::command]
 pub async fn spawn_tab(
@@ -65,16 +91,22 @@ pub async fn spawn_tab(
         return Err(format!("{provider} does not use a terminal session"));
     }
 
-    let mut tab = DesktopTab::new(ai_provider);
+    let mut tab = DesktopTab::new(ai_provider.clone());
     let tab_id = tab.id.clone();
 
-    let worktree_path = {
+    let (worktree_path, integration_dir) = {
         let app = state.lock();
         if workspace_idx >= app.workspaces.len() {
             return Err("Workspace index out of range".to_string());
         }
-        app.workspaces[workspace_idx].info.path.clone()
+        (
+            app.workspaces[workspace_idx].info.path.clone(),
+            app.paths.shell_integration_dir(),
+        )
     };
+
+    let (extra_env, extra_args, integration_on) =
+        shell_integration_setup(&ai_provider, &command, &integration_dir);
 
     // Spawn PTY session (use default_args from provider config)
     let pty = RawPtySession::spawn(
@@ -85,6 +117,9 @@ pub async fn spawn_tab(
         80,
         &command,
         &default_args,
+        &extra_env,
+        &extra_args,
+        integration_on,
     )
     .map_err(|e| format!("Failed to spawn PTY: {e}"))?;
 
@@ -212,15 +247,21 @@ pub async fn spawn_editor_tab(
     let mut tab = DesktopTab::new(AIProvider::Shell);
     let tab_id = tab.id.clone();
 
-    let worktree_path = {
+    let (worktree_path, integration_dir) = {
         let app = state.lock();
         if workspace_idx >= app.workspaces.len() {
             return Err("Workspace index out of range".to_string());
         }
-        app.workspaces[workspace_idx].info.path.clone()
+        (
+            app.workspaces[workspace_idx].info.path.clone(),
+            app.paths.shell_integration_dir(),
+        )
     };
 
     let args: Vec<String> = Vec::new();
+    let (extra_env, extra_args, integration_on) =
+        shell_integration_setup(&AIProvider::Shell, &shell_command, &integration_dir);
+
     let mut pty = RawPtySession::spawn(
         app_handle,
         tab_id.clone(),
@@ -229,6 +270,9 @@ pub async fn spawn_editor_tab(
         80,
         &shell_command,
         &args,
+        &extra_env,
+        &extra_args,
+        integration_on,
     )
     .map_err(|e| format!("Failed to spawn PTY: {e}"))?;
 

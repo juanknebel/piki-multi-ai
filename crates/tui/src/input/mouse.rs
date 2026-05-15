@@ -396,11 +396,19 @@ pub(crate) fn handle_mouse_event(
             let on_left_split_border = row >= app.left_split_y.saturating_sub(1)
                 && row <= app.left_split_y
                 && col < app.sidebar_x;
+            let cr_body = app.code_review_body_rect;
+            let on_code_review_border = app.code_review_divider_x > 0
+                && col >= app.code_review_divider_x.saturating_sub(1)
+                && col <= app.code_review_divider_x + 1
+                && row >= cr_body.y
+                && row < cr_body.y + cr_body.height;
 
             if on_sidebar_border {
                 app.resize_drag = Some(app::ResizeDrag::Sidebar);
             } else if on_left_split_border {
                 app.resize_drag = Some(app::ResizeDrag::LeftSplit);
+            } else if on_code_review_border {
+                app.resize_drag = Some(app::ResizeDrag::CodeReviewSplit);
             } else if app.mode == AppMode::Normal {
                 // Click on sub-tabs
                 if rect_contains(app.subtabs_area, col, row) {
@@ -491,8 +499,8 @@ pub(crate) fn handle_mouse_event(
                                         kanban,
                                         group_cursor: group.chars().count(),
                                         group,
-                                        ws_type: piki_core::WorkspaceType::Simple,
-                                        active_field: crate::app::DialogField::Type,
+                                        source: crate::app::NewWorkspaceSource::Local,
+                                        active_field: crate::app::DialogField::Source,
                                     });
                                     app.mode = AppMode::NewWorkspace;
                                 }
@@ -538,6 +546,15 @@ pub(crate) fn handle_mouse_event(
                             let rel = row.saturating_sub(left_top) as u32;
                             let pct = (rel * 100 / left_height as u32) as u16;
                             app.left_split_pct = pct.clamp(10, 90);
+                        }
+                    }
+                    app::ResizeDrag::CodeReviewSplit => {
+                        let body = app.code_review_body_rect;
+                        if body.width > 0 {
+                            let rel = col.saturating_sub(body.x) as u32;
+                            let pct = (rel * 100 / body.width as u32) as u16;
+                            app.code_review_split_pct = pct.clamp(10, 90);
+                            app.save_layout_prefs();
                         }
                     }
                 }

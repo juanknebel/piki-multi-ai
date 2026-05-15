@@ -1,7 +1,11 @@
 import { appState } from "../state";
 import * as ipc from "../ipc";
 import { toast } from "./toast";
-import { showWorkspaceDialog, showWorkspaceInfo } from "./dialogs/workspace-dialog";
+import {
+  showCreateWorktreeDialog,
+  showWorkspaceDialog,
+  showWorkspaceInfo,
+} from "./dialogs/workspace-dialog";
 import { showMergeDialog } from "./dialogs/merge-dialog";
 import { showGitLog } from "./dialogs/gitlog-dialog";
 import { showStashDialog } from "./dialogs/stash-dialog";
@@ -21,6 +25,7 @@ import { showThemeDialog } from "./dialogs/theme-dialog";
 import { showLogsDialog } from "./dialogs/logs-dialog";
 import { showAboutDialog } from "./dialogs/about-dialog";
 import { getProviderLabel, getProviderKey, type AIProvider } from "../types";
+import { openWebPreviewTab } from "./web-preview-panel";
 import { themeEngine } from "../theme";
 import { getShortcutKey, formatShortcut } from "../shortcuts";
 
@@ -189,13 +194,14 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
       category: "Workspace",
       action: () => showWorkspaceInfo(wsIdx),
     });
-    cmds.push({
-      id: "ws-clone",
-      label: `Clone "${ws.info.name}"`,
-      category: "Workspace",
-      action: () =>
-        showWorkspaceDialog({ mode: "clone", cloneFrom: ws.info }),
-    });
+    if (ws.info.origin?.kind === "GitHub") {
+      cmds.push({
+        id: "ws-create-worktree",
+        label: `Create Worktree from "${ws.info.name}"`,
+        category: "Workspace",
+        action: () => showCreateWorktreeDialog(ws.info),
+      });
+    }
     cmds.push({
       id: "ws-delete",
       label: `Delete "${ws.info.name}"`,
@@ -247,6 +253,41 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
       action: () => spawnTabSafe(provider),
     });
   }
+
+  // Frontend-only tab: Web Preview
+  cmds.push({
+    id: "tab-web-preview",
+    label: "Open Web Preview",
+    category: "Tab",
+    keybinding: getShortcutKey("web-preview"),
+    action: () => openWebPreviewTab(),
+  });
+
+  // Pane layout commands
+  cmds.push({
+    id: "split-right",
+    label: "Split Pane Right",
+    category: "Tab",
+    keybinding: getShortcutKey("split-right"),
+    action: () => { appState.splitActivePane("right"); },
+  });
+  cmds.push({
+    id: "split-down",
+    label: "Split Pane Down",
+    category: "Tab",
+    keybinding: getShortcutKey("split-down"),
+    action: () => { appState.splitActivePane("down"); },
+  });
+  cmds.push({
+    id: "close-pane",
+    label: "Close Active Pane",
+    category: "Tab",
+    keybinding: getShortcutKey("close-pane"),
+    action: () => {
+      const id = appState.activePaneId;
+      if (id) appState.closePane(id);
+    },
+  });
 
   // Git commands
   if (ws) {
@@ -559,6 +600,7 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
 }
 
 async function spawnTabSafe(provider: AIProvider) {
+  if (appState.focusSingletonTab(provider)) return;
   const wsIdx = appState.activeWorkspace;
   try {
     const tabId = await ipc.spawnTab(wsIdx, getProviderKey(provider));

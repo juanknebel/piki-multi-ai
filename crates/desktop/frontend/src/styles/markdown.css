@@ -1,3 +1,8 @@
+/* ── Markdown preview modal (.md-content) ──────────
+   Markdown is rendered by marked + highlight.js, producing semantic HTML
+   (<h1>, <p>, <pre><code class="hljs">, <ul>, etc.). Styles target tags
+   nested under `.md-content` rather than the legacy `.md-*` per-element
+   classes that the previous custom renderer emitted. */
 .md-content {
   padding: 24px 28px;
   overflow-y: auto;
@@ -7,30 +12,35 @@
   line-height: 1.75;
 }
 
-.md-h {
+.md-content h1,
+.md-content h2,
+.md-content h3,
+.md-content h4,
+.md-content h5,
+.md-content h6 {
   color: var(--text-bright);
   margin: 20px 0 10px;
   font-weight: 600;
 }
 
-h1.md-h {
+.md-content h1 {
   font-size: 20px;
   border-bottom: 1px solid var(--border-primary);
   padding-bottom: 10px;
 }
 
-h2.md-h {
+.md-content h2 {
   font-size: 17px;
   border-bottom: 1px solid var(--border-primary);
   padding-bottom: 8px;
 }
 
-h3.md-h { font-size: 14px; }
-h4.md-h { font-size: 13px; }
+.md-content h3 { font-size: 14px; }
+.md-content h4 { font-size: 13px; }
 
-.md-p { margin: 6px 0; }
+.md-content p { margin: 6px 0; }
 
-.md-code {
+.md-content pre {
   background: var(--bg-tertiary);
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-md);
@@ -42,7 +52,7 @@ h4.md-h { font-size: 13px; }
   color: var(--text-primary);
 }
 
-.md-inline-code {
+.md-content :not(pre) > code {
   background: var(--bg-tertiary);
   padding: 2px 6px;
   border-radius: var(--radius-sm);
@@ -50,58 +60,86 @@ h4.md-h { font-size: 13px; }
   color: var(--text-accent);
 }
 
-.md-list {
+.md-content pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+}
+
+.md-content ul,
+.md-content ol {
   margin: 6px 0;
   padding-left: 24px;
 }
 
-.md-list li {
+.md-content li {
   margin: 3px 0;
-  list-style: disc;
 }
 
-ol.md-list li {
-  list-style: decimal;
-}
+.md-content ul li { list-style: disc; }
+.md-content ol li { list-style: decimal; }
 
-.md-hr {
+.md-content hr {
   border: none;
   border-top: 1px solid var(--border-primary);
   margin: 16px 0;
 }
 
-.md-link {
+.md-content a {
   color: var(--text-accent);
   text-decoration: none;
   transition: color var(--transition-fast);
 }
 
-.md-link:hover {
+.md-content a:hover {
   color: var(--accent-hover);
   text-decoration: underline;
 }
 
-.md-table {
+.md-content table {
   border-collapse: collapse;
   width: 100%;
   margin: 10px 0;
 }
 
-.md-table th,
-.md-table td {
+.md-content th,
+.md-content td {
   border: 1px solid var(--border-primary);
   padding: 6px 12px;
   text-align: left;
 }
 
-.md-table th {
+.md-content th {
   background: var(--bg-secondary);
   font-weight: 600;
   color: var(--text-bright);
 }
 
-.md-table tr:nth-child(even) td {
+.md-content tr:nth-child(even) td {
   background: var(--bg-tertiary);
+}
+
+.md-content blockquote {
+  border-left: 3px solid var(--border-primary);
+  padding-left: 16px;
+  margin: 10px 0;
+  color: var(--text-secondary);
+}
+
+.md-content del {
+  text-decoration: line-through;
+  color: var(--text-secondary);
+}
+
+.md-content img {
+  max-width: 100%;
+  border-radius: var(--radius-md);
+}
+
+/* Task lists (GFM) */
+.md-content input[type="checkbox"] {
+  margin-right: 6px;
 }
 
 /* ── Markdown editor panel (tab pane) ──────────── */

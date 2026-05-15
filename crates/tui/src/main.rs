@@ -11,6 +11,8 @@ mod input;
 mod log_buffer;
 mod pty;
 mod syntax;
+#[cfg(test)]
+mod test_support;
 mod theme;
 mod ui;
 mod workspace_switcher;
@@ -49,6 +51,7 @@ enum Commands {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    piki_core::notifications::set_appname("piki-multi-ai");
     let cli = Cli::parse();
 
     let paths = match cli.data_dir {
@@ -161,6 +164,7 @@ async fn main() -> anyhow::Result<()> {
             std::io::stderr(),
             crossterm::event::DisableMouseCapture,
             crossterm::event::DisableBracketedPaste,
+            crossterm::event::DisableFocusChange,
         );
         ratatui::restore();
         original_hook(panic_info);
@@ -171,6 +175,7 @@ async fn main() -> anyhow::Result<()> {
         std::io::stderr(),
         crossterm::event::EnableMouseCapture,
         crossterm::event::EnableBracketedPaste,
+        crossterm::event::EnableFocusChange,
     )?;
     if kitty_keyboard {
         crossterm::execute!(
@@ -187,7 +192,11 @@ async fn main() -> anyhow::Result<()> {
             crossterm::event::PopKeyboardEnhancementFlags
         )?;
     }
-    crossterm::execute!(std::io::stderr(), crossterm::event::DisableMouseCapture)?;
+    crossterm::execute!(
+        std::io::stderr(),
+        crossterm::event::DisableMouseCapture,
+        crossterm::event::DisableFocusChange,
+    )?;
     ratatui::restore();
     tracing::info!("piki-multi-ai shutdown");
     result

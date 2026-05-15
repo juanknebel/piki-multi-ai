@@ -37,6 +37,26 @@ pub struct ProviderConfig {
     /// When set, agent profiles are synced/scanned from `<repo>/<agent_dir>/`.
     #[serde(default)]
     pub agent_dir: Option<String>,
+    /// Seconds of PTY silence before the provider tab is considered idle and
+    /// fires an OS notification. Defaults to 3 — same as the legacy
+    /// hard-coded threshold — when omitted.
+    #[serde(default)]
+    pub idle_threshold_secs: Option<u64>,
+    /// Whether idle-detection notifications are enabled for this provider.
+    /// Defaults to `true` so existing providers behave like before. Set to
+    /// `false` for noisy providers where the notification is more annoying
+    /// than useful.
+    #[serde(default = "default_idle_notify")]
+    pub idle_notify: bool,
+    /// Optional emoji / unicode glyph prepended to the agent-idle
+    /// notification title for this provider (e.g. `"✦"` for Claude,
+    /// `"✧"` for Gemini). `None` falls back to no decoration.
+    #[serde(default)]
+    pub icon: Option<String>,
+}
+
+fn default_idle_notify() -> bool {
+    true
 }
 
 fn default_prompt_format() -> PromptFormat {
@@ -150,6 +170,9 @@ impl ProviderManager {
                 prompt_format: PromptFormat::Positional,
                 dispatchable: true,
                 agent_dir: Some(".claude/agents".to_string()),
+                idle_threshold_secs: None,
+                idle_notify: true,
+                icon: Some("✦".to_string()),
             },
             ProviderConfig {
                 name: "Gemini".to_string(),
@@ -159,6 +182,9 @@ impl ProviderManager {
                 prompt_format: PromptFormat::Positional,
                 dispatchable: true,
                 agent_dir: Some(".gemini/agents".to_string()),
+                idle_threshold_secs: None,
+                idle_notify: true,
+                icon: Some("✧".to_string()),
             },
         ]
     }
@@ -191,6 +217,9 @@ mod tests {
             prompt_format: PromptFormat::Positional,
             dispatchable: false,
             agent_dir: None,
+            idle_threshold_secs: None,
+            idle_notify: true,
+            icon: None,
         };
         let args = ProviderManager::prompt_args(&config, "hello");
         assert_eq!(args, vec!["hello"]);
@@ -206,6 +235,9 @@ mod tests {
             prompt_format: PromptFormat::Flag("--prompt".into()),
             dispatchable: false,
             agent_dir: None,
+            idle_threshold_secs: None,
+            idle_notify: true,
+            icon: None,
         };
         let args = ProviderManager::prompt_args(&config, "hello");
         assert_eq!(args, vec!["--prompt", "hello"]);
@@ -221,6 +253,9 @@ mod tests {
             prompt_format: PromptFormat::None,
             dispatchable: false,
             agent_dir: None,
+            idle_threshold_secs: None,
+            idle_notify: true,
+            icon: None,
         };
         let args = ProviderManager::prompt_args(&config, "hello");
         assert!(args.is_empty());
@@ -241,6 +276,9 @@ mod tests {
                     prompt_format: PromptFormat::Flag("--task".into()),
                     dispatchable: true,
                     agent_dir: Some(".my-ai/agents".into()),
+                    idle_threshold_secs: None,
+                    idle_notify: true,
+                    icon: None,
                 },
             ],
         };
@@ -301,6 +339,9 @@ mod tests {
                     prompt_format: PromptFormat::Positional,
                     dispatchable: true,
                     agent_dir: None,
+                    idle_threshold_secs: None,
+                    idle_notify: true,
+                    icon: None,
                 },
                 ProviderConfig {
                     name: "B".into(),
@@ -310,6 +351,9 @@ mod tests {
                     prompt_format: PromptFormat::None,
                     dispatchable: false,
                     agent_dir: None,
+                    idle_threshold_secs: None,
+                    idle_notify: true,
+                    icon: None,
                 },
             ],
         };

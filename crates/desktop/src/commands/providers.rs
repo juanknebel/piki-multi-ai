@@ -64,6 +64,14 @@ pub async fn save_provider(
         "None" => piki_core::providers::PromptFormat::None,
         _ => piki_core::providers::PromptFormat::Positional,
     };
+    let mut app = state.lock();
+    // Preserve the existing icon when overwriting an entry — the UI form
+    // doesn't expose `icon` as an editable field today, so defaulting to
+    // `None` would wipe Claude's ✦ / Gemini's ✧ on every save.
+    let preserved_icon = app
+        .provider_manager
+        .get(&provider.name)
+        .and_then(|c| c.icon.clone());
     let config = piki_core::providers::ProviderConfig {
         name: provider.name,
         description: provider.description,
@@ -72,8 +80,10 @@ pub async fn save_provider(
         prompt_format,
         dispatchable: provider.dispatchable,
         agent_dir: provider.agent_dir.filter(|s| !s.is_empty()),
+        idle_threshold_secs: None,
+        idle_notify: true,
+        icon: preserved_icon,
     };
-    let mut app = state.lock();
     app.provider_manager.upsert(config);
     app.provider_manager
         .save(&app.paths.providers_path())

@@ -34,6 +34,7 @@ const SHORTCUTS: { category: string; items: [string, string][] }[] = [
       ["Ctrl+Shift+A", "Manage Agents"],
       ["Ctrl+Shift+D", "Dispatch Agent"],
       ["Alt+K", "Kanban Board"],
+      ["Alt+Shift+W", "Open Web Preview"],
       ["Alt+T", "Theme Settings"],
       ["Alt+S", "Settings"],
       ["Alt+Shift+L", "Application Logs"],
@@ -54,6 +55,16 @@ const SHORTCUTS: { category: string; items: [string, string][] }[] = [
       ["Ctrl+C / ⌘C", "Copy Selection"],
       ["Ctrl+V / ⌘V", "Paste from Clipboard"],
       ["Select text", "Auto-copy to Clipboard"],
+    ],
+  },
+  {
+    category: "Pane Layout",
+    items: [
+      ["Ctrl+\\", "Split Active Pane Right"],
+      ["Ctrl+Shift+\\", "Split Active Pane Down"],
+      ["Ctrl+Shift+Q", "Close Active Pane"],
+      ["▾ on tab / Right-click", "Tab options menu"],
+      ["Drag divider", "Resize split"],
     ],
   },
 ];

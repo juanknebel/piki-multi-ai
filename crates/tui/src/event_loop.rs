@@ -10,6 +10,8 @@ use crate::app::{self, App};
 use crate::helpers::shutdown;
 use crate::input;
 use crate::{theme, ui};
+use piki_core::notifications;
+use piki_core::shell_integration::ShellEvent;
 use piki_core::workspace::FileWatcher;
 
 const TICK_RATE: Duration = Duration::from_millis(50);
@@ -84,6 +86,11 @@ pub(crate) async fn run(
         {
             app.left_split_pct = pct.clamp(10, 90);
         }
+        if let Ok(Some(val)) = ui_prefs.get_preference("code_review_split_pct")
+            && let Ok(pct) = val.parse::<u16>()
+        {
+            app.code_review_split_pct = pct.clamp(10, 90);
+        }
     }
 
     // Load chat config from storage (shared with desktop)
@@ -141,7 +148,19 @@ pub(crate) async fn run(
     app.workspaces.sort_by_key(|ws| ws.info.order);
     tracing::info!(count = app.workspaces.len(), "workspaces restored");
     if !app.workspaces.is_empty() {
-        app.switch_workspace(0);
+        // Restore the last focused workspace from UiPrefs if available.
+        // Match by `path` since it's unique and stable across restarts.
+        let restored_idx = app
+            .storage
+            .ui_prefs
+            .as_ref()
+            .and_then(|prefs| prefs.get_preference("last_focused_workspace").ok().flatten())
+            .and_then(|saved_path| {
+                app.workspaces
+                    .iter()
+                    .position(|ws| ws.info.path.to_string_lossy() == saved_path)
+            });
+        app.switch_workspace(restored_idx.unwrap_or(0));
     }
 
     tracing::info!("event loop starting");
@@ -181,6 +200,12 @@ pub(crate) async fn run(
                             execute_action(&mut app, &manager, action, &mut terminal).await?;
                         }
                         app.needs_redraw = true;
+                    }
+                    Some(Ok(Event::FocusGained)) => {
+                        piki_core::notifications::set_window_focused(true);
+                    }
+                    Some(Ok(Event::FocusLost)) => {
+                        piki_core::notifications::set_window_focused(false);
                     }
                     Some(Ok(Event::Resize(cols, rows))) => {
                         let new_area = ui::layout::compute_terminal_area_with(Rect::new(0, 0, cols, rows), app.sidebar_pct);
@@ -427,6 +452,96 @@ pub(crate) async fn run(
             }
         }
 
+        // PTY idle detection across ALL workspaces (every tick).
+        //
+        // Each provider tab carries its own `IdleWatcher` (`tab.idle_watcher`,
+        // `Some` only for `AIProvider::Custom(_)`). The watcher tracks the
+        // PTY byte counter and emits a one-shot signal when bytes have been
+        // still for the configured threshold (default 3s). The OS
+        // notification fires regardless of whether the workspace is active.
+        {
+            let mut idle_events: Vec<IdleEvent> = Vec::new();
+            for (ws_idx, ws) in app.workspaces.iter_mut().enumerate() {
+                for tab in &mut ws.tabs {
+                    let Some(ref pty) = tab.pty_session else {
+                        continue;
+                    };
+                    let Some(ref mut watcher) = tab.idle_watcher else {
+                        continue;
+                    };
+                    if !pty.peek_alive() {
+                        continue;
+                    }
+                    if let Some(sig) = watcher.poll(pty.bytes_processed()) {
+                        idle_events.push(IdleEvent {
+                            workspace_idx: ws_idx,
+                            workspace_name: ws.info.name.clone(),
+                            provider_label: tab.provider.label().to_string(),
+                            origin: format!("ws-{ws_idx}#tab-{}", tab.id),
+                            silent_for: sig.silent_for,
+                        });
+                    }
+                }
+            }
+            for event in idle_events {
+                if let Some(ws) = app.workspaces.get_mut(event.workspace_idx) {
+                    ws.has_idle_notification = true;
+                }
+                app.needs_redraw = true;
+                let icon = app
+                    .provider_manager
+                    .get(&event.provider_label)
+                    .and_then(|c| c.icon.clone());
+                notifications::notify_agent_idle(
+                    &event.origin,
+                    &event.workspace_name,
+                    &event.provider_label,
+                    event.silent_for,
+                    icon.as_deref(),
+                );
+            }
+        }
+
+        // Shell-tab OSC 133 `command-end` drain (every tick).
+        //
+        // Shell tabs spawned with shell integration enabled accumulate
+        // `ShellEvent`s on `PtySession.shell().pending_events`. Drain them
+        // here so each finished command surfaces as an OS notification with
+        // the workspace name + exit code. Non-`CommandEnd` events are
+        // discarded — the TUI has no per-tab shell-state UI today.
+        {
+            let mut command_end_events: Vec<(String, String, Option<i32>, Option<String>)> =
+                Vec::new();
+            for (ws_idx, ws) in app.workspaces.iter_mut().enumerate() {
+                let ws_name = ws.info.name.clone();
+                for tab in &mut ws.tabs {
+                    let Some(ref pty) = tab.pty_session else {
+                        continue;
+                    };
+                    let Some(shell) = pty.shell() else { continue };
+                    let drained = shell.lock().drain_events();
+                    for ev in drained {
+                        if let ShellEvent::CommandEnd { exit_code, command } = ev {
+                            command_end_events.push((
+                                format!("ws-{ws_idx}#tab-{}", tab.id),
+                                ws_name.clone(),
+                                exit_code,
+                                command,
+                            ));
+                        }
+                    }
+                }
+            }
+            for (origin, ws_name, exit_code, command) in command_end_events {
+                notifications::notify_command_end(
+                    &origin,
+                    &ws_name,
+                    exit_code,
+                    command.as_deref(),
+                );
+            }
+        }
+
         // Poll API Explorer pending responses
         if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
             && let Some(tab) = ws.current_tab_mut()
@@ -568,4 +683,17 @@ pub(crate) async fn run(
     }
 
     Ok(())
+}
+
+/// A queued idle-notification event, applied after the per-workspace borrow
+/// scope ends so the OS notification can run without holding `&mut App`.
+struct IdleEvent {
+    workspace_idx: usize,
+    workspace_name: String,
+    provider_label: String,
+    /// Mailbox dedup key — stable per (workspace, tab) tuple.
+    origin: String,
+    /// How long the PTY was silent before the watcher fired. Surfaced in
+    /// the notification body as `(idle Ns)`.
+    silent_for: Duration,
 }
