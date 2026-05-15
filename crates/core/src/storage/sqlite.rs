@@ -105,6 +105,40 @@ impl SqliteStorage {
             tx.commit()?;
         }
 
+        // Add WorkspaceOrigin columns and backfill existing rows by inspecting
+        // each workspace's source_repo for a github.com remote.
+        if version < 6 {
+            let tx = conn.transaction()?;
+            tx.execute_batch(
+                "ALTER TABLE workspaces ADD COLUMN origin TEXT NOT NULL DEFAULT 'Local';
+                 ALTER TABLE workspaces ADD COLUMN origin_github_url TEXT;",
+            )?;
+
+            // Collect (id, source_repo) pairs first so the borrow on `tx` ends
+            // before we issue UPDATEs below.
+            let rows: Vec<(i64, String)> = {
+                let mut stmt = tx.prepare(
+                    "SELECT id, source_repo FROM workspaces WHERE source_repo IS NOT NULL AND source_repo != ''",
+                )?;
+                stmt.query_map([], |row| {
+                    Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+                })?
+                .filter_map(|r| r.ok())
+                .collect()
+            };
+            for (id, source_repo) in rows {
+                if let Some(url) = detect_github_origin(&source_repo) {
+                    tx.execute(
+                        "UPDATE workspaces SET origin = 'GitHub', origin_github_url = ?1 WHERE id = ?2",
+                        rusqlite::params![url, id],
+                    )?;
+                }
+            }
+
+            tx.execute("INSERT INTO schema_version (version) VALUES (6)", [])?;
+            tx.commit()?;
+        }
+
         Ok(())
     }
 
@@ -118,7 +152,7 @@ impl SqliteStorage {
 
         for entry in &entries {
             let rows = tx.execute(
-                "INSERT OR IGNORE INTO workspaces (project_root, name, description, prompt, kanban_path, branch, worktree_path, source_repo, workspace_type, group_name, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+                "INSERT OR IGNORE INTO workspaces (project_root, name, description, prompt, kanban_path, branch, worktree_path, source_repo, workspace_type, group_name, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name, origin, origin_github_url) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
                 rusqlite::params![
                     entry.source_repo.to_string_lossy(),
                     entry.name,
@@ -134,6 +168,8 @@ impl SqliteStorage {
                     entry.dispatch_card_id,
                     entry.dispatch_source_kanban,
                     entry.dispatch_agent_name,
+                    entry.origin.tag(),
+                    entry.origin.github_url(),
                 ],
             )?;
             count += rows;
@@ -221,7 +257,34 @@ fn parse_workspace_type(s: &str) -> WorkspaceType {
     }
 }
 
+/// Best-effort detection of a GitHub remote URL for a workspace's source_repo.
+/// Used by the v6 migration to backfill `origin` for existing rows. Returns
+/// `Some(url)` only when the path exists, `git remote get-url origin`
+/// succeeds, and the URL contains `github.com`. All other cases return None,
+/// leaving the row with its `Local` default.
+fn detect_github_origin(source_repo: &str) -> Option<String> {
+    let path = std::path::Path::new(source_repo);
+    if !path.exists() {
+        return None;
+    }
+    let output = std::process::Command::new("git")
+        .args(["-C", source_repo, "remote", "get-url", "origin"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if url.contains("github.com") {
+        Some(url)
+    } else {
+        None
+    }
+}
+
 fn row_to_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkspaceEntry> {
+    let origin_tag: String = row.get(13)?;
+    let origin_url: Option<String> = row.get(14)?;
     Ok(WorkspaceEntry {
         name: row.get(0)?,
         description: row.get(1)?,
@@ -236,6 +299,7 @@ fn row_to_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkspaceEntry> {
         dispatch_card_id: row.get(10)?,
         dispatch_source_kanban: row.get(11)?,
         dispatch_agent_name: row.get(12)?,
+        origin: crate::domain::WorkspaceOrigin::from_sql(&origin_tag, origin_url),
     })
 }
 
@@ -270,7 +334,7 @@ impl WorkspaceStorage for Arc<SqliteStorage> {
 
         for ws in workspaces.iter().filter(|ws| ws.source_repo == git_root) {
             tx.execute(
-                "INSERT INTO workspaces (project_root, name, description, prompt, kanban_path, branch, worktree_path, source_repo, workspace_type, group_name, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+                "INSERT INTO workspaces (project_root, name, description, prompt, kanban_path, branch, worktree_path, source_repo, workspace_type, group_name, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name, origin, origin_github_url) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
                 rusqlite::params![
                     git_root_str,
                     ws.name,
@@ -286,6 +350,8 @@ impl WorkspaceStorage for Arc<SqliteStorage> {
                     ws.dispatch_card_id,
                     ws.dispatch_source_kanban,
                     ws.dispatch_agent_name,
+                    ws.origin.tag(),
+                    ws.origin.github_url(),
                 ],
             )?;
         }
@@ -298,7 +364,7 @@ impl WorkspaceStorage for Arc<SqliteStorage> {
         let conn = self.conn.lock();
         let git_root_str = git_root.to_string_lossy();
         let mut stmt = conn.prepare(
-            "SELECT name, description, prompt, kanban_path, branch, worktree_path, source_repo, workspace_type, group_name, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name FROM workspaces WHERE source_repo = ?1 ORDER BY display_order",
+            "SELECT name, description, prompt, kanban_path, branch, worktree_path, source_repo, workspace_type, group_name, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name, origin, origin_github_url FROM workspaces WHERE source_repo = ?1 ORDER BY display_order",
         )?;
 
         let entries: Vec<WorkspaceEntry> = stmt
@@ -313,7 +379,7 @@ impl WorkspaceStorage for Arc<SqliteStorage> {
     fn load_all_workspaces(&self) -> Vec<WorkspaceEntry> {
         let conn = self.conn.lock();
         let mut stmt = match conn.prepare(
-            "SELECT name, description, prompt, kanban_path, branch, worktree_path, source_repo, workspace_type, group_name, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name FROM workspaces ORDER BY display_order",
+            "SELECT name, description, prompt, kanban_path, branch, worktree_path, source_repo, workspace_type, group_name, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name, origin, origin_github_url FROM workspaces ORDER BY display_order",
         ) {
             Ok(s) => s,
             Err(_) => return Vec::new(),

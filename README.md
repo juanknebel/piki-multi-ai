@@ -791,7 +791,7 @@ Cargo.toml               # Workspace root
 crates/
   core/                  # piki-core — shared library (no TUI dependencies)
     src/
-      domain.rs          # AIProvider (with Custom variant), FileStatus, ChangedFile, WorkspaceStatus, WorkspaceInfo, WorkspaceType
+      domain.rs          # AIProvider (with Custom variant), FileStatus, ChangedFile, WorkspaceStatus, WorkspaceInfo, WorkspaceType, WorkspaceOrigin (Local | GitHub { url })
       git.rs             # Git status parsing, ahead/behind detection
       github.rs          # GitHub PR operations via gh CLI (PR info, files, unified diff parser, inline comments, submit review)
       paths.rs           # DataPaths struct — centralized directory resolution (database, worktrees, logs, config)

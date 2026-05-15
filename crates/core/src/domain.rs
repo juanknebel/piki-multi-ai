@@ -115,6 +115,49 @@ pub enum WorkspaceType {
     Project,
 }
 
+/// Where the workspace's files originated.
+///
+/// `Local` covers any folder the user picked (regardless of whether it happens
+/// to be inside a git repository). `GitHub { url }` covers workspaces that
+/// `piki` cloned itself from a GitHub URL — only these support the
+/// "Create Worktree" action and the source-control panel.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "url")]
+pub enum WorkspaceOrigin {
+    #[default]
+    Local,
+    GitHub {
+        url: String,
+    },
+}
+
+impl WorkspaceOrigin {
+    /// SQL `origin` column value: `"Local"` | `"GitHub"`.
+    pub fn tag(&self) -> &'static str {
+        match self {
+            WorkspaceOrigin::Local => "Local",
+            WorkspaceOrigin::GitHub { .. } => "GitHub",
+        }
+    }
+
+    /// SQL `origin_github_url` column value (`None` for Local).
+    pub fn github_url(&self) -> Option<&str> {
+        match self {
+            WorkspaceOrigin::Local => None,
+            WorkspaceOrigin::GitHub { url } => Some(url.as_str()),
+        }
+    }
+
+    /// Rebuild from the two SQL columns. Unknown tags or `GitHub` with a
+    /// missing url fall back to `Local`.
+    pub fn from_sql(tag: &str, github_url: Option<String>) -> Self {
+        match (tag, github_url) {
+            ("GitHub", Some(url)) => WorkspaceOrigin::GitHub { url },
+            _ => WorkspaceOrigin::Local,
+        }
+    }
+}
+
 /// Strategy for merging a workspace branch into main
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MergeStrategy {
@@ -173,6 +216,10 @@ pub struct WorkspaceInfo {
     /// Name of the agent profile used for dispatch
     #[serde(default)]
     pub dispatch_agent_name: Option<String>,
+    /// Where the workspace files originated (local folder vs github clone).
+    /// Drives source-control panel visibility and worktree-action availability.
+    #[serde(default)]
+    pub origin: WorkspaceOrigin,
 }
 
 impl WorkspaceInfo {
@@ -204,6 +251,7 @@ impl WorkspaceInfo {
             dispatch_card_id: None,
             dispatch_source_kanban: None,
             dispatch_agent_name: None,
+            origin: WorkspaceOrigin::default(),
         }
     }
 }

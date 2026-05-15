@@ -22,6 +22,17 @@ pub(crate) enum Action {
         WorkspaceType,
         Option<String>,
     ),
+    /// Clone a GitHub URL into the managed worktrees dir and register as Simple.
+    /// Args: (name, description, prompt, kanban_path, github_url, group)
+    #[allow(dead_code)] // wired by the new-workspace dialog in Layer 2
+    CreateGithubWorkspace(
+        String,
+        String,
+        String,
+        Option<String>,
+        String,
+        Option<String>,
+    ),
     EditWorkspace(usize, Option<String>, String, Option<String>),
     /// Second field: optional target kanban column for dispatched cards
     DeleteWorkspace(usize, Option<String>),
@@ -180,6 +191,49 @@ pub(crate) async fn execute_action(
                     {
                         let source = app.workspaces[new_idx].source_repo.clone();
                         let infos: Vec<_> = app.workspaces.iter().map(|w| w.info.clone()).collect();
+                        let storage = Arc::clone(&app.storage);
+                        tokio::spawn(async move {
+                            let _ = storage.workspaces.save_workspaces(&source, &infos);
+                        });
+                    }
+                }
+                Err(e) => {
+                    app.status_message = Some(format!("Error: {}", e));
+                }
+            }
+        }
+        Action::CreateGithubWorkspace(name, description, prompt, kanban_path, github_url, group) => {
+            let result = manager
+                .create_from_github(&name, &description, &prompt, kanban_path, &github_url)
+                .await;
+            match result {
+                Ok(mut info) => {
+                    info.group = group;
+                    info.order = app
+                        .workspaces
+                        .iter()
+                        .map(|w| w.info.order)
+                        .max()
+                        .map(|m| m + 1)
+                        .unwrap_or(0);
+                    app.workspaces.push(app::Workspace::from_info(info));
+                    let new_idx = app.workspaces.len() - 1;
+                    app.switch_workspace(new_idx);
+
+                    let ws = &mut app.workspaces[new_idx];
+                    match FileWatcher::new(ws.path.clone(), ws.name.clone()) {
+                        Ok(watcher) => {
+                            ws.watcher = Some(watcher);
+                        }
+                        Err(e) => {
+                            app.status_message = Some(format!("Watcher error: {}", e));
+                        }
+                    }
+
+                    {
+                        let source = app.workspaces[new_idx].source_repo.clone();
+                        let infos: Vec<_> =
+                            app.workspaces.iter().map(|w| w.info.clone()).collect();
                         let storage = Arc::clone(&app.storage);
                         tokio::spawn(async move {
                             let _ = storage.workspaces.save_workspaces(&source, &infos);

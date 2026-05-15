@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
-use crate::domain::{WorkspaceInfo, WorkspaceType};
+use crate::domain::{WorkspaceInfo, WorkspaceOrigin, WorkspaceType};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WorkspaceEntry {
@@ -29,6 +29,8 @@ pub struct WorkspaceEntry {
     pub dispatch_source_kanban: Option<String>,
     #[serde(default)]
     pub dispatch_agent_name: Option<String>,
+    #[serde(default)]
+    pub origin: WorkspaceOrigin,
 }
 
 impl WorkspaceEntry {
@@ -49,6 +51,7 @@ impl WorkspaceEntry {
         info.dispatch_card_id = self.dispatch_card_id;
         info.dispatch_source_kanban = self.dispatch_source_kanban;
         info.dispatch_agent_name = self.dispatch_agent_name;
+        info.origin = self.origin;
         info
     }
 }
@@ -93,6 +96,7 @@ pub fn save(git_root: &Path, workspaces: &[WorkspaceInfo]) -> anyhow::Result<()>
             dispatch_card_id: ws.dispatch_card_id.clone(),
             dispatch_source_kanban: ws.dispatch_source_kanban.clone(),
             dispatch_agent_name: ws.dispatch_agent_name.clone(),
+            origin: ws.origin.clone(),
         })
         .collect();
 

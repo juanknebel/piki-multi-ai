@@ -185,6 +185,7 @@ fn main() {
             commands::workspace::list_workspaces,
             commands::workspace::switch_workspace,
             commands::workspace::create_workspace,
+            commands::workspace::create_github_workspace,
             commands::workspace::delete_workspace,
             commands::workspace::update_workspace,
             commands::workspace::list_project_subdirs,

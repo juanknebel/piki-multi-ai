@@ -123,6 +123,63 @@ pub async fn create_workspace(
     Ok(result_info)
 }
 
+#[allow(clippy::too_many_arguments)]
+#[tauri::command]
+pub async fn create_github_workspace(
+    state: State<'_, Mutex<DesktopApp>>,
+    name: String,
+    description: String,
+    prompt: String,
+    github_url: String,
+    group: Option<String>,
+    kanban_path: Option<String>,
+) -> Result<WorkspaceInfo, String> {
+    let (manager, storage) = {
+        let app = state.lock();
+        let manager =
+            piki_core::workspace::manager::WorkspaceManager::with_paths(app.paths.clone());
+        let storage = std::sync::Arc::clone(&app.storage);
+        (manager, storage)
+    };
+
+    let info = manager
+        .create_from_github(&name, &description, &prompt, kanban_path, &github_url)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let mut result_info = info.clone();
+    result_info.group = group.clone();
+
+    let watcher = FileWatcher::new(result_info.path.clone(), result_info.name.clone()).ok();
+
+    let mut app = state.lock();
+    let order = app
+        .workspaces
+        .iter()
+        .map(|ws| ws.info.order)
+        .max()
+        .unwrap_or(0)
+        + 1;
+    result_info.order = order;
+
+    app.workspaces.push(DesktopWorkspace {
+        info: result_info.clone(),
+        status: WorkspaceStatus::Idle,
+        changed_files: Vec::new(),
+        ahead_behind: None,
+        tabs: Vec::new(),
+        active_tab: 0,
+        watcher,
+    });
+
+    let all_infos: Vec<WorkspaceInfo> = app.workspaces.iter().map(|ws| ws.info.clone()).collect();
+    let _ = storage
+        .workspaces
+        .save_workspaces(&result_info.source_repo, &all_infos);
+
+    Ok(result_info)
+}
+
 #[tauri::command]
 pub async fn delete_workspace(
     state: State<'_, Mutex<DesktopApp>>,
