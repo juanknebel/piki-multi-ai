@@ -54,7 +54,6 @@ export function renderWorkspaceList(container: HTMLElement) {
       return a.localeCompare(b);
     });
 
-    let badge = 1;
     for (const [groupName, items] of sortedGroups) {
       const isCollapsed = collapsedGroups.has(groupName);
       const inGroup = !!groupName;
@@ -93,7 +92,6 @@ export function renderWorkspaceList(container: HTMLElement) {
             : "";
 
           item.innerHTML = `
-            <span class="workspace-badge">${badge <= 9 ? badge : ""}</span>
             ${idx === activeIdx ? '<span class="workspace-active-marker"></span>' : ""}
             <span class="workspace-name">${escapeHtml(info.name)}</span>
             ${attentionDot}
@@ -138,11 +136,7 @@ export function renderWorkspaceList(container: HTMLElement) {
           });
 
           container.appendChild(item);
-          badge++;
         }
-      } else {
-        // Still count badges for collapsed items
-        badge += items.length;
       }
     }
   }

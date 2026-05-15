@@ -24,7 +24,13 @@ pub async fn switch_workspace(
             return Err("Workspace index out of range".to_string());
         }
         app.active_workspace = index;
-        app.workspaces[index].info.path.clone()
+        let path = app.workspaces[index].info.path.clone();
+        // Persist the active workspace so the next startup focuses it.
+        if let Some(prefs) = app.storage.ui_prefs.as_ref() {
+            let path_str = path.to_string_lossy().to_string();
+            let _ = prefs.set_preference("last_focused_workspace", &path_str);
+        }
+        path
     };
 
     // Async git operations (no lock held)

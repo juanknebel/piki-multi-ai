@@ -13,7 +13,6 @@ expression: content
             │    e             Edit workspace                     │
             │    d             Delete workspace                   │
             │    tab/shift-tab Next/Prev workspace                │
-            │    1-9           Go to workspace N                  │
             │    space         Fuzzy workspace search             │
             │    `             Previous workspace                 │
             │    ctrl-p        Command palette                    │
@@ -42,4 +41,5 @@ expression: content
             │                                                     │
             │  Interaction mode (green border)                    │
             │    ctrl-g        Back to navigation                 │
-            └────────────────────────────────────── [1/139 ↑k/j↓] ┘
+            │    Esc           Back (non-terminal panes)          │
+            └────────────────────────────────────── [1/138 ↑k/j↓] ┘

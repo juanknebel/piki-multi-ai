@@ -534,29 +534,6 @@ pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Act
                 return Some(Action::GitUnstageSelected);
             }
         }
-    } else if let KeyCode::Char(c @ '1'..='9') = key.code {
-        let visual_pos = (c as usize) - ('1' as usize);
-        // Map visual position to actual workspace index via sidebar order
-        let ws_indices: Vec<usize> = app
-            .sidebar_items()
-            .iter()
-            .filter_map(|item| match item {
-                crate::app::SidebarItem::Workspace { index } => Some(*index),
-                _ => None,
-            })
-            .collect();
-        if let Some(&ws_idx) = ws_indices.get(visual_pos) {
-            app.switch_workspace(ws_idx);
-        } else {
-            app.set_toast(
-                format!(
-                    "No workspace {} (have {})",
-                    visual_pos + 1,
-                    ws_indices.len()
-                ),
-                crate::app::ToastLevel::Info,
-            );
-        }
     }
     None
 }

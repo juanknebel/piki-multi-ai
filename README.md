@@ -58,7 +58,7 @@ Built with Rust and [ratatui](https://ratatui.rs/).
 - **Ahead/behind indicator** — STATUS panel border and status bar show `↑N to push` / `↓N behind` relative to upstream tracking branch
 - **Side-by-side diffs** — View diffs as a floating overlay rendered by [delta](https://github.com/dandavison/delta) with ANSI colors preserved (terminal stays visible behind)
 - **Deterministic workspace ordering** — Workspaces persist their display order via an `order` field; new workspaces append to the end; order is stable across restarts
-- **Context-aware Tab** — Tab/Shift+Tab behavior depends on the active pane: cycles workspaces in the sidebar, cycles subtabs in the main panel, and cycles files in the status panel; number keys 1-9 (shown as badges) always jump to a workspace; backtick (`` ` ``) toggles to previous workspace (Alt-Tab style)
+- **Context-aware Tab** — Tab/Shift+Tab behavior depends on the active pane: cycles workspaces in the sidebar, cycles subtabs in the main panel, and cycles files in the status panel; backtick (`` ` ``) toggles to previous workspace (Alt-Tab style); the fuzzy switcher (`Space`) and command palette (`Ctrl+P`) cover quick jumps to any workspace
 - **Scrollbar indicators** — Thin scrollbars appear on the right edge of scrollable areas (terminal, diff, markdown, file list, workspace list) when content overflows the viewport
 - **Fuzzy workspace switcher** — Press `Space` to open a fuzzy search overlay for instant workspace switching by name, group, or branch
 - **Vim-style navigation** — j/k for movement, Enter to activate, Esc to go back (non-terminal panes), Ctrl+G for terminal panes; h from main panel goes to workspace list; j/k from main panel reach GitStatus/WorkspaceList; Enter on a workspace switches and auto-focuses the main panel
@@ -284,6 +284,7 @@ Workspace configurations are saved automatically and restored on startup using a
 - Stale entries (worktrees deleted manually) are cleaned up automatically.
 - Robust de-duplication ensures each workspace is loaded only once.
 - Simple and Project workspaces reference the original directory and are never cleaned up as stale.
+- The **last focused workspace** is remembered across restarts: switching workspaces persists the active path in `ui_preferences`, and on startup the app re-focuses that workspace (falling back to the first one if the saved path no longer exists).
 
 ### Layout
 
@@ -357,7 +358,6 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 | `e` | Edit workspace options (Kanban path, Prompt) |
 | `d` | Delete selected workspace (for dispatched workspaces, prompts which kanban column to move the card to) |
 | `Tab` / `Shift+Tab` | Context-aware: cycle workspaces (sidebar), subtabs (main), files (status) |
-| `1`-`9` | Jump to workspace N (numbers shown in sidebar) |
 | `Space` | Fuzzy workspace switcher (search by name/group/branch) |
 | `` ` `` | Toggle to previous workspace |
 | `t` | New tab (opens category menu: 1=Shell, 2=AI Agents →, 3=Tools →; submenus for agent/tool selection) |

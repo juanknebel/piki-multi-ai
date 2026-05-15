@@ -90,6 +90,20 @@ fn main() {
 
             tracing::info!(count = workspaces.len(), "Loaded workspaces");
 
+            // Restore the last focused workspace from UiPrefs (matched by path).
+            // Falls back to index 0 if no preference is set or the workspace
+            // has been removed since the last session.
+            let initial_active_workspace = storage
+                .ui_prefs
+                .as_ref()
+                .and_then(|p| p.get_preference("last_focused_workspace").ok().flatten())
+                .and_then(|saved_path| {
+                    workspaces
+                        .iter()
+                        .position(|ws| ws.info.path.to_string_lossy() == saved_path)
+                })
+                .unwrap_or(0);
+
             // Initialize sysinfo with an empty string — the background task will fill it.
             // We cannot call spawn_sysinfo_poller() here because Tauri's setup() runs
             // outside the tokio runtime context. Instead, we start our own updater.
@@ -124,7 +138,7 @@ fn main() {
             // Create app state
             let desktop_app = DesktopApp {
                 workspaces,
-                active_workspace: 0,
+                active_workspace: initial_active_workspace,
                 storage,
                 paths,
                 manager,

@@ -148,7 +148,19 @@ pub(crate) async fn run(
     app.workspaces.sort_by_key(|ws| ws.info.order);
     tracing::info!(count = app.workspaces.len(), "workspaces restored");
     if !app.workspaces.is_empty() {
-        app.switch_workspace(0);
+        // Restore the last focused workspace from UiPrefs if available.
+        // Match by `path` since it's unique and stable across restarts.
+        let restored_idx = app
+            .storage
+            .ui_prefs
+            .as_ref()
+            .and_then(|prefs| prefs.get_preference("last_focused_workspace").ok().flatten())
+            .and_then(|saved_path| {
+                app.workspaces
+                    .iter()
+                    .position(|ws| ws.info.path.to_string_lossy() == saved_path)
+            });
+        app.switch_workspace(restored_idx.unwrap_or(0));
     }
 
     tracing::info!("event loop starting");

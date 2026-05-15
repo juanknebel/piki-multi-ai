@@ -60,18 +60,6 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
 
     let sidebar_items = app.sidebar_items();
 
-    // Pre-compute visual position (0-based) for each workspace index in sidebar order.
-    // This maps workspace_index → visual_position so 1-9 badges reflect display order.
-    let mut ws_visual_pos: std::collections::HashMap<usize, usize> =
-        std::collections::HashMap::new();
-    let mut visual_counter = 0;
-    for item in &sidebar_items {
-        if let SidebarItem::Workspace { index } = item {
-            ws_visual_pos.insert(*index, visual_counter);
-            visual_counter += 1;
-        }
-    }
-
     // Compute scroll offset for mixed-height items
     let visible_height = area.height.saturating_sub(2) as usize;
     let mut scroll_offset = 0;
@@ -161,19 +149,11 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                     } else {
                         " "
                     };
-                    // Show 1-9 badge matching visual order for quick-jump shortcuts
-                    let visual_pos = ws_visual_pos.get(index).copied().unwrap_or(usize::MAX);
-                    let number_badge = if visual_pos < 9 {
-                        format!("{}", visual_pos + 1)
-                    } else {
-                        " ".to_string()
-                    };
 
                     let type_icon = workspace_type_icon(ws.info.workspace_type);
 
                     let mut line1_spans = vec![
-                        Span::styled(number_badge.to_string(), Style::default().fg(detail_color)),
-                        Span::raw(format!("{} ", marker)),
+                        Span::raw(format!(" {} ", marker)),
                         Span::styled(type_icon, Style::default().fg(detail_color)),
                         Span::styled(
                             ws.name.clone(),

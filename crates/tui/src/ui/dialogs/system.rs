@@ -77,7 +77,6 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
                 cfg.get_binding("navigation", "prev_workspace")
             )
         ),
-        format!("    {:<13} Go to workspace N", "1-9"),
         format!(
             "    {:<13} Fuzzy workspace search",
             cfg.get_binding("navigation", "workspace_switcher")

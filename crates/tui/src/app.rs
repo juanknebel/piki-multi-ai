@@ -1068,6 +1068,12 @@ impl App {
             if let Some(tab) = self.workspaces[index].current_tab_mut() {
                 tab.term_scroll = 0;
             }
+            // Persist the active workspace so the next startup focuses it.
+            // Path is the canonical key (unique + stable across restarts).
+            if let Some(prefs) = self.storage.ui_prefs.as_ref() {
+                let path_str = self.workspaces[index].info.path.to_string_lossy().to_string();
+                let _ = prefs.set_preference("last_focused_workspace", &path_str);
+            }
         }
     }
 
@@ -1599,15 +1605,6 @@ mod tests {
     }
 
     #[test]
-    fn test_workspace_number_keys_with_empty_list() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
-        // Pressing '1' with no workspaces should not panic
-        crate::input::handle_key_event(&mut app, key(KeyCode::Char('1')));
-        assert_eq!(app.active_workspace, 0);
-        assert_eq!(app.mode, AppMode::Normal);
-    }
-
-    #[test]
     fn test_commit_requires_workspace() {
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('c')));
@@ -1868,17 +1865,4 @@ mod tests {
         assert!(!app.workspaces[a].has_idle_notification);
     }
 
-    // ── Number key invalid workspace tests ──
-
-    #[test]
-    fn test_workspace_number_keys_toast_invalid() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
-        add_test_workspace(&mut app); // index 0
-        add_test_workspace(&mut app); // index 1
-
-        // Press '5' — no workspace at that position
-        crate::input::handle_key_event(&mut app, key(KeyCode::Char('5')));
-        assert!(app.toast.is_some());
-        assert!(app.toast.as_ref().unwrap().message.contains("No workspace"));
-    }
 }
