@@ -201,6 +201,12 @@ pub(crate) async fn run(
                         }
                         app.needs_redraw = true;
                     }
+                    Some(Ok(Event::FocusGained)) => {
+                        piki_core::notifications::set_window_focused(true);
+                    }
+                    Some(Ok(Event::FocusLost)) => {
+                        piki_core::notifications::set_window_focused(false);
+                    }
                     Some(Ok(Event::Resize(cols, rows))) => {
                         let new_area = ui::layout::compute_terminal_area_with(Rect::new(0, 0, cols, rows), app.sidebar_pct);
                         app.pty_rows = new_area.height;

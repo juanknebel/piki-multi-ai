@@ -190,6 +190,19 @@ fn main() {
             // Background idle-watcher loop for provider tabs.
             events::spawn_idle_watcher_loop(app_handle);
 
+            // Track main-window OS focus so piki-core::notifications can gate
+            // OS toasts: while piki has focus, the in-app toast is enough.
+            if let Some(window) = app.get_webview_window("main") {
+                piki_core::notifications::set_window_focused(
+                    window.is_focused().unwrap_or(false),
+                );
+                window.on_window_event(|event| {
+                    if let tauri::WindowEvent::Focused(focused) = event {
+                        piki_core::notifications::set_window_focused(*focused);
+                    }
+                });
+            }
+
             app.manage(Mutex::new(desktop_app));
             app.manage(lsp_manager_arc);
 

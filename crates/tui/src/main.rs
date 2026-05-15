@@ -164,6 +164,7 @@ async fn main() -> anyhow::Result<()> {
             std::io::stderr(),
             crossterm::event::DisableMouseCapture,
             crossterm::event::DisableBracketedPaste,
+            crossterm::event::DisableFocusChange,
         );
         ratatui::restore();
         original_hook(panic_info);
@@ -174,6 +175,7 @@ async fn main() -> anyhow::Result<()> {
         std::io::stderr(),
         crossterm::event::EnableMouseCapture,
         crossterm::event::EnableBracketedPaste,
+        crossterm::event::EnableFocusChange,
     )?;
     if kitty_keyboard {
         crossterm::execute!(
@@ -190,7 +192,11 @@ async fn main() -> anyhow::Result<()> {
             crossterm::event::PopKeyboardEnhancementFlags
         )?;
     }
-    crossterm::execute!(std::io::stderr(), crossterm::event::DisableMouseCapture)?;
+    crossterm::execute!(
+        std::io::stderr(),
+        crossterm::event::DisableMouseCapture,
+        crossterm::event::DisableFocusChange,
+    )?;
     ratatui::restore();
     tracing::info!("piki-multi-ai shutdown");
     result

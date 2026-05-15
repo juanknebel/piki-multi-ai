@@ -19,6 +19,7 @@
 //! that don't initialize fall back to a generic `"piki-multi"`.
 
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
@@ -30,11 +31,26 @@ pub const MAILBOX_CAPACITY: usize = 100;
 static APPNAME: OnceLock<&'static str> = OnceLock::new();
 static MAILBOX: OnceLock<Mutex<NotificationMailbox>> = OnceLock::new();
 
+/// Whether the host window/terminal currently has OS focus. When `true`,
+/// [`push_and_toast`] skips the call to `notify-rust` (the in-app toast
+/// already covers the event). Default is `false` so frontends/terminals
+/// that don't wire focus tracking — or terminals that don't emit focus
+/// events (CSI ? 1004) — still notify like today: no regression.
+static WINDOW_HAS_FOCUS: AtomicBool = AtomicBool::new(false);
+
 /// Set the OS notification source name. Idempotent — only the first call
 /// takes effect, so each binary should call this once during startup before
 /// any notification is spawned.
 pub fn set_appname(name: &'static str) {
     let _ = APPNAME.set(name);
+}
+
+/// Update the OS-focus state of the host window/terminal. Frontends call
+/// this on focus-changed events (crossterm `FocusGained`/`FocusLost` in
+/// the TUI, Tauri `WindowEvent::Focused` in the desktop). When `true`,
+/// future OS notifications are suppressed (mailbox entries still record).
+pub fn set_window_focused(focused: bool) {
+    WINDOW_HAS_FOCUS.store(focused, Ordering::Relaxed);
 }
 
 fn appname() -> &'static str {
@@ -199,7 +215,11 @@ fn push_and_toast(item: NotificationItem) {
         let mut mb = mailbox().lock();
         mb.push(item.clone());
     }
-    spawn_toast(item.title, item.body);
+    // Mailbox always records the entry; the OS toast is gated on window
+    // focus so the user isn't double-notified when they're already on piki.
+    if !WINDOW_HAS_FOCUS.load(Ordering::Relaxed) {
+        spawn_toast(item.title, item.body);
+    }
 }
 
 fn spawn_toast(summary: String, body: String) {
@@ -280,5 +300,29 @@ mod tests {
         // Snapshot survives clear because it's a deep copy.
         assert_eq!(snap.len(), 1);
         assert!(mb.is_empty());
+    }
+
+    // The two focus-gate cases share global statics (`WINDOW_HAS_FOCUS`,
+    // `MAILBOX`), so they must run as a single test under cargo's default
+    // test-thread parallelism. Splitting them caused a race where one
+    // test's `_reset_mailbox_for_test()` would land between the other's
+    // push and assert.
+    #[test]
+    fn push_and_toast_records_to_mailbox_in_both_focus_states() {
+        // Focused: mailbox still records; OS toast is suppressed (side-effect
+        // we cannot observe in-process — covered by the conditional in
+        // push_and_toast).
+        _reset_mailbox_for_test();
+        set_window_focused(true);
+        push_and_toast(fresh_item("tab-focus-on", "idle"));
+        assert_eq!(mailbox_snapshot().len(), 1);
+
+        // Unfocused: mailbox records and toast would fire.
+        _reset_mailbox_for_test();
+        set_window_focused(false);
+        push_and_toast(fresh_item("tab-focus-off", "idle"));
+        assert_eq!(mailbox_snapshot().len(), 1);
+
+        _reset_mailbox_for_test();
     }
 }
