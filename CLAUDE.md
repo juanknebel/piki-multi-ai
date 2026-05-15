@@ -2,6 +2,15 @@
 
 **IMPORTANT:** Always read and follow `AGENTS.md` at the project root before starting any task.
 
+## Branch flow
+
+`main` only receives merges from `nightly` when cutting a release (via `scripts/release.sh <version>` or the equivalent manual flow). Intermediate work — bugfixes, refactors, dependency bumps, CI changes — stays on `nightly` and rides along with the next release merge.
+
+- Push fixes to `origin/nightly` only.
+- Do NOT `git merge nightly` into `main` mid-cycle.
+- The change reaches `main` when `release.sh` runs the `--no-ff` merge as part of the release flow.
+- The `Clean Main` ruleset on `main` blocks branch deletion and non-fast-forward pushes; merge commits from the release flow are allowed.
+
 ## CI parity check
 
 Before pushing, run the same commands GitHub Actions runs so failures are caught locally:
