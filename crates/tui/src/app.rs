@@ -641,6 +641,8 @@ pub enum ResizeDrag {
     Sidebar,
     /// Horizontal border between workspace list and file list
     LeftSplit,
+    /// Vertical border between file list and diff in code review
+    CodeReviewSplit,
 }
 
 /// Terminal search overlay state
@@ -718,6 +720,8 @@ pub struct App {
     pub sidebar_pct: u16,
     /// Left panel vertical split: workspace list percentage (10..=90)
     pub left_split_pct: u16,
+    /// Code review file-list width as percentage (10..=90)
+    pub code_review_split_pct: u16,
     /// Mouse drag-resize state
     pub resize_drag: Option<ResizeDrag>,
     /// X coordinate of the vertical border between sidebar and main panel
@@ -726,6 +730,10 @@ pub struct App {
     pub left_split_y: u16,
     /// Rect of the left sidebar area (for resize calculations)
     pub left_area_rect: Rect,
+    /// X coordinate of the vertical border in code review (file list | diff)
+    pub code_review_divider_x: u16,
+    /// Body area of the code review layout (for relative drag calculation)
+    pub code_review_body_rect: Rect,
     /// Whether the UI needs to be redrawn
     pub needs_redraw: bool,
     pub config: crate::config::Config,
@@ -883,10 +891,13 @@ impl App {
             sysinfo: std::sync::Arc::new(parking_lot::Mutex::new(String::new())),
             sidebar_pct: 20,
             left_split_pct: 50,
+            code_review_split_pct: 25,
             resize_drag: None,
             sidebar_x: 0,
             left_split_y: 0,
             left_area_rect: Rect::default(),
+            code_review_divider_x: 0,
+            code_review_body_rect: Rect::default(),
             needs_redraw: true,
             config,
             refresh_tx,
@@ -927,6 +938,7 @@ impl App {
         if let Some(ref ui_prefs) = self.storage.ui_prefs {
             let _ = ui_prefs.set_preference("sidebar_pct", &self.sidebar_pct.to_string());
             let _ = ui_prefs.set_preference("left_split_pct", &self.left_split_pct.to_string());
+            let _ = ui_prefs.set_preference("code_review_split_pct", &self.code_review_split_pct.to_string());
         }
     }
 

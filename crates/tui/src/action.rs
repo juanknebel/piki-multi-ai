@@ -1168,6 +1168,14 @@ pub(crate) async fn execute_action(
                     ws.kanban_provider = Some(kanban_provider);
                 }
 
+                // Singleton guard: Kanban and Api tabs must not be duplicated
+                if matches!(provider, AIProvider::Kanban | AIProvider::Api)
+                    && let Some(idx) = ws.tabs.iter().position(|t| t.provider == provider)
+                {
+                    ws.active_tab = idx;
+                    return Ok(());
+                }
+
                 let idx = spawn_tab(ws, &provider, app.pty_rows, app.pty_cols, None, Some(&app.provider_manager), &app.paths).await;
                 ws.active_tab = idx;
                 app.status_message = Some(format!("Opened {} tab", provider.label()));

@@ -150,6 +150,10 @@ fn open_logs(app: &mut App) {
         level_filter: 0,
         selected: usize::MAX,
         hscroll: 0,
+        search_active: false,
+        search_buffer: String::new(),
+        search_cursor: 0,
+        auto_refresh: true,
     });
 }
 

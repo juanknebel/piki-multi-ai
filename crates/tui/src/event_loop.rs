@@ -86,6 +86,11 @@ pub(crate) async fn run(
         {
             app.left_split_pct = pct.clamp(10, 90);
         }
+        if let Ok(Some(val)) = ui_prefs.get_preference("code_review_split_pct")
+            && let Ok(pct) = val.parse::<u16>()
+        {
+            app.code_review_split_pct = pct.clamp(10, 90);
+        }
     }
 
     // Load chat config from storage (shared with desktop)

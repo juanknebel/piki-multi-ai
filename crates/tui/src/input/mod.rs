@@ -239,6 +239,10 @@ pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Act
             level_filter: 0,
             selected: usize::MAX,
             hscroll: 0,
+            search_active: false,
+            search_buffer: String::new(),
+            search_cursor: 0,
+            auto_refresh: true,
         });
         app.mode = AppMode::Logs;
     } else if app.config.matches_navigation(key, "workspace_info") {

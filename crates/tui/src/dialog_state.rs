@@ -143,6 +143,10 @@ pub enum DialogState {
         level_filter: u8,
         selected: usize,
         hscroll: u16,
+        search_active: bool,
+        search_buffer: String,
+        search_cursor: usize,
+        auto_refresh: bool,
     },
     GitLog {
         lines: Vec<GitLogEntry>,

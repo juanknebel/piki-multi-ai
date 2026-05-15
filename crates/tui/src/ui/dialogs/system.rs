@@ -574,52 +574,67 @@ pub(crate) fn render_confirm_quit_dialog(frame: &mut Frame, area: Rect, app: &Ap
 }
 
 pub(crate) fn render_logs_overlay(frame: &mut Frame, area: Rect, app: &App) {
-    let (log_scroll, level_filter, log_selected, log_hscroll) = match app.active_dialog {
-        Some(DialogState::Logs {
-            scroll,
-            level_filter,
-            selected,
-            hscroll,
-        }) => (scroll, level_filter, selected, hscroll),
-        _ => (u16::MAX, 0, usize::MAX, 0),
-    };
+    let (log_scroll, level_filter, log_selected, log_hscroll, search_active, search_buffer, search_cursor, auto_refresh) =
+        match &app.active_dialog {
+            Some(DialogState::Logs {
+                scroll,
+                level_filter,
+                selected,
+                hscroll,
+                search_active,
+                search_buffer,
+                search_cursor,
+                auto_refresh,
+            }) => (*scroll, *level_filter, *selected, *hscroll, *search_active, search_buffer.as_str(), *search_cursor, *auto_refresh),
+            _ => (u16::MAX, 0, usize::MAX, 0, false, "", 0, true),
+        };
 
     let width = area.width * 90 / 100;
     let height = area.height * 85 / 100;
     let popup = super::clear_popup(frame, area, width.max(40), height.max(10));
-    let inner_height = popup.height.saturating_sub(3) as usize; // borders + footer
-    let inner_width = popup.width.saturating_sub(2) as usize; // borders
+    let show_search = search_active || !search_buffer.is_empty();
+    let search_row_height = if show_search { 1u16 } else { 0 };
+    let inner_height = popup.height.saturating_sub(3 + search_row_height) as usize;
+    let inner_width = popup.width.saturating_sub(2) as usize;
 
-    // Read log entries and filter by level
+    // Read log entries filtered by level and search query
     let buf = app.log_buffer.lock();
+    let search_lower = search_buffer.to_lowercase();
     let filtered: Vec<_> = buf
         .iter()
         .filter(|entry| {
-            if level_filter == 0 {
-                return true;
+            if level_filter != 0 {
+                let entry_num = match entry.level {
+                    tracing::Level::ERROR => 1,
+                    tracing::Level::WARN => 2,
+                    tracing::Level::INFO => 3,
+                    tracing::Level::DEBUG => 4,
+                    tracing::Level::TRACE => 5,
+                };
+                if entry_num > level_filter {
+                    return false;
+                }
             }
-            let entry_num = match entry.level {
-                tracing::Level::ERROR => 1,
-                tracing::Level::WARN => 2,
-                tracing::Level::INFO => 3,
-                tracing::Level::DEBUG => 4,
-                tracing::Level::TRACE => 5,
-            };
-            entry_num <= level_filter
+            if !search_lower.is_empty() {
+                return entry.message.to_lowercase().contains(&search_lower)
+                    || entry.target.to_lowercase().contains(&search_lower);
+            }
+            true
         })
         .collect();
 
     let total = filtered.len();
+    let effective_selected = if auto_refresh { total.saturating_sub(1) } else { log_selected };
     // Clamp selected to valid range
     let selected = if total == 0 {
         0
     } else {
-        log_selected.min(total.saturating_sub(1))
+        effective_selected.min(total.saturating_sub(1))
     };
 
     // Auto-scroll to keep selection visible
     let max_scroll = total.saturating_sub(inner_height);
-    let scroll = if log_scroll == u16::MAX {
+    let scroll = if log_scroll == u16::MAX || auto_refresh {
         // Auto-scroll: ensure selected is at bottom of view
         if total <= inner_height {
             0
@@ -705,18 +720,49 @@ pub(crate) fn render_logs_overlay(frame: &mut Frame, area: Rect, app: &App) {
         _ => "all",
     };
 
-    let title = format!(" Logs [{}] ", filter_label);
+    let auto_refresh_marker = if auto_refresh { " ~" } else { "" };
+    let title = format!(" Logs [{}]{} ", filter_label, auto_refresh_marker);
     let scroll_indicator = if total > 0 {
         format!(" [{}/{}] ", selected + 1, total)
     } else {
         " [0/0] ".to_string()
     };
 
+    let (content_area, search_area) = if show_search {
+        let [content, search] = ratatui::layout::Layout::vertical([
+            ratatui::layout::Constraint::Min(0),
+            ratatui::layout::Constraint::Length(1),
+        ])
+        .areas(popup);
+        (content, Some(search))
+    } else {
+        (popup, None)
+    };
+
     let block = super::popup_block(&title, app.theme.help.border)
         .title_bottom(Line::from(scroll_indicator).right_aligned());
 
     let text = Paragraph::new(lines).block(block).scroll((0, log_hscroll));
-    frame.render_widget(text, popup);
+    frame.render_widget(text, content_area);
+
+    if let Some(search_rect) = search_area {
+        let prefix = " / ";
+        let prompt_style = Style::default().fg(Color::Cyan);
+        let search_style = Style::default().fg(Color::Yellow);
+        let search_line = Line::from(vec![
+            Span::styled(prefix, prompt_style),
+            Span::styled(search_buffer, search_style),
+        ]);
+        frame.render_widget(
+            Paragraph::new(search_line).style(Style::default().bg(Color::Reset)),
+            search_rect,
+        );
+        if search_active {
+            let cursor_x = (search_rect.x + prefix.len() as u16 + search_cursor as u16)
+                .min(search_rect.x + search_rect.width.saturating_sub(1));
+            frame.set_cursor_position((cursor_x, search_rect.y));
+        }
+    }
 }
 
 pub(crate) fn render_new_tab_dialog(frame: &mut Frame, area: Rect, app: &App) {

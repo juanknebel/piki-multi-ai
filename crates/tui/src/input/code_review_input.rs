@@ -55,6 +55,18 @@ pub(super) fn handle_code_review_key(app: &mut App, key: KeyEvent) -> Option<Act
         return None;
     }
 
+    // [ / ] resize the file-list | diff split
+    if key.code == KeyCode::Char('[') {
+        app.code_review_split_pct = app.code_review_split_pct.saturating_sub(5).max(10);
+        app.save_layout_prefs();
+        return None;
+    }
+    if key.code == KeyCode::Char(']') {
+        app.code_review_split_pct = (app.code_review_split_pct + 5).min(90);
+        app.save_layout_prefs();
+        return None;
+    }
+
     // Everything else goes to the code review interaction handler
     let ws = app.workspaces.get_mut(app.active_workspace)?;
     let cr = ws.code_review.as_mut()?;
