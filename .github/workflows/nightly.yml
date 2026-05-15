@@ -8,8 +8,38 @@ on:
 permissions:
   contents: write
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      RUSTFLAGS: -D warnings
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Clippy
+        run: cargo clippy --workspace --exclude piki-desktop --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace --exclude piki-desktop
+
   build:
+    needs: test
     strategy:
       matrix:
         include:
@@ -53,6 +83,7 @@ jobs:
           path: ${{ matrix.artifact }}.tar.gz
 
   build-desktop:
+    needs: test
     strategy:
       matrix:
         include:
