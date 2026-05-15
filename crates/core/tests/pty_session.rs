@@ -11,11 +11,15 @@ async fn test_spawn_echo() {
     let pty = PtySession::spawn(&repo_path, 24, 80, "echo", &[], &[], &[], false).await;
     assert!(pty.is_ok(), "spawn echo should succeed: {:?}", pty.err());
 
-    // Let echo finish
-    tokio::time::sleep(Duration::from_millis(200)).await;
-
+    // Poll for echo to exit. The 200ms sleep that used to live here was flaky
+    // on loaded CI runners (ubuntu in particular); a 2 s deadline gives
+    // headroom without slowing the happy path.
     let mut pty = pty.unwrap();
-    assert!(!pty.is_alive(), "echo should have exited");
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    while pty.is_alive() && std::time::Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    assert!(!pty.is_alive(), "echo should have exited within 2s");
 }
 
 #[tokio::test(flavor = "multi_thread")]
