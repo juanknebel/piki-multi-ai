@@ -1,6 +1,7 @@
 import { appState } from "../state";
 import * as ipc from "../ipc";
-import type { DirEntry, EntryKind } from "../types";
+import type { DirEntry, EntryKind, FileStatus } from "../types";
+import { FILE_STATUS_LABELS, FILE_STATUS_CSS } from "../types";
 import { registerCodeFile } from "./code-editor-panel";
 import { registerMarkdownFile } from "./markdown-editor-panel";
 import { showMarkdown } from "./markdown-viewer";
@@ -617,6 +618,7 @@ export function renderFileTree(container: HTMLElement) {
       return;
     }
     if (filterSel >= matches.length) filterSel = matches.length - 1;
+    const decor = gitDecor();
     matches.forEach((rel, i) => {
       const btn = document.createElement("button");
       btn.type = "button";
@@ -624,10 +626,12 @@ export function renderFileTree(container: HTMLElement) {
       btn.dataset.rel = rel;
       btn.style.paddingLeft = "8px";
       const dir = parentRel(rel);
+      const gs = decor.files.get(rel);
       btn.innerHTML = `
         ${FILE_SVG}
         <span class="ft-name">${esc(baseName(rel))}</span>
-        ${dir ? `<span class="ft-path">${esc(dir)}</span>` : ""}`;
+        ${dir ? `<span class="ft-path">${esc(dir)}</span>` : ""}
+        ${gs ? statusSpan(gs) : ""}`;
       btn.addEventListener("click", () => {
         filterSel = i;
         openFile(rel);
@@ -733,6 +737,7 @@ export function renderFileTree(container: HTMLElement) {
       return;
     }
 
+    const decor = gitDecor();
     const root = nodes.get("");
     const rows = visibleRows();
     if (root?.status === "loading" && rows.length === 0) {
@@ -754,6 +759,8 @@ export function renderFileTree(container: HTMLElement) {
       }
       const isDir = row.kind === "Dir";
       const isOpen = isDir && expanded.has(row.rel);
+      const gs = isDir ? undefined : decor.files.get(row.rel);
+      const dirChanged = isDir && decor.dirs.has(row.rel);
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = `ft-row${row.rel === selected ? " selected" : ""}`;
@@ -762,7 +769,8 @@ export function renderFileTree(container: HTMLElement) {
       btn.innerHTML = `
         <span class="ft-twisty${isOpen ? " open" : ""}">${isDir ? CHEVRON_SVG : ""}</span>
         ${isDir ? FOLDER_SVG : FILE_SVG}
-        <span class="ft-name">${esc(row.name)}</span>`;
+        <span class="ft-name">${esc(row.name)}</span>
+        ${gs ? statusSpan(gs) : dirChanged ? '<span class="ft-dir-dot" title="Contains changes">●</span>' : ""}`;
       btn.addEventListener("click", () => onRowActivate(row.rel, isDir));
       if (!isDir) {
         btn.addEventListener("dblclick", () => beginRename(row.rel));
@@ -822,4 +830,25 @@ function esc(text: string): string {
 }
 function escAttr(text: string): string {
   return text.replace(/"/g, "&quot;");
+}
+
+/** Git decoration derived from the active workspace's changed files: a
+ *  rel-path → status map plus the set of ancestor dirs that contain a
+ *  change. Empty (no-op) when the workspace isn't a git repo. */
+function gitDecor(): { files: Map<string, FileStatus>; dirs: Set<string> } {
+  const files = new Map<string, FileStatus>();
+  const dirs = new Set<string>();
+  for (const cf of appState.activeWs?.changedFiles ?? []) {
+    files.set(cf.path, cf.status);
+    let p = parentRel(cf.path);
+    while (p) {
+      dirs.add(p);
+      p = parentRel(p);
+    }
+  }
+  return { files, dirs };
+}
+
+function statusSpan(s: FileStatus): string {
+  return `<span class="file-status ${FILE_STATUS_CSS[s]}" title="${FILE_STATUS_LABELS[s]}">${FILE_STATUS_LABELS[s]}</span>`;
 }

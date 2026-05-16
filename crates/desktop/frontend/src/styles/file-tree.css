@@ -120,6 +120,14 @@
   font-style: italic;
 }
 
+.ft-dir-dot {
+  width: 16px;
+  text-align: center;
+  font-size: 7px;
+  flex-shrink: 0;
+  color: var(--accent-primary);
+}
+
 .ft-input-row {
   cursor: default;
 }
