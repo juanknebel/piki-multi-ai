@@ -1,5 +1,9 @@
 import * as ipc from "./ipc";
 import { terminals } from "./components/terminal-panel";
+// Static import is safe despite the theme <-> code-editor-panel cycle:
+// `reapplyEditorThemes` is only called from a method at runtime, never at
+// module-init (same arrangement as `terminals` above).
+import { reapplyEditorThemes } from "./components/code-editor-panel";
 
 // ── Types ────────────────────────────────────────────
 
@@ -406,6 +410,8 @@ class ThemeEngine {
 
     // Sync xterm terminals
     this.updateAllTerminals();
+    // Sync CodeMirror editors
+    this.updateAllEditors();
   }
 
   setPreset(id: string): void {
@@ -523,6 +529,10 @@ class ThemeEngine {
       brightCyan: c("xterm-bright-cyan"),
       brightWhite: c("xterm-bright-white"),
     };
+  }
+
+  updateAllEditors(): void {
+    reapplyEditorThemes();
   }
 
   updateAllTerminals(): void {

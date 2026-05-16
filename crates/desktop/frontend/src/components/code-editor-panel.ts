@@ -1,12 +1,34 @@
 import { EditorView, basicSetup } from "codemirror";
-import { EditorState, Extension } from "@codemirror/state";
-import { oneDark } from "@codemirror/theme-one-dark";
+import { EditorState, Extension, Compartment } from "@codemirror/state";
 import { vim } from "@replit/codemirror-vim";
 import { languageServer } from "codemirror-languageserver";
 import * as ipc from "../ipc";
 import { appState } from "../state";
 import { toast } from "./toast";
 import { modCtrl, formatShortcut } from "../shortcuts";
+import { buildCmTheme } from "../cm-theme";
+import { themeEngine } from "../theme";
+
+/** Shared theme compartment so all open editors can be re-themed live when
+ *  the global theme changes (see `reapplyEditorThemes`). */
+const themeCompartment = new Compartment();
+
+function cmTheme(): Extension {
+  return buildCmTheme(
+    (k) => themeEngine.getEffectiveColor(k),
+    themeEngine.getActivePreset().isDark,
+  );
+}
+
+/** Reconfigure every open code editor with the current global theme. Called
+ *  by ThemeEngine.applyTheme (mirrors updateAllTerminals for xterm). */
+export function reapplyEditorThemes(): void {
+  for (const inst of instances.values()) {
+    inst.editorView?.dispatch({
+      effects: themeCompartment.reconfigure(cmTheme()),
+    });
+  }
+}
 
 const LANGUAGE_IDS: Record<string, string> = {
   rs: "rust",
@@ -345,11 +367,7 @@ function createPanel(tabId: string, filePath: string, workspaceIdx: number): Cod
         basicSetup,
         ...(langExt ? [langExt] : []),
         ...lspExtensions,
-        oneDark,
-        EditorView.theme({
-          "&": { height: "100%" },
-          ".cm-scroller": { overflow: "auto" },
-        }),
+        themeCompartment.of(cmTheme()),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             const isDirty = update.state.doc.toString() !== inst.originalContent;
