@@ -335,6 +335,22 @@ export function fsReadDir(
   return invoke("fs_read_dir", { workspaceIdx, path, showHidden });
 }
 
+export function fsCreateFile(workspaceIdx: number, path: string): Promise<void> {
+  return invoke("fs_create_file", { workspaceIdx, path });
+}
+
+export function fsCreateDir(workspaceIdx: number, path: string): Promise<void> {
+  return invoke("fs_create_dir", { workspaceIdx, path });
+}
+
+export function fsRename(workspaceIdx: number, from: string, to: string): Promise<void> {
+  return invoke("fs_rename", { workspaceIdx, from, to });
+}
+
+export function fsDelete(workspaceIdx: number, path: string): Promise<void> {
+  return invoke("fs_delete", { workspaceIdx, path });
+}
+
 export function readFileContent(workspaceIdx: number, path: string): Promise<string> {
   return invoke("read_file_content", { workspaceIdx, path });
 }
