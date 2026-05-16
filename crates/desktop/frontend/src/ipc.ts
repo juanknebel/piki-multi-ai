@@ -4,6 +4,7 @@ import type {
   WorkspaceInfo,
   WorkspaceDetail,
   ChangedFile,
+  DirEntry,
   PtyOutputEvent,
   PtyExitEvent,
   GitRefreshEvent,
@@ -324,6 +325,14 @@ export function gitStashDrop(workspaceIdx: number, stashIndex: number): Promise<
 // Search commands
 export function fuzzyFileList(workspaceIdx: number): Promise<string[]> {
   return invoke("fuzzy_file_list", { workspaceIdx });
+}
+
+export function fsReadDir(
+  workspaceIdx: number,
+  path: string,
+  showHidden: boolean,
+): Promise<DirEntry[]> {
+  return invoke("fs_read_dir", { workspaceIdx, path, showHidden });
 }
 
 export function readFileContent(workspaceIdx: number, path: string): Promise<string> {

@@ -34,6 +34,18 @@ export interface ChangedFile {
   status: FileStatus;
 }
 
+/** Mirrors `piki_core::EntryKind`. */
+export type EntryKind = "File" | "Dir" | "Symlink";
+
+/** One level of a directory listing. Mirrors `piki_core::DirEntry`. */
+export interface DirEntry {
+  name: string;
+  kind: EntryKind;
+  size: number;
+  /** Milliseconds since the Unix epoch; 0 if unavailable. */
+  mtime: number;
+}
+
 export interface WorkspaceInfo {
   name: string;
   description: string;

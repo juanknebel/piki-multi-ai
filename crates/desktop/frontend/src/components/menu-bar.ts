@@ -177,6 +177,7 @@ const MENUS: MenuDefinition[] = [
     label: "View",
     items: () => [
       { label: "Explorer", action: () => appState.setActiveView("explorer") },
+      { label: "Files", action: () => appState.setActiveView("files") },
       { label: "Source Control", action: () => appState.setActiveView("git") },
       { label: "Agents", shortcut: "Ctrl+Shift+A", action: () => showAgentManager() },
       { label: "Kanban Board", shortcut: "Alt+K", action: () => appState.setActiveView("kanban") },

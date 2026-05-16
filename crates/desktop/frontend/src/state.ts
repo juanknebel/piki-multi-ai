@@ -26,8 +26,9 @@ import {
   reconcileWithTabs,
 } from "./pane-tree";
 
-export type SidebarView = "explorer" | "git" | "agents" | "kanban" | "api" | "web-preview";
-// Note: "agents" opens the modal dialog, "kanban"/"api"/"web-preview" open tabs — none are real sidebar views
+export type SidebarView = "explorer" | "files" | "git" | "agents" | "kanban" | "api" | "web-preview";
+// Note: "explorer"/"files"/"git" are real sidebar views; "agents" opens the
+// modal dialog, "kanban"/"api"/"web-preview" open tabs
 
 export interface UndoEntry {
   action: "stage" | "unstage";

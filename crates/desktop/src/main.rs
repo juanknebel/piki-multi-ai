@@ -246,6 +246,7 @@ fn main() {
             commands::stash::git_stash_pop,
             commands::stash::git_stash_apply,
             commands::stash::git_stash_drop,
+            commands::fs::fs_read_dir,
             commands::search::fuzzy_file_list,
             commands::search::read_file_content,
             commands::search::write_file_content,

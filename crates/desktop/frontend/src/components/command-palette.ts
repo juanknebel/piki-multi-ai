@@ -463,6 +463,12 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
     action: () => appState.setActiveView("explorer"),
   });
   cmds.push({
+    id: "view-files",
+    label: "Show Files",
+    category: "View",
+    action: () => appState.setActiveView("files"),
+  });
+  cmds.push({
     id: "view-git",
     label: "Show Source Control",
     category: "View",

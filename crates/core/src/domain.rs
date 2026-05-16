@@ -185,6 +185,25 @@ pub struct ChangedFile {
     pub status: FileStatus,
 }
 
+/// Kind of a directory entry returned by
+/// [`crate::workspace::manager::read_dir_entries`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EntryKind {
+    File,
+    Dir,
+    Symlink,
+}
+
+/// A single entry inside a directory (one level, non-recursive).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DirEntry {
+    pub name: String,
+    pub kind: EntryKind,
+    pub size: u64,
+    /// Milliseconds since the Unix epoch; 0 if unavailable.
+    pub mtime: u64,
+}
+
 /// Workspace metadata — the serializable, frontend-agnostic part of a workspace.
 /// Each frontend (TUI, Tauri) wraps this with its own runtime state.
 #[derive(Debug, Clone, Serialize, Deserialize)]
