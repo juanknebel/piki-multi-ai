@@ -95,17 +95,6 @@
   transform: rotate(90deg);
 }
 
-.ft-icon {
-  width: 15px;
-  height: 15px;
-  flex-shrink: 0;
-  color: var(--text-muted);
-}
-
-.ft-row.selected .ft-icon {
-  color: var(--text-secondary);
-}
-
 .ft-name {
   overflow: hidden;
   text-overflow: ellipsis;

@@ -5,6 +5,7 @@ import { showMarkdown } from "./markdown-viewer";
 import { showWorkspaceDialog } from "./dialogs/workspace-dialog";
 import { registerCodeFile } from "./code-editor-panel";
 import { revealInFileTree } from "./file-tree";
+import { fileGlyph } from "./file-icons";
 import { FILE_STATUS_LABELS, FILE_STATUS_CSS } from "../types";
 import { modCtrl } from "../shortcuts";
 import type { ChangedFile, FileStatus } from "../types";
@@ -478,9 +479,11 @@ function renderSection(
         : `<button class="file-action-btn" data-action="edit" title="Edit in inline editor">✏️</button>`;
 
       const itemIdx = fileIdx;
+      const fi = fileGlyph(fileName);
       item.innerHTML = `
         <input type="checkbox" class="file-check" data-path="${escapeAttr(file.path)}" data-idx="${itemIdx}" title="Select" />
         <span class="file-status ${statusCss}">${statusLabel}</span>
+        <span class="${fi.cls}">${fi.glyph}</span>
         <span class="file-path" title="${escapeAttr(file.path)}">
           ${escapeHtml(fileName)}${dirPath ? ` <span style="color:var(--text-muted)">${escapeHtml(dirPath)}</span>` : ""}
         </span>

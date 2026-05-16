@@ -6,6 +6,7 @@ import { registerCodeFile, getCodeEditorFilePath } from "./code-editor-panel";
 import { registerMarkdownFile, getMarkdownEditorFilePath } from "./markdown-editor-panel";
 import { showMarkdown } from "./markdown-viewer";
 import { toast } from "./toast";
+import { fileGlyph, folderGlyph, type FileIcon } from "./file-icons";
 
 type NodeState =
   | { status: "idle" }
@@ -43,8 +44,6 @@ function baseName(rel: string): string {
   return i < 0 ? rel : rel.slice(i + 1);
 }
 
-const FOLDER_SVG = `<svg class="ft-icon" viewBox="0 0 16 16"><path d="M1.5 3.5h4l1.5 2h7.5v8h-13z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>`;
-const FILE_SVG = `<svg class="ft-icon" viewBox="0 0 16 16"><path d="M3.5 1.5h6l3 3v10h-9z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M9.5 1.5v3h3" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>`;
 const CHEVRON_SVG = `<svg class="ft-chevron" viewBox="0 0 16 16"><path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`;
 const SEARCH_SVG = `<svg viewBox="0 0 16 16" width="13" height="13"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
 
@@ -658,7 +657,9 @@ export function renderFileTree(container: HTMLElement) {
     wrap.className = "ft-row ft-input-row";
     wrap.style.paddingLeft = `${6 + row.depth * 12}px`;
     wrap.innerHTML = `<span class="ft-twisty"></span>${
-      row.createKind === "dir" ? FOLDER_SVG : FILE_SVG
+      row.createKind === "dir"
+        ? iconSpan(folderGlyph("", false))
+        : iconSpan(fileGlyph(""))
     }`;
     const input = document.createElement("input");
     input.className = "ft-input";
@@ -695,7 +696,7 @@ export function renderFileTree(container: HTMLElement) {
     wrap.className = "ft-row ft-input-row";
     wrap.style.paddingLeft = `${6 + row.depth * 12}px`;
     wrap.innerHTML = `<span class="ft-twisty">${isDir ? CHEVRON_SVG : ""}</span>${
-      isDir ? FOLDER_SVG : FILE_SVG
+      isDir ? iconSpan(folderGlyph(row.name, false)) : iconSpan(fileGlyph(row.name))
     }`;
     const input = document.createElement("input");
     input.className = "ft-input";
@@ -752,7 +753,7 @@ export function renderFileTree(container: HTMLElement) {
       const dir = parentRel(rel);
       const gs = decor.files.get(rel);
       btn.innerHTML = `
-        ${FILE_SVG}
+        ${iconSpan(fileGlyph(baseName(rel)))}
         <span class="ft-name">${esc(baseName(rel))}</span>
         ${dir ? `<span class="ft-path">${esc(dir)}</span>` : ""}
         ${gs ? statusSpan(gs) : ""}`;
@@ -898,7 +899,7 @@ export function renderFileTree(container: HTMLElement) {
       btn.style.paddingLeft = `${6 + row.depth * 12}px`;
       btn.innerHTML = `
         <span class="ft-twisty${isOpen ? " open" : ""}">${isDir ? CHEVRON_SVG : ""}</span>
-        ${isDir ? FOLDER_SVG : FILE_SVG}
+        ${isDir ? iconSpan(folderGlyph(row.name, isOpen)) : iconSpan(fileGlyph(row.name))}
         <span class="ft-name">${esc(row.name)}</span>
         ${gs ? statusSpan(gs) : dirChanged ? '<span class="ft-dir-dot" title="Contains changes">●</span>' : ""}`;
       btn.addEventListener("click", () => onRowActivate(row.rel, isDir));
@@ -1002,4 +1003,8 @@ function gitDecor(): { files: Map<string, FileStatus>; dirs: Set<string> } {
 
 function statusSpan(s: FileStatus): string {
   return `<span class="file-status ${FILE_STATUS_CSS[s]}" title="${FILE_STATUS_LABELS[s]}">${FILE_STATUS_LABELS[s]}</span>`;
+}
+
+function iconSpan(icon: FileIcon): string {
+  return `<span class="${icon.cls}">${icon.glyph}</span>`;
 }

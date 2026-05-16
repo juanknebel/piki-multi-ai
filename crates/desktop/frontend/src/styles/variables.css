@@ -80,6 +80,20 @@
   --git-staged: #3fb950;
   --git-staged-modified: #d4a12e;
 
+  /* ── File-type icons ───────────────────────────── */
+  --icon-rust: #e8623a;
+  --icon-ts: #3178c6;
+  --icon-js: #e8d44d;
+  --icon-py: #4b8bbe;
+  --icon-go: #4fc3dc;
+  --icon-web: #e8732c;
+  --icon-data: #6cc04a;
+  --icon-doc: #8b96a3;
+  --icon-asset: #b07cd6;
+  --icon-muted: #5d7080;
+  --icon-default: #768390;
+  --icon-folder: #5d7080;
+
   /* ── Scrollbar ─────────────────────────────────── */
   --scrollbar-thumb: rgba(57, 186, 230, 0.08);
   --scrollbar-thumb-hover: rgba(57, 186, 230, 0.22);

@@ -3,6 +3,7 @@ import * as ipc from "../ipc";
 import { showFileViewer } from "./file-viewer";
 import { toast } from "./toast";
 import { modCtrl } from "../shortcuts";
+import { fileGlyph } from "./file-icons";
 import type { SearchMatch } from "../ipc";
 
 let searchEl: HTMLElement | null = null;
@@ -55,9 +56,11 @@ export function openProjectSearch() {
 
       const fileName = m.path.split("/").pop() || m.path;
       const dirPath = m.path.includes("/") ? m.path.substring(0, m.path.lastIndexOf("/")) : "";
+      const fi = fileGlyph(fileName);
 
       el.innerHTML = `
         <span class="palette-category" style="min-width:32px;text-align:right">${m.line_num}</span>
+        <span class="${fi.cls}" style="align-self:flex-start;margin-top:1px">${fi.glyph}</span>
         <span class="palette-label" style="flex:1;overflow:hidden">
           <span style="color:var(--text-bright)">${escapeHtml(fileName)}</span>
           ${dirPath ? `<span style="color:var(--text-muted);font-size:10px;margin-left:6px">${escapeHtml(dirPath)}</span>` : ""}

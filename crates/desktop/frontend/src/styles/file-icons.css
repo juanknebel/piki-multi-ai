@@ -1,0 +1,53 @@
+/* Shared per-file-type icon (Nerd Font glyph). Same 15px box as the old
+ * .ft-icon so existing flex layouts are unchanged. */
+.fi {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  flex-shrink: 0;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--icon-default);
+}
+
+.fi-rust {
+  color: var(--icon-rust);
+}
+.fi-ts {
+  color: var(--icon-ts);
+}
+.fi-js {
+  color: var(--icon-js);
+}
+.fi-py {
+  color: var(--icon-py);
+}
+.fi-go {
+  color: var(--icon-go);
+}
+.fi-web {
+  color: var(--icon-web);
+}
+.fi-data {
+  color: var(--icon-data);
+}
+.fi-doc {
+  color: var(--icon-doc);
+}
+.fi-asset {
+  color: var(--icon-asset);
+}
+.fi-muted {
+  color: var(--icon-muted);
+}
+.fi-default {
+  color: var(--icon-default);
+}
+.fi-folder {
+  color: var(--icon-folder);
+}
+
+.ft-row.selected .fi {
+  filter: brightness(1.18);
+}

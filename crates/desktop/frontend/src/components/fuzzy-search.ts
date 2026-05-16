@@ -4,6 +4,7 @@ import { showFileViewer } from "./file-viewer";
 import { showMarkdown } from "./markdown-viewer";
 import { toast } from "./toast";
 import { modCtrl } from "../shortcuts";
+import { fileGlyph } from "./file-icons";
 
 let searchEl: HTMLElement | null = null;
 
@@ -50,8 +51,10 @@ export async function openFuzzySearch() {
 
       const fileName = file.split("/").pop() || file;
       const dirPath = file.includes("/") ? file.substring(0, file.lastIndexOf("/")) : "";
+      const fi = fileGlyph(fileName);
 
       el.innerHTML = `
+        <span class="${fi.cls}">${fi.glyph}</span>
         <span class="palette-label">
           ${highlightMatch(fileName, input.value)}
           ${dirPath ? ` <span style="color:var(--text-muted);font-size:11px">${escapeHtml(dirPath)}</span>` : ""}
