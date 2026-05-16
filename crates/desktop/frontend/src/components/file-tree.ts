@@ -28,6 +28,7 @@ interface InputRow {
 type RenderRow = EntryRow | InputRow;
 
 const MD_RE = /\.(md|markdown)$/i;
+const FILTER_LIMIT = 300;
 
 function joinRel(parent: string, name: string): string {
   return parent ? `${parent}/${name}` : name;
@@ -44,6 +45,7 @@ function baseName(rel: string): string {
 const FOLDER_SVG = `<svg class="ft-icon" viewBox="0 0 16 16"><path d="M1.5 3.5h4l1.5 2h7.5v8h-13z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>`;
 const FILE_SVG = `<svg class="ft-icon" viewBox="0 0 16 16"><path d="M3.5 1.5h6l3 3v10h-9z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M9.5 1.5v3h3" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>`;
 const CHEVRON_SVG = `<svg class="ft-chevron" viewBox="0 0 16 16"><path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`;
+const SEARCH_SVG = `<svg viewBox="0 0 16 16" width="13" height="13"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
 
 interface CtxItem {
   label?: string;
@@ -86,7 +88,6 @@ function openContextMenu(x: number, y: number, items: CtxItem[]) {
     if (e.key === "Escape") close();
   };
   document.body.appendChild(menu);
-  // Clamp to viewport.
   const r = menu.getBoundingClientRect();
   const left = Math.min(x, window.innerWidth - r.width - 4);
   const top = Math.min(y, window.innerHeight - r.height - 4);
@@ -95,6 +96,16 @@ function openContextMenu(x: number, y: number, items: CtxItem[]) {
   document.addEventListener("mousedown", onDown, true);
   document.addEventListener("keydown", onKey, true);
   window.addEventListener("blur", close);
+}
+
+let revealImpl: ((rel: string) => void) | null = null;
+
+/** Switch the sidebar to the Files view and reveal `rel` (workspace-relative)
+ *  in the tree: expand its ancestors, select it, and scroll it into view. */
+export function revealInFileTree(rel: string) {
+  if (!rel) return;
+  appState.setActiveView("files");
+  revealImpl?.(rel);
 }
 
 export function renderFileTree(container: HTMLElement) {
@@ -106,6 +117,11 @@ export function renderFileTree(container: HTMLElement) {
   let wsIdx = -1;
   let pendingCreate: { parentRel: string; kind: "file" | "dir" } | null = null;
   let renaming: string | null = null;
+  let filterOpen = false;
+  let filterQuery = "";
+  let filterSel = 0;
+  let allFiles: string[] | null = null;
+  let loadingAll = false;
 
   async function fetchChildren(rel: string) {
     nodes.set(rel, { status: "loading" });
@@ -121,6 +137,21 @@ export function renderFileTree(container: HTMLElement) {
     render();
   }
 
+  async function ensureAllFiles() {
+    if (allFiles || loadingAll || wsIdx < 0) return;
+    loadingAll = true;
+    const reqWs = wsIdx;
+    try {
+      const files = await ipc.fuzzyFileList(reqWs);
+      if (reqWs === wsIdx) allFiles = files;
+    } catch {
+      if (reqWs === wsIdx) allFiles = [];
+    } finally {
+      loadingAll = false;
+      render();
+    }
+  }
+
   function resetToActiveWorkspace() {
     const ws = appState.activeWs;
     wsIdx = appState.activeWorkspace;
@@ -130,18 +161,22 @@ export function renderFileTree(container: HTMLElement) {
     selected = null;
     pendingCreate = null;
     renaming = null;
+    filterOpen = false;
+    filterQuery = "";
+    allFiles = null;
     if (rootPath) void fetchChildren("");
     else render();
   }
 
   function refreshLoaded() {
     if (!rootPath) return;
+    allFiles = null;
     for (const [rel, st] of [...nodes.entries()]) {
       if (st.status === "loaded") void fetchChildren(rel);
     }
+    if (filterOpen) void ensureAllFiles();
   }
 
-  /** Drop cached node + expanded state for `rel` and everything under it. */
   function forgetSubtree(rel: string) {
     const prefix = `${rel}/`;
     for (const k of [...nodes.keys()]) {
@@ -180,6 +215,24 @@ export function renderFileTree(container: HTMLElement) {
     return out;
   }
 
+  function filterMatches(): string[] {
+    if (!allFiles) return [];
+    const q = filterQuery.trim().toLowerCase();
+    if (!q) return [];
+    const scored: { p: string; s: number }[] = [];
+    for (const p of allFiles) {
+      const lp = p.toLowerCase();
+      const b = baseName(lp);
+      let s = -1;
+      if (b.startsWith(q)) s = 0;
+      else if (b.includes(q)) s = 1;
+      else if (lp.includes(q)) s = 2;
+      if (s >= 0) scored.push({ p, s });
+    }
+    scored.sort((a, b) => a.s - b.s || a.p.length - b.p.length || a.p.localeCompare(b.p));
+    return scored.slice(0, FILTER_LIMIT).map((x) => x.p);
+  }
+
   function openFile(rel: string, forceCode = false) {
     if (wsIdx < 0) return;
     const tabId = crypto.randomUUID();
@@ -214,6 +267,27 @@ export function renderFileTree(container: HTMLElement) {
     }
   }
 
+  // ── reveal ─────────────────────────────────────────
+
+  async function revealPath(rel: string) {
+    filterOpen = false;
+    filterQuery = "";
+    if (nodes.get("")?.status !== "loaded") await fetchChildren("");
+    const segs = rel.split("/").filter(Boolean);
+    let prefix = "";
+    for (let i = 0; i < segs.length - 1; i++) {
+      prefix = prefix ? `${prefix}/${segs[i]}` : segs[i];
+      expanded.add(prefix);
+      const st = nodes.get(prefix);
+      if (!st || st.status !== "loaded") await fetchChildren(prefix);
+    }
+    selected = rel;
+    render();
+    container
+      .querySelector<HTMLElement>(`.ft-row[data-rel="${CSS.escape(rel)}"]`)
+      ?.scrollIntoView({ block: "center" });
+  }
+
   // ── mutations ──────────────────────────────────────
 
   function beginCreate(parentRelPath: string, kind: "file" | "dir") {
@@ -238,6 +312,7 @@ export function renderFileTree(container: HTMLElement) {
       if (pc.kind === "dir") await ipc.fsCreateDir(wsIdx, rel);
       else await ipc.fsCreateFile(wsIdx, rel);
       selected = rel;
+      allFiles = null;
       await fetchChildren(pc.parentRel);
       if (pc.kind === "file") openFile(rel);
     } catch (e) {
@@ -263,6 +338,7 @@ export function renderFileTree(container: HTMLElement) {
       await ipc.fsRename(wsIdx, from, to);
       forgetSubtree(from);
       if (selected === from) selected = to;
+      allFiles = null;
       await fetchChildren(parentRel(from));
     } catch (e) {
       toast(`Rename failed: ${e}`, "error");
@@ -290,6 +366,7 @@ export function renderFileTree(container: HTMLElement) {
         await ipc.fsDelete(wsIdx, rel);
         forgetSubtree(rel);
         if (selected === rel) selected = null;
+        allFiles = null;
         await fetchChildren(parentRel(rel));
       } catch (e) {
         toast(`Delete failed: ${e}`, "error");
@@ -307,22 +384,35 @@ export function renderFileTree(container: HTMLElement) {
     ipc.clipboardCopy(abs).catch(() => {});
   }
 
+  function fileMenuItems(rel: string, includeReveal: boolean): CtxItem[] {
+    const isMd = MD_RE.test(rel);
+    const items: CtxItem[] = [];
+    if (isMd) {
+      items.push({ label: "Open (Rendered)", action: () => openFile(rel) });
+      items.push({ label: "Preview", action: () => void showMarkdown(rel) });
+      items.push({ label: "Open as Text", action: () => openFile(rel, true) });
+    } else {
+      items.push({ label: "Open", action: () => openFile(rel) });
+    }
+    if (includeReveal) {
+      items.push({ separator: true });
+      items.push({ label: "Reveal in Tree", action: () => void revealPath(rel) });
+    }
+    items.push({ separator: true });
+    items.push({ label: "Copy Path", action: () => copyAbs(rel) });
+    items.push({ label: "Copy Relative Path", action: () => ipc.clipboardCopy(rel).catch(() => {}) });
+    return items;
+  }
+
   function showRowMenu(ev: MouseEvent, row: EntryRow) {
     ev.preventDefault();
     selected = row.rel;
     render();
     const isDir = row.kind === "Dir";
-    const isMd = !isDir && MD_RE.test(row.rel);
     const createTarget = isDir ? row.rel : parentRel(row.rel);
     const items: CtxItem[] = [];
     if (!isDir) {
-      if (isMd) {
-        items.push({ label: "Open (Rendered)", action: () => openFile(row.rel) });
-        items.push({ label: "Preview", action: () => void showMarkdown(row.rel) });
-        items.push({ label: "Open as Text", action: () => openFile(row.rel, true) });
-      } else {
-        items.push({ label: "Open", action: () => openFile(row.rel) });
-      }
+      items.push(...fileMenuItems(row.rel, false));
       items.push({ separator: true });
     }
     items.push({ label: "New File", action: () => beginCreate(createTarget, "file") });
@@ -330,9 +420,11 @@ export function renderFileTree(container: HTMLElement) {
     items.push({ separator: true });
     items.push({ label: "Rename", action: () => beginRename(row.rel) });
     items.push({ label: "Delete", danger: true, action: () => confirmDelete(row.rel) });
-    items.push({ separator: true });
-    items.push({ label: "Copy Path", action: () => copyAbs(row.rel) });
-    items.push({ label: "Copy Relative Path", action: () => ipc.clipboardCopy(row.rel).catch(() => {}) });
+    if (isDir) {
+      items.push({ separator: true });
+      items.push({ label: "Copy Path", action: () => copyAbs(row.rel) });
+      items.push({ label: "Copy Relative Path", action: () => ipc.clipboardCopy(row.rel).catch(() => {}) });
+    }
     openContextMenu(ev.clientX, ev.clientY, items);
   }
 
@@ -351,6 +443,30 @@ export function renderFileTree(container: HTMLElement) {
   function handleKey(e: KeyboardEvent) {
     if (pendingCreate || renaming) return;
     if ((e.target as HTMLElement)?.tagName === "INPUT") return;
+
+    if (filterOpen && filterQuery.trim()) {
+      const matches = filterMatches();
+      if (matches.length === 0) return;
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        filterSel = Math.min(matches.length - 1, filterSel + 1);
+        render();
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        filterSel = Math.max(0, filterSel - 1);
+        render();
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        openFile(matches[filterSel]);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        filterOpen = false;
+        filterQuery = "";
+        render();
+      }
+      return;
+    }
+
     const rows = visibleRows().filter((r): r is EntryRow => r.type === "entry");
     if (rows.length === 0) return;
     const idx = selected ? rows.findIndex((r) => r.rel === selected) : -1;
@@ -410,7 +526,7 @@ export function renderFileTree(container: HTMLElement) {
     }
   }
 
-  // ── render ─────────────────────────────────────────
+  // ── render helpers ─────────────────────────────────
 
   function makeInputRow(row: InputRow): HTMLElement {
     const wrap = document.createElement("div");
@@ -489,6 +605,43 @@ export function renderFileTree(container: HTMLElement) {
     return wrap;
   }
 
+  function renderFilterResults(listEl: HTMLElement) {
+    if (!allFiles) {
+      listEl.appendChild(msg("Indexing files…"));
+      void ensureAllFiles();
+      return;
+    }
+    const matches = filterMatches();
+    if (matches.length === 0) {
+      listEl.appendChild(msg("No matching files"));
+      return;
+    }
+    if (filterSel >= matches.length) filterSel = matches.length - 1;
+    matches.forEach((rel, i) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `ft-row${i === filterSel ? " selected" : ""}`;
+      btn.dataset.rel = rel;
+      btn.style.paddingLeft = "8px";
+      const dir = parentRel(rel);
+      btn.innerHTML = `
+        ${FILE_SVG}
+        <span class="ft-name">${esc(baseName(rel))}</span>
+        ${dir ? `<span class="ft-path">${esc(dir)}</span>` : ""}`;
+      btn.addEventListener("click", () => {
+        filterSel = i;
+        openFile(rel);
+      });
+      btn.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        filterSel = i;
+        render();
+        openContextMenu(e.clientX, e.clientY, fileMenuItems(rel, true));
+      });
+      listEl.appendChild(btn);
+    });
+  }
+
   function render() {
     const listPrev = container.querySelector<HTMLElement>(".ft-list");
     const prevScroll = listPrev?.scrollTop ?? 0;
@@ -504,12 +657,20 @@ export function renderFileTree(container: HTMLElement) {
       <span title="${escAttr(rootPath ?? "")}">${esc(folderName.toUpperCase() || "FILES")}</span>
       <span class="ft-header-actions">
         <button class="sc-header-btn ft-new-file" title="New File">+</button>
+        <button class="sc-header-btn ft-search${filterOpen ? " active" : ""}" title="Search files">${SEARCH_SVG}</button>
         <button class="sc-header-btn ft-toggle-hidden${showHidden ? " active" : ""}" title="Show hidden files">.*</button>
         <button class="sc-header-btn ft-refresh" title="Refresh">⟳</button>
       </span>`;
     header.querySelector(".ft-new-file")!.addEventListener("click", (e) => {
       e.stopPropagation();
       beginCreate("", "file");
+    });
+    header.querySelector(".ft-search")!.addEventListener("click", (e) => {
+      e.stopPropagation();
+      filterOpen = !filterOpen;
+      if (!filterOpen) filterQuery = "";
+      else void ensureAllFiles();
+      render();
     });
     header.querySelector(".ft-toggle-hidden")!.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -523,20 +684,52 @@ export function renderFileTree(container: HTMLElement) {
     });
     container.appendChild(header);
 
+    if (filterOpen) {
+      const fwrap = document.createElement("div");
+      fwrap.className = "ft-filter-wrap";
+      const fin = document.createElement("input");
+      fin.className = "ft-filter";
+      fin.placeholder = "Filter files…";
+      fin.spellcheck = false;
+      fin.value = filterQuery;
+      fin.addEventListener("input", () => {
+        filterQuery = fin.value;
+        filterSel = 0;
+        render();
+      });
+      fin.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          filterOpen = false;
+          filterQuery = "";
+          render();
+        } else if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Enter") {
+          handleKey(e);
+        }
+      });
+      fwrap.appendChild(fin);
+      container.appendChild(fwrap);
+      queueMicrotask(() => fin.focus());
+    }
+
     const listEl = document.createElement("div");
     listEl.className = "ft-list";
     listEl.tabIndex = 0;
     listEl.addEventListener("keydown", handleKey);
     listEl.addEventListener("contextmenu", (e) => {
-      if (e.target === listEl) showRootMenu(e);
+      if (e.target === listEl && !filterOpen) showRootMenu(e);
     });
 
     if (!rootPath) {
-      const empty = document.createElement("div");
-      empty.className = "empty-message";
-      empty.textContent = "No active workspace";
-      listEl.appendChild(empty);
+      listEl.appendChild(msg("No active workspace"));
       container.appendChild(listEl);
+      return;
+    }
+
+    if (filterOpen && filterQuery.trim()) {
+      renderFilterResults(listEl);
+      container.appendChild(listEl);
+      listEl.scrollTop = prevScroll;
       return;
     }
 
@@ -595,6 +788,8 @@ export function renderFileTree(container: HTMLElement) {
   }
 
   resetToActiveWorkspace();
+  revealImpl = (rel: string) => void revealPath(rel);
+
   appState.on("active-workspace-changed", resetToActiveWorkspace);
   appState.on("files-changed", refreshLoaded);
 

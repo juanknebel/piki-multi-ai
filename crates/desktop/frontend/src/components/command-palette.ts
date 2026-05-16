@@ -27,6 +27,9 @@ import { showAboutDialog } from "./dialogs/about-dialog";
 import { getProviderLabel, getProviderKey, type AIProvider } from "../types";
 import { openWebPreviewTab } from "./web-preview-panel";
 import { themeEngine } from "../theme";
+import { revealInFileTree } from "./file-tree";
+import { getCodeEditorFilePath } from "./code-editor-panel";
+import { getMarkdownEditorFilePath } from "./markdown-editor-panel";
 import { getShortcutKey, formatShortcut } from "../shortcuts";
 
 interface Command {
@@ -467,6 +470,26 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
     label: "Show Files",
     category: "View",
     action: () => appState.setActiveView("files"),
+  });
+  cmds.push({
+    id: "reveal-in-files",
+    label: "Reveal Active File in Files",
+    category: "View",
+    action: () => {
+      const ws = appState.activeWs;
+      const tab = ws?.tabs[ws.activeTab];
+      const path =
+        tab?.provider === "CodeEditor"
+          ? getCodeEditorFilePath(tab.id)
+          : tab?.provider === "Markdown"
+            ? getMarkdownEditorFilePath(tab.id)
+            : null;
+      if (!path) {
+        toast("Active tab is not a file", "info");
+        return;
+      }
+      revealInFileTree(path);
+    },
   });
   cmds.push({
     id: "view-git",

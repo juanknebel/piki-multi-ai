@@ -7,14 +7,17 @@ import type { LeafNode } from "../pane-tree";
 import {
   destroyMarkdownEditorPanel,
   getMarkdownEditorFileName,
+  getMarkdownEditorFilePath,
 } from "./markdown-editor-panel";
 import {
   destroyCodeEditorPanel,
   getCodeEditorFileName,
+  getCodeEditorFilePath,
   isCodeEditorDirty,
   showUnsavedChangesPrompt,
 } from "./code-editor-panel";
 import { destroyWebPreviewPanel } from "./web-preview-panel";
+import { revealInFileTree } from "./file-tree";
 
 /**
  * Render a pane's mini tab bar into `container`. Each leaf calls this with its
@@ -68,6 +71,18 @@ export function renderPaneTabBar(container: HTMLElement, leaf: LeafNode) {
       if (target.closest(".tab-close")) return;
       appState.setActiveTabInPane(leaf.id, tabId);
     });
+
+    if (tab.provider === "CodeEditor" || tab.provider === "Markdown") {
+      el.addEventListener("contextmenu", (e) => {
+        const path =
+          tab.provider === "CodeEditor"
+            ? getCodeEditorFilePath(tab.id)
+            : getMarkdownEditorFilePath(tab.id);
+        if (!path) return;
+        e.preventDefault();
+        revealInFileTree(path);
+      });
+    }
 
     const closeBtn = el.querySelector(".tab-close");
     if (closeBtn) {

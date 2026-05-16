@@ -8,8 +8,39 @@
   align-items: center;
 }
 
-.ft-toggle-hidden.active {
+.ft-toggle-hidden.active,
+.ft-search.active {
   color: var(--accent-primary);
+}
+
+.ft-filter-wrap {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.ft-filter {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--border-primary);
+  color: var(--text-bright);
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 6px;
+  border-radius: 3px;
+  outline: none;
+}
+
+.ft-filter:focus {
+  border-color: var(--border-active);
+}
+
+.ft-path {
+  color: var(--text-muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-left: 4px;
 }
 
 .ft-list {

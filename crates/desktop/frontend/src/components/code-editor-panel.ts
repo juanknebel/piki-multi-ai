@@ -95,6 +95,11 @@ export function getCodeEditorFileName(tabId: string): string | null {
   return null;
 }
 
+/** Workspace-relative path of a CodeEditor tab's file, or null. */
+export function getCodeEditorFilePath(tabId: string): string | null {
+  return instances.get(tabId)?.filePath ?? pendingFiles.get(tabId)?.filePath ?? null;
+}
+
 export function hideCodeEditorPanels() {
   for (const inst of instances.values()) {
     inst.element.style.display = "none";

@@ -26,6 +26,9 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getProviderLabel, getProviderKey, type AIProvider } from "../types";
 import { getShortcutKey, formatShortcut } from "../shortcuts";
 import { openWebPreviewTab } from "./web-preview-panel";
+import { revealInFileTree } from "./file-tree";
+import { getCodeEditorFilePath } from "./code-editor-panel";
+import { getMarkdownEditorFilePath } from "./markdown-editor-panel";
 
 // ── Types ───────────────────────────────────────
 
@@ -178,6 +181,24 @@ const MENUS: MenuDefinition[] = [
     items: () => [
       { label: "Explorer", action: () => appState.setActiveView("explorer") },
       { label: "Files", action: () => appState.setActiveView("files") },
+      {
+        label: "Reveal File in Files",
+        action: () => {
+          const ws = appState.activeWs;
+          const tab = ws?.tabs[ws.activeTab];
+          const path =
+            tab?.provider === "CodeEditor"
+              ? getCodeEditorFilePath(tab.id)
+              : tab?.provider === "Markdown"
+                ? getMarkdownEditorFilePath(tab.id)
+                : null;
+          if (!path) {
+            toast("Active tab is not a file", "info");
+            return;
+          }
+          revealInFileTree(path);
+        },
+      },
       { label: "Source Control", action: () => appState.setActiveView("git") },
       { label: "Agents", shortcut: "Ctrl+Shift+A", action: () => showAgentManager() },
       { label: "Kanban Board", shortcut: "Alt+K", action: () => appState.setActiveView("kanban") },

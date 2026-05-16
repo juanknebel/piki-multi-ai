@@ -4,6 +4,7 @@ import { showFileDiff } from "./diff-viewer";
 import { showMarkdown } from "./markdown-viewer";
 import { showWorkspaceDialog } from "./dialogs/workspace-dialog";
 import { registerCodeFile } from "./code-editor-panel";
+import { revealInFileTree } from "./file-tree";
 import { FILE_STATUS_LABELS, FILE_STATUS_CSS } from "../types";
 import { modCtrl } from "../shortcuts";
 import type { ChangedFile, FileStatus } from "../types";
@@ -469,6 +470,9 @@ function renderSection(
         ? `<button class="file-action-btn" data-action="preview" title="Preview rendered markdown">👁</button>`
         : "";
       const isDeleted = file.status === "Deleted";
+      const revealBtn = isDeleted
+        ? ""
+        : `<button class="file-action-btn" data-action="reveal" title="Reveal in Files">⌖</button>`;
       const editBtn = isDeleted
         ? ""
         : `<button class="file-action-btn" data-action="edit" title="Edit in inline editor">✏️</button>`;
@@ -482,6 +486,7 @@ function renderSection(
         </span>
         <span class="file-actions">
           ${previewBtn}
+          ${revealBtn}
           ${editBtn}
           <button class="file-action-btn" data-action="${action}" title="${action === "stage" ? "Stage" : "Unstage"}">
             ${action === "stage" ? "+" : "−"}
@@ -496,6 +501,16 @@ function renderSection(
           .addEventListener("click", (e) => {
             e.stopPropagation();
             showMarkdown(file.path);
+          });
+      }
+
+      // Wire reveal button (skip for deleted files)
+      if (!isDeleted) {
+        item
+          .querySelector<HTMLButtonElement>('.file-action-btn[data-action="reveal"]')!
+          .addEventListener("click", (e) => {
+            e.stopPropagation();
+            revealInFileTree(file.path);
           });
       }
 
