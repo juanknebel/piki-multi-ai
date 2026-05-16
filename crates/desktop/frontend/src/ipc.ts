@@ -98,6 +98,13 @@ export function spawnEditorTab(
   return invoke("spawn_editor_tab", { workspaceIdx, filePath });
 }
 
+export function spawnTerminalAt(
+  workspaceIdx: number,
+  dir: string,
+): Promise<string> {
+  return invoke("spawn_terminal_at", { workspaceIdx, dir });
+}
+
 export function writePty(tabId: string, data: string): Promise<void> {
   return invoke("write_pty", { tabId, data });
 }

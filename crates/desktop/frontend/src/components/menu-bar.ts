@@ -26,7 +26,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getProviderLabel, getProviderKey, type AIProvider } from "../types";
 import { getShortcutKey, formatShortcut } from "../shortcuts";
 import { openWebPreviewTab } from "./web-preview-panel";
-import { revealInFileTree } from "./file-tree";
+import { revealInFileTree, toggleFileTreeAutoReveal } from "./file-tree";
 import { getCodeEditorFilePath } from "./code-editor-panel";
 import { getMarkdownEditorFilePath } from "./markdown-editor-panel";
 
@@ -199,6 +199,7 @@ const MENUS: MenuDefinition[] = [
           revealInFileTree(path);
         },
       },
+      { label: "Auto-reveal Active File", action: () => toggleFileTreeAutoReveal() },
       { label: "Source Control", action: () => appState.setActiveView("git") },
       { label: "Agents", shortcut: "Ctrl+Shift+A", action: () => showAgentManager() },
       { label: "Kanban Board", shortcut: "Alt+K", action: () => appState.setActiveView("kanban") },

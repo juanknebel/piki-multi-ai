@@ -27,7 +27,7 @@ import { showAboutDialog } from "./dialogs/about-dialog";
 import { getProviderLabel, getProviderKey, type AIProvider } from "../types";
 import { openWebPreviewTab } from "./web-preview-panel";
 import { themeEngine } from "../theme";
-import { revealInFileTree } from "./file-tree";
+import { revealInFileTree, toggleFileTreeAutoReveal } from "./file-tree";
 import { getCodeEditorFilePath } from "./code-editor-panel";
 import { getMarkdownEditorFilePath } from "./markdown-editor-panel";
 import { getShortcutKey, formatShortcut } from "../shortcuts";
@@ -490,6 +490,12 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
       }
       revealInFileTree(path);
     },
+  });
+  cmds.push({
+    id: "files-auto-reveal",
+    label: "Toggle Auto-reveal Active File in Files",
+    category: "View",
+    action: () => toggleFileTreeAutoReveal(),
   });
   cmds.push({
     id: "view-git",

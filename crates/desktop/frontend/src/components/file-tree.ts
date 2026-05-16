@@ -2,8 +2,8 @@ import { appState } from "../state";
 import * as ipc from "../ipc";
 import type { DirEntry, EntryKind, FileStatus } from "../types";
 import { FILE_STATUS_LABELS, FILE_STATUS_CSS } from "../types";
-import { registerCodeFile } from "./code-editor-panel";
-import { registerMarkdownFile } from "./markdown-editor-panel";
+import { registerCodeFile, getCodeEditorFilePath } from "./code-editor-panel";
+import { registerMarkdownFile, getMarkdownEditorFilePath } from "./markdown-editor-panel";
 import { showMarkdown } from "./markdown-viewer";
 import { toast } from "./toast";
 
@@ -100,6 +100,7 @@ function openContextMenu(x: number, y: number, items: CtxItem[]) {
 }
 
 let revealImpl: ((rel: string) => void) | null = null;
+let autoRevealToggleImpl: (() => void) | null = null;
 
 /** Switch the sidebar to the Files view and reveal `rel` (workspace-relative)
  *  in the tree: expand its ancestors, select it, and scroll it into view. */
@@ -107,6 +108,40 @@ export function revealInFileTree(rel: string) {
   if (!rel) return;
   appState.setActiveView("files");
   revealImpl?.(rel);
+}
+
+/** Toggle the "auto-reveal active file" preference (persisted). */
+export function toggleFileTreeAutoReveal() {
+  autoRevealToggleImpl?.();
+}
+
+const FT_SETTINGS_KEY = "fileTree";
+
+interface FtPersist {
+  autoReveal?: boolean;
+  byWs?: Record<string, { expanded: string[]; selected: string | null }>;
+}
+
+async function loadFtSettings(): Promise<FtPersist> {
+  try {
+    const raw = await ipc.getSettings();
+    const all = raw ? JSON.parse(raw) : {};
+    const v = all && typeof all === "object" ? all[FT_SETTINGS_KEY] : null;
+    return v && typeof v === "object" ? (v as FtPersist) : {};
+  } catch {
+    return {};
+  }
+}
+
+async function saveFtSettings(next: FtPersist): Promise<void> {
+  try {
+    const raw = await ipc.getSettings();
+    const all = raw ? JSON.parse(raw) : {};
+    all[FT_SETTINGS_KEY] = next;
+    await ipc.setSettings(JSON.stringify(all));
+  } catch {
+    // Best-effort; failure to persist is non-fatal.
+  }
 }
 
 export function renderFileTree(container: HTMLElement) {
@@ -123,6 +158,42 @@ export function renderFileTree(container: HTMLElement) {
   let filterSel = 0;
   let allFiles: string[] | null = null;
   let loadingAll = false;
+  let autoReveal = false;
+  let ftPersist: FtPersist = {};
+  let persistLoaded = false;
+  let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function snapshotPersist() {
+    if (!persistLoaded) return;
+    if (rootPath) {
+      ftPersist.byWs = ftPersist.byWs ?? {};
+      ftPersist.byWs[rootPath] = { expanded: [...expanded], selected };
+    }
+    ftPersist.autoReveal = autoReveal;
+  }
+
+  function flushPersist() {
+    if (!persistLoaded) return;
+    snapshotPersist();
+    void saveFtSettings(ftPersist);
+  }
+
+  function setAutoReveal(v: boolean) {
+    if (autoReveal === v) return;
+    autoReveal = v;
+    schedulePersist();
+    render();
+    toast(`Auto-reveal ${v ? "on" : "off"}`, "info");
+  }
+
+  function schedulePersist() {
+    if (!persistLoaded) return;
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      saveTimer = null;
+      flushPersist();
+    }, 400);
+  }
 
   async function fetchChildren(rel: string) {
     nodes.set(rel, { status: "loading" });
@@ -154,6 +225,13 @@ export function renderFileTree(container: HTMLElement) {
   }
 
   function resetToActiveWorkspace() {
+    // Persist the workspace we're leaving before swapping state.
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    flushPersist();
+
     const ws = appState.activeWs;
     wsIdx = appState.activeWorkspace;
     rootPath = ws?.info.path ?? null;
@@ -165,8 +243,33 @@ export function renderFileTree(container: HTMLElement) {
     filterOpen = false;
     filterQuery = "";
     allFiles = null;
-    if (rootPath) void fetchChildren("");
+
+    const saved = rootPath ? ftPersist.byWs?.[rootPath] : undefined;
+    if (saved) {
+      for (const e of saved.expanded ?? []) expanded.add(e);
+      selected = saved.selected ?? null;
+    }
+    if (rootPath) void restoreTree();
     else render();
+  }
+
+  async function restoreTree() {
+    await fetchChildren("");
+    // Fetch saved-expanded dirs shallowest-first so parents load before
+    // children; only then will visibleRows show the restored expansion.
+    const exp = [...expanded].sort(
+      (a, b) => a.split("/").length - b.split("/").length,
+    );
+    for (const d of exp) {
+      const st = nodes.get(d);
+      if (!st || st.status !== "loaded") await fetchChildren(d);
+    }
+    render();
+    if (selected) {
+      container
+        .querySelector<HTMLElement>(`.ft-row[data-rel="${CSS.escape(selected)}"]`)
+        ?.scrollIntoView({ block: "center" });
+    }
   }
 
   function refreshLoaded() {
@@ -270,9 +373,11 @@ export function renderFileTree(container: HTMLElement) {
 
   // ── reveal ─────────────────────────────────────────
 
-  async function revealPath(rel: string) {
-    filterOpen = false;
-    filterQuery = "";
+  async function revealPath(rel: string, opts?: { keepFilter?: boolean }) {
+    if (!opts?.keepFilter) {
+      filterOpen = false;
+      filterQuery = "";
+    }
     if (nodes.get("")?.status !== "loaded") await fetchChildren("");
     const segs = rel.split("/").filter(Boolean);
     let prefix = "";
@@ -385,6 +490,16 @@ export function renderFileTree(container: HTMLElement) {
     ipc.clipboardCopy(abs).catch(() => {});
   }
 
+  async function openTerminalAt(dir: string) {
+    if (wsIdx < 0) return;
+    try {
+      const id = await ipc.spawnTerminalAt(wsIdx, dir);
+      appState.addTab(wsIdx, { id, provider: "Shell", alive: true });
+    } catch (e) {
+      toast(`Open terminal failed: ${e}`, "error");
+    }
+  }
+
   function fileMenuItems(rel: string, includeReveal: boolean): CtxItem[] {
     const isMd = MD_RE.test(rel);
     const items: CtxItem[] = [];
@@ -400,6 +515,10 @@ export function renderFileTree(container: HTMLElement) {
       items.push({ label: "Reveal in Tree", action: () => void revealPath(rel) });
     }
     items.push({ separator: true });
+    items.push({
+      label: "Open in Terminal",
+      action: () => void openTerminalAt(parentRel(rel)),
+    });
     items.push({ label: "Copy Path", action: () => copyAbs(rel) });
     items.push({ label: "Copy Relative Path", action: () => ipc.clipboardCopy(rel).catch(() => {}) });
     return items;
@@ -423,6 +542,10 @@ export function renderFileTree(container: HTMLElement) {
     items.push({ label: "Delete", danger: true, action: () => confirmDelete(row.rel) });
     if (isDir) {
       items.push({ separator: true });
+      items.push({
+        label: "Open in Terminal",
+        action: () => void openTerminalAt(row.rel),
+      });
       items.push({ label: "Copy Path", action: () => copyAbs(row.rel) });
       items.push({ label: "Copy Relative Path", action: () => ipc.clipboardCopy(row.rel).catch(() => {}) });
     }
@@ -435,6 +558,7 @@ export function renderFileTree(container: HTMLElement) {
       { label: "New File", action: () => beginCreate("", "file") },
       { label: "New Folder", action: () => beginCreate("", "dir") },
       { separator: true },
+      { label: "Open in Terminal", action: () => void openTerminalAt("") },
       { label: "Refresh", action: () => refreshLoaded() },
     ]);
   }
@@ -647,6 +771,7 @@ export function renderFileTree(container: HTMLElement) {
   }
 
   function render() {
+    schedulePersist();
     const listPrev = container.querySelector<HTMLElement>(".ft-list");
     const prevScroll = listPrev?.scrollTop ?? 0;
     container.innerHTML = "";
@@ -662,6 +787,7 @@ export function renderFileTree(container: HTMLElement) {
       <span class="ft-header-actions">
         <button class="sc-header-btn ft-new-file" title="New File">+</button>
         <button class="sc-header-btn ft-search${filterOpen ? " active" : ""}" title="Search files">${SEARCH_SVG}</button>
+        <button class="sc-header-btn ft-autoreveal${autoReveal ? " active" : ""}" title="Auto-reveal active file">◎</button>
         <button class="sc-header-btn ft-toggle-hidden${showHidden ? " active" : ""}" title="Show hidden files">.*</button>
         <button class="sc-header-btn ft-refresh" title="Refresh">⟳</button>
       </span>`;
@@ -675,6 +801,10 @@ export function renderFileTree(container: HTMLElement) {
       if (!filterOpen) filterQuery = "";
       else void ensureAllFiles();
       render();
+    });
+    header.querySelector(".ft-autoreveal")!.addEventListener("click", (e) => {
+      e.stopPropagation();
+      setAutoReveal(!autoReveal);
     });
     header.querySelector(".ft-toggle-hidden")!.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -797,9 +927,30 @@ export function renderFileTree(container: HTMLElement) {
 
   resetToActiveWorkspace();
   revealImpl = (rel: string) => void revealPath(rel);
+  autoRevealToggleImpl = () => setAutoReveal(!autoReveal);
+
+  // Load persisted prefs, then re-apply for the current workspace.
+  void loadFtSettings().then((p) => {
+    ftPersist = p;
+    autoReveal = !!p.autoReveal;
+    persistLoaded = true;
+    resetToActiveWorkspace();
+  });
 
   appState.on("active-workspace-changed", resetToActiveWorkspace);
   appState.on("files-changed", refreshLoaded);
+  appState.on("active-tab-changed", () => {
+    if (!autoReveal || !rootPath) return;
+    const ws = appState.activeWs;
+    const tab = ws ? ws.tabs[ws.activeTab] : undefined;
+    const p =
+      tab?.provider === "CodeEditor"
+        ? getCodeEditorFilePath(tab.id)
+        : tab?.provider === "Markdown"
+          ? getMarkdownEditorFilePath(tab.id)
+          : null;
+    if (p) void revealPath(p, { keepFilter: true });
+  });
 
   void ipc.onFileChanged((evt) => {
     if (evt.workspace_idx !== wsIdx) return;

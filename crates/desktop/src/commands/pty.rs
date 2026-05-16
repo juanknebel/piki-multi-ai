@@ -298,6 +298,92 @@ fn shell_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
 }
 
+/// Spawns a Shell tab whose working directory is `dir` (workspace-relative).
+/// Powers the file tree's "Open in Terminal" action. Rejects paths that
+/// escape the workspace root.
+#[tauri::command]
+pub async fn spawn_terminal_at(
+    app_handle: AppHandle,
+    state: State<'_, Mutex<DesktopApp>>,
+    workspace_idx: usize,
+    dir: String,
+) -> Result<String, String> {
+    use std::path::{Component, Path};
+
+    let rel = Path::new(&dir);
+    if rel.is_absolute()
+        || rel
+            .components()
+            .any(|c| matches!(c, Component::ParentDir | Component::Prefix(_)))
+    {
+        return Err(format!("Invalid path: {dir}"));
+    }
+
+    let shell_command = {
+        let app = state.lock();
+        let custom_shell = app
+            .storage
+            .ui_prefs
+            .as_ref()
+            .and_then(|p| p.get_preference("settings").ok().flatten())
+            .and_then(|json| {
+                serde_json::from_str::<serde_json::Value>(&json)
+                    .ok()?
+                    .get("shell")?
+                    .as_str()
+                    .filter(|s| !s.is_empty())
+                    .map(String::from)
+            });
+        drop(app);
+        custom_shell.unwrap_or_else(|| AIProvider::Shell.resolved_command())
+    };
+
+    let mut tab = DesktopTab::new(AIProvider::Shell);
+    let tab_id = tab.id.clone();
+
+    let (worktree_path, integration_dir) = {
+        let app = state.lock();
+        if workspace_idx >= app.workspaces.len() {
+            return Err("Workspace index out of range".to_string());
+        }
+        (
+            app.workspaces[workspace_idx].info.path.clone(),
+            app.paths.shell_integration_dir(),
+        )
+    };
+
+    let cwd = worktree_path.join(rel);
+    let args: Vec<String> = Vec::new();
+    let (extra_env, extra_args, integration_on) =
+        shell_integration_setup(&AIProvider::Shell, &shell_command, &integration_dir);
+
+    let pty = RawPtySession::spawn(
+        app_handle,
+        tab_id.clone(),
+        &cwd,
+        24,
+        80,
+        &shell_command,
+        &args,
+        &extra_env,
+        &extra_args,
+        integration_on,
+    )
+    .map_err(|e| format!("Failed to spawn PTY: {e}"))?;
+
+    tab.pty = Some(pty);
+    tab.alive = true;
+
+    let mut app = state.lock();
+    if workspace_idx < app.workspaces.len() {
+        app.workspaces[workspace_idx].tabs.push(tab);
+        app.workspaces[workspace_idx].active_tab =
+            app.workspaces[workspace_idx].tabs.len() - 1;
+    }
+
+    Ok(tab_id)
+}
+
 #[tauri::command]
 pub async fn set_active_tab(
     state: State<'_, Mutex<DesktopApp>>,
