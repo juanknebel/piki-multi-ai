@@ -164,6 +164,25 @@ async function getLanguageExtension(filePath: string): Promise<Extension | null>
     case "md":
     case "markdown":
       return (await import("@codemirror/lang-markdown")).markdown();
+    case "yaml":
+    case "yml":
+      return (await import("@codemirror/lang-yaml")).yaml();
+    case "toml": {
+      const { StreamLanguage } = await import("@codemirror/language");
+      const { toml } = await import("@codemirror/legacy-modes/mode/toml");
+      return StreamLanguage.define(toml);
+    }
+    // No dedicated CM6 Makefile mode exists; the `shell` legacy mode is a
+    // reasonable approximation (recipes are shell, `#` comments).
+    case "sh":
+    case "bash":
+    case "zsh":
+    case "mk":
+    case "makefile": {
+      const { StreamLanguage } = await import("@codemirror/language");
+      const { shell } = await import("@codemirror/legacy-modes/mode/shell");
+      return StreamLanguage.define(shell);
+    }
     default:
       return null;
   }
