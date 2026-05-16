@@ -183,6 +183,73 @@ async function getLanguageExtension(filePath: string): Promise<Extension | null>
       const { shell } = await import("@codemirror/legacy-modes/mode/shell");
       return StreamLanguage.define(shell);
     }
+    case "c":
+    case "h":
+    case "cpp":
+    case "cc":
+    case "cxx":
+    case "hpp":
+    case "hh":
+      return (await import("@codemirror/lang-cpp")).cpp();
+    case "go":
+      return (await import("@codemirror/lang-go")).go();
+    case "java":
+      return (await import("@codemirror/lang-java")).java();
+    case "php":
+      return (await import("@codemirror/lang-php")).php();
+    case "sql":
+      return (await import("@codemirror/lang-sql")).sql();
+    case "xml":
+      return (await import("@codemirror/lang-xml")).xml();
+    case "vue":
+      return (await import("@codemirror/lang-vue")).vue();
+    case "scss":
+    case "sass":
+      return (await import("@codemirror/lang-sass")).sass({ indented: ext === "sass" });
+    case "rb":
+    case "rake":
+    case "gemspec":
+    case "gemfile":
+    case "rakefile": {
+      const { StreamLanguage } = await import("@codemirror/language");
+      const { ruby } = await import("@codemirror/legacy-modes/mode/ruby");
+      return StreamLanguage.define(ruby);
+    }
+    case "dockerfile": {
+      const { StreamLanguage } = await import("@codemirror/language");
+      const { dockerFile } = await import("@codemirror/legacy-modes/mode/dockerfile");
+      return StreamLanguage.define(dockerFile);
+    }
+    case "ini":
+    case "cfg":
+    case "conf":
+    case "properties":
+    case "editorconfig":
+    case "npmrc":
+    case "gitconfig":
+    case "env": {
+      const { StreamLanguage } = await import("@codemirror/language");
+      const { properties } = await import("@codemirror/legacy-modes/mode/properties");
+      return StreamLanguage.define(properties);
+    }
+    case "diff":
+    case "patch": {
+      const { StreamLanguage } = await import("@codemirror/language");
+      const { diff } = await import("@codemirror/legacy-modes/mode/diff");
+      return StreamLanguage.define(diff);
+    }
+    case "lua": {
+      const { StreamLanguage } = await import("@codemirror/language");
+      const { lua } = await import("@codemirror/legacy-modes/mode/lua");
+      return StreamLanguage.define(lua);
+    }
+    case "ps1":
+    case "psm1":
+    case "psd1": {
+      const { StreamLanguage } = await import("@codemirror/language");
+      const { powerShell } = await import("@codemirror/legacy-modes/mode/powershell");
+      return StreamLanguage.define(powerShell);
+    }
     default:
       return null;
   }
