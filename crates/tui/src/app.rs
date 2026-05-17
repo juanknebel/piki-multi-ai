@@ -279,6 +279,21 @@ pub struct Tab {
     pub api_state: Option<ApiTabState>,
 }
 
+impl Tab {
+    /// Snapshot of the structured Claude agent state for this tab, if the
+    /// cli-agent OSC 777 channel has produced at least one event. `None`
+    /// for non-Claude tabs (or before the first event). Locks the shell
+    /// mutex briefly — safe to call from pure render functions.
+    pub fn cli_agent_snapshot(
+        &self,
+    ) -> Option<(piki_core::cli_agent::CliAgentStatus, Option<String>)> {
+        let shell = self.pty_session.as_ref()?.shell()?;
+        let guard = shell.lock();
+        let agent = guard.state.cli_agent.as_ref()?;
+        Some((agent.status, agent.last_summary.clone()))
+    }
+}
+
 /// A single workspace backed by a git worktree
 pub struct Workspace {
     /// Core workspace metadata (shared with other frontends)

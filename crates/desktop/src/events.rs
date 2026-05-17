@@ -70,6 +70,7 @@ pub fn spawn_idle_watcher_loop(app_handle: AppHandle) {
                 String,
                 std::time::Duration,
                 Option<String>,
+                bool,
             )> = Vec::new();
             {
                 let mut app = state.lock();
@@ -82,9 +83,11 @@ pub fn spawn_idle_watcher_loop(app_handle: AppHandle) {
                     .iter()
                     .filter_map(|c| c.icon.clone().map(|i| (c.name.clone(), i)))
                     .collect();
+                let active_ws = app.active_workspace;
                 for (ws_idx, ws) in app.workspaces.iter_mut().enumerate() {
                     let ws_name = ws.info.name.clone();
-                    for tab in &mut ws.tabs {
+                    let active_tab = ws.active_tab;
+                    for (tab_idx, tab) in ws.tabs.iter_mut().enumerate() {
                         let Some(ref pty) = tab.pty else { continue };
                         let Some(ref mut watcher) = tab.idle_watcher else {
                             continue;
@@ -118,6 +121,7 @@ pub fn spawn_idle_watcher_loop(app_handle: AppHandle) {
                                 provider_label,
                                 sig.silent_for,
                                 icon,
+                                ws_idx == active_ws && tab_idx == active_tab,
                             ));
                         }
                     }
@@ -126,13 +130,16 @@ pub fn spawn_idle_watcher_loop(app_handle: AppHandle) {
             for ev in events {
                 let _ = app_handle.emit("pty-attention", ev);
             }
-            for (origin, ws_name, provider_label, silent_for, icon) in pending_idle {
+            for (origin, ws_name, provider_label, silent_for, icon, from_active_view) in
+                pending_idle
+            {
                 notifications::notify_agent_idle(
                     &origin,
                     &ws_name,
                     &provider_label,
                     silent_for,
                     icon.as_deref(),
+                    from_active_view,
                 );
             }
         }

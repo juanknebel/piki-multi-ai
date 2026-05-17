@@ -295,7 +295,7 @@ fn handle_shell_command_end(
     let Some(state) = app_handle.try_state::<Mutex<DesktopApp>>() else {
         return;
     };
-    let (workspace_idx, workspace_name) = {
+    let (workspace_idx, workspace_name, from_active_view) = {
         let app = state.lock();
         let Some((idx, ws)) = app
             .workspaces
@@ -305,7 +305,9 @@ fn handle_shell_command_end(
         else {
             return;
         };
-        (idx, ws.info.name.clone())
+        let active_view = app.active_workspace == idx
+            && ws.tabs.get(ws.active_tab).map(|t| t.id.as_str()) == Some(tab_id);
+        (idx, ws.info.name.clone(), active_view)
     };
     let _ = app_handle.emit(
         "pty-attention",
@@ -321,6 +323,7 @@ fn handle_shell_command_end(
         &workspace_name,
         exit_code,
         command.as_deref(),
+        from_active_view,
     );
 }
 
@@ -367,7 +370,7 @@ fn handle_cli_agent(app_handle: &AppHandle, tab_id: &str, ev: &CliAgentEvent) {
     let Some(state) = app_handle.try_state::<Mutex<DesktopApp>>() else {
         return;
     };
-    let (workspace_idx, workspace_name, icon) = {
+    let (workspace_idx, workspace_name, icon, from_active_view) = {
         let app = state.lock();
         let Some((idx, ws)) = app
             .workspaces
@@ -386,7 +389,9 @@ fn handle_cli_agent(app_handle: &AppHandle, tab_id: &str, ev: &CliAgentEvent) {
             .as_deref()
             .and_then(|l| app.provider_manager.get(l))
             .and_then(|c| c.icon.clone());
-        (idx, ws.info.name.clone(), icon)
+        let active_view = app.active_workspace == idx
+            && ws.tabs.get(ws.active_tab).map(|t| t.id.as_str()) == Some(tab_id);
+        (idx, ws.info.name.clone(), icon, active_view)
     };
 
     let _ = app_handle.emit(
@@ -404,6 +409,7 @@ fn handle_cli_agent(app_handle: &AppHandle, tab_id: &str, ev: &CliAgentEvent) {
         kind,
         summary.as_deref(),
         icon.as_deref(),
+        from_active_view,
     );
 }
 

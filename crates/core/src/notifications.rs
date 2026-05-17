@@ -152,6 +152,7 @@ pub fn notify_agent_idle(
     agent_label: &str,
     silent_for: Duration,
     icon: Option<&str>,
+    from_active_view: bool,
 ) {
     let icon_prefix = icon.map(|i| format!("{i} ")).unwrap_or_default();
     let idle_secs = silent_for.as_secs().max(1);
@@ -165,7 +166,7 @@ pub fn notify_agent_idle(
         ),
         created_at: Instant::now(),
     };
-    push_and_toast(item);
+    push_and_toast(item, from_active_view);
 }
 
 /// Notification for a shell tab whose OSC 133 `command-end` marker just
@@ -178,6 +179,7 @@ pub fn notify_command_end(
     workspace_name: &str,
     exit_code: Option<i32>,
     command: Option<&str>,
+    from_active_view: bool,
 ) {
     let cmd_suffix = command
         .map(|c| format!(" `{c}`"))
@@ -207,7 +209,7 @@ pub fn notify_command_end(
         body,
         created_at: Instant::now(),
     };
-    push_and_toast(item);
+    push_and_toast(item, from_active_view);
 }
 
 /// Notification for a structured Claude Code lifecycle event (Warp-style,
@@ -222,6 +224,7 @@ pub fn notify_cli_agent(
     kind: &str,
     summary: Option<&str>,
     icon: Option<&str>,
+    from_active_view: bool,
 ) {
     let icon_prefix = icon.map(|i| format!("{i} ")).unwrap_or_default();
     let detail = summary
@@ -254,17 +257,23 @@ pub fn notify_cli_agent(
         body,
         created_at: Instant::now(),
     };
-    push_and_toast(item);
+    push_and_toast(item, from_active_view);
 }
 
-fn push_and_toast(item: NotificationItem) {
+/// `visible` means the event's tab is the one the user is currently looking
+/// at (active workspace + active tab). The mailbox always records; the OS
+/// toast is suppressed **only** when the event is both `visible` *and* the
+/// piki window has OS focus — i.e. the user would already see it. A
+/// background-tab event still toasts even while piki is focused, since the
+/// user can't see a tab they aren't on (this is the whole point of the
+/// active-tab gate; window focus alone is too coarse).
+fn push_and_toast(item: NotificationItem, visible: bool) {
     {
         let mut mb = mailbox().lock();
         mb.push(item.clone());
     }
-    // Mailbox always records the entry; the OS toast is gated on window
-    // focus so the user isn't double-notified when they're already on piki.
-    if !WINDOW_HAS_FOCUS.load(Ordering::Relaxed) {
+    let already_seen = visible && WINDOW_HAS_FOCUS.load(Ordering::Relaxed);
+    if !already_seen {
         spawn_toast(item.title, item.body);
     }
 }
@@ -361,13 +370,14 @@ mod tests {
         // push_and_toast).
         _reset_mailbox_for_test();
         set_window_focused(true);
-        push_and_toast(fresh_item("tab-focus-on", "idle"));
+        // visible=true + focused → OS toast suppressed; mailbox still records.
+        push_and_toast(fresh_item("tab-focus-on", "idle"), true);
         assert_eq!(mailbox_snapshot().len(), 1);
 
-        // Unfocused: mailbox records and toast would fire.
+        // Unfocused: mailbox records and toast would fire (visibility moot).
         _reset_mailbox_for_test();
         set_window_focused(false);
-        push_and_toast(fresh_item("tab-focus-off", "idle"));
+        push_and_toast(fresh_item("tab-focus-off", "idle"), true);
         assert_eq!(mailbox_snapshot().len(), 1);
 
         _reset_mailbox_for_test();
