@@ -72,17 +72,25 @@ export function renderPaneTabBar(container: HTMLElement, leaf: LeafNode) {
       appState.setActiveTabInPane(leaf.id, tabId);
     });
 
-    if (tab.provider === "CodeEditor" || tab.provider === "Markdown") {
-      el.addEventListener("contextmenu", (e) => {
+    el.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      const items: { label: string; run: () => void }[] = [];
+      if (tab.provider === "CodeEditor" || tab.provider === "Markdown") {
         const path =
           tab.provider === "CodeEditor"
             ? getCodeEditorFilePath(tab.id)
             : getMarkdownEditorFilePath(tab.id);
-        if (!path) return;
-        e.preventDefault();
-        revealInFileTree(path);
-      });
-    }
+        if (path)
+          items.push({ label: "Reveal in Files", run: () => revealInFileTree(path) });
+      }
+      items.push(
+        { label: "Split Right (Shell)", run: () => appState.splitPaneWithShell(leaf.id, "right") },
+        { label: "Split Down (Shell)", run: () => appState.splitPaneWithShell(leaf.id, "down") },
+        { label: "Split Right (empty)", run: () => appState.splitPane(leaf.id, "right") },
+        { label: "Split Down (empty)", run: () => appState.splitPane(leaf.id, "down") },
+      );
+      showTabContextMenu(e.clientX, e.clientY, items);
+    });
 
     const closeBtn = el.querySelector(".tab-close");
     if (closeBtn) {
@@ -173,9 +181,16 @@ async function showNewTabMenu(anchor: HTMLElement, leaf: LeafNode) {
   // Combine: configured providers + tool tabs
   const allProviders: AIProvider[] = [...configuredProviders, ...TOOL_TABS];
 
-  const splitActions: { label: string; icon: string; dir: "right" | "down" }[] = [
-    { label: "Split Right", icon: "⇥", dir: "right" },
-    { label: "Split Down", icon: "⤓", dir: "down" },
+  const splitActions: {
+    label: string;
+    icon: string;
+    dir: "right" | "down";
+    shell: boolean;
+  }[] = [
+    { label: "Split Right", icon: "⇥", dir: "right", shell: true },
+    { label: "Split Down", icon: "⤓", dir: "down", shell: true },
+    { label: "Split Right (empty)", icon: "⇥", dir: "right", shell: false },
+    { label: "Split Down (empty)", icon: "⤓", dir: "down", shell: false },
   ];
 
   const menu = document.createElement("div");
@@ -267,7 +282,8 @@ async function showNewTabMenu(anchor: HTMLElement, leaf: LeafNode) {
     `;
     item.addEventListener("click", () => {
       menu.remove();
-      appState.splitPane(leaf.id, action.dir);
+      if (action.shell) appState.splitPaneWithShell(leaf.id, action.dir);
+      else appState.splitPane(leaf.id, action.dir);
     });
     item.addEventListener("mouseenter", () => {
       item.style.background = "var(--bg-active)";
@@ -283,6 +299,64 @@ async function showNewTabMenu(anchor: HTMLElement, leaf: LeafNode) {
   document.body.appendChild(menu);
 
   // Close on outside click
+  const close = (e: MouseEvent) => {
+    if (!menu.contains(e.target as Node)) {
+      menu.remove();
+      document.removeEventListener("click", close);
+    }
+  };
+  setTimeout(() => document.addEventListener("click", close), 0);
+}
+
+function showTabContextMenu(
+  x: number,
+  y: number,
+  items: { label: string; run: () => void }[],
+) {
+  document.querySelector(".tab-ctx-menu")?.remove();
+  const menu = document.createElement("div");
+  menu.className = "tab-ctx-menu";
+  menu.style.cssText = `
+    position: fixed;
+    background: var(--bg-dropdown);
+    border: 1px solid var(--dialog-border);
+    border-radius: var(--radius-md);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5), 0 0 1px rgba(255,255,255,0.05);
+    padding: 4px 0;
+    z-index: 50;
+    min-width: 180px;
+    animation: dialog-enter 0.12s cubic-bezier(0.16,1,0.3,1);
+  `;
+  for (const it of items) {
+    const item = document.createElement("button");
+    item.style.cssText = `
+      display: block;
+      width: 100%;
+      padding: 7px 14px;
+      font-size: 12px;
+      color: var(--text-primary);
+      text-align: left;
+      transition: background 0.1s, color 0.1s;
+    `;
+    item.textContent = it.label;
+    item.addEventListener("click", () => {
+      menu.remove();
+      it.run();
+    });
+    item.addEventListener("mouseenter", () => {
+      item.style.background = "var(--bg-active)";
+      item.style.color = "var(--text-bright)";
+    });
+    item.addEventListener("mouseleave", () => {
+      item.style.background = "";
+      item.style.color = "var(--text-primary)";
+    });
+    menu.appendChild(item);
+  }
+  document.body.appendChild(menu);
+  const r = menu.getBoundingClientRect();
+  menu.style.left = `${Math.max(4, Math.min(x, window.innerWidth - r.width - 4))}px`;
+  menu.style.top = `${Math.max(4, Math.min(y, window.innerHeight - r.height - 4))}px`;
   const close = (e: MouseEvent) => {
     if (!menu.contains(e.target as Node)) {
       menu.remove();

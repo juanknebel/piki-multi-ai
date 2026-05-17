@@ -207,6 +207,28 @@ class AppState extends EventTarget {
     this._schedulePaneSave();
   }
 
+  /** Add a tab to the workspace's ROOT leaf (top-left leaf of the tree)
+   *  rather than the active pane. Used by singletons (Kanban / API /
+   *  Web Preview) so they open at the top level even when a sub-pane is
+   *  focused. They stay open-once via `focusSingletonTab`. */
+  addTabToRoot(workspaceIdx: number, tab: TabInfo) {
+    const ws = this._workspaces[workspaceIdx];
+    if (!ws) return;
+    ws.tabs.push(tab);
+    ws.activeTab = ws.tabs.length - 1;
+    const rootLeaf = allLeaves(ws.paneTree)[0];
+    const targetPaneId = rootLeaf ? rootLeaf.id : ws.paneTree.id;
+    ws.paneTree = addTabToPane(ws.paneTree, targetPaneId, tab.id);
+    ws.activePaneId = targetPaneId;
+    if (workspaceIdx === this._activeWorkspace) {
+      this.emit("tabs-changed");
+      this.emit("active-tab-changed");
+      this.emit("pane-tree-changed");
+      this.emit("active-pane-changed");
+    }
+    this._schedulePaneSave();
+  }
+
   /** Providers that must exist at most once per workspace regardless of how
    *  many panes are open. The "+" menu, sidebar, menu bar, and command palette
    *  all route through `focusSingletonTab` to enforce this. */
@@ -448,6 +470,95 @@ class AppState extends EventTarget {
     this.emit("active-pane-changed");
     this._schedulePaneSave();
     return split.newPaneId;
+  }
+
+  /** Workspace-relative dir for a new shell inheriting `srcTabId`'s shell
+   *  cwd. Returns null when unknown or escaping the workspace (caller then
+   *  spawns at the workspace root). */
+  private _relativeShellDir(
+    ws: WorkspaceState,
+    srcTabId: string | null,
+  ): string | null {
+    if (!srcTabId) return null;
+    const cwd = this.getTabShellState(srcTabId)?.cwd;
+    if (!cwd) return null;
+    const root = String(ws.info.path).replace(/\/+$/, "");
+    if (cwd === root) return ".";
+    const prefix = `${root}/`;
+    if (!cwd.startsWith(prefix)) return null;
+    const rel = cwd.slice(prefix.length);
+    if (!rel || rel.includes("..") || rel.startsWith("/")) return null;
+    return rel;
+  }
+
+  /** Split `paneId`, then spawn a live Shell into the NEW pane, inheriting
+   *  the source pane's active Shell cwd when shell integration knows it. */
+  splitPaneWithShell(paneId: PaneId, dir: SplitDir): PaneId | null {
+    const ws = this.activeWs;
+    if (!ws) return null;
+    const srcPane = findPane(ws.paneTree, paneId);
+    const srcTabId =
+      srcPane && srcPane.kind === "leaf" ? srcPane.activeTabId : null;
+    const srcTab = ws.tabs.find((t) => t.id === srcTabId);
+    const inheritDir =
+      srcTab?.provider === "Shell"
+        ? this._relativeShellDir(ws, srcTabId)
+        : null;
+
+    const split = splitPaneTree(ws.paneTree, paneId, dir);
+    if (split.root === ws.paneTree) return null;
+    ws.paneTree = split.root;
+    ws.activePaneId = split.newPaneId;
+    this.emit("pane-tree-changed");
+    this.emit("active-pane-changed");
+    this._schedulePaneSave();
+
+    void this._spawnShellIntoPane(
+      this._activeWorkspace,
+      split.newPaneId,
+      inheritDir,
+    );
+    return split.newPaneId;
+  }
+
+  splitActivePaneWithShell(dir: SplitDir): PaneId | null {
+    const ws = this.activeWs;
+    if (!ws) return null;
+    return this.splitPaneWithShell(ws.activePaneId, dir);
+  }
+
+  /** Spawn a Shell tab and attach it to a specific (already-created) pane id.
+   *  Targets the pane by id so a later active-pane change can't misroute the
+   *  async result; falls back to active pane / root if the pane was closed. */
+  private async _spawnShellIntoPane(
+    wsIdx: number,
+    paneId: PaneId,
+    relDir: string | null,
+  ): Promise<void> {
+    try {
+      const tabId =
+        relDir !== null
+          ? await ipc.spawnTerminalAt(wsIdx, relDir)
+          : await ipc.spawnTab(wsIdx, "Shell");
+      const ws = this._workspaces[wsIdx];
+      if (!ws) return;
+      ws.tabs.push({ id: tabId, provider: "Shell", alive: true });
+      const target = findPane(ws.paneTree, paneId)
+        ? paneId
+        : findPane(ws.paneTree, ws.activePaneId)
+          ? ws.activePaneId
+          : ws.paneTree.id;
+      ws.paneTree = addTabToPane(ws.paneTree, target, tabId);
+      ws.activeTab = ws.tabs.length - 1;
+      if (wsIdx === this._activeWorkspace) {
+        this.emit("tabs-changed");
+        this.emit("active-tab-changed");
+        this.emit("pane-tree-changed");
+      }
+      this._schedulePaneSave();
+    } catch (err) {
+      console.error("Failed to spawn shell into split pane:", err);
+    }
   }
 
   closePane(paneId: PaneId) {

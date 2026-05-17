@@ -41,7 +41,7 @@ export function openWebPreviewTab() {
     return;
   }
   const tabId = `web-${Date.now()}`;
-  appState.addTab(appState.activeWorkspace, {
+  appState.addTabToRoot(appState.activeWorkspace, {
     id: tabId,
     provider: "WebPreview",
     alive: true,

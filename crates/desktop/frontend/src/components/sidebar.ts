@@ -67,7 +67,7 @@ export async function initSidebar() {
     if (appState.focusSingletonTab("Kanban")) return;
     try {
       const tabId = await ipc.spawnTab(appState.activeWorkspace, "Kanban");
-      appState.addTab(appState.activeWorkspace, { id: tabId, provider: "Kanban", alive: true });
+      appState.addTabToRoot(appState.activeWorkspace, { id: tabId, provider: "Kanban", alive: true });
     } catch (err) {
       console.error("Failed to open Kanban tab:", err);
     }
@@ -77,7 +77,7 @@ export async function initSidebar() {
     if (appState.focusSingletonTab("Api")) return;
     try {
       const tabId = await ipc.spawnTab(appState.activeWorkspace, "Api");
-      appState.addTab(appState.activeWorkspace, { id: tabId, provider: "Api", alive: true });
+      appState.addTabToRoot(appState.activeWorkspace, { id: tabId, provider: "Api", alive: true });
     } catch (err) {
       console.error("Failed to open API Explorer tab:", err);
     }

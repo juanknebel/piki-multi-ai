@@ -155,8 +155,8 @@ async function init() {
   bindAction("toggle-sidebar", () => toggleSidebar());
   bindAction("toggle-chat", () => toggleChatPanel());
   bindAction("help", () => showHelpDialog());
-  bindAction("split-right", () => appState.splitActivePane("right"));
-  bindAction("split-down", () => appState.splitActivePane("down"));
+  bindAction("split-right", () => appState.splitActivePaneWithShell("right"));
+  bindAction("split-down", () => appState.splitActivePaneWithShell("down"));
   bindAction("close-pane", () => {
     const id = appState.activePaneId;
     if (id) appState.closePane(id);
