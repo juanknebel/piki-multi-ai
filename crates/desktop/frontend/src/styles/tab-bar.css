@@ -3,7 +3,10 @@
 .ws-tab-bar {
   display: flex;
   align-items: stretch;
-  background: var(--tab-inactive-bg);
+  /* Match the sidebar header / content background so the strip reads as
+     window chrome (and an empty bar isn't a stray lighter band). Tab chips
+     paint their own bg, so this only affects the empty gap + `+`. */
+  background: var(--bg-primary);
   border-bottom: 1px solid var(--border-primary);
   overflow-x: auto;
   overflow-y: hidden;
