@@ -82,4 +82,12 @@ impl DataPaths {
     pub fn shell_integration_dir(&self) -> PathBuf {
         self.base.join("shell-integration")
     }
+
+    /// Claude Code hooks directory: `<base>/claude-hooks`. Holds the
+    /// materialized hook scripts and the generated `settings.json` that piki
+    /// passes via `claude --settings` to drive the structured cli-agent
+    /// (OSC 777) channel.
+    pub fn claude_hooks_dir(&self) -> PathBuf {
+        self.base.join("claude-hooks")
+    }
 }

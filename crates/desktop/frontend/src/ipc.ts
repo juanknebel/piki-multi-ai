@@ -751,6 +751,14 @@ export function onPtyShellEvent(
   );
 }
 
+export function onPtyAgentEvent(
+  callback: (event: import("./types").PtyAgentEvent) => void,
+): Promise<UnlistenFn> {
+  return listen<import("./types").PtyAgentEvent>("pty-agent-event", (e) =>
+    callback(e.payload),
+  );
+}
+
 export function onPtyAttention(
   callback: (event: import("./types").PtyAttentionEvent) => void,
 ): Promise<UnlistenFn> {

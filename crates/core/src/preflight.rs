@@ -51,6 +51,27 @@ pub fn run_preflight_checks() -> PreflightResult {
         warnings.push("delta not found — diffs will use plain git diff".to_string());
     }
 
+    // claude (optional — only needed for Claude agent tabs / dispatch)
+    if shell_env::sync_command("claude")
+        .arg("--version")
+        .output()
+        .map(|o| !o.status.success())
+        .unwrap_or(true)
+    {
+        warnings.push(
+            "claude not found — Claude agent tabs and dispatch are unavailable".to_string(),
+        );
+    }
+
+    // jq (optional — required for the structured Claude integration; without
+    // it Claude tabs fall back to the byte-silence idle heuristic)
+    if !crate::cli_agent::install::jq_available() {
+        warnings.push(
+            "jq not found — structured Claude integration disabled (idle heuristic fallback)"
+                .to_string(),
+        );
+    }
+
     PreflightResult { errors, warnings }
 }
 

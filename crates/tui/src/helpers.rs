@@ -6,6 +6,7 @@ use crate::app::{self, App};
 use crate::clipboard;
 use crate::ui;
 use piki_core::AIProvider;
+use piki_core::cli_agent::install as cli_agent_install;
 use piki_core::pty::PtySession;
 use piki_core::shell_integration::install as shell_install;
 
@@ -64,8 +65,10 @@ pub(crate) async fn spawn_tab(
         (cmd, prompt_args)
     };
 
-    // Shell integration only applies to Shell tabs (provider tabs run their
-    // binary directly with no shell wrapper to emit OSC markers).
+    // Shell tabs get OSC 133/7 shell integration. Claude provider tabs get
+    // the structured cli-agent (OSC 777) hooks. Both ride the same OSC
+    // parser, so both enable `integration_on`. Everything else runs bare.
+    let is_claude = matches!(provider, AIProvider::Custom(_)) && cmd == "claude";
     let (extra_env, extra_args, integration_on) = if *provider == AIProvider::Shell {
         match shell_install::setup_for(&cmd, &paths.shell_integration_dir()) {
             Ok(Some(setup)) => {
@@ -75,6 +78,17 @@ pub(crate) async fn spawn_tab(
             Ok(None) => (Vec::new(), Vec::new(), false),
             Err(e) => {
                 tracing::warn!(error = %e, shell = %cmd, "shell integration setup failed");
+                (Vec::new(), Vec::new(), false)
+            }
+        }
+    } else if is_claude {
+        match cli_agent_install::setup_for_claude(&paths.claude_hooks_dir()) {
+            Ok(setup) => {
+                let env: Vec<(String, String)> = setup.env.into_iter().collect();
+                (env, setup.extra_args, true)
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "claude cli-agent hook setup failed");
                 (Vec::new(), Vec::new(), false)
             }
         }

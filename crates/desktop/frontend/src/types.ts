@@ -115,6 +115,45 @@ export interface PtyShellEvent {
   cwd?: string;
 }
 
+/** Coarse status of a Claude Code agent tab, derived from its structured
+ *  OSC 777 lifecycle events. */
+export type CliAgentStatus =
+  | "running"
+  | "waiting-permission"
+  | "idle"
+  | "done";
+
+/** A structured Claude Code lifecycle event (Warp-style, delivered in-band
+ *  via OSC 777). Drives the per-tab agent status glyph + summary. */
+export interface PtyAgentEvent {
+  tab_id: string;
+  status: CliAgentStatus;
+  /** cli-agent event name: `session_start`, `prompt_submit`,
+   *  `tool_complete`, `permission_request`, `notification`, `stop`. */
+  kind: string;
+  summary?: string;
+}
+
+/** Glyph / label / theme color for a Claude agent status. Shared by the
+ *  status bar (full) and the workspace tab bar (dot only). */
+export function cliAgentStatusView(status: CliAgentStatus): {
+  glyph: string;
+  label: string;
+  color: string;
+} {
+  switch (status) {
+    case "waiting-permission":
+      return { glyph: "⚠", label: "needs permission", color: "var(--accent-warm)" };
+    case "idle":
+      return { glyph: "⏳", label: "waiting for input", color: "var(--accent-primary)" };
+    case "done":
+      return { glyph: "✓", label: "done", color: "var(--git-added)" };
+    case "running":
+    default:
+      return { glyph: "▷", label: "running", color: "var(--text-muted)" };
+  }
+}
+
 /** Workspace-level "needs attention" signal. Sources: `provider-idle` (a
  *  provider tab fell silent), `shell-command-end` (a shell tab finished a
  *  command — emitted by the frontend when it observes a `pty-shell-event` of
@@ -122,7 +161,7 @@ export interface PtyShellEvent {
 export interface PtyAttentionEvent {
   workspace_idx: number;
   tab_id: string;
-  source: "provider-idle" | "shell-command-end";
+  source: "provider-idle" | "shell-command-end" | "cli-agent";
 }
 
 // Built-in provider labels (Custom providers use their name)

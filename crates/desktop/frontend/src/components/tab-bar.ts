@@ -4,8 +4,8 @@
 import { appState } from "../state";
 import * as ipc from "../ipc";
 import { toast } from "./toast";
-import { getProviderLabel } from "../types";
-import type { AIProvider, TabInfo } from "../types";
+import { getProviderLabel, cliAgentStatusView } from "../types";
+import type { AIProvider, TabInfo, CliAgentStatus } from "../types";
 import type { PaneId, PaneNode } from "../pane-tree";
 import { allLeaves } from "../pane-tree";
 import {
@@ -42,6 +42,27 @@ function wsTabTitle(tree: PaneNode, activePaneId: PaneId): string {
   return others > 1 ? `${base} +${others - 1}` : base;
 }
 
+/** Highest-priority agent status across all content panes in a ws-tab, or
+ *  undefined if none of them are Claude agent tabs. Priority favors states
+ *  that need the user: permission > idle > done > running. */
+function wsTabAgentStatus(tree: PaneNode): CliAgentStatus | undefined {
+  const ws = appState.activeWs;
+  if (!ws) return undefined;
+  const rank: Record<CliAgentStatus, number> = {
+    "waiting-permission": 3,
+    idle: 2,
+    done: 1,
+    running: 0,
+  };
+  let best: CliAgentStatus | undefined;
+  for (const leaf of allLeaves(tree)) {
+    if (!leaf.contentId) continue;
+    const st = appState.getTabShellState(leaf.contentId)?.agentStatus;
+    if (st && (best === undefined || rank[st] > rank[best])) best = st;
+  }
+  return best;
+}
+
 export function renderWorkspaceTabBar(container: HTMLElement) {
   const ws = appState.activeWs;
   container.innerHTML = "";
@@ -53,8 +74,15 @@ export function renderWorkspaceTabBar(container: HTMLElement) {
     const isActive = i === ws.activeWsTab;
     el.className = `ws-tab${isActive ? " active" : ""}`;
     el.title = wsTabTitle(wt.paneTree, wt.activePaneId);
+    const agent = wsTabAgentStatus(wt.paneTree);
+    const dot = agent
+      ? (() => {
+          const v = cliAgentStatusView(agent);
+          return `<span class="ws-tab-agent" style="color:${v.color}" title="${escapeHtml(v.label)}">●</span>`;
+        })()
+      : "";
     el.innerHTML = `
-      <span class="ws-tab-label">${escapeHtml(el.title)}</span>
+      ${dot}<span class="ws-tab-label">${escapeHtml(el.title)}</span>
       <button class="ws-tab-close" title="Close tab">×</button>
     `;
     el.addEventListener("click", (e) => {

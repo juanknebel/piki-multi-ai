@@ -29,6 +29,15 @@ export function initPaneView(container: HTMLElement) {
   appState.on("active-workspace-changed", render);
   appState.on("tabs-changed", render);
   appState.on("active-tab-changed", render);
+  // Agent status changes only affect the ws-tab bar's status dots — refresh
+  // just that strip, never the whole pane tree (avoids terminal remount).
+  appState.on("tab-shell-state-changed", refreshWsTabBar);
+  appState.on("workspace-attention-changed", refreshWsTabBar);
+}
+
+function refreshWsTabBar() {
+  const bar = rootEl?.querySelector<HTMLElement>(".ws-tab-bar");
+  if (bar) renderWorkspaceTabBar(bar);
 }
 
 function render() {

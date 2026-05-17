@@ -210,6 +210,53 @@ pub fn notify_command_end(
     push_and_toast(item);
 }
 
+/// Notification for a structured Claude Code lifecycle event (Warp-style,
+/// delivered in-band via OSC 777). `kind` is the cli-agent event name
+/// (`permission_request`, `notification`, `stop`); other kinds are
+/// informational-only and don't notify. `summary` is the hook-built
+/// one-liner (permission preview, or the agent's final response preview).
+/// `icon` (if any) is prepended to the title, mirroring `notify_agent_idle`.
+pub fn notify_cli_agent(
+    origin: &str,
+    workspace_name: &str,
+    kind: &str,
+    summary: Option<&str>,
+    icon: Option<&str>,
+) {
+    let icon_prefix = icon.map(|i| format!("{i} ")).unwrap_or_default();
+    let detail = summary
+        .filter(|s| !s.is_empty())
+        .map(|s| format!(" — {s}"))
+        .unwrap_or_default();
+    let (category, title, body) = match kind {
+        "permission_request" => (
+            NotificationCategory::Complete,
+            format!("{icon_prefix}Permission needed"),
+            format!("{workspace_name}{detail}"),
+        ),
+        "notification" => (
+            NotificationCategory::Complete,
+            format!("{icon_prefix}Agent waiting for input"),
+            format!("{workspace_name} — Claude has been idle and needs you"),
+        ),
+        "stop" => (
+            NotificationCategory::Complete,
+            format!("{icon_prefix}Task complete"),
+            format!("{workspace_name}{detail}"),
+        ),
+        _ => return,
+    };
+    let item = NotificationItem {
+        origin: origin.to_string(),
+        workspace: workspace_name.to_string(),
+        category,
+        title,
+        body,
+        created_at: Instant::now(),
+    };
+    push_and_toast(item);
+}
+
 fn push_and_toast(item: NotificationItem) {
     {
         let mut mb = mailbox().lock();

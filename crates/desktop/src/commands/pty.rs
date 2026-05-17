@@ -4,6 +4,7 @@ use parking_lot::Mutex;
 use tauri::{AppHandle, State};
 
 use piki_core::AIProvider;
+use piki_core::cli_agent::install as cli_agent_install;
 use piki_core::shell_integration::install as shell_install;
 
 use crate::pty_raw::RawPtySession;
@@ -29,6 +30,22 @@ fn shell_integration_setup(
         Ok(None) => (Vec::new(), Vec::new(), false),
         Err(e) => {
             tracing::warn!(error = %e, shell = %shell_command, "shell integration setup failed");
+            (Vec::new(), Vec::new(), false)
+        }
+    }
+}
+
+/// Structured cli-agent (OSC 777) hook setup for Claude provider tabs.
+/// Returns the `(extra_env, extra_args, enabled)` triple; on failure the tab
+/// still spawns, just without the structured channel.
+fn cli_agent_setup(hooks_dir: &std::path::Path) -> (Vec<(String, String)>, Vec<String>, bool) {
+    match cli_agent_install::setup_for_claude(hooks_dir) {
+        Ok(setup) => {
+            let env: Vec<(String, String)> = setup.env.into_iter().collect();
+            (env, setup.extra_args, true)
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "claude cli-agent hook setup failed");
             (Vec::new(), Vec::new(), false)
         }
     }
@@ -94,7 +111,7 @@ pub async fn spawn_tab(
     let mut tab = DesktopTab::new(ai_provider.clone());
     let tab_id = tab.id.clone();
 
-    let (worktree_path, integration_dir) = {
+    let (worktree_path, integration_dir, claude_hooks_dir) = {
         let app = state.lock();
         if workspace_idx >= app.workspaces.len() {
             return Err("Workspace index out of range".to_string());
@@ -102,11 +119,18 @@ pub async fn spawn_tab(
         (
             app.workspaces[workspace_idx].info.path.clone(),
             app.paths.shell_integration_dir(),
+            app.paths.claude_hooks_dir(),
         )
     };
 
-    let (extra_env, extra_args, integration_on) =
-        shell_integration_setup(&ai_provider, &command, &integration_dir);
+    let is_claude = matches!(ai_provider, AIProvider::Custom(_)) && command == "claude";
+    let (extra_env, extra_args, integration_on) = if ai_provider == AIProvider::Shell {
+        shell_integration_setup(&ai_provider, &command, &integration_dir)
+    } else if is_claude {
+        cli_agent_setup(&claude_hooks_dir)
+    } else {
+        (Vec::new(), Vec::new(), false)
+    };
 
     // Spawn PTY session (use default_args from provider config)
     let pty = RawPtySession::spawn(

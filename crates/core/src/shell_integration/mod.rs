@@ -17,6 +17,8 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
+use crate::cli_agent::CliAgentState;
+
 pub mod install;
 pub mod parser;
 
@@ -39,6 +41,10 @@ pub enum ShellEvent {
     },
     /// `\x1b]7;file://<host>/<path>\x07` — cwd changed.
     CwdChanged(PathBuf),
+    /// `\x1b]777;notify;piki://cli-agent;<json>\x07` — a structured Claude
+    /// Code lifecycle event (Warp-style). Emitted only for the
+    /// `piki://cli-agent` target; foreign OSC 777 sequences are ignored.
+    CliAgent(crate::cli_agent::CliAgentEvent),
 }
 
 /// One executed command, captured between [`ShellEvent::CommandOutputStart`]
@@ -68,6 +74,10 @@ pub struct ShellTabState {
     /// Wall-clock start of the in-flight command, if any. Set on
     /// `CommandOutputStart`, consumed on `CommandEnd`.
     in_flight_started_at: Option<Instant>,
+    /// Structured Claude Code agent state, populated from
+    /// [`ShellEvent::CliAgent`] on Claude tabs. `None` until the first
+    /// cli-agent event arrives (shell-only tabs never set it).
+    pub cli_agent: Option<CliAgentState>,
 }
 
 impl ShellTabState {
@@ -94,6 +104,11 @@ impl ShellTabState {
                 });
                 self.last_attention_at = Some(now);
             }
+            ShellEvent::CliAgent(ev) => {
+                self.cli_agent
+                    .get_or_insert_with(CliAgentState::new)
+                    .apply(ev);
+            }
             ShellEvent::PromptStart | ShellEvent::CommandInputStart => {
                 // No-op — markers we keep for future UX (e.g. "scroll to
                 // previous prompt"), no state change today.
@@ -104,6 +119,9 @@ impl ShellTabState {
     /// Drop the attention marker (e.g. when the user focuses this tab).
     pub fn acknowledge(&mut self) {
         self.last_attention_at = None;
+        if let Some(agent) = self.cli_agent.as_mut() {
+            agent.acknowledge();
+        }
     }
 }
 

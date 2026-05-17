@@ -5,6 +5,8 @@ import type {
   ChangedFile,
   TabInfo,
   WorkspaceStatus,
+  CliAgentStatus,
+  PtyAgentEvent,
 } from "./types";
 import * as ipc from "./ipc";
 import {
@@ -77,12 +79,19 @@ interface WorkspaceState {
   needsAttention: boolean;
 }
 
-/** Per-tab state derived from `pty-shell-event`s. Keyed by content id. */
+/** Per-tab state derived from `pty-shell-event`s / `pty-agent-event`s.
+ *  Keyed by content id. */
 export interface TabShellState {
   cwd?: string;
   /** Exit code of the last command finished by this shell tab. `undefined`
    *  before the first command completes. */
   lastExitCode?: number;
+  /** Structured Claude Code agent status (Claude tabs only). `undefined`
+   *  until the first cli-agent event arrives. */
+  agentStatus?: CliAgentStatus;
+  /** Last human-relevant agent text: permission preview, or the agent's
+   *  final response preview on `done`. */
+  agentSummary?: string;
 }
 
 interface SavedWsTab {
@@ -454,6 +463,16 @@ class AppState extends EventTarget {
     } else {
       return;
     }
+    this._tabShellStates.set(event.tab_id, next);
+    this.emit("tab-shell-state-changed");
+  }
+
+  applyAgentEvent(event: PtyAgentEvent) {
+    const existing = this._tabShellStates.get(event.tab_id) ?? {};
+    const next: TabShellState = { ...existing, agentStatus: event.status };
+    // Keep the last meaningful summary; transient events (running) carry
+    // none and shouldn't wipe a permission/done message already shown.
+    if (event.summary) next.agentSummary = event.summary;
     this._tabShellStates.set(event.tab_id, next);
     this.emit("tab-shell-state-changed");
   }

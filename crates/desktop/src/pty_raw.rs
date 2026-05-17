@@ -11,6 +11,7 @@ use serde::Serialize;
 use tauri::AppHandle;
 use tauri::{Emitter, Manager};
 
+use piki_core::cli_agent::CliAgentEvent;
 use piki_core::notifications;
 use piki_core::pty::ShellSession;
 use piki_core::shell_integration::ShellEvent;
@@ -44,6 +45,20 @@ struct PtyShellEventPayload {
     exit_code: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     cwd: Option<String>,
+}
+
+/// Tauri event payload for a structured Claude Code lifecycle event
+/// (OSC 777, Warp-style). Drives the per-tab agent status glyph + summary.
+#[derive(Serialize, Clone, Debug)]
+struct PtyAgentEventPayload {
+    tab_id: String,
+    /// Coarse status: `running`, `waiting-permission`, `idle`, `done`.
+    status: &'static str,
+    /// The cli-agent event name (`session_start`, `prompt_submit`,
+    /// `tool_complete`, `permission_request`, `notification`, `stop`).
+    kind: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    summary: Option<String>,
 }
 
 pub struct RawPtySession {
@@ -157,13 +172,23 @@ impl RawPtySession {
                                     }
                                 }
                                 for ev in events {
-                                    if let ShellEvent::CommandEnd { exit_code, command } = &ev {
-                                        handle_shell_command_end(
-                                            &app_handle,
-                                            &emit_tab_id,
-                                            *exit_code,
-                                            command.clone(),
-                                        );
+                                    match &ev {
+                                        ShellEvent::CommandEnd { exit_code, command } => {
+                                            handle_shell_command_end(
+                                                &app_handle,
+                                                &emit_tab_id,
+                                                *exit_code,
+                                                command.clone(),
+                                            );
+                                        }
+                                        ShellEvent::CliAgent(a) => {
+                                            // Structured agent events ride their
+                                            // own `pty-agent-event` channel, not
+                                            // `pty-shell-event`.
+                                            handle_cli_agent(&app_handle, &emit_tab_id, a);
+                                            continue;
+                                        }
+                                        _ => {}
                                     }
                                     let _ = app_handle.emit(
                                         "pty-shell-event",
@@ -299,6 +324,89 @@ fn handle_shell_command_end(
     );
 }
 
+/// Map a structured cli-agent event to its `(status, kind, summary)` UI
+/// triple and whether it warrants pulling the user's attention.
+fn cli_agent_view(ev: &CliAgentEvent) -> (&'static str, &'static str, Option<String>, bool) {
+    match ev {
+        CliAgentEvent::SessionStart { .. } => ("running", "session_start", None, false),
+        CliAgentEvent::UserPromptSubmit { .. } => ("running", "prompt_submit", None, false),
+        CliAgentEvent::PostToolUse { .. } => ("running", "tool_complete", None, false),
+        CliAgentEvent::PermissionRequest { summary, .. } => (
+            "waiting-permission",
+            "permission_request",
+            Some(summary.clone()),
+            true,
+        ),
+        CliAgentEvent::Notification { .. } => ("idle", "notification", None, true),
+        CliAgentEvent::Stop { response, .. } => ("done", "stop", response.clone(), true),
+    }
+}
+
+/// Handle a structured Claude Code lifecycle event: always push a
+/// `pty-agent-event` (per-tab status glyph), and for the attention-worthy
+/// ones (`permission_request`, `notification`, `stop`) also ride the shared
+/// attention rail — `pty-attention` for the sidebar badge plus a de-duped
+/// OS notification (regardless of which workspace is active).
+fn handle_cli_agent(app_handle: &AppHandle, tab_id: &str, ev: &CliAgentEvent) {
+    let (status, kind, summary, needs_attention) = cli_agent_view(ev);
+
+    let _ = app_handle.emit(
+        "pty-agent-event",
+        PtyAgentEventPayload {
+            tab_id: tab_id.to_string(),
+            status,
+            kind,
+            summary: summary.clone(),
+        },
+    );
+
+    if !needs_attention {
+        return;
+    }
+
+    let Some(state) = app_handle.try_state::<Mutex<DesktopApp>>() else {
+        return;
+    };
+    let (workspace_idx, workspace_name, icon) = {
+        let app = state.lock();
+        let Some((idx, ws)) = app
+            .workspaces
+            .iter()
+            .enumerate()
+            .find(|(_, ws)| ws.tabs.iter().any(|t| t.id == tab_id))
+        else {
+            return;
+        };
+        let label = ws
+            .tabs
+            .iter()
+            .find(|t| t.id == tab_id)
+            .map(|t| t.provider.label().to_string());
+        let icon = label
+            .as_deref()
+            .and_then(|l| app.provider_manager.get(l))
+            .and_then(|c| c.icon.clone());
+        (idx, ws.info.name.clone(), icon)
+    };
+
+    let _ = app_handle.emit(
+        "pty-attention",
+        PtyAttentionPayload {
+            workspace_idx,
+            tab_id: tab_id.to_string(),
+            source: "cli-agent",
+        },
+    );
+    // `tab_id` is the desktop UUID — globally unique → perfect mailbox origin.
+    notifications::notify_cli_agent(
+        tab_id,
+        &workspace_name,
+        kind,
+        summary.as_deref(),
+        icon.as_deref(),
+    );
+}
+
 fn shell_event_payload(tab_id: &str, event: ShellEvent) -> PtyShellEventPayload {
     let mut p = PtyShellEventPayload {
         tab_id: tab_id.to_string(),
@@ -318,6 +426,9 @@ fn shell_event_payload(tab_id: &str, event: ShellEvent) -> PtyShellEventPayload 
             p.kind = "cwd-changed";
             p.cwd = Some(path.display().to_string());
         }
+        // M0: the structured agent event rides the same channel but the
+        // frontend doesn't consume it yet (that's M1 — per-tab status UI).
+        ShellEvent::CliAgent(_) => p.kind = "cli-agent",
     }
     p
 }

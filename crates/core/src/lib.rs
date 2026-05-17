@@ -1,4 +1,5 @@
 pub mod chat;
+pub mod cli_agent;
 pub mod diff;
 pub mod domain;
 pub mod git;

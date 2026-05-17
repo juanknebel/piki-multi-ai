@@ -2,6 +2,7 @@ use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
+use piki_core::cli_agent::install as cli_agent_install;
 use piki_core::storage::AgentProfile;
 
 use crate::state::DesktopApp;
@@ -400,12 +401,15 @@ pub async fn dispatch_agent(
     };
 
     // Spawn the AI tab with prompt
-    let worktree_path = {
+    let (worktree_path, claude_hooks_dir) = {
         let app = state.lock();
         if target_ws_idx >= app.workspaces.len() {
             return Err("Workspace index out of range".to_string());
         }
-        app.workspaces[target_ws_idx].info.path.clone()
+        (
+            app.workspaces[target_ws_idx].info.path.clone(),
+            app.paths.claude_hooks_dir(),
+        )
     };
 
     // Build args: default_args + prompt args
@@ -424,8 +428,25 @@ pub async fn dispatch_agent(
     let mut tab = crate::state::DesktopTab::new(ai_provider);
     let tab_id = tab.id.clone();
 
-    // Agent dispatch goes through provider tabs (Claude/Gemini/etc.) — no
-    // shell wrapper, so shell integration doesn't apply.
+    // Dispatched Claude agents get the structured cli-agent (OSC 777) hooks
+    // so the kanban flow sees precise lifecycle status. Other providers run
+    // bare (no shell wrapper, no hooks).
+    let (extra_env, extra_args, integration_on) = if command == "claude" {
+        match cli_agent_install::setup_for_claude(&claude_hooks_dir) {
+            Ok(setup) => (
+                setup.env.into_iter().collect::<Vec<_>>(),
+                setup.extra_args,
+                true,
+            ),
+            Err(e) => {
+                tracing::warn!(error = %e, "claude cli-agent hook setup failed");
+                (Vec::new(), Vec::new(), false)
+            }
+        }
+    } else {
+        (Vec::new(), Vec::new(), false)
+    };
+
     let pty = crate::pty_raw::RawPtySession::spawn(
         app_handle,
         tab_id.clone(),
@@ -434,9 +455,9 @@ pub async fn dispatch_agent(
         80,
         &command,
         &args,
-        &[],
-        &[],
-        false,
+        &extra_env,
+        &extra_args,
+        integration_on,
     )
     .map_err(|e| format!("Failed to spawn PTY: {e}"))?;
 

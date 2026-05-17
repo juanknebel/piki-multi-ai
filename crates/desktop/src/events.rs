@@ -92,6 +92,18 @@ pub fn spawn_idle_watcher_loop(app_handle: AppHandle) {
                         if !pty.peek_alive() {
                             continue;
                         }
+                        // Structured cli-agent channel live for this tab → it
+                        // owns attention (precise Stop/Notification); skip the
+                        // byte-silence heuristic so it can't double-fire. No
+                        // events (missing / version-skewed hooks) → `cli_agent`
+                        // stays `None` and the watcher is the graceful
+                        // fallback.
+                        if pty
+                            .shell()
+                            .is_some_and(|s| s.lock().state.cli_agent.is_some())
+                        {
+                            continue;
+                        }
                         if let Some(sig) = watcher.poll(pty.bytes_processed()) {
                             events.push(PtyAttentionPayload {
                                 workspace_idx: ws_idx,
