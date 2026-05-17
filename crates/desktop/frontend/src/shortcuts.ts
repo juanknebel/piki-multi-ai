@@ -62,6 +62,7 @@ const shortcuts: ShortcutDef[] = [
   { id: "split-right", label: "Split Pane Right", defaultKey: "Ctrl+\\", key: "Ctrl+\\", action: () => {}, outsideOnly: true },
   { id: "split-down", label: "Split Pane Down", defaultKey: "Ctrl+Shift+\\", key: "Ctrl+Shift+\\", action: () => {}, outsideOnly: true },
   { id: "close-pane", label: "Close Active Pane", defaultKey: "Ctrl+Shift+Q", key: "Ctrl+Shift+Q", action: () => {}, outsideOnly: true },
+  { id: "new-tab", label: "New Tab", defaultKey: "Ctrl+T", key: "Ctrl+T", action: () => {}, outsideOnly: true },
 ];
 
 export function getShortcuts(): ShortcutDef[] {

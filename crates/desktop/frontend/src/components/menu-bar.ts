@@ -16,6 +16,7 @@ import { openCommandPalette } from "./command-palette";
 import { showAgentManager } from "./dialogs/agent-dialog";
 import { showDispatchDialog } from "./dialogs/dispatch-dialog";
 import { showHelpDialog } from "./dialogs/help-dialog";
+import { closeActiveWsTab } from "./tab-bar";
 import { showDashboard } from "./dialogs/dashboard-dialog";
 import { showSysinfoDialog } from "./dialogs/sysinfo-dialog";
 import { showThemeDialog } from "./dialogs/theme-dialog";
@@ -100,20 +101,17 @@ const MENUS: MenuDefinition[] = [
       },
       SEP,
       {
+        label: "New Blank Tab",
+        shortcut: "Ctrl+T",
+        action: () => appState.newBlankTab(),
+      },
+      {
         label: "Close Tab",
         disabled: () => {
           const ws = appState.activeWs;
-          return !ws || ws.tabs.length === 0;
+          return !ws || ws.wsTabs.length === 0;
         },
-        action: () => {
-          const ws = appState.activeWs;
-          if (!ws || ws.tabs.length === 0) return;
-          const tab = ws.tabs[ws.activeTab];
-          if (!tab) return;
-          const wsIdx = appState.activeWorkspace;
-          ipc.closeTab(wsIdx, ws.activeTab).catch(() => {});
-          appState.removeTab(wsIdx, ws.activeTab);
-        },
+        action: () => closeActiveWsTab(),
       },
       SEP,
       {

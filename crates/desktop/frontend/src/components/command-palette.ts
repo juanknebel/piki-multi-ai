@@ -268,6 +268,13 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
 
   // Pane layout commands
   cmds.push({
+    id: "new-tab",
+    label: "New Blank Tab",
+    category: "Tab",
+    keybinding: getShortcutKey("new-tab"),
+    action: () => { appState.newBlankTab(); },
+  });
+  cmds.push({
     id: "split-right",
     label: "Split Pane Right",
     category: "Tab",
