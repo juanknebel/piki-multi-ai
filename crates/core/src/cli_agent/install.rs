@@ -54,9 +54,14 @@ pub fn setup_for_claude(base_dir: &Path) -> io::Result<ClaudeHookSetup> {
     materialize(base_dir)
 }
 
-/// `true` when a working `jq` is reachable on the login PATH.
+/// `true` when a working `jq` is reachable. Resolves via the user's *login*
+/// PATH (same path resolution used to spawn `claude`), not the bare process
+/// PATH — a GUI/.desktop launch inherits a minimal env where
+/// `Command::new("jq")`'s built-in lookup spuriously fails even though jq is
+/// installed.
 pub fn jq_available() -> bool {
-    crate::shell_env::sync_command("jq")
+    let jq = crate::shell_env::resolve_command("jq");
+    crate::shell_env::sync_command(&jq)
         .arg("--version")
         .output()
         .map(|o| o.status.success())

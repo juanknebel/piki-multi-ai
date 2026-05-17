@@ -281,10 +281,16 @@ fn push_and_toast(item: NotificationItem, visible: bool) {
 fn spawn_toast(summary: String, body: String) {
     let app = appname();
     std::thread::spawn(move || {
+        // We only reach here when the user is NOT looking at the event's tab
+        // (push_and_toast already gated on active-view + focus). Mark it
+        // Critical so the notification daemon doesn't auto-suppress it just
+        // because piki happens to be the focused window — a documented
+        // freedesktop behaviour for normal-urgency notifications.
         if let Err(e) = notify_rust::Notification::new()
             .summary(&summary)
             .body(&body)
             .appname(app)
+            .urgency(notify_rust::Urgency::Critical)
             .show()
         {
             tracing::warn!("OS notification failed: {e}");
