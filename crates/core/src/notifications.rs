@@ -152,6 +152,7 @@ pub fn notify_agent_idle(
     agent_label: &str,
     silent_for: Duration,
     icon: Option<&str>,
+    from_active_view: bool,
 ) {
     let icon_prefix = icon.map(|i| format!("{i} ")).unwrap_or_default();
     let idle_secs = silent_for.as_secs().max(1);
@@ -165,7 +166,7 @@ pub fn notify_agent_idle(
         ),
         created_at: Instant::now(),
     };
-    push_and_toast(item);
+    push_and_toast(item, from_active_view);
 }
 
 /// Notification for a shell tab whose OSC 133 `command-end` marker just
@@ -178,6 +179,7 @@ pub fn notify_command_end(
     workspace_name: &str,
     exit_code: Option<i32>,
     command: Option<&str>,
+    from_active_view: bool,
 ) {
     let cmd_suffix = command
         .map(|c| format!(" `{c}`"))
@@ -207,17 +209,71 @@ pub fn notify_command_end(
         body,
         created_at: Instant::now(),
     };
-    push_and_toast(item);
+    push_and_toast(item, from_active_view);
 }
 
-fn push_and_toast(item: NotificationItem) {
+/// Notification for a structured Claude Code lifecycle event (Warp-style,
+/// delivered in-band via OSC 777). `kind` is the cli-agent event name
+/// (`permission_request`, `notification`, `stop`); other kinds are
+/// informational-only and don't notify. `summary` is the hook-built
+/// one-liner (permission preview, or the agent's final response preview).
+/// `icon` (if any) is prepended to the title, mirroring `notify_agent_idle`.
+pub fn notify_cli_agent(
+    origin: &str,
+    workspace_name: &str,
+    kind: &str,
+    summary: Option<&str>,
+    icon: Option<&str>,
+    from_active_view: bool,
+) {
+    let icon_prefix = icon.map(|i| format!("{i} ")).unwrap_or_default();
+    let detail = summary
+        .filter(|s| !s.is_empty())
+        .map(|s| format!(" — {s}"))
+        .unwrap_or_default();
+    let (category, title, body) = match kind {
+        "permission_request" => (
+            NotificationCategory::Complete,
+            format!("{icon_prefix}Permission needed"),
+            format!("{workspace_name}{detail}"),
+        ),
+        "notification" => (
+            NotificationCategory::Complete,
+            format!("{icon_prefix}Agent waiting for input"),
+            format!("{workspace_name} — Claude has been idle and needs you"),
+        ),
+        "stop" => (
+            NotificationCategory::Complete,
+            format!("{icon_prefix}Task complete"),
+            format!("{workspace_name}{detail}"),
+        ),
+        _ => return,
+    };
+    let item = NotificationItem {
+        origin: origin.to_string(),
+        workspace: workspace_name.to_string(),
+        category,
+        title,
+        body,
+        created_at: Instant::now(),
+    };
+    push_and_toast(item, from_active_view);
+}
+
+/// `visible` means the event's tab is the one the user is currently looking
+/// at (active workspace + active tab). The mailbox always records; the OS
+/// toast is suppressed **only** when the event is both `visible` *and* the
+/// piki window has OS focus — i.e. the user would already see it. A
+/// background-tab event still toasts even while piki is focused, since the
+/// user can't see a tab they aren't on (this is the whole point of the
+/// active-tab gate; window focus alone is too coarse).
+fn push_and_toast(item: NotificationItem, visible: bool) {
     {
         let mut mb = mailbox().lock();
         mb.push(item.clone());
     }
-    // Mailbox always records the entry; the OS toast is gated on window
-    // focus so the user isn't double-notified when they're already on piki.
-    if !WINDOW_HAS_FOCUS.load(Ordering::Relaxed) {
+    let already_seen = visible && WINDOW_HAS_FOCUS.load(Ordering::Relaxed);
+    if !already_seen {
         spawn_toast(item.title, item.body);
     }
 }
@@ -225,12 +281,18 @@ fn push_and_toast(item: NotificationItem) {
 fn spawn_toast(summary: String, body: String) {
     let app = appname();
     std::thread::spawn(move || {
-        if let Err(e) = notify_rust::Notification::new()
-            .summary(&summary)
-            .body(&body)
-            .appname(app)
-            .show()
-        {
+        // We only reach here when the user is NOT looking at the event's tab
+        // (push_and_toast already gated on active-view + focus).
+        let mut notification = notify_rust::Notification::new();
+        notification.summary(&summary).body(&body).appname(app);
+        // Mark it Critical so the notification daemon doesn't auto-suppress
+        // it just because piki happens to be the focused window — a
+        // documented freedesktop behaviour for normal-urgency notifications.
+        // `urgency` is an XDG/freedesktop concept; the API doesn't exist on
+        // macOS (NSUserNotification has no urgency), so gate it to Linux.
+        #[cfg(target_os = "linux")]
+        notification.urgency(notify_rust::Urgency::Critical);
+        if let Err(e) = notification.show() {
             tracing::warn!("OS notification failed: {e}");
         }
     });
@@ -314,13 +376,14 @@ mod tests {
         // push_and_toast).
         _reset_mailbox_for_test();
         set_window_focused(true);
-        push_and_toast(fresh_item("tab-focus-on", "idle"));
+        // visible=true + focused → OS toast suppressed; mailbox still records.
+        push_and_toast(fresh_item("tab-focus-on", "idle"), true);
         assert_eq!(mailbox_snapshot().len(), 1);
 
-        // Unfocused: mailbox records and toast would fire.
+        // Unfocused: mailbox records and toast would fire (visibility moot).
         _reset_mailbox_for_test();
         set_window_focused(false);
-        push_and_toast(fresh_item("tab-focus-off", "idle"));
+        push_and_toast(fresh_item("tab-focus-off", "idle"), true);
         assert_eq!(mailbox_snapshot().len(), 1);
 
         _reset_mailbox_for_test();

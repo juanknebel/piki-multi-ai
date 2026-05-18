@@ -49,6 +49,13 @@ impl DataPaths {
         self.base.join("worktrees").join(project_name)
     }
 
+    /// Default destination for full GitHub clones (not worktrees):
+    /// `<base>/repos`. The actual clone lands under `<base>/repos/<repo>`;
+    /// this method returns the *parent* used as the dialog hint.
+    pub fn repos_dir(&self) -> PathBuf {
+        self.base.join("repos")
+    }
+
     /// Legacy JSON workspace config directory: `<base>/workspaces`.
     pub fn legacy_workspaces_dir(&self) -> PathBuf {
         self.base.join("workspaces")
@@ -74,5 +81,13 @@ impl DataPaths {
     /// shell to source on startup.
     pub fn shell_integration_dir(&self) -> PathBuf {
         self.base.join("shell-integration")
+    }
+
+    /// Claude Code hooks directory: `<base>/claude-hooks`. Holds the
+    /// materialized hook scripts and the generated `settings.json` that piki
+    /// passes via `claude --settings` to drive the structured cli-agent
+    /// (OSC 777) channel.
+    pub fn claude_hooks_dir(&self) -> PathBuf {
+        self.base.join("claude-hooks")
     }
 }

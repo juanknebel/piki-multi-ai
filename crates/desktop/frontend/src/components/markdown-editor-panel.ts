@@ -43,6 +43,11 @@ export function getMarkdownEditorFileName(tabId: string): string | null {
   return fp.split("/").pop() || fp;
 }
 
+/** Workspace-relative path of a Markdown tab's file, or null. */
+export function getMarkdownEditorFilePath(tabId: string): string | null {
+  return instances.get(tabId)?.filePath ?? pendingFiles.get(tabId) ?? null;
+}
+
 export function hideMarkdownEditorPanels() {
   for (const inst of instances.values()) {
     inst.element.style.display = "none";

@@ -11,6 +11,7 @@ use serde::Serialize;
 use tauri::AppHandle;
 use tauri::{Emitter, Manager};
 
+use piki_core::cli_agent::CliAgentEvent;
 use piki_core::notifications;
 use piki_core::pty::ShellSession;
 use piki_core::shell_integration::ShellEvent;
@@ -46,6 +47,20 @@ struct PtyShellEventPayload {
     cwd: Option<String>,
 }
 
+/// Tauri event payload for a structured Claude Code lifecycle event
+/// (OSC 777, Warp-style). Drives the per-tab agent status glyph + summary.
+#[derive(Serialize, Clone, Debug)]
+struct PtyAgentEventPayload {
+    tab_id: String,
+    /// Coarse status: `running`, `waiting-permission`, `idle`, `done`.
+    status: &'static str,
+    /// The cli-agent event name (`session_start`, `prompt_submit`,
+    /// `tool_complete`, `permission_request`, `notification`, `stop`).
+    kind: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    summary: Option<String>,
+}
+
 pub struct RawPtySession {
     child: Box<dyn portable_pty::Child + Send>,
     writer: Box<dyn Write + Send>,
@@ -53,6 +68,11 @@ pub struct RawPtySession {
     master: Box<dyn portable_pty::MasterPty + Send>,
     bytes_processed: Arc<AtomicU64>,
     shell: Option<Arc<Mutex<ShellSession>>>,
+    /// Out-of-band FIFO reader for the structured cli-agent channel. `Some`
+    /// only for Claude tabs spawned with a `cli_agent_sock` path. Its `Drop`
+    /// stops the reader and unlinks the FIFO.
+    #[cfg(unix)]
+    _cli_agent_sock: Option<piki_core::cli_agent::sock::SockReader>,
 }
 
 impl RawPtySession {
@@ -63,6 +83,12 @@ impl RawPtySession {
     /// `enable_shell_integration = true`, the reader spins up an [`OscParser`]
     /// that observes the byte stream, updates the session's [`ShellSession`]
     /// state, and emits `pty-shell-event` Tauri events.
+    ///
+    /// `cli_agent_sock` (when `Some` *and* `enable_shell_integration`) is the
+    /// per-spawn FIFO path the Claude hook scripts write structured lifecycle
+    /// events to out-of-band. We start a reader that feeds the same
+    /// [`ShellSession`] and, via its callback, drives `handle_cli_agent` (the
+    /// same handler the in-band OSC 777 path uses — kept as a fallback).
     #[allow(clippy::too_many_arguments)]
     pub fn spawn(
         app_handle: AppHandle,
@@ -75,6 +101,7 @@ impl RawPtySession {
         extra_env: &[(String, String)],
         extra_args: &[String],
         enable_shell_integration: bool,
+        cli_agent_sock: Option<std::path::PathBuf>,
     ) -> anyhow::Result<Self> {
         let pty_system = native_pty_system();
 
@@ -128,6 +155,13 @@ impl RawPtySession {
         };
         let shell_for_reader = shell.clone();
 
+        // Clones for the out-of-band cli-agent FIFO callback (the byte reader
+        // task below moves `app_handle`/`emit_tab_id`).
+        #[cfg(unix)]
+        let sock_app_handle = app_handle.clone();
+        #[cfg(unix)]
+        let sock_tab_id = tab_id.clone();
+
         let emit_tab_id = tab_id.clone();
         let reader_handle = tokio::task::spawn_blocking(move || {
             let mut buf = [0u8; 16384];
@@ -157,13 +191,23 @@ impl RawPtySession {
                                     }
                                 }
                                 for ev in events {
-                                    if let ShellEvent::CommandEnd { exit_code, command } = &ev {
-                                        handle_shell_command_end(
-                                            &app_handle,
-                                            &emit_tab_id,
-                                            *exit_code,
-                                            command.clone(),
-                                        );
+                                    match &ev {
+                                        ShellEvent::CommandEnd { exit_code, command } => {
+                                            handle_shell_command_end(
+                                                &app_handle,
+                                                &emit_tab_id,
+                                                *exit_code,
+                                                command.clone(),
+                                            );
+                                        }
+                                        ShellEvent::CliAgent(a) => {
+                                            // Structured agent events ride their
+                                            // own `pty-agent-event` channel, not
+                                            // `pty-shell-event`.
+                                            handle_cli_agent(&app_handle, &emit_tab_id, a);
+                                            continue;
+                                        }
+                                        _ => {}
                                     }
                                     let _ = app_handle.emit(
                                         "pty-shell-event",
@@ -195,6 +239,36 @@ impl RawPtySession {
             }
         });
 
+        // Out-of-band FIFO transport for the structured cli-agent channel.
+        // Only meaningful when shell integration is on (so `shell` is `Some`)
+        // and a per-spawn FIFO path was supplied (Claude tabs). The callback
+        // mirrors the in-band OSC 777 arm: it drives `handle_cli_agent` for
+        // the Tauri/status/notification side; the shared `ShellSession` is fed
+        // by the reader itself.
+        #[cfg(unix)]
+        let cli_agent_sock = match (cli_agent_sock, shell.as_ref()) {
+            (Some(path), Some(shell)) => {
+                let cb_app = sock_app_handle;
+                let cb_tab = sock_tab_id;
+                let cb: piki_core::cli_agent::sock::CliAgentCallback =
+                    Box::new(move |ev| handle_cli_agent(&cb_app, &cb_tab, ev));
+                match piki_core::cli_agent::sock::spawn_reader(
+                    path,
+                    Arc::clone(shell),
+                    Some(cb),
+                ) {
+                    Ok(reader) => Some(reader),
+                    Err(e) => {
+                        tracing::warn!(error = %e, "cli-agent FIFO reader failed to start; OSC 777 fallback only");
+                        None
+                    }
+                }
+            }
+            _ => None,
+        };
+        #[cfg(not(unix))]
+        let _ = cli_agent_sock;
+
         tracing::info!(command, path = %worktree_path.display(), rows, cols, shell_integration = enable_shell_integration, "Raw PTY spawned");
 
         Ok(Self {
@@ -204,6 +278,8 @@ impl RawPtySession {
             master: pair.master,
             bytes_processed,
             shell,
+            #[cfg(unix)]
+            _cli_agent_sock: cli_agent_sock,
         })
     }
 
@@ -270,7 +346,7 @@ fn handle_shell_command_end(
     let Some(state) = app_handle.try_state::<Mutex<DesktopApp>>() else {
         return;
     };
-    let (workspace_idx, workspace_name) = {
+    let (workspace_idx, workspace_name, from_active_view) = {
         let app = state.lock();
         let Some((idx, ws)) = app
             .workspaces
@@ -280,7 +356,9 @@ fn handle_shell_command_end(
         else {
             return;
         };
-        (idx, ws.info.name.clone())
+        let active_view = app.active_workspace == idx
+            && ws.tabs.get(ws.active_tab).map(|t| t.id.as_str()) == Some(tab_id);
+        (idx, ws.info.name.clone(), active_view)
     };
     let _ = app_handle.emit(
         "pty-attention",
@@ -296,6 +374,93 @@ fn handle_shell_command_end(
         &workspace_name,
         exit_code,
         command.as_deref(),
+        from_active_view,
+    );
+}
+
+/// Map a structured cli-agent event to its `(status, kind, summary)` UI
+/// triple and whether it warrants pulling the user's attention.
+fn cli_agent_view(ev: &CliAgentEvent) -> (&'static str, &'static str, Option<String>, bool) {
+    match ev {
+        CliAgentEvent::SessionStart { .. } => ("running", "session_start", None, false),
+        CliAgentEvent::UserPromptSubmit { .. } => ("running", "prompt_submit", None, false),
+        CliAgentEvent::PostToolUse { .. } => ("running", "tool_complete", None, false),
+        CliAgentEvent::PermissionRequest { summary, .. } => (
+            "waiting-permission",
+            "permission_request",
+            Some(summary.clone()),
+            true,
+        ),
+        CliAgentEvent::Notification { .. } => ("idle", "notification", None, true),
+        CliAgentEvent::Stop { response, .. } => ("done", "stop", response.clone(), true),
+    }
+}
+
+/// Handle a structured Claude Code lifecycle event: always push a
+/// `pty-agent-event` (per-tab status glyph), and for the attention-worthy
+/// ones (`permission_request`, `notification`, `stop`) also ride the shared
+/// attention rail — `pty-attention` for the sidebar badge plus a de-duped
+/// OS notification (regardless of which workspace is active).
+fn handle_cli_agent(app_handle: &AppHandle, tab_id: &str, ev: &CliAgentEvent) {
+    let (status, kind, summary, needs_attention) = cli_agent_view(ev);
+
+    let _ = app_handle.emit(
+        "pty-agent-event",
+        PtyAgentEventPayload {
+            tab_id: tab_id.to_string(),
+            status,
+            kind,
+            summary: summary.clone(),
+        },
+    );
+
+    if !needs_attention {
+        return;
+    }
+
+    let Some(state) = app_handle.try_state::<Mutex<DesktopApp>>() else {
+        return;
+    };
+    let (workspace_idx, workspace_name, icon, from_active_view) = {
+        let app = state.lock();
+        let Some((idx, ws)) = app
+            .workspaces
+            .iter()
+            .enumerate()
+            .find(|(_, ws)| ws.tabs.iter().any(|t| t.id == tab_id))
+        else {
+            return;
+        };
+        let label = ws
+            .tabs
+            .iter()
+            .find(|t| t.id == tab_id)
+            .map(|t| t.provider.label().to_string());
+        let icon = label
+            .as_deref()
+            .and_then(|l| app.provider_manager.get(l))
+            .and_then(|c| c.icon.clone());
+        let active_view = app.active_workspace == idx
+            && ws.tabs.get(ws.active_tab).map(|t| t.id.as_str()) == Some(tab_id);
+        (idx, ws.info.name.clone(), icon, active_view)
+    };
+
+    let _ = app_handle.emit(
+        "pty-attention",
+        PtyAttentionPayload {
+            workspace_idx,
+            tab_id: tab_id.to_string(),
+            source: "cli-agent",
+        },
+    );
+    // `tab_id` is the desktop UUID — globally unique → perfect mailbox origin.
+    notifications::notify_cli_agent(
+        tab_id,
+        &workspace_name,
+        kind,
+        summary.as_deref(),
+        icon.as_deref(),
+        from_active_view,
     );
 }
 
@@ -318,6 +483,9 @@ fn shell_event_payload(tab_id: &str, event: ShellEvent) -> PtyShellEventPayload 
             p.kind = "cwd-changed";
             p.cwd = Some(path.display().to_string());
         }
+        // M0: the structured agent event rides the same channel but the
+        // frontend doesn't consume it yet (that's M1 — per-tab status UI).
+        ShellEvent::CliAgent(_) => p.kind = "cli-agent",
     }
     p
 }

@@ -35,6 +35,11 @@ pub struct PtySession {
     /// Present iff this session was spawned with shell integration enabled.
     /// Reader thread parses OSC sequences and mutates this; UI threads read.
     shell: Option<Arc<Mutex<ShellSession>>>,
+    /// Out-of-band FIFO reader for the structured cli-agent channel. `Some`
+    /// only for Claude tabs spawned with a `cli_agent_sock` path. Its `Drop`
+    /// stops the reader and unlinks the FIFO.
+    #[cfg(unix)]
+    _cli_agent_sock: Option<crate::cli_agent::sock::SockReader>,
 }
 
 impl PtySession {
@@ -46,6 +51,12 @@ impl PtySession {
     /// must come before any user-supplied args. Pass `enable_shell_integration =
     /// true` to spin up an OSC parser that observes the byte stream and
     /// updates the per-tab [`ShellTabState`].
+    ///
+    /// `cli_agent_sock` (when `Some` *and* `enable_shell_integration`) is the
+    /// per-spawn FIFO path the Claude hook scripts write structured lifecycle
+    /// events to out-of-band; we start a reader that feeds the same
+    /// [`ShellSession`] the OSC parser feeds (the in-band OSC 777 path stays as
+    /// a fallback).
     #[allow(clippy::too_many_arguments)]
     pub async fn spawn(
         worktree_path: &Path,
@@ -56,6 +67,7 @@ impl PtySession {
         extra_env: &[(String, String)],
         extra_args: &[String],
         enable_shell_integration: bool,
+        cli_agent_sock: Option<std::path::PathBuf>,
     ) -> anyhow::Result<Self> {
         let pty_system = native_pty_system();
 
@@ -143,6 +155,25 @@ impl PtySession {
             }
         });
 
+        // Out-of-band FIFO transport for the structured cli-agent channel.
+        // Only meaningful when shell integration is on (so `shell` is `Some`)
+        // and a per-spawn FIFO path was supplied (Claude tabs).
+        #[cfg(unix)]
+        let cli_agent_sock = match (cli_agent_sock, shell.as_ref()) {
+            (Some(path), Some(shell)) => {
+                match crate::cli_agent::sock::spawn_reader(path, Arc::clone(shell), None) {
+                    Ok(reader) => Some(reader),
+                    Err(e) => {
+                        tracing::warn!(error = %e, "cli-agent FIFO reader failed to start; OSC 777 fallback only");
+                        None
+                    }
+                }
+            }
+            _ => None,
+        };
+        #[cfg(not(unix))]
+        let _ = cli_agent_sock;
+
         tracing::info!(command = command, path = %worktree_path.display(), rows, cols, shell_integration = enable_shell_integration, "PTY spawned");
 
         Ok(Self {
@@ -153,6 +184,8 @@ impl PtySession {
             master: pair.master,
             bytes_processed,
             shell,
+            #[cfg(unix)]
+            _cli_agent_sock: cli_agent_sock,
         })
     }
 

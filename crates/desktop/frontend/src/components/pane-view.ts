@@ -1,16 +1,21 @@
-// Recursive pane view.
+// Workspace view: a top-level tab bar plus the active tab's pane tree.
 //
-// Mounts the workspace's pane tree under a single root container. Each leaf
-// renders a mini tab bar plus a content host where the active tab's DOM is
-// mounted via `tab-mount.ts`. Splits render as flex containers with a
-// draggable resize handle between children.
+// Each top-level tab owns one PaneNode tree. Every leaf is a pane holding at
+// most ONE content item (terminal/agent/editor) — no per-pane mini tab bars.
+// A blank pane shows a content chooser. Splits render as flex containers with
+// a draggable resize handle.
 
 import { appState } from "../state";
 import type { PaneNode, LeafNode, SplitNode, PaneId } from "../pane-tree";
-import { allLeaves, findParentSplit } from "../pane-tree";
-import type { TabInfo } from "../types";
+import { allLeaves } from "../pane-tree";
+import type { TabInfo, AIProvider } from "../types";
+import { getProviderLabel } from "../types";
 import { mountTab, unmountTab } from "../tab-mount";
-import { renderPaneTabBar } from "./tab-bar";
+import {
+  renderWorkspaceTabBar,
+  getPaneProviderChoices,
+  spawnIntoPane,
+} from "./tab-bar";
 import { formatShortcut } from "../shortcuts";
 
 let rootEl: HTMLElement;
@@ -23,87 +28,111 @@ export function initPaneView(container: HTMLElement) {
   appState.on("active-pane-changed", updateActivePaneHighlight);
   appState.on("active-workspace-changed", render);
   appState.on("tabs-changed", render);
-  // Tab switches within a pane don't change the tree structure — re-render
-  // only the affected mini tab bars and remount the new active tab. Avoids
-  // a full DOM rebuild that would reparent every terminal element and
-  // run fit() before the new host's layout has settled.
-  appState.on("active-tab-changed", syncActiveTabUpdate);
-  // Re-render the per-pane tab bars when shell-integration state changes so
-  // exit-code badges update without a full pane-tree rebuild.
-  appState.on("tab-shell-state-changed", () => {
-    const ws = appState.activeWs;
-    if (!ws) return;
-    for (const leaf of allLeaves(ws.paneTree)) {
-      const pane = rootEl.querySelector<HTMLElement>(
-        `.pane[data-pane-id="${CSS.escape(leaf.id)}"]`,
-      );
-      const bar = pane?.querySelector<HTMLElement>(".pane-tab-bar");
-      if (bar) renderPaneTabBar(bar, leaf);
-    }
-  });
+  appState.on("active-tab-changed", render);
+  // Agent status changes only affect the ws-tab bar's status dots — refresh
+  // just that strip, never the whole pane tree (avoids terminal remount).
+  appState.on("tab-shell-state-changed", refreshWsTabBar);
+  appState.on("workspace-attention-changed", refreshWsTabBar);
+}
+
+function refreshWsTabBar() {
+  const bar = rootEl?.querySelector<HTMLElement>(".ws-tab-bar");
+  if (bar) renderWorkspaceTabBar(bar);
 }
 
 function render() {
-  const ws = appState.activeWs;
-
-  // Detach any panel elements currently inside the root so the rebuild doesn't
-  // garbage them. Panel modules hold their own references — `appendChild` later
-  // moves them back in.
   detachPanelElements(rootEl);
   rootEl.innerHTML = "";
 
-  if (!ws) {
-    renderWelcome(rootEl);
+  const ws = appState.activeWs;
+  const wt = appState.activeTabTree;
+
+  // Top-level tab bar (always present when a workspace is active).
+  if (ws) {
+    const bar = document.createElement("nav");
+    rootEl.appendChild(bar);
+    renderWorkspaceTabBar(bar);
+  }
+
+  const area = document.createElement("div");
+  area.className = "pane-area";
+  rootEl.appendChild(area);
+
+  if (!ws || !wt) {
+    renderWelcome(area);
     return;
   }
 
-  const tree = ws.paneTree;
-  rootEl.appendChild(renderNode(tree));
-  syncMounts(ws.paneTree, ws.tabs);
+  area.appendChild(renderNode(wt.paneTree));
+  syncMounts(wt.paneTree, ws.tabs);
   updateActivePaneHighlight();
 
-  // Leaves with no tabs get a welcome message inside their content host so
-  // the user still sees the "+" button on the mini tab bar and the keyboard
-  // hints — the most common case is a workspace that was just opened or
-  // had all its tabs closed.
-  for (const leaf of allLeaves(tree)) {
-    if (leaf.tabIds.length > 0) continue;
-    const host = rootEl.querySelector<HTMLElement>(
+  // Blank panes get a content chooser.
+  for (const leaf of allLeaves(wt.paneTree)) {
+    if (leaf.contentId) continue;
+    const host = area.querySelector<HTMLElement>(
       `.pane[data-pane-id="${cssEscape(leaf.id)}"] > .pane-content`,
     );
-    if (host && host.children.length === 0) {
-      renderWelcome(host);
-    }
+    if (host && host.children.length === 0) renderChooser(host, leaf.id);
   }
 }
 
 function renderNode(node: PaneNode): HTMLElement {
-  if (node.kind === "leaf") {
-    return renderLeaf(node);
-  }
-  return renderSplit(node);
+  return node.kind === "leaf" ? renderLeaf(node) : renderSplit(node);
 }
 
 function renderLeaf(leaf: LeafNode): HTMLElement {
   const el = document.createElement("div");
   el.className = "pane";
   el.dataset.paneId = leaf.id;
-  el.addEventListener("mousedown", () => {
-    if (appState.activeWs?.activePaneId !== leaf.id) {
-      appState.setActivePane(leaf.id);
-    }
-  }, true);
+  el.addEventListener(
+    "mousedown",
+    () => {
+      if (appState.activeTabTree?.activePaneId !== leaf.id) {
+        appState.setActivePane(leaf.id);
+      }
+    },
+    true,
+  );
 
-  const bar = document.createElement("nav");
-  bar.className = "pane-tab-bar";
-  renderPaneTabBar(bar, leaf);
-  el.appendChild(bar);
+  const head = document.createElement("div");
+  head.className = "pane-head";
+  const title = paneTitle(leaf);
+  head.innerHTML = `
+    <span class="pane-title">${escapeHtml(title)}</span>
+    <span class="pane-actions">
+      <button class="pane-btn" data-act="right" title="Split right">⇥</button>
+      <button class="pane-btn" data-act="down" title="Split down">⤓</button>
+      <button class="pane-btn pane-btn-close" data-act="close" title="Close pane">×</button>
+    </span>
+  `;
+  head.querySelector('[data-act="right"]')!.addEventListener("click", (e) => {
+    e.stopPropagation();
+    appState.setActivePane(leaf.id);
+    appState.splitPane(leaf.id, "right");
+  });
+  head.querySelector('[data-act="down"]')!.addEventListener("click", (e) => {
+    e.stopPropagation();
+    appState.setActivePane(leaf.id);
+    appState.splitPane(leaf.id, "down");
+  });
+  head.querySelector('[data-act="close"]')!.addEventListener("click", (e) => {
+    e.stopPropagation();
+    appState.closePane(leaf.id);
+  });
+  el.appendChild(head);
 
   const content = document.createElement("div");
   content.className = "pane-content";
   el.appendChild(content);
-
   return el;
+}
+
+function paneTitle(leaf: LeafNode): string {
+  const ws = appState.activeWs;
+  if (!leaf.contentId || !ws) return "Empty";
+  const c = ws.tabs.find((t) => t.id === leaf.contentId);
+  return c ? getProviderLabel(c.provider) : "Empty";
 }
 
 function renderSplit(split: SplitNode): HTMLElement {
@@ -123,92 +152,73 @@ function renderSplit(split: SplitNode): HTMLElement {
   const second = renderNode(split.second);
   second.style.flex = `${1 - split.ratio}`;
   el.appendChild(second);
-
   return el;
 }
 
-function syncMounts(tree: PaneNode, tabs: TabInfo[]) {
+function syncMounts(tree: PaneNode, contents: TabInfo[]) {
   const wsIdx = appState.activeWorkspace;
   const leaves = allLeaves(tree);
-  const visibleTabIds = new Set<string>();
+  const visible = new Set<string>();
   for (const leaf of leaves) {
-    if (leaf.activeTabId) visibleTabIds.add(leaf.activeTabId);
+    if (leaf.contentId) visible.add(leaf.contentId);
   }
-
-  // Hide tabs that are no longer the active one in any leaf.
-  for (const tab of tabs) {
-    if (!visibleTabIds.has(tab.id)) {
-      unmountTab(tab);
-    }
+  // Hide every content not visible in the active tab's tree.
+  for (const c of contents) {
+    if (!visible.has(c.id)) unmountTab(c);
   }
-
-  // Mount the active tab in each leaf into the leaf's content host.
+  // Mount each pane's content into its host.
   for (const leaf of leaves) {
-    if (!leaf.activeTabId) continue;
-    const tab = tabs.find((t) => t.id === leaf.activeTabId);
-    if (!tab) continue;
+    if (!leaf.contentId) continue;
+    const c = contents.find((t) => t.id === leaf.contentId);
+    if (!c) continue;
     const host = rootEl.querySelector<HTMLElement>(
       `.pane[data-pane-id="${cssEscape(leaf.id)}"] > .pane-content`,
     );
-    if (host) {
-      mountTab(tab, host, wsIdx);
-    }
+    if (host) mountTab(c, host, wsIdx);
   }
 }
 
-function syncActiveTabUpdate() {
-  const ws = appState.activeWs;
-  if (!ws || ws.tabs.length === 0) {
-    // Falling back to a welcome / rebuild path here — defer to render().
-    render();
-    return;
-  }
-  // If the DOM structure doesn't reflect every leaf in the tree (e.g.
-  // initial load before the first render), do a full rebuild.
-  for (const leaf of allLeaves(ws.paneTree)) {
-    if (!rootEl.querySelector(`.pane[data-pane-id="${cssEscape(leaf.id)}"]`)) {
-      render();
-      return;
-    }
-  }
-  // Re-render each leaf's mini tab bar so the active highlight follows.
-  for (const leaf of allLeaves(ws.paneTree)) {
-    const bar = rootEl.querySelector<HTMLElement>(
-      `.pane[data-pane-id="${cssEscape(leaf.id)}"] > .pane-tab-bar`,
-    );
-    if (bar) renderPaneTabBar(bar, leaf);
-  }
-  syncMounts(ws.paneTree, ws.tabs);
-}
-
-function updateActivePaneHighlight() {
-  const activeId = appState.activeWs?.activePaneId;
-  rootEl.querySelectorAll<HTMLElement>(".pane").forEach((el) => {
-    if (el.dataset.paneId === activeId) {
-      el.classList.add("active");
-    } else {
-      el.classList.remove("active");
+function renderChooser(host: HTMLElement, paneId: PaneId) {
+  const box = document.createElement("div");
+  box.className = "pane-chooser";
+  box.innerHTML = `<div class="pane-chooser-title">Open in this pane</div>
+    <div class="pane-chooser-list"><span class="pane-chooser-loading">…</span></div>`;
+  host.appendChild(box);
+  const list = box.querySelector<HTMLElement>(".pane-chooser-list")!;
+  void getPaneProviderChoices().then((providers: AIProvider[]) => {
+    list.innerHTML = "";
+    for (const p of providers) {
+      const btn = document.createElement("button");
+      btn.className = "pane-chooser-item";
+      btn.textContent = getProviderLabel(p);
+      btn.addEventListener("click", () => {
+        appState.setActivePane(paneId);
+        void spawnIntoPane(paneId, p);
+      });
+      list.appendChild(btn);
     }
   });
 }
 
+function updateActivePaneHighlight() {
+  const activeId = appState.activeTabTree?.activePaneId;
+  rootEl.querySelectorAll<HTMLElement>(".pane").forEach((el) => {
+    el.classList.toggle("active", el.dataset.paneId === activeId);
+  });
+}
+
 function detachPanelElements(container: HTMLElement) {
-  // Panel elements live in `.pane-content`. Detach them so they're not removed
-  // when we wipe the container — panel modules keep their references alive.
   container.querySelectorAll<HTMLElement>(".pane-content").forEach((host) => {
-    const children = Array.from(host.children) as HTMLElement[];
-    for (const child of children) {
-      // Welcome divs are stateless throwaways — drop them so they don't
-      // accumulate in the holding area on every rebuild.
-      if (child.classList.contains("terminal-welcome")) {
+    for (const child of Array.from(host.children) as HTMLElement[]) {
+      if (
+        child.classList.contains("terminal-welcome") ||
+        child.classList.contains("pane-chooser")
+      ) {
         host.removeChild(child);
         continue;
       }
-      // Hide and detach; mounted again later by syncMounts if still active.
       child.style.display = "none";
       host.removeChild(child);
-      // Move to a hidden holding area under the root so the element stays in
-      // the document (some libraries depend on document-attached state).
       getHolding().appendChild(child);
     }
   });
@@ -231,7 +241,7 @@ function renderWelcome(container: HTMLElement) {
   welcome.innerHTML = `
     <div class="welcome-logo">PIKI</div>
     <div class="welcome-subtitle">Multi-Agent Workspace</div>
-    <p>Select a workspace or create one to begin.</p>
+    <p>Select a workspace or open a tab to begin.</p>
     <div class="welcome-shortcuts">
       <div class="shortcut-item"><span class="shortcut-key">${formatShortcut("Ctrl+N")}</span><span class="shortcut-label">New workspace</span></div>
       <div class="shortcut-item"><span class="shortcut-key">${formatShortcut("Ctrl+P")}</span><span class="shortcut-label">Command palette</span></div>
@@ -247,11 +257,11 @@ function renderWelcome(container: HTMLElement) {
 function wireResizeHandle(handle: HTMLElement, splitId: PaneId) {
   handle.addEventListener("mousedown", (e) => {
     e.preventDefault();
-    const ws = appState.activeWs;
-    if (!ws) return;
+    const wt = appState.activeTabTree;
+    if (!wt) return;
     const splitEl = handle.parentElement;
     if (!splitEl) return;
-    const split = findSplitNode(ws.paneTree, splitId);
+    const split = findSplitNode(wt.paneTree, splitId);
     if (!split) return;
     const rect = splitEl.getBoundingClientRect();
     const isHoriz = split.orientation === "horiz";
@@ -264,7 +274,6 @@ function wireResizeHandle(handle: HTMLElement, splitId: PaneId) {
 
     const firstChild = splitEl.children[0] as HTMLElement | undefined;
     const secondChild = splitEl.children[2] as HTMLElement | undefined;
-
     let currentRatio = split.ratio;
 
     function onMove(ev: MouseEvent) {
@@ -274,7 +283,6 @@ function wireResizeHandle(handle: HTMLElement, splitId: PaneId) {
       if (firstChild) firstChild.style.flex = `${ratio}`;
       if (secondChild) secondChild.style.flex = `${1 - ratio}`;
     }
-
     function onUp() {
       handle.classList.remove("dragging");
       document.body.style.cursor = "";
@@ -282,7 +290,6 @@ function wireResizeHandle(handle: HTMLElement, splitId: PaneId) {
       document.removeEventListener("mouseup", onUp);
       appState.setSplitRatio(splitId, currentRatio);
     }
-
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
   });
@@ -296,9 +303,11 @@ function findSplitNode(root: PaneNode, id: PaneId): SplitNode | null {
   return null;
 }
 
-// Reference findParentSplit so its export stays in use (will be needed in
-// follow-up phases for boundary checks).
-void findParentSplit;
+function escapeHtml(text: string): string {
+  const el = document.createElement("span");
+  el.textContent = text;
+  return el.innerHTML;
+}
 
 function cssEscape(s: string): string {
   if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {

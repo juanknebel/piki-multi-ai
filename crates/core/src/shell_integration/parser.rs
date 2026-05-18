@@ -166,8 +166,30 @@ fn parse_payload(payload: &[u8]) -> Option<ShellEvent> {
     match id {
         "133" => parse_osc_133(rest),
         "7" => parse_osc_7(rest),
+        "777" => parse_osc_777(rest),
         _ => None,
     }
+}
+
+/// OSC 777 is shared turf (Warp's `warp://cli-agent`, urxvt `notify`, VTE…).
+/// We only claim sequences whose target is exactly piki's
+/// [`CLI_AGENT_TARGET`](crate::cli_agent::install::CLI_AGENT_TARGET); anything
+/// else returns `None` and is left for the downstream emulator, exactly like
+/// any other unknown OSC.
+///
+/// `rest` is `notify;<target>;<json>`. We `splitn(3)` so semicolons inside
+/// the JSON body survive the framing split.
+fn parse_osc_777(rest: &str) -> Option<ShellEvent> {
+    let mut parts = rest.splitn(3, ';');
+    if parts.next()? != "notify" {
+        return None;
+    }
+    if parts.next()? != crate::cli_agent::install::CLI_AGENT_TARGET {
+        return None;
+    }
+    let json = parts.next()?;
+    let event = crate::cli_agent::parse_cli_agent_payload(json)?;
+    Some(ShellEvent::CliAgent(event))
 }
 
 fn parse_osc_133(rest: &str) -> Option<ShellEvent> {
@@ -396,6 +418,72 @@ mod tests {
     fn osc_7_with_st_terminator() {
         let events = parse_one(b"\x1b]7;file://host/x\x1b\\");
         assert_eq!(events, vec![ShellEvent::CwdChanged(PathBuf::from("/x"))]);
+    }
+
+    #[test]
+    fn osc_777_piki_target_emits_cli_agent_event() {
+        use crate::cli_agent::CliAgentEvent;
+        let json = r#"{"v":1,"event":"prompt_submit","session_id":"s1"}"#;
+        let seq = format!("\x1b]777;notify;piki://cli-agent;{json}\x07");
+        let events = parse_one(seq.as_bytes());
+        assert_eq!(
+            events,
+            vec![ShellEvent::CliAgent(CliAgentEvent::UserPromptSubmit {
+                session_id: "s1".into()
+            })]
+        );
+    }
+
+    #[test]
+    fn osc_777_foreign_target_is_ignored() {
+        // Warp's own sequence must not be claimed by us.
+        let warp = b"\x1b]777;notify;warp://cli-agent;{\"event\":\"stop\"}\x07";
+        assert!(parse_one(warp).is_empty());
+        // urxvt-style `OSC 777;notify;title;body` (no piki target) too.
+        let urxvt = b"\x1b]777;notify;Build done;all green\x07";
+        assert!(parse_one(urxvt).is_empty());
+    }
+
+    #[test]
+    fn osc_777_json_with_semicolons_survives_framing_split() {
+        use crate::cli_agent::CliAgentEvent;
+        let json = r#"{"v":1,"event":"stop","session_id":"s","response":"a; b; c"}"#;
+        let seq = format!("\x1b]777;notify;piki://cli-agent;{json}\x07");
+        let events = parse_one(seq.as_bytes());
+        assert_eq!(
+            events,
+            vec![ShellEvent::CliAgent(CliAgentEvent::Stop {
+                session_id: "s".into(),
+                query: None,
+                response: Some("a; b; c".into()),
+                transcript_path: None,
+            })]
+        );
+    }
+
+    #[test]
+    fn osc_777_split_across_chunks() {
+        use crate::cli_agent::CliAgentEvent;
+        let json = r#"{"v":1,"event":"tool_complete","session_id":"s","tool_name":"Bash"}"#;
+        let seq = format!("\x1b]777;notify;piki://cli-agent;{json}\x07");
+        let mut p = OscParser::new();
+        let mut all = Vec::new();
+        for chunk in seq.as_bytes().chunks(3) {
+            all.extend(p.feed(chunk));
+        }
+        assert_eq!(
+            all,
+            vec![ShellEvent::CliAgent(CliAgentEvent::PostToolUse {
+                session_id: "s".into(),
+                tool_name: Some("Bash".into()),
+            })]
+        );
+    }
+
+    #[test]
+    fn osc_777_malformed_json_yields_no_event() {
+        let seq = b"\x1b]777;notify;piki://cli-agent;not json at all\x07";
+        assert!(parse_one(seq).is_empty());
     }
 
     #[test]

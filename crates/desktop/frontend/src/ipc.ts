@@ -4,6 +4,7 @@ import type {
   WorkspaceInfo,
   WorkspaceDetail,
   ChangedFile,
+  DirEntry,
   PtyOutputEvent,
   PtyExitEvent,
   GitRefreshEvent,
@@ -41,6 +42,7 @@ export function createGithubWorkspace(
   description: string,
   prompt: string,
   githubUrl: string,
+  destinationDir: string,
   group: string | null,
   kanbanPath: string | null = null,
 ): Promise<WorkspaceInfo> {
@@ -49,9 +51,14 @@ export function createGithubWorkspace(
     description,
     prompt,
     githubUrl,
+    destinationDir,
     group,
     kanbanPath,
   });
+}
+
+export function defaultCloneDestination(): Promise<string> {
+  return invoke("default_clone_destination");
 }
 
 export function deleteWorkspace(index: number): Promise<void> {
@@ -89,6 +96,13 @@ export function spawnEditorTab(
   filePath: string,
 ): Promise<string> {
   return invoke("spawn_editor_tab", { workspaceIdx, filePath });
+}
+
+export function spawnTerminalAt(
+  workspaceIdx: number,
+  dir: string,
+): Promise<string> {
+  return invoke("spawn_terminal_at", { workspaceIdx, dir });
 }
 
 export function writePty(tabId: string, data: string): Promise<void> {
@@ -318,6 +332,30 @@ export function gitStashDrop(workspaceIdx: number, stashIndex: number): Promise<
 // Search commands
 export function fuzzyFileList(workspaceIdx: number): Promise<string[]> {
   return invoke("fuzzy_file_list", { workspaceIdx });
+}
+
+export function fsReadDir(
+  workspaceIdx: number,
+  path: string,
+  showHidden: boolean,
+): Promise<DirEntry[]> {
+  return invoke("fs_read_dir", { workspaceIdx, path, showHidden });
+}
+
+export function fsCreateFile(workspaceIdx: number, path: string): Promise<void> {
+  return invoke("fs_create_file", { workspaceIdx, path });
+}
+
+export function fsCreateDir(workspaceIdx: number, path: string): Promise<void> {
+  return invoke("fs_create_dir", { workspaceIdx, path });
+}
+
+export function fsRename(workspaceIdx: number, from: string, to: string): Promise<void> {
+  return invoke("fs_rename", { workspaceIdx, from, to });
+}
+
+export function fsDelete(workspaceIdx: number, path: string): Promise<void> {
+  return invoke("fs_delete", { workspaceIdx, path });
 }
 
 export function readFileContent(workspaceIdx: number, path: string): Promise<string> {
@@ -709,6 +747,14 @@ export function onPtyShellEvent(
   callback: (event: import("./types").PtyShellEvent) => void,
 ): Promise<UnlistenFn> {
   return listen<import("./types").PtyShellEvent>("pty-shell-event", (e) =>
+    callback(e.payload),
+  );
+}
+
+export function onPtyAgentEvent(
+  callback: (event: import("./types").PtyAgentEvent) => void,
+): Promise<UnlistenFn> {
+  return listen<import("./types").PtyAgentEvent>("pty-agent-event", (e) =>
     callback(e.payload),
   );
 }

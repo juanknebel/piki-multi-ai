@@ -70,6 +70,7 @@ pub fn spawn_idle_watcher_loop(app_handle: AppHandle) {
                 String,
                 std::time::Duration,
                 Option<String>,
+                bool,
             )> = Vec::new();
             {
                 let mut app = state.lock();
@@ -82,14 +83,28 @@ pub fn spawn_idle_watcher_loop(app_handle: AppHandle) {
                     .iter()
                     .filter_map(|c| c.icon.clone().map(|i| (c.name.clone(), i)))
                     .collect();
+                let active_ws = app.active_workspace;
                 for (ws_idx, ws) in app.workspaces.iter_mut().enumerate() {
                     let ws_name = ws.info.name.clone();
-                    for tab in &mut ws.tabs {
+                    let active_tab = ws.active_tab;
+                    for (tab_idx, tab) in ws.tabs.iter_mut().enumerate() {
                         let Some(ref pty) = tab.pty else { continue };
                         let Some(ref mut watcher) = tab.idle_watcher else {
                             continue;
                         };
                         if !pty.peek_alive() {
+                            continue;
+                        }
+                        // Structured cli-agent channel live for this tab → it
+                        // owns attention (precise Stop/Notification); skip the
+                        // byte-silence heuristic so it can't double-fire. No
+                        // events (missing / version-skewed hooks) → `cli_agent`
+                        // stays `None` and the watcher is the graceful
+                        // fallback.
+                        if pty
+                            .shell()
+                            .is_some_and(|s| s.lock().state.cli_agent.is_some())
+                        {
                             continue;
                         }
                         if let Some(sig) = watcher.poll(pty.bytes_processed()) {
@@ -106,6 +121,7 @@ pub fn spawn_idle_watcher_loop(app_handle: AppHandle) {
                                 provider_label,
                                 sig.silent_for,
                                 icon,
+                                ws_idx == active_ws && tab_idx == active_tab,
                             ));
                         }
                     }
@@ -114,13 +130,16 @@ pub fn spawn_idle_watcher_loop(app_handle: AppHandle) {
             for ev in events {
                 let _ = app_handle.emit("pty-attention", ev);
             }
-            for (origin, ws_name, provider_label, silent_for, icon) in pending_idle {
+            for (origin, ws_name, provider_label, silent_for, icon, from_active_view) in
+                pending_idle
+            {
                 notifications::notify_agent_idle(
                     &origin,
                     &ws_name,
                     &provider_label,
                     silent_for,
                     icon.as_deref(),
+                    from_active_view,
                 );
             }
         }

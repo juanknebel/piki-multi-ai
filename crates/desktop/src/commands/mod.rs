@@ -3,6 +3,7 @@ pub mod api;
 pub mod chat;
 pub mod clipboard;
 pub mod diff;
+pub mod fs;
 pub mod git;
 pub mod gitlog;
 pub mod kanban;

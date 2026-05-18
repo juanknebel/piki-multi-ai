@@ -89,6 +89,8 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
         ref mut name_cursor,
         ref mut dir,
         ref mut dir_cursor,
+        ref mut destination,
+        ref mut destination_cursor,
         ref mut desc,
         ref mut desc_cursor,
         ref mut prompt,
@@ -106,11 +108,11 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
 
     match key.code {
         KeyCode::Tab => {
-            *active_field = active_field.next();
+            *active_field = active_field.next_with(*source);
             return None;
         }
         KeyCode::BackTab => {
-            *active_field = active_field.prev();
+            *active_field = active_field.prev_with(*source);
             return None;
         }
         KeyCode::Enter => {
@@ -175,6 +177,22 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
                 }
                 NewWorkspaceSource::GitHub => {
                     let url = dir_raw;
+                    let dest_raw = destination.trim().to_string();
+                    if dest_raw.is_empty() {
+                        app.status_message =
+                            Some("Destination folder is required".into());
+                        return None;
+                    }
+                    let dest_expanded = if dest_raw.starts_with('~') {
+                        if let Ok(home) = std::env::var("HOME") {
+                            dest_raw.replacen('~', &home, 1)
+                        } else {
+                            dest_raw.clone()
+                        }
+                    } else {
+                        dest_raw.clone()
+                    };
+                    let dest_path = PathBuf::from(&dest_expanded);
                     let ws_name = if name_trimmed.is_empty() {
                         parse_github_repo_name(&url).unwrap_or_default()
                     } else {
@@ -194,6 +212,7 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
                         prompt_val,
                         kanban_path,
                         url,
+                        dest_path,
                         group_val,
                     ));
                 }
@@ -229,6 +248,7 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
     let (buf, cursor) = match field {
         DialogField::Name => (name as &mut String, name_cursor as &mut usize),
         DialogField::Directory => (dir, dir_cursor),
+        DialogField::Destination => (destination, destination_cursor),
         DialogField::Description => (desc, desc_cursor),
         DialogField::Prompt => (prompt, prompt_cursor),
         DialogField::KanbanPath => (kanban, kanban_cursor),
@@ -1748,12 +1768,16 @@ pub(super) fn handle_edit_provider_input(app: &mut App, key: KeyEvent) -> Option
                 default_args.split_whitespace().map(String::from).collect()
             };
             let old_name = original_name.clone();
-            // Preserve the existing icon when editing — the dialog form
-            // doesn't expose it as a field today, so blindly setting `None`
-            // would wipe Claude's ✦ / Gemini's ✧ on every save.
-            let preserved_icon = old_name
+            // Preserve fields the dialog form doesn't expose today — blindly
+            // resetting them would wipe Claude's ✦ / Gemini's ✧ icon and any
+            // per-provider idle config (`idle_threshold_secs` / `idle_notify`
+            // from providers.toml) on every save.
+            let prev = old_name
                 .as_deref()
-                .and_then(|n| app.provider_manager.get(n).and_then(|c| c.icon.clone()));
+                .and_then(|n| app.provider_manager.get(n));
+            let preserved_icon = prev.and_then(|c| c.icon.clone());
+            let preserved_idle_threshold = prev.and_then(|c| c.idle_threshold_secs);
+            let preserved_idle_notify = prev.map(|c| c.idle_notify).unwrap_or(true);
             Some((old_name, piki_core::providers::ProviderConfig {
                 name: name.clone(),
                 description: description.clone(),
@@ -1762,8 +1786,8 @@ pub(super) fn handle_edit_provider_input(app: &mut App, key: KeyEvent) -> Option
                 prompt_format,
                 dispatchable,
                 agent_dir: if agent_dir.is_empty() { None } else { Some(agent_dir.clone()) },
-                idle_threshold_secs: None,
-                idle_notify: true,
+                idle_threshold_secs: preserved_idle_threshold,
+                idle_notify: preserved_idle_notify,
                 icon: preserved_icon,
             }))
         } else {

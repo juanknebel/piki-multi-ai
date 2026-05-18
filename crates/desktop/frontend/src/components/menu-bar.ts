@@ -16,6 +16,7 @@ import { openCommandPalette } from "./command-palette";
 import { showAgentManager } from "./dialogs/agent-dialog";
 import { showDispatchDialog } from "./dialogs/dispatch-dialog";
 import { showHelpDialog } from "./dialogs/help-dialog";
+import { closeActiveWsTab } from "./tab-bar";
 import { showDashboard } from "./dialogs/dashboard-dialog";
 import { showSysinfoDialog } from "./dialogs/sysinfo-dialog";
 import { showThemeDialog } from "./dialogs/theme-dialog";
@@ -26,6 +27,9 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getProviderLabel, getProviderKey, type AIProvider } from "../types";
 import { getShortcutKey, formatShortcut } from "../shortcuts";
 import { openWebPreviewTab } from "./web-preview-panel";
+import { revealInFileTree, toggleFileTreeAutoReveal } from "./file-tree";
+import { getCodeEditorFilePath } from "./code-editor-panel";
+import { getMarkdownEditorFilePath } from "./markdown-editor-panel";
 
 // ── Types ───────────────────────────────────────
 
@@ -97,20 +101,17 @@ const MENUS: MenuDefinition[] = [
       },
       SEP,
       {
+        label: "New Blank Tab",
+        shortcut: "Ctrl+T",
+        action: () => appState.newBlankTab(),
+      },
+      {
         label: "Close Tab",
         disabled: () => {
           const ws = appState.activeWs;
-          return !ws || ws.tabs.length === 0;
+          return !ws || ws.wsTabs.length === 0;
         },
-        action: () => {
-          const ws = appState.activeWs;
-          if (!ws || ws.tabs.length === 0) return;
-          const tab = ws.tabs[ws.activeTab];
-          if (!tab) return;
-          const wsIdx = appState.activeWorkspace;
-          ipc.closeTab(wsIdx, ws.activeTab).catch(() => {});
-          appState.removeTab(wsIdx, ws.activeTab);
-        },
+        action: () => closeActiveWsTab(),
       },
       SEP,
       {
@@ -177,6 +178,26 @@ const MENUS: MenuDefinition[] = [
     label: "View",
     items: () => [
       { label: "Explorer", action: () => appState.setActiveView("explorer") },
+      { label: "Files", action: () => appState.setActiveView("files") },
+      {
+        label: "Reveal File in Files",
+        action: () => {
+          const ws = appState.activeWs;
+          const tab = ws?.tabs[ws.activeTab];
+          const path =
+            tab?.provider === "CodeEditor"
+              ? getCodeEditorFilePath(tab.id)
+              : tab?.provider === "Markdown"
+                ? getMarkdownEditorFilePath(tab.id)
+                : null;
+          if (!path) {
+            toast("Active tab is not a file", "info");
+            return;
+          }
+          revealInFileTree(path);
+        },
+      },
+      { label: "Auto-reveal Active File", action: () => toggleFileTreeAutoReveal() },
       { label: "Source Control", action: () => appState.setActiveView("git") },
       { label: "Agents", shortcut: "Ctrl+Shift+A", action: () => showAgentManager() },
       { label: "Kanban Board", shortcut: "Alt+K", action: () => appState.setActiveView("kanban") },

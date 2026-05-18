@@ -142,6 +142,25 @@ fn render_normal_status(frame: &mut Frame, area: Rect, app: &App) {
         text_style,
     ));
 
+    // Structured Claude agent status for the active tab (precise lifecycle
+    // from the OSC 777 channel), with a short summary preview.
+    if let Some((status, summary)) = ws.current_tab().and_then(|t| t.cli_agent_snapshot()) {
+        let (glyph, label, color) = crate::ui::cli_agent_status_view(status);
+        let mut txt = format!("{} {}", glyph, label);
+        if let Some(s) = summary {
+            let s: String = s.replace(['\n', '\r'], " ").chars().take(40).collect();
+            if !s.trim().is_empty() {
+                txt.push_str(": ");
+                txt.push_str(s.trim());
+            }
+        }
+        left.push(sep.clone());
+        left.push(Span::styled(
+            txt,
+            Style::default().bg(mode_bg).fg(color),
+        ));
+    }
+
     // Right section: workspace counter and scroll indicator
     let mut right: Vec<Span> = vec![Span::styled(
         format!("ws {}/{}", app.active_workspace + 1, app.workspaces.len()),

@@ -89,6 +89,10 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  /* Fill the pane-area (a row flex parent) so the centered children are
+     actually centered horizontally, not hugging the left edge. */
+  flex: 1 1 auto;
+  width: 100%;
   height: 100%;
   gap: 16px;
   animation: welcome-in 0.4s var(--ease-out);

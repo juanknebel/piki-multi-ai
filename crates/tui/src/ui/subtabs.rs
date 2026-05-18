@@ -36,6 +36,13 @@ pub fn render(frame: &mut Frame, area: Rect, ws: &Workspace, theme: &Theme) {
                 Span::styled(format!(" {} ", icon), base_style),
                 Span::styled(label, base_style),
             ];
+            if let Some((status, _)) = tab.cli_agent_snapshot() {
+                let (glyph, _, color) = crate::ui::cli_agent_status_view(status);
+                spans.push(Span::styled(
+                    format!(" {}", glyph),
+                    Style::default().fg(color),
+                ));
+            }
             if tab.closable {
                 spans.push(Span::styled(
                     " ×",

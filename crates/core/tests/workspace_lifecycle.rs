@@ -97,7 +97,7 @@ async fn test_create_simple_in_git_folder_no_remote_is_local() {
 }
 
 #[tokio::test]
-async fn test_create_from_github_clones_into_managed_destination() {
+async fn test_create_from_github_clones_into_chosen_destination() {
     use piki_core::domain::{WorkspaceOrigin, WorkspaceType};
     use piki_core::paths::DataPaths;
 
@@ -117,12 +117,17 @@ async fn test_create_from_github_clones_into_managed_destination() {
         .to_string_lossy()
         .to_string();
 
+    // User-chosen destination distinct from worktrees_dir so we prove the
+    // clone really honors the argument.
+    let chosen_dest = data_dir.path().join("my-projects");
+    std::fs::create_dir_all(&chosen_dest).expect("create chosen_dest");
+
     let info = manager
-        .create_from_github("clone-ws", "desc", "", None, &url)
+        .create_from_github("clone-ws", "desc", "", None, &url, &chosen_dest)
         .await
         .expect("create_from_github should clone successfully");
 
-    let expected_path = paths.worktrees_dir(&expected_name);
+    let expected_path = chosen_dest.join(&expected_name);
     assert_eq!(info.path, expected_path);
     assert_eq!(info.source_repo, expected_path);
     assert_eq!(info.workspace_type, WorkspaceType::Simple);
@@ -134,4 +139,54 @@ async fn test_create_from_github_clones_into_managed_destination() {
         WorkspaceOrigin::GitHub { url: u } => assert_eq!(u, url),
         WorkspaceOrigin::Local => panic!("expected GitHub origin"),
     }
+}
+
+#[tokio::test]
+async fn test_create_from_github_rejects_missing_destination() {
+    use piki_core::paths::DataPaths;
+
+    let (_remote_dir, remote_path) = common::setup_test_repo();
+    let url = remote_path.to_string_lossy().to_string();
+
+    let data_dir = tempfile::TempDir::new().expect("tempdir");
+    let paths = DataPaths::new(data_dir.path().to_path_buf());
+    let manager = WorkspaceManager::with_paths(paths);
+
+    // A non-default, non-existent destination must error rather than
+    // silently fall back to creating it. The repos_dir() default is the
+    // only path the manager auto-creates.
+    let bogus = data_dir.path().join("nope-not-there");
+    let err = manager
+        .create_from_github("clone-ws", "", "", None, &url, &bogus)
+        .await
+        .expect_err("should reject missing user-chosen destination");
+    assert!(
+        err.to_string().contains("does not exist"),
+        "unexpected error: {err}"
+    );
+}
+
+#[tokio::test]
+async fn test_create_from_github_auto_creates_default_repos_dir() {
+    use piki_core::paths::DataPaths;
+
+    let (_remote_dir, remote_path) = common::setup_test_repo();
+    let url = remote_path.to_string_lossy().to_string();
+
+    let data_dir = tempfile::TempDir::new().expect("tempdir");
+    let paths = DataPaths::new(data_dir.path().to_path_buf());
+    let manager = WorkspaceManager::with_paths(paths.clone());
+
+    // The default repos_dir does NOT exist on first run; the manager
+    // should auto-create it as a convenience for the dialog default.
+    let default_dest = paths.repos_dir();
+    assert!(!default_dest.exists(), "test precondition");
+
+    let info = manager
+        .create_from_github("clone-ws", "", "", None, &url, &default_dest)
+        .await
+        .expect("default destination should auto-create");
+
+    assert!(default_dest.is_dir(), "default repos_dir created");
+    assert!(info.path.starts_with(&default_dest));
 }

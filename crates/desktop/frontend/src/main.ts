@@ -98,6 +98,13 @@ async function init() {
     }
   });
 
+  // Structured Claude Code lifecycle events (per-tab agent status). The
+  // backend already rides the `pty-attention` rail for the attention-worthy
+  // ones, so here we only update per-tab state.
+  ipc.onPtyAgentEvent((event) => {
+    appState.applyAgentEvent(event);
+  });
+
   // Provider-tab idle notifications (and any other backend "needs attention").
   ipc.onPtyAttention((event) => {
     appState.markWorkspaceAttention(event.workspace_idx);
@@ -155,6 +162,7 @@ async function init() {
   bindAction("toggle-sidebar", () => toggleSidebar());
   bindAction("toggle-chat", () => toggleChatPanel());
   bindAction("help", () => showHelpDialog());
+  bindAction("new-tab", () => appState.newBlankTab());
   bindAction("split-right", () => appState.splitActivePane("right"));
   bindAction("split-down", () => appState.splitActivePane("down"));
   bindAction("close-pane", () => {

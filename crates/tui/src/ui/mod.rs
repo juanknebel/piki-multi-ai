@@ -16,6 +16,24 @@ pub mod subtabs;
 pub mod terminal;
 pub mod workspace_switcher;
 
+/// Glyph, short label, and color for a Claude agent status. Shared by the
+/// subtab bar, the status bar, and the dashboard so the TUI surfaces the
+/// structured cli-agent channel consistently (mirrors the desktop
+/// `cliAgentStatusView`). Colors use raw ratatui constants to match the
+/// dashboard's existing status palette.
+pub(crate) fn cli_agent_status_view(
+    status: piki_core::cli_agent::CliAgentStatus,
+) -> (&'static str, &'static str, ratatui::style::Color) {
+    use piki_core::cli_agent::CliAgentStatus as S;
+    use ratatui::style::Color;
+    match status {
+        S::Running => ("▷", "running", Color::DarkGray),
+        S::WaitingPermission => ("⚠", "needs permission", Color::Yellow),
+        S::Idle => ("⏳", "waiting", Color::Cyan),
+        S::Done => ("✓", "done", Color::Green),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::app::App;

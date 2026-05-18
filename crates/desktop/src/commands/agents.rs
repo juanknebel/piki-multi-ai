@@ -2,6 +2,7 @@ use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
+use piki_core::cli_agent::install as cli_agent_install;
 use piki_core::storage::AgentProfile;
 
 use crate::state::DesktopApp;
@@ -317,7 +318,7 @@ pub async fn dispatch_agent(
     dispatch_card_title: Option<String>,
 ) -> Result<String, String> {
     // All dispatchable providers live in ProviderManager (providers.toml).
-    let (ai_provider, command, default_args, prompt_format) = {
+    let (ai_provider, command, default_args, prompt_format, provider_cfg) = {
         let app = state.lock();
         let config = app
             .provider_manager
@@ -328,6 +329,8 @@ pub async fn dispatch_agent(
             config.command.clone(),
             config.default_args.clone(),
             config.prompt_format.clone(),
+            // Cloned so the lock drops here; drives the tab's IdleWatcher.
+            config.clone(),
         )
     };
     if command.is_empty() {
@@ -400,12 +403,15 @@ pub async fn dispatch_agent(
     };
 
     // Spawn the AI tab with prompt
-    let worktree_path = {
+    let (worktree_path, claude_hooks_dir) = {
         let app = state.lock();
         if target_ws_idx >= app.workspaces.len() {
             return Err("Workspace index out of range".to_string());
         }
-        app.workspaces[target_ws_idx].info.path.clone()
+        (
+            app.workspaces[target_ws_idx].info.path.clone(),
+            app.paths.claude_hooks_dir(),
+        )
     };
 
     // Build args: default_args + prompt args
@@ -421,11 +427,32 @@ pub async fn dispatch_agent(
     let mut args = default_args;
     args.extend(prompt_args);
 
-    let mut tab = crate::state::DesktopTab::new(ai_provider);
+    let mut tab = crate::state::DesktopTab::new(ai_provider, Some(&provider_cfg));
     let tab_id = tab.id.clone();
 
-    // Agent dispatch goes through provider tabs (Claude/Gemini/etc.) — no
-    // shell wrapper, so shell integration doesn't apply.
+    // Dispatched Claude agents get the structured cli-agent (OSC 777) hooks
+    // so the kanban flow sees precise lifecycle status. Other providers run
+    // bare (no shell wrapper, no hooks).
+    let (extra_env, extra_args, integration_on, cli_agent_sock) = if command == "claude" {
+        match cli_agent_install::setup_for_claude(&claude_hooks_dir) {
+            Ok(setup) => {
+                let sock = setup.sock_path.clone();
+                (
+                    setup.env.into_iter().collect::<Vec<_>>(),
+                    setup.extra_args,
+                    true,
+                    sock,
+                )
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "claude cli-agent hook setup failed");
+                (Vec::new(), Vec::new(), false, None)
+            }
+        }
+    } else {
+        (Vec::new(), Vec::new(), false, None)
+    };
+
     let pty = crate::pty_raw::RawPtySession::spawn(
         app_handle,
         tab_id.clone(),
@@ -434,9 +461,10 @@ pub async fn dispatch_agent(
         80,
         &command,
         &args,
-        &[],
-        &[],
-        false,
+        &extra_env,
+        &extra_args,
+        integration_on,
+        cli_agent_sock,
     )
     .map_err(|e| format!("Failed to spawn PTY: {e}"))?;
 

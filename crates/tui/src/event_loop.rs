@@ -460,9 +460,11 @@ pub(crate) async fn run(
         // still for the configured threshold (default 3s). The OS
         // notification fires regardless of whether the workspace is active.
         {
+            let active_ws = app.active_workspace;
             let mut idle_events: Vec<IdleEvent> = Vec::new();
             for (ws_idx, ws) in app.workspaces.iter_mut().enumerate() {
-                for tab in &mut ws.tabs {
+                let active_tab = ws.active_tab;
+                for (tab_idx, tab) in ws.tabs.iter_mut().enumerate() {
                     let Some(ref pty) = tab.pty_session else {
                         continue;
                     };
@@ -472,6 +474,18 @@ pub(crate) async fn run(
                     if !pty.peek_alive() {
                         continue;
                     }
+                    // The structured cli-agent channel proved itself live for
+                    // this tab (≥1 OSC 777 event parsed) → it owns attention;
+                    // skip the byte-silence heuristic so it can't double-fire.
+                    // If hooks are missing / version-skewed, no events arrive,
+                    // `cli_agent` stays `None`, and the watcher remains the
+                    // graceful fallback.
+                    if pty
+                        .shell()
+                        .is_some_and(|s| s.lock().state.cli_agent.is_some())
+                    {
+                        continue;
+                    }
                     if let Some(sig) = watcher.poll(pty.bytes_processed()) {
                         idle_events.push(IdleEvent {
                             workspace_idx: ws_idx,
@@ -479,6 +493,7 @@ pub(crate) async fn run(
                             provider_label: tab.provider.label().to_string(),
                             origin: format!("ws-{ws_idx}#tab-{}", tab.id),
                             silent_for: sig.silent_for,
+                            from_active_view: ws_idx == active_ws && tab_idx == active_tab,
                         });
                     }
                 }
@@ -498,46 +513,89 @@ pub(crate) async fn run(
                     &event.provider_label,
                     event.silent_for,
                     icon.as_deref(),
+                    event.from_active_view,
                 );
             }
         }
 
-        // Shell-tab OSC 133 `command-end` drain (every tick).
+        // Shell + cli-agent OSC drain (every tick).
         //
-        // Shell tabs spawned with shell integration enabled accumulate
-        // `ShellEvent`s on `PtySession.shell().pending_events`. Drain them
-        // here so each finished command surfaces as an OS notification with
-        // the workspace name + exit code. Non-`CommandEnd` events are
-        // discarded — the TUI has no per-tab shell-state UI today.
+        // Tabs spawned with OSC integration accumulate `ShellEvent`s on
+        // `PtySession.shell().pending_events`. Shell `command-end` markers
+        // become a notification with the workspace name + exit code.
+        // Structured Claude `CliAgent` events that warrant attention
+        // (permission / idle / done) set the workspace's idle badge and
+        // fire a precise notification — this replaces the byte-silence
+        // `IdleWatcher` for Claude-with-hooks tabs (whose watcher is now
+        // `None`). Other lifecycle events are informational and dropped.
         {
-            let mut command_end_events: Vec<(String, String, Option<i32>, Option<String>)> =
-                Vec::new();
+            let active_ws = app.active_workspace;
+            let mut command_end_events: Vec<CommandEndNotice> = Vec::new();
+            let mut cli_agent_events: Vec<CliAgentNotice> = Vec::new();
             for (ws_idx, ws) in app.workspaces.iter_mut().enumerate() {
                 let ws_name = ws.info.name.clone();
-                for tab in &mut ws.tabs {
+                let active_tab = ws.active_tab;
+                for (tab_idx, tab) in ws.tabs.iter_mut().enumerate() {
                     let Some(ref pty) = tab.pty_session else {
                         continue;
                     };
                     let Some(shell) = pty.shell() else { continue };
+                    let from_active_view = ws_idx == active_ws && tab_idx == active_tab;
                     let drained = shell.lock().drain_events();
                     for ev in drained {
-                        if let ShellEvent::CommandEnd { exit_code, command } = ev {
-                            command_end_events.push((
-                                format!("ws-{ws_idx}#tab-{}", tab.id),
-                                ws_name.clone(),
-                                exit_code,
-                                command,
-                            ));
+                        match ev {
+                            ShellEvent::CommandEnd { exit_code, command } => {
+                                command_end_events.push(CommandEndNotice {
+                                    origin: format!("ws-{ws_idx}#tab-{}", tab.id),
+                                    workspace_name: ws_name.clone(),
+                                    exit_code,
+                                    command,
+                                    from_active_view,
+                                });
+                            }
+                            ShellEvent::CliAgent(a) => {
+                                if let Some((kind, summary)) = a.attention() {
+                                    cli_agent_events.push(CliAgentNotice {
+                                        workspace_idx: ws_idx,
+                                        workspace_name: ws_name.clone(),
+                                        provider_label: tab.provider.label().to_string(),
+                                        origin: format!("ws-{ws_idx}#tab-{}", tab.id),
+                                        kind,
+                                        summary: summary.map(|s| s.to_string()),
+                                        from_active_view,
+                                    });
+                                }
+                            }
+                            _ => {}
                         }
                     }
                 }
             }
-            for (origin, ws_name, exit_code, command) in command_end_events {
+            for n in command_end_events {
                 notifications::notify_command_end(
-                    &origin,
-                    &ws_name,
-                    exit_code,
-                    command.as_deref(),
+                    &n.origin,
+                    &n.workspace_name,
+                    n.exit_code,
+                    n.command.as_deref(),
+                    n.from_active_view,
+                );
+            }
+            for n in cli_agent_events {
+                if let Some(ws) = app.workspaces.get_mut(n.workspace_idx) {
+                    ws.has_idle_notification = true;
+                }
+                app.needs_redraw = true;
+                let icon = app
+                    .provider_manager
+                    .get(&n.provider_label)
+                    .and_then(|c| c.icon.clone());
+                notifications::notify_cli_agent(
+                    &n.origin,
+                    &n.workspace_name,
+                    n.kind,
+                    n.summary.as_deref(),
+                    icon.as_deref(),
+                    n.from_active_view,
                 );
             }
         }
@@ -685,6 +743,36 @@ pub(crate) async fn run(
     Ok(())
 }
 
+/// A queued shell `command-end` notification, applied after the
+/// per-workspace borrow scope ends.
+struct CommandEndNotice {
+    origin: String,
+    workspace_name: String,
+    exit_code: Option<i32>,
+    command: Option<String>,
+    /// True when this event's tab is the active tab of the active
+    /// workspace — combined with window focus to gate the OS toast.
+    from_active_view: bool,
+}
+
+/// A queued structured cli-agent attention event (Stop / Notification /
+/// PermissionRequest), applied after the per-workspace borrow scope ends.
+struct CliAgentNotice {
+    workspace_idx: usize,
+    workspace_name: String,
+    provider_label: String,
+    /// Mailbox dedup key — stable per (workspace, tab) tuple.
+    origin: String,
+    /// cli-agent notification kind: `permission_request` / `notification` /
+    /// `stop`.
+    kind: &'static str,
+    /// Hook-built one-liner (permission preview / final response preview).
+    summary: Option<String>,
+    /// True when this event's tab is the active tab of the active
+    /// workspace — combined with window focus to gate the OS toast.
+    from_active_view: bool,
+}
+
 /// A queued idle-notification event, applied after the per-workspace borrow
 /// scope ends so the OS notification can run without holding `&mut App`.
 struct IdleEvent {
@@ -696,4 +784,7 @@ struct IdleEvent {
     /// How long the PTY was silent before the watcher fired. Surfaced in
     /// the notification body as `(idle Ns)`.
     silent_for: Duration,
+    /// True when this event's tab is the active tab of the active
+    /// workspace — combined with window focus to gate the OS toast.
+    from_active_view: bool,
 }

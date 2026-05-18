@@ -4,6 +4,7 @@ use parking_lot::Mutex;
 use tauri::{AppHandle, State};
 
 use piki_core::AIProvider;
+use piki_core::cli_agent::install as cli_agent_install;
 use piki_core::shell_integration::install as shell_install;
 
 use crate::pty_raw::RawPtySession;
@@ -34,6 +35,26 @@ fn shell_integration_setup(
     }
 }
 
+/// Structured cli-agent hook setup for Claude provider tabs. Returns the
+/// `(extra_env, extra_args, enabled, cli_agent_sock)` tuple; on failure the
+/// tab still spawns, just without the structured channel. `cli_agent_sock` is
+/// the per-spawn FIFO path the out-of-band transport uses.
+type CliAgentSetup = (Vec<(String, String)>, Vec<String>, bool, Option<std::path::PathBuf>);
+
+fn cli_agent_setup(hooks_dir: &std::path::Path) -> CliAgentSetup {
+    match cli_agent_install::setup_for_claude(hooks_dir) {
+        Ok(setup) => {
+            let sock = setup.sock_path.clone();
+            let env: Vec<(String, String)> = setup.env.into_iter().collect();
+            (env, setup.extra_args, true, sock)
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "claude cli-agent hook setup failed");
+            (Vec::new(), Vec::new(), false, None)
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn spawn_tab(
     app_handle: AppHandle,
@@ -45,7 +66,8 @@ pub async fn spawn_tab(
 
     // Non-PTY providers don't need a terminal session
     if ai_provider == AIProvider::Kanban || ai_provider == AIProvider::Api {
-        let mut tab = DesktopTab::new(ai_provider);
+        // Kanban/Api: never a Custom provider, so no idle config applies.
+        let mut tab = DesktopTab::new(ai_provider, None);
         let tab_id = tab.id.clone();
         tab.alive = true;
         let mut app = state.lock();
@@ -91,10 +113,18 @@ pub async fn spawn_tab(
         return Err(format!("{provider} does not use a terminal session"));
     }
 
-    let mut tab = DesktopTab::new(ai_provider.clone());
+    // Resolve the provider's providers.toml entry (cloned, so the lock is
+    // released before the await-heavy spawn below) for its per-provider idle
+    // knobs. Built-in providers (Shell/…) have no entry → universal defaults.
+    let provider_cfg = if let AIProvider::Custom(ref name) = ai_provider {
+        state.lock().provider_manager.get(name).cloned()
+    } else {
+        None
+    };
+    let mut tab = DesktopTab::new(ai_provider.clone(), provider_cfg.as_ref());
     let tab_id = tab.id.clone();
 
-    let (worktree_path, integration_dir) = {
+    let (worktree_path, integration_dir, claude_hooks_dir) = {
         let app = state.lock();
         if workspace_idx >= app.workspaces.len() {
             return Err("Workspace index out of range".to_string());
@@ -102,11 +132,20 @@ pub async fn spawn_tab(
         (
             app.workspaces[workspace_idx].info.path.clone(),
             app.paths.shell_integration_dir(),
+            app.paths.claude_hooks_dir(),
         )
     };
 
-    let (extra_env, extra_args, integration_on) =
-        shell_integration_setup(&ai_provider, &command, &integration_dir);
+    let is_claude = matches!(ai_provider, AIProvider::Custom(_)) && command == "claude";
+    let (extra_env, extra_args, integration_on, cli_agent_sock) =
+        if ai_provider == AIProvider::Shell {
+            let (e, a, on) = shell_integration_setup(&ai_provider, &command, &integration_dir);
+            (e, a, on, None)
+        } else if is_claude {
+            cli_agent_setup(&claude_hooks_dir)
+        } else {
+            (Vec::new(), Vec::new(), false, None)
+        };
 
     // Spawn PTY session (use default_args from provider config)
     let pty = RawPtySession::spawn(
@@ -120,6 +159,7 @@ pub async fn spawn_tab(
         &extra_env,
         &extra_args,
         integration_on,
+        cli_agent_sock,
     )
     .map_err(|e| format!("Failed to spawn PTY: {e}"))?;
 
@@ -244,7 +284,7 @@ pub async fn spawn_editor_tab(
         .cloned()
         .unwrap_or_else(|| "vi".to_string());
 
-    let mut tab = DesktopTab::new(AIProvider::Shell);
+    let mut tab = DesktopTab::new(AIProvider::Shell, None);
     let tab_id = tab.id.clone();
 
     let (worktree_path, integration_dir) = {
@@ -273,6 +313,7 @@ pub async fn spawn_editor_tab(
         &extra_env,
         &extra_args,
         integration_on,
+        None,
     )
     .map_err(|e| format!("Failed to spawn PTY: {e}"))?;
 
@@ -296,6 +337,93 @@ pub async fn spawn_editor_tab(
 
 fn shell_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
+}
+
+/// Spawns a Shell tab whose working directory is `dir` (workspace-relative).
+/// Powers the file tree's "Open in Terminal" action. Rejects paths that
+/// escape the workspace root.
+#[tauri::command]
+pub async fn spawn_terminal_at(
+    app_handle: AppHandle,
+    state: State<'_, Mutex<DesktopApp>>,
+    workspace_idx: usize,
+    dir: String,
+) -> Result<String, String> {
+    use std::path::{Component, Path};
+
+    let rel = Path::new(&dir);
+    if rel.is_absolute()
+        || rel
+            .components()
+            .any(|c| matches!(c, Component::ParentDir | Component::Prefix(_)))
+    {
+        return Err(format!("Invalid path: {dir}"));
+    }
+
+    let shell_command = {
+        let app = state.lock();
+        let custom_shell = app
+            .storage
+            .ui_prefs
+            .as_ref()
+            .and_then(|p| p.get_preference("settings").ok().flatten())
+            .and_then(|json| {
+                serde_json::from_str::<serde_json::Value>(&json)
+                    .ok()?
+                    .get("shell")?
+                    .as_str()
+                    .filter(|s| !s.is_empty())
+                    .map(String::from)
+            });
+        drop(app);
+        custom_shell.unwrap_or_else(|| AIProvider::Shell.resolved_command())
+    };
+
+    let mut tab = DesktopTab::new(AIProvider::Shell, None);
+    let tab_id = tab.id.clone();
+
+    let (worktree_path, integration_dir) = {
+        let app = state.lock();
+        if workspace_idx >= app.workspaces.len() {
+            return Err("Workspace index out of range".to_string());
+        }
+        (
+            app.workspaces[workspace_idx].info.path.clone(),
+            app.paths.shell_integration_dir(),
+        )
+    };
+
+    let cwd = worktree_path.join(rel);
+    let args: Vec<String> = Vec::new();
+    let (extra_env, extra_args, integration_on) =
+        shell_integration_setup(&AIProvider::Shell, &shell_command, &integration_dir);
+
+    let pty = RawPtySession::spawn(
+        app_handle,
+        tab_id.clone(),
+        &cwd,
+        24,
+        80,
+        &shell_command,
+        &args,
+        &extra_env,
+        &extra_args,
+        integration_on,
+        None,
+    )
+    .map_err(|e| format!("Failed to spawn PTY: {e}"))?;
+
+    tab.pty = Some(pty);
+    tab.alive = true;
+
+    let mut app = state.lock();
+    if workspace_idx < app.workspaces.len() {
+        app.workspaces[workspace_idx].tabs.push(tab);
+        app.workspaces[workspace_idx].active_tab =
+            app.workspaces[workspace_idx].tabs.len() - 1;
+    }
+
+    Ok(tab_id)
 }
 
 #[tauri::command]

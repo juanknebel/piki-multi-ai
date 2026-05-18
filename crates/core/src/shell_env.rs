@@ -365,6 +365,15 @@ fn augment_path_with_common_dirs(env: &mut HashMap<String, String>) {
     }
 
     let candidates = [
+        // Base system dirs. Normally already on PATH (the filter below skips
+        // them then), but a login shell that *overwrites* PATH (e.g.
+        // `export PATH=$HOME/.local/bin:...`) drops them — which breaks not
+        // just our jq lookup but coreutils (`dirname`, `basename`, `cut`)
+        // inside Claude's hook environment too.
+        "/usr/bin".to_string(),
+        "/bin".to_string(),
+        "/usr/sbin".to_string(),
+        "/sbin".to_string(),
         "/usr/local/bin".to_string(),
         "/opt/homebrew/bin".to_string(),
         "/opt/homebrew/sbin".to_string(),

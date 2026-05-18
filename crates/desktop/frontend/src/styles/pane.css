@@ -1,4 +1,5 @@
-/* Recursive pane tree styles. The pane view is mounted into #main-content. */
+/* Workspace view: top tab bar + the active tab's pane tree.
+   Mounted into #main-content as .pane-root. */
 
 .pane-root {
   display: flex;
@@ -8,8 +9,18 @@
   overflow: hidden;
 }
 
-.pane-root > .pane,
-.pane-root > .pane-split {
+/* The active workspace tab's pane tree lives here. */
+.pane-area {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  position: relative;
+  overflow: hidden;
+}
+
+.pane-area > .pane,
+.pane-area > .pane-split {
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
@@ -25,8 +36,63 @@
   position: relative;
 }
 
-.pane.active > .pane-tab-bar {
+/* ── Per-pane header (title + split/close) ─────────── */
+
+.pane-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 24px;
+  flex: 0 0 24px;
+  padding: 0 6px;
+  font-size: 11px;
+  color: var(--tab-inactive-fg);
+  background: var(--tab-inactive-bg);
+  border-bottom: 1px solid var(--border-primary);
+  user-select: none;
+}
+
+.pane.active > .pane-head {
   background: var(--bg-active, var(--tab-inactive-bg));
+  color: var(--text-bright);
+}
+
+.pane.active {
+  outline: 1px solid var(--accent-primary);
+  outline-offset: -1px;
+}
+
+.pane-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pane-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.pane-btn {
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.pane-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-bright);
+}
+
+.pane-btn-close:hover {
+  background: rgba(229, 83, 75, 0.18);
+  color: #e5534b;
 }
 
 .pane-content {
@@ -36,10 +102,53 @@
   overflow: hidden;
 }
 
-/* Children of a leaf's content host are sized to fill */
 .pane-content > * {
   width: 100%;
   height: 100%;
+}
+
+/* ── Blank-pane content chooser ────────────────────── */
+
+.pane-chooser {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--text-muted);
+}
+
+.pane-chooser-title {
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pane-chooser-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  max-width: 80%;
+}
+
+.pane-chooser-item {
+  border: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.pane-chooser-item:hover {
+  border-color: var(--accent-primary);
+  color: var(--text-bright);
+  background: var(--bg-active);
 }
 
 /* ── Splits ────────────────────────────────────────── */

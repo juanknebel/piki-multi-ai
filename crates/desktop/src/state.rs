@@ -53,9 +53,16 @@ pub struct DesktopTab {
 }
 
 impl DesktopTab {
-    pub fn new(provider: AIProvider) -> Self {
-        let idle_watcher = matches!(provider, AIProvider::Custom(_))
-            .then(piki_core::idle_watcher::IdleWatcher::default_for_provider);
+    /// `provider_cfg` is the matching `providers.toml` entry for `Custom`
+    /// providers; its per-provider idle knobs (`idle_threshold_secs` /
+    /// `idle_notify`) drive the tab's `IdleWatcher`. `None` for built-ins.
+    pub fn new(
+        provider: AIProvider,
+        provider_cfg: Option<&piki_core::providers::ProviderConfig>,
+    ) -> Self {
+        let idle_watcher = matches!(provider, AIProvider::Custom(_)).then(|| {
+            piki_core::idle_watcher::IdleWatcher::from_provider_config(provider_cfg)
+        });
         Self {
             id: Uuid::new_v4().to_string(),
             provider,

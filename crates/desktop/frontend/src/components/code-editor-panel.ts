@@ -1,12 +1,34 @@
 import { EditorView, basicSetup } from "codemirror";
-import { EditorState, Extension } from "@codemirror/state";
-import { oneDark } from "@codemirror/theme-one-dark";
+import { EditorState, Extension, Compartment } from "@codemirror/state";
 import { vim } from "@replit/codemirror-vim";
 import { languageServer } from "codemirror-languageserver";
 import * as ipc from "../ipc";
 import { appState } from "../state";
 import { toast } from "./toast";
 import { modCtrl, formatShortcut } from "../shortcuts";
+import { buildCmTheme } from "../cm-theme";
+import { themeEngine } from "../theme";
+
+/** Shared theme compartment so all open editors can be re-themed live when
+ *  the global theme changes (see `reapplyEditorThemes`). */
+const themeCompartment = new Compartment();
+
+function cmTheme(): Extension {
+  return buildCmTheme(
+    (k) => themeEngine.getEffectiveColor(k),
+    themeEngine.getActivePreset().isDark,
+  );
+}
+
+/** Reconfigure every open code editor with the current global theme. Called
+ *  by ThemeEngine.applyTheme (mirrors updateAllTerminals for xterm). */
+export function reapplyEditorThemes(): void {
+  for (const inst of instances.values()) {
+    inst.editorView?.dispatch({
+      effects: themeCompartment.reconfigure(cmTheme()),
+    });
+  }
+}
 
 const LANGUAGE_IDS: Record<string, string> = {
   rs: "rust",
@@ -95,6 +117,11 @@ export function getCodeEditorFileName(tabId: string): string | null {
   return null;
 }
 
+/** Workspace-relative path of a CodeEditor tab's file, or null. */
+export function getCodeEditorFilePath(tabId: string): string | null {
+  return instances.get(tabId)?.filePath ?? pendingFiles.get(tabId)?.filePath ?? null;
+}
+
 export function hideCodeEditorPanels() {
   for (const inst of instances.values()) {
     inst.element.style.display = "none";
@@ -159,6 +186,92 @@ async function getLanguageExtension(filePath: string): Promise<Extension | null>
     case "md":
     case "markdown":
       return (await import("@codemirror/lang-markdown")).markdown();
+    case "yaml":
+    case "yml":
+      return (await import("@codemirror/lang-yaml")).yaml();
+    case "toml": {
+      const { StreamLanguage } = await import("@codemirror/language");
+      const { toml } = await import("@codemirror/legacy-modes/mode/toml");
+      return StreamLanguage.define(toml);
+    }
+    // No dedicated CM6 Makefile mode exists; the `shell` legacy mode is a
+    // reasonable approximation (recipes are shell, `#` comments).
+    case "sh":
+    case "bash":
+    case "zsh":
+    case "mk":
+    case "makefile": {
+      const { StreamLanguage } = await import("@codemirror/language");
+      const { shell } = await import("@codemirror/legacy-modes/mode/shell");
+      return StreamLanguage.define(shell);
+    }
+    case "c":
+    case "h":
+    case "cpp":
+    case "cc":
+    case "cxx":
+    case "hpp":
+    case "hh":
+      return (await import("@codemirror/lang-cpp")).cpp();
+    case "go":
+      return (await import("@codemirror/lang-go")).go();
+    case "java":
+      return (await import("@codemirror/lang-java")).java();
+    case "php":
+      return (await import("@codemirror/lang-php")).php();
+    case "sql":
+      return (await import("@codemirror/lang-sql")).sql();
+    case "xml":
+      return (await import("@codemirror/lang-xml")).xml();
+    case "vue":
+      return (await import("@codemirror/lang-vue")).vue();
+    case "scss":
+    case "sass":
+      return (await import("@codemirror/lang-sass")).sass({ indented: ext === "sass" });
+    case "rb":
+    case "rake":
+    case "gemspec":
+    case "gemfile":
+    case "rakefile": {
+      const { StreamLanguage } = await import("@codemirror/language");
+      const { ruby } = await import("@codemirror/legacy-modes/mode/ruby");
+      return StreamLanguage.define(ruby);
+    }
+    case "dockerfile": {
+      const { StreamLanguage } = await import("@codemirror/language");
+      const { dockerFile } = await import("@codemirror/legacy-modes/mode/dockerfile");
+      return StreamLanguage.define(dockerFile);
+    }
+    case "ini":
+    case "cfg":
+    case "conf":
+    case "properties":
+    case "editorconfig":
+    case "npmrc":
+    case "gitconfig":
+    case "env": {
+      const { StreamLanguage } = await import("@codemirror/language");
+      const { properties } = await import("@codemirror/legacy-modes/mode/properties");
+      return StreamLanguage.define(properties);
+    }
+    case "diff":
+    case "patch": {
+      const { StreamLanguage } = await import("@codemirror/language");
+      const { diff } = await import("@codemirror/legacy-modes/mode/diff");
+      return StreamLanguage.define(diff);
+    }
+    case "lua": {
+      const { StreamLanguage } = await import("@codemirror/language");
+      const { lua } = await import("@codemirror/legacy-modes/mode/lua");
+      return StreamLanguage.define(lua);
+    }
+    case "ps1":
+    case "psm1":
+    case "psd1": {
+      const { StreamLanguage } = await import("@codemirror/language");
+      const { powerShell } = await import("@codemirror/legacy-modes/mode/powershell");
+      return StreamLanguage.define(powerShell);
+    }
     default:
       return null;
   }
@@ -254,11 +367,7 @@ function createPanel(tabId: string, filePath: string, workspaceIdx: number): Cod
         basicSetup,
         ...(langExt ? [langExt] : []),
         ...lspExtensions,
-        oneDark,
-        EditorView.theme({
-          "&": { height: "100%" },
-          ".cm-scroller": { overflow: "auto" },
-        }),
+        themeCompartment.of(cmTheme()),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             const isDirty = update.state.doc.toString() !== inst.originalContent;

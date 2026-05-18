@@ -27,6 +27,9 @@ import { showAboutDialog } from "./dialogs/about-dialog";
 import { getProviderLabel, getProviderKey, type AIProvider } from "../types";
 import { openWebPreviewTab } from "./web-preview-panel";
 import { themeEngine } from "../theme";
+import { revealInFileTree, toggleFileTreeAutoReveal } from "./file-tree";
+import { getCodeEditorFilePath } from "./code-editor-panel";
+import { getMarkdownEditorFilePath } from "./markdown-editor-panel";
 import { getShortcutKey, formatShortcut } from "../shortcuts";
 
 interface Command {
@@ -265,6 +268,13 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
 
   // Pane layout commands
   cmds.push({
+    id: "new-tab",
+    label: "New Blank Tab",
+    category: "Tab",
+    keybinding: getShortcutKey("new-tab"),
+    action: () => { appState.newBlankTab(); },
+  });
+  cmds.push({
     id: "split-right",
     label: "Split Pane Right",
     category: "Tab",
@@ -461,6 +471,38 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
     label: "Show Explorer",
     category: "View",
     action: () => appState.setActiveView("explorer"),
+  });
+  cmds.push({
+    id: "view-files",
+    label: "Show Files",
+    category: "View",
+    action: () => appState.setActiveView("files"),
+  });
+  cmds.push({
+    id: "reveal-in-files",
+    label: "Reveal Active File in Files",
+    category: "View",
+    action: () => {
+      const ws = appState.activeWs;
+      const tab = ws?.tabs[ws.activeTab];
+      const path =
+        tab?.provider === "CodeEditor"
+          ? getCodeEditorFilePath(tab.id)
+          : tab?.provider === "Markdown"
+            ? getMarkdownEditorFilePath(tab.id)
+            : null;
+      if (!path) {
+        toast("Active tab is not a file", "info");
+        return;
+      }
+      revealInFileTree(path);
+    },
+  });
+  cmds.push({
+    id: "files-auto-reveal",
+    label: "Toggle Auto-reveal Active File in Files",
+    category: "View",
+    action: () => toggleFileTreeAutoReveal(),
   });
   cmds.push({
     id: "view-git",

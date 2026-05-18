@@ -65,11 +65,29 @@ impl IdleWatcher {
     }
 
     /// Build with the default threshold (3s), `enabled = true`, and the
-    /// default re-arm delta ([`DEFAULT_IDLE_REARM_BYTES`]).
+    /// default re-arm delta ([`DEFAULT_IDLE_REARM_BYTES`]). Equivalent to
+    /// [`from_provider_config(None)`](Self::from_provider_config).
     pub fn default_for_provider() -> Self {
+        Self::from_provider_config(None)
+    }
+
+    /// Build from a provider's `providers.toml` entry, honouring its
+    /// per-provider fallback knobs:
+    /// - `idle_threshold_secs` → threshold (default
+    ///   [`DEFAULT_IDLE_THRESHOLD_SECS`] when unset)
+    /// - `idle_notify` → enabled (default `true` when no config)
+    ///
+    /// `None` yields the universal defaults. This is the single mapping point
+    /// from provider config to watcher params — both the TUI and desktop
+    /// frontends call it so per-provider config behaves identically.
+    pub fn from_provider_config(cfg: Option<&crate::providers::ProviderConfig>) -> Self {
+        let threshold = cfg
+            .and_then(|c| c.idle_threshold_secs)
+            .unwrap_or(DEFAULT_IDLE_THRESHOLD_SECS);
+        let enabled = cfg.map(|c| c.idle_notify).unwrap_or(true);
         Self::new(
-            Duration::from_secs(DEFAULT_IDLE_THRESHOLD_SECS),
-            true,
+            Duration::from_secs(threshold),
+            enabled,
             DEFAULT_IDLE_REARM_BYTES,
         )
     }
@@ -190,6 +208,46 @@ mod tests {
         // Even after many polls and more time, still suppressed.
         std::thread::sleep(Duration::from_millis(60));
         assert!(w.poll(1020).is_none());
+    }
+
+    #[test]
+    fn from_provider_config_honors_threshold_and_notify() {
+        use crate::providers::{ProviderConfig, PromptFormat};
+        let base = ProviderConfig {
+            name: "X".into(),
+            description: String::new(),
+            command: "x".into(),
+            default_args: Vec::new(),
+            prompt_format: PromptFormat::Positional,
+            dispatchable: false,
+            agent_dir: None,
+            idle_threshold_secs: Some(12),
+            idle_notify: true,
+            icon: None,
+        };
+        let w = IdleWatcher::from_provider_config(Some(&base));
+        assert_eq!(w.threshold, Duration::from_secs(12));
+        assert!(w.enabled());
+
+        // idle_notify = false → disabled watcher (never fires).
+        let mut quiet = base.clone();
+        quiet.idle_notify = false;
+        quiet.idle_threshold_secs = None; // also exercise the default branch
+        let w = IdleWatcher::from_provider_config(Some(&quiet));
+        assert_eq!(
+            w.threshold,
+            Duration::from_secs(DEFAULT_IDLE_THRESHOLD_SECS)
+        );
+        assert!(!w.enabled());
+
+        // None → universal defaults; default_for_provider delegates here.
+        let w = IdleWatcher::from_provider_config(None);
+        assert_eq!(
+            w.threshold,
+            Duration::from_secs(DEFAULT_IDLE_THRESHOLD_SECS)
+        );
+        assert!(w.enabled());
+        assert_eq!(w.rearm_bytes, DEFAULT_IDLE_REARM_BYTES);
     }
 
     #[test]

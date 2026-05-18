@@ -67,6 +67,10 @@ export function showWorkspaceDialog(opts: DialogOptions) {
           <label class="dialog-label">GitHub URL</label>
           <input class="dialog-input" id="ws-url" placeholder="https://github.com/owner/repo[.git]" value="" />
         </div>
+        <div class="dialog-field" id="ws-clone-dest-field" style="display:none">
+          <label class="dialog-label">Clone into</label>
+          <input class="dialog-input" id="ws-clone-dest" placeholder="/parent/directory" value="" />
+        </div>
         `
             : ""
         }
@@ -111,6 +115,18 @@ export function showWorkspaceDialog(opts: DialogOptions) {
   if (dirInput) attachPathPicker(dirInput, { title: "Select workspace directory" });
   const kanbanInput = backdrop.querySelector<HTMLInputElement>("#ws-kanban");
   if (kanbanInput) attachPathPicker(kanbanInput, { title: "Select kanban directory" });
+  const cloneDestInput = backdrop.querySelector<HTMLInputElement>("#ws-clone-dest");
+  if (cloneDestInput) {
+    attachPathPicker(cloneDestInput, { title: "Select clone destination" });
+    // Seed with the backend-suggested default (<data_dir>/repos). Fire-and-forget;
+    // if the call fails we just leave the input empty and the user fills it in.
+    ipc
+      .defaultCloneDestination()
+      .then((dest) => {
+        if (!cloneDestInput.value) cloneDestInput.value = dest;
+      })
+      .catch(() => {});
+  }
 
   // Mount source dropdown (replaces the old workspace-type dropdown)
   let sourceDropdown: ReturnType<typeof createDropdown> | null = null;
@@ -129,11 +145,13 @@ export function showWorkspaceDialog(opts: DialogOptions) {
   // Toggle Folder/URL field visibility on source change
   const folderField = backdrop.querySelector<HTMLElement>("#ws-folder-field");
   const urlField = backdrop.querySelector<HTMLElement>("#ws-url-field");
+  const cloneDestField = backdrop.querySelector<HTMLElement>("#ws-clone-dest-field");
   if (sourceDropdown && folderField && urlField) {
     const updateSourceFields = () => {
       const isGithub = sourceDropdown!.value === "github";
       folderField.style.display = isGithub ? "none" : "";
       urlField.style.display = isGithub ? "" : "none";
+      if (cloneDestField) cloneDestField.style.display = isGithub ? "" : "none";
     };
     sourceDropdown.container.addEventListener("change", updateSourceFields);
     updateSourceFields();
@@ -190,6 +208,12 @@ async function submitCreate(backdrop: HTMLElement, source: string) {
       toast("GitHub URL is required", "error");
       return;
     }
+    const destinationDir =
+      backdrop.querySelector<HTMLInputElement>("#ws-clone-dest")?.value.trim() ?? "";
+    if (!destinationDir) {
+      toast("Clone destination is required", "error");
+      return;
+    }
     const finalName = name || parseGithubRepoNameFromUrl(url);
     if (!finalName) {
       toast("Could not parse repo name from URL", "error");
@@ -203,6 +227,7 @@ async function submitCreate(backdrop: HTMLElement, source: string) {
         desc,
         prompt,
         url,
+        destinationDir,
         group || null,
         kanban || null,
       );

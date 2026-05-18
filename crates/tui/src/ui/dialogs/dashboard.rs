@@ -129,13 +129,21 @@ pub(crate) fn render_dashboard_overlay(frame: &mut Frame, area: Rect, app: &App)
                 };
                 let arrow = if is_active_tab { "→ " } else { "  " };
 
-                body_lines.push(Line::from(vec![
+                let mut tab_spans = vec![
                     Span::styled("     ", Style::default()),
                     Span::styled(arrow, Style::default().fg(tab_fg)),
                     Span::styled(label, Style::default().fg(tab_fg)),
                     Span::raw(" "),
                     Span::styled(indicator, Style::default().fg(ind_color)),
-                ]));
+                ];
+                if let Some((status, _)) = tab.cli_agent_snapshot() {
+                    let (glyph, slabel, color) = crate::ui::cli_agent_status_view(status);
+                    tab_spans.push(Span::styled(
+                        format!("  {} {}", glyph, slabel),
+                        Style::default().fg(color),
+                    ));
+                }
+                body_lines.push(Line::from(tab_spans));
             }
         }
     }

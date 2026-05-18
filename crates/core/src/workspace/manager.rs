@@ -1,9 +1,10 @@
 use std::path::PathBuf;
+use std::time::UNIX_EPOCH;
 
 use anyhow::{Context, bail};
 use crate::shell_env;
 
-use crate::domain::{WorkspaceInfo, WorkspaceOrigin, WorkspaceType};
+use crate::domain::{DirEntry, EntryKind, WorkspaceInfo, WorkspaceOrigin, WorkspaceType};
 use crate::paths::DataPaths;
 
 // No branch prefix — branch name matches the workspace name exactly.
@@ -258,11 +259,12 @@ impl WorkspaceManager {
         Ok(info)
     }
 
-    /// Clone a GitHub repository into a managed destination under the data
-    /// directory and register it as a Simple workspace tagged with
-    /// `WorkspaceOrigin::GitHub`. The destination is
-    /// `<data_dir>/worktrees/<repo_name>/`, where `repo_name` is parsed from
-    /// the URL.
+    /// Clone a GitHub repository into a user-chosen destination directory
+    /// and register it as a Simple workspace tagged with
+    /// `WorkspaceOrigin::GitHub`. The actual clone lands at
+    /// `destination_dir.join(repo_name)`, where `repo_name` is parsed from
+    /// the URL. The dialog typically pre-fills `destination_dir` with
+    /// [`DataPaths::repos_dir`] as a hint.
     pub async fn create_from_github(
         &self,
         name: &str,
@@ -270,21 +272,40 @@ impl WorkspaceManager {
         prompt: &str,
         kanban_path: Option<String>,
         github_url: &str,
+        destination_dir: &std::path::Path,
     ) -> anyhow::Result<WorkspaceInfo> {
         let repo_name = parse_github_repo_name(github_url)
             .ok_or_else(|| anyhow::anyhow!("invalid GitHub URL: {}", github_url))?;
-        let destination = self.paths.worktrees_dir(&repo_name);
 
-        if destination.exists() {
+        // Auto-create the dialog-default `<data_dir>/repos` parent so the
+        // first-run flow Just Works; for any other user-chosen path we
+        // require it to exist already — surfacing a typo rather than
+        // silently creating an unrelated directory tree.
+        let is_default_repos_dir = destination_dir == self.paths.repos_dir();
+        if !destination_dir.exists() {
+            if is_default_repos_dir {
+                tokio::fs::create_dir_all(destination_dir)
+                    .await
+                    .context("failed to create default repos directory")?;
+            } else {
+                bail!(
+                    "destination folder '{}' does not exist",
+                    destination_dir.display()
+                );
+            }
+        } else if !destination_dir.is_dir() {
             bail!(
-                "destination '{}' already exists; refusing to overwrite",
-                destination.display()
+                "destination '{}' is not a directory",
+                destination_dir.display()
             );
         }
-        if let Some(parent) = destination.parent() {
-            tokio::fs::create_dir_all(parent)
-                .await
-                .context("failed to create worktrees parent directory")?;
+
+        let destination = destination_dir.join(&repo_name);
+        if destination.exists() {
+            bail!(
+                "'{}' already exists; refusing to overwrite",
+                destination.display()
+            );
         }
 
         let output = shell_env::command("git")
@@ -434,6 +455,63 @@ pub async fn list_subdirs(path: &std::path::Path) -> Vec<String> {
     }
     dirs.sort();
     dirs
+}
+
+/// Lists the immediate children of `path` (one level, non-recursive).
+///
+/// Directories sort first, then symlinks, then files; each group is sorted
+/// case-insensitively by name. Dot-prefixed entries are omitted unless
+/// `show_hidden` is set. Returns an empty vec if `path` can't be read.
+pub async fn read_dir_entries(path: &std::path::Path, show_hidden: bool) -> Vec<DirEntry> {
+    let mut entries: Vec<DirEntry> = Vec::new();
+    if let Ok(mut rd) = tokio::fs::read_dir(path).await {
+        while let Ok(Some(entry)) = rd.next_entry().await {
+            let Ok(name) = entry.file_name().into_string() else {
+                continue;
+            };
+            if name.starts_with('.') && !show_hidden {
+                continue;
+            }
+            // `metadata()` follows symlinks (one syscall for type+size+mtime);
+            // fall back to the entry's own (symlink) metadata for broken links
+            // so they aren't silently dropped from the listing.
+            let (meta, was_symlink) = match tokio::fs::metadata(entry.path()).await {
+                Ok(m) => (Some(m), false),
+                Err(_) => (entry.metadata().await.ok(), true),
+            };
+            let Some(meta) = meta else { continue };
+            let kind = if was_symlink {
+                EntryKind::Symlink
+            } else if meta.is_dir() {
+                EntryKind::Dir
+            } else {
+                EntryKind::File
+            };
+            let mtime = meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0);
+            entries.push(DirEntry {
+                name,
+                kind,
+                size: meta.len(),
+                mtime,
+            });
+        }
+    }
+    entries.sort_by(|a, b| {
+        let rank = |k: &EntryKind| match k {
+            EntryKind::Dir => 0,
+            EntryKind::Symlink => 1,
+            EntryKind::File => 2,
+        };
+        rank(&a.kind)
+            .cmp(&rank(&b.kind))
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
+    entries
 }
 
 /// Inspect `git -C <root> remote get-url origin`. Returns

@@ -1,5 +1,5 @@
 import { appState } from "../state";
-import { getProviderLabel, type FileStatus } from "../types";
+import { getProviderLabel, cliAgentStatusView, type FileStatus } from "../types";
 import { showAboutDialog } from "./dialogs/about-dialog";
 import * as ipc from "../ipc";
 
@@ -61,6 +61,20 @@ export function renderStatusBar(container: HTMLElement) {
             addItem(container, `📁 ${formatHomeRelative(shellState.cwd)}`, "status-cwd");
           }
         }
+        // Claude agent tabs: structured status glyph + summary preview.
+        const agentState = appState.getTabShellState(tab.id);
+        if (agentState?.agentStatus) {
+          const v = cliAgentStatusView(agentState.agentStatus);
+          const sum = agentState.agentSummary
+            ? `: ${truncate(agentState.agentSummary, 60)}`
+            : "";
+          const item = document.createElement("div");
+          item.className = "status-item status-agent";
+          item.style.color = v.color;
+          item.textContent = `${v.glyph} ${v.label}${sum}`;
+          item.title = agentState.agentSummary ?? v.label;
+          container.appendChild(item);
+        }
         const label = getProviderLabel(tab.provider);
         const alive = tab.alive ? "" : " (exited)";
         addItem(container, `${label}${alive}`);
@@ -99,6 +113,11 @@ function formatHomeRelative(path: string): string {
   const parts = path.split("/").filter(Boolean);
   if (parts.length <= 3) return path;
   return ".../" + parts.slice(-3).join("/");
+}
+
+function truncate(s: string, max: number): string {
+  const oneLine = s.replace(/\s+/g, " ").trim();
+  return oneLine.length > max ? oneLine.slice(0, max - 1) + "…" : oneLine;
 }
 
 function addItem(container: HTMLElement, text: string, ...classes: string[]) {

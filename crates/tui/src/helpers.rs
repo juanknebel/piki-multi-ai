@@ -6,6 +6,7 @@ use crate::app::{self, App};
 use crate::clipboard;
 use crate::ui;
 use piki_core::AIProvider;
+use piki_core::cli_agent::install as cli_agent_install;
 use piki_core::pty::PtySession;
 use piki_core::shell_integration::install as shell_install;
 
@@ -33,7 +34,15 @@ pub(crate) async fn spawn_tab(
     provider_manager: Option<&piki_core::providers::ProviderManager>,
     paths: &piki_core::paths::DataPaths,
 ) -> usize {
-    let idx = ws.add_tab(provider.clone(), true);
+    // Resolve the provider's `providers.toml` entry up front so its
+    // per-provider idle knobs drive the tab's IdleWatcher (re-used below for
+    // command/arg resolution).
+    let provider_cfg = if let AIProvider::Custom(name) = provider {
+        provider_manager.and_then(|m| m.get(name))
+    } else {
+        None
+    };
+    let idx = ws.add_tab(provider.clone(), true, provider_cfg);
     if *provider == AIProvider::Kanban || *provider == AIProvider::CodeReview {
         return idx;
     }
@@ -64,23 +73,38 @@ pub(crate) async fn spawn_tab(
         (cmd, prompt_args)
     };
 
-    // Shell integration only applies to Shell tabs (provider tabs run their
-    // binary directly with no shell wrapper to emit OSC markers).
-    let (extra_env, extra_args, integration_on) = if *provider == AIProvider::Shell {
-        match shell_install::setup_for(&cmd, &paths.shell_integration_dir()) {
-            Ok(Some(setup)) => {
-                let env: Vec<(String, String)> = setup.env.into_iter().collect();
-                (env, setup.extra_args, true)
+    // Shell tabs get OSC 133/7 shell integration. Claude provider tabs get
+    // the structured cli-agent (OSC 777) hooks. Both ride the same OSC
+    // parser, so both enable `integration_on`. Everything else runs bare.
+    let is_claude = matches!(provider, AIProvider::Custom(_)) && cmd == "claude";
+    let (extra_env, extra_args, integration_on, cli_agent_sock) =
+        if *provider == AIProvider::Shell {
+            match shell_install::setup_for(&cmd, &paths.shell_integration_dir()) {
+                Ok(Some(setup)) => {
+                    let env: Vec<(String, String)> = setup.env.into_iter().collect();
+                    (env, setup.extra_args, true, None)
+                }
+                Ok(None) => (Vec::new(), Vec::new(), false, None),
+                Err(e) => {
+                    tracing::warn!(error = %e, shell = %cmd, "shell integration setup failed");
+                    (Vec::new(), Vec::new(), false, None)
+                }
             }
-            Ok(None) => (Vec::new(), Vec::new(), false),
-            Err(e) => {
-                tracing::warn!(error = %e, shell = %cmd, "shell integration setup failed");
-                (Vec::new(), Vec::new(), false)
+        } else if is_claude {
+            match cli_agent_install::setup_for_claude(&paths.claude_hooks_dir()) {
+                Ok(setup) => {
+                    let sock = setup.sock_path.clone();
+                    let env: Vec<(String, String)> = setup.env.into_iter().collect();
+                    (env, setup.extra_args, true, sock)
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "claude cli-agent hook setup failed");
+                    (Vec::new(), Vec::new(), false, None)
+                }
             }
-        }
-    } else {
-        (Vec::new(), Vec::new(), false)
-    };
+        } else {
+            (Vec::new(), Vec::new(), false, None)
+        };
 
     if let Ok(session) = PtySession::spawn(
         &ws.path,
@@ -91,6 +115,7 @@ pub(crate) async fn spawn_tab(
         &extra_env,
         &extra_args,
         integration_on,
+        cli_agent_sock,
     )
     .await
     {
