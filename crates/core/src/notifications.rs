@@ -282,17 +282,17 @@ fn spawn_toast(summary: String, body: String) {
     let app = appname();
     std::thread::spawn(move || {
         // We only reach here when the user is NOT looking at the event's tab
-        // (push_and_toast already gated on active-view + focus). Mark it
-        // Critical so the notification daemon doesn't auto-suppress it just
-        // because piki happens to be the focused window — a documented
-        // freedesktop behaviour for normal-urgency notifications.
-        if let Err(e) = notify_rust::Notification::new()
-            .summary(&summary)
-            .body(&body)
-            .appname(app)
-            .urgency(notify_rust::Urgency::Critical)
-            .show()
-        {
+        // (push_and_toast already gated on active-view + focus).
+        let mut notification = notify_rust::Notification::new();
+        notification.summary(&summary).body(&body).appname(app);
+        // Mark it Critical so the notification daemon doesn't auto-suppress
+        // it just because piki happens to be the focused window — a
+        // documented freedesktop behaviour for normal-urgency notifications.
+        // `urgency` is an XDG/freedesktop concept; the API doesn't exist on
+        // macOS (NSUserNotification has no urgency), so gate it to Linux.
+        #[cfg(target_os = "linux")]
+        notification.urgency(notify_rust::Urgency::Critical);
+        if let Err(e) = notification.show() {
             tracing::warn!("OS notification failed: {e}");
         }
     });
