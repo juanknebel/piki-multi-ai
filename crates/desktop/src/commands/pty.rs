@@ -35,18 +35,22 @@ fn shell_integration_setup(
     }
 }
 
-/// Structured cli-agent (OSC 777) hook setup for Claude provider tabs.
-/// Returns the `(extra_env, extra_args, enabled)` triple; on failure the tab
-/// still spawns, just without the structured channel.
-fn cli_agent_setup(hooks_dir: &std::path::Path) -> (Vec<(String, String)>, Vec<String>, bool) {
+/// Structured cli-agent hook setup for Claude provider tabs. Returns the
+/// `(extra_env, extra_args, enabled, cli_agent_sock)` tuple; on failure the
+/// tab still spawns, just without the structured channel. `cli_agent_sock` is
+/// the per-spawn FIFO path the out-of-band transport uses.
+type CliAgentSetup = (Vec<(String, String)>, Vec<String>, bool, Option<std::path::PathBuf>);
+
+fn cli_agent_setup(hooks_dir: &std::path::Path) -> CliAgentSetup {
     match cli_agent_install::setup_for_claude(hooks_dir) {
         Ok(setup) => {
+            let sock = setup.sock_path.clone();
             let env: Vec<(String, String)> = setup.env.into_iter().collect();
-            (env, setup.extra_args, true)
+            (env, setup.extra_args, true, sock)
         }
         Err(e) => {
             tracing::warn!(error = %e, "claude cli-agent hook setup failed");
-            (Vec::new(), Vec::new(), false)
+            (Vec::new(), Vec::new(), false, None)
         }
     }
 }
@@ -124,13 +128,15 @@ pub async fn spawn_tab(
     };
 
     let is_claude = matches!(ai_provider, AIProvider::Custom(_)) && command == "claude";
-    let (extra_env, extra_args, integration_on) = if ai_provider == AIProvider::Shell {
-        shell_integration_setup(&ai_provider, &command, &integration_dir)
-    } else if is_claude {
-        cli_agent_setup(&claude_hooks_dir)
-    } else {
-        (Vec::new(), Vec::new(), false)
-    };
+    let (extra_env, extra_args, integration_on, cli_agent_sock) =
+        if ai_provider == AIProvider::Shell {
+            let (e, a, on) = shell_integration_setup(&ai_provider, &command, &integration_dir);
+            (e, a, on, None)
+        } else if is_claude {
+            cli_agent_setup(&claude_hooks_dir)
+        } else {
+            (Vec::new(), Vec::new(), false, None)
+        };
 
     // Spawn PTY session (use default_args from provider config)
     let pty = RawPtySession::spawn(
@@ -144,6 +150,7 @@ pub async fn spawn_tab(
         &extra_env,
         &extra_args,
         integration_on,
+        cli_agent_sock,
     )
     .map_err(|e| format!("Failed to spawn PTY: {e}"))?;
 
@@ -297,6 +304,7 @@ pub async fn spawn_editor_tab(
         &extra_env,
         &extra_args,
         integration_on,
+        None,
     )
     .map_err(|e| format!("Failed to spawn PTY: {e}"))?;
 
@@ -392,6 +400,7 @@ pub async fn spawn_terminal_at(
         &extra_env,
         &extra_args,
         integration_on,
+        None,
     )
     .map_err(|e| format!("Failed to spawn PTY: {e}"))?;
 

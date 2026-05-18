@@ -68,6 +68,11 @@ pub struct RawPtySession {
     master: Box<dyn portable_pty::MasterPty + Send>,
     bytes_processed: Arc<AtomicU64>,
     shell: Option<Arc<Mutex<ShellSession>>>,
+    /// Out-of-band FIFO reader for the structured cli-agent channel. `Some`
+    /// only for Claude tabs spawned with a `cli_agent_sock` path. Its `Drop`
+    /// stops the reader and unlinks the FIFO.
+    #[cfg(unix)]
+    _cli_agent_sock: Option<piki_core::cli_agent::sock::SockReader>,
 }
 
 impl RawPtySession {
@@ -78,6 +83,12 @@ impl RawPtySession {
     /// `enable_shell_integration = true`, the reader spins up an [`OscParser`]
     /// that observes the byte stream, updates the session's [`ShellSession`]
     /// state, and emits `pty-shell-event` Tauri events.
+    ///
+    /// `cli_agent_sock` (when `Some` *and* `enable_shell_integration`) is the
+    /// per-spawn FIFO path the Claude hook scripts write structured lifecycle
+    /// events to out-of-band. We start a reader that feeds the same
+    /// [`ShellSession`] and, via its callback, drives `handle_cli_agent` (the
+    /// same handler the in-band OSC 777 path uses — kept as a fallback).
     #[allow(clippy::too_many_arguments)]
     pub fn spawn(
         app_handle: AppHandle,
@@ -90,6 +101,7 @@ impl RawPtySession {
         extra_env: &[(String, String)],
         extra_args: &[String],
         enable_shell_integration: bool,
+        cli_agent_sock: Option<std::path::PathBuf>,
     ) -> anyhow::Result<Self> {
         let pty_system = native_pty_system();
 
@@ -142,6 +154,13 @@ impl RawPtySession {
             None
         };
         let shell_for_reader = shell.clone();
+
+        // Clones for the out-of-band cli-agent FIFO callback (the byte reader
+        // task below moves `app_handle`/`emit_tab_id`).
+        #[cfg(unix)]
+        let sock_app_handle = app_handle.clone();
+        #[cfg(unix)]
+        let sock_tab_id = tab_id.clone();
 
         let emit_tab_id = tab_id.clone();
         let reader_handle = tokio::task::spawn_blocking(move || {
@@ -220,6 +239,36 @@ impl RawPtySession {
             }
         });
 
+        // Out-of-band FIFO transport for the structured cli-agent channel.
+        // Only meaningful when shell integration is on (so `shell` is `Some`)
+        // and a per-spawn FIFO path was supplied (Claude tabs). The callback
+        // mirrors the in-band OSC 777 arm: it drives `handle_cli_agent` for
+        // the Tauri/status/notification side; the shared `ShellSession` is fed
+        // by the reader itself.
+        #[cfg(unix)]
+        let cli_agent_sock = match (cli_agent_sock, shell.as_ref()) {
+            (Some(path), Some(shell)) => {
+                let cb_app = sock_app_handle;
+                let cb_tab = sock_tab_id;
+                let cb: piki_core::cli_agent::sock::CliAgentCallback =
+                    Box::new(move |ev| handle_cli_agent(&cb_app, &cb_tab, ev));
+                match piki_core::cli_agent::sock::spawn_reader(
+                    path,
+                    Arc::clone(shell),
+                    Some(cb),
+                ) {
+                    Ok(reader) => Some(reader),
+                    Err(e) => {
+                        tracing::warn!(error = %e, "cli-agent FIFO reader failed to start; OSC 777 fallback only");
+                        None
+                    }
+                }
+            }
+            _ => None,
+        };
+        #[cfg(not(unix))]
+        let _ = cli_agent_sock;
+
         tracing::info!(command, path = %worktree_path.display(), rows, cols, shell_integration = enable_shell_integration, "Raw PTY spawned");
 
         Ok(Self {
@@ -229,6 +278,8 @@ impl RawPtySession {
             master: pair.master,
             bytes_processed,
             shell,
+            #[cfg(unix)]
+            _cli_agent_sock: cli_agent_sock,
         })
     }
 

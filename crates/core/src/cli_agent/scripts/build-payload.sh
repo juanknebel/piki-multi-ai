@@ -43,8 +43,19 @@ build_payload() {
 }
 
 # emit_osc <json-body>
+#
+# Prefer the out-of-band per-tab FIFO (env var set by piki, file held open
+# O_RDWR on piki's side so this never blocks/EOFs). Claude Code spawns hooks
+# setsid-detached with no controlling terminal, so the /dev/tty OSC write below
+# always fails there — the FIFO path is the one that actually delivers. The
+# OSC 777 write stays as a graceful-degradation fallback for environments
+# where the FIFO isn't available.
 emit_osc() {
-    printf '\033]777;notify;%s;%s\007' \
-        "${PIKI_CLI_AGENT_TARGET:-piki://cli-agent}" "$1" \
-        > /dev/tty 2>/dev/null || true
+    if [ -n "$PIKI_CLI_AGENT_SOCK" ] && [ -p "$PIKI_CLI_AGENT_SOCK" ]; then
+        printf '%s\n' "$1" > "$PIKI_CLI_AGENT_SOCK" 2>/dev/null || true
+    else
+        printf '\033]777;notify;%s;%s\007' \
+            "${PIKI_CLI_AGENT_TARGET:-piki://cli-agent}" "$1" \
+            > /dev/tty 2>/dev/null || true
+    fi
 }

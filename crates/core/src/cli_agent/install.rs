@@ -9,7 +9,9 @@
 
 use std::collections::HashMap;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 const SCRIPT_BUILD_PAYLOAD: &str = include_str!("scripts/build-payload.sh");
 const SCRIPT_SESSION_START: &str = include_str!("scripts/on-session-start.sh");
@@ -31,6 +33,13 @@ pub struct ClaudeHookSetup {
     pub env: HashMap<String, String>,
     /// Args to **prepend** to the command's normal args (before the prompt).
     pub extra_args: Vec<String>,
+    /// Per-spawn FIFO path advertised to the `claude` child via
+    /// `PIKI_CLI_AGENT_SOCK`. The hook scripts prefer writing the structured
+    /// payload here (out-of-band) and fall back to the in-band OSC 777
+    /// `/dev/tty` write only when this is absent. The file itself is NOT
+    /// created here — the PTY layer owns `mkfifo`/cleanup; install only
+    /// decides the path. `None` only if the path could not be derived.
+    pub sock_path: Option<PathBuf>,
 }
 
 /// Materialize the hook scripts under `base_dir` (idempotent — overwrites to
@@ -94,6 +103,13 @@ fn materialize(base_dir: &Path) -> io::Result<ClaudeHookSetup> {
     let settings_path = base_dir.join("settings.json");
     std::fs::write(&settings_path, settings_json(&scripts_dir))?;
 
+    // Compute a unique-per-spawn FIFO path under `<base_dir>/sock`. The PTY
+    // layer mkfifo's + cleans it up; we only decide the path and advertise it
+    // via env so it propagates to the `claude` child and onward to its hooks.
+    let sock_dir = base_dir.join("sock");
+    std::fs::create_dir_all(&sock_dir)?;
+    let sock_path = sock_dir.join(unique_sock_name());
+
     let mut env = HashMap::new();
     env.insert("PIKI_CLI_AGENT".to_string(), "1".to_string());
     env.insert(
@@ -104,6 +120,10 @@ fn materialize(base_dir: &Path) -> io::Result<ClaudeHookSetup> {
         "PIKI_CLI_AGENT_V".to_string(),
         super::CLI_AGENT_PROTOCOL_VERSION.to_string(),
     );
+    env.insert(
+        "PIKI_CLI_AGENT_SOCK".to_string(),
+        sock_path.display().to_string(),
+    );
 
     Ok(ClaudeHookSetup {
         env,
@@ -111,7 +131,22 @@ fn materialize(base_dir: &Path) -> io::Result<ClaudeHookSetup> {
             "--settings".to_string(),
             settings_path.display().to_string(),
         ],
+        sock_path: Some(sock_path),
     })
+}
+
+/// A process-unique FIFO file name: pid + a process-global monotonic counter +
+/// wall-clock nanos. Collision-free across concurrent spawns in the same
+/// process (counter) and across separate piki processes (pid + nanos).
+fn unique_sock_name() -> String {
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let pid = std::process::id();
+    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    format!("cli-agent-{pid}-{n}-{nanos}.sock")
 }
 
 #[cfg(unix)]
@@ -197,6 +232,31 @@ mod tests {
             setup.env.get("PIKI_CLI_AGENT_V").unwrap(),
             &super::super::CLI_AGENT_PROTOCOL_VERSION.to_string()
         );
+
+        // The out-of-band FIFO transport: a path is decided and advertised via
+        // env, but the file itself is NOT created here (PTY layer owns that).
+        let sock = setup.sock_path.clone().expect("sock_path is Some");
+        assert_eq!(
+            setup.env.get("PIKI_CLI_AGENT_SOCK").unwrap(),
+            &sock.display().to_string()
+        );
+        assert!(sock.starts_with(dir.path().join("sock")));
+        assert!(
+            !sock.exists(),
+            "install must not create the FIFO; PTY layer owns it"
+        );
+        assert!(
+            dir.path().join("sock").is_dir(),
+            "the sock dir itself is created"
+        );
+    }
+
+    #[test]
+    fn sock_path_is_unique_across_materialize_calls() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = materialize(dir.path()).unwrap().sock_path.unwrap();
+        let b = materialize(dir.path()).unwrap().sock_path.unwrap();
+        assert_ne!(a, b, "each spawn must get a distinct FIFO path");
     }
 
     #[test]

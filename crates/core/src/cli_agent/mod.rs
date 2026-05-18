@@ -26,6 +26,8 @@ use std::time::Instant;
 use serde::Deserialize;
 
 pub mod install;
+#[cfg(unix)]
+pub mod sock;
 
 /// Protocol version this build of piki understands. The hook script sends
 /// `min(its_version, $PIKI_CLI_AGENT_V)`, so a payload with `v` greater than

@@ -431,20 +431,24 @@ pub async fn dispatch_agent(
     // Dispatched Claude agents get the structured cli-agent (OSC 777) hooks
     // so the kanban flow sees precise lifecycle status. Other providers run
     // bare (no shell wrapper, no hooks).
-    let (extra_env, extra_args, integration_on) = if command == "claude" {
+    let (extra_env, extra_args, integration_on, cli_agent_sock) = if command == "claude" {
         match cli_agent_install::setup_for_claude(&claude_hooks_dir) {
-            Ok(setup) => (
-                setup.env.into_iter().collect::<Vec<_>>(),
-                setup.extra_args,
-                true,
-            ),
+            Ok(setup) => {
+                let sock = setup.sock_path.clone();
+                (
+                    setup.env.into_iter().collect::<Vec<_>>(),
+                    setup.extra_args,
+                    true,
+                    sock,
+                )
+            }
             Err(e) => {
                 tracing::warn!(error = %e, "claude cli-agent hook setup failed");
-                (Vec::new(), Vec::new(), false)
+                (Vec::new(), Vec::new(), false, None)
             }
         }
     } else {
-        (Vec::new(), Vec::new(), false)
+        (Vec::new(), Vec::new(), false, None)
     };
 
     let pty = crate::pty_raw::RawPtySession::spawn(
@@ -458,6 +462,7 @@ pub async fn dispatch_agent(
         &extra_env,
         &extra_args,
         integration_on,
+        cli_agent_sock,
     )
     .map_err(|e| format!("Failed to spawn PTY: {e}"))?;
 

@@ -69,32 +69,34 @@ pub(crate) async fn spawn_tab(
     // the structured cli-agent (OSC 777) hooks. Both ride the same OSC
     // parser, so both enable `integration_on`. Everything else runs bare.
     let is_claude = matches!(provider, AIProvider::Custom(_)) && cmd == "claude";
-    let (extra_env, extra_args, integration_on) = if *provider == AIProvider::Shell {
-        match shell_install::setup_for(&cmd, &paths.shell_integration_dir()) {
-            Ok(Some(setup)) => {
-                let env: Vec<(String, String)> = setup.env.into_iter().collect();
-                (env, setup.extra_args, true)
+    let (extra_env, extra_args, integration_on, cli_agent_sock) =
+        if *provider == AIProvider::Shell {
+            match shell_install::setup_for(&cmd, &paths.shell_integration_dir()) {
+                Ok(Some(setup)) => {
+                    let env: Vec<(String, String)> = setup.env.into_iter().collect();
+                    (env, setup.extra_args, true, None)
+                }
+                Ok(None) => (Vec::new(), Vec::new(), false, None),
+                Err(e) => {
+                    tracing::warn!(error = %e, shell = %cmd, "shell integration setup failed");
+                    (Vec::new(), Vec::new(), false, None)
+                }
             }
-            Ok(None) => (Vec::new(), Vec::new(), false),
-            Err(e) => {
-                tracing::warn!(error = %e, shell = %cmd, "shell integration setup failed");
-                (Vec::new(), Vec::new(), false)
+        } else if is_claude {
+            match cli_agent_install::setup_for_claude(&paths.claude_hooks_dir()) {
+                Ok(setup) => {
+                    let sock = setup.sock_path.clone();
+                    let env: Vec<(String, String)> = setup.env.into_iter().collect();
+                    (env, setup.extra_args, true, sock)
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "claude cli-agent hook setup failed");
+                    (Vec::new(), Vec::new(), false, None)
+                }
             }
-        }
-    } else if is_claude {
-        match cli_agent_install::setup_for_claude(&paths.claude_hooks_dir()) {
-            Ok(setup) => {
-                let env: Vec<(String, String)> = setup.env.into_iter().collect();
-                (env, setup.extra_args, true)
-            }
-            Err(e) => {
-                tracing::warn!(error = %e, "claude cli-agent hook setup failed");
-                (Vec::new(), Vec::new(), false)
-            }
-        }
-    } else {
-        (Vec::new(), Vec::new(), false)
-    };
+        } else {
+            (Vec::new(), Vec::new(), false, None)
+        };
 
     if let Ok(session) = PtySession::spawn(
         &ws.path,
@@ -105,6 +107,7 @@ pub(crate) async fn spawn_tab(
         &extra_env,
         &extra_args,
         integration_on,
+        cli_agent_sock,
     )
     .await
     {
