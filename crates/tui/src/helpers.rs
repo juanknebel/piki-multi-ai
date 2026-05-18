@@ -34,7 +34,15 @@ pub(crate) async fn spawn_tab(
     provider_manager: Option<&piki_core::providers::ProviderManager>,
     paths: &piki_core::paths::DataPaths,
 ) -> usize {
-    let idx = ws.add_tab(provider.clone(), true);
+    // Resolve the provider's `providers.toml` entry up front so its
+    // per-provider idle knobs drive the tab's IdleWatcher (re-used below for
+    // command/arg resolution).
+    let provider_cfg = if let AIProvider::Custom(name) = provider {
+        provider_manager.and_then(|m| m.get(name))
+    } else {
+        None
+    };
+    let idx = ws.add_tab(provider.clone(), true, provider_cfg);
     if *provider == AIProvider::Kanban || *provider == AIProvider::CodeReview {
         return idx;
     }

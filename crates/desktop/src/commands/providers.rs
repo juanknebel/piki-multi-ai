@@ -65,13 +65,14 @@ pub async fn save_provider(
         _ => piki_core::providers::PromptFormat::Positional,
     };
     let mut app = state.lock();
-    // Preserve the existing icon when overwriting an entry — the UI form
-    // doesn't expose `icon` as an editable field today, so defaulting to
-    // `None` would wipe Claude's ✦ / Gemini's ✧ on every save.
-    let preserved_icon = app
-        .provider_manager
-        .get(&provider.name)
-        .and_then(|c| c.icon.clone());
+    // Preserve fields the UI form doesn't expose today — defaulting them
+    // would wipe Claude's ✦ / Gemini's ✧ icon and any per-provider idle
+    // config (`idle_threshold_secs` / `idle_notify` from providers.toml) on
+    // every save.
+    let prev = app.provider_manager.get(&provider.name);
+    let preserved_icon = prev.and_then(|c| c.icon.clone());
+    let preserved_idle_threshold = prev.and_then(|c| c.idle_threshold_secs);
+    let preserved_idle_notify = prev.map(|c| c.idle_notify).unwrap_or(true);
     let config = piki_core::providers::ProviderConfig {
         name: provider.name,
         description: provider.description,
@@ -80,8 +81,8 @@ pub async fn save_provider(
         prompt_format,
         dispatchable: provider.dispatchable,
         agent_dir: provider.agent_dir.filter(|s| !s.is_empty()),
-        idle_threshold_secs: None,
-        idle_notify: true,
+        idle_threshold_secs: preserved_idle_threshold,
+        idle_notify: preserved_idle_notify,
         icon: preserved_icon,
     };
     app.provider_manager.upsert(config);

@@ -372,10 +372,21 @@ impl Workspace {
         self.tabs.get_mut(self.active_tab)
     }
 
-    /// Add a new tab and return its index
-    pub fn add_tab(&mut self, provider: AIProvider, closable: bool) -> usize {
-        let idle_watcher = matches!(provider, AIProvider::Custom(_))
-            .then(piki_core::idle_watcher::IdleWatcher::default_for_provider);
+    /// Add a new tab and return its index.
+    ///
+    /// `provider_cfg` is the matching `providers.toml` entry for `Custom`
+    /// providers (resolved by the caller); its per-provider idle knobs
+    /// (`idle_threshold_secs` / `idle_notify`) drive the tab's `IdleWatcher`.
+    /// Pass `None` for built-in providers (Shell/Kanban/Api/…).
+    pub fn add_tab(
+        &mut self,
+        provider: AIProvider,
+        closable: bool,
+        provider_cfg: Option<&piki_core::providers::ProviderConfig>,
+    ) -> usize {
+        let idle_watcher = matches!(provider, AIProvider::Custom(_)).then(|| {
+            piki_core::idle_watcher::IdleWatcher::from_provider_config(provider_cfg)
+        });
         let tab = Tab {
             id: self.next_tab_id,
             provider,

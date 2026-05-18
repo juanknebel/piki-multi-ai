@@ -1768,12 +1768,16 @@ pub(super) fn handle_edit_provider_input(app: &mut App, key: KeyEvent) -> Option
                 default_args.split_whitespace().map(String::from).collect()
             };
             let old_name = original_name.clone();
-            // Preserve the existing icon when editing — the dialog form
-            // doesn't expose it as a field today, so blindly setting `None`
-            // would wipe Claude's ✦ / Gemini's ✧ on every save.
-            let preserved_icon = old_name
+            // Preserve fields the dialog form doesn't expose today — blindly
+            // resetting them would wipe Claude's ✦ / Gemini's ✧ icon and any
+            // per-provider idle config (`idle_threshold_secs` / `idle_notify`
+            // from providers.toml) on every save.
+            let prev = old_name
                 .as_deref()
-                .and_then(|n| app.provider_manager.get(n).and_then(|c| c.icon.clone()));
+                .and_then(|n| app.provider_manager.get(n));
+            let preserved_icon = prev.and_then(|c| c.icon.clone());
+            let preserved_idle_threshold = prev.and_then(|c| c.idle_threshold_secs);
+            let preserved_idle_notify = prev.map(|c| c.idle_notify).unwrap_or(true);
             Some((old_name, piki_core::providers::ProviderConfig {
                 name: name.clone(),
                 description: description.clone(),
@@ -1782,8 +1786,8 @@ pub(super) fn handle_edit_provider_input(app: &mut App, key: KeyEvent) -> Option
                 prompt_format,
                 dispatchable,
                 agent_dir: if agent_dir.is_empty() { None } else { Some(agent_dir.clone()) },
-                idle_threshold_secs: None,
-                idle_notify: true,
+                idle_threshold_secs: preserved_idle_threshold,
+                idle_notify: preserved_idle_notify,
                 icon: preserved_icon,
             }))
         } else {

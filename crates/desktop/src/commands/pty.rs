@@ -66,7 +66,8 @@ pub async fn spawn_tab(
 
     // Non-PTY providers don't need a terminal session
     if ai_provider == AIProvider::Kanban || ai_provider == AIProvider::Api {
-        let mut tab = DesktopTab::new(ai_provider);
+        // Kanban/Api: never a Custom provider, so no idle config applies.
+        let mut tab = DesktopTab::new(ai_provider, None);
         let tab_id = tab.id.clone();
         tab.alive = true;
         let mut app = state.lock();
@@ -112,7 +113,15 @@ pub async fn spawn_tab(
         return Err(format!("{provider} does not use a terminal session"));
     }
 
-    let mut tab = DesktopTab::new(ai_provider.clone());
+    // Resolve the provider's providers.toml entry (cloned, so the lock is
+    // released before the await-heavy spawn below) for its per-provider idle
+    // knobs. Built-in providers (Shell/…) have no entry → universal defaults.
+    let provider_cfg = if let AIProvider::Custom(ref name) = ai_provider {
+        state.lock().provider_manager.get(name).cloned()
+    } else {
+        None
+    };
+    let mut tab = DesktopTab::new(ai_provider.clone(), provider_cfg.as_ref());
     let tab_id = tab.id.clone();
 
     let (worktree_path, integration_dir, claude_hooks_dir) = {
@@ -275,7 +284,7 @@ pub async fn spawn_editor_tab(
         .cloned()
         .unwrap_or_else(|| "vi".to_string());
 
-    let mut tab = DesktopTab::new(AIProvider::Shell);
+    let mut tab = DesktopTab::new(AIProvider::Shell, None);
     let tab_id = tab.id.clone();
 
     let (worktree_path, integration_dir) = {
@@ -370,7 +379,7 @@ pub async fn spawn_terminal_at(
         custom_shell.unwrap_or_else(|| AIProvider::Shell.resolved_command())
     };
 
-    let mut tab = DesktopTab::new(AIProvider::Shell);
+    let mut tab = DesktopTab::new(AIProvider::Shell, None);
     let tab_id = tab.id.clone();
 
     let (worktree_path, integration_dir) = {

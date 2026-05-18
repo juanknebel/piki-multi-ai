@@ -318,7 +318,7 @@ pub async fn dispatch_agent(
     dispatch_card_title: Option<String>,
 ) -> Result<String, String> {
     // All dispatchable providers live in ProviderManager (providers.toml).
-    let (ai_provider, command, default_args, prompt_format) = {
+    let (ai_provider, command, default_args, prompt_format, provider_cfg) = {
         let app = state.lock();
         let config = app
             .provider_manager
@@ -329,6 +329,8 @@ pub async fn dispatch_agent(
             config.command.clone(),
             config.default_args.clone(),
             config.prompt_format.clone(),
+            // Cloned so the lock drops here; drives the tab's IdleWatcher.
+            config.clone(),
         )
     };
     if command.is_empty() {
@@ -425,7 +427,7 @@ pub async fn dispatch_agent(
     let mut args = default_args;
     args.extend(prompt_args);
 
-    let mut tab = crate::state::DesktopTab::new(ai_provider);
+    let mut tab = crate::state::DesktopTab::new(ai_provider, Some(&provider_cfg));
     let tab_id = tab.id.clone();
 
     // Dispatched Claude agents get the structured cli-agent (OSC 777) hooks
