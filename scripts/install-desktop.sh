@@ -12,6 +12,8 @@ APP_ID="com.piki.desktop"
 DEFAULT_DEST="$HOME/.local/bin"
 APPLICATIONS_DIR="$HOME/.local/share/applications"
 ICONS_DIR="$HOME/.local/share/icons/hicolor"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/piki-multi"
+DESKTOP_THEMES_DIR="$CONFIG_DIR/desktop-themes"
 
 usage() {
     echo "Usage: $0 [-d DEST_DIR] [-h]"
@@ -39,6 +41,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DESKTOP_DIR="$PROJECT_ROOT/crates/desktop"
 FRONTEND_DIR="$DESKTOP_DIR/frontend"
 ICONS_SRC="$DESKTOP_DIR/icons"
+THEME_SRC="$PROJECT_ROOT/themes"
 
 # Step 1: Install frontend dependencies
 echo "Installing frontend dependencies..."
@@ -99,7 +102,24 @@ EOF
 chmod +x "$APPLICATIONS_DIR/$APP_ID.desktop"
 echo "Created desktop entry at $APPLICATIONS_DIR/$APP_ID.desktop"
 
-# Step 6: Update icon cache (if available)
+# Step 6: Install custom desktop themes (JSON, scanned at startup by the app)
+if [ -d "$THEME_SRC" ]; then
+    mkdir -p "$DESKTOP_THEMES_DIR"
+    shopt -s nullglob
+    for theme_file in "$THEME_SRC"/*.desktop.json; do
+        name="$(basename "$theme_file")"
+        dest="$DESKTOP_THEMES_DIR/$name"
+        if [ -f "$dest" ]; then
+            echo "  Desktop theme '$name' already exists, skipping (delete to reinstall)"
+        else
+            cp "$theme_file" "$dest"
+            echo "  Installed desktop theme: $name"
+        fi
+    done
+    shopt -u nullglob
+fi
+
+# Step 7: Update icon cache (if available)
 if command -v gtk-update-icon-cache &>/dev/null; then
     gtk-update-icon-cache -f -t "$ICONS_DIR" 2>/dev/null || true
 fi

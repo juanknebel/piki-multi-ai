@@ -102,6 +102,7 @@ A modern desktop GUI is available via `piki-desktop`, built with [Tauri v2](http
 - **Obsidian Glow theme** — Distinctive dark UI with deep blue-black backgrounds, cyan/amber dual-accent system, glow effects, and monospace-forward typography
 - **5 built-in theme presets** — Obsidian Dark, Nord, Catppuccin Mocha, Solarized Light, Tokyo Night; switch instantly via `Alt+T` or command palette
 - **Full theme customization** — Individual color pickers for ~60 variables across 13 groups, live preview, import/export themes as JSON, persisted in SQLite
+- **Custom theme files** — Drop `<name>.json` files into `~/.config/piki-multi/desktop-themes/` and they appear in the preset dropdown automatically (see [Custom desktop themes](#custom-desktop-themes))
 - **xterm.js terminals** — Full terminal emulation with WebGL rendering, block cursor, native clipboard via `tauri-plugin-clipboard-manager` (copy on selection, `Ctrl+Shift+C/V`), terminal search (`Ctrl+Shift+B`)
 - **Project search** — `Ctrl+Shift+F` to grep file contents across the workspace using ripgrep (`rg`); debounced search with file path, line number, and highlighted match snippet; Enter opens file viewer with scroll and copy support
 - **File viewer** — Modal for viewing file contents; opened from fuzzy file search (`Ctrl+F`) or project search; CodeMirror 6 with language-aware syntax highlighting (Rust, TypeScript, Python, JSON, HTML, CSS, Markdown, and more), copy-to-clipboard, Edit button (`Ctrl+E`) to open in `$EDITOR` in a new terminal tab, Quick Edit (`Ctrl+I`) for inline editing, and "Open in Editor" to open as a full tabbed editor panel
@@ -780,10 +781,38 @@ See `themes/default.toml` in the repo for all available color keys. Colors can b
 | `nord` | Arctic, muted dark palette |
 | `tokyonight` | Dark blue-tinted palette |
 | `synthwave` | Neon retro-futuristic |
+| `breeze` | KDE Plasma's signature dark palette with blue accent |
 | `solarized-light` | Warm light background |
 | `catppuccin-latte` | Pastel light palette |
 
 The `install.sh` script copies all themes to `~/.config/piki-multi/themes/` (existing files are not overwritten).
+
+### Custom desktop themes
+
+The Tauri desktop app ships 5 built-in presets but also scans `~/.config/piki-multi/desktop-themes/` for `*.json` files at startup. Any valid file appears in the preset dropdown next to the built-ins, no recompilation needed.
+
+Schema (self-contained, no preset dependency):
+
+```json
+{
+  "id": "my-theme",
+  "name": "My Theme",
+  "isDark": true,
+  "colors": {
+    "bg-primary": "#232629",
+    "accent-primary": "#3daee9",
+    "text-primary": "#eff0f1"
+  }
+}
+```
+
+Notes:
+- `id` must not collide with a built-in (`obsidian-dark`, `nord-dark`, `catppuccin-mocha`, `solarized-light`, `tokyo-night`); colliding files are ignored.
+- `colors` is partial-friendly: any key you omit falls back to `obsidian-dark` (when `isDark: true`) or `solarized-light` (when `isDark: false`).
+- Keys with invalid hex strings (anything not `#rrggbb`) are dropped silently and use the base preset's value.
+- See `frontend/src/theme.ts` for the full list of color keys.
+
+`install-desktop.sh` (Linux) and `install-desktop-macos.sh` (macOS) copy any `themes/*.desktop.json` shipped in this repo (currently `breeze.desktop.json`) into the directory on first install. The TUI-only `install.sh` does not touch this directory.
 
 ## Architecture
 

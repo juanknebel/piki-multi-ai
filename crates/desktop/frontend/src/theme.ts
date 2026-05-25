@@ -363,20 +363,22 @@ const TOKYO_NIGHT: ThemePreset = {
   },
 };
 
-const ALL_PRESETS: ThemePreset[] = [OBSIDIAN_DARK, NORD_DARK, CATPPUCCIN_MOCHA, SOLARIZED_LIGHT, TOKYO_NIGHT];
+const BUILTIN_PRESETS: ThemePreset[] = [OBSIDIAN_DARK, NORD_DARK, CATPPUCCIN_MOCHA, SOLARIZED_LIGHT, TOKYO_NIGHT];
+const BUILTIN_IDS = new Set(BUILTIN_PRESETS.map(p => p.id));
 
 // ── Theme Engine ─────────────────────────────────────
 
 class ThemeEngine {
   private state: ThemeState = { activePreset: "obsidian-dark", overrides: {} };
   private presets = new Map<string, ThemePreset>();
+  private customPresets: ThemePreset[] = [];
   private persistTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
-    for (const p of ALL_PRESETS) this.presets.set(p.id, p);
+    for (const p of BUILTIN_PRESETS) this.presets.set(p.id, p);
   }
 
-  getPresets(): ThemePreset[] { return ALL_PRESETS; }
+  getPresets(): ThemePreset[] { return [...BUILTIN_PRESETS, ...this.customPresets]; }
   getActivePresetId(): string { return this.state.activePreset; }
   getActivePreset(): ThemePreset { return this.presets.get(this.state.activePreset) ?? OBSIDIAN_DARK; }
   getOverrides(): Partial<ThemeColors> { return { ...this.state.overrides }; }
@@ -443,7 +445,52 @@ class ThemeEngine {
 
   // ── Persistence ────────────────────────────────
 
+  /**
+   * Read `<config_dir>/desktop-themes/*.json` and add each file as a preset.
+   * Custom themes that reuse a built-in id are ignored (built-ins win).
+   * Partial `colors` maps are filled in from a base preset of matching `isDark`,
+   * so the dropdown can ship a theme by overriding only what it wants to change.
+   */
+  private async loadCustomPresets(): Promise<void> {
+    let customs: import("./ipc").CustomThemeFile[];
+    try {
+      customs = await ipc.listCustomThemes();
+    } catch {
+      return;
+    }
+
+    const seen = new Set<string>();
+    const next: ThemePreset[] = [];
+    for (const ct of customs) {
+      if (!ct.id || BUILTIN_IDS.has(ct.id) || seen.has(ct.id)) continue;
+      seen.add(ct.id);
+
+      const base = ct.isDark ? OBSIDIAN_DARK : SOLARIZED_LIGHT;
+      const colors = { ...base.colors };
+      for (const [k, v] of Object.entries(ct.colors ?? {})) {
+        if (k in colors && typeof v === "string" && isValidHex(v)) {
+          colors[k as ThemeColorKey] = v;
+        }
+      }
+
+      const preset: ThemePreset = {
+        id: ct.id,
+        name: ct.name || ct.id,
+        isDark: ct.isDark,
+        colors,
+      };
+      this.presets.set(ct.id, preset);
+      next.push(preset);
+    }
+    next.sort((a, b) => a.name.localeCompare(b.name));
+    this.customPresets = next;
+  }
+
   async loadFromStorage(): Promise<void> {
+    // Load file-based custom presets first so a saved preset id can resolve
+    // to one of them before applyTheme runs.
+    await this.loadCustomPresets();
+
     try {
       const [preset, overridesJson] = await ipc.getTheme();
       if (preset && this.presets.has(preset)) {
@@ -482,23 +529,69 @@ class ThemeEngine {
     }, null, 2);
   }
 
-  importTheme(json: string): void {
+  /**
+   * Result of an import: `saved` means a full-preset theme was persisted to
+   * `<config>/desktop-themes/<id>.json` and is now an active custom preset
+   * (caller should refresh the preset dropdown); `applied` means a legacy
+   * `{ preset, overrides }` export was layered on top of a built-in preset
+   * (caller only needs to refresh color rows).
+   */
+  async importTheme(json: string): Promise<
+    | { kind: "saved"; presetId: string }
+    | { kind: "applied" }
+    | { kind: "error"; message: string }
+  > {
+    let data: unknown;
     try {
-      const data = JSON.parse(json);
-      if (data.preset && this.presets.has(data.preset)) {
-        this.state.activePreset = data.preset;
+      data = JSON.parse(json);
+    } catch {
+      return { kind: "error", message: "invalid JSON" };
+    }
+    if (typeof data !== "object" || data === null) {
+      return { kind: "error", message: "expected an object" };
+    }
+    const obj = data as Record<string, unknown>;
+
+    // Full-preset shape (new): { id, name, isDark, colors } → persist to disk
+    if (typeof obj.id === "string" && typeof obj.isDark === "boolean" && typeof obj.colors === "object") {
+      const id = obj.id.trim();
+      if (!id || !/^[a-zA-Z0-9_-]{1,64}$/.test(id)) {
+        return { kind: "error", message: "id must be 1..=64 chars of [a-zA-Z0-9_-]" };
       }
-      if (typeof data.overrides === "object" && data.overrides !== null) {
-        // Validate each value is a valid hex
-        const clean: Record<string, string> = {};
-        for (const [k, v] of Object.entries(data.overrides)) {
-          if (typeof v === "string" && isValidHex(v)) clean[k] = v;
-        }
-        this.state.overrides = clean as Partial<ThemeColors>;
+      if (BUILTIN_IDS.has(id)) {
+        return { kind: "error", message: `id '${id}' collides with a built-in preset` };
       }
-      this.applyTheme();
-      this.schedulePersist();
-    } catch { /* ignore invalid JSON */ }
+      const file: import("./ipc").CustomThemeFile = {
+        id,
+        name: typeof obj.name === "string" && obj.name ? obj.name : id,
+        isDark: obj.isDark,
+        colors: obj.colors as Record<string, string>,
+      };
+      try {
+        await ipc.saveCustomTheme(file);
+      } catch (err) {
+        return { kind: "error", message: `failed to save: ${err}` };
+      }
+      // Refresh the in-memory map so setPreset can find it, then activate.
+      await this.loadCustomPresets();
+      this.setPreset(id);
+      return { kind: "saved", presetId: id };
+    }
+
+    // Legacy shape: { preset, overrides } — applied to current session only.
+    if (typeof obj.preset === "string" && this.presets.has(obj.preset)) {
+      this.state.activePreset = obj.preset;
+    }
+    if (typeof obj.overrides === "object" && obj.overrides !== null) {
+      const clean: Record<string, string> = {};
+      for (const [k, v] of Object.entries(obj.overrides as Record<string, unknown>)) {
+        if (typeof v === "string" && isValidHex(v)) clean[k] = v;
+      }
+      this.state.overrides = clean as Partial<ThemeColors>;
+    }
+    this.applyTheme();
+    this.schedulePersist();
+    return { kind: "applied" };
   }
 
   // ── Terminal sync ──────────────────────────────

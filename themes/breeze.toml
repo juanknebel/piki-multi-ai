@@ -1,0 +1,77 @@
+# Breeze theme — KDE Plasma's signature dark palette
+# Based on the Breeze Dark color scheme (KColorScheme)
+# Signature accent: KDE blue #3daee9
+
+[border]
+active_interact = "#27ae60"   # positive green
+active_navigate = "#3daee9"   # KDE blue (selection/highlight)
+inactive = "#4d4d4d"          # decoration inactive
+
+[workspace_list]
+empty_text = "#7f8c8d"        # text inactive
+name_active = "#fcfcfc"       # view foreground
+name_inactive = "#bdc3c7"     # text muted
+detail_selected = "#eff0f1"   # window foreground
+detail_normal = "#7f8c8d"
+selected_bg = "#3daee9"       # selection background (KDE blue)
+group_header_bg = "#31363b"   # window background
+separator = "#4d4d4d"
+alt_bg = "#2a2e32"            # alternate view background
+
+[file_list]
+empty_text = "#7f8c8d"
+modified = "#f67400"          # neutral orange
+added = "#27ae60"             # positive green
+deleted = "#da4453"           # negative red
+renamed = "#1d99f3"           # link blue
+untracked = "#7f8c8d"
+conflicted = "#9b59b6"        # visited purple
+staged = "#27ae60"
+staged_modified = "#f67400"
+file_path = "#fcfcfc"
+selected_bg = "#3daee9"
+
+[tabs]
+active = "#3daee9"            # KDE blue
+inactive = "#7f8c8d"
+
+[subtabs]
+active = "#1d99f3"            # link blue
+inactive = "#7f8c8d"
+close_marker = "#7f8c8d"
+divider = "#4d4d4d"
+
+[status_bar]
+error_bg = "#da4453"
+error_fg = "#fcfcfc"
+diff_bg = "#31363b"
+diff_fg = "#fcfcfc"
+interact_bg = "#27ae60"
+navigate_bg = "#3daee9"
+mode_fg = "#232629"           # view background (dark text on accents)
+
+[footer]
+key = "#3daee9"
+description = "#eff0f1"
+
+[diff]
+border = "#3daee9"
+empty_text = "#7f8c8d"
+
+[dialog]
+new_ws_border = "#3daee9"
+new_ws_active = "#3daee9"
+new_ws_inactive = "#7f8c8d"
+delete_border = "#da4453"
+delete_text = "#fcfcfc"
+delete_name = "#3daee9"
+delete_yes = "#da4453"
+delete_no = "#27ae60"
+delete_cancel = "#7f8c8d"
+
+[help]
+border = "#3daee9"
+
+[general]
+welcome_text = "#eff0f1"
+muted_text = "#7f8c8d"

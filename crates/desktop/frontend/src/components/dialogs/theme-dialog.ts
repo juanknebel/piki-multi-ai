@@ -42,7 +42,9 @@ export function showThemeDialog() {
   presetLabel.className = "theme-preset-label";
   presetLabel.textContent = "Preset";
 
-  const presetDropdown = createDropdown(
+  // Use `let` so Import can swap in a new dropdown after persisting a custom
+  // preset (createDropdown has no setOptions API — easier to recreate).
+  let presetDropdown = createDropdown(
     presets.map((p) => ({ value: p.id, label: p.name })),
     themeEngine.getActivePresetId(),
     "flex:1",
@@ -51,6 +53,19 @@ export function showThemeDialog() {
   presetRow.appendChild(presetLabel);
   presetRow.appendChild(presetDropdown.container);
   body.appendChild(presetRow);
+
+  function rebuildPresetDropdown() {
+    const next = createDropdown(
+      themeEngine.getPresets().map((p) => ({ value: p.id, label: p.name })),
+      themeEngine.getActivePresetId(),
+      "flex:1",
+    );
+    next.container.addEventListener("change", () => {
+      applyPreset(next.value);
+    });
+    presetRow.replaceChild(next.container, presetDropdown.container);
+    presetDropdown = next;
+  }
 
   // Color groups
   const colorRows = new Map<ThemeColorKey, { picker: HTMLInputElement; hex: HTMLInputElement; row: HTMLElement }>();
@@ -212,9 +227,15 @@ export function showThemeDialog() {
       const file = input.files?.[0];
       if (!file) return;
       const reader = new FileReader();
-      reader.onload = () => {
-        themeEngine.importTheme(reader.result as string);
-        presetDropdown.value = themeEngine.getActivePresetId();
+      reader.onload = async () => {
+        const result = await themeEngine.importTheme(reader.result as string);
+        if (result.kind === "error") {
+          toast(`Import failed: ${result.message}`, "error");
+          return;
+        }
+        // Full-preset theme: it was just persisted to disk, so the dropdown
+        // needs to grow a new option for it.
+        if (result.kind === "saved") rebuildPresetDropdown();
         const overrides = themeEngine.getOverrides();
         for (const [key, { picker, hex, row }] of colorRows) {
           const val = themeEngine.getEffectiveColor(key);
@@ -222,7 +243,12 @@ export function showThemeDialog() {
           hex.value = val;
           row.classList.toggle("overridden", key in overrides);
         }
-        toast("Theme imported", "success");
+        toast(
+          result.kind === "saved"
+            ? `Theme imported and saved as '${result.presetId}'`
+            : "Theme imported",
+          "success",
+        );
       };
       reader.readAsText(file);
     });
