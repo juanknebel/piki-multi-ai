@@ -8,7 +8,7 @@ Every user interaction follows: **Key event -> AppMode/DialogState -> Action -> 
 
 1. `input/mod.rs` routes keys by `AppMode` to the right handler
 2. Handler in `input/dialog.rs` or `input/interaction.rs` returns an `Option<Action>`
-3. `action.rs:execute_action()` performs async work and mutates `App`
+3. `action/mod.rs:execute_action()` routes the `Action` to its domain module's `handle()`, which performs async work and mutates `App`
 4. `ui/layout.rs` routes `AppMode` to the right render function in `ui/`
 
 ## Adding a new dialog/overlay
@@ -19,7 +19,7 @@ Every user interaction follows: **Key event -> AppMode/DialogState -> Action -> 
 4. Add render function `render_<name>_dialog()` in `ui/dialogs.rs`
 5. Wire input routing in `input/mod.rs` (match arm + import)
 6. Wire render routing in `ui/layout.rs` (match arm)
-7. If async work needed: add `Action` variant in `action.rs` + handler in `execute_action()`
+7. If async work needed: add `Action` variant in `action/mod.rs` + arm in the matching domain module's `handle()` + routing arm in `execute_action()`
 8. Add unit tests in `input/dialog_tests.rs` using the helpers in `crate::test_support` (see "Testing dialog handlers" below)
 
 ## Reusable dialog helpers
@@ -61,7 +61,7 @@ Conventions:
 ## Key modules
 
 - `app.rs` — `App` struct (centralized state), `AppMode`, `ActivePane`, `Workspace`
-- `action.rs` — `Action` enum and async `execute_action()` handler
+- `action/` — `Action` enum + `execute_action()` dispatch in `mod.rs`; per-domain `handle()` in `workspace.rs`, `files.rs`, `git.rs`, `git_stash.rs`, `git_merge.rs`, `review.rs`, `tabs.rs`, `api.rs`, `chat.rs`, `agent.rs`. Shared `run_git_diff_with_delta` helper in `mod.rs`
 - `dialog_state.rs` — `DialogState` enum with per-dialog data, `CycleField` trait, per-dialog field enums
 - `event_loop.rs` — Main async loop at 50ms tick rate
 - `input/` — Key routing (`mod.rs`), dialog handlers (`dialog.rs`), interaction mode (`interaction.rs`), mouse (`mouse.rs`), text fields (`text_field_common.rs`), confirm helpers + `with_dialog_mut!` (`confirm_common.rs`), list navigation (`list_nav.rs`), input handler tests (`dialog_tests.rs`)
