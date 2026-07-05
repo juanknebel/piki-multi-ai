@@ -1186,14 +1186,12 @@ pub(crate) async fn execute_action(
                                     })
                             });
 
-                        let expanded_path = if let Some(path_str) = default_path.to_str() {
-                            if path_str.starts_with("~/") {
-                                if let Ok(home) = std::env::var("HOME") {
-                                    std::path::PathBuf::from(home)
-                                        .join(path_str.strip_prefix("~/").unwrap())
-                                } else {
-                                    default_path
-                                }
+                        let expanded_path = if let Some(rest) = default_path
+                            .to_str()
+                            .and_then(|path_str| path_str.strip_prefix("~/"))
+                        {
+                            if let Ok(home) = std::env::var("HOME") {
+                                std::path::PathBuf::from(home).join(rest)
                             } else {
                                 default_path
                             }

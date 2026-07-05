@@ -116,14 +116,10 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                     frame.render_widget(block, area);
                     flow_tui::ui::render(frame, kanban_app, Some(inner_area));
 
-                    // Restore and render our own overlay with proper cursor
+                    // Render our own overlay with proper cursor, then restore
                     if let Some(edit) = edit_state {
+                        render_kanban_edit(frame, inner_area, &edit);
                         kanban_app.edit_state = Some(edit);
-                        render_kanban_edit(
-                            frame,
-                            inner_area,
-                            kanban_app.edit_state.as_ref().unwrap(),
-                        );
                     }
                 }
                 return;

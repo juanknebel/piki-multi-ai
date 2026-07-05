@@ -830,14 +830,14 @@ pub fn parse_key_event(s: &str) -> Option<KeyEvent> {
         "insert" => KeyCode::Insert,
         "delete" => KeyCode::Delete,
         "space" => KeyCode::Char(' '),
-        s if s.len() == 1 => {
+        s if s.chars().count() == 1 => {
             // Use the original code_str to preserve case (the match lowercases it)
-            let original_c = code_str.chars().next().unwrap();
+            let original_c = code_str.chars().next()?;
             // If the original char is uppercase, implicitly add SHIFT modifier
             if original_c.is_uppercase() {
                 modifiers.insert(KeyModifiers::SHIFT);
             }
-            KeyCode::Char(s.chars().next().unwrap())
+            KeyCode::Char(s.chars().next()?)
         }
         s if s.starts_with('f') && s.len() > 1 => {
             let n = s[1..].parse::<u8>().ok()?;
