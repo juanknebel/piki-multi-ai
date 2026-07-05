@@ -208,3 +208,42 @@ pub(crate) async fn execute_action(
     Ok(())
 }
 
+/// Pipe a git command's colored output through delta for side-by-side formatting.
+async fn run_git_diff_with_delta(
+    worktree: &std::path::Path,
+    git_args: &[&str],
+    width: u16,
+) -> anyhow::Result<Vec<u8>> {
+    let git_cmd = tokio::process::Command::new("git")
+        .args(git_args)
+        .current_dir(worktree)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()?;
+
+    let git_stdout = git_cmd
+        .stdout
+        .ok_or_else(|| anyhow::anyhow!("failed to capture git stdout"))?;
+
+    let git_stdout_std: std::process::Stdio = git_stdout.try_into()?;
+
+    let delta_output = tokio::process::Command::new("delta")
+        .args([
+            "--side-by-side",
+            &format!("--width={}", width),
+            "--paging=never",
+            "--true-color=always",
+            "--line-fill-method=ansi",
+        ])
+        .stdin(git_stdout_std)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .await?;
+
+    if !delta_output.status.success() {
+        anyhow::bail!("delta exited with non-zero status");
+    }
+
+    Ok(delta_output.stdout)
+}

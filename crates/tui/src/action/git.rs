@@ -350,7 +350,7 @@ pub(super) async fn handle(
                 120
             };
             // Try delta first, fall back to plain git show
-            let ansi_bytes = match run_commit_diff_with_delta(&worktree, &sha, width).await {
+            let ansi_bytes = match super::run_git_diff_with_delta(&worktree, &["show", "--color=always", &sha], width).await {
                 Ok(bytes) => bytes,
                 Err(_) => {
                     // Fallback: plain git show with color
@@ -383,42 +383,3 @@ pub(super) async fn handle(
     Ok(())
 }
 
-/// Run `git show <sha>` piped through delta for formatted output.
-async fn run_commit_diff_with_delta(
-    worktree: &std::path::Path,
-    sha: &str,
-    width: u16,
-) -> anyhow::Result<Vec<u8>> {
-    let git_show = tokio::process::Command::new("git")
-        .args(["show", "--color=always", sha])
-        .current_dir(worktree)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .spawn()?;
-
-    let git_stdout = git_show
-        .stdout
-        .ok_or_else(|| anyhow::anyhow!("failed to capture git show stdout"))?;
-
-    let git_stdout_std: std::process::Stdio = git_stdout.try_into()?;
-
-    let delta_output = tokio::process::Command::new("delta")
-        .args([
-            "--side-by-side",
-            &format!("--width={}", width),
-            "--paging=never",
-            "--true-color=always",
-            "--line-fill-method=ansi",
-        ])
-        .stdin(git_stdout_std)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .output()
-        .await?;
-
-    if !delta_output.status.success() {
-        anyhow::bail!("delta exited with non-zero status");
-    }
-
-    Ok(delta_output.stdout)
-}

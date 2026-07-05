@@ -170,7 +170,11 @@ pub(super) async fn handle(
                 120
             };
             // Try delta first, fall back to plain git stash show
-            let ansi_bytes = match run_stash_diff_with_delta(&worktree, &stash_ref, width).await {
+            let ansi_bytes = match super::run_git_diff_with_delta(
+                &worktree,
+                &["stash", "show", "-p", "--color=always", &stash_ref],
+                width,
+            ).await {
                 Ok(bytes) => bytes,
                 Err(_) => {
                     let output = tokio::process::Command::new("git")
@@ -200,46 +204,6 @@ pub(super) async fn handle(
         other => unreachable!("non-stash action routed to action::git_stash: {other:?}"),
     }
     Ok(())
-}
-
-/// Run `git stash show -p <ref>` piped through delta for formatted output.
-async fn run_stash_diff_with_delta(
-    worktree: &std::path::Path,
-    stash_ref: &str,
-    width: u16,
-) -> anyhow::Result<Vec<u8>> {
-    let git_stash = tokio::process::Command::new("git")
-        .args(["stash", "show", "-p", "--color=always", stash_ref])
-        .current_dir(worktree)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .spawn()?;
-
-    let git_stdout = git_stash
-        .stdout
-        .ok_or_else(|| anyhow::anyhow!("failed to capture git stash show stdout"))?;
-
-    let git_stdout_std: std::process::Stdio = git_stdout.try_into()?;
-
-    let delta_output = tokio::process::Command::new("delta")
-        .args([
-            "--side-by-side",
-            &format!("--width={}", width),
-            "--paging=never",
-            "--true-color=always",
-            "--line-fill-method=ansi",
-        ])
-        .stdin(git_stdout_std)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .output()
-        .await?;
-
-    if !delta_output.status.success() {
-        anyhow::bail!("delta exited with non-zero status");
-    }
-
-    Ok(delta_output.stdout)
 }
 
 /// Parse `git stash list` output into (ref, message) pairs.
