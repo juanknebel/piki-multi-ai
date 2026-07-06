@@ -6,11 +6,11 @@ A terminal UI for orchestrating multiple [Claude Code](https://docs.anthropic.co
 
 Built with Rust and [ratatui](https://ratatui.rs/).
 
-### Navigation & Interaction
+### Main layout
 
-| Navigation mode | Interaction mode |
+| Sidebar focused | Terminal focused |
 |:---:|:---:|
-| ![Navigation mode](screenshots/01-general-navigate.png) | ![Interaction mode](screenshots/02-general-interact.png) |
+| ![Sidebar focused](screenshots/01-general-navigate.png) | ![Terminal focused](screenshots/02-general-interact.png) |
 
 ### Workspace Dashboard
 
@@ -45,7 +45,7 @@ Built with Rust and [ratatui](https://ratatui.rs/).
 - **Parallel workspaces** — Run multiple AI coding sessions simultaneously, each in an isolated git worktree, pointing directly to an existing directory (Simple mode), or managing a multi-service project root (Project mode)
 - **Dynamic tabs** — Workspaces start empty; create tabs on demand (`t`) organized in categories: Shell (direct), AI Agents (Claude Code, Gemini, OpenCode, Kilo, Codex), and Tools (Kanban Board, Code Review, API Explorer); close tabs with `w`; cycle with `g`/`G`; Kanban Board and API Explorer are singletons — re-opening one focuses the existing tab instead of creating a duplicate
 - **Workspace dashboard** — Press `D` for a bird's-eye overview of all workspaces with their tabs, status (idle/busy/done), changed files, and ahead/behind; `j`/`k` to navigate, `Enter` to switch, `Esc` to close
-- **Git log viewer** — Press `L` in navigation mode to open a scrollable overlay showing `git log --oneline --graph --decorate --all -50`; navigate with `j`/`k`, `Ctrl+d`/`Ctrl+u` for page, `g`/`G` for top/bottom; press `Enter` on a commit to view its diff (piped through delta if available); `Esc` to close
+- **Git log viewer** — Press `Ctrl+G L` to open a scrollable overlay showing `git log --oneline --graph --decorate --all -50`; navigate with `j`/`k`, `Ctrl+d`/`Ctrl+u` for page, `g`/`G` for top/bottom; press `Enter` on a commit to view its diff (piped through delta if available); `Esc` to close
 - **Live terminal rendering** — See AI assistant output in real-time with full ANSI color support via `tui-term`
 - **Interactive input** — Type directly into any AI session (Enter on the terminal pane to interact)
 - **Git branch-style naming** — Workspace names support `/`, `.`, `-`, `_` (e.g. `feature/login`, `bugfix/issue-42`)
@@ -61,13 +61,13 @@ Built with Rust and [ratatui](https://ratatui.rs/).
 - **Context-aware Tab** — Tab/Shift+Tab behavior depends on the active pane: cycles workspaces in the sidebar, cycles subtabs in the main panel, and cycles files in the status panel; backtick (`` ` ``) toggles to previous workspace (Alt-Tab style); the fuzzy switcher (`Space`) and command palette (`Ctrl+P`) cover quick jumps to any workspace
 - **Scrollbar indicators** — Thin scrollbars appear on the right edge of scrollable areas (terminal, diff, markdown, file list, workspace list) when content overflows the viewport
 - **Fuzzy workspace switcher** — Press `Space` to open a fuzzy search overlay for instant workspace switching by name, group, or branch
-- **Vim-style navigation** — j/k for movement, Enter to activate, Esc to go back (non-terminal panes), Ctrl+G for terminal panes; h from main panel goes to workspace list; j/k from main panel reach GitStatus/WorkspaceList; Enter on a workspace switches and auto-focuses the main panel
+- **tmux-style prefix keybindings** — keys always go to the focused pane (full passthrough to the embedded terminal); app actions live behind a one-shot `Ctrl+G` prefix (`Ctrl+G h/j/k/l` moves focus, `Ctrl+G c/x/n/p/1..9` manages tabs, `Ctrl+G Ctrl+G` sends a literal Ctrl+G); Enter on a workspace switches and auto-focuses the main panel
 - **Fuzzy file search** — Search all files in the active worktree with fuzzy matching powered by [nucleo](https://github.com/helix-editor/nucleo) (same engine as Helix editor), respects `.gitignore`
 - **$EDITOR integration** — Open any file in your preferred editor (`$EDITOR` or `vi`); TUI suspends and resumes automatically
 - **Inline editor** — Edit files directly inside the TUI with a built-in text editor (cursor movement, line numbers, scroll); syntax-highlighted via `syntect`
 - **Syntax highlighting** — Language-aware syntax coloring powered by [syntect](https://github.com/trishume/syntect) across three surfaces: code review diffs (per-line highlighting merged with add/delete coloring), inline editor (with cursor overlay), and markdown fenced code blocks (with language hints like ` ```rust `); configurable theme via `syntax_theme` in `config.toml` (default: `base16-ocean.dark`)
-- **Terminal search** — Press `Ctrl+Shift+F` in terminal interaction mode to search within terminal output; type to filter, `Enter`/`Shift+Enter` to navigate matches, `Esc` to close
-- **Undo stage/unstage** — Press `Ctrl+Z` in navigation mode to undo the last stage or unstage operation (up to 20 entries); status bar shows `[C-z undo]` hint after each operation
+- **Terminal search** — Press `Ctrl+Shift+F` with the terminal focused to search within terminal output; type to filter, `Enter`/`Shift+Enter` to navigate matches, `Esc` to close
+- **Undo stage/unstage** — Press `Ctrl+G z` to undo the last stage or unstage operation (up to 20 entries); status bar shows `[C-z undo]` hint after each operation
 - **Clipboard support** — Paste from clipboard (`Ctrl+Shift+V`), copy visible terminal (`Ctrl+Shift+C`), and mouse drag-to-select with auto-copy; cross-platform (Wayland, X11, macOS, Windows)
 - **Workspace prompts** — Optionally provide an initial prompt when creating a workspace, stored for reference and used when spawning AI tabs
 - **Git operations** — Stage (`s`), unstage (`u`), commit (`c`), push (`P`), merge (`M`), and stash (`S`) directly from the TUI; commit dialog with inline message input; stash overlay supports save/pop/apply/drop/show
@@ -83,7 +83,7 @@ Built with Rust and [ratatui](https://ratatui.rs/).
 - **Shell integration (Linux/macOS)** — Shell tabs (zsh, bash, fish) auto-source a tiny init script that emits OSC 133 (prompt/command markers + exit code) and OSC 7 (cwd reporting). Piki's per-tab OSC parser captures those markers from the PTY stream and surfaces them: cwd of the active shell tab in the desktop status bar, ✓/✗ exit-code badge on the shell tab after each command, a workspace `●` badge when a command finishes in a background tab, and an OS notification on every `command-end` (see above). The init scripts live in `crates/core/src/shell_integration/scripts/` and are materialized to `<data_dir>/shell-integration/` on first use; bridge files chain to your real `~/.zshrc` / `~/.bashrc` so user dotfiles are preserved (fish loads its integration via `-C 'source ...'` on top of your `config.fish`). Disabled gracefully for unsupported shells (`sh`, `dash`, etc.)
 - **Structured Claude integration (Warp-style)** — Claude Code agent tabs get a precise lifecycle channel instead of guessing from PTY silence. Piki ships six Claude Code hook scripts (`SessionStart`, `UserPromptSubmit`, `PostToolUse`, `PermissionRequest`, `Notification`, `Stop`) and passes them via a generated `claude --settings` file (your `~/.claude/settings.json` is never touched); each hook emits an **in-band OSC 777** sequence (`ESC]777;notify;piki://cli-agent;<json>BEL`) that the same per-tab OSC parser sniffs out of the PTY stream — purely additive, the agent stays a raw passthrough. Surfaces a per-tab status glyph (running / waiting-permission / idle / done) in the desktop status bar + an aggregate dot on the workspace tab, routes permission/idle/done through the shared notification + workspace-attention rail, and replaces the byte-silence idle heuristic (which auto-steps-aside once the channel proves live, and stays as graceful fallback otherwise). Scripts are materialized to `<data_dir>/claude-hooks/`; require `jq`. The channel is self-disabling (hooks no-op unless `PIKI_CLI_AGENT` is set) and version-negotiated (`v` field; unknown majors are dropped and the tab falls back to the heuristic). Core logic + parser live in `crates/core/src/cli_agent/` and `shell_integration::parser`; non-Claude providers (Gemini, etc.) keep the `IdleWatcher` unchanged
 - **Pre-flight checks** — Validates required (git >= 2.20) and optional dependencies (delta, plus `claude` and `jq` for the structured Claude integration) at startup with clear error/warning messages; `gh` CLI availability is checked lazily on first Code Review use
-- **Command palette** — Press `Ctrl+p` to open a VS Code-style searchable command palette; fuzzy-filter 26+ commands across 9 categories (Workspace, Git, Tabs, Search, View, Layout, Clipboard, App, Switch) with match highlighting and keybinding hints; includes dynamic "Switch to" entries for all workspaces; powered by [nucleo](https://github.com/helix-editor/nucleo)
+- **Command palette** — Press `Ctrl+G :` to open a VS Code-style searchable command palette; fuzzy-filter 26+ commands across 9 categories (Workspace, Git, Tabs, Search, View, Layout, Clipboard, App, Switch) with match highlighting and keybinding hints; includes dynamic "Switch to" entries for all workspaces; powered by [nucleo](https://github.com/helix-editor/nucleo)
 - **In-app log viewer** — Press `Ctrl+l` to open a scrollable overlay showing the last 500 log entries from the current session; color-coded by level (ERROR=red, WARN=yellow, INFO=green, DEBUG=cyan, TRACE=gray); filter by level with `0`-`5` keys; press `/` to open a text search bar (case-insensitive substring match on message and target — title shows `[filter ~]` when active); press `r` to toggle auto-refresh / tail mode (title shows `~` marker, selection follows the latest entry); select lines with `j`/`k` (highlighted), horizontal scroll with `h`/`l`, page with `Ctrl+d`/`Ctrl+u`, `g`/`G` top/bottom; `Enter`/`y` copies selected line to clipboard; mouse scroll and click to select
 - **Structured logging** — File-based structured logging via `tracing` with daily rotation to `~/.local/share/piki-multi/logs/`; configurable via `--log-level` flag (trace/debug/info/warn/error)
 - **Agent Profiles** — Configure named agents per project (`A` key, Simple workspaces only) with a two-step wizard: step 1 selects name + provider, step 2 opens a large floating editor for the agent's role/instructions; agents are stored in SQLite per `source_repo` with version tracking; press `p` to sync agent config to the repo as provider-native subagent files (e.g., `.claude/agents/<name>.md`); press `i` to import agents from repo files (reverse sync) — scans all provider directories for `.md` files, shows a checklist with `(new)`/`(exists)` status, and imports selected agents marked as synced; version indicator shows sync status (`v3 ✓` synced, `v2 ✗` pending); editing an agent increments its version and resets sync status; falls back to raw provider selector when no agents are configured
@@ -311,10 +311,10 @@ Workspace configurations are saved automatically and restored on startup using a
 |  ? untracked.txt |
 | ↑1 to push      |
 +------------------+--------------------------------------------------------+
-  Footer keys change per active pane. Examples:
-  Workspace list: [hjkl] navigate [enter] interact [n] new ws [r] clone ws [e] edit ws [d] delete ws [tab] switch ws [^P] commands [space] switch ws [?] help [q] quit
-  Git status:     [hjkl] navigate [enter] interact [/] search [c] commit [P] push [M] merge [ctrl-z] undo [^P] commands [space] switch ws [?] help [q] quit
-  Main panel:     [hjkl] navigate [enter] interact [t] new tab [w] close tab [g/G] next/prev tab [^P] commands [space] switch ws [?] help [q] quit
+  Footer keys change per focused pane. Examples:
+  Workspace list: [k/j] select [enter] open [e] edit ws [d] delete ws [C-g] prefix
+  Git status:     [k/j] navigate [space] select [enter] diff [s] stage [u] unstage [a] sel all [e] editor [C-g] prefix
+  Main panel:     [ctrl-shift-f] search [C-g [] scroll [C-g ?] help [C-g] prefix
 ```
 
 For **Project workspaces**, the STATUS panel is replaced by a SERVICES panel showing sub-directories:
@@ -347,60 +347,57 @@ The STATUS panel uses `git status --porcelain=v1` and shows:
 
 ### Keybindings
 
-The UI uses a **vim-style modal model**: navigate between panes, then press Enter to interact. **All keybindings are customizable** via `config.toml`. Both the footer and the help overlay (`?`) update dynamically to show your current configuration.
+The UI uses a **tmux-style prefix model**: keys always go to the focused pane (the embedded terminal gets full passthrough), and app-level actions live behind a one-shot **`Ctrl+G` prefix** — press `Ctrl+G`, then the action key. `Esc` cancels a pending prefix, `Ctrl+G Ctrl+G` sends a literal Ctrl+G to the terminal, and unknown chords show a toast. **All keybindings are customizable** via `config.toml`. Both the footer and the help overlay (`Ctrl+G ?`) update dynamically to show your current configuration.
 
-**macOS support**: The app auto-detects the operating system. On macOS, all `Ctrl` and `Alt` keybindings also accept `Cmd` (⌘), and the UI displays `cmd-` instead of `ctrl-`/`alt-` in help text, footer hints, and status bar. For example, `Ctrl+G` to exit interaction mode becomes `Cmd+G` on macOS, and `Alt+M` for mdr becomes `Cmd+M`. The `Alt` → `Cmd` mapping exists because macOS Option key sends special characters instead of Alt in most terminals. Both original modifiers are always accepted as a fallback.
+**macOS support**: The app auto-detects the operating system. On macOS, all `Ctrl` and `Alt` keybindings also accept `Cmd` (⌘), and the UI displays `cmd-` instead of `ctrl-`/`alt-` in help text, footer hints, and status bar. The prefix works as `Cmd+G` too. The `Alt` → `Cmd` mapping exists because macOS Option key sends special characters instead of Alt in most terminals. Both original modifiers are always accepted as a fallback.
 
-**Default Navigation mode** (yellow border):
+**Prefix actions** (`Ctrl+G` + key, status bar shows `[PREFIX]` while pending):
 
 | Key | Action |
 |-----|--------|
-| `h` / `j` / `k` / `l` | Move between panes (`h` from main panel goes to workspace list) |
-| `Enter` | Interact with selected pane |
-| `n` | Create new workspace |
-| `r` | Create Worktree (GitHub-only): spawn a git worktree from the selected GitHub-origin workspace, inheriting prompt/kanban/group |
-| `e` | Edit workspace options (Kanban path, Prompt) |
-| `d` | Delete selected workspace (for dispatched workspaces, prompts which kanban column to move the card to) |
-| `Tab` / `Shift+Tab` | Context-aware: cycle workspaces (sidebar), subtabs (main), files (status) |
-| `Space` | Fuzzy workspace switcher (search by name/group/branch) |
+| `h` / `j` / `k` / `l` (or arrows) | Move focus between panes (`h` from main panel goes to workspace list) |
+| `c` | New tab (opens category menu: 1=Shell, 2=AI Agents →, 3=Tools →) |
+| `x` | Close current tab (with confirmation dialog) |
+| `n` / `p` | Next / previous tab |
+| `1`..`9` | Jump to tab N |
+| `w` | Fuzzy workspace switcher (search by name/group/branch) |
+| `)` / `(` | Next / previous workspace |
 | `` ` `` | Toggle to previous workspace |
-| `t` | New tab (opens category menu: 1=Shell, 2=AI Agents →, 3=Tools →; submenus for agent/tool selection) |
-| `w` | Close current tab (with confirmation dialog) |
-| `b` | Open kanban board for current workspace |
-| `A` | Manage agent profiles (create/edit/delete agents for this project) |
-| `Alt+P` | Manage providers (add/edit/delete custom AI providers) |
-| `D` | Workspace dashboard overlay (bird's-eye view of all workspaces and tabs) |
-| `Ctrl+p` | Command palette (fuzzy-searchable list of all commands) |
-| `Ctrl+l` | Log viewer overlay (last 500 log entries, color-coded, filterable by level) |
-| `g` / `G` | Next / previous tab |
-| `<` / `>` | Resize sidebar width (±5%) |
-| `+` / `-` | Resize workspace/file split (±10%) |
-| `/` or `Ctrl+f` | Fuzzy file search |
-| `J` / `K` | Scroll main panel down/up |
-| `PageUp` / `PageDown` | Page scroll |
-| `Ctrl+z` | Undo last stage/unstage operation |
-| `s` | Quick stage file (when file list focused) |
-| `u` | Quick unstage file (when file list focused) |
-| `c` | Commit (opens dialog) — not available for Project workspaces |
+| `N` | Create new workspace |
+| `e` | Edit workspace options (Kanban path, Prompt) |
+| `i` | Workspace info overlay (branch, paths, description, prompt; mouse-copyable) |
+| `R` | Create Worktree (GitHub-only): spawn a git worktree from the selected GitHub-origin workspace, inheriting prompt/kanban/group |
+| `C` | Commit (opens dialog) — not available for Project workspaces |
 | `P` | Push — not available for Project workspaces |
+| `M` | Merge workspace branch into main — not available for Project workspaces |
 | `S` | Git stash overlay (save/pop/apply/drop/show) — not available for Project workspaces |
 | `L` | Git log overlay (scrollable graph with commit diffs via Enter) |
 | `X` | Conflict resolution overlay (ours/theirs/edit/mark-resolved/abort) — not available for Project workspaces |
-| `M` | Merge workspace branch into main — not available for Project workspaces |
-| `i` | Workspace info overlay (branch, paths, description, prompt; mouse-copyable) |
-| `?` | Help overlay |
+| `z` | Undo last stage/unstage operation |
+| `:` | Command palette (fuzzy-searchable list of all commands) |
+| `/` | Fuzzy file search |
+| `[` | Terminal scroll mode (see below) |
+| `y` | AI Chat panel |
+| `D` | Workspace dashboard overlay (bird's-eye view of all workspaces and tabs) |
+| `o` | Log viewer overlay (last 500 log entries, color-coded, filterable by level) |
+| `A` | Manage agent profiles (create/edit/delete agents for this project) |
+| `V` | Manage providers (add/edit/delete custom AI providers) |
+| `<` / `>` | Resize sidebar width (±5%) |
+| `+` / `-` | Resize workspace/file split (±10%) |
 | `a` | About overlay |
+| `?` | Help overlay |
 | `q` | Quit (with confirmation dialog) |
+| `Ctrl+G` | Send a literal Ctrl+G to the terminal |
+| `Esc` | Cancel the pending prefix |
 
-**Interaction mode** (green border):
+**Terminal scroll mode** (`Ctrl+G [`, status bar shows `[SCROLL]`): `j`/`k` scroll by line, `Ctrl+U`/`Ctrl+D` (or `PageUp`/`PageDown`) by page, `g`/`G` top/bottom, `/` opens terminal search, `Esc`/`q` exits and snaps back to the live view. Mouse wheel scrolling works at any time without entering the mode.
 
-| Key | Action |
-|-----|--------|
-| `Ctrl+g` | Back to navigation mode (all panes) |
-| `Esc` | Back to navigation mode (non-terminal panes only) |
-| `Ctrl+Shift+f` | Search in terminal output (terminal pane) |
-| *Terminal pane* | All keys forwarded to active tab |
-| *Workspace list* | `j`/`k` select, `Enter` switch + focus main panel, `d` delete |
+**Focused-pane keys** (no prefix needed — keys go straight to the pane):
+
+| Pane | Keys |
+|------|------|
+| *Terminal pane* | All keys forwarded to the active tab; `Ctrl+Shift+F` search, `Ctrl+Shift+C` copy visible content, `Ctrl+Shift+V` paste |
+| *Workspace list* | `j`/`k` select, `Enter` switch + focus main panel, `e` edit, `d` delete |
 | *File list* | `j`/`k` select, `Space` toggle multi-select, `a` select/deselect all, `Enter` open diff, `e` open in $EDITOR, `v` inline editor, `s` stage, `u` unstage (bulk when multi-selected) |
 | *Services list (Project)* | `j`/`k` select, `Enter` open New Workspace dialog pre-filled with sub-directory |
 | *Markdown tab* | `j`/`k` scroll, `Ctrl+d`/`Ctrl+u` page, `g`/`G` top/bottom (read-only) |
@@ -602,7 +599,7 @@ The UI uses a **vim-style modal model**: navigate between panes, then press Ente
 
 | Key | Action |
 |-----|--------|
-| `Ctrl+Shift+V` | Paste from system clipboard (terminal interaction mode) |
+| `Ctrl+Shift+V` | Paste from system clipboard (terminal focused) |
 | `Ctrl+Shift+C` | Copy visible terminal content (both modes) |
 | Mouse drag | Select text in terminal pane (auto-copies on release) |
 
@@ -717,10 +714,14 @@ Custom providers appear alongside built-in providers in the New Tab menu (`t` �
 
 ### Keybindings
 
-You can override any default keybinding in the `[keybindings]` section of `config.toml`. Keybindings are organized by mode:
+You can override any default keybinding in the `[keybindings]` section of `config.toml`.
 
-- `navigation`: Main UI navigation (moving between panes, global actions)
-- `interaction`: Actions while interacting with a pane (copy, paste, exit)
+The `prefix_key` setting (default `"ctrl-g"`) defines the tmux-style prefix. The `[keybindings.app]` table holds all global actions; each value is either a single binding string or an array of alternatives. Strings starting with `prefix-` fire after the prefix key (e.g. `"prefix-c"` = `Ctrl+G c`); anything else is a **direct chord** that fires without the prefix (e.g. `"alt-n"`) — handy for promoting frequent actions, at the cost of shadowing that chord in the embedded terminal. Bindings that collide with each other or with the prefix key are ignored with a warning in the logs.
+
+The remaining tables are per-surface local keys:
+
+- `app`: Global actions (prefix chords or direct, see above)
+- `scroll`: Terminal scroll mode controls
 - `markdown`: Markdown viewer controls (scrolling)
 - `diff`: Diff viewer controls (scrolling, file navigation)
 - `workspace_list`: Actions while in the workspace list
@@ -741,18 +742,18 @@ Example:
 ```toml
 theme = "nord"
 
-[keybindings.navigation]
-quit = "ctrl-q"
-new_workspace = "ctrl-n"
+[keybindings]
+prefix_key = "ctrl-a"          # use Ctrl+A as the prefix, screen-style
 
-[keybindings.interaction]
-exit_interaction = "esc"
+[keybindings.app]
+quit = "prefix-Q"              # Ctrl+A Q to quit
+next_tab = ["prefix-n", "alt-n"]  # also bind Alt+N directly, no prefix
 
 [keybindings.fuzzy]
 editor = "ctrl-o"  # Change open in editor from default ctrl-e
 ```
 
-Keys support `ctrl-`, `alt-`, and `shift-` prefixes (e.g., `ctrl-shift-c`). You can use special key names like `enter`, `tab`, `backspace`, `esc`, `left`, `right`, `up`, `down`, `pageup`, `pagedown`, `home`, `end`, `insert`, `delete`, and function keys `f1`-`f12`.
+Keys support `ctrl-`, `alt-`, and `shift-` modifiers (e.g., `ctrl-shift-c`), plus the `prefix-` marker in the `app` table. You can use special key names like `enter`, `tab`, `backspace`, `esc`, `left`, `right`, `up`, `down`, `pageup`, `pagedown`, `home`, `end`, `insert`, `delete`, and function keys `f1`-`f12`.
 
 ### Themes
 
@@ -903,7 +904,7 @@ crates/
         input.rs         # Crossterm key events -> PTY bytes
       input/
         mod.rs           # Main input dispatcher (mode routing)
-        interaction.rs   # Interaction-mode handlers (API, markdown, filelist, terminal, workspace, kanban)
+        interaction.rs   # Focused-pane key handlers (API, markdown, filelist, terminal, workspace, kanban)
         dialog.rs        # Dialog input handlers (git_log, stash, commit, merge, conflict resolution)
         mouse.rs         # Mouse events (click, scroll, drag-to-select, resize, PTY forwarding)
         editor_input.rs  # Inline editor keyboard handling
@@ -969,7 +970,7 @@ sequenceDiagram
             Main->>Watcher: new(path)
             Main->>App: push(workspace)
 
-        else User types in terminal (Interaction mode)
+        else User types in terminal (focused main panel)
             User->>Main: KeyEvent(char)
             Main->>PTY: write(key_to_bytes(key))
             PTY->>PTY: AI process receives input

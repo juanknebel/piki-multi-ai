@@ -6,10 +6,20 @@ Main application crate. Binary `piki-multi-ai`. Depends on `piki-core` and `piki
 
 Every user interaction follows: **Key event -> AppMode/DialogState -> Action -> State mutation -> Render**
 
-1. `input/mod.rs` routes keys by `AppMode` to the right handler
+1. `input/mod.rs` routes keys: modal `AppMode`s first, then the tmux-style prefix state machine (`app.input_state`), then the focused pane
 2. Handler in `input/dialog.rs` or `input/interaction.rs` returns an `Option<Action>`
 3. `action/mod.rs:execute_action()` routes the `Action` to its domain module's `handle()`, which performs async work and mutates `App`
 4. `ui/layout.rs` routes `AppMode` to the right render function in `ui/`
+
+## Keybinding model (tmux-style prefix)
+
+There are no navigation/interaction modes. Keys always go to the focused pane (`app.active_pane`); the terminal gets full PTY passthrough. App-level actions live behind a **one-shot prefix** (default `Ctrl+G`, `keybindings.prefix_key` in config):
+
+- `InputState { Normal, PrefixPending, TermScroll }` in `app.rs` — only consulted in `AppMode::Normal`/`Diff`; modal dialogs intercept input before it.
+- `[keybindings.app]` (`config.rs::default_app()`) maps action names to `BindingValue`s (string or array). `"prefix-x"` strings fire after the prefix; other strings are direct chords checked before pane routing (`try_direct_app_binding`). Defaults are all prefix chords except `copy`/`paste`/`search`, which stay pane-scoped inside the terminal/API handlers.
+- **Adding an app action**: add the default to `default_app()`, the name to `APP_ACTIONS` in `input/mod.rs`, an arm in `dispatch_app_action()` calling a helper in `input/app_actions.rs`, a help line in `ui/dialogs/system.rs`, and (if user-facing) a command palette entry in `command_palette.rs`. `prefix 1..9` (tab jump) is hardcoded in `handle_prefix_key`, not configurable.
+- `prefix prefix` sends a literal prefix byte to the PTY (`send_literal_prefix`), `Esc` cancels, unknown chords toast. Terminal scroll mode (`prefix [`) is `handle_term_scroll_key` + the `scroll` config context.
+- Status bar shows `[PREFIX]`/`[SCROLL]` chips (`theme.status_bar.prefix_bg`); the focused pane border uses `theme.border.active`.
 
 ## Adding a new dialog/overlay
 
@@ -64,7 +74,7 @@ Conventions:
 - `action/` — `Action` enum + `execute_action()` dispatch in `mod.rs`; per-domain `handle()` in `workspace.rs`, `files.rs`, `git.rs`, `git_stash.rs`, `git_merge.rs`, `review.rs`, `tabs.rs`, `api.rs`, `chat.rs`, `agent.rs`. Shared `run_git_diff_with_delta` helper in `mod.rs`
 - `dialog_state.rs` — `DialogState` enum with per-dialog data, `CycleField` trait, per-dialog field enums
 - `event_loop.rs` — Main async loop at 50ms tick rate
-- `input/` — Key routing (`mod.rs`), dialog handlers (`dialog.rs`), interaction mode (`interaction.rs`), mouse (`mouse.rs`), text fields (`text_field_common.rs`), confirm helpers + `with_dialog_mut!` (`confirm_common.rs`), list navigation (`list_nav.rs`), input handler tests (`dialog_tests.rs`)
+- `input/` — Key routing + prefix dispatch (`mod.rs`), app action bodies (`app_actions.rs`), dialog handlers (`dialog.rs`), focused-pane handlers (`interaction.rs`), mouse (`mouse.rs`), text fields (`text_field_common.rs`), confirm helpers + `with_dialog_mut!` (`confirm_common.rs`), list navigation (`list_nav.rs`), input handler tests (`dialog_tests.rs`)
 - `ui/` — Rendering: `layout.rs` (compositor), `dialogs.rs` (overlays), component sub-modules
 - `config.rs` — Keybindings and settings from `config.toml`
 - `theme.rs` — Color theme loading
