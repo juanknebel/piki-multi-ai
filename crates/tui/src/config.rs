@@ -1016,7 +1016,11 @@ prefix_key = "ctrl-a"
 
     #[test]
     fn test_get_binding_app_display() {
-        let cfg = Config::default();
+        // Pin the platform: on macOS the display would be "Cmd-g c"
+        let cfg = Config {
+            platform: Platform::Linux,
+            ..Config::default()
+        };
         assert_eq!(cfg.get_binding("app", "new_tab"), "C-g c");
         assert_eq!(cfg.get_binding("app", "copy"), "ctrl-shift-c");
         assert_eq!(cfg.get_binding("app", "nonexistent"), "???");
@@ -1101,7 +1105,11 @@ quit = "prefix-Q"
 
     #[test]
     fn test_get_binding_falls_back_to_default() {
-        let cfg = Config::default();
+        // Pin the platform: on macOS the display would be "Cmd-g q"
+        let cfg = Config {
+            platform: Platform::Linux,
+            ..Config::default()
+        };
         assert_eq!(cfg.get_binding("app", "quit"), "C-g q");
         assert_eq!(cfg.get_binding("app", "help"), "C-g ?");
         // Unknown action returns "???"
