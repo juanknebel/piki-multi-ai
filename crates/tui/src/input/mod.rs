@@ -1,3 +1,4 @@
+pub(crate) mod app_actions;
 mod chat_input;
 mod code_review_input;
 mod command_palette_input;
@@ -17,9 +18,8 @@ mod workspace_switcher_input;
 use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::action::Action;
-use crate::app::{ActivePane, App, AppMode, DialogField};
-use crate::dialog_state::{DialogState, EditWorkspaceField};
-use crate::helpers::{copy_visible_terminal, resize_all_ptys, scrollback_max};
+use crate::app::{ActivePane, App, AppMode};
+use crate::helpers::copy_visible_terminal;
 
 use self::command_palette_input::handle_command_palette_input;
 use self::dialog::{
@@ -184,362 +184,117 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
 // ── Navigation mode: hjkl between panes, Enter to interact, global shortcuts ──
 
 pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
-    // Pane navigation
-    if app.config.matches_navigation(key, "left") || app.config.matches_navigation(key, "left_alt")
-    {
-        if app.active_pane == ActivePane::MainPanel {
-            app.active_pane = ActivePane::WorkspaceList;
-        }
-    } else if app.config.matches_navigation(key, "right")
-        || app.config.matches_navigation(key, "right_alt")
-    {
-        if matches!(
-            app.active_pane,
-            ActivePane::WorkspaceList | ActivePane::GitStatus
-        ) {
-            app.active_pane = ActivePane::MainPanel;
-        }
-    } else if app.config.matches_navigation(key, "down")
-        || app.config.matches_navigation(key, "down_alt")
-    {
-        match app.active_pane {
-            ActivePane::WorkspaceList => app.active_pane = ActivePane::GitStatus,
-            ActivePane::MainPanel => app.active_pane = ActivePane::GitStatus,
-            _ => {}
-        }
-    } else if app.config.matches_navigation(key, "up")
-        || app.config.matches_navigation(key, "up_alt")
-    {
-        match app.active_pane {
-            ActivePane::GitStatus => app.active_pane = ActivePane::WorkspaceList,
-            ActivePane::MainPanel => app.active_pane = ActivePane::WorkspaceList,
-            _ => {}
-        }
-    } else if app.config.matches_navigation(key, "enter_pane") {
+    fn nav(app: &App, key: KeyEvent, action: &str) -> bool {
+        app.config.matches_navigation(key, action)
+    }
+    let nav = |app: &App, a: &str| nav(app, key, a);
+    if nav(app, "left") || nav(app, "left_alt") {
+        app_actions::focus_left(app)
+    } else if nav(app, "right") || nav(app, "right_alt") {
+        app_actions::focus_right(app)
+    } else if nav(app, "down") || nav(app, "down_alt") {
+        app_actions::focus_down(app)
+    } else if nav(app, "up") || nav(app, "up_alt") {
+        app_actions::focus_up(app)
+    } else if nav(app, "enter_pane") {
         app.interacting = true;
-    } else if app.config.matches_navigation(key, "quit") {
-        app.active_dialog = Some(DialogState::ConfirmQuit);
-        app.mode = AppMode::ConfirmQuit;
-    } else if app.config.matches_navigation(key, "help") {
-        app.active_dialog = Some(DialogState::Help { scroll: 0 });
-        app.mode = AppMode::Help;
-    } else if app.config.matches_navigation(key, "about") {
-        app.active_dialog = Some(DialogState::About);
-        app.mode = AppMode::About;
-    } else if app.config.matches_navigation(key, "dashboard") {
-        if !app.workspaces.is_empty() {
-            app.active_dialog = Some(DialogState::Dashboard {
-                selected: app.active_workspace,
-                scroll_offset: 0,
-            });
-            app.mode = AppMode::Dashboard;
-        }
-    } else if app.config.matches_navigation(key, "logs") {
-        app.active_dialog = Some(DialogState::Logs {
-            scroll: u16::MAX,
-            level_filter: 0,
-            selected: usize::MAX,
-            hscroll: 0,
-            search_active: false,
-            search_buffer: String::new(),
-            search_cursor: 0,
-            auto_refresh: true,
-        });
-        app.mode = AppMode::Logs;
-    } else if app.config.matches_navigation(key, "workspace_info") {
-        if !app.workspaces.is_empty() {
-            app.active_dialog = Some(DialogState::WorkspaceInfo { hscroll: 0 });
-            app.mode = AppMode::WorkspaceInfo;
-            let _ = crossterm::execute!(std::io::stderr(), crossterm::event::DisableMouseCapture);
-        }
-    } else if app.config.matches_navigation(key, "edit_workspace") {
-        if !app.workspaces.is_empty() {
-            let ws = &app.workspaces[app.selected_workspace];
-            let kanban = ws.kanban_path.clone().unwrap_or_default();
-            let prompt = ws.prompt.clone();
-            let group = ws.info.group.clone().unwrap_or_default();
-            app.active_dialog = Some(DialogState::EditWorkspace {
-                target: app.selected_workspace,
-                kanban_cursor: kanban.chars().count(),
-                kanban,
-                prompt_cursor: prompt.chars().count(),
-                prompt,
-                group_cursor: group.chars().count(),
-                group,
-                active_field: EditWorkspaceField::KanbanPath,
-            });
-            app.mode = AppMode::EditWorkspace;
-        }
-    } else if app.config.matches_navigation(key, "clone_workspace") {
-        // Layer 3: the former "Clone workspace" action is now "Create Worktree",
-        // available only when the selected workspace has a GitHub origin.
-        if let Some(ws) = app.workspaces.get(app.selected_workspace) {
-            match &ws.info.origin {
-                piki_core::WorkspaceOrigin::GitHub { .. } => {
-                    let kanban = ws.kanban_path.clone().unwrap_or_default();
-                    let prompt = ws.prompt.clone();
-                    let group = ws.info.group.clone().unwrap_or_default();
-                    app.active_dialog = Some(crate::dialog_state::DialogState::CreateWorktree {
-                        parent_idx: app.selected_workspace,
-                        name: String::new(),
-                        name_cursor: 0,
-                        prompt_cursor: prompt.chars().count(),
-                        prompt,
-                        kanban_cursor: kanban.chars().count(),
-                        kanban,
-                        group_cursor: group.chars().count(),
-                        group,
-                        active_field: crate::dialog_state::CreateWorktreeField::Name,
-                    });
-                    app.mode = AppMode::CreateWorktree;
-                }
-                piki_core::WorkspaceOrigin::Local => {
-                    app.status_message = Some(
-                        "Create Worktree is available only for GitHub workspaces".into(),
-                    );
-                }
-            }
-        }
-    } else if app.config.matches_navigation(key, "new_workspace") {
-        let default_dest = app.paths.repos_dir().to_string_lossy().to_string();
-        let default_dest_cursor = default_dest.len();
-        app.active_dialog = Some(DialogState::NewWorkspace {
-            name: String::new(),
-            name_cursor: 0,
-            dir: String::new(),
-            dir_cursor: 0,
-            destination: default_dest,
-            destination_cursor: default_dest_cursor,
-            desc: String::new(),
-            desc_cursor: 0,
-            prompt: String::new(),
-            prompt_cursor: 0,
-            kanban: String::new(),
-            kanban_cursor: 0,
-            group: String::new(),
-            group_cursor: 0,
-            source: crate::app::NewWorkspaceSource::default(),
-            active_field: DialogField::Source,
-        });
-        app.mode = AppMode::NewWorkspace;
-    } else if app.config.matches_navigation(key, "delete_workspace") {
-        if !app.workspaces.is_empty() {
-            app.active_dialog = Some(DialogState::ConfirmDelete {
-                target: app.selected_workspace,
-            });
-            app.mode = AppMode::ConfirmDelete;
-        }
-    } else if app.config.matches_navigation(key, "commit") {
-        if let Some(ws) = app.current_workspace()
-            && ws.info.workspace_type != piki_core::WorkspaceType::Project
-        {
-            app.active_dialog = Some(DialogState::CommitMessage {
-                buffer: String::new(),
-            });
-            app.mode = AppMode::CommitMessage;
-        }
-    } else if app.config.matches_navigation(key, "merge") {
-        if let Some(ws) = app.current_workspace()
-            && ws.info.workspace_type != piki_core::WorkspaceType::Project
-        {
-            app.active_dialog = Some(DialogState::ConfirmMerge);
-            app.mode = AppMode::ConfirmMerge;
-        }
-    } else if app.config.matches_navigation(key, "push") {
-        if let Some(ws) = app.current_workspace()
-            && ws.info.workspace_type != piki_core::WorkspaceType::Project
-        {
-            return Some(Action::GitPush);
-        }
-    } else if app.config.matches_navigation(key, "stash") {
-        if let Some(ws) = app.current_workspace()
-            && ws.info.workspace_type != piki_core::WorkspaceType::Project
-        {
-            return Some(Action::GitStashList);
-        }
-    } else if app.config.matches_navigation(key, "git_log") {
-        if app.current_workspace().is_some() {
-            return Some(Action::LoadGitLog);
-        }
+        None
+    } else if nav(app, "quit") {
+        app_actions::open_confirm_quit(app)
+    } else if nav(app, "help") {
+        app_actions::open_help(app)
+    } else if nav(app, "about") {
+        app_actions::open_about(app)
+    } else if nav(app, "dashboard") {
+        app_actions::open_dashboard(app)
+    } else if nav(app, "logs") {
+        app_actions::open_logs(app)
+    } else if nav(app, "workspace_info") {
+        app_actions::open_workspace_info(app)
+    } else if nav(app, "edit_workspace") {
+        app_actions::open_edit_workspace(app)
+    } else if nav(app, "clone_workspace") {
+        app_actions::open_clone_workspace(app)
+    } else if nav(app, "new_workspace") {
+        app_actions::open_new_workspace(app)
+    } else if nav(app, "delete_workspace") {
+        app_actions::open_delete_workspace(app)
+    } else if nav(app, "commit") {
+        app_actions::open_commit_dialog(app)
+    } else if nav(app, "merge") {
+        app_actions::open_confirm_merge(app)
+    } else if nav(app, "push") {
+        app_actions::git_push(app)
+    } else if nav(app, "stash") {
+        app_actions::git_stash_list(app)
+    } else if nav(app, "git_log") {
+        app_actions::git_log(app)
     } else if key.code == KeyCode::Char('A')
         && app
             .current_workspace()
             .is_some_and(|ws| ws.info.workspace_type == piki_core::WorkspaceType::Simple)
     {
-        // Load agents for current project before opening the overlay (Simple ws only)
-        if let Some(ref storage) = app.storage.agent_profiles
-            && let Some(ws) = app.current_workspace()
-        {
-            let repo = ws.source_repo.clone();
-            if let Ok(agents) = storage.load_agents(&repo) {
-                app.agent_profiles = agents;
-            }
-        }
-        app.active_dialog = Some(DialogState::ManageAgents { selected: 0 });
-        app.mode = AppMode::ManageAgents;
-    } else if key.code == KeyCode::Char('p') && key.modifiers.contains(crossterm::event::KeyModifiers::ALT) {
-        // Open providers manager (Alt+P)
-        app.active_dialog = Some(DialogState::ManageProviders { selected: 0 });
-        app.mode = AppMode::ManageProviders;
-    } else if app.config.matches_navigation(key, "conflicts") {
-        if let Some(ws) = app.current_workspace()
-            && ws.info.workspace_type != piki_core::WorkspaceType::Project
-        {
-            return Some(Action::DetectConflicts);
-        }
-    } else if app.config.matches_navigation(key, "chat_panel") {
-        app.mode = AppMode::ChatPanel;
-        if app.chat_panel.models.is_empty() {
-            return Some(Action::ChatLoadModels);
-        }
-    } else if app.config.matches_navigation(key, "undo") {
-        return Some(Action::Undo);
-    } else if app.config.matches_navigation(key, "next_workspace") {
-        match app.active_pane {
-            ActivePane::WorkspaceList => app.next_workspace(),
-            ActivePane::MainPanel => {
-                if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-                    && !ws.tabs.is_empty()
-                {
-                    ws.active_tab = (ws.active_tab + 1) % ws.tabs.len();
-                }
-            }
-            ActivePane::GitStatus => app.next_file(),
-        }
-    } else if app.config.matches_navigation(key, "prev_workspace") {
-        match app.active_pane {
-            ActivePane::WorkspaceList => app.prev_workspace(),
-            ActivePane::MainPanel => {
-                if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-                    && !ws.tabs.is_empty()
-                {
-                    ws.active_tab = (ws.active_tab + ws.tabs.len() - 1) % ws.tabs.len();
-                }
-            }
-            ActivePane::GitStatus => app.prev_file(),
-        }
-    } else if app.config.matches_navigation(key, "scroll_up") {
-        if app.active_pane == ActivePane::MainPanel
-            && app.mode == AppMode::Normal
-            && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-            && let Some(tab) = ws.current_tab_mut()
-            && let Some(ref parser) = tab.pty_parser
-        {
-            let max = scrollback_max(parser);
-            tab.term_scroll = (tab.term_scroll + 3).min(max);
-        }
-    } else if app.config.matches_navigation(key, "scroll_down") {
-        if app.active_pane == ActivePane::MainPanel
-            && app.mode == AppMode::Normal
-            && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-            && let Some(tab) = ws.current_tab_mut()
-        {
-            tab.term_scroll = tab.term_scroll.saturating_sub(3);
-        }
-    } else if app.config.matches_navigation(key, "page_up") {
-        if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-            && let Some(tab) = ws.current_tab_mut()
-            && let Some(ref parser) = tab.pty_parser
-        {
-            let screen_height = app.pty_rows as usize;
-            let max = scrollback_max(parser);
-            tab.term_scroll = (tab.term_scroll + screen_height).min(max);
-        }
-    } else if app.config.matches_navigation(key, "page_down") {
-        if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-            && let Some(tab) = ws.current_tab_mut()
-        {
-            let screen_height = app.pty_rows as usize;
-            tab.term_scroll = tab.term_scroll.saturating_sub(screen_height);
-        }
-    } else if app.config.matches_navigation(key, "copy") {
+        app_actions::open_manage_agents(app)
+    } else if key.code == KeyCode::Char('p')
+        && key.modifiers.contains(crossterm::event::KeyModifiers::ALT)
+    {
+        app_actions::open_manage_providers(app)
+    } else if nav(app, "conflicts") {
+        app_actions::detect_conflicts(app)
+    } else if nav(app, "chat_panel") {
+        app_actions::open_chat_panel(app)
+    } else if nav(app, "undo") {
+        app_actions::undo(app)
+    } else if nav(app, "next_workspace") {
+        app_actions::cycle_next_by_pane(app)
+    } else if nav(app, "prev_workspace") {
+        app_actions::cycle_prev_by_pane(app)
+    } else if nav(app, "scroll_up") {
+        app_actions::term_scroll_up(app, 3)
+    } else if nav(app, "scroll_down") {
+        app_actions::term_scroll_down(app, 3)
+    } else if nav(app, "page_up") {
+        app_actions::term_page_up(app)
+    } else if nav(app, "page_down") {
+        app_actions::term_page_down(app)
+    } else if nav(app, "copy") {
         copy_visible_terminal(app);
-    } else if app.config.matches_navigation(key, "fuzzy_search")
-        || app.config.matches_navigation(key, "fuzzy_search_alt")
-    {
+        None
+    } else if nav(app, "fuzzy_search") || nav(app, "fuzzy_search_alt") {
         app.open_fuzzy_search();
-    } else if app.config.matches_navigation(key, "command_palette") {
+        None
+    } else if nav(app, "command_palette") {
         app.open_command_palette();
-    } else if app.config.matches_navigation(key, "workspace_switcher") {
+        None
+    } else if nav(app, "workspace_switcher") {
         app.open_workspace_switcher();
-    } else if app.config.matches_navigation(key, "toggle_prev_workspace") {
+        None
+    } else if nav(app, "toggle_prev_workspace") {
         app.toggle_previous_workspace();
-    } else if app.config.matches_navigation(key, "sidebar_shrink")
-        || app.config.matches_navigation(key, "sidebar_shrink_alt")
-    {
-        app.sidebar_pct = app.sidebar_pct.saturating_sub(5).max(10);
-        resize_all_ptys(app);
-        app.save_layout_prefs();
-    } else if app.config.matches_navigation(key, "sidebar_grow")
-        || app.config.matches_navigation(key, "sidebar_grow_alt")
-    {
-        app.sidebar_pct = (app.sidebar_pct + 5).min(90);
-        resize_all_ptys(app);
-        app.save_layout_prefs();
-    } else if app.config.matches_navigation(key, "split_up")
-        || app.config.matches_navigation(key, "split_up_alt")
-    {
-        app.left_split_pct = (app.left_split_pct + 10).min(90);
-        app.save_layout_prefs();
-    } else if app.config.matches_navigation(key, "split_down") {
-        app.left_split_pct = app.left_split_pct.saturating_sub(10).max(10);
-        app.save_layout_prefs();
-    } else if app.config.matches_navigation(key, "next_tab") {
-        if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-            && !ws.tabs.is_empty()
-        {
-            ws.active_tab = (ws.active_tab + 1) % ws.tabs.len();
-        }
-    } else if app.config.matches_navigation(key, "prev_tab") {
-        if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-            && !ws.tabs.is_empty()
-        {
-            ws.active_tab = (ws.active_tab + ws.tabs.len() - 1) % ws.tabs.len();
-        }
-    } else if app.config.matches_navigation(key, "new_tab") {
-        if app.current_workspace().is_some() {
-            app.active_dialog = Some(DialogState::NewTab {
-                menu: crate::dialog_state::NewTabMenu::Main,
-            });
-            app.mode = AppMode::NewTab;
-        }
-    } else if app.config.matches_navigation(key, "close_tab") {
-        if let Some(ws) = app.workspaces.get(app.active_workspace) {
-            if ws.current_tab().is_some_and(|t| t.closable) {
-                app.active_dialog = Some(DialogState::ConfirmCloseTab {
-                    target: ws.active_tab,
-                });
-                app.mode = AppMode::ConfirmCloseTab;
-            } else {
-                app.status_message = Some("Cannot close the initial shell tab".into());
-            }
-        }
-    } else if app.config.matches_navigation(key, "stage_quick") {
-        // Quick stage without entering interaction mode
-        if app.active_pane == ActivePane::GitStatus
-            && let Some(ws) = app.current_workspace()
-            && !ws.changed_files.is_empty()
-        {
-            if app.selected_files.is_empty() {
-                return Some(Action::GitStage(app.selected_file));
-            } else {
-                return Some(Action::GitStageSelected);
-            }
-        }
-    } else if app.config.matches_navigation(key, "unstage_quick") {
-        // Quick unstage without entering interaction mode
-        if app.active_pane == ActivePane::GitStatus
-            && let Some(ws) = app.current_workspace()
-            && !ws.changed_files.is_empty()
-        {
-            if app.selected_files.is_empty() {
-                return Some(Action::GitUnstage(app.selected_file));
-            } else {
-                return Some(Action::GitUnstageSelected);
-            }
-        }
+        None
+    } else if nav(app, "sidebar_shrink") || nav(app, "sidebar_shrink_alt") {
+        app_actions::sidebar_shrink(app)
+    } else if nav(app, "sidebar_grow") || nav(app, "sidebar_grow_alt") {
+        app_actions::sidebar_grow(app)
+    } else if nav(app, "split_up") || nav(app, "split_up_alt") {
+        app_actions::split_up(app)
+    } else if nav(app, "split_down") {
+        app_actions::split_down(app)
+    } else if nav(app, "next_tab") {
+        app_actions::cycle_next_tab(app)
+    } else if nav(app, "prev_tab") {
+        app_actions::cycle_prev_tab(app)
+    } else if nav(app, "new_tab") {
+        app_actions::open_new_tab(app)
+    } else if nav(app, "close_tab") {
+        app_actions::request_close_tab(app)
+    } else if nav(app, "stage_quick") {
+        app_actions::stage_quick(app)
+    } else if nav(app, "unstage_quick") {
+        app_actions::unstage_quick(app)
+    } else {
+        None
     }
-    None
 }
 
 // ── Interaction mode: Esc to leave, keys go to the active pane ──
