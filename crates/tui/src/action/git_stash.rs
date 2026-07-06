@@ -194,7 +194,6 @@ pub(super) async fn handle(
                     app.diff_scroll = 0;
                     app.mode = AppMode::Diff;
                     app.active_pane = ActivePane::MainPanel;
-                    app.interacting = true;
                 }
                 Err(e) => {
                     app.status_message = Some(format!("Failed to parse stash diff: {}", e));

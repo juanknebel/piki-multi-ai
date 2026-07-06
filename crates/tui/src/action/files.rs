@@ -74,7 +74,6 @@ pub(super) async fn handle(
                     app.diff_scroll = 0;
                     app.mode = AppMode::Diff;
                     app.active_pane = ActivePane::MainPanel;
-                    app.interacting = true;
                 } else {
                     let worktree_path = ws.path.clone();
                     let file_status = file.status.clone();
@@ -97,7 +96,6 @@ pub(super) async fn handle(
                                     app.diff_scroll = 0;
                                     app.mode = AppMode::Diff;
                                     app.active_pane = ActivePane::MainPanel;
-                                    app.interacting = true;
                                 }
                                 Err(e) => {
                                     app.status_message =

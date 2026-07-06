@@ -39,14 +39,10 @@ pub fn compute_terminal_area_with(total: Rect, sidebar_pct: u16) -> Rect {
     )
 }
 
-/// Border style for a pane: green if interacting, yellow if selected, white otherwise
+/// Border style for a pane: highlighted when focused, white otherwise
 pub(super) fn pane_border_style(app: &App, pane: ActivePane) -> Style {
     if app.active_pane == pane {
-        if app.interacting {
-            Style::default().fg(app.theme.border.active_interact)
-        } else {
-            Style::default().fg(app.theme.border.active_navigate)
-        }
+        Style::default().fg(app.theme.border.active_interact)
     } else {
         Style::default().fg(app.theme.border.inactive)
     }
@@ -84,7 +80,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         return;
     }
 
-    // Compute footer keys — use cache when mode/interacting/pane haven't changed
+    // Compute footer keys — use cache when mode/input-state/pane haven't changed
     let has_markdown = app
         .current_workspace()
         .and_then(|ws| ws.current_tab())
@@ -109,7 +105,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
     let sel_count = app.selection_count();
     let cache_key = (
         app.mode.clone(),
-        app.interacting,
+        app.input_state,
         app.active_pane,
         has_markdown,
         api_footer_state,

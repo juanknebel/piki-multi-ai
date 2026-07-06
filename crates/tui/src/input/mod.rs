@@ -18,8 +18,7 @@ mod workspace_switcher_input;
 use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::action::Action;
-use crate::app::{ActivePane, App, AppMode};
-use crate::helpers::copy_visible_terminal;
+use crate::app::{ActivePane, App, AppMode, InputState};
 
 use self::command_palette_input::handle_command_palette_input;
 use self::dialog::{
@@ -44,8 +43,12 @@ use self::interaction::{
 
 /// Handle a bracketed paste event — insert full text at once into the active context.
 pub(crate) fn handle_paste(app: &mut App, text: &str) {
-    // Terminal interaction: write to PTY
-    if app.interacting
+    // A paste while a prefix chord is pending cancels the chord
+    if app.input_state == InputState::PrefixPending {
+        app.input_state = InputState::Normal;
+    }
+    // Focused terminal: write to PTY
+    if app.active_pane == ActivePane::MainPanel
         && matches!(app.mode, AppMode::Normal | AppMode::Diff)
         && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
         && let Some(tab) = ws.current_tab_mut()
@@ -174,132 +177,246 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
     app.toast = None;
     app.selection = None;
 
-    if app.interacting {
-        handle_interaction_mode(app, key)
-    } else {
-        handle_navigation_mode(app, key)
+    // The terminal search overlay captures everything, including the prefix key
+    if app.active_pane == ActivePane::MainPanel && app.term_search.is_some() {
+        return interaction::handle_term_search_key(app, key);
+    }
+
+    match app.input_state {
+        InputState::PrefixPending => {
+            // One-shot: always reset before dispatching
+            app.input_state = InputState::Normal;
+            if key.code == KeyCode::Esc {
+                return None;
+            }
+            if app.config.is_prefix_key(key) {
+                send_literal_prefix(app);
+                return None;
+            }
+            handle_prefix_key(app, key)
+        }
+        InputState::TermScroll => {
+            if app.config.is_prefix_key(key) {
+                app_actions::exit_term_scroll(app);
+                app.input_state = InputState::PrefixPending;
+                return None;
+            }
+            handle_term_scroll_key(app, key)
+        }
+        InputState::Normal => {
+            if app.config.is_prefix_key(key) {
+                app.input_state = InputState::PrefixPending;
+                return None;
+            }
+            if let Some(result) = try_direct_app_binding(app, key) {
+                return result;
+            }
+            handle_pane_key(app, key)
+        }
     }
 }
 
-// ── Navigation mode: hjkl between panes, Enter to interact, global shortcuts ──
+/// App actions addressable from the `[keybindings.app]` table, minus the
+/// terminal clipboard/search chords (those stay pane-scoped so e.g. copy in an
+/// API tab can copy the response instead of the terminal screen).
+const APP_ACTIONS: &[&str] = &[
+    "focus_left",
+    "focus_down",
+    "focus_up",
+    "focus_right",
+    "new_tab",
+    "close_tab",
+    "next_tab",
+    "prev_tab",
+    "workspace_switcher",
+    "next_workspace",
+    "prev_workspace",
+    "toggle_prev_workspace",
+    "new_workspace",
+    "edit_workspace",
+    "workspace_info",
+    "clone_workspace",
+    "commit",
+    "push",
+    "merge",
+    "stash",
+    "git_log",
+    "conflicts",
+    "undo",
+    "help",
+    "about",
+    "dashboard",
+    "command_palette",
+    "fuzzy_search",
+    "chat_panel",
+    "quit",
+    "manage_agents",
+    "manage_providers",
+    "logs",
+    "scroll_mode",
+    "sidebar_shrink",
+    "sidebar_grow",
+    "split_up",
+    "split_down",
+];
 
-pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
-    fn nav(app: &App, key: KeyEvent, action: &str) -> bool {
-        app.config.matches_navigation(key, action)
-    }
-    let nav = |app: &App, a: &str| nav(app, key, a);
-    if nav(app, "left") || nav(app, "left_alt") {
-        app_actions::focus_left(app)
-    } else if nav(app, "right") || nav(app, "right_alt") {
-        app_actions::focus_right(app)
-    } else if nav(app, "down") || nav(app, "down_alt") {
-        app_actions::focus_down(app)
-    } else if nav(app, "up") || nav(app, "up_alt") {
-        app_actions::focus_up(app)
-    } else if nav(app, "enter_pane") {
-        app.interacting = true;
-        None
-    } else if nav(app, "quit") {
-        app_actions::open_confirm_quit(app)
-    } else if nav(app, "help") {
-        app_actions::open_help(app)
-    } else if nav(app, "about") {
-        app_actions::open_about(app)
-    } else if nav(app, "dashboard") {
-        app_actions::open_dashboard(app)
-    } else if nav(app, "logs") {
-        app_actions::open_logs(app)
-    } else if nav(app, "workspace_info") {
-        app_actions::open_workspace_info(app)
-    } else if nav(app, "edit_workspace") {
-        app_actions::open_edit_workspace(app)
-    } else if nav(app, "clone_workspace") {
-        app_actions::open_clone_workspace(app)
-    } else if nav(app, "new_workspace") {
-        app_actions::open_new_workspace(app)
-    } else if nav(app, "delete_workspace") {
-        app_actions::open_delete_workspace(app)
-    } else if nav(app, "commit") {
-        app_actions::open_commit_dialog(app)
-    } else if nav(app, "merge") {
-        app_actions::open_confirm_merge(app)
-    } else if nav(app, "push") {
-        app_actions::git_push(app)
-    } else if nav(app, "stash") {
-        app_actions::git_stash_list(app)
-    } else if nav(app, "git_log") {
-        app_actions::git_log(app)
-    } else if key.code == KeyCode::Char('A')
-        && app
-            .current_workspace()
-            .is_some_and(|ws| ws.info.workspace_type == piki_core::WorkspaceType::Simple)
-    {
-        app_actions::open_manage_agents(app)
-    } else if key.code == KeyCode::Char('p')
-        && key.modifiers.contains(crossterm::event::KeyModifiers::ALT)
-    {
-        app_actions::open_manage_providers(app)
-    } else if nav(app, "conflicts") {
-        app_actions::detect_conflicts(app)
-    } else if nav(app, "chat_panel") {
-        app_actions::open_chat_panel(app)
-    } else if nav(app, "undo") {
-        app_actions::undo(app)
-    } else if nav(app, "next_workspace") {
-        app_actions::cycle_next_by_pane(app)
-    } else if nav(app, "prev_workspace") {
-        app_actions::cycle_prev_by_pane(app)
-    } else if nav(app, "scroll_up") {
-        app_actions::term_scroll_up(app, 3)
-    } else if nav(app, "scroll_down") {
-        app_actions::term_scroll_down(app, 3)
-    } else if nav(app, "page_up") {
-        app_actions::term_page_up(app)
-    } else if nav(app, "page_down") {
-        app_actions::term_page_down(app)
-    } else if nav(app, "copy") {
-        copy_visible_terminal(app);
-        None
-    } else if nav(app, "fuzzy_search") || nav(app, "fuzzy_search_alt") {
-        app.open_fuzzy_search();
-        None
-    } else if nav(app, "command_palette") {
-        app.open_command_palette();
-        None
-    } else if nav(app, "workspace_switcher") {
-        app.open_workspace_switcher();
-        None
-    } else if nav(app, "toggle_prev_workspace") {
-        app.toggle_previous_workspace();
-        None
-    } else if nav(app, "sidebar_shrink") || nav(app, "sidebar_shrink_alt") {
-        app_actions::sidebar_shrink(app)
-    } else if nav(app, "sidebar_grow") || nav(app, "sidebar_grow_alt") {
-        app_actions::sidebar_grow(app)
-    } else if nav(app, "split_up") || nav(app, "split_up_alt") {
-        app_actions::split_up(app)
-    } else if nav(app, "split_down") {
-        app_actions::split_down(app)
-    } else if nav(app, "next_tab") {
-        app_actions::cycle_next_tab(app)
-    } else if nav(app, "prev_tab") {
-        app_actions::cycle_prev_tab(app)
-    } else if nav(app, "new_tab") {
-        app_actions::open_new_tab(app)
-    } else if nav(app, "close_tab") {
-        app_actions::request_close_tab(app)
-    } else if nav(app, "stage_quick") {
-        app_actions::stage_quick(app)
-    } else if nav(app, "unstage_quick") {
-        app_actions::unstage_quick(app)
-    } else {
-        None
+/// Execute an `[keybindings.app]` action by name.
+fn dispatch_app_action(app: &mut App, action: &str) -> Option<Action> {
+    match action {
+        "focus_left" => app_actions::focus_left(app),
+        "focus_down" => app_actions::focus_down(app),
+        "focus_up" => app_actions::focus_up(app),
+        "focus_right" => app_actions::focus_right(app),
+        "new_tab" => app_actions::open_new_tab(app),
+        "close_tab" => app_actions::request_close_tab(app),
+        "next_tab" => app_actions::cycle_next_tab(app),
+        "prev_tab" => app_actions::cycle_prev_tab(app),
+        "workspace_switcher" => {
+            app.open_workspace_switcher();
+            None
+        }
+        "next_workspace" => {
+            app.next_workspace();
+            None
+        }
+        "prev_workspace" => {
+            app.prev_workspace();
+            None
+        }
+        "toggle_prev_workspace" => {
+            app.toggle_previous_workspace();
+            None
+        }
+        "new_workspace" => app_actions::open_new_workspace(app),
+        "edit_workspace" => app_actions::open_edit_workspace(app),
+        "workspace_info" => app_actions::open_workspace_info(app),
+        "clone_workspace" => app_actions::open_clone_workspace(app),
+        "commit" => app_actions::open_commit_dialog(app),
+        "push" => app_actions::git_push(app),
+        "merge" => app_actions::open_confirm_merge(app),
+        "stash" => app_actions::git_stash_list(app),
+        "git_log" => app_actions::git_log(app),
+        "conflicts" => app_actions::detect_conflicts(app),
+        "undo" => app_actions::undo(app),
+        "help" => app_actions::open_help(app),
+        "about" => app_actions::open_about(app),
+        "dashboard" => app_actions::open_dashboard(app),
+        "command_palette" => {
+            app.open_command_palette();
+            None
+        }
+        "fuzzy_search" => {
+            app.open_fuzzy_search();
+            None
+        }
+        "chat_panel" => app_actions::open_chat_panel(app),
+        "quit" => app_actions::open_confirm_quit(app),
+        "manage_agents" => app_actions::open_manage_agents(app),
+        "manage_providers" => app_actions::open_manage_providers(app),
+        "logs" => app_actions::open_logs(app),
+        "scroll_mode" => app_actions::enter_term_scroll(app),
+        "sidebar_shrink" => app_actions::sidebar_shrink(app),
+        "sidebar_grow" => app_actions::sidebar_grow(app),
+        "split_up" => app_actions::split_up(app),
+        "split_down" => app_actions::split_down(app),
+        _ => None,
     }
 }
 
-// ── Interaction mode: Esc to leave, keys go to the active pane ──
+/// Dispatch the key following the prefix chord against the app table.
+fn handle_prefix_key(app: &mut App, key: KeyEvent) -> Option<Action> {
+    // prefix 1..9 → jump to tab N (not configurable, like tmux)
+    if let KeyCode::Char(c @ '1'..='9') = key.code
+        && (key.modifiers.is_empty()
+            || key.modifiers == crossterm::event::KeyModifiers::NONE)
+    {
+        let n = c as usize - '1' as usize;
+        if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+            && n < ws.tabs.len()
+        {
+            ws.active_tab = n;
+        }
+        return None;
+    }
+    for action in APP_ACTIONS {
+        if app.config.matches_app_prefix(key, action) {
+            return dispatch_app_action(app, action);
+        }
+    }
+    app.set_toast(
+        format!("Unbound key after {}", app.config.prefix_display()),
+        crate::app::ToastLevel::Info,
+    );
+    None
+}
 
-fn handle_interaction_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
+/// Direct (non-prefix) chords from the app table, e.g. a user-promoted
+/// `next_tab = "alt-n"`. Defaults have none (copy/paste/search are pane-scoped).
+fn try_direct_app_binding(app: &mut App, key: KeyEvent) -> Option<Option<Action>> {
+    for action in APP_ACTIONS {
+        if app.config.matches_app_direct(key, action) {
+            return Some(dispatch_app_action(app, action));
+        }
+    }
+    None
+}
+
+/// Send the prefix key literally to the focused terminal (prefix-prefix).
+/// Writes BEL (0x07) for the default Ctrl+G; other prefixes go through the
+/// regular key-to-bytes conversion.
+fn send_literal_prefix(app: &mut App) {
+    if app.active_pane != ActivePane::MainPanel {
+        return;
+    }
+    let bytes = if app.config.keybindings.prefix_key == "ctrl-g" {
+        Some(vec![0x07])
+    } else {
+        crate::config::parse_key_event(&app.config.keybindings.prefix_key)
+            .and_then(crate::pty::input::key_to_bytes)
+    };
+    if let Some(bytes) = bytes
+        && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+        && let Some(tab) = ws.current_tab_mut()
+        && let Some(ref mut pty) = tab.pty_session
+    {
+        let _ = pty.write(&bytes);
+    }
+}
+
+/// Terminal scroll mode (`prefix [`): navigate the scrollback of the focused
+/// terminal, tmux-copy-mode style.
+fn handle_term_scroll_key(app: &mut App, key: KeyEvent) -> Option<Action> {
+    fn m(app: &App, key: KeyEvent, action: &str) -> bool {
+        app.config.matches_scroll(key, action)
+    }
+    if m(app, key, "exit") || m(app, key, "exit_alt") {
+        app_actions::exit_term_scroll(app);
+    } else if m(app, key, "down") || m(app, key, "down_alt") {
+        app_actions::term_scroll_down(app, 1);
+    } else if m(app, key, "up") || m(app, key, "up_alt") {
+        app_actions::term_scroll_up(app, 1);
+    } else if m(app, key, "page_down") || m(app, key, "page_down_alt") {
+        app_actions::term_page_down(app);
+    } else if m(app, key, "page_up") || m(app, key, "page_up_alt") {
+        app_actions::term_page_up(app);
+    } else if m(app, key, "top") {
+        app_actions::term_scroll_top(app);
+    } else if m(app, key, "bottom") {
+        app_actions::term_scroll_bottom(app);
+    } else if m(app, key, "search") {
+        app.term_search = Some(crate::app::TermSearchState {
+            query: String::new(),
+            cursor: 0,
+            matches: Vec::new(),
+            current_match: 0,
+        });
+    }
+    None
+}
+
+// ── Pane routing: keys go to the focused pane ──
+
+fn handle_pane_key(app: &mut App, key: KeyEvent) -> Option<Action> {
     match app.active_pane {
         ActivePane::MainPanel => {
             if app.mode == AppMode::Diff {

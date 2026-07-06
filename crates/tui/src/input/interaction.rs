@@ -8,11 +8,6 @@ use crate::dialog_state::{DialogState, EditWorkspaceField};
 use crate::helpers::copy_visible_terminal;
 
 pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    if app.config.matches_interaction(key, "exit_interaction") {
-        app.interacting = false;
-        return None;
-    }
-
     let ws = app.workspaces.get_mut(app.active_workspace)?;
     let (kanban_app, kanban_provider) = match (&mut ws.kanban_app, &mut ws.kanban_provider) {
         (Some(a), Some(p)) => (a, p),
@@ -270,7 +265,6 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
                 use_current_ws: false,
             });
             app.mode = AppMode::DispatchAgent;
-            app.interacting = false;
         }
         return None;
     }
@@ -418,10 +412,9 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
                 }
             }
             _ => {
-                let should_quit = kanban_app.apply(a);
-                if should_quit {
-                    app.interacting = false;
-                }
+                // "Quit" from the kanban sub-app is a no-op now that there is
+                // no interaction mode to leave.
+                let _ = kanban_app.apply(a);
             }
         }
     }
@@ -476,10 +469,11 @@ fn search_terminal(app: &mut App) {
     }
 }
 
-pub(super) fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    // Terminal search overlay captures input when active
-    if app.term_search.is_some() {
-        match key.code {
+/// Terminal search overlay input. Captures everything while the overlay is
+/// open; dispatched from `handle_key_event` before the input-state machine so
+/// the prefix key can be typed into the query.
+pub(super) fn handle_term_search_key(app: &mut App, key: KeyEvent) -> Option<Action> {
+    match key.code {
             KeyCode::Esc => {
                 app.term_search = None;
             }
@@ -534,17 +528,13 @@ pub(super) fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Optio
                 search_terminal(app);
             }
             _ => {}
-        }
-        return None;
     }
+    None
+}
 
-    if app.config.matches_interaction(key, "exit_interaction") {
-        app.interacting = false;
-        app.term_search = None;
-        return None;
-    }
+pub(super) fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
     // Ctrl+Shift+F: open terminal search
-    if app.config.matches_interaction(key, "search") {
+    if app.config.matches_app_direct(key, "search") {
         app.term_search = Some(crate::app::TermSearchState {
             query: String::new(),
             cursor: 0,
@@ -554,7 +544,7 @@ pub(super) fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Optio
         return None;
     }
     // Ctrl+Shift+V: paste from clipboard
-    if app.config.matches_interaction(key, "paste") {
+    if app.config.matches_app_direct(key, "paste") {
         match clipboard::paste_from_clipboard() {
             Ok(text) => {
                 if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
@@ -582,7 +572,7 @@ pub(super) fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Optio
         return None;
     }
     // Ctrl+Shift+C: copy visible terminal content
-    if app.config.matches_interaction(key, "copy") {
+    if app.config.matches_app_direct(key, "copy") {
         copy_visible_terminal(app);
         return None;
     }
@@ -598,12 +588,6 @@ pub(super) fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Optio
 }
 
 pub(super) fn handle_markdown_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    if app.config.matches_markdown(key, "exit_interaction")
-        || app.config.matches_markdown(key, "exit_interaction_alt")
-    {
-        app.interacting = false;
-        return None;
-    }
     if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
         && let Some(tab) = ws.current_tab_mut()
     {
@@ -631,7 +615,6 @@ pub(super) fn handle_diff_interaction(app: &mut App, key: KeyEvent) -> Option<Ac
     if app.config.matches_diff(key, "exit") {
         app.diff_content = None;
         app.diff_file_path = None;
-        app.interacting = false;
         // Return to the overlay we came from, if any
         if matches!(
             app.active_dialog,
@@ -675,14 +658,6 @@ pub(super) fn handle_diff_interaction(app: &mut App, key: KeyEvent) -> Option<Ac
 }
 
 pub(super) fn handle_workspace_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    if app.config.matches_workspace_list(key, "exit_interaction")
-        || app
-            .config
-            .matches_workspace_list(key, "exit_interaction_alt")
-    {
-        app.interacting = false;
-        return None;
-    }
     if app.config.matches_workspace_list(key, "down")
         || app.config.matches_workspace_list(key, "down_alt")
     {
@@ -700,7 +675,6 @@ pub(super) fn handle_workspace_interaction(app: &mut App, key: KeyEvent) -> Opti
             Some(crate::app::SidebarItem::Workspace { index }) => {
                 app.switch_workspace(*index);
                 app.active_pane = ActivePane::MainPanel;
-                app.interacting = false;
             }
             None => {}
         }
@@ -711,7 +685,7 @@ pub(super) fn handle_workspace_interaction(app: &mut App, key: KeyEvent) -> Opti
             app.active_dialog = Some(DialogState::ConfirmDelete { target: ws_idx });
             app.mode = AppMode::ConfirmDelete;
         }
-    } else if app.config.matches_navigation(key, "edit_workspace")
+    } else if app.config.matches_workspace_list(key, "edit")
         && let Some(ws_idx) = app.sidebar_row_to_workspace(app.selected_sidebar_row)
         && let Some(ws) = app.workspaces.get(ws_idx)
     {
@@ -729,7 +703,6 @@ pub(super) fn handle_workspace_interaction(app: &mut App, key: KeyEvent) -> Opti
             active_field: EditWorkspaceField::KanbanPath,
         });
         app.mode = AppMode::EditWorkspace;
-        app.interacting = false;
     }
     None
 }
@@ -830,17 +803,12 @@ fn search_api_response(api: &mut crate::app::ApiTabState) {
 }
 
 pub(super) fn handle_api_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    if app.config.matches_interaction(key, "exit_interaction") || key.code == KeyCode::Esc {
-        app.interacting = false;
-        return None;
-    }
-
     // Ctrl+C / Ctrl+Shift+C: copy entire response body
     // Ctrl+C is safe here (no PTY in API tab); Ctrl+Shift+C may be intercepted by the terminal
     if (key.code == KeyCode::Char('c')
         && has_ctrl(key.modifiers, app.config.platform)
         && !key.modifiers.contains(KeyModifiers::SHIFT))
-        || app.config.matches_interaction(key, "copy")
+        || app.config.matches_app_direct(key, "copy")
     {
         let text = app
             .workspaces
@@ -1147,13 +1115,6 @@ pub(super) fn handle_api_interaction(app: &mut App, key: KeyEvent) -> Option<Act
 }
 
 pub(super) fn handle_filelist_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    if app.config.matches_file_list(key, "exit_interaction")
-        || app.config.matches_file_list(key, "exit_interaction_alt")
-    {
-        app.interacting = false;
-        return None;
-    }
-
     // Project workspaces: navigate sub-directories, Enter opens NewWorkspace dialog
     let is_project = app
         .current_workspace()
@@ -1197,7 +1158,6 @@ pub(super) fn handle_filelist_interaction(app: &mut App, key: KeyEvent) -> Optio
                 active_field: DialogField::Source,
             });
             app.mode = AppMode::NewWorkspace;
-            app.interacting = false;
         }
         return None;
     }

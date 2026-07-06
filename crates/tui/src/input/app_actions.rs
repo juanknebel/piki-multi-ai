@@ -1,7 +1,7 @@
 //! Global app actions, one function per action.
 //!
 //! These are the bodies of the former navigation-mode arms, extracted so the
-//! key-matching layer (navigation mode today, the prefix dispatcher next) stays
+//! key-matching layer (the prefix dispatcher and pane routing) stays
 //! a thin table. All helpers return `Option<Action>` so callers can uniformly
 //! `return` their result.
 
@@ -289,26 +289,6 @@ pub(crate) fn undo(_app: &mut App) -> Option<Action> {
 
 // ── Workspaces & tabs ──
 
-/// Pane-sensitive "next" cycling (workspace / tab / file, depending on focus).
-pub(crate) fn cycle_next_by_pane(app: &mut App) -> Option<Action> {
-    match app.active_pane {
-        ActivePane::WorkspaceList => app.next_workspace(),
-        ActivePane::MainPanel => return cycle_next_tab(app),
-        ActivePane::GitStatus => app.next_file(),
-    }
-    None
-}
-
-/// Pane-sensitive "prev" cycling (workspace / tab / file, depending on focus).
-pub(crate) fn cycle_prev_by_pane(app: &mut App) -> Option<Action> {
-    match app.active_pane {
-        ActivePane::WorkspaceList => app.prev_workspace(),
-        ActivePane::MainPanel => return cycle_prev_tab(app),
-        ActivePane::GitStatus => app.prev_file(),
-    }
-    None
-}
-
 pub(crate) fn cycle_next_tab(app: &mut App) -> Option<Action> {
     if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
         && !ws.tabs.is_empty()
@@ -399,6 +379,53 @@ pub(crate) fn term_page_down(app: &mut App) -> Option<Action> {
     None
 }
 
+pub(crate) fn term_scroll_top(app: &mut App) -> Option<Action> {
+    if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+        && let Some(tab) = ws.current_tab_mut()
+        && let Some(ref parser) = tab.pty_parser
+    {
+        tab.term_scroll = scrollback_max(parser);
+    }
+    None
+}
+
+pub(crate) fn term_scroll_bottom(app: &mut App) -> Option<Action> {
+    if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+        && let Some(tab) = ws.current_tab_mut()
+    {
+        tab.term_scroll = 0;
+    }
+    None
+}
+
+/// Enter terminal scroll mode (`prefix [`). Only meaningful when the current
+/// tab is a real terminal; focus moves to the main panel.
+pub(crate) fn enter_term_scroll(app: &mut App) -> Option<Action> {
+    let has_pty = app.mode == AppMode::Normal
+        && app
+            .current_workspace()
+            .and_then(|ws| ws.current_tab())
+            .is_some_and(|tab| tab.pty_parser.is_some());
+    if has_pty {
+        app.active_pane = ActivePane::MainPanel;
+        app.input_state = crate::app::InputState::TermScroll;
+    } else {
+        app.set_toast("No scrollback here", crate::app::ToastLevel::Info);
+    }
+    None
+}
+
+/// Leave terminal scroll mode and snap the view back to the live bottom.
+pub(crate) fn exit_term_scroll(app: &mut App) -> Option<Action> {
+    app.input_state = crate::app::InputState::Normal;
+    if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+        && let Some(tab) = ws.current_tab_mut()
+    {
+        tab.term_scroll = 0;
+    }
+    None
+}
+
 // ── Layout ──
 
 pub(crate) fn sidebar_shrink(app: &mut App) -> Option<Action> {
@@ -427,32 +454,3 @@ pub(crate) fn split_down(app: &mut App) -> Option<Action> {
     None
 }
 
-// ── Quick git actions (GitStatus pane) ──
-
-pub(crate) fn stage_quick(app: &mut App) -> Option<Action> {
-    if app.active_pane == ActivePane::GitStatus
-        && let Some(ws) = app.current_workspace()
-        && !ws.changed_files.is_empty()
-    {
-        if app.selected_files.is_empty() {
-            return Some(Action::GitStage(app.selected_file));
-        } else {
-            return Some(Action::GitStageSelected);
-        }
-    }
-    None
-}
-
-pub(crate) fn unstage_quick(app: &mut App) -> Option<Action> {
-    if app.active_pane == ActivePane::GitStatus
-        && let Some(ws) = app.current_workspace()
-        && !ws.changed_files.is_empty()
-    {
-        if app.selected_files.is_empty() {
-            return Some(Action::GitUnstage(app.selected_file));
-        } else {
-            return Some(Action::GitUnstageSelected);
-        }
-    }
-    None
-}

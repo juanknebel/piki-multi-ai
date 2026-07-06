@@ -69,34 +69,42 @@ pub(crate) fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
 
 fn render_normal_status(frame: &mut Frame, area: Rect, app: &App) {
     let theme = &app.theme.status_bar;
-    let mode_label = if app.interacting {
-        "INTERACT"
-    } else {
-        "NAVIGATE"
-    };
-    let mode_bg = if app.interacting {
-        theme.interact_bg
-    } else {
-        theme.navigate_bg
+    let (mode_label, mode_bg) = match app.input_state {
+        crate::app::InputState::PrefixPending => ("PREFIX", theme.interact_bg),
+        crate::app::InputState::TermScroll => ("SCROLL", theme.interact_bg),
+        crate::app::InputState::Normal => ("", theme.navigate_bg),
     };
     let text_style = Style::default().bg(mode_bg).fg(theme.mode_fg);
     let sep = Span::styled(" │ ", Style::default().bg(mode_bg).fg(theme.separator_fg));
 
+    // Only show a mode chip while a prefix chord or scroll mode is active
+    let label_span = |first: bool| -> Vec<Span> {
+        if mode_label.is_empty() {
+            if first { vec![Span::styled(" ", text_style)] } else { vec![] }
+        } else {
+            vec![Span::styled(format!(" [{}]", mode_label), text_style)]
+        }
+    };
+
     let Some(ws) = app.current_workspace() else {
-        let bar = Paragraph::new(Line::from(vec![
-            Span::styled(format!(" [{}]", mode_label), text_style),
-            sep,
-            Span::styled("No active workspace", text_style),
-        ]));
+        let mut spans = label_span(true);
+        if !mode_label.is_empty() {
+            spans.push(sep.clone());
+        }
+        spans.push(Span::styled("No active workspace", text_style));
+        let bar = Paragraph::new(Line::from(spans));
         frame.render_widget(bar, area);
         return;
     };
 
-    let mut left: Vec<Span> = vec![Span::styled(format!(" [{}]", mode_label), text_style)];
+    let mut left: Vec<Span> = label_span(true);
+    let first_sep_needed = !mode_label.is_empty();
 
     let is_project = ws.info.workspace_type == piki_core::WorkspaceType::Project;
     if is_project {
-        left.push(sep.clone());
+        if first_sep_needed {
+            left.push(sep.clone());
+        }
         left.push(Span::styled("project", text_style));
         left.push(sep.clone());
         left.push(Span::styled(
@@ -104,7 +112,9 @@ fn render_normal_status(frame: &mut Frame, area: Rect, app: &App) {
             text_style,
         ));
     } else {
-        left.push(sep.clone());
+        if first_sep_needed {
+            left.push(sep.clone());
+        }
         left.push(Span::styled(format!("⎇ {}", ws.branch), text_style));
         left.push(sep.clone());
         left.push(Span::styled(
@@ -439,8 +449,64 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             ("enter".to_string(), "confirm"),
             ("esc".to_string(), "cancel"),
         ],
-        _ if app.interacting => {
-            if app.active_pane == ActivePane::GitStatus {
+        _ if app.input_state == crate::app::InputState::PrefixPending => vec![
+            ("esc".to_string(), "cancel"),
+            (cfg.prefix_display(), "send literal"),
+            (cfg.get_binding("app", "help"), "help"),
+            (cfg.get_binding("app", "workspace_switcher"), "workspaces"),
+        ],
+        _ if app.input_state == crate::app::InputState::TermScroll => vec![
+            (
+                format!(
+                    "{}/{}",
+                    cfg.get_binding("scroll", "up"),
+                    cfg.get_binding("scroll", "down")
+                ),
+                "scroll",
+            ),
+            (
+                format!(
+                    "{}/{}",
+                    cfg.get_binding("scroll", "page_up"),
+                    cfg.get_binding("scroll", "page_down")
+                ),
+                "page",
+            ),
+            (
+                format!(
+                    "{}/{}",
+                    cfg.get_binding("scroll", "top"),
+                    cfg.get_binding("scroll", "bottom")
+                ),
+                "top/bottom",
+            ),
+            (cfg.get_binding("scroll", "search"), "search"),
+            (
+                format!(
+                    "{}/{}",
+                    cfg.get_binding("scroll", "exit_alt"),
+                    cfg.get_binding("scroll", "exit")
+                ),
+                "exit",
+            ),
+        ],
+        _ => {
+            if app.active_pane == ActivePane::WorkspaceList {
+                vec![
+                    (
+                        format!(
+                            "{}/{}",
+                            cfg.get_binding("workspace_list", "up"),
+                            cfg.get_binding("workspace_list", "down")
+                        ),
+                        "select",
+                    ),
+                    (cfg.get_binding("workspace_list", "select"), "open"),
+                    (cfg.get_binding("workspace_list", "edit"), "edit ws"),
+                    (cfg.get_binding("workspace_list", "delete"), "delete ws"),
+                    (cfg.prefix_display(), "prefix"),
+                ]
+            } else if app.active_pane == ActivePane::GitStatus {
                 let is_project = app
                     .current_workspace()
                     .is_some_and(|ws| ws.info.workspace_type == piki_core::WorkspaceType::Project);
@@ -455,7 +521,7 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                             "select",
                         ),
                         ("enter".to_string(), "open as workspace"),
-                        (cfg.get_binding("interaction", "exit_interaction"), "back"),
+                        (cfg.prefix_display(), "prefix"),
                     ]
                 } else {
                     let has_sel = app.selection_count() > 0;
@@ -480,7 +546,7 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                         (cfg.get_binding("file_list", "unstage"), unstage_label),
                         (cfg.get_binding("file_list", "select_all"), "sel all"),
                         (cfg.get_binding("file_list", "edit_external"), "editor"),
-                        (cfg.get_binding("interaction", "exit_interaction"), "back"),
+                        (cfg.prefix_display(), "prefix"),
                     ]
                 }
             } else if app
@@ -507,7 +573,7 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                             (format!("{}J/{}K", p, p), "scroll"),
                             (format!("{}F", p), "search"),
                             (format!("{}C", p), "copy response"),
-                            (cfg.get_binding("interaction", "exit_interaction"), "back"),
+                            (cfg.prefix_display(), "prefix"),
                         ]
                     }
                 }
@@ -541,7 +607,7 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                         ),
                         "top/bottom",
                     ),
-                    (cfg.get_binding("interaction", "exit_interaction"), "back"),
+                    (cfg.prefix_display(), "prefix"),
                 ]
             } else if app.term_search.is_some() {
                 vec![
@@ -551,78 +617,12 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                 ]
             } else {
                 vec![
-                    (cfg.get_binding("interaction", "search"), "search"),
-                    (
-                        cfg.get_binding("interaction", "exit_interaction"),
-                        "navigation mode",
-                    ),
+                    (cfg.get_binding("app", "search"), "search"),
+                    (cfg.get_binding("app", "scroll_mode"), "scroll"),
+                    (cfg.get_binding("app", "help"), "help"),
+                    (cfg.prefix_display(), "prefix"),
                 ]
             }
-        }
-        _ => {
-            let nav = format!(
-                "{}{}{}{}",
-                cfg.get_binding("navigation", "up"),
-                cfg.get_binding("navigation", "down"),
-                cfg.get_binding("navigation", "left"),
-                cfg.get_binding("navigation", "right")
-            );
-            let mut keys = vec![
-                (nav, "navigate"),
-                (cfg.get_binding("navigation", "enter_pane"), "interact"),
-            ];
-            match app.active_pane {
-                ActivePane::WorkspaceList => {
-                    keys.push((cfg.get_binding("navigation", "new_workspace"), "new ws"));
-                    keys.push((cfg.get_binding("navigation", "clone_workspace"), "create worktree"));
-                    keys.push((cfg.get_binding("navigation", "edit_workspace"), "edit ws"));
-                    keys.push((
-                        cfg.get_binding("navigation", "delete_workspace"),
-                        "delete ws",
-                    ));
-                    keys.push((cfg.get_binding("navigation", "next_workspace"), "switch ws"));
-                }
-                ActivePane::GitStatus => {
-                    let is_project = app.current_workspace().is_some_and(|ws| {
-                        ws.info.workspace_type == piki_core::WorkspaceType::Project
-                    });
-                    keys.push((cfg.get_binding("navigation", "fuzzy_search"), "search"));
-                    if !is_project {
-                        keys.push((cfg.get_binding("navigation", "commit"), "commit"));
-                        keys.push((cfg.get_binding("navigation", "push"), "push"));
-                        keys.push((cfg.get_binding("navigation", "merge"), "merge"));
-                        keys.push((cfg.get_binding("navigation", "undo"), "undo"));
-                    }
-                }
-                ActivePane::MainPanel => {
-                    keys.push((cfg.get_binding("navigation", "new_tab"), "new tab"));
-                    keys.push((cfg.get_binding("navigation", "close_tab"), "close tab"));
-                    keys.push((
-                        format!(
-                            "{}/{}",
-                            cfg.get_binding("navigation", "next_tab"),
-                            cfg.get_binding("navigation", "prev_tab")
-                        ),
-                        "next/prev tab",
-                    ));
-                }
-            }
-            keys.push((
-                format!(
-                    "{}/{}",
-                    cfg.get_binding("navigation", "sidebar_shrink"),
-                    cfg.get_binding("navigation", "sidebar_grow")
-                ),
-                "resize",
-            ));
-            keys.push((cfg.get_binding("navigation", "command_palette"), "commands"));
-            keys.push((
-                cfg.get_binding("navigation", "workspace_switcher"),
-                "switch ws",
-            ));
-            keys.push((cfg.get_binding("navigation", "help"), "help"));
-            keys.push((cfg.get_binding("navigation", "quit"), "quit"));
-            keys
         }
     }
 }

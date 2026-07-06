@@ -19,7 +19,7 @@ pub(super) fn is_code_review_locked(app: &App) -> bool {
 }
 
 /// Top-level key handler when code review is locked.
-/// ALL keys route here — nothing leaks to navigation mode.
+/// ALL keys route here — nothing leaks to the prefix dispatcher.
 pub(super) fn handle_code_review_key(app: &mut App, key: KeyEvent) -> Option<Action> {
     // If editing a comment, route there first
     if app
@@ -51,7 +51,6 @@ pub(super) fn handle_code_review_key(app: &mut App, key: KeyEvent) -> Option<Act
             }
         }
         app.mode = AppMode::Normal;
-        app.interacting = false;
         return None;
     }
 

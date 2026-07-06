@@ -137,7 +137,6 @@ pub(super) async fn handle(
                             }
                         }
                         app.mode = AppMode::Normal;
-                        app.interacting = false;
                         app.active_dialog = None;
                         app.set_toast(
                             format!("Review submitted: {}", verdict.label()),

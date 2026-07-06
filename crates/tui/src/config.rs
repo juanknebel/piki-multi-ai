@@ -131,10 +131,6 @@ pub struct Keybindings {
     pub app: HashMap<String, BindingValue>,
     #[serde(default = "default_scroll")]
     pub scroll: HashMap<String, String>,
-    #[serde(default = "default_navigation")]
-    pub navigation: HashMap<String, String>,
-    #[serde(default = "default_interaction")]
-    pub interaction: HashMap<String, String>,
     #[serde(default = "default_markdown")]
     pub markdown: HashMap<String, String>,
     #[serde(default = "default_diff")]
@@ -179,8 +175,6 @@ impl Default for Keybindings {
             prefix_key: default_prefix_key(),
             app: default_app(),
             scroll: default_scroll(),
-            navigation: default_navigation(),
-            interaction: default_interaction(),
             markdown: default_markdown(),
             diff: default_diff(),
             workspace_list: default_workspace_list(),
@@ -289,93 +283,8 @@ fn default_scroll() -> HashMap<String, String> {
     m
 }
 
-fn default_navigation() -> HashMap<String, String> {
-    let mut m = HashMap::new();
-    // Pane navigation
-    m.insert("left".to_string(), "h".to_string());
-    m.insert("right".to_string(), "l".to_string());
-    m.insert("up".to_string(), "k".to_string());
-    m.insert("down".to_string(), "j".to_string());
-    m.insert("left_alt".to_string(), "left".to_string());
-    m.insert("right_alt".to_string(), "right".to_string());
-    m.insert("up_alt".to_string(), "up".to_string());
-    m.insert("down_alt".to_string(), "down".to_string());
-
-    // App state
-    m.insert("enter_pane".to_string(), "enter".to_string());
-    m.insert("quit".to_string(), "q".to_string());
-    m.insert("help".to_string(), "?".to_string());
-    m.insert("about".to_string(), "a".to_string());
-    m.insert("workspace_info".to_string(), "i".to_string());
-    m.insert("edit_workspace".to_string(), "e".to_string());
-    m.insert("kanban".to_string(), "b".to_string());
-    m.insert("new_workspace".to_string(), "n".to_string());
-    m.insert("delete_workspace".to_string(), "d".to_string());
-    m.insert("clone_workspace".to_string(), "r".to_string());
-    m.insert("dashboard".to_string(), "D".to_string());
-    m.insert("logs".to_string(), "ctrl-l".to_string());
-    m.insert("commit".to_string(), "c".to_string());
-    m.insert("merge".to_string(), "M".to_string());
-    m.insert("push".to_string(), "P".to_string());
-    m.insert("stash".to_string(), "S".to_string());
-    m.insert("git_log".to_string(), "L".to_string());
-    m.insert("conflicts".to_string(), "X".to_string());
-    m.insert("undo".to_string(), "ctrl-z".to_string());
-
-    // Tabs & Workspaces
-    m.insert("next_workspace".to_string(), "tab".to_string());
-    m.insert("prev_workspace".to_string(), "shift-tab".to_string());
-    m.insert("next_tab".to_string(), "g".to_string());
-    m.insert("prev_tab".to_string(), "G".to_string());
-    m.insert("new_tab".to_string(), "t".to_string());
-    m.insert("close_tab".to_string(), "w".to_string());
-
-    // Scrolling
-    m.insert("scroll_up".to_string(), "K".to_string());
-    m.insert("scroll_down".to_string(), "J".to_string());
-    m.insert("page_up".to_string(), "pageup".to_string());
-    m.insert("page_down".to_string(), "pagedown".to_string());
-
-    // Clipboard & Search
-    m.insert("copy".to_string(), "ctrl-shift-c".to_string());
-    m.insert("fuzzy_search".to_string(), "/".to_string());
-    m.insert("fuzzy_search_alt".to_string(), "ctrl-f".to_string());
-    m.insert("command_palette".to_string(), "ctrl-p".to_string());
-    m.insert("workspace_switcher".to_string(), "space".to_string());
-    m.insert("toggle_prev_workspace".to_string(), "`".to_string());
-
-    // Quick actions (context-sensitive)
-    m.insert("stage_quick".to_string(), "s".to_string());
-    m.insert("unstage_quick".to_string(), "u".to_string());
-
-    // Resizing
-    m.insert("sidebar_shrink".to_string(), "<".to_string());
-    m.insert("sidebar_shrink_alt".to_string(), ",".to_string());
-    m.insert("sidebar_grow".to_string(), ">".to_string());
-    m.insert("sidebar_grow_alt".to_string(), ".".to_string());
-    m.insert("split_up".to_string(), "+".to_string());
-    m.insert("split_up_alt".to_string(), "=".to_string());
-    m.insert("split_down".to_string(), "-".to_string());
-
-    // AI Chat
-    m.insert("chat_panel".to_string(), "ctrl-y".to_string());
-
-    m
-}
-
-fn default_interaction() -> HashMap<String, String> {
-    let mut m = HashMap::new();
-    m.insert("exit_interaction".to_string(), "ctrl-g".to_string());
-    m.insert("paste".to_string(), "ctrl-shift-v".to_string());
-    m.insert("copy".to_string(), "ctrl-shift-c".to_string());
-    m.insert("search".to_string(), "ctrl-shift-f".to_string());
-    m
-}
-
 fn default_markdown() -> HashMap<String, String> {
     let mut m = HashMap::new();
-    m.insert("exit_interaction".to_string(), "ctrl-g".to_string());
-    m.insert("exit_interaction_alt".to_string(), "esc".to_string());
     m.insert("down".to_string(), "j".to_string());
     m.insert("up".to_string(), "k".to_string());
     m.insert("down_alt".to_string(), "down".to_string());
@@ -405,21 +314,18 @@ fn default_diff() -> HashMap<String, String> {
 
 fn default_workspace_list() -> HashMap<String, String> {
     let mut m = HashMap::new();
-    m.insert("exit_interaction".to_string(), "ctrl-g".to_string());
-    m.insert("exit_interaction_alt".to_string(), "esc".to_string());
     m.insert("down".to_string(), "j".to_string());
     m.insert("up".to_string(), "k".to_string());
     m.insert("down_alt".to_string(), "down".to_string());
     m.insert("up_alt".to_string(), "up".to_string());
     m.insert("select".to_string(), "enter".to_string());
     m.insert("delete".to_string(), "d".to_string());
+    m.insert("edit".to_string(), "e".to_string());
     m
 }
 
 fn default_file_list() -> HashMap<String, String> {
     let mut m = HashMap::new();
-    m.insert("exit_interaction".to_string(), "ctrl-g".to_string());
-    m.insert("exit_interaction_alt".to_string(), "esc".to_string());
     m.insert("down".to_string(), "j".to_string());
     m.insert("up".to_string(), "k".to_string());
     m.insert("down_alt".to_string(), "down".to_string());
@@ -633,9 +539,6 @@ impl Config {
     }
 
     /// Whether this key event is the tmux-style prefix key.
-    // TODO(prefix-rollout): remove the dead_code allows below once the prefix
-    // dispatcher lands (phase 2b) — they only exist so phase 1 passes clippy.
-    #[allow(dead_code)]
     pub fn is_prefix_key(&self, event: KeyEvent) -> bool {
         key_matches_platform(event, &self.keybindings.prefix_key, self.platform)
     }
@@ -657,7 +560,6 @@ impl Config {
 
     /// Match a key against the prefix-mode bindings of an `app` action
     /// (binding strings starting with `prefix-`).
-    #[allow(dead_code)]
     pub fn matches_app_prefix(&self, event: KeyEvent, action: &str) -> bool {
         self.app_binding_strings(action).iter().any(|b| {
             b.strip_prefix("prefix-")
@@ -667,14 +569,12 @@ impl Config {
 
     /// Match a key against the direct-chord bindings of an `app` action
     /// (binding strings without the `prefix-` marker).
-    #[allow(dead_code)]
     pub fn matches_app_direct(&self, event: KeyEvent, action: &str) -> bool {
         self.app_binding_strings(action).iter().any(|b| {
             !b.starts_with("prefix-") && key_matches_platform(event, b, self.platform)
         })
     }
 
-    #[allow(dead_code)]
     pub fn matches_scroll(&self, event: KeyEvent, action: &str) -> bool {
         if let Some(binding) = self.keybindings.scroll.get(action) {
             key_matches_platform(event, binding, self.platform)
@@ -740,28 +640,6 @@ impl Config {
                     );
                 }
             }
-        }
-    }
-
-    pub fn matches_navigation(&self, event: KeyEvent, action: &str) -> bool {
-        if let Some(binding) = self.keybindings.navigation.get(action) {
-            key_matches_platform(event, binding, self.platform)
-        } else {
-            let defaults = default_navigation();
-            defaults
-                .get(action)
-                .is_some_and(|b| key_matches_platform(event, b, self.platform))
-        }
-    }
-
-    pub fn matches_interaction(&self, event: KeyEvent, action: &str) -> bool {
-        if let Some(binding) = self.keybindings.interaction.get(action) {
-            key_matches_platform(event, binding, self.platform)
-        } else {
-            let defaults = default_interaction();
-            defaults
-                .get(action)
-                .is_some_and(|b| key_matches_platform(event, b, self.platform))
         }
     }
 
@@ -900,18 +778,6 @@ impl Config {
                 .get(action)
                 .cloned()
                 .or_else(|| default_scroll().get(action).cloned()),
-            "navigation" => self
-                .keybindings
-                .navigation
-                .get(action)
-                .cloned()
-                .or_else(|| default_navigation().get(action).cloned()),
-            "interaction" => self
-                .keybindings
-                .interaction
-                .get(action)
-                .cloned()
-                .or_else(|| default_interaction().get(action).cloned()),
             "markdown" => self
                 .keybindings
                 .markdown
@@ -1184,23 +1050,25 @@ mod tests {
     #[test]
     fn test_default_config_has_valid_bindings() {
         let cfg = Config::default();
-        // All navigation bindings should parse successfully
-        for (action, binding) in &cfg.keybindings.navigation {
-            assert!(
-                parse_key_event(binding).is_some(),
-                "navigation binding '{}' = '{}' failed to parse",
-                action,
-                binding,
-            );
+        // All app-table bindings should parse successfully (prefix or direct)
+        for (action, value) in &cfg.keybindings.app {
+            for binding in value.values() {
+                assert!(
+                    parse_binding_trigger(binding).is_some(),
+                    "app binding '{}' = '{}' failed to parse",
+                    action,
+                    binding,
+                );
+            }
         }
+        assert!(parse_key_event(&cfg.keybindings.prefix_key).is_some());
     }
 
     #[test]
     fn test_all_default_sections_parse() {
         let cfg = Config::default();
         let sections: Vec<(&str, &HashMap<String, String>)> = vec![
-            ("navigation", &cfg.keybindings.navigation),
-            ("interaction", &cfg.keybindings.interaction),
+            ("scroll", &cfg.keybindings.scroll),
             ("diff", &cfg.keybindings.diff),
             ("help", &cfg.keybindings.help),
             ("fuzzy", &cfg.keybindings.fuzzy),
@@ -1388,12 +1256,15 @@ foo = "bar"
     #[test]
     fn test_partial_toml_merge_with_defaults() {
         let toml_str = r#"
-[keybindings.navigation]
-quit = "ctrl-q"
+[keybindings.app]
+quit = "prefix-Q"
 "#;
         let cfg: Config = toml::from_str(toml_str).unwrap();
         // Overridden binding
-        assert_eq!(cfg.keybindings.navigation.get("quit").unwrap(), "ctrl-q");
+        assert_eq!(
+            cfg.keybindings.app.get("quit").unwrap().values(),
+            vec!["prefix-Q"]
+        );
         // Other sections still get defaults
         assert!(cfg.keybindings.help.contains_key("exit"));
         assert!(cfg.keybindings.diff.contains_key("down"));
@@ -1405,26 +1276,28 @@ quit = "ctrl-q"
         assert!(result.is_err());
         // Config::load() would fall back to defaults — verify defaults are valid
         let cfg = Config::default();
-        assert!(!cfg.keybindings.navigation.is_empty());
+        assert!(!cfg.keybindings.app.is_empty());
     }
 
     #[test]
     fn test_get_binding_falls_back_to_default() {
         let cfg = Config::default();
-        assert_eq!(cfg.get_binding("navigation", "quit"), "q");
-        assert_eq!(cfg.get_binding("navigation", "help"), "?");
+        assert_eq!(cfg.get_binding("app", "quit"), "C-g q");
+        assert_eq!(cfg.get_binding("app", "help"), "C-g ?");
         // Unknown action returns "???"
-        assert_eq!(cfg.get_binding("navigation", "nonexistent"), "???");
+        assert_eq!(cfg.get_binding("app", "nonexistent"), "???");
         // Unknown section returns "???"
         assert_eq!(cfg.get_binding("nonexistent_section", "quit"), "???");
     }
 
     #[test]
-    fn test_matches_navigation_with_defaults() {
+    fn test_matches_app_prefix_with_defaults() {
         let cfg = Config::default();
         let q_event = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::empty());
-        assert!(cfg.matches_navigation(q_event, "quit"));
-        assert!(!cfg.matches_navigation(q_event, "help"));
+        assert!(cfg.matches_app_prefix(q_event, "quit"));
+        assert!(!cfg.matches_app_prefix(q_event, "help"));
+        // A prefix binding is not a direct chord
+        assert!(!cfg.matches_app_direct(q_event, "quit"));
     }
 
     #[test]
@@ -1432,8 +1305,15 @@ quit = "ctrl-q"
         let toml_str = Config::generate_default_toml();
         let cfg: Config = toml::from_str(&toml_str).unwrap();
         // Verify key bindings survived the roundtrip
-        assert_eq!(cfg.keybindings.navigation.get("quit").unwrap(), "q");
-        assert_eq!(cfg.keybindings.navigation.get("help").unwrap(), "?");
+        assert_eq!(cfg.keybindings.prefix_key, "ctrl-g");
+        assert_eq!(
+            cfg.keybindings.app.get("quit").unwrap().values(),
+            vec!["prefix-q"]
+        );
+        assert_eq!(
+            cfg.keybindings.app.get("focus_left").unwrap().values(),
+            vec!["prefix-h", "prefix-left"]
+        );
     }
 
     // --- Platform-aware keybinding tests ---
@@ -1574,9 +1454,9 @@ quit = "ctrl-q"
             platform: Platform::MacOs,
             ..Config::default()
         };
-        // ctrl-g should display as cmd-g on macOS
-        assert_eq!(cfg.get_binding("interaction", "exit_interaction"), "cmd-g");
+        // ctrl-shift-c should display with cmd- on macOS
+        assert_eq!(cfg.get_binding("app", "copy"), "cmd-shift-c");
         // Non-ctrl bindings unchanged
-        assert_eq!(cfg.get_binding("navigation", "quit"), "q");
+        assert_eq!(cfg.get_binding("diff", "exit"), "esc");
     }
 }

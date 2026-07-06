@@ -1130,7 +1130,6 @@ pub(super) fn handle_conflict_resolution_input(app: &mut App, key: KeyEvent) -> 
     {
         app.active_dialog = None;
         app.mode = AppMode::Normal;
-        app.interacting = false;
         app.diff_content = None;
         app.diff_file_path = None;
     }

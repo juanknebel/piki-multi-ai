@@ -2402,7 +2402,6 @@ fn conflict_esc_dismisses_and_clears_diff() {
     let mut app = test_app();
     app.diff_content = Some(std::sync::Arc::new(ratatui::text::Text::raw("x")));
     app.diff_file_path = Some("src/a.rs".into());
-    app.interacting = true;
     open_conflict_resolution(
         &mut app,
         sample_conflict_files(),
@@ -2415,7 +2414,6 @@ fn conflict_esc_dismisses_and_clears_diff() {
     assert!(action.is_none());
     assert!(app.active_dialog.is_none());
     assert_eq!(app.mode, AppMode::Normal);
-    assert!(!app.interacting);
     assert!(app.diff_content.is_none());
     assert!(app.diff_file_path.is_none());
 }
@@ -3740,7 +3738,8 @@ fn clone_keybinding_on_github_workspace_opens_create_worktree() {
     );
     app.selected_workspace = idx;
 
-    crate::input::handle_key_event(&mut app, key(KeyCode::Char('r')));
+    crate::input::handle_key_event(&mut app, key_with_mods(KeyCode::Char('g'), KeyModifiers::CONTROL));
+    crate::input::handle_key_event(&mut app, key_with_mods(KeyCode::Char('R'), KeyModifiers::SHIFT));
 
     assert_eq!(app.mode, AppMode::CreateWorktree);
     assert!(matches!(
@@ -3755,7 +3754,8 @@ fn clone_keybinding_on_local_workspace_shows_status_message() {
     let idx = push_test_ws(&mut app, "local-ws", WorkspaceOrigin::Local);
     app.selected_workspace = idx;
 
-    crate::input::handle_key_event(&mut app, key(KeyCode::Char('r')));
+    crate::input::handle_key_event(&mut app, key_with_mods(KeyCode::Char('g'), KeyModifiers::CONTROL));
+    crate::input::handle_key_event(&mut app, key_with_mods(KeyCode::Char('R'), KeyModifiers::SHIFT));
 
     assert_eq!(app.mode, AppMode::Normal);
     assert!(app.active_dialog.is_none());

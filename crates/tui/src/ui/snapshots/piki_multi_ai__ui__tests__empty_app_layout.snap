@@ -1,6 +1,6 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 243
+assertion_line: 261
 expression: content
 ---
 
@@ -23,7 +23,7 @@ expression: content
 │              ││                                                              │
 │              ││                                                              │
 │              ││                                                              │
+│              ││                                                              │
 │              │└──────────────────────────────────────────────────────────────┘
-└──────────────┘ [NAVIGATE] │ No active workspace
- [kjhl] navigate  [enter] interact  [n] new ws  [r] create worktree  [e] edit ws
- [tab] switch ws  [</>] resize  [ctrl-p] commands  [space] switch ws  [?] help
+└──────────────┘ No active workspace
+ [k/j] select  [enter] open  [e] edit ws  [d] delete ws  [C-g] prefix

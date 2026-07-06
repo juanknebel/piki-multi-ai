@@ -1,6 +1,6 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 122
+assertion_line: 95
 expression: content
 ---
- [NAVIGATE] │ No active workspace
+ No active workspace

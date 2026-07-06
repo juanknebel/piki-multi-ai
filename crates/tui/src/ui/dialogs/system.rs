@@ -36,114 +36,147 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let cfg = &app.config;
     let popup = super::clear_popup(frame, area, 55, 75);
 
+    let prefix = cfg.prefix_display();
     let help_text = vec![
         "".to_string(),
-        "  Navigation mode (yellow border)".to_string(),
+        format!("  Prefix key: {prefix} (tmux-style)"),
+        "    Keys always go to the focused pane;".to_string(),
+        format!("    press {prefix} first for app actions:"),
+        "".to_string(),
         format!(
-            "    {:<13} Move between panes (h→ws list)",
+            "    {:<13} Move focus between panes",
+            format!("{prefix} h/j/k/l")
+        ),
+        format!("    {:<13} New tab", cfg.get_binding("app", "new_tab")),
+        format!("    {:<13} Close tab", cfg.get_binding("app", "close_tab")),
+        format!(
+            "    {:<13} Next/Prev tab",
             format!(
-                "{}/{}/{}/{}",
-                cfg.get_binding("navigation", "up"),
-                cfg.get_binding("navigation", "down"),
-                cfg.get_binding("navigation", "left"),
-                cfg.get_binding("navigation", "right")
+                "{}/{}",
+                cfg.get_binding("app", "next_tab"),
+                cfg.get_binding("app", "prev_tab")
             )
         ),
+        format!("    {:<13} Jump to tab N", format!("{prefix} 1..9")),
         format!(
-            "    {:<13} Interact with pane",
-            cfg.get_binding("navigation", "enter_pane")
-        ),
-        format!(
-            "    {:<13} New workspace",
-            cfg.get_binding("navigation", "new_workspace")
-        ),
-        format!(
-            "    {:<13} Create worktree (GitHub-only)",
-            cfg.get_binding("navigation", "clone_workspace")
-        ),
-        format!(
-            "    {:<13} Edit workspace",
-            cfg.get_binding("navigation", "edit_workspace")
-        ),
-        format!(
-            "    {:<13} Delete workspace",
-            cfg.get_binding("navigation", "delete_workspace")
+            "    {:<13} Fuzzy workspace switcher",
+            cfg.get_binding("app", "workspace_switcher")
         ),
         format!(
             "    {:<13} Next/Prev workspace",
             format!(
                 "{}/{}",
-                cfg.get_binding("navigation", "next_workspace"),
-                cfg.get_binding("navigation", "prev_workspace")
+                cfg.get_binding("app", "next_workspace"),
+                cfg.get_binding("app", "prev_workspace")
             )
         ),
         format!(
-            "    {:<13} Fuzzy workspace search",
-            cfg.get_binding("navigation", "workspace_switcher")
+            "    {:<13} Previous workspace (toggle)",
+            cfg.get_binding("app", "toggle_prev_workspace")
         ),
         format!(
-            "    {:<13} Previous workspace",
-            cfg.get_binding("navigation", "toggle_prev_workspace")
+            "    {:<13} New workspace",
+            cfg.get_binding("app", "new_workspace")
         ),
         format!(
-            "    {:<13} Command palette",
-            cfg.get_binding("navigation", "command_palette")
+            "    {:<13} Edit workspace",
+            cfg.get_binding("app", "edit_workspace")
         ),
-        format!(
-            "    {:<13} Next/Prev tab",
-            format!(
-                "{}/{}",
-                cfg.get_binding("navigation", "next_tab"),
-                cfg.get_binding("navigation", "prev_tab")
-            )
-        ),
-        format!(
-            "    {:<13} New tab",
-            cfg.get_binding("navigation", "new_tab")
-        ),
-        format!(
-            "    {:<13} Close tab",
-            cfg.get_binding("navigation", "close_tab")
-        ),
-        format!(
-            "    {:<13} Toggle help",
-            cfg.get_binding("navigation", "help")
-        ),
-        format!("    {:<13} About", cfg.get_binding("navigation", "about")),
         format!(
             "    {:<13} Workspace info",
-            cfg.get_binding("navigation", "workspace_info")
+            cfg.get_binding("app", "workspace_info")
         ),
         format!(
-            "    {:<13} Open Kanban Board",
-            cfg.get_binding("navigation", "kanban")
+            "    {:<13} Create worktree (GitHub-only)",
+            cfg.get_binding("app", "clone_workspace")
+        ),
+        format!("    {:<13} Commit", cfg.get_binding("app", "commit")),
+        format!("    {:<13} Push", cfg.get_binding("app", "push")),
+        format!("    {:<13} Merge/Rebase", cfg.get_binding("app", "merge")),
+        format!("    {:<13} Git stash", cfg.get_binding("app", "stash")),
+        format!("    {:<13} Git log", cfg.get_binding("app", "git_log")),
+        format!(
+            "    {:<13} Conflict resolution",
+            cfg.get_binding("app", "conflicts")
         ),
         format!(
             "    {:<13} Undo last stage/unstage",
-            cfg.get_binding("navigation", "undo")
+            cfg.get_binding("app", "undo")
         ),
         format!(
-            "    {:<13} Quick stage (file list focused)",
-            cfg.get_binding("navigation", "stage_quick")
+            "    {:<13} Command palette",
+            cfg.get_binding("app", "command_palette")
         ),
         format!(
-            "    {:<13} Quick unstage (file list focused)",
-            cfg.get_binding("navigation", "unstage_quick")
+            "    {:<13} Fuzzy file search",
+            cfg.get_binding("app", "fuzzy_search")
         ),
         format!(
-            "    {:<13} Dashboard",
-            cfg.get_binding("navigation", "dashboard")
+            "    {:<13} Terminal scroll mode",
+            cfg.get_binding("app", "scroll_mode")
         ),
-        format!("    {:<13} Logs", cfg.get_binding("navigation", "logs")),
+        format!("    {:<13} AI Chat", cfg.get_binding("app", "chat_panel")),
+        format!("    {:<13} Dashboard", cfg.get_binding("app", "dashboard")),
+        format!("    {:<13} Logs", cfg.get_binding("app", "logs")),
         format!(
-            "    {:<13} Git log",
-            cfg.get_binding("navigation", "git_log")
+            "    {:<13} Manage agents",
+            cfg.get_binding("app", "manage_agents")
         ),
         format!(
-            "    {:<13} AI Chat",
-            cfg.get_binding("navigation", "chat_panel")
+            "    {:<13} Manage providers",
+            cfg.get_binding("app", "manage_providers")
         ),
-        format!("    {:<13} Quit", cfg.get_binding("navigation", "quit")),
+        format!("    {:<13} About", cfg.get_binding("app", "about")),
+        format!("    {:<13} This help", cfg.get_binding("app", "help")),
+        format!("    {:<13} Quit", cfg.get_binding("app", "quit")),
+        format!("    {:<13} Send {prefix} to terminal", format!("{prefix} {prefix}")),
+        "    Esc           Cancel pending prefix".to_string(),
+        "".to_string(),
+        format!(
+            "  Terminal scroll mode ({})",
+            cfg.get_binding("app", "scroll_mode")
+        ),
+        format!(
+            "    {:<13} Scroll up/down",
+            format!(
+                "{}/{}",
+                cfg.get_binding("scroll", "up"),
+                cfg.get_binding("scroll", "down")
+            )
+        ),
+        format!(
+            "    {:<13} Page up/down",
+            format!(
+                "{}/{}",
+                cfg.get_binding("scroll", "page_up"),
+                cfg.get_binding("scroll", "page_down")
+            )
+        ),
+        format!(
+            "    {:<13} Top/Bottom",
+            format!(
+                "{}/{}",
+                cfg.get_binding("scroll", "top"),
+                cfg.get_binding("scroll", "bottom")
+            )
+        ),
+        format!("    {:<13} Search", cfg.get_binding("scroll", "search")),
+        format!(
+            "    {:<13} Exit scroll mode",
+            format!(
+                "{}/{}",
+                cfg.get_binding("scroll", "exit_alt"),
+                cfg.get_binding("scroll", "exit")
+            )
+        ),
+        "".to_string(),
+        "  Terminal pane".to_string(),
+        "    All keys sent to active tab".to_string(),
+        format!(
+            "    {:<13} Search in terminal output",
+            cfg.get_binding("app", "search")
+        ),
+        "    Mouse scroll  Scroll up/down".to_string(),
         "".to_string(),
         "  AI Chat overlay".to_string(),
         "    Enter         Send message".to_string(),
@@ -151,39 +184,6 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         format!("    {:<13} Settings (URL, system prompt)", cfg.format_binding("ctrl-o")),
         format!("    {:<13} Clear conversation", cfg.format_binding("ctrl-l")),
         "    Esc           Hide (keeps state)".to_string(),
-        "".to_string(),
-        "  Interaction mode (green border)".to_string(),
-        format!(
-            "    {:<13} Back to navigation",
-            cfg.get_binding("interaction", "exit_interaction")
-        ),
-        "    Esc           Back (non-terminal panes)".to_string(),
-        "".to_string(),
-        "  Terminal pane (navigation mode)".to_string(),
-        format!(
-            "    {:<13} Scroll up/down (3 lines)",
-            format!(
-                "{}/{}",
-                cfg.get_binding("navigation", "scroll_up"),
-                cfg.get_binding("navigation", "scroll_down")
-            )
-        ),
-        format!(
-            "    {:<13} Scroll by page",
-            format!(
-                "{}/{}",
-                cfg.get_binding("navigation", "page_up"),
-                cfg.get_binding("navigation", "page_down")
-            )
-        ),
-        "    Mouse scroll  Scroll up/down".to_string(),
-        "".to_string(),
-        "  Terminal pane (interaction mode)".to_string(),
-        "    All keys sent to active tab".to_string(),
-        format!(
-            "    {:<13} Search in terminal output",
-            cfg.get_binding("interaction", "search")
-        ),
         "".to_string(),
         "  File list pane".to_string(),
         format!(
@@ -196,7 +196,7 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         ),
         format!("    {:<13} Open diff", cfg.get_binding("file_list", "diff")),
         "".to_string(),
-        "  Workspace list pane (interaction mode)".to_string(),
+        "  Workspace list pane".to_string(),
         format!(
             "    {:<13} Select workspace",
             format!(
@@ -210,12 +210,12 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
             cfg.get_binding("workspace_list", "select")
         ),
         format!(
-            "    {:<13} Delete workspace",
-            cfg.get_binding("workspace_list", "delete")
+            "    {:<13} Edit workspace",
+            cfg.get_binding("workspace_list", "edit")
         ),
         format!(
-            "    {:<13} Back to navigation",
-            cfg.get_binding("interaction", "exit_interaction")
+            "    {:<13} Delete workspace",
+            cfg.get_binding("workspace_list", "delete")
         ),
         "".to_string(),
         "  Diff view".to_string(),
@@ -254,11 +254,9 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         format!("    {:<13} Close diff", cfg.get_binding("diff", "exit")),
         "".to_string(),
         format!(
-            "  Fuzzy search ({} or {})",
-            cfg.get_binding("navigation", "fuzzy_search"),
-            cfg.get_binding("navigation", "fuzzy_search_alt")
-        )
-        .to_string(),
+            "  Fuzzy search ({})",
+            cfg.get_binding("app", "fuzzy_search")
+        ),
         "    Type          Filter files".to_string(),
         format!(
             "    {:<13} Select result",
@@ -287,7 +285,7 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         ),
         format!("    {:<13} Close", cfg.get_binding("fuzzy", "exit")),
         "".to_string(),
-        "  File list (interaction mode)".to_string(),
+        "  File list pane (more)".to_string(),
         format!(
             "    {:<13} Open in $EDITOR",
             cfg.get_binding("file_list", "edit_external")
@@ -316,20 +314,20 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         "  Git operations".to_string(),
         format!(
             "    {:<13} Commit (opens dialog)",
-            cfg.get_binding("navigation", "commit")
+            cfg.get_binding("app", "commit")
         ),
-        format!("    {:<13} Push", cfg.get_binding("navigation", "push")),
+        format!("    {:<13} Push", cfg.get_binding("app", "push")),
         format!(
             "    {:<13} Merge/Rebase into main",
-            cfg.get_binding("navigation", "merge")
+            cfg.get_binding("app", "merge")
         ),
         format!(
             "    {:<13} Conflict resolution",
-            cfg.get_binding("navigation", "conflicts")
+            cfg.get_binding("app", "conflicts")
         ),
         format!(
             "    {:<13} Git stash overlay",
-            cfg.get_binding("navigation", "stash")
+            cfg.get_binding("app", "stash")
         ),
         "".to_string(),
         "  Git stash overlay".to_string(),
@@ -392,7 +390,7 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
             cfg.get_binding("conflict_resolution", "exit")
         ),
         "".to_string(),
-        "  Kanban board (interaction mode)".to_string(),
+        "  Kanban board (focused)".to_string(),
         "    h/l/j/k     Navigate columns and cards".to_string(),
         "    H/L         Move card left/right".to_string(),
         "    n           New card".to_string(),
@@ -409,14 +407,20 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         "                With (None): choose workspace (New/Current)".to_string(),
         "    Esc         Cancel / Back".to_string(),
         "".to_string(),
-        "  Manage providers (Alt+P in navigation mode)".to_string(),
+        format!(
+            "  Manage providers ({})",
+            cfg.get_binding("app", "manage_providers")
+        ),
         "    j/k         Navigate provider list".to_string(),
         "    n           New provider".to_string(),
         "    e / Enter   Edit selected provider".to_string(),
         "    d           Delete selected provider".to_string(),
         "    Esc         Close".to_string(),
         "".to_string(),
-        "  Manage agents (A in navigation mode)".to_string(),
+        format!(
+            "  Manage agents ({})",
+            cfg.get_binding("app", "manage_agents")
+        ),
         "    j/k         Navigate agent list".to_string(),
         "    n           New agent (step 1: name + provider)".to_string(),
         "    e / Enter   Edit selected agent".to_string(),
@@ -443,16 +447,16 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
             "    {:<13} Resize sidebar width",
             format!(
                 "{} / {}",
-                cfg.get_binding("navigation", "sidebar_shrink"),
-                cfg.get_binding("navigation", "sidebar_grow")
+                cfg.get_binding("app", "sidebar_shrink"),
+                cfg.get_binding("app", "sidebar_grow")
             )
         ),
         format!(
             "    {:<13} Resize workspace/file split",
             format!(
                 "{} / {}",
-                cfg.get_binding("navigation", "split_up"),
-                cfg.get_binding("navigation", "split_down")
+                cfg.get_binding("app", "split_up"),
+                cfg.get_binding("app", "split_down")
             )
         ),
         "    Mouse drag    Drag pane borders to resize".to_string(),
@@ -474,11 +478,11 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         "    Mouse drag    Select text in terminal".to_string(),
         format!(
             "    {:<13} Copy visible terminal content",
-            cfg.get_binding("interaction", "copy")
+            cfg.get_binding("app", "copy")
         ),
         format!(
             "    {:<13} Paste from clipboard (terminal)",
-            cfg.get_binding("interaction", "paste")
+            cfg.get_binding("app", "paste")
         ),
     ];
 

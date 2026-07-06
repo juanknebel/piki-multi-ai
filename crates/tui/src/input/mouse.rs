@@ -301,6 +301,10 @@ pub(crate) fn handle_mouse_event(
             _ => {}
         },
         MouseEventKind::Down(MouseButton::Left) => {
+            // A click cancels a pending prefix chord
+            if app.input_state == crate::app::InputState::PrefixPending {
+                app.input_state = crate::app::InputState::Normal;
+            }
             // Detect double-click
             let now = Instant::now();
             let is_double_click = app.last_click.is_some_and(|(t, c, r)| {
@@ -523,7 +527,6 @@ pub(crate) fn handle_mouse_event(
                 // Click on main panel — start text selection
                 else if rect_contains(app.main_content_area, col, row) {
                     app.active_pane = ActivePane::MainPanel;
-                    app.interacting = true;
                     if let Some(inner) = app.terminal_inner_area
                         && rect_contains(inner, col, row)
                     {

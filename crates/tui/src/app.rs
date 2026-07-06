@@ -698,12 +698,26 @@ pub struct TermSearchState {
     pub current_match: usize,
 }
 
-/// Cached footer keys: (mode, interacting, active_pane, has_markdown, api_footer_state, new_tab_menu, keys)
+/// Keyboard input state for the tmux-style prefix model. Keys always go to
+/// the focused pane except while a prefix chord or the terminal scroll mode
+/// is active. Only consulted in `AppMode::Normal` / `AppMode::Diff`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum InputState {
+    /// Passthrough: keys go to the focused pane (PTY, kanban, lists, ...).
+    #[default]
+    Normal,
+    /// The prefix key was pressed; the next key is looked up in the app table.
+    PrefixPending,
+    /// Terminal scroll mode (`prefix [`): keys scroll the focused terminal.
+    TermScroll,
+}
+
+/// Cached footer keys: (mode, input_state, active_pane, has_markdown, api_footer_state, new_tab_menu, keys)
 /// api_footer_state: 0 = no API tab, 1 = API tab, 2 = API tab with search open
 /// new_tab_menu: 0 = N/A, 1 = Main, 2 = Agents, 3 = Tools
 pub type FooterCache = (
     AppMode,
-    bool,
+    InputState,
     ActivePane,
     bool,
     u8,
@@ -716,8 +730,8 @@ pub struct App {
     pub should_quit: bool,
     pub mode: AppMode,
     pub active_pane: ActivePane,
-    /// When true, keyboard input goes to the active pane; when false, hjkl navigates between panes
-    pub interacting: bool,
+    /// Prefix/scroll input state (tmux-style; see [`InputState`])
+    pub input_state: InputState,
     pub workspaces: Vec<Workspace>,
     pub active_workspace: usize,
     pub selected_workspace: usize,
@@ -805,7 +819,7 @@ pub struct App {
     pub main_content_area: Rect,
     /// Cache for rendered diff output, keyed by file path (LRU eviction)
     pub diff_cache: lru::LruCache<String, Arc<Text<'static>>>,
-    /// Cached footer keys: (mode, interacting, active_pane, has_markdown) → keys
+    /// Cached footer keys: (mode, input_state, active_pane, has_markdown) → keys
     pub footer_cache: Option<FooterCache>,
     /// Last time inactive workspace PTYs were checked for exit
     pub last_inactive_pty_check: Instant,
@@ -903,7 +917,7 @@ impl App {
             should_quit: false,
             mode: AppMode::Normal,
             active_pane: ActivePane::WorkspaceList,
-            interacting: false,
+            input_state: InputState::default(),
             log_buffer: crate::log_buffer::new_buffer(),
             workspaces: Vec::new(),
             active_workspace: 0,
@@ -1372,12 +1386,16 @@ mod tests {
         KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL)
     }
 
+    fn shift(c: char) -> KeyEvent {
+        KeyEvent::new(KeyCode::Char(c), KeyModifiers::SHIFT)
+    }
+
     #[test]
     fn test_initial_state() {
         let app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
         assert_eq!(app.mode, AppMode::Normal);
         assert_eq!(app.active_pane, ActivePane::WorkspaceList);
-        assert!(!app.interacting);
+        assert_eq!(app.input_state, InputState::Normal);
         assert!(!app.should_quit);
         assert!(app.workspaces.is_empty());
     }
@@ -1385,6 +1403,7 @@ mod tests {
     #[test]
     fn test_normal_to_help_and_back() {
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        crate::input::handle_key_event(&mut app, ctrl('g'));
         let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('?')));
         assert!(action.is_none());
         assert_eq!(app.mode, AppMode::Help);
@@ -1398,6 +1417,7 @@ mod tests {
     #[test]
     fn test_normal_to_about_and_back() {
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        crate::input::handle_key_event(&mut app, ctrl('g'));
         let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('a')));
         assert!(action.is_none());
         assert_eq!(app.mode, AppMode::About);
@@ -1410,6 +1430,7 @@ mod tests {
     #[test]
     fn test_normal_to_confirm_quit() {
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        crate::input::handle_key_event(&mut app, ctrl('g'));
         let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('q')));
         assert!(action.is_none());
         assert_eq!(app.mode, AppMode::ConfirmQuit);
@@ -1439,7 +1460,8 @@ mod tests {
     #[test]
     fn test_normal_to_new_workspace() {
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
-        let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('n')));
+        crate::input::handle_key_event(&mut app, ctrl('g'));
+        let action = crate::input::handle_key_event(&mut app, shift('N'));
         assert!(action.is_none());
         assert_eq!(app.mode, AppMode::NewWorkspace);
     }
@@ -1448,7 +1470,8 @@ mod tests {
     fn test_new_workspace_cancel() {
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
         // Opening new workspace sets both mode and dialog
-        crate::input::handle_key_event(&mut app, key(KeyCode::Char('n')));
+        crate::input::handle_key_event(&mut app, ctrl('g'));
+        crate::input::handle_key_event(&mut app, shift('N'));
         assert_eq!(app.mode, AppMode::NewWorkspace);
 
         let action = crate::input::handle_key_event(&mut app, key(KeyCode::Esc));
@@ -1460,8 +1483,9 @@ mod tests {
     #[test]
     fn test_normal_to_new_tab_requires_workspace() {
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
-        // No workspaces → pressing 't' should NOT enter NewTab mode
-        let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('t')));
+        // No workspaces → prefix c should NOT enter NewTab mode
+        crate::input::handle_key_event(&mut app, ctrl('g'));
+        let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('c')));
         assert!(action.is_none());
         assert_eq!(app.mode, AppMode::Normal);
     }
@@ -1470,7 +1494,8 @@ mod tests {
     fn test_new_workspace_tab_cycles_fields() {
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
         // Use the normal entry point to set up dialog state
-        crate::input::handle_key_event(&mut app, key(KeyCode::Char('n')));
+        crate::input::handle_key_event(&mut app, ctrl('g'));
+        crate::input::handle_key_event(&mut app, shift('N'));
         assert_eq!(app.mode, AppMode::NewWorkspace);
 
         let get_field = |app: &App| -> DialogField {
@@ -1509,7 +1534,8 @@ mod tests {
     fn test_new_workspace_char_appends_to_active_buffer() {
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
         // Use normal entry point to create dialog
-        crate::input::handle_key_event(&mut app, key(KeyCode::Char('n')));
+        crate::input::handle_key_event(&mut app, ctrl('g'));
+        crate::input::handle_key_event(&mut app, shift('N'));
         assert_eq!(app.mode, AppMode::NewWorkspace);
 
         // Tab from Source → Directory → Name to reach the Name field
@@ -1553,23 +1579,58 @@ mod tests {
     }
 
     #[test]
-    fn test_interacting_toggle() {
+    fn test_prefix_state_machine() {
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
-        assert!(!app.interacting);
+        assert_eq!(app.input_state, InputState::Normal);
 
-        // Enter → interact
-        crate::input::handle_key_event(&mut app, key(KeyCode::Enter));
-        assert!(app.interacting);
-
-        // Ctrl-G → back to navigation
+        // Prefix key arms the chord
         crate::input::handle_key_event(&mut app, ctrl('g'));
-        assert!(!app.interacting);
+        assert_eq!(app.input_state, InputState::PrefixPending);
+
+        // Esc cancels without any action
+        crate::input::handle_key_event(&mut app, key(KeyCode::Esc));
+        assert_eq!(app.input_state, InputState::Normal);
+        assert_eq!(app.mode, AppMode::Normal);
+
+        // Prefix + unknown key → back to Normal, toast, no action
+        crate::input::handle_key_event(&mut app, ctrl('g'));
+        let action = crate::input::handle_key_event(&mut app, key(KeyCode::F(5)));
+        assert!(action.is_none());
+        assert_eq!(app.input_state, InputState::Normal);
+        assert!(app.toast.is_some());
+        assert_eq!(app.mode, AppMode::Normal);
+
+        // Prefix-prefix returns to Normal (literal send is a no-op without a PTY)
+        crate::input::handle_key_event(&mut app, ctrl('g'));
+        crate::input::handle_key_event(&mut app, ctrl('g'));
+        assert_eq!(app.input_state, InputState::Normal);
+        assert_eq!(app.mode, AppMode::Normal);
+    }
+
+    #[test]
+    fn test_prefix_is_one_shot() {
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        // prefix ? opens Help and resets the state
+        crate::input::handle_key_event(&mut app, ctrl('g'));
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('?')));
+        assert_eq!(app.mode, AppMode::Help);
+        assert_eq!(app.input_state, InputState::Normal);
+        // Close help; a bare 'q' must NOT open the quit dialog (no more nav mode)
+        crate::input::handle_key_event(&mut app, key(KeyCode::Esc));
+        assert_eq!(app.mode, AppMode::Normal);
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('q')));
+        assert_eq!(app.mode, AppMode::Normal);
+        // prefix q opens the quit dialog
+        crate::input::handle_key_event(&mut app, ctrl('g'));
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('q')));
+        assert_eq!(app.mode, AppMode::ConfirmQuit);
     }
 
     #[test]
     fn test_help_scroll() {
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
-        // Use the normal entry point to open help
+        // Open help through the prefix chord
+        crate::input::handle_key_event(&mut app, ctrl('g'));
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('?')));
         assert_eq!(app.mode, AppMode::Help);
 
@@ -1599,16 +1660,24 @@ mod tests {
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
         assert_eq!(app.active_pane, ActivePane::WorkspaceList);
 
-        // j → down → GitStatus
+        // prefix j → down → GitStatus
+        crate::input::handle_key_event(&mut app, ctrl('g'));
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('j')));
         assert_eq!(app.active_pane, ActivePane::GitStatus);
 
-        // l → right → MainPanel
+        // prefix l → right → MainPanel
+        crate::input::handle_key_event(&mut app, ctrl('g'));
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('l')));
         assert_eq!(app.active_pane, ActivePane::MainPanel);
 
-        // h → left → WorkspaceList
+        // prefix h → left → WorkspaceList
+        crate::input::handle_key_event(&mut app, ctrl('g'));
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('h')));
+        assert_eq!(app.active_pane, ActivePane::WorkspaceList);
+
+        // prefix Left (arrow alternative) is a no-op from the sidebar
+        crate::input::handle_key_event(&mut app, ctrl('g'));
+        crate::input::handle_key_event(&mut app, key(KeyCode::Left));
         assert_eq!(app.active_pane, ActivePane::WorkspaceList);
     }
 
@@ -1636,7 +1705,8 @@ mod tests {
     #[test]
     fn test_commit_requires_workspace() {
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
-        crate::input::handle_key_event(&mut app, key(KeyCode::Char('c')));
+        crate::input::handle_key_event(&mut app, ctrl('g'));
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('C')));
         assert_eq!(app.mode, AppMode::Normal); // No workspace → no commit dialog
     }
 
@@ -1670,7 +1740,8 @@ mod tests {
     #[test]
     fn test_command_palette_open_and_dismiss() {
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
-        crate::input::handle_key_event(&mut app, ctrl('p'));
+        crate::input::handle_key_event(&mut app, ctrl('g'));
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char(':')));
         assert_eq!(app.mode, AppMode::CommandPalette);
         assert!(app.command_palette.is_some());
 
@@ -1684,7 +1755,8 @@ mod tests {
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
         add_test_workspace(&mut app);
 
-        crate::input::handle_key_event(&mut app, key(KeyCode::Char(' ')));
+        crate::input::handle_key_event(&mut app, ctrl('g'));
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('w')));
         assert_eq!(app.mode, AppMode::WorkspaceSwitcher);
         assert!(app.workspace_switcher.is_some());
 
@@ -1696,8 +1768,9 @@ mod tests {
     #[test]
     fn test_workspace_switcher_no_workspace() {
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
-        // No workspaces → Space should not open switcher
-        crate::input::handle_key_event(&mut app, key(KeyCode::Char(' ')));
+        // No workspaces → prefix w should not open switcher
+        crate::input::handle_key_event(&mut app, ctrl('g'));
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('w')));
         assert_eq!(app.mode, AppMode::Normal);
         assert!(app.workspace_switcher.is_none());
     }
@@ -1713,12 +1786,14 @@ mod tests {
         assert_eq!(app.active_workspace, 1);
         assert_eq!(app.previous_workspace, Some(0));
 
-        // Backtick toggles back to 0
+        // prefix ` toggles back to 0
+        crate::input::handle_key_event(&mut app, ctrl('g'));
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('`')));
         assert_eq!(app.active_workspace, 0);
         assert_eq!(app.previous_workspace, Some(1));
 
-        // Backtick toggles back to 1
+        // prefix ` toggles back to 1
+        crate::input::handle_key_event(&mut app, ctrl('g'));
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('`')));
         assert_eq!(app.active_workspace, 1);
         assert_eq!(app.previous_workspace, Some(0));
@@ -1730,51 +1805,17 @@ mod tests {
         add_test_workspace(&mut app);
         assert!(app.previous_workspace.is_none());
 
-        // Backtick with no previous → nothing changes
+        // prefix ` with no previous → nothing changes
+        crate::input::handle_key_event(&mut app, ctrl('g'));
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('`')));
         assert_eq!(app.active_workspace, 0);
         assert!(app.previous_workspace.is_none());
     }
 
-    // ── Esc exits non-terminal interaction tests ──
+    // ── Local stage/unstage keys on the git status pane ──
 
     #[test]
-    fn test_esc_exits_workspace_list_interaction() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
-        add_test_workspace(&mut app);
-        app.active_pane = ActivePane::WorkspaceList;
-        app.interacting = true;
-
-        crate::input::handle_key_event(&mut app, key(KeyCode::Esc));
-        assert!(!app.interacting);
-    }
-
-    #[test]
-    fn test_esc_exits_filelist_interaction() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
-        add_test_workspace(&mut app);
-        app.active_pane = ActivePane::GitStatus;
-        app.interacting = true;
-
-        crate::input::handle_key_event(&mut app, key(KeyCode::Esc));
-        assert!(!app.interacting);
-    }
-
-    #[test]
-    fn test_ctrl_g_exits_interaction() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
-        add_test_workspace(&mut app);
-        app.active_pane = ActivePane::WorkspaceList;
-        app.interacting = true;
-
-        crate::input::handle_key_event(&mut app, ctrl('g'));
-        assert!(!app.interacting);
-    }
-
-    // ── Quick stage/unstage tests ──
-
-    #[test]
-    fn test_quick_stage_from_navigation() {
+    fn test_stage_local_key_on_git_status() {
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
         let idx = add_test_workspace(&mut app);
         app.workspaces[idx].changed_files.push(ChangedFile {
@@ -1782,14 +1823,13 @@ mod tests {
             status: FileStatus::Modified,
         });
         app.active_pane = ActivePane::GitStatus;
-        app.interacting = false;
 
         let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('s')));
         assert!(matches!(action, Some(crate::action::Action::GitStage(0))));
     }
 
     #[test]
-    fn test_quick_unstage_from_navigation() {
+    fn test_unstage_local_key_on_git_status() {
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
         let idx = add_test_workspace(&mut app);
         app.workspaces[idx].changed_files.push(ChangedFile {
@@ -1797,14 +1837,13 @@ mod tests {
             status: FileStatus::Staged,
         });
         app.active_pane = ActivePane::GitStatus;
-        app.interacting = false;
 
         let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('u')));
         assert!(matches!(action, Some(crate::action::Action::GitUnstage(0))));
     }
 
     #[test]
-    fn test_quick_stage_wrong_pane_ignored() {
+    fn test_stage_key_on_main_panel_goes_to_pane() {
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
         let idx = add_test_workspace(&mut app);
         app.workspaces[idx].changed_files.push(ChangedFile {
@@ -1812,8 +1851,8 @@ mod tests {
             status: FileStatus::Modified,
         });
         app.active_pane = ActivePane::MainPanel;
-        app.interacting = false;
 
+        // 's' on the main panel is terminal input, not a git action
         let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('s')));
         assert!(action.is_none());
     }
@@ -1824,6 +1863,7 @@ mod tests {
     fn test_pane_nav_main_panel_h_to_workspace_list() {
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
         app.active_pane = ActivePane::MainPanel;
+        crate::input::handle_key_event(&mut app, ctrl('g'));
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('h')));
         assert_eq!(app.active_pane, ActivePane::WorkspaceList);
     }
@@ -1832,6 +1872,7 @@ mod tests {
     fn test_pane_nav_main_panel_j_to_git_status() {
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
         app.active_pane = ActivePane::MainPanel;
+        crate::input::handle_key_event(&mut app, ctrl('g'));
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('j')));
         assert_eq!(app.active_pane, ActivePane::GitStatus);
     }
@@ -1840,6 +1881,7 @@ mod tests {
     fn test_pane_nav_main_panel_k_to_workspace_list() {
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
         app.active_pane = ActivePane::MainPanel;
+        crate::input::handle_key_event(&mut app, ctrl('g'));
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('k')));
         assert_eq!(app.active_pane, ActivePane::WorkspaceList);
     }
@@ -1852,7 +1894,6 @@ mod tests {
         add_test_workspace(&mut app); // index 0
         add_test_workspace(&mut app); // index 1
         app.active_pane = ActivePane::WorkspaceList;
-        app.interacting = true;
         // Select the second workspace row in the sidebar
         app.selected_sidebar_row = 1;
 
@@ -1860,7 +1901,6 @@ mod tests {
         crate::input::handle_key_event(&mut app, key(KeyCode::Enter));
         assert_eq!(app.active_workspace, 1);
         assert_eq!(app.active_pane, ActivePane::MainPanel);
-        assert!(!app.interacting);
     }
 
     // ── PTY idle notifications ──

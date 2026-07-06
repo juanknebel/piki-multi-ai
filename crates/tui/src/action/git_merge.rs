@@ -325,7 +325,6 @@ pub(super) async fn handle(
                     app.diff_scroll = 0;
                     app.mode = AppMode::Diff;
                     app.active_pane = ActivePane::MainPanel;
-                    app.interacting = true;
                 }
                 Err(e) => {
                     app.status_message = Some(format!("Failed to parse diff: {}", e));
@@ -400,7 +399,6 @@ pub(super) async fn handle(
                     };
                     app.active_dialog = None;
                     app.mode = AppMode::Normal;
-                    app.interacting = false;
                     app.diff_content = None;
                     app.diff_file_path = None;
                     app.set_toast(msg, ToastLevel::Success);
@@ -437,7 +435,6 @@ pub(super) async fn handle(
             }
             app.active_dialog = None;
             app.mode = AppMode::Normal;
-            app.interacting = false;
             app.diff_content = None;
             app.diff_file_path = None;
             app.set_toast("Merge aborted", ToastLevel::Info);

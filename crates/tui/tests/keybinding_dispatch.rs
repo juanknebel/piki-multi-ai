@@ -147,8 +147,8 @@ fn test_key_matches_with_modifiers() {
 }
 
 #[test]
-fn test_default_navigation_bindings() {
-    // Verify well-known default bindings parse correctly
+fn test_common_binding_keys_parse() {
+    // Verify well-known binding key strings parse correctly
     let bindings = vec![
         ("h", KeyCode::Char('h')),
         ("j", KeyCode::Char('j')),
