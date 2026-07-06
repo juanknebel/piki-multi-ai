@@ -159,7 +159,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         let key_hint = if cmd.keybinding_action.is_empty() {
             String::new()
         } else {
-            app.config.get_binding("navigation", cmd.keybinding_action)
+            app.config.get_binding("app", cmd.keybinding_action)
         };
         let hint_str = if key_hint.is_empty() || key_hint == "???" {
             String::new()

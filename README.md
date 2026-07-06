@@ -67,7 +67,7 @@ Built with Rust and [ratatui](https://ratatui.rs/).
 - **Inline editor** — Edit files directly inside the TUI with a built-in text editor (cursor movement, line numbers, scroll); syntax-highlighted via `syntect`
 - **Syntax highlighting** — Language-aware syntax coloring powered by [syntect](https://github.com/trishume/syntect) across three surfaces: code review diffs (per-line highlighting merged with add/delete coloring), inline editor (with cursor overlay), and markdown fenced code blocks (with language hints like ` ```rust `); configurable theme via `syntax_theme` in `config.toml` (default: `base16-ocean.dark`)
 - **Terminal search** — Press `Ctrl+Shift+F` with the terminal focused to search within terminal output; type to filter, `Enter`/`Shift+Enter` to navigate matches, `Esc` to close
-- **Undo stage/unstage** — Press `Ctrl+G z` to undo the last stage or unstage operation (up to 20 entries); status bar shows `[C-z undo]` hint after each operation
+- **Undo stage/unstage** — Press `Ctrl+G z` to undo the last stage or unstage operation (up to 20 entries); status bar shows a `[C-g z undo]` hint after each operation
 - **Clipboard support** — Paste from clipboard (`Ctrl+Shift+V`), copy visible terminal (`Ctrl+Shift+C`), and mouse drag-to-select with auto-copy; cross-platform (Wayland, X11, macOS, Windows)
 - **Workspace prompts** — Optionally provide an initial prompt when creating a workspace, stored for reference and used when spawning AI tabs
 - **Git operations** — Stage (`s`), unstage (`u`), commit (`c`), push (`P`), merge (`M`), and stash (`S`) directly from the TUI; commit dialog with inline message input; stash overlay supports save/pop/apply/drop/show

@@ -49,7 +49,10 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
         let lines = vec![
             Line::from(""),
             Line::from(vec![
-                Span::styled(" [n]", key_style),
+                Span::styled(
+                    format!(" [{}]", app.config.get_binding("app", "new_workspace")),
+                    key_style,
+                ),
                 Span::styled(" New workspace", desc_style),
             ]),
         ];

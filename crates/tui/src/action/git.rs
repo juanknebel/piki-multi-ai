@@ -23,6 +23,7 @@ pub(super) async fn handle(
                 let worktree = ws.path.clone();
                 let status_tx = app.status_tx.clone();
                 let undo_tx = app.undo_tx.clone();
+                let undo_hint = app.config.get_binding("app", "undo");
                 app.status_message = Some(format!("Staging: {}", file_path));
                 ws.dirty = true;
                 ws.last_refresh = None;
@@ -39,7 +40,7 @@ pub(super) async fn handle(
                                 workspace_idx: ws_idx,
                                 file_path: file_path.clone(),
                             });
-                            let _ = status_tx.send(format!("Staged: {} [C-z undo]", file_path));
+                            let _ = status_tx.send(format!("Staged: {} [{} undo]", file_path, undo_hint));
                         }
                         Ok(o) => {
                             let stderr = String::from_utf8_lossy(&o.stderr);
@@ -61,6 +62,7 @@ pub(super) async fn handle(
                 let worktree = ws.path.clone();
                 let status_tx = app.status_tx.clone();
                 let undo_tx = app.undo_tx.clone();
+                let undo_hint = app.config.get_binding("app", "undo");
                 app.status_message = Some(format!("Unstaging: {}", file_path));
                 ws.dirty = true;
                 ws.last_refresh = None;
@@ -77,7 +79,7 @@ pub(super) async fn handle(
                                 workspace_idx: ws_idx,
                                 file_path: file_path.clone(),
                             });
-                            let _ = status_tx.send(format!("Unstaged: {} [C-z undo]", file_path));
+                            let _ = status_tx.send(format!("Unstaged: {} [{} undo]", file_path, undo_hint));
                         }
                         Ok(o) => {
                             let stderr = String::from_utf8_lossy(&o.stderr);
@@ -98,6 +100,7 @@ pub(super) async fn handle(
                     let worktree = ws.path.clone();
                     let status_tx = app.status_tx.clone();
                     let undo_tx = app.undo_tx.clone();
+                    let undo_hint = app.config.get_binding("app", "undo");
                     let count = paths.len();
                     app.status_message = Some(format!("Staging {} files...", count));
                     ws.dirty = true;
@@ -121,7 +124,7 @@ pub(super) async fn handle(
                                     });
                                 }
                                 let _ =
-                                    status_tx.send(format!("Staged {} files [C-z undo]", count));
+                                    status_tx.send(format!("Staged {} files [{} undo]", count, undo_hint));
                             }
                             Ok(o) => {
                                 let stderr = String::from_utf8_lossy(&o.stderr);
@@ -144,6 +147,7 @@ pub(super) async fn handle(
                     let worktree = ws.path.clone();
                     let status_tx = app.status_tx.clone();
                     let undo_tx = app.undo_tx.clone();
+                    let undo_hint = app.config.get_binding("app", "undo");
                     let count = paths.len();
                     app.status_message = Some(format!("Unstaging {} files...", count));
                     ws.dirty = true;
@@ -167,7 +171,7 @@ pub(super) async fn handle(
                                     });
                                 }
                                 let _ = status_tx
-                                    .send(format!("Unstaged {} files [C-z undo]", count));
+                                    .send(format!("Unstaged {} files [{} undo]", count, undo_hint));
                             }
                             Ok(o) => {
                                 let stderr = String::from_utf8_lossy(&o.stderr);

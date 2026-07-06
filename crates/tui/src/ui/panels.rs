@@ -146,6 +146,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                     .borders(Borders::ALL)
                     .border_style(border_style);
                 let cmd = provider.command();
+                let new_tab = app.config.get_binding("app", "new_tab");
                 let ascii_art = format!(
                     r#"
         ___________________
@@ -162,7 +163,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                     (_____)
 
     Install `{cmd}` and add it to your PATH
-    then press [t] to open a new tab."#
+    then press [{new_tab}] to open a new tab."#
                 );
                 let text = Paragraph::new(ascii_art)
                     .style(Style::default().fg(app.theme.general.muted_text))
@@ -182,11 +183,17 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                 Line::from(Span::styled("No tabs open", desc_style)),
                 Line::from(""),
                 Line::from(vec![
-                    Span::styled("[t]", key_style),
+                    Span::styled(
+                        format!("[{}]", app.config.get_binding("app", "new_tab")),
+                        key_style,
+                    ),
                     Span::styled(" Open a new tab", desc_style),
                 ]),
                 Line::from(vec![
-                    Span::styled("[Ctrl+P]", key_style),
+                    Span::styled(
+                        format!("[{}]", app.config.get_binding("app", "command_palette")),
+                        key_style,
+                    ),
                     Span::styled(" Search commands", desc_style),
                 ]),
             ];

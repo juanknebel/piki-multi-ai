@@ -1,12 +1,12 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 261
+assertion_line: 275
 expression: content
 ---
 
 ┌ WORKSPACES ──┐
 │              │────────────────────────────────────────────────────────────────
-│ [n] New works│┌ piki-multi-ai ───────────────────────────────────────────────┐
+│ [C-g N] New w│┌ piki-multi-ai ───────────────────────────────────────────────┐
 │              ││                                                              │
 │              ││  Welcome to piki-multi-ai                                    │
 │              ││                                                              │
