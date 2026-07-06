@@ -3,7 +3,6 @@ pub(crate) mod chat;
 pub(crate) mod code_review;
 pub mod command_palette;
 pub(crate) mod dialogs;
-pub mod diff;
 pub mod editor;
 pub mod fuzzy;
 pub mod layout;
@@ -31,6 +30,22 @@ pub(crate) fn cli_agent_status_view(
         S::WaitingPermission => ("⚠", "needs permission", Color::Yellow),
         S::Idle => ("⏳", "waiting", Color::Cyan),
         S::Done => ("✓", "done", Color::Green),
+    }
+}
+
+/// Fallback liveness indicator for a tab without OSC 777 agent state.
+/// Shared by the dashboard and the Agents pane.
+pub(crate) fn agent_tab_indicator(
+    tab: &crate::app::Tab,
+) -> (&'static str, &'static str, ratatui::style::Color) {
+    use ratatui::style::Color;
+    let alive = tab.pty_session.as_ref().is_some_and(|p| p.peek_alive());
+    if alive {
+        ("●", "alive", Color::Green)
+    } else if tab.pty_session.is_some() {
+        ("○", "exited", Color::DarkGray)
+    } else {
+        ("—", "not started", Color::DarkGray)
     }
 }
 
@@ -146,6 +161,39 @@ mod tests {
     // ── New snapshot tests for dialogs ──
 
     #[test]
+    fn test_snapshot_agents_pane_with_rows() {
+        let mut terminal = test_terminal(40, 8);
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let info = piki_core::WorkspaceInfo {
+            name: "demo-ws".to_string(),
+            path: std::path::PathBuf::from("/tmp/demo"),
+            branch: "main".to_string(),
+            workspace_type: piki_core::WorkspaceType::Simple,
+            description: String::new(),
+            prompt: String::new(),
+            kanban_path: None,
+            group: None,
+            order: 0,
+            source_repo: std::path::PathBuf::from("/tmp/demo"),
+            source_repo_display: String::new(),
+            dispatch_card_id: None,
+            dispatch_source_kanban: None,
+            dispatch_agent_name: None,
+            origin: piki_core::WorkspaceOrigin::default(),
+        };
+        let mut ws = crate::app::Workspace::from_info(info);
+        ws.add_tab(piki_core::AIProvider::Custom("Claude".to_string()), true, None);
+        app.workspaces.push(ws);
+        terminal
+            .draw(|frame| {
+                super::sidebar::render_agents_pane(frame, frame.area(), &app);
+            })
+            .unwrap();
+        let content = buffer_to_snapshot(terminal.backend().buffer());
+        insta::assert_snapshot!("agents_pane_with_rows", content);
+    }
+
+    #[test]
     fn test_snapshot_confirm_delete_dialog() {
         let mut terminal = test_terminal(80, 24);
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
@@ -159,37 +207,7 @@ mod tests {
         insta::assert_snapshot!("confirm_delete_dialog", content);
     }
 
-    #[test]
-    fn test_snapshot_confirm_merge_dialog() {
-        let mut terminal = test_terminal(80, 24);
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
-        app.active_dialog = Some(DialogState::ConfirmMerge);
-        terminal
-            .draw(|frame| {
-                super::dialogs::render_confirm_merge_dialog(frame, frame.area(), &app);
-            })
-            .unwrap();
-        let content = buffer_to_snapshot(terminal.backend().buffer());
-        insta::assert_snapshot!("confirm_merge_dialog", content);
-    }
-
-    #[test]
-    fn test_snapshot_commit_message_dialog() {
-        let mut terminal = test_terminal(80, 24);
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
-        app.active_dialog = Some(DialogState::CommitMessage {
-            buffer: "feat: add snapshot tests".to_string(),
-        });
-        terminal
-            .draw(|frame| {
-                super::dialogs::render_commit_dialog(frame, frame.area(), &app);
-            })
-            .unwrap();
-        let content = buffer_to_snapshot(terminal.backend().buffer());
-        insta::assert_snapshot!("commit_message_dialog", content);
-    }
-
-    #[test]
+            #[test]
     fn test_snapshot_help_overlay() {
         let mut terminal = test_terminal(80, 40);
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());

@@ -3,17 +3,13 @@ use std::path::PathBuf;
 use ratatui::DefaultTerminal;
 
 use crate::app::App;
-use crate::dialog_state::ConflictStrategy;
 use piki_core::workspace::WorkspaceManager;
-use piki_core::{AIProvider, MergeStrategy, WorkspaceType};
+use piki_core::{AIProvider, WorkspaceType};
 
 mod agent;
 mod api;
 mod chat;
 mod files;
-mod git;
-mod git_merge;
-mod git_stash;
 mod review;
 mod tabs;
 mod workspace;
@@ -47,32 +43,14 @@ pub(crate) enum Action {
     DeleteWorkspace(usize, Option<String>),
     /// Remove workspace from app list but keep worktree on disk
     RemoveFromList(usize),
-    /// Open diff for the file at the given index in the active workspace
-    OpenDiff(usize),
     /// Open $EDITOR for a file path
     OpenEditor(PathBuf),
-    /// Git: stage a file at the given index
-    GitStage(usize),
-    /// Git: unstage a file at the given index
-    GitUnstage(usize),
-    /// Git: stage all multi-selected files
-    GitStageSelected,
-    /// Git: unstage all multi-selected files
-    GitUnstageSelected,
-    /// Git: commit with message
-    GitCommit(String),
-    /// Git: push current branch
-    GitPush,
     /// Spawn a new tab with the given provider
     SpawnTab(AIProvider),
     /// Open a markdown file in a new tab
     OpenMarkdown(PathBuf),
     /// Open a markdown file in external mdr viewer
     OpenMdr(PathBuf),
-    /// Git: merge workspace branch into main
-    GitMerge(MergeStrategy),
-    /// Undo last stage/unstage action
-    Undo,
     /// Load PR review data (info + files) for the active workspace
     LoadPrReview,
     /// Load diff for a specific file in the PR review
@@ -81,33 +59,6 @@ pub(crate) enum Action {
     SubmitPrReview,
     /// Send an API request (raw Hurl text)
     SendApiRequest(String),
-    /// Load git log for the active workspace
-    LoadGitLog,
-    /// View diff for a specific commit by SHA
-    ViewCommitDiff(String),
-    /// Git stash: list all stash entries
-    GitStashList,
-    /// Git stash: save with message
-    GitStashSave(String),
-    /// Git stash: pop entry at index
-    GitStashPop(usize),
-    /// Git stash: apply entry at index
-    GitStashApply(usize),
-    /// Git stash: drop entry at index
-    GitStashDrop(usize),
-    /// Git stash: show diff for entry at index
-    GitStashShow(usize),
-    /// View the conflict diff for a file (shows ours vs theirs)
-    ViewConflictDiff(String),
-    /// Resolve a merge conflict on a single file using the given strategy
-    ResolveConflict {
-        file: String,
-        strategy: ConflictStrategy,
-    },
-    /// Abort the current merge or rebase
-    AbortMerge,
-    /// Scan for conflicts in worktree and source_repo, open resolution overlay
-    DetectConflicts,
     /// Dispatch an agent to work on a kanban card
     DispatchAgent {
         source_ws: usize,
@@ -155,26 +106,8 @@ pub(crate) async fn execute_action(
         | Action::RemoveFromList(..) => {
             workspace::handle(app, manager, action, terminal).await?
         }
-        Action::OpenEditor(..) | Action::OpenDiff(..) => {
+        Action::OpenEditor(..) => {
             files::handle(app, manager, action, terminal).await?
-        }
-        Action::GitStage(..)
-        | Action::GitUnstage(..)
-        | Action::GitStageSelected
-        | Action::GitUnstageSelected
-        | Action::GitCommit(..)
-        | Action::GitPush
-        | Action::Undo
-        | Action::LoadGitLog
-        | Action::ViewCommitDiff(..) => {
-            git::handle(app, manager, action, terminal).await?
-        }
-        Action::GitMerge(..)
-        | Action::ViewConflictDiff(..)
-        | Action::ResolveConflict { .. }
-        | Action::AbortMerge
-        | Action::DetectConflicts => {
-            git_merge::handle(app, manager, action, terminal).await?
         }
         Action::LoadPrReview | Action::LoadPrFileDiff(..) | Action::SubmitPrReview => {
             review::handle(app, manager, action, terminal).await?
@@ -184,14 +117,6 @@ pub(crate) async fn execute_action(
         }
         Action::SendApiRequest(..) => {
             api::handle(app, manager, action, terminal).await?
-        }
-        Action::GitStashList
-        | Action::GitStashSave(..)
-        | Action::GitStashPop(..)
-        | Action::GitStashApply(..)
-        | Action::GitStashDrop(..)
-        | Action::GitStashShow(..) => {
-            git_stash::handle(app, manager, action, terminal).await?
         }
         Action::DispatchAgent { .. }
         | Action::SaveAgent { .. }
@@ -208,42 +133,3 @@ pub(crate) async fn execute_action(
     Ok(())
 }
 
-/// Pipe a git command's colored output through delta for side-by-side formatting.
-async fn run_git_diff_with_delta(
-    worktree: &std::path::Path,
-    git_args: &[&str],
-    width: u16,
-) -> anyhow::Result<Vec<u8>> {
-    let git_cmd = tokio::process::Command::new("git")
-        .args(git_args)
-        .current_dir(worktree)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .spawn()?;
-
-    let git_stdout = git_cmd
-        .stdout
-        .ok_or_else(|| anyhow::anyhow!("failed to capture git stdout"))?;
-
-    let git_stdout_std: std::process::Stdio = git_stdout.try_into()?;
-
-    let delta_output = tokio::process::Command::new("delta")
-        .args([
-            "--side-by-side",
-            &format!("--width={}", width),
-            "--paging=never",
-            "--true-color=always",
-            "--line-fill-method=ansi",
-        ])
-        .stdin(git_stdout_std)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .output()
-        .await?;
-
-    if !delta_output.status.success() {
-        anyhow::bail!("delta exited with non-zero status");
-    }
-
-    Ok(delta_output.stdout)
-}

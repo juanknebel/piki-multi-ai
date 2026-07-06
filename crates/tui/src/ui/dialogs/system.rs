@@ -7,25 +7,6 @@ use ratatui::widgets::Paragraph;
 use crate::app::App;
 use crate::dialog_state::{DialogState, NewTabMenu};
 
-pub(crate) fn render_diff_overlay(frame: &mut Frame, area: Rect, app: &App) {
-    let width = area.width * 90 / 100;
-    let height = area.height * 85 / 100;
-    let popup = super::clear_popup(frame, area, width, height);
-
-    let file_path = app.diff_file_path.as_deref().unwrap_or("?");
-    let border_style = Style::default().fg(app.theme.diff.border);
-    crate::ui::diff::render(
-        frame,
-        popup,
-        &app.diff_content,
-        app.diff_scroll,
-        file_path,
-        border_style,
-        app.theme.diff.empty_text,
-        app.theme.general.scrollbar_thumb,
-    );
-}
-
 pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let help_scroll = match app.active_dialog {
         Some(DialogState::Help { scroll }) => scroll,
@@ -91,19 +72,6 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
             cfg.get_binding("app", "clone_workspace")
         ),
         format!("    {:<13} Git (lazygit tab)", cfg.get_binding("app", "git")),
-        format!("    {:<13} Commit", cfg.get_binding("app", "commit")),
-        format!("    {:<13} Push", cfg.get_binding("app", "push")),
-        format!("    {:<13} Merge/Rebase", cfg.get_binding("app", "merge")),
-        format!("    {:<13} Git stash", cfg.get_binding("app", "stash")),
-        format!("    {:<13} Git log", cfg.get_binding("app", "git_log")),
-        format!(
-            "    {:<13} Conflict resolution",
-            cfg.get_binding("app", "conflicts")
-        ),
-        format!(
-            "    {:<13} Undo last stage/unstage",
-            cfg.get_binding("app", "undo")
-        ),
         format!(
             "    {:<13} Command palette",
             cfg.get_binding("app", "command_palette")
@@ -186,16 +154,20 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         format!("    {:<13} Clear conversation", cfg.format_binding("ctrl-l")),
         "    Esc           Hide (keeps state)".to_string(),
         "".to_string(),
-        "  File list pane".to_string(),
+        "  Agents pane".to_string(),
         format!(
-            "    {:<13} Select file",
+            "    {:<13} Select agent",
             format!(
                 "{}/{}",
-                cfg.get_binding("file_list", "up"),
-                cfg.get_binding("file_list", "down")
+                cfg.get_binding("agents", "up"),
+                cfg.get_binding("agents", "down")
             )
         ),
-        format!("    {:<13} Open diff", cfg.get_binding("file_list", "diff")),
+        format!(
+            "    {:<13} Jump to that workspace/tab",
+            cfg.get_binding("agents", "select")
+        ),
+        "    Click         Jump directly".to_string(),
         "".to_string(),
         "  Workspace list pane".to_string(),
         format!(
@@ -219,41 +191,6 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
             cfg.get_binding("workspace_list", "delete")
         ),
         "".to_string(),
-        "  Diff view".to_string(),
-        format!(
-            "    {:<13} Scroll",
-            format!(
-                "{}/{}",
-                cfg.get_binding("diff", "up"),
-                cfg.get_binding("diff", "down")
-            )
-        ),
-        format!(
-            "    {:<13} Page down/up",
-            format!(
-                "{}/{}",
-                cfg.get_binding("diff", "page_up"),
-                cfg.get_binding("diff", "page_down")
-            )
-        ),
-        format!(
-            "    {:<13} Top/Bottom",
-            format!(
-                "{}/{}",
-                cfg.get_binding("diff", "scroll_top"),
-                cfg.get_binding("diff", "scroll_bottom")
-            )
-        ),
-        format!(
-            "    {:<13} Next/Prev file",
-            format!(
-                "{}/{}",
-                cfg.get_binding("diff", "next_file"),
-                cfg.get_binding("diff", "prev_file")
-            )
-        ),
-        format!("    {:<13} Close diff", cfg.get_binding("diff", "exit")),
-        "".to_string(),
         format!(
             "  Fuzzy search ({})",
             cfg.get_binding("app", "fuzzy_search")
@@ -267,9 +204,12 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
                 cfg.get_binding("fuzzy", "down")
             )
         ),
-        format!("    {:<13} Open diff", cfg.get_binding("fuzzy", "diff")),
         format!(
             "    {:<13} Open in $EDITOR",
+            cfg.get_binding("fuzzy", "open")
+        ),
+        format!(
+            "    {:<13} Open in $EDITOR (alt)",
             cfg.get_binding("fuzzy", "editor")
         ),
         format!(
@@ -285,111 +225,6 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
             cfg.get_binding("fuzzy", "mdr")
         ),
         format!("    {:<13} Close", cfg.get_binding("fuzzy", "exit")),
-        "".to_string(),
-        "  File list pane (more)".to_string(),
-        format!(
-            "    {:<13} Open in $EDITOR",
-            cfg.get_binding("file_list", "edit_external")
-        ),
-        format!(
-            "    {:<13} Inline editor",
-            cfg.get_binding("file_list", "edit_inline")
-        ),
-        format!(
-            "    {:<13} Stage file (git add)",
-            cfg.get_binding("file_list", "stage")
-        ),
-        format!(
-            "    {:<13} Unstage file (git reset)",
-            cfg.get_binding("file_list", "unstage")
-        ),
-        format!(
-            "    {:<13} Toggle multi-select",
-            cfg.get_binding("file_list", "toggle_select")
-        ),
-        format!(
-            "    {:<13} Select/deselect all",
-            cfg.get_binding("file_list", "select_all")
-        ),
-        "".to_string(),
-        "  Git operations".to_string(),
-        format!(
-            "    {:<13} Commit (opens dialog)",
-            cfg.get_binding("app", "commit")
-        ),
-        format!("    {:<13} Push", cfg.get_binding("app", "push")),
-        format!(
-            "    {:<13} Merge/Rebase into main",
-            cfg.get_binding("app", "merge")
-        ),
-        format!(
-            "    {:<13} Conflict resolution",
-            cfg.get_binding("app", "conflicts")
-        ),
-        format!(
-            "    {:<13} Git stash overlay",
-            cfg.get_binding("app", "stash")
-        ),
-        "".to_string(),
-        "  Git stash overlay".to_string(),
-        format!(
-            "    {:<13} Save new stash (enter message)",
-            cfg.get_binding("git_stash", "save")
-        ),
-        format!(
-            "    {:<13} Pop selected stash",
-            cfg.get_binding("git_stash", "pop")
-        ),
-        format!(
-            "    {:<13} Apply selected stash",
-            cfg.get_binding("git_stash", "apply")
-        ),
-        format!(
-            "    {:<13} Drop selected stash",
-            cfg.get_binding("git_stash", "drop")
-        ),
-        format!(
-            "    {:<13} Show stash diff",
-            cfg.get_binding("git_stash", "show")
-        ),
-        format!(
-            "    {:<13} Close",
-            cfg.get_binding("git_stash", "exit")
-        ),
-        "".to_string(),
-        "  Conflict resolution overlay".to_string(),
-        format!(
-            "    {:<13} Navigate files",
-            format!(
-                "{}/{}",
-                cfg.get_binding("conflict_resolution", "up"),
-                cfg.get_binding("conflict_resolution", "down")
-            )
-        ),
-        format!(
-            "    {:<13} Resolve with ours",
-            cfg.get_binding("conflict_resolution", "ours")
-        ),
-        format!(
-            "    {:<13} Resolve with theirs",
-            cfg.get_binding("conflict_resolution", "theirs")
-        ),
-        format!(
-            "    {:<13} Mark as resolved (git add)",
-            cfg.get_binding("conflict_resolution", "mark_resolved")
-        ),
-        format!(
-            "    {:<13} Edit file in $EDITOR",
-            cfg.get_binding("conflict_resolution", "edit")
-        ),
-        format!(
-            "    {:<13} Abort merge/rebase",
-            cfg.get_binding("conflict_resolution", "abort")
-        ),
-        format!(
-            "    {:<13} Close",
-            cfg.get_binding("conflict_resolution", "exit")
-        ),
         "".to_string(),
         "  Kanban board (focused)".to_string(),
         "    h/l/j/k     Navigate columns and cards".to_string(),

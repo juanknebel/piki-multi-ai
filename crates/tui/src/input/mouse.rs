@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::time::Instant;
 
 use crossterm::event::{MouseButton, MouseEventKind};
 use ratatui::DefaultTerminal;
@@ -203,9 +202,6 @@ pub(crate) fn handle_mouse_event(
                     *scroll = scroll.saturating_sub(3);
                 }
             }
-            AppMode::Diff => {
-                app.diff_scroll = app.diff_scroll.saturating_sub(3);
-            }
             AppMode::FuzzySearch => {
                 if let Some(ref mut state) = app.fuzzy {
                     state.selected = state.selected.saturating_sub(1);
@@ -215,8 +211,8 @@ pub(crate) fn handle_mouse_event(
                 let api_resp_area = app.api_response_inner_area;
                 if rect_contains(app.ws_list_area, col, row) {
                     app.select_prev_sidebar_row();
-                } else if rect_contains(app.file_list_area, col, row) {
-                    app.prev_file();
+                } else if rect_contains(app.agents_area, col, row) {
+                    app.selected_agent_row = app.selected_agent_row.saturating_sub(1);
                 } else if rect_contains(app.main_content_area, col, row)
                     && !try_forward_scroll_to_pty(app, col, row, 64)
                     && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
@@ -262,9 +258,6 @@ pub(crate) fn handle_mouse_event(
                     *scroll = scroll.saturating_add(3);
                 }
             }
-            AppMode::Diff => {
-                app.diff_scroll = app.diff_scroll.saturating_add(3);
-            }
             AppMode::FuzzySearch => {
                 if let Some(ref mut state) = app.fuzzy {
                     let count = state.nucleo.snapshot().matched_item_count() as usize;
@@ -277,8 +270,11 @@ pub(crate) fn handle_mouse_event(
                 let api_resp_area = app.api_response_inner_area;
                 if rect_contains(app.ws_list_area, col, row) {
                     app.select_next_sidebar_row();
-                } else if rect_contains(app.file_list_area, col, row) {
-                    app.next_file();
+                } else if rect_contains(app.agents_area, col, row) {
+                    let total = app.agent_rows().len();
+                    if total > 0 && app.selected_agent_row + 1 < total {
+                        app.selected_agent_row += 1;
+                    }
                 } else if rect_contains(app.main_content_area, col, row)
                     && !try_forward_scroll_to_pty(app, col, row, 65)
                     && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
@@ -305,13 +301,6 @@ pub(crate) fn handle_mouse_event(
             if app.input_state == crate::app::InputState::PrefixPending {
                 app.input_state = crate::app::InputState::Normal;
             }
-            // Detect double-click
-            let now = Instant::now();
-            let is_double_click = app.last_click.is_some_and(|(t, c, r)| {
-                now.duration_since(t).as_millis() < 400 && c == col && r == row
-            });
-            app.last_click = Some((now, col, row));
-
             // Dismiss overlays on click (except Logs — handle click-to-select)
             match app.mode {
                 AppMode::Logs => {
@@ -461,66 +450,24 @@ pub(crate) fn handle_mouse_event(
                         }
                     }
                 }
-                // Click on file list / services list
-                else if rect_contains(app.file_list_area, col, row) {
-                    app.active_pane = ActivePane::GitStatus;
-                    let inner_y = app.file_list_area.y + 1;
+                // Click on the Agents pane — select the row and jump to it
+                else if rect_contains(app.agents_area, col, row) {
+                    app.active_pane = ActivePane::Agents;
+                    let inner_y = app.agents_area.y + 1;
                     if row >= inner_y {
-                        let relative_row = (row - inner_y) as usize;
-                        let is_project = app.current_workspace().is_some_and(|ws| {
-                            ws.info.workspace_type == piki_core::WorkspaceType::Project
-                        });
-                        if is_project {
-                            // Extract needed data before mutating app
-                            let click_data = app.current_workspace().and_then(|ws| {
-                                if relative_row < ws.sub_directories.len() {
-                                    Some((
-                                        ws.path
-                                            .join(&ws.sub_directories[relative_row])
-                                            .display()
-                                            .to_string(),
-                                        ws.prompt.clone(),
-                                        ws.kanban_path.clone().unwrap_or_default(),
-                                        ws.info.group.clone().unwrap_or_default(),
-                                    ))
-                                } else {
-                                    None
-                                }
-                            });
-                            if let Some((full_dir, prompt, kanban, group)) = click_data {
-                                app.selected_file = relative_row;
-                                if is_double_click {
-                                    let dest = app.paths.repos_dir().to_string_lossy().to_string();
-                                    let dest_cursor = dest.chars().count();
-                                    app.active_dialog = Some(DialogState::NewWorkspace {
-                                        name: String::new(),
-                                        name_cursor: 0,
-                                        dir_cursor: full_dir.chars().count(),
-                                        dir: full_dir,
-                                        destination: dest,
-                                        destination_cursor: dest_cursor,
-                                        desc: String::new(),
-                                        desc_cursor: 0,
-                                        prompt_cursor: prompt.chars().count(),
-                                        prompt,
-                                        kanban_cursor: kanban.chars().count(),
-                                        kanban,
-                                        group_cursor: group.chars().count(),
-                                        group,
-                                        source: crate::app::NewWorkspaceSource::Local,
-                                        active_field: crate::app::DialogField::Source,
-                                    });
-                                    app.mode = AppMode::NewWorkspace;
-                                }
-                            }
-                        } else if let Some(ws) = app.current_workspace()
-                            && relative_row < ws.changed_files.len()
-                        {
-                            app.selected_file = relative_row;
-                            // Double-click opens diff
-                            if is_double_click {
-                                return Some(Action::OpenDiff(relative_row));
-                            }
+                        let rows = app.agent_rows();
+                        // Mirror the render's derived scroll offset
+                        let visible = app.agents_area.height.saturating_sub(2) as usize;
+                        let selected = app.selected_agent_row.min(rows.len().saturating_sub(1));
+                        let scroll_offset = if !rows.is_empty() && selected >= visible {
+                            selected + 1 - visible
+                        } else {
+                            0
+                        };
+                        let clicked = (row - inner_y) as usize + scroll_offset;
+                        if clicked < rows.len() {
+                            app.selected_agent_row = clicked;
+                            super::interaction::jump_to_agent(app, rows[clicked]);
                         }
                     }
                 }

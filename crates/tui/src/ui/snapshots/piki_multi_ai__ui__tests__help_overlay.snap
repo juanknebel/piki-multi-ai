@@ -1,6 +1,6 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 206
+assertion_line: 191
 expression: content
 ---
             ┌ Help ───────────────────────────────────────────────┐
@@ -22,13 +22,6 @@ expression: content
             │    C-g i         Workspace info                     │
             │    C-g R         Create worktree (GitHub-only)      │
             │    C-g g         Git (lazygit tab)                  │
-            │    C-g C         Commit                             │
-            │    C-g P         Push                               │
-            │    C-g M         Merge/Rebase                       │
-            │    C-g S         Git stash                          │
-            │    C-g L         Git log                            │
-            │    C-g X         Conflict resolution                │
-            │    C-g z         Undo last stage/unstage            │
             │    C-g :         Command palette                    │
             │    C-g /         Fuzzy file search                  │
             │    C-g [         Terminal scroll mode               │
@@ -42,4 +35,11 @@ expression: content
             │    C-g q         Quit                               │
             │    C-g C-g       Send C-g to terminal               │
             │    Esc           Cancel pending prefix              │
-            └────────────────────────────────────── [1/148 ↑k/j↓] ┘
+            │                                                     │
+            │  Terminal scroll mode (C-g [)                       │
+            │    k/j           Scroll up/down                     │
+            │    ctrl-u/ctrl-d Page up/down                       │
+            │    g/G           Top/Bottom                         │
+            │    /             Search                             │
+            │    q/esc         Exit scroll mode                   │
+            └────────────────────────────────────── [1/103 ↑k/j↓] ┘

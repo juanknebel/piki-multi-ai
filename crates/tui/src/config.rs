@@ -131,14 +131,12 @@ pub struct Keybindings {
     pub app: HashMap<String, BindingValue>,
     #[serde(default = "default_scroll")]
     pub scroll: HashMap<String, String>,
+    #[serde(default = "default_agents")]
+    pub agents: HashMap<String, String>,
     #[serde(default = "default_markdown")]
     pub markdown: HashMap<String, String>,
-    #[serde(default = "default_diff")]
-    pub diff: HashMap<String, String>,
     #[serde(default = "default_workspace_list")]
     pub workspace_list: HashMap<String, String>,
-    #[serde(default = "default_file_list")]
-    pub file_list: HashMap<String, String>,
     #[serde(default = "default_help")]
     pub help: HashMap<String, String>,
     #[serde(default = "default_about")]
@@ -151,22 +149,12 @@ pub struct Keybindings {
     pub editor: HashMap<String, String>,
     #[serde(default = "default_new_workspace")]
     pub new_workspace: HashMap<String, String>,
-    #[serde(default = "default_commit")]
-    pub commit: HashMap<String, String>,
-    #[serde(default = "default_merge")]
-    pub merge: HashMap<String, String>,
     #[serde(default = "default_new_tab")]
     pub new_tab: HashMap<String, String>,
     #[serde(default = "default_dashboard")]
     pub dashboard: HashMap<String, String>,
     #[serde(default = "default_logs")]
     pub logs: HashMap<String, String>,
-    #[serde(default = "default_git_stash")]
-    pub git_stash: HashMap<String, String>,
-    #[serde(default = "default_git_log")]
-    pub git_log: HashMap<String, String>,
-    #[serde(default = "default_conflict_resolution")]
-    pub conflict_resolution: HashMap<String, String>,
 }
 
 impl Default for Keybindings {
@@ -175,24 +163,18 @@ impl Default for Keybindings {
             prefix_key: default_prefix_key(),
             app: default_app(),
             scroll: default_scroll(),
+            agents: default_agents(),
             markdown: default_markdown(),
-            diff: default_diff(),
             workspace_list: default_workspace_list(),
-            file_list: default_file_list(),
             help: default_help(),
             about: default_about(),
             workspace_info: default_workspace_info(),
             fuzzy: default_fuzzy(),
             editor: default_editor(),
             new_workspace: default_new_workspace(),
-            commit: default_commit(),
-            merge: default_merge(),
             new_tab: default_new_tab(),
             dashboard: default_dashboard(),
             logs: default_logs(),
-            git_stash: default_git_stash(),
-            git_log: default_git_log(),
-            conflict_resolution: default_conflict_resolution(),
         }
     }
 }
@@ -228,15 +210,8 @@ fn default_app() -> HashMap<String, BindingValue> {
     m.insert("workspace_info".to_string(), BindingValue::one("prefix-i"));
     m.insert("clone_workspace".to_string(), BindingValue::one("prefix-R"));
 
-    // Git
+    // Git (everything else is delegated to the lazygit tab)
     m.insert("git".to_string(), BindingValue::one("prefix-g"));
-    m.insert("commit".to_string(), BindingValue::one("prefix-C"));
-    m.insert("push".to_string(), BindingValue::one("prefix-P"));
-    m.insert("merge".to_string(), BindingValue::one("prefix-M"));
-    m.insert("stash".to_string(), BindingValue::one("prefix-S"));
-    m.insert("git_log".to_string(), BindingValue::one("prefix-L"));
-    m.insert("conflicts".to_string(), BindingValue::one("prefix-X"));
-    m.insert("undo".to_string(), BindingValue::one("prefix-z"));
 
     // App
     m.insert("help".to_string(), BindingValue::one("prefix-?"));
@@ -284,6 +259,17 @@ fn default_scroll() -> HashMap<String, String> {
     m
 }
 
+/// Agents pane (bottom-left): navigate active agents and jump to them.
+fn default_agents() -> HashMap<String, String> {
+    let mut m = HashMap::new();
+    m.insert("down".to_string(), "j".to_string());
+    m.insert("up".to_string(), "k".to_string());
+    m.insert("down_alt".to_string(), "down".to_string());
+    m.insert("up_alt".to_string(), "up".to_string());
+    m.insert("select".to_string(), "enter".to_string());
+    m
+}
+
 fn default_markdown() -> HashMap<String, String> {
     let mut m = HashMap::new();
     m.insert("down".to_string(), "j".to_string());
@@ -297,21 +283,6 @@ fn default_markdown() -> HashMap<String, String> {
     m
 }
 
-fn default_diff() -> HashMap<String, String> {
-    let mut m = HashMap::new();
-    m.insert("exit".to_string(), "esc".to_string());
-    m.insert("down".to_string(), "j".to_string());
-    m.insert("up".to_string(), "k".to_string());
-    m.insert("down_alt".to_string(), "down".to_string());
-    m.insert("up_alt".to_string(), "up".to_string());
-    m.insert("page_down".to_string(), "ctrl-d".to_string());
-    m.insert("page_up".to_string(), "ctrl-u".to_string());
-    m.insert("scroll_top".to_string(), "g".to_string());
-    m.insert("scroll_bottom".to_string(), "G".to_string());
-    m.insert("next_file".to_string(), "n".to_string());
-    m.insert("prev_file".to_string(), "p".to_string());
-    m
-}
 
 fn default_workspace_list() -> HashMap<String, String> {
     let mut m = HashMap::new();
@@ -325,21 +296,6 @@ fn default_workspace_list() -> HashMap<String, String> {
     m
 }
 
-fn default_file_list() -> HashMap<String, String> {
-    let mut m = HashMap::new();
-    m.insert("down".to_string(), "j".to_string());
-    m.insert("up".to_string(), "k".to_string());
-    m.insert("down_alt".to_string(), "down".to_string());
-    m.insert("up_alt".to_string(), "up".to_string());
-    m.insert("diff".to_string(), "enter".to_string());
-    m.insert("edit_external".to_string(), "e".to_string());
-    m.insert("edit_inline".to_string(), "v".to_string());
-    m.insert("stage".to_string(), "s".to_string());
-    m.insert("unstage".to_string(), "u".to_string());
-    m.insert("toggle_select".to_string(), "space".to_string());
-    m.insert("select_all".to_string(), "a".to_string());
-    m
-}
 
 fn default_help() -> HashMap<String, String> {
     let mut m = HashMap::new();
@@ -378,7 +334,7 @@ fn default_fuzzy() -> HashMap<String, String> {
     let mut m = HashMap::new();
     m.insert("up".to_string(), "up".to_string());
     m.insert("down".to_string(), "down".to_string());
-    m.insert("diff".to_string(), "enter".to_string());
+    m.insert("open".to_string(), "enter".to_string());
     m.insert("editor".to_string(), "ctrl-e".to_string());
     m.insert("inline_edit".to_string(), "ctrl-v".to_string());
     m.insert("markdown".to_string(), "ctrl-o".to_string());
@@ -402,20 +358,7 @@ fn default_new_workspace() -> HashMap<String, String> {
     m
 }
 
-fn default_commit() -> HashMap<String, String> {
-    let mut m = HashMap::new();
-    m.insert("commit".to_string(), "enter".to_string());
-    m.insert("exit".to_string(), "esc".to_string());
-    m
-}
 
-fn default_merge() -> HashMap<String, String> {
-    let mut m = HashMap::new();
-    m.insert("merge".to_string(), "m".to_string());
-    m.insert("rebase".to_string(), "r".to_string());
-    m.insert("exit".to_string(), "esc".to_string());
-    m
-}
 
 fn default_dashboard() -> HashMap<String, String> {
     let mut m = HashMap::new();
@@ -456,54 +399,8 @@ fn default_new_tab() -> HashMap<String, String> {
     m
 }
 
-fn default_git_stash() -> HashMap<String, String> {
-    let mut m = HashMap::new();
-    m.insert("down".to_string(), "j".to_string());
-    m.insert("up".to_string(), "k".to_string());
-    m.insert("down_alt".to_string(), "down".to_string());
-    m.insert("up_alt".to_string(), "up".to_string());
-    m.insert("save".to_string(), "s".to_string());
-    m.insert("pop".to_string(), "p".to_string());
-    m.insert("apply".to_string(), "a".to_string());
-    m.insert("drop".to_string(), "d".to_string());
-    m.insert("show".to_string(), "enter".to_string());
-    m.insert("exit".to_string(), "esc".to_string());
-    m.insert("exit_alt".to_string(), "S".to_string());
-    m
-}
 
-fn default_git_log() -> HashMap<String, String> {
-    let mut m = HashMap::new();
-    m.insert("down".to_string(), "j".to_string());
-    m.insert("up".to_string(), "k".to_string());
-    m.insert("down_alt".to_string(), "down".to_string());
-    m.insert("up_alt".to_string(), "up".to_string());
-    m.insert("page_down".to_string(), "ctrl-d".to_string());
-    m.insert("page_up".to_string(), "ctrl-u".to_string());
-    m.insert("scroll_top".to_string(), "g".to_string());
-    m.insert("scroll_bottom".to_string(), "G".to_string());
-    m.insert("select".to_string(), "enter".to_string());
-    m.insert("exit".to_string(), "esc".to_string());
-    m.insert("exit_alt".to_string(), "L".to_string());
-    m
-}
 
-fn default_conflict_resolution() -> HashMap<String, String> {
-    let mut m = HashMap::new();
-    m.insert("down".to_string(), "j".to_string());
-    m.insert("up".to_string(), "k".to_string());
-    m.insert("down_alt".to_string(), "down".to_string());
-    m.insert("up_alt".to_string(), "up".to_string());
-    m.insert("ours".to_string(), "o".to_string());
-    m.insert("theirs".to_string(), "t".to_string());
-    m.insert("mark_resolved".to_string(), "m".to_string());
-    m.insert("edit".to_string(), "e".to_string());
-    m.insert("abort".to_string(), "A".to_string());
-    m.insert("select".to_string(), "enter".to_string());
-    m.insert("exit".to_string(), "esc".to_string());
-    m.insert("exit_alt".to_string(), "X".to_string());
-    m
-}
 
 impl Config {
     pub fn generate_default_toml() -> String {
@@ -644,6 +541,17 @@ impl Config {
         }
     }
 
+    pub fn matches_agents(&self, event: KeyEvent, action: &str) -> bool {
+        if let Some(binding) = self.keybindings.agents.get(action) {
+            key_matches_platform(event, binding, self.platform)
+        } else {
+            let defaults = default_agents();
+            defaults
+                .get(action)
+                .is_some_and(|b| key_matches_platform(event, b, self.platform))
+        }
+    }
+
     pub fn matches_markdown(&self, event: KeyEvent, action: &str) -> bool {
         if let Some(binding) = self.keybindings.markdown.get(action) {
             key_matches_platform(event, binding, self.platform)
@@ -655,16 +563,6 @@ impl Config {
         }
     }
 
-    pub fn matches_diff(&self, event: KeyEvent, action: &str) -> bool {
-        if let Some(binding) = self.keybindings.diff.get(action) {
-            key_matches_platform(event, binding, self.platform)
-        } else {
-            let defaults = default_diff();
-            defaults
-                .get(action)
-                .is_some_and(|b| key_matches_platform(event, b, self.platform))
-        }
-    }
 
     pub fn matches_workspace_list(&self, event: KeyEvent, action: &str) -> bool {
         if let Some(binding) = self.keybindings.workspace_list.get(action) {
@@ -677,16 +575,6 @@ impl Config {
         }
     }
 
-    pub fn matches_file_list(&self, event: KeyEvent, action: &str) -> bool {
-        if let Some(binding) = self.keybindings.file_list.get(action) {
-            key_matches_platform(event, binding, self.platform)
-        } else {
-            let defaults = default_file_list();
-            defaults
-                .get(action)
-                .is_some_and(|b| key_matches_platform(event, b, self.platform))
-        }
-    }
 
     pub fn matches_help(&self, event: KeyEvent, action: &str) -> bool {
         if let Some(binding) = self.keybindings.help.get(action) {
@@ -728,35 +616,8 @@ impl Config {
         }
     }
 
-    pub fn matches_git_stash(&self, event: KeyEvent, action: &str) -> bool {
-        if let Some(binding) = self.keybindings.git_stash.get(action) {
-            key_matches_platform(event, binding, self.platform)
-        } else {
-            false
-        }
-    }
 
-    pub fn matches_git_log(&self, event: KeyEvent, action: &str) -> bool {
-        if let Some(binding) = self.keybindings.git_log.get(action) {
-            key_matches_platform(event, binding, self.platform)
-        } else {
-            let defaults = default_git_log();
-            defaults
-                .get(action)
-                .is_some_and(|b| key_matches_platform(event, b, self.platform))
-        }
-    }
 
-    pub fn matches_conflict_resolution(&self, event: KeyEvent, action: &str) -> bool {
-        if let Some(binding) = self.keybindings.conflict_resolution.get(action) {
-            key_matches_platform(event, binding, self.platform)
-        } else {
-            let defaults = default_conflict_resolution();
-            defaults
-                .get(action)
-                .is_some_and(|b| key_matches_platform(event, b, self.platform))
-        }
-    }
 
     /// Format a binding string for the current platform.
     /// On macOS, replaces `ctrl-` with `cmd-` for display.
@@ -779,30 +640,24 @@ impl Config {
                 .get(action)
                 .cloned()
                 .or_else(|| default_scroll().get(action).cloned()),
+            "agents" => self
+                .keybindings
+                .agents
+                .get(action)
+                .cloned()
+                .or_else(|| default_agents().get(action).cloned()),
             "markdown" => self
                 .keybindings
                 .markdown
                 .get(action)
                 .cloned()
                 .or_else(|| default_markdown().get(action).cloned()),
-            "diff" => self
-                .keybindings
-                .diff
-                .get(action)
-                .cloned()
-                .or_else(|| default_diff().get(action).cloned()),
             "workspace_list" => self
                 .keybindings
                 .workspace_list
                 .get(action)
                 .cloned()
                 .or_else(|| default_workspace_list().get(action).cloned()),
-            "file_list" => self
-                .keybindings
-                .file_list
-                .get(action)
-                .cloned()
-                .or_else(|| default_file_list().get(action).cloned()),
             "help" => self
                 .keybindings
                 .help
@@ -839,18 +694,6 @@ impl Config {
                 .get(action)
                 .cloned()
                 .or_else(|| default_new_workspace().get(action).cloned()),
-            "commit" => self
-                .keybindings
-                .commit
-                .get(action)
-                .cloned()
-                .or_else(|| default_commit().get(action).cloned()),
-            "merge" => self
-                .keybindings
-                .merge
-                .get(action)
-                .cloned()
-                .or_else(|| default_merge().get(action).cloned()),
             "new_tab" => self
                 .keybindings
                 .new_tab
@@ -869,24 +712,6 @@ impl Config {
                 .get(action)
                 .cloned()
                 .or_else(|| default_logs().get(action).cloned()),
-            "git_stash" => self
-                .keybindings
-                .git_stash
-                .get(action)
-                .cloned()
-                .or_else(|| default_git_stash().get(action).cloned()),
-            "git_log" => self
-                .keybindings
-                .git_log
-                .get(action)
-                .cloned()
-                .or_else(|| default_git_log().get(action).cloned()),
-            "conflict_resolution" => self
-                .keybindings
-                .conflict_resolution
-                .get(action)
-                .cloned()
-                .or_else(|| default_conflict_resolution().get(action).cloned()),
             _ => None,
         };
         binding
@@ -1070,22 +895,16 @@ mod tests {
         let cfg = Config::default();
         let sections: Vec<(&str, &HashMap<String, String>)> = vec![
             ("scroll", &cfg.keybindings.scroll),
-            ("diff", &cfg.keybindings.diff),
+            ("agents", &cfg.keybindings.agents),
             ("help", &cfg.keybindings.help),
             ("fuzzy", &cfg.keybindings.fuzzy),
             ("editor", &cfg.keybindings.editor),
-            ("commit", &cfg.keybindings.commit),
-            ("merge", &cfg.keybindings.merge),
             ("new_tab", &cfg.keybindings.new_tab),
             ("new_workspace", &cfg.keybindings.new_workspace),
-            ("file_list", &cfg.keybindings.file_list),
             ("workspace_list", &cfg.keybindings.workspace_list),
             ("about", &cfg.keybindings.about),
             ("workspace_info", &cfg.keybindings.workspace_info),
             ("markdown", &cfg.keybindings.markdown),
-            ("git_stash", &cfg.keybindings.git_stash),
-            ("git_log", &cfg.keybindings.git_log),
-            ("conflict_resolution", &cfg.keybindings.conflict_resolution),
         ];
         for (section, bindings) in sections {
             for (action, binding) in bindings {
@@ -1268,7 +1087,7 @@ quit = "prefix-Q"
         );
         // Other sections still get defaults
         assert!(cfg.keybindings.help.contains_key("exit"));
-        assert!(cfg.keybindings.diff.contains_key("down"));
+        assert!(cfg.keybindings.agents.contains_key("down"));
     }
 
     #[test]
@@ -1458,6 +1277,6 @@ quit = "prefix-Q"
         // ctrl-shift-c should display with cmd- on macOS
         assert_eq!(cfg.get_binding("app", "copy"), "cmd-shift-c");
         // Non-ctrl bindings unchanged
-        assert_eq!(cfg.get_binding("diff", "exit"), "esc");
+        assert_eq!(cfg.get_binding("scroll", "exit"), "esc");
     }
 }

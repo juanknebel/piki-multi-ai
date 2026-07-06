@@ -6,24 +6,23 @@
 //! `ImportAgents`, `ManageAgents`, `ManageProviders`).
 
 use crossterm::event::{KeyCode, KeyModifiers};
-use piki_core::MergeStrategy;
 use piki_core::storage::AgentProfile;
 
 use super::dialog::{
-    handle_about_input, handle_commit_message_input, handle_confirm_close_tab_input,
-    handle_confirm_delete_input, handle_confirm_merge_input, handle_confirm_quit_input,
-    handle_conflict_resolution_input, handle_dashboard_input, handle_dispatch_agent_input,
+    handle_about_input, handle_confirm_close_tab_input,
+    handle_confirm_delete_input, handle_confirm_quit_input,
+    handle_dashboard_input, handle_dispatch_agent_input,
     handle_dispatch_card_move_input, handle_edit_agent_input, handle_edit_agent_role_input,
-    handle_edit_provider_input, handle_edit_workspace_input, handle_git_log_input,
-    handle_git_stash_input, handle_help_input, handle_import_agents_input, handle_logs_input,
+    handle_edit_provider_input, handle_edit_workspace_input,
+    handle_help_input, handle_import_agents_input, handle_logs_input,
     handle_manage_agents_input, handle_manage_providers_input, handle_new_tab_input,
     handle_new_workspace_input, handle_workspace_info_input,
 };
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField};
 use crate::dialog_state::{
-    ConflictFile, ConflictStrategy, DialogState, EditAgentField, EditProviderField,
-    EditWorkspaceField, GitLogEntry, NewTabMenu,
+    DialogState, EditAgentField, EditProviderField,
+    EditWorkspaceField, NewTabMenu,
 };
 use piki_core::WorkspaceType;
 use crate::log_buffer::LogEntry;
@@ -52,13 +51,6 @@ fn open_edit_workspace(app: &mut App, active_field: EditWorkspaceField) {
     });
 }
 
-fn open_commit_message(app: &mut App, buffer: &str) {
-    app.mode = AppMode::CommitMessage;
-    app.active_dialog = Some(DialogState::CommitMessage {
-        buffer: buffer.to_string(),
-    });
-}
-
 fn open_confirm_close_tab(app: &mut App, target: usize) {
     app.mode = AppMode::ConfirmCloseTab;
     app.active_dialog = Some(DialogState::ConfirmCloseTab { target });
@@ -67,11 +59,6 @@ fn open_confirm_close_tab(app: &mut App, target: usize) {
 fn open_confirm_quit(app: &mut App) {
     app.mode = AppMode::ConfirmQuit;
     app.active_dialog = Some(DialogState::ConfirmQuit);
-}
-
-fn open_confirm_merge(app: &mut App) {
-    app.mode = AppMode::ConfirmMerge;
-    app.active_dialog = Some(DialogState::ConfirmMerge);
 }
 
 fn open_help(app: &mut App, scroll: u16) {
@@ -110,22 +97,6 @@ fn open_dispatch_card_move(app: &mut App, target: usize, columns: Vec<(String, S
         columns,
         selected: 0,
     });
-}
-
-fn open_git_log(app: &mut App, lines: Vec<GitLogEntry>) {
-    app.mode = AppMode::GitLog;
-    app.active_dialog = Some(DialogState::GitLog {
-        lines,
-        selected: 0,
-        scroll: 0,
-    });
-}
-
-fn current_git_log_selected(app: &App) -> usize {
-    match &app.active_dialog {
-        Some(DialogState::GitLog { selected, .. }) => *selected,
-        _ => panic!("not in GitLog dialog"),
-    }
 }
 
 fn current_dispatch_card_selected(app: &App) -> usize {
@@ -175,32 +146,6 @@ fn push_log_entry(app: &App, level: tracing::Level, message: &str) {
         target: "test".to_string(),
         message: message.to_string(),
     });
-}
-
-fn open_git_stash(app: &mut App, entries: Vec<(String, String)>) {
-    app.mode = AppMode::GitStash;
-    app.active_dialog = Some(DialogState::GitStash {
-        entries,
-        selected: 0,
-        scroll: 0,
-        input_mode: false,
-        input_buffer: String::new(),
-        input_cursor: 0,
-    });
-}
-
-fn git_stash_input_mode(app: &App) -> bool {
-    match &app.active_dialog {
-        Some(DialogState::GitStash { input_mode, .. }) => *input_mode,
-        _ => panic!("not in GitStash dialog"),
-    }
-}
-
-fn git_stash_input_buffer(app: &App) -> String {
-    match &app.active_dialog {
-        Some(DialogState::GitStash { input_buffer, .. }) => input_buffer.clone(),
-        _ => panic!("not in GitStash dialog"),
-    }
 }
 
 fn open_import_agents(app: &mut App, discovered: Vec<(String, String, String, bool)>) {
@@ -323,13 +268,6 @@ fn current_edit_cursors(app: &App) -> (usize, usize, usize) {
             ..
         }) => (kanban_cursor, prompt_cursor, group_cursor),
         _ => panic!("not in EditWorkspace dialog"),
-    }
-}
-
-fn current_commit_buffer(app: &App) -> String {
-    match &app.active_dialog {
-        Some(DialogState::CommitMessage { buffer }) => buffer.clone(),
-        _ => panic!("not in CommitMessage dialog"),
     }
 }
 
@@ -575,72 +513,6 @@ fn edit_workspace_returns_none_when_dialog_not_active() {
 
 // ── CommitMessage ────────────────────────────────────────────────────────
 
-#[test]
-fn commit_message_char_inserts_and_backspace_deletes() {
-    let mut app = test_app();
-    open_commit_message(&mut app, "");
-
-    for c in "fix:".chars() {
-        handle_commit_message_input(&mut app, key(KeyCode::Char(c)));
-    }
-    assert_eq!(current_commit_buffer(&app), "fix:");
-
-    handle_commit_message_input(&mut app, key(KeyCode::Backspace));
-    assert_eq!(current_commit_buffer(&app), "fix");
-}
-
-#[test]
-fn commit_message_enter_with_empty_buffer_rejects() {
-    let mut app = test_app();
-    open_commit_message(&mut app, "");
-
-    let action = handle_commit_message_input(&mut app, key(KeyCode::Enter));
-
-    assert!(action.is_none());
-    // Dialog still open, status_message set
-    assert!(matches!(
-        app.active_dialog,
-        Some(DialogState::CommitMessage { .. })
-    ));
-    assert_eq!(app.mode, AppMode::CommitMessage);
-    assert!(app.status_message.is_some());
-}
-
-#[test]
-fn commit_message_enter_with_content_emits_git_commit_and_dismisses() {
-    let mut app = test_app();
-    open_commit_message(&mut app, "feat: add tests");
-
-    let action = handle_commit_message_input(&mut app, key(KeyCode::Enter));
-
-    match action {
-        Some(Action::GitCommit(msg)) => assert_eq!(msg, "feat: add tests"),
-        _ => panic!("expected GitCommit"),
-    }
-    assert!(app.active_dialog.is_none());
-    assert_eq!(app.mode, AppMode::Normal);
-}
-
-#[test]
-fn commit_message_esc_dismisses_without_action() {
-    let mut app = test_app();
-    open_commit_message(&mut app, "wip");
-
-    let action = handle_commit_message_input(&mut app, key(KeyCode::Esc));
-
-    assert!(action.is_none());
-    assert!(app.active_dialog.is_none());
-    assert_eq!(app.mode, AppMode::Normal);
-}
-
-#[test]
-fn commit_message_returns_none_when_dialog_not_active() {
-    let mut app = test_app();
-    // No dialog set
-    let action = handle_commit_message_input(&mut app, key(KeyCode::Char('x')));
-    assert!(action.is_none());
-}
-
 // ── ConfirmCloseTab ──────────────────────────────────────────────────────
 
 #[test]
@@ -771,57 +643,6 @@ fn confirm_quit_irrelevant_key_keeps_dialog_open() {
 }
 
 // ── ConfirmMerge ─────────────────────────────────────────────────────────
-
-#[test]
-fn confirm_merge_m_emits_merge_strategy_and_dismisses() {
-    let mut app = test_app();
-    open_confirm_merge(&mut app);
-
-    let action = handle_confirm_merge_input(&mut app, key(KeyCode::Char('m')));
-
-    assert!(matches!(action, Some(Action::GitMerge(MergeStrategy::Merge))));
-    assert!(app.active_dialog.is_none());
-    assert_eq!(app.mode, AppMode::Normal);
-}
-
-#[test]
-fn confirm_merge_r_emits_rebase_strategy_and_dismisses() {
-    let mut app = test_app();
-    open_confirm_merge(&mut app);
-
-    let action = handle_confirm_merge_input(&mut app, key(KeyCode::Char('r')));
-
-    assert!(matches!(
-        action,
-        Some(Action::GitMerge(MergeStrategy::Rebase))
-    ));
-    assert!(app.active_dialog.is_none());
-    assert_eq!(app.mode, AppMode::Normal);
-}
-
-#[test]
-fn confirm_merge_esc_dismisses_without_action() {
-    let mut app = test_app();
-    open_confirm_merge(&mut app);
-
-    let action = handle_confirm_merge_input(&mut app, key(KeyCode::Esc));
-
-    assert!(action.is_none());
-    assert!(app.active_dialog.is_none());
-    assert_eq!(app.mode, AppMode::Normal);
-}
-
-#[test]
-fn confirm_merge_irrelevant_key_keeps_dialog_open() {
-    let mut app = test_app();
-    open_confirm_merge(&mut app);
-
-    let action = handle_confirm_merge_input(&mut app, key(KeyCode::Char('x')));
-
-    assert!(action.is_none());
-    assert!(matches!(app.active_dialog, Some(DialogState::ConfirmMerge)));
-    assert_eq!(app.mode, AppMode::ConfirmMerge);
-}
 
 // ── Help (scroll dialog) ────────────────────────────────────────────────
 
@@ -1097,97 +918,6 @@ fn dispatch_card_move_returns_none_when_dialog_not_active() {
 
 // ── GitLog ──────────────────────────────────────────────────────────────
 
-fn sample_git_log() -> Vec<GitLogEntry> {
-    vec![
-        GitLogEntry {
-            raw_line: "* abcdef1 first".to_string(),
-            sha: Some("abcdef1".to_string()),
-        },
-        GitLogEntry {
-            raw_line: "* abcdef2 second".to_string(),
-            sha: Some("abcdef2".to_string()),
-        },
-        GitLogEntry {
-            raw_line: "| merge marker".to_string(),
-            sha: None,
-        },
-    ]
-}
-
-#[test]
-fn git_log_j_advances_clamped() {
-    let mut app = test_app();
-    open_git_log(&mut app, sample_git_log());
-
-    handle_git_log_input(&mut app, key(KeyCode::Char('j')));
-    assert_eq!(current_git_log_selected(&app), 1);
-    // Step past the end stays clamped
-    for _ in 0..10 {
-        handle_git_log_input(&mut app, key(KeyCode::Char('j')));
-    }
-    assert_eq!(current_git_log_selected(&app), 2);
-}
-
-#[test]
-fn git_log_k_decrements_with_floor() {
-    let mut app = test_app();
-    open_git_log(&mut app, sample_git_log());
-    handle_git_log_input(&mut app, key(KeyCode::Char('j')));
-
-    handle_git_log_input(&mut app, key(KeyCode::Char('k')));
-    handle_git_log_input(&mut app, key(KeyCode::Char('k')));
-
-    assert_eq!(current_git_log_selected(&app), 0);
-}
-
-#[test]
-fn git_log_select_with_sha_emits_view_commit_diff() {
-    let mut app = test_app();
-    open_git_log(&mut app, sample_git_log());
-    handle_git_log_input(&mut app, key(KeyCode::Char('j')));
-
-    let action = handle_git_log_input(&mut app, key(KeyCode::Enter));
-
-    match action {
-        Some(Action::ViewCommitDiff(sha)) => assert_eq!(sha, "abcdef2"),
-        _ => panic!("expected ViewCommitDiff"),
-    }
-}
-
-#[test]
-fn git_log_select_without_sha_emits_no_action() {
-    let mut app = test_app();
-    open_git_log(&mut app, sample_git_log());
-    // Move to the entry with sha=None
-    handle_git_log_input(&mut app, key(KeyCode::Char('j')));
-    handle_git_log_input(&mut app, key(KeyCode::Char('j')));
-
-    let action = handle_git_log_input(&mut app, key(KeyCode::Enter));
-
-    assert!(action.is_none());
-    // Dialog stays open
-    assert!(matches!(app.active_dialog, Some(DialogState::GitLog { .. })));
-}
-
-#[test]
-fn git_log_esc_dismisses() {
-    let mut app = test_app();
-    open_git_log(&mut app, sample_git_log());
-
-    let action = handle_git_log_input(&mut app, key(KeyCode::Esc));
-
-    assert!(action.is_none());
-    assert!(app.active_dialog.is_none());
-    assert_eq!(app.mode, AppMode::Normal);
-}
-
-#[test]
-fn git_log_returns_none_when_dialog_not_active() {
-    let mut app = test_app();
-    let action = handle_git_log_input(&mut app, key(KeyCode::Char('j')));
-    assert!(action.is_none());
-}
-
 // ── Dashboard ──────────────────────────────────────────────────────────
 
 #[test]
@@ -1292,124 +1022,6 @@ fn logs_returns_none_when_dialog_not_active() {
 }
 
 // ── GitStash ───────────────────────────────────────────────────────────
-
-fn sample_stash_entries() -> Vec<(String, String)> {
-    vec![
-        ("stash@{0}".to_string(), "WIP feature".to_string()),
-        ("stash@{1}".to_string(), "bugfix".to_string()),
-    ]
-}
-
-#[test]
-fn git_stash_s_enters_input_mode() {
-    let mut app = test_app();
-    open_git_stash(&mut app, sample_stash_entries());
-    assert!(!git_stash_input_mode(&app));
-
-    handle_git_stash_input(&mut app, key(KeyCode::Char('s')));
-
-    assert!(git_stash_input_mode(&app));
-}
-
-#[test]
-fn git_stash_input_mode_inserts_chars_and_backspace_removes() {
-    let mut app = test_app();
-    open_git_stash(&mut app, sample_stash_entries());
-    handle_git_stash_input(&mut app, key(KeyCode::Char('s'))); // enter input mode
-
-    for c in "wip".chars() {
-        handle_git_stash_input(&mut app, key(KeyCode::Char(c)));
-    }
-    assert_eq!(git_stash_input_buffer(&app), "wip");
-
-    handle_git_stash_input(&mut app, key(KeyCode::Backspace));
-    assert_eq!(git_stash_input_buffer(&app), "wi");
-}
-
-#[test]
-fn git_stash_input_mode_esc_exits_to_list_mode() {
-    let mut app = test_app();
-    open_git_stash(&mut app, sample_stash_entries());
-    handle_git_stash_input(&mut app, key(KeyCode::Char('s')));
-    assert!(git_stash_input_mode(&app));
-
-    handle_git_stash_input(&mut app, key(KeyCode::Esc));
-
-    // Dialog still open, but back in list mode
-    assert!(matches!(app.active_dialog, Some(DialogState::GitStash { .. })));
-    assert!(!git_stash_input_mode(&app));
-}
-
-#[test]
-fn git_stash_input_mode_enter_emits_save_with_buffer() {
-    let mut app = test_app();
-    open_git_stash(&mut app, sample_stash_entries());
-    handle_git_stash_input(&mut app, key(KeyCode::Char('s')));
-    for c in "msg".chars() {
-        handle_git_stash_input(&mut app, key(KeyCode::Char(c)));
-    }
-
-    let action = handle_git_stash_input(&mut app, key(KeyCode::Enter));
-
-    match action {
-        Some(Action::GitStashSave(msg)) => assert_eq!(msg, "msg"),
-        _ => panic!("expected GitStashSave"),
-    }
-}
-
-#[test]
-fn git_stash_list_p_emits_pop_for_selected_index() {
-    let mut app = test_app();
-    open_git_stash(&mut app, sample_stash_entries());
-    handle_git_stash_input(&mut app, key(KeyCode::Char('j')));
-
-    let action = handle_git_stash_input(&mut app, key(KeyCode::Char('p')));
-
-    assert!(matches!(action, Some(Action::GitStashPop(1))));
-}
-
-#[test]
-fn git_stash_list_a_emits_apply() {
-    let mut app = test_app();
-    open_git_stash(&mut app, sample_stash_entries());
-
-    let action = handle_git_stash_input(&mut app, key(KeyCode::Char('a')));
-
-    assert!(matches!(action, Some(Action::GitStashApply(0))));
-}
-
-#[test]
-fn git_stash_list_d_emits_drop() {
-    let mut app = test_app();
-    open_git_stash(&mut app, sample_stash_entries());
-
-    let action = handle_git_stash_input(&mut app, key(KeyCode::Char('d')));
-
-    assert!(matches!(action, Some(Action::GitStashDrop(0))));
-}
-
-#[test]
-fn git_stash_list_enter_emits_show() {
-    // "show" is bound to Enter by default (not 'w' as initially planned).
-    let mut app = test_app();
-    open_git_stash(&mut app, sample_stash_entries());
-
-    let action = handle_git_stash_input(&mut app, key(KeyCode::Enter));
-
-    assert!(matches!(action, Some(Action::GitStashShow(0))));
-}
-
-#[test]
-fn git_stash_list_esc_dismisses() {
-    let mut app = test_app();
-    open_git_stash(&mut app, sample_stash_entries());
-
-    let action = handle_git_stash_input(&mut app, key(KeyCode::Esc));
-
-    assert!(action.is_none());
-    assert!(app.active_dialog.is_none());
-    assert_eq!(app.mode, AppMode::Normal);
-}
 
 // ── ImportAgents ───────────────────────────────────────────────────────
 
@@ -2179,293 +1791,6 @@ fn new_tab_returns_none_when_dialog_not_active() {
 // which falls back to the defaults in `default_conflict_resolution()`:
 // down=j, up=k, ours=o, theirs=t, mark_resolved=m, edit=e, abort=A,
 // select=enter (view diff), exit=esc, exit_alt=X.
-
-fn sample_conflict_files() -> Vec<ConflictFile> {
-    vec![
-        ConflictFile {
-            path: "src/a.rs".into(),
-            status: "Conflicted".into(),
-        },
-        ConflictFile {
-            path: "src/b.rs".into(),
-            status: "Conflicted".into(),
-        },
-        ConflictFile {
-            path: "src/c.rs".into(),
-            status: "Conflicted".into(),
-        },
-    ]
-}
-
-fn open_conflict_resolution(
-    app: &mut App,
-    files: Vec<ConflictFile>,
-    repo_path: std::path::PathBuf,
-    selected: usize,
-) {
-    app.mode = AppMode::ConflictResolution;
-    app.active_dialog = Some(DialogState::ConflictResolution {
-        files,
-        selected,
-        repo_path,
-    });
-}
-
-fn current_conflict_selected(app: &App) -> usize {
-    match app.active_dialog {
-        Some(DialogState::ConflictResolution { selected, .. }) => selected,
-        _ => panic!("expected ConflictResolution dialog"),
-    }
-}
-
-#[test]
-fn conflict_down_advances_with_clamp() {
-    let mut app = test_app();
-    open_conflict_resolution(
-        &mut app,
-        sample_conflict_files(),
-        "/tmp/repo".into(),
-        0,
-    );
-
-    handle_conflict_resolution_input(&mut app, key(KeyCode::Char('j')));
-    assert_eq!(current_conflict_selected(&app), 1);
-    handle_conflict_resolution_input(&mut app, key(KeyCode::Char('j')));
-    assert_eq!(current_conflict_selected(&app), 2);
-    // Clamp at last
-    handle_conflict_resolution_input(&mut app, key(KeyCode::Char('j')));
-    assert_eq!(current_conflict_selected(&app), 2);
-}
-
-#[test]
-fn conflict_up_retreats_with_clamp() {
-    let mut app = test_app();
-    open_conflict_resolution(
-        &mut app,
-        sample_conflict_files(),
-        "/tmp/repo".into(),
-        2,
-    );
-
-    handle_conflict_resolution_input(&mut app, key(KeyCode::Char('k')));
-    assert_eq!(current_conflict_selected(&app), 1);
-    handle_conflict_resolution_input(&mut app, key(KeyCode::Char('k')));
-    assert_eq!(current_conflict_selected(&app), 0);
-    // Clamp at 0 (saturating_sub)
-    handle_conflict_resolution_input(&mut app, key(KeyCode::Char('k')));
-    assert_eq!(current_conflict_selected(&app), 0);
-}
-
-#[test]
-fn conflict_arrow_keys_navigate_as_alt_bindings() {
-    let mut app = test_app();
-    open_conflict_resolution(
-        &mut app,
-        sample_conflict_files(),
-        "/tmp/repo".into(),
-        0,
-    );
-
-    handle_conflict_resolution_input(&mut app, key(KeyCode::Down));
-    assert_eq!(current_conflict_selected(&app), 1);
-    handle_conflict_resolution_input(&mut app, key(KeyCode::Up));
-    assert_eq!(current_conflict_selected(&app), 0);
-}
-
-#[test]
-fn conflict_empty_list_navigation_is_noop() {
-    let mut app = test_app();
-    open_conflict_resolution(&mut app, vec![], "/tmp/repo".into(), 0);
-
-    handle_conflict_resolution_input(&mut app, key(KeyCode::Char('j')));
-    assert_eq!(current_conflict_selected(&app), 0);
-    handle_conflict_resolution_input(&mut app, key(KeyCode::Char('k')));
-    assert_eq!(current_conflict_selected(&app), 0);
-}
-
-#[test]
-fn conflict_ours_returns_resolve_action_for_selected() {
-    let mut app = test_app();
-    open_conflict_resolution(
-        &mut app,
-        sample_conflict_files(),
-        "/tmp/repo".into(),
-        1,
-    );
-
-    let action = handle_conflict_resolution_input(&mut app, key(KeyCode::Char('o')));
-
-    match action {
-        Some(Action::ResolveConflict {
-            file,
-            strategy: ConflictStrategy::Ours,
-        }) => assert_eq!(file, "src/b.rs"),
-        other => panic!("expected ResolveConflict(b.rs, Ours), got {other:?}"),
-    }
-}
-
-#[test]
-fn conflict_theirs_returns_resolve_action_for_selected() {
-    let mut app = test_app();
-    open_conflict_resolution(
-        &mut app,
-        sample_conflict_files(),
-        "/tmp/repo".into(),
-        0,
-    );
-
-    let action = handle_conflict_resolution_input(&mut app, key(KeyCode::Char('t')));
-
-    match action {
-        Some(Action::ResolveConflict {
-            file,
-            strategy: ConflictStrategy::Theirs,
-        }) => assert_eq!(file, "src/a.rs"),
-        other => panic!("expected ResolveConflict(a.rs, Theirs), got {other:?}"),
-    }
-}
-
-#[test]
-fn conflict_mark_resolved_returns_resolve_action() {
-    let mut app = test_app();
-    open_conflict_resolution(
-        &mut app,
-        sample_conflict_files(),
-        "/tmp/repo".into(),
-        2,
-    );
-
-    let action = handle_conflict_resolution_input(&mut app, key(KeyCode::Char('m')));
-
-    match action {
-        Some(Action::ResolveConflict {
-            file,
-            strategy: ConflictStrategy::MarkResolved,
-        }) => assert_eq!(file, "src/c.rs"),
-        other => panic!("expected ResolveConflict(c.rs, MarkResolved), got {other:?}"),
-    }
-}
-
-#[test]
-fn conflict_enter_returns_view_diff_action() {
-    let mut app = test_app();
-    open_conflict_resolution(
-        &mut app,
-        sample_conflict_files(),
-        "/tmp/repo".into(),
-        1,
-    );
-
-    let action = handle_conflict_resolution_input(&mut app, key(KeyCode::Enter));
-
-    match action {
-        Some(Action::ViewConflictDiff(file)) => assert_eq!(file, "src/b.rs"),
-        other => panic!("expected ViewConflictDiff(b.rs), got {other:?}"),
-    }
-}
-
-#[test]
-fn conflict_edit_returns_open_editor_with_full_path() {
-    let mut app = test_app();
-    open_conflict_resolution(
-        &mut app,
-        sample_conflict_files(),
-        "/tmp/repo".into(),
-        0,
-    );
-
-    let action = handle_conflict_resolution_input(&mut app, key(KeyCode::Char('e')));
-
-    match action {
-        Some(Action::OpenEditor(path)) => {
-            assert_eq!(path, std::path::PathBuf::from("/tmp/repo/src/a.rs"));
-        }
-        other => panic!("expected OpenEditor(/tmp/repo/src/a.rs), got {other:?}"),
-    }
-}
-
-#[test]
-fn conflict_abort_returns_abort_merge() {
-    let mut app = test_app();
-    open_conflict_resolution(
-        &mut app,
-        sample_conflict_files(),
-        "/tmp/repo".into(),
-        0,
-    );
-
-    // Default `abort` binding is "A" — uppercase parses with SHIFT modifier.
-    let action = handle_conflict_resolution_input(
-        &mut app,
-        key_with_mods(KeyCode::Char('A'), KeyModifiers::SHIFT),
-    );
-
-    assert!(matches!(action, Some(Action::AbortMerge)));
-    // Dialog stays open — caller decides what to do next.
-    assert!(matches!(
-        app.active_dialog,
-        Some(DialogState::ConflictResolution { .. })
-    ));
-}
-
-#[test]
-fn conflict_esc_dismisses_and_clears_diff() {
-    let mut app = test_app();
-    app.diff_content = Some(std::sync::Arc::new(ratatui::text::Text::raw("x")));
-    app.diff_file_path = Some("src/a.rs".into());
-    open_conflict_resolution(
-        &mut app,
-        sample_conflict_files(),
-        "/tmp/repo".into(),
-        0,
-    );
-
-    let action = handle_conflict_resolution_input(&mut app, key(KeyCode::Esc));
-
-    assert!(action.is_none());
-    assert!(app.active_dialog.is_none());
-    assert_eq!(app.mode, AppMode::Normal);
-    assert!(app.diff_content.is_none());
-    assert!(app.diff_file_path.is_none());
-}
-
-#[test]
-fn conflict_exit_alt_capital_x_also_dismisses() {
-    let mut app = test_app();
-    open_conflict_resolution(
-        &mut app,
-        sample_conflict_files(),
-        "/tmp/repo".into(),
-        0,
-    );
-
-    // Default `exit_alt` binding is "X" — uppercase parses with SHIFT modifier.
-    let action = handle_conflict_resolution_input(
-        &mut app,
-        key_with_mods(KeyCode::Char('X'), KeyModifiers::SHIFT),
-    );
-
-    assert!(action.is_none());
-    assert!(app.active_dialog.is_none());
-    assert_eq!(app.mode, AppMode::Normal);
-}
-
-#[test]
-fn conflict_action_on_empty_list_returns_none() {
-    let mut app = test_app();
-    open_conflict_resolution(&mut app, vec![], "/tmp/repo".into(), 0);
-
-    let action = handle_conflict_resolution_input(&mut app, key(KeyCode::Char('o')));
-
-    assert!(action.is_none());
-}
-
-#[test]
-fn conflict_returns_none_when_dialog_not_active() {
-    let mut app = test_app();
-    let action = handle_conflict_resolution_input(&mut app, key(KeyCode::Char('o')));
-    assert!(action.is_none());
-}
 
 // ── EditAgent (step 1: name + provider) ───────────────────────────────────
 //

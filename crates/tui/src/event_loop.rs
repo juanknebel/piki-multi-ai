@@ -19,40 +19,11 @@ const DEBOUNCE: Duration = Duration::from_millis(500);
 const PERIODIC_REFRESH: Duration = Duration::from_secs(3);
 
 fn process_refresh_result(app: &mut App, result: app::RefreshResult) {
-    if let Some(ref sub_dirs) = result.sub_directories {
-        // Project workspace: update sub_directories
-        if let Some(ws) = app.workspaces.get_mut(result.workspace_idx) {
-            ws.sub_directories = sub_dirs.clone();
-            ws.dirty = false;
-            ws.last_refresh = Some(Instant::now());
-        }
-    } else {
-        for file in &result.changed_files {
-            let prefix = format!("{}@", file.path);
-            let keys_to_remove: Vec<String> = app
-                .diff_cache
-                .iter()
-                .filter(|(key, _)| key.starts_with(&prefix))
-                .map(|(key, _)| key.clone())
-                .collect();
-            for key in keys_to_remove {
-                app.diff_cache.pop(&key);
-            }
-        }
-        if let Some(ws) = app.workspaces.get_mut(result.workspace_idx) {
-            ws.changed_files = result.changed_files;
-            ws.ahead_behind = result.ahead_behind;
-            ws.dirty = false;
-            ws.last_refresh = Some(Instant::now());
-        }
-        // Remove selected paths that no longer appear in the file list
-        if result.workspace_idx == app.active_workspace
-            && let Some(ws) = app.workspaces.get(result.workspace_idx)
-        {
-            let live_paths: std::collections::HashSet<&str> =
-                ws.changed_files.iter().map(|f| f.path.as_str()).collect();
-            app.selected_files.retain(|p| live_paths.contains(p.as_str()));
-        }
+    if let Some(ws) = app.workspaces.get_mut(result.workspace_idx) {
+        ws.changed_files = result.changed_files;
+        ws.ahead_behind = result.ahead_behind;
+        ws.dirty = false;
+        ws.last_refresh = Some(Instant::now());
     }
     app.refresh_pending = false;
     app.needs_redraw = true;
@@ -136,11 +107,8 @@ pub(crate) async fn run(
         }
 
         // Initial file status refresh so pre-existing changes show up
-        if ws.info.workspace_type == piki_core::WorkspaceType::Project {
-            ws.refresh_sub_directories().await;
-        } else {
-            let _ = ws.refresh_changed_files().await;
-        }
+        // (harmless no-op for non-git Project workspaces)
+        let _ = ws.refresh_changed_files().await;
 
         app.workspaces.push(ws);
     }
@@ -154,7 +122,12 @@ pub(crate) async fn run(
             .storage
             .ui_prefs
             .as_ref()
-            .and_then(|prefs| prefs.get_preference("last_focused_workspace").ok().flatten())
+            .and_then(|prefs| {
+                prefs
+                    .get_preference("last_focused_workspace")
+                    .ok()
+                    .flatten()
+            })
             .and_then(|saved_path| {
                 app.workspaces
                     .iter()
@@ -218,8 +191,6 @@ pub(crate) async fn run(
                                 }
                             }
                         }
-                        // Clear open diff so it re-renders at new width; LRU handles stale entries
-                        app.diff_content = None;
                         app.footer_cache = None;
                         app.needs_redraw = true;
                     }
@@ -234,19 +205,6 @@ pub(crate) async fn run(
                     process_refresh_result(&mut app, result);
                     while let Ok(result) = app.refresh_rx.try_recv() {
                         process_refresh_result(&mut app, result);
-                    }
-                }
-            }
-
-            entry = app.undo_rx.recv() => {
-                if let Some(entry) = entry {
-                    app.undo_stack.push_back(entry);
-                    while let Ok(entry) = app.undo_rx.try_recv() {
-                        app.undo_stack.push_back(entry);
-                    }
-                    // Cap at 20 entries
-                    while app.undo_stack.len() > 20 {
-                        app.undo_stack.pop_front();
                     }
                 }
             }
@@ -628,40 +586,16 @@ pub(crate) async fn run(
                 if should_refresh && !app.refresh_pending {
                     let path = ws.info.path.clone();
                     let tx = app.refresh_tx.clone();
-                    let is_project = ws.info.workspace_type == piki_core::WorkspaceType::Project;
                     app.refresh_pending = true;
                     tokio::spawn(async move {
-                        if is_project {
-                            // Scan sub-directories instead of git status
-                            let mut dirs = Vec::new();
-                            if let Ok(mut entries) = tokio::fs::read_dir(&path).await {
-                                while let Ok(Some(entry)) = entries.next_entry().await {
-                                    if let Ok(ft) = entry.file_type().await
-                                        && ft.is_dir()
-                                        && let Some(name) = entry.file_name().to_str()
-                                        && !name.starts_with('.')
-                                    {
-                                        dirs.push(name.to_string());
-                                    }
-                                }
-                            }
-                            dirs.sort();
-                            let _ = tx.send(app::RefreshResult {
-                                workspace_idx: idx,
-                                changed_files: Vec::new(),
-                                ahead_behind: None,
-                                sub_directories: Some(dirs),
-                            });
-                        } else {
-                            let files = app::get_changed_files(&path).await.unwrap_or_default();
-                            let ab = app::get_ahead_behind(&path).await;
-                            let _ = tx.send(app::RefreshResult {
-                                workspace_idx: idx,
-                                changed_files: files,
-                                ahead_behind: ab,
-                                sub_directories: None,
-                            });
-                        }
+                        // Non-git dirs (Project workspaces) yield an empty list
+                        let files = app::get_changed_files(&path).await.unwrap_or_default();
+                        let ab = app::get_ahead_behind(&path).await;
+                        let _ = tx.send(app::RefreshResult {
+                            workspace_idx: idx,
+                            changed_files: files,
+                            ahead_behind: ab,
+                        });
                     });
                 }
             }

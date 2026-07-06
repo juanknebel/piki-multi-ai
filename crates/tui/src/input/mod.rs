@@ -22,21 +22,19 @@ use crate::app::{ActivePane, App, AppMode, InputState};
 
 use self::command_palette_input::handle_command_palette_input;
 use self::dialog::{
-    handle_about_input, handle_commit_message_input, handle_confirm_close_tab_input,
-    handle_confirm_delete_input, handle_confirm_merge_input, handle_confirm_quit_input,
-    handle_conflict_resolution_input, handle_dashboard_input, handle_dispatch_agent_input,
-    handle_dispatch_card_move_input, handle_edit_agent_input, handle_edit_agent_role_input,
-    handle_edit_workspace_input,
-    handle_git_log_input,
-    handle_git_stash_input, handle_help_input, handle_import_agents_input, handle_logs_input,
-    handle_manage_agents_input, handle_manage_providers_input, handle_edit_provider_input,
-    handle_create_worktree_input, handle_new_tab_input, handle_new_workspace_input,
-    handle_workspace_info_input,
+    handle_about_input, handle_confirm_close_tab_input,
+    handle_confirm_delete_input, handle_confirm_quit_input,
+    handle_create_worktree_input, handle_dashboard_input,
+    handle_dispatch_agent_input, handle_dispatch_card_move_input, handle_edit_agent_input,
+    handle_edit_agent_role_input, handle_edit_provider_input, handle_edit_workspace_input,
+    handle_help_input, handle_import_agents_input,
+    handle_logs_input, handle_manage_agents_input, handle_manage_providers_input,
+    handle_new_tab_input, handle_new_workspace_input, handle_workspace_info_input,
 };
 use self::editor_input::handle_inline_edit_input;
 use self::fuzzy_input::handle_fuzzy_search_input;
 use self::interaction::{
-    handle_api_interaction, handle_diff_interaction, handle_filelist_interaction,
+    handle_agents_interaction, handle_api_interaction,
     handle_kanban_interaction, handle_markdown_interaction, handle_terminal_interaction,
     handle_workspace_interaction,
 };
@@ -49,7 +47,7 @@ pub(crate) fn handle_paste(app: &mut App, text: &str) {
     }
     // Focused terminal: write to PTY
     if app.active_pane == ActivePane::MainPanel
-        && matches!(app.mode, AppMode::Normal | AppMode::Diff)
+        && app.mode == AppMode::Normal
         && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
         && let Some(tab) = ws.current_tab_mut()
     {
@@ -143,8 +141,6 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         AppMode::NewWorkspace => return handle_new_workspace_input(app, key),
         AppMode::EditWorkspace => return handle_edit_workspace_input(app, key),
         AppMode::CreateWorktree => return handle_create_worktree_input(app, key),
-        AppMode::CommitMessage => return handle_commit_message_input(app, key),
-        AppMode::ConfirmMerge => return handle_confirm_merge_input(app, key),
         AppMode::NewTab => return handle_new_tab_input(app, key),
         AppMode::ConfirmCloseTab => return handle_confirm_close_tab_input(app, key),
         AppMode::ConfirmQuit => return handle_confirm_quit_input(app, key),
@@ -156,9 +152,6 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         }
         AppMode::ConfirmDelete => return handle_confirm_delete_input(app, key),
         AppMode::SubmitReview => return code_review_input::handle_submit_review_input(app, key),
-        AppMode::GitStash => return handle_git_stash_input(app, key),
-        AppMode::GitLog => return handle_git_log_input(app, key),
-        AppMode::ConflictResolution => return handle_conflict_resolution_input(app, key),
         AppMode::DispatchAgent => return handle_dispatch_agent_input(app, key),
         AppMode::ManageAgents => return handle_manage_agents_input(app, key),
         AppMode::EditAgent => return handle_edit_agent_input(app, key),
@@ -168,8 +161,8 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         AppMode::ManageProviders => return handle_manage_providers_input(app, key),
         AppMode::EditProvider => return handle_edit_provider_input(app, key),
         AppMode::ChatPanel => return chat_input::handle_chat_panel_input(app, key),
-        // Normal and Diff modes fall through to navigation/interaction handling
-        AppMode::Normal | AppMode::Diff => {}
+        // Normal mode falls through to the prefix/pane dispatch
+        AppMode::Normal => {}
     }
 
     // Clear status message, toast, and selection on any key
@@ -237,13 +230,6 @@ const APP_ACTIONS: &[&str] = &[
     "workspace_info",
     "clone_workspace",
     "git",
-    "commit",
-    "push",
-    "merge",
-    "stash",
-    "git_log",
-    "conflicts",
-    "undo",
     "help",
     "about",
     "dashboard",
@@ -293,13 +279,6 @@ fn dispatch_app_action(app: &mut App, action: &str) -> Option<Action> {
         "workspace_info" => app_actions::open_workspace_info(app),
         "clone_workspace" => app_actions::open_clone_workspace(app),
         "git" => app_actions::open_git_tab(app),
-        "commit" => app_actions::open_commit_dialog(app),
-        "push" => app_actions::git_push(app),
-        "merge" => app_actions::open_confirm_merge(app),
-        "stash" => app_actions::git_stash_list(app),
-        "git_log" => app_actions::git_log(app),
-        "conflicts" => app_actions::detect_conflicts(app),
-        "undo" => app_actions::undo(app),
         "help" => app_actions::open_help(app),
         "about" => app_actions::open_about(app),
         "dashboard" => app_actions::open_dashboard(app),
@@ -329,8 +308,7 @@ fn dispatch_app_action(app: &mut App, action: &str) -> Option<Action> {
 fn handle_prefix_key(app: &mut App, key: KeyEvent) -> Option<Action> {
     // prefix 1..9 → jump to tab N (not configurable, like tmux)
     if let KeyCode::Char(c @ '1'..='9') = key.code
-        && (key.modifiers.is_empty()
-            || key.modifiers == crossterm::event::KeyModifiers::NONE)
+        && (key.modifiers.is_empty() || key.modifiers == crossterm::event::KeyModifiers::NONE)
     {
         let n = c as usize - '1' as usize;
         if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
@@ -421,9 +399,7 @@ fn handle_term_scroll_key(app: &mut App, key: KeyEvent) -> Option<Action> {
 fn handle_pane_key(app: &mut App, key: KeyEvent) -> Option<Action> {
     match app.active_pane {
         ActivePane::MainPanel => {
-            if app.mode == AppMode::Diff {
-                handle_diff_interaction(app, key)
-            } else if app
+            if app
                 .current_workspace()
                 .and_then(|ws| ws.current_tab())
                 .is_some_and(|tab| tab.api_state.is_some())
@@ -446,6 +422,6 @@ fn handle_pane_key(app: &mut App, key: KeyEvent) -> Option<Action> {
             }
         }
         ActivePane::WorkspaceList => handle_workspace_interaction(app, key),
-        ActivePane::GitStatus => handle_filelist_interaction(app, key),
+        ActivePane::Agents => handle_agents_interaction(app, key),
     }
 }

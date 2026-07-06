@@ -30,19 +30,8 @@ pub(crate) fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
             "C"
         };
         match app.mode {
-            AppMode::Diff => Span::styled(
-                format!(
-                    " DIFF: {} | [{}-g] back | [↑↓] scroll | [n/p] file",
-                    app.diff_file_path.as_deref().unwrap_or("?"),
-                    ctrl,
-                ),
-                Style::default().bg(theme.diff_bg).fg(theme.diff_fg),
-            ),
             AppMode::FuzzySearch => Span::styled(
-                format!(
-                    " SEARCH | type to filter | Enter = diff | {}-e = editor | Esc = close",
-                    ctrl,
-                ),
+                " SEARCH | type to filter | Enter = editor | Esc = close".to_string(),
                 Style::default().bg(theme.navigate_bg).fg(theme.mode_fg),
             ),
             AppMode::InlineEdit => Span::styled(
@@ -80,7 +69,11 @@ fn render_normal_status(frame: &mut Frame, area: Rect, app: &App) {
     // Only show a mode chip while a prefix chord or scroll mode is active
     let label_span = |first: bool| -> Vec<Span> {
         if mode_label.is_empty() {
-            if first { vec![Span::styled(" ", text_style)] } else { vec![] }
+            if first {
+                vec![Span::styled(" ", text_style)]
+            } else {
+                vec![]
+            }
         } else {
             vec![Span::styled(format!(" [{}]", mode_label), text_style)]
         }
@@ -125,10 +118,7 @@ fn render_normal_status(frame: &mut Frame, area: Rect, app: &App) {
         match ws.ahead_behind {
             Some((ahead, behind)) if ahead > 0 && behind > 0 => {
                 left.push(sep.clone());
-                left.push(Span::styled(
-                    format!("↑{} ↓{}", ahead, behind),
-                    text_style,
-                ));
+                left.push(Span::styled(format!("↑{} ↓{}", ahead, behind), text_style));
             }
             Some((ahead, 0)) if ahead > 0 => {
                 left.push(sep.clone());
@@ -142,10 +132,7 @@ fn render_normal_status(frame: &mut Frame, area: Rect, app: &App) {
         }
     }
 
-    let tab_label = ws
-        .current_tab()
-        .map(|t| t.provider.label())
-        .unwrap_or("—");
+    let tab_label = ws.current_tab().map(|t| t.provider.label()).unwrap_or("—");
     left.push(sep.clone());
     left.push(Span::styled(
         format!("{}: {}", tab_label, ws.status_label()),
@@ -165,10 +152,7 @@ fn render_normal_status(frame: &mut Frame, area: Rect, app: &App) {
             }
         }
         left.push(sep.clone());
-        left.push(Span::styled(
-            txt,
-            Style::default().bg(mode_bg).fg(color),
-        ));
+        left.push(Span::styled(txt, Style::default().bg(mode_bg).fg(color)));
     }
 
     // Right section: workspace counter and scroll indicator
@@ -180,10 +164,7 @@ fn render_normal_status(frame: &mut Frame, area: Rect, app: &App) {
     let tab_scroll = ws.current_tab().map(|t| t.term_scroll).unwrap_or(0);
     if tab_scroll > 0 {
         right.push(sep.clone());
-        right.push(Span::styled(
-            format!("SCROLL -{} ", tab_scroll),
-            text_style,
-        ));
+        right.push(Span::styled(format!("SCROLL -{} ", tab_scroll), text_style));
     } else {
         right.push(Span::styled(" ", text_style));
     }
@@ -196,10 +177,7 @@ fn render_normal_status(frame: &mut Frame, area: Rect, app: &App) {
     let mut spans = left;
     if total > left_width + right_width {
         let pad = total - left_width - right_width;
-        spans.push(Span::styled(
-            " ".repeat(pad),
-            Style::default().bg(mode_bg),
-        ));
+        spans.push(Span::styled(" ".repeat(pad), Style::default().bg(mode_bg)));
     } else {
         spans.push(sep);
     }
@@ -256,8 +234,7 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                 ),
                 "select",
             ),
-            (cfg.get_binding("fuzzy", "diff"), "diff"),
-            (cfg.get_binding("fuzzy", "editor"), "editor"),
+            (cfg.get_binding("fuzzy", "open"), "editor"),
             (cfg.get_binding("fuzzy", "inline_edit"), "inline edit"),
             (cfg.get_binding("fuzzy", "markdown"), "markdown"),
             (cfg.get_binding("fuzzy", "mdr"), "mdr"),
@@ -274,15 +251,6 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             ),
             (cfg.get_binding("new_workspace", "create"), "create"),
             (cfg.get_binding("new_workspace", "exit"), "cancel"),
-        ],
-        AppMode::CommitMessage => vec![
-            (cfg.get_binding("commit", "commit"), "commit"),
-            (cfg.get_binding("commit", "exit"), "cancel"),
-        ],
-        AppMode::ConfirmMerge => vec![
-            (cfg.get_binding("merge", "merge"), "merge"),
-            (cfg.get_binding("merge", "rebase"), "rebase"),
-            (cfg.get_binding("merge", "exit"), "cancel"),
         ],
         AppMode::EditWorkspace => vec![
             (
@@ -318,41 +286,6 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             ("enter".to_string(), "submit"),
             ("esc".to_string(), "close"),
             (cfg.format_binding("ctrl-d"), "discard"),
-        ],
-        AppMode::Diff => vec![
-            (
-                format!(
-                    "{}/{}",
-                    cfg.get_binding("diff", "up"),
-                    cfg.get_binding("diff", "down")
-                ),
-                "scroll",
-            ),
-            (
-                format!(
-                    "{}/{}",
-                    cfg.get_binding("diff", "page_up"),
-                    cfg.get_binding("diff", "page_down")
-                ),
-                "page",
-            ),
-            (
-                format!(
-                    "{}/{}",
-                    cfg.get_binding("diff", "scroll_top"),
-                    cfg.get_binding("diff", "scroll_bottom")
-                ),
-                "top/bottom",
-            ),
-            (
-                format!(
-                    "{}/{}",
-                    cfg.get_binding("diff", "next_file"),
-                    cfg.get_binding("diff", "prev_file")
-                ),
-                "next/prev file",
-            ),
-            (cfg.get_binding("diff", "exit"), "close"),
         ],
         AppMode::Logs => vec![
             (
@@ -394,53 +327,6 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             ),
             (cfg.get_binding("dashboard", "select"), "switch"),
             (cfg.get_binding("dashboard", "exit"), "close"),
-        ],
-        AppMode::GitStash => vec![
-            (
-                format!(
-                    "{}/{}",
-                    cfg.get_binding("git_stash", "up"),
-                    cfg.get_binding("git_stash", "down")
-                ),
-                "select",
-            ),
-            (cfg.get_binding("git_stash", "save"), "save"),
-            (cfg.get_binding("git_stash", "pop"), "pop"),
-            (cfg.get_binding("git_stash", "apply"), "apply"),
-            (cfg.get_binding("git_stash", "drop"), "drop"),
-            (cfg.get_binding("git_stash", "show"), "show diff"),
-            (cfg.get_binding("git_stash", "exit"), "close"),
-        ],
-        AppMode::GitLog => vec![
-            (
-                format!(
-                    "{}/{}",
-                    cfg.get_binding("git_log", "up"),
-                    cfg.get_binding("git_log", "down")
-                ),
-                "navigate",
-            ),
-            (cfg.get_binding("git_log", "select"), "view diff"),
-            (cfg.get_binding("git_log", "exit"), "close"),
-        ],
-        AppMode::ConflictResolution => vec![
-            (
-                format!(
-                    "{}/{}",
-                    cfg.get_binding("conflict_resolution", "up"),
-                    cfg.get_binding("conflict_resolution", "down")
-                ),
-                "select",
-            ),
-            (cfg.get_binding("conflict_resolution", "ours"), "ours"),
-            (cfg.get_binding("conflict_resolution", "theirs"), "theirs"),
-            (
-                cfg.get_binding("conflict_resolution", "mark_resolved"),
-                "mark resolved",
-            ),
-            (cfg.get_binding("conflict_resolution", "edit"), "edit"),
-            (cfg.get_binding("conflict_resolution", "abort"), "abort"),
-            (cfg.get_binding("conflict_resolution", "exit"), "close"),
         ],
         AppMode::ConfirmCloseTab => vec![("Y".to_string(), "close"), ("N".to_string(), "cancel")],
         AppMode::ConfirmQuit => vec![("Y".to_string(), "quit"), ("N".to_string(), "cancel")],
@@ -506,49 +392,19 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                     (cfg.get_binding("workspace_list", "delete"), "delete ws"),
                     (cfg.prefix_display(), "prefix"),
                 ]
-            } else if app.active_pane == ActivePane::GitStatus {
-                let is_project = app
-                    .current_workspace()
-                    .is_some_and(|ws| ws.info.workspace_type == piki_core::WorkspaceType::Project);
-                if is_project {
-                    vec![
-                        (
-                            format!(
-                                "{}/{}",
-                                cfg.get_binding("file_list", "up"),
-                                cfg.get_binding("file_list", "down")
-                            ),
-                            "select",
+            } else if app.active_pane == ActivePane::Agents {
+                vec![
+                    (
+                        format!(
+                            "{}/{}",
+                            cfg.get_binding("agents", "up"),
+                            cfg.get_binding("agents", "down")
                         ),
-                        ("enter".to_string(), "open as workspace"),
-                        (cfg.prefix_display(), "prefix"),
-                    ]
-                } else {
-                    let has_sel = app.selection_count() > 0;
-                    let stage_label: &'static str = if has_sel { "stage sel" } else { "stage" };
-                    let unstage_label: &'static str =
-                        if has_sel { "unstage sel" } else { "unstage" };
-                    vec![
-                        (
-                            format!(
-                                "{}/{}",
-                                cfg.get_binding("file_list", "up"),
-                                cfg.get_binding("file_list", "down")
-                            ),
-                            "navigate",
-                        ),
-                        (
-                            cfg.get_binding("file_list", "toggle_select"),
-                            "select",
-                        ),
-                        (cfg.get_binding("file_list", "diff"), "diff"),
-                        (cfg.get_binding("file_list", "stage"), stage_label),
-                        (cfg.get_binding("file_list", "unstage"), unstage_label),
-                        (cfg.get_binding("file_list", "select_all"), "sel all"),
-                        (cfg.get_binding("file_list", "edit_external"), "editor"),
-                        (cfg.prefix_display(), "prefix"),
-                    ]
-                }
+                        "navigate",
+                    ),
+                    (cfg.get_binding("agents", "select"), "jump to agent"),
+                    (cfg.prefix_display(), "prefix"),
+                ]
             } else if app
                 .current_workspace()
                 .and_then(|ws| ws.current_tab())

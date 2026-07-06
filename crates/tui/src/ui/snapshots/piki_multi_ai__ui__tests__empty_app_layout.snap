@@ -1,6 +1,6 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 275
+assertion_line: 260
 expression: content
 ---
 
@@ -15,9 +15,9 @@ expression: content
 │              ││  1. [n] Create your first workspace                          │
 │              ││  2. [Tab] Switch between workspaces                          │
 └──────────────┘│  3. [Enter] Interact with the terminal                       │
-┌ STATUS ──────┐│  4. [?] Full help                                            │
-│  ✓ Working tr││                                                              │
-│              ││                                                              │
+┌ AGENTS ──────┐│  4. [?] Full help                                            │
+│  No agents ru││                                                              │
+│  [C-g c] new ││                                                              │
 │              ││                                                              │
 │              ││                                                              │
 │              ││                                                              │

@@ -49,7 +49,6 @@ struct ThemeToml {
     subtabs: SubtabsToml,
     status_bar: StatusBarToml,
     footer: FooterToml,
-    diff: DiffToml,
     dialog: DialogToml,
     help: HelpToml,
     general: GeneralToml,
@@ -120,8 +119,6 @@ struct SubtabsToml {
 struct StatusBarToml {
     error_bg: Option<String>,
     error_fg: Option<String>,
-    diff_bg: Option<String>,
-    diff_fg: Option<String>,
     /// Background for the [PREFIX]/[SCROLL] chips. Falls back to the
     /// deprecated `interact_bg` for older theme files.
     prefix_bg: Option<String>,
@@ -136,13 +133,6 @@ struct StatusBarToml {
 struct FooterToml {
     key: Option<String>,
     description: Option<String>,
-}
-
-#[derive(Deserialize, Default)]
-#[serde(default)]
-struct DiffToml {
-    border: Option<String>,
-    empty_text: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -241,8 +231,6 @@ pub struct SubtabsTheme {
 pub struct StatusBarTheme {
     pub error_bg: Color,
     pub error_fg: Color,
-    pub diff_bg: Color,
-    pub diff_fg: Color,
     /// Background for the [PREFIX]/[SCROLL] mode chips
     pub prefix_bg: Color,
     pub navigate_bg: Color,
@@ -253,11 +241,6 @@ pub struct StatusBarTheme {
 pub struct FooterTheme {
     pub key: Color,
     pub description: Color,
-}
-
-pub struct DiffTheme {
-    pub border: Color,
-    pub empty_text: Color,
 }
 
 pub struct DialogTheme {
@@ -304,7 +287,6 @@ pub struct Theme {
     pub subtabs: SubtabsTheme,
     pub status_bar: StatusBarTheme,
     pub footer: FooterTheme,
-    pub diff: DiffTheme,
     pub dialog: DialogTheme,
     pub help: HelpTheme,
     pub general: GeneralTheme,
@@ -357,8 +339,6 @@ impl Default for Theme {
             status_bar: StatusBarTheme {
                 error_bg: Color::Red,
                 error_fg: Color::White,
-                diff_bg: Color::DarkGray,
-                diff_fg: Color::White,
                 prefix_bg: Color::Green,
                 navigate_bg: Color::Yellow,
                 mode_fg: Color::Black,
@@ -367,10 +347,6 @@ impl Default for Theme {
             footer: FooterTheme {
                 key: Color::Yellow,
                 description: Color::Gray,
-            },
-            diff: DiffTheme {
-                border: Color::Cyan,
-                empty_text: Color::DarkGray,
             },
             dialog: DialogTheme {
                 new_ws_border: Color::Yellow,
@@ -475,8 +451,6 @@ impl Theme {
             status_bar: StatusBarTheme {
                 error_bg: resolve(&t.status_bar.error_bg, d.status_bar.error_bg),
                 error_fg: resolve(&t.status_bar.error_fg, d.status_bar.error_fg),
-                diff_bg: resolve(&t.status_bar.diff_bg, d.status_bar.diff_bg),
-                diff_fg: resolve(&t.status_bar.diff_fg, d.status_bar.diff_fg),
                 prefix_bg: resolve(
                     &t.status_bar
                         .prefix_bg
@@ -491,10 +465,6 @@ impl Theme {
             footer: FooterTheme {
                 key: resolve(&t.footer.key, d.footer.key),
                 description: resolve(&t.footer.description, d.footer.description),
-            },
-            diff: DiffTheme {
-                border: resolve(&t.diff.border, d.diff.border),
-                empty_text: resolve(&t.diff.empty_text, d.diff.empty_text),
             },
             dialog: DialogTheme {
                 new_ws_border: resolve(&t.dialog.new_ws_border, d.dialog.new_ws_border),

@@ -4,8 +4,8 @@ use ratatui::DefaultTerminal;
 
 use super::Action;
 use crate::app::{self, App, ToastLevel};
-use piki_core::workspace::{FileWatcher, WorkspaceManager};
 use piki_core::WorkspaceType;
+use piki_core::workspace::{FileWatcher, WorkspaceManager};
 
 pub(super) async fn handle(
     app: &mut App,
@@ -45,11 +45,6 @@ pub(super) async fn handle(
                     app.workspaces.push(app::Workspace::from_info(info));
                     let new_idx = app.workspaces.len() - 1;
                     app.switch_workspace(new_idx);
-
-                    // Populate sub-directories for Project workspaces
-                    if ws_type == WorkspaceType::Project {
-                        app.workspaces[new_idx].refresh_sub_directories().await;
-                    }
 
                     // Start file watcher
                     let ws = &mut app.workspaces[new_idx];
@@ -122,8 +117,7 @@ pub(super) async fn handle(
 
                     {
                         let source = app.workspaces[new_idx].source_repo.clone();
-                        let infos: Vec<_> =
-                            app.workspaces.iter().map(|w| w.info.clone()).collect();
+                        let infos: Vec<_> = app.workspaces.iter().map(|w| w.info.clone()).collect();
                         let storage = Arc::clone(&app.storage);
                         tokio::spawn(async move {
                             let _ = storage.workspaces.save_workspaces(&source, &infos);
@@ -175,9 +169,7 @@ pub(super) async fn handle(
                         if let Some(ref mut kp) = src_ws.kanban_provider {
                             if let Ok(board) = kp.load_board() {
                                 for col in &board.columns {
-                                    if let Some(card) =
-                                        col.cards.iter().find(|c| c.id == card_id)
-                                    {
+                                    if let Some(card) = col.cards.iter().find(|c| c.id == card_id) {
                                         let _ = kp.update_card(
                                             &card_id,
                                             &card.title,

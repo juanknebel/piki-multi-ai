@@ -22,7 +22,7 @@ pub(crate) fn focus_left(app: &mut App) -> Option<Action> {
 pub(crate) fn focus_right(app: &mut App) -> Option<Action> {
     if matches!(
         app.active_pane,
-        ActivePane::WorkspaceList | ActivePane::GitStatus
+        ActivePane::WorkspaceList | ActivePane::Agents
     ) {
         app.active_pane = ActivePane::MainPanel;
     }
@@ -32,7 +32,7 @@ pub(crate) fn focus_right(app: &mut App) -> Option<Action> {
 pub(crate) fn focus_down(app: &mut App) -> Option<Action> {
     match app.active_pane {
         ActivePane::WorkspaceList | ActivePane::MainPanel => {
-            app.active_pane = ActivePane::GitStatus;
+            app.active_pane = ActivePane::Agents;
         }
         _ => {}
     }
@@ -41,7 +41,7 @@ pub(crate) fn focus_down(app: &mut App) -> Option<Action> {
 
 pub(crate) fn focus_up(app: &mut App) -> Option<Action> {
     match app.active_pane {
-        ActivePane::GitStatus | ActivePane::MainPanel => {
+        ActivePane::Agents | ActivePane::MainPanel => {
             app.active_pane = ActivePane::WorkspaceList;
         }
         _ => {}
@@ -192,61 +192,11 @@ pub(crate) fn open_delete_workspace(app: &mut App) -> Option<Action> {
     None
 }
 
-pub(crate) fn open_commit_dialog(app: &mut App) -> Option<Action> {
-    if let Some(ws) = app.current_workspace()
-        && ws.info.workspace_type != piki_core::WorkspaceType::Project
-    {
-        app.active_dialog = Some(DialogState::CommitMessage {
-            buffer: String::new(),
-        });
-        app.mode = AppMode::CommitMessage;
-    }
-    None
-}
 
-pub(crate) fn open_confirm_merge(app: &mut App) -> Option<Action> {
-    if let Some(ws) = app.current_workspace()
-        && ws.info.workspace_type != piki_core::WorkspaceType::Project
-    {
-        app.active_dialog = Some(DialogState::ConfirmMerge);
-        app.mode = AppMode::ConfirmMerge;
-    }
-    None
-}
 
-pub(crate) fn git_push(app: &mut App) -> Option<Action> {
-    if let Some(ws) = app.current_workspace()
-        && ws.info.workspace_type != piki_core::WorkspaceType::Project
-    {
-        return Some(Action::GitPush);
-    }
-    None
-}
 
-pub(crate) fn git_stash_list(app: &mut App) -> Option<Action> {
-    if let Some(ws) = app.current_workspace()
-        && ws.info.workspace_type != piki_core::WorkspaceType::Project
-    {
-        return Some(Action::GitStashList);
-    }
-    None
-}
 
-pub(crate) fn git_log(app: &mut App) -> Option<Action> {
-    if app.current_workspace().is_some() {
-        return Some(Action::LoadGitLog);
-    }
-    None
-}
 
-pub(crate) fn detect_conflicts(app: &mut App) -> Option<Action> {
-    if let Some(ws) = app.current_workspace()
-        && ws.info.workspace_type != piki_core::WorkspaceType::Project
-    {
-        return Some(Action::DetectConflicts);
-    }
-    None
-}
 
 pub(crate) fn open_manage_agents(app: &mut App) -> Option<Action> {
     if !app
@@ -283,9 +233,6 @@ pub(crate) fn open_chat_panel(app: &mut App) -> Option<Action> {
     None
 }
 
-pub(crate) fn undo(_app: &mut App) -> Option<Action> {
-    Some(Action::Undo)
-}
 
 // ── Workspaces & tabs ──
 
@@ -482,4 +429,3 @@ pub(crate) fn split_down(app: &mut App) -> Option<Action> {
     app.save_layout_prefs();
     None
 }
-

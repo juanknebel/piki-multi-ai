@@ -10,7 +10,7 @@ use ratatui::text::Text;
 pub use piki_core::git::{get_ahead_behind, get_changed_files};
 pub use piki_core::pty::PtySession;
 pub use piki_core::workspace::FileWatcher;
-pub use piki_core::{AIProvider, ChangedFile, FileStatus, WorkspaceStatus, WorkspaceType};
+pub use piki_core::{AIProvider, ChangedFile, WorkspaceStatus, WorkspaceType};
 
 use crate::dialog_state::DialogState;
 use crate::theme::Theme;
@@ -52,27 +52,11 @@ impl Toast {
 }
 
 /// An undo-able git stage/unstage action
-#[derive(Debug, Clone)]
-pub enum UndoAction {
-    Stage,
-    Unstage,
-}
-
-/// Entry in the undo stack
-#[derive(Debug, Clone)]
-pub struct UndoEntry {
-    pub action: UndoAction,
-    pub workspace_idx: usize,
-    pub file_path: String,
-}
-
 /// Result of an async git refresh for a workspace
 pub struct RefreshResult {
     pub workspace_idx: usize,
     pub changed_files: Vec<ChangedFile>,
     pub ahead_behind: Option<(usize, usize)>,
-    /// Sub-directories for Project workspaces (when set, replaces sub_directories instead of changed_files)
-    pub sub_directories: Option<Vec<String>>,
 }
 
 /// Main application mode
@@ -80,8 +64,6 @@ pub struct RefreshResult {
 pub enum AppMode {
     /// Viewing PTY output of the active workspace
     Normal,
-    /// Viewing a side-by-side diff
-    Diff,
     /// Input dialog for creating a new workspace
     NewWorkspace,
     /// Input dialog for editing a workspace
@@ -96,10 +78,6 @@ pub enum AppMode {
     FuzzySearch,
     /// Inline file editor
     InlineEdit,
-    /// Commit message input dialog
-    CommitMessage,
-    /// Merge confirmation dialog
-    ConfirmMerge,
     /// New tab provider selection dialog
     NewTab,
     /// About overlay
@@ -120,12 +98,6 @@ pub enum AppMode {
     SubmitReview,
     /// Fuzzy workspace switcher overlay
     WorkspaceSwitcher,
-    /// Git log overlay
-    GitLog,
-    /// Git stash overlay
-    GitStash,
-    /// Conflict resolution overlay
-    ConflictResolution,
     /// Dispatch agent dialog
     DispatchAgent,
     /// Manage agent profiles overlay
@@ -150,8 +122,8 @@ pub enum AppMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActivePane {
     WorkspaceList,
-    GitStatus,
-    MainPanel, // Terminal or Diff
+    Agents,
+    MainPanel,
 }
 
 /// Which field is active in the New Workspace dialog
@@ -301,7 +273,6 @@ pub struct Workspace {
     pub status: WorkspaceStatus,
     pub changed_files: Vec<ChangedFile>,
     /// Sub-directories for Project workspaces
-    pub sub_directories: Vec<String>,
     /// Dynamic tabs, each with its own PTY session
     pub tabs: Vec<Tab>,
     /// Index of the currently active tab
@@ -347,7 +318,6 @@ impl Workspace {
             info,
             status: WorkspaceStatus::Idle,
             changed_files: Vec::new(),
-            sub_directories: Vec::new(),
             tabs: Vec::new(),
             active_tab: 0,
             next_tab_id: 0,
@@ -384,9 +354,8 @@ impl Workspace {
         closable: bool,
         provider_cfg: Option<&piki_core::providers::ProviderConfig>,
     ) -> usize {
-        let idle_watcher = matches!(provider, AIProvider::Custom(_)).then(|| {
-            piki_core::idle_watcher::IdleWatcher::from_provider_config(provider_cfg)
-        });
+        let idle_watcher = matches!(provider, AIProvider::Custom(_))
+            .then(|| piki_core::idle_watcher::IdleWatcher::from_provider_config(provider_cfg));
         let tab = Tab {
             id: self.next_tab_id,
             provider,
@@ -453,11 +422,7 @@ impl Workspace {
     }
 
     pub fn file_count(&self) -> usize {
-        if self.info.workspace_type == WorkspaceType::Project {
-            self.sub_directories.len()
-        } else {
-            self.changed_files.len()
-        }
+        self.changed_files.len()
     }
 
     pub fn status_label(&self) -> &str {
@@ -475,12 +440,6 @@ impl Workspace {
         self.ahead_behind = get_ahead_behind(&self.info.path).await;
         self.dirty = false;
         Ok(())
-    }
-
-    /// Refresh the list of immediate sub-directories (for Project workspaces).
-    pub async fn refresh_sub_directories(&mut self) {
-        self.sub_directories = piki_core::workspace::manager::list_subdirs(&self.info.path).await;
-        self.dirty = false;
     }
 }
 
@@ -722,7 +681,6 @@ pub type FooterCache = (
     bool,
     u8,
     u8,
-    usize,
     Vec<(String, &'static str)>,
 );
 
@@ -735,12 +693,8 @@ pub struct App {
     pub workspaces: Vec<Workspace>,
     pub active_workspace: usize,
     pub selected_workspace: usize,
-    pub selected_file: usize,
-    /// Multi-selected file paths in the git status list (empty = no multi-selection)
-    pub selected_files: std::collections::HashSet<String>,
-    pub diff_scroll: u16,
-    pub diff_content: Option<Arc<Text<'static>>>,
-    pub diff_file_path: Option<String>,
+    /// Selected row in the Agents pane (index into `agent_rows()`)
+    pub selected_agent_row: usize,
     /// Active dialog state — None means no dialog is open
     pub active_dialog: Option<DialogState>,
     pub collapsed_groups: std::collections::HashSet<String>,
@@ -802,23 +756,14 @@ pub struct App {
     pub status_rx: tokio::sync::mpsc::UnboundedReceiver<String>,
     /// Whether a background git refresh is in-flight
     pub refresh_pending: bool,
-    /// Channel for receiving completed undo entries from background git tasks
-    pub undo_tx: tokio::sync::mpsc::UnboundedSender<UndoEntry>,
-    pub undo_rx: tokio::sync::mpsc::UnboundedReceiver<UndoEntry>,
-    /// Undo stack (max 20 entries)
-    pub undo_stack: std::collections::VecDeque<UndoEntry>,
     /// Terminal search overlay (None = closed)
     pub term_search: Option<TermSearchState>,
-    /// Last left-click position and time (for double-click detection)
-    pub last_click: Option<(Instant, u16, u16)>,
     /// Layout areas for mouse hit-testing
     pub ws_list_area: Rect,
-    pub file_list_area: Rect,
+    pub agents_area: Rect,
     pub tabs_area: Rect,
     pub subtabs_area: Rect,
     pub main_content_area: Rect,
-    /// Cache for rendered diff output, keyed by file path (LRU eviction)
-    pub diff_cache: lru::LruCache<String, Arc<Text<'static>>>,
     /// Cached footer keys: (mode, input_state, active_pane, has_markdown) → keys
     pub footer_cache: Option<FooterCache>,
     /// Last time inactive workspace PTYs were checked for exit
@@ -906,7 +851,6 @@ impl App {
     ) -> Self {
         let (refresh_tx, refresh_rx) = tokio::sync::mpsc::unbounded_channel::<RefreshResult>();
         let (status_tx, status_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
-        let (undo_tx, undo_rx) = tokio::sync::mpsc::unbounded_channel::<UndoEntry>();
         let (chat_token_tx, chat_token_rx) =
             tokio::sync::mpsc::unbounded_channel::<piki_api_client::ChatStreamEvent>();
         let (agent_event_tx, agent_event_rx) =
@@ -922,11 +866,7 @@ impl App {
             workspaces: Vec::new(),
             active_workspace: 0,
             selected_workspace: 0,
-            selected_file: 0,
-            selected_files: std::collections::HashSet::new(),
-            diff_scroll: 0,
-            diff_content: None,
-            diff_file_path: None,
+            selected_agent_row: 0,
             active_dialog: None,
             collapsed_groups: std::collections::HashSet::new(),
             selected_sidebar_row: 0,
@@ -962,17 +902,12 @@ impl App {
             status_tx,
             status_rx,
             refresh_pending: false,
-            undo_tx,
-            undo_rx,
-            undo_stack: std::collections::VecDeque::new(),
             term_search: None,
-            last_click: None,
             ws_list_area: Rect::default(),
-            file_list_area: Rect::default(),
+            agents_area: Rect::default(),
             tabs_area: Rect::default(),
             subtabs_area: Rect::default(),
             main_content_area: Rect::default(),
-            diff_cache: lru::LruCache::new(std::num::NonZeroUsize::new(32).unwrap()),
             footer_cache: None,
             last_inactive_pty_check: Instant::now(),
             gh_available: None,
@@ -995,13 +930,11 @@ impl App {
         if let Some(ref ui_prefs) = self.storage.ui_prefs {
             let _ = ui_prefs.set_preference("sidebar_pct", &self.sidebar_pct.to_string());
             let _ = ui_prefs.set_preference("left_split_pct", &self.left_split_pct.to_string());
-            let _ = ui_prefs.set_preference("code_review_split_pct", &self.code_review_split_pct.to_string());
+            let _ = ui_prefs.set_preference(
+                "code_review_split_pct",
+                &self.code_review_split_pct.to_string(),
+            );
         }
-    }
-
-    /// Insert a diff into the cache (LRU eviction handles size limit automatically).
-    pub fn insert_diff_cache(&mut self, key: String, value: Arc<Text<'static>>) {
-        self.diff_cache.put(key, value);
     }
 
     /// Build the list of AI providers from providers.toml.
@@ -1094,12 +1027,8 @@ impl App {
             }
             self.active_workspace = index;
             self.selected_workspace = index;
-            self.selected_file = 0;
-            self.selected_files.clear();
             self.sync_sidebar_row(index);
             self.mode = AppMode::Normal;
-            self.diff_content = None;
-            self.diff_file_path = None;
             self.selection = None;
             // Trigger immediate background refresh for the new workspace
             self.workspaces[index].dirty = true;
@@ -1114,65 +1043,34 @@ impl App {
             // Persist the active workspace so the next startup focuses it.
             // Path is the canonical key (unique + stable across restarts).
             if let Some(prefs) = self.storage.ui_prefs.as_ref() {
-                let path_str = self.workspaces[index].info.path.to_string_lossy().to_string();
+                let path_str = self.workspaces[index]
+                    .info
+                    .path
+                    .to_string_lossy()
+                    .to_string();
                 let _ = prefs.set_preference("last_focused_workspace", &path_str);
             }
         }
     }
 
-    pub fn next_file(&mut self) {
-        if let Some(ws) = self.current_workspace() {
-            let count = ws.file_count();
-            if count > 0 {
-                self.selected_file = (self.selected_file + 1) % count;
-            }
-        }
-    }
-
-    pub fn prev_file(&mut self) {
-        if let Some(ws) = self.current_workspace() {
-            let count = ws.file_count();
-            if count > 0 {
-                self.selected_file = (self.selected_file + count - 1) % count;
-            }
-        }
-    }
-
-    /// Toggle multi-selection of the file at the current cursor position.
-    pub fn toggle_file_selection(&mut self) {
-        if let Some(ws) = self.current_workspace()
-            && let Some(file) = ws.changed_files.get(self.selected_file)
-        {
-            let path = file.path.clone();
-            if !self.selected_files.remove(&path) {
-                self.selected_files.insert(path);
-            }
-        }
-    }
-
-    /// Select all files in the current workspace.
-    pub fn select_all_files(&mut self) {
-        if let Some(ws) = self.current_workspace() {
-            self.selected_files = ws.changed_files.iter().map(|f| f.path.clone()).collect();
-        }
-    }
-
-    /// Deselect all files.
-    pub fn deselect_all_files(&mut self) {
-        self.selected_files.clear();
-    }
-
-    /// Returns true if the file at the given path is multi-selected.
-    pub fn is_file_selected(&self, path: &str) -> bool {
-        self.selected_files.contains(path)
-    }
-
-    /// Number of multi-selected files.
-    pub fn selection_count(&self) -> usize {
-        self.selected_files.len()
-    }
-
     /// Build the visual sidebar item list, grouping workspaces by their group field.
+    /// Rows of the Agents pane: every (workspace, tab) pair running an AI
+    /// agent (Custom provider), across ALL workspaces, in sidebar order.
+    /// Labels and status are derived live at render time.
+    pub fn agent_rows(&self) -> Vec<(usize, usize)> {
+        self.workspaces
+            .iter()
+            .enumerate()
+            .flat_map(|(wi, ws)| {
+                ws.tabs
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, t)| matches!(t.provider, AIProvider::Custom(_)))
+                    .map(move |(ti, _)| (wi, ti))
+            })
+            .collect()
+    }
+
     pub fn sidebar_items(&self) -> Vec<SidebarItem> {
         let mut items = Vec::new();
         let mut groups: std::collections::BTreeMap<String, Vec<usize>> =
@@ -1262,26 +1160,6 @@ impl App {
                 return;
             }
         }
-    }
-
-    /// Open the conflict resolution overlay for the active workspace.
-    /// Open conflict resolution overlay with detected conflicts.
-    /// Called from Action::DetectConflicts after async git status scan.
-    pub fn open_conflict_resolution_with(
-        &mut self,
-        conflicts: Vec<crate::dialog_state::ConflictFile>,
-        repo_path: std::path::PathBuf,
-    ) {
-        if conflicts.is_empty() {
-            self.set_toast("No conflicts detected", ToastLevel::Info);
-            return;
-        }
-        self.active_dialog = Some(DialogState::ConflictResolution {
-            files: conflicts,
-            selected: 0,
-            repo_path,
-        });
-        self.mode = AppMode::ConflictResolution;
     }
 
     /// Open the fuzzy file search overlay by scanning all files in the active worktree.
@@ -1392,7 +1270,10 @@ mod tests {
 
     #[test]
     fn test_initial_state() {
-        let app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         assert_eq!(app.mode, AppMode::Normal);
         assert_eq!(app.active_pane, ActivePane::WorkspaceList);
         assert_eq!(app.input_state, InputState::Normal);
@@ -1402,7 +1283,10 @@ mod tests {
 
     #[test]
     fn test_normal_to_help_and_back() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         crate::input::handle_key_event(&mut app, ctrl('g'));
         let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('?')));
         assert!(action.is_none());
@@ -1416,7 +1300,10 @@ mod tests {
 
     #[test]
     fn test_normal_to_about_and_back() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         crate::input::handle_key_event(&mut app, ctrl('g'));
         let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('a')));
         assert!(action.is_none());
@@ -1429,7 +1316,10 @@ mod tests {
 
     #[test]
     fn test_normal_to_confirm_quit() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         crate::input::handle_key_event(&mut app, ctrl('g'));
         let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('q')));
         assert!(action.is_none());
@@ -1438,7 +1328,10 @@ mod tests {
 
     #[test]
     fn test_confirm_quit_cancel() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         app.mode = AppMode::ConfirmQuit;
         app.active_dialog = Some(DialogState::ConfirmQuit);
         let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('n')));
@@ -1449,7 +1342,10 @@ mod tests {
 
     #[test]
     fn test_confirm_quit_accept() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         app.mode = AppMode::ConfirmQuit;
         app.active_dialog = Some(DialogState::ConfirmQuit);
         let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('y')));
@@ -1459,7 +1355,10 @@ mod tests {
 
     #[test]
     fn test_normal_to_new_workspace() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         crate::input::handle_key_event(&mut app, ctrl('g'));
         let action = crate::input::handle_key_event(&mut app, shift('N'));
         assert!(action.is_none());
@@ -1468,7 +1367,10 @@ mod tests {
 
     #[test]
     fn test_new_workspace_cancel() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         // Opening new workspace sets both mode and dialog
         crate::input::handle_key_event(&mut app, ctrl('g'));
         crate::input::handle_key_event(&mut app, shift('N'));
@@ -1482,7 +1384,10 @@ mod tests {
 
     #[test]
     fn test_normal_to_new_tab_requires_workspace() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         // No workspaces → prefix c should NOT enter NewTab mode
         crate::input::handle_key_event(&mut app, ctrl('g'));
         let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('c')));
@@ -1492,7 +1397,10 @@ mod tests {
 
     #[test]
     fn test_new_workspace_tab_cycles_fields() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         // Use the normal entry point to set up dialog state
         crate::input::handle_key_event(&mut app, ctrl('g'));
         crate::input::handle_key_event(&mut app, shift('N'));
@@ -1532,7 +1440,10 @@ mod tests {
 
     #[test]
     fn test_new_workspace_char_appends_to_active_buffer() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         // Use normal entry point to create dialog
         crate::input::handle_key_event(&mut app, ctrl('g'));
         crate::input::handle_key_event(&mut app, shift('N'));
@@ -1558,7 +1469,10 @@ mod tests {
 
     #[test]
     fn test_guard_no_edit_without_workspaces() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         // 'e' (edit workspace) should do nothing without workspaces
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('e')));
         assert_eq!(app.mode, AppMode::Normal);
@@ -1566,21 +1480,30 @@ mod tests {
 
     #[test]
     fn test_guard_no_delete_without_workspaces() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('d')));
         assert_eq!(app.mode, AppMode::Normal);
     }
 
     #[test]
     fn test_guard_no_info_without_workspaces() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('i')));
         assert_eq!(app.mode, AppMode::Normal);
     }
 
     #[test]
     fn test_prefix_state_machine() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         assert_eq!(app.input_state, InputState::Normal);
 
         // Prefix key arms the chord
@@ -1609,7 +1532,10 @@ mod tests {
 
     #[test]
     fn test_prefix_is_one_shot() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         // prefix ? opens Help and resets the state
         crate::input::handle_key_event(&mut app, ctrl('g'));
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('?')));
@@ -1628,7 +1554,10 @@ mod tests {
 
     #[test]
     fn test_help_scroll() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         // Open help through the prefix chord
         crate::input::handle_key_event(&mut app, ctrl('g'));
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('?')));
@@ -1657,13 +1586,16 @@ mod tests {
 
     #[test]
     fn test_pane_navigation() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         assert_eq!(app.active_pane, ActivePane::WorkspaceList);
 
         // prefix j → down → GitStatus
         crate::input::handle_key_event(&mut app, ctrl('g'));
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('j')));
-        assert_eq!(app.active_pane, ActivePane::GitStatus);
+        assert_eq!(app.active_pane, ActivePane::Agents);
 
         // prefix l → right → MainPanel
         crate::input::handle_key_event(&mut app, ctrl('g'));
@@ -1683,7 +1615,10 @@ mod tests {
 
     #[test]
     fn test_toast_set_and_expire() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         app.set_toast("hello", ToastLevel::Info);
         assert!(app.toast.is_some());
         assert_eq!(app.toast.as_ref().unwrap().message, "hello");
@@ -1704,7 +1639,10 @@ mod tests {
 
     #[test]
     fn test_commit_requires_workspace() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         crate::input::handle_key_event(&mut app, ctrl('g'));
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('C')));
         assert_eq!(app.mode, AppMode::Normal); // No workspace → no commit dialog
@@ -1739,7 +1677,10 @@ mod tests {
 
     #[test]
     fn test_command_palette_open_and_dismiss() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         crate::input::handle_key_event(&mut app, ctrl('g'));
         crate::input::handle_key_event(&mut app, key(KeyCode::Char(':')));
         assert_eq!(app.mode, AppMode::CommandPalette);
@@ -1752,7 +1693,10 @@ mod tests {
 
     #[test]
     fn test_workspace_switcher_open_and_dismiss() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         add_test_workspace(&mut app);
 
         crate::input::handle_key_event(&mut app, ctrl('g'));
@@ -1767,7 +1711,10 @@ mod tests {
 
     #[test]
     fn test_workspace_switcher_no_workspace() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         // No workspaces → prefix w should not open switcher
         crate::input::handle_key_event(&mut app, ctrl('g'));
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('w')));
@@ -1779,7 +1726,10 @@ mod tests {
 
     #[test]
     fn test_toggle_previous_workspace_round_trip() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         add_test_workspace(&mut app); // index 0
         add_test_workspace(&mut app); // index 1
         app.switch_workspace(1);
@@ -1801,7 +1751,10 @@ mod tests {
 
     #[test]
     fn test_toggle_previous_workspace_none() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         add_test_workspace(&mut app);
         assert!(app.previous_workspace.is_none());
 
@@ -1812,23 +1765,12 @@ mod tests {
         assert!(app.previous_workspace.is_none());
     }
 
-    #[test]
-    fn test_prefix_works_in_diff_mode() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
-        add_test_workspace(&mut app);
-        app.mode = AppMode::Diff;
-        app.active_pane = ActivePane::MainPanel;
-
-        crate::input::handle_key_event(&mut app, ctrl('g'));
-        assert_eq!(app.input_state, InputState::PrefixPending);
-        crate::input::handle_key_event(&mut app, key(KeyCode::Char('?')));
-        assert_eq!(app.mode, AppMode::Help);
-        assert_eq!(app.input_state, InputState::Normal);
-    }
-
-    #[test]
+        #[test]
     fn test_scroll_mode_requires_pty() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         add_test_workspace(&mut app); // test workspace has no PTY tabs
 
         crate::input::handle_key_event(&mut app, ctrl('g'));
@@ -1839,7 +1781,10 @@ mod tests {
 
     #[test]
     fn test_scroll_mode_exit_keys() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         add_test_workspace(&mut app);
         // Force the state (entering requires a PTY, which tests can't spawn)
         app.input_state = InputState::TermScroll;
@@ -1859,7 +1804,10 @@ mod tests {
 
     #[test]
     fn test_paste_cancels_pending_prefix() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         crate::input::handle_key_event(&mut app, ctrl('g'));
         assert_eq!(app.input_state, InputState::PrefixPending);
 
@@ -1869,7 +1817,10 @@ mod tests {
 
     #[test]
     fn test_direct_app_binding_override() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         add_test_workspace(&mut app);
         // Promote 'help' to a direct Alt+H chord via config override
         app.config.keybindings.app.insert(
@@ -1887,7 +1838,10 @@ mod tests {
 
     #[test]
     fn test_prefix_g_without_workspace_toasts() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         crate::input::handle_key_event(&mut app, ctrl('g'));
         let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('g')));
         assert!(action.is_none());
@@ -1897,7 +1851,10 @@ mod tests {
 
     #[test]
     fn test_prefix_g_spawns_git_tab() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         add_test_workspace(&mut app);
         crate::input::handle_key_event(&mut app, ctrl('g'));
         let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('g')));
@@ -1910,7 +1867,10 @@ mod tests {
 
     #[test]
     fn test_prefix_g_respawns_dead_git_tab() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         let idx = add_test_workspace(&mut app);
         // A Git tab with no live PTY counts as dead → close + respawn
         app.workspaces[idx].add_tab(piki_core::AIProvider::Git, true, None);
@@ -1925,56 +1885,79 @@ mod tests {
         assert_eq!(app.workspaces[idx].tabs.len(), tabs_before - 1);
     }
 
-    // ── Local stage/unstage keys on the git status pane ──
+    // ── Agents pane ──
 
-    #[test]
-    fn test_stage_local_key_on_git_status() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
-        let idx = add_test_workspace(&mut app);
-        app.workspaces[idx].changed_files.push(ChangedFile {
-            path: "foo.rs".to_string(),
-            status: FileStatus::Modified,
-        });
-        app.active_pane = ActivePane::GitStatus;
-
-        let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('s')));
-        assert!(matches!(action, Some(crate::action::Action::GitStage(0))));
+    fn add_agent_tab(app: &mut App, ws_idx: usize, name: &str) {
+        app.workspaces[ws_idx].add_tab(AIProvider::Custom(name.to_string()), true, None);
     }
 
     #[test]
-    fn test_unstage_local_key_on_git_status() {
+    fn test_agent_rows_spans_all_workspaces() {
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
-        let idx = add_test_workspace(&mut app);
-        app.workspaces[idx].changed_files.push(ChangedFile {
-            path: "foo.rs".to_string(),
-            status: FileStatus::Staged,
-        });
-        app.active_pane = ActivePane::GitStatus;
+        let a = add_test_workspace(&mut app);
+        let b = add_test_workspace(&mut app);
+        add_agent_tab(&mut app, a, "Claude");
+        add_agent_tab(&mut app, b, "Codex");
+        add_agent_tab(&mut app, b, "Claude");
+        // Shell/Git tabs are not agents
+        app.workspaces[a].add_tab(AIProvider::Shell, true, None);
+        app.workspaces[b].add_tab(AIProvider::Git, true, None);
 
-        let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('u')));
-        assert!(matches!(action, Some(crate::action::Action::GitUnstage(0))));
+        let rows = app.agent_rows();
+        assert_eq!(rows.len(), 3);
+        assert!(rows.iter().all(|&(wi, ti)| {
+            matches!(
+                app.workspaces[wi].tabs[ti].provider,
+                AIProvider::Custom(_)
+            )
+        }));
     }
 
     #[test]
-    fn test_stage_key_on_main_panel_goes_to_pane() {
+    fn test_agents_pane_navigation_and_jump() {
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
-        let idx = add_test_workspace(&mut app);
-        app.workspaces[idx].changed_files.push(ChangedFile {
-            path: "foo.rs".to_string(),
-            status: FileStatus::Modified,
-        });
-        app.active_pane = ActivePane::MainPanel;
+        let a = add_test_workspace(&mut app);
+        let b = add_test_workspace(&mut app);
+        add_agent_tab(&mut app, a, "Claude");
+        add_agent_tab(&mut app, b, "Codex");
+        app.active_pane = ActivePane::Agents;
+        app.active_workspace = a;
 
-        // 's' on the main panel is terminal input, not a git action
-        let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('s')));
+        // j moves the selection down
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('j')));
+        assert_eq!(app.selected_agent_row, 1);
+        // Enter jumps to workspace b's agent tab and focuses the main panel
+        crate::input::handle_key_event(&mut app, key(KeyCode::Enter));
+        assert_eq!(app.active_workspace, b);
+        assert_eq!(app.active_pane, ActivePane::MainPanel);
+        let ws = &app.workspaces[b];
+        assert!(matches!(
+            ws.tabs[ws.active_tab].provider,
+            AIProvider::Custom(_)
+        ));
+    }
+
+    #[test]
+    fn test_agents_pane_empty_is_noop() {
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        add_test_workspace(&mut app);
+        app.active_pane = ActivePane::Agents;
+
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('j')));
+        assert_eq!(app.selected_agent_row, 0);
+        let action = crate::input::handle_key_event(&mut app, key(KeyCode::Enter));
         assert!(action.is_none());
+        assert_eq!(app.mode, AppMode::Normal);
     }
 
     // ── Symmetric pane navigation tests ──
 
     #[test]
     fn test_pane_nav_main_panel_h_to_workspace_list() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         app.active_pane = ActivePane::MainPanel;
         crate::input::handle_key_event(&mut app, ctrl('g'));
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('h')));
@@ -1983,16 +1966,22 @@ mod tests {
 
     #[test]
     fn test_pane_nav_main_panel_j_to_git_status() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         app.active_pane = ActivePane::MainPanel;
         crate::input::handle_key_event(&mut app, ctrl('g'));
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('j')));
-        assert_eq!(app.active_pane, ActivePane::GitStatus);
+        assert_eq!(app.active_pane, ActivePane::Agents);
     }
 
     #[test]
     fn test_pane_nav_main_panel_k_to_workspace_list() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         app.active_pane = ActivePane::MainPanel;
         crate::input::handle_key_event(&mut app, ctrl('g'));
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('k')));
@@ -2003,7 +1992,10 @@ mod tests {
 
     #[test]
     fn test_workspace_enter_focuses_main_panel() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         add_test_workspace(&mut app); // index 0
         add_test_workspace(&mut app); // index 1
         app.active_pane = ActivePane::WorkspaceList;
@@ -2020,7 +2012,10 @@ mod tests {
 
     #[test]
     fn switch_workspace_clears_has_idle_notification() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         let a = add_test_workspace(&mut app);
         let b = add_test_workspace(&mut app);
         app.active_workspace = a;
@@ -2037,7 +2032,10 @@ mod tests {
         // Edge case: re-entering the active workspace acknowledges any
         // notifications that fired while it was visible (e.g. the active
         // tab went idle while the user was in another pane).
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         let a = add_test_workspace(&mut app);
         app.active_workspace = a;
         app.workspaces[a].has_idle_notification = true;
@@ -2046,5 +2044,4 @@ mod tests {
 
         assert!(!app.workspaces[a].has_idle_notification);
     }
-
 }

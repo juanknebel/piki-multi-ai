@@ -1,7 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::action::Action;
-use crate::app::{ActivePane, App, AppMode, DialogField};
+use crate::app::{ActivePane, App, AppMode};
 use crate::clipboard;
 use crate::config::has_ctrl;
 use crate::dialog_state::{DialogState, EditWorkspaceField};
@@ -51,9 +51,14 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
                 let priority = edit.priority;
                 let assignee = edit.assignee.clone();
                 let project = edit.project.clone();
-                if let Err(e) =
-                    kanban_provider.update_card(&card_id, &title, &description, priority, &assignee, &project)
-                {
+                if let Err(e) = kanban_provider.update_card(
+                    &card_id,
+                    &title,
+                    &description,
+                    priority,
+                    &assignee,
+                    &project,
+                ) {
                     kanban_app.banner = Some(format!("Save failed: {}", e));
                 } else {
                     match kanban_provider.load_board() {
@@ -209,7 +214,9 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
                         .map(|(name, _)| name.clone())
                         .collect();
                     kanban_app.project_filter = selected;
-                    kanban_app.board.apply_project_filter(&kanban_app.project_filter);
+                    kanban_app
+                        .board
+                        .apply_project_filter(&kanban_app.project_filter);
                     kanban_app.clamp();
                 }
             }
@@ -235,7 +242,9 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
                 )
             });
         let source_ws = app.active_workspace;
-        if let Some((card_id, card_title, card_description, card_priority, card_project)) = card_data {
+        if let Some((card_id, card_title, card_description, card_priority, card_project)) =
+            card_data
+        {
             // Load & snapshot configured agents for this project
             if let Some(ref storage) = app.storage.agent_profiles
                 && let Some(ws) = app.current_workspace()
@@ -377,8 +386,7 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
                 kanban_app.banner = Some(format!("Sorted by priority {}", label));
             }
             flow_tui::Action::Search => {
-                kanban_app.search_state =
-                    Some(flow_tui::app::SearchState::new());
+                kanban_app.search_state = Some(flow_tui::app::SearchState::new());
             }
             flow_tui::Action::ProjectFilter => {
                 let mut all_projects = match kanban_provider.load_board() {
@@ -403,12 +411,11 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
                                 || kanban_app.project_filter.contains(p)
                         })
                         .collect();
-                    kanban_app.project_filter_state =
-                        Some(flow_tui::app::ProjectFilterState {
-                            projects: all_projects,
-                            selected,
-                            cursor: 0,
-                        });
+                    kanban_app.project_filter_state = Some(flow_tui::app::ProjectFilterState {
+                        projects: all_projects,
+                        selected,
+                        cursor: 0,
+                    });
                 }
             }
             _ => {
@@ -474,60 +481,60 @@ fn search_terminal(app: &mut App) {
 /// the prefix key can be typed into the query.
 pub(super) fn handle_term_search_key(app: &mut App, key: KeyEvent) -> Option<Action> {
     match key.code {
-            KeyCode::Esc => {
-                app.term_search = None;
-            }
-            KeyCode::Enter => {
-                if let Some(ref mut search) = app.term_search
-                    && !search.matches.is_empty()
+        KeyCode::Esc => {
+            app.term_search = None;
+        }
+        KeyCode::Enter => {
+            if let Some(ref mut search) = app.term_search
+                && !search.matches.is_empty()
+            {
+                if key
+                    .modifiers
+                    .contains(crossterm::event::KeyModifiers::SHIFT)
                 {
-                    if key
-                        .modifiers
-                        .contains(crossterm::event::KeyModifiers::SHIFT)
-                    {
-                        // Shift+Enter → previous match
-                        search.current_match = if search.current_match == 0 {
-                            search.matches.len() - 1
-                        } else {
-                            search.current_match - 1
-                        };
+                    // Shift+Enter → previous match
+                    search.current_match = if search.current_match == 0 {
+                        search.matches.len() - 1
                     } else {
-                        // Enter → next match
-                        search.current_match = (search.current_match + 1) % search.matches.len();
-                    }
+                        search.current_match - 1
+                    };
+                } else {
+                    // Enter → next match
+                    search.current_match = (search.current_match + 1) % search.matches.len();
                 }
             }
-            KeyCode::Char(c) => {
-                if let Some(ref mut search) = app.term_search {
-                    search.query.insert(
-                        search
-                            .query
-                            .char_indices()
-                            .nth(search.cursor)
-                            .map(|(i, _)| i)
-                            .unwrap_or(search.query.len()),
-                        c,
-                    );
-                    search.cursor += 1;
-                }
-                search_terminal(app);
-            }
-            KeyCode::Backspace => {
-                if let Some(ref mut search) = app.term_search
-                    && search.cursor > 0
-                {
-                    search.cursor -= 1;
-                    let byte_pos = search
+        }
+        KeyCode::Char(c) => {
+            if let Some(ref mut search) = app.term_search {
+                search.query.insert(
+                    search
                         .query
                         .char_indices()
                         .nth(search.cursor)
                         .map(|(i, _)| i)
-                        .unwrap_or(search.query.len());
-                    search.query.remove(byte_pos);
-                }
-                search_terminal(app);
+                        .unwrap_or(search.query.len()),
+                    c,
+                );
+                search.cursor += 1;
             }
-            _ => {}
+            search_terminal(app);
+        }
+        KeyCode::Backspace => {
+            if let Some(ref mut search) = app.term_search
+                && search.cursor > 0
+            {
+                search.cursor -= 1;
+                let byte_pos = search
+                    .query
+                    .char_indices()
+                    .nth(search.cursor)
+                    .map(|(i, _)| i)
+                    .unwrap_or(search.query.len());
+                search.query.remove(byte_pos);
+            }
+            search_terminal(app);
+        }
+        _ => {}
     }
     None
 }
@@ -611,51 +618,6 @@ pub(super) fn handle_markdown_interaction(app: &mut App, key: KeyEvent) -> Optio
     None
 }
 
-pub(super) fn handle_diff_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    if app.config.matches_diff(key, "exit") {
-        app.diff_content = None;
-        app.diff_file_path = None;
-        // Return to the overlay we came from, if any
-        if matches!(
-            app.active_dialog,
-            Some(DialogState::ConflictResolution { .. })
-                | Some(DialogState::GitLog { .. })
-                | Some(DialogState::GitStash { .. })
-        ) {
-            app.mode = match &app.active_dialog {
-                Some(DialogState::ConflictResolution { .. }) => AppMode::ConflictResolution,
-                Some(DialogState::GitLog { .. }) => AppMode::GitLog,
-                Some(DialogState::GitStash { .. }) => AppMode::GitStash,
-                _ => AppMode::Normal,
-            };
-        } else {
-            app.mode = AppMode::Normal;
-            app.active_pane = ActivePane::GitStatus;
-        }
-        return None;
-    }
-
-    if app.config.matches_diff(key, "down") || app.config.matches_diff(key, "down_alt") {
-        app.diff_scroll = app.diff_scroll.saturating_add(1);
-    } else if app.config.matches_diff(key, "up") || app.config.matches_diff(key, "up_alt") {
-        app.diff_scroll = app.diff_scroll.saturating_sub(1);
-    } else if app.config.matches_diff(key, "page_down") {
-        app.diff_scroll = app.diff_scroll.saturating_add(20);
-    } else if app.config.matches_diff(key, "page_up") {
-        app.diff_scroll = app.diff_scroll.saturating_sub(20);
-    } else if app.config.matches_diff(key, "scroll_top") {
-        app.diff_scroll = 0;
-    } else if app.config.matches_diff(key, "scroll_bottom") {
-        app.diff_scroll = u16::MAX;
-    } else if app.config.matches_diff(key, "next_file") {
-        app.next_file();
-        return Some(Action::OpenDiff(app.selected_file));
-    } else if app.config.matches_diff(key, "prev_file") {
-        app.prev_file();
-        return Some(Action::OpenDiff(app.selected_file));
-    }
-    None
-}
 
 pub(super) fn handle_workspace_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
     if app.config.matches_workspace_list(key, "down")
@@ -1035,9 +997,7 @@ pub(super) fn handle_api_interaction(app: &mut App, key: KeyEvent) -> Option<Act
     }
 
     // Ctrl+H (Cmd+H on macOS): open API history overlay
-    if key.code == KeyCode::Char('h')
-        && has_ctrl(key.modifiers, app.config.platform)
-    {
+    if key.code == KeyCode::Char('h') && has_ctrl(key.modifiers, app.config.platform) {
         if let Some(ref api_storage) = app.storage.api_history {
             let repo = app
                 .workspaces
@@ -1062,25 +1022,19 @@ pub(super) fn handle_api_interaction(app: &mut App, key: KeyEvent) -> Option<Act
     }
 
     // Ctrl+S (Cmd+S on macOS): send the request block at cursor
-    if key.code == KeyCode::Char('s')
-        && has_ctrl(key.modifiers, app.config.platform)
-    {
+    if key.code == KeyCode::Char('s') && has_ctrl(key.modifiers, app.config.platform) {
         let block_text = extract_block_at_cursor(&api.editor);
         return Some(Action::SendApiRequest(block_text));
     }
 
     // Ctrl+J (Cmd+J on macOS): scroll response down
-    if key.code == KeyCode::Char('j')
-        && has_ctrl(key.modifiers, app.config.platform)
-    {
+    if key.code == KeyCode::Char('j') && has_ctrl(key.modifiers, app.config.platform) {
         api.response_scroll = api.response_scroll.saturating_add(1);
         return None;
     }
 
     // Ctrl+K (Cmd+K on macOS): scroll response up
-    if key.code == KeyCode::Char('k')
-        && has_ctrl(key.modifiers, app.config.platform)
-    {
+    if key.code == KeyCode::Char('k') && has_ctrl(key.modifiers, app.config.platform) {
         api.response_scroll = api.response_scroll.saturating_sub(1);
         return None;
     }
@@ -1114,109 +1068,36 @@ pub(super) fn handle_api_interaction(app: &mut App, key: KeyEvent) -> Option<Act
     None
 }
 
-pub(super) fn handle_filelist_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    // Project workspaces: navigate sub-directories, Enter opens NewWorkspace dialog
-    let is_project = app
-        .current_workspace()
-        .is_some_and(|ws| ws.info.workspace_type == piki_core::WorkspaceType::Project);
-
-    if is_project {
-        if app.config.matches_file_list(key, "down")
-            || app.config.matches_file_list(key, "down_alt")
-        {
-            app.next_file();
-        } else if app.config.matches_file_list(key, "up")
-            || app.config.matches_file_list(key, "up_alt")
-        {
-            app.prev_file();
-        } else if key.code == KeyCode::Enter
-            && let Some(ws) = app.current_workspace()
-            && let Some(dir_name) = ws.sub_directories.get(app.selected_file)
-        {
-            let full_dir = ws.path.join(dir_name).display().to_string();
-            let prompt = ws.prompt.clone();
-            let kanban = ws.kanban_path.clone().unwrap_or_default();
-            let group = ws.info.group.clone().unwrap_or_default();
-            let dest = app.paths.repos_dir().to_string_lossy().to_string();
-            let dest_cursor = dest.chars().count();
-            app.active_dialog = Some(DialogState::NewWorkspace {
-                name: String::new(),
-                name_cursor: 0,
-                dir_cursor: full_dir.chars().count(),
-                dir: full_dir,
-                destination: dest,
-                destination_cursor: dest_cursor,
-                desc: String::new(),
-                desc_cursor: 0,
-                prompt_cursor: prompt.chars().count(),
-                prompt,
-                kanban_cursor: kanban.chars().count(),
-                kanban,
-                group_cursor: group.chars().count(),
-                group,
-                source: crate::app::NewWorkspaceSource::Local,
-                active_field: DialogField::Source,
-            });
-            app.mode = AppMode::NewWorkspace;
-        }
+pub(super) fn handle_agents_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let rows = app.agent_rows();
+    if rows.is_empty() {
         return None;
     }
-
-    if app.config.matches_file_list(key, "down") || app.config.matches_file_list(key, "down_alt") {
-        app.next_file();
-    } else if app.config.matches_file_list(key, "up") || app.config.matches_file_list(key, "up_alt")
-    {
-        app.prev_file();
-    } else if app.config.matches_file_list(key, "diff") {
-        if let Some(ws) = app.current_workspace()
-            && !ws.changed_files.is_empty()
-        {
-            return Some(Action::OpenDiff(app.selected_file));
-        }
-    } else if app.config.matches_file_list(key, "edit_external") {
-        if let Some(ws) = app.current_workspace()
-            && let Some(file) = ws.changed_files.get(app.selected_file)
-        {
-            let full_path = ws.path.join(&file.path);
-            return Some(Action::OpenEditor(full_path));
-        }
-    } else if app.config.matches_file_list(key, "edit_inline") {
-        if let Some(ws) = app.current_workspace()
-            && let Some(file) = ws.changed_files.get(app.selected_file)
-        {
-            let full_path = ws.path.join(&file.path);
-            app.open_inline_editor(full_path);
-        }
-    } else if app.config.matches_file_list(key, "toggle_select") {
-        app.toggle_file_selection();
-        app.next_file();
-    } else if app.config.matches_file_list(key, "select_all") {
-        if let Some(ws) = app.current_workspace() {
-            if app.selected_files.len() == ws.changed_files.len() {
-                app.deselect_all_files();
-            } else {
-                app.select_all_files();
-            }
-        }
-    } else if app.config.matches_file_list(key, "stage") {
-        if let Some(ws) = app.current_workspace()
-            && !ws.changed_files.is_empty()
-        {
-            if app.selected_files.is_empty() {
-                return Some(Action::GitStage(app.selected_file));
-            } else {
-                return Some(Action::GitStageSelected);
-            }
-        }
-    } else if app.config.matches_file_list(key, "unstage")
-        && let Some(ws) = app.current_workspace()
-        && !ws.changed_files.is_empty()
-    {
-        if app.selected_files.is_empty() {
-            return Some(Action::GitUnstage(app.selected_file));
-        } else {
-            return Some(Action::GitUnstageSelected);
-        }
+    // Clamp: tabs can close asynchronously between renders
+    if app.selected_agent_row >= rows.len() {
+        app.selected_agent_row = rows.len() - 1;
+    }
+    if app.config.matches_agents(key, "down") || app.config.matches_agents(key, "down_alt") {
+        crate::input::list_nav::move_selection(&mut app.selected_agent_row, rows.len(), 1, false);
+    } else if app.config.matches_agents(key, "up") || app.config.matches_agents(key, "up_alt") {
+        crate::input::list_nav::move_selection(&mut app.selected_agent_row, rows.len(), -1, false);
+    } else if app.config.matches_agents(key, "select") {
+        jump_to_agent(app, rows[app.selected_agent_row]);
     }
     None
+}
+
+/// Focus the given (workspace, tab) pair from the Agents pane.
+pub(super) fn jump_to_agent(app: &mut App, (ws_idx, tab_idx): (usize, usize)) {
+    // Defensive: a mouse jump could arrive while in terminal scroll mode
+    app.input_state = crate::app::InputState::Normal;
+    app.switch_workspace(ws_idx);
+    // After switch_workspace, which resets the previous tab's scroll
+    if let Some(ws) = app.workspaces.get_mut(ws_idx)
+        && tab_idx < ws.tabs.len()
+    {
+        ws.active_tab = tab_idx;
+        ws.tabs[tab_idx].term_scroll = 0;
+    }
+    app.active_pane = ActivePane::MainPanel;
 }

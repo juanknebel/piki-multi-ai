@@ -1,10 +1,10 @@
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph};
 
-use crate::app::{ActivePane, App, FileStatus, SidebarItem};
+use crate::app::{ActivePane, App, SidebarItem};
 use piki_core::WorkspaceType;
 
 use super::layout::pane_border_style;
@@ -69,7 +69,10 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
     if visible_height > 0 {
         // Sum heights up to and including selected row
         let mut height_to_selected: usize = 0;
-        for i in 0..=app.selected_sidebar_row.min(sidebar_items.len().saturating_sub(1)) {
+        for i in 0..=app
+            .selected_sidebar_row
+            .min(sidebar_items.len().saturating_sub(1))
+        {
             height_to_selected += sidebar_item_height(&sidebar_items, i);
             if i == app.selected_sidebar_row {
                 break;
@@ -124,10 +127,7 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                         .add_modifier(Modifier::BOLD);
                     let line = Line::from(vec![
                         Span::styled(format!(" {} ", arrow), header_style),
-                        Span::styled(
-                            format!("{} ({})", name.to_uppercase(), count),
-                            header_style,
-                        ),
+                        Span::styled(format!("{} ({})", name.to_uppercase(), count), header_style),
                     ]);
                     let style = if is_selected {
                         Style::default().bg(theme.selected_bg)
@@ -178,11 +178,7 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                         ));
                     }
                     let line1 = Line::from(line1_spans);
-                    let count_label = if ws.info.workspace_type == WorkspaceType::Project {
-                        format!("{} services", ws.file_count())
-                    } else {
-                        format!("{} files", ws.file_count())
-                    };
+                    let count_label = format!("{} files", ws.file_count());
                     let line2 = Line::from(vec![
                         Span::raw("   "),
                         Span::styled(count_label, Style::default().fg(detail_color)),
@@ -252,218 +248,83 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
     );
 }
 
-pub(super) fn render_file_list(frame: &mut Frame, area: Rect, app: &App) {
-    let is_active = app.active_pane == ActivePane::GitStatus;
-    let border_style = pane_border_style(app, ActivePane::GitStatus);
+/// Bottom-left pane: active AI agents across ALL workspaces.
+/// One row per (workspace, tab) running a Custom provider; Enter/click jumps
+/// to that workspace+tab. Status comes from the OSC 777 channel when present.
+pub(super) fn render_agents_pane(frame: &mut Frame, area: Rect, app: &App) {
+    let is_active = app.active_pane == ActivePane::Agents;
+    let border_style = pane_border_style(app, ActivePane::Agents);
     let theme = &app.theme.file_list;
 
-    let ws = app.current_workspace();
-    let is_project = ws
-        .is_some_and(|w| w.info.workspace_type == piki_core::WorkspaceType::Project);
-    let is_local_origin =
-        ws.is_some_and(|w| matches!(w.info.origin, piki_core::WorkspaceOrigin::Local));
-
-    if is_project {
-        render_project_file_list(frame, area, app, is_active, border_style, theme);
-    } else if is_local_origin {
-        render_local_origin_placeholder(frame, area, border_style, theme);
-    } else {
-        render_git_file_list(frame, area, app, is_active, border_style, theme);
-    }
-}
-
-fn render_local_origin_placeholder(
-    frame: &mut Frame,
-    area: Rect,
-    border_style: Style,
-    theme: &crate::theme::FileListTheme,
-) {
     let block = Block::default()
-        .title(" STATUS ")
-        .title_style(border_style)
-        .borders(Borders::ALL)
-        .border_style(border_style);
-    let text = Paragraph::new("  Source control unavailable for local-folder workspaces")
-        .style(Style::default().fg(theme.empty_text))
-        .block(block);
-    frame.render_widget(text, area);
-}
-
-fn render_project_file_list(
-    frame: &mut Frame,
-    area: Rect,
-    app: &App,
-    is_active: bool,
-    border_style: Style,
-    theme: &crate::theme::FileListTheme,
-) {
-    let block = Block::default()
-        .title(" SERVICES ")
+        .title(" AGENTS ")
         .title_style(border_style)
         .borders(Borders::ALL)
         .border_style(border_style);
 
-    let dirs = app
-        .current_workspace()
-        .map(|ws| &ws.sub_directories[..])
-        .unwrap_or(&[]);
-
-    if dirs.is_empty() {
-        let text = Paragraph::new("  No services found")
+    let rows = app.agent_rows();
+    if rows.is_empty() {
+        let hint = format!(
+            "  No agents running\n  [{}] new agent tab",
+            app.config.get_binding("app", "new_tab")
+        );
+        let text = Paragraph::new(hint)
             .style(Style::default().fg(theme.empty_text))
             .block(block);
         frame.render_widget(text, area);
         return;
     }
 
+    let selected = app.selected_agent_row.min(rows.len() - 1);
     let visible_height = area.height.saturating_sub(2) as usize;
-    let scroll_offset = if visible_height > 0 && app.selected_file >= visible_height {
-        app.selected_file - visible_height + 1
+    let scroll_offset = if selected >= visible_height {
+        selected + 1 - visible_height
     } else {
         0
     };
 
-    let items: Vec<ListItem> = dirs
+    let items: Vec<ListItem> = rows
         .iter()
-        .enumerate()
         .skip(scroll_offset)
         .take(visible_height)
-        .map(|(i, dir_name)| {
-            let line = Line::from(vec![
-                Span::styled("  📂 ", Style::default().fg(theme.file_path)),
-                Span::styled(dir_name.as_str(), Style::default().fg(theme.file_path)),
-            ]);
-            let style = if i == app.selected_file && is_active {
+        .enumerate()
+        .map(|(vis_idx, &(wi, ti))| {
+            let row_idx = vis_idx + scroll_offset;
+            let ws = &app.workspaces[wi];
+            let tab = &ws.tabs[ti];
+
+            let (glyph, status_label, status_color) = match tab.cli_agent_snapshot() {
+                Some((status, _)) => crate::ui::cli_agent_status_view(status),
+                None => crate::ui::agent_tab_indicator(tab),
+            };
+
+            let row_bg = if is_active && row_idx == selected {
                 Style::default().bg(theme.selected_bg)
             } else {
                 Style::default()
             };
-            ListItem::new(line).style(style)
-        })
-        .collect();
-
-    let list = List::new(items).block(block);
-    frame.render_widget(list, area);
-    super::scrollbar::render_vertical(
-        frame,
-        area,
-        scroll_offset,
-        dirs.len(),
-        visible_height,
-        app.theme.general.scrollbar_thumb,
-    );
-}
-
-fn render_git_file_list(
-    frame: &mut Frame,
-    area: Rect,
-    app: &App,
-    is_active: bool,
-    border_style: Style,
-    theme: &crate::theme::FileListTheme,
-) {
-    let ahead_title = app
-        .current_workspace()
-        .and_then(|ws| ws.ahead_behind)
-        .and_then(|(ahead, behind)| {
-            if ahead > 0 && behind > 0 {
-                Some(format!(" ↑{} ↓{} ", ahead, behind))
-            } else if ahead > 0 {
-                Some(format!(" ↑{} to push ", ahead))
-            } else if behind > 0 {
-                Some(format!(" ↓{} behind ", behind))
-            } else {
-                None
+            let mut spans = vec![
+                Span::styled(format!(" {glyph} "), row_bg.fg(status_color)),
+                Span::styled(ws.name.clone(), row_bg.fg(theme.file_path)),
+                Span::styled(" · ", row_bg.fg(theme.empty_text)),
+                Span::styled(tab.provider.label().to_string(), row_bg.fg(theme.file_path)),
+                Span::styled(format!(" {status_label}"), row_bg.fg(status_color)),
+            ];
+            if ws.has_idle_notification {
+                spans.push(Span::styled(" ●", row_bg.fg(ratatui::style::Color::Yellow)));
             }
-        });
-
-    let sel_count = app.selection_count();
-    let title = if sel_count > 0 {
-        format!(" STATUS ({} selected) ", sel_count)
-    } else {
-        " STATUS ".to_string()
-    };
-    let mut block = Block::default()
-        .title(title)
-        .title_style(border_style)
-        .borders(Borders::ALL)
-        .border_style(border_style);
-
-    if let Some(ref title) = ahead_title {
-        block = block.title_bottom(Line::from(Span::styled(
-            title.as_str(),
-            Style::default().fg(theme.modified),
-        )));
-    }
-
-    let files = app
-        .current_workspace()
-        .map(|ws| &ws.changed_files[..])
-        .unwrap_or(&[]);
-
-    if files.is_empty() {
-        let text = Paragraph::new(Line::from(vec![
-            Span::styled("  ✓ ", Style::default().fg(Color::Green)),
-            Span::styled(
-                "Working tree clean",
-                Style::default().fg(theme.empty_text),
-            ),
-        ]))
-        .block(block);
-        frame.render_widget(text, area);
-        return;
-    }
-
-    let visible_height = area.height.saturating_sub(2) as usize;
-    let scroll_offset = if visible_height > 0 && app.selected_file >= visible_height {
-        app.selected_file - visible_height + 1
-    } else {
-        0
-    };
-
-    let items: Vec<ListItem> = files
-        .iter()
-        .enumerate()
-        .skip(scroll_offset)
-        .take(visible_height)
-        .map(|(i, f)| {
-            let (label, color) = match f.status {
-                FileStatus::Modified => ("M", theme.modified),
-                FileStatus::Added => ("A", theme.added),
-                FileStatus::Deleted => ("D", theme.deleted),
-                FileStatus::Renamed => ("R", theme.renamed),
-                FileStatus::Untracked => ("?", theme.untracked),
-                FileStatus::Conflicted => ("C", theme.conflicted),
-                FileStatus::Staged => ("S", theme.staged),
-                FileStatus::StagedModified => ("SM", theme.staged_modified),
-            };
-            let is_multi_selected = app.is_file_selected(&f.path);
-            let select_marker = if is_multi_selected { ">" } else { " " };
-            let line = Line::from(vec![
-                Span::styled(
-                    format!(" {}{} ", select_marker, label),
-                    Style::default().fg(color),
-                ),
-                Span::styled(&f.path, Style::default().fg(theme.file_path)),
-            ]);
-            let style = if i == app.selected_file && is_active {
-                Style::default().bg(theme.selected_bg)
-            } else if is_multi_selected {
-                Style::default().bg(theme.multi_select_bg)
-            } else {
-                Style::default()
-            };
-            ListItem::new(line).style(style)
+            ListItem::new(Line::from(spans))
         })
         .collect();
 
     let list = List::new(items).block(block);
     frame.render_widget(list, area);
+
     super::scrollbar::render_vertical(
         frame,
         area,
         scroll_offset,
-        files.len(),
+        rows.len(),
         visible_height,
         app.theme.general.scrollbar_thumb,
     );
