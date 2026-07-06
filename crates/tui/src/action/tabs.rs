@@ -88,9 +88,11 @@ pub(super) async fn handle(
                     ws.kanban_provider = Some(kanban_provider);
                 }
 
-                // Singleton guard: Kanban and Api tabs must not be duplicated
-                if matches!(provider, AIProvider::Kanban | AIProvider::Api)
-                    && let Some(idx) = ws.tabs.iter().position(|t| t.provider == provider)
+                // Singleton guard: Kanban, Api and Git tabs must not be duplicated
+                if matches!(
+                    provider,
+                    AIProvider::Kanban | AIProvider::Api | AIProvider::Git
+                ) && let Some(idx) = ws.tabs.iter().position(|t| t.provider == provider)
                 {
                     ws.active_tab = idx;
                     return Ok(());

@@ -2144,6 +2144,17 @@ fn new_tab_tools_key_3_spawns_api() {
 }
 
 #[test]
+fn new_tab_tools_key_4_spawns_git() {
+    let mut app = test_app();
+    open_new_tab_tools(&mut app);
+
+    let action = handle_new_tab_input(&mut app, key(KeyCode::Char('4')));
+
+    assert!(matches!(action, Some(Action::SpawnTab(AIProvider::Git))));
+    assert!(app.active_dialog.is_none());
+}
+
+#[test]
 fn new_tab_tools_esc_returns_to_main() {
     let mut app = test_app();
     open_new_tab_tools(&mut app);

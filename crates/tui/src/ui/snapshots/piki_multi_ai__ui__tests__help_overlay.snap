@@ -1,6 +1,6 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 192
+assertion_line: 206
 expression: content
 ---
             ┌ Help ───────────────────────────────────────────────┐
@@ -21,6 +21,7 @@ expression: content
             │    C-g e         Edit workspace                     │
             │    C-g i         Workspace info                     │
             │    C-g R         Create worktree (GitHub-only)      │
+            │    C-g g         Git (lazygit tab)                  │
             │    C-g C         Commit                             │
             │    C-g P         Push                               │
             │    C-g M         Merge/Rebase                       │
@@ -41,5 +42,4 @@ expression: content
             │    C-g q         Quit                               │
             │    C-g C-g       Send C-g to terminal               │
             │    Esc           Cancel pending prefix              │
-            │                                                     │
-            └────────────────────────────────────── [1/147 ↑k/j↓] ┘
+            └────────────────────────────────────── [1/148 ↑k/j↓] ┘

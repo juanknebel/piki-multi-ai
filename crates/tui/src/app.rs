@@ -1883,6 +1883,48 @@ mod tests {
         assert_eq!(app.input_state, InputState::Normal);
     }
 
+    // ── prefix g: open-or-focus the lazygit tab ──
+
+    #[test]
+    fn test_prefix_g_without_workspace_toasts() {
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        crate::input::handle_key_event(&mut app, ctrl('g'));
+        let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('g')));
+        assert!(action.is_none());
+        assert!(app.toast.is_some());
+        assert_eq!(app.input_state, InputState::Normal);
+    }
+
+    #[test]
+    fn test_prefix_g_spawns_git_tab() {
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        add_test_workspace(&mut app);
+        crate::input::handle_key_event(&mut app, ctrl('g'));
+        let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('g')));
+        assert!(matches!(
+            action,
+            Some(crate::action::Action::SpawnTab(piki_core::AIProvider::Git))
+        ));
+        assert_eq!(app.active_pane, ActivePane::MainPanel);
+    }
+
+    #[test]
+    fn test_prefix_g_respawns_dead_git_tab() {
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let idx = add_test_workspace(&mut app);
+        // A Git tab with no live PTY counts as dead → close + respawn
+        app.workspaces[idx].add_tab(piki_core::AIProvider::Git, true, None);
+        let tabs_before = app.workspaces[idx].tabs.len();
+
+        crate::input::handle_key_event(&mut app, ctrl('g'));
+        let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('g')));
+        assert!(matches!(
+            action,
+            Some(crate::action::Action::SpawnTab(piki_core::AIProvider::Git))
+        ));
+        assert_eq!(app.workspaces[idx].tabs.len(), tabs_before - 1);
+    }
+
     // ── Local stage/unstage keys on the git status pane ──
 
     #[test]

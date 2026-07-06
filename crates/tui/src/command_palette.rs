@@ -81,6 +81,7 @@ fn all_commands() -> Vec<PaletteCommand> {
             "workspace_info"
         ),
         // Git
+        cmd!("git", "Git (lazygit)", "Git", "git"),
         cmd!("commit", "Commit", "Git", "commit"),
         cmd!("merge", "Merge", "Git", "merge"),
         cmd!("push", "Push", "Git", "push"),

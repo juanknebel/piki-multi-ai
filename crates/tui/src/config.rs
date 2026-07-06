@@ -229,6 +229,7 @@ fn default_app() -> HashMap<String, BindingValue> {
     m.insert("clone_workspace".to_string(), BindingValue::one("prefix-R"));
 
     // Git
+    m.insert("git".to_string(), BindingValue::one("prefix-g"));
     m.insert("commit".to_string(), BindingValue::one("prefix-C"));
     m.insert("push".to_string(), BindingValue::one("prefix-P"));
     m.insert("merge".to_string(), BindingValue::one("prefix-M"));

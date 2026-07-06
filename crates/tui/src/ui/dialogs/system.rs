@@ -90,6 +90,7 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
             "    {:<13} Create worktree (GitHub-only)",
             cfg.get_binding("app", "clone_workspace")
         ),
+        format!("    {:<13} Git (lazygit tab)", cfg.get_binding("app", "git")),
         format!("    {:<13} Commit", cfg.get_binding("app", "commit")),
         format!("    {:<13} Push", cfg.get_binding("app", "push")),
         format!("    {:<13} Merge/Rebase", cfg.get_binding("app", "merge")),
@@ -822,12 +823,13 @@ pub(crate) fn render_new_tab_dialog(frame: &mut Frame, area: Rect, app: &App) {
             frame.render_widget(text, popup);
         }
         NewTabMenu::Tools => {
-            let popup = super::clear_popup(frame, area, 40, 9);
+            let popup = super::clear_popup(frame, area, 40, 10);
             let lines = vec![
                 Line::from(""),
                 Line::from("  [1] Kanban Board"),
                 Line::from("  [2] Code Review"),
                 Line::from("  [3] API Explorer"),
+                Line::from("  [4] Git (lazygit)"),
                 Line::from(""),
                 Line::from("  [Esc] Back"),
             ];

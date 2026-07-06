@@ -308,7 +308,7 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                     (cfg.get_binding("new_tab", "exit"), "back"),
                 ],
                 crate::dialog_state::NewTabMenu::Tools => vec![
-                    ("1-3".to_string(), "select"),
+                    ("1-4".to_string(), "select"),
                     (cfg.get_binding("new_tab", "exit"), "back"),
                 ],
             }
