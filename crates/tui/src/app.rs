@@ -1812,6 +1812,77 @@ mod tests {
         assert!(app.previous_workspace.is_none());
     }
 
+    #[test]
+    fn test_prefix_works_in_diff_mode() {
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        add_test_workspace(&mut app);
+        app.mode = AppMode::Diff;
+        app.active_pane = ActivePane::MainPanel;
+
+        crate::input::handle_key_event(&mut app, ctrl('g'));
+        assert_eq!(app.input_state, InputState::PrefixPending);
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('?')));
+        assert_eq!(app.mode, AppMode::Help);
+        assert_eq!(app.input_state, InputState::Normal);
+    }
+
+    #[test]
+    fn test_scroll_mode_requires_pty() {
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        add_test_workspace(&mut app); // test workspace has no PTY tabs
+
+        crate::input::handle_key_event(&mut app, ctrl('g'));
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('[')));
+        assert_eq!(app.input_state, InputState::Normal);
+        assert!(app.toast.is_some());
+    }
+
+    #[test]
+    fn test_scroll_mode_exit_keys() {
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        add_test_workspace(&mut app);
+        // Force the state (entering requires a PTY, which tests can't spawn)
+        app.input_state = InputState::TermScroll;
+
+        crate::input::handle_key_event(&mut app, key(KeyCode::Esc));
+        assert_eq!(app.input_state, InputState::Normal);
+
+        app.input_state = InputState::TermScroll;
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('q')));
+        assert_eq!(app.input_state, InputState::Normal);
+
+        // The prefix key inside scroll mode exits and arms the prefix
+        app.input_state = InputState::TermScroll;
+        crate::input::handle_key_event(&mut app, ctrl('g'));
+        assert_eq!(app.input_state, InputState::PrefixPending);
+    }
+
+    #[test]
+    fn test_paste_cancels_pending_prefix() {
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        crate::input::handle_key_event(&mut app, ctrl('g'));
+        assert_eq!(app.input_state, InputState::PrefixPending);
+
+        crate::input::handle_paste(&mut app, "hello");
+        assert_eq!(app.input_state, InputState::Normal);
+    }
+
+    #[test]
+    fn test_direct_app_binding_override() {
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        add_test_workspace(&mut app);
+        // Promote 'help' to a direct Alt+H chord via config override
+        app.config.keybindings.app.insert(
+            "help".to_string(),
+            crate::config::BindingValue::one("alt-h"),
+        );
+
+        let alt_h = KeyEvent::new(KeyCode::Char('h'), KeyModifiers::ALT);
+        crate::input::handle_key_event(&mut app, alt_h);
+        assert_eq!(app.mode, AppMode::Help);
+        assert_eq!(app.input_state, InputState::Normal);
+    }
+
     // ── Local stage/unstage keys on the git status pane ──
 
     #[test]

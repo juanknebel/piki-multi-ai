@@ -1,0 +1,6 @@
+---
+source: crates/tui/src/ui/mod.rs
+assertion_line: 109
+expression: content
+---
+ [PREFIX] │ No active workspace

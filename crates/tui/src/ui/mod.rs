@@ -96,6 +96,20 @@ mod tests {
     }
 
     #[test]
+    fn test_render_status_bar_prefix_pending() {
+        let mut terminal = test_terminal(80, 1);
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        app.input_state = crate::app::InputState::PrefixPending;
+        terminal
+            .draw(|frame| {
+                super::statusbar::render_status_bar(frame, frame.area(), &app);
+            })
+            .unwrap();
+        let content = buffer_to_snapshot(terminal.backend().buffer());
+        insta::assert_snapshot!("status_bar_prefix_pending", content);
+    }
+
+    #[test]
     fn test_render_footer_from_keys_single_line() {
         let mut terminal = test_terminal(80, 1);
         let theme = Theme::default();
