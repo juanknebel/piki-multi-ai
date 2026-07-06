@@ -60,6 +60,9 @@ struct ThemeToml {
 #[derive(Deserialize, Default)]
 #[serde(default)]
 struct BorderToml {
+    /// Focused-pane border color. Falls back to the deprecated
+    /// `active_interact` (then `active_navigate`) for older theme files.
+    active: Option<String>,
     active_interact: Option<String>,
     active_navigate: Option<String>,
     inactive: Option<String>,
@@ -119,6 +122,9 @@ struct StatusBarToml {
     error_fg: Option<String>,
     diff_bg: Option<String>,
     diff_fg: Option<String>,
+    /// Background for the [PREFIX]/[SCROLL] chips. Falls back to the
+    /// deprecated `interact_bg` for older theme files.
+    prefix_bg: Option<String>,
     interact_bg: Option<String>,
     navigate_bg: Option<String>,
     mode_fg: Option<String>,
@@ -188,8 +194,8 @@ struct SelectionToml {
 // ── Resolved Theme (Color values) ──
 
 pub struct BorderTheme {
-    pub active_interact: Color,
-    pub active_navigate: Color,
+    /// Border color of the focused pane
+    pub active: Color,
     pub inactive: Color,
 }
 
@@ -237,7 +243,8 @@ pub struct StatusBarTheme {
     pub error_fg: Color,
     pub diff_bg: Color,
     pub diff_fg: Color,
-    pub interact_bg: Color,
+    /// Background for the [PREFIX]/[SCROLL] mode chips
+    pub prefix_bg: Color,
     pub navigate_bg: Color,
     pub mode_fg: Color,
     pub separator_fg: Color,
@@ -309,8 +316,7 @@ impl Default for Theme {
     fn default() -> Self {
         Self {
             border: BorderTheme {
-                active_interact: Color::Green,
-                active_navigate: Color::Yellow,
+                active: Color::Green,
                 inactive: Color::DarkGray,
             },
             workspace_list: WorkspaceListTheme {
@@ -353,7 +359,7 @@ impl Default for Theme {
                 error_fg: Color::White,
                 diff_bg: Color::DarkGray,
                 diff_fg: Color::White,
-                interact_bg: Color::Green,
+                prefix_bg: Color::Green,
                 navigate_bg: Color::Yellow,
                 mode_fg: Color::Black,
                 separator_fg: Color::DarkGray,
@@ -406,8 +412,14 @@ impl Theme {
         let d = Self::default();
         Self {
             border: BorderTheme {
-                active_interact: resolve(&t.border.active_interact, d.border.active_interact),
-                active_navigate: resolve(&t.border.active_navigate, d.border.active_navigate),
+                active: resolve(
+                    &t.border
+                        .active
+                        .clone()
+                        .or_else(|| t.border.active_interact.clone())
+                        .or_else(|| t.border.active_navigate.clone()),
+                    d.border.active,
+                ),
                 inactive: resolve(&t.border.inactive, d.border.inactive),
             },
             workspace_list: WorkspaceListTheme {
@@ -465,7 +477,13 @@ impl Theme {
                 error_fg: resolve(&t.status_bar.error_fg, d.status_bar.error_fg),
                 diff_bg: resolve(&t.status_bar.diff_bg, d.status_bar.diff_bg),
                 diff_fg: resolve(&t.status_bar.diff_fg, d.status_bar.diff_fg),
-                interact_bg: resolve(&t.status_bar.interact_bg, d.status_bar.interact_bg),
+                prefix_bg: resolve(
+                    &t.status_bar
+                        .prefix_bg
+                        .clone()
+                        .or_else(|| t.status_bar.interact_bg.clone()),
+                    d.status_bar.prefix_bg,
+                ),
                 navigate_bg: resolve(&t.status_bar.navigate_bg, d.status_bar.navigate_bg),
                 mode_fg: resolve(&t.status_bar.mode_fg, d.status_bar.mode_fg),
                 separator_fg: resolve(&t.status_bar.separator_fg, d.status_bar.separator_fg),
@@ -575,8 +593,7 @@ mod tests {
     #[test]
     fn test_default_theme_matches_hardcoded() {
         let t = Theme::default();
-        assert_eq!(t.border.active_interact, Color::Green);
-        assert_eq!(t.border.active_navigate, Color::Yellow);
+        assert_eq!(t.border.active, Color::Green);
         assert_eq!(t.border.inactive, Color::DarkGray);
         assert_eq!(t.file_list.modified, Color::Yellow);
         assert_eq!(t.subtabs.active, Color::Cyan);
@@ -584,13 +601,19 @@ mod tests {
 
     #[test]
     fn test_partial_toml_override() {
+        // The deprecated active_interact key still feeds border.active
         let toml_str = "[border]\nactive_interact = \"#ff0000\"\n";
         let t: ThemeToml = toml::from_str(toml_str).unwrap();
         let theme = Theme::from_toml(t);
-        assert_eq!(theme.border.active_interact, Color::Rgb(255, 0, 0));
+        assert_eq!(theme.border.active, Color::Rgb(255, 0, 0));
         // Unset fields keep defaults
-        assert_eq!(theme.border.active_navigate, Color::Yellow);
         assert_eq!(theme.border.inactive, Color::DarkGray);
+
+        // The new key wins over the deprecated one
+        let toml_str = "[border]\nactive = \"#00ff00\"\nactive_interact = \"#ff0000\"\n";
+        let t: ThemeToml = toml::from_str(toml_str).unwrap();
+        let theme = Theme::from_toml(t);
+        assert_eq!(theme.border.active, Color::Rgb(0, 255, 0));
     }
 
     #[test]
@@ -598,7 +621,7 @@ mod tests {
         let t: ThemeToml = toml::from_str("").unwrap();
         let theme = Theme::from_toml(t);
         let default = Theme::default();
-        assert_eq!(theme.border.active_interact, default.border.active_interact);
+        assert_eq!(theme.border.active, default.border.active);
         assert_eq!(theme.border.inactive, default.border.inactive);
         assert_eq!(theme.file_list.modified, default.file_list.modified);
         assert_eq!(theme.footer.key, default.footer.key);
@@ -622,7 +645,7 @@ mod tests {
         // Overridden
         assert_eq!(theme.file_list.modified, Color::Rgb(0xaa, 0xbb, 0xcc));
         // Other sections untouched
-        assert_eq!(theme.border.active_interact, Color::Green);
+        assert_eq!(theme.border.active, Color::Green);
         assert_eq!(theme.footer.key, Color::Yellow);
     }
 }

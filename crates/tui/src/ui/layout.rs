@@ -42,7 +42,7 @@ pub fn compute_terminal_area_with(total: Rect, sidebar_pct: u16) -> Rect {
 /// Border style for a pane: highlighted when focused, white otherwise
 pub(super) fn pane_border_style(app: &App, pane: ActivePane) -> Style {
     if app.active_pane == pane {
-        Style::default().fg(app.theme.border.active_interact)
+        Style::default().fg(app.theme.border.active)
     } else {
         Style::default().fg(app.theme.border.inactive)
     }

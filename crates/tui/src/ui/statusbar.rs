@@ -11,7 +11,7 @@ pub(crate) fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
     let content = if let Some(ref toast) = app.toast {
         let (bg, fg, icon) = match toast.level {
             ToastLevel::Info => (theme.navigate_bg, theme.mode_fg, "ℹ"),
-            ToastLevel::Success => (theme.interact_bg, theme.mode_fg, "✓"),
+            ToastLevel::Success => (theme.prefix_bg, theme.mode_fg, "✓"),
             ToastLevel::Error => (theme.error_bg, theme.error_fg, "✗"),
         };
         Span::styled(
@@ -54,7 +54,7 @@ pub(crate) fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
                         .unwrap_or_else(|| "?".to_string()),
                     ctrl,
                 ),
-                Style::default().bg(theme.interact_bg).fg(theme.mode_fg),
+                Style::default().bg(theme.prefix_bg).fg(theme.mode_fg),
             ),
             _ => {
                 render_normal_status(frame, area, app);
@@ -70,8 +70,8 @@ pub(crate) fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
 fn render_normal_status(frame: &mut Frame, area: Rect, app: &App) {
     let theme = &app.theme.status_bar;
     let (mode_label, mode_bg) = match app.input_state {
-        crate::app::InputState::PrefixPending => ("PREFIX", theme.interact_bg),
-        crate::app::InputState::TermScroll => ("SCROLL", theme.interact_bg),
+        crate::app::InputState::PrefixPending => ("PREFIX", theme.prefix_bg),
+        crate::app::InputState::TermScroll => ("SCROLL", theme.prefix_bg),
         crate::app::InputState::Normal => ("", theme.navigate_bg),
     };
     let text_style = Style::default().bg(mode_bg).fg(theme.mode_fg);
