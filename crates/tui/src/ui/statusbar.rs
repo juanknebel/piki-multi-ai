@@ -99,11 +99,6 @@ fn render_normal_status(frame: &mut Frame, area: Rect, app: &App) {
             left.push(sep.clone());
         }
         left.push(Span::styled("project", text_style));
-        left.push(sep.clone());
-        left.push(Span::styled(
-            format!("{} services", ws.file_count()),
-            text_style,
-        ));
     } else {
         if first_sep_needed {
             left.push(sep.clone());

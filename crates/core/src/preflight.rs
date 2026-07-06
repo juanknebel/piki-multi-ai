@@ -40,15 +40,15 @@ pub fn run_preflight_checks() -> PreflightResult {
         }
     }
 
-    // delta (optional, affects diff display)
-    if shell_env::sync_command("delta").arg("--version").output().is_err()
-        || shell_env::sync_command("delta")
+    // lazygit (optional, powers the TUI Git tab)
+    if shell_env::sync_command("lazygit").arg("--version").output().is_err()
+        || shell_env::sync_command("lazygit")
             .arg("--version")
             .output()
             .map(|o| !o.status.success())
             .unwrap_or(true)
     {
-        warnings.push("delta not found — diffs will use plain git diff".to_string());
+        warnings.push("lazygit not found — the Git tab needs it (https://github.com/jesseduffield/lazygit)".to_string());
     }
 
     // claude (optional — only needed for Claude agent tabs / dispatch)

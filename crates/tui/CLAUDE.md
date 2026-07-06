@@ -15,11 +15,12 @@ Every user interaction follows: **Key event -> AppMode/DialogState -> Action -> 
 
 There are no navigation/interaction modes. Keys always go to the focused pane (`app.active_pane`); the terminal gets full PTY passthrough. App-level actions live behind a **one-shot prefix** (default `Ctrl+G`, `keybindings.prefix_key` in config):
 
-- `InputState { Normal, PrefixPending, TermScroll }` in `app.rs` — only consulted in `AppMode::Normal`/`Diff`; modal dialogs intercept input before it.
+- `InputState { Normal, PrefixPending, TermScroll }` in `app.rs` — only consulted in `AppMode::Normal`; modal dialogs intercept input before it.
 - `[keybindings.app]` (`config.rs::default_app()`) maps action names to `BindingValue`s (string or array). `"prefix-x"` strings fire after the prefix; other strings are direct chords checked before pane routing (`try_direct_app_binding`). Defaults are all prefix chords except `copy`/`paste`/`search`, which stay pane-scoped inside the terminal/API handlers.
 - **Adding an app action**: add the default to `default_app()`, the name to `APP_ACTIONS` in `input/mod.rs`, an arm in `dispatch_app_action()` calling a helper in `input/app_actions.rs`, a help line in `ui/dialogs/system.rs`, and (if user-facing) a command palette entry in `command_palette.rs`. `prefix 1..9` (tab jump) is hardcoded in `handle_prefix_key`, not configurable.
 - `prefix prefix` sends a literal prefix byte to the PTY (`send_literal_prefix`), `Esc` cancels, unknown chords toast. Terminal scroll mode (`prefix [`) is `handle_term_scroll_key` + the `scroll` config context.
 - Status bar shows `[PREFIX]`/`[SCROLL]` chips (`theme.status_bar.prefix_bg`); the focused pane border uses `theme.border.active`.
+- The bottom-left pane is **Agents** (`ActivePane::Agents`): `App::agent_rows()` lists (workspace, tab) pairs with Custom providers; `render_agents_pane` (ui/sidebar.rs) derives status live via `cli_agent_snapshot()`/`agent_tab_indicator()`; `handle_agents_interaction` + `jump_to_agent` (input/interaction.rs) handle j/k/Enter; the `agents` config context holds its local keys.
 
 ## Adding a new dialog/overlay
 
@@ -71,7 +72,7 @@ Conventions:
 ## Key modules
 
 - `app.rs` — `App` struct (centralized state), `AppMode`, `ActivePane`, `Workspace`
-- `action/` — `Action` enum + `execute_action()` dispatch in `mod.rs`; per-domain `handle()` in `workspace.rs`, `files.rs`, `git.rs`, `git_stash.rs`, `git_merge.rs`, `review.rs`, `tabs.rs`, `api.rs`, `chat.rs`, `agent.rs`. Shared `run_git_diff_with_delta` helper in `mod.rs`
+- `action/` — `Action` enum + `execute_action()` dispatch in `mod.rs`; per-domain `handle()` in `workspace.rs`, `files.rs`, `review.rs`, `tabs.rs`, `api.rs`, `chat.rs`, `agent.rs`. All git handling is delegated to the lazygit tab (`AIProvider::Git`, prefix g) — do NOT add native git actions back
 - `dialog_state.rs` — `DialogState` enum with per-dialog data, `CycleField` trait, per-dialog field enums
 - `event_loop.rs` — Main async loop at 50ms tick rate
 - `input/` — Key routing + prefix dispatch (`mod.rs`), app action bodies (`app_actions.rs`), dialog handlers (`dialog.rs`), focused-pane handlers (`interaction.rs`), mouse (`mouse.rs`), text fields (`text_field_common.rs`), confirm helpers + `with_dialog_mut!` (`confirm_common.rs`), list navigation (`list_nav.rs`), input handler tests (`dialog_tests.rs`)

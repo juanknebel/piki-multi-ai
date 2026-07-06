@@ -211,7 +211,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
     );
     app.terminal_inner_area = Some(terminal_inner);
 
-    // Right center: main content (PTY or Diff)
+    // Right center: main content (PTY, kanban, markdown, API)
     super::panels::render_main_content(frame, main_area, app);
 
     // Right bottom: status bar

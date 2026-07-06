@@ -51,7 +51,6 @@ impl Toast {
     }
 }
 
-/// An undo-able git stage/unstage action
 /// Result of an async git refresh for a workspace
 pub struct RefreshResult {
     pub workspace_idx: usize,
@@ -1592,7 +1591,7 @@ mod tests {
         );
         assert_eq!(app.active_pane, ActivePane::WorkspaceList);
 
-        // prefix j → down → GitStatus
+        // prefix j → down → Agents pane
         crate::input::handle_key_event(&mut app, ctrl('g'));
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('j')));
         assert_eq!(app.active_pane, ActivePane::Agents);
