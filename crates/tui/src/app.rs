@@ -433,13 +433,6 @@ impl Workspace {
         }
     }
 
-    /// Refresh the list of changed files by running `git diff --name-status HEAD`
-    pub async fn refresh_changed_files(&mut self) -> anyhow::Result<()> {
-        self.changed_files = get_changed_files(&self.info.path).await?;
-        self.ahead_behind = get_ahead_behind(&self.info.path).await;
-        self.dirty = false;
-        Ok(())
-    }
 }
 
 /// State for the fuzzy file search overlay (backed by nucleo async matcher)

@@ -106,14 +106,28 @@ pub(crate) async fn run(
             }
         }
 
-        // Initial file status refresh so pre-existing changes show up
-        // (harmless no-op for non-git Project workspaces)
-        let _ = ws.refresh_changed_files().await;
-
         app.workspaces.push(ws);
     }
     // Sort by persistent order field for deterministic ordering across restarts
     app.workspaces.sort_by_key(|ws| ws.info.order);
+
+    // Initial file status refresh runs in the BACKGROUND: blocking startup on
+    // sequential `git status` for every workspace made launch take seconds.
+    // Results arrive through the regular refresh channel and fill in the
+    // sidebar counts as they land. (Harmless no-op for non-git directories.)
+    for (idx, ws) in app.workspaces.iter().enumerate() {
+        let path = ws.info.path.clone();
+        let tx = app.refresh_tx.clone();
+        tokio::spawn(async move {
+            let files = app::get_changed_files(&path).await.unwrap_or_default();
+            let ab = app::get_ahead_behind(&path).await;
+            let _ = tx.send(app::RefreshResult {
+                workspace_idx: idx,
+                changed_files: files,
+                ahead_behind: ab,
+            });
+        });
+    }
     tracing::info!(count = app.workspaces.len(), "workspaces restored");
     if !app.workspaces.is_empty() {
         // Restore the last focused workspace from UiPrefs if available.
