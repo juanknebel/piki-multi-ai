@@ -31,6 +31,20 @@ if test -n "$PIKI_SHELL_INTEGRATION"
         __piki_osc_cmd_start
     end
 
+    # Wrap a manually-typed `claude` so it loads piki's hook settings and
+    # reports its status to the Agents pane (env PIKI_CLI_AGENT_SOCK et al.
+    # are already in this shell's environment). Skipped if the user passes
+    # their own --settings.
+    if test -n "$PIKI_CLAUDE_HOOK_SETTINGS"
+        function claude --wraps claude
+            if contains -- --settings $argv; or string match -q -- '--settings=*' $argv
+                command claude $argv
+            else
+                command claude --settings "$PIKI_CLAUDE_HOOK_SETTINGS" $argv
+            end
+        end
+    end
+
     # Emit cwd once at startup so piki gets the initial directory before
     # any command runs (matches the bash/zsh integration).
     __piki_osc_cwd

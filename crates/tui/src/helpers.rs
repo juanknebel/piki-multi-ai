@@ -81,8 +81,25 @@ pub(crate) async fn spawn_tab(
         if *provider == AIProvider::Shell {
             match shell_install::setup_for(&cmd, &paths.shell_integration_dir()) {
                 Ok(Some(setup)) => {
-                    let env: Vec<(String, String)> = setup.env.into_iter().collect();
-                    (env, setup.extra_args, true, None)
+                    let mut env: Vec<(String, String)> = setup.env.into_iter().collect();
+                    // Also wire the cli-agent channel so a manually-typed
+                    // `claude` inside this shell reports to the Agents pane:
+                    // the FIFO + hook env ride the shell's environment, and
+                    // the bridge script wraps `claude` with `--settings`.
+                    // Only the env is merged — the `--settings` extra_args
+                    // are claude args, not shell args.
+                    let sock = match cli_agent_install::setup_for_claude(&paths.claude_hooks_dir())
+                    {
+                        Ok(agent) => {
+                            env.extend(agent.env);
+                            agent.sock_path
+                        }
+                        Err(e) => {
+                            tracing::debug!(error = %e, "cli-agent channel skipped for shell tab");
+                            None
+                        }
+                    };
+                    (env, setup.extra_args, true, sock)
                 }
                 Ok(None) => (Vec::new(), Vec::new(), false, None),
                 Err(e) => {

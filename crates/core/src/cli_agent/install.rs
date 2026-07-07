@@ -124,6 +124,13 @@ fn materialize(base_dir: &Path) -> io::Result<ClaudeHookSetup> {
         "PIKI_CLI_AGENT_SOCK".to_string(),
         sock_path.display().to_string(),
     );
+    // Advertised so the shell-integration bridge can wrap a manually-typed
+    // `claude` with `--settings <this file>` inside shell tabs (where piki
+    // doesn't control the command line).
+    env.insert(
+        "PIKI_CLAUDE_HOOK_SETTINGS".to_string(),
+        settings_path.display().to_string(),
+    );
 
     Ok(ClaudeHookSetup {
         env,
@@ -223,6 +230,10 @@ mod tests {
         assert!(settings_path.exists());
         assert_eq!(setup.extra_args[0], "--settings");
         assert_eq!(setup.extra_args[1], settings_path.display().to_string());
+        assert_eq!(
+            setup.env.get("PIKI_CLAUDE_HOOK_SETTINGS").unwrap(),
+            &settings_path.display().to_string()
+        );
         assert_eq!(setup.env.get("PIKI_CLI_AGENT").unwrap(), "1");
         assert_eq!(
             setup.env.get("PIKI_CLI_AGENT_TARGET").unwrap(),

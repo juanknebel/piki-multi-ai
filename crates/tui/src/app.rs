@@ -438,7 +438,6 @@ impl Workspace {
         }
         self.tabs
             .iter()
-            .filter(|t| matches!(t.provider, AIProvider::Custom(_)))
             .filter_map(|t| t.cli_agent_snapshot().map(|(status, _)| status))
             .max_by_key(severity)
     }
@@ -1066,7 +1065,9 @@ impl App {
 
     /// Build the visual sidebar item list, grouping workspaces by their group field.
     /// Rows of the Agents pane: every (workspace, tab) pair running an AI
-    /// agent (Custom provider), across ALL workspaces, in sidebar order.
+    /// agent, across ALL workspaces, in sidebar order. That's agent tabs
+    /// (Custom provider) plus any other tab whose cli-agent channel has
+    /// reported — e.g. a `claude` typed manually inside a shell tab.
     /// Labels and status are derived live at render time.
     pub fn agent_rows(&self) -> Vec<(usize, usize)> {
         self.workspaces
@@ -1076,7 +1077,10 @@ impl App {
                 ws.tabs
                     .iter()
                     .enumerate()
-                    .filter(|(_, t)| matches!(t.provider, AIProvider::Custom(_)))
+                    .filter(|(_, t)| {
+                        matches!(t.provider, AIProvider::Custom(_))
+                            || t.cli_agent_snapshot().is_some()
+                    })
                     .map(move |(ti, _)| (wi, ti))
             })
             .collect()
@@ -1910,7 +1914,8 @@ mod tests {
         add_agent_tab(&mut app, a, "Claude");
         add_agent_tab(&mut app, b, "Codex");
         add_agent_tab(&mut app, b, "Claude");
-        // Shell/Git tabs are not agents
+        // Shell/Git tabs only count as agents once their cli-agent channel
+        // reports (manual `claude` inside them); without one they're excluded
         app.workspaces[a].add_tab(AIProvider::Shell, true, None);
         app.workspaces[b].add_tab(AIProvider::Git, true, None);
 

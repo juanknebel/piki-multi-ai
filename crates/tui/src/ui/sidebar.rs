@@ -257,6 +257,13 @@ pub(super) fn render_agents_pane(frame: &mut Frame, area: Rect, app: &App) {
                 Some((status, _)) => crate::ui::cli_agent_status_view(status),
                 None => crate::ui::agent_tab_indicator(tab),
             };
+            // A non-Custom tab only lists here because its cli-agent channel
+            // reported — a `claude` run manually inside that tab.
+            let label = if matches!(tab.provider, piki_core::AIProvider::Custom(_)) {
+                tab.provider.label().to_string()
+            } else {
+                format!("Claude ({})", tab.provider.label())
+            };
 
             let row_bg = if is_active && row_idx == selected {
                 Style::default().bg(theme.selected_bg)
@@ -267,7 +274,7 @@ pub(super) fn render_agents_pane(frame: &mut Frame, area: Rect, app: &App) {
                 Span::styled(format!(" {glyph} "), row_bg.fg(status_color)),
                 Span::styled(ws.name.clone(), row_bg.fg(theme.file_path)),
                 Span::styled(" · ", row_bg.fg(theme.empty_text)),
-                Span::styled(tab.provider.label().to_string(), row_bg.fg(theme.file_path)),
+                Span::styled(label, row_bg.fg(theme.file_path)),
                 Span::styled(format!(" {status_label}"), row_bg.fg(status_color)),
             ];
             if ws.has_idle_notification {
