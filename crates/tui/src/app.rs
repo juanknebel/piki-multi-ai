@@ -424,6 +424,25 @@ impl Workspace {
         self.changed_files.len()
     }
 
+    /// Worst agent status across this workspace's agent tabs, for the sidebar
+    /// rollup. Priority: needs-permission > running > waiting > done.
+    pub fn agent_status_rollup(&self) -> Option<piki_core::cli_agent::CliAgentStatus> {
+        use piki_core::cli_agent::CliAgentStatus as S;
+        fn severity(s: &S) -> u8 {
+            match s {
+                S::WaitingPermission => 3,
+                S::Running => 2,
+                S::Idle => 1,
+                S::Done => 0,
+            }
+        }
+        self.tabs
+            .iter()
+            .filter(|t| matches!(t.provider, AIProvider::Custom(_)))
+            .filter_map(|t| t.cli_agent_snapshot().map(|(status, _)| status))
+            .max_by_key(severity)
+    }
+
     pub fn status_label(&self) -> &str {
         match &self.status {
             WorkspaceStatus::Idle => "idle",

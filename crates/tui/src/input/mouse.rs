@@ -425,28 +425,29 @@ pub(crate) fn handle_mouse_event(
                     app.active_pane = ActivePane::WorkspaceList;
                     let inner_y = app.ws_list_area.y + 1;
                     if row >= inner_y {
-                        let relative_row = (row - inner_y) as usize;
                         let sidebar_items = app.sidebar_items();
-                        let mut cumulative_height = 0;
-                        for (i, item) in sidebar_items.iter().enumerate() {
-                            let item_height = match item {
-                                crate::app::SidebarItem::GroupHeader { .. } => 1,
-                                crate::app::SidebarItem::Workspace { .. } => 3,
-                            };
-                            if relative_row < cumulative_height + item_height {
-                                app.selected_sidebar_row = i;
-                                match item {
-                                    crate::app::SidebarItem::GroupHeader { .. } => {
-                                        app.toggle_selected_group();
-                                    }
-                                    crate::app::SidebarItem::Workspace { index } => {
-                                        app.selected_workspace = *index;
-                                        app.switch_workspace(*index);
-                                    }
+                        // Rows are one line tall; mirror the render's derived scroll
+                        let visible = app.ws_list_area.height.saturating_sub(2) as usize;
+                        let selected = app
+                            .selected_sidebar_row
+                            .min(sidebar_items.len().saturating_sub(1));
+                        let scroll_offset = if visible > 0 && selected >= visible {
+                            selected + 1 - visible
+                        } else {
+                            0
+                        };
+                        let clicked = (row - inner_y) as usize + scroll_offset;
+                        if let Some(item) = sidebar_items.get(clicked) {
+                            app.selected_sidebar_row = clicked;
+                            match item {
+                                crate::app::SidebarItem::GroupHeader { .. } => {
+                                    app.toggle_selected_group();
                                 }
-                                break;
+                                crate::app::SidebarItem::Workspace { index } => {
+                                    app.selected_workspace = *index;
+                                    app.switch_workspace(*index);
+                                }
                             }
-                            cumulative_height += item_height;
                         }
                     }
                 }

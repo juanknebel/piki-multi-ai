@@ -160,6 +160,66 @@ mod tests {
 
     // ── New snapshot tests for dialogs ──
 
+    fn test_ws_info(name: &str, group: Option<&str>, order: u32) -> piki_core::WorkspaceInfo {
+        piki_core::WorkspaceInfo {
+            name: name.to_string(),
+            path: std::path::PathBuf::from(format!("/tmp/{name}")),
+            branch: name.to_string(),
+            workspace_type: piki_core::WorkspaceType::Worktree,
+            description: String::new(),
+            prompt: String::new(),
+            kanban_path: None,
+            group: group.map(String::from),
+            order,
+            source_repo: std::path::PathBuf::from("/tmp/src"),
+            source_repo_display: String::new(),
+            dispatch_card_id: None,
+            dispatch_source_kanban: None,
+            dispatch_agent_name: None,
+            origin: piki_core::WorkspaceOrigin::default(),
+        }
+    }
+
+    #[test]
+    fn test_snapshot_workspace_list_single_line_rows() {
+        let mut terminal = test_terminal(40, 10);
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+
+        let mut a = crate::app::Workspace::from_info(test_ws_info("nightly", Some("piki"), 0));
+        a.changed_files.push(piki_core::ChangedFile {
+            path: "src/main.rs".to_string(),
+            status: piki_core::FileStatus::Modified,
+        });
+        a.changed_files.push(piki_core::ChangedFile {
+            path: "src/lib.rs".to_string(),
+            status: piki_core::FileStatus::Modified,
+        });
+        a.ahead_behind = Some((1, 2));
+        app.workspaces.push(a);
+        app.workspaces
+            .push(crate::app::Workspace::from_info(test_ws_info(
+                "void-setup",
+                Some("ricing"),
+                1,
+            )));
+        app.workspaces
+            .push(crate::app::Workspace::from_info(test_ws_info(
+                "x220t",
+                Some("ricing"),
+                2,
+            )));
+        app.active_workspace = 0;
+        app.selected_sidebar_row = 1;
+
+        terminal
+            .draw(|frame| {
+                super::sidebar::render_workspace_list(frame, frame.area(), &app);
+            })
+            .unwrap();
+        let content = buffer_to_snapshot(terminal.backend().buffer());
+        insta::assert_snapshot!("workspace_list_single_line_rows", content);
+    }
+
     #[test]
     fn test_snapshot_agents_pane_with_rows() {
         let mut terminal = test_terminal(40, 8);
