@@ -36,10 +36,10 @@ active = "#3daee9"            # KDE blue
 inactive = "#7f8c8d"
 
 [subtabs]
-active = "#1d99f3"            # link blue
+active = "#1d99f3"            # link blue (active block bg)
+active_fg = "#eff0f1"
 inactive = "#7f8c8d"
-close_marker = "#7f8c8d"
-divider = "#4d4d4d"
+inactive_bg = "#31363b"
 
 [status_bar]
 error_bg = "#da4453"

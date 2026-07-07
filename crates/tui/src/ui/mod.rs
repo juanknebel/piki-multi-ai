@@ -254,6 +254,23 @@ mod tests {
     }
 
     #[test]
+    fn test_snapshot_tab_bar_solid_blocks() {
+        let mut terminal = test_terminal(60, 2);
+        let app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut ws = crate::app::Workspace::from_info(test_ws_info("demo", None, 0));
+        ws.add_tab(piki_core::AIProvider::Custom("Claude".to_string()), true, None);
+        ws.add_tab(piki_core::AIProvider::Shell, true, None);
+        ws.active_tab = 0;
+        terminal
+            .draw(|frame| {
+                super::subtabs::render(frame, frame.area(), &ws, &app.theme);
+            })
+            .unwrap();
+        let content = buffer_to_snapshot(terminal.backend().buffer());
+        insta::assert_snapshot!("tab_bar_solid_blocks", content);
+    }
+
+    #[test]
     fn test_snapshot_confirm_delete_dialog() {
         let mut terminal = test_terminal(80, 24);
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());

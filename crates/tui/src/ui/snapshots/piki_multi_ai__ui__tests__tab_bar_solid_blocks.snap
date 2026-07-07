@@ -1,0 +1,7 @@
+---
+source: crates/tui/src/ui/mod.rs
+assertion_line: 270
+expression: content
+---
+ ▸ Claude ×   ▸ Shell ×   +
+────────────────────────────────────────────────────────────

@@ -7,7 +7,7 @@ use crate::action::Action;
 use crate::app::{self, ActivePane, ApiResponseDisplay, App, AppMode};
 use crate::clipboard;
 use crate::dialog_state::DialogState;
-use crate::helpers::{rect_contains, resize_all_ptys, scrollback_max, subtab_index_at};
+use crate::helpers::{SubtabHit, rect_contains, resize_all_ptys, scrollback_max, subtab_index_at};
 
 /// Encode a mouse scroll event as terminal escape bytes based on the protocol encoding.
 /// `button` is 64 for scroll-up, 65 for scroll-down. `col`/`row` are 1-based PTY coordinates.
@@ -406,8 +406,8 @@ pub(crate) fn handle_mouse_event(
                 // Click on sub-tabs
                 if rect_contains(app.subtabs_area, col, row) {
                     let subtabs_area = app.subtabs_area;
-                    if let Some((idx, on_close)) = subtab_index_at(app, col, subtabs_area) {
-                        if on_close {
+                    match subtab_index_at(app, col, subtabs_area) {
+                        Some(SubtabHit::Tab(idx, true)) => {
                             if let Some(ws) = app.current_workspace()
                                 && ws.tabs.get(idx).is_some_and(|t| t.closable)
                             {
@@ -415,9 +415,16 @@ pub(crate) fn handle_mouse_event(
                                     Some(DialogState::ConfirmCloseTab { target: idx });
                                 app.mode = AppMode::ConfirmCloseTab;
                             }
-                        } else if let Some(ws) = app.current_workspace_mut() {
-                            ws.active_tab = idx;
                         }
+                        Some(SubtabHit::Tab(idx, false)) => {
+                            if let Some(ws) = app.current_workspace_mut() {
+                                ws.active_tab = idx;
+                            }
+                        }
+                        Some(SubtabHit::NewTab) => {
+                            let _ = super::app_actions::open_new_tab(app);
+                        }
+                        None => {}
                     }
                 }
                 // Click on workspace list

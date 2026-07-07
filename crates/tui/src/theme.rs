@@ -108,9 +108,9 @@ struct TabsToml {
 #[serde(default)]
 struct SubtabsToml {
     active: Option<String>,
+    active_fg: Option<String>,
     inactive: Option<String>,
-    close_marker: Option<String>,
-    divider: Option<String>,
+    inactive_bg: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -220,10 +220,14 @@ pub struct TabsTheme {
 }
 
 pub struct SubtabsTheme {
+    /// Background of the active tab block.
     pub active: Color,
+    /// Text on the active tab block.
+    pub active_fg: Color,
+    /// Text of inactive tab blocks.
     pub inactive: Color,
-    pub close_marker: Color,
-    pub divider: Color,
+    /// Background of inactive tab blocks.
+    pub inactive_bg: Color,
 }
 
 pub struct StatusBarTheme {
@@ -329,9 +333,9 @@ impl Default for Theme {
             },
             subtabs: SubtabsTheme {
                 active: Color::Cyan,
+                active_fg: Color::Black,
                 inactive: Color::Gray,
-                close_marker: Color::DarkGray,
-                divider: Color::DarkGray,
+                inactive_bg: Color::DarkGray,
             },
             status_bar: StatusBarTheme {
                 error_bg: Color::Red,
@@ -440,9 +444,9 @@ impl Theme {
             },
             subtabs: SubtabsTheme {
                 active: resolve(&t.subtabs.active, d.subtabs.active),
+                active_fg: resolve(&t.subtabs.active_fg, d.subtabs.active_fg),
                 inactive: resolve(&t.subtabs.inactive, d.subtabs.inactive),
-                close_marker: resolve(&t.subtabs.close_marker, d.subtabs.close_marker),
-                divider: resolve(&t.subtabs.divider, d.subtabs.divider),
+                inactive_bg: resolve(&t.subtabs.inactive_bg, d.subtabs.inactive_bg),
             },
             status_bar: StatusBarTheme {
                 error_bg: resolve(&t.status_bar.error_bg, d.status_bar.error_bg),

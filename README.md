@@ -290,15 +290,13 @@ Workspace configurations are saved automatically and restored on startup using a
 ```
  [CPU] 12%  [RAM] 4.2/16.0G  [BAT] 85%  [TIME] 2026-03-07 14:32
 +------------------+-------------------------------------------------------+
-| WORKSPACES       |  ▸ Claude Code ×│▸ Shell ×  (dynamic sub-tabs w/ icons)|
+| WORKSPACES       | [▸ Claude Code ×] [$ Shell ×] +   (tab blocks + new)  |
 |                  |-------------------------------------------------------|
 |  ▼ frontend (2)  |                                                       |
-|  ▶ ws-1 (active) |  AI assistant live terminal output                    |
-|    3 files       |  (Press [t] to open a new tab)                        |
-|    Fix auth bug  |  (diff opens as floating overlay)                     |
-|                  |                                                       |
-|    ws-2          |                                                       |
+|  ▶ ⎇ ws-1  3∆ ↑1 |  AI assistant live terminal output                    |
+|    ⎇ ws-2        |  (Ctrl+G c or click + to open a new tab)              |
 |  ▸ backend (1)   |                                                       |
+|                  |                                                       |
 |------------------+                                                       |
 | AGENTS           |-------------------------------------------------------|
 | ▷ ws-1 · Claude  | branch: ws-1 | 3 files | ↑1 unpushed | Claude: busy  |
@@ -482,16 +480,15 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 | Action | Effect |
 |--------|--------|
 | Click workspace list | Focus pane and switch to clicked workspace |
-| Click file list | Focus pane and select clicked file |
-| Click service (Project) | Select service |
-| Double-click service (Project) | Open New Workspace dialog pre-filled with sub-directory, prompt, kanban, and group |
+| Click agents pane | Select agent and jump to its workspace/tab |
 | Click main panel | Focus pane and start text selection |
-| Click sub-tab | Switch to that tab |
-| Click × on sub-tab | Close that tab (with confirmation) |
+| Click tab | Switch to that tab |
+| Click × on tab | Close that tab (with confirmation) |
+| Click + after the tabs | Open the New Tab dialog |
 | Scroll in workspace list | Navigate workspaces up/down |
-| Scroll in file list | Navigate files up/down |
+| Scroll in agents pane | Navigate agents up/down |
 | Scroll in main panel | Scroll terminal scrollback/markdown; forwarded as escape sequences to TUI apps (alternate screen with mouse capture) |
-| Scroll in Help/Diff overlay | Scroll overlay content |
+| Scroll in Help overlay | Scroll overlay content |
 | Scroll in fuzzy search | Navigate results |
 | Click on Help/About/Info overlay | Dismiss overlay |
 | Drag on border | Resize pane split |
@@ -832,7 +829,7 @@ crates/
         api.rs           # API Explorer tab renderer (editor + response panes)
         dialogs.rs       # Dialog and overlay renderers (dashboard, agents, providers, etc.)
         scrollbar.rs     # Shared vertical scrollbar helper (thin indicators)
-        subtabs.rs       # Sub-tab bar rendering (dynamic tabs with provider icons and × close buttons)
+        subtabs.rs       # Tab bar rendering (solid tab blocks with provider icons, × close buttons and a + button)
         workspace_switcher.rs # Workspace switcher overlay renderer
 ```
 

@@ -41,10 +41,10 @@ active = "Yellow"
 inactive = "DarkGray"
 
 [subtabs]
-active = "Cyan"
-inactive = "Gray"
-close_marker = "DarkGray"
-divider = "DarkGray"
+active = "Cyan"          # active tab block background
+active_fg = "Black"      # text on the active block
+inactive = "Gray"        # text of inactive blocks
+inactive_bg = "DarkGray" # background of inactive blocks
 
 [status_bar]
 error_bg = "Red"
