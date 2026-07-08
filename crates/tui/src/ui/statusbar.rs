@@ -150,9 +150,14 @@ fn render_normal_status(frame: &mut Frame, area: Rect, app: &App) {
         left.push(Span::styled(txt, Style::default().bg(mode_bg).fg(color)));
     }
 
-    // Right section: workspace counter and scroll indicator
+    // Right section: active workspace name + position, and scroll indicator
     let mut right: Vec<Span> = vec![Span::styled(
-        format!("ws {}/{}", app.active_workspace + 1, app.workspaces.len()),
+        format!(
+            "{} · {}/{}",
+            ws.info.name,
+            app.active_workspace + 1,
+            app.workspaces.len()
+        ),
         text_style,
     )];
 
