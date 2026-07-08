@@ -866,6 +866,10 @@ impl App {
         let (agent_event_tx, agent_event_rx) =
             tokio::sync::mpsc::unbounded_channel::<piki_agent::AgentEvent>();
         let config = crate::config::Config::load_from(paths);
+        // Propagate notification prefs to the shared core layer (process
+        // globals — the notify_* helpers read them on every event).
+        piki_core::notifications::set_delivery(config.notifications.parsed_delivery());
+        piki_core::sound::set_settings(config.notifications.sound_settings());
         let syntax = crate::syntax::SyntaxHighlighter::new(&config.syntax_theme);
         Self {
             should_quit: false,

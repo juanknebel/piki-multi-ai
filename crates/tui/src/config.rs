@@ -40,6 +40,69 @@ impl Default for KanbanConfig {
     }
 }
 
+/// `[notifications]` — how background agent events reach the user.
+/// `delivery`: `"system"` (OS desktop toast, default), `"terminal"` (OSC 9
+/// escape so the host terminal emulator notifies — works inside tmux/ssh),
+/// or `"off"`. `sound` toggles the built-in chimes (done/attention),
+/// independent of `delivery`; the `sound_*_path` overrides point at custom
+/// audio files (any format your system player decodes).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NotificationsConfig {
+    pub delivery: String,
+    pub sound: bool,
+    pub sound_path: Option<String>,
+    pub sound_done_path: Option<String>,
+    pub sound_attention_path: Option<String>,
+}
+
+impl Default for NotificationsConfig {
+    fn default() -> Self {
+        Self {
+            delivery: "system".to_string(),
+            sound: false,
+            sound_path: None,
+            sound_done_path: None,
+            sound_attention_path: None,
+        }
+    }
+}
+
+impl NotificationsConfig {
+    /// Parse `delivery` into the core enum, warning (once, at call time) on
+    /// unknown values and falling back to the default.
+    pub fn parsed_delivery(&self) -> piki_core::notifications::NotificationDelivery {
+        use piki_core::notifications::NotificationDelivery as D;
+        match self.delivery.as_str() {
+            "off" => D::Off,
+            "system" => D::System,
+            "terminal" => D::Terminal,
+            other => {
+                tracing::warn!(
+                    "unknown notifications.delivery '{other}' (expected off|system|terminal); using 'system'"
+                );
+                D::System
+            }
+        }
+    }
+
+    pub fn sound_settings(&self) -> piki_core::sound::SoundSettings {
+        // Expand a leading `~/` so config paths like "~/sounds/ding.wav" work.
+        let p = |s: &Option<String>| {
+            s.as_ref().map(|s| match s.strip_prefix("~/") {
+                Some(rest) => piki_core::xdg::home_dir().join(rest),
+                None => std::path::PathBuf::from(s),
+            })
+        };
+        piki_core::sound::SoundSettings {
+            enabled: self.sound,
+            path: p(&self.sound_path),
+            done_path: p(&self.sound_done_path),
+            attention_path: p(&self.sound_attention_path),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     #[serde(default)]
@@ -50,6 +113,8 @@ pub struct Config {
     pub keybindings: Keybindings,
     #[serde(default)]
     pub kanban: KanbanConfig,
+    #[serde(default)]
+    pub notifications: NotificationsConfig,
     /// Runtime-detected platform (not serialized).
     #[serde(skip)]
     pub platform: Platform,
@@ -72,6 +137,7 @@ impl Default for Config {
             syntax_theme: default_syntax_theme(),
             keybindings: Keybindings::default(),
             kanban: KanbanConfig::default(),
+            notifications: NotificationsConfig::default(),
             platform: Platform::detect(),
         }
     }
@@ -1126,6 +1192,29 @@ quit = "prefix-Q"
         assert!(!cfg.matches_app_prefix(q_event, "help"));
         // A prefix binding is not a direct chord
         assert!(!cfg.matches_app_direct(q_event, "quit"));
+    }
+
+    #[test]
+    fn test_notifications_config_defaults_and_parse() {
+        use piki_core::notifications::NotificationDelivery as D;
+        // Absent section → defaults
+        let cfg: Config = toml::from_str("").unwrap();
+        assert_eq!(cfg.notifications.parsed_delivery(), D::System);
+        assert!(!cfg.notifications.sound);
+
+        let cfg: Config = toml::from_str(
+            "[notifications]\ndelivery = \"terminal\"\nsound = true\nsound_done_path = \"/tmp/d.wav\"\n",
+        )
+        .unwrap();
+        assert_eq!(cfg.notifications.parsed_delivery(), D::Terminal);
+        let s = cfg.notifications.sound_settings();
+        assert!(s.enabled);
+        assert_eq!(s.done_path, Some(std::path::PathBuf::from("/tmp/d.wav")));
+        assert_eq!(s.attention_path, None);
+
+        // Unknown delivery falls back to system instead of failing
+        let cfg: Config = toml::from_str("[notifications]\ndelivery = \"banana\"\n").unwrap();
+        assert_eq!(cfg.notifications.parsed_delivery(), D::System);
     }
 
     #[test]
