@@ -1072,8 +1072,14 @@ impl App {
     /// agent, across ALL workspaces, in sidebar order. That's agent tabs
     /// (Custom provider) plus any other tab whose cli-agent channel has
     /// reported — e.g. a `claude` typed manually inside a shell tab.
+    ///
+    /// A shell tab only lists while its `claude` is still active: once the
+    /// `Stop` hook marks it `Done` (the CLI exited) it drops off, since the
+    /// shell itself lives on and the snapshot would otherwise linger. A
+    /// dedicated Custom-provider tab always lists — that tab *is* the agent.
     /// Labels and status are derived live at render time.
     pub fn agent_rows(&self) -> Vec<(usize, usize)> {
+        use piki_core::cli_agent::CliAgentStatus;
         self.workspaces
             .iter()
             .enumerate()
@@ -1082,8 +1088,13 @@ impl App {
                     .iter()
                     .enumerate()
                     .filter(|(_, t)| {
-                        matches!(t.provider, AIProvider::Custom(_))
-                            || t.cli_agent_snapshot().is_some()
+                        if matches!(t.provider, AIProvider::Custom(_)) {
+                            return true;
+                        }
+                        matches!(
+                            t.cli_agent_snapshot(),
+                            Some((status, _)) if status != CliAgentStatus::Done
+                        )
                     })
                     .map(move |(ti, _)| (wi, ti))
             })

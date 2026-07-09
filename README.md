@@ -310,7 +310,7 @@ Workspace configurations are saved automatically and restored on startup using a
   Main panel:     [ctrl-shift-f] search [C-g [] scroll [C-g ?] help [C-g] prefix
 ```
 
-The AGENTS pane (bottom-left) lists every running AI agent across all workspaces with its live status (▷ running, ⚠ needs permission, ⏳ waiting, ✓ done, ● alive, ○ exited); `Enter` or a click jumps to that workspace and tab. This includes a `claude` typed manually inside a shell tab: the shell bridge transparently wraps `claude` with piki's hook settings, so it reports status the same way as a dedicated agent tab (listed as `Claude (Shell)` once its first hook event arrives; skipped if you pass your own `--settings`). Git status details live in the lazygit tab (`Ctrl+G g`).
+The AGENTS pane (bottom-left) lists every running AI agent across all workspaces with its live status (▷ running, ⚠ needs permission, ⏳ waiting, ✓ done, ● alive, ○ exited); `Enter` or a click jumps to that workspace and tab. This includes a `claude` typed manually inside a shell tab: the shell bridge transparently wraps `claude` with piki's hook settings, so it reports status the same way as a dedicated agent tab (listed as `Claude (Shell)` once its first hook event arrives; skipped if you pass your own `--settings`). Such a shell entry drops off the pane as soon as the CLI exits (its `Stop` hook marks it done), since the shell itself keeps running; a dedicated agent tab stays listed for as long as the tab is open. Git status details live in the lazygit tab (`Ctrl+G g`).
 
 ### Keybindings
 
