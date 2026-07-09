@@ -22,11 +22,9 @@ Built with Rust and [ratatui](https://ratatui.rs/).
 |:---:|:---:|:---:|
 | ![New Tab](screenshots/04-new-tab.png) | ![AI Agents](screenshots/05-new-tab-agents.png) | ![Tools](screenshots/06-new-tab-tools.png) |
 
-### AI Agent Tab & Git Diff
+### AI Agent Tab
 
-| OpenCode tab | Side-by-side diff |
-|:---:|:---:|
-| ![OpenCode](screenshots/07-tab-opencode.png) | ![Git Diff](screenshots/08-git-diff.png) |
+![OpenCode](screenshots/07-tab-opencode.png)
 
 ### API Explorer
 
@@ -119,7 +117,7 @@ A modern desktop GUI is available via `piki-desktop`, built with [Tauri v2](http
 - **System info** — `Alt+I` for live system monitoring: CPU, RAM, disk usage gauges with color thresholds (green/amber/red), battery status, load average, uptime, hostname; auto-refreshes every 3 seconds
 - **Application log viewer** — `Alt+Shift+L` for in-memory ring buffer (500 entries), filterable by level
 - **About dialog** — Click "Piki Desktop" in status bar or via command palette
-- **Workspace switcher** — `Ctrl+G w` opens a tree of every workspace with its tabs nested underneath (provider · live status in a right-aligned column, active workspace/tab marked); `j`/`k` move, `Enter` jumps to the workspace or a specific tab, and typing filters by workspace or tab name
+- **Workspace switcher** — `Ctrl+Space` for quick fuzzy workspace switching; results grouped by group name with headers, sorted alphabetically (ungrouped first), items ordered within each group
 - **Settings** — `Alt+S` to open settings dialog; all keyboard shortcuts are editable at runtime (click a shortcut, press new key combo) with two-column display (Default / Current); configure the terminal shell command; changes persist in SQLite and take effect immediately without restart; "Restore Defaults" button resets everything
 - **AI Chat panel** — Right-side chat panel (`Ctrl+Shift+L`) for chatting with local LLMs via Ollama or llama.cpp server; server type selectable in settings dialog (gear icon), model selector dropdown populated from the selected server, streaming responses, resizable panel, conversation persists when hidden; config saved to settings
 - **Resizable sidebar** — Drag the divider or use the resize handle
@@ -132,9 +130,11 @@ A modern desktop GUI is available via `piki-desktop`, built with [Tauri v2](http
 |---|---|
 | `Ctrl+P` | Command palette |
 | `Ctrl+N` | New workspace |
+| `Ctrl+T` | New tab |
 | `Ctrl+Space` | Workspace switcher |
+| `Ctrl+B` | Toggle sidebar |
 | `Ctrl+M` | Merge / Rebase |
-| `Ctrl+F` | Fuzzy file search |
+| `Ctrl+F` | Find file (fuzzy) |
 | `Ctrl+Shift+F` | Search in project (grep) |
 | `Ctrl+E` | Edit file in $EDITOR (in file search / project search / file viewer) |
 | `Ctrl+I` | Quick Edit inline (in file viewer) |
@@ -149,12 +149,14 @@ A modern desktop GUI is available via `piki-desktop`, built with [Tauri v2](http
 | `Alt+I` | System Info |
 | `Alt+K` | Kanban Board |
 | `Alt+L` | Git log |
+| `Alt+P` | Manage providers |
 | `Alt+S` | Settings |
 | `Alt+T` | Theme settings |
 | `Alt+Shift+W` | Open Web Preview tab (Desktop) |
 | `Alt+Shift+L` | Application logs |
-| `Ctrl+Shift+C` | Copy selection |
-| `Ctrl+Shift+V` | Paste from clipboard |
+| `Ctrl+Shift+C` / `Ctrl+Shift+V` | Copy / paste in terminal (Cmd+C/V on macOS) |
+| `Ctrl+Shift+L` | Toggle AI Chat panel |
+| `Ctrl+J` | API jq filter (in API Explorer) |
 | `Ctrl+\` | Split active pane right |
 | `Ctrl+Shift+\` | Split active pane down |
 | `Ctrl+Shift+Q` | Close active pane |
@@ -932,7 +934,7 @@ sequenceDiagram
 - **portable-pty** (sync) wrapped with `tokio::task::spawn_blocking` for non-blocking PTY reads
 - **vt100** parser accumulates terminal state; **tui-term** renders it as a ratatui widget
 - Workspaces start with no tabs; all tabs (Claude, Gemini, OpenCode, Kilo, Codex, Shell, Kanban, Code Review, API Explorer, Git/lazygit) are created on demand via `Ctrl+G c` which opens a categorized menu (Shell, AI Agents, Tools); PTY-backed tabs each have their own session, while Kanban, Code Review, and API Explorer tabs manage their own state without PTY; the Git tab runs lazygit in its own PTY
-- Worktrees are stored in `~/.local/share/piki-multi/worktrees/<project>/<name>` with branch names matching the workspace name exactly; Simple workspaces point directly to their source directory; Project workspaces scan sub-directories instead of running git operations
+- Worktrees are stored in `~/.local/share/piki-multi/worktrees/<project>/<name>` with branch names matching the workspace name exactly; Simple and Project workspaces point directly to their source directory rather than a managed worktree (git status still runs there, harmlessly empty for non-git directories)
 - Event-driven architecture: `crossterm::EventStream` + `tokio::select!` in `event_loop.rs` for truly async event loop; key handlers return `Option<Action>`, `action.rs` executes actions asynchronously
 - **Structured logging** to file via `tracing` (not to terminal) — TUI output is unaffected; logs rotate daily in `~/.local/share/piki-multi/logs/`
 
