@@ -1068,6 +1068,31 @@ impl App {
     }
 
     /// Build the visual sidebar item list, grouping workspaces by their group field.
+    /// Map an absolute screen `row` inside the Agents pane to an index into
+    /// [`agent_rows`], accounting for the pane border and the derived scroll
+    /// offset (mirrors `render_agents_pane`). Returns `None` when the row is
+    /// on the border or past the last agent. Shared by mouse click + scroll
+    /// hit-testing so the two can't drift.
+    pub fn agent_row_at(&self, row: u16) -> Option<usize> {
+        let rows = self.agent_rows();
+        if rows.is_empty() {
+            return None;
+        }
+        let inner_y = self.agents_area.y + 1;
+        if row < inner_y {
+            return None;
+        }
+        let visible = self.agents_area.height.saturating_sub(2) as usize;
+        let selected = self.selected_agent_row.min(rows.len() - 1);
+        let scroll_offset = if visible > 0 && selected >= visible {
+            selected + 1 - visible
+        } else {
+            0
+        };
+        let idx = (row - inner_y) as usize + scroll_offset;
+        (idx < rows.len()).then_some(idx)
+    }
+
     /// Rows of the Agents pane: every (workspace, tab) pair running an AI
     /// agent, across ALL workspaces, in sidebar order. That's agent tabs
     /// (Custom provider) plus any other tab whose cli-agent channel has
@@ -1942,6 +1967,46 @@ mod tests {
                 AIProvider::Custom(_)
             )
         }));
+    }
+
+    #[test]
+    fn test_agent_row_at_maps_click_to_index() {
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let a = add_test_workspace(&mut app);
+        add_agent_tab(&mut app, a, "Claude");
+        add_agent_tab(&mut app, a, "Codex");
+        add_agent_tab(&mut app, a, "Gemini");
+        // Pane at y=10, height 5 → border at row 10, content rows 11..=13
+        app.agents_area = ratatui::layout::Rect::new(0, 10, 20, 5);
+
+        assert_eq!(app.agent_row_at(10), None, "border row is not an agent");
+        assert_eq!(app.agent_row_at(11), Some(0));
+        assert_eq!(app.agent_row_at(12), Some(1));
+        assert_eq!(app.agent_row_at(13), Some(2));
+        assert_eq!(app.agent_row_at(9), None, "above the pane");
+    }
+
+    #[test]
+    fn test_agent_row_at_accounts_for_scroll() {
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let a = add_test_workspace(&mut app);
+        for n in 0..6 {
+            add_agent_tab(&mut app, a, &format!("Agent{n}"));
+        }
+        // visible height = 2 (height 4 minus borders); select the last row so
+        // the render scrolls it into view (scroll_offset = 4, showing 4 & 5).
+        app.agents_area = ratatui::layout::Rect::new(0, 0, 20, 4);
+        app.selected_agent_row = 5;
+        assert_eq!(app.agent_row_at(1), Some(4), "first visible row after scroll");
+        assert_eq!(app.agent_row_at(2), Some(5), "selected row scrolled into view");
+        assert_eq!(app.agent_row_at(3), None, "below the pane border");
+    }
+
+    #[test]
+    fn test_agent_row_at_empty_is_none() {
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        app.agents_area = ratatui::layout::Rect::new(0, 0, 20, 5);
+        assert_eq!(app.agent_row_at(1), None);
     }
 
     #[test]

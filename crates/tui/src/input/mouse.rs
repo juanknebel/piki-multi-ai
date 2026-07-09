@@ -461,22 +461,10 @@ pub(crate) fn handle_mouse_event(
                 // Click on the Agents pane — select the row and jump to it
                 else if rect_contains(app.agents_area, col, row) {
                     app.active_pane = ActivePane::Agents;
-                    let inner_y = app.agents_area.y + 1;
-                    if row >= inner_y {
-                        let rows = app.agent_rows();
-                        // Mirror the render's derived scroll offset
-                        let visible = app.agents_area.height.saturating_sub(2) as usize;
-                        let selected = app.selected_agent_row.min(rows.len().saturating_sub(1));
-                        let scroll_offset = if !rows.is_empty() && selected >= visible {
-                            selected + 1 - visible
-                        } else {
-                            0
-                        };
-                        let clicked = (row - inner_y) as usize + scroll_offset;
-                        if clicked < rows.len() {
-                            app.selected_agent_row = clicked;
-                            super::interaction::jump_to_agent(app, rows[clicked]);
-                        }
+                    if let Some(clicked) = app.agent_row_at(row) {
+                        app.selected_agent_row = clicked;
+                        let target = app.agent_rows()[clicked];
+                        super::interaction::jump_to_agent(app, target);
                     }
                 }
                 // Click on main panel — start text selection

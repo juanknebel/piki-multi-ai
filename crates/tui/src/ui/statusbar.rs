@@ -395,6 +395,7 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                         "navigate",
                     ),
                     (cfg.get_binding("agents", "select"), "jump to agent"),
+                    ("click".to_string(), "jump"),
                     (cfg.prefix_display(), "prefix"),
                 ]
             } else if app
