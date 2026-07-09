@@ -334,8 +334,11 @@ impl Default for Theme {
             subtabs: SubtabsTheme {
                 active: Color::Cyan,
                 active_fg: Color::Black,
-                inactive: Color::Gray,
-                inactive_bg: Color::DarkGray,
+                // A raised surface + light-grey text so an inactive tab reads
+                // as a clearly distinct (but secondary) block, not a smudge
+                // against the bar background.
+                inactive: Color::Rgb(180, 180, 195),
+                inactive_bg: Color::Rgb(48, 48, 60),
             },
             status_bar: StatusBarTheme {
                 error_bg: Color::Red,

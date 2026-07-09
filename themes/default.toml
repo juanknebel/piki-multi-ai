@@ -43,8 +43,8 @@ inactive = "DarkGray"
 [subtabs]
 active = "Cyan"          # active tab block background
 active_fg = "Black"      # text on the active block
-inactive = "Gray"        # text of inactive blocks
-inactive_bg = "DarkGray" # background of inactive blocks
+inactive = "#b4b4c3"     # light grey text — readable but secondary
+inactive_bg = "#30303c"  # raised surface, distinct from the bar bg
 
 [status_bar]
 error_bg = "Red"
