@@ -466,7 +466,7 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                 ]
             } else {
                 vec![
-                    (cfg.get_binding("app", "search"), "search"),
+                    (cfg.get_binding("app", "terminal_search"), "search"),
                     (cfg.get_binding("app", "scroll_mode"), "scroll"),
                     (cfg.get_binding("app", "help"), "help"),
                     (cfg.prefix_display(), "prefix"),

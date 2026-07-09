@@ -143,7 +143,7 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         "    All keys sent to active tab".to_string(),
         format!(
             "    {:<13} Search in terminal output",
-            cfg.get_binding("app", "search")
+            cfg.get_binding("app", "terminal_search")
         ),
         "    Mouse scroll  Scroll up/down".to_string(),
         "".to_string(),

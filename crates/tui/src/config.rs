@@ -298,10 +298,12 @@ fn default_app() -> HashMap<String, BindingValue> {
     m.insert("split_up".to_string(), BindingValue::many(&["prefix-+", "prefix-="]));
     m.insert("split_down".to_string(), BindingValue::one("prefix--"));
 
-    // Terminal clipboard/search: direct chords, never sent to the PTY
+    // Terminal clipboard: direct chords, never sent to the PTY.
     m.insert("copy".to_string(), BindingValue::one("ctrl-shift-c"));
     m.insert("paste".to_string(), BindingValue::one("ctrl-shift-v"));
-    m.insert("search".to_string(), BindingValue::one("ctrl-shift-f"));
+    // Terminal search is a prefix chord (not a direct Ctrl+Shift+F) so it
+    // can't be swallowed by the terminal emulator's own bindings (ghostty).
+    m.insert("terminal_search".to_string(), BindingValue::one("prefix-f"));
 
     m
 }

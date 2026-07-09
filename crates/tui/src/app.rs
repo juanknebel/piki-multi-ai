@@ -1934,6 +1934,23 @@ mod tests {
         assert_eq!(app.workspaces[idx].tabs.len(), tabs_before - 1);
     }
 
+    #[test]
+    fn test_prefix_f_opens_terminal_search() {
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
+        add_test_workspace(&mut app);
+        assert!(app.term_search.is_none());
+
+        crate::input::handle_key_event(&mut app, ctrl('g'));
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('f')));
+        assert!(
+            app.term_search.is_some(),
+            "Ctrl+G f should open the terminal search overlay"
+        );
+    }
+
     // ── Agents pane ──
 
     fn add_agent_tab(app: &mut App, ws_idx: usize, name: &str) {

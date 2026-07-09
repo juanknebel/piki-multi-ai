@@ -540,16 +540,8 @@ pub(super) fn handle_term_search_key(app: &mut App, key: KeyEvent) -> Option<Act
 }
 
 pub(super) fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    // Ctrl+Shift+F: open terminal search
-    if app.config.matches_app_direct(key, "search") {
-        app.term_search = Some(crate::app::TermSearchState {
-            query: String::new(),
-            cursor: 0,
-            matches: Vec::new(),
-            current_match: 0,
-        });
-        return None;
-    }
+    // Terminal search now lives behind the prefix (Ctrl+G f), dispatched as an
+    // app action, so it can't collide with the emulator's own Ctrl+Shift+F.
     // Ctrl+Shift+V: paste from clipboard
     if app.config.matches_app_direct(key, "paste") {
         match clipboard::paste_from_clipboard() {

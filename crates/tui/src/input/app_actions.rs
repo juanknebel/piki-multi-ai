@@ -376,6 +376,20 @@ pub(crate) fn exit_term_scroll(app: &mut App) -> Option<Action> {
 /// `prefix g`: open-or-focus the lazygit tab of the current workspace.
 /// If a Git tab exists but its process died (e.g. the user quit lazygit),
 /// close it and respawn transparently.
+/// Open the in-terminal search overlay over the active tab. A prefix action
+/// (default `Ctrl+G f`) rather than a direct chord, so it can't collide with a
+/// terminal emulator's own `Ctrl+Shift+*` bindings (e.g. ghostty).
+pub(crate) fn open_terminal_search(app: &mut App) -> Option<Action> {
+    app.active_pane = ActivePane::MainPanel;
+    app.term_search = Some(crate::app::TermSearchState {
+        query: String::new(),
+        cursor: 0,
+        matches: Vec::new(),
+        current_match: 0,
+    });
+    None
+}
+
 pub(crate) fn open_git_tab(app: &mut App) -> Option<Action> {
     let Some(ws) = app.workspaces.get_mut(app.active_workspace) else {
         app.set_toast("No active workspace", crate::app::ToastLevel::Info);

@@ -63,7 +63,7 @@ Built with Rust and [ratatui](https://ratatui.rs/).
 - **$EDITOR integration** — Open any file in your preferred editor (`$EDITOR` or `vi`); TUI suspends and resumes automatically
 - **Inline editor** — Edit files directly inside the TUI with a built-in text editor (cursor movement, line numbers, scroll); syntax-highlighted via `syntect`
 - **Syntax highlighting** — Language-aware syntax coloring powered by [syntect](https://github.com/trishume/syntect) across three surfaces: code review diffs (per-line highlighting merged with add/delete coloring), inline editor (with cursor overlay), and markdown fenced code blocks (with language hints like ` ```rust `); configurable theme via `syntax_theme` in `config.toml` (default: `base16-ocean.dark`)
-- **Terminal search** — Press `Ctrl+Shift+F` with the terminal focused to search within terminal output; type to filter, `Enter`/`Shift+Enter` to navigate matches, `Esc` to close
+- **Terminal search** — Press `Ctrl+G f` to search within the active terminal's output; type to filter, `Enter`/`Shift+Enter` to navigate matches, `Esc` to close (a prefix chord rather than `Ctrl+Shift+F` so it can't be swallowed by the terminal emulator)
 - **Clipboard support** — Paste from clipboard (`Ctrl+Shift+V`), copy visible terminal (`Ctrl+Shift+C`), and mouse drag-to-select with auto-copy; cross-platform (Wayland, X11, macOS, Windows)
 - **Workspace prompts** — Optionally provide an initial prompt when creating a workspace, stored for reference and used when spawning AI tabs
 - **System status header** — Live CPU%, RAM usage, battery level, and date/time displayed in a top header bar (powered by `systemstat`)
@@ -339,6 +339,7 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 | `g` | Git: open-or-focus the lazygit tab for the current workspace (respawns if the process exited) |
 | `:` | Command palette (fuzzy-searchable list of all commands) |
 | `/` | Fuzzy file search |
+| `f` | Search within the active terminal's output |
 | `[` | Terminal scroll mode (see below) |
 | `y` | AI Chat panel |
 | `D` | Workspace dashboard overlay (bird's-eye view of all workspaces and tabs) |
@@ -359,7 +360,7 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 
 | Pane | Keys |
 |------|------|
-| *Terminal pane* | All keys forwarded to the active tab; `Ctrl+Shift+F` search, `Ctrl+Shift+C` copy visible content, `Ctrl+Shift+V` paste |
+| *Terminal pane* | All keys forwarded to the active tab; `Ctrl+G f` search, `Ctrl+Shift+C` copy visible content, `Ctrl+Shift+V` paste |
 | *Workspace list* | `j`/`k` select, `Enter` switch + focus main panel, `e` edit, `d` delete |
 | *Agents pane* | `j`/`k` select agent, `Enter` or click to jump to that workspace/tab |
 | *Markdown tab* | `j`/`k` scroll, `Ctrl+d`/`Ctrl+u` page, `g`/`G` top/bottom (read-only) |
