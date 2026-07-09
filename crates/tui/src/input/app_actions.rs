@@ -379,7 +379,21 @@ pub(crate) fn exit_term_scroll(app: &mut App) -> Option<Action> {
 /// Open the in-terminal search overlay over the active tab. A prefix action
 /// (default `Ctrl+G f`) rather than a direct chord, so it can't collide with a
 /// terminal emulator's own `Ctrl+Shift+*` bindings (e.g. ghostty).
+///
+/// No-op (with a toast) unless the active tab is actually a live terminal:
+/// searching only makes sense over PTY output, not over a chat, kanban board,
+/// markdown viewer, or a "command not found" placeholder — all of which render
+/// in the MainPanel without a `pty_parser`.
 pub(crate) fn open_terminal_search(app: &mut App) -> Option<Action> {
+    let has_terminal = app
+        .workspaces
+        .get(app.active_workspace)
+        .and_then(|ws| ws.current_tab())
+        .is_some_and(|tab| tab.pty_parser.is_some());
+    if !has_terminal {
+        app.set_toast("No terminal to search", crate::app::ToastLevel::Info);
+        return None;
+    }
     app.active_pane = ActivePane::MainPanel;
     app.term_search = Some(crate::app::TermSearchState {
         query: String::new(),

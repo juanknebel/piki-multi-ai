@@ -31,14 +31,16 @@ pub(super) fn handle_workspace_switcher_input(app: &mut App, key: KeyEvent) -> O
             }
             return None;
         }
-        // Navigation: j/k plus arrows. Down/up move by one visible row (tabs
-        // and workspaces intermixed). No wrap so the ends feel like a list.
+        // Navigation: arrows plus Ctrl+P/Ctrl+N (readline prev/next). We can't
+        // use bare j/k here because this overlay also has a search field — those
+        // letters must be typeable into the query. Down/up move by one visible
+        // row (tabs and workspaces intermixed). No wrap so the ends feel like a list.
         KeyCode::Down => move_selection(&mut state.selected, total, 1, false),
         KeyCode::Up => move_selection(&mut state.selected, total, -1, false),
-        KeyCode::Char('j') if key.modifiers.is_empty() => {
+        KeyCode::Char('n') if key.modifiers == KeyModifiers::CONTROL => {
             move_selection(&mut state.selected, total, 1, false)
         }
-        KeyCode::Char('k') if key.modifiers.is_empty() => {
+        KeyCode::Char('p') if key.modifiers == KeyModifiers::CONTROL => {
             move_selection(&mut state.selected, total, -1, false)
         }
         // Search: printable chars extend the query; backspace trims it. Both

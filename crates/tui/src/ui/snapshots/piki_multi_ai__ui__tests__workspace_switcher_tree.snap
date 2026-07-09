@@ -1,6 +1,5 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 297
 expression: content
 ---
 
@@ -14,5 +13,5 @@ expression: content
       │    ├─ → — Claude                 claude · not started │
       │                                                       │
       │ piki-nightly                                          │
-      │ enter switch  j/k move  type search  esc close        │
+      │ enter switch  ^p/^n move  type search  esc close      │
       └───────────────────────────────────────────────────────┘

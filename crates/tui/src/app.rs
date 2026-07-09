@@ -1722,6 +1722,15 @@ mod tests {
         app.workspaces.len() - 1
     }
 
+    /// Give the active tab of `ws_idx` a live in-memory terminal (a bare vt100
+    /// parser, no real PTY) so terminal-search gating sees a searchable pane.
+    fn add_terminal_tab(app: &mut App, ws_idx: usize) {
+        let ws = &mut app.workspaces[ws_idx];
+        let idx = ws.add_tab(AIProvider::Shell, true, None);
+        ws.tabs[idx].pty_parser = Some(Arc::new(Mutex::new(vt100::Parser::new(24, 80, 0))));
+        ws.active_tab = idx;
+    }
+
     // ── Fuzzy overlay tests ──
 
     #[test]
@@ -1940,14 +1949,33 @@ mod tests {
             test_storage(),
             &piki_core::paths::DataPaths::default_paths(),
         );
-        add_test_workspace(&mut app);
+        let ws_idx = add_test_workspace(&mut app);
+        add_terminal_tab(&mut app, ws_idx);
         assert!(app.term_search.is_none());
 
         crate::input::handle_key_event(&mut app, ctrl('g'));
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('f')));
         assert!(
             app.term_search.is_some(),
-            "Ctrl+G f should open the terminal search overlay"
+            "Ctrl+G f should open the terminal search overlay over a terminal tab"
+        );
+    }
+
+    #[test]
+    fn test_prefix_f_noop_without_terminal() {
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
+        // A workspace with no tabs → nothing to search.
+        add_test_workspace(&mut app);
+        assert!(app.term_search.is_none());
+
+        crate::input::handle_key_event(&mut app, ctrl('g'));
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('f')));
+        assert!(
+            app.term_search.is_none(),
+            "Ctrl+G f should not open terminal search when no terminal is active"
         );
     }
 

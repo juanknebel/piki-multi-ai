@@ -100,7 +100,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
         Span::raw(" "),
         Span::styled("enter", key_style),
         Span::styled(" switch  ", hint_style),
-        Span::styled("j/k", key_style),
+        Span::styled("^p/^n", key_style),
         Span::styled(" move  ", hint_style),
         Span::styled("type", key_style),
         Span::styled(" search  ", hint_style),
