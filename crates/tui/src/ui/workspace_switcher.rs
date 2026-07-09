@@ -1,172 +1,265 @@
-use std::collections::HashSet;
-
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
 use crate::app::App;
+use crate::workspace_switcher::SwitcherRow;
 
+/// Tree-style workspace/tab switcher: workspaces as headers, their tabs as
+/// children with a right-aligned provider·status column, an accent selection
+/// bar, and a breadcrumb + hints footer.
 pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let state = match &app.workspace_switcher {
         Some(s) => s,
         None => return,
     };
     let theme = &app.theme.fuzzy_search;
-    let snap = state.nucleo.snapshot();
 
-    // Centered overlay: 60% width, 50% height
-    let width = (area.width * 60 / 100).max(30).min(area.width);
-    let height = (area.height * 50 / 100).max(8).min(area.height);
+    // Large centered overlay (this is a whole-screen navigator, like herdr's).
+    let width = (area.width * 82 / 100).max(40).min(area.width);
+    let height = (area.height * 74 / 100).max(10).min(area.height);
     let x = area.x + (area.width.saturating_sub(width)) / 2;
     let y = area.y + (area.height.saturating_sub(height)) / 2;
     let popup = Rect::new(x, y, width, height);
-
     frame.render_widget(Clear, popup);
 
     let block = Block::default()
-        .title(" Switch Workspace (Space) ")
-        .title_style(Style::default().fg(theme.border))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.border));
-
     let inner = block.inner(popup);
     frame.render_widget(block, popup);
-
-    if inner.height < 3 {
+    if inner.height < 4 || inner.width < 8 {
         return;
     }
+    let iw = inner.width as usize;
 
-    // Line 0: search input
-    let cursor_char = "\u{2588}";
-    let input_line = Line::from(vec![
-        Span::styled(" > ", Style::default().fg(theme.border)),
-        Span::styled(
-            format!("{}{}", state.query, cursor_char),
-            Style::default().fg(theme.input_text),
-        ),
-    ]);
+    // ── Header: "/ query" left, counter right ─────────────────────────────
+    let header_left = if state.query.is_empty() {
+        " / switch workspace".to_string()
+    } else {
+        format!(" / {}\u{2588}", state.query)
+    };
+    let counter = format!("{} ", state.workspace_count());
+    let header = pad_between(&header_left, &counter, iw);
     frame.render_widget(
-        Paragraph::new(input_line),
+        Paragraph::new(Line::from(Span::styled(
+            header,
+            Style::default().fg(theme.count_text),
+        ))),
         Rect::new(inner.x, inner.y, inner.width, 1),
     );
 
-    // Line 1: result count
-    let total = snap.item_count();
-    let filtered = snap.matched_item_count();
-    let count_line = Line::from(Span::styled(
-        format!(" {}/{}", filtered, total),
-        Style::default().fg(theme.count_text),
-    ));
-    frame.render_widget(
-        Paragraph::new(count_line),
-        Rect::new(inner.x, inner.y + 1, inner.width, 1),
-    );
-
-    // Lines 2+: results list
-    let results_height = (inner.height as usize).saturating_sub(2);
-    if results_height == 0 || filtered == 0 {
+    // ── Body: the tree, with derived scroll ───────────────────────────────
+    // Rows: header(1) + [tree] + breadcrumb(1) + hints(1).
+    let body_top = inner.y + 1;
+    let body_height = inner.height.saturating_sub(3) as usize;
+    if body_height == 0 {
         return;
     }
-
-    let scroll_offset = if state.selected >= results_height {
-        state.selected - results_height + 1
+    let total = state.rows.len();
+    let selected = state.selected.min(total.saturating_sub(1));
+    let scroll = if selected >= body_height {
+        selected + 1 - body_height
     } else {
         0
     };
 
-    let pattern = snap.pattern().column_pattern(0);
-    let has_pattern = !state.query.is_empty();
-    let mut matcher = nucleo::Matcher::default();
-    let mut indices_buf = Vec::new();
-    let mut utf32_buf = Vec::new();
-
-    for i in 0..results_height {
-        let abs_idx = (scroll_offset + i) as u32;
-        if abs_idx >= filtered {
+    for i in 0..body_height {
+        let idx = scroll + i;
+        if idx >= total {
             break;
         }
-
-        let item = match snap.get_matched_item(abs_idx) {
-            Some(item) => item,
-            None => break,
-        };
-        let entry = &item.data;
-        let display_text = if let Some(ref group) = entry.group {
-            format!("{} ({}) [{}]", entry.name, group, entry.branch)
-        } else {
-            format!("{} [{}]", entry.name, entry.branch)
-        };
-        let is_selected = scroll_offset + i == state.selected;
-
-        let bg = if is_selected {
-            theme.selected_bg
-        } else {
-            ratatui::style::Color::Reset
-        };
-
-        // Compute match indices for highlighting
-        indices_buf.clear();
-        if has_pattern {
-            let haystack = nucleo::Utf32Str::new(&display_text, &mut utf32_buf);
-            pattern.indices(haystack, &mut matcher, &mut indices_buf);
-            indices_buf.sort_unstable();
-            indices_buf.dedup();
-        }
-
-        let matched_style = Style::default()
-            .fg(theme.match_highlight)
-            .bg(bg)
-            .add_modifier(Modifier::BOLD);
-        let normal_style = Style::default().fg(theme.result_text).bg(bg);
-        let hint_style = Style::default().fg(theme.count_text).bg(bg);
-
-        let match_set: HashSet<u32> = indices_buf.iter().copied().collect();
-        let mut spans = vec![Span::styled(" ", Style::default().bg(bg))];
-
-        // Number badge (1-9) for quick access hint
-        if entry.index < 9 {
-            spans.push(Span::styled(format!("{} ", entry.index + 1), hint_style));
-        } else {
-            spans.push(Span::styled("  ", Style::default().bg(bg)));
-        }
-
-        let mut run_start: Option<(usize, bool)> = None;
-        for (ci, (byte_idx, _ch)) in display_text.char_indices().enumerate() {
-            let is_match = match_set.contains(&(ci as u32));
-            match run_start {
-                Some((start, prev_match)) if prev_match != is_match => {
-                    let style = if prev_match {
-                        matched_style
-                    } else {
-                        normal_style
-                    };
-                    spans.push(Span::styled(
-                        display_text[start..byte_idx].to_string(),
-                        style,
-                    ));
-                    run_start = Some((byte_idx, is_match));
-                }
-                None => {
-                    run_start = Some((byte_idx, is_match));
-                }
-                _ => {}
-            }
-        }
-        if let Some((start, is_match)) = run_start {
-            let style = if is_match {
-                matched_style
-            } else {
-                normal_style
-            };
-            spans.push(Span::styled(display_text[start..].to_string(), style));
-        }
-
-        let line = Line::from(spans);
+        let is_selected = idx == selected;
+        let line = row_line(app, state.rows[idx], is_selected, iw, theme);
         frame.render_widget(
             Paragraph::new(line),
-            Rect::new(inner.x, inner.y + 2 + i as u16, inner.width, 1),
+            Rect::new(inner.x, body_top + i as u16, inner.width, 1),
         );
     }
+
+    // ── Footer: breadcrumb + hints ────────────────────────────────────────
+    let breadcrumb = state
+        .selected_row()
+        .map(|r| breadcrumb_text(app, r))
+        .unwrap_or_default();
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            format!(" {breadcrumb}"),
+            Style::default().fg(theme.count_text),
+        ))),
+        Rect::new(inner.x, inner.y + inner.height - 2, inner.width, 1),
+    );
+
+    let hint_style = Style::default().fg(theme.count_text);
+    let key_style = Style::default()
+        .fg(theme.result_text)
+        .add_modifier(Modifier::BOLD);
+    let hints = Line::from(vec![
+        Span::raw(" "),
+        Span::styled("enter", key_style),
+        Span::styled(" switch  ", hint_style),
+        Span::styled("j/k", key_style),
+        Span::styled(" move  ", hint_style),
+        Span::styled("type", key_style),
+        Span::styled(" search  ", hint_style),
+        Span::styled("esc", key_style),
+        Span::styled(" close", hint_style),
+    ]);
+    frame.render_widget(
+        Paragraph::new(hints),
+        Rect::new(inner.x, inner.y + inner.height - 1, inner.width, 1),
+    );
+}
+
+/// Build one tree row (workspace header or tab), as a full-width line so the
+/// selection bar spans the whole row.
+fn row_line<'a>(
+    app: &App,
+    row: SwitcherRow,
+    is_selected: bool,
+    iw: usize,
+    theme: &crate::theme::FuzzySearchTheme,
+) -> Line<'a> {
+    let sel_bg = theme.selected_bg;
+    let (left, right, right_color) = match row {
+        SwitcherRow::Workspace { ws_idx } => {
+            let Some(ws) = app.workspaces.get(ws_idx) else {
+                return Line::from("");
+            };
+            let is_active = ws_idx == app.active_workspace;
+            let (glyph, color) = match ws.agent_status_rollup() {
+                Some(s) => {
+                    let (g, _, c) = crate::ui::cli_agent_status_view(s);
+                    (g, c)
+                }
+                None => ("○", Color::DarkGray),
+            };
+            let marker = if is_active { "◆ " } else { "  " };
+            let left = format!(" {marker}{glyph} {} ({})", ws.name, ws.tabs.len());
+            (left, String::new(), color)
+        }
+        SwitcherRow::Tab { ws_idx, tab_idx } => {
+            let Some(ws) = app.workspaces.get(ws_idx) else {
+                return Line::from("");
+            };
+            let Some(tab) = ws.tabs.get(tab_idx) else {
+                return Line::from("");
+            };
+            let is_active_tab = tab_idx == ws.active_tab;
+            let (glyph, status_label, color) = match tab.cli_agent_snapshot() {
+                Some((status, _)) => crate::ui::cli_agent_status_view(status),
+                None => crate::ui::agent_tab_indicator(tab),
+            };
+            let label = tab
+                .markdown_label
+                .as_deref()
+                .unwrap_or(tab.provider.label());
+            let arrow = if is_active_tab { "→ " } else { "  " };
+            let left = format!("    ├─ {arrow}{glyph} {label}");
+
+            use piki_core::AIProvider;
+            let (right, right_color) = if matches!(tab.provider, AIProvider::Custom(_))
+                || tab.cli_agent_snapshot().is_some()
+            {
+                (
+                    format!("{} · {}", tab.provider.label().to_lowercase(), status_label),
+                    color,
+                )
+            } else {
+                (tab.provider.label().to_lowercase(), Color::DarkGray)
+            };
+            (left, right, right_color)
+        }
+    };
+
+    let is_bold = matches!(row, SwitcherRow::Workspace { ws_idx } if ws_idx == app.active_workspace)
+        || matches!(row, SwitcherRow::Tab { ws_idx, tab_idx }
+            if app.workspaces.get(ws_idx).is_some_and(|w| w.active_tab == tab_idx));
+
+    if is_selected {
+        // Full-width accent bar with dark text; right column keeps a subtle
+        // contrast by staying bold.
+        let base = Style::default().fg(Color::Black).bg(sel_bg);
+        let text = pad_between(&left, &format!("{right} "), iw);
+        let mut style = base;
+        if is_bold {
+            style = style.add_modifier(Modifier::BOLD);
+        }
+        Line::from(Span::styled(text, style))
+    } else {
+        let mut left_style = Style::default().fg(match row {
+            SwitcherRow::Workspace { .. } => theme.result_text,
+            SwitcherRow::Tab { .. } => theme.result_text,
+        });
+        if is_bold {
+            left_style = left_style.add_modifier(Modifier::BOLD);
+        }
+        let pad = iw
+            .saturating_sub(display_width(&left))
+            .saturating_sub(display_width(&right))
+            .saturating_sub(1);
+        Line::from(vec![
+            Span::styled(left, left_style),
+            Span::raw(" ".repeat(pad)),
+            Span::styled(right, Style::default().fg(right_color)),
+            Span::raw(" "),
+        ])
+    }
+}
+
+/// Breadcrumb for the footer, e.g. `piki-nightly · tab: Claude · idle`.
+fn breadcrumb_text(app: &App, row: SwitcherRow) -> String {
+    match row {
+        SwitcherRow::Workspace { ws_idx } => app
+            .workspaces
+            .get(ws_idx)
+            .map(|w| w.name.clone())
+            .unwrap_or_default(),
+        SwitcherRow::Tab { ws_idx, tab_idx } => {
+            let Some(ws) = app.workspaces.get(ws_idx) else {
+                return String::new();
+            };
+            let Some(tab) = ws.tabs.get(tab_idx) else {
+                return ws.name.clone();
+            };
+            let label = tab
+                .markdown_label
+                .as_deref()
+                .unwrap_or(tab.provider.label());
+            let status = tab
+                .cli_agent_snapshot()
+                .map(|(s, _)| crate::ui::cli_agent_status_view(s).1)
+                .unwrap_or("");
+            if status.is_empty() {
+                format!("{} · tab: {}", ws.name, label)
+            } else {
+                format!("{} · tab: {} · {}", ws.name, label, status)
+            }
+        }
+    }
+}
+
+/// Left-justify `left`, right-justify `right`, padded to `width` columns
+/// (display width aware). Truncates `left` if the two would overlap.
+fn pad_between(left: &str, right: &str, width: usize) -> String {
+    let lw = display_width(left);
+    let rw = display_width(right);
+    if lw + rw >= width {
+        // Not enough room — just clip to width, prioritizing the left text.
+        return truncate_to(left, width);
+    }
+    format!("{left}{}{right}", " ".repeat(width - lw - rw))
+}
+
+/// Approximate display width by char count. Workspace/tab names are almost
+/// always ASCII; the padding this feeds is cosmetic, so a wide-char miss just
+/// nudges alignment, never breaks layout.
+fn display_width(s: &str) -> usize {
+    s.chars().count()
+}
+
+fn truncate_to(s: &str, width: usize) -> String {
+    s.chars().take(width).collect()
 }

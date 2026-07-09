@@ -271,6 +271,33 @@ mod tests {
     }
 
     #[test]
+    fn test_snapshot_workspace_switcher_tree() {
+        let mut terminal = test_terminal(70, 16);
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+
+        let mut a = crate::app::Workspace::from_info(test_ws_info("piki-nightly", Some("piki"), 0));
+        a.add_tab(piki_core::AIProvider::Shell, true, None);
+        a.add_tab(piki_core::AIProvider::Custom("Claude".to_string()), true, None);
+        app.workspaces.push(a);
+
+        let mut b = crate::app::Workspace::from_info(test_ws_info("bob-the-builder", None, 1));
+        b.add_tab(piki_core::AIProvider::Custom("Claude".to_string()), true, None);
+        app.workspaces.push(b);
+
+        app.active_workspace = 0;
+        app.workspace_switcher =
+            Some(crate::workspace_switcher::create_state(&app.workspaces));
+
+        terminal
+            .draw(|frame| {
+                super::workspace_switcher::render(frame, frame.area(), &app);
+            })
+            .unwrap();
+        let content = buffer_to_snapshot(terminal.backend().buffer());
+        insta::assert_snapshot!("workspace_switcher_tree", content);
+    }
+
+    #[test]
     fn test_snapshot_confirm_delete_dialog() {
         let mut terminal = test_terminal(80, 24);
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());

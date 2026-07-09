@@ -108,11 +108,7 @@ pub(crate) fn handle_paste(app: &mut App, text: &str) {
         AppMode::WorkspaceSwitcher => {
             if let Some(ref mut state) = app.workspace_switcher {
                 state.query.push_str(text);
-                let q = state.query.clone();
-                state
-                    .nucleo
-                    .pattern
-                    .reparse(0, &q, nucleo::pattern::CaseMatching::Smart, true);
+                state.refilter();
             }
             return;
         }

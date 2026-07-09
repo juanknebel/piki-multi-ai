@@ -59,7 +59,7 @@ Built with Rust and [ratatui](https://ratatui.rs/).
 - **Deterministic workspace ordering** — Workspaces persist their display order via an `order` field; new workspaces append to the end; order is stable across restarts
 - **Quick workspace jumps** — `` Ctrl+G ` `` toggles to the previous workspace (Alt-Tab style); the fuzzy switcher (`Ctrl+G w`) and command palette (`Ctrl+G :`) cover jumps to any workspace
 - **Scrollbar indicators** — Thin scrollbars appear on the right edge of scrollable areas (terminal, markdown, agents list, workspace list) when content overflows the viewport
-- **Fuzzy workspace switcher** — Press `Ctrl+G w` to open a fuzzy search overlay for instant workspace switching by name, group, or branch
+- **Workspace switcher** — Press `Ctrl+G w` for a tree-style navigator: every workspace with its tabs nested underneath, each tab showing its provider and live status (e.g. `claude · idle`) in a right-aligned column, the active workspace/tab marked, and a full-width selection bar. `j`/`k` move across all rows, `Enter` jumps to the workspace (or straight to a specific tab), and typing filters by workspace or tab name
 - **tmux-style prefix keybindings** — keys always go to the focused pane (full passthrough to the embedded terminal); app actions live behind a one-shot `Ctrl+G` prefix (`Ctrl+G h/j/k/l` moves focus, `Ctrl+G c/x/n/p/1..9` manages tabs, `Ctrl+G Ctrl+G` sends a literal Ctrl+G); Enter on a workspace switches and auto-focuses the main panel
 - **Fuzzy file search** — Search all files in the active worktree with fuzzy matching powered by [nucleo](https://github.com/helix-editor/nucleo) (same engine as Helix editor), respects `.gitignore`
 - **$EDITOR integration** — Open any file in your preferred editor (`$EDITOR` or `vi`); TUI suspends and resumes automatically
@@ -119,7 +119,7 @@ A modern desktop GUI is available via `piki-desktop`, built with [Tauri v2](http
 - **System info** — `Alt+I` for live system monitoring: CPU, RAM, disk usage gauges with color thresholds (green/amber/red), battery status, load average, uptime, hostname; auto-refreshes every 3 seconds
 - **Application log viewer** — `Alt+Shift+L` for in-memory ring buffer (500 entries), filterable by level
 - **About dialog** — Click "Piki Desktop" in status bar or via command palette
-- **Workspace switcher** — `Ctrl+Space` for quick fuzzy workspace switching; results grouped by group name with headers, sorted alphabetically (ungrouped first), items ordered within each group
+- **Workspace switcher** — `Ctrl+G w` opens a tree of every workspace with its tabs nested underneath (provider · live status in a right-aligned column, active workspace/tab marked); `j`/`k` move, `Enter` jumps to the workspace or a specific tab, and typing filters by workspace or tab name
 - **Settings** — `Alt+S` to open settings dialog; all keyboard shortcuts are editable at runtime (click a shortcut, press new key combo) with two-column display (Default / Current); configure the terminal shell command; changes persist in SQLite and take effect immediately without restart; "Restore Defaults" button resets everything
 - **AI Chat panel** — Right-side chat panel (`Ctrl+Shift+L`) for chatting with local LLMs via Ollama or llama.cpp server; server type selectable in settings dialog (gear icon), model selector dropdown populated from the selected server, streaming responses, resizable panel, conversation persists when hidden; config saved to settings
 - **Resizable sidebar** — Drag the divider or use the resize handle
@@ -327,7 +327,7 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 | `x` | Close current tab (with confirmation dialog) |
 | `n` / `p` | Next / previous tab |
 | `1`..`9` | Jump to tab N |
-| `w` | Fuzzy workspace switcher (search by name/group/branch) |
+| `w` | Workspace switcher (tree of workspaces + tabs; type to filter, Enter to jump) |
 | `)` / `(` | Next / previous workspace |
 | `` ` `` | Toggle to previous workspace |
 | `N` | Create new workspace |
@@ -817,7 +817,7 @@ crates/
       syntax.rs          # SyntaxHighlighter wrapping syntect for ratatui integration
       log_buffer.rs      # In-memory ring buffer tracing layer for log viewer
       command_palette.rs # Command palette types, registry, nucleo state
-      workspace_switcher.rs # Fuzzy workspace switcher state (nucleo-powered)
+      workspace_switcher.rs # Tree-style workspace switcher state (workspaces + tabs, substring filter)
       helpers.rs         # Shared utility functions
       pty/
         input.rs         # Crossterm key events -> PTY bytes
