@@ -1,0 +1,91 @@
+{
+  "id": "breeze",
+  "name": "Breeze Dark",
+  "isDark": true,
+  "colors": {
+    "bg-primary": "#232629",
+    "bg-secondary": "#1d2023",
+    "bg-tertiary": "#31363b",
+    "bg-hover": "#3b4046",
+    "bg-active": "#4d5157",
+    "bg-input": "#1d2023",
+    "bg-dropdown": "#31363b",
+    "bg-surface": "#232629",
+    "bg-elevated": "#31363b",
+
+    "text-primary": "#eff0f1",
+    "text-secondary": "#bdc3c7",
+    "text-muted": "#7f8c8d",
+    "text-accent": "#3daee9",
+    "text-bright": "#fcfcfc",
+
+    "border-primary": "#31363b",
+    "border-active": "#3daee9",
+    "border-inactive": "#4d4d4d",
+
+    "accent-primary": "#3daee9",
+    "accent-hover": "#5cbef0",
+    "accent-focus": "#3daee9",
+    "accent-warm": "#f67400",
+
+    "activity-bar-bg": "#1d2023",
+    "activity-bar-fg": "#fcfcfc",
+    "activity-bar-inactive": "#7f8c8d",
+    "activity-bar-badge": "#3daee9",
+
+    "sidebar-bg": "#232629",
+    "sidebar-header-bg": "#1d2023",
+    "sidebar-header-fg": "#bdc3c7",
+    "sidebar-item-hover": "#31363b",
+    "sidebar-item-active": "#3b4046",
+
+    "tab-active-bg": "#232629",
+    "tab-active-fg": "#fcfcfc",
+    "tab-inactive-bg": "#1d2023",
+    "tab-inactive-fg": "#7f8c8d",
+    "tab-border": "#31363b",
+    "tab-active-border-top": "#3daee9",
+
+    "terminal-bg": "#232629",
+    "terminal-fg": "#fcfcfc",
+    "terminal-cursor": "#3daee9",
+
+    "statusbar-bg": "#31363b",
+    "statusbar-fg": "#3daee9",
+    "statusbar-no-folder": "#9b59b6",
+
+    "git-modified": "#f67400",
+    "git-added": "#27ae60",
+    "git-deleted": "#da4453",
+    "git-renamed": "#1d99f3",
+    "git-untracked": "#7f8c8d",
+    "git-conflicted": "#9b59b6",
+    "git-staged": "#27ae60",
+    "git-staged-modified": "#f67400",
+
+    "dialog-bg": "#31363b",
+    "dialog-border": "#4d4d4d",
+
+    "toast-info-bg": "#1d99f3",
+    "toast-success-bg": "#27ae60",
+    "toast-error-bg": "#da4453",
+    "toast-fg": "#fcfcfc",
+
+    "xterm-black": "#232629",
+    "xterm-red": "#ed1515",
+    "xterm-green": "#11d116",
+    "xterm-yellow": "#f67400",
+    "xterm-blue": "#1d99f3",
+    "xterm-magenta": "#9b59b6",
+    "xterm-cyan": "#1abc9c",
+    "xterm-white": "#fcfcfc",
+    "xterm-bright-black": "#7f8c8d",
+    "xterm-bright-red": "#c0392b",
+    "xterm-bright-green": "#1cdc9a",
+    "xterm-bright-yellow": "#fdbc4b",
+    "xterm-bright-blue": "#3daee9",
+    "xterm-bright-magenta": "#8e44ad",
+    "xterm-bright-cyan": "#16a085",
+    "xterm-bright-white": "#ffffff"
+  }
+}

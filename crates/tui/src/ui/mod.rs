@@ -3,7 +3,6 @@ pub(crate) mod chat;
 pub(crate) mod code_review;
 pub mod command_palette;
 pub(crate) mod dialogs;
-pub mod diff;
 pub mod editor;
 pub mod fuzzy;
 pub mod layout;
@@ -31,6 +30,22 @@ pub(crate) fn cli_agent_status_view(
         S::WaitingPermission => ("⚠", "needs permission", Color::Yellow),
         S::Idle => ("⏳", "waiting", Color::Cyan),
         S::Done => ("✓", "done", Color::Green),
+    }
+}
+
+/// Fallback liveness indicator for a tab without OSC 777 agent state.
+/// Shared by the dashboard and the Agents pane.
+pub(crate) fn agent_tab_indicator(
+    tab: &crate::app::Tab,
+) -> (&'static str, &'static str, ratatui::style::Color) {
+    use ratatui::style::Color;
+    let alive = tab.pty_session.as_ref().is_some_and(|p| p.peek_alive());
+    if alive {
+        ("●", "alive", Color::Green)
+    } else if tab.pty_session.is_some() {
+        ("○", "exited", Color::DarkGray)
+    } else {
+        ("—", "not started", Color::DarkGray)
     }
 }
 
@@ -96,6 +111,20 @@ mod tests {
     }
 
     #[test]
+    fn test_render_status_bar_prefix_pending() {
+        let mut terminal = test_terminal(80, 1);
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        app.input_state = crate::app::InputState::PrefixPending;
+        terminal
+            .draw(|frame| {
+                super::statusbar::render_status_bar(frame, frame.area(), &app);
+            })
+            .unwrap();
+        let content = buffer_to_snapshot(terminal.backend().buffer());
+        insta::assert_snapshot!("status_bar_prefix_pending", content);
+    }
+
+    #[test]
     fn test_render_footer_from_keys_single_line() {
         let mut terminal = test_terminal(80, 1);
         let theme = Theme::default();
@@ -131,6 +160,143 @@ mod tests {
 
     // ── New snapshot tests for dialogs ──
 
+    fn test_ws_info(name: &str, group: Option<&str>, order: u32) -> piki_core::WorkspaceInfo {
+        piki_core::WorkspaceInfo {
+            name: name.to_string(),
+            path: std::path::PathBuf::from(format!("/tmp/{name}")),
+            branch: name.to_string(),
+            workspace_type: piki_core::WorkspaceType::Worktree,
+            description: String::new(),
+            prompt: String::new(),
+            kanban_path: None,
+            group: group.map(String::from),
+            order,
+            source_repo: std::path::PathBuf::from("/tmp/src"),
+            source_repo_display: String::new(),
+            dispatch_card_id: None,
+            dispatch_source_kanban: None,
+            dispatch_agent_name: None,
+            origin: piki_core::WorkspaceOrigin::default(),
+        }
+    }
+
+    #[test]
+    fn test_snapshot_workspace_list_single_line_rows() {
+        let mut terminal = test_terminal(40, 10);
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+
+        let mut a = crate::app::Workspace::from_info(test_ws_info("nightly", Some("piki"), 0));
+        a.changed_files.push(piki_core::ChangedFile {
+            path: "src/main.rs".to_string(),
+            status: piki_core::FileStatus::Modified,
+        });
+        a.changed_files.push(piki_core::ChangedFile {
+            path: "src/lib.rs".to_string(),
+            status: piki_core::FileStatus::Modified,
+        });
+        a.ahead_behind = Some((1, 2));
+        app.workspaces.push(a);
+        app.workspaces
+            .push(crate::app::Workspace::from_info(test_ws_info(
+                "void-setup",
+                Some("ricing"),
+                1,
+            )));
+        app.workspaces
+            .push(crate::app::Workspace::from_info(test_ws_info(
+                "x220t",
+                Some("ricing"),
+                2,
+            )));
+        app.active_workspace = 0;
+        app.selected_sidebar_row = 1;
+
+        terminal
+            .draw(|frame| {
+                super::sidebar::render_workspace_list(frame, frame.area(), &app);
+            })
+            .unwrap();
+        let content = buffer_to_snapshot(terminal.backend().buffer());
+        insta::assert_snapshot!("workspace_list_single_line_rows", content);
+    }
+
+    #[test]
+    fn test_snapshot_agents_pane_with_rows() {
+        let mut terminal = test_terminal(40, 8);
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let info = piki_core::WorkspaceInfo {
+            name: "demo-ws".to_string(),
+            path: std::path::PathBuf::from("/tmp/demo"),
+            branch: "main".to_string(),
+            workspace_type: piki_core::WorkspaceType::Simple,
+            description: String::new(),
+            prompt: String::new(),
+            kanban_path: None,
+            group: None,
+            order: 0,
+            source_repo: std::path::PathBuf::from("/tmp/demo"),
+            source_repo_display: String::new(),
+            dispatch_card_id: None,
+            dispatch_source_kanban: None,
+            dispatch_agent_name: None,
+            origin: piki_core::WorkspaceOrigin::default(),
+        };
+        let mut ws = crate::app::Workspace::from_info(info);
+        ws.add_tab(piki_core::AIProvider::Custom("Claude".to_string()), true, None);
+        app.workspaces.push(ws);
+        terminal
+            .draw(|frame| {
+                super::sidebar::render_agents_pane(frame, frame.area(), &app);
+            })
+            .unwrap();
+        let content = buffer_to_snapshot(terminal.backend().buffer());
+        insta::assert_snapshot!("agents_pane_with_rows", content);
+    }
+
+    #[test]
+    fn test_snapshot_tab_bar_solid_blocks() {
+        let mut terminal = test_terminal(60, 2);
+        let app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut ws = crate::app::Workspace::from_info(test_ws_info("demo", None, 0));
+        ws.add_tab(piki_core::AIProvider::Custom("Claude".to_string()), true, None);
+        ws.add_tab(piki_core::AIProvider::Shell, true, None);
+        ws.active_tab = 0;
+        terminal
+            .draw(|frame| {
+                super::subtabs::render(frame, frame.area(), &ws, &app.theme);
+            })
+            .unwrap();
+        let content = buffer_to_snapshot(terminal.backend().buffer());
+        insta::assert_snapshot!("tab_bar_solid_blocks", content);
+    }
+
+    #[test]
+    fn test_snapshot_workspace_switcher_tree() {
+        let mut terminal = test_terminal(70, 16);
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+
+        let mut a = crate::app::Workspace::from_info(test_ws_info("piki-nightly", Some("piki"), 0));
+        a.add_tab(piki_core::AIProvider::Shell, true, None);
+        a.add_tab(piki_core::AIProvider::Custom("Claude".to_string()), true, None);
+        app.workspaces.push(a);
+
+        let mut b = crate::app::Workspace::from_info(test_ws_info("bob-the-builder", None, 1));
+        b.add_tab(piki_core::AIProvider::Custom("Claude".to_string()), true, None);
+        app.workspaces.push(b);
+
+        app.active_workspace = 0;
+        app.workspace_switcher =
+            Some(crate::workspace_switcher::create_state(&app.workspaces));
+
+        terminal
+            .draw(|frame| {
+                super::workspace_switcher::render(frame, frame.area(), &app);
+            })
+            .unwrap();
+        let content = buffer_to_snapshot(terminal.backend().buffer());
+        insta::assert_snapshot!("workspace_switcher_tree", content);
+    }
+
     #[test]
     fn test_snapshot_confirm_delete_dialog() {
         let mut terminal = test_terminal(80, 24);
@@ -145,37 +311,7 @@ mod tests {
         insta::assert_snapshot!("confirm_delete_dialog", content);
     }
 
-    #[test]
-    fn test_snapshot_confirm_merge_dialog() {
-        let mut terminal = test_terminal(80, 24);
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
-        app.active_dialog = Some(DialogState::ConfirmMerge);
-        terminal
-            .draw(|frame| {
-                super::dialogs::render_confirm_merge_dialog(frame, frame.area(), &app);
-            })
-            .unwrap();
-        let content = buffer_to_snapshot(terminal.backend().buffer());
-        insta::assert_snapshot!("confirm_merge_dialog", content);
-    }
-
-    #[test]
-    fn test_snapshot_commit_message_dialog() {
-        let mut terminal = test_terminal(80, 24);
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
-        app.active_dialog = Some(DialogState::CommitMessage {
-            buffer: "feat: add snapshot tests".to_string(),
-        });
-        terminal
-            .draw(|frame| {
-                super::dialogs::render_commit_dialog(frame, frame.area(), &app);
-            })
-            .unwrap();
-        let content = buffer_to_snapshot(terminal.backend().buffer());
-        insta::assert_snapshot!("commit_message_dialog", content);
-    }
-
-    #[test]
+            #[test]
     fn test_snapshot_help_overlay() {
         let mut terminal = test_terminal(80, 40);
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());

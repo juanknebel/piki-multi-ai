@@ -135,6 +135,28 @@ export function createTerminal(tabId: string): TerminalInstance {
     e.stopPropagation();
   }, true);
 
+  // Mouse-wheel scrollback fix. When a program enables mouse tracking (Claude
+  // Code, tmux, etc.), xterm forwards wheel events to it as mouse reports
+  // instead of moving the scrollback — so the wheel appears dead and the user
+  // is forced onto the arrow keys, and the forwarded events make the program
+  // redraw from the top (the viewport snapping "all the way up"). On the normal
+  // buffer there's real scrollback the wheel should move, so we scroll it here
+  // and swallow the event. The alternate buffer (vim, less, fzf) keeps xterm's
+  // default alt-scroll behavior so those apps still get their wheel events.
+  element.addEventListener("wheel", (e) => {
+    if (terminal.buffer.active.type !== "normal") return;
+    if (terminal.modes.mouseTrackingMode === "none") return;
+    const rows = terminal.rows || 1;
+    const rowHeight = element.clientHeight > 0 ? element.clientHeight / rows : 17;
+    let lines: number;
+    if (e.deltaMode === WheelEvent.DOM_DELTA_LINE) lines = e.deltaY;
+    else if (e.deltaMode === WheelEvent.DOM_DELTA_PAGE) lines = e.deltaY * rows;
+    else lines = e.deltaY / rowHeight;
+    terminal.scrollLines(Math.round(lines) || (e.deltaY > 0 ? 1 : -1));
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }, { capture: true });
+
   // Send keystrokes to backend (UTF-8 safe base64 encoding)
   terminal.onData((data) => {
     const bytes = new TextEncoder().encode(data);

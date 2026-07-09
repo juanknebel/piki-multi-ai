@@ -1,3 +1,4 @@
+pub(crate) mod app_actions;
 mod chat_input;
 mod code_review_input;
 mod command_palette_input;
@@ -17,36 +18,36 @@ mod workspace_switcher_input;
 use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::action::Action;
-use crate::app::{ActivePane, App, AppMode, DialogField};
-use crate::dialog_state::{DialogState, EditWorkspaceField};
-use crate::helpers::{copy_visible_terminal, resize_all_ptys, scrollback_max};
+use crate::app::{ActivePane, App, AppMode, InputState};
 
 use self::command_palette_input::handle_command_palette_input;
 use self::dialog::{
-    handle_about_input, handle_commit_message_input, handle_confirm_close_tab_input,
-    handle_confirm_delete_input, handle_confirm_merge_input, handle_confirm_quit_input,
-    handle_conflict_resolution_input, handle_dashboard_input, handle_dispatch_agent_input,
-    handle_dispatch_card_move_input, handle_edit_agent_input, handle_edit_agent_role_input,
-    handle_edit_workspace_input,
-    handle_git_log_input,
-    handle_git_stash_input, handle_help_input, handle_import_agents_input, handle_logs_input,
-    handle_manage_agents_input, handle_manage_providers_input, handle_edit_provider_input,
-    handle_create_worktree_input, handle_new_tab_input, handle_new_workspace_input,
-    handle_workspace_info_input,
+    handle_about_input, handle_confirm_close_tab_input,
+    handle_confirm_delete_input, handle_confirm_quit_input,
+    handle_create_worktree_input, handle_dashboard_input,
+    handle_dispatch_agent_input, handle_dispatch_card_move_input, handle_edit_agent_input,
+    handle_edit_agent_role_input, handle_edit_provider_input, handle_edit_workspace_input,
+    handle_help_input, handle_import_agents_input,
+    handle_logs_input, handle_manage_agents_input, handle_manage_providers_input,
+    handle_new_tab_input, handle_new_workspace_input, handle_workspace_info_input,
 };
 use self::editor_input::handle_inline_edit_input;
 use self::fuzzy_input::handle_fuzzy_search_input;
 use self::interaction::{
-    handle_api_interaction, handle_diff_interaction, handle_filelist_interaction,
+    handle_agents_interaction, handle_api_interaction,
     handle_kanban_interaction, handle_markdown_interaction, handle_terminal_interaction,
     handle_workspace_interaction,
 };
 
 /// Handle a bracketed paste event — insert full text at once into the active context.
 pub(crate) fn handle_paste(app: &mut App, text: &str) {
-    // Terminal interaction: write to PTY
-    if app.interacting
-        && matches!(app.mode, AppMode::Normal | AppMode::Diff)
+    // A paste while a prefix chord is pending cancels the chord
+    if app.input_state == InputState::PrefixPending {
+        app.input_state = InputState::Normal;
+    }
+    // Focused terminal: write to PTY
+    if app.active_pane == ActivePane::MainPanel
+        && app.mode == AppMode::Normal
         && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
         && let Some(tab) = ws.current_tab_mut()
     {
@@ -107,11 +108,7 @@ pub(crate) fn handle_paste(app: &mut App, text: &str) {
         AppMode::WorkspaceSwitcher => {
             if let Some(ref mut state) = app.workspace_switcher {
                 state.query.push_str(text);
-                let q = state.query.clone();
-                state
-                    .nucleo
-                    .pattern
-                    .reparse(0, &q, nucleo::pattern::CaseMatching::Smart, true);
+                state.refilter();
             }
             return;
         }
@@ -140,8 +137,6 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         AppMode::NewWorkspace => return handle_new_workspace_input(app, key),
         AppMode::EditWorkspace => return handle_edit_workspace_input(app, key),
         AppMode::CreateWorktree => return handle_create_worktree_input(app, key),
-        AppMode::CommitMessage => return handle_commit_message_input(app, key),
-        AppMode::ConfirmMerge => return handle_confirm_merge_input(app, key),
         AppMode::NewTab => return handle_new_tab_input(app, key),
         AppMode::ConfirmCloseTab => return handle_confirm_close_tab_input(app, key),
         AppMode::ConfirmQuit => return handle_confirm_quit_input(app, key),
@@ -153,9 +148,6 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         }
         AppMode::ConfirmDelete => return handle_confirm_delete_input(app, key),
         AppMode::SubmitReview => return code_review_input::handle_submit_review_input(app, key),
-        AppMode::GitStash => return handle_git_stash_input(app, key),
-        AppMode::GitLog => return handle_git_log_input(app, key),
-        AppMode::ConflictResolution => return handle_conflict_resolution_input(app, key),
         AppMode::DispatchAgent => return handle_dispatch_agent_input(app, key),
         AppMode::ManageAgents => return handle_manage_agents_input(app, key),
         AppMode::EditAgent => return handle_edit_agent_input(app, key),
@@ -165,8 +157,8 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         AppMode::ManageProviders => return handle_manage_providers_input(app, key),
         AppMode::EditProvider => return handle_edit_provider_input(app, key),
         AppMode::ChatPanel => return chat_input::handle_chat_panel_input(app, key),
-        // Normal and Diff modes fall through to navigation/interaction handling
-        AppMode::Normal | AppMode::Diff => {}
+        // Normal mode falls through to the prefix/pane dispatch
+        AppMode::Normal => {}
     }
 
     // Clear status message, toast, and selection on any key
@@ -174,382 +166,238 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
     app.toast = None;
     app.selection = None;
 
-    if app.interacting {
-        handle_interaction_mode(app, key)
-    } else {
-        handle_navigation_mode(app, key)
+    // The terminal search overlay captures everything, including the prefix key
+    if app.active_pane == ActivePane::MainPanel && app.term_search.is_some() {
+        return interaction::handle_term_search_key(app, key);
+    }
+
+    match app.input_state {
+        InputState::PrefixPending => {
+            // One-shot: always reset before dispatching
+            app.input_state = InputState::Normal;
+            if key.code == KeyCode::Esc {
+                return None;
+            }
+            if app.config.is_prefix_key(key) {
+                send_literal_prefix(app);
+                return None;
+            }
+            handle_prefix_key(app, key)
+        }
+        InputState::TermScroll => {
+            if app.config.is_prefix_key(key) {
+                app_actions::exit_term_scroll(app);
+                app.input_state = InputState::PrefixPending;
+                return None;
+            }
+            handle_term_scroll_key(app, key)
+        }
+        InputState::Normal => {
+            if app.config.is_prefix_key(key) {
+                app.input_state = InputState::PrefixPending;
+                return None;
+            }
+            if let Some(result) = try_direct_app_binding(app, key) {
+                return result;
+            }
+            handle_pane_key(app, key)
+        }
     }
 }
 
-// ── Navigation mode: hjkl between panes, Enter to interact, global shortcuts ──
+/// App actions addressable from the `[keybindings.app]` table, minus the
+/// terminal clipboard/search chords (those stay pane-scoped so e.g. copy in an
+/// API tab can copy the response instead of the terminal screen).
+const APP_ACTIONS: &[&str] = &[
+    "focus_left",
+    "focus_down",
+    "focus_up",
+    "focus_right",
+    "new_tab",
+    "close_tab",
+    "next_tab",
+    "prev_tab",
+    "workspace_switcher",
+    "next_workspace",
+    "prev_workspace",
+    "toggle_prev_workspace",
+    "new_workspace",
+    "edit_workspace",
+    "workspace_info",
+    "clone_workspace",
+    "git",
+    "terminal_search",
+    "help",
+    "about",
+    "dashboard",
+    "command_palette",
+    "fuzzy_search",
+    "chat_panel",
+    "quit",
+    "manage_agents",
+    "manage_providers",
+    "logs",
+    "scroll_mode",
+    "sidebar_shrink",
+    "sidebar_grow",
+    "split_up",
+    "split_down",
+];
 
-pub(crate) fn handle_navigation_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
-    // Pane navigation
-    if app.config.matches_navigation(key, "left") || app.config.matches_navigation(key, "left_alt")
+/// Execute an `[keybindings.app]` action by name.
+fn dispatch_app_action(app: &mut App, action: &str) -> Option<Action> {
+    match action {
+        "focus_left" => app_actions::focus_left(app),
+        "focus_down" => app_actions::focus_down(app),
+        "focus_up" => app_actions::focus_up(app),
+        "focus_right" => app_actions::focus_right(app),
+        "new_tab" => app_actions::open_new_tab(app),
+        "close_tab" => app_actions::request_close_tab(app),
+        "next_tab" => app_actions::cycle_next_tab(app),
+        "prev_tab" => app_actions::cycle_prev_tab(app),
+        "workspace_switcher" => {
+            app.open_workspace_switcher();
+            None
+        }
+        "next_workspace" => {
+            app.next_workspace();
+            None
+        }
+        "prev_workspace" => {
+            app.prev_workspace();
+            None
+        }
+        "toggle_prev_workspace" => {
+            app.toggle_previous_workspace();
+            None
+        }
+        "new_workspace" => app_actions::open_new_workspace(app),
+        "edit_workspace" => app_actions::open_edit_workspace(app),
+        "workspace_info" => app_actions::open_workspace_info(app),
+        "clone_workspace" => app_actions::open_clone_workspace(app),
+        "git" => app_actions::open_git_tab(app),
+        "terminal_search" => app_actions::open_terminal_search(app),
+        "help" => app_actions::open_help(app),
+        "about" => app_actions::open_about(app),
+        "dashboard" => app_actions::open_dashboard(app),
+        "command_palette" => {
+            app.open_command_palette();
+            None
+        }
+        "fuzzy_search" => {
+            app.open_fuzzy_search();
+            None
+        }
+        "chat_panel" => app_actions::open_chat_panel(app),
+        "quit" => app_actions::open_confirm_quit(app),
+        "manage_agents" => app_actions::open_manage_agents(app),
+        "manage_providers" => app_actions::open_manage_providers(app),
+        "logs" => app_actions::open_logs(app),
+        "scroll_mode" => app_actions::enter_term_scroll(app),
+        "sidebar_shrink" => app_actions::sidebar_shrink(app),
+        "sidebar_grow" => app_actions::sidebar_grow(app),
+        "split_up" => app_actions::split_up(app),
+        "split_down" => app_actions::split_down(app),
+        _ => None,
+    }
+}
+
+/// Dispatch the key following the prefix chord against the app table.
+fn handle_prefix_key(app: &mut App, key: KeyEvent) -> Option<Action> {
+    // prefix 1..9 → jump to tab N (not configurable, like tmux)
+    if let KeyCode::Char(c @ '1'..='9') = key.code
+        && (key.modifiers.is_empty() || key.modifiers == crossterm::event::KeyModifiers::NONE)
     {
-        if app.active_pane == ActivePane::MainPanel {
-            app.active_pane = ActivePane::WorkspaceList;
-        }
-    } else if app.config.matches_navigation(key, "right")
-        || app.config.matches_navigation(key, "right_alt")
-    {
-        if matches!(
-            app.active_pane,
-            ActivePane::WorkspaceList | ActivePane::GitStatus
-        ) {
-            app.active_pane = ActivePane::MainPanel;
-        }
-    } else if app.config.matches_navigation(key, "down")
-        || app.config.matches_navigation(key, "down_alt")
-    {
-        match app.active_pane {
-            ActivePane::WorkspaceList => app.active_pane = ActivePane::GitStatus,
-            ActivePane::MainPanel => app.active_pane = ActivePane::GitStatus,
-            _ => {}
-        }
-    } else if app.config.matches_navigation(key, "up")
-        || app.config.matches_navigation(key, "up_alt")
-    {
-        match app.active_pane {
-            ActivePane::GitStatus => app.active_pane = ActivePane::WorkspaceList,
-            ActivePane::MainPanel => app.active_pane = ActivePane::WorkspaceList,
-            _ => {}
-        }
-    } else if app.config.matches_navigation(key, "enter_pane") {
-        app.interacting = true;
-    } else if app.config.matches_navigation(key, "quit") {
-        app.active_dialog = Some(DialogState::ConfirmQuit);
-        app.mode = AppMode::ConfirmQuit;
-    } else if app.config.matches_navigation(key, "help") {
-        app.active_dialog = Some(DialogState::Help { scroll: 0 });
-        app.mode = AppMode::Help;
-    } else if app.config.matches_navigation(key, "about") {
-        app.active_dialog = Some(DialogState::About);
-        app.mode = AppMode::About;
-    } else if app.config.matches_navigation(key, "dashboard") {
-        if !app.workspaces.is_empty() {
-            app.active_dialog = Some(DialogState::Dashboard {
-                selected: app.active_workspace,
-                scroll_offset: 0,
-            });
-            app.mode = AppMode::Dashboard;
-        }
-    } else if app.config.matches_navigation(key, "logs") {
-        app.active_dialog = Some(DialogState::Logs {
-            scroll: u16::MAX,
-            level_filter: 0,
-            selected: usize::MAX,
-            hscroll: 0,
-            search_active: false,
-            search_buffer: String::new(),
-            search_cursor: 0,
-            auto_refresh: true,
-        });
-        app.mode = AppMode::Logs;
-    } else if app.config.matches_navigation(key, "workspace_info") {
-        if !app.workspaces.is_empty() {
-            app.active_dialog = Some(DialogState::WorkspaceInfo { hscroll: 0 });
-            app.mode = AppMode::WorkspaceInfo;
-            let _ = crossterm::execute!(std::io::stderr(), crossterm::event::DisableMouseCapture);
-        }
-    } else if app.config.matches_navigation(key, "edit_workspace") {
-        if !app.workspaces.is_empty() {
-            let ws = &app.workspaces[app.selected_workspace];
-            let kanban = ws.kanban_path.clone().unwrap_or_default();
-            let prompt = ws.prompt.clone();
-            let group = ws.info.group.clone().unwrap_or_default();
-            app.active_dialog = Some(DialogState::EditWorkspace {
-                target: app.selected_workspace,
-                kanban_cursor: kanban.chars().count(),
-                kanban,
-                prompt_cursor: prompt.chars().count(),
-                prompt,
-                group_cursor: group.chars().count(),
-                group,
-                active_field: EditWorkspaceField::KanbanPath,
-            });
-            app.mode = AppMode::EditWorkspace;
-        }
-    } else if app.config.matches_navigation(key, "clone_workspace") {
-        // Layer 3: the former "Clone workspace" action is now "Create Worktree",
-        // available only when the selected workspace has a GitHub origin.
-        if let Some(ws) = app.workspaces.get(app.selected_workspace) {
-            match &ws.info.origin {
-                piki_core::WorkspaceOrigin::GitHub { .. } => {
-                    let kanban = ws.kanban_path.clone().unwrap_or_default();
-                    let prompt = ws.prompt.clone();
-                    let group = ws.info.group.clone().unwrap_or_default();
-                    app.active_dialog = Some(crate::dialog_state::DialogState::CreateWorktree {
-                        parent_idx: app.selected_workspace,
-                        name: String::new(),
-                        name_cursor: 0,
-                        prompt_cursor: prompt.chars().count(),
-                        prompt,
-                        kanban_cursor: kanban.chars().count(),
-                        kanban,
-                        group_cursor: group.chars().count(),
-                        group,
-                        active_field: crate::dialog_state::CreateWorktreeField::Name,
-                    });
-                    app.mode = AppMode::CreateWorktree;
-                }
-                piki_core::WorkspaceOrigin::Local => {
-                    app.status_message = Some(
-                        "Create Worktree is available only for GitHub workspaces".into(),
-                    );
-                }
-            }
-        }
-    } else if app.config.matches_navigation(key, "new_workspace") {
-        let default_dest = app.paths.repos_dir().to_string_lossy().to_string();
-        let default_dest_cursor = default_dest.len();
-        app.active_dialog = Some(DialogState::NewWorkspace {
-            name: String::new(),
-            name_cursor: 0,
-            dir: String::new(),
-            dir_cursor: 0,
-            destination: default_dest,
-            destination_cursor: default_dest_cursor,
-            desc: String::new(),
-            desc_cursor: 0,
-            prompt: String::new(),
-            prompt_cursor: 0,
-            kanban: String::new(),
-            kanban_cursor: 0,
-            group: String::new(),
-            group_cursor: 0,
-            source: crate::app::NewWorkspaceSource::default(),
-            active_field: DialogField::Source,
-        });
-        app.mode = AppMode::NewWorkspace;
-    } else if app.config.matches_navigation(key, "delete_workspace") {
-        if !app.workspaces.is_empty() {
-            app.active_dialog = Some(DialogState::ConfirmDelete {
-                target: app.selected_workspace,
-            });
-            app.mode = AppMode::ConfirmDelete;
-        }
-    } else if app.config.matches_navigation(key, "commit") {
-        if let Some(ws) = app.current_workspace()
-            && ws.info.workspace_type != piki_core::WorkspaceType::Project
-        {
-            app.active_dialog = Some(DialogState::CommitMessage {
-                buffer: String::new(),
-            });
-            app.mode = AppMode::CommitMessage;
-        }
-    } else if app.config.matches_navigation(key, "merge") {
-        if let Some(ws) = app.current_workspace()
-            && ws.info.workspace_type != piki_core::WorkspaceType::Project
-        {
-            app.active_dialog = Some(DialogState::ConfirmMerge);
-            app.mode = AppMode::ConfirmMerge;
-        }
-    } else if app.config.matches_navigation(key, "push") {
-        if let Some(ws) = app.current_workspace()
-            && ws.info.workspace_type != piki_core::WorkspaceType::Project
-        {
-            return Some(Action::GitPush);
-        }
-    } else if app.config.matches_navigation(key, "stash") {
-        if let Some(ws) = app.current_workspace()
-            && ws.info.workspace_type != piki_core::WorkspaceType::Project
-        {
-            return Some(Action::GitStashList);
-        }
-    } else if app.config.matches_navigation(key, "git_log") {
-        if app.current_workspace().is_some() {
-            return Some(Action::LoadGitLog);
-        }
-    } else if key.code == KeyCode::Char('A')
-        && app
-            .current_workspace()
-            .is_some_and(|ws| ws.info.workspace_type == piki_core::WorkspaceType::Simple)
-    {
-        // Load agents for current project before opening the overlay (Simple ws only)
-        if let Some(ref storage) = app.storage.agent_profiles
-            && let Some(ws) = app.current_workspace()
-        {
-            let repo = ws.source_repo.clone();
-            if let Ok(agents) = storage.load_agents(&repo) {
-                app.agent_profiles = agents;
-            }
-        }
-        app.active_dialog = Some(DialogState::ManageAgents { selected: 0 });
-        app.mode = AppMode::ManageAgents;
-    } else if key.code == KeyCode::Char('p') && key.modifiers.contains(crossterm::event::KeyModifiers::ALT) {
-        // Open providers manager (Alt+P)
-        app.active_dialog = Some(DialogState::ManageProviders { selected: 0 });
-        app.mode = AppMode::ManageProviders;
-    } else if app.config.matches_navigation(key, "conflicts") {
-        if let Some(ws) = app.current_workspace()
-            && ws.info.workspace_type != piki_core::WorkspaceType::Project
-        {
-            return Some(Action::DetectConflicts);
-        }
-    } else if app.config.matches_navigation(key, "chat_panel") {
-        app.mode = AppMode::ChatPanel;
-        if app.chat_panel.models.is_empty() {
-            return Some(Action::ChatLoadModels);
-        }
-    } else if app.config.matches_navigation(key, "undo") {
-        return Some(Action::Undo);
-    } else if app.config.matches_navigation(key, "next_workspace") {
-        match app.active_pane {
-            ActivePane::WorkspaceList => app.next_workspace(),
-            ActivePane::MainPanel => {
-                if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-                    && !ws.tabs.is_empty()
-                {
-                    ws.active_tab = (ws.active_tab + 1) % ws.tabs.len();
-                }
-            }
-            ActivePane::GitStatus => app.next_file(),
-        }
-    } else if app.config.matches_navigation(key, "prev_workspace") {
-        match app.active_pane {
-            ActivePane::WorkspaceList => app.prev_workspace(),
-            ActivePane::MainPanel => {
-                if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-                    && !ws.tabs.is_empty()
-                {
-                    ws.active_tab = (ws.active_tab + ws.tabs.len() - 1) % ws.tabs.len();
-                }
-            }
-            ActivePane::GitStatus => app.prev_file(),
-        }
-    } else if app.config.matches_navigation(key, "scroll_up") {
-        if app.active_pane == ActivePane::MainPanel
-            && app.mode == AppMode::Normal
-            && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-            && let Some(tab) = ws.current_tab_mut()
-            && let Some(ref parser) = tab.pty_parser
-        {
-            let max = scrollback_max(parser);
-            tab.term_scroll = (tab.term_scroll + 3).min(max);
-        }
-    } else if app.config.matches_navigation(key, "scroll_down") {
-        if app.active_pane == ActivePane::MainPanel
-            && app.mode == AppMode::Normal
-            && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-            && let Some(tab) = ws.current_tab_mut()
-        {
-            tab.term_scroll = tab.term_scroll.saturating_sub(3);
-        }
-    } else if app.config.matches_navigation(key, "page_up") {
+        let n = c as usize - '1' as usize;
         if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-            && let Some(tab) = ws.current_tab_mut()
-            && let Some(ref parser) = tab.pty_parser
+            && n < ws.tabs.len()
         {
-            let screen_height = app.pty_rows as usize;
-            let max = scrollback_max(parser);
-            tab.term_scroll = (tab.term_scroll + screen_height).min(max);
+            ws.active_tab = n;
         }
-    } else if app.config.matches_navigation(key, "page_down") {
-        if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-            && let Some(tab) = ws.current_tab_mut()
-        {
-            let screen_height = app.pty_rows as usize;
-            tab.term_scroll = tab.term_scroll.saturating_sub(screen_height);
+        return None;
+    }
+    for action in APP_ACTIONS {
+        if app.config.matches_app_prefix(key, action) {
+            return dispatch_app_action(app, action);
         }
-    } else if app.config.matches_navigation(key, "copy") {
-        copy_visible_terminal(app);
-    } else if app.config.matches_navigation(key, "fuzzy_search")
-        || app.config.matches_navigation(key, "fuzzy_search_alt")
-    {
-        app.open_fuzzy_search();
-    } else if app.config.matches_navigation(key, "command_palette") {
-        app.open_command_palette();
-    } else if app.config.matches_navigation(key, "workspace_switcher") {
-        app.open_workspace_switcher();
-    } else if app.config.matches_navigation(key, "toggle_prev_workspace") {
-        app.toggle_previous_workspace();
-    } else if app.config.matches_navigation(key, "sidebar_shrink")
-        || app.config.matches_navigation(key, "sidebar_shrink_alt")
-    {
-        app.sidebar_pct = app.sidebar_pct.saturating_sub(5).max(10);
-        resize_all_ptys(app);
-        app.save_layout_prefs();
-    } else if app.config.matches_navigation(key, "sidebar_grow")
-        || app.config.matches_navigation(key, "sidebar_grow_alt")
-    {
-        app.sidebar_pct = (app.sidebar_pct + 5).min(90);
-        resize_all_ptys(app);
-        app.save_layout_prefs();
-    } else if app.config.matches_navigation(key, "split_up")
-        || app.config.matches_navigation(key, "split_up_alt")
-    {
-        app.left_split_pct = (app.left_split_pct + 10).min(90);
-        app.save_layout_prefs();
-    } else if app.config.matches_navigation(key, "split_down") {
-        app.left_split_pct = app.left_split_pct.saturating_sub(10).max(10);
-        app.save_layout_prefs();
-    } else if app.config.matches_navigation(key, "next_tab") {
-        if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-            && !ws.tabs.is_empty()
-        {
-            ws.active_tab = (ws.active_tab + 1) % ws.tabs.len();
-        }
-    } else if app.config.matches_navigation(key, "prev_tab") {
-        if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-            && !ws.tabs.is_empty()
-        {
-            ws.active_tab = (ws.active_tab + ws.tabs.len() - 1) % ws.tabs.len();
-        }
-    } else if app.config.matches_navigation(key, "new_tab") {
-        if app.current_workspace().is_some() {
-            app.active_dialog = Some(DialogState::NewTab {
-                menu: crate::dialog_state::NewTabMenu::Main,
-            });
-            app.mode = AppMode::NewTab;
-        }
-    } else if app.config.matches_navigation(key, "close_tab") {
-        if let Some(ws) = app.workspaces.get(app.active_workspace) {
-            if ws.current_tab().is_some_and(|t| t.closable) {
-                app.active_dialog = Some(DialogState::ConfirmCloseTab {
-                    target: ws.active_tab,
-                });
-                app.mode = AppMode::ConfirmCloseTab;
-            } else {
-                app.status_message = Some("Cannot close the initial shell tab".into());
-            }
-        }
-    } else if app.config.matches_navigation(key, "stage_quick") {
-        // Quick stage without entering interaction mode
-        if app.active_pane == ActivePane::GitStatus
-            && let Some(ws) = app.current_workspace()
-            && !ws.changed_files.is_empty()
-        {
-            if app.selected_files.is_empty() {
-                return Some(Action::GitStage(app.selected_file));
-            } else {
-                return Some(Action::GitStageSelected);
-            }
-        }
-    } else if app.config.matches_navigation(key, "unstage_quick") {
-        // Quick unstage without entering interaction mode
-        if app.active_pane == ActivePane::GitStatus
-            && let Some(ws) = app.current_workspace()
-            && !ws.changed_files.is_empty()
-        {
-            if app.selected_files.is_empty() {
-                return Some(Action::GitUnstage(app.selected_file));
-            } else {
-                return Some(Action::GitUnstageSelected);
-            }
+    }
+    app.set_toast(
+        format!("Unbound key after {}", app.config.prefix_display()),
+        crate::app::ToastLevel::Info,
+    );
+    None
+}
+
+/// Direct (non-prefix) chords from the app table, e.g. a user-promoted
+/// `next_tab = "alt-n"`. Defaults have none (copy/paste/search are pane-scoped).
+fn try_direct_app_binding(app: &mut App, key: KeyEvent) -> Option<Option<Action>> {
+    for action in APP_ACTIONS {
+        if app.config.matches_app_direct(key, action) {
+            return Some(dispatch_app_action(app, action));
         }
     }
     None
 }
 
-// ── Interaction mode: Esc to leave, keys go to the active pane ──
+/// Send the prefix key literally to the focused terminal (prefix-prefix).
+/// Writes BEL (0x07) for the default Ctrl+G; other prefixes go through the
+/// regular key-to-bytes conversion.
+fn send_literal_prefix(app: &mut App) {
+    if app.active_pane != ActivePane::MainPanel {
+        return;
+    }
+    let bytes = if app.config.keybindings.prefix_key == "ctrl-g" {
+        Some(vec![0x07])
+    } else {
+        crate::config::parse_key_event(&app.config.keybindings.prefix_key)
+            .and_then(crate::pty::input::key_to_bytes)
+    };
+    if let Some(bytes) = bytes
+        && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+        && let Some(tab) = ws.current_tab_mut()
+        && let Some(ref mut pty) = tab.pty_session
+    {
+        let _ = pty.write(&bytes);
+    }
+}
 
-fn handle_interaction_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
+/// Terminal scroll mode (`prefix [`): navigate the scrollback of the focused
+/// terminal, tmux-copy-mode style.
+fn handle_term_scroll_key(app: &mut App, key: KeyEvent) -> Option<Action> {
+    fn m(app: &App, key: KeyEvent, action: &str) -> bool {
+        app.config.matches_scroll(key, action)
+    }
+    if m(app, key, "exit") || m(app, key, "exit_alt") {
+        app_actions::exit_term_scroll(app);
+    } else if m(app, key, "down") || m(app, key, "down_alt") {
+        app_actions::term_scroll_down(app, 1);
+    } else if m(app, key, "up") || m(app, key, "up_alt") {
+        app_actions::term_scroll_up(app, 1);
+    } else if m(app, key, "page_down") || m(app, key, "page_down_alt") {
+        app_actions::term_page_down(app);
+    } else if m(app, key, "page_up") || m(app, key, "page_up_alt") {
+        app_actions::term_page_up(app);
+    } else if m(app, key, "top") {
+        app_actions::term_scroll_top(app);
+    } else if m(app, key, "bottom") {
+        app_actions::term_scroll_bottom(app);
+    } else if m(app, key, "search") {
+        app.term_search = Some(crate::app::TermSearchState {
+            query: String::new(),
+            cursor: 0,
+            matches: Vec::new(),
+            current_match: 0,
+        });
+    }
+    None
+}
+
+// ── Pane routing: keys go to the focused pane ──
+
+fn handle_pane_key(app: &mut App, key: KeyEvent) -> Option<Action> {
     match app.active_pane {
         ActivePane::MainPanel => {
-            if app.mode == AppMode::Diff {
-                handle_diff_interaction(app, key)
-            } else if app
+            if app
                 .current_workspace()
                 .and_then(|ws| ws.current_tab())
                 .is_some_and(|tab| tab.api_state.is_some())
@@ -572,6 +420,6 @@ fn handle_interaction_mode(app: &mut App, key: KeyEvent) -> Option<Action> {
             }
         }
         ActivePane::WorkspaceList => handle_workspace_interaction(app, key),
-        ActivePane::GitStatus => handle_filelist_interaction(app, key),
+        ActivePane::Agents => handle_agents_interaction(app, key),
     }
 }

@@ -38,5 +38,17 @@ __piki_debug_trap() {
 }
 trap '__piki_debug_trap' DEBUG
 
+# Wrap a manually-typed `claude` so it loads piki's hook settings and reports
+# its status to the Agents pane (env PIKI_CLI_AGENT_SOCK et al. are already in
+# this shell's environment). Skipped if the user passes their own --settings.
+if [ -n "$PIKI_CLAUDE_HOOK_SETTINGS" ]; then
+    claude() {
+        case " $* " in
+            *" --settings "*|*" --settings="*) command claude "$@" ;;
+            *) command claude --settings "$PIKI_CLAUDE_HOOK_SETTINGS" "$@" ;;
+        esac
+    }
+fi
+
 # Emit cwd once at startup.
 __piki_osc_cwd

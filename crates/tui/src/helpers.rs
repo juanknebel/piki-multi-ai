@@ -81,8 +81,25 @@ pub(crate) async fn spawn_tab(
         if *provider == AIProvider::Shell {
             match shell_install::setup_for(&cmd, &paths.shell_integration_dir()) {
                 Ok(Some(setup)) => {
-                    let env: Vec<(String, String)> = setup.env.into_iter().collect();
-                    (env, setup.extra_args, true, None)
+                    let mut env: Vec<(String, String)> = setup.env.into_iter().collect();
+                    // Also wire the cli-agent channel so a manually-typed
+                    // `claude` inside this shell reports to the Agents pane:
+                    // the FIFO + hook env ride the shell's environment, and
+                    // the bridge script wraps `claude` with `--settings`.
+                    // Only the env is merged — the `--settings` extra_args
+                    // are claude args, not shell args.
+                    let sock = match cli_agent_install::setup_for_claude(&paths.claude_hooks_dir())
+                    {
+                        Ok(agent) => {
+                            env.extend(agent.env);
+                            agent.sock_path
+                        }
+                        Err(e) => {
+                            tracing::debug!(error = %e, "cli-agent channel skipped for shell tab");
+                            None
+                        }
+                    };
+                    (env, setup.extra_args, true, sock)
                 }
                 Ok(None) => (Vec::new(), Vec::new(), false, None),
                 Err(e) => {
@@ -189,8 +206,16 @@ pub(crate) fn rect_contains(r: Rect, col: u16, row: u16) -> bool {
     col >= r.x && col < r.x + r.width && row >= r.y && row < r.y + r.height
 }
 
-/// Calculate which sub-tab index was clicked and whether the close button was hit
-pub(crate) fn subtab_index_at(app: &App, col: u16, area: Rect) -> Option<(usize, bool)> {
+/// What a click on the tab bar landed on.
+pub(crate) enum SubtabHit {
+    /// Tab index + whether the close button (`×`) was hit.
+    Tab(usize, bool),
+    /// The trailing `+` (new tab) button.
+    NewTab,
+}
+
+/// Calculate what was clicked in the tab bar
+pub(crate) fn subtab_index_at(app: &App, col: u16, area: Rect) -> Option<SubtabHit> {
     let ws = app.current_workspace()?;
     let mut x = area.x;
     for (i, tab) in ws.tabs.iter().enumerate() {
@@ -198,21 +223,25 @@ pub(crate) fn subtab_index_at(app: &App, col: u16, area: Rect) -> Option<(usize,
             .markdown_label
             .as_deref()
             .unwrap_or(tab.provider.label());
-        // Matches subtabs.rs: " icon " (3) + label + " ×" (2, if closable) + " " (1)
-        // Icon is a single-width char padded: " ▸ " = 3 display cols
-        // With close: 3 + label.len() + 2 + 1 = label.len() + 6
-        // Without close: 3 + label.len() + 1 = label.len() + 4
-        let tab_display_width = if tab.closable {
-            label.len() as u16 + 6
-        } else {
-            label.len() as u16 + 4
-        };
+        // Matches subtabs.rs: " icon " (3) + label + " g" (2, if agent glyph)
+        // + " ×" (2, if closable) + " " (1); blocks separated by a 1-col gap
+        let mut tab_display_width = label.len() as u16 + 4;
+        if tab.cli_agent_snapshot().is_some() {
+            tab_display_width += 2;
+        }
+        if tab.closable {
+            tab_display_width += 2;
+        }
         if col >= x && col < x + tab_display_width {
             // Close button is the last 2 display columns before trailing space: "× "
             let on_close = tab.closable && col >= x + tab_display_width - 3;
-            return Some((i, on_close));
+            return Some(SubtabHit::Tab(i, on_close));
         }
-        x += tab_display_width + 1; // +1 for "|" divider
+        x += tab_display_width + 1; // +1 for the gap between blocks
+    }
+    // Trailing " + " button right after the last tab's gap
+    if col >= x && col < x + 3 {
+        return Some(SubtabHit::NewTab);
     }
     None
 }

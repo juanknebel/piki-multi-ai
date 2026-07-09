@@ -13,6 +13,8 @@ pub enum AIProvider {
     Kanban,
     CodeReview,
     Api,
+    /// Git management via lazygit running in a PTY tab.
+    Git,
     /// A user-defined provider loaded from `providers.toml`.
     /// The string is the provider name (matches `ProviderConfig::name`).
     Custom(String),
@@ -27,6 +29,7 @@ impl AIProvider {
             AIProvider::Kanban => "",
             AIProvider::CodeReview => "gh",
             AIProvider::Api => "",
+            AIProvider::Git => "lazygit",
             AIProvider::Custom(_) => "",
         }
     }
@@ -47,6 +50,7 @@ impl AIProvider {
             AIProvider::Kanban => "▦",
             AIProvider::CodeReview => "⊙",
             AIProvider::Api => "⚡",
+            AIProvider::Git => "⎇",
             AIProvider::Custom(_) => "▸",
         }
     }
@@ -59,6 +63,7 @@ impl AIProvider {
             AIProvider::Kanban => "Kanban Board",
             AIProvider::CodeReview => "Code Review",
             AIProvider::Api => "API Explorer",
+            AIProvider::Git => "Git",
             AIProvider::Custom(name) => name,
         }
     }
@@ -81,6 +86,7 @@ impl AIProvider {
             "Kanban Board" => AIProvider::Kanban,
             "Code Review" => AIProvider::CodeReview,
             "API Explorer" => AIProvider::Api,
+            "Git" => AIProvider::Git,
             other => AIProvider::Custom(other.to_string()),
         }
     }

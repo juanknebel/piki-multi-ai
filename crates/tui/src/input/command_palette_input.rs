@@ -2,8 +2,6 @@ use crossterm::event::KeyEvent;
 
 use crate::action::Action;
 use crate::app::{App, AppMode};
-use crate::config::parse_key_event;
-
 use super::fuzzy_common::{FuzzyAction, handle_fuzzy_input};
 
 pub(super) fn handle_command_palette_input(app: &mut App, key: KeyEvent) -> Option<Action> {
@@ -46,7 +44,7 @@ pub(super) fn handle_command_palette_input(app: &mut App, key: KeyEvent) -> Opti
     None
 }
 
-/// Execute a palette command by looking up its keybinding and dispatching through navigation mode.
+/// Execute a palette command by dispatching its app action directly.
 fn execute_palette_command(app: &mut App, id: &str, switch_idx: Option<usize>) -> Option<Action> {
     // Handle dynamic workspace switch commands
     if let Some(idx) = switch_idx {
@@ -74,16 +72,18 @@ fn execute_palette_command(app: &mut App, id: &str, switch_idx: Option<usize>) -
             app.mode = crate::app::AppMode::ManageProviders;
             return None;
         }
+        // Actions that live outside the app keybinding table
+        "delete_workspace" => return super::app_actions::open_delete_workspace(app),
+        "copy" => {
+            crate::helpers::copy_visible_terminal(app);
+            return None;
+        }
         _ => {}
     }
 
-    let binding = app.config.get_binding("navigation", id);
-    if binding == "???" {
-        app.status_message = Some(format!("Unknown command: {}", id));
-        return None;
+    if super::APP_ACTIONS.contains(&id) {
+        return super::dispatch_app_action(app, id);
     }
-    if let Some(key_event) = parse_key_event(&binding) {
-        return super::handle_navigation_mode(app, key_event);
-    }
+    app.status_message = Some(format!("Unknown command: {}", id));
     None
 }

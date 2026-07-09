@@ -36,7 +36,9 @@ inactive = "#93a1a1"
 
 [subtabs]
 active = "#2aa198"
-inactive = "#93a1a1"
+active_fg = "#fdf6e3"
+inactive = "#657b83"
+inactive_bg = "#eee8d5"
 
 [status_bar]
 error_bg = "#dc322f"

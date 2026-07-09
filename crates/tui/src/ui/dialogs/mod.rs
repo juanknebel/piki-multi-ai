@@ -1,6 +1,5 @@
 mod agents;
 mod dashboard;
-mod git;
 mod providers;
 mod system;
 mod workspace;
@@ -11,14 +10,10 @@ pub(crate) use self::agents::{
     render_edit_agent_role_dialog, render_import_agents_dialog, render_manage_agents_dialog,
 };
 pub(crate) use self::dashboard::render_dashboard_overlay;
-pub(crate) use self::git::{
-    render_commit_dialog, render_confirm_merge_dialog, render_conflict_resolution_overlay,
-    render_git_log_overlay, render_git_stash_overlay,
-};
 pub(crate) use self::providers::{render_edit_provider_dialog, render_manage_providers_dialog};
 pub(crate) use self::system::{
     render_about_overlay, render_confirm_close_tab_dialog, render_confirm_quit_dialog,
-    render_diff_overlay, render_help_overlay, render_logs_overlay, render_new_tab_dialog,
+    render_help_overlay, render_logs_overlay, render_new_tab_dialog,
 };
 pub(crate) use self::workspace::{
     render_confirm_delete_dialog, render_create_worktree_dialog, render_edit_workspace_dialog,

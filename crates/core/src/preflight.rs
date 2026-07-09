@@ -40,24 +40,13 @@ pub fn run_preflight_checks() -> PreflightResult {
         }
     }
 
-    // delta (optional, affects diff display)
-    if shell_env::sync_command("delta").arg("--version").output().is_err()
-        || shell_env::sync_command("delta")
-            .arg("--version")
-            .output()
-            .map(|o| !o.status.success())
-            .unwrap_or(true)
-    {
-        warnings.push("delta not found — diffs will use plain git diff".to_string());
+    // lazygit (optional, powers the TUI Git tab)
+    if !command_ok("lazygit") {
+        warnings.push("lazygit not found — the Git tab needs it (https://github.com/jesseduffield/lazygit)".to_string());
     }
 
     // claude (optional — only needed for Claude agent tabs / dispatch)
-    if shell_env::sync_command("claude")
-        .arg("--version")
-        .output()
-        .map(|o| !o.status.success())
-        .unwrap_or(true)
-    {
+    if !command_ok("claude") {
         warnings.push(
             "claude not found — Claude agent tabs and dispatch are unavailable".to_string(),
         );
@@ -73,6 +62,16 @@ pub fn run_preflight_checks() -> PreflightResult {
     }
 
     PreflightResult { errors, warnings }
+}
+
+/// `true` if `<cmd> --version` runs and exits 0. Spawns the process exactly
+/// once (the previous version invoked it up to three times per check).
+fn command_ok(cmd: &str) -> bool {
+    shell_env::sync_command(cmd)
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
 }
 
 /// Parse "git version X.Y.Z" into (major, minor).

@@ -39,14 +39,10 @@ pub fn compute_terminal_area_with(total: Rect, sidebar_pct: u16) -> Rect {
     )
 }
 
-/// Border style for a pane: green if interacting, yellow if selected, white otherwise
+/// Border style for a pane: highlighted when focused, white otherwise
 pub(super) fn pane_border_style(app: &App, pane: ActivePane) -> Style {
     if app.active_pane == pane {
-        if app.interacting {
-            Style::default().fg(app.theme.border.active_interact)
-        } else {
-            Style::default().fg(app.theme.border.active_navigate)
-        }
+        Style::default().fg(app.theme.border.active)
     } else {
         Style::default().fg(app.theme.border.inactive)
     }
@@ -84,7 +80,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         return;
     }
 
-    // Compute footer keys — use cache when mode/interacting/pane haven't changed
+    // Compute footer keys — use cache when mode/input-state/pane haven't changed
     let has_markdown = app
         .current_workspace()
         .and_then(|ws| ws.current_tab())
@@ -106,24 +102,21 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         },
         _ => 0,
     };
-    let sel_count = app.selection_count();
     let cache_key = (
         app.mode.clone(),
-        app.interacting,
+        app.input_state,
         app.active_pane,
         has_markdown,
         api_footer_state,
         new_tab_menu,
-        sel_count,
     );
-    let keys = if let Some((ref m, i, p, md, api, ntm, sc, ref cached)) = app.footer_cache {
+    let keys = if let Some((ref m, i, p, md, api, ntm, ref cached)) = app.footer_cache {
         if *m == cache_key.0
             && i == cache_key.1
             && p == cache_key.2
             && md == cache_key.3
             && api == cache_key.4
             && ntm == cache_key.5
-            && sc == cache_key.6
         {
             cached.clone()
         } else {
@@ -135,7 +128,6 @@ pub fn render(frame: &mut Frame, app: &mut App) {
                 cache_key.3,
                 cache_key.4,
                 cache_key.5,
-                cache_key.6,
                 k.clone(),
             ));
             k
@@ -149,7 +141,6 @@ pub fn render(frame: &mut Frame, app: &mut App) {
             cache_key.3,
             cache_key.4,
             cache_key.5,
-            cache_key.6,
             k.clone(),
         ));
         k
@@ -183,7 +174,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
     app.left_split_y = ws_area.y + ws_area.height;
     app.left_area_rect = left_area;
     app.ws_list_area = ws_area;
-    app.file_list_area = files_area;
+    app.agents_area = files_area;
 
     // Right panel: sub-tabs + content + status bar (store for mouse hit-testing)
     let [subtabs_area, main_area, status_area] = Layout::vertical([
@@ -206,7 +197,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
     super::sidebar::render_workspace_list(frame, ws_area, app);
 
     // Left bottom: changed files
-    super::sidebar::render_file_list(frame, files_area, app);
+    super::sidebar::render_agents_pane(frame, files_area, app);
 
     // Right: AI provider sub-tabs
     super::panels::render_subtabs(frame, subtabs_area, app);
@@ -220,7 +211,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
     );
     app.terminal_inner_area = Some(terminal_inner);
 
-    // Right center: main content (PTY or Diff)
+    // Right center: main content (PTY, kanban, markdown, API)
     super::panels::render_main_content(frame, main_area, app);
 
     // Right bottom: status bar
@@ -232,16 +223,11 @@ pub fn render(frame: &mut Frame, app: &mut App) {
     // Overlays — match ensures exhaustive coverage of all AppMode variants
     match app.mode {
         AppMode::Normal => {}
-        AppMode::Diff => super::dialogs::render_diff_overlay(frame, area, app),
         AppMode::NewWorkspace => super::dialogs::render_new_workspace_dialog(frame, area, app),
         AppMode::EditWorkspace => super::dialogs::render_edit_workspace_dialog(frame, area, app),
-        AppMode::CreateWorktree => {
-            super::dialogs::render_create_worktree_dialog(frame, area, app)
-        }
+        AppMode::CreateWorktree => super::dialogs::render_create_worktree_dialog(frame, area, app),
         AppMode::Help => super::dialogs::render_help_overlay(frame, area, app),
         AppMode::ConfirmDelete => super::dialogs::render_confirm_delete_dialog(frame, area, app),
-        AppMode::CommitMessage => super::dialogs::render_commit_dialog(frame, area, app),
-        AppMode::ConfirmMerge => super::dialogs::render_confirm_merge_dialog(frame, area, app),
         AppMode::FuzzySearch => super::fuzzy::render(frame, area, app),
         AppMode::NewTab => super::dialogs::render_new_tab_dialog(frame, area, app),
         AppMode::About => super::dialogs::render_about_overlay(frame, area, app),
@@ -254,35 +240,18 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         AppMode::Logs => super::dialogs::render_logs_overlay(frame, area, app),
         AppMode::CommandPalette => super::command_palette::render(frame, area, app),
         AppMode::WorkspaceSwitcher => super::workspace_switcher::render(frame, area, app),
-        AppMode::GitStash => super::dialogs::render_git_stash_overlay(frame, area, app),
-        AppMode::GitLog => super::dialogs::render_git_log_overlay(frame, area, app),
-        AppMode::ConflictResolution => {
-            super::dialogs::render_conflict_resolution_overlay(frame, area, app)
-        }
-        AppMode::DispatchAgent => {
-            super::dialogs::render_dispatch_agent_dialog(frame, area, app)
-        }
-        AppMode::ManageAgents => {
-            super::dialogs::render_manage_agents_dialog(frame, area, app)
-        }
-        AppMode::EditAgent => {
-            super::dialogs::render_edit_agent_dialog(frame, area, app)
-        }
-        AppMode::EditAgentRole => {
-            super::dialogs::render_edit_agent_role_dialog(frame, area, app)
-        }
-        AppMode::ImportAgents => {
-            super::dialogs::render_import_agents_dialog(frame, area, app)
-        }
+        AppMode::DispatchAgent => super::dialogs::render_dispatch_agent_dialog(frame, area, app),
+        AppMode::ManageAgents => super::dialogs::render_manage_agents_dialog(frame, area, app),
+        AppMode::EditAgent => super::dialogs::render_edit_agent_dialog(frame, area, app),
+        AppMode::EditAgentRole => super::dialogs::render_edit_agent_role_dialog(frame, area, app),
+        AppMode::ImportAgents => super::dialogs::render_import_agents_dialog(frame, area, app),
         AppMode::DispatchCardMove => {
             super::dialogs::render_dispatch_card_move_dialog(frame, area, app)
         }
         AppMode::ManageProviders => {
             super::dialogs::render_manage_providers_dialog(frame, area, app)
         }
-        AppMode::EditProvider => {
-            super::dialogs::render_edit_provider_dialog(frame, area, app)
-        }
+        AppMode::EditProvider => super::dialogs::render_edit_provider_dialog(frame, area, app),
         AppMode::InlineEdit => {}   // handled by main content render
         AppMode::SubmitReview => {} // handled by full-screen code review bypass above
         AppMode::ChatPanel => super::chat::render_chat_overlay(frame, area, app),

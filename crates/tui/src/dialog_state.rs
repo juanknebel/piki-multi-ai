@@ -61,30 +61,6 @@ impl DialogField {
     }
 }
 
-/// Strategy for resolving a merge conflict on a single file.
-#[derive(Debug, Clone)]
-pub enum ConflictStrategy {
-    Ours,
-    Theirs,
-    MarkResolved,
-}
-
-/// A file with an unresolved merge conflict.
-#[derive(Debug, Clone)]
-pub struct ConflictFile {
-    pub path: String,
-    /// Human-readable status description (e.g. "Conflicted").
-    #[allow(dead_code)]
-    pub status: String,
-}
-
-/// A single line from `git log --oneline --graph`.
-#[derive(Debug, Clone)]
-pub struct GitLogEntry {
-    pub raw_line: String,
-    pub sha: Option<String>,
-}
-
 /// Which level of the new-tab menu is currently shown.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NewTabMenu {
@@ -149,9 +125,6 @@ pub enum DialogState {
         group_cursor: usize,
         active_field: CreateWorktreeField,
     },
-    CommitMessage {
-        buffer: String,
-    },
     ConfirmDelete {
         target: usize,
     },
@@ -159,7 +132,6 @@ pub enum DialogState {
         target: usize,
     },
     ConfirmQuit,
-    ConfirmMerge,
     NewTab {
         menu: NewTabMenu,
     },
@@ -183,25 +155,6 @@ pub enum DialogState {
         search_buffer: String,
         search_cursor: usize,
         auto_refresh: bool,
-    },
-    GitLog {
-        lines: Vec<GitLogEntry>,
-        selected: usize,
-        scroll: usize,
-    },
-    GitStash {
-        entries: Vec<(String, String)>,
-        selected: usize,
-        scroll: usize,
-        input_mode: bool,
-        input_buffer: String,
-        input_cursor: usize,
-    },
-    ConflictResolution {
-        files: Vec<ConflictFile>,
-        selected: usize,
-        /// The repo path where conflicts exist (source_repo for merge, ws.path for manual)
-        repo_path: std::path::PathBuf,
     },
     DispatchAgent {
         source_ws: usize,

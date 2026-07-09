@@ -99,24 +99,20 @@ pub(super) fn handle_fuzzy_search_input(app: &mut App, key: KeyEvent) -> Option<
             app.mode = AppMode::Normal;
         }
         FuzzyAction::Select => {
+            // Enter opens the file in $EDITOR (diffs live in the lazygit tab now)
             let selected_path = app
                 .fuzzy
                 .as_ref()
                 .and_then(|s| s.selected_path())
                 .map(String::from);
 
-            if let Some(path) = selected_path {
-                // Check if file is in changed_files list; if so, open its diff
-                if let Some(ws) = app.current_workspace() {
-                    if let Some(idx) = ws.changed_files.iter().position(|f| f.path == path) {
-                        app.fuzzy = None;
-                        app.mode = AppMode::Normal;
-                        app.selected_file = idx;
-                        return Some(Action::OpenDiff(idx));
-                    } else {
-                        app.status_message = Some(format!("{} has no changes to diff", path));
-                    }
-                }
+            if let Some(path) = selected_path
+                && let Some(ws) = app.current_workspace()
+            {
+                let full_path = ws.path.join(&path);
+                app.fuzzy = None;
+                app.mode = AppMode::Normal;
+                return Some(Action::OpenEditor(full_path));
             }
         }
         FuzzyAction::Handled => {

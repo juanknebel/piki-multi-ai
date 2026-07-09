@@ -623,6 +623,21 @@ export function setTheme(preset: string, overrides: string): Promise<void> {
   return invoke("set_theme", { preset, overrides });
 }
 
+export interface CustomThemeFile {
+  id: string;
+  name: string;
+  isDark: boolean;
+  colors: Record<string, string>;
+}
+
+export function listCustomThemes(): Promise<CustomThemeFile[]> {
+  return invoke("list_custom_themes");
+}
+
+export function saveCustomTheme(theme: CustomThemeFile): Promise<void> {
+  return invoke("save_custom_theme", { theme });
+}
+
 // System commands
 export function getSysinfo(): Promise<string> {
   return invoke("get_sysinfo");

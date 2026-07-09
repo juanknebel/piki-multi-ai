@@ -19,10 +19,48 @@
 //! that don't initialize fall back to a generic `"piki-multi"`.
 
 use std::sync::OnceLock;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
+
+/// How notifications reach the user when they aren't looking at the event's
+/// tab (herdr-style selector). The in-process mailbox always records
+/// regardless; sound is a separate, independent layer (see [`crate::sound`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum NotificationDelivery {
+    /// Mailbox only — no visible notification.
+    Off,
+    /// OS desktop notification via `notify-rust` (the historical behavior).
+    #[default]
+    System,
+    /// OSC 9 escape written to `/dev/tty` so the *outer* terminal emulator
+    /// (kitty, ghostty, …) shows its native notification. Useful inside
+    /// tmux/ssh where a desktop toast can't reach the user; the sequence is
+    /// tmux-passthrough-wrapped when `$TMUX` is set.
+    Terminal,
+}
+
+static DELIVERY: AtomicU8 = AtomicU8::new(1); // System
+
+/// Select the toast delivery mode. Frontends call this at startup from
+/// their config; the default is [`NotificationDelivery::System`].
+pub fn set_delivery(d: NotificationDelivery) {
+    let v = match d {
+        NotificationDelivery::Off => 0,
+        NotificationDelivery::System => 1,
+        NotificationDelivery::Terminal => 2,
+    };
+    DELIVERY.store(v, Ordering::Relaxed);
+}
+
+fn delivery() -> NotificationDelivery {
+    match DELIVERY.load(Ordering::Relaxed) {
+        0 => NotificationDelivery::Off,
+        2 => NotificationDelivery::Terminal,
+        _ => NotificationDelivery::System,
+    }
+}
 
 /// Maximum entries kept in the in-process mailbox before old ones drop.
 /// Matches Warp's mailbox cap (`app/src/ai/agent_management/notifications/item.rs`).
@@ -166,7 +204,7 @@ pub fn notify_agent_idle(
         ),
         created_at: Instant::now(),
     };
-    push_and_toast(item, from_active_view);
+    push_and_toast(item, from_active_view, Some(crate::sound::Sound::Done));
 }
 
 /// Notification for a shell tab whose OSC 133 `command-end` marker just
@@ -209,7 +247,8 @@ pub fn notify_command_end(
         body,
         created_at: Instant::now(),
     };
-    push_and_toast(item, from_active_view);
+    // No sound for plain shell commands — chimes are agent events only.
+    push_and_toast(item, from_active_view, None);
 }
 
 /// Notification for a structured Claude Code lifecycle event (Warp-style,
@@ -231,21 +270,24 @@ pub fn notify_cli_agent(
         .filter(|s| !s.is_empty())
         .map(|s| format!(" — {s}"))
         .unwrap_or_default();
-    let (category, title, body) = match kind {
+    let (category, title, body, sound) = match kind {
         "permission_request" => (
             NotificationCategory::Complete,
             format!("{icon_prefix}Permission needed"),
             format!("{workspace_name}{detail}"),
+            crate::sound::Sound::Attention,
         ),
         "notification" => (
             NotificationCategory::Complete,
             format!("{icon_prefix}Agent waiting for input"),
             format!("{workspace_name} — Claude has been idle and needs you"),
+            crate::sound::Sound::Attention,
         ),
         "stop" => (
             NotificationCategory::Complete,
             format!("{icon_prefix}Task complete"),
             format!("{workspace_name}{detail}"),
+            crate::sound::Sound::Done,
         ),
         _ => return,
     };
@@ -257,7 +299,7 @@ pub fn notify_cli_agent(
         body,
         created_at: Instant::now(),
     };
-    push_and_toast(item, from_active_view);
+    push_and_toast(item, from_active_view, Some(sound));
 }
 
 /// `visible` means the event's tab is the one the user is currently looking
@@ -267,15 +309,81 @@ pub fn notify_cli_agent(
 /// background-tab event still toasts even while piki is focused, since the
 /// user can't see a tab they aren't on (this is the whole point of the
 /// active-tab gate; window focus alone is too coarse).
-fn push_and_toast(item: NotificationItem, visible: bool) {
+fn push_and_toast(item: NotificationItem, visible: bool, sound: Option<crate::sound::Sound>) {
     {
         let mut mb = mailbox().lock();
         mb.push(item.clone());
     }
     let already_seen = visible && WINDOW_HAS_FOCUS.load(Ordering::Relaxed);
-    if !already_seen {
-        spawn_toast(item.title, item.body);
+    if already_seen {
+        return;
     }
+    // Sound is independent from the toast delivery mode — it plays (when
+    // enabled in config) even with delivery = off, mirroring herdr.
+    if let Some(s) = sound {
+        crate::sound::play(s);
+    }
+    match delivery() {
+        NotificationDelivery::Off => {}
+        NotificationDelivery::System => spawn_toast(item.title, item.body),
+        NotificationDelivery::Terminal => emit_terminal_notification(&item.title, &item.body),
+    }
+}
+
+/// Emit an OSC 9 notification escape to `/dev/tty` so the host terminal
+/// emulator shows it natively. Called from the frontend's event-loop thread,
+/// so the write is serialized with rendering (no tearing against ratatui's
+/// output). Wrapped in a tmux passthrough when running inside tmux.
+fn emit_terminal_notification(title: &str, body: &str) {
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        let msg = if body.is_empty() {
+            sanitize_osc(title)
+        } else {
+            format!("{}: {}", sanitize_osc(title), sanitize_osc(body))
+        };
+        let seq = format!("\x1b]9;{msg}\x1b\\");
+        let bytes = if std::env::var_os("TMUX").is_some() {
+            wrap_tmux_passthrough(seq.as_bytes())
+        } else {
+            seq.into_bytes()
+        };
+        match std::fs::OpenOptions::new().write(true).open("/dev/tty") {
+            Ok(mut tty) => {
+                let _ = tty.write_all(&bytes);
+            }
+            Err(e) => tracing::warn!(error = %e, "terminal notification failed: /dev/tty not writable"),
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (title, body);
+    }
+}
+
+/// Strip control characters so a title/body can't terminate or corrupt the
+/// OSC sequence (ESC, BEL, newlines all collapse to spaces).
+fn sanitize_osc(s: &str) -> String {
+    s.chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect()
+}
+
+/// Wrap an escape sequence in tmux's passthrough envelope
+/// (`ESC P tmux; <seq with ESC doubled> ESC \`) so tmux forwards it to the
+/// outer terminal instead of swallowing it.
+fn wrap_tmux_passthrough(seq: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(seq.len() + 8);
+    out.extend_from_slice(b"\x1bPtmux;");
+    for &b in seq {
+        if b == 0x1b {
+            out.push(0x1b);
+        }
+        out.push(b);
+    }
+    out.extend_from_slice(b"\x1b\\");
+    out
 }
 
 fn spawn_toast(summary: String, body: String) {
@@ -377,15 +485,38 @@ mod tests {
         _reset_mailbox_for_test();
         set_window_focused(true);
         // visible=true + focused → OS toast suppressed; mailbox still records.
-        push_and_toast(fresh_item("tab-focus-on", "idle"), true);
+        push_and_toast(fresh_item("tab-focus-on", "idle"), true, None);
         assert_eq!(mailbox_snapshot().len(), 1);
 
         // Unfocused: mailbox records and toast would fire (visibility moot).
         _reset_mailbox_for_test();
         set_window_focused(false);
-        push_and_toast(fresh_item("tab-focus-off", "idle"), true);
+        push_and_toast(fresh_item("tab-focus-off", "idle"), true, None);
         assert_eq!(mailbox_snapshot().len(), 1);
 
         _reset_mailbox_for_test();
+    }
+
+    #[test]
+    fn tmux_passthrough_doubles_escapes_and_wraps() {
+        let wrapped = wrap_tmux_passthrough(b"\x1b]9;hi\x1b\\");
+        assert_eq!(wrapped, b"\x1bPtmux;\x1b\x1b]9;hi\x1b\x1b\\\x1b\\");
+    }
+
+    #[test]
+    fn sanitize_osc_strips_control_chars() {
+        assert_eq!(sanitize_osc("a\x1b]bad\x07\ntitle"), "a ]bad  title");
+    }
+
+    #[test]
+    fn delivery_roundtrips_through_setter() {
+        for d in [
+            NotificationDelivery::Off,
+            NotificationDelivery::Terminal,
+            NotificationDelivery::System,
+        ] {
+            set_delivery(d);
+            assert_eq!(delivery(), d);
+        }
     }
 }

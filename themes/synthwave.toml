@@ -34,8 +34,10 @@ active = "#fede5d"
 inactive = "#495495"
 
 [subtabs]
-active = "#36f9f6"            # neon cyan
-inactive = "#495495"
+active = "#36f9f6"            # neon cyan (active block bg)
+active_fg = "#241b2f"
+inactive = "#d4d0e8"          # light lavender — clearly readable
+inactive_bg = "#463465"       # synthwave selection — a distinct raised block
 
 [status_bar]
 error_bg = "#fe4450"

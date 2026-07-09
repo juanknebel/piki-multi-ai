@@ -86,7 +86,10 @@ async fn main() -> anyhow::Result<()> {
             }
             Commands::Migrate => {
                 let db_path = paths.db_path();
-                std::fs::create_dir_all(db_path.parent().unwrap())?;
+                let parent = db_path.parent().ok_or_else(|| {
+                    anyhow::anyhow!("db path has no parent directory: {}", db_path.display())
+                })?;
+                std::fs::create_dir_all(parent)?;
                 let storage = piki_core::storage::sqlite::SqliteStorage::open(&db_path)?;
                 let count = storage.migrate_from_json(&paths)?;
                 println!("Migrated {count} workspaces from JSON to SQLite");

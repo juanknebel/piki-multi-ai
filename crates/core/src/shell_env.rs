@@ -34,6 +34,23 @@ pub fn print_env_and_exit() -> ! {
 pub fn user_login_env() -> &'static HashMap<String, String> {
     static ENV: OnceLock<HashMap<String, String>> = OnceLock::new();
     ENV.get_or_init(|| {
+        // Fast path: when launched from a terminal (stdin is a TTY), this
+        // process already inherited the user's fully-configured shell
+        // environment. Spawning an interactive login shell just to re-capture
+        // it costs ~0.5-1s at startup (it sources the whole ~/.zshrc /
+        // plugins) for no gain. Only GUI launches (macOS .app / Linux
+        // .desktop) get a stripped env and actually need the shell round-trip
+        // — and those have no controlling TTY, so they fall through below.
+        // Opt out with PIKI_FORCE_LOGIN_ENV=1 if a terminal somehow has a
+        // deficient env.
+        use std::io::IsTerminal;
+        if std::env::var_os("PIKI_FORCE_LOGIN_ENV").is_none() && std::io::stdin().is_terminal() {
+            let mut env_map: HashMap<String, String> = std::env::vars().collect();
+            augment_path_with_common_dirs(&mut env_map);
+            tracing::debug!(vars = env_map.len(), "Using inherited terminal environment (skipped login-shell capture)");
+            return env_map;
+        }
+
         let shell = detect_user_shell();
 
         // Strategy 1: self-invocation (preferred — clean JSON, no parsing ambiguity)

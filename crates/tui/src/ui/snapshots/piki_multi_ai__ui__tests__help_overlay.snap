@@ -1,45 +1,45 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 174
+assertion_line: 191
 expression: content
 ---
             ┌ Help ───────────────────────────────────────────────┐
             │                                                     │
-            │  Navigation mode (yellow border)                    │
-            │    k/j/h/l       Move between panes (h→ws list)     │
-            │    enter         Interact with pane                 │
-            │    n             New workspace                      │
-            │    r             Create worktree (GitHub-only)      │
-            │    e             Edit workspace                     │
-            │    d             Delete workspace                   │
-            │    tab/shift-tab Next/Prev workspace                │
-            │    space         Fuzzy workspace search             │
-            │    `             Previous workspace                 │
-            │    ctrl-p        Command palette                    │
-            │    g/G           Next/Prev tab                      │
-            │    t             New tab                            │
-            │    w             Close tab                          │
-            │    ?             Toggle help                        │
-            │    a             About                              │
-            │    i             Workspace info                     │
-            │    b             Open Kanban Board                  │
-            │    ctrl-z        Undo last stage/unstage            │
-            │    s             Quick stage (file list focused)    │
-            │    u             Quick unstage (file list focused)  │
-            │    D             Dashboard                          │
-            │    ctrl-l        Logs                               │
-            │    L             Git log                            │
-            │    ctrl-y        AI Chat                            │
-            │    q             Quit                               │
+            │  Prefix key: C-g (tmux-style)                       │
+            │    Keys always go to the focused pane;              │
+            │    press C-g first for app actions:                 │
             │                                                     │
-            │  AI Chat overlay                                    │
-            │    Enter         Send message                       │
-            │    Tab           Select model                       │
-            │    ctrl-o        Settings (URL, system prompt)      │
-            │    ctrl-l        Clear conversation                 │
-            │    Esc           Hide (keeps state)                 │
+            │    C-g h/j/k/l   Move focus between panes           │
+            │    C-g c         New tab                            │
+            │    C-g x         Close tab                          │
+            │    C-g n/C-g p   Next/Prev tab                      │
+            │    C-g 1..9      Jump to tab N                      │
+            │    C-g w         Fuzzy workspace switcher           │
+            │    C-g )/C-g (   Next/Prev workspace                │
+            │    C-g `         Previous workspace (toggle)        │
+            │    C-g N         New workspace                      │
+            │    C-g e         Edit workspace                     │
+            │    C-g i         Workspace info                     │
+            │    C-g R         Create worktree (GitHub-only)      │
+            │    C-g g         Git (lazygit tab)                  │
+            │    C-g :         Command palette                    │
+            │    C-g /         Fuzzy file search                  │
+            │    C-g [         Terminal scroll mode               │
+            │    C-g y         AI Chat                            │
+            │    C-g D         Dashboard                          │
+            │    C-g o         Logs                               │
+            │    C-g A         Manage agents                      │
+            │    C-g V         Manage providers                   │
+            │    C-g a         About                              │
+            │    C-g ?         This help                          │
+            │    C-g q         Quit                               │
+            │    C-g C-g       Send C-g to terminal               │
+            │    Esc           Cancel pending prefix              │
             │                                                     │
-            │  Interaction mode (green border)                    │
-            │    ctrl-g        Back to navigation                 │
-            │    Esc           Back (non-terminal panes)          │
-            └────────────────────────────────────── [1/138 ↑k/j↓] ┘
+            │  Terminal scroll mode (C-g [)                       │
+            │    k/j           Scroll up/down                     │
+            │    ctrl-u/ctrl-d Page up/down                       │
+            │    g/G           Top/Bottom                         │
+            │    /             Search                             │
+            │    q/esc         Exit scroll mode                   │
+            └────────────────────────────────────── [1/103 ↑k/j↓] ┘

@@ -135,44 +135,30 @@ pub(crate) fn handle_bulk_insert(app: &mut crate::app::App, text: &str) {
         }
         AppMode::NewWorkspace | AppMode::EditWorkspace => {
             // Delegate to the active field in the workspace dialog
-            if let Some(ref mut dialog) = app.active_dialog {
-                match dialog {
-                    DialogState::NewWorkspace {
-                        name,
-                        name_cursor,
-                        dir,
-                        dir_cursor,
-                        destination,
-                        destination_cursor,
-                        desc,
-                        desc_cursor,
-                        prompt,
-                        prompt_cursor,
-                        active_field,
-                        ..
-                    } => {
-                        use crate::app::DialogField;
-                        match active_field {
-                            DialogField::Name => bulk_insert(name, name_cursor, text),
-                            DialogField::Directory => bulk_insert(dir, dir_cursor, text),
-                            DialogField::Destination => {
-                                bulk_insert(destination, destination_cursor, text)
-                            }
-                            DialogField::Description => bulk_insert(desc, desc_cursor, text),
-                            DialogField::Prompt => bulk_insert(prompt, prompt_cursor, text),
-                            _ => {}
-                        }
-                    }
-                    DialogState::CommitMessage { buffer } => {
-                        buffer.push_str(text);
-                    }
+            if let Some(DialogState::NewWorkspace {
+                name,
+                name_cursor,
+                dir,
+                dir_cursor,
+                destination,
+                destination_cursor,
+                desc,
+                desc_cursor,
+                prompt,
+                prompt_cursor,
+                active_field,
+                ..
+            }) = &mut app.active_dialog
+            {
+                use crate::app::DialogField;
+                match active_field {
+                    DialogField::Name => bulk_insert(name, name_cursor, text),
+                    DialogField::Directory => bulk_insert(dir, dir_cursor, text),
+                    DialogField::Destination => bulk_insert(destination, destination_cursor, text),
+                    DialogField::Description => bulk_insert(desc, desc_cursor, text),
+                    DialogField::Prompt => bulk_insert(prompt, prompt_cursor, text),
                     _ => {}
                 }
-            }
-        }
-        AppMode::CommitMessage => {
-            if let Some(DialogState::CommitMessage { ref mut buffer }) = app.active_dialog {
-                buffer.push_str(text);
             }
         }
         AppMode::DispatchAgent => {

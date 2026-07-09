@@ -1,0 +1,17 @@
+---
+source: crates/tui/src/ui/mod.rs
+expression: content
+---
+
+
+      ┌───────────────────────────────────────────────────────┐
+      │ / switch workspace                                  2 │
+      │ ◆ ○ piki-nightly (2)                                  │
+      │    ├─ → — Shell                                 shell │
+      │    ├─   — Claude                 claude · not started │
+      │   ○ bob-the-builder (1)                               │
+      │    ├─ → — Claude                 claude · not started │
+      │                                                       │
+      │ piki-nightly                                          │
+      │ enter switch  ^p/^n move  type search  esc close      │
+      └───────────────────────────────────────────────────────┘

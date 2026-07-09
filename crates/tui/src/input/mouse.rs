@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::time::Instant;
 
 use crossterm::event::{MouseButton, MouseEventKind};
 use ratatui::DefaultTerminal;
@@ -8,7 +7,7 @@ use crate::action::Action;
 use crate::app::{self, ActivePane, ApiResponseDisplay, App, AppMode};
 use crate::clipboard;
 use crate::dialog_state::DialogState;
-use crate::helpers::{rect_contains, resize_all_ptys, scrollback_max, subtab_index_at};
+use crate::helpers::{SubtabHit, rect_contains, resize_all_ptys, scrollback_max, subtab_index_at};
 
 /// Encode a mouse scroll event as terminal escape bytes based on the protocol encoding.
 /// `button` is 64 for scroll-up, 65 for scroll-down. `col`/`row` are 1-based PTY coordinates.
@@ -203,9 +202,6 @@ pub(crate) fn handle_mouse_event(
                     *scroll = scroll.saturating_sub(3);
                 }
             }
-            AppMode::Diff => {
-                app.diff_scroll = app.diff_scroll.saturating_sub(3);
-            }
             AppMode::FuzzySearch => {
                 if let Some(ref mut state) = app.fuzzy {
                     state.selected = state.selected.saturating_sub(1);
@@ -215,8 +211,8 @@ pub(crate) fn handle_mouse_event(
                 let api_resp_area = app.api_response_inner_area;
                 if rect_contains(app.ws_list_area, col, row) {
                     app.select_prev_sidebar_row();
-                } else if rect_contains(app.file_list_area, col, row) {
-                    app.prev_file();
+                } else if rect_contains(app.agents_area, col, row) {
+                    app.selected_agent_row = app.selected_agent_row.saturating_sub(1);
                 } else if rect_contains(app.main_content_area, col, row)
                     && !try_forward_scroll_to_pty(app, col, row, 64)
                     && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
@@ -262,9 +258,6 @@ pub(crate) fn handle_mouse_event(
                     *scroll = scroll.saturating_add(3);
                 }
             }
-            AppMode::Diff => {
-                app.diff_scroll = app.diff_scroll.saturating_add(3);
-            }
             AppMode::FuzzySearch => {
                 if let Some(ref mut state) = app.fuzzy {
                     let count = state.nucleo.snapshot().matched_item_count() as usize;
@@ -277,8 +270,11 @@ pub(crate) fn handle_mouse_event(
                 let api_resp_area = app.api_response_inner_area;
                 if rect_contains(app.ws_list_area, col, row) {
                     app.select_next_sidebar_row();
-                } else if rect_contains(app.file_list_area, col, row) {
-                    app.next_file();
+                } else if rect_contains(app.agents_area, col, row) {
+                    let total = app.agent_rows().len();
+                    if total > 0 && app.selected_agent_row + 1 < total {
+                        app.selected_agent_row += 1;
+                    }
                 } else if rect_contains(app.main_content_area, col, row)
                     && !try_forward_scroll_to_pty(app, col, row, 65)
                     && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
@@ -301,13 +297,10 @@ pub(crate) fn handle_mouse_event(
             _ => {}
         },
         MouseEventKind::Down(MouseButton::Left) => {
-            // Detect double-click
-            let now = Instant::now();
-            let is_double_click = app.last_click.is_some_and(|(t, c, r)| {
-                now.duration_since(t).as_millis() < 400 && c == col && r == row
-            });
-            app.last_click = Some((now, col, row));
-
+            // A click cancels a pending prefix chord
+            if app.input_state == crate::app::InputState::PrefixPending {
+                app.input_state = crate::app::InputState::Normal;
+            }
             // Dismiss overlays on click (except Logs — handle click-to-select)
             match app.mode {
                 AppMode::Logs => {
@@ -413,8 +406,8 @@ pub(crate) fn handle_mouse_event(
                 // Click on sub-tabs
                 if rect_contains(app.subtabs_area, col, row) {
                     let subtabs_area = app.subtabs_area;
-                    if let Some((idx, on_close)) = subtab_index_at(app, col, subtabs_area) {
-                        if on_close {
+                    match subtab_index_at(app, col, subtabs_area) {
+                        Some(SubtabHit::Tab(idx, true)) => {
                             if let Some(ws) = app.current_workspace()
                                 && ws.tabs.get(idx).is_some_and(|t| t.closable)
                             {
@@ -422,108 +415,65 @@ pub(crate) fn handle_mouse_event(
                                     Some(DialogState::ConfirmCloseTab { target: idx });
                                 app.mode = AppMode::ConfirmCloseTab;
                             }
-                        } else if let Some(ws) = app.current_workspace_mut() {
-                            ws.active_tab = idx;
                         }
+                        Some(SubtabHit::Tab(idx, false)) => {
+                            if let Some(ws) = app.current_workspace_mut() {
+                                ws.active_tab = idx;
+                            }
+                        }
+                        Some(SubtabHit::NewTab) => {
+                            let _ = super::app_actions::open_new_tab(app);
+                        }
+                        None => {}
                     }
                 }
-                // Click on workspace list
+                // Click on workspace list. The sidebar panes are action-only:
+                // a click performs the action (switch workspace / toggle group)
+                // and focus always lands on the main panel — never the list. An
+                // empty click just focuses the main panel and does nothing else.
                 else if rect_contains(app.ws_list_area, col, row) {
-                    app.active_pane = ActivePane::WorkspaceList;
                     let inner_y = app.ws_list_area.y + 1;
                     if row >= inner_y {
-                        let relative_row = (row - inner_y) as usize;
                         let sidebar_items = app.sidebar_items();
-                        let mut cumulative_height = 0;
-                        for (i, item) in sidebar_items.iter().enumerate() {
-                            let item_height = match item {
-                                crate::app::SidebarItem::GroupHeader { .. } => 1,
-                                crate::app::SidebarItem::Workspace { .. } => 3,
-                            };
-                            if relative_row < cumulative_height + item_height {
-                                app.selected_sidebar_row = i;
-                                match item {
-                                    crate::app::SidebarItem::GroupHeader { .. } => {
-                                        app.toggle_selected_group();
-                                    }
-                                    crate::app::SidebarItem::Workspace { index } => {
-                                        app.selected_workspace = *index;
-                                        app.switch_workspace(*index);
-                                    }
+                        // Rows are one line tall; mirror the render's derived scroll
+                        let visible = app.ws_list_area.height.saturating_sub(2) as usize;
+                        let selected = app
+                            .selected_sidebar_row
+                            .min(sidebar_items.len().saturating_sub(1));
+                        let scroll_offset = if visible > 0 && selected >= visible {
+                            selected + 1 - visible
+                        } else {
+                            0
+                        };
+                        let clicked = (row - inner_y) as usize + scroll_offset;
+                        if let Some(item) = sidebar_items.get(clicked) {
+                            app.selected_sidebar_row = clicked;
+                            match item {
+                                crate::app::SidebarItem::GroupHeader { .. } => {
+                                    app.toggle_selected_group();
                                 }
-                                break;
+                                crate::app::SidebarItem::Workspace { index } => {
+                                    app.selected_workspace = *index;
+                                    app.switch_workspace(*index);
+                                }
                             }
-                            cumulative_height += item_height;
                         }
                     }
+                    app.active_pane = ActivePane::MainPanel;
                 }
-                // Click on file list / services list
-                else if rect_contains(app.file_list_area, col, row) {
-                    app.active_pane = ActivePane::GitStatus;
-                    let inner_y = app.file_list_area.y + 1;
-                    if row >= inner_y {
-                        let relative_row = (row - inner_y) as usize;
-                        let is_project = app.current_workspace().is_some_and(|ws| {
-                            ws.info.workspace_type == piki_core::WorkspaceType::Project
-                        });
-                        if is_project {
-                            // Extract needed data before mutating app
-                            let click_data = app.current_workspace().and_then(|ws| {
-                                if relative_row < ws.sub_directories.len() {
-                                    Some((
-                                        ws.path
-                                            .join(&ws.sub_directories[relative_row])
-                                            .display()
-                                            .to_string(),
-                                        ws.prompt.clone(),
-                                        ws.kanban_path.clone().unwrap_or_default(),
-                                        ws.info.group.clone().unwrap_or_default(),
-                                    ))
-                                } else {
-                                    None
-                                }
-                            });
-                            if let Some((full_dir, prompt, kanban, group)) = click_data {
-                                app.selected_file = relative_row;
-                                if is_double_click {
-                                    let dest = app.paths.repos_dir().to_string_lossy().to_string();
-                                    let dest_cursor = dest.chars().count();
-                                    app.active_dialog = Some(DialogState::NewWorkspace {
-                                        name: String::new(),
-                                        name_cursor: 0,
-                                        dir_cursor: full_dir.chars().count(),
-                                        dir: full_dir,
-                                        destination: dest,
-                                        destination_cursor: dest_cursor,
-                                        desc: String::new(),
-                                        desc_cursor: 0,
-                                        prompt_cursor: prompt.chars().count(),
-                                        prompt,
-                                        kanban_cursor: kanban.chars().count(),
-                                        kanban,
-                                        group_cursor: group.chars().count(),
-                                        group,
-                                        source: crate::app::NewWorkspaceSource::Local,
-                                        active_field: crate::app::DialogField::Source,
-                                    });
-                                    app.mode = AppMode::NewWorkspace;
-                                }
-                            }
-                        } else if let Some(ws) = app.current_workspace()
-                            && relative_row < ws.changed_files.len()
-                        {
-                            app.selected_file = relative_row;
-                            // Double-click opens diff
-                            if is_double_click {
-                                return Some(Action::OpenDiff(relative_row));
-                            }
-                        }
+                // Click on the Agents pane — jump to the agent, or just focus
+                // the main panel on an empty click. Focus never stays here.
+                else if rect_contains(app.agents_area, col, row) {
+                    if let Some(clicked) = app.agent_row_at(row) {
+                        app.selected_agent_row = clicked;
+                        let target = app.agent_rows()[clicked];
+                        super::interaction::jump_to_agent(app, target);
                     }
+                    app.active_pane = ActivePane::MainPanel;
                 }
                 // Click on main panel — start text selection
                 else if rect_contains(app.main_content_area, col, row) {
                     app.active_pane = ActivePane::MainPanel;
-                    app.interacting = true;
                     if let Some(inner) = app.terminal_inner_area
                         && rect_contains(inner, col, row)
                     {

@@ -36,7 +36,8 @@ pub struct PtySession {
     /// Reader thread parses OSC sequences and mutates this; UI threads read.
     shell: Option<Arc<Mutex<ShellSession>>>,
     /// Out-of-band FIFO reader for the structured cli-agent channel. `Some`
-    /// only for Claude tabs spawned with a `cli_agent_sock` path. Its `Drop`
+    /// only for tabs spawned with a `cli_agent_sock` path (Claude tabs, and
+    /// shell tabs so a manually-run `claude` can report too). Its `Drop`
     /// stops the reader and unlinks the FIFO.
     #[cfg(unix)]
     _cli_agent_sock: Option<crate::cli_agent::sock::SockReader>,

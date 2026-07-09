@@ -1,6 +1,5 @@
 pub mod chat;
 pub mod cli_agent;
-pub mod diff;
 pub mod domain;
 pub mod git;
 pub mod github;
@@ -12,6 +11,7 @@ pub mod providers;
 pub mod pty;
 pub mod shell_env;
 pub mod shell_integration;
+pub mod sound;
 pub mod storage;
 pub mod sysinfo;
 pub mod workspace;

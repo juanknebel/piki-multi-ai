@@ -40,6 +40,69 @@ impl Default for KanbanConfig {
     }
 }
 
+/// `[notifications]` — how background agent events reach the user.
+/// `delivery`: `"system"` (OS desktop toast, default), `"terminal"` (OSC 9
+/// escape so the host terminal emulator notifies — works inside tmux/ssh),
+/// or `"off"`. `sound` toggles the built-in chimes (done/attention),
+/// independent of `delivery`; the `sound_*_path` overrides point at custom
+/// audio files (any format your system player decodes).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NotificationsConfig {
+    pub delivery: String,
+    pub sound: bool,
+    pub sound_path: Option<String>,
+    pub sound_done_path: Option<String>,
+    pub sound_attention_path: Option<String>,
+}
+
+impl Default for NotificationsConfig {
+    fn default() -> Self {
+        Self {
+            delivery: "system".to_string(),
+            sound: false,
+            sound_path: None,
+            sound_done_path: None,
+            sound_attention_path: None,
+        }
+    }
+}
+
+impl NotificationsConfig {
+    /// Parse `delivery` into the core enum, warning (once, at call time) on
+    /// unknown values and falling back to the default.
+    pub fn parsed_delivery(&self) -> piki_core::notifications::NotificationDelivery {
+        use piki_core::notifications::NotificationDelivery as D;
+        match self.delivery.as_str() {
+            "off" => D::Off,
+            "system" => D::System,
+            "terminal" => D::Terminal,
+            other => {
+                tracing::warn!(
+                    "unknown notifications.delivery '{other}' (expected off|system|terminal); using 'system'"
+                );
+                D::System
+            }
+        }
+    }
+
+    pub fn sound_settings(&self) -> piki_core::sound::SoundSettings {
+        // Expand a leading `~/` so config paths like "~/sounds/ding.wav" work.
+        let p = |s: &Option<String>| {
+            s.as_ref().map(|s| match s.strip_prefix("~/") {
+                Some(rest) => piki_core::xdg::home_dir().join(rest),
+                None => std::path::PathBuf::from(s),
+            })
+        };
+        piki_core::sound::SoundSettings {
+            enabled: self.sound,
+            path: p(&self.sound_path),
+            done_path: p(&self.sound_done_path),
+            attention_path: p(&self.sound_attention_path),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     #[serde(default)]
@@ -50,6 +113,8 @@ pub struct Config {
     pub keybindings: Keybindings,
     #[serde(default)]
     pub kanban: KanbanConfig,
+    #[serde(default)]
+    pub notifications: NotificationsConfig,
     /// Runtime-detected platform (not serialized).
     #[serde(skip)]
     pub platform: Platform,
@@ -72,25 +137,72 @@ impl Default for Config {
             syntax_theme: default_syntax_theme(),
             keybindings: Keybindings::default(),
             kanban: KanbanConfig::default(),
+            notifications: NotificationsConfig::default(),
             platform: Platform::detect(),
         }
     }
 }
 
+/// A binding value in `[keybindings.app]`: either a single binding string or a
+/// list of alternatives. Strings starting with `prefix-` fire after the prefix
+/// key (tmux-style); anything else is a direct chord.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum BindingValue {
+    One(String),
+    Many(Vec<String>),
+}
+
+impl BindingValue {
+    pub fn one(s: &str) -> Self {
+        Self::One(s.to_string())
+    }
+
+    pub fn many(items: &[&str]) -> Self {
+        Self::Many(items.iter().map(|s| s.to_string()).collect())
+    }
+
+    pub fn values(&self) -> Vec<&str> {
+        match self {
+            Self::One(s) => vec![s.as_str()],
+            Self::Many(v) => v.iter().map(String::as_str).collect(),
+        }
+    }
+}
+
+/// How a binding string in the `app` table is triggered.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BindingTrigger {
+    /// Fires directly (e.g. `ctrl-shift-c`).
+    Direct(KeyEvent),
+    /// Fires after the prefix key (e.g. `prefix-c`).
+    Prefix(KeyEvent),
+}
+
+/// Parse an `app`-table binding string into its trigger.
+pub fn parse_binding_trigger(s: &str) -> Option<BindingTrigger> {
+    match s.strip_prefix("prefix-") {
+        Some(rest) => parse_key_event(rest).map(BindingTrigger::Prefix),
+        None => parse_key_event(s).map(BindingTrigger::Direct),
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Keybindings {
-    #[serde(default = "default_navigation")]
-    pub navigation: HashMap<String, String>,
-    #[serde(default = "default_interaction")]
-    pub interaction: HashMap<String, String>,
+    /// The tmux-style prefix key. Pressing it twice sends the key literally to
+    /// the terminal. Must come before the table fields for TOML serialization.
+    #[serde(default = "default_prefix_key")]
+    pub prefix_key: String,
+    #[serde(default = "default_app")]
+    pub app: HashMap<String, BindingValue>,
+    #[serde(default = "default_scroll")]
+    pub scroll: HashMap<String, String>,
+    #[serde(default = "default_agents")]
+    pub agents: HashMap<String, String>,
     #[serde(default = "default_markdown")]
     pub markdown: HashMap<String, String>,
-    #[serde(default = "default_diff")]
-    pub diff: HashMap<String, String>,
     #[serde(default = "default_workspace_list")]
     pub workspace_list: HashMap<String, String>,
-    #[serde(default = "default_file_list")]
-    pub file_list: HashMap<String, String>,
     #[serde(default = "default_help")]
     pub help: HashMap<String, String>,
     #[serde(default = "default_about")]
@@ -103,138 +215,131 @@ pub struct Keybindings {
     pub editor: HashMap<String, String>,
     #[serde(default = "default_new_workspace")]
     pub new_workspace: HashMap<String, String>,
-    #[serde(default = "default_commit")]
-    pub commit: HashMap<String, String>,
-    #[serde(default = "default_merge")]
-    pub merge: HashMap<String, String>,
     #[serde(default = "default_new_tab")]
     pub new_tab: HashMap<String, String>,
     #[serde(default = "default_dashboard")]
     pub dashboard: HashMap<String, String>,
     #[serde(default = "default_logs")]
     pub logs: HashMap<String, String>,
-    #[serde(default = "default_git_stash")]
-    pub git_stash: HashMap<String, String>,
-    #[serde(default = "default_git_log")]
-    pub git_log: HashMap<String, String>,
-    #[serde(default = "default_conflict_resolution")]
-    pub conflict_resolution: HashMap<String, String>,
 }
 
 impl Default for Keybindings {
     fn default() -> Self {
         Self {
-            navigation: default_navigation(),
-            interaction: default_interaction(),
+            prefix_key: default_prefix_key(),
+            app: default_app(),
+            scroll: default_scroll(),
+            agents: default_agents(),
             markdown: default_markdown(),
-            diff: default_diff(),
             workspace_list: default_workspace_list(),
-            file_list: default_file_list(),
             help: default_help(),
             about: default_about(),
             workspace_info: default_workspace_info(),
             fuzzy: default_fuzzy(),
             editor: default_editor(),
             new_workspace: default_new_workspace(),
-            commit: default_commit(),
-            merge: default_merge(),
             new_tab: default_new_tab(),
             dashboard: default_dashboard(),
             logs: default_logs(),
-            git_stash: default_git_stash(),
-            git_log: default_git_log(),
-            conflict_resolution: default_conflict_resolution(),
         }
     }
 }
 
-fn default_navigation() -> HashMap<String, String> {
+fn default_prefix_key() -> String {
+    "ctrl-g".to_string()
+}
+
+/// Global app actions. All defaults are behind the prefix key except the
+/// terminal clipboard/search chords; users can promote any action to a direct
+/// chord (e.g. `next_tab = "alt-n"`) or supply alternatives as an array.
+fn default_app() -> HashMap<String, BindingValue> {
     let mut m = HashMap::new();
-    // Pane navigation
-    m.insert("left".to_string(), "h".to_string());
-    m.insert("right".to_string(), "l".to_string());
-    m.insert("up".to_string(), "k".to_string());
-    m.insert("down".to_string(), "j".to_string());
-    m.insert("left_alt".to_string(), "left".to_string());
-    m.insert("right_alt".to_string(), "right".to_string());
-    m.insert("up_alt".to_string(), "up".to_string());
-    m.insert("down_alt".to_string(), "down".to_string());
+    // Focus movement between panes
+    m.insert("focus_left".to_string(), BindingValue::many(&["prefix-h", "prefix-left"]));
+    m.insert("focus_down".to_string(), BindingValue::many(&["prefix-j", "prefix-down"]));
+    m.insert("focus_up".to_string(), BindingValue::many(&["prefix-k", "prefix-up"]));
+    m.insert("focus_right".to_string(), BindingValue::many(&["prefix-l", "prefix-right"]));
 
-    // App state
-    m.insert("enter_pane".to_string(), "enter".to_string());
-    m.insert("quit".to_string(), "q".to_string());
-    m.insert("help".to_string(), "?".to_string());
-    m.insert("about".to_string(), "a".to_string());
-    m.insert("workspace_info".to_string(), "i".to_string());
-    m.insert("edit_workspace".to_string(), "e".to_string());
-    m.insert("kanban".to_string(), "b".to_string());
-    m.insert("new_workspace".to_string(), "n".to_string());
-    m.insert("delete_workspace".to_string(), "d".to_string());
-    m.insert("clone_workspace".to_string(), "r".to_string());
-    m.insert("dashboard".to_string(), "D".to_string());
-    m.insert("logs".to_string(), "ctrl-l".to_string());
-    m.insert("commit".to_string(), "c".to_string());
-    m.insert("merge".to_string(), "M".to_string());
-    m.insert("push".to_string(), "P".to_string());
-    m.insert("stash".to_string(), "S".to_string());
-    m.insert("git_log".to_string(), "L".to_string());
-    m.insert("conflicts".to_string(), "X".to_string());
-    m.insert("undo".to_string(), "ctrl-z".to_string());
+    // Tabs
+    m.insert("new_tab".to_string(), BindingValue::one("prefix-c"));
+    m.insert("close_tab".to_string(), BindingValue::one("prefix-x"));
+    m.insert("next_tab".to_string(), BindingValue::one("prefix-n"));
+    m.insert("prev_tab".to_string(), BindingValue::one("prefix-p"));
 
-    // Tabs & Workspaces
-    m.insert("next_workspace".to_string(), "tab".to_string());
-    m.insert("prev_workspace".to_string(), "shift-tab".to_string());
-    m.insert("next_tab".to_string(), "g".to_string());
-    m.insert("prev_tab".to_string(), "G".to_string());
-    m.insert("new_tab".to_string(), "t".to_string());
-    m.insert("close_tab".to_string(), "w".to_string());
+    // Workspaces
+    m.insert("workspace_switcher".to_string(), BindingValue::one("prefix-w"));
+    m.insert("next_workspace".to_string(), BindingValue::one("prefix-)"));
+    m.insert("prev_workspace".to_string(), BindingValue::one("prefix-("));
+    m.insert("toggle_prev_workspace".to_string(), BindingValue::one("prefix-`"));
+    m.insert("new_workspace".to_string(), BindingValue::one("prefix-N"));
+    m.insert("edit_workspace".to_string(), BindingValue::one("prefix-e"));
+    m.insert("workspace_info".to_string(), BindingValue::one("prefix-i"));
+    m.insert("clone_workspace".to_string(), BindingValue::one("prefix-R"));
 
-    // Scrolling
-    m.insert("scroll_up".to_string(), "K".to_string());
-    m.insert("scroll_down".to_string(), "J".to_string());
-    m.insert("page_up".to_string(), "pageup".to_string());
-    m.insert("page_down".to_string(), "pagedown".to_string());
+    // Git (everything else is delegated to the lazygit tab)
+    m.insert("git".to_string(), BindingValue::one("prefix-g"));
 
-    // Clipboard & Search
-    m.insert("copy".to_string(), "ctrl-shift-c".to_string());
-    m.insert("fuzzy_search".to_string(), "/".to_string());
-    m.insert("fuzzy_search_alt".to_string(), "ctrl-f".to_string());
-    m.insert("command_palette".to_string(), "ctrl-p".to_string());
-    m.insert("workspace_switcher".to_string(), "space".to_string());
-    m.insert("toggle_prev_workspace".to_string(), "`".to_string());
+    // App
+    m.insert("help".to_string(), BindingValue::one("prefix-?"));
+    m.insert("about".to_string(), BindingValue::one("prefix-a"));
+    m.insert("dashboard".to_string(), BindingValue::one("prefix-D"));
+    m.insert("command_palette".to_string(), BindingValue::one("prefix-:"));
+    m.insert("fuzzy_search".to_string(), BindingValue::one("prefix-/"));
+    m.insert("chat_panel".to_string(), BindingValue::one("prefix-y"));
+    m.insert("quit".to_string(), BindingValue::one("prefix-q"));
+    m.insert("manage_agents".to_string(), BindingValue::one("prefix-A"));
+    m.insert("manage_providers".to_string(), BindingValue::one("prefix-V"));
+    m.insert("logs".to_string(), BindingValue::one("prefix-o"));
+    m.insert("scroll_mode".to_string(), BindingValue::one("prefix-["));
 
-    // Quick actions (context-sensitive)
-    m.insert("stage_quick".to_string(), "s".to_string());
-    m.insert("unstage_quick".to_string(), "u".to_string());
+    // Layout
+    m.insert("sidebar_shrink".to_string(), BindingValue::many(&["prefix-<", "prefix-,"]));
+    m.insert("sidebar_grow".to_string(), BindingValue::many(&["prefix->", "prefix-."]));
+    m.insert("split_up".to_string(), BindingValue::many(&["prefix-+", "prefix-="]));
+    m.insert("split_down".to_string(), BindingValue::one("prefix--"));
 
-    // Resizing
-    m.insert("sidebar_shrink".to_string(), "<".to_string());
-    m.insert("sidebar_shrink_alt".to_string(), ",".to_string());
-    m.insert("sidebar_grow".to_string(), ">".to_string());
-    m.insert("sidebar_grow_alt".to_string(), ".".to_string());
-    m.insert("split_up".to_string(), "+".to_string());
-    m.insert("split_up_alt".to_string(), "=".to_string());
-    m.insert("split_down".to_string(), "-".to_string());
-
-    // AI Chat
-    m.insert("chat_panel".to_string(), "ctrl-y".to_string());
+    // Terminal clipboard: direct chords, never sent to the PTY.
+    m.insert("copy".to_string(), BindingValue::one("ctrl-shift-c"));
+    m.insert("paste".to_string(), BindingValue::one("ctrl-shift-v"));
+    // Terminal search is a prefix chord (not a direct Ctrl+Shift+F) so it
+    // can't be swallowed by the terminal emulator's own bindings (ghostty).
+    m.insert("terminal_search".to_string(), BindingValue::one("prefix-f"));
 
     m
 }
 
-fn default_interaction() -> HashMap<String, String> {
+/// Terminal scroll mode (entered with the `scroll_mode` app action).
+fn default_scroll() -> HashMap<String, String> {
     let mut m = HashMap::new();
-    m.insert("exit_interaction".to_string(), "ctrl-g".to_string());
-    m.insert("paste".to_string(), "ctrl-shift-v".to_string());
-    m.insert("copy".to_string(), "ctrl-shift-c".to_string());
-    m.insert("search".to_string(), "ctrl-shift-f".to_string());
+    m.insert("down".to_string(), "j".to_string());
+    m.insert("up".to_string(), "k".to_string());
+    m.insert("down_alt".to_string(), "down".to_string());
+    m.insert("up_alt".to_string(), "up".to_string());
+    m.insert("page_down".to_string(), "ctrl-d".to_string());
+    m.insert("page_up".to_string(), "ctrl-u".to_string());
+    m.insert("page_down_alt".to_string(), "pagedown".to_string());
+    m.insert("page_up_alt".to_string(), "pageup".to_string());
+    m.insert("top".to_string(), "g".to_string());
+    m.insert("bottom".to_string(), "G".to_string());
+    m.insert("search".to_string(), "/".to_string());
+    m.insert("exit".to_string(), "esc".to_string());
+    m.insert("exit_alt".to_string(), "q".to_string());
+    m
+}
+
+/// Agents pane (bottom-left): navigate active agents and jump to them.
+fn default_agents() -> HashMap<String, String> {
+    let mut m = HashMap::new();
+    m.insert("down".to_string(), "j".to_string());
+    m.insert("up".to_string(), "k".to_string());
+    m.insert("down_alt".to_string(), "down".to_string());
+    m.insert("up_alt".to_string(), "up".to_string());
+    m.insert("select".to_string(), "enter".to_string());
     m
 }
 
 fn default_markdown() -> HashMap<String, String> {
     let mut m = HashMap::new();
-    m.insert("exit_interaction".to_string(), "ctrl-g".to_string());
-    m.insert("exit_interaction_alt".to_string(), "esc".to_string());
     m.insert("down".to_string(), "j".to_string());
     m.insert("up".to_string(), "k".to_string());
     m.insert("down_alt".to_string(), "down".to_string());
@@ -246,52 +351,19 @@ fn default_markdown() -> HashMap<String, String> {
     m
 }
 
-fn default_diff() -> HashMap<String, String> {
-    let mut m = HashMap::new();
-    m.insert("exit".to_string(), "esc".to_string());
-    m.insert("down".to_string(), "j".to_string());
-    m.insert("up".to_string(), "k".to_string());
-    m.insert("down_alt".to_string(), "down".to_string());
-    m.insert("up_alt".to_string(), "up".to_string());
-    m.insert("page_down".to_string(), "ctrl-d".to_string());
-    m.insert("page_up".to_string(), "ctrl-u".to_string());
-    m.insert("scroll_top".to_string(), "g".to_string());
-    m.insert("scroll_bottom".to_string(), "G".to_string());
-    m.insert("next_file".to_string(), "n".to_string());
-    m.insert("prev_file".to_string(), "p".to_string());
-    m
-}
 
 fn default_workspace_list() -> HashMap<String, String> {
     let mut m = HashMap::new();
-    m.insert("exit_interaction".to_string(), "ctrl-g".to_string());
-    m.insert("exit_interaction_alt".to_string(), "esc".to_string());
     m.insert("down".to_string(), "j".to_string());
     m.insert("up".to_string(), "k".to_string());
     m.insert("down_alt".to_string(), "down".to_string());
     m.insert("up_alt".to_string(), "up".to_string());
     m.insert("select".to_string(), "enter".to_string());
     m.insert("delete".to_string(), "d".to_string());
+    m.insert("edit".to_string(), "e".to_string());
     m
 }
 
-fn default_file_list() -> HashMap<String, String> {
-    let mut m = HashMap::new();
-    m.insert("exit_interaction".to_string(), "ctrl-g".to_string());
-    m.insert("exit_interaction_alt".to_string(), "esc".to_string());
-    m.insert("down".to_string(), "j".to_string());
-    m.insert("up".to_string(), "k".to_string());
-    m.insert("down_alt".to_string(), "down".to_string());
-    m.insert("up_alt".to_string(), "up".to_string());
-    m.insert("diff".to_string(), "enter".to_string());
-    m.insert("edit_external".to_string(), "e".to_string());
-    m.insert("edit_inline".to_string(), "v".to_string());
-    m.insert("stage".to_string(), "s".to_string());
-    m.insert("unstage".to_string(), "u".to_string());
-    m.insert("toggle_select".to_string(), "space".to_string());
-    m.insert("select_all".to_string(), "a".to_string());
-    m
-}
 
 fn default_help() -> HashMap<String, String> {
     let mut m = HashMap::new();
@@ -330,7 +402,7 @@ fn default_fuzzy() -> HashMap<String, String> {
     let mut m = HashMap::new();
     m.insert("up".to_string(), "up".to_string());
     m.insert("down".to_string(), "down".to_string());
-    m.insert("diff".to_string(), "enter".to_string());
+    m.insert("open".to_string(), "enter".to_string());
     m.insert("editor".to_string(), "ctrl-e".to_string());
     m.insert("inline_edit".to_string(), "ctrl-v".to_string());
     m.insert("markdown".to_string(), "ctrl-o".to_string());
@@ -354,20 +426,7 @@ fn default_new_workspace() -> HashMap<String, String> {
     m
 }
 
-fn default_commit() -> HashMap<String, String> {
-    let mut m = HashMap::new();
-    m.insert("commit".to_string(), "enter".to_string());
-    m.insert("exit".to_string(), "esc".to_string());
-    m
-}
 
-fn default_merge() -> HashMap<String, String> {
-    let mut m = HashMap::new();
-    m.insert("merge".to_string(), "m".to_string());
-    m.insert("rebase".to_string(), "r".to_string());
-    m.insert("exit".to_string(), "esc".to_string());
-    m
-}
 
 fn default_dashboard() -> HashMap<String, String> {
     let mut m = HashMap::new();
@@ -408,54 +467,8 @@ fn default_new_tab() -> HashMap<String, String> {
     m
 }
 
-fn default_git_stash() -> HashMap<String, String> {
-    let mut m = HashMap::new();
-    m.insert("down".to_string(), "j".to_string());
-    m.insert("up".to_string(), "k".to_string());
-    m.insert("down_alt".to_string(), "down".to_string());
-    m.insert("up_alt".to_string(), "up".to_string());
-    m.insert("save".to_string(), "s".to_string());
-    m.insert("pop".to_string(), "p".to_string());
-    m.insert("apply".to_string(), "a".to_string());
-    m.insert("drop".to_string(), "d".to_string());
-    m.insert("show".to_string(), "enter".to_string());
-    m.insert("exit".to_string(), "esc".to_string());
-    m.insert("exit_alt".to_string(), "S".to_string());
-    m
-}
 
-fn default_git_log() -> HashMap<String, String> {
-    let mut m = HashMap::new();
-    m.insert("down".to_string(), "j".to_string());
-    m.insert("up".to_string(), "k".to_string());
-    m.insert("down_alt".to_string(), "down".to_string());
-    m.insert("up_alt".to_string(), "up".to_string());
-    m.insert("page_down".to_string(), "ctrl-d".to_string());
-    m.insert("page_up".to_string(), "ctrl-u".to_string());
-    m.insert("scroll_top".to_string(), "g".to_string());
-    m.insert("scroll_bottom".to_string(), "G".to_string());
-    m.insert("select".to_string(), "enter".to_string());
-    m.insert("exit".to_string(), "esc".to_string());
-    m.insert("exit_alt".to_string(), "L".to_string());
-    m
-}
 
-fn default_conflict_resolution() -> HashMap<String, String> {
-    let mut m = HashMap::new();
-    m.insert("down".to_string(), "j".to_string());
-    m.insert("up".to_string(), "k".to_string());
-    m.insert("down_alt".to_string(), "down".to_string());
-    m.insert("up_alt".to_string(), "up".to_string());
-    m.insert("ours".to_string(), "o".to_string());
-    m.insert("theirs".to_string(), "t".to_string());
-    m.insert("mark_resolved".to_string(), "m".to_string());
-    m.insert("edit".to_string(), "e".to_string());
-    m.insert("abort".to_string(), "A".to_string());
-    m.insert("select".to_string(), "enter".to_string());
-    m.insert("exit".to_string(), "esc".to_string());
-    m.insert("exit_alt".to_string(), "X".to_string());
-    m
-}
 
 impl Config {
     pub fn generate_default_toml() -> String {
@@ -487,25 +500,120 @@ impl Config {
                 Self::default()
             });
         cfg.platform = Platform::detect();
+        cfg.validate_keybindings();
         cfg
     }
 
-    pub fn matches_navigation(&self, event: KeyEvent, action: &str) -> bool {
-        if let Some(binding) = self.keybindings.navigation.get(action) {
+    /// Whether this key event is the tmux-style prefix key.
+    pub fn is_prefix_key(&self, event: KeyEvent) -> bool {
+        key_matches_platform(event, &self.keybindings.prefix_key, self.platform)
+    }
+
+    /// The prefix key formatted for display (e.g. "C-g").
+    pub fn prefix_display(&self) -> String {
+        compact_binding_display(&self.format_binding(&self.keybindings.prefix_key))
+    }
+
+    fn app_binding_strings(&self, action: &str) -> Vec<String> {
+        self.keybindings
+            .app
+            .get(action)
+            .cloned()
+            .or_else(|| default_app().get(action).cloned())
+            .map(|v| v.values().iter().map(|s| s.to_string()).collect())
+            .unwrap_or_default()
+    }
+
+    /// Match a key against the prefix-mode bindings of an `app` action
+    /// (binding strings starting with `prefix-`).
+    pub fn matches_app_prefix(&self, event: KeyEvent, action: &str) -> bool {
+        self.app_binding_strings(action).iter().any(|b| {
+            b.strip_prefix("prefix-")
+                .is_some_and(|rest| key_matches_platform(event, rest, self.platform))
+        })
+    }
+
+    /// Match a key against the direct-chord bindings of an `app` action
+    /// (binding strings without the `prefix-` marker).
+    pub fn matches_app_direct(&self, event: KeyEvent, action: &str) -> bool {
+        self.app_binding_strings(action).iter().any(|b| {
+            !b.starts_with("prefix-") && key_matches_platform(event, b, self.platform)
+        })
+    }
+
+    pub fn matches_scroll(&self, event: KeyEvent, action: &str) -> bool {
+        if let Some(binding) = self.keybindings.scroll.get(action) {
             key_matches_platform(event, binding, self.platform)
         } else {
-            let defaults = default_navigation();
+            let defaults = default_scroll();
             defaults
                 .get(action)
                 .is_some_and(|b| key_matches_platform(event, b, self.platform))
         }
     }
 
-    pub fn matches_interaction(&self, event: KeyEvent, action: &str) -> bool {
-        if let Some(binding) = self.keybindings.interaction.get(action) {
+    /// Log warnings for misconfigured keybindings: unparseable strings,
+    /// bindings that collide with the prefix key (reserved for the literal
+    /// send), duplicate triggers, and direct chords without modifiers (which
+    /// would shadow terminal input).
+    pub fn validate_keybindings(&self) {
+        let prefix = parse_key_event(&self.keybindings.prefix_key);
+        if prefix.is_none() {
+            tracing::warn!(
+                prefix_key = %self.keybindings.prefix_key,
+                "invalid prefix_key, falling back to ctrl-g"
+            );
+        }
+        let mut seen: HashMap<(bool, KeyCode, KeyModifiers), String> = HashMap::new();
+        let mut actions: Vec<&String> = self.keybindings.app.keys().collect();
+        let defaults = default_app();
+        actions.extend(defaults.keys().filter(|k| !self.keybindings.app.contains_key(*k)));
+        for action in actions {
+            for binding in self.app_binding_strings(action) {
+                let Some(trigger) = parse_binding_trigger(&binding) else {
+                    tracing::warn!(%action, %binding, "unparseable keybinding, ignored");
+                    continue;
+                };
+                let (is_prefix, event) = match trigger {
+                    BindingTrigger::Prefix(e) => (true, e),
+                    BindingTrigger::Direct(e) => (false, e),
+                };
+                if !is_prefix
+                    && prefix.is_some_and(|p| p.code == event.code && p.modifiers == event.modifiers)
+                {
+                    tracing::warn!(
+                        %action, %binding,
+                        "binding collides with the prefix key (reserved for literal send), ignored"
+                    );
+                    continue;
+                }
+                if !is_prefix
+                    && event.modifiers.is_empty()
+                    && matches!(event.code, KeyCode::Char(_))
+                {
+                    tracing::warn!(
+                        %action, %binding,
+                        "direct binding without modifiers shadows terminal input"
+                    );
+                }
+                if let Some(other) = seen
+                    .insert((is_prefix, event.code, event.modifiers), action.clone())
+                    .filter(|other| other != action)
+                {
+                    tracing::warn!(
+                        %binding, first = %other, second = %action,
+                        "duplicate keybinding, the first match wins"
+                    );
+                }
+            }
+        }
+    }
+
+    pub fn matches_agents(&self, event: KeyEvent, action: &str) -> bool {
+        if let Some(binding) = self.keybindings.agents.get(action) {
             key_matches_platform(event, binding, self.platform)
         } else {
-            let defaults = default_interaction();
+            let defaults = default_agents();
             defaults
                 .get(action)
                 .is_some_and(|b| key_matches_platform(event, b, self.platform))
@@ -523,16 +631,6 @@ impl Config {
         }
     }
 
-    pub fn matches_diff(&self, event: KeyEvent, action: &str) -> bool {
-        if let Some(binding) = self.keybindings.diff.get(action) {
-            key_matches_platform(event, binding, self.platform)
-        } else {
-            let defaults = default_diff();
-            defaults
-                .get(action)
-                .is_some_and(|b| key_matches_platform(event, b, self.platform))
-        }
-    }
 
     pub fn matches_workspace_list(&self, event: KeyEvent, action: &str) -> bool {
         if let Some(binding) = self.keybindings.workspace_list.get(action) {
@@ -545,16 +643,6 @@ impl Config {
         }
     }
 
-    pub fn matches_file_list(&self, event: KeyEvent, action: &str) -> bool {
-        if let Some(binding) = self.keybindings.file_list.get(action) {
-            key_matches_platform(event, binding, self.platform)
-        } else {
-            let defaults = default_file_list();
-            defaults
-                .get(action)
-                .is_some_and(|b| key_matches_platform(event, b, self.platform))
-        }
-    }
 
     pub fn matches_help(&self, event: KeyEvent, action: &str) -> bool {
         if let Some(binding) = self.keybindings.help.get(action) {
@@ -596,35 +684,8 @@ impl Config {
         }
     }
 
-    pub fn matches_git_stash(&self, event: KeyEvent, action: &str) -> bool {
-        if let Some(binding) = self.keybindings.git_stash.get(action) {
-            key_matches_platform(event, binding, self.platform)
-        } else {
-            false
-        }
-    }
 
-    pub fn matches_git_log(&self, event: KeyEvent, action: &str) -> bool {
-        if let Some(binding) = self.keybindings.git_log.get(action) {
-            key_matches_platform(event, binding, self.platform)
-        } else {
-            let defaults = default_git_log();
-            defaults
-                .get(action)
-                .is_some_and(|b| key_matches_platform(event, b, self.platform))
-        }
-    }
 
-    pub fn matches_conflict_resolution(&self, event: KeyEvent, action: &str) -> bool {
-        if let Some(binding) = self.keybindings.conflict_resolution.get(action) {
-            key_matches_platform(event, binding, self.platform)
-        } else {
-            let defaults = default_conflict_resolution();
-            defaults
-                .get(action)
-                .is_some_and(|b| key_matches_platform(event, b, self.platform))
-        }
-    }
 
     /// Format a binding string for the current platform.
     /// On macOS, replaces `ctrl-` with `cmd-` for display.
@@ -633,43 +694,38 @@ impl Config {
     }
 
     pub fn get_binding(&self, section: &str, action: &str) -> String {
+        if section == "app" {
+            return self
+                .app_binding_strings(action)
+                .first()
+                .map(|b| self.display_app_binding(b))
+                .unwrap_or_else(|| "???".to_string());
+        }
         let binding = match section {
-            "navigation" => self
+            "scroll" => self
                 .keybindings
-                .navigation
+                .scroll
                 .get(action)
                 .cloned()
-                .or_else(|| default_navigation().get(action).cloned()),
-            "interaction" => self
+                .or_else(|| default_scroll().get(action).cloned()),
+            "agents" => self
                 .keybindings
-                .interaction
+                .agents
                 .get(action)
                 .cloned()
-                .or_else(|| default_interaction().get(action).cloned()),
+                .or_else(|| default_agents().get(action).cloned()),
             "markdown" => self
                 .keybindings
                 .markdown
                 .get(action)
                 .cloned()
                 .or_else(|| default_markdown().get(action).cloned()),
-            "diff" => self
-                .keybindings
-                .diff
-                .get(action)
-                .cloned()
-                .or_else(|| default_diff().get(action).cloned()),
             "workspace_list" => self
                 .keybindings
                 .workspace_list
                 .get(action)
                 .cloned()
                 .or_else(|| default_workspace_list().get(action).cloned()),
-            "file_list" => self
-                .keybindings
-                .file_list
-                .get(action)
-                .cloned()
-                .or_else(|| default_file_list().get(action).cloned()),
             "help" => self
                 .keybindings
                 .help
@@ -706,18 +762,6 @@ impl Config {
                 .get(action)
                 .cloned()
                 .or_else(|| default_new_workspace().get(action).cloned()),
-            "commit" => self
-                .keybindings
-                .commit
-                .get(action)
-                .cloned()
-                .or_else(|| default_commit().get(action).cloned()),
-            "merge" => self
-                .keybindings
-                .merge
-                .get(action)
-                .cloned()
-                .or_else(|| default_merge().get(action).cloned()),
             "new_tab" => self
                 .keybindings
                 .new_tab
@@ -736,30 +780,30 @@ impl Config {
                 .get(action)
                 .cloned()
                 .or_else(|| default_logs().get(action).cloned()),
-            "git_stash" => self
-                .keybindings
-                .git_stash
-                .get(action)
-                .cloned()
-                .or_else(|| default_git_stash().get(action).cloned()),
-            "git_log" => self
-                .keybindings
-                .git_log
-                .get(action)
-                .cloned()
-                .or_else(|| default_git_log().get(action).cloned()),
-            "conflict_resolution" => self
-                .keybindings
-                .conflict_resolution
-                .get(action)
-                .cloned()
-                .or_else(|| default_conflict_resolution().get(action).cloned()),
             _ => None,
         };
         binding
             .map(|b| self.format_binding(&b))
             .unwrap_or_else(|| "???".to_string())
     }
+
+    /// Display form of an `app` binding: `"prefix-c"` → `"C-g c"`,
+    /// `"ctrl-shift-c"` → `"ctrl-shift-c"` (platform-formatted).
+    fn display_app_binding(&self, binding: &str) -> String {
+        match binding.strip_prefix("prefix-") {
+            Some(rest) => format!("{} {}", self.prefix_display(), self.format_binding(rest)),
+            None => self.format_binding(binding),
+        }
+    }
+}
+
+/// Compact modifier spelling for tight UI spots: `ctrl-g` → `C-g`, `alt-p` → `M-p`.
+fn compact_binding_display(binding: &str) -> String {
+    binding
+        .replace("ctrl-", "C-")
+        .replace("alt-", "M-")
+        .replace("shift-", "S-")
+        .replace("cmd-", "Cmd-")
 }
 
 /// Check if modifiers include Ctrl (or Super on macOS).
@@ -830,14 +874,14 @@ pub fn parse_key_event(s: &str) -> Option<KeyEvent> {
         "insert" => KeyCode::Insert,
         "delete" => KeyCode::Delete,
         "space" => KeyCode::Char(' '),
-        s if s.len() == 1 => {
+        s if s.chars().count() == 1 => {
             // Use the original code_str to preserve case (the match lowercases it)
-            let original_c = code_str.chars().next().unwrap();
+            let original_c = code_str.chars().next()?;
             // If the original char is uppercase, implicitly add SHIFT modifier
             if original_c.is_uppercase() {
                 modifiers.insert(KeyModifiers::SHIFT);
             }
-            KeyCode::Char(s.chars().next().unwrap())
+            KeyCode::Char(s.chars().next()?)
         }
         s if s.starts_with('f') && s.len() > 1 => {
             let n = s[1..].parse::<u8>().ok()?;
@@ -900,39 +944,35 @@ mod tests {
     #[test]
     fn test_default_config_has_valid_bindings() {
         let cfg = Config::default();
-        // All navigation bindings should parse successfully
-        for (action, binding) in &cfg.keybindings.navigation {
-            assert!(
-                parse_key_event(binding).is_some(),
-                "navigation binding '{}' = '{}' failed to parse",
-                action,
-                binding,
-            );
+        // All app-table bindings should parse successfully (prefix or direct)
+        for (action, value) in &cfg.keybindings.app {
+            for binding in value.values() {
+                assert!(
+                    parse_binding_trigger(binding).is_some(),
+                    "app binding '{}' = '{}' failed to parse",
+                    action,
+                    binding,
+                );
+            }
         }
+        assert!(parse_key_event(&cfg.keybindings.prefix_key).is_some());
     }
 
     #[test]
     fn test_all_default_sections_parse() {
         let cfg = Config::default();
         let sections: Vec<(&str, &HashMap<String, String>)> = vec![
-            ("navigation", &cfg.keybindings.navigation),
-            ("interaction", &cfg.keybindings.interaction),
-            ("diff", &cfg.keybindings.diff),
+            ("scroll", &cfg.keybindings.scroll),
+            ("agents", &cfg.keybindings.agents),
             ("help", &cfg.keybindings.help),
             ("fuzzy", &cfg.keybindings.fuzzy),
             ("editor", &cfg.keybindings.editor),
-            ("commit", &cfg.keybindings.commit),
-            ("merge", &cfg.keybindings.merge),
             ("new_tab", &cfg.keybindings.new_tab),
             ("new_workspace", &cfg.keybindings.new_workspace),
-            ("file_list", &cfg.keybindings.file_list),
             ("workspace_list", &cfg.keybindings.workspace_list),
             ("about", &cfg.keybindings.about),
             ("workspace_info", &cfg.keybindings.workspace_info),
             ("markdown", &cfg.keybindings.markdown),
-            ("git_stash", &cfg.keybindings.git_stash),
-            ("git_log", &cfg.keybindings.git_log),
-            ("conflict_resolution", &cfg.keybindings.conflict_resolution),
         ];
         for (section, bindings) in sections {
             for (action, binding) in bindings {
@@ -945,6 +985,129 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn test_default_app_bindings_parse_and_do_not_collide() {
+        let mut seen: HashMap<(bool, KeyCode, KeyModifiers), String> = HashMap::new();
+        for (action, value) in default_app() {
+            for binding in value.values() {
+                let trigger = parse_binding_trigger(binding);
+                assert!(trigger.is_some(), "app binding '{action}' = '{binding}' failed to parse");
+                let (is_prefix, event) = match trigger.unwrap() {
+                    BindingTrigger::Prefix(e) => (true, e),
+                    BindingTrigger::Direct(e) => (false, e),
+                };
+                if let Some(other) =
+                    seen.insert((is_prefix, event.code, event.modifiers), action.clone())
+                {
+                    panic!("app bindings collide: '{other}' and '{action}' share '{binding}'");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_default_scroll_bindings_parse() {
+        for (action, binding) in default_scroll() {
+            assert!(
+                parse_key_event(&binding).is_some(),
+                "scroll binding '{action}' = '{binding}' failed to parse",
+            );
+        }
+    }
+
+    #[test]
+    fn test_parse_binding_trigger() {
+        match parse_binding_trigger("prefix-C") {
+            Some(BindingTrigger::Prefix(e)) => {
+                // parse_key_event stores the lowercased char plus SHIFT
+                assert_eq!(e.code, KeyCode::Char('c'));
+                assert_eq!(e.modifiers, KeyModifiers::SHIFT);
+            }
+            other => panic!("expected Prefix trigger, got {other:?}"),
+        }
+        match parse_binding_trigger("ctrl-shift-c") {
+            Some(BindingTrigger::Direct(e)) => {
+                assert_eq!(e.code, KeyCode::Char('c'));
+                assert_eq!(e.modifiers, KeyModifiers::CONTROL | KeyModifiers::SHIFT);
+            }
+            other => panic!("expected Direct trigger, got {other:?}"),
+        }
+        // "prefix--" is prefix + literal '-'
+        match parse_binding_trigger("prefix--") {
+            Some(BindingTrigger::Prefix(e)) => assert_eq!(e.code, KeyCode::Char('-')),
+            other => panic!("expected Prefix('-'), got {other:?}"),
+        }
+        assert!(parse_binding_trigger("prefix-bogus").is_none());
+    }
+
+    #[test]
+    fn test_binding_value_toml_forms() {
+        let toml_str = r#"
+[keybindings.app]
+next_tab = "alt-n"
+focus_left = ["prefix-h", "prefix-left"]
+"#;
+        let cfg: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(
+            cfg.keybindings.app.get("next_tab").unwrap().values(),
+            vec!["alt-n"]
+        );
+        assert_eq!(
+            cfg.keybindings.app.get("focus_left").unwrap().values(),
+            vec!["prefix-h", "prefix-left"]
+        );
+        // Direct override matches directly, not behind the prefix
+        let alt_n = KeyEvent::new(KeyCode::Char('n'), KeyModifiers::ALT);
+        assert!(cfg.matches_app_direct(alt_n, "next_tab"));
+        assert!(!cfg.matches_app_prefix(alt_n, "next_tab"));
+        // Non-overridden actions fall back to defaults
+        let c = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::empty());
+        assert!(cfg.matches_app_prefix(c, "new_tab"));
+    }
+
+    #[test]
+    fn test_is_prefix_key_default_and_custom() {
+        let cfg = Config::default();
+        assert!(cfg.is_prefix_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::CONTROL)));
+        assert!(!cfg.is_prefix_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::empty())));
+
+        let toml_str = r#"
+[keybindings]
+prefix_key = "ctrl-a"
+"#;
+        let cfg: Config = toml::from_str(toml_str).unwrap();
+        assert!(cfg.is_prefix_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL)));
+        assert!(!cfg.is_prefix_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::CONTROL)));
+    }
+
+    #[test]
+    fn test_get_binding_app_display() {
+        // Pin the platform: on macOS the display would be "Cmd-g c"
+        let cfg = Config {
+            platform: Platform::Linux,
+            ..Config::default()
+        };
+        assert_eq!(cfg.get_binding("app", "new_tab"), "C-g c");
+        assert_eq!(cfg.get_binding("app", "copy"), "ctrl-shift-c");
+        assert_eq!(cfg.get_binding("app", "nonexistent"), "???");
+    }
+
+    #[test]
+    fn test_obsolete_config_sections_are_ignored() {
+        // A pre-prefix config.toml with the old navigation/interaction tables
+        // must still deserialize (unknown keys inside known tables are kept,
+        // whole unknown tables are ignored by serde).
+        let toml_str = r#"
+[keybindings.navigation]
+quit = "ctrl-q"
+
+[keybindings.obsolete_table]
+foo = "bar"
+"#;
+        let cfg: Result<Config, _> = toml::from_str(toml_str);
+        assert!(cfg.is_ok());
     }
 
     #[test]
@@ -985,15 +1148,18 @@ mod tests {
     #[test]
     fn test_partial_toml_merge_with_defaults() {
         let toml_str = r#"
-[keybindings.navigation]
-quit = "ctrl-q"
+[keybindings.app]
+quit = "prefix-Q"
 "#;
         let cfg: Config = toml::from_str(toml_str).unwrap();
         // Overridden binding
-        assert_eq!(cfg.keybindings.navigation.get("quit").unwrap(), "ctrl-q");
+        assert_eq!(
+            cfg.keybindings.app.get("quit").unwrap().values(),
+            vec!["prefix-Q"]
+        );
         // Other sections still get defaults
         assert!(cfg.keybindings.help.contains_key("exit"));
-        assert!(cfg.keybindings.diff.contains_key("down"));
+        assert!(cfg.keybindings.agents.contains_key("down"));
     }
 
     #[test]
@@ -1002,26 +1168,55 @@ quit = "ctrl-q"
         assert!(result.is_err());
         // Config::load() would fall back to defaults — verify defaults are valid
         let cfg = Config::default();
-        assert!(!cfg.keybindings.navigation.is_empty());
+        assert!(!cfg.keybindings.app.is_empty());
     }
 
     #[test]
     fn test_get_binding_falls_back_to_default() {
-        let cfg = Config::default();
-        assert_eq!(cfg.get_binding("navigation", "quit"), "q");
-        assert_eq!(cfg.get_binding("navigation", "help"), "?");
+        // Pin the platform: on macOS the display would be "Cmd-g q"
+        let cfg = Config {
+            platform: Platform::Linux,
+            ..Config::default()
+        };
+        assert_eq!(cfg.get_binding("app", "quit"), "C-g q");
+        assert_eq!(cfg.get_binding("app", "help"), "C-g ?");
         // Unknown action returns "???"
-        assert_eq!(cfg.get_binding("navigation", "nonexistent"), "???");
+        assert_eq!(cfg.get_binding("app", "nonexistent"), "???");
         // Unknown section returns "???"
         assert_eq!(cfg.get_binding("nonexistent_section", "quit"), "???");
     }
 
     #[test]
-    fn test_matches_navigation_with_defaults() {
+    fn test_matches_app_prefix_with_defaults() {
         let cfg = Config::default();
         let q_event = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::empty());
-        assert!(cfg.matches_navigation(q_event, "quit"));
-        assert!(!cfg.matches_navigation(q_event, "help"));
+        assert!(cfg.matches_app_prefix(q_event, "quit"));
+        assert!(!cfg.matches_app_prefix(q_event, "help"));
+        // A prefix binding is not a direct chord
+        assert!(!cfg.matches_app_direct(q_event, "quit"));
+    }
+
+    #[test]
+    fn test_notifications_config_defaults_and_parse() {
+        use piki_core::notifications::NotificationDelivery as D;
+        // Absent section → defaults
+        let cfg: Config = toml::from_str("").unwrap();
+        assert_eq!(cfg.notifications.parsed_delivery(), D::System);
+        assert!(!cfg.notifications.sound);
+
+        let cfg: Config = toml::from_str(
+            "[notifications]\ndelivery = \"terminal\"\nsound = true\nsound_done_path = \"/tmp/d.wav\"\n",
+        )
+        .unwrap();
+        assert_eq!(cfg.notifications.parsed_delivery(), D::Terminal);
+        let s = cfg.notifications.sound_settings();
+        assert!(s.enabled);
+        assert_eq!(s.done_path, Some(std::path::PathBuf::from("/tmp/d.wav")));
+        assert_eq!(s.attention_path, None);
+
+        // Unknown delivery falls back to system instead of failing
+        let cfg: Config = toml::from_str("[notifications]\ndelivery = \"banana\"\n").unwrap();
+        assert_eq!(cfg.notifications.parsed_delivery(), D::System);
     }
 
     #[test]
@@ -1029,8 +1224,15 @@ quit = "ctrl-q"
         let toml_str = Config::generate_default_toml();
         let cfg: Config = toml::from_str(&toml_str).unwrap();
         // Verify key bindings survived the roundtrip
-        assert_eq!(cfg.keybindings.navigation.get("quit").unwrap(), "q");
-        assert_eq!(cfg.keybindings.navigation.get("help").unwrap(), "?");
+        assert_eq!(cfg.keybindings.prefix_key, "ctrl-g");
+        assert_eq!(
+            cfg.keybindings.app.get("quit").unwrap().values(),
+            vec!["prefix-q"]
+        );
+        assert_eq!(
+            cfg.keybindings.app.get("focus_left").unwrap().values(),
+            vec!["prefix-h", "prefix-left"]
+        );
     }
 
     // --- Platform-aware keybinding tests ---
@@ -1171,9 +1373,9 @@ quit = "ctrl-q"
             platform: Platform::MacOs,
             ..Config::default()
         };
-        // ctrl-g should display as cmd-g on macOS
-        assert_eq!(cfg.get_binding("interaction", "exit_interaction"), "cmd-g");
+        // ctrl-shift-c should display with cmd- on macOS
+        assert_eq!(cfg.get_binding("app", "copy"), "cmd-shift-c");
         // Non-ctrl bindings unchanged
-        assert_eq!(cfg.get_binding("navigation", "quit"), "q");
+        assert_eq!(cfg.get_binding("scroll", "exit"), "esc");
     }
 }

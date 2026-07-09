@@ -279,6 +279,8 @@ fn main() {
             commands::system::get_sysinfo_detailed,
             commands::theme::get_theme,
             commands::theme::set_theme,
+            commands::theme::list_custom_themes,
+            commands::theme::save_custom_theme,
             commands::logs::get_logs,
             commands::logs::clear_logs,
             commands::kanban::kanban_load_board,
