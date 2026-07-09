@@ -103,6 +103,13 @@ impl ShellTabState {
                     exit_code: *exit_code,
                 });
                 self.last_attention_at = Some(now);
+                // A foreground command just returned to the shell prompt. If a
+                // cli-agent (a manually-run `claude`) was reporting through
+                // this shell, it has now exited — clear its state so it drops
+                // off the Agents pane. Dedicated agent tabs run the agent
+                // directly (no shell integration), never see CommandEnd, and
+                // keep their state.
+                self.cli_agent = None;
             }
             ShellEvent::CliAgent(ev) => {
                 self.cli_agent
@@ -165,5 +172,27 @@ mod tests {
         let cmd = s.last_command.expect("command recorded");
         assert_eq!(cmd.exit_code, Some(2));
         assert_eq!(cmd.duration, Duration::ZERO);
+    }
+
+    #[test]
+    fn command_end_clears_cli_agent_state() {
+        // A manually-run `claude` reports through a shell tab...
+        let mut s = ShellTabState::new();
+        s.apply(&ShellEvent::CliAgent(
+            crate::cli_agent::CliAgentEvent::SessionStart {
+                session_id: "s1".to_string(),
+                cwd: None,
+                project: None,
+            },
+        ));
+        assert!(s.cli_agent.is_some(), "cli-agent state set by the event");
+
+        // ...and drops off when the CLI exits and the shell returns to its
+        // prompt (OSC 133 command-end).
+        s.apply(&ShellEvent::CommandEnd { exit_code: Some(0), command: None });
+        assert!(
+            s.cli_agent.is_none(),
+            "cli-agent state cleared once claude exits"
+        );
     }
 }

@@ -1098,13 +1098,12 @@ impl App {
     /// (Custom provider) plus any other tab whose cli-agent channel has
     /// reported — e.g. a `claude` typed manually inside a shell tab.
     ///
-    /// A shell tab only lists while its `claude` is still active: once the
-    /// `Stop` hook marks it `Done` (the CLI exited) it drops off, since the
-    /// shell itself lives on and the snapshot would otherwise linger. A
-    /// dedicated Custom-provider tab always lists — that tab *is* the agent.
-    /// Labels and status are derived live at render time.
+    /// A shell entry disappears when its `claude` exits: the shell's OSC 133
+    /// `CommandEnd` marker clears the tab's cli-agent state (see
+    /// `ShellTabState::apply`), so its snapshot goes away and it drops off
+    /// here. A dedicated Custom-provider tab always lists — that tab *is* the
+    /// agent. Labels and status are derived live at render time.
     pub fn agent_rows(&self) -> Vec<(usize, usize)> {
-        use piki_core::cli_agent::CliAgentStatus;
         self.workspaces
             .iter()
             .enumerate()
@@ -1113,13 +1112,8 @@ impl App {
                     .iter()
                     .enumerate()
                     .filter(|(_, t)| {
-                        if matches!(t.provider, AIProvider::Custom(_)) {
-                            return true;
-                        }
-                        matches!(
-                            t.cli_agent_snapshot(),
-                            Some((status, _)) if status != CliAgentStatus::Done
-                        )
+                        matches!(t.provider, AIProvider::Custom(_))
+                            || t.cli_agent_snapshot().is_some()
                     })
                     .map(move |(ti, _)| (wi, ti))
             })
