@@ -479,8 +479,8 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 
 | Action | Effect |
 |--------|--------|
-| Click workspace list | Focus pane and switch to clicked workspace |
-| Click agents pane | Select agent and jump to its workspace/tab |
+| Click workspace list | Switch to the clicked workspace (focus moves to the main panel; empty click just focuses the main panel) |
+| Click agents pane | Jump to the clicked agent's workspace/tab (focus moves to the main panel; empty click just focuses the main panel) |
 | Click main panel | Focus pane and start text selection |
 | Click tab | Switch to that tab |
 | Click × on tab | Close that tab (with confirmation) |

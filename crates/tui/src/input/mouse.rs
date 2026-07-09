@@ -427,9 +427,11 @@ pub(crate) fn handle_mouse_event(
                         None => {}
                     }
                 }
-                // Click on workspace list
+                // Click on workspace list. The sidebar panes are action-only:
+                // a click performs the action (switch workspace / toggle group)
+                // and focus always lands on the main panel — never the list. An
+                // empty click just focuses the main panel and does nothing else.
                 else if rect_contains(app.ws_list_area, col, row) {
-                    app.active_pane = ActivePane::WorkspaceList;
                     let inner_y = app.ws_list_area.y + 1;
                     if row >= inner_y {
                         let sidebar_items = app.sidebar_items();
@@ -457,15 +459,17 @@ pub(crate) fn handle_mouse_event(
                             }
                         }
                     }
+                    app.active_pane = ActivePane::MainPanel;
                 }
-                // Click on the Agents pane — select the row and jump to it
+                // Click on the Agents pane — jump to the agent, or just focus
+                // the main panel on an empty click. Focus never stays here.
                 else if rect_contains(app.agents_area, col, row) {
-                    app.active_pane = ActivePane::Agents;
                     if let Some(clicked) = app.agent_row_at(row) {
                         app.selected_agent_row = clicked;
                         let target = app.agent_rows()[clicked];
                         super::interaction::jump_to_agent(app, target);
                     }
+                    app.active_pane = ActivePane::MainPanel;
                 }
                 // Click on main panel — start text selection
                 else if rect_contains(app.main_content_area, col, row) {
