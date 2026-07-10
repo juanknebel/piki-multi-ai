@@ -191,6 +191,14 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
             )
         ),
         format!(
+            "    {:<13} Collapse / expand group",
+            format!(
+                "{}/{}",
+                cfg.get_binding("workspaces", "collapse"),
+                cfg.get_binding("workspaces", "expand")
+            )
+        ),
+        format!(
             "    {:<13} Switch to it / toggle group",
             cfg.get_binding("workspaces", "select")
         ),

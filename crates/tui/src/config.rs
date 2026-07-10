@@ -347,6 +347,11 @@ fn default_workspaces() -> HashMap<String, String> {
     m.insert("up".to_string(), "k".to_string());
     m.insert("down_alt".to_string(), "down".to_string());
     m.insert("up_alt".to_string(), "up".to_string());
+    // Tree-style horizontal keys: collapse / expand the group.
+    m.insert("collapse".to_string(), "h".to_string());
+    m.insert("collapse_alt".to_string(), "left".to_string());
+    m.insert("expand".to_string(), "l".to_string());
+    m.insert("expand_alt".to_string(), "right".to_string());
     // Switch to the selected workspace, or toggle the selected group header.
     m.insert("select".to_string(), "enter".to_string());
     m

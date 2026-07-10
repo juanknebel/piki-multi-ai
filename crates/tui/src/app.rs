@@ -1230,9 +1230,55 @@ impl App {
         if !self.collapsed_groups.remove(&name) {
             self.collapsed_groups.insert(name);
         }
-        // Persist to storage if available
+        self.persist_collapsed_groups();
+    }
+
+    fn persist_collapsed_groups(&self) {
         if let Some(ref ui_prefs) = self.storage.ui_prefs {
             let _ = ui_prefs.set_collapsed_groups(&self.collapsed_groups);
+        }
+    }
+
+    /// The group name for the currently selected sidebar row: the header's own
+    /// name, or the parent group of a selected workspace (`None` if ungrouped).
+    fn selected_group_name(&self) -> Option<String> {
+        match self.sidebar_items().get(self.selected_sidebar_row)? {
+            SidebarItem::GroupHeader { name, .. } => Some(name.clone()),
+            SidebarItem::Workspace { index } => {
+                self.workspaces.get(*index).and_then(|w| w.info.group.clone())
+            }
+        }
+    }
+
+    /// Collapse the group the selection belongs to (its own header, or the
+    /// parent group of a selected workspace) and park the selection on that
+    /// header row. Tree-style `←` behaviour. No-op for ungrouped rows.
+    pub fn collapse_selected_group(&mut self) {
+        let Some(name) = self.selected_group_name() else {
+            return;
+        };
+        self.collapsed_groups.insert(name.clone());
+        self.persist_collapsed_groups();
+        // Land on the (now collapsed) header so a following `→` re-expands it.
+        for (i, item) in self.sidebar_items().iter().enumerate() {
+            if let SidebarItem::GroupHeader { name: n, .. } = item
+                && *n == name
+            {
+                self.selected_sidebar_row = i;
+                break;
+            }
+        }
+    }
+
+    /// Expand the selected collapsed group header. Tree-style `→` behaviour;
+    /// a no-op unless the selection is on a collapsed header.
+    pub fn expand_selected_group(&mut self) {
+        let name = match self.sidebar_items().get(self.selected_sidebar_row) {
+            Some(SidebarItem::GroupHeader { name, .. }) => name.clone(),
+            _ => return,
+        };
+        if self.collapsed_groups.remove(&name) {
+            self.persist_collapsed_groups();
         }
     }
 
@@ -2199,6 +2245,36 @@ mod tests {
         assert_eq!(app.active_pane, ActivePane::WorkspaceList);
         assert_eq!(app.mode, AppMode::Normal);
         assert!(app.active_dialog.is_none());
+    }
+
+    #[test]
+    fn test_workspace_list_collapse_expand_group() {
+        // Side arrows (or h/l) collapse/expand a group in the Workspaces tree.
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
+        add_test_workspace(&mut app); // index 0
+        add_test_workspace(&mut app); // index 1
+        app.workspaces[0].info.group = Some("G".to_string());
+        app.workspaces[1].info.group = Some("G".to_string());
+        app.active_pane = ActivePane::WorkspaceList;
+        // sidebar_items: [GroupHeader{G}, Workspace{0}, Workspace{1}]
+        app.selected_sidebar_row = 1; // a workspace inside the group
+
+        // h collapses the parent group and parks selection on its header.
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('h')));
+        assert!(app.collapsed_groups.contains("G"));
+        assert_eq!(app.selected_sidebar_row, 0);
+        // l re-expands it.
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('l')));
+        assert!(!app.collapsed_groups.contains("G"));
+        // Arrow Left collapses again straight from the header row.
+        crate::input::handle_key_event(&mut app, key(KeyCode::Left));
+        assert!(app.collapsed_groups.contains("G"));
+        // Arrow Right expands.
+        crate::input::handle_key_event(&mut app, key(KeyCode::Right));
+        assert!(!app.collapsed_groups.contains("G"));
     }
 
     // ── PTY idle notifications ──

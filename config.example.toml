@@ -140,6 +140,10 @@ theme = "default"
 # up = "k"
 # down_alt = "down"
 # up_alt = "up"
+# collapse = "h"              # collapse the group (or the row's parent group)
+# collapse_alt = "left"
+# expand = "l"                # expand the selected collapsed group header
+# expand_alt = "right"
 # select = "enter"
 
 # [keybindings.markdown]      # markdown reader

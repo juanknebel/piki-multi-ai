@@ -1042,6 +1042,14 @@ pub(super) fn handle_workspace_list_interaction(app: &mut App, key: KeyEvent) ->
         || app.config.matches_workspaces(key, "up_alt")
     {
         app.select_prev_sidebar_row();
+    } else if app.config.matches_workspaces(key, "collapse")
+        || app.config.matches_workspaces(key, "collapse_alt")
+    {
+        app.collapse_selected_group();
+    } else if app.config.matches_workspaces(key, "expand")
+        || app.config.matches_workspaces(key, "expand_alt")
+    {
+        app.expand_selected_group();
     } else if app.config.matches_workspaces(key, "select") {
         match app.sidebar_items().get(app.selected_sidebar_row) {
             Some(crate::app::SidebarItem::GroupHeader { .. }) => app.toggle_selected_group(),
