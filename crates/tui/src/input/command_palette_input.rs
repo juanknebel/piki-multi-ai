@@ -48,7 +48,7 @@ pub(super) fn handle_command_palette_input(app: &mut App, key: KeyEvent) -> Opti
 fn execute_palette_command(app: &mut App, id: &str, switch_idx: Option<usize>) -> Option<Action> {
     // Handle dynamic workspace switch commands
     if let Some(idx) = switch_idx {
-        app.switch_workspace(idx);
+        app.switch_workspace_and_focus(idx);
         return None;
     }
 

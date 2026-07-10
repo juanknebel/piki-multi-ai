@@ -252,6 +252,29 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             ("enter".to_string(), "save"),
             ("esc".to_string(), "cancel"),
         ],
+        AppMode::CreateWorktree => {
+            let mode = match app.active_dialog {
+                Some(crate::dialog_state::DialogState::CreateWorktree { mode, .. }) => mode,
+                _ => crate::dialog_state::CreateWorktreeMode::ChooseSource,
+            };
+            match mode {
+                crate::dialog_state::CreateWorktreeMode::ChooseSource => vec![
+                    ("j/k".to_string(), "navigate"),
+                    ("enter".to_string(), "select"),
+                    ("esc".to_string(), "cancel"),
+                ],
+                crate::dialog_state::CreateWorktreeMode::CreateNew => vec![
+                    ("tab".to_string(), "switch field"),
+                    ("enter".to_string(), "create"),
+                    ("esc".to_string(), "cancel"),
+                ],
+                crate::dialog_state::CreateWorktreeMode::LoadExisting => vec![
+                    ("j/k".to_string(), "navigate"),
+                    ("enter".to_string(), "load"),
+                    ("esc".to_string(), "cancel"),
+                ],
+            }
+        }
         AppMode::NewTab => {
             let menu = match app.active_dialog {
                 Some(crate::dialog_state::DialogState::NewTab { ref menu }) => menu.clone(),

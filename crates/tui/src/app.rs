@@ -58,6 +58,14 @@ pub struct RefreshResult {
     pub ahead_behind: Option<(usize, usize)>,
 }
 
+/// Result of backgrounded `FileWatcher::new` setup for a restored workspace.
+/// Watch registration walks the whole worktree tree synchronously, so it's
+/// run off the startup critical path (see `event_loop.rs`).
+pub struct WatcherResult {
+    pub workspace_idx: usize,
+    pub watcher: anyhow::Result<piki_core::workspace::FileWatcher>,
+}
+
 /// Main application mode
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AppMode {
@@ -761,6 +769,9 @@ pub struct App {
     /// Channel for receiving async git refresh results
     pub refresh_tx: tokio::sync::mpsc::UnboundedSender<RefreshResult>,
     pub refresh_rx: tokio::sync::mpsc::UnboundedReceiver<RefreshResult>,
+    /// Channel for receiving backgrounded FileWatcher setup results
+    pub watcher_tx: tokio::sync::mpsc::UnboundedSender<WatcherResult>,
+    pub watcher_rx: tokio::sync::mpsc::UnboundedReceiver<WatcherResult>,
     /// Channel for receiving status messages from background tasks
     pub status_tx: tokio::sync::mpsc::UnboundedSender<String>,
     pub status_rx: tokio::sync::mpsc::UnboundedReceiver<String>,
@@ -860,6 +871,7 @@ impl App {
         paths: &piki_core::paths::DataPaths,
     ) -> Self {
         let (refresh_tx, refresh_rx) = tokio::sync::mpsc::unbounded_channel::<RefreshResult>();
+        let (watcher_tx, watcher_rx) = tokio::sync::mpsc::unbounded_channel::<WatcherResult>();
         let (status_tx, status_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
         let (chat_token_tx, chat_token_rx) =
             tokio::sync::mpsc::unbounded_channel::<piki_api_client::ChatStreamEvent>();
@@ -913,6 +925,8 @@ impl App {
             config,
             refresh_tx,
             refresh_rx,
+            watcher_tx,
+            watcher_rx,
             status_tx,
             status_rx,
             refresh_pending: false,
@@ -1011,7 +1025,7 @@ impl App {
             .position(|&i| i == self.active_workspace)
             .unwrap_or(0);
         let next = visible[(pos + 1) % visible.len()];
-        self.switch_workspace(next);
+        self.switch_workspace_and_focus(next);
     }
 
     pub fn prev_workspace(&mut self) {
@@ -1031,7 +1045,7 @@ impl App {
             .position(|&i| i == self.active_workspace)
             .unwrap_or(0);
         let prev = visible[(pos + visible.len() - 1) % visible.len()];
-        self.switch_workspace(prev);
+        self.switch_workspace_and_focus(prev);
     }
 
     pub fn switch_workspace(&mut self, index: usize) {
@@ -1065,6 +1079,15 @@ impl App {
                 let _ = prefs.set_preference("last_focused_workspace", &path_str);
             }
         }
+    }
+
+    /// Same as `switch_workspace`, but also focuses the main panel — use this
+    /// from any keyboard-driven action that should land the user on the
+    /// workspace's content (as opposed to the startup restore path, which
+    /// intentionally leaves `active_pane` untouched).
+    pub fn switch_workspace_and_focus(&mut self, index: usize) {
+        self.switch_workspace(index);
+        self.active_pane = ActivePane::MainPanel;
     }
 
     /// Build the visual sidebar item list, grouping workspaces by their group field.
@@ -1262,7 +1285,7 @@ impl App {
         if let Some(prev) = self.previous_workspace
             && prev < self.workspaces.len()
         {
-            self.switch_workspace(prev);
+            self.switch_workspace_and_focus(prev);
         }
     }
 
@@ -2178,5 +2201,72 @@ mod tests {
         app.switch_workspace(a);
 
         assert!(!app.workspaces[a].has_idle_notification);
+    }
+
+    // ── active_pane sync on workspace switch ──
+
+    #[test]
+    fn bare_switch_workspace_leaves_active_pane_untouched() {
+        // Regression guard: the startup-restore path in event_loop.rs relies
+        // on switch_workspace NOT touching active_pane.
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
+        add_test_workspace(&mut app);
+        add_test_workspace(&mut app);
+        app.active_pane = ActivePane::WorkspaceList;
+
+        app.switch_workspace(1);
+
+        assert_eq!(app.active_pane, ActivePane::WorkspaceList);
+    }
+
+    #[test]
+    fn next_workspace_focuses_main_panel() {
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
+        add_test_workspace(&mut app);
+        add_test_workspace(&mut app);
+        app.active_pane = ActivePane::WorkspaceList;
+
+        app.next_workspace();
+
+        assert_eq!(app.active_pane, ActivePane::MainPanel);
+    }
+
+    #[test]
+    fn prev_workspace_focuses_main_panel() {
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
+        add_test_workspace(&mut app);
+        add_test_workspace(&mut app);
+        app.active_pane = ActivePane::WorkspaceList;
+
+        app.prev_workspace();
+
+        assert_eq!(app.active_pane, ActivePane::MainPanel);
+    }
+
+    #[test]
+    fn toggle_previous_workspace_focuses_main_panel() {
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
+        let a = add_test_workspace(&mut app);
+        let b = add_test_workspace(&mut app);
+        app.active_workspace = a;
+        app.switch_workspace(b); // sets previous_workspace = Some(a), active_pane untouched
+        app.active_pane = ActivePane::WorkspaceList;
+
+        app.toggle_previous_workspace();
+
+        assert_eq!(app.active_workspace, a);
+        assert_eq!(app.active_pane, ActivePane::MainPanel);
     }
 }

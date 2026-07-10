@@ -126,7 +126,9 @@ pub enum WorkspaceType {
 /// `Local` covers any folder the user picked (regardless of whether it happens
 /// to be inside a git repository). `GitHub { url }` covers workspaces that
 /// `piki` cloned itself from a GitHub URL — only these support the
-/// "Create Worktree" action and the source-control panel.
+/// "Create Worktree" action (both creating a new worktree and loading one
+/// that already exists on disk via `WorkspaceManager::list_worktrees`) and
+/// the source-control panel.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "url")]
 pub enum WorkspaceOrigin {

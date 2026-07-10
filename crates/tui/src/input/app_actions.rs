@@ -136,6 +136,7 @@ pub(crate) fn open_clone_workspace(app: &mut App) -> Option<Action> {
                 let group = ws.info.group.clone().unwrap_or_default();
                 app.active_dialog = Some(crate::dialog_state::DialogState::CreateWorktree {
                     parent_idx: app.selected_workspace,
+                    mode: crate::dialog_state::CreateWorktreeMode::ChooseSource,
                     name: String::new(),
                     name_cursor: 0,
                     prompt_cursor: prompt.chars().count(),
@@ -145,6 +146,9 @@ pub(crate) fn open_clone_workspace(app: &mut App) -> Option<Action> {
                     group_cursor: group.chars().count(),
                     group,
                     active_field: crate::dialog_state::CreateWorktreeField::Name,
+                    existing: Vec::new(),
+                    existing_selected: 0,
+                    existing_loading: false,
                 });
                 app.mode = AppMode::CreateWorktree;
             }

@@ -29,12 +29,24 @@ fn process_refresh_result(app: &mut App, result: app::RefreshResult) {
     app.needs_redraw = true;
 }
 
+fn process_watcher_result(app: &mut App, result: app::WatcherResult) {
+    if let Some(ws) = app.workspaces.get_mut(result.workspace_idx) {
+        match result.watcher {
+            Ok(watcher) => ws.watcher = Some(watcher),
+            Err(e) => {
+                app.status_message = Some(format!("Watcher error: {}", e));
+            }
+        }
+    }
+}
+
 pub(crate) async fn run(
     mut terminal: DefaultTerminal,
     preflight_warnings: Vec<String>,
     log_buffer: crate::log_buffer::LogBuffer,
     paths: piki_core::paths::DataPaths,
 ) -> anyhow::Result<()> {
+    let run_t0 = Instant::now();
     let manager = piki_core::workspace::WorkspaceManager::with_paths(paths.clone());
     let storage = std::sync::Arc::new(piki_core::storage::create_storage(&paths)?);
     let mut app = App::new(std::sync::Arc::clone(&storage), &paths);
@@ -92,24 +104,48 @@ pub(crate) async fn run(
     app.pty_cols = pty_area.width;
 
     // Restore persisted workspaces from storage backend
+    let restore_t0 = Instant::now();
     let entries = storage.workspaces.load_all_workspaces();
     for entry in entries {
-        let mut ws = app::Workspace::from_info(entry.into_info());
-
-        // Start file watcher
-        match FileWatcher::new(ws.path.clone(), ws.name.clone()) {
-            Ok(watcher) => {
-                ws.watcher = Some(watcher);
-            }
-            Err(e) => {
-                app.status_message = Some(format!("Watcher error: {}", e));
-            }
-        }
-
+        let ws = app::Workspace::from_info(entry.into_info());
         app.workspaces.push(ws);
     }
     // Sort by persistent order field for deterministic ordering across restarts
     app.workspaces.sort_by_key(|ws| ws.info.order);
+    tracing::info!(
+        count = app.workspaces.len(),
+        elapsed_ms = restore_t0.elapsed().as_millis(),
+        "startup: workspaces restored (watchers still pending)"
+    );
+
+    // FileWatcher setup runs in the BACKGROUND: `FileWatcher::new` walks the
+    // whole worktree tree synchronously to register the recursive inotify
+    // watch, so doing it inline for every workspace before the first frame
+    // could take seconds on a large tree (e.g. an unfiltered target/ or
+    // node_modules/). Results arrive through watcher_rx and attach lazily —
+    // mirrors the git-status backgrounding below, which solved the same
+    // shape of problem.
+    for (idx, ws) in app.workspaces.iter().enumerate() {
+        let path = ws.path.clone();
+        let name = ws.name.clone();
+        let tx = app.watcher_tx.clone();
+        tokio::spawn(async move {
+            let t0 = Instant::now();
+            let watcher = tokio::task::spawn_blocking(move || FileWatcher::new(path, name))
+                .await
+                .unwrap_or_else(|e| Err(anyhow::anyhow!("watcher task panicked: {e}")));
+            tracing::info!(
+                workspace_idx = idx,
+                elapsed_ms = t0.elapsed().as_millis(),
+                ok = watcher.is_ok(),
+                "startup: background file watcher setup done"
+            );
+            let _ = tx.send(app::WatcherResult {
+                workspace_idx: idx,
+                watcher,
+            });
+        });
+    }
 
     // Initial file status refresh runs in the BACKGROUND: blocking startup on
     // sequential `git status` for every workspace made launch take seconds.
@@ -128,7 +164,6 @@ pub(crate) async fn run(
             });
         });
     }
-    tracing::info!(count = app.workspaces.len(), "workspaces restored");
     if !app.workspaces.is_empty() {
         // Restore the last focused workspace from UiPrefs if available.
         // Match by `path` since it's unique and stable across restarts.
@@ -147,10 +182,15 @@ pub(crate) async fn run(
                     .iter()
                     .position(|ws| ws.info.path.to_string_lossy() == saved_path)
             });
+        // Bare switch_workspace: keep the default ActivePane::WorkspaceList on
+        // cold start (switch_workspace_and_focus would force MainPanel here).
         app.switch_workspace(restored_idx.unwrap_or(0));
     }
 
-    tracing::info!("event loop starting");
+    tracing::info!(
+        elapsed_ms = run_t0.elapsed().as_millis(),
+        "startup: event loop starting (first frame imminent)"
+    );
     let mut reader = EventStream::new();
     let mut tick_interval = tokio::time::interval(TICK_RATE);
     tick_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -219,6 +259,15 @@ pub(crate) async fn run(
                     process_refresh_result(&mut app, result);
                     while let Ok(result) = app.refresh_rx.try_recv() {
                         process_refresh_result(&mut app, result);
+                    }
+                }
+            }
+
+            result = app.watcher_rx.recv() => {
+                if let Some(result) = result {
+                    process_watcher_result(&mut app, result);
+                    while let Ok(result) = app.watcher_rx.try_recv() {
+                        process_watcher_result(&mut app, result);
                     }
                 }
             }

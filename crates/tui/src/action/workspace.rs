@@ -4,8 +4,43 @@ use ratatui::DefaultTerminal;
 
 use super::Action;
 use crate::app::{self, App, ToastLevel};
+use crate::dialog_state::{CreateWorktreeMode, DialogState};
 use piki_core::WorkspaceType;
 use piki_core::workspace::{FileWatcher, WorkspaceManager};
+
+/// Push a newly-created/imported workspace onto `app.workspaces`, switch to
+/// it and focus the main panel, start its file watcher, and persist config.
+/// Shared tail of `CreateWorkspace`/`CreateGithubWorkspace`/`ImportExistingWorktree`.
+fn finish_workspace_creation(app: &mut App, mut info: piki_core::WorkspaceInfo, group: Option<String>) {
+    info.group = group;
+    info.order = app
+        .workspaces
+        .iter()
+        .map(|w| w.info.order)
+        .max()
+        .map(|m| m + 1)
+        .unwrap_or(0);
+    app.workspaces.push(app::Workspace::from_info(info));
+    let new_idx = app.workspaces.len() - 1;
+    app.switch_workspace_and_focus(new_idx);
+
+    let ws = &mut app.workspaces[new_idx];
+    match FileWatcher::new(ws.path.clone(), ws.name.clone()) {
+        Ok(watcher) => {
+            ws.watcher = Some(watcher);
+        }
+        Err(e) => {
+            app.status_message = Some(format!("Watcher error: {}", e));
+        }
+    }
+
+    let source = app.workspaces[new_idx].source_repo.clone();
+    let infos: Vec<_> = app.workspaces.iter().map(|w| w.info.clone()).collect();
+    let storage = Arc::clone(&app.storage);
+    tokio::spawn(async move {
+        let _ = storage.workspaces.save_workspaces(&source, &infos);
+    });
+}
 
 pub(super) async fn handle(
     app: &mut App,
@@ -33,40 +68,7 @@ pub(super) async fn handle(
                 }
             };
             match result {
-                Ok(mut info) => {
-                    info.group = group;
-                    info.order = app
-                        .workspaces
-                        .iter()
-                        .map(|w| w.info.order)
-                        .max()
-                        .map(|m| m + 1)
-                        .unwrap_or(0);
-                    app.workspaces.push(app::Workspace::from_info(info));
-                    let new_idx = app.workspaces.len() - 1;
-                    app.switch_workspace(new_idx);
-
-                    // Start file watcher
-                    let ws = &mut app.workspaces[new_idx];
-                    match FileWatcher::new(ws.path.clone(), ws.name.clone()) {
-                        Ok(watcher) => {
-                            ws.watcher = Some(watcher);
-                        }
-                        Err(e) => {
-                            app.status_message = Some(format!("Watcher error: {}", e));
-                        }
-                    }
-
-                    // Persist config async
-                    {
-                        let source = app.workspaces[new_idx].source_repo.clone();
-                        let infos: Vec<_> = app.workspaces.iter().map(|w| w.info.clone()).collect();
-                        let storage = Arc::clone(&app.storage);
-                        tokio::spawn(async move {
-                            let _ = storage.workspaces.save_workspaces(&source, &infos);
-                        });
-                    }
-                }
+                Ok(info) => finish_workspace_creation(app, info, group),
                 Err(e) => {
                     app.status_message = Some(format!("Error: {}", e));
                 }
@@ -92,38 +94,59 @@ pub(super) async fn handle(
                 )
                 .await;
             match result {
-                Ok(mut info) => {
-                    info.group = group;
-                    info.order = app
-                        .workspaces
-                        .iter()
-                        .map(|w| w.info.order)
-                        .max()
-                        .map(|m| m + 1)
-                        .unwrap_or(0);
-                    app.workspaces.push(app::Workspace::from_info(info));
-                    let new_idx = app.workspaces.len() - 1;
-                    app.switch_workspace(new_idx);
-
-                    let ws = &mut app.workspaces[new_idx];
-                    match FileWatcher::new(ws.path.clone(), ws.name.clone()) {
-                        Ok(watcher) => {
-                            ws.watcher = Some(watcher);
-                        }
-                        Err(e) => {
-                            app.status_message = Some(format!("Watcher error: {}", e));
-                        }
-                    }
-
-                    {
-                        let source = app.workspaces[new_idx].source_repo.clone();
-                        let infos: Vec<_> = app.workspaces.iter().map(|w| w.info.clone()).collect();
-                        let storage = Arc::clone(&app.storage);
-                        tokio::spawn(async move {
-                            let _ = storage.workspaces.save_workspaces(&source, &infos);
-                        });
-                    }
+                Ok(info) => finish_workspace_creation(app, info, group),
+                Err(e) => {
+                    app.status_message = Some(format!("Error: {}", e));
                 }
+            }
+        }
+        Action::ListWorktrees(parent_idx) => {
+            let Some(parent) = app.workspaces.get(parent_idx) else {
+                return Ok(());
+            };
+            let source_repo = parent.info.source_repo.clone();
+            let result = manager.list_worktrees(&source_repo).await;
+            let existing = match result {
+                Ok(found) => found
+                    .into_iter()
+                    .filter(|w| !app.workspaces.iter().any(|ws| ws.info.path == w.path))
+                    .collect(),
+                Err(e) => {
+                    app.status_message = Some(format!("Error: {}", e));
+                    Vec::new()
+                }
+            };
+            if let Some(DialogState::CreateWorktree {
+                parent_idx: p,
+                mode,
+                existing: existing_field,
+                existing_loading,
+                ..
+            }) = &mut app.active_dialog
+                && *p == parent_idx
+            {
+                *mode = CreateWorktreeMode::LoadExisting;
+                *existing_field = existing;
+                *existing_loading = false;
+            }
+        }
+        Action::ImportExistingWorktree {
+            parent_idx,
+            path,
+            branch,
+        } => {
+            let Some(parent) = app.workspaces.get(parent_idx) else {
+                app.status_message = Some("Parent workspace no longer exists".into());
+                return Ok(());
+            };
+            let source_repo = parent.info.source_repo.clone();
+            let group = parent.info.group.clone();
+            let name = branch.rsplit('/').next().unwrap_or(&branch).to_string();
+            let result = manager
+                .import_existing_worktree(&name, branch, path, source_repo)
+                .await;
+            match result {
+                Ok(info) => finish_workspace_creation(app, info, group),
                 Err(e) => {
                     app.status_message = Some(format!("Error: {}", e));
                 }

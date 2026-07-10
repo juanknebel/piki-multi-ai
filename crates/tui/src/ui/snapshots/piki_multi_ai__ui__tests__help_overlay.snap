@@ -1,6 +1,6 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 191
+assertion_line: 328
 expression: content
 ---
             ┌ Help ───────────────────────────────────────────────┐
@@ -19,8 +19,9 @@ expression: content
             │    C-g `         Previous workspace (toggle)        │
             │    C-g N         New workspace                      │
             │    C-g e         Edit workspace                     │
+            │    C-g d         Delete workspace                   │
             │    C-g i         Workspace info                     │
-            │    C-g R         Create worktree (GitHub-only)      │
+            │    C-g R         Create/load worktree (GitHub-only) │
             │    C-g g         Git (lazygit tab)                  │
             │    C-g :         Command palette                    │
             │    C-g /         Fuzzy file search                  │
@@ -41,5 +42,4 @@ expression: content
             │    ctrl-u/ctrl-d Page up/down                       │
             │    g/G           Top/Bottom                         │
             │    /             Search                             │
-            │    q/esc         Exit scroll mode                   │
-            └────────────────────────────────────── [1/103 ↑k/j↓] ┘
+            └────────────────────────────────────── [1/149 ↑k/j↓] ┘

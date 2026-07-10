@@ -41,6 +41,16 @@ pub(crate) enum Action {
     EditWorkspace(usize, Option<String>, String, Option<String>),
     /// Second field: optional target kanban column for dispatched cards
     DeleteWorkspace(usize, Option<String>),
+    /// Scan disk (via `git worktree list`) for worktrees of the parent
+    /// workspace's repo that aren't already registered, for the
+    /// CreateWorktree dialog's "Load existing worktree" flow.
+    ListWorktrees(usize),
+    /// Register an already-existing worktree directory as a new workspace.
+    ImportExistingWorktree {
+        parent_idx: usize,
+        path: PathBuf,
+        branch: String,
+    },
     /// Remove workspace from app list but keep worktree on disk
     RemoveFromList(usize),
     /// Open $EDITOR for a file path
@@ -103,7 +113,9 @@ pub(crate) async fn execute_action(
         | Action::CreateGithubWorkspace(..)
         | Action::EditWorkspace(..)
         | Action::DeleteWorkspace(..)
-        | Action::RemoveFromList(..) => {
+        | Action::RemoveFromList(..)
+        | Action::ListWorktrees(..)
+        | Action::ImportExistingWorktree { .. } => {
             workspace::handle(app, manager, action, terminal).await?
         }
         Action::OpenEditor(..) => {

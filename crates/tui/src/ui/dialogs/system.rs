@@ -64,11 +64,15 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
             cfg.get_binding("app", "edit_workspace")
         ),
         format!(
+            "    {:<13} Delete workspace",
+            cfg.get_binding("app", "delete_workspace")
+        ),
+        format!(
             "    {:<13} Workspace info",
             cfg.get_binding("app", "workspace_info")
         ),
         format!(
-            "    {:<13} Create worktree (GitHub-only)",
+            "    {:<13} Create/load worktree (GitHub-only)",
             cfg.get_binding("app", "clone_workspace")
         ),
         format!("    {:<13} Git (lazygit tab)", cfg.get_binding("app", "git")),
@@ -171,6 +175,14 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         "".to_string(),
         "  Workspace list pane".to_string(),
         format!(
+            "    {:<13} Focus this pane (click only switches workspace)",
+            format!(
+                "{}/{}",
+                cfg.get_binding("app", "focus_left"),
+                cfg.get_binding("app", "focus_up")
+            )
+        ),
+        format!(
             "    {:<13} Select workspace",
             format!(
                 "{}/{}",
@@ -229,19 +241,27 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         "  Kanban board (focused)".to_string(),
         "    h/l/j/k     Navigate columns and cards".to_string(),
         "    H/L         Move card left/right".to_string(),
-        "    n           New card".to_string(),
+        "    n/a         New card".to_string(),
         "    e           Edit selected card".to_string(),
         "    d           Delete card".to_string(),
         "    D           Dispatch agent (feature/bug/spike branch + AI)".to_string(),
         "    Enter       Toggle card details".to_string(),
         "    r           Refresh board".to_string(),
+        "    s           Toggle sort by priority".to_string(),
+        "    /           Search cards".to_string(),
+        "    p           Project filter".to_string(),
         "    Esc         Close".to_string(),
         "".to_string(),
         "  Dispatch agent dialog (D on kanban card)".to_string(),
-        "    ◄/►/Tab     Cycle agent/provider (includes (None))".to_string(),
-        "    Enter       With agent: dispatch to new worktree".to_string(),
-        "                With (None): choose workspace (New/Current)".to_string(),
-        "    Esc         Cancel / Back".to_string(),
+        "    Step 1: agent/provider".to_string(),
+        "    ←/→/Tab     Cycle agent/provider".to_string(),
+        "    Type        Add extra prompt instructions".to_string(),
+        "    Enter       Next: choose destination".to_string(),
+        "    Esc         Cancel".to_string(),
+        "    Step 2: destination workspace".to_string(),
+        "    ←/→/Tab     Toggle new worktree / current workspace".to_string(),
+        "    Enter       Dispatch".to_string(),
+        "    Esc         Back to step 1".to_string(),
         "".to_string(),
         format!(
             "  Manage providers ({})",
@@ -264,12 +284,14 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         "    p           Sync agent to repo".to_string(),
         "    i           Import agents from repo".to_string(),
         "    Esc         Close".to_string(),
+        "".to_string(),
         "  Import agents overlay (i in manage agents)".to_string(),
         "    j/k         Navigate discovered agents".to_string(),
         "    Space       Toggle selection".to_string(),
         "    a           Toggle select all".to_string(),
         "    Enter       Import selected".to_string(),
         "    Esc         Cancel".to_string(),
+        "".to_string(),
         "  Agent role editor (step 2)".to_string(),
         format!("    {:<13} Save agent and close", cfg.format_binding("ctrl-s")),
         "    Esc         Back to step 1 without saving".to_string(),
@@ -304,11 +326,85 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         "    n/p           Next/prev file (in diff view)".to_string(),
         "    g/G           Top/bottom of diff".to_string(),
         format!("    {}/{}      Page down/up in diff", cfg.format_binding("ctrl-d"), cfg.format_binding("ctrl-u")),
+        "    c             Add/edit comment on line (diff view)".to_string(),
+        "    d             Delete comment on line (diff view)".to_string(),
+        "    [ / ]         Resize file list / diff split".to_string(),
         "    s             Open submit review dialog".to_string(),
-        "    r             Refresh PR data".to_string(),
+        "    r             Refresh PR data (file list focused)".to_string(),
         "    q             Close review (discard state)".to_string(),
         "    Tab           Cycle verdict (in submit)".to_string(),
         format!("    {:<13} Discard draft (in submit)", cfg.format_binding("ctrl-shift-d")),
+        "".to_string(),
+        "  Dashboard".to_string(),
+        format!(
+            "    {:<13} Select workspace",
+            format!(
+                "{}/{}",
+                cfg.get_binding("dashboard", "up"),
+                cfg.get_binding("dashboard", "down")
+            )
+        ),
+        format!(
+            "    {:<13} Switch + focus main panel",
+            cfg.get_binding("dashboard", "select")
+        ),
+        format!("    {:<13} Close", cfg.get_binding("dashboard", "exit")),
+        "".to_string(),
+        format!("  Logs ({})", cfg.get_binding("app", "logs")),
+        format!(
+            "    {:<13} Select entry / page",
+            format!(
+                "{}/{}",
+                cfg.get_binding("logs", "up"),
+                cfg.get_binding("logs", "down")
+            )
+        ),
+        format!(
+            "    {:<13} Top/bottom",
+            format!(
+                "{}/{}",
+                cfg.get_binding("logs", "scroll_top"),
+                cfg.get_binding("logs", "scroll_bottom")
+            )
+        ),
+        "    0-5           Filter by level (0=all)".to_string(),
+        "    /             Search entries".to_string(),
+        format!(
+            "    {:<13} Copy selected entry",
+            cfg.get_binding("logs", "copy")
+        ),
+        "    r             Toggle auto-refresh (tail)".to_string(),
+        format!("    {:<13} Close", cfg.get_binding("logs", "exit")),
+        "".to_string(),
+        format!(
+            "  Command palette ({})",
+            cfg.get_binding("app", "command_palette")
+        ),
+        "    Type          Filter commands".to_string(),
+        "    Up/Down       Select command".to_string(),
+        "    Enter         Run selected command".to_string(),
+        "    Esc           Close".to_string(),
+        "".to_string(),
+        format!(
+            "  Workspace switcher ({})",
+            cfg.get_binding("app", "workspace_switcher")
+        ),
+        "    Type          Filter workspaces/tabs".to_string(),
+        format!(
+            "    {:<13} Select row",
+            format!(
+                "Up/Down / {}/{}",
+                cfg.format_binding("ctrl-p"),
+                cfg.format_binding("ctrl-n")
+            )
+        ),
+        "    Enter         Jump to workspace/tab".to_string(),
+        "    Esc           Close".to_string(),
+        "".to_string(),
+        "  Move dispatched card (after confirming delete)".to_string(),
+        "    j/k           Select target kanban column".to_string(),
+        "    Enter         Move card and delete workspace".to_string(),
+        "    Esc           Cancel".to_string(),
         "".to_string(),
         "  Clipboard".to_string(),
         "    Mouse drag    Select text in terminal".to_string(),

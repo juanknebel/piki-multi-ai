@@ -1,7 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::action::Action;
-use crate::app::{ActivePane, App, AppMode};
+use crate::app::{App, AppMode};
 use crate::clipboard;
 use crate::config::has_ctrl;
 use crate::dialog_state::{DialogState, EditWorkspaceField};
@@ -627,8 +627,7 @@ pub(super) fn handle_workspace_interaction(app: &mut App, key: KeyEvent) -> Opti
                 app.toggle_selected_group();
             }
             Some(crate::app::SidebarItem::Workspace { index }) => {
-                app.switch_workspace(*index);
-                app.active_pane = ActivePane::MainPanel;
+                app.switch_workspace_and_focus(*index);
             }
             None => {}
         }
@@ -1083,7 +1082,7 @@ pub(super) fn handle_agents_interaction(app: &mut App, key: KeyEvent) -> Option<
 pub(super) fn jump_to_agent(app: &mut App, (ws_idx, tab_idx): (usize, usize)) {
     // Defensive: a mouse jump could arrive while in terminal scroll mode
     app.input_state = crate::app::InputState::Normal;
-    app.switch_workspace(ws_idx);
+    app.switch_workspace_and_focus(ws_idx);
     // After switch_workspace, which resets the previous tab's scroll
     if let Some(ws) = app.workspaces.get_mut(ws_idx)
         && tab_idx < ws.tabs.len()
@@ -1091,5 +1090,4 @@ pub(super) fn jump_to_agent(app: &mut App, (ws_idx, tab_idx): (usize, usize)) {
         ws.active_tab = tab_idx;
         ws.tabs[tab_idx].term_scroll = 0;
     }
-    app.active_pane = ActivePane::MainPanel;
 }

@@ -273,6 +273,7 @@ fn default_app() -> HashMap<String, BindingValue> {
     m.insert("toggle_prev_workspace".to_string(), BindingValue::one("prefix-`"));
     m.insert("new_workspace".to_string(), BindingValue::one("prefix-N"));
     m.insert("edit_workspace".to_string(), BindingValue::one("prefix-e"));
+    m.insert("delete_workspace".to_string(), BindingValue::one("prefix-d"));
     m.insert("workspace_info".to_string(), BindingValue::one("prefix-i"));
     m.insert("clone_workspace".to_string(), BindingValue::one("prefix-R"));
 

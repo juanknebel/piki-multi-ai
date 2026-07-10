@@ -6,7 +6,7 @@ use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField, NewWorkspaceSource};
 use crate::config::has_ctrl;
 use crate::dialog_state::{
-    CreateWorktreeField, CycleField, DialogState, EditAgentField,
+    CreateWorktreeField, CreateWorktreeMode, CycleField, DialogState, EditAgentField,
     EditProviderField, EditWorkspaceField, NewTabMenu,
 };
 use piki_core::workspace::manager::parse_github_repo_name;
@@ -268,6 +268,61 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
 }
 
 pub(super) fn handle_create_worktree_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::CreateWorktree { mode, .. }) = &app.active_dialog else {
+        return None;
+    };
+
+    match mode {
+        CreateWorktreeMode::ChooseSource => handle_create_worktree_choose_source(app, key),
+        CreateWorktreeMode::CreateNew => handle_create_worktree_create_new(app, key),
+        CreateWorktreeMode::LoadExisting => handle_create_worktree_load_existing(app, key),
+    }
+}
+
+fn handle_create_worktree_choose_source(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::CreateWorktree {
+        parent_idx,
+        mode,
+        existing_selected,
+        existing_loading,
+        ..
+    }) = &mut app.active_dialog
+    else {
+        return None;
+    };
+
+    // Row 0 = "Create new worktree", row 1 = "Load existing worktree".
+    // Reuse existing_selected to track the chosen row on this step.
+    match key.code {
+        KeyCode::Down
+        | KeyCode::Char('j')
+            if !key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) =>
+        {
+            move_selection(existing_selected, 2, 1, false);
+        }
+        KeyCode::Up | KeyCode::Char('k')
+            if !key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) =>
+        {
+            move_selection(existing_selected, 2, -1, false);
+        }
+        KeyCode::Enter => {
+            if *existing_selected == 0 {
+                *mode = CreateWorktreeMode::CreateNew;
+            } else {
+                let parent_idx = *parent_idx;
+                *existing_loading = true;
+                return Some(Action::ListWorktrees(parent_idx));
+            }
+        }
+        _ if is_cancel(key, app.config.platform) => {
+            dismiss_dialog_to_pane(app, ActivePane::WorkspaceList);
+        }
+        _ => {}
+    }
+    None
+}
+
+fn handle_create_worktree_create_new(app: &mut App, key: KeyEvent) -> Option<Action> {
     let Some(DialogState::CreateWorktree {
         parent_idx,
         ref mut name,
@@ -279,6 +334,7 @@ pub(super) fn handle_create_worktree_input(app: &mut App, key: KeyEvent) -> Opti
         ref mut group,
         ref mut group_cursor,
         ref mut active_field,
+        ..
     }) = app.active_dialog
     else {
         return None;
@@ -348,6 +404,50 @@ pub(super) fn handle_create_worktree_input(app: &mut App, key: KeyEvent) -> Opti
         }
     };
     handle_text_input(buf, cursor, key, validator);
+    None
+}
+
+fn handle_create_worktree_load_existing(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::CreateWorktree {
+        parent_idx,
+        existing,
+        existing_selected,
+        existing_loading,
+        ..
+    }) = &mut app.active_dialog
+    else {
+        return None;
+    };
+
+    if *existing_loading {
+        if is_cancel(key, app.config.platform) {
+            dismiss_dialog_to_pane(app, ActivePane::WorkspaceList);
+        }
+        return None;
+    }
+
+    match key.code {
+        KeyCode::Down | KeyCode::Char('j') => {
+            move_selection(existing_selected, existing.len(), 1, false);
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            move_selection(existing_selected, existing.len(), -1, false);
+        }
+        KeyCode::Enter => {
+            let chosen = existing.get(*existing_selected).cloned()?;
+            let parent_idx = *parent_idx;
+            dismiss_dialog_to_pane(app, ActivePane::WorkspaceList);
+            return Some(Action::ImportExistingWorktree {
+                parent_idx,
+                path: chosen.path,
+                branch: chosen.branch,
+            });
+        }
+        _ if is_cancel(key, app.config.platform) => {
+            dismiss_dialog_to_pane(app, ActivePane::WorkspaceList);
+        }
+        _ => {}
+    }
     None
 }
 
@@ -642,7 +742,7 @@ pub(super) fn handle_dashboard_input(app: &mut App, key: KeyEvent) -> Option<Act
     } else if app.config.matches_dashboard(key, "select") {
         let idx = *selected;
         app.active_dialog = None;
-        app.switch_workspace(idx);
+        app.switch_workspace_and_focus(idx);
     } else if app.config.matches_dashboard(key, "exit")
         || app.config.matches_dashboard(key, "exit_alt")
     {

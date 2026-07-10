@@ -434,6 +434,103 @@ impl WorkspaceManager {
 
         Ok(())
     }
+
+    /// List git worktrees that already exist on disk for the repository
+    /// containing `source_dir`, excluding the main/bare checkout. Used to
+    /// offer "load an existing worktree" as an alternative to `create()`.
+    pub async fn list_worktrees(&self, source_dir: &PathBuf) -> anyhow::Result<Vec<ExistingWorktree>> {
+        let git_root = Self::git_root(source_dir).await?;
+        let output = shell_env::command("git")
+            .args(["worktree", "list", "--porcelain"])
+            .current_dir(&git_root)
+            .output()
+            .await
+            .context("failed to run git worktree list")?;
+
+        if !output.status.success() {
+            bail!(
+                "git worktree list failed: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            );
+        }
+
+        let text = String::from_utf8_lossy(&output.stdout);
+        Ok(parse_worktree_list(&text, &git_root))
+    }
+
+    /// Register an already-existing worktree directory as a new workspace,
+    /// without shelling out to `git worktree add`. `worktree_path` and
+    /// `branch` are expected to come from `list_worktrees()`.
+    pub async fn import_existing_worktree(
+        &self,
+        name: &str,
+        branch: String,
+        worktree_path: PathBuf,
+        source_repo: PathBuf,
+    ) -> anyhow::Result<WorkspaceInfo> {
+        if !worktree_path.exists() {
+            bail!(
+                "worktree '{}' no longer exists on disk",
+                worktree_path.display()
+            );
+        }
+
+        let origin = detect_origin_from_repo(&source_repo).await;
+        let mut info = WorkspaceInfo::new(
+            name.to_string(),
+            String::new(),
+            String::new(),
+            None,
+            branch,
+            worktree_path,
+            source_repo,
+        );
+        info.origin = origin;
+        info.workspace_type = WorkspaceType::Worktree;
+        Ok(info)
+    }
+}
+
+/// One entry from `git worktree list --porcelain`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExistingWorktree {
+    pub path: PathBuf,
+    pub branch: String,
+}
+
+/// Parse `git worktree list --porcelain` output into `ExistingWorktree`
+/// entries, excluding the main/bare worktree at `git_root`.
+fn parse_worktree_list(text: &str, git_root: &std::path::Path) -> Vec<ExistingWorktree> {
+    let mut result = Vec::new();
+    let mut cur_path: Option<PathBuf> = None;
+    let mut cur_branch: Option<String> = None;
+    let mut is_bare = false;
+
+    for line in text.lines().chain(std::iter::once("")) {
+        if line.is_empty() {
+            if let Some(path) = cur_path.take()
+                && !is_bare
+                && path != git_root
+            {
+                result.push(ExistingWorktree {
+                    path,
+                    branch: cur_branch.take().unwrap_or_else(|| "(detached)".to_string()),
+                });
+            }
+            cur_branch = None;
+            is_bare = false;
+            continue;
+        }
+        if let Some(p) = line.strip_prefix("worktree ") {
+            cur_path = Some(PathBuf::from(p));
+        } else if let Some(b) = line.strip_prefix("branch refs/heads/") {
+            cur_branch = Some(b.to_string());
+        } else if line == "bare" {
+            is_bare = true;
+        }
+    }
+
+    result
 }
 
 /// List immediate sub-directories of `path`, excluding hidden directories
@@ -592,5 +689,66 @@ mod url_tests {
             parse_github_repo_name("https://github.com/").as_deref(),
             Some("github.com")
         );
+    }
+}
+
+#[cfg(test)]
+mod worktree_list_tests {
+    use super::{ExistingWorktree, parse_worktree_list};
+    use std::path::PathBuf;
+
+    #[test]
+    fn excludes_main_worktree_and_parses_branches() {
+        let git_root = PathBuf::from("/repo");
+        let text = "worktree /repo\n\
+                     HEAD deadbeef\n\
+                     branch refs/heads/main\n\
+                     \n\
+                     worktree /repo-worktrees/feature-a\n\
+                     HEAD cafebabe\n\
+                     branch refs/heads/feature-a\n\
+                     \n";
+        let result = parse_worktree_list(text, &git_root);
+        assert_eq!(
+            result,
+            vec![ExistingWorktree {
+                path: PathBuf::from("/repo-worktrees/feature-a"),
+                branch: "feature-a".to_string(),
+            }]
+        );
+    }
+
+    #[test]
+    fn excludes_bare_worktree() {
+        let git_root = PathBuf::from("/repo.git");
+        let text = "worktree /repo.git\n\
+                     bare\n\
+                     \n\
+                     worktree /repo-worktrees/feature-a\n\
+                     branch refs/heads/feature-a\n\
+                     \n";
+        let result = parse_worktree_list(text, &git_root);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].path, PathBuf::from("/repo-worktrees/feature-a"));
+    }
+
+    #[test]
+    fn detached_worktree_reports_placeholder_branch() {
+        let git_root = PathBuf::from("/repo");
+        let text = "worktree /repo\n\
+                     branch refs/heads/main\n\
+                     \n\
+                     worktree /repo-worktrees/detached\n\
+                     HEAD cafebabe\n\
+                     detached\n\
+                     \n";
+        let result = parse_worktree_list(text, &git_root);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].branch, "(detached)");
+    }
+
+    #[test]
+    fn empty_output_yields_empty_list() {
+        assert!(parse_worktree_list("", &PathBuf::from("/repo")).is_empty());
     }
 }

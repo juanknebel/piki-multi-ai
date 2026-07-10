@@ -132,7 +132,10 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!(log_level = %cli.log_level, "piki-multi-ai starting");
 
     // Pre-flight dependency checks
+    let startup_t0 = std::time::Instant::now();
+    let preflight_t0 = std::time::Instant::now();
     let preflight = piki_core::preflight::run_preflight_checks();
+    tracing::info!(elapsed_ms = preflight_t0.elapsed().as_millis(), "startup: preflight checks done");
     if preflight.has_errors() {
         for error in &preflight.errors {
             tracing::error!("{}", error);
@@ -145,7 +148,13 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Check if terminal supports the Kitty keyboard protocol (for Shift+Enter detection)
+    let kitty_probe_t0 = std::time::Instant::now();
     let kitty_keyboard = crossterm::terminal::supports_keyboard_enhancement().unwrap_or(false);
+    tracing::info!(
+        elapsed_ms = kitty_probe_t0.elapsed().as_millis(),
+        supported = kitty_keyboard,
+        "startup: keyboard-enhancement probe done"
+    );
     if kitty_keyboard {
         tracing::info!("terminal supports Kitty keyboard protocol");
     } else {
@@ -188,6 +197,10 @@ async fn main() -> anyhow::Result<()> {
             )
         )?;
     }
+    tracing::info!(
+        elapsed_ms = startup_t0.elapsed().as_millis(),
+        "startup: pre-event-loop setup done, entering event_loop::run"
+    );
     let result = event_loop::run(terminal, preflight.warnings, log_buffer, paths).await;
     if kitty_keyboard {
         crossterm::execute!(

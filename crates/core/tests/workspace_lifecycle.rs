@@ -190,3 +190,102 @@ async fn test_create_from_github_auto_creates_default_repos_dir() {
     assert!(default_dest.is_dir(), "default repos_dir created");
     assert!(info.path.starts_with(&default_dest));
 }
+
+#[tokio::test]
+async fn test_list_worktrees_excludes_main_checkout() {
+    let (_dir, repo_path) = common::setup_test_repo();
+    let manager = WorkspaceManager::new();
+
+    let ws_a = manager
+        .create("list-ws-a", "", "", None, &repo_path)
+        .await
+        .expect("create a should succeed");
+    let ws_b = manager
+        .create("list-ws-b", "", "", None, &repo_path)
+        .await
+        .expect("create b should succeed");
+
+    let worktrees = manager
+        .list_worktrees(&repo_path)
+        .await
+        .expect("list_worktrees should succeed");
+
+    let paths: Vec<_> = worktrees.iter().map(|w| w.path.clone()).collect();
+    assert!(paths.contains(&ws_a.path));
+    assert!(paths.contains(&ws_b.path));
+    assert!(
+        !paths.contains(&repo_path),
+        "main checkout should be excluded"
+    );
+    assert_eq!(worktrees.len(), 2);
+
+    let a = worktrees
+        .iter()
+        .find(|w| w.path == ws_a.path)
+        .expect("ws_a present");
+    assert_eq!(a.branch, "list-ws-a");
+
+    manager.remove("list-ws-a", &repo_path).await.ok();
+    manager.remove("list-ws-b", &repo_path).await.ok();
+}
+
+#[tokio::test]
+async fn test_import_existing_worktree_registers_without_git_worktree_add() {
+    let (_dir, repo_path) = common::setup_test_repo();
+    let manager = WorkspaceManager::new();
+
+    let created = manager
+        .create("import-ws", "", "", None, &repo_path)
+        .await
+        .expect("create should succeed");
+
+    let worktrees_before = manager
+        .list_worktrees(&repo_path)
+        .await
+        .expect("list should succeed");
+    assert_eq!(worktrees_before.len(), 1);
+
+    let info = manager
+        .import_existing_worktree(
+            "import-ws",
+            created.branch.clone(),
+            created.path.clone(),
+            repo_path.clone(),
+        )
+        .await
+        .expect("import should succeed");
+
+    assert_eq!(info.path, created.path);
+    assert_eq!(info.branch, created.branch);
+    assert_eq!(info.workspace_type, piki_core::WorkspaceType::Worktree);
+
+    // No new worktree should have been created on disk.
+    let worktrees_after = manager
+        .list_worktrees(&repo_path)
+        .await
+        .expect("list should succeed");
+    assert_eq!(worktrees_after.len(), 1);
+
+    manager.remove("import-ws", &repo_path).await.ok();
+}
+
+#[tokio::test]
+async fn test_import_existing_worktree_rejects_missing_path() {
+    let (_dir, repo_path) = common::setup_test_repo();
+    let manager = WorkspaceManager::new();
+
+    let missing = repo_path.join("does-not-exist-on-disk");
+    let err = manager
+        .import_existing_worktree(
+            "ghost-ws",
+            "some-branch".to_string(),
+            missing,
+            repo_path.clone(),
+        )
+        .await
+        .expect_err("importing a missing path should fail");
+    assert!(
+        err.to_string().contains("no longer exists"),
+        "unexpected error: {err}"
+    );
+}

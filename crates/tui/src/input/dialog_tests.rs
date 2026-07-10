@@ -3042,7 +3042,7 @@ fn new_workspace_returns_none_when_dialog_not_active() {
 // ── Layer 3: CreateWorktree dialog + clone_workspace keybinding gating ────
 
 use crate::app::Workspace;
-use crate::dialog_state::CreateWorktreeField;
+use crate::dialog_state::{CreateWorktreeField, CreateWorktreeMode};
 use piki_core::WorkspaceOrigin;
 use super::dialog::handle_create_worktree_input;
 
@@ -3080,7 +3080,10 @@ fn clone_keybinding_on_github_workspace_opens_create_worktree() {
     assert_eq!(app.mode, AppMode::CreateWorktree);
     assert!(matches!(
         app.active_dialog,
-        Some(DialogState::CreateWorktree { .. })
+        Some(DialogState::CreateWorktree {
+            mode: CreateWorktreeMode::ChooseSource,
+            ..
+        })
     ));
 }
 
@@ -3114,6 +3117,7 @@ fn create_worktree_tab_cycles_four_fields() {
     );
     app.active_dialog = Some(DialogState::CreateWorktree {
         parent_idx: idx,
+        mode: CreateWorktreeMode::CreateNew,
         name: String::new(),
         name_cursor: 0,
         prompt: String::new(),
@@ -3123,6 +3127,9 @@ fn create_worktree_tab_cycles_four_fields() {
         group: String::new(),
         group_cursor: 0,
         active_field: CreateWorktreeField::Name,
+        existing: Vec::new(),
+        existing_selected: 0,
+        existing_loading: false,
     });
     app.mode = AppMode::CreateWorktree;
 
@@ -3154,6 +3161,7 @@ fn create_worktree_enter_with_empty_name_keeps_dialog_open() {
     );
     app.active_dialog = Some(DialogState::CreateWorktree {
         parent_idx: idx,
+        mode: CreateWorktreeMode::CreateNew,
         name: String::new(),
         name_cursor: 0,
         prompt: String::new(),
@@ -3163,6 +3171,9 @@ fn create_worktree_enter_with_empty_name_keeps_dialog_open() {
         group: String::new(),
         group_cursor: 0,
         active_field: CreateWorktreeField::Name,
+        existing: Vec::new(),
+        existing_selected: 0,
+        existing_loading: false,
     });
     app.mode = AppMode::CreateWorktree;
 
@@ -3198,6 +3209,7 @@ fn create_worktree_enter_dispatches_create_workspace_with_worktree_type() {
     };
     app.active_dialog = Some(DialogState::CreateWorktree {
         parent_idx: idx,
+        mode: CreateWorktreeMode::CreateNew,
         name: "feature/x".into(),
         name_cursor: 0,
         prompt: "do the thing".into(),
@@ -3207,6 +3219,9 @@ fn create_worktree_enter_dispatches_create_workspace_with_worktree_type() {
         group: "agents".into(),
         group_cursor: 0,
         active_field: CreateWorktreeField::Name,
+        existing: Vec::new(),
+        existing_selected: 0,
+        existing_loading: false,
     });
     app.mode = AppMode::CreateWorktree;
 
@@ -3239,6 +3254,7 @@ fn create_worktree_esc_dismisses() {
     );
     app.active_dialog = Some(DialogState::CreateWorktree {
         parent_idx: idx,
+        mode: CreateWorktreeMode::CreateNew,
         name: String::new(),
         name_cursor: 0,
         prompt: String::new(),
@@ -3248,8 +3264,203 @@ fn create_worktree_esc_dismisses() {
         group: String::new(),
         group_cursor: 0,
         active_field: CreateWorktreeField::Name,
+        existing: Vec::new(),
+        existing_selected: 0,
+        existing_loading: false,
     });
     app.mode = AppMode::CreateWorktree;
+
+    let action = handle_create_worktree_input(&mut app, key(KeyCode::Esc));
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+// ── CreateWorktree: ChooseSource / LoadExisting (load-existing-worktree flow) ──
+
+fn open_choose_source_dialog(app: &mut App, idx: usize) {
+    app.active_dialog = Some(DialogState::CreateWorktree {
+        parent_idx: idx,
+        mode: CreateWorktreeMode::ChooseSource,
+        name: String::new(),
+        name_cursor: 0,
+        prompt: String::new(),
+        prompt_cursor: 0,
+        kanban: String::new(),
+        kanban_cursor: 0,
+        group: String::new(),
+        group_cursor: 0,
+        active_field: CreateWorktreeField::Name,
+        existing: Vec::new(),
+        existing_selected: 0,
+        existing_loading: false,
+    });
+    app.mode = AppMode::CreateWorktree;
+}
+
+fn current_create_worktree_mode(app: &App) -> CreateWorktreeMode {
+    match app.active_dialog {
+        Some(DialogState::CreateWorktree { mode, .. }) => mode,
+        _ => panic!("expected CreateWorktree dialog"),
+    }
+}
+
+#[test]
+fn choose_source_enter_on_first_row_switches_to_create_new() {
+    let mut app = test_app();
+    let idx = push_test_ws(
+        &mut app,
+        "gh",
+        WorkspaceOrigin::GitHub {
+            url: "https://github.com/o/r".into(),
+        },
+    );
+    open_choose_source_dialog(&mut app, idx);
+
+    let action = handle_create_worktree_input(&mut app, key(KeyCode::Enter));
+
+    assert!(action.is_none());
+    assert_eq!(current_create_worktree_mode(&app), CreateWorktreeMode::CreateNew);
+}
+
+#[test]
+fn choose_source_enter_on_second_row_dispatches_list_worktrees() {
+    let mut app = test_app();
+    let idx = push_test_ws(
+        &mut app,
+        "gh",
+        WorkspaceOrigin::GitHub {
+            url: "https://github.com/o/r".into(),
+        },
+    );
+    open_choose_source_dialog(&mut app, idx);
+
+    handle_create_worktree_input(&mut app, key(KeyCode::Down));
+    let action = handle_create_worktree_input(&mut app, key(KeyCode::Enter));
+
+    match action {
+        Some(Action::ListWorktrees(parent_idx)) => assert_eq!(parent_idx, idx),
+        other => panic!("expected ListWorktrees action, got {other:?}"),
+    }
+    match app.active_dialog {
+        Some(DialogState::CreateWorktree { existing_loading, .. }) => {
+            assert!(existing_loading);
+        }
+        _ => panic!("expected CreateWorktree dialog"),
+    }
+}
+
+#[test]
+fn choose_source_esc_dismisses() {
+    let mut app = test_app();
+    let idx = push_test_ws(
+        &mut app,
+        "gh",
+        WorkspaceOrigin::GitHub {
+            url: "https://github.com/o/r".into(),
+        },
+    );
+    open_choose_source_dialog(&mut app, idx);
+
+    let action = handle_create_worktree_input(&mut app, key(KeyCode::Esc));
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+fn open_load_existing_dialog(
+    app: &mut App,
+    idx: usize,
+    existing: Vec<piki_core::workspace::ExistingWorktree>,
+) {
+    app.active_dialog = Some(DialogState::CreateWorktree {
+        parent_idx: idx,
+        mode: CreateWorktreeMode::LoadExisting,
+        name: String::new(),
+        name_cursor: 0,
+        prompt: String::new(),
+        prompt_cursor: 0,
+        kanban: String::new(),
+        kanban_cursor: 0,
+        group: String::new(),
+        group_cursor: 0,
+        active_field: CreateWorktreeField::Name,
+        existing,
+        existing_selected: 0,
+        existing_loading: false,
+    });
+    app.mode = AppMode::CreateWorktree;
+}
+
+#[test]
+fn load_existing_enter_dispatches_import_with_selected_entry() {
+    let mut app = test_app();
+    let idx = push_test_ws(
+        &mut app,
+        "gh",
+        WorkspaceOrigin::GitHub {
+            url: "https://github.com/o/r".into(),
+        },
+    );
+    let entries = vec![
+        piki_core::workspace::ExistingWorktree {
+            path: std::path::PathBuf::from("/tmp/wt-a"),
+            branch: "feature-a".into(),
+        },
+        piki_core::workspace::ExistingWorktree {
+            path: std::path::PathBuf::from("/tmp/wt-b"),
+            branch: "feature-b".into(),
+        },
+    ];
+    open_load_existing_dialog(&mut app, idx, entries);
+
+    handle_create_worktree_input(&mut app, key(KeyCode::Down));
+    let action = handle_create_worktree_input(&mut app, key(KeyCode::Enter));
+
+    match action {
+        Some(Action::ImportExistingWorktree { parent_idx, path, branch }) => {
+            assert_eq!(parent_idx, idx);
+            assert_eq!(path, std::path::PathBuf::from("/tmp/wt-b"));
+            assert_eq!(branch, "feature-b");
+        }
+        other => panic!("expected ImportExistingWorktree action, got {other:?}"),
+    }
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+    assert_eq!(app.active_pane, ActivePane::WorkspaceList);
+}
+
+#[test]
+fn load_existing_enter_on_empty_list_does_nothing() {
+    let mut app = test_app();
+    let idx = push_test_ws(
+        &mut app,
+        "gh",
+        WorkspaceOrigin::GitHub {
+            url: "https://github.com/o/r".into(),
+        },
+    );
+    open_load_existing_dialog(&mut app, idx, Vec::new());
+
+    let action = handle_create_worktree_input(&mut app, key(KeyCode::Enter));
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_some());
+}
+
+#[test]
+fn load_existing_esc_dismisses() {
+    let mut app = test_app();
+    let idx = push_test_ws(
+        &mut app,
+        "gh",
+        WorkspaceOrigin::GitHub {
+            url: "https://github.com/o/r".into(),
+        },
+    );
+    open_load_existing_dialog(&mut app, idx, Vec::new());
 
     let action = handle_create_worktree_input(&mut app, key(KeyCode::Esc));
 

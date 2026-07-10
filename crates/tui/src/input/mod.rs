@@ -223,6 +223,7 @@ const APP_ACTIONS: &[&str] = &[
     "toggle_prev_workspace",
     "new_workspace",
     "edit_workspace",
+    "delete_workspace",
     "workspace_info",
     "clone_workspace",
     "git",
@@ -273,6 +274,7 @@ fn dispatch_app_action(app: &mut App, action: &str) -> Option<Action> {
         }
         "new_workspace" => app_actions::open_new_workspace(app),
         "edit_workspace" => app_actions::open_edit_workspace(app),
+        "delete_workspace" => app_actions::open_delete_workspace(app),
         "workspace_info" => app_actions::open_workspace_info(app),
         "clone_workspace" => app_actions::open_clone_workspace(app),
         "git" => app_actions::open_git_tab(app),
