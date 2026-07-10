@@ -230,15 +230,24 @@ pub(crate) fn subtab_index_at(app: &App, col: u16, area: Rect) -> Option<SubtabH
         if i < 9 {
             tab_display_width += 2;
         }
-        if tab.cli_agent_snapshot().is_some() {
+        // The glyph is only rendered when the status is *actionable*, not for
+        // every tab that has a cli-agent snapshot — mirror subtabs.rs exactly
+        // or the close-button hit region drifts right of the visible `×`.
+        if let Some((status, attention, _)) = tab.cli_agent_snapshot()
+            && crate::ui::actionable_status_view(&app.theme, status, attention).is_some()
+        {
             tab_display_width += 2;
         }
         if tab.closable {
             tab_display_width += 2;
         }
         if col >= x && col < x + tab_display_width {
-            // Close button is the last 2 display columns before trailing space: "× "
-            let on_close = tab.closable && col >= x + tab_display_width - 3;
+            // The block ends with " ×" (2 cols) then a trailing space (1 col).
+            // The close target is just those two `" ×"` columns; excluding the
+            // trailing space keeps a click in the padding from closing the tab.
+            let on_close = tab.closable
+                && col >= x + tab_display_width - 3
+                && col < x + tab_display_width - 1;
             return Some(SubtabHit::Tab(i, on_close));
         }
         x += tab_display_width + 1; // +1 for the gap between blocks
