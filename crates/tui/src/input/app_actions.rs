@@ -6,7 +6,7 @@
 //! `return` their result.
 
 use crate::action::Action;
-use crate::app::{ActivePane, App, AppMode, DialogField};
+use crate::app::{ActivePane, App, AppMode, DialogField, InputState};
 use crate::dialog_state::{DialogState, EditWorkspaceField};
 use crate::helpers::{resize_all_ptys, scrollback_max};
 
@@ -440,6 +440,7 @@ pub(crate) fn sidebar_shrink(app: &mut App) -> Option<Action> {
     app.sidebar_pct = app.sidebar_pct.saturating_sub(5).max(10);
     resize_all_ptys(app);
     app.save_layout_prefs();
+    app.input_state = InputState::Resize;
     None
 }
 
@@ -447,17 +448,20 @@ pub(crate) fn sidebar_grow(app: &mut App) -> Option<Action> {
     app.sidebar_pct = (app.sidebar_pct + 5).min(90);
     resize_all_ptys(app);
     app.save_layout_prefs();
+    app.input_state = InputState::Resize;
     None
 }
 
 pub(crate) fn split_up(app: &mut App) -> Option<Action> {
     app.left_split_pct = (app.left_split_pct + 10).min(90);
     app.save_layout_prefs();
+    app.input_state = InputState::Resize;
     None
 }
 
 pub(crate) fn split_down(app: &mut App) -> Option<Action> {
     app.left_split_pct = app.left_split_pct.saturating_sub(10).max(10);
     app.save_layout_prefs();
+    app.input_state = InputState::Resize;
     None
 }

@@ -3468,3 +3468,40 @@ fn load_existing_esc_dismisses() {
     assert!(app.active_dialog.is_none());
     assert_eq!(app.mode, AppMode::Normal);
 }
+
+// ── Resize repeat mode (P2) ──────────────────────────────────────────────────
+
+#[test]
+fn resize_mode_repeats_shrink_and_stays() {
+    let (mut app, _tmp) = test_app_isolated();
+    app.input_state = crate::app::InputState::Resize;
+    let before = app.sidebar_pct;
+
+    // A bare resize chord repeats the resize and stays in Resize mode.
+    super::handle_key_event(&mut app, key(KeyCode::Char('<')));
+    assert!(app.sidebar_pct < before, "sidebar should shrink");
+    assert_eq!(app.input_state, crate::app::InputState::Resize);
+
+    // Pressing it again keeps repeating without re-entering the prefix.
+    let mid = app.sidebar_pct;
+    super::handle_key_event(&mut app, key(KeyCode::Char('<')));
+    assert!(app.sidebar_pct < mid, "sidebar should shrink again");
+    assert_eq!(app.input_state, crate::app::InputState::Resize);
+}
+
+#[test]
+fn resize_mode_exits_on_esc_and_unrelated_key() {
+    let (mut app, _tmp) = test_app_isolated();
+
+    // Esc exits.
+    app.input_state = crate::app::InputState::Resize;
+    super::handle_key_event(&mut app, key(KeyCode::Esc));
+    assert_eq!(app.input_state, crate::app::InputState::Normal);
+
+    // An unrelated key exits without resizing.
+    app.input_state = crate::app::InputState::Resize;
+    let before = app.sidebar_pct;
+    super::handle_key_event(&mut app, key(KeyCode::Char('z')));
+    assert_eq!(app.input_state, crate::app::InputState::Normal);
+    assert_eq!(app.sidebar_pct, before, "unrelated key must not resize");
+}

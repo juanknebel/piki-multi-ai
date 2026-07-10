@@ -71,6 +71,7 @@ fn render_normal_status(frame: &mut Frame, area: Rect, app: &App) {
     let mode_label = match app.input_state {
         crate::app::InputState::PrefixPending => "PREFIX",
         crate::app::InputState::TermScroll => "SCROLL",
+        crate::app::InputState::Resize => "RESIZE",
         crate::app::InputState::Normal => "",
     };
 
@@ -446,6 +447,26 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
         _ if app.input_state == crate::app::InputState::PrefixPending => vec![
             (cfg.prefix_display(), "send literal"),
             ("Esc".to_string(), "cancel"),
+        ],
+        // Resize repeat mode: the bare resize chords keep repeating until Esc.
+        _ if app.input_state == crate::app::InputState::Resize => vec![
+            (
+                format!(
+                    "{}/{}",
+                    cfg.prefix_chord("sidebar_shrink").unwrap_or_default(),
+                    cfg.prefix_chord("sidebar_grow").unwrap_or_default()
+                ),
+                "sidebar",
+            ),
+            (
+                format!(
+                    "{}/{}",
+                    cfg.prefix_chord("split_down").unwrap_or_default(),
+                    cfg.prefix_chord("split_up").unwrap_or_default()
+                ),
+                "split",
+            ),
+            ("Esc".to_string(), "done"),
         ],
         _ if app.input_state == crate::app::InputState::TermScroll => vec![
             (

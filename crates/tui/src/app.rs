@@ -694,6 +694,10 @@ pub enum InputState {
     PrefixPending,
     /// Terminal scroll mode (`prefix [`): keys scroll the focused terminal.
     TermScroll,
+    /// Resize repeat mode: entered by a sidebar/split resize action so the bare
+    /// resize keys repeat without re-pressing the prefix each time (tmux
+    /// `bind -r`). Any non-resize key or Esc exits.
+    Resize,
 }
 
 /// Cached footer keys: (mode, input_state, active_pane, has_markdown, api_footer_state, new_tab_menu, keys)

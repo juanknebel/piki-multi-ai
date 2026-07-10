@@ -192,6 +192,13 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
             }
             handle_term_scroll_key(app, key)
         }
+        InputState::Resize => {
+            if app.config.is_prefix_key(key) {
+                app.input_state = InputState::PrefixPending;
+                return None;
+            }
+            handle_resize_key(app, key)
+        }
         InputState::Normal => {
             if app.config.is_prefix_key(key) {
                 app.input_state = InputState::PrefixPending;
@@ -302,6 +309,23 @@ fn dispatch_app_action(app: &mut App, action: &str) -> Option<Action> {
         "split_down" => app_actions::split_down(app),
         _ => None,
     }
+}
+
+/// The resize actions whose bare chords repeat while `InputState::Resize` is
+/// active. Each re-enters Resize, so pressing the key again keeps repeating.
+const RESIZE_ACTIONS: &[&str] = &["sidebar_shrink", "sidebar_grow", "split_up", "split_down"];
+
+/// Handle a key in resize repeat mode: a bare resize chord repeats the resize
+/// and stays in the mode; anything else (including Esc) exits back to Normal.
+fn handle_resize_key(app: &mut App, key: KeyEvent) -> Option<Action> {
+    for &action in RESIZE_ACTIONS {
+        if app.config.matches_app_prefix(key, action) {
+            // The dispatched action sets input_state back to Resize.
+            return dispatch_app_action(app, action);
+        }
+    }
+    app.input_state = InputState::Normal;
+    None
 }
 
 /// Dispatch the key following the prefix chord against the app table.
