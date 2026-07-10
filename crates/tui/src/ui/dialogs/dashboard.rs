@@ -137,7 +137,7 @@ pub(crate) fn render_dashboard_overlay(frame: &mut Frame, area: Rect, app: &App)
                     Span::styled(indicator, Style::default().fg(ind_color)),
                 ];
                 if let Some((status, _)) = tab.cli_agent_snapshot() {
-                    let (glyph, slabel, color) = crate::ui::cli_agent_status_view(status);
+                    let (glyph, slabel, color) = crate::ui::cli_agent_status_view(app, status);
                     tab_spans.push(Span::styled(
                         format!("  {} {}", glyph, slabel),
                         Style::default().fg(color),

@@ -15,37 +15,64 @@ pub mod subtabs;
 pub mod terminal;
 pub mod workspace_switcher;
 
-/// Glyph, short label, and color for a Claude agent status. Shared by the
-/// subtab bar, the status bar, and the dashboard so the TUI surfaces the
-/// structured cli-agent channel consistently (mirrors the desktop
-/// `cliAgentStatusView`). Colors use raw ratatui constants to match the
-/// dashboard's existing status palette.
+/// Braille frames for the running-activity spinner (~100ms per frame at the
+/// 50ms event-loop tick; see `App::spinner_frame`).
+pub(crate) const SPINNER_FRAMES: [&str; 10] =
+    ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+/// Glyph, short label, and color for a Claude agent status — the single
+/// source of the status vocabulary (mirrors the desktop `cliAgentStatusView`).
+/// Used by the surfaces that *list* agents: the Agents pane, the dashboard,
+/// and the workspace switcher. Ambient chrome (tab bar, workspace list,
+/// status bar) must go through `actionable_status_view` instead, so activity
+/// only ever animates in one place.
 pub(crate) fn cli_agent_status_view(
+    app: &crate::app::App,
     status: piki_core::cli_agent::CliAgentStatus,
 ) -> (&'static str, &'static str, ratatui::style::Color) {
     use piki_core::cli_agent::CliAgentStatus as S;
-    use ratatui::style::Color;
+    let t = &app.theme.status;
     match status {
-        S::Running => ("▷", "running", Color::DarkGray),
-        S::WaitingPermission => ("⚠", "needs permission", Color::Yellow),
-        S::Idle => ("⏳", "waiting", Color::Cyan),
-        S::Done => ("✓", "done", Color::Green),
+        S::Running => (
+            SPINNER_FRAMES[(app.spinner_frame / 2) % SPINNER_FRAMES.len()],
+            "running",
+            t.running,
+        ),
+        S::WaitingPermission => ("⚠", "permission", t.needs_you),
+        S::Idle => ("●", "needs you", t.needs_you),
+        S::Done => ("✓", "done", t.done),
+    }
+}
+
+/// Status glyph for ambient chrome (tab bar, workspace-list rollup). Only
+/// actionable states surface here — running/done stay in the Agents pane;
+/// the glyph keeps its semantic color even on an accent background.
+pub(crate) fn actionable_status_view(
+    theme: &crate::theme::Theme,
+    status: piki_core::cli_agent::CliAgentStatus,
+) -> Option<(&'static str, ratatui::style::Color)> {
+    use piki_core::cli_agent::CliAgentStatus as S;
+    match status {
+        S::WaitingPermission => Some(("⚠", theme.status.needs_you)),
+        S::Idle => Some(("●", theme.status.needs_you)),
+        S::Running | S::Done => None,
     }
 }
 
 /// Fallback liveness indicator for a tab without OSC 777 agent state.
 /// Shared by the dashboard and the Agents pane.
 pub(crate) fn agent_tab_indicator(
+    app: &crate::app::App,
     tab: &crate::app::Tab,
 ) -> (&'static str, &'static str, ratatui::style::Color) {
-    use ratatui::style::Color;
+    let t = &app.theme.status;
     let alive = tab.pty_session.as_ref().is_some_and(|p| p.peek_alive());
     if alive {
-        ("●", "alive", Color::Green)
+        ("●", "alive", t.running)
     } else if tab.pty_session.is_some() {
-        ("○", "exited", Color::DarkGray)
+        ("○", "exited", t.exited)
     } else {
-        ("—", "not started", Color::DarkGray)
+        ("—", "not started", t.exited)
     }
 }
 

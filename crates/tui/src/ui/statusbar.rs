@@ -8,21 +8,29 @@ use crate::app::{ActivePane, App, AppMode, ToastLevel};
 
 pub(crate) fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
     let theme = &app.theme.status_bar;
-    let content = if let Some(ref toast) = app.toast {
-        let (bg, fg, icon) = match toast.level {
-            ToastLevel::Info => (theme.navigate_bg, theme.mode_fg, "ℹ"),
-            ToastLevel::Success => (theme.prefix_bg, theme.mode_fg, "✓"),
-            ToastLevel::Error => (theme.error_bg, theme.error_fg, "✗"),
-        };
-        Span::styled(
-            format!(" {} {} ", icon, toast.message),
-            Style::default().bg(bg).fg(fg),
-        )
+    let quiet = Style::default().bg(theme.navigate_bg).fg(theme.text_fg);
+    // Toasts are glyph + text on the quiet bar; only errors paint a
+    // background, so red stays reserved for things that are actually broken.
+    let content: Vec<Span> = if let Some(ref toast) = app.toast {
+        match toast.level {
+            ToastLevel::Info => vec![
+                Span::styled(" ℹ ", quiet.fg(theme.toast_info)),
+                Span::styled(toast.message.clone(), quiet),
+            ],
+            ToastLevel::Success => vec![
+                Span::styled(" ✓ ", quiet.fg(theme.toast_success)),
+                Span::styled(toast.message.clone(), quiet),
+            ],
+            ToastLevel::Error => vec![Span::styled(
+                format!(" ✗ {} ", toast.message),
+                Style::default().bg(theme.error_bg).fg(theme.error_fg),
+            )],
+        }
     } else if let Some(msg) = &app.status_message {
-        Span::styled(
-            format!(" {} ", msg),
+        vec![Span::styled(
+            format!(" ✗ {} ", msg),
             Style::default().bg(theme.error_bg).fg(theme.error_fg),
-        )
+        )]
     } else {
         let ctrl = if app.config.platform.is_macos() {
             "⌘"
@@ -30,11 +38,11 @@ pub(crate) fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
             "C"
         };
         match app.mode {
-            AppMode::FuzzySearch => Span::styled(
+            AppMode::FuzzySearch => vec![Span::styled(
                 " SEARCH | type to filter | Enter = editor | Esc = close".to_string(),
-                Style::default().bg(theme.navigate_bg).fg(theme.mode_fg),
-            ),
-            AppMode::InlineEdit => Span::styled(
+                quiet,
+            )],
+            AppMode::InlineEdit => vec![Span::styled(
                 format!(
                     " EDIT: {} | {}-s = save | Esc = close",
                     app.editing_file
@@ -43,8 +51,8 @@ pub(crate) fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
                         .unwrap_or_else(|| "?".to_string()),
                     ctrl,
                 ),
-                Style::default().bg(theme.prefix_bg).fg(theme.mode_fg),
-            ),
+                quiet,
+            )],
             _ => {
                 render_normal_status(frame, area, app);
                 return;
@@ -52,19 +60,24 @@ pub(crate) fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
         }
     };
 
-    let bar = Paragraph::new(Line::from(content));
+    let bar = Paragraph::new(Line::from(content)).style(Style::default().bg(theme.navigate_bg));
     frame.render_widget(bar, area);
 }
 
 fn render_normal_status(frame: &mut Frame, area: Rect, app: &App) {
     let theme = &app.theme.status_bar;
-    let (mode_label, mode_bg) = match app.input_state {
-        crate::app::InputState::PrefixPending => ("PREFIX", theme.prefix_bg),
-        crate::app::InputState::TermScroll => ("SCROLL", theme.prefix_bg),
-        crate::app::InputState::Normal => ("", theme.navigate_bg),
+    // The bar itself is a quiet surface; only the mode chip carries the
+    // accent (the prefix is an interaction state, not a success).
+    let bar_bg = theme.navigate_bg;
+    let mode_bg = bar_bg;
+    let text_style = Style::default().bg(bar_bg).fg(theme.text_fg);
+    let sep = Span::styled(" │ ", Style::default().bg(bar_bg).fg(theme.separator_fg));
+
+    let mode_label = match app.input_state {
+        crate::app::InputState::PrefixPending => "PREFIX",
+        crate::app::InputState::TermScroll => "SCROLL",
+        crate::app::InputState::Normal => "",
     };
-    let text_style = Style::default().bg(mode_bg).fg(theme.mode_fg);
-    let sep = Span::styled(" │ ", Style::default().bg(mode_bg).fg(theme.separator_fg));
 
     // Only show a mode chip while a prefix chord or scroll mode is active
     let label_span = |first: bool| -> Vec<Span> {
@@ -75,7 +88,13 @@ fn render_normal_status(frame: &mut Frame, area: Rect, app: &App) {
                 vec![]
             }
         } else {
-            vec![Span::styled(format!(" [{}]", mode_label), text_style)]
+            vec![Span::styled(
+                format!(" {} ", mode_label),
+                Style::default()
+                    .bg(theme.prefix_bg)
+                    .fg(theme.mode_fg)
+                    .add_modifier(ratatui::style::Modifier::BOLD),
+            )]
         }
     };
 
@@ -85,7 +104,7 @@ fn render_normal_status(frame: &mut Frame, area: Rect, app: &App) {
             spans.push(sep.clone());
         }
         spans.push(Span::styled("No active workspace", text_style));
-        let bar = Paragraph::new(Line::from(spans));
+        let bar = Paragraph::new(Line::from(spans)).style(Style::default().bg(bar_bg));
         frame.render_widget(bar, area);
         return;
     };
@@ -127,27 +146,16 @@ fn render_normal_status(frame: &mut Frame, area: Rect, app: &App) {
         }
     }
 
-    let tab_label = ws.current_tab().map(|t| t.provider.label()).unwrap_or("—");
-    left.push(sep.clone());
-    left.push(Span::styled(
-        format!("{}: {}", tab_label, ws.status_label()),
-        text_style,
-    ));
-
-    // Structured Claude agent status for the active tab (precise lifecycle
-    // from the OSC 777 channel), with a short summary preview.
-    if let Some((status, summary)) = ws.current_tab().and_then(|t| t.cli_agent_snapshot()) {
-        let (glyph, label, color) = crate::ui::cli_agent_status_view(status);
-        let mut txt = format!("{} {}", glyph, label);
-        if let Some(s) = summary {
-            let s: String = s.replace(['\n', '\r'], " ").chars().take(40).collect();
-            if !s.trim().is_empty() {
-                txt.push_str(": ");
-                txt.push_str(s.trim());
-            }
-        }
+    // Agent activity does not repeat in the status bar: running lives in the
+    // Agents pane; only an actionable state for the active tab surfaces here.
+    if let Some((status, _)) = ws.current_tab().and_then(|t| t.cli_agent_snapshot())
+        && let Some((glyph, color)) = crate::ui::actionable_status_view(&app.theme, status)
+    {
         left.push(sep.clone());
-        left.push(Span::styled(txt, Style::default().bg(mode_bg).fg(color)));
+        left.push(Span::styled(
+            glyph.to_string(),
+            Style::default().bg(mode_bg).fg(color),
+        ));
     }
 
     // Right section: active workspace name, and scroll indicator
@@ -175,7 +183,7 @@ fn render_normal_status(frame: &mut Frame, area: Rect, app: &App) {
     }
     spans.extend(right);
 
-    let bar = Paragraph::new(Line::from(spans));
+    let bar = Paragraph::new(Line::from(spans)).style(Style::default().bg(bar_bg));
     frame.render_widget(bar, area);
 }
 

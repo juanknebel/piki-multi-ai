@@ -699,6 +699,18 @@ pub(crate) async fn run(
 
         // Phase 4: Tick-gated periodic work
         if is_tick {
+            // Advance the Agents-pane activity spinner while any agent runs.
+            let any_running = app.agent_rows().iter().any(|&(wi, ti)| {
+                matches!(
+                    app.workspaces[wi].tabs[ti].cli_agent_snapshot(),
+                    Some((piki_core::cli_agent::CliAgentStatus::Running, _))
+                )
+            });
+            if any_running {
+                app.spinner_frame = app.spinner_frame.wrapping_add(1);
+                app.needs_redraw = true;
+            }
+
             // Inactive workspaces — only check is_alive every ~1s
             if now.duration_since(app.last_inactive_pty_check) >= Duration::from_secs(1) {
                 app.last_inactive_pty_check = now;

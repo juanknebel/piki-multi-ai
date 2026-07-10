@@ -765,6 +765,9 @@ pub struct App {
     pub code_review_body_rect: Rect,
     /// Whether the UI needs to be redrawn
     pub needs_redraw: bool,
+    /// Tick counter driving the running-agent spinner in the Agents pane
+    /// (advanced by the event loop only while some agent is running)
+    pub spinner_frame: usize,
     pub config: crate::config::Config,
     /// Channel for receiving async git refresh results
     pub refresh_tx: tokio::sync::mpsc::UnboundedSender<RefreshResult>,
@@ -922,6 +925,7 @@ impl App {
             code_review_divider_x: 0,
             code_review_body_rect: Rect::default(),
             needs_redraw: true,
+            spinner_frame: 0,
             config,
             refresh_tx,
             refresh_rx,

@@ -44,14 +44,13 @@ pub fn render(frame: &mut Frame, area: Rect, ws: &Workspace, theme: &Theme) {
                 base_style
             },
         ));
-        if let Some((status, _)) = tab.cli_agent_snapshot() {
-            let (glyph, _, color) = crate::ui::cli_agent_status_view(status);
-            let glyph_style = if is_active {
-                base_style
-            } else {
-                base_style.fg(color)
-            };
-            spans.push(Span::styled(format!(" {}", glyph), glyph_style));
+        if let Some((status, _)) = tab.cli_agent_snapshot()
+            && let Some((glyph, color)) = crate::ui::actionable_status_view(theme, status)
+        {
+            // Only actionable states reach the tab bar (activity stays in the
+            // Agents pane); the glyph keeps its semantic color even on the
+            // active accent block.
+            spans.push(Span::styled(format!(" {}", glyph), base_style.fg(color)));
         }
         if tab.closable {
             spans.push(Span::styled(" ×", base_style.add_modifier(Modifier::DIM)));

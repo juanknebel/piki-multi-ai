@@ -129,16 +129,19 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                         left.push(Span::styled(
                             " ●",
                             Style::default()
-                                .fg(ratatui::style::Color::Yellow)
+                                .fg(app.theme.status.needs_you)
                                 .add_modifier(Modifier::BOLD),
                         ));
                     }
 
                     // Right-aligned metadata, shown only when it says something:
-                    // worst agent status across tabs, changed-file count, ahead/behind.
+                    // actionable agent status, changed-file count, ahead/behind.
+                    // Activity (running) stays in the Agents pane.
                     let mut right: Vec<Span> = Vec::new();
-                    if let Some(status) = ws.agent_status_rollup() {
-                        let (glyph, _, color) = crate::ui::cli_agent_status_view(status);
+                    if let Some(status) = ws.agent_status_rollup()
+                        && let Some((glyph, color)) =
+                            crate::ui::actionable_status_view(&app.theme, status)
+                    {
                         right.push(Span::styled(
                             glyph.to_string(),
                             Style::default().fg(color),
@@ -254,8 +257,8 @@ pub(super) fn render_agents_pane(frame: &mut Frame, area: Rect, app: &App) {
             let tab = &ws.tabs[ti];
 
             let (glyph, status_label, status_color) = match tab.cli_agent_snapshot() {
-                Some((status, _)) => crate::ui::cli_agent_status_view(status),
-                None => crate::ui::agent_tab_indicator(tab),
+                Some((status, _)) => crate::ui::cli_agent_status_view(app, status),
+                None => crate::ui::agent_tab_indicator(app, tab),
             };
             // A non-Custom tab only lists here because its cli-agent channel
             // reported — a `claude` run manually inside that tab.
@@ -278,7 +281,7 @@ pub(super) fn render_agents_pane(frame: &mut Frame, area: Rect, app: &App) {
                 Span::styled(format!(" {status_label}"), row_bg.fg(status_color)),
             ];
             if ws.has_idle_notification {
-                spans.push(Span::styled(" ●", row_bg.fg(ratatui::style::Color::Yellow)));
+                spans.push(Span::styled(" ●", row_bg.fg(app.theme.status.needs_you)));
             }
             ListItem::new(Line::from(spans))
         })

@@ -54,6 +54,7 @@ struct ThemeToml {
     general: GeneralToml,
     fuzzy_search: FuzzySearchToml,
     selection: SelectionToml,
+    status: StatusToml,
 }
 
 #[derive(Deserialize, Default)]
@@ -125,6 +126,9 @@ struct StatusBarToml {
     navigate_bg: Option<String>,
     mode_fg: Option<String>,
     separator_fg: Option<String>,
+    text_fg: Option<String>,
+    toast_info: Option<String>,
+    toast_success: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -178,6 +182,16 @@ struct FuzzySearchToml {
 struct SelectionToml {
     bg: Option<String>,
     fg: Option<String>,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct StatusToml {
+    running: Option<String>,
+    needs_you: Option<String>,
+    done: Option<String>,
+    error: Option<String>,
+    exited: Option<String>,
 }
 
 // ── Cabina palette (primitive tokens) ──
@@ -304,11 +318,19 @@ pub struct SubtabsTheme {
 pub struct StatusBarTheme {
     pub error_bg: Color,
     pub error_fg: Color,
-    /// Background for the [PREFIX]/[SCROLL] mode chips
+    /// Background for the PREFIX/SCROLL mode chips
     pub prefix_bg: Color,
+    /// Quiet surface of the whole bar
     pub navigate_bg: Color,
+    /// Text on the mode chip
     pub mode_fg: Color,
     pub separator_fg: Color,
+    /// Body text of the bar (branch, counters)
+    pub text_fg: Color,
+    /// Glyph color of info toasts
+    pub toast_info: Color,
+    /// Glyph color of success toasts
+    pub toast_success: Color,
 }
 
 pub struct FooterTheme {
@@ -352,6 +374,21 @@ pub struct SelectionTheme {
     pub fg: Color,
 }
 
+/// Unified agent/process status vocabulary. Every surface that shows agent
+/// state (Agents pane, tab bar, dashboard, workspace switcher) reads these
+/// tokens; the glyphs live in `ui::cli_agent_status_view`.
+pub struct StatusTheme {
+    /// Activity: the running spinner (Agents pane only) and live processes.
+    pub running: Color,
+    /// "Your turn": permission prompts and idle-with-news. Propagates to
+    /// ambient chrome (tabs, sidebar, header) — activity does not.
+    pub needs_you: Color,
+    pub done: Color,
+    pub error: Color,
+    /// Exited / not-started processes; almost invisible on purpose.
+    pub exited: Color,
+}
+
 pub struct Theme {
     pub border: BorderTheme,
     pub workspace_list: WorkspaceListTheme,
@@ -365,6 +402,7 @@ pub struct Theme {
     pub general: GeneralTheme,
     pub fuzzy_search: FuzzySearchTheme,
     pub selection: SelectionTheme,
+    pub status: StatusTheme,
 }
 
 impl Default for Theme {
@@ -423,9 +461,12 @@ impl Theme {
                 error_bg: p.err,
                 error_fg: p.bg0,
                 prefix_bg: p.iris,
-                navigate_bg: p.warn,
+                navigate_bg: p.bg2,
                 mode_fg: p.bg0,
                 separator_fg: p.fg3,
+                text_fg: p.fg1,
+                toast_info: p.info,
+                toast_success: p.ok,
             },
             footer: FooterTheme {
                 key: p.iris,
@@ -463,6 +504,13 @@ impl Theme {
             selection: SelectionTheme {
                 bg: p.iris_wash,
                 fg: p.fg0,
+            },
+            status: StatusTheme {
+                running: p.info,
+                needs_you: p.warn,
+                done: p.ok,
+                error: p.err,
+                exited: p.fg3,
             },
         }
     }
@@ -545,6 +593,9 @@ impl Theme {
                 navigate_bg: resolve(&t.status_bar.navigate_bg, d.status_bar.navigate_bg),
                 mode_fg: resolve(&t.status_bar.mode_fg, d.status_bar.mode_fg),
                 separator_fg: resolve(&t.status_bar.separator_fg, d.status_bar.separator_fg),
+                text_fg: resolve(&t.status_bar.text_fg, d.status_bar.text_fg),
+                toast_info: resolve(&t.status_bar.toast_info, d.status_bar.toast_info),
+                toast_success: resolve(&t.status_bar.toast_success, d.status_bar.toast_success),
             },
             footer: FooterTheme {
                 key: resolve(&t.footer.key, d.footer.key),
@@ -586,6 +637,13 @@ impl Theme {
             selection: SelectionTheme {
                 bg: resolve(&t.selection.bg, d.selection.bg),
                 fg: resolve(&t.selection.fg, d.selection.fg),
+            },
+            status: StatusTheme {
+                running: resolve(&t.status.running, d.status.running),
+                needs_you: resolve(&t.status.needs_you, d.status.needs_you),
+                done: resolve(&t.status.done, d.status.done),
+                error: resolve(&t.status.error, d.status.error),
+                exited: resolve(&t.status.exited, d.status.exited),
             },
         }
     }

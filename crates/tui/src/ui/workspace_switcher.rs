@@ -131,10 +131,10 @@ fn row_line<'a>(
             let is_active = ws_idx == app.active_workspace;
             let (glyph, color) = match ws.agent_status_rollup() {
                 Some(s) => {
-                    let (g, _, c) = crate::ui::cli_agent_status_view(s);
+                    let (g, _, c) = crate::ui::cli_agent_status_view(app, s);
                     (g, c)
                 }
-                None => ("○", Color::DarkGray),
+                None => ("○", app.theme.status.exited),
             };
             let marker = if is_active { "◆ " } else { "  " };
             let left = format!(" {marker}{glyph} {} ({})", ws.name, ws.tabs.len());
@@ -149,8 +149,8 @@ fn row_line<'a>(
             };
             let is_active_tab = tab_idx == ws.active_tab;
             let (glyph, status_label, color) = match tab.cli_agent_snapshot() {
-                Some((status, _)) => crate::ui::cli_agent_status_view(status),
-                None => crate::ui::agent_tab_indicator(tab),
+                Some((status, _)) => crate::ui::cli_agent_status_view(app, status),
+                None => crate::ui::agent_tab_indicator(app, tab),
             };
             let label = tab
                 .markdown_label
@@ -230,7 +230,7 @@ fn breadcrumb_text(app: &App, row: SwitcherRow) -> String {
                 .unwrap_or(tab.provider.label());
             let status = tab
                 .cli_agent_snapshot()
-                .map(|(s, _)| crate::ui::cli_agent_status_view(s).1)
+                .map(|(s, _)| crate::ui::cli_agent_status_view(app, s).1)
                 .unwrap_or("");
             if status.is_empty() {
                 format!("{} · tab: {}", ws.name, label)
