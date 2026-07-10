@@ -770,14 +770,14 @@ impl Config {
         }
     }
 
-    /// Bare chord (without the prefix) of a prefix-bound app action, for
-    /// which-key hints shown while the prefix is pending. Falls back to the
-    /// full display for direct chords.
-    pub fn prefix_chord_display(&self, action: &str) -> String {
+    /// The bare chord of a prefix-bound app action (e.g. `"c"` for `prefix-c`),
+    /// or `None` if the action has no prefix binding (e.g. a direct chord like
+    /// `copy`). Used by the which-key overlay to list only keys reachable
+    /// *after* the prefix.
+    pub fn prefix_chord(&self, action: &str) -> Option<String> {
         self.app_binding_strings(action)
             .iter()
             .find_map(|b| b.strip_prefix("prefix-").map(|rest| self.format_binding(rest)))
-            .unwrap_or_else(|| self.get_binding("app", action))
     }
 }
 

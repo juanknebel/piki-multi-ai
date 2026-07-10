@@ -13,6 +13,7 @@ pub(crate) mod scrollbar;
 pub(crate) mod statusbar;
 pub mod subtabs;
 pub mod terminal;
+pub(crate) mod which_key;
 pub mod workspace_switcher;
 
 /// Braille frames for the running-activity spinner (~100ms per frame at the
@@ -189,6 +190,19 @@ mod tests {
             .unwrap();
         let content = buffer_to_snapshot(terminal.backend().buffer());
         insta::assert_snapshot!("footer_wraps_on_narrow_terminal", content);
+    }
+
+    #[test]
+    fn test_render_which_key_overlay() {
+        let mut terminal = test_terminal(80, 24);
+        let app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        terminal
+            .draw(|frame| {
+                super::which_key::render(frame, frame.area(), &app);
+            })
+            .unwrap();
+        let content = buffer_to_snapshot(terminal.backend().buffer());
+        insta::assert_snapshot!("which_key_overlay", content);
     }
 
     // ── New snapshot tests for dialogs ──

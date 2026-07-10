@@ -441,28 +441,11 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             ),
             (cfg.get_binding("workspace_info", "exit"), "close"),
         ],
+        // The which-key overlay (rendered on top while the prefix is pending)
+        // shows the full grouped keymap, so the footer stays out of its way.
         _ if app.input_state == crate::app::InputState::PrefixPending => vec![
-            (cfg.prefix_chord_display("new_tab"), "new tab"),
-            (cfg.prefix_chord_display("close_tab"), "close tab"),
-            (
-                format!(
-                    "{}/{}",
-                    cfg.prefix_chord_display("prev_tab"),
-                    cfg.prefix_chord_display("next_tab")
-                ),
-                "cycle tabs",
-            ),
-            ("1-9".to_string(), "go to tab"),
-            ("h/j/k/l".to_string(), "focus pane"),
-            (cfg.prefix_chord_display("workspace_switcher"), "workspaces"),
-            (cfg.prefix_chord_display("git"), "lazygit"),
-            (cfg.prefix_chord_display("command_palette"), "palette"),
-            (cfg.prefix_chord_display("fuzzy_search"), "find file"),
-            (cfg.prefix_chord_display("scroll_mode"), "scroll"),
-            (cfg.prefix_chord_display("quit"), "quit"),
             (cfg.prefix_display(), "send literal"),
             ("Esc".to_string(), "cancel"),
-            (cfg.prefix_chord_display("help"), "all keys"),
         ],
         _ if app.input_state == crate::app::InputState::TermScroll => vec![
             (

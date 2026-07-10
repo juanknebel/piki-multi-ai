@@ -268,4 +268,10 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         AppMode::SubmitReview => {} // handled by full-screen code review bypass above
         AppMode::ChatPanel => super::chat::render_chat_overlay(frame, area, app),
     }
+
+    // Which-key: transient prefix menu while a prefix chord is pending. Only
+    // reachable in Normal mode (modal dialogs intercept input before it).
+    if app.input_state == crate::app::InputState::PrefixPending {
+        super::which_key::render(frame, area, app);
+    }
 }
