@@ -687,22 +687,26 @@ All UI colors are customizable via TOML theme files. Without configuration, the 
 
 ```toml
 [border]
-active_interact = "#88c0d0"
-active_navigate = "#ebcb8b"
+active = "#88c0d0"
 
 [file_list]
 modified = "#ebcb8b"
 added = "#a3be8c"
 deleted = "#bf616a"
+
+[status]
+needs_you = "#ebcb8b"
 ```
 
-See `themes/default.toml` in the repo for all available color keys. Colors can be named (`"Red"`, `"DarkGray"`, `"LightCyan"`, etc.) or hex (`"#rrggbb"`).
+See `themes/piki-dark.toml` in the repo for all available color keys (including the `[status]` agent-state and `[diff]` code-review groups). Colors can be named (`"Red"`, `"DarkGray"`, `"LightCyan"`, etc.), `"Reset"` (terminal default), or hex (`"#rrggbb"`).
 
 ### Included themes
 
 | Theme | Description |
 |-------|-------------|
-| `default` | Standard terminal colors (named colors) |
+| `default` | The built-in "Cabina" dark palette (violet ink, iris accent) |
+| `piki-dark` | Same as `default`, under an explicit name |
+| `piki-ansi` | Cabina degraded to the 16 ANSI colors, for terminals without truecolor |
 | `nord` | Arctic, muted dark palette |
 | `tokyonight` | Dark blue-tinted palette |
 | `synthwave` | Neon retro-futuristic |
