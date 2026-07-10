@@ -180,6 +180,77 @@ struct SelectionToml {
     fg: Option<String>,
 }
 
+// ── Cabina palette (primitive tokens) ──
+
+/// Build a Color from a `0xRRGGBB` literal.
+const fn rgb(hex: u32) -> Color {
+    Color::Rgb((hex >> 16) as u8, (hex >> 8) as u8, hex as u8)
+}
+
+/// Primitive color tokens of the "Cabina" visual language. The roles in
+/// [`Theme`] derive from these; render code never reads the palette directly.
+///
+/// Two rules govern the mapping:
+/// - `iris` (the single accent) marks focus/interactivity and never state.
+/// - The semantic colors (`ok`/`warn`/`err`/`info`) mark state and never focus.
+pub struct Palette {
+    /// Canvas: pane and terminal background.
+    pub bg0: Color,
+    /// Barely raised: alternate rows.
+    pub bg1: Color,
+    /// Raised: group headers, inactive tabs, unfocused selection.
+    pub bg2: Color,
+    /// Overlays and popups.
+    pub bg3: Color,
+    /// Borders of unfocused panes.
+    pub line: Color,
+    /// Borders of neutral dialogs.
+    pub line_strong: Color,
+    /// Primary text: names, values, the selected thing.
+    pub fg0: Color,
+    /// Secondary text: regular content.
+    pub fg1: Color,
+    /// Muted: details, unfocused titles, textual separators.
+    pub fg2: Color,
+    /// Ghost: placeholders, counters, the inactive.
+    pub fg3: Color,
+    /// THE accent: focus, active tab, matches, keys, cursor.
+    pub iris: Color,
+    /// Selection background in the focused pane.
+    pub iris_wash: Color,
+    /// Done, staged, additions, success toasts.
+    pub ok: Color,
+    /// "Needs you": permission prompts, idle with news, modified files.
+    pub warn: Color,
+    /// Errors, deletions, conflicts, destructive confirms.
+    pub err: Color,
+    /// Running activity, informative toasts, renames.
+    pub info: Color,
+}
+
+impl Default for Palette {
+    fn default() -> Self {
+        Self {
+            bg0: rgb(0x14141C),
+            bg1: rgb(0x1B1B26),
+            bg2: rgb(0x232331),
+            bg3: rgb(0x2A2A3C),
+            line: rgb(0x3D3D54),
+            line_strong: rgb(0x4C4C68),
+            fg0: rgb(0xECECF6),
+            fg1: rgb(0xB4B4CC),
+            fg2: rgb(0x7C7C99),
+            fg3: rgb(0x56566E),
+            iris: rgb(0xA78BFA),
+            iris_wash: rgb(0x322D4D),
+            ok: rgb(0x9BD186),
+            warn: rgb(0xE8B15E),
+            err: rgb(0xF0717D),
+            info: rgb(0x84B0F2),
+        }
+    }
+}
+
 // ── Resolved Theme (Color values) ──
 
 pub struct BorderTheme {
@@ -298,90 +369,100 @@ pub struct Theme {
 
 impl Default for Theme {
     fn default() -> Self {
+        Self::from_palette(&Palette::default())
+    }
+}
+
+impl Theme {
+    /// Derive every role from the primitive palette. This is the single
+    /// place that decides what each token *means* visually.
+    pub fn from_palette(p: &Palette) -> Self {
         Self {
             border: BorderTheme {
-                active: Color::Green,
-                inactive: Color::DarkGray,
+                active: p.iris,
+                inactive: p.line,
             },
             workspace_list: WorkspaceListTheme {
-                empty_text: Color::DarkGray,
-                name_active: Color::White,
-                name_inactive: Color::Gray,
-                detail_selected: Color::Gray,
-                detail_normal: Color::DarkGray,
-                selected_bg: Color::DarkGray,
-                group_header_bg: Color::Rgb(30, 30, 45),
-                alt_bg: Color::Rgb(25, 25, 35),
+                empty_text: p.fg3,
+                name_active: p.fg0,
+                name_inactive: p.fg1,
+                detail_selected: p.fg2,
+                detail_normal: p.fg3,
+                selected_bg: p.iris_wash,
+                group_header_bg: p.bg2,
+                alt_bg: p.bg1,
             },
             file_list: FileListTheme {
-                empty_text: Color::DarkGray,
-                modified: Color::Yellow,
-                added: Color::Green,
-                deleted: Color::Red,
-                renamed: Color::Cyan,
-                untracked: Color::DarkGray,
-                conflicted: Color::Magenta,
-                staged: Color::Green,
-                staged_modified: Color::Yellow,
-                file_path: Color::White,
-                selected_bg: Color::DarkGray,
-                multi_select_bg: Color::Rgb(40, 40, 60),
+                empty_text: p.fg3,
+                modified: p.warn,
+                added: p.ok,
+                deleted: p.err,
+                renamed: p.info,
+                untracked: p.fg3,
+                conflicted: p.err,
+                staged: p.ok,
+                staged_modified: p.warn,
+                file_path: p.fg0,
+                selected_bg: p.iris_wash,
+                multi_select_bg: p.bg3,
             },
             tabs: TabsTheme {
-                active: Color::Yellow,
-                inactive: Color::DarkGray,
+                active: p.iris,
+                inactive: p.fg2,
             },
             subtabs: SubtabsTheme {
-                active: Color::Cyan,
-                active_fg: Color::Black,
-                // A raised surface + light-grey text so an inactive tab reads
-                // as a clearly distinct (but secondary) block, not a smudge
-                // against the bar background.
-                inactive: Color::Rgb(180, 180, 195),
-                inactive_bg: Color::Rgb(48, 48, 60),
+                active: p.iris,
+                active_fg: p.bg0,
+                // A raised surface + muted text so an inactive tab reads as a
+                // clearly distinct (but secondary) block, not a smudge against
+                // the bar background.
+                inactive: p.fg2,
+                inactive_bg: p.bg2,
             },
             status_bar: StatusBarTheme {
-                error_bg: Color::Red,
-                error_fg: Color::White,
-                prefix_bg: Color::Green,
-                navigate_bg: Color::Yellow,
-                mode_fg: Color::Black,
-                separator_fg: Color::DarkGray,
+                error_bg: p.err,
+                error_fg: p.bg0,
+                prefix_bg: p.iris,
+                navigate_bg: p.warn,
+                mode_fg: p.bg0,
+                separator_fg: p.fg3,
             },
             footer: FooterTheme {
-                key: Color::Yellow,
-                description: Color::Gray,
+                key: p.iris,
+                description: p.fg2,
             },
             dialog: DialogTheme {
-                new_ws_border: Color::Yellow,
-                new_ws_active: Color::Yellow,
-                new_ws_inactive: Color::DarkGray,
-                delete_border: Color::Red,
-                delete_text: Color::White,
-                delete_name: Color::Yellow,
-                delete_yes: Color::Red,
-                delete_no: Color::Green,
-                delete_cancel: Color::DarkGray,
+                new_ws_border: p.line_strong,
+                new_ws_active: p.iris,
+                new_ws_inactive: p.fg2,
+                delete_border: p.err,
+                delete_text: p.fg1,
+                delete_name: p.fg0,
+                delete_yes: p.err,
+                // The safe action stays neutral: green would say "this is the
+                // good one", and semantics never editorialize a choice.
+                delete_no: p.fg1,
+                delete_cancel: p.fg3,
             },
             help: HelpTheme {
-                border: Color::Cyan,
+                border: p.line_strong,
             },
             general: GeneralTheme {
-                welcome_text: Color::Gray,
-                muted_text: Color::DarkGray,
-                scrollbar_thumb: Color::Gray,
+                welcome_text: p.fg1,
+                muted_text: p.fg2,
+                scrollbar_thumb: p.fg2,
             },
             fuzzy_search: FuzzySearchTheme {
-                border: Color::Cyan,
-                input_text: Color::White,
-                match_highlight: Color::Yellow,
-                result_text: Color::Gray,
-                selected_bg: Color::DarkGray,
-                count_text: Color::DarkGray,
+                border: p.line_strong,
+                input_text: p.fg0,
+                match_highlight: p.iris,
+                result_text: p.fg1,
+                selected_bg: p.iris_wash,
+                count_text: p.fg3,
             },
             selection: SelectionTheme {
-                bg: Color::LightBlue,
-                fg: Color::Black,
+                bg: p.iris_wash,
+                fg: p.fg0,
             },
         }
     }
@@ -564,12 +645,19 @@ mod tests {
     }
 
     #[test]
-    fn test_default_theme_matches_hardcoded() {
+    fn test_default_theme_derives_from_palette() {
+        let p = Palette::default();
         let t = Theme::default();
-        assert_eq!(t.border.active, Color::Green);
-        assert_eq!(t.border.inactive, Color::DarkGray);
-        assert_eq!(t.file_list.modified, Color::Yellow);
-        assert_eq!(t.subtabs.active, Color::Cyan);
+        // The accent marks focus/interactivity...
+        assert_eq!(t.border.active, p.iris);
+        assert_eq!(t.subtabs.active, p.iris);
+        assert_eq!(t.footer.key, p.iris);
+        assert_eq!(t.fuzzy_search.match_highlight, p.iris);
+        // ...and semantics mark state.
+        assert_eq!(t.file_list.modified, p.warn);
+        assert_eq!(t.file_list.added, p.ok);
+        assert_eq!(t.file_list.deleted, p.err);
+        assert_eq!(t.border.inactive, p.line);
     }
 
     #[test]
@@ -580,7 +668,7 @@ mod tests {
         let theme = Theme::from_toml(t);
         assert_eq!(theme.border.active, Color::Rgb(255, 0, 0));
         // Unset fields keep defaults
-        assert_eq!(theme.border.inactive, Color::DarkGray);
+        assert_eq!(theme.border.inactive, Theme::default().border.inactive);
 
         // The new key wins over the deprecated one
         let toml_str = "[border]\nactive = \"#00ff00\"\nactive_interact = \"#ff0000\"\n";
@@ -618,7 +706,8 @@ mod tests {
         // Overridden
         assert_eq!(theme.file_list.modified, Color::Rgb(0xaa, 0xbb, 0xcc));
         // Other sections untouched
-        assert_eq!(theme.border.active, Color::Green);
-        assert_eq!(theme.footer.key, Color::Yellow);
+        let d = Theme::default();
+        assert_eq!(theme.border.active, d.border.active);
+        assert_eq!(theme.footer.key, d.footer.key);
     }
 }
