@@ -135,6 +135,13 @@ theme = "default"
 # up_alt = "up"
 # select = "enter"
 
+# [keybindings.workspaces]    # Workspaces pane (top-left tree)
+# down = "j"                  # select = switch workspace / toggle group header
+# up = "k"
+# down_alt = "down"
+# up_alt = "up"
+# select = "enter"
+
 # [keybindings.markdown]      # markdown reader
 # down = "j"
 # up = "k"

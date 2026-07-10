@@ -2096,6 +2096,11 @@ mod tests {
         // j moves the selection down
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('j')));
         assert_eq!(app.selected_agent_row, 1);
+        // Arrow keys navigate too: Up back to row 0, Down to row 1
+        crate::input::handle_key_event(&mut app, key(KeyCode::Up));
+        assert_eq!(app.selected_agent_row, 0);
+        crate::input::handle_key_event(&mut app, key(KeyCode::Down));
+        assert_eq!(app.selected_agent_row, 1);
         // Enter jumps to workspace b's agent tab and focuses the main panel
         crate::input::handle_key_event(&mut app, key(KeyCode::Enter));
         assert_eq!(app.active_workspace, b);
@@ -2161,29 +2166,36 @@ mod tests {
     // ── Workspace switch + focus tests ──
 
     #[test]
-    fn test_workspace_list_ignores_bare_keys() {
-        // The workspace list is display-only: no single-key actions on the
-        // focused pane — everything goes through the prefix.
+    fn test_workspace_list_keyboard_nav() {
+        // The focused workspace list is keyboard-navigable: up/down (j/k or the
+        // arrows) move the selection and Enter switches to the selected
+        // workspace. Heavier actions (new/edit/delete) still go through the
+        // prefix; bare letter keys are no-ops here.
         let mut app = App::new(
             test_storage(),
             &piki_core::paths::DataPaths::default_paths(),
         );
-        add_test_workspace(&mut app); // index 0
-        add_test_workspace(&mut app); // index 1
+        add_test_workspace(&mut app); // index 0 → sidebar row 0
+        add_test_workspace(&mut app); // index 1 → sidebar row 1
         app.active_pane = ActivePane::WorkspaceList;
-        app.selected_sidebar_row = 1;
+        app.selected_sidebar_row = 0;
 
-        for k in [
-            key(KeyCode::Enter),
-            key(KeyCode::Char('j')),
-            key(KeyCode::Char('k')),
-            key(KeyCode::Char('e')),
-            key(KeyCode::Char('d')),
-        ] {
-            crate::input::handle_key_event(&mut app, k);
-        }
-        assert_eq!(app.active_workspace, 0);
+        // Down (j) moves the selection to row 1.
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('j')));
         assert_eq!(app.selected_sidebar_row, 1);
+        // Arrow Up moves back to row 0.
+        crate::input::handle_key_event(&mut app, key(KeyCode::Up));
+        assert_eq!(app.selected_sidebar_row, 0);
+        // A bare letter key is a no-op (not a prefix chord).
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('e')));
+        assert_eq!(app.selected_sidebar_row, 0);
+
+        // Arrow Down then Enter switches to the selected workspace, and focus
+        // stays on the list so navigation can continue.
+        crate::input::handle_key_event(&mut app, key(KeyCode::Down));
+        assert_eq!(app.selected_sidebar_row, 1);
+        crate::input::handle_key_event(&mut app, key(KeyCode::Enter));
+        assert_eq!(app.active_workspace, 1);
         assert_eq!(app.active_pane, ActivePane::WorkspaceList);
         assert_eq!(app.mode, AppMode::Normal);
         assert!(app.active_dialog.is_none());

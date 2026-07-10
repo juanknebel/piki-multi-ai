@@ -199,6 +199,8 @@ pub struct Keybindings {
     pub scroll: HashMap<String, String>,
     #[serde(default = "default_agents")]
     pub agents: HashMap<String, String>,
+    #[serde(default = "default_workspaces")]
+    pub workspaces: HashMap<String, String>,
     #[serde(default = "default_markdown")]
     pub markdown: HashMap<String, String>,
     #[serde(default = "default_help")]
@@ -228,6 +230,7 @@ impl Default for Keybindings {
             app: default_app(),
             scroll: default_scroll(),
             agents: default_agents(),
+            workspaces: default_workspaces(),
             markdown: default_markdown(),
             help: default_help(),
             about: default_about(),
@@ -334,6 +337,17 @@ fn default_agents() -> HashMap<String, String> {
     m.insert("up".to_string(), "k".to_string());
     m.insert("down_alt".to_string(), "down".to_string());
     m.insert("up_alt".to_string(), "up".to_string());
+    m.insert("select".to_string(), "enter".to_string());
+    m
+}
+
+fn default_workspaces() -> HashMap<String, String> {
+    let mut m = HashMap::new();
+    m.insert("down".to_string(), "j".to_string());
+    m.insert("up".to_string(), "k".to_string());
+    m.insert("down_alt".to_string(), "down".to_string());
+    m.insert("up_alt".to_string(), "up".to_string());
+    // Switch to the selected workspace, or toggle the selected group header.
     m.insert("select".to_string(), "enter".to_string());
     m
 }
@@ -613,6 +627,17 @@ impl Config {
         }
     }
 
+    pub fn matches_workspaces(&self, event: KeyEvent, action: &str) -> bool {
+        if let Some(binding) = self.keybindings.workspaces.get(action) {
+            key_matches_platform(event, binding, self.platform)
+        } else {
+            let defaults = default_workspaces();
+            defaults
+                .get(action)
+                .is_some_and(|b| key_matches_platform(event, b, self.platform))
+        }
+    }
+
     pub fn matches_markdown(&self, event: KeyEvent, action: &str) -> bool {
         if let Some(binding) = self.keybindings.markdown.get(action) {
             key_matches_platform(event, binding, self.platform)
@@ -692,6 +717,12 @@ impl Config {
                 .get(action)
                 .cloned()
                 .or_else(|| default_agents().get(action).cloned()),
+            "workspaces" => self
+                .keybindings
+                .workspaces
+                .get(action)
+                .cloned()
+                .or_else(|| default_workspaces().get(action).cloned()),
             "markdown" => self
                 .keybindings
                 .markdown
@@ -971,6 +1002,7 @@ mod tests {
         let sections: Vec<(&str, &HashMap<String, String>)> = vec![
             ("scroll", &cfg.keybindings.scroll),
             ("agents", &cfg.keybindings.agents),
+            ("workspaces", &cfg.keybindings.workspaces),
             ("help", &cfg.keybindings.help),
             ("fuzzy", &cfg.keybindings.fuzzy),
             ("editor", &cfg.keybindings.editor),

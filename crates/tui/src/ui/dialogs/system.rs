@@ -175,14 +175,26 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         "".to_string(),
         "  Workspace list pane".to_string(),
         format!(
-            "    {:<13} Focus this pane (click only switches workspace)",
+            "    {:<13} Focus this pane",
             format!(
                 "{}/{}",
                 cfg.get_binding("app", "focus_left"),
                 cfg.get_binding("app", "focus_up")
             )
         ),
-        "    The list is display-only — workspace actions go through the prefix:".to_string(),
+        format!(
+            "    {:<13} Select workspace / group",
+            format!(
+                "{}/{}",
+                cfg.get_binding("workspaces", "up"),
+                cfg.get_binding("workspaces", "down")
+            )
+        ),
+        format!(
+            "    {:<13} Switch to it / toggle group",
+            cfg.get_binding("workspaces", "select")
+        ),
+        "    Heavier workspace actions go through the prefix:".to_string(),
         format!(
             "    {:<13} Switch workspace (fuzzy)",
             cfg.get_binding("app", "workspace_switcher")

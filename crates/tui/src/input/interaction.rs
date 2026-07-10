@@ -1030,6 +1030,32 @@ pub(super) fn handle_agents_interaction(app: &mut App, key: KeyEvent) -> Option<
     None
 }
 
+/// Keyboard navigation for the focused Workspaces pane (bottom/top-left tree).
+/// Mirrors the mouse behaviour in `mouse.rs`: up/down move the selection over
+/// the flattened sidebar rows, and `select` (Enter) either switches to the
+/// selected workspace or toggles the selected group header.
+pub(super) fn handle_workspace_list_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
+    if app.config.matches_workspaces(key, "down") || app.config.matches_workspaces(key, "down_alt")
+    {
+        app.select_next_sidebar_row();
+    } else if app.config.matches_workspaces(key, "up")
+        || app.config.matches_workspaces(key, "up_alt")
+    {
+        app.select_prev_sidebar_row();
+    } else if app.config.matches_workspaces(key, "select") {
+        match app.sidebar_items().get(app.selected_sidebar_row) {
+            Some(crate::app::SidebarItem::GroupHeader { .. }) => app.toggle_selected_group(),
+            Some(crate::app::SidebarItem::Workspace { index }) => {
+                let idx = *index;
+                app.selected_workspace = idx;
+                app.switch_workspace(idx);
+            }
+            None => {}
+        }
+    }
+    None
+}
+
 /// Focus the given (workspace, tab) pair from the Agents pane.
 pub(super) fn jump_to_agent(app: &mut App, (ws_idx, tab_idx): (usize, usize)) {
     // Defensive: a mouse jump could arrive while in terminal scroll mode

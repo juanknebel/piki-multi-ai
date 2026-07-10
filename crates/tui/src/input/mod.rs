@@ -36,6 +36,7 @@ use self::fuzzy_input::handle_fuzzy_search_input;
 use self::interaction::{
     handle_agents_interaction, handle_api_interaction,
     handle_kanban_interaction, handle_markdown_interaction, handle_terminal_interaction,
+    handle_workspace_list_interaction,
     
 };
 
@@ -448,9 +449,10 @@ fn handle_pane_key(app: &mut App, key: KeyEvent) -> Option<Action> {
                 handle_terminal_interaction(app, key)
             }
         }
-        // The workspace list is display-only: workspace actions live behind
-        // the prefix (switcher, new/edit/delete), never on bare keys.
-        ActivePane::WorkspaceList => None,
+        // When focused, the workspace list is keyboard-navigable (up/down to
+        // move the selection, Enter to switch workspace / toggle a group).
+        // The heavier workspace actions still live behind the prefix.
+        ActivePane::WorkspaceList => handle_workspace_list_interaction(app, key),
         ActivePane::Agents => handle_agents_interaction(app, key),
     }
 }
