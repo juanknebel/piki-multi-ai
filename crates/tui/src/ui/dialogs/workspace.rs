@@ -144,7 +144,7 @@ pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
         ),
         Line::from(""),
         Line::from(vec![Span::styled(
-            "  [Esc] Cancel",
+            "  [Esc] cancel",
             Style::default().fg(theme.new_ws_inactive),
         )]),
     ]);
@@ -210,7 +210,7 @@ pub(crate) fn render_edit_workspace_dialog(frame: &mut Frame, area: Rect, app: &
         ),
         Line::from(""),
         Line::from(vec![Span::styled(
-            "  [Esc] Cancel",
+            "  [Esc] cancel",
             Style::default().fg(theme.new_ws_inactive),
         )]),
     ];
@@ -256,7 +256,7 @@ fn render_create_worktree_choose_source(frame: &mut Frame, area: Rect, app: &App
     }
     lines.push(Line::from(""));
     lines.push(Line::from(vec![Span::styled(
-        "  [j/k] move  [Enter] select  [Esc] Cancel",
+        "  [j/k] move  [Enter] select  [Esc] cancel",
         Style::default().fg(inactive_c),
     )]));
 
@@ -349,7 +349,7 @@ fn render_create_worktree_create_new(frame: &mut Frame, area: Rect, app: &App) {
         ),
         Line::from(""),
         Line::from(vec![Span::styled(
-            "  [Esc] Cancel",
+            "  [Esc] cancel",
             Style::default().fg(theme.new_ws_inactive),
         )]),
     ];
@@ -403,7 +403,7 @@ fn render_create_worktree_load_existing(frame: &mut Frame, area: Rect, app: &App
     }
     lines.push(Line::from(""));
     lines.push(Line::from(vec![Span::styled(
-        "  [j/k] move  [Enter] load  [Esc] Cancel",
+        "  [j/k] move  [Enter] load  [Esc] cancel",
         Style::default().fg(inactive_c),
     )]));
 
@@ -499,7 +499,7 @@ pub(crate) fn render_workspace_info_overlay(frame: &mut Frame, area: Rect, app: 
     }
 
     lines.push(Line::from(Span::styled(
-        " Esc to close · h/l to scroll · mouse select to copy",
+        " [h/l] scroll  [i/Esc] close  [mouse] select to copy",
         Style::default().fg(theme.palette.fg3),
     )));
 
@@ -565,7 +565,7 @@ pub(crate) fn render_confirm_delete_dialog(frame: &mut Frame, area: Rect, app: &
         )));
     }
     lines.push(Line::from(Span::styled(
-        "  [Esc] Cancel",
+        "  [Esc] cancel",
         Style::default().fg(theme.delete_cancel),
     )));
 

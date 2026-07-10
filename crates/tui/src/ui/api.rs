@@ -76,7 +76,7 @@ fn render_editor(
         .title_style(title_style)
         .title_bottom(
             Line::from(Span::styled(
-                " [^S send | ^H history] ",
+                " [C-s] send  [C-h] history ",
                 Style::default().fg(p.fg3),
             ))
             .right_aligned(),
@@ -220,9 +220,9 @@ fn render_responses(
     };
 
     let help_hint = if api.search.is_some() {
-        " [^F search] "
+        " [C-f] search "
     } else {
-        " [^J/^K scroll | ^F search] "
+        " [C-j/C-k] scroll  [C-f] search "
     };
 
     let block = Block::default()

@@ -155,7 +155,7 @@ pub(crate) fn render_dashboard_overlay(frame: &mut Frame, area: Rect, app: &App)
 
     // Footer hint
     lines.push(Line::from(Span::styled(
-        " j/k navigate  Enter switch  Esc close",
+        " [j/k] navigate  [Enter] switch  [Esc] close",
         Style::default().fg(theme.palette.fg3),
     )));
 

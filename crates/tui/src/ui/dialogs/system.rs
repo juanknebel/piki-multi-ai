@@ -726,7 +726,7 @@ pub(crate) fn render_new_tab_dialog(frame: &mut Frame, area: Rect, app: &App) {
                     Span::styled("→", Style::default().fg(app.theme.palette.fg3)),
                 ]),
                 Line::from(""),
-                Line::from("  [Esc] Cancel"),
+                Line::from("  [Esc] cancel"),
             ];
             let text = Paragraph::new(lines)
                 .block(super::popup_block("New Tab", app.theme.palette.iris));
@@ -755,7 +755,7 @@ pub(crate) fn render_new_tab_dialog(frame: &mut Frame, area: Rect, app: &App) {
                 lines.push(Line::from(Span::styled(format!("  {num}{label}"), style)));
             }
             lines.push(Line::from(""));
-            lines.push(Line::from("  [Esc] Back"));
+            lines.push(Line::from("  [Esc] back"));
             let text = Paragraph::new(lines)
                 .block(super::popup_block("AI Agents", app.theme.palette.iris));
             frame.render_widget(text, popup);
@@ -769,7 +769,7 @@ pub(crate) fn render_new_tab_dialog(frame: &mut Frame, area: Rect, app: &App) {
                 Line::from("  [3] API Explorer"),
                 Line::from("  [4] Git (lazygit)"),
                 Line::from(""),
-                Line::from("  [Esc] Back"),
+                Line::from("  [Esc] back"),
             ];
             let text = Paragraph::new(lines)
                 .block(super::popup_block("Tools", app.theme.palette.iris));

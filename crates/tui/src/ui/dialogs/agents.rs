@@ -156,10 +156,10 @@ pub(crate) fn render_dispatch_agent_dialog(frame: &mut Frame, area: Rect, app: &
         lines.push(Line::from(""));
         lines.push(Line::from(vec![
             Span::styled(
-                "  [Enter] Dispatch    ",
+                "  [Enter] dispatch    ",
                 Style::default().fg(active_c).add_modifier(Modifier::BOLD),
             ),
-            Span::styled("[Esc] Back", Style::default().fg(inactive_c)),
+            Span::styled("[Esc] back", Style::default().fg(inactive_c)),
         ]));
     } else {
         // Step 0: agent selection + prompt
@@ -175,10 +175,10 @@ pub(crate) fn render_dispatch_agent_dialog(frame: &mut Frame, area: Rect, app: &
         lines.push(Line::from(""));
         lines.push(Line::from(vec![
             Span::styled(
-                "  [Enter] Dispatch    ",
+                "  [Enter] dispatch    ",
                 Style::default().fg(active_c).add_modifier(Modifier::BOLD),
             ),
-            Span::styled("[Esc] Cancel", Style::default().fg(inactive_c)),
+            Span::styled("[Esc] cancel", Style::default().fg(inactive_c)),
         ]));
     }
 
@@ -238,12 +238,12 @@ pub(crate) fn render_manage_agents_dialog(frame: &mut Frame, area: Rect, app: &A
 
     lines.push(Line::from(""));
     lines.push(Line::from(vec![
-        Span::styled("  [n] New  ", Style::default().fg(active_c)),
-        Span::styled("[e] Edit  ", Style::default().fg(active_c)),
-        Span::styled("[d] Delete  ", Style::default().fg(active_c)),
-        Span::styled("[p] Sync to repo  ", Style::default().fg(active_c)),
-        Span::styled("[i] Import from repo  ", Style::default().fg(active_c)),
-        Span::styled("[Esc] Close", Style::default().fg(inactive_c)),
+        Span::styled("  [n] new  ", Style::default().fg(active_c)),
+        Span::styled("[e] edit  ", Style::default().fg(active_c)),
+        Span::styled("[d] delete  ", Style::default().fg(active_c)),
+        Span::styled("[p] sync to repo  ", Style::default().fg(active_c)),
+        Span::styled("[i] import  ", Style::default().fg(active_c)),
+        Span::styled("[Esc] close", Style::default().fg(inactive_c)),
     ]));
 
     let project_name = app
@@ -335,10 +335,10 @@ pub(crate) fn render_edit_agent_dialog(frame: &mut Frame, area: Rect, app: &App)
         Line::from(""),
         Line::from(vec![
             Span::styled(
-                "  [Enter] Next (edit role)    ",
+                "  [Enter] edit role    ",
                 Style::default().fg(active_c).add_modifier(Modifier::BOLD),
             ),
-            Span::styled("[Esc] Cancel", Style::default().fg(inactive_c)),
+            Span::styled("[Esc] cancel", Style::default().fg(inactive_c)),
         ]),
     ];
 
@@ -458,15 +458,15 @@ pub(crate) fn render_edit_agent_role_dialog(frame: &mut Frame, area: Rect, app: 
 
     // Footer
     lines.push(Line::from(""));
-    let save_label = format!("  [{}] Save    ", app.config.format_binding("ctrl-s"));
-    let clear_label = format!("[{}] Clear all    ", app.config.format_binding("ctrl-d"));
+    let save_label = format!("  [{}] save    ", app.config.format_binding("ctrl-s"));
+    let clear_label = format!("[{}] clear all    ", app.config.format_binding("ctrl-d"));
     lines.push(Line::from(vec![
         Span::styled(
             save_label,
             Style::default().fg(active_c).add_modifier(Modifier::BOLD),
         ),
         Span::styled(clear_label, Style::default().fg(inactive_c)),
-        Span::styled("[Esc] Back", Style::default().fg(inactive_c)),
+        Span::styled("[Esc] back", Style::default().fg(inactive_c)),
     ]));
 
     let text = Paragraph::new(lines).block(super::popup_block(&title, app.theme.palette.iris));
@@ -528,10 +528,10 @@ pub(crate) fn render_import_agents_dialog(frame: &mut Frame, area: Rect, app: &A
 
     lines.push(Line::from(""));
     lines.push(Line::from(vec![
-        Span::styled("  [Space] Toggle  ", Style::default().fg(active_c)),
-        Span::styled("[a] All  ", Style::default().fg(active_c)),
-        Span::styled("[Enter] Import  ", Style::default().fg(active_c)),
-        Span::styled("[Esc] Cancel", Style::default().fg(inactive_c)),
+        Span::styled("  [Space] toggle  ", Style::default().fg(active_c)),
+        Span::styled("[a] all  ", Style::default().fg(active_c)),
+        Span::styled("[Enter] import  ", Style::default().fg(active_c)),
+        Span::styled("[Esc] cancel", Style::default().fg(inactive_c)),
     ]));
 
     let text = Paragraph::new(lines)

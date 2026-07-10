@@ -52,10 +52,10 @@ pub(crate) fn render_manage_providers_dialog(frame: &mut Frame, area: Rect, app:
 
     lines.push(Line::from(""));
     lines.push(Line::from(vec![
-        Span::styled("  [n] New  ", Style::default().fg(active_c)),
-        Span::styled("[e] Edit  ", Style::default().fg(active_c)),
-        Span::styled("[d] Delete  ", Style::default().fg(active_c)),
-        Span::styled("[Esc] Close", Style::default().fg(inactive_c)),
+        Span::styled("  [n] new  ", Style::default().fg(active_c)),
+        Span::styled("[e] edit  ", Style::default().fg(active_c)),
+        Span::styled("[d] delete  ", Style::default().fg(active_c)),
+        Span::styled("[Esc] close", Style::default().fg(inactive_c)),
     ]));
 
     let text = Paragraph::new(lines)
@@ -138,9 +138,12 @@ pub(crate) fn render_edit_provider_dialog(frame: &mut Frame, area: Rect, app: &A
         text_field("Agent Dir:", agent_dir, agent_dir_cursor, EditProviderField::AgentDir),
         Line::from(""),
         Line::from(vec![
-            Span::styled("  [Ctrl+S] Save  ", Style::default().fg(active_c)),
-            Span::styled("[Tab] Next field  ", Style::default().fg(inactive_c)),
-            Span::styled("[Esc] Cancel", Style::default().fg(inactive_c)),
+            Span::styled(
+                format!("  [{}] save  ", app.config.format_binding("ctrl-s")),
+                Style::default().fg(active_c),
+            ),
+            Span::styled("[Tab] switch field  ", Style::default().fg(inactive_c)),
+            Span::styled("[Esc] cancel", Style::default().fg(inactive_c)),
         ]),
     ];
 

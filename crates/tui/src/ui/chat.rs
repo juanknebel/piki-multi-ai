@@ -97,7 +97,7 @@ pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &App) {
         crate::app::ChatSubMode::Settings => vec![
             Span::styled("[Tab]", Style::default().fg(h)),
             Span::raw(" switch field  "),
-            Span::styled("[Ctrl+Enter]", Style::default().fg(h)),
+            Span::styled("[C-Enter]", Style::default().fg(h)),
             Span::raw(" save  "),
             Span::styled("[Esc]", Style::default().fg(h)),
             Span::raw(" cancel"),

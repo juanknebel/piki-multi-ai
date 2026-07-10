@@ -32,24 +32,19 @@ pub(crate) fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
             Style::default().bg(theme.error_bg).fg(theme.error_fg),
         )]
     } else {
-        let ctrl = if app.config.platform.is_macos() {
-            "⌘"
-        } else {
-            "C"
-        };
         match app.mode {
             AppMode::FuzzySearch => vec![Span::styled(
-                " SEARCH | type to filter | Enter = editor | Esc = close".to_string(),
+                " SEARCH  [Enter] editor  [Esc] close".to_string(),
                 quiet,
             )],
             AppMode::InlineEdit => vec![Span::styled(
                 format!(
-                    " EDIT: {} | {}-s = save | Esc = close",
+                    " EDIT: {}  [{}] save  [Esc] close",
                     app.editing_file
                         .as_ref()
                         .map(|p| p.to_string_lossy().to_string())
                         .unwrap_or_else(|| "?".to_string()),
-                    ctrl,
+                    app.config.format_binding("ctrl-s"),
                 ),
                 quiet,
             )],
@@ -551,16 +546,20 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                         ("esc".to_string(), "close search"),
                     ]
                 } else {
-                    {
-                        let p = if cfg.platform.is_macos() { "⌘" } else { "^" };
-                        vec![
-                            (format!("{}S", p), "send"),
-                            (format!("{}J/{}K", p, p), "scroll"),
-                            (format!("{}F", p), "search"),
-                            (format!("{}C", p), "copy response"),
-                            (cfg.prefix_display(), "prefix"),
-                        ]
-                    }
+                    vec![
+                        (cfg.format_binding("ctrl-s"), "send"),
+                        (
+                            format!(
+                                "{}/{}",
+                                cfg.format_binding("ctrl-j"),
+                                cfg.format_binding("ctrl-k")
+                            ),
+                            "scroll",
+                        ),
+                        (cfg.format_binding("ctrl-f"), "search"),
+                        (cfg.format_binding("ctrl-c"), "copy response"),
+                        (cfg.prefix_display(), "prefix"),
+                    ]
                 }
             } else if app
                 .current_workspace()
