@@ -30,6 +30,16 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
     } else {
         app.theme.palette.bg2
     };
+    // The cursor is a single left rail — iris where the focus is, muted where
+    // it is not. It is the ONLY selection signal, so it never competes with
+    // the group triangle or the type icon.
+    let sel_bar_fg = if app.active_pane == ActivePane::WorkspaceList {
+        app.theme.palette.iris
+    } else {
+        app.theme.palette.fg3
+    };
+    // Muted vertical guide that ties group children back to their header.
+    let guide_fg = app.theme.palette.line;
 
     let block = Block::default()
         .title(" WORKSPACES ")
@@ -57,6 +67,12 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
 
     let sidebar_items = app.sidebar_items();
 
+    // A workspace is a group child iff a header precedes it; children get the
+    // vertical guide, top-level workspaces stay flush.
+    let first_group_row = sidebar_items
+        .iter()
+        .position(|it| matches!(it, SidebarItem::GroupHeader { .. }));
+
     // All rows are one line tall; scroll follows the selection.
     let visible_height = area.height.saturating_sub(2) as usize;
     let selected = app
@@ -69,7 +85,6 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
     };
 
     let inner_width = area.width.saturating_sub(2) as usize;
-    let mut ws_visual_idx: usize = 0;
 
     let items: Vec<ListItem> = sidebar_items
         .iter()
@@ -84,26 +99,30 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                     count,
                     collapsed,
                 } => {
-                    let arrow = if *collapsed { "▸" } else { "▼" };
+                    let arrow = if *collapsed { "▸" } else { "▾" };
+                    let bar = if is_selected {
+                        Span::styled("▎", Style::default().fg(sel_bar_fg))
+                    } else {
+                        Span::raw(" ")
+                    };
                     let header_style = Style::default()
                         .fg(theme.name_inactive)
-                        .bg(theme.group_header_bg)
                         .add_modifier(Modifier::BOLD);
                     let line = Line::from(vec![
-                        Span::styled(format!(" {} ", arrow), header_style),
+                        bar,
+                        Span::styled(format!("{} ", arrow), header_style),
                         Span::styled(format!("{} ({})", name.to_uppercase(), count), header_style),
                     ]);
                     let style = if is_selected {
                         Style::default().bg(sel_bg)
                     } else {
-                        Style::default().bg(theme.group_header_bg)
+                        Style::default()
                     };
                     ListItem::new(vec![line]).style(style)
                 }
                 SidebarItem::Workspace { index } => {
                     let ws = &app.workspaces[*index];
-                    let current_ws_idx = ws_visual_idx;
-                    ws_visual_idx += 1;
+                    let grouped = first_group_row.is_some_and(|h| row > h);
 
                     let detail_color = if is_selected {
                         theme.detail_selected
@@ -111,19 +130,29 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                         theme.detail_normal
                     };
 
-                    let marker = if *index == app.active_workspace {
-                        "▶"
+                    let is_active = *index == app.active_workspace;
+                    // Selection rail in col 0; group guide in col 1. The active
+                    // workspace is now carried by the name weight/brightness —
+                    // no triangle, so it can't be mistaken for a group header.
+                    let bar = if is_selected {
+                        Span::styled("▎", Style::default().fg(sel_bar_fg))
                     } else {
-                        " "
+                        Span::raw(" ")
+                    };
+                    let guide = if grouped {
+                        Span::styled("│ ", Style::default().fg(guide_fg))
+                    } else {
+                        Span::raw("  ")
                     };
                     let type_icon = workspace_type_icon(ws.info.workspace_type);
 
                     let mut left: Vec<Span> = vec![
-                        Span::raw(format!(" {} ", marker)),
+                        bar,
+                        guide,
                         Span::styled(type_icon, Style::default().fg(detail_color)),
                         Span::styled(
                             ws.name.clone(),
-                            if *index == app.active_workspace {
+                            if is_active {
                                 Style::default()
                                     .fg(theme.name_active)
                                     .add_modifier(Modifier::BOLD)
@@ -194,8 +223,6 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
 
                     let style = if is_selected {
                         Style::default().bg(sel_bg)
-                    } else if current_ws_idx % 2 == 1 {
-                        Style::default().bg(theme.alt_bg)
                     } else {
                         Style::default()
                     };
