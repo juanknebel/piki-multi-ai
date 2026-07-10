@@ -15,7 +15,7 @@ expression: content
 
 ╭ C-g ─────────────────────────────────────────────────────────────────────────╮
 │Workspace  N new  R worktree  e edit  d delete  D dashboard  i info  w switch │
-│           ) next  ( prev  ` last                                             │
+│           } next  { prev  ` last                                             │
 │Git        g lazygit                                                          │
 │Tabs       c new  x close  n next  p prev                                     │
 │Search     / find file  f search                                              │

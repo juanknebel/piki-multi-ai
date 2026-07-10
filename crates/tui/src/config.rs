@@ -265,8 +265,10 @@ fn default_app() -> HashMap<String, BindingValue> {
 
     // Workspaces
     m.insert("workspace_switcher".to_string(), BindingValue::one("prefix-w"));
-    m.insert("next_workspace".to_string(), BindingValue::one("prefix-)"));
-    m.insert("prev_workspace".to_string(), BindingValue::one("prefix-("));
+    // `}`/`{` — the "big next/prev" siblings of the tabs' n/p, mirroring vim's
+    // paragraph-jump feel (moved off `)`/`(`, which read as nothing in particular).
+    m.insert("next_workspace".to_string(), BindingValue::one("prefix-}"));
+    m.insert("prev_workspace".to_string(), BindingValue::one("prefix-{"));
     m.insert("toggle_prev_workspace".to_string(), BindingValue::one("prefix-`"));
     m.insert("new_workspace".to_string(), BindingValue::one("prefix-N"));
     m.insert("edit_workspace".to_string(), BindingValue::one("prefix-e"));

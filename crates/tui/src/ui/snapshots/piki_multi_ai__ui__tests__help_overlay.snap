@@ -17,7 +17,7 @@ expression: content
             │    C-g n/C-g p   Next/Prev tab                      │
             │    C-g 1..9      Jump to tab N                      │
             │    C-g w         Fuzzy workspace switcher           │
-            │    C-g )/C-g (   Next/Prev workspace                │
+            │    C-g }/C-g {   Next/Prev workspace                │
             │    C-g `         Previous workspace (toggle)        │
             │    C-g N         New workspace                      │
             │    C-g e         Edit workspace                     │
