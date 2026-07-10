@@ -91,3 +91,4 @@ Conventions:
 - Snapshot test new UI with `insta::assert_snapshot!` using `TestBackend` (tests in `ui/mod.rs`, snapshots in `ui/snapshots/`).
 - Mouse hit-testing: store `Rect` areas on `App`, check in `mouse.rs`.
 - Footer hints: context-sensitive per `AppMode`; cache key must reflect state transitions.
+- **Config key added/renamed/removed in `config.rs`?** Also update `config.example.toml` at the repo root — it is a hand-maintained, fully-commented template that `scripts/install.sh` copies to the user's `config.toml` on install. It drifts silently from the code defaults otherwise (nothing enforces parity). Keep every option commented out (the app supplies defaults; the file only overrides), except the active `theme = "default"`.
