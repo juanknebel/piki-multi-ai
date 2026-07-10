@@ -1,4 +1,5 @@
 mod action;
+mod action_catalog;
 mod app;
 mod clipboard;
 pub(crate) mod code_review;

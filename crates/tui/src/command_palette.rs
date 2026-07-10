@@ -33,137 +33,19 @@ impl CommandPaletteState {
     }
 }
 
-macro_rules! cmd {
-    ($id:expr, $label:expr, $cat:expr, $kb:expr) => {
-        PaletteCommand {
-            id: $id,
-            label: Cow::Borrowed($label),
-            category: $cat,
-            keybinding_action: $kb,
-            switch_workspace_idx: None,
-        }
-    };
-}
-
-/// Returns the static list of all palette commands.
+/// Returns the static list of all palette commands, derived from the shared
+/// action catalog so it never drifts from the other discoverability surfaces.
 fn all_commands() -> Vec<PaletteCommand> {
-    vec![
-        // Workspace
-        cmd!(
-            "new_workspace",
-            "New Workspace",
-            "Workspace",
-            "new_workspace"
-        ),
-        cmd!(
-            "clone_workspace",
-            "Create Worktree (GitHub-only)",
-            "Workspace",
-            "clone_workspace"
-        ),
-        cmd!(
-            "edit_workspace",
-            "Edit Workspace",
-            "Workspace",
-            "edit_workspace"
-        ),
-        cmd!(
-            "delete_workspace",
-            "Delete Workspace",
-            "Workspace",
-            "delete_workspace"
-        ),
-        cmd!("dashboard", "Dashboard", "Workspace", "dashboard"),
-        cmd!(
-            "workspace_info",
-            "Workspace Info",
-            "Workspace",
-            "workspace_info"
-        ),
-        cmd!(
-            "workspace_switcher",
-            "Switch Workspace (fuzzy)",
-            "Workspace",
-            "workspace_switcher"
-        ),
-        cmd!(
-            "next_workspace",
-            "Next Workspace",
-            "Workspace",
-            "next_workspace"
-        ),
-        cmd!(
-            "prev_workspace",
-            "Previous Workspace",
-            "Workspace",
-            "prev_workspace"
-        ),
-        cmd!(
-            "toggle_prev_workspace",
-            "Toggle Last Workspace",
-            "Workspace",
-            "toggle_prev_workspace"
-        ),
-        // Git
-        cmd!("git", "Git (lazygit)", "Git", "git"),
-        // Tabs
-        cmd!("new_tab", "New Tab", "Tabs", "new_tab"),
-        cmd!("close_tab", "Close Tab", "Tabs", "close_tab"),
-        cmd!("next_tab", "Next Tab", "Tabs", "next_tab"),
-        cmd!("prev_tab", "Previous Tab", "Tabs", "prev_tab"),
-        // Search
-        cmd!(
-            "fuzzy_search",
-            "Fuzzy File Search",
-            "Search",
-            "fuzzy_search"
-        ),
-        cmd!(
-            "terminal_search",
-            "Search in Terminal",
-            "Search",
-            "terminal_search"
-        ),
-        // View
-        cmd!("help", "Help", "View", "help"),
-        cmd!("about", "About", "View", "about"),
-        cmd!("logs", "Logs", "View", "logs"),
-        cmd!("scroll_mode", "Terminal Scroll Mode", "View", "scroll_mode"),
-        // Focus
-        cmd!("focus_left", "Focus Pane Left", "Focus", "focus_left"),
-        cmd!("focus_down", "Focus Pane Down", "Focus", "focus_down"),
-        cmd!("focus_up", "Focus Pane Up", "Focus", "focus_up"),
-        cmd!("focus_right", "Focus Pane Right", "Focus", "focus_right"),
-        // Layout
-        cmd!(
-            "sidebar_shrink",
-            "Shrink Sidebar",
-            "Layout",
-            "sidebar_shrink"
-        ),
-        cmd!("sidebar_grow", "Grow Sidebar", "Layout", "sidebar_grow"),
-        cmd!("split_up", "Grow Left Split", "Layout", "split_up"),
-        cmd!("split_down", "Shrink Left Split", "Layout", "split_down"),
-        // Clipboard
-        cmd!("copy", "Copy Terminal", "Clipboard", "copy"),
-        // Agents / Providers
-        cmd!(
-            "manage_agents",
-            "Manage Agents",
-            "Agents",
-            "manage_agents"
-        ),
-        cmd!(
-            "manage_providers",
-            "Manage Providers",
-            "Providers",
-            "manage_providers"
-        ),
-        // AI Chat
-        cmd!("chat_panel", "AI Chat", "View", "chat_panel"),
-        // App
-        cmd!("quit", "Quit", "App", "quit"),
-    ]
+    crate::action_catalog::catalog()
+        .iter()
+        .map(|a| PaletteCommand {
+            id: a.id,
+            label: Cow::Borrowed(a.label),
+            category: a.category,
+            keybinding_action: a.id,
+            switch_workspace_idx: None,
+        })
+        .collect()
 }
 
 /// Create a new CommandPaletteState with all commands and workspace switch entries.
