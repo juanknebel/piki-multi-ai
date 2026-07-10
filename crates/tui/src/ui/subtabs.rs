@@ -35,6 +35,14 @@ pub fn render(frame: &mut Frame, area: Rect, ws: &Workspace, theme: &Theme) {
                 .bg(theme.subtabs.inactive_bg)
         };
 
+        // A dim 1-based index makes the `prefix 1..9` tab-jump discoverable.
+        // Its 2-col width (" N") must stay mirrored in `subtab_index_at`.
+        if i < 9 {
+            spans.push(Span::styled(
+                format!(" {}", i + 1),
+                base_style.add_modifier(Modifier::DIM),
+            ));
+        }
         spans.push(Span::styled(format!(" {} ", icon), base_style));
         spans.push(Span::styled(
             label.to_string(),

@@ -223,9 +223,13 @@ pub(crate) fn subtab_index_at(app: &App, col: u16, area: Rect) -> Option<SubtabH
             .markdown_label
             .as_deref()
             .unwrap_or(tab.provider.label());
-        // Matches subtabs.rs: " icon " (3) + label + " g" (2, if agent glyph)
-        // + " ×" (2, if closable) + " " (1); blocks separated by a 1-col gap
+        // Matches subtabs.rs: " N" (2, if i < 9) + " icon " (3) + label
+        // + " g" (2, if agent glyph) + " ×" (2, if closable) + " " (1);
+        // blocks separated by a 1-col gap
         let mut tab_display_width = label.len() as u16 + 4;
+        if i < 9 {
+            tab_display_width += 2;
+        }
         if tab.cli_agent_snapshot().is_some() {
             tab_display_width += 2;
         }
