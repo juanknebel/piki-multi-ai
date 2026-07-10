@@ -1,0 +1,66 @@
+# piki-multi-ai configuration
+#
+# Every setting is OPTIONAL. The app ships with built-in defaults; this file
+# only needs the keys you want to override. Anything you omit keeps its
+# default, so it is safe to delete sections you do not care about.
+#
+# Location: $XDG_CONFIG_HOME/piki-multi/config.toml
+#           (usually ~/.config/piki-multi/config.toml)
+
+# ── Appearance ────────────────────────────────────────────────────────────
+
+# UI theme. Bundled themes live next to this file in the `themes/` directory
+# ($XDG_CONFIG_HOME/piki-multi/themes/*.toml); the value is the file name
+# without the `.toml`. Run the installer to (re)populate that directory.
+theme = "default"
+
+# Syntax-highlighting theme for file previews (a syntect theme name).
+# syntax_theme = "base16-ocean.dark"
+
+# ── Notifications ─────────────────────────────────────────────────────────
+# How background agent events reach you.
+
+# [notifications]
+# delivery: "system"   → OS desktop toast (default)
+#           "terminal" → OSC 9 escape, so the host terminal notifies
+#                        (works inside tmux / over ssh)
+#           "off"      → no notifications
+# delivery = "system"
+#
+# sound: play the built-in chimes (done / attention), independent of delivery.
+# sound = false
+#
+# Optional custom audio files (any format your system player decodes).
+# A leading `~/` is expanded to your home directory.
+#   sound_path            → fallback used when a specific one is unset
+#   sound_done_path       → played when an agent finishes
+#   sound_attention_path  → played when an agent needs you
+# sound_done_path = "~/sounds/done.wav"
+# sound_attention_path = "~/sounds/attention.wav"
+
+# ── Kanban board ──────────────────────────────────────────────────────────
+# Backing store for the task board.
+
+# [kanban]
+# provider = "local"
+# path = "~/.config/flow/boards/default"
+
+# ── Keybindings ───────────────────────────────────────────────────────────
+# The app uses a tmux-style one-shot prefix: press the prefix, then a key.
+# Pressing the prefix twice sends it literally to the focused terminal.
+# All app actions and every per-context table have built-in defaults; only
+# list the ones you want to change.
+
+# [keybindings]
+# prefix_key = "ctrl-g"
+
+# App actions fire after the prefix. A value starting with `prefix-` is a
+# prefix chord; anything else (e.g. "ctrl-shift-c") is a direct chord checked
+# before the focused pane. A value may be a single string or a list of
+# alternatives. Defaults include, for example:
+#   quit = "prefix-q"      new_workspace = "prefix-N"   command_palette = "prefix-:"
+#   git  = "prefix-g"      help = "prefix-?"            fuzzy_search = "prefix-/"
+
+# [keybindings.app]
+# quit = "prefix-Q"
+# focus_left = ["prefix-h", "prefix-left"]

@@ -27,8 +27,13 @@ while getopts "d:h" opt; do
     esac
 done
 
+# Anchor to the project root so build/cp/theme paths are cwd-independent.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$PROJECT_ROOT"
+
 echo "Building $BINARY_NAME in release mode..."
-cargo build --release
+cargo build --release -p agent-multi
 
 mkdir -p "$DEST_DIR"
 cp "target/release/$BINARY_NAME" "$DEST_DIR/$BINARY_NAME"
@@ -44,12 +49,11 @@ esac
 # Install themes
 mkdir -p "$THEMES_DIR"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 THEME_SRC="$PROJECT_ROOT/themes"
 
 if [ -d "$THEME_SRC" ]; then
     for theme_file in "$THEME_SRC"/*.toml; do
+        [ -e "$theme_file" ] || continue
         name="$(basename "$theme_file")"
         dest="$THEMES_DIR/$name"
         if [ -f "$dest" ]; then
@@ -63,9 +67,15 @@ else
     echo "Warning: themes/ directory not found, skipping theme install"
 fi
 
-# Create default config if it doesn't exist
+# Create default config if it doesn't exist, from the documented example.
 if [ ! -f "$CONFIG_DIR/config.toml" ]; then
-    echo 'theme = "default"' > "$CONFIG_DIR/config.toml"
+    CONFIG_EXAMPLE="$PROJECT_ROOT/config.example.toml"
+    if [ -f "$CONFIG_EXAMPLE" ]; then
+        cp "$CONFIG_EXAMPLE" "$CONFIG_DIR/config.toml"
+    else
+        # Fallback: the example is missing, write a minimal config.
+        echo 'theme = "default"' > "$CONFIG_DIR/config.toml"
+    fi
     echo "  Created $CONFIG_DIR/config.toml"
 fi
 
