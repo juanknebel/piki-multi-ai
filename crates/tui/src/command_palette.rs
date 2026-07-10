@@ -80,6 +80,30 @@ fn all_commands() -> Vec<PaletteCommand> {
             "Workspace",
             "workspace_info"
         ),
+        cmd!(
+            "workspace_switcher",
+            "Switch Workspace (fuzzy)",
+            "Workspace",
+            "workspace_switcher"
+        ),
+        cmd!(
+            "next_workspace",
+            "Next Workspace",
+            "Workspace",
+            "next_workspace"
+        ),
+        cmd!(
+            "prev_workspace",
+            "Previous Workspace",
+            "Workspace",
+            "prev_workspace"
+        ),
+        cmd!(
+            "toggle_prev_workspace",
+            "Toggle Last Workspace",
+            "Workspace",
+            "toggle_prev_workspace"
+        ),
         // Git
         cmd!("git", "Git (lazygit)", "Git", "git"),
         // Tabs
@@ -94,10 +118,22 @@ fn all_commands() -> Vec<PaletteCommand> {
             "Search",
             "fuzzy_search"
         ),
+        cmd!(
+            "terminal_search",
+            "Search in Terminal",
+            "Search",
+            "terminal_search"
+        ),
         // View
         cmd!("help", "Help", "View", "help"),
         cmd!("about", "About", "View", "about"),
         cmd!("logs", "Logs", "View", "logs"),
+        cmd!("scroll_mode", "Terminal Scroll Mode", "View", "scroll_mode"),
+        // Focus
+        cmd!("focus_left", "Focus Pane Left", "Focus", "focus_left"),
+        cmd!("focus_down", "Focus Pane Down", "Focus", "focus_down"),
+        cmd!("focus_up", "Focus Pane Up", "Focus", "focus_up"),
+        cmd!("focus_right", "Focus Pane Right", "Focus", "focus_right"),
         // Layout
         cmd!(
             "sidebar_shrink",
