@@ -19,6 +19,9 @@ fn parse_color(s: &str) -> Color {
         "LightMagenta" => Color::LightMagenta,
         "LightCyan" => Color::LightCyan,
         "White" => Color::White,
+        // Terminal default (no color) — lets ANSI fallback themes drop
+        // backgrounds instead of faking them.
+        "Reset" => Color::Reset,
         s if s.starts_with('#') && s.len() == 7 => {
             let r = u8::from_str_radix(&s[1..3], 16).unwrap_or(255);
             let g = u8::from_str_radix(&s[3..5], 16).unwrap_or(255);
@@ -55,6 +58,7 @@ struct ThemeToml {
     fuzzy_search: FuzzySearchToml,
     selection: SelectionToml,
     status: StatusToml,
+    diff: DiffToml,
 }
 
 #[derive(Deserialize, Default)]
@@ -194,6 +198,18 @@ struct StatusToml {
     exited: Option<String>,
 }
 
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct DiffToml {
+    add: Option<String>,
+    add_bg: Option<String>,
+    del: Option<String>,
+    del_bg: Option<String>,
+    context: Option<String>,
+    hunk: Option<String>,
+    comment: Option<String>,
+}
+
 // ── Cabina palette (primitive tokens) ──
 
 /// Build a Color from a `0xRRGGBB` literal.
@@ -202,11 +218,14 @@ const fn rgb(hex: u32) -> Color {
 }
 
 /// Primitive color tokens of the "Cabina" visual language. The roles in
-/// [`Theme`] derive from these; render code never reads the palette directly.
+/// [`Theme`] derive from these; render code prefers role tokens and may read
+/// `theme.palette` directly only for one-off semantic colors that have no
+/// role (e.g. a ✓/✗ verdict glyph).
 ///
 /// Two rules govern the mapping:
 /// - `iris` (the single accent) marks focus/interactivity and never state.
 /// - The semantic colors (`ok`/`warn`/`err`/`info`) mark state and never focus.
+#[derive(Clone, Copy)]
 pub struct Palette {
     /// Canvas: pane and terminal background.
     pub bg0: Color,
@@ -240,6 +259,10 @@ pub struct Palette {
     pub err: Color,
     /// Running activity, informative toasts, renames.
     pub info: Color,
+    /// Background tint of added diff lines.
+    pub diff_add_bg: Color,
+    /// Background tint of deleted diff lines.
+    pub diff_del_bg: Color,
 }
 
 impl Default for Palette {
@@ -261,6 +284,8 @@ impl Default for Palette {
             warn: rgb(0xE8B15E),
             err: rgb(0xF0717D),
             info: rgb(0x84B0F2),
+            diff_add_bg: rgb(0x1C271B),
+            diff_del_bg: rgb(0x2E1C22),
         }
     }
 }
@@ -374,6 +399,23 @@ pub struct SelectionTheme {
     pub fg: Color,
 }
 
+/// Diff rendering tokens (code review). The background tints make the diff
+/// readable at a peripheral glance, without reading the +/- markers.
+pub struct DiffTheme {
+    /// Added lines.
+    pub add: Color,
+    pub add_bg: Color,
+    /// Deleted lines.
+    pub del: Color,
+    pub del_bg: Color,
+    /// Unchanged context lines.
+    pub context: Color,
+    /// Hunk headers (@@ ... @@).
+    pub hunk: Color,
+    /// Inline review comments attached to lines.
+    pub comment: Color,
+}
+
 /// Unified agent/process status vocabulary. Every surface that shows agent
 /// state (Agents pane, tab bar, dashboard, workspace switcher) reads these
 /// tokens; the glyphs live in `ui::cli_agent_status_view`.
@@ -403,6 +445,10 @@ pub struct Theme {
     pub fuzzy_search: FuzzySearchTheme,
     pub selection: SelectionTheme,
     pub status: StatusTheme,
+    pub diff: DiffTheme,
+    /// The primitive tokens this theme derives from, for one-off semantic
+    /// colors that have no dedicated role.
+    pub palette: Palette,
 }
 
 impl Default for Theme {
@@ -512,6 +558,16 @@ impl Theme {
                 error: p.err,
                 exited: p.fg3,
             },
+            diff: DiffTheme {
+                add: p.ok,
+                add_bg: p.diff_add_bg,
+                del: p.err,
+                del_bg: p.diff_del_bg,
+                context: p.fg2,
+                hunk: p.info,
+                comment: p.warn,
+            },
+            palette: *p,
         }
     }
 }
@@ -645,6 +701,16 @@ impl Theme {
                 error: resolve(&t.status.error, d.status.error),
                 exited: resolve(&t.status.exited, d.status.exited),
             },
+            diff: DiffTheme {
+                add: resolve(&t.diff.add, d.diff.add),
+                add_bg: resolve(&t.diff.add_bg, d.diff.add_bg),
+                del: resolve(&t.diff.del, d.diff.del),
+                del_bg: resolve(&t.diff.del_bg, d.diff.del_bg),
+                context: resolve(&t.diff.context, d.diff.context),
+                hunk: resolve(&t.diff.hunk, d.diff.hunk),
+                comment: resolve(&t.diff.comment, d.diff.comment),
+            },
+            palette: d.palette,
         }
     }
 }
@@ -700,6 +766,11 @@ mod tests {
     #[test]
     fn test_parse_color_unknown() {
         assert_eq!(parse_color("garbage"), Color::White);
+    }
+
+    #[test]
+    fn test_parse_color_reset() {
+        assert_eq!(parse_color("Reset"), Color::Reset);
     }
 
     #[test]
