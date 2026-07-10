@@ -60,6 +60,11 @@ theme = "default"
 # prefix chord; anything else (e.g. "ctrl-shift-c") is a direct chord checked
 # before the focused pane. A value may be a single string, or an array of
 # alternatives.
+#
+# Convention: defaults avoid Shift. Every letter action uses an unshifted
+# lowercase key; there are no uppercase-letter defaults. The only Shift chords
+# are `:` (palette), `?` (help) and `}`/`{` (workspace next/prev). When you
+# rebind, an unshifted key (or `ctrl-<key>`) keeps that no-Shift feel.
 # [keybindings.app]
 # # Focus movement between panes
 # focus_left  = ["prefix-h", "prefix-left"]
