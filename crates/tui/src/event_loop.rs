@@ -703,12 +703,28 @@ pub(crate) async fn run(
             let any_running = app.agent_rows().iter().any(|&(wi, ti)| {
                 matches!(
                     app.workspaces[wi].tabs[ti].cli_agent_snapshot(),
-                    Some((piki_core::cli_agent::CliAgentStatus::Running, _))
+                    Some((piki_core::cli_agent::CliAgentStatus::Running, _, _))
                 )
             });
             if any_running {
                 app.spinner_frame = app.spinner_frame.wrapping_add(1);
                 app.needs_redraw = true;
+            }
+
+            // Looking at a tab acknowledges its "unseen news" marker, so the
+            // amber ● stops propagating once the user has actually seen it.
+            if app.active_pane == crate::app::ActivePane::MainPanel
+                && let Some(ws) = app.workspaces.get(app.active_workspace)
+                && let Some(tab) = ws.tabs.get(ws.active_tab)
+                && let Some(shell) = tab.pty_session.as_ref().and_then(|p| p.shell())
+            {
+                let mut guard = shell.lock();
+                if let Some(agent) = guard.state.cli_agent.as_mut()
+                    && agent.last_attention_at.is_some()
+                {
+                    agent.acknowledge();
+                    app.needs_redraw = true;
+                }
             }
 
             // Inactive workspaces — only check is_alive every ~1s

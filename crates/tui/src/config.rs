@@ -201,8 +201,6 @@ pub struct Keybindings {
     pub agents: HashMap<String, String>,
     #[serde(default = "default_markdown")]
     pub markdown: HashMap<String, String>,
-    #[serde(default = "default_workspace_list")]
-    pub workspace_list: HashMap<String, String>,
     #[serde(default = "default_help")]
     pub help: HashMap<String, String>,
     #[serde(default = "default_about")]
@@ -231,7 +229,6 @@ impl Default for Keybindings {
             scroll: default_scroll(),
             agents: default_agents(),
             markdown: default_markdown(),
-            workspace_list: default_workspace_list(),
             help: default_help(),
             about: default_about(),
             workspace_info: default_workspace_info(),
@@ -353,17 +350,6 @@ fn default_markdown() -> HashMap<String, String> {
 }
 
 
-fn default_workspace_list() -> HashMap<String, String> {
-    let mut m = HashMap::new();
-    m.insert("down".to_string(), "j".to_string());
-    m.insert("up".to_string(), "k".to_string());
-    m.insert("down_alt".to_string(), "down".to_string());
-    m.insert("up_alt".to_string(), "up".to_string());
-    m.insert("select".to_string(), "enter".to_string());
-    m.insert("delete".to_string(), "d".to_string());
-    m.insert("edit".to_string(), "e".to_string());
-    m
-}
 
 
 fn default_help() -> HashMap<String, String> {
@@ -633,16 +619,6 @@ impl Config {
     }
 
 
-    pub fn matches_workspace_list(&self, event: KeyEvent, action: &str) -> bool {
-        if let Some(binding) = self.keybindings.workspace_list.get(action) {
-            key_matches_platform(event, binding, self.platform)
-        } else {
-            let defaults = default_workspace_list();
-            defaults
-                .get(action)
-                .is_some_and(|b| key_matches_platform(event, b, self.platform))
-        }
-    }
 
 
     pub fn matches_help(&self, event: KeyEvent, action: &str) -> bool {
@@ -724,12 +700,6 @@ impl Config {
                 .get(action)
                 .cloned()
                 .or_else(|| default_markdown().get(action).cloned()),
-            "workspace_list" => self
-                .keybindings
-                .workspace_list
-                .get(action)
-                .cloned()
-                .or_else(|| default_workspace_list().get(action).cloned()),
             "help" => self
                 .keybindings
                 .help
@@ -1008,7 +978,6 @@ mod tests {
             ("editor", &cfg.keybindings.editor),
             ("new_tab", &cfg.keybindings.new_tab),
             ("new_workspace", &cfg.keybindings.new_workspace),
-            ("workspace_list", &cfg.keybindings.workspace_list),
             ("about", &cfg.keybindings.about),
             ("workspace_info", &cfg.keybindings.workspace_info),
             ("markdown", &cfg.keybindings.markdown),

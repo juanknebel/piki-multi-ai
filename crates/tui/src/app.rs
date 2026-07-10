@@ -263,13 +263,20 @@ impl Tab {
     /// cli-agent OSC 777 channel has produced at least one event. `None`
     /// for non-Claude tabs (or before the first event). Locks the shell
     /// mutex briefly — safe to call from pure render functions.
+    /// (status, attention pending, last summary) for this tab's cli agent.
+    /// `attention` is true while the agent has news the user hasn't looked
+    /// at yet (cleared when the tab is viewed).
     pub fn cli_agent_snapshot(
         &self,
-    ) -> Option<(piki_core::cli_agent::CliAgentStatus, Option<String>)> {
+    ) -> Option<(piki_core::cli_agent::CliAgentStatus, bool, Option<String>)> {
         let shell = self.pty_session.as_ref()?.shell()?;
         let guard = shell.lock();
         let agent = guard.state.cli_agent.as_ref()?;
-        Some((agent.status, agent.last_summary.clone()))
+        Some((
+            agent.status,
+            agent.last_attention_at.is_some(),
+            agent.last_summary.clone(),
+        ))
     }
 }
 
@@ -432,21 +439,21 @@ impl Workspace {
         self.changed_files.len()
     }
 
-    /// Worst agent status across this workspace's agent tabs, for the sidebar
-    /// rollup. Priority: needs-permission > running > waiting > done.
-    pub fn agent_status_rollup(&self) -> Option<piki_core::cli_agent::CliAgentStatus> {
+    /// Worst (status, attention) across this workspace's agent tabs, for the
+    /// sidebar rollup. Priority: needs-permission > unseen news > running.
+    pub fn agent_status_rollup(&self) -> Option<(piki_core::cli_agent::CliAgentStatus, bool)> {
         use piki_core::cli_agent::CliAgentStatus as S;
-        fn severity(s: &S) -> u8 {
-            match s {
-                S::WaitingPermission => 3,
-                S::Running => 2,
-                S::Idle => 1,
-                S::Done => 0,
+        fn severity(&(s, attention): &(S, bool)) -> u8 {
+            match (s, attention) {
+                (S::WaitingPermission, _) => 4,
+                (S::Idle | S::Done, true) => 3,
+                (S::Running, _) => 2,
+                _ => 0,
             }
         }
         self.tabs
             .iter()
-            .filter_map(|t| t.cli_agent_snapshot().map(|(status, _)| status))
+            .filter_map(|t| t.cli_agent_snapshot().map(|(status, att, _)| (status, att)))
             .max_by_key(severity)
     }
 
@@ -2153,7 +2160,9 @@ mod tests {
     // ── Workspace switch + focus tests ──
 
     #[test]
-    fn test_workspace_enter_focuses_main_panel() {
+    fn test_workspace_list_ignores_bare_keys() {
+        // The workspace list is display-only: no single-key actions on the
+        // focused pane — everything goes through the prefix.
         let mut app = App::new(
             test_storage(),
             &piki_core::paths::DataPaths::default_paths(),
@@ -2161,13 +2170,22 @@ mod tests {
         add_test_workspace(&mut app); // index 0
         add_test_workspace(&mut app); // index 1
         app.active_pane = ActivePane::WorkspaceList;
-        // Select the second workspace row in the sidebar
         app.selected_sidebar_row = 1;
 
-        // Press Enter to select workspace 1
-        crate::input::handle_key_event(&mut app, key(KeyCode::Enter));
-        assert_eq!(app.active_workspace, 1);
-        assert_eq!(app.active_pane, ActivePane::MainPanel);
+        for k in [
+            key(KeyCode::Enter),
+            key(KeyCode::Char('j')),
+            key(KeyCode::Char('k')),
+            key(KeyCode::Char('e')),
+            key(KeyCode::Char('d')),
+        ] {
+            crate::input::handle_key_event(&mut app, k);
+        }
+        assert_eq!(app.active_workspace, 0);
+        assert_eq!(app.selected_sidebar_row, 1);
+        assert_eq!(app.active_pane, ActivePane::WorkspaceList);
+        assert_eq!(app.mode, AppMode::Normal);
+        assert!(app.active_dialog.is_none());
     }
 
     // ── PTY idle notifications ──

@@ -36,7 +36,7 @@ use self::fuzzy_input::handle_fuzzy_search_input;
 use self::interaction::{
     handle_agents_interaction, handle_api_interaction,
     handle_kanban_interaction, handle_markdown_interaction, handle_terminal_interaction,
-    handle_workspace_interaction,
+    
 };
 
 /// Handle a bracketed paste event — insert full text at once into the active context.
@@ -421,7 +421,9 @@ fn handle_pane_key(app: &mut App, key: KeyEvent) -> Option<Action> {
                 handle_terminal_interaction(app, key)
             }
         }
-        ActivePane::WorkspaceList => handle_workspace_interaction(app, key),
+        // The workspace list is display-only: workspace actions live behind
+        // the prefix (switcher, new/edit/delete), never on bare keys.
+        ActivePane::WorkspaceList => None,
         ActivePane::Agents => handle_agents_interaction(app, key),
     }
 }

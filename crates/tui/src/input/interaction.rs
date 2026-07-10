@@ -4,7 +4,7 @@ use crate::action::Action;
 use crate::app::{App, AppMode};
 use crate::clipboard;
 use crate::config::has_ctrl;
-use crate::dialog_state::{DialogState, EditWorkspaceField};
+use crate::dialog_state::DialogState;
 use crate::helpers::copy_visible_terminal;
 
 pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
@@ -611,54 +611,6 @@ pub(super) fn handle_markdown_interaction(app: &mut App, key: KeyEvent) -> Optio
 }
 
 
-pub(super) fn handle_workspace_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    if app.config.matches_workspace_list(key, "down")
-        || app.config.matches_workspace_list(key, "down_alt")
-    {
-        app.select_next_sidebar_row();
-    } else if app.config.matches_workspace_list(key, "up")
-        || app.config.matches_workspace_list(key, "up_alt")
-    {
-        app.select_prev_sidebar_row();
-    } else if app.config.matches_workspace_list(key, "select") {
-        let items = app.sidebar_items();
-        match items.get(app.selected_sidebar_row) {
-            Some(crate::app::SidebarItem::GroupHeader { .. }) => {
-                app.toggle_selected_group();
-            }
-            Some(crate::app::SidebarItem::Workspace { index }) => {
-                app.switch_workspace_and_focus(*index);
-            }
-            None => {}
-        }
-    } else if app.config.matches_workspace_list(key, "delete") {
-        if !app.workspaces.is_empty()
-            && let Some(ws_idx) = app.sidebar_row_to_workspace(app.selected_sidebar_row)
-        {
-            app.active_dialog = Some(DialogState::ConfirmDelete { target: ws_idx });
-            app.mode = AppMode::ConfirmDelete;
-        }
-    } else if app.config.matches_workspace_list(key, "edit")
-        && let Some(ws_idx) = app.sidebar_row_to_workspace(app.selected_sidebar_row)
-        && let Some(ws) = app.workspaces.get(ws_idx)
-    {
-        let kanban = ws.kanban_path.clone().unwrap_or_default();
-        let prompt = ws.prompt.clone();
-        let group = ws.info.group.clone().unwrap_or_default();
-        app.active_dialog = Some(DialogState::EditWorkspace {
-            target: ws_idx,
-            kanban_cursor: kanban.chars().count(),
-            kanban,
-            prompt_cursor: prompt.chars().count(),
-            prompt,
-            group_cursor: group.chars().count(),
-            group,
-            active_field: EditWorkspaceField::KanbanPath,
-        });
-        app.mode = AppMode::EditWorkspace;
-    }
-    None
-}
 
 const HTTP_METHODS: &[&str] = &["GET", "POST", "PUT", "DELETE", "PATCH", "GRPC"];
 

@@ -143,8 +143,8 @@ fn render_normal_status(frame: &mut Frame, area: Rect, app: &App) {
 
     // Agent activity does not repeat in the status bar: running lives in the
     // Agents pane; only an actionable state for the active tab surfaces here.
-    if let Some((status, _)) = ws.current_tab().and_then(|t| t.cli_agent_snapshot())
-        && let Some((glyph, color)) = crate::ui::actionable_status_view(&app.theme, status)
+    if let Some((status, attention, _)) = ws.current_tab().and_then(|t| t.cli_agent_snapshot())
+        && let Some((glyph, color)) = crate::ui::actionable_status_view(&app.theme, status, attention)
     {
         left.push(sep.clone());
         left.push(Span::styled(
@@ -501,19 +501,12 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
         ],
         _ => {
             if app.active_pane == ActivePane::WorkspaceList {
+                // Display-only pane: everything goes through the prefix.
                 vec![
-                    (
-                        format!(
-                            "{}/{}",
-                            cfg.get_binding("workspace_list", "up"),
-                            cfg.get_binding("workspace_list", "down")
-                        ),
-                        "select",
-                    ),
-                    (cfg.get_binding("workspace_list", "select"), "open"),
-                    (cfg.get_binding("workspace_list", "edit"), "edit ws"),
-                    (cfg.get_binding("workspace_list", "delete"), "delete ws"),
-                    (cfg.prefix_display(), "prefix"),
+                    (cfg.get_binding("app", "workspace_switcher"), "workspaces"),
+                    (cfg.get_binding("app", "new_workspace"), "new ws"),
+                    (cfg.get_binding("app", "edit_workspace"), "edit ws"),
+                    (cfg.get_binding("app", "delete_workspace"), "delete ws"),
                 ]
             } else if app.active_pane == ActivePane::Agents {
                 vec![

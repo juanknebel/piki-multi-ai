@@ -145,9 +145,9 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                     // actionable agent status, changed-file count, ahead/behind.
                     // Activity (running) stays in the Agents pane.
                     let mut right: Vec<Span> = Vec::new();
-                    if let Some(status) = ws.agent_status_rollup()
+                    if let Some((status, attention)) = ws.agent_status_rollup()
                         && let Some((glyph, color)) =
-                            crate::ui::actionable_status_view(&app.theme, status)
+                            crate::ui::actionable_status_view(&app.theme, status, attention)
                     {
                         right.push(Span::styled(
                             glyph.to_string(),
@@ -264,7 +264,9 @@ pub(super) fn render_agents_pane(frame: &mut Frame, area: Rect, app: &App) {
             let tab = &ws.tabs[ti];
 
             let (glyph, status_label, status_color) = match tab.cli_agent_snapshot() {
-                Some((status, _)) => crate::ui::cli_agent_status_view(app, status),
+                Some((status, attention, _)) => {
+                    crate::ui::cli_agent_status_view(app, status, attention)
+                }
                 None => crate::ui::agent_tab_indicator(app, tab),
             };
             // A non-Custom tab only lists here because its cli-agent channel

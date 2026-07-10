@@ -143,9 +143,12 @@ impl CliAgentState {
     pub fn apply(&mut self, event: &CliAgentEvent) {
         self.session_id = Some(event.session_id().to_string());
         match event {
-            CliAgentEvent::SessionStart { .. }
-            | CliAgentEvent::UserPromptSubmit { .. }
-            | CliAgentEvent::PostToolUse { .. } => {
+            CliAgentEvent::SessionStart { .. } => {
+                // A fresh session sits at the prompt waiting for input — it
+                // is not running until a prompt is submitted.
+                self.status = CliAgentStatus::Idle;
+            }
+            CliAgentEvent::UserPromptSubmit { .. } | CliAgentEvent::PostToolUse { .. } => {
                 self.status = CliAgentStatus::Running;
             }
             CliAgentEvent::PermissionRequest { summary, .. } => {

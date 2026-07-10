@@ -29,6 +29,7 @@ pub(crate) const SPINNER_FRAMES: [&str; 10] =
 pub(crate) fn cli_agent_status_view(
     app: &crate::app::App,
     status: piki_core::cli_agent::CliAgentStatus,
+    attention: bool,
 ) -> (&'static str, &'static str, ratatui::style::Color) {
     use piki_core::cli_agent::CliAgentStatus as S;
     let t = &app.theme.status;
@@ -39,7 +40,10 @@ pub(crate) fn cli_agent_status_view(
             t.running,
         ),
         S::WaitingPermission => ("⚠", "permission", t.needs_you),
-        S::Idle => ("●", "needs you", t.needs_you),
+        // Idle only shouts when it has news you haven't seen; a freshly
+        // started or already-viewed agent sits quiet at the prompt.
+        S::Idle if attention => ("●", "needs you", t.needs_you),
+        S::Idle => ("●", "idle", t.exited),
         S::Done => ("✓", "done", t.done),
     }
 }
@@ -50,12 +54,14 @@ pub(crate) fn cli_agent_status_view(
 pub(crate) fn actionable_status_view(
     theme: &crate::theme::Theme,
     status: piki_core::cli_agent::CliAgentStatus,
+    attention: bool,
 ) -> Option<(&'static str, ratatui::style::Color)> {
     use piki_core::cli_agent::CliAgentStatus as S;
     match status {
         S::WaitingPermission => Some(("⚠", theme.status.needs_you)),
-        S::Idle => Some(("●", theme.status.needs_you)),
-        S::Running | S::Done => None,
+        // "Has news you haven't seen" propagates; quiet idle/done doesn't.
+        S::Idle | S::Done if attention => Some(("●", theme.status.needs_you)),
+        _ => None,
     }
 }
 
