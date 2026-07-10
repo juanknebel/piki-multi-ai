@@ -1,12 +1,13 @@
 use ratatui::Frame;
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph};
 
 use crate::app::App;
 use crate::code_review::{CodeReviewState, ReviewFocus};
 use crate::config::{Platform, format_binding_for_platform};
+use crate::theme::Theme;
 use piki_core::github::{DiffLineType, ParsedDiff, ReviewVerdict};
 
 /// Render the full-screen code review layout
@@ -39,9 +40,9 @@ pub(super) fn render_fullscreen(frame: &mut Frame, area: Rect, app: &mut App) {
             let block = Block::default()
                 .title(" Code Review ")
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Yellow));
+                .border_style(Style::default().fg(app.theme.palette.line));
             let text = Paragraph::new("  Loading PR data...")
-                .style(Style::default().fg(Color::DarkGray))
+                .style(Style::default().fg(app.theme.palette.fg3))
                 .block(block);
             frame.render_widget(text, area);
             return;
@@ -56,7 +57,7 @@ pub(super) fn render_fullscreen(frame: &mut Frame, area: Rect, app: &mut App) {
     ])
     .areas(area);
 
-    render_pr_header(frame, header_area, state);
+    render_pr_header(frame, header_area, state, &app.theme);
 
     // Body: file list | diff (split ratio from app state)
     let split_pct = app.code_review_split_pct;
@@ -66,30 +67,30 @@ pub(super) fn render_fullscreen(frame: &mut Frame, area: Rect, app: &mut App) {
     ])
     .areas(body_area);
 
-    render_file_list(frame, files_area, state);
-    render_diff(frame, diff_area, state, &app.syntax);
-    render_footer(frame, footer_area, state, app.config.platform);
+    render_file_list(frame, files_area, state, &app.theme);
+    render_diff(frame, diff_area, state, &app.syntax, &app.theme);
+    render_footer(frame, footer_area, state, app.config.platform, &app.theme);
 
     // Comment input overlay (on top of everything)
     if state.editing_comment.is_some() {
-        render_comment_input_overlay(frame, area, state);
+        render_comment_input_overlay(frame, area, state, &app.theme);
     }
 }
 
 /// Render PR info header bar
-fn render_pr_header(frame: &mut Frame, area: Rect, state: &CodeReviewState) {
+fn render_pr_header(frame: &mut Frame, area: Rect, state: &CodeReviewState, theme: &Theme) {
     let pr = &state.pr_info;
     let state_color = if pr.state == "OPEN" {
-        Color::Green
+        theme.palette.ok
     } else {
-        Color::Red
+        theme.palette.err
     };
 
     let line = Line::from(vec![
         Span::styled(
             format!(" PR #{}: ", pr.number),
             Style::default()
-                .fg(Color::Cyan)
+                .fg(theme.palette.info)
                 .add_modifier(Modifier::BOLD),
         ),
         Span::styled(&pr.title, Style::default().add_modifier(Modifier::BOLD)),
@@ -98,38 +99,38 @@ fn render_pr_header(frame: &mut Frame, area: Rect, state: &CodeReviewState) {
         Span::raw("  "),
         Span::styled(
             format!("{} ← {}", pr.base_ref_name, pr.head_ref_name),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(theme.palette.fg2),
         ),
         Span::raw("  "),
         Span::styled(
             format!("+{}", pr.additions),
-            Style::default().fg(Color::Green),
+            Style::default().fg(theme.diff.add),
         ),
         Span::raw(" "),
         Span::styled(
             format!("-{}", pr.deletions),
-            Style::default().fg(Color::Red),
+            Style::default().fg(theme.diff.del),
         ),
         Span::raw("  "),
         Span::styled(
             format!("{} files", state.files.len()),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(theme.palette.fg2),
         ),
     ]);
 
     let block = Block::default()
         .borders(Borders::BOTTOM)
-        .border_style(Style::default().fg(Color::DarkGray));
+        .border_style(Style::default().fg(theme.palette.line));
     let header = Paragraph::new(line).block(block);
     frame.render_widget(header, area);
 }
 
 /// Render the scrollable file list with selection and comment count badges
-fn render_file_list(frame: &mut Frame, area: Rect, state: &CodeReviewState) {
+fn render_file_list(frame: &mut Frame, area: Rect, state: &CodeReviewState, theme: &Theme) {
     let focus_color = if state.focus == ReviewFocus::FileList {
-        Color::Cyan
+        theme.palette.iris
     } else {
-        Color::DarkGray
+        theme.palette.line
     };
 
     let block = Block::default()
@@ -141,7 +142,8 @@ fn render_file_list(frame: &mut Frame, area: Rect, state: &CodeReviewState) {
     frame.render_widget(block, area);
 
     if state.files.is_empty() {
-        let text = Paragraph::new("  No files changed").style(Style::default().fg(Color::DarkGray));
+        let text =
+            Paragraph::new("  No files changed").style(Style::default().fg(theme.palette.fg3));
         frame.render_widget(text, inner);
         return;
     }
@@ -164,10 +166,10 @@ fn render_file_list(frame: &mut Frame, area: Rect, state: &CodeReviewState) {
 
             let style = if selected {
                 Style::default()
-                    .fg(Color::White)
+                    .fg(theme.palette.fg0)
                     .add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(Color::Gray)
+                Style::default().fg(theme.palette.fg1)
             };
 
             let mut spans = vec![
@@ -176,12 +178,12 @@ fn render_file_list(frame: &mut Frame, area: Rect, state: &CodeReviewState) {
                 Span::raw(" "),
                 Span::styled(
                     format!("+{}", file.additions),
-                    Style::default().fg(Color::Green),
+                    Style::default().fg(theme.diff.add),
                 ),
                 Span::raw(" "),
                 Span::styled(
                     format!("-{}", file.deletions),
-                    Style::default().fg(Color::Red),
+                    Style::default().fg(theme.diff.del),
                 ),
             ];
 
@@ -189,7 +191,7 @@ fn render_file_list(frame: &mut Frame, area: Rect, state: &CodeReviewState) {
                 spans.push(Span::raw(" "));
                 spans.push(Span::styled(
                     format!("[{}]", comment_count),
-                    Style::default().fg(Color::Yellow),
+                    Style::default().fg(theme.diff.comment),
                 ));
             }
 
@@ -373,11 +375,12 @@ fn render_diff(
     area: Rect,
     state: &CodeReviewState,
     syntax_hl: &crate::syntax::SyntaxHighlighter,
+    theme: &Theme,
 ) {
     let focus_color = if state.focus == ReviewFocus::DiffView {
-        Color::Cyan
+        theme.palette.iris
     } else {
-        Color::DarkGray
+        theme.palette.line
     };
 
     let title = if let Some(path) = state.current_file_path() {
@@ -425,12 +428,12 @@ fn render_diff(
 
                     let style = match diff_line.line_type {
                         DiffLineType::HunkHeader => Style::default()
-                            .fg(Color::Cyan)
+                            .fg(theme.diff.hunk)
                             .add_modifier(Modifier::BOLD),
                         DiffLineType::FileHeader => Style::default()
-                            .fg(Color::White)
+                            .fg(theme.palette.fg0)
                             .add_modifier(Modifier::BOLD),
-                        _ => Style::default().fg(Color::Gray),
+                        _ => Style::default().fg(theme.palette.fg1),
                     };
                     let style = if is_cursor {
                         style.add_modifier(Modifier::REVERSED)
@@ -480,6 +483,7 @@ fn render_diff(
                         true,
                         syntax_hl,
                         file_syntax,
+                        theme,
                     );
 
                     // Vertical separator
@@ -490,7 +494,7 @@ fn render_diff(
                             sep_x,
                             y,
                             "\u{2502}",
-                            Style::default().fg(Color::DarkGray),
+                            Style::default().fg(theme.palette.line),
                             1,
                         );
                     }
@@ -510,6 +514,7 @@ fn render_diff(
                         false,
                         syntax_hl,
                         file_syntax,
+                        theme,
                     );
                 }
                 SplitRow::CommentHeader { diff_idx, side } => {
@@ -525,6 +530,7 @@ fn render_diff(
                         *diff_idx,
                         *side,
                         CommentDecorPart::Header,
+                        theme,
                     );
                 }
                 SplitRow::CommentBody { diff_idx, side } => {
@@ -540,6 +546,7 @@ fn render_diff(
                         *diff_idx,
                         *side,
                         CommentDecorPart::Body,
+                        theme,
                     );
                 }
                 SplitRow::CommentFooter { diff_idx, side } => {
@@ -555,16 +562,18 @@ fn render_diff(
                         *diff_idx,
                         *side,
                         CommentDecorPart::Footer,
+                        theme,
                     );
                 }
             }
         }
     } else if state.loading {
-        let text = Paragraph::new("  Loading diff...").style(Style::default().fg(Color::DarkGray));
+        let text =
+            Paragraph::new("  Loading diff...").style(Style::default().fg(theme.palette.fg3));
         frame.render_widget(text, inner);
     } else {
         let text = Paragraph::new("  Select a file and press Enter to view diff")
-            .style(Style::default().fg(Color::DarkGray));
+            .style(Style::default().fg(theme.palette.fg3));
         frame.render_widget(text, inner);
     }
 }
@@ -583,6 +592,7 @@ fn render_half_line(
     is_left: bool,
     syntax_hl: &crate::syntax::SyntaxHighlighter,
     file_syntax: Option<&syntect::parsing::SyntaxReference>,
+    theme: &Theme,
 ) {
     if half_width < gutter + 1 {
         return;
@@ -605,20 +615,26 @@ fn render_half_line(
 
             let gutter_style = if is_cursor {
                 Style::default()
-                    .fg(Color::DarkGray)
+                    .fg(theme.palette.fg3)
                     .add_modifier(Modifier::REVERSED)
             } else {
-                Style::default().fg(Color::DarkGray)
+                Style::default().fg(theme.palette.fg3)
             };
 
             buf_set_string_clipped(frame.buffer_mut(), x, y, &ln_str, gutter_style, gutter);
 
             // Content: determine base style and prefix from diff line type
             let (base_style, prefix) = match diff_line.line_type {
-                DiffLineType::Addition => (Style::default().fg(Color::Green), "+"),
-                DiffLineType::Deletion => (Style::default().fg(Color::Red), "-"),
-                DiffLineType::Context => (Style::default().fg(Color::Gray), " "),
-                _ => (Style::default().fg(Color::Gray), " "),
+                DiffLineType::Addition => (
+                    Style::default().fg(theme.diff.add).bg(theme.diff.add_bg),
+                    "+",
+                ),
+                DiffLineType::Deletion => (
+                    Style::default().fg(theme.diff.del).bg(theme.diff.del_bg),
+                    "-",
+                ),
+                DiffLineType::Context => (Style::default().fg(theme.diff.context), " "),
+                _ => (Style::default().fg(theme.diff.context), " "),
             };
 
             let base_style = if is_cursor {
@@ -682,10 +698,10 @@ fn render_half_line(
             // Empty filler — dim fill
             let fill_style = if is_cursor {
                 Style::default()
-                    .fg(Color::DarkGray)
+                    .fg(theme.palette.fg3)
                     .add_modifier(Modifier::REVERSED)
             } else {
-                Style::default().fg(Color::DarkGray)
+                Style::default().fg(theme.palette.fg3)
             };
             let fill = " ".repeat(half_width as usize);
             buf_set_string_clipped(frame.buffer_mut(), x, y, &fill, fill_style, half_width);
@@ -714,6 +730,7 @@ fn render_comment_decoration_row(
     diff_idx: usize,
     side: CommentSide,
     part: CommentDecorPart,
+    theme: &Theme,
 ) {
     let diff_line = &diff.lines[diff_idx];
     let (ln, side_str) = match side {
@@ -721,7 +738,7 @@ fn render_comment_decoration_row(
         CommentSide::Right => (diff_line.new_line.unwrap_or(0), "RIGHT"),
     };
 
-    let comment_style = Style::default().fg(Color::Yellow);
+    let comment_style = Style::default().fg(theme.diff.comment);
 
     // Determine the x offset and available width for this side
     let (side_x, side_width) = match side {
@@ -761,7 +778,7 @@ fn render_comment_decoration_row(
             inner.x + left_half,
             y,
             "\u{2502}",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(theme.palette.line),
             1,
         );
     }
@@ -811,7 +828,13 @@ fn buf_set_spans_clipped(
 }
 
 /// Render context-sensitive footer keybindings
-fn render_footer(frame: &mut Frame, area: Rect, state: &CodeReviewState, platform: Platform) {
+fn render_footer(
+    frame: &mut Frame,
+    area: Rect,
+    state: &CodeReviewState,
+    platform: Platform,
+    theme: &Theme,
+) {
     let keys = if state.editing_comment.is_some() {
         "[Enter] save comment  [Esc] cancel".to_string()
     } else if state.show_submit {
@@ -836,13 +859,18 @@ fn render_footer(frame: &mut Frame, area: Rect, state: &CodeReviewState, platfor
 
     let line = Line::from(Span::styled(
         format!(" {} ", keys),
-        Style::default().fg(Color::DarkGray),
+        Style::default().fg(theme.palette.fg3),
     ));
     frame.render_widget(Paragraph::new(line), area);
 }
 
 /// Render the comment input overlay
-fn render_comment_input_overlay(frame: &mut Frame, area: Rect, state: &CodeReviewState) {
+fn render_comment_input_overlay(
+    frame: &mut Frame,
+    area: Rect,
+    state: &CodeReviewState,
+    theme: &Theme,
+) {
     let ec = match &state.editing_comment {
         Some(ec) => ec,
         None => return,
@@ -860,7 +888,7 @@ fn render_comment_input_overlay(frame: &mut Frame, area: Rect, state: &CodeRevie
     let block = Block::default()
         .title(title)
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Yellow));
+        .border_style(Style::default().fg(theme.palette.iris));
     let inner = block.inner(popup);
     frame.render_widget(block, popup);
 
@@ -873,9 +901,9 @@ fn render_comment_input_overlay(frame: &mut Frame, area: Rect, state: &CodeRevie
         Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).areas(inner);
 
     let body_text = if ec.body.is_empty() {
-        Paragraph::new("Type comment...").style(Style::default().fg(Color::DarkGray))
+        Paragraph::new("Type comment...").style(Style::default().fg(theme.palette.fg3))
     } else {
-        Paragraph::new(ec.body.as_str()).style(Style::default().fg(Color::White))
+        Paragraph::new(ec.body.as_str()).style(Style::default().fg(theme.palette.fg0))
     };
     frame.render_widget(body_text, body_area);
 
@@ -888,7 +916,7 @@ fn render_comment_input_overlay(frame: &mut Frame, area: Rect, state: &CodeRevie
 
     let hints = Line::from(Span::styled(
         " [Enter] save  [Esc] cancel ",
-        Style::default().fg(Color::DarkGray),
+        Style::default().fg(theme.palette.fg3),
     ));
     frame.render_widget(
         Paragraph::new(hints).alignment(Alignment::Center),
@@ -907,6 +935,7 @@ pub(super) fn render_submit_overlay(frame: &mut Frame, area: Rect, app: &App) {
         None => return,
     };
 
+    let theme = &app.theme;
     let draft = &state.draft;
     let comment_count = draft.comments.len();
 
@@ -922,7 +951,7 @@ pub(super) fn render_submit_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let block = Block::default()
         .title(" Submit Review ")
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan));
+        .border_style(Style::default().fg(theme.palette.line_strong));
     let inner = block.inner(popup);
     frame.render_widget(block, popup);
 
@@ -958,11 +987,16 @@ pub(super) fn render_submit_overlay(frame: &mut Frame, area: Rect, app: &App) {
             let selected = *v == draft.verdict;
             let marker = if selected { "\u{25cf}" } else { "\u{25cb}" };
             let style = if selected {
+                let verdict_color = match v {
+                    ReviewVerdict::Approve => theme.palette.ok,
+                    ReviewVerdict::RequestChanges => theme.palette.err,
+                    ReviewVerdict::Comment => theme.palette.info,
+                };
                 Style::default()
-                    .fg(Color::Cyan)
+                    .fg(verdict_color)
                     .add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(Color::Gray)
+                Style::default().fg(theme.palette.fg1)
             };
             vec![
                 Span::raw("  "),
@@ -984,10 +1018,13 @@ pub(super) fn render_submit_overlay(frame: &mut Frame, area: Rect, app: &App) {
                 comment_count,
                 if comment_count == 1 { "" } else { "s" }
             ),
-            Style::default().fg(Color::Yellow),
+            Style::default().fg(theme.diff.comment),
         )
     } else {
-        Span::styled("  No inline comments", Style::default().fg(Color::DarkGray))
+        Span::styled(
+            "  No inline comments",
+            Style::default().fg(theme.palette.fg3),
+        )
     };
     frame.render_widget(Paragraph::new(Line::from(comments_text)), comments_area);
 
@@ -1000,7 +1037,9 @@ pub(super) fn render_submit_overlay(frame: &mut Frame, area: Rect, app: &App) {
         frame.render_widget(
             Paragraph::new(Line::from(Span::styled(
                 format!("  {}", err_text),
-                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(theme.palette.err)
+                    .add_modifier(Modifier::BOLD),
             ))),
             error_area,
         );
@@ -1009,14 +1048,14 @@ pub(super) fn render_submit_overlay(frame: &mut Frame, area: Rect, app: &App) {
     // Body input area
     let body_block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::White));
+        .border_style(Style::default().fg(theme.palette.iris));
     let body_inner = body_block.inner(body_area);
     frame.render_widget(body_block, body_area);
 
     let body_text = if draft.body.is_empty() {
-        Paragraph::new("Type review comment...").style(Style::default().fg(Color::DarkGray))
+        Paragraph::new("Type review comment...").style(Style::default().fg(theme.palette.fg3))
     } else {
-        Paragraph::new(draft.body.as_str()).style(Style::default().fg(Color::White))
+        Paragraph::new(draft.body.as_str()).style(Style::default().fg(theme.palette.fg0))
     };
     frame.render_widget(body_text, body_inner);
 
@@ -1028,7 +1067,7 @@ pub(super) fn render_submit_overlay(frame: &mut Frame, area: Rect, app: &App) {
     }
 
     // Hints (2 lines so everything is visible)
-    let hint_style = Style::default().fg(Color::DarkGray);
+    let hint_style = Style::default().fg(theme.palette.fg3);
     let hints = vec![
         Line::from(Span::styled(
             " [Tab] cycle verdict   [Enter] submit ",
