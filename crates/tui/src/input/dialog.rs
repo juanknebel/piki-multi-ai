@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField, NewWorkspaceSource};
@@ -753,27 +753,44 @@ pub(super) fn handle_dashboard_input(app: &mut App, key: KeyEvent) -> Option<Act
 }
 
 pub(super) fn handle_help_input(app: &mut App, key: KeyEvent) -> Option<Action> {
-    let Some(DialogState::Help { ref mut scroll }) = app.active_dialog else {
+    // The help browser is a live search box: printable keys edit the filter,
+    // so navigation is on the non-textual keys only (arrows / PgUp-PgDn /
+    // Home-End / Ctrl-D-U). Esc clears a non-empty filter, then closes.
+    let Some(DialogState::Help {
+        ref mut scroll,
+        ref mut filter,
+    }) = app.active_dialog
+    else {
         return None;
     };
-
-    if app.config.matches_help(key, "down") || app.config.matches_help(key, "down_alt") {
-        *scroll = scroll.saturating_add(1);
-    } else if app.config.matches_help(key, "up") || app.config.matches_help(key, "up_alt") {
-        *scroll = scroll.saturating_sub(1);
-    } else if app.config.matches_help(key, "page_down") {
-        *scroll = scroll.saturating_add(10);
-    } else if app.config.matches_help(key, "page_up") {
-        *scroll = scroll.saturating_sub(10);
-    } else if app.config.matches_help(key, "scroll_top") {
-        *scroll = 0;
-    } else if app.config.matches_help(key, "scroll_bottom") {
-        *scroll = u16::MAX;
-    } else if app.config.matches_help(key, "exit")
-        || app.config.matches_help(key, "exit_alt")
-        || app.config.matches_help(key, "exit_help")
-    {
-        dismiss_dialog(app);
+    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    let alt = key.modifiers.contains(KeyModifiers::ALT);
+    match key.code {
+        KeyCode::Esc => {
+            if filter.is_empty() {
+                dismiss_dialog(app);
+            } else {
+                filter.clear();
+                *scroll = 0;
+            }
+        }
+        KeyCode::Down => *scroll = scroll.saturating_add(1),
+        KeyCode::Up => *scroll = scroll.saturating_sub(1),
+        KeyCode::PageDown => *scroll = scroll.saturating_add(10),
+        KeyCode::PageUp => *scroll = scroll.saturating_sub(10),
+        KeyCode::Char('d') if ctrl => *scroll = scroll.saturating_add(10),
+        KeyCode::Char('u') if ctrl => *scroll = scroll.saturating_sub(10),
+        KeyCode::Home => *scroll = 0,
+        KeyCode::End => *scroll = u16::MAX,
+        KeyCode::Backspace => {
+            filter.pop();
+            *scroll = 0;
+        }
+        KeyCode::Char(c) if !ctrl && !alt => {
+            filter.push(c);
+            *scroll = 0;
+        }
+        _ => {}
     }
     None
 }

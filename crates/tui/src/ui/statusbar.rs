@@ -411,24 +411,13 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             (cfg.format_binding("ctrl-a"), "agent"),
             ("Esc".to_string(), "hide"),
         ],
+        // The help browser is a live search box: printable keys filter,
+        // arrows / PgUp-PgDn scroll, Esc clears the filter then closes.
         AppMode::Help => vec![
-            (
-                format!(
-                    "{}/{}",
-                    cfg.get_binding("help", "up"),
-                    cfg.get_binding("help", "down")
-                ),
-                "scroll",
-            ),
-            (
-                format!(
-                    "{}/{}",
-                    cfg.get_binding("help", "page_up"),
-                    cfg.get_binding("help", "page_down")
-                ),
-                "page",
-            ),
-            (cfg.get_binding("help", "exit"), "close"),
+            ("type".to_string(), "filter"),
+            ("↑↓".to_string(), "scroll"),
+            ("PgUp/PgDn".to_string(), "page"),
+            ("Esc".to_string(), "clear/close"),
         ],
         AppMode::About => vec![(cfg.get_binding("about", "exit"), "close")],
         AppMode::WorkspaceInfo => vec![

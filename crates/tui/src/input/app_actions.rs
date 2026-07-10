@@ -58,7 +58,7 @@ pub(crate) fn open_confirm_quit(app: &mut App) -> Option<Action> {
 }
 
 pub(crate) fn open_help(app: &mut App) -> Option<Action> {
-    app.active_dialog = Some(DialogState::Help { scroll: 0 });
+    app.active_dialog = Some(DialogState::Help { scroll: 0, filter: String::new() });
     app.mode = AppMode::Help;
     None
 }

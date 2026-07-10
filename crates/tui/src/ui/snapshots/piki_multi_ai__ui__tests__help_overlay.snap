@@ -1,9 +1,11 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 355
+assertion_line: 375
 expression: content
 ---
             ╭ Help ───────────────────────────────────────────────╮
+            │  Type to filter · ↑↓ PgUp/PgDn scroll · Esc close   │
+            │                                                     │
             │                                                     │
             │  Prefix key: C-g (tmux-style)                       │
             │    Keys always go to the focused pane;              │
@@ -40,6 +42,4 @@ expression: content
             │  Terminal scroll mode (C-g [)                       │
             │    k/j           Scroll up/down                     │
             │    C-u/C-d       Page up/down                       │
-            │    g/G           Top/Bottom                         │
-            │    /             Search                             │
-            ╰────────────────────────────────────── [1/149 ↑k/j↓] ╯
+            ╰───────────────────────────────────────── [1/151 ↑↓] ╯

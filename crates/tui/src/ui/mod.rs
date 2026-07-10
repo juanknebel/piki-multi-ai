@@ -365,7 +365,7 @@ mod tests {
         // Force Linux so the snapshot is stable across CI runners. On macOS
         // the footer renders `cmd-*` instead of `ctrl-*`.
         app.config.platform = crate::config::Platform::Linux;
-        app.active_dialog = Some(DialogState::Help { scroll: 0 });
+        app.active_dialog = Some(DialogState::Help { scroll: 0, filter: String::new() });
         terminal
             .draw(|frame| {
                 super::dialogs::render_help_overlay(frame, frame.area(), &app);

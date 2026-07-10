@@ -1652,15 +1652,16 @@ mod tests {
 
         let get_scroll = |app: &App| -> u16 {
             match &app.active_dialog {
-                Some(DialogState::Help { scroll }) => *scroll,
+                Some(DialogState::Help { scroll, .. }) => *scroll,
                 _ => panic!("Expected Help dialog"),
             }
         };
 
-        crate::input::handle_key_event(&mut app, key(KeyCode::Char('j')));
+        // The help browser is a search box now: arrows scroll, letters filter.
+        crate::input::handle_key_event(&mut app, key(KeyCode::Down));
         assert_eq!(get_scroll(&app), 1);
 
-        crate::input::handle_key_event(&mut app, key(KeyCode::Char('k')));
+        crate::input::handle_key_event(&mut app, key(KeyCode::Up));
         assert_eq!(get_scroll(&app), 0);
 
         // Page down

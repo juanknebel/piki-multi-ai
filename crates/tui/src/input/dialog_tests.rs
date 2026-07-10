@@ -63,7 +63,10 @@ fn open_confirm_quit(app: &mut App) {
 
 fn open_help(app: &mut App, scroll: u16) {
     app.mode = AppMode::Help;
-    app.active_dialog = Some(DialogState::Help { scroll });
+    app.active_dialog = Some(DialogState::Help {
+        scroll,
+        filter: String::new(),
+    });
 }
 
 fn open_about(app: &mut App) {
@@ -78,7 +81,14 @@ fn open_workspace_info(app: &mut App, hscroll: u16) {
 
 fn current_help_scroll(app: &App) -> u16 {
     match app.active_dialog {
-        Some(DialogState::Help { scroll }) => scroll,
+        Some(DialogState::Help { scroll, .. }) => scroll,
+        _ => panic!("not in Help dialog"),
+    }
+}
+
+fn current_help_filter(app: &App) -> String {
+    match &app.active_dialog {
+        Some(DialogState::Help { filter, .. }) => filter.clone(),
         _ => panic!("not in Help dialog"),
     }
 }
@@ -647,17 +657,6 @@ fn confirm_quit_irrelevant_key_keeps_dialog_open() {
 // ── Help (scroll dialog) ────────────────────────────────────────────────
 
 #[test]
-fn help_j_increments_scroll() {
-    let mut app = test_app();
-    open_help(&mut app, 0);
-
-    let action = handle_help_input(&mut app, key(KeyCode::Char('j')));
-
-    assert!(action.is_none());
-    assert_eq!(current_help_scroll(&app), 1);
-}
-
-#[test]
 fn help_down_arrow_increments_scroll() {
     let mut app = test_app();
     open_help(&mut app, 3);
@@ -668,11 +667,11 @@ fn help_down_arrow_increments_scroll() {
 }
 
 #[test]
-fn help_k_decrements_scroll_with_saturating_floor() {
+fn help_up_arrow_decrements_scroll_with_saturating_floor() {
     let mut app = test_app();
     open_help(&mut app, 0);
 
-    handle_help_input(&mut app, key(KeyCode::Char('k')));
+    handle_help_input(&mut app, key(KeyCode::Up));
 
     assert_eq!(current_help_scroll(&app), 0);
 }
@@ -682,13 +681,15 @@ fn help_page_down_jumps_ten_lines() {
     let mut app = test_app();
     open_help(&mut app, 5);
 
+    // PageDown and Ctrl-D both page down.
+    handle_help_input(&mut app, key(KeyCode::PageDown));
+    assert_eq!(current_help_scroll(&app), 15);
     let action = handle_help_input(
         &mut app,
         key_with_mods(KeyCode::Char('d'), KeyModifiers::CONTROL),
     );
-
     assert!(action.is_none());
-    assert_eq!(current_help_scroll(&app), 15);
+    assert_eq!(current_help_scroll(&app), 25);
 }
 
 #[test]
@@ -705,47 +706,47 @@ fn help_page_up_saturates_at_zero() {
 }
 
 #[test]
-fn help_scroll_top_resets_to_zero() {
+fn help_home_resets_and_end_jumps_to_max() {
     let mut app = test_app();
     open_help(&mut app, 100);
-
-    handle_help_input(&mut app, key(KeyCode::Char('g')));
-
+    handle_help_input(&mut app, key(KeyCode::Home));
     assert_eq!(current_help_scroll(&app), 0);
-}
-
-#[test]
-fn help_scroll_bottom_jumps_to_max() {
-    let mut app = test_app();
-    open_help(&mut app, 0);
-
-    handle_help_input(
-        &mut app,
-        key_with_mods(KeyCode::Char('G'), KeyModifiers::SHIFT),
-    );
-
+    handle_help_input(&mut app, key(KeyCode::End));
     assert_eq!(current_help_scroll(&app), u16::MAX);
 }
 
 #[test]
-fn help_esc_dismisses() {
+fn help_printable_keys_edit_the_filter() {
     let mut app = test_app();
-    open_help(&mut app, 10);
+    open_help(&mut app, 7);
 
-    let action = handle_help_input(&mut app, key(KeyCode::Esc));
+    // Letters that used to scroll (j/k/g/q) now type into the filter.
+    handle_help_input(&mut app, key(KeyCode::Char('g')));
+    handle_help_input(&mut app, key(KeyCode::Char('i')));
+    handle_help_input(&mut app, key(KeyCode::Char('t')));
+    assert_eq!(current_help_filter(&app), "git");
+    // Editing the filter jumps back to the top.
+    assert_eq!(current_help_scroll(&app), 0);
 
-    assert!(action.is_none());
-    assert!(app.active_dialog.is_none());
-    assert_eq!(app.mode, AppMode::Normal);
+    handle_help_input(&mut app, key(KeyCode::Backspace));
+    assert_eq!(current_help_filter(&app), "gi");
 }
 
 #[test]
-fn help_q_also_dismisses() {
+fn help_esc_clears_filter_then_dismisses() {
     let mut app = test_app();
     open_help(&mut app, 0);
+    handle_help_input(&mut app, key(KeyCode::Char('t')));
+    assert_eq!(current_help_filter(&app), "t");
 
-    handle_help_input(&mut app, key(KeyCode::Char('q')));
+    // First Esc clears a non-empty filter.
+    handle_help_input(&mut app, key(KeyCode::Esc));
+    assert_eq!(current_help_filter(&app), "");
+    assert_eq!(app.mode, AppMode::Help);
 
+    // Second Esc (empty filter) closes.
+    let action = handle_help_input(&mut app, key(KeyCode::Esc));
+    assert!(action.is_none());
     assert!(app.active_dialog.is_none());
     assert_eq!(app.mode, AppMode::Normal);
 }

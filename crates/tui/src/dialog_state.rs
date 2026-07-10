@@ -145,6 +145,9 @@ pub enum DialogState {
     },
     Help {
         scroll: u16,
+        /// Incremental filter query; when non-empty the help shows only the
+        /// keybinding lines that match it (case-insensitive substring).
+        filter: String,
     },
     About,
     WorkspaceInfo {

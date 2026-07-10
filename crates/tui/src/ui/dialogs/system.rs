@@ -8,9 +8,9 @@ use crate::app::App;
 use crate::dialog_state::{DialogState, NewTabMenu};
 
 pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
-    let help_scroll = match app.active_dialog {
-        Some(DialogState::Help { scroll }) => scroll,
-        _ => 0,
+    let (help_scroll, filter) = match &app.active_dialog {
+        Some(DialogState::Help { scroll, filter }) => (*scroll, filter.as_str()),
+        _ => (0, ""),
     };
 
     let theme = &app.theme;
@@ -411,28 +411,50 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
         ),
     ];
 
-    let block = super::popup_block("Help", theme.help.border);
+    // Live filter: keep only content lines matching the query (case-insensitive).
+    // A leading status line always shows so the box reads as searchable.
+    let lines: Vec<String> = if filter.is_empty() {
+        let mut out = vec![
+            "  Type to filter · ↑↓ PgUp/PgDn scroll · Esc close".to_string(),
+            String::new(),
+        ];
+        out.extend(help_text);
+        out
+    } else {
+        let q = filter.to_lowercase();
+        let matches: Vec<String> = help_text
+            .into_iter()
+            .filter(|l| !l.trim().is_empty() && l.to_lowercase().contains(&q))
+            .collect();
+        let mut out = vec![
+            format!("  Filter: {}   ({} matches)", filter, matches.len()),
+            String::new(),
+        ];
+        out.extend(matches);
+        out
+    };
 
-    let total_lines = help_text.len() as u16;
+    let title = if filter.is_empty() {
+        "Help".to_string()
+    } else {
+        format!("Help  /{filter}")
+    };
+    let block = super::popup_block(&title, theme.help.border);
+
+    let total_lines = lines.len() as u16;
     let inner_height = popup.height.saturating_sub(2); // borders
     let max_scroll = total_lines.saturating_sub(inner_height);
     let scroll = help_scroll.min(max_scroll);
 
     let scroll_indicator = if max_scroll > 0 {
-        format!(
-            " [{}/{} ↑{}/{}↓] ",
-            scroll + 1,
-            max_scroll + 1,
-            cfg.get_binding("help", "up"),
-            cfg.get_binding("help", "down")
-        )
+        format!(" [{}/{} ↑↓] ", scroll + 1, max_scroll + 1)
     } else {
         String::new()
     };
 
     let block = block.title_bottom(Line::from(scroll_indicator).right_aligned());
 
-    let text = Paragraph::new(help_text.join("\n"))
+    let text = Paragraph::new(lines.join("\n"))
         .block(block)
         .scroll((scroll, 0));
     frame.render_widget(text, popup);

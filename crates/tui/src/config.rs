@@ -621,14 +621,6 @@ impl Config {
 
 
 
-    pub fn matches_help(&self, event: KeyEvent, action: &str) -> bool {
-        if let Some(binding) = self.keybindings.help.get(action) {
-            key_matches_platform(event, binding, self.platform)
-        } else {
-            false
-        }
-    }
-
     pub fn matches_about(&self, event: KeyEvent, action: &str) -> bool {
         if let Some(binding) = self.keybindings.about.get(action) {
             key_matches_platform(event, binding, self.platform)
