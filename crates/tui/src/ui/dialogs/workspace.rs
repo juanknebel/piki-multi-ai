@@ -1,6 +1,6 @@
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
@@ -500,7 +500,7 @@ pub(crate) fn render_workspace_info_overlay(frame: &mut Frame, area: Rect, app: 
 
     lines.push(Line::from(Span::styled(
         " Esc to close · h/l to scroll · mouse select to copy",
-        Style::default().fg(Color::DarkGray),
+        Style::default().fg(theme.palette.fg3),
     )));
 
     let height = (lines.len() as u16 + 2).min(area.height);

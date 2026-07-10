@@ -85,7 +85,11 @@ fn render_yn_dialog(
     let popup = clear_popup(frame, area, 40, 7);
     let lines = vec![
         Line::from(""),
-        Line::from(Span::styled(message, Style::default().fg(Color::White))).centered(),
+        Line::from(Span::styled(
+            message,
+            Style::default().fg(crate::theme::Palette::default().fg0),
+        ))
+        .centered(),
         Line::from(""),
         Line::from(Span::styled(
             "[Y] Yes    [N] No",

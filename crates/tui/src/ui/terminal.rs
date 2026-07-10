@@ -9,6 +9,7 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 use tui_term::widget::{Cursor as PtyCursor, PseudoTerminal};
 
 use crate::app::{Selection, TermSearchState};
+use crate::theme::Palette;
 
 /// Render the PTY terminal output in the given area.
 /// Locks the parser briefly to read the vt100 screen state.
@@ -25,6 +26,7 @@ pub fn render(
     selection_style: Style,
     search: Option<&TermSearchState>,
     scrollbar_color: Color,
+    palette: &Palette,
 ) {
     let mut parser_guard = parser.lock();
 
@@ -102,8 +104,8 @@ pub fn render(
     if let Some(search) = search {
         let query_len = search.query.chars().count();
         if query_len > 0 {
-            let match_style = Style::default().bg(Color::Yellow).fg(Color::Black);
-            let current_style = Style::default().bg(Color::LightRed).fg(Color::Black);
+            let match_style = Style::default().bg(palette.iris).fg(palette.bg0);
+            let current_style = Style::default().bg(palette.err).fg(palette.bg0);
             let buf = frame.buffer_mut();
             for (idx, &(row, col)) in search.matches.iter().enumerate() {
                 let style = if idx == search.current_match {
@@ -145,9 +147,9 @@ pub fn render(
         };
 
         let bar = Paragraph::new(Line::from(vec![
-            Span::styled(" / ", Style::default().fg(Color::Yellow)),
+            Span::styled(" / ", Style::default().fg(palette.iris)),
             Span::raw(&search.query),
-            Span::styled(match_info, Style::default().fg(Color::DarkGray)),
+            Span::styled(match_info, Style::default().fg(palette.fg2)),
         ]));
         frame.render_widget(bar, bar_area);
     }

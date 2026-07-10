@@ -1,6 +1,6 @@
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
@@ -168,7 +168,7 @@ fn row_line<'a>(
                     color,
                 )
             } else {
-                (tab.provider.label().to_lowercase(), Color::DarkGray)
+                (tab.provider.label().to_lowercase(), app.theme.palette.fg3)
             };
             (left, right, right_color)
         }
@@ -179,9 +179,9 @@ fn row_line<'a>(
             if app.workspaces.get(ws_idx).is_some_and(|w| w.active_tab == tab_idx));
 
     if is_selected {
-        // Full-width accent bar with dark text; right column keeps a subtle
-        // contrast by staying bold.
-        let base = Style::default().fg(Color::Black).bg(sel_bg);
+        // Full-width selection wash with primary text; right column keeps a
+        // subtle contrast by staying bold.
+        let base = Style::default().fg(app.theme.palette.fg0).bg(sel_bg);
         let text = pad_between(&left, &format!("{right} "), iw);
         let mut style = base;
         if is_bold {

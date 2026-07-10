@@ -88,6 +88,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                         frame,
                         area,
                         api,
+                        &app.theme,
                         border_style,
                         selection.as_ref(),
                         selection_style,
@@ -118,7 +119,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
 
                     // Render our own overlay with proper cursor, then restore
                     if let Some(edit) = edit_state {
-                        render_kanban_edit(frame, inner_area, &edit);
+                        render_kanban_edit(frame, inner_area, &edit, &app.theme.palette);
                         kanban_app.edit_state = Some(edit);
                     }
                 }
@@ -137,6 +138,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                     selection_style,
                     app.term_search.as_ref(),
                     app.theme.general.scrollbar_thumb,
+                    &app.theme.palette,
                 );
             } else {
                 // Provider CLI not found — show fun ASCII art
@@ -216,7 +218,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
         let key_style = Style::default().fg(app.theme.footer.key);
         let desc_style = Style::default().fg(app.theme.general.welcome_text);
         let title_style = Style::default()
-            .fg(Color::White)
+            .fg(app.theme.palette.fg0)
             .add_modifier(Modifier::BOLD);
         let lines = vec![
             Line::from(""),
@@ -254,17 +256,22 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
     app.selection = selection;
 }
 
-fn priority_color(p: flow_core::Priority) -> Color {
+fn priority_color(p: flow_core::Priority, palette: &crate::theme::Palette) -> Color {
     match p {
-        flow_core::Priority::Bug => Color::Red,
-        flow_core::Priority::High => Color::Yellow,
-        flow_core::Priority::Medium => Color::White,
-        flow_core::Priority::Low => Color::DarkGray,
-        flow_core::Priority::Wishlist => Color::Cyan,
+        flow_core::Priority::Bug => palette.err,
+        flow_core::Priority::High => palette.err,
+        flow_core::Priority::Medium => palette.warn,
+        flow_core::Priority::Low => palette.fg2,
+        flow_core::Priority::Wishlist => palette.info,
     }
 }
 
-fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditState) {
+fn render_kanban_edit(
+    f: &mut Frame,
+    parent: Rect,
+    edit: &flow_tui::app::EditState,
+    palette: &crate::theme::Palette,
+) {
     use flow_tui::app::EditFocus;
 
     // chunks: [0] header, [1] title, [2] project, [3] priority, [4] assignee, [5] description, [6] footer
@@ -294,12 +301,12 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
     );
 
     let title_style = if edit.focus == EditFocus::Title {
-        Style::default().fg(Color::Cyan)
+        Style::default().fg(palette.iris)
     } else {
         Style::default()
     };
     let title_content = if edit.title.is_empty() {
-        Line::from(Span::styled("(required)", Style::default().fg(Color::DarkGray)))
+        Line::from(Span::styled("(required)", Style::default().fg(palette.fg3)))
     } else {
         Line::from(edit.title.clone())
     };
@@ -314,12 +321,12 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
     );
 
     let project_style = if edit.focus == EditFocus::Project {
-        Style::default().fg(Color::Cyan)
+        Style::default().fg(palette.iris)
     } else {
         Style::default()
     };
     let project_label = if edit.project.is_empty() {
-        Span::styled("(required)", Style::default().fg(Color::DarkGray))
+        Span::styled("(required)", Style::default().fg(palette.fg3))
     } else {
         Span::raw(edit.project.clone())
     };
@@ -335,7 +342,7 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
 
     let priority_focused = edit.focus == EditFocus::Priority;
     let priority_style = if priority_focused {
-        Style::default().fg(Color::Cyan)
+        Style::default().fg(palette.iris)
     } else {
         Style::default()
     };
@@ -344,11 +351,11 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
         Span::styled(
             format!(" {} ", edit.priority.label()),
             Style::default()
-                .fg(priority_color(edit.priority))
+                .fg(priority_color(edit.priority, palette))
                 .add_modifier(Modifier::BOLD),
         ),
         if priority_focused {
-            Span::styled("  ←/→ to change", Style::default().fg(Color::DarkGray))
+            Span::styled("  ←/→ to change", Style::default().fg(palette.fg3))
         } else {
             Span::raw("")
         },
@@ -364,7 +371,7 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
     );
 
     let assignee_style = if edit.focus == EditFocus::Assignee {
-        Style::default().fg(Color::Cyan)
+        Style::default().fg(palette.iris)
     } else {
         Style::default()
     };
@@ -379,7 +386,7 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
     );
 
     let desc_style = if edit.focus == EditFocus::Description {
-        Style::default().fg(Color::Cyan)
+        Style::default().fg(palette.iris)
     } else {
         Style::default()
     };
@@ -400,7 +407,7 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
 
     f.render_widget(
         Paragraph::new("Tab: switch field  ←/→: priority  Enter: save  Esc: cancel")
-            .style(Style::default().fg(Color::DarkGray))
+            .style(Style::default().fg(palette.fg3))
             .alignment(ratatui::layout::Alignment::Center),
         chunks[6],
     );
@@ -441,7 +448,7 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
         Block::default()
             .borders(Borders::ALL)
             .title("Edit Card")
-            .border_style(Style::default().fg(Color::Cyan)),
+            .border_style(Style::default().fg(palette.line_strong)),
         area,
     );
 }

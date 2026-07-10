@@ -24,7 +24,7 @@ pub fn parse_to_static(content: &str, syntax_hl: Option<&SyntaxHighlighter>) -> 
 
     // Post-process code blocks
     let code_bg = Style::new().on_dark_gray();
-    let fence_prefix_style = Style::new().fg(Color::DarkGray);
+    let fence_prefix_style = Style::new().fg(crate::theme::Palette::default().fg3);
     let mut in_code_block = false;
     let mut code_lang: Option<String> = None;
     let mut processed: Vec<Line<'static>> = Vec::with_capacity(text.lines.len());
