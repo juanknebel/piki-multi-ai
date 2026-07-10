@@ -419,7 +419,14 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             ("PgUp/PgDn".to_string(), "page"),
             ("Esc".to_string(), "clear/close"),
         ],
-        AppMode::About => vec![(cfg.get_binding("about", "exit"), "close")],
+        AppMode::About => vec![(
+            format!(
+                "{}/{}",
+                cfg.get_binding("about", "exit"),
+                cfg.get_binding("about", "exit_about")
+            ),
+            "close",
+        )],
         AppMode::WorkspaceInfo => vec![
             (
                 format!(

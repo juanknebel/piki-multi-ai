@@ -796,7 +796,7 @@ pub(super) fn handle_help_input(app: &mut App, key: KeyEvent) -> Option<Action> 
 }
 
 pub(super) fn handle_about_input(app: &mut App, key: KeyEvent) -> Option<Action> {
-    if app.config.matches_about(key, "exit") {
+    if app.config.matches_about(key, "exit") || app.config.matches_about(key, "exit_about") {
         dismiss_dialog(app);
     }
     None

@@ -371,6 +371,9 @@ fn default_help() -> HashMap<String, String> {
 fn default_about() -> HashMap<String, String> {
     let mut m = HashMap::new();
     m.insert("exit".to_string(), "esc".to_string());
+    // Toggle-close: About opens with prefix-a, so bare `a` also closes it —
+    // the same convention as Help (?), Workspace Info (i) and Dashboard (D).
+    m.insert("exit_about".to_string(), "a".to_string());
     m
 }
 

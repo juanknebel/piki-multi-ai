@@ -482,7 +482,7 @@ pub(crate) fn render_about_overlay(frame: &mut Frame, area: Rect, app: &App) {
         Line::from("Web: github.com/juanknebel/piki-multi-ai"),
         Line::from("License: GPL-2.0"),
         Line::from(""),
-        Line::from("Press Esc to close"),
+        Line::from("Press Esc or a to close"),
     ];
 
     let text = Paragraph::new(about_lines)

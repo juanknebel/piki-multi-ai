@@ -3506,3 +3506,14 @@ fn resize_mode_exits_on_esc_and_unrelated_key() {
     assert_eq!(app.input_state, crate::app::InputState::Normal);
     assert_eq!(app.sidebar_pct, before, "unrelated key must not resize");
 }
+
+#[test]
+fn about_toggle_key_a_also_dismisses() {
+    let mut app = test_app();
+    open_about(&mut app);
+
+    handle_about_input(&mut app, key(KeyCode::Char('a')));
+
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}

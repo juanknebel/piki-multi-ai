@@ -1,6 +1,6 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 369
+assertion_line: 389
 expression: content
 ---
 
@@ -25,6 +25,6 @@ expression: content
                │    Web: github.com/juanknebel/piki-multi-ai    │
                │                License: GPL-2.0                │
                │                                                │
-               │               Press Esc to close               │
+               │             Press Esc or a to close            │
                │                                                │
                ╰────────────────────────────────────────────────╯
