@@ -145,21 +145,14 @@ theme = "default"
 # scroll_top = "g"
 # scroll_bottom = "G"
 
-# [keybindings.help]
-# down = "j"
-# up = "k"
-# down_alt = "down"
-# up_alt = "up"
-# page_down = "ctrl-d"
-# page_up = "ctrl-u"
-# scroll_top = "g"
-# scroll_bottom = "G"
-# exit = "esc"
-# exit_alt = "q"
-# exit_help = "?"
+# The help browser (prefix-?) is a live search box: printable keys filter the
+# keybinding list, and navigation is on fixed keys — arrows / PgUp-PgDn /
+# Home-End / Ctrl-D-Ctrl-U to scroll, Esc to clear the filter then close. These
+# are not configurable (a [keybindings.help] table is ignored).
 
 # [keybindings.about]
 # exit = "esc"
+# exit_about = "a"           # toggle-close (About opens with prefix-a)
 
 # [keybindings.workspace_info]
 # right = "l"
@@ -198,7 +191,7 @@ theme = "default"
 # up_alt = "up"
 # select = "enter"
 # exit = "esc"
-# exit_alt = "D"
+# exit_alt = "b"             # toggle-close (Dashboard opens with prefix-b)
 
 # [keybindings.logs]
 # down = "j"
