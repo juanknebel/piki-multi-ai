@@ -26,4 +26,4 @@ expression: content
 │              ││                                                              │
 │              │╰──────────────────────────────────────────────────────────────╯
 ╰──────────────╯ No active workspace
- [k/j] select  [enter] open  [e] edit ws  [d] delete ws  [C-g] prefix
+ [k/j] select  [Enter] open  [e] edit ws  [d] delete ws  [C-g] prefix

@@ -512,7 +512,7 @@ impl Config {
 
     /// The prefix key formatted for display (e.g. "C-g").
     pub fn prefix_display(&self) -> String {
-        compact_binding_display(&self.format_binding(&self.keybindings.prefix_key))
+        self.format_binding(&self.keybindings.prefix_key)
     }
 
     fn app_binding_strings(&self, action: &str) -> Vec<String> {
@@ -688,10 +688,13 @@ impl Config {
 
 
 
-    /// Format a binding string for the current platform.
-    /// On macOS, replaces `ctrl-` with `cmd-` for display.
+    /// Canonical display form of a binding — the single key grammar every
+    /// surface (footer, help, palette, dialog hints) renders through:
+    /// platform mapping first (macOS `ctrl-` → `cmd-`), then compact
+    /// modifiers (`C-`, `M-`, `S-`, `Cmd-`) and capitalized special keys
+    /// (`Esc`, `Enter`, arrows as glyphs). `"ctrl-shift-c"` → `"C-S-c"`.
     pub fn format_binding(&self, binding: &str) -> String {
-        format_binding_for_platform(binding, self.platform)
+        compact_binding_display(&format_binding_for_platform(binding, self.platform))
     }
 
     pub fn get_binding(&self, section: &str, action: &str) -> String {
@@ -798,13 +801,38 @@ impl Config {
     }
 }
 
-/// Compact modifier spelling for tight UI spots: `ctrl-g` → `C-g`, `alt-p` → `M-p`.
+/// Compact modifier spelling plus capitalized special keys: `ctrl-g` →
+/// `C-g`, `alt-p` → `M-p`, `esc` → `Esc`, `ctrl-pagedown` → `C-PgDn`,
+/// `up` → `↑`.
 fn compact_binding_display(binding: &str) -> String {
-    binding
+    let compacted = binding
         .replace("ctrl-", "C-")
         .replace("alt-", "M-")
         .replace("shift-", "S-")
-        .replace("cmd-", "Cmd-")
+        .replace("cmd-", "Cmd-");
+    let (mods, key) = match compacted.rfind('-') {
+        Some(i) if i + 1 < compacted.len() => (&compacted[..=i], &compacted[i + 1..]),
+        _ => ("", compacted.as_str()),
+    };
+    let key_disp = match key {
+        "esc" => "Esc",
+        "enter" => "Enter",
+        "tab" => "Tab",
+        "space" => "Space",
+        "backspace" => "Backspace",
+        "delete" => "Del",
+        "insert" => "Ins",
+        "home" => "Home",
+        "end" => "End",
+        "pageup" => "PgUp",
+        "pagedown" => "PgDn",
+        "up" => "↑",
+        "down" => "↓",
+        "left" => "←",
+        "right" => "→",
+        _ => key,
+    };
+    format!("{mods}{key_disp}")
 }
 
 /// Check if modifiers include Ctrl (or Super on macOS).
@@ -1091,7 +1119,8 @@ prefix_key = "ctrl-a"
             ..Config::default()
         };
         assert_eq!(cfg.get_binding("app", "new_tab"), "C-g c");
-        assert_eq!(cfg.get_binding("app", "copy"), "ctrl-shift-c");
+        // Direct chords compact through the same grammar as prefix chords
+        assert_eq!(cfg.get_binding("app", "copy"), "C-S-c");
         assert_eq!(cfg.get_binding("app", "nonexistent"), "???");
     }
 
@@ -1374,9 +1403,9 @@ quit = "prefix-Q"
             platform: Platform::MacOs,
             ..Config::default()
         };
-        // ctrl-shift-c should display with cmd- on macOS
-        assert_eq!(cfg.get_binding("app", "copy"), "cmd-shift-c");
-        // Non-ctrl bindings unchanged
-        assert_eq!(cfg.get_binding("scroll", "exit"), "esc");
+        // ctrl-shift-c should display with Cmd- on macOS
+        assert_eq!(cfg.get_binding("app", "copy"), "Cmd-S-c");
+        // Special keys render capitalized
+        assert_eq!(cfg.get_binding("scroll", "exit"), "Esc");
     }
 }
