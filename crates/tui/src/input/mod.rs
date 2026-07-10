@@ -347,8 +347,11 @@ fn handle_prefix_key(app: &mut App, key: KeyEvent) -> Option<Action> {
             return dispatch_app_action(app, action);
         }
     }
+    // Don't dead-end: point at the keymap the user just had open.
+    let prefix = app.config.prefix_display();
+    let help = app.config.prefix_chord("help").unwrap_or_else(|| "?".to_string());
     app.set_toast(
-        format!("Unbound key after {}", app.config.prefix_display()),
+        format!("Unbound key — press {prefix} {help} for the keymap"),
         crate::app::ToastLevel::Info,
     );
     None
