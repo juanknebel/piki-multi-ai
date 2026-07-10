@@ -1,6 +1,6 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 342
+assertion_line: 369
 expression: content
 ---
 
@@ -8,7 +8,7 @@ expression: content
 
 
 
-               ┌ About ─────────────────────────────────────────┐
+               ╭ About ─────────────────────────────────────────╮
                │                                                │
                │                                                │
                │             ██████╗ ██╗██╗  ██╗██╗             │
@@ -27,4 +27,4 @@ expression: content
                │                                                │
                │               Press Esc to close               │
                │                                                │
-               └────────────────────────────────────────────────┘
+               ╰────────────────────────────────────────────────╯

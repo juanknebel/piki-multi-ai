@@ -1,6 +1,6 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 96
+assertion_line: 111
 expression: content
 ---
 
@@ -11,10 +11,10 @@ expression: content
 
 
 
-                    ┌ Close Tab ───────────────────────────┐
+                    ╭ Close Tab ───────────────────────────╮
                     │                                      │
                     │             Close tab ""?            │
                     │                                      │
                     │           [Y] Yes    [N] No          │
                     │                                      │
-                    └──────────────────────────────────────┘
+                    ╰──────────────────────────────────────╯

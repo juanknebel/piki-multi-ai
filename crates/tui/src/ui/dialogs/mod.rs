@@ -45,7 +45,7 @@ fn popup_block(title: &str, border_color: Color) -> Block<'static> {
     Block::default()
         .title(format!(" {} ", title))
         .title_style(Style::default().fg(border_color))
-        .borders(Borders::ALL)
+        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(Style::default().fg(border_color))
 }
 

@@ -6,7 +6,7 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
 use crate::app::{ActivePane, App, AppMode};
 
-use super::layout::pane_border_style;
+use super::layout::{pane_border_style, pane_title_style};
 
 pub(super) fn render_subtabs(frame: &mut Frame, area: Rect, app: &App) {
     if let Some(ws) = app.current_workspace() {
@@ -24,6 +24,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
     }
 
     let border_style = pane_border_style(app, ActivePane::MainPanel);
+    let title_style = pane_title_style(app, ActivePane::MainPanel);
     app.api_response_inner_area = None;
 
     let selection = app.selection.take();
@@ -44,6 +45,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                         label,
                         scroll,
                         border_style,
+                        title_style,
                         app.theme.general.scrollbar_thumb,
                     );
                 } else if let (Some(content), Some(label)) =
@@ -59,6 +61,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                         &label,
                         scroll,
                         border_style,
+                        title_style,
                         Some(&app.syntax),
                         app.theme.general.scrollbar_thumb,
                     );
@@ -72,8 +75,8 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                 // Code review has its own full-screen layout; show a placeholder here
                 let block = Block::default()
                     .title(" Code Review ")
-                    .title_style(border_style)
-                    .borders(Borders::ALL)
+                    .title_style(title_style)
+                    .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
                     .border_style(border_style);
                 let text = Paragraph::new("  Code Review renders in full-screen mode")
                     .style(Style::default().fg(app.theme.general.muted_text))
@@ -90,6 +93,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                         api,
                         &app.theme,
                         border_style,
+                        title_style,
                         selection.as_ref(),
                         selection_style,
                     );
@@ -111,7 +115,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                     let edit_state = kanban_app.edit_state.take();
 
                     let block = Block::default()
-                        .borders(Borders::ALL)
+                        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
                         .border_style(border_style);
                     let inner_area = block.inner(area);
                     frame.render_widget(block, area);
@@ -132,6 +136,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                     area,
                     parser,
                     border_style,
+                    title_style,
                     provider.label(),
                     tab.term_scroll,
                     selection.as_ref(),
@@ -144,8 +149,8 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                 // Provider CLI not found — show fun ASCII art
                 let block = Block::default()
                     .title(format!(" {} ", provider.label()))
-                    .title_style(border_style)
-                    .borders(Borders::ALL)
+                    .title_style(title_style)
+                    .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
                     .border_style(border_style);
                 let cmd = provider.command();
                 let new_tab = app.config.get_binding("app", "new_tab");
@@ -176,8 +181,8 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
             // No tabs yet — centered hints
             let block = Block::default()
                 .title(" Terminal ")
-                .title_style(border_style)
-                .borders(Borders::ALL)
+                .title_style(title_style)
+                .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
                 .border_style(border_style);
             let key_style = Style::default().fg(app.theme.footer.key);
             let desc_style = Style::default().fg(app.theme.general.muted_text);
@@ -212,8 +217,8 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
     } else {
         let block = Block::default()
             .title(" piki-multi-ai ")
-            .title_style(border_style)
-            .borders(Borders::ALL)
+            .title_style(title_style)
+            .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
             .border_style(border_style);
         let key_style = Style::default().fg(app.theme.footer.key);
         let desc_style = Style::default().fg(app.theme.general.welcome_text);
@@ -314,7 +319,7 @@ fn render_kanban_edit(
         Paragraph::new(title_content).block(
             Block::default()
                 .title("Title *")
-                .borders(Borders::ALL)
+                .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
                 .border_style(title_style),
         ),
         chunks[1],
@@ -334,7 +339,7 @@ fn render_kanban_edit(
         Paragraph::new(Line::from(project_label)).block(
             Block::default()
                 .title("Project *")
-                .borders(Borders::ALL)
+                .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
                 .border_style(project_style),
         ),
         chunks[2],
@@ -364,7 +369,7 @@ fn render_kanban_edit(
         Paragraph::new(Line::from(priority_spans)).block(
             Block::default()
                 .title("Priority")
-                .borders(Borders::ALL)
+                .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
                 .border_style(priority_style),
         ),
         chunks[3],
@@ -379,7 +384,7 @@ fn render_kanban_edit(
         Paragraph::new(edit.assignee.clone()).block(
             Block::default()
                 .title("Assignee")
-                .borders(Borders::ALL)
+                .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
                 .border_style(assignee_style),
         ),
         chunks[4],
@@ -399,7 +404,7 @@ fn render_kanban_edit(
         Paragraph::new(wrapped).block(
             Block::default()
                 .title("Description")
-                .borders(Borders::ALL)
+                .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
                 .border_style(desc_style),
         ),
         chunks[5],
@@ -446,7 +451,7 @@ fn render_kanban_edit(
 
     f.render_widget(
         Block::default()
-            .borders(Borders::ALL)
+            .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
             .title("Edit Card")
             .border_style(Style::default().fg(palette.line_strong)),
         area,

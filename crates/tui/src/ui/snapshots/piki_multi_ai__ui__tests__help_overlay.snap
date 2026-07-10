@@ -1,9 +1,9 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 328
+assertion_line: 355
 expression: content
 ---
-            ┌ Help ───────────────────────────────────────────────┐
+            ╭ Help ───────────────────────────────────────────────╮
             │                                                     │
             │  Prefix key: C-g (tmux-style)                       │
             │    Keys always go to the focused pane;              │
@@ -42,4 +42,4 @@ expression: content
             │    ctrl-u/ctrl-d Page up/down                       │
             │    g/G           Top/Bottom                         │
             │    /             Search                             │
-            └────────────────────────────────────── [1/149 ↑k/j↓] ┘
+            ╰────────────────────────────────────── [1/149 ↑k/j↓] ╯

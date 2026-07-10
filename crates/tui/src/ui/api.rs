@@ -16,12 +16,14 @@ fn char_to_byte_idx(s: &str, char_idx: usize) -> usize {
 
 /// Render the API Explorer tab. Returns the inner area of the response panel
 /// (for mouse hit-testing), or `None` if no response is displayed.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn render(
     frame: &mut Frame,
     area: Rect,
     api: &ApiTabState,
     theme: &Theme,
     border_style: Style,
+    title_style: Style,
     selection: Option<&Selection>,
     selection_style: Style,
 ) -> Option<Rect> {
@@ -35,7 +37,7 @@ pub(crate) fn render(
     };
 
     // ── Editor pane ──
-    render_editor(frame, chunks[0], api, p, border_style);
+    render_editor(frame, chunks[0], api, p, border_style, title_style);
 
     // ── Response pane ──
     let result = if has_response {
@@ -45,6 +47,7 @@ pub(crate) fn render(
             api,
             p,
             border_style,
+            title_style,
             selection,
             selection_style,
         )
@@ -66,10 +69,11 @@ fn render_editor(
     api: &ApiTabState,
     p: &Palette,
     border_style: Style,
+    title_style: Style,
 ) {
     let block = Block::default()
         .title(" API Explorer ")
-        .title_style(border_style)
+        .title_style(title_style)
         .title_bottom(
             Line::from(Span::styled(
                 " [^S send | ^H history] ",
@@ -77,7 +81,7 @@ fn render_editor(
             ))
             .right_aligned(),
         )
-        .borders(Borders::ALL)
+        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(border_style);
 
     let inner = block.inner(area);
@@ -127,20 +131,22 @@ fn render_editor(
     frame.render_widget(paragraph, inner);
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render_responses(
     frame: &mut Frame,
     area: Rect,
     api: &ApiTabState,
     p: &Palette,
     border_style: Style,
+    title_style: Style,
     selection: Option<&Selection>,
     selection_style: Style,
 ) -> Option<Rect> {
     if api.loading {
         let block = Block::default()
             .title(" Response ")
-            .title_style(border_style)
-            .borders(Borders::ALL)
+            .title_style(title_style)
+            .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
             .border_style(border_style);
         let text = Paragraph::new("  Sending...")
             .style(Style::default().fg(p.warn))
@@ -224,7 +230,7 @@ fn render_responses(
         .title_bottom(
             Line::from(Span::styled(help_hint, Style::default().fg(p.fg3))).right_aligned(),
         )
-        .borders(Borders::ALL)
+        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(border_style);
 
     let inner = block.inner(area);
@@ -479,7 +485,7 @@ fn render_history_overlay(
             ))
             .right_aligned(),
         )
-        .borders(Borders::ALL)
+        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(Style::default().fg(p.line_strong));
 
     let inner = block.inner(overlay_area);

@@ -20,6 +20,7 @@ pub fn render(
     area: Rect,
     parser: &Arc<Mutex<vt100::Parser>>,
     border_style: Style,
+    title_style: Style,
     title: &str,
     scroll_offset: usize,
     selection: Option<&Selection>,
@@ -39,8 +40,8 @@ pub fn render(
     let mut pseudo_term = PseudoTerminal::new(parser_guard.screen()).block(
         Block::default()
             .title(format!(" {} ", title))
-            .title_style(border_style)
-            .borders(Borders::ALL)
+            .title_style(title_style)
+            .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
             .border_style(border_style),
     );
     if actual_offset > 0 {

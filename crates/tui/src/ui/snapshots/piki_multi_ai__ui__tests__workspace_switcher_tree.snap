@@ -1,10 +1,11 @@
 ---
 source: crates/tui/src/ui/mod.rs
+assertion_line: 324
 expression: content
 ---
 
 
-      ┌───────────────────────────────────────────────────────┐
+      ╭───────────────────────────────────────────────────────╮
       │ / switch workspace                                  2 │
       │ ◆ ○ piki-nightly (2)                                  │
       │    ├─ → — Shell                                 shell │
@@ -14,4 +15,4 @@ expression: content
       │                                                       │
       │ piki-nightly                                          │
       │ enter switch  ^p/^n move  type search  esc close      │
-      └───────────────────────────────────────────────────────┘
+      ╰───────────────────────────────────────────────────────╯

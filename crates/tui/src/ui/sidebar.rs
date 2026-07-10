@@ -7,7 +7,7 @@ use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph};
 use crate::app::{ActivePane, App, SidebarItem};
 use piki_core::WorkspaceType;
 
-use super::layout::pane_border_style;
+use super::layout::{pane_border_style, pane_title_style};
 
 /// Icon prefix for each workspace type.
 fn workspace_type_icon(ws_type: WorkspaceType) -> &'static str {
@@ -26,8 +26,8 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
 
     let block = Block::default()
         .title(" WORKSPACES ")
-        .title_style(border_style)
-        .borders(Borders::ALL)
+        .title_style(pane_title_style(app, ActivePane::WorkspaceList))
+        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(border_style);
 
     if app.workspaces.is_empty() {
@@ -221,8 +221,8 @@ pub(super) fn render_agents_pane(frame: &mut Frame, area: Rect, app: &App) {
 
     let block = Block::default()
         .title(" AGENTS ")
-        .title_style(border_style)
-        .borders(Borders::ALL)
+        .title_style(pane_title_style(app, ActivePane::Agents))
+        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(border_style);
 
     let rows = app.agent_rows();

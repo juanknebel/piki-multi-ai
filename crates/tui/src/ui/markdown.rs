@@ -90,6 +90,7 @@ pub fn parse_to_static(content: &str, syntax_hl: Option<&SyntaxHighlighter>) -> 
 }
 
 /// Render pre-parsed cached markdown text.
+#[allow(clippy::too_many_arguments)]
 pub fn render_cached(
     frame: &mut Frame,
     area: Rect,
@@ -97,12 +98,13 @@ pub fn render_cached(
     label: &str,
     scroll: u16,
     border_style: Style,
+    title_style: Style,
     scrollbar_color: Color,
 ) {
     let block = Block::default()
         .title(format!(" {} ", label))
-        .title_style(border_style)
-        .borders(Borders::ALL)
+        .title_style(title_style)
+        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(border_style);
 
     let paragraph = Paragraph::new(text.clone())
@@ -131,9 +133,10 @@ pub fn render(
     label: &str,
     scroll: u16,
     border_style: Style,
+    title_style: Style,
     syntax_hl: Option<&SyntaxHighlighter>,
     scrollbar_color: Color,
 ) {
     let text = parse_to_static(content, syntax_hl);
-    render_cached(frame, area, &text, label, scroll, border_style, scrollbar_color);
+    render_cached(frame, area, &text, label, scroll, border_style, title_style, scrollbar_color);
 }

@@ -30,7 +30,7 @@ pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let block = Block::default()
         .title(title)
         .title_style(Style::default().fg(theme.help.border))
-        .borders(Borders::ALL)
+        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(Style::default().fg(theme.help.border));
 
     let inner = block.inner(popup);

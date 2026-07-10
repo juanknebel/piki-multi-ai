@@ -1,9 +1,9 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 220
+assertion_line: 247
 expression: content
 ---
-┌ WORKSPACES ──────────────────────────┐
+╭ WORKSPACES ──────────────────────────╮
 │ ▼ PIKI (1)                           │
 │ ▶ ⎇ nightly                 2∆ ↑1 ↓2 │
 │ ▼ RICING (2)                         │
@@ -12,4 +12,4 @@ expression: content
 │                                      │
 │                                      │
 │                                      │
-└──────────────────────────────────────┘
+╰──────────────────────────────────────╯

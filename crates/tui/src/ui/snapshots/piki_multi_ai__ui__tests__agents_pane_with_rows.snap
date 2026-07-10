@@ -1,13 +1,13 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 193
+assertion_line: 280
 expression: content
 ---
-┌ AGENTS ──────────────────────────────┐
+╭ AGENTS ──────────────────────────────╮
 │ — demo-ws · Claude not started       │
 │                                      │
 │                                      │
 │                                      │
 │                                      │
 │                                      │
-└──────────────────────────────────────┘
+╰──────────────────────────────────────╯

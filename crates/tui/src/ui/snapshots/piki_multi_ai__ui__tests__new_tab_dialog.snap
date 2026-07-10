@@ -1,6 +1,6 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 109
+assertion_line: 124
 expression: content
 ---
 
@@ -10,7 +10,7 @@ expression: content
 
 
 
-                    ┌ New Tab ─────────────────────────────┐
+                    ╭ New Tab ─────────────────────────────╮
                     │                                      │
                     │  Select category:                    │
                     │                                      │
@@ -18,4 +18,4 @@ expression: content
                     │  [2] AI Agents  →                    │
                     │  [3] Tools      →                    │
                     │                                      │
-                    └──────────────────────────────────────┘
+                    ╰──────────────────────────────────────╯
