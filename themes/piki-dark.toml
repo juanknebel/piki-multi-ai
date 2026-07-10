@@ -1,8 +1,8 @@
-# piki-multi-ai default theme — the "Cabina" visual language
+# piki-dark — the "Cabina" visual language (built-in default)
 #
-# Copy this file to ~/.config/piki-multi/themes/default.toml (install.sh does
-# it for you). It mirrors the built-in defaults: override only what you need.
-# piki-dark.toml is the same reference under an explicit name.
+# This file mirrors the built-in defaults; it exists as a reference for
+# building custom themes. Copy to ~/.config/piki-multi/themes/<name>.toml,
+# set theme = "<name>" in config.toml, and override only what you need.
 #
 # Colors can be named ANSI (Red, Green, Yellow, Blue, Cyan, Magenta, White,
 # Black, Gray, DarkGray, Light*), "Reset" (terminal default), or hex #rrggbb.
