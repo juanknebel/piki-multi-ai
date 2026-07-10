@@ -236,12 +236,18 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
             Line::from(""),
             Line::from(vec![
                 Span::styled("  1. ", desc_style),
-                Span::styled("[n]", key_style),
+                Span::styled(
+                    format!("[{}]", app.config.get_binding("app", "new_workspace")),
+                    key_style,
+                ),
                 Span::styled(" Create your first workspace", desc_style),
             ]),
             Line::from(vec![
                 Span::styled("  2. ", desc_style),
-                Span::styled("[Tab]", key_style),
+                Span::styled(
+                    format!("[{}]", app.config.get_binding("app", "workspace_switcher")),
+                    key_style,
+                ),
                 Span::styled(" Switch between workspaces", desc_style),
             ]),
             Line::from(vec![
@@ -251,7 +257,10 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
             ]),
             Line::from(vec![
                 Span::styled("  4. ", desc_style),
-                Span::styled("[?]", key_style),
+                Span::styled(
+                    format!("[{}]", app.config.get_binding("app", "help")),
+                    key_style,
+                ),
                 Span::styled(" Full help", desc_style),
             ]),
         ];

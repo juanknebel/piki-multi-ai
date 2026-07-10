@@ -12,10 +12,10 @@ expression: content
 │              ││                                                              │
 │              ││  Quick Start:                                                │
 │              ││                                                              │
-│              ││  1. [n] Create your first workspace                          │
-│              ││  2. [Tab] Switch between workspaces                          │
+│              ││  1. [C-g N] Create your first workspace                      │
+│              ││  2. [C-g w] Switch between workspaces                        │
 ╰──────────────╯│  3. [Enter] Interact with the terminal                       │
-╭ AGENTS ──────╮│  4. [?] Full help                                            │
+╭ AGENTS ──────╮│  4. [C-g ?] Full help                                        │
 │  No agents ru││                                                              │
 │  [C-g c] new ││                                                              │
 │              ││                                                              │
