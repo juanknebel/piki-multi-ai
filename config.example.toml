@@ -48,19 +48,167 @@ theme = "default"
 # ── Keybindings ───────────────────────────────────────────────────────────
 # The app uses a tmux-style one-shot prefix: press the prefix, then a key.
 # Pressing the prefix twice sends it literally to the focused terminal.
-# All app actions and every per-context table have built-in defaults; only
-# list the ones you want to change.
+#
+# Everything below is COMMENTED OUT and shows the built-in DEFAULT. Uncomment
+# only the line you want to change (and its parent `[table]` header). Any key
+# you leave commented keeps its default.
 
 # [keybindings]
 # prefix_key = "ctrl-g"
 
 # App actions fire after the prefix. A value starting with `prefix-` is a
 # prefix chord; anything else (e.g. "ctrl-shift-c") is a direct chord checked
-# before the focused pane. A value may be a single string or a list of
-# alternatives. Defaults include, for example:
-#   quit = "prefix-q"      new_workspace = "prefix-N"   command_palette = "prefix-:"
-#   git  = "prefix-g"      help = "prefix-?"            fuzzy_search = "prefix-/"
-
+# before the focused pane. A value may be a single string, or an array of
+# alternatives.
 # [keybindings.app]
-# quit = "prefix-Q"
-# focus_left = ["prefix-h", "prefix-left"]
+# # Focus movement between panes
+# focus_left  = ["prefix-h", "prefix-left"]
+# focus_down  = ["prefix-j", "prefix-down"]
+# focus_up    = ["prefix-k", "prefix-up"]
+# focus_right = ["prefix-l", "prefix-right"]
+# # Tabs
+# new_tab   = "prefix-c"
+# close_tab = "prefix-x"
+# next_tab  = "prefix-n"
+# prev_tab  = "prefix-p"
+# # Workspaces
+# workspace_switcher    = "prefix-w"
+# next_workspace        = "prefix-)"
+# prev_workspace        = "prefix-("
+# toggle_prev_workspace = "prefix-`"
+# new_workspace         = "prefix-N"
+# edit_workspace        = "prefix-e"
+# delete_workspace      = "prefix-d"
+# workspace_info        = "prefix-i"
+# clone_workspace       = "prefix-R"
+# # Git (everything else lives in the lazygit tab)
+# git = "prefix-g"
+# # App
+# help             = "prefix-?"
+# about            = "prefix-a"
+# dashboard        = "prefix-D"
+# command_palette  = "prefix-:"
+# fuzzy_search     = "prefix-/"
+# chat_panel       = "prefix-y"
+# quit             = "prefix-q"
+# manage_agents    = "prefix-A"
+# manage_providers = "prefix-V"
+# logs             = "prefix-o"
+# scroll_mode      = "prefix-["
+# # Layout
+# sidebar_shrink = ["prefix-<", "prefix-,"]
+# sidebar_grow   = ["prefix->", "prefix-."]
+# split_up       = ["prefix-+", "prefix-="]
+# split_down     = "prefix--"
+# # Terminal clipboard: direct chords, never sent to the PTY
+# copy            = "ctrl-shift-c"
+# paste           = "ctrl-shift-v"
+# terminal_search = "prefix-f"
+
+# The tables below are pane/mode-local keys — active only while that view is
+# focused, NOT behind the prefix. Each is shown with its default.
+
+# [keybindings.scroll]        # terminal scroll mode (entered with scroll_mode)
+# down = "j"
+# up = "k"
+# down_alt = "down"
+# up_alt = "up"
+# page_down = "ctrl-d"
+# page_up = "ctrl-u"
+# page_down_alt = "pagedown"
+# page_up_alt = "pageup"
+# top = "g"
+# bottom = "G"
+# search = "/"
+# exit = "esc"
+# exit_alt = "q"
+
+# [keybindings.agents]        # Agents pane (bottom-left)
+# down = "j"
+# up = "k"
+# down_alt = "down"
+# up_alt = "up"
+# select = "enter"
+
+# [keybindings.markdown]      # markdown reader
+# down = "j"
+# up = "k"
+# down_alt = "down"
+# up_alt = "up"
+# page_down = "ctrl-d"
+# page_up = "ctrl-u"
+# scroll_top = "g"
+# scroll_bottom = "G"
+
+# [keybindings.help]
+# down = "j"
+# up = "k"
+# down_alt = "down"
+# up_alt = "up"
+# page_down = "ctrl-d"
+# page_up = "ctrl-u"
+# scroll_top = "g"
+# scroll_bottom = "G"
+# exit = "esc"
+# exit_alt = "q"
+# exit_help = "?"
+
+# [keybindings.about]
+# exit = "esc"
+
+# [keybindings.workspace_info]
+# right = "l"
+# right_alt = "right"
+# left = "h"
+# left_alt = "left"
+# exit = "esc"
+# exit_info = "i"
+
+# [keybindings.fuzzy]         # fuzzy file search
+# up = "up"
+# down = "down"
+# open = "enter"
+# editor = "ctrl-e"
+# inline_edit = "ctrl-v"
+# markdown = "ctrl-o"
+# mdr = "alt-m"
+# exit = "esc"
+
+# [keybindings.editor]        # inline text editor
+# save = "ctrl-s"
+# exit = "esc"
+
+# [keybindings.new_workspace]
+# switch_field = "tab"
+# create = "enter"
+# exit = "esc"
+
+# [keybindings.new_tab]
+# exit = "esc"
+
+# [keybindings.dashboard]
+# down = "j"
+# up = "k"
+# down_alt = "down"
+# up_alt = "up"
+# select = "enter"
+# exit = "esc"
+# exit_alt = "D"
+
+# [keybindings.logs]
+# down = "j"
+# up = "k"
+# down_alt = "down"
+# up_alt = "up"
+# page_down = "ctrl-d"
+# page_up = "ctrl-u"
+# scroll_top = "g"
+# scroll_bottom = "G"
+# left = "h"
+# right = "l"
+# left_alt = "left"
+# right_alt = "right"
+# copy = "enter"
+# copy_alt = "y"
+# exit = "esc"
+# exit_alt = "ctrl-l"
