@@ -3076,7 +3076,7 @@ fn clone_keybinding_on_github_workspace_opens_create_worktree() {
     app.selected_workspace = idx;
 
     crate::input::handle_key_event(&mut app, key_with_mods(KeyCode::Char('g'), KeyModifiers::CONTROL));
-    crate::input::handle_key_event(&mut app, key_with_mods(KeyCode::Char('R'), KeyModifiers::SHIFT));
+    crate::input::handle_key_event(&mut app, key(KeyCode::Char('r')));
 
     assert_eq!(app.mode, AppMode::CreateWorktree);
     assert!(matches!(
@@ -3095,7 +3095,7 @@ fn clone_keybinding_on_local_workspace_shows_status_message() {
     app.selected_workspace = idx;
 
     crate::input::handle_key_event(&mut app, key_with_mods(KeyCode::Char('g'), KeyModifiers::CONTROL));
-    crate::input::handle_key_event(&mut app, key_with_mods(KeyCode::Char('R'), KeyModifiers::SHIFT));
+    crate::input::handle_key_event(&mut app, key(KeyCode::Char('r')));
 
     assert_eq!(app.mode, AppMode::Normal);
     assert!(app.active_dialog.is_none());

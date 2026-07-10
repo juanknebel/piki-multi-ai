@@ -14,7 +14,7 @@ expression: content
 
 
 ╭ C-g ─────────────────────────────────────────────────────────────────────────╮
-│Workspace  N new  R worktree  e edit  d delete  D dashboard  i info  w switch │
+│Workspace  s new  r worktree  e edit  d delete  b dashboard  i info  w switch │
 │           } next  { prev  ` last                                             │
 │Git        g lazygit                                                          │
 │Tabs       c new  x close  n next  p prev                                     │
@@ -22,8 +22,8 @@ expression: content
 │View       ? all keys  a about  o logs  [ scroll  y chat                      │
 │Focus      h left  j down  k up  l right                                      │
 │Layout     < sidebar −  > sidebar +  + split +  - split −                     │
-│Agents     A agents                                                           │
-│Providers  V providers                                                        │
+│Agents     m agents                                                           │
+│Providers  v providers                                                        │
 │App        q quit                                                             │
 │1-9 tab   C-g literal   Esc cancel                                            │
 ╰──────────────────────────────────────────────────────────────────────────────╯

@@ -270,11 +270,11 @@ fn default_app() -> HashMap<String, BindingValue> {
     m.insert("next_workspace".to_string(), BindingValue::one("prefix-}"));
     m.insert("prev_workspace".to_string(), BindingValue::one("prefix-{"));
     m.insert("toggle_prev_workspace".to_string(), BindingValue::one("prefix-`"));
-    m.insert("new_workspace".to_string(), BindingValue::one("prefix-N"));
+    m.insert("new_workspace".to_string(), BindingValue::one("prefix-s"));
     m.insert("edit_workspace".to_string(), BindingValue::one("prefix-e"));
     m.insert("delete_workspace".to_string(), BindingValue::one("prefix-d"));
     m.insert("workspace_info".to_string(), BindingValue::one("prefix-i"));
-    m.insert("clone_workspace".to_string(), BindingValue::one("prefix-R"));
+    m.insert("clone_workspace".to_string(), BindingValue::one("prefix-r"));
 
     // Git (everything else is delegated to the lazygit tab)
     m.insert("git".to_string(), BindingValue::one("prefix-g"));
@@ -282,13 +282,13 @@ fn default_app() -> HashMap<String, BindingValue> {
     // App
     m.insert("help".to_string(), BindingValue::one("prefix-?"));
     m.insert("about".to_string(), BindingValue::one("prefix-a"));
-    m.insert("dashboard".to_string(), BindingValue::one("prefix-D"));
+    m.insert("dashboard".to_string(), BindingValue::one("prefix-b"));
     m.insert("command_palette".to_string(), BindingValue::one("prefix-:"));
     m.insert("fuzzy_search".to_string(), BindingValue::one("prefix-/"));
     m.insert("chat_panel".to_string(), BindingValue::one("prefix-y"));
     m.insert("quit".to_string(), BindingValue::one("prefix-q"));
-    m.insert("manage_agents".to_string(), BindingValue::one("prefix-A"));
-    m.insert("manage_providers".to_string(), BindingValue::one("prefix-V"));
+    m.insert("manage_agents".to_string(), BindingValue::one("prefix-m"));
+    m.insert("manage_providers".to_string(), BindingValue::one("prefix-v"));
     m.insert("logs".to_string(), BindingValue::one("prefix-o"));
     m.insert("scroll_mode".to_string(), BindingValue::one("prefix-["));
 
@@ -428,7 +428,8 @@ fn default_dashboard() -> HashMap<String, String> {
     m.insert("up_alt".to_string(), "up".to_string());
     m.insert("select".to_string(), "enter".to_string());
     m.insert("exit".to_string(), "esc".to_string());
-    m.insert("exit_alt".to_string(), "D".to_string());
+    // Toggle-close matches the (now lowercase) dashboard open key.
+    m.insert("exit_alt".to_string(), "b".to_string());
     m
 }
 

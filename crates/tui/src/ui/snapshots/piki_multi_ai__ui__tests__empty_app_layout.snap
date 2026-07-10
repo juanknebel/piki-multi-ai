@@ -1,18 +1,18 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 430
+assertion_line: 444
 expression: content
 ---
 
 ╭ WORKSPACES ──╮
 │              │────────────────────────────────────────────────────────────────
-│ [C-g N] New w│╭ piki-multi-ai ───────────────────────────────────────────────╮
+│ [C-g s] New w│╭ piki-multi-ai ───────────────────────────────────────────────╮
 │              ││                                                              │
 │              ││  Welcome to piki-multi-ai                                    │
 │              ││                                                              │
 │              ││  Quick Start:                                                │
 │              ││                                                              │
-│              ││  1. [C-g N] Create your first workspace                      │
+│              ││  1. [C-g s] Create your first workspace                      │
 │              ││  2. [C-g w] Switch between workspaces                        │
 ╰──────────────╯│  3. [Enter] Interact with the terminal                       │
 ╭ AGENTS ──────╮│  4. [C-g ?] Full help                                        │
@@ -26,4 +26,4 @@ expression: content
 │              ││                                                              │
 │              │╰──────────────────────────────────────────────────────────────╯
 ╰──────────────╯ No active workspace
- [C-g w] workspaces  [C-g N] new ws  [C-g e] edit ws  [C-g d] delete ws
+ [C-g w] workspaces  [C-g s] new ws  [C-g e] edit ws  [C-g d] delete ws

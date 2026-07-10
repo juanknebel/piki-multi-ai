@@ -1351,10 +1351,6 @@ mod tests {
         KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL)
     }
 
-    fn shift(c: char) -> KeyEvent {
-        KeyEvent::new(KeyCode::Char(c), KeyModifiers::SHIFT)
-    }
-
     #[test]
     fn test_initial_state() {
         let app = App::new(
@@ -1447,7 +1443,7 @@ mod tests {
             &piki_core::paths::DataPaths::default_paths(),
         );
         crate::input::handle_key_event(&mut app, ctrl('g'));
-        let action = crate::input::handle_key_event(&mut app, shift('N'));
+        let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('s')));
         assert!(action.is_none());
         assert_eq!(app.mode, AppMode::NewWorkspace);
     }
@@ -1460,7 +1456,7 @@ mod tests {
         );
         // Opening new workspace sets both mode and dialog
         crate::input::handle_key_event(&mut app, ctrl('g'));
-        crate::input::handle_key_event(&mut app, shift('N'));
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('s')));
         assert_eq!(app.mode, AppMode::NewWorkspace);
 
         let action = crate::input::handle_key_event(&mut app, key(KeyCode::Esc));
@@ -1490,7 +1486,7 @@ mod tests {
         );
         // Use the normal entry point to set up dialog state
         crate::input::handle_key_event(&mut app, ctrl('g'));
-        crate::input::handle_key_event(&mut app, shift('N'));
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('s')));
         assert_eq!(app.mode, AppMode::NewWorkspace);
 
         let get_field = |app: &App| -> DialogField {
@@ -1533,7 +1529,7 @@ mod tests {
         );
         // Use normal entry point to create dialog
         crate::input::handle_key_event(&mut app, ctrl('g'));
-        crate::input::handle_key_event(&mut app, shift('N'));
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('s')));
         assert_eq!(app.mode, AppMode::NewWorkspace);
 
         // Tab from Source → Directory → Name to reach the Name field

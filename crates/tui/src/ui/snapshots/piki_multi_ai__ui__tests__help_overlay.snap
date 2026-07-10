@@ -19,20 +19,20 @@ expression: content
             │    C-g w         Fuzzy workspace switcher           │
             │    C-g }/C-g {   Next/Prev workspace                │
             │    C-g `         Previous workspace (toggle)        │
-            │    C-g N         New workspace                      │
+            │    C-g s         New workspace                      │
             │    C-g e         Edit workspace                     │
             │    C-g d         Delete workspace                   │
             │    C-g i         Workspace info                     │
-            │    C-g R         Create/load worktree (GitHub-only) │
+            │    C-g r         Create/load worktree (GitHub-only) │
             │    C-g g         Git (lazygit tab)                  │
             │    C-g :         Command palette                    │
             │    C-g /         Fuzzy file search                  │
             │    C-g [         Terminal scroll mode               │
             │    C-g y         AI Chat                            │
-            │    C-g D         Dashboard                          │
+            │    C-g b         Dashboard                          │
             │    C-g o         Logs                               │
-            │    C-g A         Manage agents                      │
-            │    C-g V         Manage providers                   │
+            │    C-g m         Manage agents                      │
+            │    C-g v         Manage providers                   │
             │    C-g a         About                              │
             │    C-g ?         This help                          │
             │    C-g q         Quit                               │
