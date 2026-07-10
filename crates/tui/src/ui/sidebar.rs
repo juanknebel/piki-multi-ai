@@ -23,6 +23,13 @@ fn workspace_type_icon(ws_type: WorkspaceType) -> &'static str {
 pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
     let border_style = pane_border_style(app, ActivePane::WorkspaceList);
     let theme = &app.theme.workspace_list;
+    // Selection has two temperatures: the iris wash where the focus is, a
+    // neutral raised surface where it is not — you never lose your place.
+    let sel_bg = if app.active_pane == ActivePane::WorkspaceList {
+        theme.selected_bg
+    } else {
+        app.theme.palette.bg2
+    };
 
     let block = Block::default()
         .title(" WORKSPACES ")
@@ -87,7 +94,7 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                         Span::styled(format!("{} ({})", name.to_uppercase(), count), header_style),
                     ]);
                     let style = if is_selected {
-                        Style::default().bg(theme.selected_bg)
+                        Style::default().bg(sel_bg)
                     } else {
                         Style::default().bg(theme.group_header_bg)
                     };
@@ -186,7 +193,7 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                     }
 
                     let style = if is_selected {
-                        Style::default().bg(theme.selected_bg)
+                        Style::default().bg(sel_bg)
                     } else if current_ws_idx % 2 == 1 {
                         Style::default().bg(theme.alt_bg)
                     } else {
@@ -268,8 +275,14 @@ pub(super) fn render_agents_pane(frame: &mut Frame, area: Rect, app: &App) {
                 format!("Claude ({})", tab.provider.label())
             };
 
-            let row_bg = if is_active && row_idx == selected {
-                Style::default().bg(theme.selected_bg)
+            // Selection cools to a neutral surface when the pane loses focus
+            // but never disappears.
+            let row_bg = if row_idx == selected {
+                Style::default().bg(if is_active {
+                    theme.selected_bg
+                } else {
+                    app.theme.palette.bg2
+                })
             } else {
                 Style::default()
             };
