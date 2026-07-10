@@ -221,9 +221,9 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
     let cfg = &app.config;
     match app.mode {
         AppMode::CommandPalette | AppMode::WorkspaceSwitcher => vec![
-            ("up/down".to_string(), "select"),
-            ("enter".to_string(), "execute"),
-            ("esc".to_string(), "close"),
+            ("↑/↓".to_string(), "select"),
+            ("Enter".to_string(), "execute"),
+            ("Esc".to_string(), "close"),
         ],
         AppMode::FuzzySearch => vec![
             (
@@ -257,8 +257,8 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                 cfg.get_binding("new_workspace", "switch_field"),
                 "switch field",
             ),
-            ("enter".to_string(), "save"),
-            ("esc".to_string(), "cancel"),
+            (cfg.get_binding("new_workspace", "create"), "save"),
+            (cfg.get_binding("new_workspace", "exit"), "cancel"),
         ],
         AppMode::CreateWorktree => {
             let mode = match app.active_dialog {
@@ -268,18 +268,18 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             match mode {
                 crate::dialog_state::CreateWorktreeMode::ChooseSource => vec![
                     ("j/k".to_string(), "navigate"),
-                    ("enter".to_string(), "select"),
-                    ("esc".to_string(), "cancel"),
+                    ("Enter".to_string(), "select"),
+                    ("Esc".to_string(), "cancel"),
                 ],
                 crate::dialog_state::CreateWorktreeMode::CreateNew => vec![
-                    ("tab".to_string(), "switch field"),
-                    ("enter".to_string(), "create"),
-                    ("esc".to_string(), "cancel"),
+                    ("Tab".to_string(), "switch field"),
+                    ("Enter".to_string(), "create"),
+                    ("Esc".to_string(), "cancel"),
                 ],
                 crate::dialog_state::CreateWorktreeMode::LoadExisting => vec![
                     ("j/k".to_string(), "navigate"),
-                    ("enter".to_string(), "load"),
-                    ("esc".to_string(), "cancel"),
+                    ("Enter".to_string(), "load"),
+                    ("Esc".to_string(), "cancel"),
                 ],
             }
         }
@@ -295,7 +295,7 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                 ],
                 crate::dialog_state::NewTabMenu::Agents { .. } => vec![
                     ("j/k".to_string(), "navigate"),
-                    ("enter/1-9".to_string(), "select"),
+                    ("Enter/1-9".to_string(), "select"),
                     (cfg.get_binding("new_tab", "exit"), "back"),
                 ],
                 crate::dialog_state::NewTabMenu::Tools => vec![
@@ -306,8 +306,8 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
         }
         AppMode::SubmitReview => vec![
             ("Tab".to_string(), "cycle verdict"),
-            ("enter".to_string(), "submit"),
-            ("esc".to_string(), "close"),
+            ("Enter".to_string(), "submit"),
+            ("Esc".to_string(), "close"),
             (cfg.format_binding("ctrl-d"), "discard"),
         ],
         AppMode::Logs => vec![
@@ -351,18 +351,123 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             (cfg.get_binding("dashboard", "select"), "switch"),
             (cfg.get_binding("dashboard", "exit"), "close"),
         ],
-        AppMode::ConfirmCloseTab => vec![("Y".to_string(), "close"), ("N".to_string(), "cancel")],
-        AppMode::ConfirmQuit => vec![("Y".to_string(), "quit"), ("N".to_string(), "cancel")],
+        AppMode::ConfirmCloseTab => vec![("y".to_string(), "close"), ("n".to_string(), "cancel")],
+        AppMode::ConfirmQuit => vec![("y".to_string(), "quit"), ("n".to_string(), "cancel")],
         AppMode::DispatchCardMove => vec![
             ("↑/↓".to_string(), "select"),
-            ("enter".to_string(), "confirm"),
-            ("esc".to_string(), "cancel"),
+            ("Enter".to_string(), "confirm"),
+            ("Esc".to_string(), "cancel"),
+        ],
+        // ── Modal overlays: the footer shows the modal's keys, never stale
+        // terminal hints underneath it ──
+        AppMode::ConfirmDelete => vec![
+            ("y".to_string(), "delete"),
+            ("n".to_string(), "keep"),
+            ("Esc".to_string(), "cancel"),
+        ],
+        AppMode::DispatchAgent => vec![
+            ("j/k".to_string(), "select"),
+            ("Enter".to_string(), "dispatch"),
+            ("Esc".to_string(), "back"),
+        ],
+        AppMode::ManageAgents => vec![
+            ("j/k".to_string(), "select"),
+            ("e".to_string(), "edit"),
+            ("d".to_string(), "delete"),
+            ("p".to_string(), "sync to repo"),
+            ("i".to_string(), "import"),
+            ("Esc".to_string(), "close"),
+        ],
+        AppMode::EditAgent => vec![
+            ("Tab".to_string(), "switch field"),
+            ("Enter".to_string(), "edit role"),
+            ("Esc".to_string(), "cancel"),
+        ],
+        AppMode::EditAgentRole => vec![
+            (cfg.format_binding("ctrl-s"), "save"),
+            (cfg.format_binding("ctrl-d"), "clear all"),
+            ("Esc".to_string(), "back"),
+        ],
+        AppMode::ImportAgents => vec![
+            ("j/k".to_string(), "select"),
+            ("Space".to_string(), "toggle"),
+            ("a".to_string(), "all"),
+            ("Enter".to_string(), "import"),
+            ("Esc".to_string(), "cancel"),
+        ],
+        AppMode::ManageProviders => vec![
+            ("j/k".to_string(), "select"),
+            ("n".to_string(), "new"),
+            ("e".to_string(), "edit"),
+            ("d".to_string(), "delete"),
+            ("Esc".to_string(), "close"),
+        ],
+        AppMode::EditProvider => vec![
+            ("Tab".to_string(), "switch field"),
+            (cfg.format_binding("ctrl-s"), "save"),
+            ("Esc".to_string(), "cancel"),
+        ],
+        AppMode::ChatPanel => vec![
+            ("Enter".to_string(), "send"),
+            ("Tab".to_string(), "model"),
+            (cfg.format_binding("ctrl-o"), "settings"),
+            (cfg.format_binding("ctrl-l"), "clear"),
+            (cfg.format_binding("ctrl-a"), "agent"),
+            ("Esc".to_string(), "hide"),
+        ],
+        AppMode::Help => vec![
+            (
+                format!(
+                    "{}/{}",
+                    cfg.get_binding("help", "up"),
+                    cfg.get_binding("help", "down")
+                ),
+                "scroll",
+            ),
+            (
+                format!(
+                    "{}/{}",
+                    cfg.get_binding("help", "page_up"),
+                    cfg.get_binding("help", "page_down")
+                ),
+                "page",
+            ),
+            (cfg.get_binding("help", "exit"), "close"),
+        ],
+        AppMode::About => vec![(cfg.get_binding("about", "exit"), "close")],
+        AppMode::WorkspaceInfo => vec![
+            (
+                format!(
+                    "{}/{}",
+                    cfg.get_binding("workspace_info", "left"),
+                    cfg.get_binding("workspace_info", "right")
+                ),
+                "scroll",
+            ),
+            (cfg.get_binding("workspace_info", "exit"), "close"),
         ],
         _ if app.input_state == crate::app::InputState::PrefixPending => vec![
-            ("esc".to_string(), "cancel"),
+            (cfg.prefix_chord_display("new_tab"), "new tab"),
+            (cfg.prefix_chord_display("close_tab"), "close tab"),
+            (
+                format!(
+                    "{}/{}",
+                    cfg.prefix_chord_display("prev_tab"),
+                    cfg.prefix_chord_display("next_tab")
+                ),
+                "cycle tabs",
+            ),
+            ("1-9".to_string(), "go to tab"),
+            ("h/j/k/l".to_string(), "focus pane"),
+            (cfg.prefix_chord_display("workspace_switcher"), "workspaces"),
+            (cfg.prefix_chord_display("git"), "lazygit"),
+            (cfg.prefix_chord_display("command_palette"), "palette"),
+            (cfg.prefix_chord_display("fuzzy_search"), "find file"),
+            (cfg.prefix_chord_display("scroll_mode"), "scroll"),
+            (cfg.prefix_chord_display("quit"), "quit"),
             (cfg.prefix_display(), "send literal"),
-            (cfg.get_binding("app", "help"), "help"),
-            (cfg.get_binding("app", "workspace_switcher"), "workspaces"),
+            ("Esc".to_string(), "cancel"),
+            (cfg.prefix_chord_display("help"), "all keys"),
         ],
         _ if app.input_state == crate::app::InputState::TermScroll => vec![
             (

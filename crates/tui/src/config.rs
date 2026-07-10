@@ -792,12 +792,22 @@ impl Config {
     }
 
     /// Display form of an `app` binding: `"prefix-c"` → `"C-g c"`,
-    /// `"ctrl-shift-c"` → `"ctrl-shift-c"` (platform-formatted).
+    /// `"ctrl-shift-c"` → `"C-S-c"`.
     fn display_app_binding(&self, binding: &str) -> String {
         match binding.strip_prefix("prefix-") {
             Some(rest) => format!("{} {}", self.prefix_display(), self.format_binding(rest)),
             None => self.format_binding(binding),
         }
+    }
+
+    /// Bare chord (without the prefix) of a prefix-bound app action, for
+    /// which-key hints shown while the prefix is pending. Falls back to the
+    /// full display for direct chords.
+    pub fn prefix_chord_display(&self, action: &str) -> String {
+        self.app_binding_strings(action)
+            .iter()
+            .find_map(|b| b.strip_prefix("prefix-").map(|rest| self.format_binding(rest)))
+            .unwrap_or_else(|| self.get_binding("app", action))
     }
 }
 
