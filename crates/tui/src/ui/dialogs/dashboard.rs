@@ -45,17 +45,17 @@ pub(crate) fn render_dashboard_overlay(frame: &mut Frame, area: Rect, app: &App)
         // Status
         let status_label = ws.status_label();
         let status_color = match &ws.status {
-            piki_core::WorkspaceStatus::Idle => Color::DarkGray,
-            piki_core::WorkspaceStatus::Busy => Color::Yellow,
-            piki_core::WorkspaceStatus::Done => Color::Green,
-            piki_core::WorkspaceStatus::Error(_) => Color::Red,
+            piki_core::WorkspaceStatus::Idle => theme.status.exited,
+            piki_core::WorkspaceStatus::Busy => theme.status.running,
+            piki_core::WorkspaceStatus::Done => theme.status.done,
+            piki_core::WorkspaceStatus::Error(_) => theme.status.error,
         };
 
         // Row style
         let base_fg = if is_active {
             theme.workspace_list.name_active
         } else {
-            Color::White
+            theme.palette.fg1
         };
         let bg = if is_selected {
             theme.workspace_list.selected_bg
@@ -64,7 +64,7 @@ pub(crate) fn render_dashboard_overlay(frame: &mut Frame, area: Rect, app: &App)
         };
         let row_style = Style::default().fg(base_fg).bg(bg);
         let status_style = Style::default().fg(status_color).bg(bg);
-        let muted = Style::default().fg(Color::DarkGray).bg(bg);
+        let muted = Style::default().fg(theme.palette.fg2).bg(bg);
 
         // Workspace header line
         if narrow {
@@ -101,7 +101,7 @@ pub(crate) fn render_dashboard_overlay(frame: &mut Frame, area: Rect, app: &App)
         if ws.tabs.is_empty() {
             body_lines.push(Line::from(Span::styled(
                 "     (no tabs)",
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(theme.palette.fg3),
             )));
         } else {
             for (ti, tab) in ws.tabs.iter().enumerate() {
@@ -110,22 +110,18 @@ pub(crate) fn render_dashboard_overlay(frame: &mut Frame, area: Rect, app: &App)
                     .as_deref()
                     .unwrap_or(tab.provider.label());
 
-                let alive = tab.pty_session.as_ref().is_some_and(|p| p.peek_alive());
                 let (indicator, ind_color) = if tab.markdown_content.is_some() {
-                    ("md", Color::Cyan)
-                } else if alive {
-                    ("●", Color::Green)
-                } else if tab.pty_session.is_some() {
-                    ("○", Color::DarkGray)
+                    ("md", theme.palette.info)
                 } else {
-                    ("—", Color::DarkGray)
+                    let (glyph, _, color) = crate::ui::agent_tab_indicator(app, tab);
+                    (glyph, color)
                 };
 
                 let is_active_tab = ti == ws.active_tab;
                 let tab_fg = if is_active_tab {
-                    Color::White
+                    theme.palette.fg0
                 } else {
-                    Color::DarkGray
+                    theme.palette.fg2
                 };
                 let arrow = if is_active_tab { "→ " } else { "  " };
 
@@ -160,7 +156,7 @@ pub(crate) fn render_dashboard_overlay(frame: &mut Frame, area: Rect, app: &App)
     // Footer hint
     lines.push(Line::from(Span::styled(
         " j/k navigate  Enter switch  Esc close",
-        Style::default().fg(Color::DarkGray),
+        Style::default().fg(theme.palette.fg3),
     )));
 
     // Scroll indicator in title

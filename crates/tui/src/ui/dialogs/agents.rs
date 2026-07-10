@@ -1,6 +1,6 @@
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
@@ -116,11 +116,11 @@ pub(crate) fn render_dispatch_agent_dialog(frame: &mut Frame, area: Rect, app: &
         Line::from(""),
         Line::from(vec![
             Span::styled("  Card:     ", Style::default().fg(inactive_c)),
-            Span::styled(title_display, Style::default().fg(Color::White)),
+            Span::styled(title_display, Style::default().fg(app.theme.palette.fg0)),
         ]),
         Line::from(vec![
             Span::styled("  Desc:     ", Style::default().fg(inactive_c)),
-            Span::styled(desc_display, Style::default().fg(Color::DarkGray)),
+            Span::styled(desc_display, Style::default().fg(app.theme.palette.fg2)),
         ]),
         Line::from(""),
         Line::from(vec![
@@ -129,7 +129,7 @@ pub(crate) fn render_dispatch_agent_dialog(frame: &mut Frame, area: Rect, app: &
         ]),
         Line::from(Span::styled(
             "              ◄/► to change",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(app.theme.palette.fg3),
         )),
         Line::from(""),
     ];
@@ -150,7 +150,7 @@ pub(crate) fn render_dispatch_agent_dialog(frame: &mut Frame, area: Rect, app: &
         ]));
         lines.push(Line::from(Span::styled(
             "              ◄/► to change",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(app.theme.palette.fg3),
         )));
         lines.push(Line::from(""));
         lines.push(Line::from(""));
@@ -182,7 +182,8 @@ pub(crate) fn render_dispatch_agent_dialog(frame: &mut Frame, area: Rect, app: &
         ]));
     }
 
-    let text = Paragraph::new(lines).block(super::popup_block("Dispatch Agent", Color::Yellow));
+    let text = Paragraph::new(lines)
+        .block(super::popup_block("Dispatch Agent", app.theme.palette.iris));
     frame.render_widget(text, popup);
 }
 
@@ -202,7 +203,7 @@ pub(crate) fn render_manage_agents_dialog(frame: &mut Frame, area: Rect, app: &A
     if app.agent_profiles.is_empty() {
         lines.push(Line::from(Span::styled(
             "  No agents configured. Press [n] to create one.",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(app.theme.palette.fg3),
         )));
     } else {
         for (i, agent) in app.agent_profiles.iter().enumerate() {
@@ -210,17 +211,17 @@ pub(crate) fn render_manage_agents_dialog(frame: &mut Frame, area: Rect, app: &A
             let style = if i == selected {
                 Style::default().fg(active_c).add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(Color::White)
+                Style::default().fg(app.theme.palette.fg0)
             };
             let sync_indicator = if agent.last_synced_at.is_some() {
                 Span::styled(
                     format!(" v{} ✓", agent.version),
-                    Style::default().fg(Color::Green),
+                    Style::default().fg(app.theme.palette.ok),
                 )
             } else {
                 Span::styled(
                     format!(" v{} ✗", agent.version),
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(app.theme.palette.fg3),
                 )
             };
             lines.push(Line::from(vec![
@@ -257,7 +258,7 @@ pub(crate) fn render_manage_agents_dialog(frame: &mut Frame, area: Rect, app: &A
         .unwrap_or_default();
     let title = format!("Manage Agents ({})", project_name);
 
-    let text = Paragraph::new(lines).block(super::popup_block(&title, Color::Cyan));
+    let text = Paragraph::new(lines).block(super::popup_block(&title, app.theme.palette.iris));
     frame.render_widget(text, popup);
 }
 
@@ -328,7 +329,7 @@ pub(crate) fn render_edit_agent_dialog(frame: &mut Frame, area: Rect, app: &App)
         ]),
         Line::from(Span::styled(
             "              Tab switch  ◄/► provider",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(app.theme.palette.fg3),
         )),
         Line::from(""),
         Line::from(""),
@@ -341,7 +342,7 @@ pub(crate) fn render_edit_agent_dialog(frame: &mut Frame, area: Rect, app: &App)
         ]),
     ];
 
-    let text = Paragraph::new(lines).block(super::popup_block(title, Color::Cyan));
+    let text = Paragraph::new(lines).block(super::popup_block(title, app.theme.palette.iris));
     frame.render_widget(text, popup);
 }
 
@@ -425,7 +426,7 @@ pub(crate) fn render_edit_agent_role_dialog(frame: &mut Frame, area: Rect, app: 
 
     let mut lines = vec![Line::from(Span::styled(
         format!("  {}/{} lines", cursor_line + 1, display_lines.len()),
-        Style::default().fg(Color::DarkGray),
+        Style::default().fg(app.theme.palette.fg3),
     ))];
 
     let visible_range = s..display_lines.len().min(s + inner_height);
@@ -437,14 +438,14 @@ pub(crate) fn render_edit_agent_role_dialog(frame: &mut Frame, area: Rect, app: 
             let after: String = text.chars().skip(cursor_col).collect();
             lines.push(Line::from(vec![
                 Span::styled("  ", Style::default()),
-                Span::styled(before, Style::default().fg(Color::White)),
+                Span::styled(before, Style::default().fg(app.theme.palette.fg0)),
                 Span::styled("█", Style::default().fg(active_c)),
-                Span::styled(after, Style::default().fg(Color::White)),
+                Span::styled(after, Style::default().fg(app.theme.palette.fg0)),
             ]));
         } else {
             lines.push(Line::from(vec![
                 Span::styled("  ", Style::default()),
-                Span::styled(text.to_string(), Style::default().fg(Color::White)),
+                Span::styled(text.to_string(), Style::default().fg(app.theme.palette.fg0)),
             ]));
         }
         let _ = i;
@@ -468,7 +469,7 @@ pub(crate) fn render_edit_agent_role_dialog(frame: &mut Frame, area: Rect, app: 
         Span::styled("[Esc] Back", Style::default().fg(inactive_c)),
     ]));
 
-    let text = Paragraph::new(lines).block(super::popup_block(&title, Color::Cyan));
+    let text = Paragraph::new(lines).block(super::popup_block(&title, app.theme.palette.iris));
     frame.render_widget(text, popup);
 }
 
@@ -493,7 +494,7 @@ pub(crate) fn render_import_agents_dialog(frame: &mut Frame, area: Rect, app: &A
     if discovered.is_empty() {
         lines.push(Line::from(Span::styled(
             "  No agent files found in repo.",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(app.theme.palette.fg3),
         )));
     } else {
         for (i, (name, provider, _role, exists)) in discovered.iter().enumerate() {
@@ -506,12 +507,12 @@ pub(crate) fn render_import_agents_dialog(frame: &mut Frame, area: Rect, app: &A
             let style = if i == cursor {
                 Style::default().fg(active_c).add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(Color::White)
+                Style::default().fg(app.theme.palette.fg0)
             };
             let status = if *exists {
-                Span::styled(" (exists)", Style::default().fg(Color::DarkGray))
+                Span::styled(" (exists)", Style::default().fg(app.theme.palette.fg3))
             } else {
-                Span::styled(" (new)", Style::default().fg(Color::Green))
+                Span::styled(" (new)", Style::default().fg(app.theme.palette.ok))
             };
             lines.push(Line::from(vec![
                 Span::styled(format!("  {}{}", marker, checkbox), style),
@@ -533,7 +534,7 @@ pub(crate) fn render_import_agents_dialog(frame: &mut Frame, area: Rect, app: &A
         Span::styled("[Esc] Cancel", Style::default().fg(inactive_c)),
     ]));
 
-    let text =
-        Paragraph::new(lines).block(super::popup_block("Import Agents from Repo", Color::Cyan));
+    let text = Paragraph::new(lines)
+        .block(super::popup_block("Import Agents from Repo", app.theme.palette.iris));
     frame.render_widget(text, popup);
 }

@@ -597,16 +597,17 @@ pub(crate) fn render_logs_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let start = scroll;
     let end = total.min(scroll + inner_height);
 
+    let theme = &app.theme;
     for (view_idx, entry) in filtered[start..end].iter().enumerate() {
         let abs_idx = start + view_idx;
         let is_selected = abs_idx == selected && total > 0;
 
         let level_color = match entry.level {
-            tracing::Level::ERROR => Color::Red,
-            tracing::Level::WARN => Color::Yellow,
-            tracing::Level::INFO => Color::Green,
-            tracing::Level::DEBUG => Color::Cyan,
-            tracing::Level::TRACE => Color::DarkGray,
+            tracing::Level::ERROR => theme.palette.err,
+            tracing::Level::WARN => theme.palette.warn,
+            tracing::Level::INFO => theme.palette.info,
+            tracing::Level::DEBUG => theme.palette.fg3,
+            tracing::Level::TRACE => theme.palette.fg3,
         };
         let level_str = match entry.level {
             tracing::Level::ERROR => "ERROR",
@@ -622,7 +623,9 @@ pub(crate) fn render_logs_overlay(frame: &mut Frame, area: Rect, app: &App) {
                 " {} {} {} {}",
                 entry.timestamp, level_str, entry.target, entry.message
             );
-            let sel_style = Style::default().bg(Color::DarkGray).fg(Color::White);
+            let sel_style = Style::default()
+                .bg(theme.workspace_list.selected_bg)
+                .fg(theme.palette.fg0);
             lines.push(Line::from(vec![Span::styled(
                 format!("{:<width$}", full_text, width = pad_width),
                 sel_style,
@@ -632,14 +635,14 @@ pub(crate) fn render_logs_overlay(frame: &mut Frame, area: Rect, app: &App) {
             lines.push(Line::from(vec![
                 Span::styled(
                     format!(" {} ", entry.timestamp),
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(theme.palette.fg2),
                 ),
                 Span::styled(format!("{} ", level_str), Style::default().fg(level_color)),
                 Span::styled(
                     format!("{} ", entry.target),
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(theme.palette.fg2),
                 ),
-                Span::styled(&entry.message, Style::default().fg(Color::White)),
+                Span::styled(&entry.message, Style::default().fg(theme.palette.fg0)),
             ]));
         }
     }
@@ -682,8 +685,8 @@ pub(crate) fn render_logs_overlay(frame: &mut Frame, area: Rect, app: &App) {
 
     if let Some(search_rect) = search_area {
         let prefix = " / ";
-        let prompt_style = Style::default().fg(Color::Cyan);
-        let search_style = Style::default().fg(Color::Yellow);
+        let prompt_style = Style::default().fg(app.theme.palette.iris);
+        let search_style = Style::default().fg(app.theme.palette.fg0);
         let search_line = Line::from(vec![
             Span::styled(prefix, prompt_style),
             Span::styled(search_buffer, search_style),
@@ -716,16 +719,17 @@ pub(crate) fn render_new_tab_dialog(frame: &mut Frame, area: Rect, app: &App) {
                 Line::from("  [1] Shell"),
                 Line::from(vec![
                     Span::raw("  [2] AI Agents  "),
-                    Span::styled("→", Style::default().fg(Color::DarkGray)),
+                    Span::styled("→", Style::default().fg(app.theme.palette.fg3)),
                 ]),
                 Line::from(vec![
                     Span::raw("  [3] Tools      "),
-                    Span::styled("→", Style::default().fg(Color::DarkGray)),
+                    Span::styled("→", Style::default().fg(app.theme.palette.fg3)),
                 ]),
                 Line::from(""),
                 Line::from("  [Esc] Cancel"),
             ];
-            let text = Paragraph::new(lines).block(super::popup_block("New Tab", Color::Cyan));
+            let text = Paragraph::new(lines)
+                .block(super::popup_block("New Tab", app.theme.palette.iris));
             frame.render_widget(text, popup);
         }
         NewTabMenu::Agents { selected } => {
@@ -742,7 +746,9 @@ pub(crate) fn render_new_tab_dialog(frame: &mut Frame, area: Rect, app: &App) {
                 };
                 let label = provider.label();
                 let style = if i == selected {
-                    Style::default().fg(Color::Black).bg(Color::Cyan)
+                    Style::default()
+                        .fg(app.theme.palette.bg0)
+                        .bg(app.theme.palette.iris)
                 } else {
                     Style::default()
                 };
@@ -750,7 +756,8 @@ pub(crate) fn render_new_tab_dialog(frame: &mut Frame, area: Rect, app: &App) {
             }
             lines.push(Line::from(""));
             lines.push(Line::from("  [Esc] Back"));
-            let text = Paragraph::new(lines).block(super::popup_block("AI Agents", Color::Cyan));
+            let text = Paragraph::new(lines)
+                .block(super::popup_block("AI Agents", app.theme.palette.iris));
             frame.render_widget(text, popup);
         }
         NewTabMenu::Tools => {
@@ -764,7 +771,8 @@ pub(crate) fn render_new_tab_dialog(frame: &mut Frame, area: Rect, app: &App) {
                 Line::from(""),
                 Line::from("  [Esc] Back"),
             ];
-            let text = Paragraph::new(lines).block(super::popup_block("Tools", Color::Cyan));
+            let text = Paragraph::new(lines)
+                .block(super::popup_block("Tools", app.theme.palette.iris));
             frame.render_widget(text, popup);
         }
     }

@@ -1,6 +1,6 @@
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
@@ -24,7 +24,7 @@ pub(crate) fn render_manage_providers_dialog(frame: &mut Frame, area: Rect, app:
     if providers.is_empty() {
         lines.push(Line::from(Span::styled(
             "  No providers configured. Press [n] to create one.",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(app.theme.palette.fg3),
         )));
     } else {
         for (i, config) in providers.iter().enumerate() {
@@ -32,7 +32,7 @@ pub(crate) fn render_manage_providers_dialog(frame: &mut Frame, area: Rect, app:
             let style = if i == selected {
                 Style::default().fg(active_c).add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(Color::White)
+                Style::default().fg(app.theme.palette.fg0)
             };
             let dispatch_marker = if config.dispatchable { " ✓" } else { "" };
             lines.push(Line::from(vec![
@@ -44,7 +44,7 @@ pub(crate) fn render_manage_providers_dialog(frame: &mut Frame, area: Rect, app:
                 ),
                 Span::styled(
                     dispatch_marker,
-                    Style::default().fg(Color::Green),
+                    Style::default().fg(app.theme.palette.ok),
                 ),
             ]));
         }
@@ -58,7 +58,8 @@ pub(crate) fn render_manage_providers_dialog(frame: &mut Frame, area: Rect, app:
         Span::styled("[Esc] Close", Style::default().fg(inactive_c)),
     ]));
 
-    let text = Paragraph::new(lines).block(super::popup_block("Manage Providers", Color::Cyan));
+    let text = Paragraph::new(lines)
+        .block(super::popup_block("Manage Providers", app.theme.palette.iris));
     frame.render_widget(text, popup);
 }
 
@@ -105,7 +106,7 @@ pub(crate) fn render_edit_provider_dialog(frame: &mut Frame, area: Rect, app: &A
         let display = super::visible_field(value, is_active, cursor, fw);
         Line::from(vec![
             Span::styled(format!("  {label:<15}"), label_style),
-            Span::styled(display, Style::default().fg(Color::White)),
+            Span::styled(display, Style::default().fg(app.theme.palette.fg0)),
         ])
     };
 
@@ -113,9 +114,11 @@ pub(crate) fn render_edit_provider_dialog(frame: &mut Frame, area: Rect, app: &A
         let is_active = active_field == field_id;
         let label_style = Style::default().fg(if is_active { active_c } else { inactive_c });
         let val_style = if is_active {
-            Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(app.theme.palette.fg0)
+                .add_modifier(Modifier::BOLD)
         } else {
-            Style::default().fg(Color::White)
+            Style::default().fg(app.theme.palette.fg0)
         };
         Line::from(vec![
             Span::styled(format!("  {label:<15}"), label_style),
@@ -141,6 +144,6 @@ pub(crate) fn render_edit_provider_dialog(frame: &mut Frame, area: Rect, app: &A
         ]),
     ];
 
-    let text = Paragraph::new(lines).block(super::popup_block(title, Color::Cyan));
+    let text = Paragraph::new(lines).block(super::popup_block(title, app.theme.palette.iris));
     frame.render_widget(text, popup);
 }
