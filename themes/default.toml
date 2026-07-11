@@ -7,12 +7,22 @@
 # Colors can be named ANSI (Red, Green, Yellow, Blue, Cyan, Magenta, White,
 # Black, Gray, DarkGray, Light*), "Reset" (terminal default), or hex #rrggbb.
 #
-# Cabina primitives, for reference:
-#   ink ramp   bg0 #14141C · bg1 #1B1B26 · bg2 #232331 · bg3 #2A2A3C
-#   lines      line #3D3D54 · line-strong #4C4C68
-#   text ramp  fg0 #ECECF6 · fg1 #B4B4CC · fg2 #7C7C99 · fg3 #56566E
-#   accent     iris #A78BFA · iris-wash #322D4D   (focus, never state)
-#   semantics  ok #9BD186 · warn #E8B15E · err #F0717D · info #84B0F2
+# The fastest way to build a theme is the primitive `[palette]` below: every
+# role (and every direct palette read in the UI) derives from it, so setting
+# just these retints the whole app — a light theme only needs a light ink ramp
+# and a dark text ramp. The role sections further down then fine-tune specifics.
+# See themes/tokyonight.toml (dark) or catppuccin-latte.toml (light) for
+# palette-only examples.
+#
+# [palette]
+# bg0 = "#14141C"   # canvas          line = "#3D3D54"        # unfocused borders
+# bg1 = "#1B1B26"   # alt rows        line_strong = "#4C4C68" # dialog borders
+# bg2 = "#232331"   # raised surface  fg0 = "#ECECF6"         # primary text
+# bg3 = "#2A2A3C"   # overlays        fg1 = "#B4B4CC"         # body text
+# iris = "#A78BFA"      # accent      fg2 = "#7C7C99"         # muted detail
+# iris_wash = "#322D4D" # selection   fg3 = "#56566E"         # ghost text
+# ok = "#9BD186"  warn = "#E8B15E"  err = "#F0717D"  info = "#84B0F2"
+# diff_add_bg = "#1C271B"   diff_del_bg = "#2E1C22"
 
 [border]
 active = "#A78BFA"      # focused pane — the single iris accent
@@ -58,7 +68,7 @@ error_fg = "#14141C"
 prefix_bg = "#A78BFA"    # PREFIX/SCROLL mode chip
 navigate_bg = "#232331"  # quiet surface of the whole bar
 mode_fg = "#14141C"      # text on the mode chip
-separator_fg = "#56566E"
+separator_fg = "#7C7C99"
 text_fg = "#B4B4CC"      # bar body text (branch, counters)
 toast_info = "#84B0F2"
 toast_success = "#9BD186"

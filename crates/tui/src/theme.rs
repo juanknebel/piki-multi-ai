@@ -40,11 +40,39 @@ fn resolve(opt: &Option<String>, default: Color) -> Color {
     }
 }
 
+/// Build a [`Palette`] from the `[palette]` section, filling any unset token
+/// from the dark default. This runs before role resolution so the whole theme
+/// (roles + direct `theme.palette.*` reads) derives from the resolved palette.
+fn resolve_palette(t: &PaletteToml) -> Palette {
+    let d = Palette::default();
+    Palette {
+        bg0: resolve(&t.bg0, d.bg0),
+        bg1: resolve(&t.bg1, d.bg1),
+        bg2: resolve(&t.bg2, d.bg2),
+        bg3: resolve(&t.bg3, d.bg3),
+        line: resolve(&t.line, d.line),
+        line_strong: resolve(&t.line_strong, d.line_strong),
+        fg0: resolve(&t.fg0, d.fg0),
+        fg1: resolve(&t.fg1, d.fg1),
+        fg2: resolve(&t.fg2, d.fg2),
+        fg3: resolve(&t.fg3, d.fg3),
+        iris: resolve(&t.iris, d.iris),
+        iris_wash: resolve(&t.iris_wash, d.iris_wash),
+        ok: resolve(&t.ok, d.ok),
+        warn: resolve(&t.warn, d.warn),
+        err: resolve(&t.err, d.err),
+        info: resolve(&t.info, d.info),
+        diff_add_bg: resolve(&t.diff_add_bg, d.diff_add_bg),
+        diff_del_bg: resolve(&t.diff_del_bg, d.diff_del_bg),
+    }
+}
+
 // ── TOML deserialization structs (all Option<String>) ──
 
 #[derive(Deserialize, Default)]
 #[serde(default)]
 struct ThemeToml {
+    palette: PaletteToml,
     border: BorderToml,
     workspace_list: WorkspaceListToml,
     file_list: FileListToml,
@@ -208,6 +236,33 @@ struct DiffToml {
     context: Option<String>,
     hunk: Option<String>,
     comment: Option<String>,
+}
+
+/// A theme file may set any of the primitive `[palette]` tokens; unset ones
+/// fall back to the dark default. Every role and every direct `theme.palette.*`
+/// read then derives from the resolved palette, so overriding these is the one
+/// place a theme (notably a light one) can retint the whole UI at once.
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct PaletteToml {
+    bg0: Option<String>,
+    bg1: Option<String>,
+    bg2: Option<String>,
+    bg3: Option<String>,
+    line: Option<String>,
+    line_strong: Option<String>,
+    fg0: Option<String>,
+    fg1: Option<String>,
+    fg2: Option<String>,
+    fg3: Option<String>,
+    iris: Option<String>,
+    iris_wash: Option<String>,
+    ok: Option<String>,
+    warn: Option<String>,
+    err: Option<String>,
+    info: Option<String>,
+    diff_add_bg: Option<String>,
+    diff_del_bg: Option<String>,
 }
 
 // ── Cabina palette (primitive tokens) ──
@@ -509,7 +564,10 @@ impl Theme {
                 prefix_bg: p.iris,
                 navigate_bg: p.bg2,
                 mode_fg: p.bg0,
-                separator_fg: p.fg3,
+                // Muted, not ghost: the `│` dividers derive from fg2 so they
+                // stay legible on the bar (fg3 lands ~2.2:1 — below the 3:1
+                // floor even for a decorative separator).
+                separator_fg: p.fg2,
                 text_fg: p.fg1,
                 toast_info: p.info,
                 toast_success: p.ok,
@@ -574,7 +632,11 @@ impl Theme {
 
 impl Theme {
     fn from_toml(t: ThemeToml) -> Self {
-        let d = Self::default();
+        // Resolve the primitive palette first; every role default below (and
+        // every direct `theme.palette.*` read at render time) derives from it,
+        // so a theme that only sets `[palette]` retints the entire UI.
+        let p = resolve_palette(&t.palette);
+        let d = Self::from_palette(&p);
         Self {
             border: BorderTheme {
                 active: resolve(
@@ -710,7 +772,7 @@ impl Theme {
                 hunk: resolve(&t.diff.hunk, d.diff.hunk),
                 comment: resolve(&t.diff.comment, d.diff.comment),
             },
-            palette: d.palette,
+            palette: p,
         }
     }
 }
@@ -804,6 +866,56 @@ mod tests {
         let t: ThemeToml = toml::from_str(toml_str).unwrap();
         let theme = Theme::from_toml(t);
         assert_eq!(theme.border.active, Color::Rgb(0, 255, 0));
+    }
+
+    #[test]
+    fn test_palette_override_retints_roles_and_palette() {
+        // Setting a `[palette]` primitive must flow into every role that
+        // derives from it AND into the exposed `theme.palette` (which render
+        // code reads directly), not just leave the dark default in place.
+        let toml_str = "[palette]\niris = \"#00ff00\"\nbg0 = \"#ffffff\"\nfg0 = \"#010203\"\n";
+        let t: ThemeToml = toml::from_str(toml_str).unwrap();
+        let theme = Theme::from_toml(t);
+        let green = Color::Rgb(0, 255, 0);
+        // Roles derived from `iris` follow the override.
+        assert_eq!(theme.border.active, green);
+        assert_eq!(theme.subtabs.active, green);
+        assert_eq!(theme.footer.key, green);
+        // `subtabs.active_fg` derives from bg0, `workspace_list.name_active`
+        // from fg0 — both must track the override.
+        assert_eq!(theme.subtabs.active_fg, Color::Rgb(255, 255, 255));
+        assert_eq!(theme.workspace_list.name_active, Color::Rgb(1, 2, 3));
+        // The exposed palette carries the override for direct reads.
+        assert_eq!(theme.palette.iris, green);
+        assert_eq!(theme.palette.bg0, Color::Rgb(255, 255, 255));
+        // A role override still wins over the palette-derived default.
+        let toml_str = "[palette]\niris = \"#00ff00\"\n[border]\nactive = \"#0000ff\"\n";
+        let t: ThemeToml = toml::from_str(toml_str).unwrap();
+        let theme = Theme::from_toml(t);
+        assert_eq!(theme.border.active, Color::Rgb(0, 0, 255));
+        assert_eq!(theme.subtabs.active, green); // untouched role still tracks palette
+    }
+
+    #[test]
+    fn test_shipped_theme_files_parse_and_apply() {
+        // Every theme under repo `themes/` must deserialize and resolve without
+        // panicking (guards against a typo'd hex or a malformed section in a
+        // shipped theme file).
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../themes");
+        let mut checked = 0;
+        for entry in std::fs::read_dir(&dir).expect("themes dir") {
+            let path = entry.unwrap().path();
+            if path.extension().and_then(|e| e.to_str()) != Some("toml") {
+                continue;
+            }
+            let src = std::fs::read_to_string(&path).unwrap();
+            let t: ThemeToml = toml::from_str(&src)
+                .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            let _ = Theme::from_toml(t); // must not panic
+            checked += 1;
+        }
+        assert!(checked >= 8, "expected the shipped themes, saw {checked}");
     }
 
     #[test]
