@@ -97,6 +97,10 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         .current_workspace()
         .and_then(|ws| ws.current_tab())
         .is_some_and(|tab| tab.markdown_content.is_some());
+    let has_kanban = app
+        .current_workspace()
+        .and_then(|ws| ws.current_tab())
+        .is_some_and(|tab| tab.provider == piki_core::AIProvider::Kanban);
     let api_footer_state: u8 = match app
         .current_workspace()
         .and_then(|ws| ws.current_tab())
@@ -119,16 +123,18 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         app.input_state,
         app.active_pane,
         has_markdown,
+        has_kanban,
         api_footer_state,
         new_tab_menu,
     );
-    let keys = if let Some((ref m, i, p, md, api, ntm, ref cached)) = app.footer_cache {
+    let keys = if let Some((ref m, i, p, md, kb, api, ntm, ref cached)) = app.footer_cache {
         if *m == cache_key.0
             && i == cache_key.1
             && p == cache_key.2
             && md == cache_key.3
-            && api == cache_key.4
-            && ntm == cache_key.5
+            && kb == cache_key.4
+            && api == cache_key.5
+            && ntm == cache_key.6
         {
             cached.clone()
         } else {
@@ -140,6 +146,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
                 cache_key.3,
                 cache_key.4,
                 cache_key.5,
+                cache_key.6,
                 k.clone(),
             ));
             k
@@ -153,6 +160,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
             cache_key.3,
             cache_key.4,
             cache_key.5,
+            cache_key.6,
             k.clone(),
         ));
         k

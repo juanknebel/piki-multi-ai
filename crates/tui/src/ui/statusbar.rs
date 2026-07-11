@@ -525,6 +525,23 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             } else if app
                 .current_workspace()
                 .and_then(|ws| ws.current_tab())
+                .is_some_and(|tab| tab.provider == piki_core::AIProvider::Kanban)
+            {
+                // The kanban board speaks flow_tui's own pane-local keys, not
+                // app chords — surface them (dispatch especially, the one
+                // reason to be here) so the footer stops showing terminal hints.
+                vec![
+                    ("h/l/j/k".to_string(), "navigate"),
+                    ("n".to_string(), "new"),
+                    ("D".to_string(), "dispatch"),
+                    ("e".to_string(), "edit"),
+                    ("d".to_string(), "delete"),
+                    ("Enter".to_string(), "details"),
+                    (cfg.prefix_display(), "prefix"),
+                ]
+            } else if app
+                .current_workspace()
+                .and_then(|ws| ws.current_tab())
                 .is_some_and(|tab| tab.api_state.is_some())
             {
                 let has_search = app

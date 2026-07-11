@@ -700,13 +700,14 @@ pub enum InputState {
     Resize,
 }
 
-/// Cached footer keys: (mode, input_state, active_pane, has_markdown, api_footer_state, new_tab_menu, keys)
+/// Cached footer keys: (mode, input_state, active_pane, has_markdown, has_kanban, api_footer_state, new_tab_menu, keys)
 /// api_footer_state: 0 = no API tab, 1 = API tab, 2 = API tab with search open
 /// new_tab_menu: 0 = N/A, 1 = Main, 2 = Agents, 3 = Tools
 pub type FooterCache = (
     AppMode,
     InputState,
     ActivePane,
+    bool,
     bool,
     u8,
     u8,
