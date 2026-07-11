@@ -195,7 +195,9 @@ mod tests {
     #[test]
     fn test_render_which_key_overlay() {
         let mut terminal = test_terminal(80, 24);
-        let app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        // Pin the platform: on macOS the prefix would render as "Cmd-g".
+        app.config.platform = crate::config::Platform::Linux;
         terminal
             .draw(|frame| {
                 super::which_key::render(frame, frame.area(), &app);
