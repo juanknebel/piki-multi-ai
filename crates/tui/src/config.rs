@@ -791,6 +791,23 @@ impl Config {
             .iter()
             .find_map(|b| b.strip_prefix("prefix-").map(|rest| self.format_binding(rest)))
     }
+
+    /// Every key reachable after the prefix, across all actions and including
+    /// the secondary alternatives (`prefix-,` alongside `prefix-<`). Display
+    /// form, same as [`Self::prefix_chord`].
+    ///
+    /// Only the README parity test needs the full set; the UI surfaces all want
+    /// the primary chord, so they call [`Self::prefix_chord`].
+    #[cfg(test)]
+    pub fn all_prefix_chords(&self) -> Vec<String> {
+        let mut actions: Vec<String> = self.keybindings.app.keys().cloned().collect();
+        actions.extend(default_app().into_keys().filter(|k| !self.keybindings.app.contains_key(k)));
+        actions
+            .iter()
+            .flat_map(|a| self.app_binding_strings(a))
+            .filter_map(|b| b.strip_prefix("prefix-").map(|rest| self.format_binding(rest)))
+            .collect()
+    }
 }
 
 /// Compact modifier spelling plus capitalized special keys: `ctrl-g` →

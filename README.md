@@ -322,6 +322,7 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 
 **Prefix actions** (`Ctrl+G` + key, status bar shows `[PREFIX]` while pending):
 
+<!-- BEGIN:prefix-keys -->
 | Key | Action |
 |-----|--------|
 | `h` / `j` / `k` / `l` (or arrows) | Move focus between panes (`h` from main panel goes to workspace list) |
@@ -330,29 +331,33 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 | `n` / `p` | Next / previous tab |
 | `1`..`9` | Jump to tab N |
 | `w` | Workspace switcher (tree of workspaces + tabs; type to filter, Enter to jump) |
-| `)` / `(` | Next / previous workspace |
+| `}` / `{` | Next / previous workspace |
 | `` ` `` | Toggle to previous workspace |
-| `N` | Create new workspace |
+| `s` | Create new workspace |
 | `e` | Edit workspace options (Kanban path, Prompt) |
+| `d` | Delete the selected workspace (with confirmation dialog) |
 | `i` | Workspace info overlay (branch, paths, description, prompt; mouse-copyable) |
-| `R` | Create Worktree (GitHub-only): spawn a git worktree from the selected GitHub-origin workspace, inheriting prompt/kanban/group |
+| `r` | Create Worktree (GitHub-only): spawn a git worktree from the selected GitHub-origin workspace, inheriting prompt/kanban/group |
 | `g` | Git: open-or-focus the lazygit tab for the current workspace (respawns if the process exited) |
 | `:` | Command palette (fuzzy-searchable list of all commands) |
 | `/` | Fuzzy file search |
 | `f` | Search within the active terminal's output |
 | `[` | Terminal scroll mode (see below) |
 | `y` | AI Chat panel |
-| `D` | Workspace dashboard overlay (bird's-eye view of all workspaces and tabs) |
+| `b` | Workspace dashboard overlay (bird's-eye view of all workspaces and tabs) |
 | `o` | Log viewer overlay (last 500 log entries, color-coded, filterable by level) |
-| `A` | Manage agent profiles (create/edit/delete agents for this project) |
-| `V` | Manage providers (add/edit/delete custom AI providers) |
-| `<` / `>` | Resize sidebar width (±5%) |
-| `+` / `-` | Resize workspace/file split (±10%) |
+| `m` | Manage agent profiles (create/edit/delete agents for this project) |
+| `v` | Manage providers (add/edit/delete custom AI providers) |
+| `<` / `>` (or `,` / `.`) | Resize sidebar width (±5%) |
+| `+` / `-` (or `=`) | Resize workspace/file split (±10%) |
 | `a` | About overlay |
 | `?` | Help overlay |
 | `q` | Quit (with confirmation dialog) |
 | `Ctrl+G` | Send a literal Ctrl+G to the terminal |
 | `Esc` | Cancel the pending prefix |
+<!-- END:prefix-keys -->
+
+> This table is checked against `default_app()` by the `readme_parity` tests: every action key must appear here, and no key may be listed that nothing binds.
 
 **Terminal scroll mode** (`Ctrl+G [`, status bar shows `[SCROLL]`): `j`/`k` scroll by line, `Ctrl+U`/`Ctrl+D` (or `PageUp`/`PageDown`) by page, `g`/`G` top/bottom, `/` opens terminal search, `Esc`/`q` exits and snaps back to the live view. Mouse wheel scrolling works at any time without entering the mode.
 

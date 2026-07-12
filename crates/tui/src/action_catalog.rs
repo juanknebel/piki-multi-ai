@@ -105,3 +105,127 @@ mod tests {
         }
     }
 }
+
+/// Keeps the README's prefix table honest.
+///
+/// Nothing used to enforce this, and it drifted: the README advertised `N`, `D`,
+/// `A`, `V` and `)`/`(` long after they were renamed to `s`, `b`, `m`, `v` and
+/// `}`/`{`, so a new user following it could not drive the app.
+///
+/// It checks the *keys*, not the prose — the descriptions stay hand-written.
+#[cfg(test)]
+mod readme_parity {
+    use super::*;
+    use std::collections::HashSet;
+
+    const BEGIN: &str = "<!-- BEGIN:prefix-keys -->";
+    const END: &str = "<!-- END:prefix-keys -->";
+
+    /// Keys the table lists that aren't bound to a catalog action: the
+    /// hardcoded tab jumps and the two prefix-state escapes.
+    const META_KEYS: &[&str] = &["1", "9", "C-g", "Ctrl+G", "Esc"];
+
+    fn readme() -> String {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../README.md")
+            .canonicalize()
+            .expect("README.md not found");
+        std::fs::read_to_string(path).expect("failed to read README.md")
+    }
+
+    /// The rows between the markers, as their first (key) column.
+    fn key_column_rows(readme: &str) -> Vec<String> {
+        let body = readme
+            .split_once(BEGIN)
+            .unwrap_or_else(|| panic!("README.md is missing the `{BEGIN}` marker"))
+            .1
+            .split_once(END)
+            .unwrap_or_else(|| panic!("README.md is missing the `{END}` marker"))
+            .0;
+
+        body.lines()
+            .filter(|l| l.starts_with('|'))
+            // Skip the header row and its `|---|---|` separator.
+            .filter(|l| !l.contains("---"))
+            .filter(|l| !l.contains("| Action |"))
+            .filter_map(|l| l.split('|').nth(1).map(str::to_string))
+            .collect()
+    }
+
+    /// Every inline-code span in a markdown fragment. Handles the ``` `` ` `` ```
+    /// form the backtick key needs, as well as plain `` `x` ``.
+    fn code_spans(s: &str) -> Vec<String> {
+        let chars: Vec<char> = s.chars().collect();
+        let mut spans = Vec::new();
+        let mut i = 0;
+        while i < chars.len() {
+            if chars[i] != '`' {
+                i += 1;
+                continue;
+            }
+            let fence = if chars.get(i + 1) == Some(&'`') { 2 } else { 1 };
+            let open = i + fence;
+            let mut j = open;
+            let close = loop {
+                if j >= chars.len() {
+                    break None;
+                }
+                let run = chars[j..].iter().take_while(|c| **c == '`').count();
+                if run == fence {
+                    break Some(j);
+                }
+                j += if run > 0 { run } else { 1 };
+            };
+            match close {
+                Some(end) => {
+                    let inner: String = chars[open..end].iter().collect();
+                    spans.push(inner.trim().to_string());
+                    i = end + fence;
+                }
+                None => break,
+            }
+        }
+        spans
+    }
+
+    #[test]
+    fn readme_prefix_table_lists_every_action_key() {
+        let cfg = crate::config::Config::default();
+        let readme = readme();
+        let documented: HashSet<String> = key_column_rows(&readme)
+            .iter()
+            .flat_map(|col| code_spans(col))
+            .collect();
+
+        for a in catalog() {
+            let Some(chord) = cfg.prefix_chord(a.id) else {
+                continue; // direct chords (copy) live in the focused-pane table
+            };
+            assert!(
+                documented.contains(&chord),
+                "README prefix table is missing `{chord}` ({}). Add a row for it \
+                 between the {BEGIN} markers.",
+                a.label,
+            );
+        }
+    }
+
+    #[test]
+    fn readme_prefix_table_invents_no_keys() {
+        let cfg = crate::config::Config::default();
+        let readme = readme();
+
+        let mut bound: HashSet<String> = cfg.all_prefix_chords().into_iter().collect();
+        bound.extend(META_KEYS.iter().map(|s| s.to_string()));
+
+        for col in key_column_rows(&readme) {
+            for key in code_spans(&col) {
+                assert!(
+                    bound.contains(&key),
+                    "README prefix table documents `{key}`, which no action binds. \
+                     It was probably renamed — check `default_app()`.",
+                );
+            }
+        }
+    }
+}

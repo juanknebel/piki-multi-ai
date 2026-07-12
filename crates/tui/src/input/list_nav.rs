@@ -1,5 +1,5 @@
 //! Tiny helper for moving a `selected: usize` cursor in list-style dialogs
-//! (Manage*, Import, GitLog, DispatchCardMove, …). Centralizes the
+//! (Manage*, Import, Dashboard, DispatchCardMove, …). Centralizes the
 //! clamp/wrap arithmetic so handlers can express their j/k arms in one line.
 //!
 //! Not a trait: the survey of the 8 list-nav dialogs (see plan

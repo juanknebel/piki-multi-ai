@@ -1,9 +1,9 @@
 //! Unit tests for the dialog input handlers in `input/dialog.rs`.
-//! Covered: all confirmations (`ConfirmDelete`, `ConfirmCloseTab`, `ConfirmQuit`,
-//! `ConfirmMerge`), text dialogs (`CommitMessage`, `EditWorkspace`), scroll
+//! Covered: the confirmations (`ConfirmDelete`, `ConfirmCloseTab`,
+//! `ConfirmQuit`), text dialogs (`NewWorkspace`, `EditWorkspace`), scroll
 //! overlays (`Help`, `About`, `WorkspaceInfo`), and list-navigation dialogs
-//! (`DispatchCardMove`, `GitLog`, `Dashboard`, `Logs`, `GitStash`,
-//! `ImportAgents`, `ManageAgents`, `ManageProviders`).
+//! (`DispatchCardMove`, `Dashboard`, `Logs`, `ImportAgents`, `ManageAgents`,
+//! `ManageProviders`).
 
 use crossterm::event::{KeyCode, KeyModifiers};
 use piki_core::storage::AgentProfile;
@@ -917,8 +917,6 @@ fn dispatch_card_move_returns_none_when_dialog_not_active() {
     assert!(action.is_none());
 }
 
-// ── GitLog ──────────────────────────────────────────────────────────────
-
 // ── Dashboard ──────────────────────────────────────────────────────────
 
 #[test]
@@ -1784,14 +1782,6 @@ fn new_tab_returns_none_when_dialog_not_active() {
     let action = handle_new_tab_input(&mut app, key(KeyCode::Char('1')));
     assert!(action.is_none());
 }
-
-// ── ConflictResolution ────────────────────────────────────────────────────
-//
-// List of conflicted files with action keys (o/t/m/e/A/Enter) and j/k
-// navigation. Keybindings come from `app.config.matches_conflict_resolution`,
-// which falls back to the defaults in `default_conflict_resolution()`:
-// down=j, up=k, ours=o, theirs=t, mark_resolved=m, edit=e, abort=A,
-// select=enter (view diff), exit=esc, exit_alt=X.
 
 // ── EditAgent (step 1: name + provider) ───────────────────────────────────
 //
