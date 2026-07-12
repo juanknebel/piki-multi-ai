@@ -1,32 +1,35 @@
 use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::app::{App, AppMode};
-use crate::config::has_ctrl;
 
 pub(super) fn handle_inline_edit_input(app: &mut App, key: KeyEvent) -> Option<super::Action> {
-    match key.code {
-        KeyCode::Esc => {
-            app.editor = None;
-            app.editing_file = None;
-            app.mode = AppMode::Normal;
-        }
-        KeyCode::Char('s') if has_ctrl(key.modifiers, app.config.platform) => {
-            // Save file
-            if let (Some(editor), Some(path)) = (&app.editor, &app.editing_file) {
-                let content = editor.contents();
-                match std::fs::write(path, &content) {
-                    Ok(()) => {
-                        app.status_message = Some(format!("Saved: {}", path.display()));
-                        if let Some(ws) = app.current_workspace_mut() {
-                            ws.dirty = true;
-                        }
+    // `[keybindings.editor]` bindings first — they must pre-empt the `Char`
+    // fallback below, which types everything else into the buffer.
+    if app.config.matches_editor(key, "exit") {
+        app.editor = None;
+        app.editing_file = None;
+        app.mode = AppMode::Normal;
+        return None;
+    }
+    if app.config.matches_editor(key, "save") {
+        if let (Some(editor), Some(path)) = (&app.editor, &app.editing_file) {
+            let content = editor.contents();
+            match std::fs::write(path, &content) {
+                Ok(()) => {
+                    app.status_message = Some(format!("Saved: {}", path.display()));
+                    if let Some(ws) = app.current_workspace_mut() {
+                        ws.dirty = true;
                     }
-                    Err(e) => {
-                        app.status_message = Some(format!("Save error: {}", e));
-                    }
+                }
+                Err(e) => {
+                    app.status_message = Some(format!("Save error: {}", e));
                 }
             }
         }
+        return None;
+    }
+
+    match key.code {
         KeyCode::Up => {
             if let Some(ref mut editor) = app.editor {
                 editor.move_up();

@@ -7,7 +7,7 @@ use crate::workspace_switcher::SwitcherRow;
 use super::list_nav::move_selection;
 
 pub(super) fn handle_workspace_switcher_input(app: &mut App, key: KeyEvent) -> Option<Action> {
-    let is_cancel = super::text_field_common::is_cancel(key, app.config.platform);
+    let is_cancel = super::text_field_common::is_cancel(key, &app.config);
     let state = app.workspace_switcher.as_mut()?;
 
     if is_cancel {

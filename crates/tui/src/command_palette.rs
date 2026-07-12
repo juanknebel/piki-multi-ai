@@ -35,9 +35,13 @@ impl CommandPaletteState {
 
 /// Returns the static list of all palette commands, derived from the shared
 /// action catalog so it never drifts from the other discoverability surfaces.
+///
+/// `command_palette` itself is skipped — offering "open the command palette"
+/// from inside the open command palette is noise.
 fn all_commands() -> Vec<PaletteCommand> {
     crate::action_catalog::catalog()
         .iter()
+        .filter(|a| a.id != "command_palette")
         .map(|a| PaletteCommand {
             id: a.id,
             label: Cow::Borrowed(a.label),

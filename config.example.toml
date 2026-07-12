@@ -112,6 +112,14 @@ theme = "default"
 
 # The tables below are pane/mode-local keys — active only while that view is
 # focused, NOT behind the prefix. Each is shown with its default.
+#
+# Overriding a table is additive: any key you leave out keeps its default, so
+# you only list what you actually want to change.
+#
+# In the text-entry overlays (fuzzy, editor, new_workspace) these bindings are
+# checked *before* the keystroke reaches the text buffer — bind one to a bare
+# letter and that letter becomes untypable. Prefer a modifier or a special key.
+# Esc and the prefix key always cancel a dialog, whatever `exit` says.
 
 # [keybindings.scroll]        # terminal scroll mode (entered with scroll_mode)
 # down = "j"
@@ -173,14 +181,14 @@ theme = "default"
 # exit = "esc"
 # exit_info = "i"
 
-# [keybindings.fuzzy]         # fuzzy file search
-# up = "up"
+# [keybindings.fuzzy]         # fuzzy file search AND the command palette —
+# up = "up"                   # both overlays share this navigation grammar
 # down = "down"
 # open = "enter"
-# editor = "ctrl-e"
-# inline_edit = "ctrl-v"
-# markdown = "ctrl-o"
-# mdr = "alt-m"
+# editor = "ctrl-e"           # open the selection in $EDITOR
+# inline_edit = "ctrl-v"      # open the selection in the inline editor
+# markdown = "ctrl-o"         # open a .md file in a new tab
+# mdr = "alt-m"               # open a .md file in the external `mdr` viewer
 # exit = "esc"
 
 # [keybindings.editor]        # inline text editor
@@ -189,11 +197,12 @@ theme = "default"
 
 # [keybindings.new_workspace]
 # switch_field = "tab"
+# switch_field_back = "backtab"
 # create = "enter"
 # exit = "esc"
 
 # [keybindings.new_tab]
-# exit = "esc"
+# exit = "esc"                # closes the menu, or steps back out of a submenu
 
 # [keybindings.dashboard]
 # down = "j"

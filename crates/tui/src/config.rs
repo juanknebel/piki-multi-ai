@@ -203,8 +203,6 @@ pub struct Keybindings {
     pub workspaces: HashMap<String, String>,
     #[serde(default = "default_markdown")]
     pub markdown: HashMap<String, String>,
-    #[serde(default = "default_help")]
-    pub help: HashMap<String, String>,
     #[serde(default = "default_about")]
     pub about: HashMap<String, String>,
     #[serde(default = "default_workspace_info")]
@@ -232,7 +230,6 @@ impl Default for Keybindings {
             agents: default_agents(),
             workspaces: default_workspaces(),
             markdown: default_markdown(),
-            help: default_help(),
             about: default_about(),
             workspace_info: default_workspace_info(),
             fuzzy: default_fuzzy(),
@@ -373,22 +370,6 @@ fn default_markdown() -> HashMap<String, String> {
 
 
 
-fn default_help() -> HashMap<String, String> {
-    let mut m = HashMap::new();
-    m.insert("down".to_string(), "j".to_string());
-    m.insert("up".to_string(), "k".to_string());
-    m.insert("down_alt".to_string(), "down".to_string());
-    m.insert("up_alt".to_string(), "up".to_string());
-    m.insert("page_down".to_string(), "ctrl-d".to_string());
-    m.insert("page_up".to_string(), "ctrl-u".to_string());
-    m.insert("scroll_top".to_string(), "g".to_string());
-    m.insert("scroll_bottom".to_string(), "G".to_string());
-    m.insert("exit".to_string(), "esc".to_string());
-    m.insert("exit_alt".to_string(), "q".to_string());
-    m.insert("exit_help".to_string(), "?".to_string());
-    m
-}
-
 fn default_about() -> HashMap<String, String> {
     let mut m = HashMap::new();
     m.insert("exit".to_string(), "esc".to_string());
@@ -432,6 +413,7 @@ fn default_editor() -> HashMap<String, String> {
 fn default_new_workspace() -> HashMap<String, String> {
     let mut m = HashMap::new();
     m.insert("switch_field".to_string(), "tab".to_string());
+    m.insert("switch_field_back".to_string(), "backtab".to_string());
     m.insert("create".to_string(), "enter".to_string());
     m.insert("exit".to_string(), "esc".to_string());
     m
@@ -553,15 +535,29 @@ impl Config {
         })
     }
 
-    pub fn matches_scroll(&self, event: KeyEvent, action: &str) -> bool {
-        if let Some(binding) = self.keybindings.scroll.get(action) {
-            key_matches_platform(event, binding, self.platform)
-        } else {
-            let defaults = default_scroll();
-            defaults
+    /// Match a key against one action of a pane/dialog-local binding table.
+    ///
+    /// Serde replaces a `[keybindings.*]` table wholesale when the user
+    /// overrides it, so a partial override would otherwise silently drop every
+    /// key it didn't list. Falling back to the table's defaults per *action*
+    /// keeps a partial override additive, which is what users expect.
+    fn matches_ctx(
+        &self,
+        table: &HashMap<String, String>,
+        defaults: fn() -> HashMap<String, String>,
+        event: KeyEvent,
+        action: &str,
+    ) -> bool {
+        match table.get(action) {
+            Some(binding) => key_matches_platform(event, binding, self.platform),
+            None => defaults()
                 .get(action)
-                .is_some_and(|b| key_matches_platform(event, b, self.platform))
+                .is_some_and(|b| key_matches_platform(event, b, self.platform)),
         }
+    }
+
+    pub fn matches_scroll(&self, event: KeyEvent, action: &str) -> bool {
+        self.matches_ctx(&self.keybindings.scroll, default_scroll, event, action)
     }
 
     /// Log warnings for misconfigured keybindings: unparseable strings,
@@ -622,71 +618,59 @@ impl Config {
     }
 
     pub fn matches_agents(&self, event: KeyEvent, action: &str) -> bool {
-        if let Some(binding) = self.keybindings.agents.get(action) {
-            key_matches_platform(event, binding, self.platform)
-        } else {
-            let defaults = default_agents();
-            defaults
-                .get(action)
-                .is_some_and(|b| key_matches_platform(event, b, self.platform))
-        }
+        self.matches_ctx(&self.keybindings.agents, default_agents, event, action)
     }
 
     pub fn matches_workspaces(&self, event: KeyEvent, action: &str) -> bool {
-        if let Some(binding) = self.keybindings.workspaces.get(action) {
-            key_matches_platform(event, binding, self.platform)
-        } else {
-            let defaults = default_workspaces();
-            defaults
-                .get(action)
-                .is_some_and(|b| key_matches_platform(event, b, self.platform))
-        }
+        self.matches_ctx(&self.keybindings.workspaces, default_workspaces, event, action)
     }
 
     pub fn matches_markdown(&self, event: KeyEvent, action: &str) -> bool {
-        if let Some(binding) = self.keybindings.markdown.get(action) {
-            key_matches_platform(event, binding, self.platform)
-        } else {
-            let defaults = default_markdown();
-            defaults
-                .get(action)
-                .is_some_and(|b| key_matches_platform(event, b, self.platform))
-        }
+        self.matches_ctx(&self.keybindings.markdown, default_markdown, event, action)
     }
 
-
-
-
     pub fn matches_about(&self, event: KeyEvent, action: &str) -> bool {
-        if let Some(binding) = self.keybindings.about.get(action) {
-            key_matches_platform(event, binding, self.platform)
-        } else {
-            false
-        }
+        self.matches_ctx(&self.keybindings.about, default_about, event, action)
     }
 
     pub fn matches_workspace_info(&self, event: KeyEvent, action: &str) -> bool {
-        if let Some(binding) = self.keybindings.workspace_info.get(action) {
-            key_matches_platform(event, binding, self.platform)
-        } else {
-            false
-        }
+        self.matches_ctx(
+            &self.keybindings.workspace_info,
+            default_workspace_info,
+            event,
+            action,
+        )
     }
 
     pub fn matches_dashboard(&self, event: KeyEvent, action: &str) -> bool {
-        if let Some(binding) = self.keybindings.dashboard.get(action) {
-            key_matches_platform(event, binding, self.platform)
-        } else {
-            false
-        }
+        self.matches_ctx(&self.keybindings.dashboard, default_dashboard, event, action)
     }
 
     pub fn matches_logs(&self, event: KeyEvent, action: &str) -> bool {
-        if let Some(binding) = self.keybindings.logs.get(action) {
-            key_matches_platform(event, binding, self.platform)
-        } else {
-            false
-        }
+        self.matches_ctx(&self.keybindings.logs, default_logs, event, action)
+    }
+
+    /// Keys of the fuzzy overlays — both the file search (`prefix-/`) and the
+    /// command palette (`prefix-:`), which share the same navigation grammar.
+    pub fn matches_fuzzy(&self, event: KeyEvent, action: &str) -> bool {
+        self.matches_ctx(&self.keybindings.fuzzy, default_fuzzy, event, action)
+    }
+
+    pub fn matches_editor(&self, event: KeyEvent, action: &str) -> bool {
+        self.matches_ctx(&self.keybindings.editor, default_editor, event, action)
+    }
+
+    pub fn matches_new_workspace(&self, event: KeyEvent, action: &str) -> bool {
+        self.matches_ctx(
+            &self.keybindings.new_workspace,
+            default_new_workspace,
+            event,
+            action,
+        )
+    }
+
+    pub fn matches_new_tab(&self, event: KeyEvent, action: &str) -> bool {
+        self.matches_ctx(&self.keybindings.new_tab, default_new_tab, event, action)
     }
 
 
@@ -734,12 +718,6 @@ impl Config {
                 .get(action)
                 .cloned()
                 .or_else(|| default_markdown().get(action).cloned()),
-            "help" => self
-                .keybindings
-                .help
-                .get(action)
-                .cloned()
-                .or_else(|| default_help().get(action).cloned()),
             "about" => self
                 .keybindings
                 .about
@@ -832,6 +810,7 @@ fn compact_binding_display(binding: &str) -> String {
         "esc" => "Esc",
         "enter" => "Enter",
         "tab" => "Tab",
+        "backtab" => "S-Tab",
         "space" => "Space",
         "backspace" => "Backspace",
         "delete" => "Del",
@@ -854,12 +833,6 @@ fn compact_binding_display(binding: &str) -> String {
 /// platform-aware key matching in input handlers.
 pub fn has_ctrl(modifiers: KeyModifiers, platform: Platform) -> bool {
     modifiers.contains(KeyModifiers::CONTROL)
-        || (platform.is_macos() && modifiers.contains(KeyModifiers::SUPER))
-}
-
-/// Check if modifiers include Alt (or Super on macOS, since Option doesn't send ALT).
-pub fn has_alt(modifiers: KeyModifiers, platform: Platform) -> bool {
-    modifiers.contains(KeyModifiers::ALT)
         || (platform.is_macos() && modifiers.contains(KeyModifiers::SUPER))
 }
 
@@ -904,6 +877,8 @@ pub fn parse_key_event(s: &str) -> Option<KeyEvent> {
     let code = match code_str.to_lowercase().as_str() {
         "enter" => KeyCode::Enter,
         "tab" => KeyCode::Tab,
+        // Crossterm reports Shift+Tab as its own key code, not Tab+SHIFT.
+        "backtab" => KeyCode::BackTab,
         "backspace" => KeyCode::Backspace,
         "esc" => KeyCode::Esc,
         "left" => KeyCode::Left,
@@ -943,6 +918,16 @@ pub fn key_matches(event: KeyEvent, binding: &str) -> bool {
     key_matches_platform(event, binding, Platform::detect())
 }
 
+/// SHIFT is redundant on `BackTab` — the key code already encodes Shift+Tab, and
+/// terminals disagree on whether they set the modifier too. Drop it so a
+/// `"backtab"` binding matches either report.
+fn strip_redundant_shift(event: KeyEvent) -> KeyModifiers {
+    match event.code {
+        KeyCode::BackTab => event.modifiers - KeyModifiers::SHIFT,
+        _ => event.modifiers,
+    }
+}
+
 /// Platform-aware key matching. On macOS, `ctrl-*` and `alt-*` bindings also
 /// accept `super-*` (Cmd), because macOS Option key does not send ALT to terminals.
 pub fn key_matches_platform(event: KeyEvent, binding: &str, platform: Platform) -> bool {
@@ -954,7 +939,11 @@ pub fn key_matches_platform(event: KeyEvent, binding: &str, platform: Platform) 
             (KeyCode::Char(a), KeyCode::Char(b)) => a.eq_ignore_ascii_case(&b),
             (a, b) => a == b,
         };
-        if code_match && event.modifiers == target.modifiers {
+        // BackTab already *means* Shift+Tab; terminals disagree on whether they
+        // also set the SHIFT modifier, so it carries no information here.
+        let event_mods = strip_redundant_shift(event);
+        let target = KeyEvent::new(target.code, strip_redundant_shift(target));
+        if code_match && event_mods == target.modifiers {
             return true;
         }
         // On macOS, also accept Super (Cmd) where the binding specifies Ctrl.
@@ -1008,7 +997,6 @@ mod tests {
             ("scroll", &cfg.keybindings.scroll),
             ("agents", &cfg.keybindings.agents),
             ("workspaces", &cfg.keybindings.workspaces),
-            ("help", &cfg.keybindings.help),
             ("fuzzy", &cfg.keybindings.fuzzy),
             ("editor", &cfg.keybindings.editor),
             ("new_tab", &cfg.keybindings.new_tab),
@@ -1016,6 +1004,8 @@ mod tests {
             ("about", &cfg.keybindings.about),
             ("workspace_info", &cfg.keybindings.workspace_info),
             ("markdown", &cfg.keybindings.markdown),
+            ("dashboard", &cfg.keybindings.dashboard),
+            ("logs", &cfg.keybindings.logs),
         ];
         for (section, bindings) in sections {
             for (action, binding) in bindings {
@@ -1202,8 +1192,66 @@ quit = "prefix-Q"
             vec!["prefix-Q"]
         );
         // Other sections still get defaults
-        assert!(cfg.keybindings.help.contains_key("exit"));
+        assert!(cfg.keybindings.fuzzy.contains_key("exit"));
         assert!(cfg.keybindings.agents.contains_key("down"));
+    }
+
+    /// Serde replaces an overridden `[keybindings.*]` table wholesale, so a
+    /// partial override must still fall back to the defaults for the keys it
+    /// omitted. `matches_*` used to return `false` here for `about`,
+    /// `workspace_info`, `dashboard` and `logs` — the help text kept showing
+    /// the default key while pressing it did nothing.
+    #[test]
+    fn partial_ctx_override_keeps_the_other_defaults() {
+        let toml_str = r#"
+[keybindings.about]
+exit = "esc"
+"#;
+        let cfg: Config = toml::from_str(toml_str).unwrap();
+        // The key the user listed still works…
+        assert!(cfg.matches_about(KeyEvent::new(KeyCode::Esc, KeyModifiers::empty()), "exit"));
+        // …and the one they didn't (default `a`) is not silently dropped.
+        assert!(cfg.matches_about(
+            KeyEvent::new(KeyCode::Char('a'), KeyModifiers::empty()),
+            "exit_about"
+        ));
+    }
+
+    /// `[keybindings.fuzzy]`, `[editor]`, `[new_workspace]` and `[new_tab]` used
+    /// to be display-only: shipped in `config.example.toml` as if configurable,
+    /// but every handler hardcoded its `KeyCode`, so rebinding them changed the
+    /// help text and nothing else. Each now resolves through a `matches_*`.
+    #[test]
+    fn dialog_tables_actually_rebind() {
+        let toml_str = r#"
+[keybindings.fuzzy]
+editor = "ctrl-x"
+
+[keybindings.editor]
+save = "ctrl-w"
+
+[keybindings.new_workspace]
+create = "ctrl-enter"
+
+[keybindings.new_tab]
+exit = "ctrl-c"
+"#;
+        let cfg: Config = toml::from_str(toml_str).unwrap();
+        let ctrl = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL);
+
+        assert!(cfg.matches_fuzzy(ctrl('x'), "editor"));
+        assert!(cfg.matches_editor(ctrl('w'), "save"));
+        assert!(cfg.matches_new_tab(ctrl('c'), "exit"));
+        assert!(cfg.matches_new_workspace(
+            KeyEvent::new(KeyCode::Enter, KeyModifiers::CONTROL),
+            "create"
+        ));
+
+        // The displaced defaults no longer fire…
+        assert!(!cfg.matches_fuzzy(ctrl('e'), "editor"));
+        assert!(!cfg.matches_editor(ctrl('s'), "save"));
+        // …but keys the user didn't mention keep their defaults.
+        assert!(cfg.matches_fuzzy(KeyEvent::new(KeyCode::Esc, KeyModifiers::empty()), "exit"));
     }
 
     #[test]
@@ -1397,18 +1445,40 @@ quit = "prefix-Q"
         assert!(!has_ctrl(KeyModifiers::ALT, Platform::MacOs));
     }
 
+    /// Some terminals report Shift+Tab as bare `BackTab`, others as `BackTab` +
+    /// SHIFT. A `"backtab"` binding must match both.
     #[test]
-    fn test_has_alt_linux() {
-        assert!(has_alt(KeyModifiers::ALT, Platform::Linux));
-        assert!(!has_alt(KeyModifiers::SUPER, Platform::Linux));
-        assert!(!has_alt(KeyModifiers::CONTROL, Platform::Linux));
+    fn test_backtab_binding_ignores_redundant_shift() {
+        let bare = KeyEvent::new(KeyCode::BackTab, KeyModifiers::empty());
+        let shifted = KeyEvent::new(KeyCode::BackTab, KeyModifiers::SHIFT);
+        assert!(key_matches_platform(bare, "backtab", Platform::Linux));
+        assert!(key_matches_platform(shifted, "backtab", Platform::Linux));
+        // A plain Tab must not satisfy it.
+        let tab = KeyEvent::new(KeyCode::Tab, KeyModifiers::empty());
+        assert!(!key_matches_platform(tab, "backtab", Platform::Linux));
+    }
+
+    /// The `alt-*` → Cmd fallback that `has_alt` used to provide now lives in
+    /// `key_matches_platform`, which every binding table resolves through.
+    #[test]
+    fn test_alt_binding_linux() {
+        let alt_m = KeyEvent::new(KeyCode::Char('m'), KeyModifiers::ALT);
+        let super_m = KeyEvent::new(KeyCode::Char('m'), KeyModifiers::SUPER);
+        let ctrl_m = KeyEvent::new(KeyCode::Char('m'), KeyModifiers::CONTROL);
+        assert!(key_matches_platform(alt_m, "alt-m", Platform::Linux));
+        assert!(!key_matches_platform(super_m, "alt-m", Platform::Linux));
+        assert!(!key_matches_platform(ctrl_m, "alt-m", Platform::Linux));
     }
 
     #[test]
-    fn test_has_alt_macos() {
-        assert!(has_alt(KeyModifiers::ALT, Platform::MacOs));
-        assert!(has_alt(KeyModifiers::SUPER, Platform::MacOs));
-        assert!(!has_alt(KeyModifiers::CONTROL, Platform::MacOs));
+    fn test_alt_binding_macos() {
+        let alt_m = KeyEvent::new(KeyCode::Char('m'), KeyModifiers::ALT);
+        let super_m = KeyEvent::new(KeyCode::Char('m'), KeyModifiers::SUPER);
+        let ctrl_m = KeyEvent::new(KeyCode::Char('m'), KeyModifiers::CONTROL);
+        assert!(key_matches_platform(alt_m, "alt-m", Platform::MacOs));
+        // macOS Option sends special characters instead of ALT, so Cmd stands in.
+        assert!(key_matches_platform(super_m, "alt-m", Platform::MacOs));
+        assert!(!key_matches_platform(ctrl_m, "alt-m", Platform::MacOs));
     }
 
     #[test]

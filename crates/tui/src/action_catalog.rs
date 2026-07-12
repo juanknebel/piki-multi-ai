@@ -49,6 +49,7 @@ pub fn catalog() -> &'static [ActionMeta] {
         ActionMeta { id: "fuzzy_search", category: "Search", label: "Fuzzy File Search", short: "find file" },
         ActionMeta { id: "terminal_search", category: "Search", label: "Search in Terminal", short: "search" },
         // ── View ──
+        ActionMeta { id: "command_palette", category: "View", label: "Command Palette", short: "palette" },
         ActionMeta { id: "help", category: "View", label: "Help", short: "all keys" },
         ActionMeta { id: "about", category: "View", label: "About", short: "about" },
         ActionMeta { id: "logs", category: "View", label: "Logs", short: "logs" },

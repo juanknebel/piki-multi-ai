@@ -55,7 +55,7 @@ pub(super) fn handle_edit_workspace_input(app: &mut App, key: KeyEvent) -> Optio
                 prompt.clone(),
                 trim_some(group),
             )))),
-            _ if is_cancel(key, app.config.platform) => Some(Step::Cancel),
+            _ if is_cancel(key, &app.config) => Some(Step::Cancel),
             _ => {
                 let (buf, cursor) = match *active_field {
                     EditWorkspaceField::KanbanPath => {
@@ -106,16 +106,16 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
         return None;
     };
 
-    match key.code {
-        KeyCode::Tab => {
+    match () {
+        _ if app.config.matches_new_workspace(key, "switch_field") => {
             *active_field = active_field.next_with(*source);
             return None;
         }
-        KeyCode::BackTab => {
+        _ if app.config.matches_new_workspace(key, "switch_field_back") => {
             *active_field = active_field.prev_with(*source);
             return None;
         }
-        KeyCode::Enter => {
+        _ if app.config.matches_new_workspace(key, "create") => {
             let dir_raw = dir.trim().to_string();
             let description = desc.clone();
             let prompt_val = prompt.clone();
@@ -218,7 +218,7 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
                 }
             }
         }
-        _ if is_cancel(key, app.config.platform) => {
+        _ if app.config.matches_new_workspace(key, "exit") || is_cancel(key, &app.config) => {
             app.active_dialog = None;
             app.mode = AppMode::Normal;
             app.active_pane = ActivePane::WorkspaceList;
@@ -314,7 +314,7 @@ fn handle_create_worktree_choose_source(app: &mut App, key: KeyEvent) -> Option<
                 return Some(Action::ListWorktrees(parent_idx));
             }
         }
-        _ if is_cancel(key, app.config.platform) => {
+        _ if is_cancel(key, &app.config) => {
             dismiss_dialog_to_pane(app, ActivePane::WorkspaceList);
         }
         _ => {}
@@ -379,7 +379,7 @@ fn handle_create_worktree_create_new(app: &mut App, key: KeyEvent) -> Option<Act
                 group_opt,
             ));
         }
-        _ if is_cancel(key, app.config.platform) => {
+        _ if is_cancel(key, &app.config) => {
             app.active_dialog = None;
             app.mode = AppMode::Normal;
             app.active_pane = ActivePane::WorkspaceList;
@@ -420,7 +420,7 @@ fn handle_create_worktree_load_existing(app: &mut App, key: KeyEvent) -> Option<
     };
 
     if *existing_loading {
-        if is_cancel(key, app.config.platform) {
+        if is_cancel(key, &app.config) {
             dismiss_dialog_to_pane(app, ActivePane::WorkspaceList);
         }
         return None;
@@ -443,7 +443,7 @@ fn handle_create_worktree_load_existing(app: &mut App, key: KeyEvent) -> Option<
                 branch: chosen.branch,
             });
         }
-        _ if is_cancel(key, app.config.platform) => {
+        _ if is_cancel(key, &app.config) => {
             dismiss_dialog_to_pane(app, ActivePane::WorkspaceList);
         }
         _ => {}
@@ -607,7 +607,7 @@ pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Actio
                 });
                 None
             }
-            KeyCode::Esc => {
+            _ if app.config.matches_new_tab(key, "exit") => {
                 app.active_dialog = None;
                 app.mode = AppMode::Normal;
                 None
@@ -654,7 +654,7 @@ pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Actio
                         None
                     }
                 }
-                KeyCode::Esc => {
+                _ if app.config.matches_new_tab(key, "exit") => {
                     app.active_dialog = Some(DialogState::NewTab {
                         menu: NewTabMenu::Main,
                     });
@@ -684,7 +684,7 @@ pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Actio
                 app.mode = AppMode::Normal;
                 Some(Action::SpawnTab(AIProvider::Git))
             }
-            KeyCode::Esc => {
+            _ if app.config.matches_new_tab(key, "exit") => {
                 app.active_dialog = Some(DialogState::NewTab {
                     menu: NewTabMenu::Main,
                 });
@@ -1086,7 +1086,7 @@ pub(super) fn handle_dispatch_agent_input(app: &mut App, key: KeyEvent) -> Optio
                 app.mode = AppMode::Normal;
                 Some(action)
             }
-            _ if is_cancel(key, app.config.platform) => {
+            _ if is_cancel(key, &app.config) => {
                 // Back to step 0
                 *step = 0;
                 None
@@ -1113,7 +1113,7 @@ pub(super) fn handle_dispatch_agent_input(app: &mut App, key: KeyEvent) -> Optio
                 *step = 1;
                 None
             }
-            _ if is_cancel(key, app.config.platform) => {
+            _ if is_cancel(key, &app.config) => {
                 app.active_dialog = None;
                 app.mode = AppMode::Normal;
                 None
@@ -1208,7 +1208,7 @@ pub(super) fn handle_manage_agents_input(app: &mut App, key: KeyEvent) -> Option
             // Import agents from repo files
             Some(Action::ScanRepoAgents)
         }
-        _ if is_cancel(key, app.config.platform) => {
+        _ if is_cancel(key, &app.config) => {
             dismiss_dialog(app);
             None
         }
@@ -1265,7 +1265,7 @@ pub(super) fn handle_edit_agent_input(app: &mut App, key: KeyEvent) -> Option<Ac
             app.mode = AppMode::EditAgentRole;
             None
         }
-        _ if is_cancel(key, app.config.platform) => {
+        _ if is_cancel(key, &app.config) => {
             app.active_dialog = Some(DialogState::ManageAgents { selected: 0 });
             app.mode = AppMode::ManageAgents;
             None
@@ -1321,7 +1321,7 @@ pub(super) fn handle_edit_agent_role_input(app: &mut App, key: KeyEvent) -> Opti
     }
 
     // Esc: go back to step 1 without saving
-    if is_cancel(key, app.config.platform) {
+    if is_cancel(key, &app.config) {
         app.active_dialog = Some(DialogState::EditAgent {
             editing_id,
             name: name.clone(),
@@ -1454,7 +1454,7 @@ pub(super) fn handle_import_agents_input(app: &mut App, key: KeyEvent) -> Option
 
     let count = discovered.len();
     if count == 0 {
-        if is_cancel(key, app.config.platform) || key.code == KeyCode::Enter {
+        if is_cancel(key, &app.config) || key.code == KeyCode::Enter {
             app.active_dialog = Some(DialogState::ManageAgents { selected: 0 });
             app.mode = AppMode::ManageAgents;
         }
@@ -1505,7 +1505,7 @@ pub(super) fn handle_import_agents_input(app: &mut App, key: KeyEvent) -> Option
                 Some(Action::ImportAgents(to_import))
             }
         }
-        _ if is_cancel(key, app.config.platform) => {
+        _ if is_cancel(key, &app.config) => {
             app.active_dialog = Some(DialogState::ManageAgents { selected: 0 });
             app.mode = AppMode::ManageAgents;
             None
@@ -1608,7 +1608,7 @@ pub(super) fn handle_manage_providers_input(app: &mut App, key: KeyEvent) -> Opt
             }
             None
         }
-        _ if is_cancel(key, app.config.platform) => {
+        _ if is_cancel(key, &app.config) => {
             dismiss_dialog(app);
             None
         }
@@ -1690,7 +1690,7 @@ pub(super) fn handle_edit_provider_input(app: &mut App, key: KeyEvent) -> Option
     }
 
     // Esc: cancel back to manage
-    if is_cancel(key, app.config.platform) {
+    if is_cancel(key, &app.config) {
         app.active_dialog = Some(DialogState::ManageProviders { selected: 0 });
         app.mode = AppMode::ManageProviders;
         return None;

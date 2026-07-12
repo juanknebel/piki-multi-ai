@@ -1,6 +1,5 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 205
 expression: content
 ---
 
@@ -19,7 +18,7 @@ expression: content
 │Git        g lazygit                                                          │
 │Tabs       c new  x close  n next  p prev                                     │
 │Search     / find file  f search                                              │
-│View       ? all keys  a about  o logs  [ scroll  y chat                      │
+│View       : palette  ? all keys  a about  o logs  [ scroll  y chat           │
 │Focus      h left  j down  k up  l right                                      │
 │Layout     < sidebar −  > sidebar +  + split +  - split −                     │
 │Agents     m agents                                                           │
