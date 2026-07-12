@@ -13,7 +13,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
-use crate::action_catalog::catalog;
+use crate::action_catalog::global_actions;
 use crate::app::App;
 
 /// Left column reserved for the category name.
@@ -24,7 +24,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
 
     // Group prefix-reachable actions by category, preserving first-seen order.
     let mut groups: Vec<(&'static str, Vec<(String, &'static str)>)> = Vec::new();
-    for a in catalog() {
+    for a in global_actions() {
         let Some(chord) = cfg.prefix_chord(a.id) else {
             continue; // direct chords (e.g. copy) aren't reachable via the prefix
         };

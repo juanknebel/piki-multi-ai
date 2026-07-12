@@ -1,45 +1,44 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 375
 expression: content
 ---
             ╭ Help ───────────────────────────────────────────────╮
             │  Type to filter · ↑↓ PgUp/PgDn scroll · Esc close   │
             │                                                     │
             │                                                     │
-            │  Prefix key: C-g (tmux-style)                       │
-            │    Keys always go to the focused pane;              │
-            │    press C-g first for app actions:                 │
-            │                                                     │
-            │    C-g h/j/k/l   Move focus between panes           │
-            │    C-g c         New tab                            │
-            │    C-g x         Close tab                          │
-            │    C-g n/C-g p   Next/Prev tab                      │
-            │    C-g 1..9      Jump to tab N                      │
-            │    C-g w         Fuzzy workspace switcher           │
-            │    C-g }/C-g {   Next/Prev workspace                │
-            │    C-g `         Previous workspace (toggle)        │
-            │    C-g s         New workspace                      │
-            │    C-g e         Edit workspace                     │
-            │    C-g d         Delete workspace                   │
-            │    C-g i         Workspace info                     │
-            │    C-g r         Create/load worktree (GitHub-only) │
-            │    C-g g         Git (lazygit tab)                  │
-            │    C-g :         Command palette                    │
-            │    C-g /         Fuzzy file search                  │
-            │    C-g [         Terminal scroll mode               │
-            │    C-g y         AI Chat                            │
-            │    C-g b         Dashboard                          │
-            │    C-g o         Logs                               │
-            │    C-g m         Manage agents                      │
-            │    C-g v         Manage providers                   │
-            │    C-g a         About                              │
-            │    C-g ?         This help                          │
-            │    C-g q         Quit                               │
-            │    C-g C-g       Send C-g to terminal               │
-            │    Esc           Cancel pending prefix              │
-            │                                                     │
-            │  Terminal scroll mode (C-g [)                       │
-            │    k/j           Scroll up/down                     │
-            │    C-u/C-d       Page up/down                       │
-            ╰───────────────────────────────────────── [1/154 ↑↓] ╯
+            │  Prefix actions                                     │
+            │    Press C-g first (tmux-style).                    │
+            │    Workspace                                        │
+            │      C-g s         New Workspace                    │
+            │      C-g r         Create Worktree (GitHub-only)    │
+            │      C-g e         Edit Workspace                   │
+            │      C-g d         Delete Workspace                 │
+            │      C-g b         Dashboard                        │
+            │      C-g i         Workspace Info                   │
+            │      C-g w         Switch Workspace (fuzzy)         │
+            │      C-g }         Next Workspace                   │
+            │      C-g {         Previous Workspace               │
+            │      C-g `         Toggle Last Workspace            │
+            │    Git                                              │
+            │      C-g g         Git (lazygit)                    │
+            │    Tabs                                             │
+            │      C-g c         New Tab                          │
+            │      C-g x         Close Tab                        │
+            │      C-g n         Next Tab                         │
+            │      C-g p         Previous Tab                     │
+            │    Search                                           │
+            │      C-g /         Fuzzy File Search                │
+            │      C-g f         Search in Terminal               │
+            │    View                                             │
+            │      C-g :         Command Palette                  │
+            │      C-g ?         Help                             │
+            │      C-g a         About                            │
+            │      C-g o         Logs                             │
+            │      C-g [         Terminal Scroll Mode             │
+            │      C-g y         AI Chat                          │
+            │    Focus                                            │
+            │      C-g h         Focus Pane Left                  │
+            │      C-g j         Focus Pane Down                  │
+            │      C-g k         Focus Pane Up                    │
+            │      C-g l         Focus Pane Right                 │
+            ╰───────────────────────────────────────── [1/177 ↑↓] ╯

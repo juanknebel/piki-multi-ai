@@ -39,8 +39,7 @@ impl CommandPaletteState {
 /// `command_palette` itself is skipped — offering "open the command palette"
 /// from inside the open command palette is noise.
 fn all_commands() -> Vec<PaletteCommand> {
-    crate::action_catalog::catalog()
-        .iter()
+    crate::action_catalog::global_actions()
         .filter(|a| a.id != "command_palette")
         .map(|a| PaletteCommand {
             id: a.id,

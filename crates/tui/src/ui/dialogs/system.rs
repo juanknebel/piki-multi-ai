@@ -4,8 +4,61 @@ use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
+use crate::action_catalog::{Context, HELP_ORDER, catalog};
 use crate::app::App;
+use crate::config::Config;
 use crate::dialog_state::{DialogState, NewTabMenu};
+
+/// Width of the key column in the help browser.
+const KEY_COL: usize = 13;
+
+/// The whole help body, derived from the action catalog: one section per
+/// [`Context`], one line per key. Nothing here is hand-maintained — adding an
+/// entry to the catalog is what makes it show up.
+pub(crate) fn help_lines(cfg: &Config) -> Vec<String> {
+    let mut out = Vec::new();
+
+    for &ctx in HELP_ORDER {
+        let entries: Vec<&crate::action_catalog::ActionMeta> =
+            catalog().iter().filter(|a| a.context == ctx).collect();
+        if entries.is_empty() {
+            continue;
+        }
+
+        let heading = match ctx.opened_by() {
+            Some(id) => format!("  {} ({})", ctx.title(), cfg.get_binding("app", id)),
+            None => format!("  {}", ctx.title()),
+        };
+        out.push(String::new());
+        out.push(heading);
+
+        if ctx == Context::Global {
+            out.push(format!(
+                "    Press {} first (tmux-style).",
+                cfg.prefix_display()
+            ));
+        }
+
+        // Global is the only context with enough entries to need sub-grouping;
+        // it reuses the which-key categories.
+        let mut current_category = "";
+        for a in entries {
+            if ctx == Context::Global && !a.category.is_empty() && a.category != current_category {
+                current_category = a.category;
+                out.push(format!("    {current_category}"));
+            }
+            let key = a.keys.display(cfg);
+            let indent = if ctx == Context::Global && !current_category.is_empty() {
+                "      "
+            } else {
+                "    "
+            };
+            out.push(format!("{indent}{key:<KEY_COL$} {}", a.label));
+        }
+    }
+
+    out
+}
 
 pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let (help_scroll, filter) = match &app.active_dialog {
@@ -17,419 +70,7 @@ pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let cfg = &app.config;
     let popup = super::clear_popup(frame, area, 55, 75);
 
-    let prefix = cfg.prefix_display();
-    let help_text = vec![
-        "".to_string(),
-        format!("  Prefix key: {prefix} (tmux-style)"),
-        "    Keys always go to the focused pane;".to_string(),
-        format!("    press {prefix} first for app actions:"),
-        "".to_string(),
-        format!(
-            "    {:<13} Move focus between panes",
-            format!("{prefix} h/j/k/l")
-        ),
-        format!("    {:<13} New tab", cfg.get_binding("app", "new_tab")),
-        format!("    {:<13} Close tab", cfg.get_binding("app", "close_tab")),
-        format!(
-            "    {:<13} Next/Prev tab",
-            format!(
-                "{}/{}",
-                cfg.get_binding("app", "next_tab"),
-                cfg.get_binding("app", "prev_tab")
-            )
-        ),
-        format!("    {:<13} Jump to tab N", format!("{prefix} 1..9")),
-        format!(
-            "    {:<13} Fuzzy workspace switcher",
-            cfg.get_binding("app", "workspace_switcher")
-        ),
-        format!(
-            "    {:<13} Next/Prev workspace",
-            format!(
-                "{}/{}",
-                cfg.get_binding("app", "next_workspace"),
-                cfg.get_binding("app", "prev_workspace")
-            )
-        ),
-        format!(
-            "    {:<13} Previous workspace (toggle)",
-            cfg.get_binding("app", "toggle_prev_workspace")
-        ),
-        format!(
-            "    {:<13} New workspace",
-            cfg.get_binding("app", "new_workspace")
-        ),
-        format!(
-            "    {:<13} Edit workspace",
-            cfg.get_binding("app", "edit_workspace")
-        ),
-        format!(
-            "    {:<13} Delete workspace",
-            cfg.get_binding("app", "delete_workspace")
-        ),
-        format!(
-            "    {:<13} Workspace info",
-            cfg.get_binding("app", "workspace_info")
-        ),
-        format!(
-            "    {:<13} Create/load worktree (GitHub-only)",
-            cfg.get_binding("app", "clone_workspace")
-        ),
-        format!("    {:<13} Git (lazygit tab)", cfg.get_binding("app", "git")),
-        format!(
-            "    {:<13} Command palette",
-            cfg.get_binding("app", "command_palette")
-        ),
-        format!(
-            "    {:<13} Fuzzy file search",
-            cfg.get_binding("app", "fuzzy_search")
-        ),
-        format!(
-            "    {:<13} Terminal scroll mode",
-            cfg.get_binding("app", "scroll_mode")
-        ),
-        format!("    {:<13} AI Chat", cfg.get_binding("app", "chat_panel")),
-        format!("    {:<13} Dashboard", cfg.get_binding("app", "dashboard")),
-        format!("    {:<13} Logs", cfg.get_binding("app", "logs")),
-        format!(
-            "    {:<13} Manage agents",
-            cfg.get_binding("app", "manage_agents")
-        ),
-        format!(
-            "    {:<13} Manage providers",
-            cfg.get_binding("app", "manage_providers")
-        ),
-        format!("    {:<13} About", cfg.get_binding("app", "about")),
-        format!("    {:<13} This help", cfg.get_binding("app", "help")),
-        format!("    {:<13} Quit", cfg.get_binding("app", "quit")),
-        format!("    {:<13} Send {prefix} to terminal", format!("{prefix} {prefix}")),
-        "    Esc           Cancel pending prefix".to_string(),
-        "".to_string(),
-        format!(
-            "  Terminal scroll mode ({})",
-            cfg.get_binding("app", "scroll_mode")
-        ),
-        format!(
-            "    {:<13} Scroll up/down",
-            format!(
-                "{}/{}",
-                cfg.get_binding("scroll", "up"),
-                cfg.get_binding("scroll", "down")
-            )
-        ),
-        format!(
-            "    {:<13} Page up/down",
-            format!(
-                "{}/{}",
-                cfg.get_binding("scroll", "page_up"),
-                cfg.get_binding("scroll", "page_down")
-            )
-        ),
-        format!(
-            "    {:<13} Top/Bottom",
-            format!(
-                "{}/{}",
-                cfg.get_binding("scroll", "top"),
-                cfg.get_binding("scroll", "bottom")
-            )
-        ),
-        format!("    {:<13} Search", cfg.get_binding("scroll", "search")),
-        format!(
-            "    {:<13} Exit scroll mode",
-            format!(
-                "{}/{}",
-                cfg.get_binding("scroll", "exit_alt"),
-                cfg.get_binding("scroll", "exit")
-            )
-        ),
-        "".to_string(),
-        "  Terminal pane".to_string(),
-        "    All keys sent to active tab".to_string(),
-        format!(
-            "    {:<13} Search in terminal output",
-            cfg.get_binding("app", "terminal_search")
-        ),
-        "    Mouse scroll  Scroll up/down".to_string(),
-        "".to_string(),
-        "  AI Chat overlay".to_string(),
-        "    Enter         Send message".to_string(),
-        "    Tab           Select model".to_string(),
-        format!("    {:<13} Settings (URL, system prompt)", cfg.format_binding("ctrl-o")),
-        format!("    {:<13} Clear conversation", cfg.format_binding("ctrl-l")),
-        "    Esc           Hide (keeps state)".to_string(),
-        "".to_string(),
-        "  Agents pane".to_string(),
-        format!(
-            "    {:<13} Select agent",
-            format!(
-                "{}/{}",
-                cfg.get_binding("agents", "up"),
-                cfg.get_binding("agents", "down")
-            )
-        ),
-        format!(
-            "    {:<13} Jump to that workspace/tab",
-            cfg.get_binding("agents", "select")
-        ),
-        "    Click         Jump directly".to_string(),
-        "".to_string(),
-        "  Workspace list pane".to_string(),
-        format!(
-            "    {:<13} Focus this pane",
-            format!(
-                "{}/{}",
-                cfg.get_binding("app", "focus_left"),
-                cfg.get_binding("app", "focus_up")
-            )
-        ),
-        format!(
-            "    {:<13} Select workspace / group",
-            format!(
-                "{}/{}",
-                cfg.get_binding("workspaces", "up"),
-                cfg.get_binding("workspaces", "down")
-            )
-        ),
-        format!(
-            "    {:<13} Collapse / expand group",
-            format!(
-                "{}/{}",
-                cfg.get_binding("workspaces", "collapse"),
-                cfg.get_binding("workspaces", "expand")
-            )
-        ),
-        format!(
-            "    {:<13} Switch to it / toggle group",
-            cfg.get_binding("workspaces", "select")
-        ),
-        "    Heavier workspace actions go through the prefix:".to_string(),
-        format!(
-            "    {:<13} Switch workspace (fuzzy)",
-            cfg.get_binding("app", "workspace_switcher")
-        ),
-        format!(
-            "    {:<13} Edit workspace",
-            cfg.get_binding("app", "edit_workspace")
-        ),
-        format!(
-            "    {:<13} Delete workspace",
-            cfg.get_binding("app", "delete_workspace")
-        ),
-        "".to_string(),
-        format!(
-            "  Fuzzy search ({})",
-            cfg.get_binding("app", "fuzzy_search")
-        ),
-        "    Type          Filter files".to_string(),
-        format!(
-            "    {:<13} Select result",
-            format!(
-                "{}/{}",
-                cfg.get_binding("fuzzy", "up"),
-                cfg.get_binding("fuzzy", "down")
-            )
-        ),
-        format!(
-            "    {:<13} Open in $EDITOR",
-            cfg.get_binding("fuzzy", "open")
-        ),
-        format!(
-            "    {:<13} Open in $EDITOR (alt)",
-            cfg.get_binding("fuzzy", "editor")
-        ),
-        format!(
-            "    {:<13} Inline editor",
-            cfg.get_binding("fuzzy", "inline_edit")
-        ),
-        format!(
-            "    {:<13} Open markdown viewer",
-            cfg.get_binding("fuzzy", "markdown")
-        ),
-        format!(
-            "    {:<13} Open in mdr (external)",
-            cfg.get_binding("fuzzy", "mdr")
-        ),
-        format!("    {:<13} Close", cfg.get_binding("fuzzy", "exit")),
-        "".to_string(),
-        "  Kanban board (focused)".to_string(),
-        "    h/l/j/k     Navigate columns and cards".to_string(),
-        "    H/L         Move card left/right".to_string(),
-        "    n/a         New card".to_string(),
-        "    e           Edit selected card".to_string(),
-        "    d           Delete card".to_string(),
-        "    D           Dispatch agent (feature/bug/spike branch + AI)".to_string(),
-        "    Enter       Toggle card details".to_string(),
-        "    r           Refresh board".to_string(),
-        "    s           Toggle sort by priority".to_string(),
-        "    /           Search cards".to_string(),
-        "    p           Project filter".to_string(),
-        "    Esc         Close".to_string(),
-        "".to_string(),
-        "  Dispatch agent dialog (D on kanban card)".to_string(),
-        "    Step 1: agent/provider".to_string(),
-        "    ←/→/Tab     Cycle agent/provider".to_string(),
-        "    Type        Add extra prompt instructions".to_string(),
-        "    Enter       Next: choose destination".to_string(),
-        "    Esc         Cancel".to_string(),
-        "    Step 2: destination workspace".to_string(),
-        "    ←/→/Tab     Toggle new worktree / current workspace".to_string(),
-        "    Enter       Dispatch".to_string(),
-        "    Esc         Back to step 1".to_string(),
-        "".to_string(),
-        format!(
-            "  Manage providers ({})",
-            cfg.get_binding("app", "manage_providers")
-        ),
-        "    j/k         Navigate provider list".to_string(),
-        "    n           New provider".to_string(),
-        "    e / Enter   Edit selected provider".to_string(),
-        "    d           Delete selected provider".to_string(),
-        "    Esc         Close".to_string(),
-        "".to_string(),
-        format!(
-            "  Manage agents ({})",
-            cfg.get_binding("app", "manage_agents")
-        ),
-        "    j/k         Navigate agent list".to_string(),
-        "    n           New agent (step 1: name + provider)".to_string(),
-        "    e / Enter   Edit selected agent".to_string(),
-        "    d           Delete selected agent".to_string(),
-        "    p           Sync agent to repo".to_string(),
-        "    i           Import agents from repo".to_string(),
-        "    Esc         Close".to_string(),
-        "".to_string(),
-        "  Import agents overlay (i in manage agents)".to_string(),
-        "    j/k         Navigate discovered agents".to_string(),
-        "    Space       Toggle selection".to_string(),
-        "    a           Toggle select all".to_string(),
-        "    Enter       Import selected".to_string(),
-        "    Esc         Cancel".to_string(),
-        "".to_string(),
-        "  Agent role editor (step 2)".to_string(),
-        format!("    {:<13} Save agent and close", cfg.format_binding("ctrl-s")),
-        "    Esc         Back to step 1 without saving".to_string(),
-        "".to_string(),
-        "  Inline editor".to_string(),
-        format!("    {:<13} Save", cfg.get_binding("editor", "save")),
-        format!("    {:<13} Close", cfg.get_binding("editor", "exit")),
-        "".to_string(),
-        "  Pane resize".to_string(),
-        format!(
-            "    {:<13} Resize sidebar width",
-            format!(
-                "{} / {}",
-                cfg.get_binding("app", "sidebar_shrink"),
-                cfg.get_binding("app", "sidebar_grow")
-            )
-        ),
-        format!(
-            "    {:<13} Resize workspace/file split",
-            format!(
-                "{} / {}",
-                cfg.get_binding("app", "split_up"),
-                cfg.get_binding("app", "split_down")
-            )
-        ),
-        "    Mouse drag    Drag pane borders to resize".to_string(),
-        "".to_string(),
-        "  Code Review (requires gh CLI, locked mode)".to_string(),
-        "    j/k           Navigate files / scroll diff".to_string(),
-        "    Enter         View file diff".to_string(),
-        "    h/l           Switch file list / diff pane".to_string(),
-        "    n/p           Next/prev file (in diff view)".to_string(),
-        "    g/G           Top/bottom of diff".to_string(),
-        format!("    {}/{}      Page down/up in diff", cfg.format_binding("ctrl-d"), cfg.format_binding("ctrl-u")),
-        "    c             Add/edit comment on line (diff view)".to_string(),
-        "    d             Delete comment on line (diff view)".to_string(),
-        "    [ / ]         Resize file list / diff split".to_string(),
-        "    s             Open submit review dialog".to_string(),
-        "    r             Refresh PR data (file list focused)".to_string(),
-        "    q             Close review (discard state)".to_string(),
-        "    Tab           Cycle verdict (in submit)".to_string(),
-        format!("    {:<13} Discard draft (in submit)", cfg.format_binding("ctrl-shift-d")),
-        "".to_string(),
-        "  Dashboard".to_string(),
-        format!(
-            "    {:<13} Select workspace",
-            format!(
-                "{}/{}",
-                cfg.get_binding("dashboard", "up"),
-                cfg.get_binding("dashboard", "down")
-            )
-        ),
-        format!(
-            "    {:<13} Switch + focus main panel",
-            cfg.get_binding("dashboard", "select")
-        ),
-        format!("    {:<13} Close", cfg.get_binding("dashboard", "exit")),
-        "".to_string(),
-        format!("  Logs ({})", cfg.get_binding("app", "logs")),
-        format!(
-            "    {:<13} Select entry / page",
-            format!(
-                "{}/{}",
-                cfg.get_binding("logs", "up"),
-                cfg.get_binding("logs", "down")
-            )
-        ),
-        format!(
-            "    {:<13} Top/bottom",
-            format!(
-                "{}/{}",
-                cfg.get_binding("logs", "scroll_top"),
-                cfg.get_binding("logs", "scroll_bottom")
-            )
-        ),
-        "    0-5           Filter by level (0=all)".to_string(),
-        "    /             Search entries".to_string(),
-        format!(
-            "    {:<13} Copy selected entry",
-            cfg.get_binding("logs", "copy")
-        ),
-        "    r             Toggle auto-refresh (tail)".to_string(),
-        format!("    {:<13} Close", cfg.get_binding("logs", "exit")),
-        "".to_string(),
-        format!(
-            "  Command palette ({})",
-            cfg.get_binding("app", "command_palette")
-        ),
-        "    Type          Filter commands".to_string(),
-        "    Up/Down       Select command".to_string(),
-        "    Enter         Run selected command".to_string(),
-        "    Esc           Close".to_string(),
-        "".to_string(),
-        format!(
-            "  Workspace switcher ({})",
-            cfg.get_binding("app", "workspace_switcher")
-        ),
-        "    Type          Filter workspaces/tabs".to_string(),
-        format!(
-            "    {:<13} Select row",
-            format!(
-                "Up/Down / {}/{}",
-                cfg.format_binding("ctrl-p"),
-                cfg.format_binding("ctrl-n")
-            )
-        ),
-        "    Enter         Jump to workspace/tab".to_string(),
-        "    Esc           Close".to_string(),
-        "".to_string(),
-        "  Move dispatched card (after confirming delete)".to_string(),
-        "    j/k           Select target kanban column".to_string(),
-        "    Enter         Move card and delete workspace".to_string(),
-        "    Esc           Cancel".to_string(),
-        "".to_string(),
-        "  Clipboard".to_string(),
-        "    Mouse drag    Select text in terminal".to_string(),
-        format!(
-            "    {:<13} Copy visible terminal content",
-            cfg.get_binding("app", "copy")
-        ),
-        format!(
-            "    {:<13} Paste from clipboard (terminal)",
-            cfg.get_binding("app", "paste")
-        ),
-    ];
+    let help_text = help_lines(cfg);
 
     // Live filter: keep only content lines matching the query (case-insensitive).
     // A leading status line always shows so the box reads as searchable.

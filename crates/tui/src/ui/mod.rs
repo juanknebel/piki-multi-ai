@@ -377,6 +377,21 @@ mod tests {
         insta::assert_snapshot!("help_overlay", content);
     }
 
+    /// The rendered overlay only shows the first screenful, so snapshot the full
+    /// derived body too — otherwise a catalog entry could vanish from the help
+    /// and no test would notice.
+    #[test]
+    fn test_snapshot_help_body() {
+        // Force Linux so the snapshot is stable across CI runners — on macOS the
+        // key grammar renders `cmd-` instead of `ctrl-`.
+        let cfg = crate::config::Config {
+            platform: crate::config::Platform::Linux,
+            ..Default::default()
+        };
+        let body = super::dialogs::help_lines(&cfg).join("\n");
+        insta::assert_snapshot!("help_body", body);
+    }
+
     #[test]
     fn test_snapshot_about_overlay() {
         let mut terminal = test_terminal(80, 30);
