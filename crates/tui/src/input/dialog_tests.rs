@@ -1591,6 +1591,31 @@ fn new_tab_main_esc_dismisses() {
     assert_eq!(app.mode, AppMode::Normal);
 }
 
+/// The `[keybindings.new_tab]` table used to be inert: the handler hardcoded
+/// `KeyCode::Esc`, so a rebind changed the help text and nothing else. Drive the
+/// handler with a rebound key to prove it actually reads the config now.
+#[test]
+fn new_tab_honors_a_rebound_exit_key() {
+    let mut app = test_app();
+    app.config
+        .keybindings
+        .new_tab
+        .insert("exit".to_string(), "ctrl-c".to_string());
+    open_new_tab_main(&mut app);
+
+    // The displaced default no longer closes it — a rebind replaces, not adds.
+    handle_new_tab_input(&mut app, key(KeyCode::Esc));
+    assert!(app.active_dialog.is_some(), "the displaced Esc still closed the dialog");
+
+    handle_new_tab_input(
+        &mut app,
+        key_with_mods(KeyCode::Char('c'), KeyModifiers::CONTROL),
+    );
+
+    assert!(app.active_dialog.is_none(), "rebound exit key did not close the dialog");
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
 #[test]
 fn new_tab_main_unknown_key_is_noop() {
     let mut app = test_app();
