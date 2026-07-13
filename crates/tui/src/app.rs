@@ -232,7 +232,6 @@ impl ApiTabState {
 
 /// A tab within a workspace, each with its own PTY session
 pub struct Tab {
-    #[allow(dead_code)]
     pub id: usize,
     pub provider: AIProvider,
     pub pty_session: Option<PtySession>,
@@ -727,6 +726,9 @@ pub struct App {
     pub selected_workspace: usize,
     /// Selected row in the Agents pane (index into `agent_rows()`)
     pub selected_agent_row: usize,
+    /// (workspace, tab id) the Agents highlight was last synced to, so the
+    /// sync only fires when the user actually moves to another tab.
+    agent_focus_key: Option<(usize, usize)>,
     /// Active dialog state — None means no dialog is open
     pub active_dialog: Option<DialogState>,
     pub collapsed_groups: std::collections::HashSet<String>,
@@ -910,6 +912,7 @@ impl App {
             active_workspace: 0,
             selected_workspace: 0,
             selected_agent_row: 0,
+            agent_focus_key: None,
             active_dialog: None,
             collapsed_groups: std::collections::HashSet::new(),
             selected_sidebar_row: 0,
@@ -1159,6 +1162,35 @@ impl App {
                     .map(move |(ti, _)| (wi, ti))
             })
             .collect()
+    }
+
+    /// Move the Agents highlight onto the agent tab the user is standing on.
+    ///
+    /// The pane lists agents from every workspace, so a highlight left behind
+    /// on another workspace's agent reads as "I'm on that one". Called once per
+    /// event-loop iteration rather than at each tab/workspace switch site, and
+    /// only re-selects when the active tab changed — so browsing the pane with
+    /// j/k isn't yanked back. A non-agent tab (shell, lazygit) leaves the
+    /// highlight where it was: there is no row to move it to.
+    pub fn sync_agent_selection(&mut self) {
+        let key = self
+            .current_workspace()
+            .and_then(|ws| ws.tabs.get(ws.active_tab).map(|tab| tab.id))
+            .map(|tab_id| (self.active_workspace, tab_id));
+        if key == self.agent_focus_key {
+            return;
+        }
+        self.agent_focus_key = key;
+
+        let Some(target) = self
+            .current_workspace()
+            .map(|ws| (self.active_workspace, ws.active_tab))
+        else {
+            return;
+        };
+        if let Some(idx) = self.agent_rows().iter().position(|&row| row == target) {
+            self.selected_agent_row = idx;
+        }
     }
 
     pub fn sidebar_items(&self) -> Vec<SidebarItem> {
@@ -2159,6 +2191,60 @@ mod tests {
             ws.tabs[ws.active_tab].provider,
             AIProvider::Custom(_)
         ));
+    }
+
+    #[test]
+    fn test_agent_selection_follows_the_active_agent_tab() {
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let a = add_test_workspace(&mut app);
+        let b = add_test_workspace(&mut app);
+        add_agent_tab(&mut app, a, "Antigravity");
+        add_agent_tab(&mut app, b, "Claude Code");
+
+        app.active_workspace = a;
+        app.sync_agent_selection();
+        assert_eq!(app.selected_agent_row, 0);
+
+        // Opening/switching to workspace b's agent moves the highlight with it
+        app.switch_workspace(b);
+        app.sync_agent_selection();
+        assert_eq!(app.selected_agent_row, 1);
+    }
+
+    #[test]
+    fn test_agent_selection_does_not_fight_pane_browsing() {
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let a = add_test_workspace(&mut app);
+        let b = add_test_workspace(&mut app);
+        add_agent_tab(&mut app, a, "Antigravity");
+        add_agent_tab(&mut app, b, "Claude Code");
+        app.active_workspace = b;
+        app.sync_agent_selection();
+        assert_eq!(app.selected_agent_row, 1);
+
+        // The user browses the pane with j/k; the active tab didn't change, so
+        // the next loop iteration must leave their cursor alone.
+        app.selected_agent_row = 0;
+        app.sync_agent_selection();
+        assert_eq!(app.selected_agent_row, 0);
+    }
+
+    #[test]
+    fn test_agent_selection_kept_on_a_non_agent_tab() {
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let a = add_test_workspace(&mut app);
+        add_agent_tab(&mut app, a, "Antigravity");
+        let b = add_test_workspace(&mut app);
+        add_agent_tab(&mut app, b, "Claude Code");
+        app.active_workspace = b;
+        app.sync_agent_selection();
+        assert_eq!(app.selected_agent_row, 1);
+
+        // A shell tab has no row of its own — the highlight stays put rather
+        // than snapping back to some other workspace's agent.
+        app.workspaces[b].add_tab(AIProvider::Shell, true, None);
+        app.sync_agent_selection();
+        assert_eq!(app.selected_agent_row, 1);
     }
 
     #[test]

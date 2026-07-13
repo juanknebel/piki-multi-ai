@@ -196,6 +196,9 @@ pub(crate) async fn run(
     tick_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
     loop {
+        // Phase 0: Keep the Agents highlight on the tab the user is standing on
+        app.sync_agent_selection();
+
         // Phase 1: Render only when state has changed
         if app.needs_redraw {
             terminal.draw(|frame| {
