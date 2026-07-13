@@ -1239,20 +1239,29 @@ impl App {
     pub fn select_next_sidebar_row(&mut self) {
         let count = self.sidebar_items().len();
         if count > 0 {
-            self.selected_sidebar_row = (self.selected_sidebar_row + 1) % count;
-            if let Some(idx) = self.sidebar_row_to_workspace(self.selected_sidebar_row) {
-                self.selected_workspace = idx;
-            }
+            self.follow_sidebar_row((self.selected_sidebar_row + 1) % count);
         }
     }
 
     pub fn select_prev_sidebar_row(&mut self) {
         let count = self.sidebar_items().len();
         if count > 0 {
-            self.selected_sidebar_row = (self.selected_sidebar_row + count - 1) % count;
-            if let Some(idx) = self.sidebar_row_to_workspace(self.selected_sidebar_row) {
-                self.selected_workspace = idx;
-            }
+            self.follow_sidebar_row((self.selected_sidebar_row + count - 1) % count);
+        }
+    }
+
+    /// Land the sidebar cursor on `row` and make that workspace the active one
+    /// (a group header has none, so the cursor moves alone).
+    ///
+    /// Follow-focus: the cursor and the workspace every action targets are the
+    /// same thing. Without it the two drift apart — the cursor sits on one
+    /// workspace while `prefix c` opens its tab in whichever workspace the main
+    /// panel still shows — and every workspace-scoped action becomes a coin
+    /// flip. A sidebar click already switched (`input/mouse.rs`); j/k didn't.
+    fn follow_sidebar_row(&mut self, row: usize) {
+        self.selected_sidebar_row = row;
+        if let Some(idx) = self.sidebar_row_to_workspace(row) {
+            self.switch_workspace(idx);
         }
     }
 
@@ -2191,6 +2200,44 @@ mod tests {
             ws.tabs[ws.active_tab].provider,
             AIProvider::Custom(_)
         ));
+    }
+
+    #[test]
+    fn test_sidebar_cursor_switches_the_active_workspace() {
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let a = add_test_workspace(&mut app);
+        let b = add_test_workspace(&mut app);
+        app.switch_workspace(a);
+
+        // Follow-focus: j/k don't just move a cursor, they move the workspace
+        // every action targets — so `prefix c` right after lands its tab here.
+        app.select_next_sidebar_row();
+        assert_eq!(app.selected_workspace, b);
+        assert_eq!(app.active_workspace, b);
+
+        app.select_prev_sidebar_row();
+        assert_eq!(app.active_workspace, a);
+    }
+
+    #[test]
+    fn test_sidebar_cursor_on_a_group_header_keeps_the_active_workspace() {
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let a = add_test_workspace(&mut app);
+        let b = add_test_workspace(&mut app);
+        app.workspaces[b].info.group = Some("GROUP".to_string());
+        app.switch_workspace(a);
+
+        // Rows are [Workspace a, GroupHeader GROUP, Workspace b] — the header
+        // has no workspace of its own, so the cursor moves alone.
+        app.select_next_sidebar_row();
+        assert!(matches!(
+            app.sidebar_items()[app.selected_sidebar_row],
+            SidebarItem::GroupHeader { .. }
+        ));
+        assert_eq!(app.active_workspace, a);
+
+        app.select_next_sidebar_row();
+        assert_eq!(app.active_workspace, b);
     }
 
     #[test]
