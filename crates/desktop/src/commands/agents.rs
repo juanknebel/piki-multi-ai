@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use piki_core::cli_agent::install as cli_agent_install;
+use piki_core::cli_agent::install_antigravity as agy_install;
+use piki_core::cli_agent::{AgentBridge, bridge_for_command};
 use piki_core::storage::AgentProfile;
 
 use crate::state::DesktopApp;
@@ -403,7 +405,7 @@ pub async fn dispatch_agent(
     };
 
     // Spawn the AI tab with prompt
-    let (worktree_path, claude_hooks_dir) = {
+    let (worktree_path, claude_hooks_dir, agy_hooks_dir) = {
         let app = state.lock();
         if target_ws_idx >= app.workspaces.len() {
             return Err("Workspace index out of range".to_string());
@@ -411,6 +413,7 @@ pub async fn dispatch_agent(
         (
             app.workspaces[target_ws_idx].info.path.clone(),
             app.paths.claude_hooks_dir(),
+            app.paths.antigravity_hooks_dir(),
         )
     };
 
@@ -430,28 +433,46 @@ pub async fn dispatch_agent(
     let mut tab = crate::state::DesktopTab::new(ai_provider, Some(&provider_cfg));
     let tab_id = tab.id.clone();
 
-    // Dispatched Claude agents get the structured cli-agent (OSC 777) hooks
-    // so the kanban flow sees precise lifecycle status. Other providers run
-    // bare (no shell wrapper, no hooks).
-    let (extra_env, extra_args, integration_on, cli_agent_sock) = if command == "claude" {
-        match cli_agent_install::setup_for_claude(&claude_hooks_dir) {
-            Ok(setup) => {
-                let sock = setup.sock_path.clone();
-                (
-                    setup.env.into_iter().collect::<Vec<_>>(),
-                    setup.extra_args,
-                    true,
-                    sock,
-                )
+    // Dispatched agents with a hook bridge (Claude Code, Antigravity) get the
+    // structured cli-agent channel so the kanban flow sees precise lifecycle
+    // status. Other providers run bare (no shell wrapper, no hooks).
+    let (extra_env, extra_args, integration_on, cli_agent_sock) =
+        match bridge_for_command(&command) {
+            Some(AgentBridge::Claude) => {
+                match cli_agent_install::setup_for_claude(&claude_hooks_dir) {
+                    Ok(setup) => {
+                        let sock = setup.sock_path.clone();
+                        (
+                            setup.env.into_iter().collect::<Vec<_>>(),
+                            setup.extra_args,
+                            true,
+                            sock,
+                        )
+                    }
+                    Err(e) => {
+                        tracing::warn!(error = %e, "claude cli-agent hook setup failed");
+                        (Vec::new(), Vec::new(), false, None)
+                    }
+                }
             }
-            Err(e) => {
-                tracing::warn!(error = %e, "claude cli-agent hook setup failed");
-                (Vec::new(), Vec::new(), false, None)
+            Some(AgentBridge::Antigravity) => {
+                // agy takes no hook args — the plugin lives in its own root.
+                match agy_install::setup_for_antigravity(
+                    &agy_hooks_dir,
+                    &agy_install::plugins_root(),
+                ) {
+                    Ok(setup) => {
+                        let sock = setup.sock_path.clone();
+                        (setup.env.into_iter().collect::<Vec<_>>(), Vec::new(), true, sock)
+                    }
+                    Err(e) => {
+                        tracing::warn!(error = %e, "antigravity cli-agent hook setup failed");
+                        (Vec::new(), Vec::new(), false, None)
+                    }
+                }
             }
-        }
-    } else {
-        (Vec::new(), Vec::new(), false, None)
-    };
+            None => (Vec::new(), Vec::new(), false, None),
+        };
 
     let pty = crate::pty_raw::RawPtySession::spawn(
         app_handle,

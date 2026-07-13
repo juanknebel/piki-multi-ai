@@ -29,14 +29,16 @@ use self::dialog::{
     handle_edit_agent_role_input, handle_edit_provider_input, handle_edit_workspace_input,
     handle_help_input, handle_import_agents_input,
     handle_logs_input, handle_manage_agents_input, handle_manage_providers_input,
-    handle_new_tab_input, handle_new_workspace_input, handle_workspace_info_input,
+    handle_missing_prereqs_input, handle_new_tab_input, handle_new_workspace_input,
+    handle_workspace_info_input,
 };
 use self::editor_input::handle_inline_edit_input;
 use self::fuzzy_input::handle_fuzzy_search_input;
 use self::interaction::{
     handle_agents_interaction, handle_api_interaction,
     handle_kanban_interaction, handle_markdown_interaction, handle_terminal_interaction,
-    handle_workspace_interaction,
+    handle_workspace_list_interaction,
+    
 };
 
 /// Handle a bracketed paste event — insert full text at once into the active context.
@@ -131,6 +133,7 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
     match app.mode {
         AppMode::WorkspaceInfo => return handle_workspace_info_input(app, key),
         AppMode::About => return handle_about_input(app, key),
+        AppMode::MissingPrereqs => return handle_missing_prereqs_input(app, key),
         AppMode::Help => return handle_help_input(app, key),
         AppMode::FuzzySearch => return handle_fuzzy_search_input(app, key),
         AppMode::InlineEdit => return handle_inline_edit_input(app, key),
@@ -192,6 +195,13 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
             }
             handle_term_scroll_key(app, key)
         }
+        InputState::Resize => {
+            if app.config.is_prefix_key(key) {
+                app.input_state = InputState::PrefixPending;
+                return None;
+            }
+            handle_resize_key(app, key)
+        }
         InputState::Normal => {
             if app.config.is_prefix_key(key) {
                 app.input_state = InputState::PrefixPending;
@@ -223,6 +233,7 @@ const APP_ACTIONS: &[&str] = &[
     "toggle_prev_workspace",
     "new_workspace",
     "edit_workspace",
+    "delete_workspace",
     "workspace_info",
     "clone_workspace",
     "git",
@@ -273,6 +284,7 @@ fn dispatch_app_action(app: &mut App, action: &str) -> Option<Action> {
         }
         "new_workspace" => app_actions::open_new_workspace(app),
         "edit_workspace" => app_actions::open_edit_workspace(app),
+        "delete_workspace" => app_actions::open_delete_workspace(app),
         "workspace_info" => app_actions::open_workspace_info(app),
         "clone_workspace" => app_actions::open_clone_workspace(app),
         "git" => app_actions::open_git_tab(app),
@@ -302,6 +314,23 @@ fn dispatch_app_action(app: &mut App, action: &str) -> Option<Action> {
     }
 }
 
+/// The resize actions whose bare chords repeat while `InputState::Resize` is
+/// active. Each re-enters Resize, so pressing the key again keeps repeating.
+const RESIZE_ACTIONS: &[&str] = &["sidebar_shrink", "sidebar_grow", "split_up", "split_down"];
+
+/// Handle a key in resize repeat mode: a bare resize chord repeats the resize
+/// and stays in the mode; anything else (including Esc) exits back to Normal.
+fn handle_resize_key(app: &mut App, key: KeyEvent) -> Option<Action> {
+    for &action in RESIZE_ACTIONS {
+        if app.config.matches_app_prefix(key, action) {
+            // The dispatched action sets input_state back to Resize.
+            return dispatch_app_action(app, action);
+        }
+    }
+    app.input_state = InputState::Normal;
+    None
+}
+
 /// Dispatch the key following the prefix chord against the app table.
 fn handle_prefix_key(app: &mut App, key: KeyEvent) -> Option<Action> {
     // prefix 1..9 → jump to tab N (not configurable, like tmux)
@@ -321,8 +350,11 @@ fn handle_prefix_key(app: &mut App, key: KeyEvent) -> Option<Action> {
             return dispatch_app_action(app, action);
         }
     }
+    // Don't dead-end: point at the keymap the user just had open.
+    let prefix = app.config.prefix_display();
+    let help = app.config.prefix_chord("help").unwrap_or_else(|| "?".to_string());
     app.set_toast(
-        format!("Unbound key after {}", app.config.prefix_display()),
+        format!("Unbound key — press {prefix} {help} for the keymap"),
         crate::app::ToastLevel::Info,
     );
     None
@@ -419,7 +451,10 @@ fn handle_pane_key(app: &mut App, key: KeyEvent) -> Option<Action> {
                 handle_terminal_interaction(app, key)
             }
         }
-        ActivePane::WorkspaceList => handle_workspace_interaction(app, key),
+        // When focused, the workspace list is keyboard-navigable (up/down to
+        // move the selection, Enter to switch workspace / toggle a group).
+        // The heavier workspace actions still live behind the prefix.
+        ActivePane::WorkspaceList => handle_workspace_list_interaction(app, key),
         ActivePane::Agents => handle_agents_interaction(app, key),
     }
 }

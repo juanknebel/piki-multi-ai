@@ -1,6 +1,6 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 83
+assertion_line: 98
 expression: content
 ---
 
@@ -11,10 +11,10 @@ expression: content
 
 
 
-                    ┌ Quit ────────────────────────────────┐
+                    ╭ Quit ────────────────────────────────╮
                     │                                      │
                     │    Are you sure you want to quit?    │
                     │                                      │
                     │           [Y] Yes    [N] No          │
                     │                                      │
-                    └──────────────────────────────────────┘
+                    ╰──────────────────────────────────────╯

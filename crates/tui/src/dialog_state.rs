@@ -109,12 +109,17 @@ pub enum DialogState {
         group_cursor: usize,
         active_field: EditWorkspaceField,
     },
-    /// Create a git worktree from a GitHub-origin parent workspace. The parent
-    /// is identified by index; the dialog only captures the worktree branch
-    /// name (required) and optional overrides for prompt/kanban/group
-    /// (pre-filled from the parent).
+    /// Create a git worktree from a GitHub-origin parent workspace, or load
+    /// one that already exists on disk (via `git worktree list`). The parent
+    /// is identified by index.
+    /// `mode` selects between the two flows; `name`/`prompt`/`kanban`/`group`/
+    /// `active_field` are only meaningful when `mode == CreateNew` (they
+    /// capture the worktree branch name plus optional overrides, pre-filled
+    /// from the parent). `existing`/`existing_selected`/`existing_loading`
+    /// are only meaningful when `mode == LoadExisting`.
     CreateWorktree {
         parent_idx: usize,
+        mode: CreateWorktreeMode,
         name: String,
         name_cursor: usize,
         prompt: String,
@@ -124,6 +129,9 @@ pub enum DialogState {
         group: String,
         group_cursor: usize,
         active_field: CreateWorktreeField,
+        existing: Vec<piki_core::workspace::ExistingWorktree>,
+        existing_selected: usize,
+        existing_loading: bool,
     },
     ConfirmDelete {
         target: usize,
@@ -137,8 +145,20 @@ pub enum DialogState {
     },
     Help {
         scroll: u16,
+        /// Incremental filter query; when non-empty the help shows only the
+        /// keybinding lines that match it (case-insensitive substring).
+        filter: String,
     },
     About,
+    /// A bridged agent tab was opened while the tools its hooks need are
+    /// missing from PATH. The tab spawned fine — this only warns that its
+    /// status will be guessed from PTY silence instead of read from the agent.
+    MissingPrereqs {
+        /// The agent whose bridge is degraded (e.g. `Antigravity`).
+        agent: String,
+        /// Tools that weren't found (e.g. `jq`).
+        missing: Vec<String>,
+    },
     WorkspaceInfo {
         hscroll: u16,
     },
@@ -326,6 +346,17 @@ impl CycleField for EditWorkspaceField {
             Self::Prompt => Self::KanbanPath,
         }
     }
+}
+
+/// Which step of the CreateWorktree dialog is currently shown.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CreateWorktreeMode {
+    /// Pick "Create new worktree" vs "Load existing worktree".
+    ChooseSource,
+    /// Today's text-field flow: branch name + optional prompt/kanban/group.
+    CreateNew,
+    /// Pick from worktrees discovered on disk via `git worktree list`.
+    LoadExisting,
 }
 
 /// Active field in the CreateWorktree dialog (Layer 3 GitHub-only flow).

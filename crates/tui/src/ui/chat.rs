@@ -30,7 +30,7 @@ pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let block = Block::default()
         .title(title)
         .title_style(Style::default().fg(theme.help.border))
-        .borders(Borders::ALL)
+        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(Style::default().fg(theme.help.border));
 
     let inner = block.inner(popup);
@@ -86,7 +86,7 @@ pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let input_line = Line::from(vec![
         Span::styled("> ", Style::default().fg(theme.help.border)),
         Span::raw(before),
-        Span::styled(cursor_char, Style::default().bg(theme.help.border).fg(Color::Black)),
+        Span::styled(cursor_char, Style::default().bg(theme.help.border).fg(theme.palette.bg0)),
         Span::raw(after),
     ]);
     frame.render_widget(Paragraph::new(input_line), input_area);
@@ -97,7 +97,7 @@ pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &App) {
         crate::app::ChatSubMode::Settings => vec![
             Span::styled("[Tab]", Style::default().fg(h)),
             Span::raw(" switch field  "),
-            Span::styled("[Ctrl+Enter]", Style::default().fg(h)),
+            Span::styled("[C-Enter]", Style::default().fg(h)),
             Span::raw(" save  "),
             Span::styled("[Esc]", Style::default().fg(h)),
             Span::raw(" cancel"),
@@ -118,7 +118,7 @@ pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &App) {
                 .map(|r| r.tool_name.as_str())
                 .unwrap_or("?");
             vec![
-                Span::styled(format!("Approve {tool_name}? "), Style::default().fg(Color::Yellow)),
+                Span::styled(format!("Approve {tool_name}? "), Style::default().fg(theme.palette.warn)),
                 Span::styled("[y]", Style::default().fg(h)),
                 Span::raw(" allow  "),
                 Span::styled("[n]", Style::default().fg(h)),
@@ -341,6 +341,7 @@ fn render_settings(frame: &mut Frame, area: Rect, app: &App) {
         if url_active { Some(cursor) } else { None },
         max_w,
         h,
+        theme.palette.bg0,
     ));
     lines.push(Line::from(""));
 
@@ -370,13 +371,14 @@ fn render_settings(frame: &mut Frame, area: Rect, app: &App) {
                     if prompt_active { Some(cursor.min(pline.len())) } else { None },
                     max_w,
                     h,
+                    theme.palette.bg0,
                 ));
             } else {
                 lines.push(Line::from(format!("    {pline}")));
             }
         }
         if prompt_text.is_empty() && prompt_active {
-            lines.push(render_text_field("", Some(0), max_w, h));
+            lines.push(render_text_field("", Some(0), max_w, h, theme.palette.bg0));
         }
     }
 
@@ -390,6 +392,7 @@ fn render_text_field<'a>(
     cursor_pos: Option<usize>,
     max_width: usize,
     accent: Color,
+    cursor_fg: Color,
 ) -> Line<'a> {
     let prefix = "    ";
     match cursor_pos {
@@ -405,7 +408,7 @@ fn render_text_field<'a>(
             Line::from(vec![
                 Span::raw(prefix),
                 Span::raw(before.to_string()),
-                Span::styled(cursor_char.to_string(), Style::default().bg(accent).fg(Color::Black)),
+                Span::styled(cursor_char.to_string(), Style::default().bg(accent).fg(cursor_fg)),
                 Span::raw(after.to_string()),
             ])
         }

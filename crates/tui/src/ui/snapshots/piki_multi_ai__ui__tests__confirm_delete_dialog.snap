@@ -1,6 +1,6 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 172
+assertion_line: 338
 expression: content
 ---
 
@@ -10,12 +10,12 @@ expression: content
 
 
 
-               ┌ Delete Workspace ──────────────────────────────┐
+               ╭ Delete Workspace ──────────────────────────────╮
                │                                                │
                │  Remove ? ?                                    │
                │                                                │
                │  [y] Yes, remove from list                     │
-               │  [Esc] Cancel                                  │
+               │  [Esc] cancel                                  │
                │                                                │
                │                                                │
-               └────────────────────────────────────────────────┘
+               ╰────────────────────────────────────────────────╯

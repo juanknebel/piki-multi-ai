@@ -58,6 +58,14 @@ pub struct RefreshResult {
     pub ahead_behind: Option<(usize, usize)>,
 }
 
+/// Result of backgrounded `FileWatcher::new` setup for a restored workspace.
+/// Watch registration walks the whole worktree tree synchronously, so it's
+/// run off the startup critical path (see `event_loop.rs`).
+pub struct WatcherResult {
+    pub workspace_idx: usize,
+    pub watcher: anyhow::Result<piki_core::workspace::FileWatcher>,
+}
+
 /// Main application mode
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AppMode {
@@ -81,6 +89,8 @@ pub enum AppMode {
     NewTab,
     /// About overlay
     About,
+    /// Warning overlay: a bridged agent opened without its hook prerequisites
+    MissingPrereqs,
     /// Workspace info overlay
     WorkspaceInfo,
     /// Confirmation dialog for closing a tab
@@ -222,7 +232,6 @@ impl ApiTabState {
 
 /// A tab within a workspace, each with its own PTY session
 pub struct Tab {
-    #[allow(dead_code)]
     pub id: usize,
     pub provider: AIProvider,
     pub pty_session: Option<PtySession>,
@@ -255,13 +264,20 @@ impl Tab {
     /// cli-agent OSC 777 channel has produced at least one event. `None`
     /// for non-Claude tabs (or before the first event). Locks the shell
     /// mutex briefly — safe to call from pure render functions.
+    /// (status, attention pending, last summary) for this tab's cli agent.
+    /// `attention` is true while the agent has news the user hasn't looked
+    /// at yet (cleared when the tab is viewed).
     pub fn cli_agent_snapshot(
         &self,
-    ) -> Option<(piki_core::cli_agent::CliAgentStatus, Option<String>)> {
+    ) -> Option<(piki_core::cli_agent::CliAgentStatus, bool, Option<String>)> {
         let shell = self.pty_session.as_ref()?.shell()?;
         let guard = shell.lock();
         let agent = guard.state.cli_agent.as_ref()?;
-        Some((agent.status, agent.last_summary.clone()))
+        Some((
+            agent.status,
+            agent.last_attention_at.is_some(),
+            agent.last_summary.clone(),
+        ))
     }
 }
 
@@ -424,21 +440,21 @@ impl Workspace {
         self.changed_files.len()
     }
 
-    /// Worst agent status across this workspace's agent tabs, for the sidebar
-    /// rollup. Priority: needs-permission > running > waiting > done.
-    pub fn agent_status_rollup(&self) -> Option<piki_core::cli_agent::CliAgentStatus> {
+    /// Worst (status, attention) across this workspace's agent tabs, for the
+    /// sidebar rollup. Priority: needs-permission > unseen news > running.
+    pub fn agent_status_rollup(&self) -> Option<(piki_core::cli_agent::CliAgentStatus, bool)> {
         use piki_core::cli_agent::CliAgentStatus as S;
-        fn severity(s: &S) -> u8 {
-            match s {
-                S::WaitingPermission => 3,
-                S::Running => 2,
-                S::Idle => 1,
-                S::Done => 0,
+        fn severity(&(s, attention): &(S, bool)) -> u8 {
+            match (s, attention) {
+                (S::WaitingPermission, _) => 4,
+                (S::Idle | S::Done, true) => 3,
+                (S::Running, _) => 2,
+                _ => 0,
             }
         }
         self.tabs
             .iter()
-            .filter_map(|t| t.cli_agent_snapshot().map(|(status, _)| status))
+            .filter_map(|t| t.cli_agent_snapshot().map(|(status, att, _)| (status, att)))
             .max_by_key(severity)
     }
 
@@ -679,15 +695,20 @@ pub enum InputState {
     PrefixPending,
     /// Terminal scroll mode (`prefix [`): keys scroll the focused terminal.
     TermScroll,
+    /// Resize repeat mode: entered by a sidebar/split resize action so the bare
+    /// resize keys repeat without re-pressing the prefix each time (tmux
+    /// `bind -r`). Any non-resize key or Esc exits.
+    Resize,
 }
 
-/// Cached footer keys: (mode, input_state, active_pane, has_markdown, api_footer_state, new_tab_menu, keys)
+/// Cached footer keys: (mode, input_state, active_pane, has_markdown, has_kanban, api_footer_state, new_tab_menu, keys)
 /// api_footer_state: 0 = no API tab, 1 = API tab, 2 = API tab with search open
 /// new_tab_menu: 0 = N/A, 1 = Main, 2 = Agents, 3 = Tools
 pub type FooterCache = (
     AppMode,
     InputState,
     ActivePane,
+    bool,
     bool,
     u8,
     u8,
@@ -705,6 +726,9 @@ pub struct App {
     pub selected_workspace: usize,
     /// Selected row in the Agents pane (index into `agent_rows()`)
     pub selected_agent_row: usize,
+    /// (workspace, tab id) the Agents highlight was last synced to, so the
+    /// sync only fires when the user actually moves to another tab.
+    agent_focus_key: Option<(usize, usize)>,
     /// Active dialog state — None means no dialog is open
     pub active_dialog: Option<DialogState>,
     pub collapsed_groups: std::collections::HashSet<String>,
@@ -757,10 +781,16 @@ pub struct App {
     pub code_review_body_rect: Rect,
     /// Whether the UI needs to be redrawn
     pub needs_redraw: bool,
+    /// Tick counter driving the running-agent spinner in the Agents pane
+    /// (advanced by the event loop only while some agent is running)
+    pub spinner_frame: usize,
     pub config: crate::config::Config,
     /// Channel for receiving async git refresh results
     pub refresh_tx: tokio::sync::mpsc::UnboundedSender<RefreshResult>,
     pub refresh_rx: tokio::sync::mpsc::UnboundedReceiver<RefreshResult>,
+    /// Channel for receiving backgrounded FileWatcher setup results
+    pub watcher_tx: tokio::sync::mpsc::UnboundedSender<WatcherResult>,
+    pub watcher_rx: tokio::sync::mpsc::UnboundedReceiver<WatcherResult>,
     /// Channel for receiving status messages from background tasks
     pub status_tx: tokio::sync::mpsc::UnboundedSender<String>,
     pub status_rx: tokio::sync::mpsc::UnboundedReceiver<String>,
@@ -860,6 +890,7 @@ impl App {
         paths: &piki_core::paths::DataPaths,
     ) -> Self {
         let (refresh_tx, refresh_rx) = tokio::sync::mpsc::unbounded_channel::<RefreshResult>();
+        let (watcher_tx, watcher_rx) = tokio::sync::mpsc::unbounded_channel::<WatcherResult>();
         let (status_tx, status_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
         let (chat_token_tx, chat_token_rx) =
             tokio::sync::mpsc::unbounded_channel::<piki_api_client::ChatStreamEvent>();
@@ -881,6 +912,7 @@ impl App {
             active_workspace: 0,
             selected_workspace: 0,
             selected_agent_row: 0,
+            agent_focus_key: None,
             active_dialog: None,
             collapsed_groups: std::collections::HashSet::new(),
             selected_sidebar_row: 0,
@@ -910,9 +942,12 @@ impl App {
             code_review_divider_x: 0,
             code_review_body_rect: Rect::default(),
             needs_redraw: true,
+            spinner_frame: 0,
             config,
             refresh_tx,
             refresh_rx,
+            watcher_tx,
+            watcher_rx,
             status_tx,
             status_rx,
             refresh_pending: false,
@@ -1011,7 +1046,7 @@ impl App {
             .position(|&i| i == self.active_workspace)
             .unwrap_or(0);
         let next = visible[(pos + 1) % visible.len()];
-        self.switch_workspace(next);
+        self.switch_workspace_and_focus(next);
     }
 
     pub fn prev_workspace(&mut self) {
@@ -1031,7 +1066,7 @@ impl App {
             .position(|&i| i == self.active_workspace)
             .unwrap_or(0);
         let prev = visible[(pos + visible.len() - 1) % visible.len()];
-        self.switch_workspace(prev);
+        self.switch_workspace_and_focus(prev);
     }
 
     pub fn switch_workspace(&mut self, index: usize) {
@@ -1065,6 +1100,15 @@ impl App {
                 let _ = prefs.set_preference("last_focused_workspace", &path_str);
             }
         }
+    }
+
+    /// Same as `switch_workspace`, but also focuses the main panel — use this
+    /// from any keyboard-driven action that should land the user on the
+    /// workspace's content (as opposed to the startup restore path, which
+    /// intentionally leaves `active_pane` untouched).
+    pub fn switch_workspace_and_focus(&mut self, index: usize) {
+        self.switch_workspace(index);
+        self.active_pane = ActivePane::MainPanel;
     }
 
     /// Build the visual sidebar item list, grouping workspaces by their group field.
@@ -1120,6 +1164,35 @@ impl App {
             .collect()
     }
 
+    /// Move the Agents highlight onto the agent tab the user is standing on.
+    ///
+    /// The pane lists agents from every workspace, so a highlight left behind
+    /// on another workspace's agent reads as "I'm on that one". Called once per
+    /// event-loop iteration rather than at each tab/workspace switch site, and
+    /// only re-selects when the active tab changed — so browsing the pane with
+    /// j/k isn't yanked back. A non-agent tab (shell, lazygit) leaves the
+    /// highlight where it was: there is no row to move it to.
+    pub fn sync_agent_selection(&mut self) {
+        let key = self
+            .current_workspace()
+            .and_then(|ws| ws.tabs.get(ws.active_tab).map(|tab| tab.id))
+            .map(|tab_id| (self.active_workspace, tab_id));
+        if key == self.agent_focus_key {
+            return;
+        }
+        self.agent_focus_key = key;
+
+        let Some(target) = self
+            .current_workspace()
+            .map(|ws| (self.active_workspace, ws.active_tab))
+        else {
+            return;
+        };
+        if let Some(idx) = self.agent_rows().iter().position(|&row| row == target) {
+            self.selected_agent_row = idx;
+        }
+    }
+
     pub fn sidebar_items(&self) -> Vec<SidebarItem> {
         let mut items = Vec::new();
         let mut groups: std::collections::BTreeMap<String, Vec<usize>> =
@@ -1166,20 +1239,29 @@ impl App {
     pub fn select_next_sidebar_row(&mut self) {
         let count = self.sidebar_items().len();
         if count > 0 {
-            self.selected_sidebar_row = (self.selected_sidebar_row + 1) % count;
-            if let Some(idx) = self.sidebar_row_to_workspace(self.selected_sidebar_row) {
-                self.selected_workspace = idx;
-            }
+            self.follow_sidebar_row((self.selected_sidebar_row + 1) % count);
         }
     }
 
     pub fn select_prev_sidebar_row(&mut self) {
         let count = self.sidebar_items().len();
         if count > 0 {
-            self.selected_sidebar_row = (self.selected_sidebar_row + count - 1) % count;
-            if let Some(idx) = self.sidebar_row_to_workspace(self.selected_sidebar_row) {
-                self.selected_workspace = idx;
-            }
+            self.follow_sidebar_row((self.selected_sidebar_row + count - 1) % count);
+        }
+    }
+
+    /// Land the sidebar cursor on `row` and make that workspace the active one
+    /// (a group header has none, so the cursor moves alone).
+    ///
+    /// Follow-focus: the cursor and the workspace every action targets are the
+    /// same thing. Without it the two drift apart — the cursor sits on one
+    /// workspace while `prefix c` opens its tab in whichever workspace the main
+    /// panel still shows — and every workspace-scoped action becomes a coin
+    /// flip. A sidebar click already switched (`input/mouse.rs`); j/k didn't.
+    fn follow_sidebar_row(&mut self, row: usize) {
+        self.selected_sidebar_row = row;
+        if let Some(idx) = self.sidebar_row_to_workspace(row) {
+            self.switch_workspace(idx);
         }
     }
 
@@ -1192,9 +1274,55 @@ impl App {
         if !self.collapsed_groups.remove(&name) {
             self.collapsed_groups.insert(name);
         }
-        // Persist to storage if available
+        self.persist_collapsed_groups();
+    }
+
+    fn persist_collapsed_groups(&self) {
         if let Some(ref ui_prefs) = self.storage.ui_prefs {
             let _ = ui_prefs.set_collapsed_groups(&self.collapsed_groups);
+        }
+    }
+
+    /// The group name for the currently selected sidebar row: the header's own
+    /// name, or the parent group of a selected workspace (`None` if ungrouped).
+    fn selected_group_name(&self) -> Option<String> {
+        match self.sidebar_items().get(self.selected_sidebar_row)? {
+            SidebarItem::GroupHeader { name, .. } => Some(name.clone()),
+            SidebarItem::Workspace { index } => {
+                self.workspaces.get(*index).and_then(|w| w.info.group.clone())
+            }
+        }
+    }
+
+    /// Collapse the group the selection belongs to (its own header, or the
+    /// parent group of a selected workspace) and park the selection on that
+    /// header row. Tree-style `←` behaviour. No-op for ungrouped rows.
+    pub fn collapse_selected_group(&mut self) {
+        let Some(name) = self.selected_group_name() else {
+            return;
+        };
+        self.collapsed_groups.insert(name.clone());
+        self.persist_collapsed_groups();
+        // Land on the (now collapsed) header so a following `→` re-expands it.
+        for (i, item) in self.sidebar_items().iter().enumerate() {
+            if let SidebarItem::GroupHeader { name: n, .. } = item
+                && *n == name
+            {
+                self.selected_sidebar_row = i;
+                break;
+            }
+        }
+    }
+
+    /// Expand the selected collapsed group header. Tree-style `→` behaviour;
+    /// a no-op unless the selection is on a collapsed header.
+    pub fn expand_selected_group(&mut self) {
+        let name = match self.sidebar_items().get(self.selected_sidebar_row) {
+            Some(SidebarItem::GroupHeader { name, .. }) => name.clone(),
+            _ => return,
+        };
+        if self.collapsed_groups.remove(&name) {
+            self.persist_collapsed_groups();
         }
     }
 
@@ -1262,7 +1390,7 @@ impl App {
         if let Some(prev) = self.previous_workspace
             && prev < self.workspaces.len()
         {
-            self.switch_workspace(prev);
+            self.switch_workspace_and_focus(prev);
         }
     }
 
@@ -1311,10 +1439,6 @@ mod tests {
 
     fn ctrl(c: char) -> KeyEvent {
         KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL)
-    }
-
-    fn shift(c: char) -> KeyEvent {
-        KeyEvent::new(KeyCode::Char(c), KeyModifiers::SHIFT)
     }
 
     #[test]
@@ -1409,7 +1533,7 @@ mod tests {
             &piki_core::paths::DataPaths::default_paths(),
         );
         crate::input::handle_key_event(&mut app, ctrl('g'));
-        let action = crate::input::handle_key_event(&mut app, shift('N'));
+        let action = crate::input::handle_key_event(&mut app, key(KeyCode::Char('s')));
         assert!(action.is_none());
         assert_eq!(app.mode, AppMode::NewWorkspace);
     }
@@ -1422,7 +1546,7 @@ mod tests {
         );
         // Opening new workspace sets both mode and dialog
         crate::input::handle_key_event(&mut app, ctrl('g'));
-        crate::input::handle_key_event(&mut app, shift('N'));
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('s')));
         assert_eq!(app.mode, AppMode::NewWorkspace);
 
         let action = crate::input::handle_key_event(&mut app, key(KeyCode::Esc));
@@ -1452,7 +1576,7 @@ mod tests {
         );
         // Use the normal entry point to set up dialog state
         crate::input::handle_key_event(&mut app, ctrl('g'));
-        crate::input::handle_key_event(&mut app, shift('N'));
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('s')));
         assert_eq!(app.mode, AppMode::NewWorkspace);
 
         let get_field = |app: &App| -> DialogField {
@@ -1495,7 +1619,7 @@ mod tests {
         );
         // Use normal entry point to create dialog
         crate::input::handle_key_event(&mut app, ctrl('g'));
-        crate::input::handle_key_event(&mut app, shift('N'));
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('s')));
         assert_eq!(app.mode, AppMode::NewWorkspace);
 
         // Tab from Source → Directory → Name to reach the Name field
@@ -1614,15 +1738,16 @@ mod tests {
 
         let get_scroll = |app: &App| -> u16 {
             match &app.active_dialog {
-                Some(DialogState::Help { scroll }) => *scroll,
+                Some(DialogState::Help { scroll, .. }) => *scroll,
                 _ => panic!("Expected Help dialog"),
             }
         };
 
-        crate::input::handle_key_event(&mut app, key(KeyCode::Char('j')));
+        // The help browser is a search box now: arrows scroll, letters filter.
+        crate::input::handle_key_event(&mut app, key(KeyCode::Down));
         assert_eq!(get_scroll(&app), 1);
 
-        crate::input::handle_key_event(&mut app, key(KeyCode::Char('k')));
+        crate::input::handle_key_event(&mut app, key(KeyCode::Up));
         assert_eq!(get_scroll(&app), 0);
 
         // Page down
@@ -2061,6 +2186,11 @@ mod tests {
         // j moves the selection down
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('j')));
         assert_eq!(app.selected_agent_row, 1);
+        // Arrow keys navigate too: Up back to row 0, Down to row 1
+        crate::input::handle_key_event(&mut app, key(KeyCode::Up));
+        assert_eq!(app.selected_agent_row, 0);
+        crate::input::handle_key_event(&mut app, key(KeyCode::Down));
+        assert_eq!(app.selected_agent_row, 1);
         // Enter jumps to workspace b's agent tab and focuses the main panel
         crate::input::handle_key_event(&mut app, key(KeyCode::Enter));
         assert_eq!(app.active_workspace, b);
@@ -2070,6 +2200,98 @@ mod tests {
             ws.tabs[ws.active_tab].provider,
             AIProvider::Custom(_)
         ));
+    }
+
+    #[test]
+    fn test_sidebar_cursor_switches_the_active_workspace() {
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let a = add_test_workspace(&mut app);
+        let b = add_test_workspace(&mut app);
+        app.switch_workspace(a);
+
+        // Follow-focus: j/k don't just move a cursor, they move the workspace
+        // every action targets — so `prefix c` right after lands its tab here.
+        app.select_next_sidebar_row();
+        assert_eq!(app.selected_workspace, b);
+        assert_eq!(app.active_workspace, b);
+
+        app.select_prev_sidebar_row();
+        assert_eq!(app.active_workspace, a);
+    }
+
+    #[test]
+    fn test_sidebar_cursor_on_a_group_header_keeps_the_active_workspace() {
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let a = add_test_workspace(&mut app);
+        let b = add_test_workspace(&mut app);
+        app.workspaces[b].info.group = Some("GROUP".to_string());
+        app.switch_workspace(a);
+
+        // Rows are [Workspace a, GroupHeader GROUP, Workspace b] — the header
+        // has no workspace of its own, so the cursor moves alone.
+        app.select_next_sidebar_row();
+        assert!(matches!(
+            app.sidebar_items()[app.selected_sidebar_row],
+            SidebarItem::GroupHeader { .. }
+        ));
+        assert_eq!(app.active_workspace, a);
+
+        app.select_next_sidebar_row();
+        assert_eq!(app.active_workspace, b);
+    }
+
+    #[test]
+    fn test_agent_selection_follows_the_active_agent_tab() {
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let a = add_test_workspace(&mut app);
+        let b = add_test_workspace(&mut app);
+        add_agent_tab(&mut app, a, "Antigravity");
+        add_agent_tab(&mut app, b, "Claude Code");
+
+        app.active_workspace = a;
+        app.sync_agent_selection();
+        assert_eq!(app.selected_agent_row, 0);
+
+        // Opening/switching to workspace b's agent moves the highlight with it
+        app.switch_workspace(b);
+        app.sync_agent_selection();
+        assert_eq!(app.selected_agent_row, 1);
+    }
+
+    #[test]
+    fn test_agent_selection_does_not_fight_pane_browsing() {
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let a = add_test_workspace(&mut app);
+        let b = add_test_workspace(&mut app);
+        add_agent_tab(&mut app, a, "Antigravity");
+        add_agent_tab(&mut app, b, "Claude Code");
+        app.active_workspace = b;
+        app.sync_agent_selection();
+        assert_eq!(app.selected_agent_row, 1);
+
+        // The user browses the pane with j/k; the active tab didn't change, so
+        // the next loop iteration must leave their cursor alone.
+        app.selected_agent_row = 0;
+        app.sync_agent_selection();
+        assert_eq!(app.selected_agent_row, 0);
+    }
+
+    #[test]
+    fn test_agent_selection_kept_on_a_non_agent_tab() {
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let a = add_test_workspace(&mut app);
+        add_agent_tab(&mut app, a, "Antigravity");
+        let b = add_test_workspace(&mut app);
+        add_agent_tab(&mut app, b, "Claude Code");
+        app.active_workspace = b;
+        app.sync_agent_selection();
+        assert_eq!(app.selected_agent_row, 1);
+
+        // A shell tab has no row of its own — the highlight stays put rather
+        // than snapping back to some other workspace's agent.
+        app.workspaces[b].add_tab(AIProvider::Shell, true, None);
+        app.sync_agent_selection();
+        assert_eq!(app.selected_agent_row, 1);
     }
 
     #[test]
@@ -2126,21 +2348,69 @@ mod tests {
     // ── Workspace switch + focus tests ──
 
     #[test]
-    fn test_workspace_enter_focuses_main_panel() {
+    fn test_workspace_list_keyboard_nav() {
+        // The focused workspace list is keyboard-navigable: up/down (j/k or the
+        // arrows) move the selection and Enter switches to the selected
+        // workspace. Heavier actions (new/edit/delete) still go through the
+        // prefix; bare letter keys are no-ops here.
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
+        add_test_workspace(&mut app); // index 0 → sidebar row 0
+        add_test_workspace(&mut app); // index 1 → sidebar row 1
+        app.active_pane = ActivePane::WorkspaceList;
+        app.selected_sidebar_row = 0;
+
+        // Down (j) moves the selection to row 1.
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('j')));
+        assert_eq!(app.selected_sidebar_row, 1);
+        // Arrow Up moves back to row 0.
+        crate::input::handle_key_event(&mut app, key(KeyCode::Up));
+        assert_eq!(app.selected_sidebar_row, 0);
+        // A bare letter key is a no-op (not a prefix chord).
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('e')));
+        assert_eq!(app.selected_sidebar_row, 0);
+
+        // Arrow Down then Enter switches to the selected workspace, and focus
+        // stays on the list so navigation can continue.
+        crate::input::handle_key_event(&mut app, key(KeyCode::Down));
+        assert_eq!(app.selected_sidebar_row, 1);
+        crate::input::handle_key_event(&mut app, key(KeyCode::Enter));
+        assert_eq!(app.active_workspace, 1);
+        assert_eq!(app.active_pane, ActivePane::WorkspaceList);
+        assert_eq!(app.mode, AppMode::Normal);
+        assert!(app.active_dialog.is_none());
+    }
+
+    #[test]
+    fn test_workspace_list_collapse_expand_group() {
+        // Side arrows (or h/l) collapse/expand a group in the Workspaces tree.
         let mut app = App::new(
             test_storage(),
             &piki_core::paths::DataPaths::default_paths(),
         );
         add_test_workspace(&mut app); // index 0
         add_test_workspace(&mut app); // index 1
+        app.workspaces[0].info.group = Some("G".to_string());
+        app.workspaces[1].info.group = Some("G".to_string());
         app.active_pane = ActivePane::WorkspaceList;
-        // Select the second workspace row in the sidebar
-        app.selected_sidebar_row = 1;
+        // sidebar_items: [GroupHeader{G}, Workspace{0}, Workspace{1}]
+        app.selected_sidebar_row = 1; // a workspace inside the group
 
-        // Press Enter to select workspace 1
-        crate::input::handle_key_event(&mut app, key(KeyCode::Enter));
-        assert_eq!(app.active_workspace, 1);
-        assert_eq!(app.active_pane, ActivePane::MainPanel);
+        // h collapses the parent group and parks selection on its header.
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('h')));
+        assert!(app.collapsed_groups.contains("G"));
+        assert_eq!(app.selected_sidebar_row, 0);
+        // l re-expands it.
+        crate::input::handle_key_event(&mut app, key(KeyCode::Char('l')));
+        assert!(!app.collapsed_groups.contains("G"));
+        // Arrow Left collapses again straight from the header row.
+        crate::input::handle_key_event(&mut app, key(KeyCode::Left));
+        assert!(app.collapsed_groups.contains("G"));
+        // Arrow Right expands.
+        crate::input::handle_key_event(&mut app, key(KeyCode::Right));
+        assert!(!app.collapsed_groups.contains("G"));
     }
 
     // ── PTY idle notifications ──
@@ -2178,5 +2448,72 @@ mod tests {
         app.switch_workspace(a);
 
         assert!(!app.workspaces[a].has_idle_notification);
+    }
+
+    // ── active_pane sync on workspace switch ──
+
+    #[test]
+    fn bare_switch_workspace_leaves_active_pane_untouched() {
+        // Regression guard: the startup-restore path in event_loop.rs relies
+        // on switch_workspace NOT touching active_pane.
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
+        add_test_workspace(&mut app);
+        add_test_workspace(&mut app);
+        app.active_pane = ActivePane::WorkspaceList;
+
+        app.switch_workspace(1);
+
+        assert_eq!(app.active_pane, ActivePane::WorkspaceList);
+    }
+
+    #[test]
+    fn next_workspace_focuses_main_panel() {
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
+        add_test_workspace(&mut app);
+        add_test_workspace(&mut app);
+        app.active_pane = ActivePane::WorkspaceList;
+
+        app.next_workspace();
+
+        assert_eq!(app.active_pane, ActivePane::MainPanel);
+    }
+
+    #[test]
+    fn prev_workspace_focuses_main_panel() {
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
+        add_test_workspace(&mut app);
+        add_test_workspace(&mut app);
+        app.active_pane = ActivePane::WorkspaceList;
+
+        app.prev_workspace();
+
+        assert_eq!(app.active_pane, ActivePane::MainPanel);
+    }
+
+    #[test]
+    fn toggle_previous_workspace_focuses_main_panel() {
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
+        let a = add_test_workspace(&mut app);
+        let b = add_test_workspace(&mut app);
+        app.active_workspace = a;
+        app.switch_workspace(b); // sets previous_workspace = Some(a), active_pane untouched
+        app.active_pane = ActivePane::WorkspaceList;
+
+        app.toggle_previous_workspace();
+
+        assert_eq!(app.active_workspace, a);
+        assert_eq!(app.active_pane, ActivePane::MainPanel);
     }
 }

@@ -6,7 +6,7 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
 use crate::app::{ActivePane, App, AppMode};
 
-use super::layout::pane_border_style;
+use super::layout::{pane_border_style, pane_title_style};
 
 pub(super) fn render_subtabs(frame: &mut Frame, area: Rect, app: &App) {
     if let Some(ws) = app.current_workspace() {
@@ -24,6 +24,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
     }
 
     let border_style = pane_border_style(app, ActivePane::MainPanel);
+    let title_style = pane_title_style(app, ActivePane::MainPanel);
     app.api_response_inner_area = None;
 
     let selection = app.selection.take();
@@ -44,6 +45,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                         label,
                         scroll,
                         border_style,
+                        title_style,
                         app.theme.general.scrollbar_thumb,
                     );
                 } else if let (Some(content), Some(label)) =
@@ -59,6 +61,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                         &label,
                         scroll,
                         border_style,
+                        title_style,
                         Some(&app.syntax),
                         app.theme.general.scrollbar_thumb,
                     );
@@ -72,8 +75,8 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                 // Code review has its own full-screen layout; show a placeholder here
                 let block = Block::default()
                     .title(" Code Review ")
-                    .title_style(border_style)
-                    .borders(Borders::ALL)
+                    .title_style(title_style)
+                    .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
                     .border_style(border_style);
                 let text = Paragraph::new("  Code Review renders in full-screen mode")
                     .style(Style::default().fg(app.theme.general.muted_text))
@@ -88,7 +91,9 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                         frame,
                         area,
                         api,
+                        &app.theme,
                         border_style,
+                        title_style,
                         selection.as_ref(),
                         selection_style,
                     );
@@ -110,7 +115,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                     let edit_state = kanban_app.edit_state.take();
 
                     let block = Block::default()
-                        .borders(Borders::ALL)
+                        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
                         .border_style(border_style);
                     let inner_area = block.inner(area);
                     frame.render_widget(block, area);
@@ -118,7 +123,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
 
                     // Render our own overlay with proper cursor, then restore
                     if let Some(edit) = edit_state {
-                        render_kanban_edit(frame, inner_area, &edit);
+                        render_kanban_edit(frame, inner_area, &edit, &app.theme.palette);
                         kanban_app.edit_state = Some(edit);
                     }
                 }
@@ -131,19 +136,21 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                     area,
                     parser,
                     border_style,
+                    title_style,
                     provider.label(),
                     tab.term_scroll,
                     selection.as_ref(),
                     selection_style,
                     app.term_search.as_ref(),
                     app.theme.general.scrollbar_thumb,
+                    &app.theme.palette,
                 );
             } else {
                 // Provider CLI not found — show fun ASCII art
                 let block = Block::default()
                     .title(format!(" {} ", provider.label()))
-                    .title_style(border_style)
-                    .borders(Borders::ALL)
+                    .title_style(title_style)
+                    .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
                     .border_style(border_style);
                 let cmd = provider.command();
                 let new_tab = app.config.get_binding("app", "new_tab");
@@ -174,8 +181,8 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
             // No tabs yet — centered hints
             let block = Block::default()
                 .title(" Terminal ")
-                .title_style(border_style)
-                .borders(Borders::ALL)
+                .title_style(title_style)
+                .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
                 .border_style(border_style);
             let key_style = Style::default().fg(app.theme.footer.key);
             let desc_style = Style::default().fg(app.theme.general.muted_text);
@@ -210,13 +217,13 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
     } else {
         let block = Block::default()
             .title(" piki-multi-ai ")
-            .title_style(border_style)
-            .borders(Borders::ALL)
+            .title_style(title_style)
+            .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
             .border_style(border_style);
         let key_style = Style::default().fg(app.theme.footer.key);
         let desc_style = Style::default().fg(app.theme.general.welcome_text);
         let title_style = Style::default()
-            .fg(Color::White)
+            .fg(app.theme.palette.fg0)
             .add_modifier(Modifier::BOLD);
         let lines = vec![
             Line::from(""),
@@ -229,12 +236,18 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
             Line::from(""),
             Line::from(vec![
                 Span::styled("  1. ", desc_style),
-                Span::styled("[n]", key_style),
+                Span::styled(
+                    format!("[{}]", app.config.get_binding("app", "new_workspace")),
+                    key_style,
+                ),
                 Span::styled(" Create your first workspace", desc_style),
             ]),
             Line::from(vec![
                 Span::styled("  2. ", desc_style),
-                Span::styled("[Tab]", key_style),
+                Span::styled(
+                    format!("[{}]", app.config.get_binding("app", "workspace_switcher")),
+                    key_style,
+                ),
                 Span::styled(" Switch between workspaces", desc_style),
             ]),
             Line::from(vec![
@@ -244,7 +257,10 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
             ]),
             Line::from(vec![
                 Span::styled("  4. ", desc_style),
-                Span::styled("[?]", key_style),
+                Span::styled(
+                    format!("[{}]", app.config.get_binding("app", "help")),
+                    key_style,
+                ),
                 Span::styled(" Full help", desc_style),
             ]),
         ];
@@ -254,17 +270,22 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
     app.selection = selection;
 }
 
-fn priority_color(p: flow_core::Priority) -> Color {
+fn priority_color(p: flow_core::Priority, palette: &crate::theme::Palette) -> Color {
     match p {
-        flow_core::Priority::Bug => Color::Red,
-        flow_core::Priority::High => Color::Yellow,
-        flow_core::Priority::Medium => Color::White,
-        flow_core::Priority::Low => Color::DarkGray,
-        flow_core::Priority::Wishlist => Color::Cyan,
+        flow_core::Priority::Bug => palette.err,
+        flow_core::Priority::High => palette.err,
+        flow_core::Priority::Medium => palette.warn,
+        flow_core::Priority::Low => palette.fg2,
+        flow_core::Priority::Wishlist => palette.info,
     }
 }
 
-fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditState) {
+fn render_kanban_edit(
+    f: &mut Frame,
+    parent: Rect,
+    edit: &flow_tui::app::EditState,
+    palette: &crate::theme::Palette,
+) {
     use flow_tui::app::EditFocus;
 
     // chunks: [0] header, [1] title, [2] project, [3] priority, [4] assignee, [5] description, [6] footer
@@ -294,12 +315,12 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
     );
 
     let title_style = if edit.focus == EditFocus::Title {
-        Style::default().fg(Color::Cyan)
+        Style::default().fg(palette.iris)
     } else {
         Style::default()
     };
     let title_content = if edit.title.is_empty() {
-        Line::from(Span::styled("(required)", Style::default().fg(Color::DarkGray)))
+        Line::from(Span::styled("(required)", Style::default().fg(palette.fg3)))
     } else {
         Line::from(edit.title.clone())
     };
@@ -307,19 +328,19 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
         Paragraph::new(title_content).block(
             Block::default()
                 .title("Title *")
-                .borders(Borders::ALL)
+                .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
                 .border_style(title_style),
         ),
         chunks[1],
     );
 
     let project_style = if edit.focus == EditFocus::Project {
-        Style::default().fg(Color::Cyan)
+        Style::default().fg(palette.iris)
     } else {
         Style::default()
     };
     let project_label = if edit.project.is_empty() {
-        Span::styled("(required)", Style::default().fg(Color::DarkGray))
+        Span::styled("(required)", Style::default().fg(palette.fg3))
     } else {
         Span::raw(edit.project.clone())
     };
@@ -327,7 +348,7 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
         Paragraph::new(Line::from(project_label)).block(
             Block::default()
                 .title("Project *")
-                .borders(Borders::ALL)
+                .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
                 .border_style(project_style),
         ),
         chunks[2],
@@ -335,7 +356,7 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
 
     let priority_focused = edit.focus == EditFocus::Priority;
     let priority_style = if priority_focused {
-        Style::default().fg(Color::Cyan)
+        Style::default().fg(palette.iris)
     } else {
         Style::default()
     };
@@ -344,11 +365,11 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
         Span::styled(
             format!(" {} ", edit.priority.label()),
             Style::default()
-                .fg(priority_color(edit.priority))
+                .fg(priority_color(edit.priority, palette))
                 .add_modifier(Modifier::BOLD),
         ),
         if priority_focused {
-            Span::styled("  ←/→ to change", Style::default().fg(Color::DarkGray))
+            Span::styled("  ←/→ to change", Style::default().fg(palette.fg3))
         } else {
             Span::raw("")
         },
@@ -357,14 +378,14 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
         Paragraph::new(Line::from(priority_spans)).block(
             Block::default()
                 .title("Priority")
-                .borders(Borders::ALL)
+                .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
                 .border_style(priority_style),
         ),
         chunks[3],
     );
 
     let assignee_style = if edit.focus == EditFocus::Assignee {
-        Style::default().fg(Color::Cyan)
+        Style::default().fg(palette.iris)
     } else {
         Style::default()
     };
@@ -372,14 +393,14 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
         Paragraph::new(edit.assignee.clone()).block(
             Block::default()
                 .title("Assignee")
-                .borders(Borders::ALL)
+                .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
                 .border_style(assignee_style),
         ),
         chunks[4],
     );
 
     let desc_style = if edit.focus == EditFocus::Description {
-        Style::default().fg(Color::Cyan)
+        Style::default().fg(palette.iris)
     } else {
         Style::default()
     };
@@ -392,7 +413,7 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
         Paragraph::new(wrapped).block(
             Block::default()
                 .title("Description")
-                .borders(Borders::ALL)
+                .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
                 .border_style(desc_style),
         ),
         chunks[5],
@@ -400,7 +421,7 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
 
     f.render_widget(
         Paragraph::new("Tab: switch field  ←/→: priority  Enter: save  Esc: cancel")
-            .style(Style::default().fg(Color::DarkGray))
+            .style(Style::default().fg(palette.fg3))
             .alignment(ratatui::layout::Alignment::Center),
         chunks[6],
     );
@@ -439,9 +460,9 @@ fn render_kanban_edit(f: &mut Frame, parent: Rect, edit: &flow_tui::app::EditSta
 
     f.render_widget(
         Block::default()
-            .borders(Borders::ALL)
+            .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
             .title("Edit Card")
-            .border_style(Style::default().fg(Color::Cyan)),
+            .border_style(Style::default().fg(palette.line_strong)),
         area,
     );
 }

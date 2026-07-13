@@ -1,0 +1,115 @@
+# piki-dark — the "Cabina" visual language (built-in default)
+#
+# This file mirrors the built-in defaults; it exists as a reference for
+# building custom themes. Copy to ~/.config/piki-multi/themes/<name>.toml,
+# set theme = "<name>" in config.toml, and override only what you need.
+#
+# Colors can be named ANSI (Red, Green, Yellow, Blue, Cyan, Magenta, White,
+# Black, Gray, DarkGray, Light*), "Reset" (terminal default), or hex #rrggbb.
+#
+# Cabina primitives, for reference:
+#   ink ramp   bg0 #14141C · bg1 #1B1B26 · bg2 #232331 · bg3 #2A2A3C
+#   lines      line #3D3D54 · line-strong #4C4C68
+#   text ramp  fg0 #ECECF6 · fg1 #B4B4CC · fg2 #7C7C99 · fg3 #56566E
+#   accent     iris #A78BFA · iris-wash #322D4D   (focus, never state)
+#   semantics  ok #9BD186 · warn #E8B15E · err #F0717D · info #84B0F2
+
+[border]
+active = "#A78BFA"      # focused pane — the single iris accent
+inactive = "#3D3D54"
+
+[workspace_list]
+empty_text = "#56566E"
+name_active = "#ECECF6"
+name_inactive = "#B4B4CC"
+detail_selected = "#7C7C99"
+detail_normal = "#56566E"
+selected_bg = "#322D4D"
+group_header_bg = "#232331"
+alt_bg = "#1B1B26"
+
+[file_list]
+empty_text = "#56566E"
+modified = "#E8B15E"
+added = "#9BD186"
+deleted = "#F0717D"
+renamed = "#84B0F2"
+untracked = "#56566E"
+conflicted = "#F0717D"
+staged = "#9BD186"
+staged_modified = "#E8B15E"
+file_path = "#ECECF6"
+selected_bg = "#322D4D"
+multi_select_bg = "#2A2A3C"
+
+[tabs]
+active = "#A78BFA"
+inactive = "#7C7C99"
+
+[subtabs]
+active = "#A78BFA"       # active tab block background
+active_fg = "#14141C"    # text on the active block
+inactive = "#7C7C99"     # text of inactive blocks
+inactive_bg = "#232331"  # raised surface
+
+[status_bar]
+error_bg = "#F0717D"
+error_fg = "#14141C"
+prefix_bg = "#A78BFA"    # PREFIX/SCROLL mode chip
+navigate_bg = "#232331"  # quiet surface of the whole bar
+mode_fg = "#14141C"      # text on the mode chip
+separator_fg = "#7C7C99"
+text_fg = "#B4B4CC"      # bar body text (branch, counters)
+toast_info = "#84B0F2"
+toast_success = "#9BD186"
+
+[footer]
+key = "#A78BFA"
+description = "#7C7C99"
+
+[dialog]
+new_ws_border = "#4C4C68"
+new_ws_active = "#A78BFA"
+new_ws_inactive = "#7C7C99"
+delete_border = "#F0717D"
+delete_text = "#B4B4CC"
+delete_name = "#ECECF6"
+delete_yes = "#F0717D"
+delete_no = "#B4B4CC"
+delete_cancel = "#56566E"
+
+[help]
+border = "#4C4C68"
+
+[general]
+welcome_text = "#B4B4CC"
+muted_text = "#7C7C99"
+scrollbar_thumb = "#7C7C99"
+
+[fuzzy_search]
+border = "#4C4C68"
+input_text = "#ECECF6"
+match_highlight = "#A78BFA"
+result_text = "#B4B4CC"
+selected_bg = "#322D4D"
+count_text = "#56566E"
+
+[selection]
+bg = "#322D4D"
+fg = "#ECECF6"
+
+[status]
+running = "#84B0F2"      # spinner, Agents pane only
+needs_you = "#E8B15E"    # permission prompts, idle with news
+done = "#9BD186"
+error = "#F0717D"
+exited = "#56566E"
+
+[diff]
+add = "#9BD186"
+add_bg = "#1C271B"
+del = "#F0717D"
+del_bg = "#2E1C22"
+context = "#7C7C99"
+hunk = "#84B0F2"
+comment = "#E8B15E"

@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use crate::shell_env;
 
 pub struct PreflightResult {
@@ -18,7 +20,13 @@ pub fn run_preflight_checks() -> PreflightResult {
     let mut warnings = Vec::new();
 
     // git (required, >= 2.20)
-    match shell_env::sync_command("git").arg("--version").output() {
+    let git_t0 = Instant::now();
+    let git_result = shell_env::sync_command("git").arg("--version").output();
+    tracing::info!(
+        elapsed_ms = git_t0.elapsed().as_millis(),
+        "preflight: git check done"
+    );
+    match git_result {
         Ok(output) if output.status.success() => {
             let stdout = String::from_utf8_lossy(&output.stdout);
             if let Some((major, minor)) = parse_git_version(&stdout) {
@@ -41,12 +49,12 @@ pub fn run_preflight_checks() -> PreflightResult {
     }
 
     // lazygit (optional, powers the TUI Git tab)
-    if !command_ok("lazygit") {
+    if !timed_command_ok("lazygit") {
         warnings.push("lazygit not found — the Git tab needs it (https://github.com/jesseduffield/lazygit)".to_string());
     }
 
     // claude (optional — only needed for Claude agent tabs / dispatch)
-    if !command_ok("claude") {
+    if !timed_command_ok("claude") {
         warnings.push(
             "claude not found — Claude agent tabs and dispatch are unavailable".to_string(),
         );
@@ -54,7 +62,13 @@ pub fn run_preflight_checks() -> PreflightResult {
 
     // jq (optional — required for the structured Claude integration; without
     // it Claude tabs fall back to the byte-silence idle heuristic)
-    if !crate::cli_agent::install::jq_available() {
+    let jq_t0 = Instant::now();
+    let jq_available = crate::cli_agent::install::jq_available();
+    tracing::info!(
+        elapsed_ms = jq_t0.elapsed().as_millis(),
+        "preflight: jq check done"
+    );
+    if !jq_available {
         warnings.push(
             "jq not found — structured Claude integration disabled (idle heuristic fallback)"
                 .to_string(),
@@ -72,6 +86,19 @@ fn command_ok(cmd: &str) -> bool {
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false)
+}
+
+/// Same as `command_ok`, but logs elapsed time so a specific slow optional
+/// dependency check is identifiable from cold-boot logs.
+fn timed_command_ok(cmd: &str) -> bool {
+    let t0 = Instant::now();
+    let ok = command_ok(cmd);
+    tracing::info!(
+        cmd,
+        elapsed_ms = t0.elapsed().as_millis(),
+        "preflight: optional dependency check done"
+    );
+    ok
 }
 
 /// Parse "git version X.Y.Z" into (major, minor).

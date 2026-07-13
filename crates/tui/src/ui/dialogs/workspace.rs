@@ -1,11 +1,11 @@
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
 use crate::app::{App, DialogField, NewWorkspaceSource, WorkspaceType};
-use crate::dialog_state::{CreateWorktreeField, DialogState, EditWorkspaceField};
+use crate::dialog_state::{CreateWorktreeField, CreateWorktreeMode, DialogState, EditWorkspaceField};
 
 pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
     let Some(DialogState::NewWorkspace {
@@ -144,7 +144,7 @@ pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
         ),
         Line::from(""),
         Line::from(vec![Span::styled(
-            "  [Esc] Cancel",
+            "  [Esc] cancel",
             Style::default().fg(theme.new_ws_inactive),
         )]),
     ]);
@@ -210,7 +210,7 @@ pub(crate) fn render_edit_workspace_dialog(frame: &mut Frame, area: Rect, app: &
         ),
         Line::from(""),
         Line::from(vec![Span::styled(
-            "  [Esc] Cancel",
+            "  [Esc] cancel",
             Style::default().fg(theme.new_ws_inactive),
         )]),
     ];
@@ -220,6 +220,52 @@ pub(crate) fn render_edit_workspace_dialog(frame: &mut Frame, area: Rect, app: &
 }
 
 pub(crate) fn render_create_worktree_dialog(frame: &mut Frame, area: Rect, app: &App) {
+    let Some(DialogState::CreateWorktree { mode, .. }) = &app.active_dialog else {
+        return;
+    };
+
+    match mode {
+        CreateWorktreeMode::ChooseSource => render_create_worktree_choose_source(frame, area, app),
+        CreateWorktreeMode::CreateNew => render_create_worktree_create_new(frame, area, app),
+        CreateWorktreeMode::LoadExisting => render_create_worktree_load_existing(frame, area, app),
+    }
+}
+
+fn render_create_worktree_choose_source(frame: &mut Frame, area: Rect, app: &App) {
+    let Some(DialogState::CreateWorktree { existing_selected, .. }) = &app.active_dialog else {
+        return;
+    };
+
+    let popup_width = area.width * 60 / 100;
+    let popup = super::clear_popup(frame, area, popup_width.max(40), 8);
+    let theme = &app.theme.dialog;
+    let active_c = theme.new_ws_active;
+    let inactive_c = theme.new_ws_inactive;
+
+    let rows = ["Create new worktree", "Load existing worktree"];
+    let mut lines: Vec<Line<'_>> = vec![Line::from("")];
+    for (idx, label) in rows.iter().enumerate() {
+        let is_selected = idx == *existing_selected;
+        let prefix = if is_selected { "  > " } else { "    " };
+        let style = if is_selected {
+            Style::default().fg(active_c).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(inactive_c)
+        };
+        lines.push(Line::from(Span::styled(format!("{prefix}{label}"), style)));
+    }
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![Span::styled(
+        "  [j/k] move  [Enter] select  [Esc] cancel",
+        Style::default().fg(inactive_c),
+    )]));
+
+    let text =
+        Paragraph::new(lines).block(super::popup_block("Create Worktree", theme.new_ws_border));
+    frame.render_widget(text, popup);
+}
+
+fn render_create_worktree_create_new(frame: &mut Frame, area: Rect, app: &App) {
     let Some(DialogState::CreateWorktree {
         parent_idx,
         ref name,
@@ -231,6 +277,7 @@ pub(crate) fn render_create_worktree_dialog(frame: &mut Frame, area: Rect, app: 
         ref group,
         group_cursor,
         active_field,
+        ..
     }) = app.active_dialog
     else {
         return;
@@ -302,13 +349,66 @@ pub(crate) fn render_create_worktree_dialog(frame: &mut Frame, area: Rect, app: 
         ),
         Line::from(""),
         Line::from(vec![Span::styled(
-            "  [Esc] Cancel",
+            "  [Esc] cancel",
             Style::default().fg(theme.new_ws_inactive),
         )]),
     ];
 
     let text =
         Paragraph::new(lines).block(super::popup_block("Create Worktree", theme.new_ws_border));
+    frame.render_widget(text, popup);
+}
+
+fn render_create_worktree_load_existing(frame: &mut Frame, area: Rect, app: &App) {
+    let Some(DialogState::CreateWorktree {
+        existing,
+        existing_selected,
+        existing_loading,
+        ..
+    }) = &app.active_dialog
+    else {
+        return;
+    };
+
+    let popup_width = area.width * 70 / 100;
+    let height = 8u16.saturating_add(existing.len().min(10) as u16);
+    let popup = super::clear_popup(frame, area, popup_width.max(40), height);
+    let theme = &app.theme.dialog;
+    let active_c = theme.new_ws_active;
+    let inactive_c = theme.new_ws_inactive;
+
+    let mut lines: Vec<Line<'_>> = vec![Line::from("")];
+    if *existing_loading {
+        lines.push(Line::from(Span::styled(
+            "  Scanning worktrees...",
+            Style::default().fg(inactive_c),
+        )));
+    } else if existing.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "  No other worktrees found for this repository.",
+            Style::default().fg(inactive_c),
+        )));
+    } else {
+        for (idx, wt) in existing.iter().enumerate() {
+            let is_selected = idx == *existing_selected;
+            let prefix = if is_selected { "  > " } else { "    " };
+            let style = if is_selected {
+                Style::default().fg(active_c).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(inactive_c)
+            };
+            let label = format!("{} ({})", wt.path.display(), wt.branch);
+            lines.push(Line::from(Span::styled(format!("{prefix}{label}"), style)));
+        }
+    }
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![Span::styled(
+        "  [j/k] move  [Enter] load  [Esc] cancel",
+        Style::default().fg(inactive_c),
+    )]));
+
+    let text =
+        Paragraph::new(lines).block(super::popup_block("Load Existing Worktree", theme.new_ws_border));
     frame.render_widget(text, popup);
 }
 
@@ -399,8 +499,8 @@ pub(crate) fn render_workspace_info_overlay(frame: &mut Frame, area: Rect, app: 
     }
 
     lines.push(Line::from(Span::styled(
-        " Esc to close · h/l to scroll · mouse select to copy",
-        Style::default().fg(Color::DarkGray),
+        " [h/l] scroll  [i/Esc] close  [mouse] select to copy",
+        Style::default().fg(theme.palette.fg3),
     )));
 
     let height = (lines.len() as u16 + 2).min(area.height);
@@ -465,7 +565,7 @@ pub(crate) fn render_confirm_delete_dialog(frame: &mut Frame, area: Rect, app: &
         )));
     }
     lines.push(Line::from(Span::styled(
-        "  [Esc] Cancel",
+        "  [Esc] cancel",
         Style::default().fg(theme.delete_cancel),
     )));
 

@@ -74,7 +74,8 @@ Built with Rust and [ratatui](https://ratatui.rs/).
 - **Customizable themes** — Colors loaded from TOML files; supports named colors and hex `#rrggbb`
 - **OS notifications** — Unified desktop-notification surface for tab-completion events, fired regardless of which workspace is currently focused, with an in-process replace-by-origin mailbox so the same tab can't pile up stale entries. Events are tagged with a `NotificationCategory` (`Complete` for shell exit 0 / agent idle after a meaningful burst, `Error` for shell non-zero exits). Each event carries a per-tab `origin` key — pushing a new event for the same `origin` replaces any previous mailbox entry instead of stacking (design lifted from Warp's `app/src/ai/agent_management/notifications/`). (1) Custom-provider tabs (Claude/Gemini/etc.) trigger when their `IdleWatcher` reports the PTY has been silent past the configured threshold (default 3 s); the watcher also enforces a minimum re-arm byte delta (`DEFAULT_IDLE_REARM_BYTES = 256`) so cursor blinks, status redraws, and spinner frames at the agent's prompt don't cause repeated re-fires — the next notification only arrives after the agent produces a meaningful burst of new output. The agent-idle body includes how long the agent was quiet (`Claude finished the task (idle 5s)`), and the title is prepended with a per-provider glyph from `ProviderConfig.icon` (defaults seeded: `✦` Claude Code, `✧` Gemini; users can set their own in `providers.toml`). For Claude tabs with the structured cli-agent channel active (see **Structured Claude integration** below) this heuristic is superseded by precise task-complete / idle / permission-request events (`notify_cli_agent`) and the `IdleWatcher` steps aside automatically the moment the first structured event is parsed — it only remains the fallback when hooks are unavailable (`jq` missing or a protocol-version mismatch). (2) Shell tabs trigger when an OSC 133 `command-end` marker arrives, with the workspace name, exit code, and the **last command typed** (captured between OSC 133 `B` and `C` and ANSI-stripped) in the body (`Command finished — <ws> — exit 0 \`cargo test\`` / `Command failed (exit N) — <ws> — exit N \`make build\``). The sidebar still marks a `●` badge per workspace for visual breadcrumb. All helpers live in `piki-core::notifications` (`notify_agent_idle`, `notify_command_end`, `NotificationCategory`, `NotificationMailbox`, `mailbox_snapshot`) and are shared by TUI and Desktop via a single `notify-rust` dependency in `piki-core`. The mailbox snapshot (`piki_core::notifications::mailbox_snapshot()`) is available as a foundation for a future in-app notification history panel. An OS notification is suppressed **only** when the user is already looking at that exact event's tab — i.e. it's the active tab of the active workspace **and** the piki window/terminal has OS focus. An event from a *background* tab/workspace still fires the OS notification even while piki is focused, because the user can't see a tab they aren't on (window focus alone is too coarse — the active-tab gate is what makes background agents actually notify). Focus is tracked via crossterm `FocusGained`/`FocusLost` (TUI) and Tauri `WindowEvent::Focused` (desktop); terminals that don't emit focus events (CSI ? 1004) default to unfocused, so they always notify. The mailbox always records regardless. Delivery is selectable (`[notifications]` in `config.toml`): OS toast (default), OSC 9 to the host terminal emulator (tmux/ssh-friendly), or off — plus optional built-in chimes (done/attention) played through the system audio tools, independent of the toast mode (see **Notifications** under Configuration).
 - **Shell integration (Linux/macOS)** — Shell tabs (zsh, bash, fish) auto-source a tiny init script that emits OSC 133 (prompt/command markers + exit code) and OSC 7 (cwd reporting). Piki's per-tab OSC parser captures those markers from the PTY stream and surfaces them: cwd of the active shell tab in the desktop status bar, ✓/✗ exit-code badge on the shell tab after each command, a workspace `●` badge when a command finishes in a background tab, and an OS notification on every `command-end` (see above). The init scripts live in `crates/core/src/shell_integration/scripts/` and are materialized to `<data_dir>/shell-integration/` on first use; bridge files chain to your real `~/.zshrc` / `~/.bashrc` so user dotfiles are preserved (fish loads its integration via `-C 'source ...'` on top of your `config.fish`). Disabled gracefully for unsupported shells (`sh`, `dash`, etc.)
-- **Structured Claude integration (Warp-style)** — Claude Code agent tabs get a precise lifecycle channel instead of guessing from PTY silence. Piki ships six Claude Code hook scripts (`SessionStart`, `UserPromptSubmit`, `PostToolUse`, `PermissionRequest`, `Notification`, `Stop`) and passes them via a generated `claude --settings` file (your `~/.claude/settings.json` is never touched); each hook emits an **in-band OSC 777** sequence (`ESC]777;notify;piki://cli-agent;<json>BEL`) that the same per-tab OSC parser sniffs out of the PTY stream — purely additive, the agent stays a raw passthrough. Surfaces a per-tab status glyph (running / waiting-permission / idle / done) in the desktop status bar + an aggregate dot on the workspace tab, routes permission/idle/done through the shared notification + workspace-attention rail, and replaces the byte-silence idle heuristic (which auto-steps-aside once the channel proves live, and stays as graceful fallback otherwise). Scripts are materialized to `<data_dir>/claude-hooks/`; require `jq`. The channel is self-disabling (hooks no-op unless `PIKI_CLI_AGENT` is set) and version-negotiated (`v` field; unknown majors are dropped and the tab falls back to the heuristic). Core logic + parser live in `crates/core/src/cli_agent/` and `shell_integration::parser`; non-Claude providers (Gemini, etc.) keep the `IdleWatcher` unchanged
+- **Structured Claude integration (Warp-style)** — Claude Code agent tabs get a precise lifecycle channel instead of guessing from PTY silence. Piki ships six Claude Code hook scripts (`SessionStart`, `UserPromptSubmit`, `PostToolUse`, `PermissionRequest`, `Notification`, `Stop`) and passes them via a generated `claude --settings` file (your `~/.claude/settings.json` is never touched); each hook emits an **in-band OSC 777** sequence (`ESC]777;notify;piki://cli-agent;<json>BEL`) that the same per-tab OSC parser sniffs out of the PTY stream — purely additive, the agent stays a raw passthrough. Surfaces a per-tab status glyph (running / waiting-permission / idle / done) in the desktop status bar + an aggregate dot on the workspace tab, routes permission/idle/done through the shared notification + workspace-attention rail, and replaces the byte-silence idle heuristic (which auto-steps-aside once the channel proves live, and stays as graceful fallback otherwise). Scripts are materialized to `<data_dir>/claude-hooks/`; require `jq`. The channel is self-disabling (hooks no-op unless `PIKI_CLI_AGENT` is set) and version-negotiated (`v` field; unknown majors are dropped and the tab falls back to the heuristic). Core logic + parser live in `crates/core/src/cli_agent/` and `shell_integration::parser`; providers without a bridge (Gemini, etc.) keep the `IdleWatcher` unchanged
+- **Structured Antigravity integration** — Antigravity (`agy`) tabs get the same lifecycle channel, so the Agents pane shows running / done instead of a bare "alive". agy has no `--settings` equivalent — its hooks are only discovered from a **plugin** — so piki materializes one shared, self-contained plugin at `~/.gemini/config/plugins/piki-multi-bridge/` (`plugin.json` + `hooks.json` + scripts; no `agy plugin install` needed, the directory alone is enough) and maps `PreInvocation` → `prompt_submit`, `PostToolUse` → `tool_complete`, `Stop` → `stop` (with query/response previews read from agy's transcript). The per-tab FIFO path rides the environment (`PIKI_CLI_AGENT_SOCK`), which agy passes down to its hook children, so one static plugin serves every tab and nothing per-spawn is written into your agy config. Like the Claude bridge it is self-disabling — the handlers no-op (printing `{}`) unless `PIKI_CLI_AGENT` is set, so a plain `agy` run outside piki is unaffected. `PreToolUse` is deliberately not registered: agy fires it before every tool step whether or not you'll be asked to approve it, so Antigravity tabs have no `waiting-permission` state; everything else is at parity. Lives in `crates/core/src/cli_agent/install_antigravity.rs`; requires `jq`
 - **Pre-flight checks** — Validates required (git >= 2.20) and optional dependencies (lazygit, plus `claude` and `jq` for the structured Claude integration) at startup with clear error/warning messages; `gh` CLI availability is checked lazily on first Code Review use
 - **Command palette** — Press `Ctrl+G :` to open a VS Code-style searchable command palette; fuzzy-filter 26+ commands across 9 categories (Workspace, Git, Tabs, Search, View, Layout, Clipboard, App, Switch) with match highlighting and keybinding hints; includes dynamic "Switch to" entries for all workspaces; powered by [nucleo](https://github.com/helix-editor/nucleo)
 - **In-app log viewer** — Press `Ctrl+l` to open a scrollable overlay showing the last 500 log entries from the current session; color-coded by level (ERROR=red, WARN=yellow, INFO=green, DEBUG=cyan, TRACE=gray); filter by level with `0`-`5` keys; press `/` to open a text search bar (case-insensitive substring match on message and target — title shows `[filter ~]` when active); press `r` to toggle auto-refresh / tail mode (title shows `~` marker, selection follows the latest entry); select lines with `j`/`k` (highlighted), horizontal scroll with `h`/`l`, page with `Ctrl+d`/`Ctrl+u`, `g`/`G` top/bottom; `Enter`/`y` copies selected line to clipboard; mouse scroll and click to select
@@ -322,6 +323,7 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 
 **Prefix actions** (`Ctrl+G` + key, status bar shows `[PREFIX]` while pending):
 
+<!-- BEGIN:prefix-keys -->
 | Key | Action |
 |-----|--------|
 | `h` / `j` / `k` / `l` (or arrows) | Move focus between panes (`h` from main panel goes to workspace list) |
@@ -330,29 +332,33 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 | `n` / `p` | Next / previous tab |
 | `1`..`9` | Jump to tab N |
 | `w` | Workspace switcher (tree of workspaces + tabs; type to filter, Enter to jump) |
-| `)` / `(` | Next / previous workspace |
+| `}` / `{` | Next / previous workspace |
 | `` ` `` | Toggle to previous workspace |
-| `N` | Create new workspace |
+| `s` | Create new workspace |
 | `e` | Edit workspace options (Kanban path, Prompt) |
+| `d` | Delete the selected workspace (with confirmation dialog) |
 | `i` | Workspace info overlay (branch, paths, description, prompt; mouse-copyable) |
-| `R` | Create Worktree (GitHub-only): spawn a git worktree from the selected GitHub-origin workspace, inheriting prompt/kanban/group |
+| `r` | Create Worktree (GitHub-only): spawn a git worktree from the selected GitHub-origin workspace, inheriting prompt/kanban/group |
 | `g` | Git: open-or-focus the lazygit tab for the current workspace (respawns if the process exited) |
 | `:` | Command palette (fuzzy-searchable list of all commands) |
 | `/` | Fuzzy file search |
 | `f` | Search within the active terminal's output |
 | `[` | Terminal scroll mode (see below) |
 | `y` | AI Chat panel |
-| `D` | Workspace dashboard overlay (bird's-eye view of all workspaces and tabs) |
+| `b` | Workspace dashboard overlay (bird's-eye view of all workspaces and tabs) |
 | `o` | Log viewer overlay (last 500 log entries, color-coded, filterable by level) |
-| `A` | Manage agent profiles (create/edit/delete agents for this project) |
-| `V` | Manage providers (add/edit/delete custom AI providers) |
-| `<` / `>` | Resize sidebar width (±5%) |
-| `+` / `-` | Resize workspace/file split (±10%) |
+| `m` | Manage agent profiles (create/edit/delete agents for this project) |
+| `v` | Manage providers (add/edit/delete custom AI providers) |
+| `<` / `>` (or `,` / `.`) | Resize sidebar width (±5%) |
+| `+` / `-` (or `=`) | Resize workspace/file split (±10%) |
 | `a` | About overlay |
 | `?` | Help overlay |
 | `q` | Quit (with confirmation dialog) |
 | `Ctrl+G` | Send a literal Ctrl+G to the terminal |
 | `Esc` | Cancel the pending prefix |
+<!-- END:prefix-keys -->
+
+> This table is checked against `default_app()` by the `readme_parity` tests: every action key must appear here, and no key may be listed that nothing binds.
 
 **Terminal scroll mode** (`Ctrl+G [`, status bar shows `[SCROLL]`): `j`/`k` scroll by line, `Ctrl+U`/`Ctrl+D` (or `PageUp`/`PageDown`) by page, `g`/`G` top/bottom, `/` opens terminal search, `Esc`/`q` exits and snaps back to the live view. Mouse wheel scrolling works at any time without entering the mode.
 
@@ -687,22 +693,26 @@ All UI colors are customizable via TOML theme files. Without configuration, the 
 
 ```toml
 [border]
-active_interact = "#88c0d0"
-active_navigate = "#ebcb8b"
+active = "#88c0d0"
 
 [file_list]
 modified = "#ebcb8b"
 added = "#a3be8c"
 deleted = "#bf616a"
+
+[status]
+needs_you = "#ebcb8b"
 ```
 
-See `themes/default.toml` in the repo for all available color keys. Colors can be named (`"Red"`, `"DarkGray"`, `"LightCyan"`, etc.) or hex (`"#rrggbb"`).
+See `themes/piki-dark.toml` in the repo for all available color keys (including the `[status]` agent-state and `[diff]` code-review groups). Colors can be named (`"Red"`, `"DarkGray"`, `"LightCyan"`, etc.), `"Reset"` (terminal default), or hex (`"#rrggbb"`).
 
 ### Included themes
 
 | Theme | Description |
 |-------|-------------|
-| `default` | Standard terminal colors (named colors) |
+| `default` | The built-in "Cabina" dark palette (violet ink, iris accent) |
+| `piki-dark` | Same as `default`, under an explicit name |
+| `piki-ansi` | Cabina degraded to the 16 ANSI colors, for terminals without truecolor |
 | `nord` | Arctic, muted dark palette |
 | `tokyonight` | Dark blue-tinted palette |
 | `synthwave` | Neon retro-futuristic |

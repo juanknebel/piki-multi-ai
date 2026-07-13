@@ -39,12 +39,24 @@ pub fn compute_terminal_area_with(total: Rect, sidebar_pct: u16) -> Rect {
     )
 }
 
-/// Border style for a pane: highlighted when focused, white otherwise
+/// Border style for a pane: accent when focused, quiet line otherwise
 pub(super) fn pane_border_style(app: &App, pane: ActivePane) -> Style {
     if app.active_pane == pane {
         Style::default().fg(app.theme.border.active)
     } else {
         Style::default().fg(app.theme.border.inactive)
+    }
+}
+
+/// Title style for a pane: bold accent when focused, muted (readable, above
+/// the border line) otherwise. Exactly one title on screen reads bold.
+pub(super) fn pane_title_style(app: &App, pane: ActivePane) -> Style {
+    if app.active_pane == pane {
+        Style::default()
+            .fg(app.theme.border.active)
+            .add_modifier(ratatui::style::Modifier::BOLD)
+    } else {
+        Style::default().fg(app.theme.general.muted_text)
     }
 }
 
@@ -85,6 +97,10 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         .current_workspace()
         .and_then(|ws| ws.current_tab())
         .is_some_and(|tab| tab.markdown_content.is_some());
+    let has_kanban = app
+        .current_workspace()
+        .and_then(|ws| ws.current_tab())
+        .is_some_and(|tab| tab.provider == piki_core::AIProvider::Kanban);
     let api_footer_state: u8 = match app
         .current_workspace()
         .and_then(|ws| ws.current_tab())
@@ -107,16 +123,18 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         app.input_state,
         app.active_pane,
         has_markdown,
+        has_kanban,
         api_footer_state,
         new_tab_menu,
     );
-    let keys = if let Some((ref m, i, p, md, api, ntm, ref cached)) = app.footer_cache {
+    let keys = if let Some((ref m, i, p, md, kb, api, ntm, ref cached)) = app.footer_cache {
         if *m == cache_key.0
             && i == cache_key.1
             && p == cache_key.2
             && md == cache_key.3
-            && api == cache_key.4
-            && ntm == cache_key.5
+            && kb == cache_key.4
+            && api == cache_key.5
+            && ntm == cache_key.6
         {
             cached.clone()
         } else {
@@ -128,6 +146,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
                 cache_key.3,
                 cache_key.4,
                 cache_key.5,
+                cache_key.6,
                 k.clone(),
             ));
             k
@@ -141,6 +160,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
             cache_key.3,
             cache_key.4,
             cache_key.5,
+            cache_key.6,
             k.clone(),
         ));
         k
@@ -231,6 +251,9 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         AppMode::FuzzySearch => super::fuzzy::render(frame, area, app),
         AppMode::NewTab => super::dialogs::render_new_tab_dialog(frame, area, app),
         AppMode::About => super::dialogs::render_about_overlay(frame, area, app),
+        AppMode::MissingPrereqs => {
+            super::dialogs::render_missing_prereqs_overlay(frame, area, app)
+        }
         AppMode::WorkspaceInfo => super::dialogs::render_workspace_info_overlay(frame, area, app),
         AppMode::ConfirmCloseTab => {
             super::dialogs::render_confirm_close_tab_dialog(frame, area, app)
@@ -255,5 +278,11 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         AppMode::InlineEdit => {}   // handled by main content render
         AppMode::SubmitReview => {} // handled by full-screen code review bypass above
         AppMode::ChatPanel => super::chat::render_chat_overlay(frame, area, app),
+    }
+
+    // Which-key: transient prefix menu while a prefix chord is pending. Only
+    // reachable in Normal mode (modal dialogs intercept input before it).
+    if app.input_state == crate::app::InputState::PrefixPending {
+        super::which_key::render(frame, area, app);
     }
 }

@@ -8,43 +8,46 @@ use crate::app::{ActivePane, App, AppMode, ToastLevel};
 
 pub(crate) fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
     let theme = &app.theme.status_bar;
-    let content = if let Some(ref toast) = app.toast {
-        let (bg, fg, icon) = match toast.level {
-            ToastLevel::Info => (theme.navigate_bg, theme.mode_fg, "ℹ"),
-            ToastLevel::Success => (theme.prefix_bg, theme.mode_fg, "✓"),
-            ToastLevel::Error => (theme.error_bg, theme.error_fg, "✗"),
-        };
-        Span::styled(
-            format!(" {} {} ", icon, toast.message),
-            Style::default().bg(bg).fg(fg),
-        )
+    let quiet = Style::default().bg(theme.navigate_bg).fg(theme.text_fg);
+    // Toasts are glyph + text on the quiet bar; only errors paint a
+    // background, so red stays reserved for things that are actually broken.
+    let content: Vec<Span> = if let Some(ref toast) = app.toast {
+        match toast.level {
+            ToastLevel::Info => vec![
+                Span::styled(" ℹ ", quiet.fg(theme.toast_info)),
+                Span::styled(toast.message.clone(), quiet),
+            ],
+            ToastLevel::Success => vec![
+                Span::styled(" ✓ ", quiet.fg(theme.toast_success)),
+                Span::styled(toast.message.clone(), quiet),
+            ],
+            ToastLevel::Error => vec![Span::styled(
+                format!(" ✗ {} ", toast.message),
+                Style::default().bg(theme.error_bg).fg(theme.error_fg),
+            )],
+        }
     } else if let Some(msg) = &app.status_message {
-        Span::styled(
-            format!(" {} ", msg),
+        vec![Span::styled(
+            format!(" ✗ {} ", msg),
             Style::default().bg(theme.error_bg).fg(theme.error_fg),
-        )
+        )]
     } else {
-        let ctrl = if app.config.platform.is_macos() {
-            "⌘"
-        } else {
-            "C"
-        };
         match app.mode {
-            AppMode::FuzzySearch => Span::styled(
-                " SEARCH | type to filter | Enter = editor | Esc = close".to_string(),
-                Style::default().bg(theme.navigate_bg).fg(theme.mode_fg),
-            ),
-            AppMode::InlineEdit => Span::styled(
+            AppMode::FuzzySearch => vec![Span::styled(
+                " SEARCH  [Enter] editor  [Esc] close".to_string(),
+                quiet,
+            )],
+            AppMode::InlineEdit => vec![Span::styled(
                 format!(
-                    " EDIT: {} | {}-s = save | Esc = close",
+                    " EDIT: {}  [{}] save  [Esc] close",
                     app.editing_file
                         .as_ref()
                         .map(|p| p.to_string_lossy().to_string())
                         .unwrap_or_else(|| "?".to_string()),
-                    ctrl,
+                    app.config.format_binding("ctrl-s"),
                 ),
-                Style::default().bg(theme.prefix_bg).fg(theme.mode_fg),
-            ),
+                quiet,
+            )],
             _ => {
                 render_normal_status(frame, area, app);
                 return;
@@ -52,19 +55,25 @@ pub(crate) fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
         }
     };
 
-    let bar = Paragraph::new(Line::from(content));
+    let bar = Paragraph::new(Line::from(content)).style(Style::default().bg(theme.navigate_bg));
     frame.render_widget(bar, area);
 }
 
 fn render_normal_status(frame: &mut Frame, area: Rect, app: &App) {
     let theme = &app.theme.status_bar;
-    let (mode_label, mode_bg) = match app.input_state {
-        crate::app::InputState::PrefixPending => ("PREFIX", theme.prefix_bg),
-        crate::app::InputState::TermScroll => ("SCROLL", theme.prefix_bg),
-        crate::app::InputState::Normal => ("", theme.navigate_bg),
+    // The bar itself is a quiet surface; only the mode chip carries the
+    // accent (the prefix is an interaction state, not a success).
+    let bar_bg = theme.navigate_bg;
+    let mode_bg = bar_bg;
+    let text_style = Style::default().bg(bar_bg).fg(theme.text_fg);
+    let sep = Span::styled(" │ ", Style::default().bg(bar_bg).fg(theme.separator_fg));
+
+    let mode_label = match app.input_state {
+        crate::app::InputState::PrefixPending => "PREFIX",
+        crate::app::InputState::TermScroll => "SCROLL",
+        crate::app::InputState::Resize => "RESIZE",
+        crate::app::InputState::Normal => "",
     };
-    let text_style = Style::default().bg(mode_bg).fg(theme.mode_fg);
-    let sep = Span::styled(" │ ", Style::default().bg(mode_bg).fg(theme.separator_fg));
 
     // Only show a mode chip while a prefix chord or scroll mode is active
     let label_span = |first: bool| -> Vec<Span> {
@@ -75,7 +84,13 @@ fn render_normal_status(frame: &mut Frame, area: Rect, app: &App) {
                 vec![]
             }
         } else {
-            vec![Span::styled(format!(" [{}]", mode_label), text_style)]
+            vec![Span::styled(
+                format!(" {} ", mode_label),
+                Style::default()
+                    .bg(theme.prefix_bg)
+                    .fg(theme.mode_fg)
+                    .add_modifier(ratatui::style::Modifier::BOLD),
+            )]
         }
     };
 
@@ -85,7 +100,7 @@ fn render_normal_status(frame: &mut Frame, area: Rect, app: &App) {
             spans.push(sep.clone());
         }
         spans.push(Span::styled("No active workspace", text_style));
-        let bar = Paragraph::new(Line::from(spans));
+        let bar = Paragraph::new(Line::from(spans)).style(Style::default().bg(bar_bg));
         frame.render_widget(bar, area);
         return;
     };
@@ -127,27 +142,16 @@ fn render_normal_status(frame: &mut Frame, area: Rect, app: &App) {
         }
     }
 
-    let tab_label = ws.current_tab().map(|t| t.provider.label()).unwrap_or("—");
-    left.push(sep.clone());
-    left.push(Span::styled(
-        format!("{}: {}", tab_label, ws.status_label()),
-        text_style,
-    ));
-
-    // Structured Claude agent status for the active tab (precise lifecycle
-    // from the OSC 777 channel), with a short summary preview.
-    if let Some((status, summary)) = ws.current_tab().and_then(|t| t.cli_agent_snapshot()) {
-        let (glyph, label, color) = crate::ui::cli_agent_status_view(status);
-        let mut txt = format!("{} {}", glyph, label);
-        if let Some(s) = summary {
-            let s: String = s.replace(['\n', '\r'], " ").chars().take(40).collect();
-            if !s.trim().is_empty() {
-                txt.push_str(": ");
-                txt.push_str(s.trim());
-            }
-        }
+    // Agent activity does not repeat in the status bar: running lives in the
+    // Agents pane; only an actionable state for the active tab surfaces here.
+    if let Some((status, attention, _)) = ws.current_tab().and_then(|t| t.cli_agent_snapshot())
+        && let Some((glyph, color)) = crate::ui::actionable_status_view(&app.theme, status, attention)
+    {
         left.push(sep.clone());
-        left.push(Span::styled(txt, Style::default().bg(mode_bg).fg(color)));
+        left.push(Span::styled(
+            glyph.to_string(),
+            Style::default().bg(mode_bg).fg(color),
+        ));
     }
 
     // Right section: active workspace name, and scroll indicator
@@ -175,7 +179,7 @@ fn render_normal_status(frame: &mut Frame, area: Rect, app: &App) {
     }
     spans.extend(right);
 
-    let bar = Paragraph::new(Line::from(spans));
+    let bar = Paragraph::new(Line::from(spans)).style(Style::default().bg(bar_bg));
     frame.render_widget(bar, area);
 }
 
@@ -213,9 +217,9 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
     let cfg = &app.config;
     match app.mode {
         AppMode::CommandPalette | AppMode::WorkspaceSwitcher => vec![
-            ("up/down".to_string(), "select"),
-            ("enter".to_string(), "execute"),
-            ("esc".to_string(), "close"),
+            ("↑/↓".to_string(), "select"),
+            ("Enter".to_string(), "execute"),
+            ("Esc".to_string(), "close"),
         ],
         AppMode::FuzzySearch => vec![
             (
@@ -249,9 +253,32 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                 cfg.get_binding("new_workspace", "switch_field"),
                 "switch field",
             ),
-            ("enter".to_string(), "save"),
-            ("esc".to_string(), "cancel"),
+            (cfg.get_binding("new_workspace", "create"), "save"),
+            (cfg.get_binding("new_workspace", "exit"), "cancel"),
         ],
+        AppMode::CreateWorktree => {
+            let mode = match app.active_dialog {
+                Some(crate::dialog_state::DialogState::CreateWorktree { mode, .. }) => mode,
+                _ => crate::dialog_state::CreateWorktreeMode::ChooseSource,
+            };
+            match mode {
+                crate::dialog_state::CreateWorktreeMode::ChooseSource => vec![
+                    ("j/k".to_string(), "navigate"),
+                    ("Enter".to_string(), "select"),
+                    ("Esc".to_string(), "cancel"),
+                ],
+                crate::dialog_state::CreateWorktreeMode::CreateNew => vec![
+                    ("Tab".to_string(), "switch field"),
+                    ("Enter".to_string(), "create"),
+                    ("Esc".to_string(), "cancel"),
+                ],
+                crate::dialog_state::CreateWorktreeMode::LoadExisting => vec![
+                    ("j/k".to_string(), "navigate"),
+                    ("Enter".to_string(), "load"),
+                    ("Esc".to_string(), "cancel"),
+                ],
+            }
+        }
         AppMode::NewTab => {
             let menu = match app.active_dialog {
                 Some(crate::dialog_state::DialogState::NewTab { ref menu }) => menu.clone(),
@@ -264,7 +291,7 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                 ],
                 crate::dialog_state::NewTabMenu::Agents { .. } => vec![
                     ("j/k".to_string(), "navigate"),
-                    ("enter/1-9".to_string(), "select"),
+                    ("Enter/1-9".to_string(), "select"),
                     (cfg.get_binding("new_tab", "exit"), "back"),
                 ],
                 crate::dialog_state::NewTabMenu::Tools => vec![
@@ -275,8 +302,8 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
         }
         AppMode::SubmitReview => vec![
             ("Tab".to_string(), "cycle verdict"),
-            ("enter".to_string(), "submit"),
-            ("esc".to_string(), "close"),
+            ("Enter".to_string(), "submit"),
+            ("Esc".to_string(), "close"),
             (cfg.format_binding("ctrl-d"), "discard"),
         ],
         AppMode::Logs => vec![
@@ -320,18 +347,122 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             (cfg.get_binding("dashboard", "select"), "switch"),
             (cfg.get_binding("dashboard", "exit"), "close"),
         ],
-        AppMode::ConfirmCloseTab => vec![("Y".to_string(), "close"), ("N".to_string(), "cancel")],
-        AppMode::ConfirmQuit => vec![("Y".to_string(), "quit"), ("N".to_string(), "cancel")],
+        AppMode::ConfirmCloseTab => vec![("y".to_string(), "close"), ("n".to_string(), "cancel")],
+        AppMode::ConfirmQuit => vec![("y".to_string(), "quit"), ("n".to_string(), "cancel")],
         AppMode::DispatchCardMove => vec![
             ("↑/↓".to_string(), "select"),
-            ("enter".to_string(), "confirm"),
-            ("esc".to_string(), "cancel"),
+            ("Enter".to_string(), "confirm"),
+            ("Esc".to_string(), "cancel"),
         ],
+        // ── Modal overlays: the footer shows the modal's keys, never stale
+        // terminal hints underneath it ──
+        AppMode::ConfirmDelete => vec![
+            ("y".to_string(), "delete"),
+            ("n".to_string(), "keep"),
+            ("Esc".to_string(), "cancel"),
+        ],
+        AppMode::DispatchAgent => vec![
+            ("j/k".to_string(), "select"),
+            ("Enter".to_string(), "dispatch"),
+            ("Esc".to_string(), "back"),
+        ],
+        AppMode::ManageAgents => vec![
+            ("j/k".to_string(), "select"),
+            ("e".to_string(), "edit"),
+            ("d".to_string(), "delete"),
+            ("p".to_string(), "sync to repo"),
+            ("i".to_string(), "import"),
+            ("Esc".to_string(), "close"),
+        ],
+        AppMode::EditAgent => vec![
+            ("Tab".to_string(), "switch field"),
+            ("Enter".to_string(), "edit role"),
+            ("Esc".to_string(), "cancel"),
+        ],
+        AppMode::EditAgentRole => vec![
+            (cfg.format_binding("ctrl-s"), "save"),
+            (cfg.format_binding("ctrl-d"), "clear all"),
+            ("Esc".to_string(), "back"),
+        ],
+        AppMode::ImportAgents => vec![
+            ("j/k".to_string(), "select"),
+            ("Space".to_string(), "toggle"),
+            ("a".to_string(), "all"),
+            ("Enter".to_string(), "import"),
+            ("Esc".to_string(), "cancel"),
+        ],
+        AppMode::ManageProviders => vec![
+            ("j/k".to_string(), "select"),
+            ("n".to_string(), "new"),
+            ("e".to_string(), "edit"),
+            ("d".to_string(), "delete"),
+            ("Esc".to_string(), "close"),
+        ],
+        AppMode::EditProvider => vec![
+            ("Tab".to_string(), "switch field"),
+            (cfg.format_binding("ctrl-s"), "save"),
+            ("Esc".to_string(), "cancel"),
+        ],
+        AppMode::ChatPanel => vec![
+            ("Enter".to_string(), "send"),
+            ("Tab".to_string(), "model"),
+            (cfg.format_binding("ctrl-o"), "settings"),
+            (cfg.format_binding("ctrl-l"), "clear"),
+            (cfg.format_binding("ctrl-a"), "agent"),
+            ("Esc".to_string(), "hide"),
+        ],
+        // The help browser is a live search box: printable keys filter,
+        // arrows / PgUp-PgDn scroll, Esc clears the filter then closes.
+        AppMode::Help => vec![
+            ("type".to_string(), "filter"),
+            ("↑↓".to_string(), "scroll"),
+            ("PgUp/PgDn".to_string(), "page"),
+            ("Esc".to_string(), "clear/close"),
+        ],
+        AppMode::About => vec![(
+            format!(
+                "{}/{}",
+                cfg.get_binding("about", "exit"),
+                cfg.get_binding("about", "exit_about")
+            ),
+            "close",
+        )],
+        AppMode::WorkspaceInfo => vec![
+            (
+                format!(
+                    "{}/{}",
+                    cfg.get_binding("workspace_info", "left"),
+                    cfg.get_binding("workspace_info", "right")
+                ),
+                "scroll",
+            ),
+            (cfg.get_binding("workspace_info", "exit"), "close"),
+        ],
+        // The which-key overlay (rendered on top while the prefix is pending)
+        // shows the full grouped keymap, so the footer stays out of its way.
         _ if app.input_state == crate::app::InputState::PrefixPending => vec![
-            ("esc".to_string(), "cancel"),
             (cfg.prefix_display(), "send literal"),
-            (cfg.get_binding("app", "help"), "help"),
-            (cfg.get_binding("app", "workspace_switcher"), "workspaces"),
+            ("Esc".to_string(), "cancel"),
+        ],
+        // Resize repeat mode: the bare resize chords keep repeating until Esc.
+        _ if app.input_state == crate::app::InputState::Resize => vec![
+            (
+                format!(
+                    "{}/{}",
+                    cfg.prefix_chord("sidebar_shrink").unwrap_or_default(),
+                    cfg.prefix_chord("sidebar_grow").unwrap_or_default()
+                ),
+                "sidebar",
+            ),
+            (
+                format!(
+                    "{}/{}",
+                    cfg.prefix_chord("split_down").unwrap_or_default(),
+                    cfg.prefix_chord("split_up").unwrap_or_default()
+                ),
+                "split",
+            ),
+            ("Esc".to_string(), "done"),
         ],
         _ if app.input_state == crate::app::InputState::TermScroll => vec![
             (
@@ -370,19 +501,12 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
         ],
         _ => {
             if app.active_pane == ActivePane::WorkspaceList {
+                // Display-only pane: everything goes through the prefix.
                 vec![
-                    (
-                        format!(
-                            "{}/{}",
-                            cfg.get_binding("workspace_list", "up"),
-                            cfg.get_binding("workspace_list", "down")
-                        ),
-                        "select",
-                    ),
-                    (cfg.get_binding("workspace_list", "select"), "open"),
-                    (cfg.get_binding("workspace_list", "edit"), "edit ws"),
-                    (cfg.get_binding("workspace_list", "delete"), "delete ws"),
-                    (cfg.prefix_display(), "prefix"),
+                    (cfg.get_binding("app", "workspace_switcher"), "workspaces"),
+                    (cfg.get_binding("app", "new_workspace"), "new ws"),
+                    (cfg.get_binding("app", "edit_workspace"), "edit ws"),
+                    (cfg.get_binding("app", "delete_workspace"), "delete ws"),
                 ]
             } else if app.active_pane == ActivePane::Agents {
                 vec![
@@ -396,6 +520,23 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                     ),
                     (cfg.get_binding("agents", "select"), "jump to agent"),
                     ("click".to_string(), "jump"),
+                    (cfg.prefix_display(), "prefix"),
+                ]
+            } else if app
+                .current_workspace()
+                .and_then(|ws| ws.current_tab())
+                .is_some_and(|tab| tab.provider == piki_core::AIProvider::Kanban)
+            {
+                // The kanban board speaks flow_tui's own pane-local keys, not
+                // app chords — surface them (dispatch especially, the one
+                // reason to be here) so the footer stops showing terminal hints.
+                vec![
+                    ("h/l/j/k".to_string(), "navigate"),
+                    ("n".to_string(), "new"),
+                    ("D".to_string(), "dispatch"),
+                    ("e".to_string(), "edit"),
+                    ("d".to_string(), "delete"),
+                    ("Enter".to_string(), "details"),
                     (cfg.prefix_display(), "prefix"),
                 ]
             } else if app
@@ -415,16 +556,20 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                         ("esc".to_string(), "close search"),
                     ]
                 } else {
-                    {
-                        let p = if cfg.platform.is_macos() { "⌘" } else { "^" };
-                        vec![
-                            (format!("{}S", p), "send"),
-                            (format!("{}J/{}K", p, p), "scroll"),
-                            (format!("{}F", p), "search"),
-                            (format!("{}C", p), "copy response"),
-                            (cfg.prefix_display(), "prefix"),
-                        ]
-                    }
+                    vec![
+                        (cfg.format_binding("ctrl-s"), "send"),
+                        (
+                            format!(
+                                "{}/{}",
+                                cfg.format_binding("ctrl-j"),
+                                cfg.format_binding("ctrl-k")
+                            ),
+                            "scroll",
+                        ),
+                        (cfg.format_binding("ctrl-f"), "search"),
+                        (cfg.format_binding("ctrl-c"), "copy response"),
+                        (cfg.prefix_display(), "prefix"),
+                    ]
                 }
             } else if app
                 .current_workspace()

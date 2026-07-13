@@ -5,6 +5,8 @@ use tauri::{AppHandle, State};
 
 use piki_core::AIProvider;
 use piki_core::cli_agent::install as cli_agent_install;
+use piki_core::cli_agent::install_antigravity as agy_install;
+use piki_core::cli_agent::{AgentBridge, bridge_for_command};
 use piki_core::shell_integration::install as shell_install;
 
 use crate::pty_raw::RawPtySession;
@@ -50,6 +52,22 @@ fn cli_agent_setup(hooks_dir: &std::path::Path) -> CliAgentSetup {
         }
         Err(e) => {
             tracing::warn!(error = %e, "claude cli-agent hook setup failed");
+            (Vec::new(), Vec::new(), false, None)
+        }
+    }
+}
+
+/// Same, for Antigravity tabs. No `extra_args` — agy picks the bridge up from
+/// its own plugins root, so only the env carries the per-tab FIFO.
+fn antigravity_agent_setup(hooks_dir: &std::path::Path) -> CliAgentSetup {
+    match agy_install::setup_for_antigravity(hooks_dir, &agy_install::plugins_root()) {
+        Ok(setup) => {
+            let sock = setup.sock_path.clone();
+            let env: Vec<(String, String)> = setup.env.into_iter().collect();
+            (env, Vec::new(), true, sock)
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "antigravity cli-agent hook setup failed");
             (Vec::new(), Vec::new(), false, None)
         }
     }
@@ -124,7 +142,7 @@ pub async fn spawn_tab(
     let mut tab = DesktopTab::new(ai_provider.clone(), provider_cfg.as_ref());
     let tab_id = tab.id.clone();
 
-    let (worktree_path, integration_dir, claude_hooks_dir) = {
+    let (worktree_path, integration_dir, claude_hooks_dir, agy_hooks_dir) = {
         let app = state.lock();
         if workspace_idx >= app.workspaces.len() {
             return Err("Workspace index out of range".to_string());
@@ -133,19 +151,42 @@ pub async fn spawn_tab(
             app.workspaces[workspace_idx].info.path.clone(),
             app.paths.shell_integration_dir(),
             app.paths.claude_hooks_dir(),
+            app.paths.antigravity_hooks_dir(),
         )
     };
 
-    let is_claude = matches!(ai_provider, AIProvider::Custom(_)) && command == "claude";
+    let bridge = match ai_provider {
+        AIProvider::Custom(_) => bridge_for_command(&command),
+        _ => None,
+    };
     let (extra_env, extra_args, integration_on, cli_agent_sock) =
         if ai_provider == AIProvider::Shell {
             let (e, a, on) = shell_integration_setup(&ai_provider, &command, &integration_dir);
             (e, a, on, None)
-        } else if is_claude {
-            cli_agent_setup(&claude_hooks_dir)
         } else {
-            (Vec::new(), Vec::new(), false, None)
+            match bridge {
+                Some(AgentBridge::Claude) => cli_agent_setup(&claude_hooks_dir),
+                Some(AgentBridge::Antigravity) => antigravity_agent_setup(&agy_hooks_dir),
+                None => (Vec::new(), Vec::new(), false, None),
+            }
         };
+
+    // The bridge exists for this agent but couldn't be installed (its hook
+    // scripts need `jq`). The tab still runs — only its status degrades to the
+    // byte-silence heuristic — so this warns instead of failing the spawn.
+    if let Some(b) = bridge
+        && !integration_on
+    {
+        let missing = piki_core::cli_agent::missing_prerequisites(b).join(", ");
+        crate::events::emit_toast(
+            &app_handle,
+            &format!(
+                "{} status unavailable — install {missing} and reopen the tab",
+                b.label()
+            ),
+            "info",
+        );
+    }
 
     // Spawn PTY session (use default_args from provider config)
     let pty = RawPtySession::spawn(

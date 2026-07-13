@@ -7,6 +7,8 @@ use crate::clipboard;
 use crate::ui;
 use piki_core::AIProvider;
 use piki_core::cli_agent::install as cli_agent_install;
+use piki_core::cli_agent::install_antigravity as agy_install;
+use piki_core::cli_agent::{AgentBridge, bridge_for_command};
 use piki_core::pty::PtySession;
 use piki_core::shell_integration::install as shell_install;
 
@@ -21,6 +23,31 @@ pub(crate) fn shutdown(app: &mut App) {
         ws.tabs.clear();
         ws.watcher = None;
     }
+}
+
+/// Tools a provider's hook bridge needs but that aren't on PATH, with the
+/// agent's display name. `None` when the provider has no bridge (nothing to
+/// degrade) or when everything it needs is installed.
+///
+/// The tab spawns either way — [`spawn_tab`] just falls back to the byte-silence
+/// idle heuristic — so callers use this to *warn*, never to block.
+pub(crate) fn missing_bridge_prereqs(
+    provider: &AIProvider,
+    provider_manager: &piki_core::providers::ProviderManager,
+) -> Option<(String, Vec<String>)> {
+    let AIProvider::Custom(name) = provider else {
+        return None;
+    };
+    let cmd = provider_manager.get(name).map(|c| c.command.clone())?;
+    let bridge = bridge_for_command(&cmd)?;
+    let missing = piki_core::cli_agent::missing_prerequisites(bridge);
+    if missing.is_empty() {
+        return None;
+    }
+    Some((
+        bridge.label().to_string(),
+        missing.into_iter().map(String::from).collect(),
+    ))
 }
 
 /// Spawn a new tab with the given provider in a workspace.
@@ -73,10 +100,14 @@ pub(crate) async fn spawn_tab(
         (cmd, prompt_args)
     };
 
-    // Shell tabs get OSC 133/7 shell integration. Claude provider tabs get
-    // the structured cli-agent (OSC 777) hooks. Both ride the same OSC
-    // parser, so both enable `integration_on`. Everything else runs bare.
-    let is_claude = matches!(provider, AIProvider::Custom(_)) && cmd == "claude";
+    // Shell tabs get OSC 133/7 shell integration. Provider tabs whose binary
+    // has a hook bridge (Claude Code, Antigravity) get the structured
+    // cli-agent channel. Both ride the same OSC parser, so both enable
+    // `integration_on`. Everything else runs bare.
+    let bridge = match provider {
+        AIProvider::Custom(_) => bridge_for_command(&cmd),
+        _ => None,
+    };
     let (extra_env, extra_args, integration_on, cli_agent_sock) =
         if *provider == AIProvider::Shell {
             match shell_install::setup_for(&cmd, &paths.shell_integration_dir()) {
@@ -107,7 +138,7 @@ pub(crate) async fn spawn_tab(
                     (Vec::new(), Vec::new(), false, None)
                 }
             }
-        } else if is_claude {
+        } else if bridge == Some(AgentBridge::Claude) {
             match cli_agent_install::setup_for_claude(&paths.claude_hooks_dir()) {
                 Ok(setup) => {
                     let sock = setup.sock_path.clone();
@@ -116,6 +147,23 @@ pub(crate) async fn spawn_tab(
                 }
                 Err(e) => {
                     tracing::warn!(error = %e, "claude cli-agent hook setup failed");
+                    (Vec::new(), Vec::new(), false, None)
+                }
+            }
+        } else if bridge == Some(AgentBridge::Antigravity) {
+            // No extra_args: agy discovers the bridge from its own plugins
+            // root, so the hooks ride the environment alone.
+            match agy_install::setup_for_antigravity(
+                &paths.antigravity_hooks_dir(),
+                &agy_install::plugins_root(),
+            ) {
+                Ok(setup) => {
+                    let sock = setup.sock_path.clone();
+                    let env: Vec<(String, String)> = setup.env.into_iter().collect();
+                    (env, Vec::new(), true, sock)
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "antigravity cli-agent hook setup failed");
                     (Vec::new(), Vec::new(), false, None)
                 }
             }
@@ -223,18 +271,31 @@ pub(crate) fn subtab_index_at(app: &App, col: u16, area: Rect) -> Option<SubtabH
             .markdown_label
             .as_deref()
             .unwrap_or(tab.provider.label());
-        // Matches subtabs.rs: " icon " (3) + label + " g" (2, if agent glyph)
-        // + " ×" (2, if closable) + " " (1); blocks separated by a 1-col gap
+        // Matches subtabs.rs: " N" (2, if i < 9) + " icon " (3) + label
+        // + " g" (2, if agent glyph) + " ×" (2, if closable) + " " (1);
+        // blocks separated by a 1-col gap
         let mut tab_display_width = label.len() as u16 + 4;
-        if tab.cli_agent_snapshot().is_some() {
+        if i < 9 {
+            tab_display_width += 2;
+        }
+        // The glyph is only rendered when the status is *actionable*, not for
+        // every tab that has a cli-agent snapshot — mirror subtabs.rs exactly
+        // or the close-button hit region drifts right of the visible `×`.
+        if let Some((status, attention, _)) = tab.cli_agent_snapshot()
+            && crate::ui::actionable_status_view(&app.theme, status, attention).is_some()
+        {
             tab_display_width += 2;
         }
         if tab.closable {
             tab_display_width += 2;
         }
         if col >= x && col < x + tab_display_width {
-            // Close button is the last 2 display columns before trailing space: "× "
-            let on_close = tab.closable && col >= x + tab_display_width - 3;
+            // The block ends with " ×" (2 cols) then a trailing space (1 col).
+            // The close target is just those two `" ×"` columns; excluding the
+            // trailing space keeps a click in the padding from closing the tab.
+            let on_close = tab.closable
+                && col >= x + tab_display_width - 3
+                && col < x + tab_display_width - 1;
             return Some(SubtabHit::Tab(i, on_close));
         }
         x += tab_display_width + 1; // +1 for the gap between blocks

@@ -1,76 +1,31 @@
-# Solarized Light theme — warm light background palette
-# Based on https://ethanschoonover.com/solarized/
+# Solarized Light — warm LIGHT palette
+# https://ethanschoonover.com/solarized/
+#
+# A light theme: the ink ramp (bg*) is light and the text ramp (fg*) is dark.
+# Every role and every direct palette read derives from these primitives, so a
+# light `[palette]` is enough to retint the whole UI — no per-role overrides.
 
-[border]
-active_interact = "#859900"   # green
-active_navigate = "#b58900"   # yellow
-inactive = "#93a1a1"          # base1
+[palette]
+bg0 = "#fdf6e3"          # base3 — canvas
+bg1 = "#f2ecd8"          # alt rows
+bg2 = "#eee8d5"          # base2 — group headers, inactive tabs, status bar
+bg3 = "#e3ddc9"          # overlays / popups
+line = "#c8c2ad"         # unfocused borders
+line_strong = "#93a1a1"  # base1 — dialog borders
+fg0 = "#073642"          # base02 — primary (dark on light)
+fg1 = "#586e75"          # base01 — body text
+fg2 = "#657b83"          # base00 — muted detail
+fg3 = "#93a1a1"          # base1 — ghost / placeholders
+iris = "#6c71c4"         # violet — THE accent: focus, active tab, keys
+iris_wash = "#dcd6ef"    # light violet — selection background
+ok = "#859900"           # green — done, staged, additions
+warn = "#b58900"         # yellow — needs-you, modified
+err = "#dc322f"          # red — errors, deletions
+info = "#268bd2"         # blue — running, info, renames
+diff_add_bg = "#e4ecc9"
+diff_del_bg = "#f5d9d3"
 
-[workspace_list]
-empty_text = "#93a1a1"
-name_active = "#073642"       # base02
-name_inactive = "#586e75"     # base01
-detail_selected = "#586e75"
-detail_normal = "#93a1a1"
-selected_bg = "#eee8d5"       # base2
-group_header_bg = "#eee8d5"   # base2
-separator = "#d6cdb7"
-alt_bg = "#f5f0e4"
-
-[file_list]
-empty_text = "#93a1a1"
-modified = "#b58900"          # yellow
-added = "#859900"             # green
-deleted = "#dc322f"           # red
-renamed = "#2aa198"           # cyan
-untracked = "#93a1a1"
-conflicted = "#d33682"        # magenta
-staged = "#859900"
-staged_modified = "#b58900"
-file_path = "#073642"
-selected_bg = "#eee8d5"
-
-[tabs]
-active = "#b58900"
-inactive = "#93a1a1"
-
-[subtabs]
-active = "#2aa198"
-active_fg = "#fdf6e3"
-inactive = "#657b83"
-inactive_bg = "#eee8d5"
-
-[status_bar]
-error_bg = "#dc322f"
-error_fg = "#fdf6e3"          # base3
-diff_bg = "#eee8d5"
-diff_fg = "#073642"
-interact_bg = "#859900"
-navigate_bg = "#b58900"
-mode_fg = "#fdf6e3"
-
-[footer]
-key = "#b58900"
-description = "#586e75"
-
+# Diff line text needs to stay legible on the light tint backgrounds.
 [diff]
-border = "#2aa198"
-empty_text = "#93a1a1"
-
-[dialog]
-new_ws_border = "#b58900"
-new_ws_active = "#b58900"
-new_ws_inactive = "#93a1a1"
-delete_border = "#dc322f"
-delete_text = "#073642"
-delete_name = "#b58900"
-delete_yes = "#dc322f"
-delete_no = "#859900"
-delete_cancel = "#93a1a1"
-
-[help]
-border = "#2aa198"
-
-[general]
-welcome_text = "#586e75"
-muted_text = "#93a1a1"
+add = "#5b6800"
+del = "#c22320"

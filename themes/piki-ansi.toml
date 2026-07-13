@@ -1,0 +1,105 @@
+# piki-ansi — Cabina degraded to the 16 ANSI colors
+#
+# For terminals without truecolor: the violet nuance is lost, never the
+# grammar. iris→Magenta, ok→Green, warn→Yellow, err→Red, info→Blue,
+# text ramp→White/Gray/DarkGray, surfaces/washes→Reset or DarkGray.
+
+[border]
+active = "Magenta"
+inactive = "DarkGray"
+
+[workspace_list]
+empty_text = "DarkGray"
+name_active = "White"
+name_inactive = "Gray"
+detail_selected = "Gray"
+detail_normal = "DarkGray"
+selected_bg = "DarkGray"
+group_header_bg = "Reset"
+alt_bg = "Reset"
+
+[file_list]
+empty_text = "DarkGray"
+modified = "Yellow"
+added = "Green"
+deleted = "Red"
+renamed = "Blue"
+untracked = "DarkGray"
+conflicted = "Red"
+staged = "Green"
+staged_modified = "Yellow"
+file_path = "White"
+selected_bg = "DarkGray"
+multi_select_bg = "DarkGray"
+
+[tabs]
+active = "Magenta"
+inactive = "DarkGray"
+
+[subtabs]
+active = "Magenta"
+active_fg = "Black"
+inactive = "Gray"
+inactive_bg = "DarkGray"
+
+[status_bar]
+error_bg = "Red"
+error_fg = "Black"
+prefix_bg = "Magenta"
+navigate_bg = "Reset"
+mode_fg = "Black"
+separator_fg = "DarkGray"
+text_fg = "Gray"
+toast_info = "Blue"
+toast_success = "Green"
+
+[footer]
+key = "Magenta"
+description = "Gray"
+
+[dialog]
+new_ws_border = "DarkGray"
+new_ws_active = "Magenta"
+new_ws_inactive = "Gray"
+delete_border = "Red"
+delete_text = "Gray"
+delete_name = "White"
+delete_yes = "Red"
+delete_no = "Gray"
+delete_cancel = "DarkGray"
+
+[help]
+border = "DarkGray"
+
+[general]
+welcome_text = "Gray"
+muted_text = "Gray"
+scrollbar_thumb = "Gray"
+
+[fuzzy_search]
+border = "DarkGray"
+input_text = "White"
+match_highlight = "Magenta"
+result_text = "Gray"
+selected_bg = "DarkGray"
+count_text = "DarkGray"
+
+[selection]
+bg = "DarkGray"
+fg = "White"
+
+[status]
+running = "Blue"
+needs_you = "Yellow"
+done = "Green"
+error = "Red"
+exited = "DarkGray"
+
+[diff]
+add = "Green"
+add_bg = "Reset"
+del = "Red"
+del_bg = "Reset"
+context = "Gray"
+hunk = "Blue"
+comment = "Yellow"

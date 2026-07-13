@@ -1,0 +1,28 @@
+---
+source: crates/tui/src/ui/mod.rs
+expression: content
+---
+
+
+
+
+
+
+
+
+
+
+╭ C-g ─────────────────────────────────────────────────────────────────────────╮
+│Workspace  s new  r worktree  e edit  d delete  b dashboard  i info  w switch │
+│           } next  { prev  ` last                                             │
+│Git        g lazygit                                                          │
+│Tabs       c new  x close  n next  p prev                                     │
+│Search     / find file  f search                                              │
+│View       : palette  ? all keys  a about  o logs  [ scroll  y chat           │
+│Focus      h left  j down  k up  l right                                      │
+│Layout     < sidebar −  > sidebar +  + split +  - split −                     │
+│Agents     m agents                                                           │
+│Providers  v providers                                                        │
+│App        q quit                                                             │
+│1-9 tab   C-g literal   Esc cancel                                            │
+╰──────────────────────────────────────────────────────────────────────────────╯

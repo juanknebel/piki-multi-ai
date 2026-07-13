@@ -1,0 +1,232 @@
+# piki-multi-ai configuration
+#
+# Every setting is OPTIONAL. The app ships with built-in defaults; this file
+# only needs the keys you want to override. Anything you omit keeps its
+# default, so it is safe to delete sections you do not care about.
+#
+# Location: $XDG_CONFIG_HOME/piki-multi/config.toml
+#           (usually ~/.config/piki-multi/config.toml)
+
+# ── Appearance ────────────────────────────────────────────────────────────
+
+# UI theme. Bundled themes live next to this file in the `themes/` directory
+# ($XDG_CONFIG_HOME/piki-multi/themes/*.toml); the value is the file name
+# without the `.toml`. Run the installer to (re)populate that directory.
+theme = "default"
+
+# Syntax-highlighting theme for file previews (a syntect theme name).
+# syntax_theme = "base16-ocean.dark"
+
+# ── Notifications ─────────────────────────────────────────────────────────
+# How background agent events reach you.
+
+# [notifications]
+# delivery: "system"   → OS desktop toast (default)
+#           "terminal" → OSC 9 escape, so the host terminal notifies
+#                        (works inside tmux / over ssh)
+#           "off"      → no notifications
+# delivery = "system"
+#
+# sound: play the built-in chimes (done / attention), independent of delivery.
+# sound = false
+#
+# Optional custom audio files (any format your system player decodes).
+# A leading `~/` is expanded to your home directory.
+#   sound_path            → fallback used when a specific one is unset
+#   sound_done_path       → played when an agent finishes
+#   sound_attention_path  → played when an agent needs you
+# sound_done_path = "~/sounds/done.wav"
+# sound_attention_path = "~/sounds/attention.wav"
+
+# ── Kanban board ──────────────────────────────────────────────────────────
+# Backing store for the task board.
+
+# [kanban]
+# provider = "local"
+# path = "~/.config/flow/boards/default"
+
+# ── Keybindings ───────────────────────────────────────────────────────────
+# The app uses a tmux-style one-shot prefix: press the prefix, then a key.
+# Pressing the prefix twice sends it literally to the focused terminal.
+#
+# Everything below is COMMENTED OUT and shows the built-in DEFAULT. Uncomment
+# only the line you want to change (and its parent `[table]` header). Any key
+# you leave commented keeps its default.
+
+# [keybindings]
+# prefix_key = "ctrl-g"
+
+# App actions fire after the prefix. A value starting with `prefix-` is a
+# prefix chord; anything else (e.g. "ctrl-shift-c") is a direct chord checked
+# before the focused pane. A value may be a single string, or an array of
+# alternatives.
+#
+# Convention: defaults avoid Shift. Every letter action uses an unshifted
+# lowercase key; there are no uppercase-letter defaults. The only Shift chords
+# are `:` (palette), `?` (help) and `}`/`{` (workspace next/prev). When you
+# rebind, an unshifted key (or `ctrl-<key>`) keeps that no-Shift feel.
+# [keybindings.app]
+# # Focus movement between panes
+# focus_left  = ["prefix-h", "prefix-left"]
+# focus_down  = ["prefix-j", "prefix-down"]
+# focus_up    = ["prefix-k", "prefix-up"]
+# focus_right = ["prefix-l", "prefix-right"]
+# # Tabs
+# new_tab   = "prefix-c"
+# close_tab = "prefix-x"
+# next_tab  = "prefix-n"
+# prev_tab  = "prefix-p"
+# # Workspaces
+# workspace_switcher    = "prefix-w"
+# next_workspace        = "prefix-}"
+# prev_workspace        = "prefix-{"
+# toggle_prev_workspace = "prefix-`"
+# new_workspace         = "prefix-s"
+# edit_workspace        = "prefix-e"
+# delete_workspace      = "prefix-d"
+# workspace_info        = "prefix-i"
+# clone_workspace       = "prefix-r"
+# # Git (everything else lives in the lazygit tab)
+# git = "prefix-g"
+# # App
+# help             = "prefix-?"
+# about            = "prefix-a"
+# dashboard        = "prefix-b"
+# command_palette  = "prefix-:"
+# fuzzy_search     = "prefix-/"
+# chat_panel       = "prefix-y"
+# quit             = "prefix-q"
+# manage_agents    = "prefix-m"
+# manage_providers = "prefix-v"
+# logs             = "prefix-o"
+# scroll_mode      = "prefix-["
+# # Layout
+# sidebar_shrink = ["prefix-<", "prefix-,"]
+# sidebar_grow   = ["prefix->", "prefix-."]
+# split_up       = ["prefix-+", "prefix-="]
+# split_down     = "prefix--"
+# # Terminal clipboard: direct chords, never sent to the PTY
+# copy            = "ctrl-shift-c"
+# paste           = "ctrl-shift-v"
+# terminal_search = "prefix-f"
+
+# The tables below are pane/mode-local keys — active only while that view is
+# focused, NOT behind the prefix. Each is shown with its default.
+#
+# Overriding a table is additive: any key you leave out keeps its default, so
+# you only list what you actually want to change.
+#
+# In the text-entry overlays (fuzzy, editor, new_workspace) these bindings are
+# checked *before* the keystroke reaches the text buffer — bind one to a bare
+# letter and that letter becomes untypable. Prefer a modifier or a special key.
+# Esc and the prefix key always cancel a dialog, whatever `exit` says.
+
+# [keybindings.scroll]        # terminal scroll mode (entered with scroll_mode)
+# down = "j"
+# up = "k"
+# down_alt = "down"
+# up_alt = "up"
+# page_down = "ctrl-d"
+# page_up = "ctrl-u"
+# page_down_alt = "pagedown"
+# page_up_alt = "pageup"
+# top = "g"
+# bottom = "G"
+# search = "/"
+# exit = "esc"
+# exit_alt = "q"
+
+# [keybindings.agents]        # Agents pane (bottom-left)
+# down = "j"
+# up = "k"
+# down_alt = "down"
+# up_alt = "up"
+# select = "enter"
+
+# [keybindings.workspaces]    # Workspaces pane (top-left tree)
+# down = "j"                  # select = switch workspace / toggle group header
+# up = "k"
+# down_alt = "down"
+# up_alt = "up"
+# collapse = "h"              # collapse the group (or the row's parent group)
+# collapse_alt = "left"
+# expand = "l"                # expand the selected collapsed group header
+# expand_alt = "right"
+# select = "enter"
+
+# [keybindings.markdown]      # markdown reader
+# down = "j"
+# up = "k"
+# down_alt = "down"
+# up_alt = "up"
+# page_down = "ctrl-d"
+# page_up = "ctrl-u"
+# scroll_top = "g"
+# scroll_bottom = "G"
+
+# The help browser (prefix-?) is a live search box: printable keys filter the
+# keybinding list, and navigation is on fixed keys — arrows / PgUp-PgDn /
+# Home-End / Ctrl-D-Ctrl-U to scroll, Esc to clear the filter then close. These
+# are not configurable (a [keybindings.help] table is ignored).
+
+# [keybindings.about]
+# exit = "esc"
+# exit_about = "a"           # toggle-close (About opens with prefix-a)
+
+# [keybindings.workspace_info]
+# right = "l"
+# right_alt = "right"
+# left = "h"
+# left_alt = "left"
+# exit = "esc"
+# exit_info = "i"
+
+# [keybindings.fuzzy]         # fuzzy file search AND the command palette —
+# up = "up"                   # both overlays share this navigation grammar
+# down = "down"
+# open = "enter"
+# editor = "ctrl-e"           # open the selection in $EDITOR
+# inline_edit = "ctrl-v"      # open the selection in the inline editor
+# markdown = "ctrl-o"         # open a .md file in a new tab
+# mdr = "alt-m"               # open a .md file in the external `mdr` viewer
+# exit = "esc"
+
+# [keybindings.editor]        # inline text editor
+# save = "ctrl-s"
+# exit = "esc"
+
+# [keybindings.new_workspace]
+# switch_field = "tab"
+# switch_field_back = "backtab"
+# create = "enter"
+# exit = "esc"
+
+# [keybindings.new_tab]
+# exit = "esc"                # closes the menu, or steps back out of a submenu
+
+# [keybindings.dashboard]
+# down = "j"
+# up = "k"
+# down_alt = "down"
+# up_alt = "up"
+# select = "enter"
+# exit = "esc"
+# exit_alt = "b"             # toggle-close (Dashboard opens with prefix-b)
+
+# [keybindings.logs]
+# down = "j"
+# up = "k"
+# down_alt = "down"
+# up_alt = "up"
+# page_down = "ctrl-d"
+# page_up = "ctrl-u"
+# scroll_top = "g"
+# scroll_bottom = "G"
+# left = "h"
+# right = "l"
+# left_alt = "left"
+# right_alt = "right"
+# copy = "enter"
+# copy_alt = "y"
+# exit = "esc"
+# exit_alt = "ctrl-l"

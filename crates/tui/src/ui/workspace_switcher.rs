@@ -1,6 +1,6 @@
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
@@ -26,7 +26,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(Clear, popup);
 
     let block = Block::default()
-        .borders(Borders::ALL)
+        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(Style::default().fg(theme.border));
     let inner = block.inner(popup);
     frame.render_widget(block, popup);
@@ -130,11 +130,11 @@ fn row_line<'a>(
             };
             let is_active = ws_idx == app.active_workspace;
             let (glyph, color) = match ws.agent_status_rollup() {
-                Some(s) => {
-                    let (g, _, c) = crate::ui::cli_agent_status_view(s);
+                Some((s, att)) => {
+                    let (g, _, c) = crate::ui::cli_agent_status_view(app, s, att);
                     (g, c)
                 }
-                None => ("○", Color::DarkGray),
+                None => ("○", app.theme.status.exited),
             };
             let marker = if is_active { "◆ " } else { "  " };
             let left = format!(" {marker}{glyph} {} ({})", ws.name, ws.tabs.len());
@@ -149,8 +149,10 @@ fn row_line<'a>(
             };
             let is_active_tab = tab_idx == ws.active_tab;
             let (glyph, status_label, color) = match tab.cli_agent_snapshot() {
-                Some((status, _)) => crate::ui::cli_agent_status_view(status),
-                None => crate::ui::agent_tab_indicator(tab),
+                Some((status, attention, _)) => {
+                    crate::ui::cli_agent_status_view(app, status, attention)
+                }
+                None => crate::ui::agent_tab_indicator(app, tab),
             };
             let label = tab
                 .markdown_label
@@ -168,7 +170,7 @@ fn row_line<'a>(
                     color,
                 )
             } else {
-                (tab.provider.label().to_lowercase(), Color::DarkGray)
+                (tab.provider.label().to_lowercase(), app.theme.palette.fg3)
             };
             (left, right, right_color)
         }
@@ -179,9 +181,9 @@ fn row_line<'a>(
             if app.workspaces.get(ws_idx).is_some_and(|w| w.active_tab == tab_idx));
 
     if is_selected {
-        // Full-width accent bar with dark text; right column keeps a subtle
-        // contrast by staying bold.
-        let base = Style::default().fg(Color::Black).bg(sel_bg);
+        // Full-width selection wash with primary text; right column keeps a
+        // subtle contrast by staying bold.
+        let base = Style::default().fg(app.theme.palette.fg0).bg(sel_bg);
         let text = pad_between(&left, &format!("{right} "), iw);
         let mut style = base;
         if is_bold {
@@ -230,7 +232,7 @@ fn breadcrumb_text(app: &App, row: SwitcherRow) -> String {
                 .unwrap_or(tab.provider.label());
             let status = tab
                 .cli_agent_snapshot()
-                .map(|(s, _)| crate::ui::cli_agent_status_view(s).1)
+                .map(|(s, att, _)| crate::ui::cli_agent_status_view(app, s, att).1)
                 .unwrap_or("");
             if status.is_empty() {
                 format!("{} · tab: {}", ws.name, label)

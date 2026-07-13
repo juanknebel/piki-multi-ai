@@ -1,0 +1,216 @@
+---
+source: crates/tui/src/ui/mod.rs
+expression: body
+---
+
+  Prefix actions
+    Press C-g first (tmux-style).
+    Workspace
+      C-g s         New Workspace
+      C-g r         Create Worktree (GitHub-only)
+      C-g e         Edit Workspace
+      C-g d         Delete Workspace
+      C-g b         Dashboard
+      C-g i         Workspace Info
+      C-g w         Switch Workspace (fuzzy)
+      C-g }         Next Workspace
+      C-g {         Previous Workspace
+      C-g `         Toggle Last Workspace
+    Git
+      C-g g         Git (lazygit)
+    Tabs
+      C-g c         New Tab
+      C-g x         Close Tab
+      C-g n         Next Tab
+      C-g p         Previous Tab
+    Search
+      C-g /         Fuzzy File Search
+      C-g f         Search in Terminal
+    View
+      C-g :         Command Palette
+      C-g ?         Help
+      C-g a         About
+      C-g o         Logs
+      C-g [         Terminal Scroll Mode
+      C-g y         AI Chat
+    Focus
+      C-g h         Focus Pane Left
+      C-g j         Focus Pane Down
+      C-g k         Focus Pane Up
+      C-g l         Focus Pane Right
+    Layout
+      C-g <         Shrink Sidebar
+      C-g >         Grow Sidebar
+      C-g +         Grow Left Split
+      C-g -         Shrink Left Split
+      Mouse drag    Drag a pane border to resize it
+    Clipboard
+      C-S-c         Copy Terminal
+    Agents
+      C-g m         Manage Agents
+    Providers
+      C-g v         Manage Providers
+    App
+      C-g q         Quit
+    Prefix
+      C-g 1..9      Jump to tab N
+      C-g C-g       Send the prefix key to the terminal
+      Esc           Cancel a pending prefix
+
+  Terminal scroll mode (C-g [)
+    j             Scroll down a line
+    k             Scroll up a line
+    C-d           Page down
+    C-u           Page up
+    g             Jump to the top
+    G             Jump to the bottom
+    /             Search the scrollback
+    Esc           Exit scroll mode
+    q             Exit scroll mode (alt)
+
+  Terminal pane
+    (any)         Every key is forwarded to the active tab
+    C-S-v         Paste from the clipboard
+    Mouse scroll  Scroll the terminal
+    Mouse drag    Select text (copies on release)
+
+  Workspace list pane
+    j             Select the next workspace
+    k             Select the previous workspace
+    h             Collapse the group
+    l             Expand the group
+    Enter         Switch to it / toggle the group
+
+  Agents pane
+    j             Select the next agent
+    k             Select the previous agent
+    Enter         Jump to that workspace and tab
+    Click         Jump to that workspace and tab
+
+  Fuzzy file search (C-g /)
+    Type          Filter files
+    ↓             Select the next result
+    ↑             Select the previous result
+    Enter         Open in $EDITOR
+    C-e           Open in $EDITOR (without closing)
+    C-v           Open in the inline editor
+    C-o           Open a markdown file in a new tab
+    M-m           Open a markdown file in mdr (external)
+    Esc           Close
+
+  Command palette (C-g :)
+    Type          Filter commands
+    ↓             Select the next command
+    ↑             Select the previous command
+    Enter         Run the selected command
+    Esc           Close
+
+  Workspace switcher (C-g w)
+    Type          Filter workspaces and tabs
+    ↑/↓           Select a row
+    C-p           Select the previous row
+    C-n           Select the next row
+    Enter         Jump to that workspace or tab
+    Esc           Close
+
+  Dashboard (C-g b)
+    j             Select the next workspace
+    k             Select the previous workspace
+    Enter         Switch to it and focus the main panel
+    Esc           Close
+
+  Logs (C-g o)
+    j             Select the next entry
+    k             Select the previous entry
+    C-d           Page down
+    C-u           Page up
+    g             Jump to the top
+    G             Jump to the bottom
+    0-5           Filter by level (0 = all)
+    /             Search entries
+    r             Toggle auto-refresh (tail)
+    Enter         Copy the selected entry
+    Esc           Close
+
+  AI Chat overlay (C-g y)
+    Enter         Send the message
+    Tab           Select the model
+    C-o           Settings (server, URL, system prompt)
+    C-a           Toggle agent mode (tool use)
+    C-l           Clear the conversation
+    Esc           Hide (keeps state)
+
+  Kanban board
+    h/l/j/k       Navigate columns and cards
+    H/L           Move the card left/right
+    n / a         New card
+    e             Edit the selected card
+    d             Delete the card
+    D             Dispatch an agent (branch + AI)
+    Enter         Toggle card details
+    r             Refresh the board
+    s             Toggle sort by priority
+    /             Search cards
+    p             Filter by project
+    Esc           Close
+
+  Dispatch agent dialog
+    ←/→/Tab       Step 1: cycle the agent / provider
+    Type          Step 1: add extra prompt instructions
+    Enter         Step 1: continue to the destination
+    ←/→/Tab       Step 2: new worktree or current workspace
+    Enter         Step 2: dispatch
+    Esc           Back a step, or cancel
+
+  Move dispatched card (after confirming delete)
+    j/k           Select the target kanban column
+    Enter         Move the card and delete the workspace
+    Esc           Cancel
+
+  Manage agents (C-g m)
+    j/k           Navigate the agent list
+    n             New agent (step 1: name + provider)
+    e / Enter     Edit the selected agent
+    d             Delete the selected agent
+    p             Sync the agent to the repo
+    i             Import agents from the repo
+    Esc           Close
+
+  Agent role editor (step 2)
+    C-s           Save the agent and close
+    Esc           Back to step 1 without saving
+
+  Import agents overlay
+    j/k           Navigate the discovered agents
+    Space         Toggle the selection
+    a             Toggle select-all
+    Enter         Import the selected agents
+    Esc           Cancel
+
+  Manage providers (C-g v)
+    j/k           Navigate the provider list
+    n             New provider
+    e / Enter     Edit the selected provider
+    d             Delete the selected provider
+    Esc           Close
+
+  Inline editor
+    C-s           Save
+    Esc           Close
+
+  Code Review (requires gh CLI, locked mode)
+    j/k           Navigate files / scroll the diff
+    Enter         View the file diff
+    h/l           Switch between the file list and the diff
+    n/p           Next / previous file (in the diff view)
+    g/G           Top / bottom of the diff
+    C-d           Page down in the diff
+    C-u           Page up in the diff
+    c             Add or edit a comment on the line
+    d             Delete the comment on the line
+    [ / ]         Resize the file list / diff split
+    s             Open the submit-review dialog
+    r             Refresh the PR data
+    q             Close the review (discards state)
+    Tab           Cycle the verdict (in submit)
+    C-S-d         Discard the draft (in submit)

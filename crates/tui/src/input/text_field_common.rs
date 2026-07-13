@@ -1,6 +1,6 @@
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::config::{Platform, has_ctrl};
+use crate::config::Config;
 
 /// Result of processing a text input key event
 pub(crate) enum TextInputResult {
@@ -175,7 +175,10 @@ pub(crate) fn handle_bulk_insert(app: &mut crate::app::App, text: &str) {
     }
 }
 
-pub(crate) fn is_cancel(key: KeyEvent, platform: Platform) -> bool {
-    key.code == KeyCode::Esc
-        || (key.code == KeyCode::Char('g') && has_ctrl(key.modifiers, platform))
+/// Esc, or the prefix key — the two universal "back out of this dialog" keys.
+///
+/// The prefix arm used to hardcode `Ctrl+G`, so rebinding `prefix_key` silently
+/// lost it; it now resolves through the config like every other binding.
+pub(crate) fn is_cancel(key: KeyEvent, cfg: &Config) -> bool {
+    key.code == KeyCode::Esc || cfg.is_prefix_key(key)
 }

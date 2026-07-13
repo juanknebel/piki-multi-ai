@@ -90,4 +90,13 @@ impl DataPaths {
     pub fn claude_hooks_dir(&self) -> PathBuf {
         self.base.join("claude-hooks")
     }
+
+    /// Antigravity hooks directory: `<base>/antigravity-hooks`. Only holds the
+    /// per-tab FIFOs — the hook scripts themselves must live in agy's own
+    /// customization root (it has no `--settings` equivalent), so the bridge
+    /// plugin is written to
+    /// [`cli_agent::install_antigravity::plugins_root`](crate::cli_agent::install_antigravity::plugins_root).
+    pub fn antigravity_hooks_dir(&self) -> PathBuf {
+        self.base.join("antigravity-hooks")
+    }
 }

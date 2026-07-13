@@ -1,6 +1,6 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 342
+assertion_line: 423
 expression: content
 ---
 
@@ -8,7 +8,7 @@ expression: content
 
 
 
-               ┌ About ─────────────────────────────────────────┐
+               ╭ About ─────────────────────────────────────────╮
                │                                                │
                │                                                │
                │             ██████╗ ██╗██╗  ██╗██╗             │
@@ -18,13 +18,13 @@ expression: content
                │             ██║     ██║██║  ██╗██║             │
                │             ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝             │
                │                                                │
-               │              piki-multi-ai v1.8.0              │
+               │              piki-multi-ai v2.0.0              │
                │                                                │
                │               Author: Juan Knebel              │
                │          Contact: juanknebel@gmail.com         │
                │    Web: github.com/juanknebel/piki-multi-ai    │
                │                License: GPL-2.0                │
                │                                                │
-               │               Press Esc to close               │
+               │             Press Esc or a to close            │
                │                                                │
-               └────────────────────────────────────────────────┘
+               ╰────────────────────────────────────────────────╯

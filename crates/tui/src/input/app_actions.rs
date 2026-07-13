@@ -6,47 +6,56 @@
 //! `return` their result.
 
 use crate::action::Action;
-use crate::app::{ActivePane, App, AppMode, DialogField};
+use crate::app::{ActivePane, App, AppMode, DialogField, InputState};
 use crate::dialog_state::{DialogState, EditWorkspaceField};
 use crate::helpers::{resize_all_ptys, scrollback_max};
 
 // ── Focus movement between panes ──
+//
+// Layout: WorkspaceList (top-left) and Agents (bottom-left) stack in the
+// sidebar; MainPanel (right) spans both. Moves off the edge of that grid have no
+// destination — say so instead of doing nothing, or the user can't tell an edge
+// apart from an unbound key.
 
-pub(crate) fn focus_left(app: &mut App) -> Option<Action> {
-    if app.active_pane == ActivePane::MainPanel {
-        app.active_pane = ActivePane::WorkspaceList;
+fn focus(app: &mut App, edge: &str, target: Option<ActivePane>) -> Option<Action> {
+    match target {
+        Some(pane) => app.active_pane = pane,
+        None => app.status_message = Some(format!("No pane {edge}")),
     }
     None
+}
+
+pub(crate) fn focus_left(app: &mut App) -> Option<Action> {
+    let target = match app.active_pane {
+        ActivePane::MainPanel => Some(ActivePane::WorkspaceList),
+        // Both sidebar panes are already flush against the left edge.
+        ActivePane::WorkspaceList | ActivePane::Agents => None,
+    };
+    focus(app, "to the left", target)
 }
 
 pub(crate) fn focus_right(app: &mut App) -> Option<Action> {
-    if matches!(
-        app.active_pane,
-        ActivePane::WorkspaceList | ActivePane::Agents
-    ) {
-        app.active_pane = ActivePane::MainPanel;
-    }
-    None
+    let target = match app.active_pane {
+        ActivePane::WorkspaceList | ActivePane::Agents => Some(ActivePane::MainPanel),
+        ActivePane::MainPanel => None,
+    };
+    focus(app, "to the right", target)
 }
 
 pub(crate) fn focus_down(app: &mut App) -> Option<Action> {
-    match app.active_pane {
-        ActivePane::WorkspaceList | ActivePane::MainPanel => {
-            app.active_pane = ActivePane::Agents;
-        }
-        _ => {}
-    }
-    None
+    let target = match app.active_pane {
+        ActivePane::WorkspaceList | ActivePane::MainPanel => Some(ActivePane::Agents),
+        ActivePane::Agents => None,
+    };
+    focus(app, "below", target)
 }
 
 pub(crate) fn focus_up(app: &mut App) -> Option<Action> {
-    match app.active_pane {
-        ActivePane::Agents | ActivePane::MainPanel => {
-            app.active_pane = ActivePane::WorkspaceList;
-        }
-        _ => {}
-    }
-    None
+    let target = match app.active_pane {
+        ActivePane::Agents | ActivePane::MainPanel => Some(ActivePane::WorkspaceList),
+        ActivePane::WorkspaceList => None,
+    };
+    focus(app, "above", target)
 }
 
 // ── Dialogs and overlays ──
@@ -58,7 +67,7 @@ pub(crate) fn open_confirm_quit(app: &mut App) -> Option<Action> {
 }
 
 pub(crate) fn open_help(app: &mut App) -> Option<Action> {
-    app.active_dialog = Some(DialogState::Help { scroll: 0 });
+    app.active_dialog = Some(DialogState::Help { scroll: 0, filter: String::new() });
     app.mode = AppMode::Help;
     None
 }
@@ -136,6 +145,7 @@ pub(crate) fn open_clone_workspace(app: &mut App) -> Option<Action> {
                 let group = ws.info.group.clone().unwrap_or_default();
                 app.active_dialog = Some(crate::dialog_state::DialogState::CreateWorktree {
                     parent_idx: app.selected_workspace,
+                    mode: crate::dialog_state::CreateWorktreeMode::ChooseSource,
                     name: String::new(),
                     name_cursor: 0,
                     prompt_cursor: prompt.chars().count(),
@@ -145,6 +155,9 @@ pub(crate) fn open_clone_workspace(app: &mut App) -> Option<Action> {
                     group_cursor: group.chars().count(),
                     group,
                     active_field: crate::dialog_state::CreateWorktreeField::Name,
+                    existing: Vec::new(),
+                    existing_selected: 0,
+                    existing_loading: false,
                 });
                 app.mode = AppMode::CreateWorktree;
             }
@@ -436,6 +449,7 @@ pub(crate) fn sidebar_shrink(app: &mut App) -> Option<Action> {
     app.sidebar_pct = app.sidebar_pct.saturating_sub(5).max(10);
     resize_all_ptys(app);
     app.save_layout_prefs();
+    app.input_state = InputState::Resize;
     None
 }
 
@@ -443,17 +457,75 @@ pub(crate) fn sidebar_grow(app: &mut App) -> Option<Action> {
     app.sidebar_pct = (app.sidebar_pct + 5).min(90);
     resize_all_ptys(app);
     app.save_layout_prefs();
+    app.input_state = InputState::Resize;
     None
 }
 
 pub(crate) fn split_up(app: &mut App) -> Option<Action> {
     app.left_split_pct = (app.left_split_pct + 10).min(90);
     app.save_layout_prefs();
+    app.input_state = InputState::Resize;
     None
 }
 
 pub(crate) fn split_down(app: &mut App) -> Option<Action> {
     app.left_split_pct = app.left_split_pct.saturating_sub(10).max(10);
     app.save_layout_prefs();
+    app.input_state = InputState::Resize;
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::test_app;
+
+    /// A focus move: the pane it starts from, the mover, and what it should say
+    /// when there is nowhere to go.
+    type EdgeCase = (ActivePane, fn(&mut App) -> Option<Action>, &'static str);
+
+    /// The four focus moves used to be silent no-ops at the edges of the pane
+    /// grid, which reads exactly like an unbound key.
+    #[test]
+    fn focus_moves_off_the_edge_say_so() {
+        let cases: [EdgeCase; 4] = [
+            (ActivePane::Agents, focus_left, "No pane to the left"),
+            (ActivePane::MainPanel, focus_right, "No pane to the right"),
+            (ActivePane::Agents, focus_down, "No pane below"),
+            (ActivePane::WorkspaceList, focus_up, "No pane above"),
+        ];
+
+        for (from, mv, expected) in cases {
+            let mut app = test_app();
+            app.active_pane = from;
+
+            mv(&mut app);
+
+            assert_eq!(app.active_pane, from, "focus should not have moved");
+            assert_eq!(app.status_message.as_deref(), Some(expected));
+        }
+    }
+
+    #[test]
+    fn focus_moves_with_a_destination_are_silent() {
+        let mut app = test_app();
+        app.active_pane = ActivePane::MainPanel;
+
+        focus_left(&mut app);
+
+        assert_eq!(app.active_pane, ActivePane::WorkspaceList);
+        assert!(app.status_message.is_none(), "a successful move must not toast");
+    }
+
+    /// Agents sits below the workspace list, so `focus_left` from it has no
+    /// destination — but `focus_up` does.
+    #[test]
+    fn agents_pane_reaches_the_workspace_list_upward() {
+        let mut app = test_app();
+        app.active_pane = ActivePane::Agents;
+
+        focus_up(&mut app);
+
+        assert_eq!(app.active_pane, ActivePane::WorkspaceList);
+    }
 }

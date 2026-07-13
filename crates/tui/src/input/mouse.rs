@@ -198,7 +198,7 @@ pub(crate) fn handle_mouse_event(
                 }
             }
             AppMode::Help => {
-                if let Some(DialogState::Help { ref mut scroll }) = app.active_dialog {
+                if let Some(DialogState::Help { ref mut scroll, .. }) = app.active_dialog {
                     *scroll = scroll.saturating_sub(3);
                 }
             }
@@ -254,7 +254,7 @@ pub(crate) fn handle_mouse_event(
                 }
             }
             AppMode::Help => {
-                if let Some(DialogState::Help { ref mut scroll }) = app.active_dialog {
+                if let Some(DialogState::Help { ref mut scroll, .. }) = app.active_dialog {
                     *scroll = scroll.saturating_add(3);
                 }
             }

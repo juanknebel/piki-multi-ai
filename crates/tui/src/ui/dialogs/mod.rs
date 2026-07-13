@@ -13,8 +13,11 @@ pub(crate) use self::dashboard::render_dashboard_overlay;
 pub(crate) use self::providers::{render_edit_provider_dialog, render_manage_providers_dialog};
 pub(crate) use self::system::{
     render_about_overlay, render_confirm_close_tab_dialog, render_confirm_quit_dialog,
+    render_missing_prereqs_overlay,
     render_help_overlay, render_logs_overlay, render_new_tab_dialog,
 };
+#[cfg(test)]
+pub(crate) use self::system::help_lines;
 pub(crate) use self::workspace::{
     render_confirm_delete_dialog, render_create_worktree_dialog, render_edit_workspace_dialog,
     render_new_workspace_dialog, render_workspace_info_overlay,
@@ -45,7 +48,7 @@ fn popup_block(title: &str, border_color: Color) -> Block<'static> {
     Block::default()
         .title(format!(" {} ", title))
         .title_style(Style::default().fg(border_color))
-        .borders(Borders::ALL)
+        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(Style::default().fg(border_color))
 }
 
@@ -85,7 +88,11 @@ fn render_yn_dialog(
     let popup = clear_popup(frame, area, 40, 7);
     let lines = vec![
         Line::from(""),
-        Line::from(Span::styled(message, Style::default().fg(Color::White))).centered(),
+        Line::from(Span::styled(
+            message,
+            Style::default().fg(crate::theme::Palette::default().fg0),
+        ))
+        .centered(),
         Line::from(""),
         Line::from(Span::styled(
             "[Y] Yes    [N] No",

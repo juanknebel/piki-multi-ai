@@ -4,346 +4,118 @@ use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
+use crate::action_catalog::{Context, HELP_ORDER, catalog};
 use crate::app::App;
+use crate::config::Config;
 use crate::dialog_state::{DialogState, NewTabMenu};
 
+/// Width of the key column in the help browser.
+const KEY_COL: usize = 13;
+
+/// The whole help body, derived from the action catalog: one section per
+/// [`Context`], one line per key. Nothing here is hand-maintained — adding an
+/// entry to the catalog is what makes it show up.
+pub(crate) fn help_lines(cfg: &Config) -> Vec<String> {
+    let mut out = Vec::new();
+
+    for &ctx in HELP_ORDER {
+        let entries: Vec<&crate::action_catalog::ActionMeta> =
+            catalog().iter().filter(|a| a.context == ctx).collect();
+        if entries.is_empty() {
+            continue;
+        }
+
+        let heading = match ctx.opened_by() {
+            Some(id) => format!("  {} ({})", ctx.title(), cfg.get_binding("app", id)),
+            None => format!("  {}", ctx.title()),
+        };
+        out.push(String::new());
+        out.push(heading);
+
+        if ctx == Context::Global {
+            out.push(format!(
+                "    Press {} first (tmux-style).",
+                cfg.prefix_display()
+            ));
+        }
+
+        // Global is the only context with enough entries to need sub-grouping;
+        // it reuses the which-key categories.
+        let mut current_category = "";
+        for a in entries {
+            if ctx == Context::Global && !a.category.is_empty() && a.category != current_category {
+                current_category = a.category;
+                out.push(format!("    {current_category}"));
+            }
+            let key = a.keys.display(cfg);
+            let indent = if ctx == Context::Global && !current_category.is_empty() {
+                "      "
+            } else {
+                "    "
+            };
+            out.push(format!("{indent}{key:<KEY_COL$} {}", a.label));
+        }
+    }
+
+    out
+}
+
 pub(crate) fn render_help_overlay(frame: &mut Frame, area: Rect, app: &App) {
-    let help_scroll = match app.active_dialog {
-        Some(DialogState::Help { scroll }) => scroll,
-        _ => 0,
+    let (help_scroll, filter) = match &app.active_dialog {
+        Some(DialogState::Help { scroll, filter }) => (*scroll, filter.as_str()),
+        _ => (0, ""),
     };
 
     let theme = &app.theme;
     let cfg = &app.config;
     let popup = super::clear_popup(frame, area, 55, 75);
 
-    let prefix = cfg.prefix_display();
-    let help_text = vec![
-        "".to_string(),
-        format!("  Prefix key: {prefix} (tmux-style)"),
-        "    Keys always go to the focused pane;".to_string(),
-        format!("    press {prefix} first for app actions:"),
-        "".to_string(),
-        format!(
-            "    {:<13} Move focus between panes",
-            format!("{prefix} h/j/k/l")
-        ),
-        format!("    {:<13} New tab", cfg.get_binding("app", "new_tab")),
-        format!("    {:<13} Close tab", cfg.get_binding("app", "close_tab")),
-        format!(
-            "    {:<13} Next/Prev tab",
-            format!(
-                "{}/{}",
-                cfg.get_binding("app", "next_tab"),
-                cfg.get_binding("app", "prev_tab")
-            )
-        ),
-        format!("    {:<13} Jump to tab N", format!("{prefix} 1..9")),
-        format!(
-            "    {:<13} Fuzzy workspace switcher",
-            cfg.get_binding("app", "workspace_switcher")
-        ),
-        format!(
-            "    {:<13} Next/Prev workspace",
-            format!(
-                "{}/{}",
-                cfg.get_binding("app", "next_workspace"),
-                cfg.get_binding("app", "prev_workspace")
-            )
-        ),
-        format!(
-            "    {:<13} Previous workspace (toggle)",
-            cfg.get_binding("app", "toggle_prev_workspace")
-        ),
-        format!(
-            "    {:<13} New workspace",
-            cfg.get_binding("app", "new_workspace")
-        ),
-        format!(
-            "    {:<13} Edit workspace",
-            cfg.get_binding("app", "edit_workspace")
-        ),
-        format!(
-            "    {:<13} Workspace info",
-            cfg.get_binding("app", "workspace_info")
-        ),
-        format!(
-            "    {:<13} Create worktree (GitHub-only)",
-            cfg.get_binding("app", "clone_workspace")
-        ),
-        format!("    {:<13} Git (lazygit tab)", cfg.get_binding("app", "git")),
-        format!(
-            "    {:<13} Command palette",
-            cfg.get_binding("app", "command_palette")
-        ),
-        format!(
-            "    {:<13} Fuzzy file search",
-            cfg.get_binding("app", "fuzzy_search")
-        ),
-        format!(
-            "    {:<13} Terminal scroll mode",
-            cfg.get_binding("app", "scroll_mode")
-        ),
-        format!("    {:<13} AI Chat", cfg.get_binding("app", "chat_panel")),
-        format!("    {:<13} Dashboard", cfg.get_binding("app", "dashboard")),
-        format!("    {:<13} Logs", cfg.get_binding("app", "logs")),
-        format!(
-            "    {:<13} Manage agents",
-            cfg.get_binding("app", "manage_agents")
-        ),
-        format!(
-            "    {:<13} Manage providers",
-            cfg.get_binding("app", "manage_providers")
-        ),
-        format!("    {:<13} About", cfg.get_binding("app", "about")),
-        format!("    {:<13} This help", cfg.get_binding("app", "help")),
-        format!("    {:<13} Quit", cfg.get_binding("app", "quit")),
-        format!("    {:<13} Send {prefix} to terminal", format!("{prefix} {prefix}")),
-        "    Esc           Cancel pending prefix".to_string(),
-        "".to_string(),
-        format!(
-            "  Terminal scroll mode ({})",
-            cfg.get_binding("app", "scroll_mode")
-        ),
-        format!(
-            "    {:<13} Scroll up/down",
-            format!(
-                "{}/{}",
-                cfg.get_binding("scroll", "up"),
-                cfg.get_binding("scroll", "down")
-            )
-        ),
-        format!(
-            "    {:<13} Page up/down",
-            format!(
-                "{}/{}",
-                cfg.get_binding("scroll", "page_up"),
-                cfg.get_binding("scroll", "page_down")
-            )
-        ),
-        format!(
-            "    {:<13} Top/Bottom",
-            format!(
-                "{}/{}",
-                cfg.get_binding("scroll", "top"),
-                cfg.get_binding("scroll", "bottom")
-            )
-        ),
-        format!("    {:<13} Search", cfg.get_binding("scroll", "search")),
-        format!(
-            "    {:<13} Exit scroll mode",
-            format!(
-                "{}/{}",
-                cfg.get_binding("scroll", "exit_alt"),
-                cfg.get_binding("scroll", "exit")
-            )
-        ),
-        "".to_string(),
-        "  Terminal pane".to_string(),
-        "    All keys sent to active tab".to_string(),
-        format!(
-            "    {:<13} Search in terminal output",
-            cfg.get_binding("app", "terminal_search")
-        ),
-        "    Mouse scroll  Scroll up/down".to_string(),
-        "".to_string(),
-        "  AI Chat overlay".to_string(),
-        "    Enter         Send message".to_string(),
-        "    Tab           Select model".to_string(),
-        format!("    {:<13} Settings (URL, system prompt)", cfg.format_binding("ctrl-o")),
-        format!("    {:<13} Clear conversation", cfg.format_binding("ctrl-l")),
-        "    Esc           Hide (keeps state)".to_string(),
-        "".to_string(),
-        "  Agents pane".to_string(),
-        format!(
-            "    {:<13} Select agent",
-            format!(
-                "{}/{}",
-                cfg.get_binding("agents", "up"),
-                cfg.get_binding("agents", "down")
-            )
-        ),
-        format!(
-            "    {:<13} Jump to that workspace/tab",
-            cfg.get_binding("agents", "select")
-        ),
-        "    Click         Jump directly".to_string(),
-        "".to_string(),
-        "  Workspace list pane".to_string(),
-        format!(
-            "    {:<13} Select workspace",
-            format!(
-                "{}/{}",
-                cfg.get_binding("workspace_list", "up"),
-                cfg.get_binding("workspace_list", "down")
-            )
-        ),
-        format!(
-            "    {:<13} Switch + focus main panel",
-            cfg.get_binding("workspace_list", "select")
-        ),
-        format!(
-            "    {:<13} Edit workspace",
-            cfg.get_binding("workspace_list", "edit")
-        ),
-        format!(
-            "    {:<13} Delete workspace",
-            cfg.get_binding("workspace_list", "delete")
-        ),
-        "".to_string(),
-        format!(
-            "  Fuzzy search ({})",
-            cfg.get_binding("app", "fuzzy_search")
-        ),
-        "    Type          Filter files".to_string(),
-        format!(
-            "    {:<13} Select result",
-            format!(
-                "{}/{}",
-                cfg.get_binding("fuzzy", "up"),
-                cfg.get_binding("fuzzy", "down")
-            )
-        ),
-        format!(
-            "    {:<13} Open in $EDITOR",
-            cfg.get_binding("fuzzy", "open")
-        ),
-        format!(
-            "    {:<13} Open in $EDITOR (alt)",
-            cfg.get_binding("fuzzy", "editor")
-        ),
-        format!(
-            "    {:<13} Inline editor",
-            cfg.get_binding("fuzzy", "inline_edit")
-        ),
-        format!(
-            "    {:<13} Open markdown viewer",
-            cfg.get_binding("fuzzy", "markdown")
-        ),
-        format!(
-            "    {:<13} Open in mdr (external)",
-            cfg.get_binding("fuzzy", "mdr")
-        ),
-        format!("    {:<13} Close", cfg.get_binding("fuzzy", "exit")),
-        "".to_string(),
-        "  Kanban board (focused)".to_string(),
-        "    h/l/j/k     Navigate columns and cards".to_string(),
-        "    H/L         Move card left/right".to_string(),
-        "    n           New card".to_string(),
-        "    e           Edit selected card".to_string(),
-        "    d           Delete card".to_string(),
-        "    D           Dispatch agent (feature/bug/spike branch + AI)".to_string(),
-        "    Enter       Toggle card details".to_string(),
-        "    r           Refresh board".to_string(),
-        "    Esc         Close".to_string(),
-        "".to_string(),
-        "  Dispatch agent dialog (D on kanban card)".to_string(),
-        "    ◄/►/Tab     Cycle agent/provider (includes (None))".to_string(),
-        "    Enter       With agent: dispatch to new worktree".to_string(),
-        "                With (None): choose workspace (New/Current)".to_string(),
-        "    Esc         Cancel / Back".to_string(),
-        "".to_string(),
-        format!(
-            "  Manage providers ({})",
-            cfg.get_binding("app", "manage_providers")
-        ),
-        "    j/k         Navigate provider list".to_string(),
-        "    n           New provider".to_string(),
-        "    e / Enter   Edit selected provider".to_string(),
-        "    d           Delete selected provider".to_string(),
-        "    Esc         Close".to_string(),
-        "".to_string(),
-        format!(
-            "  Manage agents ({})",
-            cfg.get_binding("app", "manage_agents")
-        ),
-        "    j/k         Navigate agent list".to_string(),
-        "    n           New agent (step 1: name + provider)".to_string(),
-        "    e / Enter   Edit selected agent".to_string(),
-        "    d           Delete selected agent".to_string(),
-        "    p           Sync agent to repo".to_string(),
-        "    i           Import agents from repo".to_string(),
-        "    Esc         Close".to_string(),
-        "  Import agents overlay (i in manage agents)".to_string(),
-        "    j/k         Navigate discovered agents".to_string(),
-        "    Space       Toggle selection".to_string(),
-        "    a           Toggle select all".to_string(),
-        "    Enter       Import selected".to_string(),
-        "    Esc         Cancel".to_string(),
-        "  Agent role editor (step 2)".to_string(),
-        format!("    {:<13} Save agent and close", cfg.format_binding("ctrl-s")),
-        "    Esc         Back to step 1 without saving".to_string(),
-        "".to_string(),
-        "  Inline editor".to_string(),
-        format!("    {:<13} Save", cfg.get_binding("editor", "save")),
-        format!("    {:<13} Close", cfg.get_binding("editor", "exit")),
-        "".to_string(),
-        "  Pane resize".to_string(),
-        format!(
-            "    {:<13} Resize sidebar width",
-            format!(
-                "{} / {}",
-                cfg.get_binding("app", "sidebar_shrink"),
-                cfg.get_binding("app", "sidebar_grow")
-            )
-        ),
-        format!(
-            "    {:<13} Resize workspace/file split",
-            format!(
-                "{} / {}",
-                cfg.get_binding("app", "split_up"),
-                cfg.get_binding("app", "split_down")
-            )
-        ),
-        "    Mouse drag    Drag pane borders to resize".to_string(),
-        "".to_string(),
-        "  Code Review (requires gh CLI, locked mode)".to_string(),
-        "    j/k           Navigate files / scroll diff".to_string(),
-        "    Enter         View file diff".to_string(),
-        "    h/l           Switch file list / diff pane".to_string(),
-        "    n/p           Next/prev file (in diff view)".to_string(),
-        "    g/G           Top/bottom of diff".to_string(),
-        format!("    {}/{}      Page down/up in diff", cfg.format_binding("ctrl-d"), cfg.format_binding("ctrl-u")),
-        "    s             Open submit review dialog".to_string(),
-        "    r             Refresh PR data".to_string(),
-        "    q             Close review (discard state)".to_string(),
-        "    Tab           Cycle verdict (in submit)".to_string(),
-        format!("    {:<13} Discard draft (in submit)", cfg.format_binding("ctrl-shift-d")),
-        "".to_string(),
-        "  Clipboard".to_string(),
-        "    Mouse drag    Select text in terminal".to_string(),
-        format!(
-            "    {:<13} Copy visible terminal content",
-            cfg.get_binding("app", "copy")
-        ),
-        format!(
-            "    {:<13} Paste from clipboard (terminal)",
-            cfg.get_binding("app", "paste")
-        ),
-    ];
+    let help_text = help_lines(cfg);
 
-    let block = super::popup_block("Help", theme.help.border);
+    // Live filter: keep only content lines matching the query (case-insensitive).
+    // A leading status line always shows so the box reads as searchable.
+    let lines: Vec<String> = if filter.is_empty() {
+        let mut out = vec![
+            "  Type to filter · ↑↓ PgUp/PgDn scroll · Esc close".to_string(),
+            String::new(),
+        ];
+        out.extend(help_text);
+        out
+    } else {
+        let q = filter.to_lowercase();
+        let matches: Vec<String> = help_text
+            .into_iter()
+            .filter(|l| !l.trim().is_empty() && l.to_lowercase().contains(&q))
+            .collect();
+        let mut out = vec![
+            format!("  Filter: {}   ({} matches)", filter, matches.len()),
+            String::new(),
+        ];
+        out.extend(matches);
+        out
+    };
 
-    let total_lines = help_text.len() as u16;
+    let title = if filter.is_empty() {
+        "Help".to_string()
+    } else {
+        format!("Help  /{filter}")
+    };
+    let block = super::popup_block(&title, theme.help.border);
+
+    let total_lines = lines.len() as u16;
     let inner_height = popup.height.saturating_sub(2); // borders
     let max_scroll = total_lines.saturating_sub(inner_height);
     let scroll = help_scroll.min(max_scroll);
 
     let scroll_indicator = if max_scroll > 0 {
-        format!(
-            " [{}/{} ↑{}/{}↓] ",
-            scroll + 1,
-            max_scroll + 1,
-            cfg.get_binding("help", "up"),
-            cfg.get_binding("help", "down")
-        )
+        format!(" [{}/{} ↑↓] ", scroll + 1, max_scroll + 1)
     } else {
         String::new()
     };
 
     let block = block.title_bottom(Line::from(scroll_indicator).right_aligned());
 
-    let text = Paragraph::new(help_text.join("\n"))
+    let text = Paragraph::new(lines.join("\n"))
         .block(block)
         .scroll((scroll, 0));
     frame.render_widget(text, popup);
@@ -371,11 +143,66 @@ pub(crate) fn render_about_overlay(frame: &mut Frame, area: Rect, app: &App) {
         Line::from("Web: github.com/juanknebel/piki-multi-ai"),
         Line::from("License: GPL-2.0"),
         Line::from(""),
-        Line::from("Press Esc to close"),
+        Line::from("Press Esc or a to close"),
     ];
 
     let text = Paragraph::new(about_lines)
         .block(super::popup_block("About", app.theme.help.border))
+        .alignment(ratatui::layout::Alignment::Center);
+    frame.render_widget(text, popup);
+}
+
+/// Warn that a bridged agent (Claude Code, Antigravity) opened without the
+/// tools its hooks need. The tab itself is fine — only its *status* degrades to
+/// the byte-silence heuristic — so this is informational, not a failure.
+pub(crate) fn render_missing_prereqs_overlay(frame: &mut Frame, area: Rect, app: &App) {
+    let (agent, missing) = match app.active_dialog {
+        Some(DialogState::MissingPrereqs {
+            ref agent,
+            ref missing,
+        }) => (agent.clone(), missing.join(", ")),
+        _ => return,
+    };
+    let popup = super::clear_popup(frame, area, 58, 13);
+    let theme = &app.theme;
+
+    let lines: Vec<Line> = vec![
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(
+                "Missing: ",
+                Style::default().fg(theme.general.muted_text),
+            ),
+            Span::styled(
+                missing,
+                Style::default()
+                    .fg(theme.status.needs_you)
+                    .add_modifier(ratatui::style::Modifier::BOLD),
+            ),
+        ]),
+        Line::from(""),
+        Line::from(format!(
+            "{agent} runs fine, but piki can't read its status:"
+        )),
+        Line::from("the Agents pane will show bare liveness (alive/exited)"),
+        Line::from("instead of running / idle / done."),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Install it and reopen the tab to get the full status.",
+            Style::default().fg(theme.general.muted_text),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Press Esc or Enter to dismiss",
+            Style::default().fg(theme.general.muted_text),
+        )),
+    ];
+
+    let text = Paragraph::new(lines)
+        .block(super::popup_block(
+            "Agent status unavailable",
+            theme.status.needs_you,
+        ))
         .alignment(ratatui::layout::Alignment::Center);
     frame.render_widget(text, popup);
 }
@@ -501,16 +328,17 @@ pub(crate) fn render_logs_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let start = scroll;
     let end = total.min(scroll + inner_height);
 
+    let theme = &app.theme;
     for (view_idx, entry) in filtered[start..end].iter().enumerate() {
         let abs_idx = start + view_idx;
         let is_selected = abs_idx == selected && total > 0;
 
         let level_color = match entry.level {
-            tracing::Level::ERROR => Color::Red,
-            tracing::Level::WARN => Color::Yellow,
-            tracing::Level::INFO => Color::Green,
-            tracing::Level::DEBUG => Color::Cyan,
-            tracing::Level::TRACE => Color::DarkGray,
+            tracing::Level::ERROR => theme.palette.err,
+            tracing::Level::WARN => theme.palette.warn,
+            tracing::Level::INFO => theme.palette.info,
+            tracing::Level::DEBUG => theme.palette.fg3,
+            tracing::Level::TRACE => theme.palette.fg3,
         };
         let level_str = match entry.level {
             tracing::Level::ERROR => "ERROR",
@@ -526,7 +354,9 @@ pub(crate) fn render_logs_overlay(frame: &mut Frame, area: Rect, app: &App) {
                 " {} {} {} {}",
                 entry.timestamp, level_str, entry.target, entry.message
             );
-            let sel_style = Style::default().bg(Color::DarkGray).fg(Color::White);
+            let sel_style = Style::default()
+                .bg(theme.workspace_list.selected_bg)
+                .fg(theme.palette.fg0);
             lines.push(Line::from(vec![Span::styled(
                 format!("{:<width$}", full_text, width = pad_width),
                 sel_style,
@@ -536,14 +366,14 @@ pub(crate) fn render_logs_overlay(frame: &mut Frame, area: Rect, app: &App) {
             lines.push(Line::from(vec![
                 Span::styled(
                     format!(" {} ", entry.timestamp),
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(theme.palette.fg2),
                 ),
                 Span::styled(format!("{} ", level_str), Style::default().fg(level_color)),
                 Span::styled(
                     format!("{} ", entry.target),
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(theme.palette.fg2),
                 ),
-                Span::styled(&entry.message, Style::default().fg(Color::White)),
+                Span::styled(&entry.message, Style::default().fg(theme.palette.fg0)),
             ]));
         }
     }
@@ -586,8 +416,8 @@ pub(crate) fn render_logs_overlay(frame: &mut Frame, area: Rect, app: &App) {
 
     if let Some(search_rect) = search_area {
         let prefix = " / ";
-        let prompt_style = Style::default().fg(Color::Cyan);
-        let search_style = Style::default().fg(Color::Yellow);
+        let prompt_style = Style::default().fg(app.theme.palette.iris);
+        let search_style = Style::default().fg(app.theme.palette.fg0);
         let search_line = Line::from(vec![
             Span::styled(prefix, prompt_style),
             Span::styled(search_buffer, search_style),
@@ -620,16 +450,17 @@ pub(crate) fn render_new_tab_dialog(frame: &mut Frame, area: Rect, app: &App) {
                 Line::from("  [1] Shell"),
                 Line::from(vec![
                     Span::raw("  [2] AI Agents  "),
-                    Span::styled("→", Style::default().fg(Color::DarkGray)),
+                    Span::styled("→", Style::default().fg(app.theme.palette.fg3)),
                 ]),
                 Line::from(vec![
                     Span::raw("  [3] Tools      "),
-                    Span::styled("→", Style::default().fg(Color::DarkGray)),
+                    Span::styled("→", Style::default().fg(app.theme.palette.fg3)),
                 ]),
                 Line::from(""),
-                Line::from("  [Esc] Cancel"),
+                Line::from("  [Esc] cancel"),
             ];
-            let text = Paragraph::new(lines).block(super::popup_block("New Tab", Color::Cyan));
+            let text = Paragraph::new(lines)
+                .block(super::popup_block("New Tab", app.theme.palette.iris));
             frame.render_widget(text, popup);
         }
         NewTabMenu::Agents { selected } => {
@@ -646,15 +477,18 @@ pub(crate) fn render_new_tab_dialog(frame: &mut Frame, area: Rect, app: &App) {
                 };
                 let label = provider.label();
                 let style = if i == selected {
-                    Style::default().fg(Color::Black).bg(Color::Cyan)
+                    Style::default()
+                        .fg(app.theme.palette.bg0)
+                        .bg(app.theme.palette.iris)
                 } else {
                     Style::default()
                 };
                 lines.push(Line::from(Span::styled(format!("  {num}{label}"), style)));
             }
             lines.push(Line::from(""));
-            lines.push(Line::from("  [Esc] Back"));
-            let text = Paragraph::new(lines).block(super::popup_block("AI Agents", Color::Cyan));
+            lines.push(Line::from("  [Esc] back"));
+            let text = Paragraph::new(lines)
+                .block(super::popup_block("AI Agents", app.theme.palette.iris));
             frame.render_widget(text, popup);
         }
         NewTabMenu::Tools => {
@@ -666,9 +500,10 @@ pub(crate) fn render_new_tab_dialog(frame: &mut Frame, area: Rect, app: &App) {
                 Line::from("  [3] API Explorer"),
                 Line::from("  [4] Git (lazygit)"),
                 Line::from(""),
-                Line::from("  [Esc] Back"),
+                Line::from("  [Esc] back"),
             ];
-            let text = Paragraph::new(lines).block(super::popup_block("Tools", Color::Cyan));
+            let text = Paragraph::new(lines)
+                .block(super::popup_block("Tools", app.theme.palette.iris));
             frame.render_widget(text, popup);
         }
     }

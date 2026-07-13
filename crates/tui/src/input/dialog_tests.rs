@@ -1,9 +1,9 @@
 //! Unit tests for the dialog input handlers in `input/dialog.rs`.
-//! Covered: all confirmations (`ConfirmDelete`, `ConfirmCloseTab`, `ConfirmQuit`,
-//! `ConfirmMerge`), text dialogs (`CommitMessage`, `EditWorkspace`), scroll
+//! Covered: the confirmations (`ConfirmDelete`, `ConfirmCloseTab`,
+//! `ConfirmQuit`), text dialogs (`NewWorkspace`, `EditWorkspace`), scroll
 //! overlays (`Help`, `About`, `WorkspaceInfo`), and list-navigation dialogs
-//! (`DispatchCardMove`, `GitLog`, `Dashboard`, `Logs`, `GitStash`,
-//! `ImportAgents`, `ManageAgents`, `ManageProviders`).
+//! (`DispatchCardMove`, `Dashboard`, `Logs`, `ImportAgents`, `ManageAgents`,
+//! `ManageProviders`).
 
 use crossterm::event::{KeyCode, KeyModifiers};
 use piki_core::storage::AgentProfile;
@@ -15,8 +15,8 @@ use super::dialog::{
     handle_dispatch_card_move_input, handle_edit_agent_input, handle_edit_agent_role_input,
     handle_edit_provider_input, handle_edit_workspace_input,
     handle_help_input, handle_import_agents_input, handle_logs_input,
-    handle_manage_agents_input, handle_manage_providers_input, handle_new_tab_input,
-    handle_new_workspace_input, handle_workspace_info_input,
+    handle_manage_agents_input, handle_manage_providers_input, handle_missing_prereqs_input,
+    handle_new_tab_input, handle_new_workspace_input, handle_workspace_info_input,
 };
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField};
@@ -63,7 +63,10 @@ fn open_confirm_quit(app: &mut App) {
 
 fn open_help(app: &mut App, scroll: u16) {
     app.mode = AppMode::Help;
-    app.active_dialog = Some(DialogState::Help { scroll });
+    app.active_dialog = Some(DialogState::Help {
+        scroll,
+        filter: String::new(),
+    });
 }
 
 fn open_about(app: &mut App) {
@@ -78,7 +81,14 @@ fn open_workspace_info(app: &mut App, hscroll: u16) {
 
 fn current_help_scroll(app: &App) -> u16 {
     match app.active_dialog {
-        Some(DialogState::Help { scroll }) => scroll,
+        Some(DialogState::Help { scroll, .. }) => scroll,
+        _ => panic!("not in Help dialog"),
+    }
+}
+
+fn current_help_filter(app: &App) -> String {
+    match &app.active_dialog {
+        Some(DialogState::Help { filter, .. }) => filter.clone(),
         _ => panic!("not in Help dialog"),
     }
 }
@@ -647,17 +657,6 @@ fn confirm_quit_irrelevant_key_keeps_dialog_open() {
 // ── Help (scroll dialog) ────────────────────────────────────────────────
 
 #[test]
-fn help_j_increments_scroll() {
-    let mut app = test_app();
-    open_help(&mut app, 0);
-
-    let action = handle_help_input(&mut app, key(KeyCode::Char('j')));
-
-    assert!(action.is_none());
-    assert_eq!(current_help_scroll(&app), 1);
-}
-
-#[test]
 fn help_down_arrow_increments_scroll() {
     let mut app = test_app();
     open_help(&mut app, 3);
@@ -668,11 +667,11 @@ fn help_down_arrow_increments_scroll() {
 }
 
 #[test]
-fn help_k_decrements_scroll_with_saturating_floor() {
+fn help_up_arrow_decrements_scroll_with_saturating_floor() {
     let mut app = test_app();
     open_help(&mut app, 0);
 
-    handle_help_input(&mut app, key(KeyCode::Char('k')));
+    handle_help_input(&mut app, key(KeyCode::Up));
 
     assert_eq!(current_help_scroll(&app), 0);
 }
@@ -682,13 +681,15 @@ fn help_page_down_jumps_ten_lines() {
     let mut app = test_app();
     open_help(&mut app, 5);
 
+    // PageDown and Ctrl-D both page down.
+    handle_help_input(&mut app, key(KeyCode::PageDown));
+    assert_eq!(current_help_scroll(&app), 15);
     let action = handle_help_input(
         &mut app,
         key_with_mods(KeyCode::Char('d'), KeyModifiers::CONTROL),
     );
-
     assert!(action.is_none());
-    assert_eq!(current_help_scroll(&app), 15);
+    assert_eq!(current_help_scroll(&app), 25);
 }
 
 #[test]
@@ -705,47 +706,47 @@ fn help_page_up_saturates_at_zero() {
 }
 
 #[test]
-fn help_scroll_top_resets_to_zero() {
+fn help_home_resets_and_end_jumps_to_max() {
     let mut app = test_app();
     open_help(&mut app, 100);
-
-    handle_help_input(&mut app, key(KeyCode::Char('g')));
-
+    handle_help_input(&mut app, key(KeyCode::Home));
     assert_eq!(current_help_scroll(&app), 0);
-}
-
-#[test]
-fn help_scroll_bottom_jumps_to_max() {
-    let mut app = test_app();
-    open_help(&mut app, 0);
-
-    handle_help_input(
-        &mut app,
-        key_with_mods(KeyCode::Char('G'), KeyModifiers::SHIFT),
-    );
-
+    handle_help_input(&mut app, key(KeyCode::End));
     assert_eq!(current_help_scroll(&app), u16::MAX);
 }
 
 #[test]
-fn help_esc_dismisses() {
+fn help_printable_keys_edit_the_filter() {
     let mut app = test_app();
-    open_help(&mut app, 10);
+    open_help(&mut app, 7);
 
-    let action = handle_help_input(&mut app, key(KeyCode::Esc));
+    // Letters that used to scroll (j/k/g/q) now type into the filter.
+    handle_help_input(&mut app, key(KeyCode::Char('g')));
+    handle_help_input(&mut app, key(KeyCode::Char('i')));
+    handle_help_input(&mut app, key(KeyCode::Char('t')));
+    assert_eq!(current_help_filter(&app), "git");
+    // Editing the filter jumps back to the top.
+    assert_eq!(current_help_scroll(&app), 0);
 
-    assert!(action.is_none());
-    assert!(app.active_dialog.is_none());
-    assert_eq!(app.mode, AppMode::Normal);
+    handle_help_input(&mut app, key(KeyCode::Backspace));
+    assert_eq!(current_help_filter(&app), "gi");
 }
 
 #[test]
-fn help_q_also_dismisses() {
+fn help_esc_clears_filter_then_dismisses() {
     let mut app = test_app();
     open_help(&mut app, 0);
+    handle_help_input(&mut app, key(KeyCode::Char('t')));
+    assert_eq!(current_help_filter(&app), "t");
 
-    handle_help_input(&mut app, key(KeyCode::Char('q')));
+    // First Esc clears a non-empty filter.
+    handle_help_input(&mut app, key(KeyCode::Esc));
+    assert_eq!(current_help_filter(&app), "");
+    assert_eq!(app.mode, AppMode::Help);
 
+    // Second Esc (empty filter) closes.
+    let action = handle_help_input(&mut app, key(KeyCode::Esc));
+    assert!(action.is_none());
     assert!(app.active_dialog.is_none());
     assert_eq!(app.mode, AppMode::Normal);
 }
@@ -755,6 +756,46 @@ fn help_returns_none_when_dialog_not_active() {
     let mut app = test_app();
     let action = handle_help_input(&mut app, key(KeyCode::Char('j')));
     assert!(action.is_none());
+}
+
+// ── Missing prereqs warning (dismiss-only dialog) ──────────────────────
+
+fn open_missing_prereqs(app: &mut App) {
+    app.mode = AppMode::MissingPrereqs;
+    app.active_dialog = Some(DialogState::MissingPrereqs {
+        agent: "Antigravity".to_string(),
+        missing: vec!["jq".to_string()],
+    });
+}
+
+#[test]
+fn missing_prereqs_any_dismiss_key_closes_it() {
+    // Purely informational: Esc, Enter, Space and q all get out of the way.
+    for k in [
+        key(KeyCode::Esc),
+        key(KeyCode::Enter),
+        key(KeyCode::Char(' ')),
+        key(KeyCode::Char('q')),
+    ] {
+        let mut app = test_app();
+        open_missing_prereqs(&mut app);
+
+        let action = handle_missing_prereqs_input(&mut app, k);
+
+        assert!(action.is_none());
+        assert!(app.active_dialog.is_none(), "{k:?} should dismiss");
+        assert_eq!(app.mode, AppMode::Normal);
+    }
+}
+
+#[test]
+fn missing_prereqs_ignores_other_keys() {
+    let mut app = test_app();
+    open_missing_prereqs(&mut app);
+
+    assert!(handle_missing_prereqs_input(&mut app, key(KeyCode::Char('x'))).is_none());
+    assert!(app.active_dialog.is_some());
+    assert_eq!(app.mode, AppMode::MissingPrereqs);
 }
 
 // ── About (dismiss-only dialog) ────────────────────────────────────────
@@ -915,8 +956,6 @@ fn dispatch_card_move_returns_none_when_dialog_not_active() {
     let action = handle_dispatch_card_move_input(&mut app, key(KeyCode::Enter));
     assert!(action.is_none());
 }
-
-// ── GitLog ──────────────────────────────────────────────────────────────
 
 // ── Dashboard ──────────────────────────────────────────────────────────
 
@@ -1592,6 +1631,31 @@ fn new_tab_main_esc_dismisses() {
     assert_eq!(app.mode, AppMode::Normal);
 }
 
+/// The `[keybindings.new_tab]` table used to be inert: the handler hardcoded
+/// `KeyCode::Esc`, so a rebind changed the help text and nothing else. Drive the
+/// handler with a rebound key to prove it actually reads the config now.
+#[test]
+fn new_tab_honors_a_rebound_exit_key() {
+    let mut app = test_app();
+    app.config
+        .keybindings
+        .new_tab
+        .insert("exit".to_string(), "ctrl-c".to_string());
+    open_new_tab_main(&mut app);
+
+    // The displaced default no longer closes it — a rebind replaces, not adds.
+    handle_new_tab_input(&mut app, key(KeyCode::Esc));
+    assert!(app.active_dialog.is_some(), "the displaced Esc still closed the dialog");
+
+    handle_new_tab_input(
+        &mut app,
+        key_with_mods(KeyCode::Char('c'), KeyModifiers::CONTROL),
+    );
+
+    assert!(app.active_dialog.is_none(), "rebound exit key did not close the dialog");
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
 #[test]
 fn new_tab_main_unknown_key_is_noop() {
     let mut app = test_app();
@@ -1783,14 +1847,6 @@ fn new_tab_returns_none_when_dialog_not_active() {
     let action = handle_new_tab_input(&mut app, key(KeyCode::Char('1')));
     assert!(action.is_none());
 }
-
-// ── ConflictResolution ────────────────────────────────────────────────────
-//
-// List of conflicted files with action keys (o/t/m/e/A/Enter) and j/k
-// navigation. Keybindings come from `app.config.matches_conflict_resolution`,
-// which falls back to the defaults in `default_conflict_resolution()`:
-// down=j, up=k, ours=o, theirs=t, mark_resolved=m, edit=e, abort=A,
-// select=enter (view diff), exit=esc, exit_alt=X.
 
 // ── EditAgent (step 1: name + provider) ───────────────────────────────────
 //
@@ -3042,7 +3098,7 @@ fn new_workspace_returns_none_when_dialog_not_active() {
 // ── Layer 3: CreateWorktree dialog + clone_workspace keybinding gating ────
 
 use crate::app::Workspace;
-use crate::dialog_state::CreateWorktreeField;
+use crate::dialog_state::{CreateWorktreeField, CreateWorktreeMode};
 use piki_core::WorkspaceOrigin;
 use super::dialog::handle_create_worktree_input;
 
@@ -3075,12 +3131,15 @@ fn clone_keybinding_on_github_workspace_opens_create_worktree() {
     app.selected_workspace = idx;
 
     crate::input::handle_key_event(&mut app, key_with_mods(KeyCode::Char('g'), KeyModifiers::CONTROL));
-    crate::input::handle_key_event(&mut app, key_with_mods(KeyCode::Char('R'), KeyModifiers::SHIFT));
+    crate::input::handle_key_event(&mut app, key(KeyCode::Char('r')));
 
     assert_eq!(app.mode, AppMode::CreateWorktree);
     assert!(matches!(
         app.active_dialog,
-        Some(DialogState::CreateWorktree { .. })
+        Some(DialogState::CreateWorktree {
+            mode: CreateWorktreeMode::ChooseSource,
+            ..
+        })
     ));
 }
 
@@ -3091,7 +3150,7 @@ fn clone_keybinding_on_local_workspace_shows_status_message() {
     app.selected_workspace = idx;
 
     crate::input::handle_key_event(&mut app, key_with_mods(KeyCode::Char('g'), KeyModifiers::CONTROL));
-    crate::input::handle_key_event(&mut app, key_with_mods(KeyCode::Char('R'), KeyModifiers::SHIFT));
+    crate::input::handle_key_event(&mut app, key(KeyCode::Char('r')));
 
     assert_eq!(app.mode, AppMode::Normal);
     assert!(app.active_dialog.is_none());
@@ -3114,6 +3173,7 @@ fn create_worktree_tab_cycles_four_fields() {
     );
     app.active_dialog = Some(DialogState::CreateWorktree {
         parent_idx: idx,
+        mode: CreateWorktreeMode::CreateNew,
         name: String::new(),
         name_cursor: 0,
         prompt: String::new(),
@@ -3123,6 +3183,9 @@ fn create_worktree_tab_cycles_four_fields() {
         group: String::new(),
         group_cursor: 0,
         active_field: CreateWorktreeField::Name,
+        existing: Vec::new(),
+        existing_selected: 0,
+        existing_loading: false,
     });
     app.mode = AppMode::CreateWorktree;
 
@@ -3154,6 +3217,7 @@ fn create_worktree_enter_with_empty_name_keeps_dialog_open() {
     );
     app.active_dialog = Some(DialogState::CreateWorktree {
         parent_idx: idx,
+        mode: CreateWorktreeMode::CreateNew,
         name: String::new(),
         name_cursor: 0,
         prompt: String::new(),
@@ -3163,6 +3227,9 @@ fn create_worktree_enter_with_empty_name_keeps_dialog_open() {
         group: String::new(),
         group_cursor: 0,
         active_field: CreateWorktreeField::Name,
+        existing: Vec::new(),
+        existing_selected: 0,
+        existing_loading: false,
     });
     app.mode = AppMode::CreateWorktree;
 
@@ -3198,6 +3265,7 @@ fn create_worktree_enter_dispatches_create_workspace_with_worktree_type() {
     };
     app.active_dialog = Some(DialogState::CreateWorktree {
         parent_idx: idx,
+        mode: CreateWorktreeMode::CreateNew,
         name: "feature/x".into(),
         name_cursor: 0,
         prompt: "do the thing".into(),
@@ -3207,6 +3275,9 @@ fn create_worktree_enter_dispatches_create_workspace_with_worktree_type() {
         group: "agents".into(),
         group_cursor: 0,
         active_field: CreateWorktreeField::Name,
+        existing: Vec::new(),
+        existing_selected: 0,
+        existing_loading: false,
     });
     app.mode = AppMode::CreateWorktree;
 
@@ -3239,6 +3310,7 @@ fn create_worktree_esc_dismisses() {
     );
     app.active_dialog = Some(DialogState::CreateWorktree {
         parent_idx: idx,
+        mode: CreateWorktreeMode::CreateNew,
         name: String::new(),
         name_cursor: 0,
         prompt: String::new(),
@@ -3248,12 +3320,255 @@ fn create_worktree_esc_dismisses() {
         group: String::new(),
         group_cursor: 0,
         active_field: CreateWorktreeField::Name,
+        existing: Vec::new(),
+        existing_selected: 0,
+        existing_loading: false,
     });
     app.mode = AppMode::CreateWorktree;
 
     let action = handle_create_worktree_input(&mut app, key(KeyCode::Esc));
 
     assert!(action.is_none());
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+// ── CreateWorktree: ChooseSource / LoadExisting (load-existing-worktree flow) ──
+
+fn open_choose_source_dialog(app: &mut App, idx: usize) {
+    app.active_dialog = Some(DialogState::CreateWorktree {
+        parent_idx: idx,
+        mode: CreateWorktreeMode::ChooseSource,
+        name: String::new(),
+        name_cursor: 0,
+        prompt: String::new(),
+        prompt_cursor: 0,
+        kanban: String::new(),
+        kanban_cursor: 0,
+        group: String::new(),
+        group_cursor: 0,
+        active_field: CreateWorktreeField::Name,
+        existing: Vec::new(),
+        existing_selected: 0,
+        existing_loading: false,
+    });
+    app.mode = AppMode::CreateWorktree;
+}
+
+fn current_create_worktree_mode(app: &App) -> CreateWorktreeMode {
+    match app.active_dialog {
+        Some(DialogState::CreateWorktree { mode, .. }) => mode,
+        _ => panic!("expected CreateWorktree dialog"),
+    }
+}
+
+#[test]
+fn choose_source_enter_on_first_row_switches_to_create_new() {
+    let mut app = test_app();
+    let idx = push_test_ws(
+        &mut app,
+        "gh",
+        WorkspaceOrigin::GitHub {
+            url: "https://github.com/o/r".into(),
+        },
+    );
+    open_choose_source_dialog(&mut app, idx);
+
+    let action = handle_create_worktree_input(&mut app, key(KeyCode::Enter));
+
+    assert!(action.is_none());
+    assert_eq!(current_create_worktree_mode(&app), CreateWorktreeMode::CreateNew);
+}
+
+#[test]
+fn choose_source_enter_on_second_row_dispatches_list_worktrees() {
+    let mut app = test_app();
+    let idx = push_test_ws(
+        &mut app,
+        "gh",
+        WorkspaceOrigin::GitHub {
+            url: "https://github.com/o/r".into(),
+        },
+    );
+    open_choose_source_dialog(&mut app, idx);
+
+    handle_create_worktree_input(&mut app, key(KeyCode::Down));
+    let action = handle_create_worktree_input(&mut app, key(KeyCode::Enter));
+
+    match action {
+        Some(Action::ListWorktrees(parent_idx)) => assert_eq!(parent_idx, idx),
+        other => panic!("expected ListWorktrees action, got {other:?}"),
+    }
+    match app.active_dialog {
+        Some(DialogState::CreateWorktree { existing_loading, .. }) => {
+            assert!(existing_loading);
+        }
+        _ => panic!("expected CreateWorktree dialog"),
+    }
+}
+
+#[test]
+fn choose_source_esc_dismisses() {
+    let mut app = test_app();
+    let idx = push_test_ws(
+        &mut app,
+        "gh",
+        WorkspaceOrigin::GitHub {
+            url: "https://github.com/o/r".into(),
+        },
+    );
+    open_choose_source_dialog(&mut app, idx);
+
+    let action = handle_create_worktree_input(&mut app, key(KeyCode::Esc));
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+fn open_load_existing_dialog(
+    app: &mut App,
+    idx: usize,
+    existing: Vec<piki_core::workspace::ExistingWorktree>,
+) {
+    app.active_dialog = Some(DialogState::CreateWorktree {
+        parent_idx: idx,
+        mode: CreateWorktreeMode::LoadExisting,
+        name: String::new(),
+        name_cursor: 0,
+        prompt: String::new(),
+        prompt_cursor: 0,
+        kanban: String::new(),
+        kanban_cursor: 0,
+        group: String::new(),
+        group_cursor: 0,
+        active_field: CreateWorktreeField::Name,
+        existing,
+        existing_selected: 0,
+        existing_loading: false,
+    });
+    app.mode = AppMode::CreateWorktree;
+}
+
+#[test]
+fn load_existing_enter_dispatches_import_with_selected_entry() {
+    let mut app = test_app();
+    let idx = push_test_ws(
+        &mut app,
+        "gh",
+        WorkspaceOrigin::GitHub {
+            url: "https://github.com/o/r".into(),
+        },
+    );
+    let entries = vec![
+        piki_core::workspace::ExistingWorktree {
+            path: std::path::PathBuf::from("/tmp/wt-a"),
+            branch: "feature-a".into(),
+        },
+        piki_core::workspace::ExistingWorktree {
+            path: std::path::PathBuf::from("/tmp/wt-b"),
+            branch: "feature-b".into(),
+        },
+    ];
+    open_load_existing_dialog(&mut app, idx, entries);
+
+    handle_create_worktree_input(&mut app, key(KeyCode::Down));
+    let action = handle_create_worktree_input(&mut app, key(KeyCode::Enter));
+
+    match action {
+        Some(Action::ImportExistingWorktree { parent_idx, path, branch }) => {
+            assert_eq!(parent_idx, idx);
+            assert_eq!(path, std::path::PathBuf::from("/tmp/wt-b"));
+            assert_eq!(branch, "feature-b");
+        }
+        other => panic!("expected ImportExistingWorktree action, got {other:?}"),
+    }
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+    assert_eq!(app.active_pane, ActivePane::WorkspaceList);
+}
+
+#[test]
+fn load_existing_enter_on_empty_list_does_nothing() {
+    let mut app = test_app();
+    let idx = push_test_ws(
+        &mut app,
+        "gh",
+        WorkspaceOrigin::GitHub {
+            url: "https://github.com/o/r".into(),
+        },
+    );
+    open_load_existing_dialog(&mut app, idx, Vec::new());
+
+    let action = handle_create_worktree_input(&mut app, key(KeyCode::Enter));
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_some());
+}
+
+#[test]
+fn load_existing_esc_dismisses() {
+    let mut app = test_app();
+    let idx = push_test_ws(
+        &mut app,
+        "gh",
+        WorkspaceOrigin::GitHub {
+            url: "https://github.com/o/r".into(),
+        },
+    );
+    open_load_existing_dialog(&mut app, idx, Vec::new());
+
+    let action = handle_create_worktree_input(&mut app, key(KeyCode::Esc));
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+// ── Resize repeat mode (P2) ──────────────────────────────────────────────────
+
+#[test]
+fn resize_mode_repeats_shrink_and_stays() {
+    let (mut app, _tmp) = test_app_isolated();
+    app.input_state = crate::app::InputState::Resize;
+    let before = app.sidebar_pct;
+
+    // A bare resize chord repeats the resize and stays in Resize mode.
+    super::handle_key_event(&mut app, key(KeyCode::Char('<')));
+    assert!(app.sidebar_pct < before, "sidebar should shrink");
+    assert_eq!(app.input_state, crate::app::InputState::Resize);
+
+    // Pressing it again keeps repeating without re-entering the prefix.
+    let mid = app.sidebar_pct;
+    super::handle_key_event(&mut app, key(KeyCode::Char('<')));
+    assert!(app.sidebar_pct < mid, "sidebar should shrink again");
+    assert_eq!(app.input_state, crate::app::InputState::Resize);
+}
+
+#[test]
+fn resize_mode_exits_on_esc_and_unrelated_key() {
+    let (mut app, _tmp) = test_app_isolated();
+
+    // Esc exits.
+    app.input_state = crate::app::InputState::Resize;
+    super::handle_key_event(&mut app, key(KeyCode::Esc));
+    assert_eq!(app.input_state, crate::app::InputState::Normal);
+
+    // An unrelated key exits without resizing.
+    app.input_state = crate::app::InputState::Resize;
+    let before = app.sidebar_pct;
+    super::handle_key_event(&mut app, key(KeyCode::Char('z')));
+    assert_eq!(app.input_state, crate::app::InputState::Normal);
+    assert_eq!(app.sidebar_pct, before, "unrelated key must not resize");
+}
+
+#[test]
+fn about_toggle_key_a_also_dismisses() {
+    let mut app = test_app();
+    open_about(&mut app);
+
+    handle_about_input(&mut app, key(KeyCode::Char('a')));
+
     assert!(app.active_dialog.is_none());
     assert_eq!(app.mode, AppMode::Normal);
 }

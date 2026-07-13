@@ -5,6 +5,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
 use crate::app::{ApiResponseDisplay, ApiTabState, Selection};
+use crate::theme::{Palette, Theme};
 
 fn char_to_byte_idx(s: &str, char_idx: usize) -> usize {
     s.char_indices()
@@ -15,14 +16,18 @@ fn char_to_byte_idx(s: &str, char_idx: usize) -> usize {
 
 /// Render the API Explorer tab. Returns the inner area of the response panel
 /// (for mouse hit-testing), or `None` if no response is displayed.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn render(
     frame: &mut Frame,
     area: Rect,
     api: &ApiTabState,
+    theme: &Theme,
     border_style: Style,
+    title_style: Style,
     selection: Option<&Selection>,
     selection_style: Style,
 ) -> Option<Rect> {
+    let p = &theme.palette;
     let has_response = !api.responses.is_empty() || api.loading;
 
     let chunks = if has_response {
@@ -32,7 +37,7 @@ pub(crate) fn render(
     };
 
     // ── Editor pane ──
-    render_editor(frame, chunks[0], api, border_style);
+    render_editor(frame, chunks[0], api, p, border_style, title_style);
 
     // ── Response pane ──
     let result = if has_response {
@@ -40,7 +45,9 @@ pub(crate) fn render(
             frame,
             chunks[1],
             api,
+            p,
             border_style,
+            title_style,
             selection,
             selection_style,
         )
@@ -50,24 +57,31 @@ pub(crate) fn render(
 
     // ── History overlay ──
     if let Some(ref hist) = api.history {
-        render_history_overlay(frame, area, hist);
+        render_history_overlay(frame, area, hist, p);
     }
 
     result
 }
 
-fn render_editor(frame: &mut Frame, area: Rect, api: &ApiTabState, border_style: Style) {
+fn render_editor(
+    frame: &mut Frame,
+    area: Rect,
+    api: &ApiTabState,
+    p: &Palette,
+    border_style: Style,
+    title_style: Style,
+) {
     let block = Block::default()
         .title(" API Explorer ")
-        .title_style(border_style)
+        .title_style(title_style)
         .title_bottom(
             Line::from(Span::styled(
-                " [^S send | ^H history] ",
-                Style::default().fg(Color::DarkGray),
+                " [C-s] send  [C-h] history ",
+                Style::default().fg(p.fg3),
             ))
             .right_aligned(),
         )
-        .borders(Borders::ALL)
+        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(border_style);
 
     let inner = block.inner(area);
@@ -85,16 +99,13 @@ fn render_editor(frame: &mut Frame, area: Rect, api: &ApiTabState, border_style:
         .take(visible_height)
         .map(|(row, line_text)| {
             let line_num = format!("{:>width$} ", row + 1, width = line_num_width);
-            let mut spans = vec![Span::styled(line_num, Style::default().fg(Color::DarkGray))];
+            let mut spans = vec![Span::styled(line_num, Style::default().fg(p.fg2))];
 
             if row == editor.cursor_row {
                 let cursor_byte = char_to_byte_idx(line_text, editor.cursor_col);
                 if cursor_byte >= line_text.len() {
                     spans.push(Span::raw(line_text.clone()));
-                    spans.push(Span::styled(
-                        " ",
-                        Style::default().bg(Color::White).fg(Color::Black),
-                    ));
+                    spans.push(Span::styled(" ", Style::default().bg(p.fg0).fg(p.bg0)));
                 } else {
                     let next_byte = char_to_byte_idx(line_text, editor.cursor_col + 1);
                     if cursor_byte > 0 {
@@ -102,7 +113,7 @@ fn render_editor(frame: &mut Frame, area: Rect, api: &ApiTabState, border_style:
                     }
                     spans.push(Span::styled(
                         line_text[cursor_byte..next_byte].to_string(),
-                        Style::default().bg(Color::White).fg(Color::Black),
+                        Style::default().bg(p.fg0).fg(p.bg0),
                     ));
                     if next_byte < line_text.len() {
                         spans.push(Span::raw(line_text[next_byte..].to_string()));
@@ -120,22 +131,25 @@ fn render_editor(frame: &mut Frame, area: Rect, api: &ApiTabState, border_style:
     frame.render_widget(paragraph, inner);
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render_responses(
     frame: &mut Frame,
     area: Rect,
     api: &ApiTabState,
+    p: &Palette,
     border_style: Style,
+    title_style: Style,
     selection: Option<&Selection>,
     selection_style: Style,
 ) -> Option<Rect> {
     if api.loading {
         let block = Block::default()
             .title(" Response ")
-            .title_style(border_style)
-            .borders(Borders::ALL)
+            .title_style(title_style)
+            .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
             .border_style(border_style);
         let text = Paragraph::new("  Sending...")
-            .style(Style::default().fg(Color::Yellow))
+            .style(Style::default().fg(p.warn))
             .block(block);
         frame.render_widget(text, area);
         return None;
@@ -151,7 +165,7 @@ fn render_responses(
 
     for (idx, resp) in api.responses.iter().enumerate() {
         // Response header line
-        let status_color = status_color(resp.status);
+        let status_color = status_color(resp.status, p);
         let header = if resp.status == 0 {
             format!("── Response #{} (error) — {}ms ", idx + 1, resp.elapsed_ms)
         } else if total == 1 {
@@ -167,7 +181,7 @@ fn render_responses(
         )));
 
         // Colorized body
-        all_lines.extend(colorize_json(&resp.body));
+        all_lines.extend(colorize_json(&resp.body, p));
 
         // Separator between responses
         if idx + 1 < total {
@@ -194,33 +208,29 @@ fn render_responses(
     };
 
     let title_color = if api.responses.iter().all(|r| (200..300).contains(&r.status)) {
-        Color::Green
+        p.ok
     } else if api
         .responses
         .iter()
         .any(|r| r.status == 0 || r.status >= 500)
     {
-        Color::Red
+        p.err
     } else {
-        Color::Yellow
+        p.warn
     };
 
     let help_hint = if api.search.is_some() {
-        " [^F search] "
+        " [C-f] search "
     } else {
-        " [^J/^K scroll | ^F search] "
+        " [C-j/C-k] scroll  [C-f] search "
     };
 
     let block = Block::default()
         .title(Span::styled(title, Style::default().fg(title_color)))
         .title_bottom(
-            Line::from(Span::styled(
-                help_hint,
-                Style::default().fg(Color::DarkGray),
-            ))
-            .right_aligned(),
+            Line::from(Span::styled(help_hint, Style::default().fg(p.fg3))).right_aligned(),
         )
-        .borders(Borders::ALL)
+        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(border_style);
 
     let inner = block.inner(area);
@@ -256,8 +266,8 @@ fn render_responses(
     if let Some(ref search) = api.search {
         let query_len = search.query.chars().count();
         if query_len > 0 {
-            let match_style = Style::default().bg(Color::Yellow).fg(Color::Black);
-            let current_style = Style::default().bg(Color::LightRed).fg(Color::Black);
+            let match_style = Style::default().bg(p.iris_wash).fg(p.fg0);
+            let current_style = Style::default().bg(p.iris).fg(p.bg0);
             let scroll = api.response_scroll as usize;
             let visible_height = inner.height as usize;
             let buf = frame.buffer_mut();
@@ -302,9 +312,9 @@ fn render_responses(
         };
 
         let bar = Paragraph::new(Line::from(vec![
-            Span::styled(" / ", Style::default().fg(Color::Yellow)),
+            Span::styled(" / ", Style::default().fg(p.iris)),
             Span::raw(&search.query),
-            Span::styled(match_info, Style::default().fg(Color::DarkGray)),
+            Span::styled(match_info, Style::default().fg(p.fg3)),
         ]));
         frame.render_widget(bar, bar_area);
     }
@@ -312,13 +322,13 @@ fn render_responses(
     Some(inner)
 }
 
-fn status_color(status: u16) -> Color {
+fn status_color(status: u16, p: &Palette) -> Color {
     match status {
-        200..=299 => Color::Green,
-        400..=499 => Color::Yellow,
-        500..=599 => Color::Red,
-        0 => Color::Red,
-        _ => Color::White,
+        200..=299 => p.ok,
+        400..=499 => p.warn,
+        500..=599 => p.err,
+        0 => p.err,
+        _ => p.fg0,
     }
 }
 
@@ -332,27 +342,20 @@ fn response_title(resp: &ApiResponseDisplay) -> String {
 
 // ── JSON syntax colorizer ──
 
-const KEY_COLOR: Color = Color::Cyan;
-const STRING_COLOR: Color = Color::Green;
-const NUMBER_COLOR: Color = Color::Yellow;
-const BOOL_COLOR: Color = Color::Magenta;
-const NULL_COLOR: Color = Color::DarkGray;
-const PUNCT_COLOR: Color = Color::White;
-
 /// Colorize a JSON string line-by-line using a simple state machine.
-/// Falls back to plain white text if the input is not valid JSON.
-fn colorize_json(text: &str) -> Vec<Line<'static>> {
+/// Falls back to plain text if the input is not valid JSON.
+fn colorize_json(text: &str, p: &Palette) -> Vec<Line<'static>> {
     if serde_json::from_str::<serde_json::Value>(text).is_err() {
         return text.lines().map(|l| Line::raw(l.to_string())).collect();
     }
 
     text.lines()
-        .map(|line| Line::from(colorize_json_line(line)))
+        .map(|line| Line::from(colorize_json_line(line, p)))
         .collect()
 }
 
 /// Colorize a single line of pretty-printed JSON.
-fn colorize_json_line(line: &str) -> Vec<Span<'static>> {
+fn colorize_json_line(line: &str, p: &Palette) -> Vec<Span<'static>> {
     let mut spans = Vec::new();
     let chars: Vec<char> = line.chars().collect();
     let len = chars.len();
@@ -389,9 +392,9 @@ fn colorize_json_line(line: &str) -> Vec<Span<'static>> {
                     .trim_start()
                     .to_string();
                 let color = if rest_trimmed.starts_with(':') {
-                    KEY_COLOR
+                    p.info
                 } else {
-                    STRING_COLOR
+                    p.ok
                 };
                 spans.push(Span::styled(s, Style::default().fg(color)));
             }
@@ -401,14 +404,13 @@ fn colorize_json_line(line: &str) -> Vec<Span<'static>> {
             {
                 let kw_len = if chars[i] == 't' { 4 } else { 5 };
                 let s: String = chars[i..i + kw_len].iter().collect();
-                spans.push(Span::styled(s, Style::default().fg(BOOL_COLOR)));
+                // Constants take the magenta-family slot of classic JSON
+                // highlighting; the accent never colors syntax.
+                spans.push(Span::styled(s, Style::default().fg(p.err)));
                 i += kw_len;
             }
             'n' if matches_keyword(&chars[i..], "null") => {
-                spans.push(Span::styled(
-                    "null".to_string(),
-                    Style::default().fg(NULL_COLOR),
-                ));
+                spans.push(Span::styled("null".to_string(), Style::default().fg(p.fg3)));
                 i += 4;
             }
             '0'..='9' | '-' => {
@@ -425,13 +427,10 @@ fn colorize_json_line(line: &str) -> Vec<Span<'static>> {
                     i += 1;
                 }
                 let s: String = chars[start..i].iter().collect();
-                spans.push(Span::styled(s, Style::default().fg(NUMBER_COLOR)));
+                spans.push(Span::styled(s, Style::default().fg(p.warn)));
             }
             '{' | '}' | '[' | ']' | ':' | ',' => {
-                spans.push(Span::styled(
-                    ch.to_string(),
-                    Style::default().fg(PUNCT_COLOR),
-                ));
+                spans.push(Span::styled(ch.to_string(), Style::default().fg(p.fg0)));
                 i += 1;
             }
             _ => {
@@ -454,7 +453,12 @@ fn matches_keyword(chars: &[char], keyword: &str) -> bool {
 
 // ── History overlay ──
 
-fn render_history_overlay(frame: &mut Frame, area: Rect, hist: &crate::app::ApiHistoryState) {
+fn render_history_overlay(
+    frame: &mut Frame,
+    area: Rect,
+    hist: &crate::app::ApiHistoryState,
+    p: &Palette,
+) {
     // Centered floating panel: 80% width, 70% height
     let overlay_w = (area.width as u32 * 80 / 100).min(area.width as u32) as u16;
     let overlay_h = (area.height as u32 * 70 / 100)
@@ -477,19 +481,18 @@ fn render_history_overlay(frame: &mut Frame, area: Rect, hist: &crate::app::ApiH
         .title_bottom(
             Line::from(Span::styled(
                 " [j/k nav | Enter load | d delete | / search | Esc close] ",
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(p.fg3),
             ))
             .right_aligned(),
         )
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan));
+        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
+        .border_style(Style::default().fg(p.line_strong));
 
     let inner = block.inner(overlay_area);
     frame.render_widget(block, overlay_area);
 
     if hist.entries.is_empty() {
-        let empty =
-            Paragraph::new("  No history entries").style(Style::default().fg(Color::DarkGray));
+        let empty = Paragraph::new("  No history entries").style(Style::default().fg(p.fg3));
         frame.render_widget(empty, inner);
         return;
     }
@@ -502,7 +505,7 @@ fn render_history_overlay(frame: &mut Frame, area: Rect, hist: &crate::app::ApiH
         .skip(hist.scroll_offset)
         .take(visible_height)
         .map(|(idx, entry)| {
-            let status_color = status_color(entry.status);
+            let status_color = status_color(entry.status, p);
             let ts = if entry.created_at.len() >= 16 {
                 &entry.created_at[..16]
             } else {
@@ -514,8 +517,8 @@ fn render_history_overlay(frame: &mut Frame, area: Rect, hist: &crate::app::ApiH
             );
             let style = if idx == hist.selected {
                 Style::default()
-                    .fg(Color::White)
-                    .bg(Color::DarkGray)
+                    .fg(p.fg0)
+                    .bg(p.iris_wash)
                     .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(status_color)

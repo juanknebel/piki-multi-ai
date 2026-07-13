@@ -7,7 +7,7 @@ use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph};
 use crate::app::{ActivePane, App, SidebarItem};
 use piki_core::WorkspaceType;
 
-use super::layout::pane_border_style;
+use super::layout::{pane_border_style, pane_title_style};
 
 /// Icon prefix for each workspace type.
 fn workspace_type_icon(ws_type: WorkspaceType) -> &'static str {
@@ -23,11 +23,28 @@ fn workspace_type_icon(ws_type: WorkspaceType) -> &'static str {
 pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
     let border_style = pane_border_style(app, ActivePane::WorkspaceList);
     let theme = &app.theme.workspace_list;
+    // Selection has two temperatures: the iris wash where the focus is, a
+    // neutral raised surface where it is not — you never lose your place.
+    let sel_bg = if app.active_pane == ActivePane::WorkspaceList {
+        theme.selected_bg
+    } else {
+        app.theme.palette.bg2
+    };
+    // The cursor is a single left rail — iris where the focus is, muted where
+    // it is not. It is the ONLY selection signal, so it never competes with
+    // the group triangle or the type icon.
+    let sel_bar_fg = if app.active_pane == ActivePane::WorkspaceList {
+        app.theme.palette.iris
+    } else {
+        app.theme.palette.fg3
+    };
+    // Muted vertical guide that ties group children back to their header.
+    let guide_fg = app.theme.palette.line;
 
     let block = Block::default()
         .title(" WORKSPACES ")
-        .title_style(border_style)
-        .borders(Borders::ALL)
+        .title_style(pane_title_style(app, ActivePane::WorkspaceList))
+        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(border_style);
 
     if app.workspaces.is_empty() {
@@ -50,6 +67,12 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
 
     let sidebar_items = app.sidebar_items();
 
+    // A workspace is a group child iff a header precedes it; children get the
+    // vertical guide, top-level workspaces stay flush.
+    let first_group_row = sidebar_items
+        .iter()
+        .position(|it| matches!(it, SidebarItem::GroupHeader { .. }));
+
     // All rows are one line tall; scroll follows the selection.
     let visible_height = area.height.saturating_sub(2) as usize;
     let selected = app
@@ -62,7 +85,6 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
     };
 
     let inner_width = area.width.saturating_sub(2) as usize;
-    let mut ws_visual_idx: usize = 0;
 
     let items: Vec<ListItem> = sidebar_items
         .iter()
@@ -77,26 +99,30 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                     count,
                     collapsed,
                 } => {
-                    let arrow = if *collapsed { "▸" } else { "▼" };
+                    let arrow = if *collapsed { "▸" } else { "▾" };
+                    let bar = if is_selected {
+                        Span::styled("▎", Style::default().fg(sel_bar_fg))
+                    } else {
+                        Span::raw(" ")
+                    };
                     let header_style = Style::default()
                         .fg(theme.name_inactive)
-                        .bg(theme.group_header_bg)
                         .add_modifier(Modifier::BOLD);
                     let line = Line::from(vec![
-                        Span::styled(format!(" {} ", arrow), header_style),
+                        bar,
+                        Span::styled(format!("{} ", arrow), header_style),
                         Span::styled(format!("{} ({})", name.to_uppercase(), count), header_style),
                     ]);
                     let style = if is_selected {
-                        Style::default().bg(theme.selected_bg)
+                        Style::default().bg(sel_bg)
                     } else {
-                        Style::default().bg(theme.group_header_bg)
+                        Style::default()
                     };
                     ListItem::new(vec![line]).style(style)
                 }
                 SidebarItem::Workspace { index } => {
                     let ws = &app.workspaces[*index];
-                    let current_ws_idx = ws_visual_idx;
-                    ws_visual_idx += 1;
+                    let grouped = first_group_row.is_some_and(|h| row > h);
 
                     let detail_color = if is_selected {
                         theme.detail_selected
@@ -104,19 +130,29 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                         theme.detail_normal
                     };
 
-                    let marker = if *index == app.active_workspace {
-                        "▶"
+                    let is_active = *index == app.active_workspace;
+                    // Selection rail in col 0; group guide in col 1. The active
+                    // workspace is now carried by the name weight/brightness —
+                    // no triangle, so it can't be mistaken for a group header.
+                    let bar = if is_selected {
+                        Span::styled("▎", Style::default().fg(sel_bar_fg))
                     } else {
-                        " "
+                        Span::raw(" ")
+                    };
+                    let guide = if grouped {
+                        Span::styled("│ ", Style::default().fg(guide_fg))
+                    } else {
+                        Span::raw("  ")
                     };
                     let type_icon = workspace_type_icon(ws.info.workspace_type);
 
                     let mut left: Vec<Span> = vec![
-                        Span::raw(format!(" {} ", marker)),
+                        bar,
+                        guide,
                         Span::styled(type_icon, Style::default().fg(detail_color)),
                         Span::styled(
                             ws.name.clone(),
-                            if *index == app.active_workspace {
+                            if is_active {
                                 Style::default()
                                     .fg(theme.name_active)
                                     .add_modifier(Modifier::BOLD)
@@ -129,16 +165,19 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                         left.push(Span::styled(
                             " ●",
                             Style::default()
-                                .fg(ratatui::style::Color::Yellow)
+                                .fg(app.theme.status.needs_you)
                                 .add_modifier(Modifier::BOLD),
                         ));
                     }
 
                     // Right-aligned metadata, shown only when it says something:
-                    // worst agent status across tabs, changed-file count, ahead/behind.
+                    // actionable agent status, changed-file count, ahead/behind.
+                    // Activity (running) stays in the Agents pane.
                     let mut right: Vec<Span> = Vec::new();
-                    if let Some(status) = ws.agent_status_rollup() {
-                        let (glyph, _, color) = crate::ui::cli_agent_status_view(status);
+                    if let Some((status, attention)) = ws.agent_status_rollup()
+                        && let Some((glyph, color)) =
+                            crate::ui::actionable_status_view(&app.theme, status, attention)
+                    {
                         right.push(Span::styled(
                             glyph.to_string(),
                             Style::default().fg(color),
@@ -183,9 +222,7 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                     }
 
                     let style = if is_selected {
-                        Style::default().bg(theme.selected_bg)
-                    } else if current_ws_idx % 2 == 1 {
-                        Style::default().bg(theme.alt_bg)
+                        Style::default().bg(sel_bg)
                     } else {
                         Style::default()
                     };
@@ -218,8 +255,8 @@ pub(super) fn render_agents_pane(frame: &mut Frame, area: Rect, app: &App) {
 
     let block = Block::default()
         .title(" AGENTS ")
-        .title_style(border_style)
-        .borders(Borders::ALL)
+        .title_style(pane_title_style(app, ActivePane::Agents))
+        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(border_style);
 
     let rows = app.agent_rows();
@@ -254,8 +291,10 @@ pub(super) fn render_agents_pane(frame: &mut Frame, area: Rect, app: &App) {
             let tab = &ws.tabs[ti];
 
             let (glyph, status_label, status_color) = match tab.cli_agent_snapshot() {
-                Some((status, _)) => crate::ui::cli_agent_status_view(status),
-                None => crate::ui::agent_tab_indicator(tab),
+                Some((status, attention, _)) => {
+                    crate::ui::cli_agent_status_view(app, status, attention)
+                }
+                None => crate::ui::agent_tab_indicator(app, tab),
             };
             // A non-Custom tab only lists here because its cli-agent channel
             // reported — a `claude` run manually inside that tab.
@@ -265,8 +304,14 @@ pub(super) fn render_agents_pane(frame: &mut Frame, area: Rect, app: &App) {
                 format!("Claude ({})", tab.provider.label())
             };
 
-            let row_bg = if is_active && row_idx == selected {
-                Style::default().bg(theme.selected_bg)
+            // Selection cools to a neutral surface when the pane loses focus
+            // but never disappears.
+            let row_bg = if row_idx == selected {
+                Style::default().bg(if is_active {
+                    theme.selected_bg
+                } else {
+                    app.theme.palette.bg2
+                })
             } else {
                 Style::default()
             };
@@ -278,7 +323,7 @@ pub(super) fn render_agents_pane(frame: &mut Frame, area: Rect, app: &App) {
                 Span::styled(format!(" {status_label}"), row_bg.fg(status_color)),
             ];
             if ws.has_idle_notification {
-                spans.push(Span::styled(" ●", row_bg.fg(ratatui::style::Color::Yellow)));
+                spans.push(Span::styled(" ●", row_bg.fg(app.theme.status.needs_you)));
             }
             ListItem::new(Line::from(spans))
         })

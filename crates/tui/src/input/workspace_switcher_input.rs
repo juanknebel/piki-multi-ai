@@ -7,7 +7,7 @@ use crate::workspace_switcher::SwitcherRow;
 use super::list_nav::move_selection;
 
 pub(super) fn handle_workspace_switcher_input(app: &mut App, key: KeyEvent) -> Option<Action> {
-    let is_cancel = super::text_field_common::is_cancel(key, app.config.platform);
+    let is_cancel = super::text_field_common::is_cancel(key, &app.config);
     let state = app.workspace_switcher.as_mut()?;
 
     if is_cancel {
@@ -23,7 +23,7 @@ pub(super) fn handle_workspace_switcher_input(app: &mut App, key: KeyEvent) -> O
                 app.workspace_switcher = None;
                 app.mode = AppMode::Normal;
                 match row {
-                    SwitcherRow::Workspace { ws_idx } => app.switch_workspace(ws_idx),
+                    SwitcherRow::Workspace { ws_idx } => app.switch_workspace_and_focus(ws_idx),
                     SwitcherRow::Tab { ws_idx, tab_idx } => {
                         super::interaction::jump_to_agent(app, (ws_idx, tab_idx));
                     }

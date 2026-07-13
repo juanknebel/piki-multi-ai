@@ -176,7 +176,7 @@ pub(super) async fn handle(
                         // Create workspace and switch to it
                         app.workspaces.push(app::Workspace::from_info(info));
                         let new_idx = app.workspaces.len() - 1;
-                        app.switch_workspace(new_idx);
+                        app.switch_workspace_and_focus(new_idx);
 
                         // Start file watcher
                         let ws = &mut app.workspaces[new_idx];

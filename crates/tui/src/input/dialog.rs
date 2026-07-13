@@ -1,12 +1,12 @@
 use std::path::PathBuf;
 
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField, NewWorkspaceSource};
 use crate::config::has_ctrl;
 use crate::dialog_state::{
-    CreateWorktreeField, CycleField, DialogState, EditAgentField,
+    CreateWorktreeField, CreateWorktreeMode, CycleField, DialogState, EditAgentField,
     EditProviderField, EditWorkspaceField, NewTabMenu,
 };
 use piki_core::workspace::manager::parse_github_repo_name;
@@ -55,7 +55,7 @@ pub(super) fn handle_edit_workspace_input(app: &mut App, key: KeyEvent) -> Optio
                 prompt.clone(),
                 trim_some(group),
             )))),
-            _ if is_cancel(key, app.config.platform) => Some(Step::Cancel),
+            _ if is_cancel(key, &app.config) => Some(Step::Cancel),
             _ => {
                 let (buf, cursor) = match *active_field {
                     EditWorkspaceField::KanbanPath => {
@@ -106,16 +106,16 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
         return None;
     };
 
-    match key.code {
-        KeyCode::Tab => {
+    match () {
+        _ if app.config.matches_new_workspace(key, "switch_field") => {
             *active_field = active_field.next_with(*source);
             return None;
         }
-        KeyCode::BackTab => {
+        _ if app.config.matches_new_workspace(key, "switch_field_back") => {
             *active_field = active_field.prev_with(*source);
             return None;
         }
-        KeyCode::Enter => {
+        _ if app.config.matches_new_workspace(key, "create") => {
             let dir_raw = dir.trim().to_string();
             let description = desc.clone();
             let prompt_val = prompt.clone();
@@ -218,7 +218,7 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
                 }
             }
         }
-        _ if is_cancel(key, app.config.platform) => {
+        _ if app.config.matches_new_workspace(key, "exit") || is_cancel(key, &app.config) => {
             app.active_dialog = None;
             app.mode = AppMode::Normal;
             app.active_pane = ActivePane::WorkspaceList;
@@ -268,6 +268,61 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
 }
 
 pub(super) fn handle_create_worktree_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::CreateWorktree { mode, .. }) = &app.active_dialog else {
+        return None;
+    };
+
+    match mode {
+        CreateWorktreeMode::ChooseSource => handle_create_worktree_choose_source(app, key),
+        CreateWorktreeMode::CreateNew => handle_create_worktree_create_new(app, key),
+        CreateWorktreeMode::LoadExisting => handle_create_worktree_load_existing(app, key),
+    }
+}
+
+fn handle_create_worktree_choose_source(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::CreateWorktree {
+        parent_idx,
+        mode,
+        existing_selected,
+        existing_loading,
+        ..
+    }) = &mut app.active_dialog
+    else {
+        return None;
+    };
+
+    // Row 0 = "Create new worktree", row 1 = "Load existing worktree".
+    // Reuse existing_selected to track the chosen row on this step.
+    match key.code {
+        KeyCode::Down
+        | KeyCode::Char('j')
+            if !key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) =>
+        {
+            move_selection(existing_selected, 2, 1, false);
+        }
+        KeyCode::Up | KeyCode::Char('k')
+            if !key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) =>
+        {
+            move_selection(existing_selected, 2, -1, false);
+        }
+        KeyCode::Enter => {
+            if *existing_selected == 0 {
+                *mode = CreateWorktreeMode::CreateNew;
+            } else {
+                let parent_idx = *parent_idx;
+                *existing_loading = true;
+                return Some(Action::ListWorktrees(parent_idx));
+            }
+        }
+        _ if is_cancel(key, &app.config) => {
+            dismiss_dialog_to_pane(app, ActivePane::WorkspaceList);
+        }
+        _ => {}
+    }
+    None
+}
+
+fn handle_create_worktree_create_new(app: &mut App, key: KeyEvent) -> Option<Action> {
     let Some(DialogState::CreateWorktree {
         parent_idx,
         ref mut name,
@@ -279,6 +334,7 @@ pub(super) fn handle_create_worktree_input(app: &mut App, key: KeyEvent) -> Opti
         ref mut group,
         ref mut group_cursor,
         ref mut active_field,
+        ..
     }) = app.active_dialog
     else {
         return None;
@@ -323,7 +379,7 @@ pub(super) fn handle_create_worktree_input(app: &mut App, key: KeyEvent) -> Opti
                 group_opt,
             ));
         }
-        _ if is_cancel(key, app.config.platform) => {
+        _ if is_cancel(key, &app.config) => {
             app.active_dialog = None;
             app.mode = AppMode::Normal;
             app.active_pane = ActivePane::WorkspaceList;
@@ -348,6 +404,50 @@ pub(super) fn handle_create_worktree_input(app: &mut App, key: KeyEvent) -> Opti
         }
     };
     handle_text_input(buf, cursor, key, validator);
+    None
+}
+
+fn handle_create_worktree_load_existing(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::CreateWorktree {
+        parent_idx,
+        existing,
+        existing_selected,
+        existing_loading,
+        ..
+    }) = &mut app.active_dialog
+    else {
+        return None;
+    };
+
+    if *existing_loading {
+        if is_cancel(key, &app.config) {
+            dismiss_dialog_to_pane(app, ActivePane::WorkspaceList);
+        }
+        return None;
+    }
+
+    match key.code {
+        KeyCode::Down | KeyCode::Char('j') => {
+            move_selection(existing_selected, existing.len(), 1, false);
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            move_selection(existing_selected, existing.len(), -1, false);
+        }
+        KeyCode::Enter => {
+            let chosen = existing.get(*existing_selected).cloned()?;
+            let parent_idx = *parent_idx;
+            dismiss_dialog_to_pane(app, ActivePane::WorkspaceList);
+            return Some(Action::ImportExistingWorktree {
+                parent_idx,
+                path: chosen.path,
+                branch: chosen.branch,
+            });
+        }
+        _ if is_cancel(key, &app.config) => {
+            dismiss_dialog_to_pane(app, ActivePane::WorkspaceList);
+        }
+        _ => {}
+    }
     None
 }
 
@@ -507,7 +607,7 @@ pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Actio
                 });
                 None
             }
-            KeyCode::Esc => {
+            _ if app.config.matches_new_tab(key, "exit") => {
                 app.active_dialog = None;
                 app.mode = AppMode::Normal;
                 None
@@ -554,7 +654,7 @@ pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Actio
                         None
                     }
                 }
-                KeyCode::Esc => {
+                _ if app.config.matches_new_tab(key, "exit") => {
                     app.active_dialog = Some(DialogState::NewTab {
                         menu: NewTabMenu::Main,
                     });
@@ -584,7 +684,7 @@ pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Actio
                 app.mode = AppMode::Normal;
                 Some(Action::SpawnTab(AIProvider::Git))
             }
-            KeyCode::Esc => {
+            _ if app.config.matches_new_tab(key, "exit") => {
                 app.active_dialog = Some(DialogState::NewTab {
                     menu: NewTabMenu::Main,
                 });
@@ -642,7 +742,7 @@ pub(super) fn handle_dashboard_input(app: &mut App, key: KeyEvent) -> Option<Act
     } else if app.config.matches_dashboard(key, "select") {
         let idx = *selected;
         app.active_dialog = None;
-        app.switch_workspace(idx);
+        app.switch_workspace_and_focus(idx);
     } else if app.config.matches_dashboard(key, "exit")
         || app.config.matches_dashboard(key, "exit_alt")
     {
@@ -653,25 +753,53 @@ pub(super) fn handle_dashboard_input(app: &mut App, key: KeyEvent) -> Option<Act
 }
 
 pub(super) fn handle_help_input(app: &mut App, key: KeyEvent) -> Option<Action> {
-    let Some(DialogState::Help { ref mut scroll }) = app.active_dialog else {
+    // The help browser is a live search box: printable keys edit the filter,
+    // so navigation is on the non-textual keys only (arrows / PgUp-PgDn /
+    // Home-End / Ctrl-D-U). Esc clears a non-empty filter, then closes.
+    let Some(DialogState::Help {
+        ref mut scroll,
+        ref mut filter,
+    }) = app.active_dialog
+    else {
         return None;
     };
+    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    let alt = key.modifiers.contains(KeyModifiers::ALT);
+    match key.code {
+        KeyCode::Esc => {
+            if filter.is_empty() {
+                dismiss_dialog(app);
+            } else {
+                filter.clear();
+                *scroll = 0;
+            }
+        }
+        KeyCode::Down => *scroll = scroll.saturating_add(1),
+        KeyCode::Up => *scroll = scroll.saturating_sub(1),
+        KeyCode::PageDown => *scroll = scroll.saturating_add(10),
+        KeyCode::PageUp => *scroll = scroll.saturating_sub(10),
+        KeyCode::Char('d') if ctrl => *scroll = scroll.saturating_add(10),
+        KeyCode::Char('u') if ctrl => *scroll = scroll.saturating_sub(10),
+        KeyCode::Home => *scroll = 0,
+        KeyCode::End => *scroll = u16::MAX,
+        KeyCode::Backspace => {
+            filter.pop();
+            *scroll = 0;
+        }
+        KeyCode::Char(c) if !ctrl && !alt => {
+            filter.push(c);
+            *scroll = 0;
+        }
+        _ => {}
+    }
+    None
+}
 
-    if app.config.matches_help(key, "down") || app.config.matches_help(key, "down_alt") {
-        *scroll = scroll.saturating_add(1);
-    } else if app.config.matches_help(key, "up") || app.config.matches_help(key, "up_alt") {
-        *scroll = scroll.saturating_sub(1);
-    } else if app.config.matches_help(key, "page_down") {
-        *scroll = scroll.saturating_add(10);
-    } else if app.config.matches_help(key, "page_up") {
-        *scroll = scroll.saturating_sub(10);
-    } else if app.config.matches_help(key, "scroll_top") {
-        *scroll = 0;
-    } else if app.config.matches_help(key, "scroll_bottom") {
-        *scroll = u16::MAX;
-    } else if app.config.matches_help(key, "exit")
-        || app.config.matches_help(key, "exit_alt")
-        || app.config.matches_help(key, "exit_help")
+/// The missing-prereqs warning is purely informational: any dismiss key closes
+/// it. Nothing to rebind, so it takes no `[keybindings.*]` context of its own.
+pub(super) fn handle_missing_prereqs_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    if is_cancel(key, &app.config)
+        || matches!(key.code, KeyCode::Enter | KeyCode::Char(' ') | KeyCode::Char('q'))
     {
         dismiss_dialog(app);
     }
@@ -679,7 +807,7 @@ pub(super) fn handle_help_input(app: &mut App, key: KeyEvent) -> Option<Action> 
 }
 
 pub(super) fn handle_about_input(app: &mut App, key: KeyEvent) -> Option<Action> {
-    if app.config.matches_about(key, "exit") {
+    if app.config.matches_about(key, "exit") || app.config.matches_about(key, "exit_about") {
         dismiss_dialog(app);
     }
     None
@@ -969,7 +1097,7 @@ pub(super) fn handle_dispatch_agent_input(app: &mut App, key: KeyEvent) -> Optio
                 app.mode = AppMode::Normal;
                 Some(action)
             }
-            _ if is_cancel(key, app.config.platform) => {
+            _ if is_cancel(key, &app.config) => {
                 // Back to step 0
                 *step = 0;
                 None
@@ -996,7 +1124,7 @@ pub(super) fn handle_dispatch_agent_input(app: &mut App, key: KeyEvent) -> Optio
                 *step = 1;
                 None
             }
-            _ if is_cancel(key, app.config.platform) => {
+            _ if is_cancel(key, &app.config) => {
                 app.active_dialog = None;
                 app.mode = AppMode::Normal;
                 None
@@ -1091,7 +1219,7 @@ pub(super) fn handle_manage_agents_input(app: &mut App, key: KeyEvent) -> Option
             // Import agents from repo files
             Some(Action::ScanRepoAgents)
         }
-        _ if is_cancel(key, app.config.platform) => {
+        _ if is_cancel(key, &app.config) => {
             dismiss_dialog(app);
             None
         }
@@ -1148,7 +1276,7 @@ pub(super) fn handle_edit_agent_input(app: &mut App, key: KeyEvent) -> Option<Ac
             app.mode = AppMode::EditAgentRole;
             None
         }
-        _ if is_cancel(key, app.config.platform) => {
+        _ if is_cancel(key, &app.config) => {
             app.active_dialog = Some(DialogState::ManageAgents { selected: 0 });
             app.mode = AppMode::ManageAgents;
             None
@@ -1204,7 +1332,7 @@ pub(super) fn handle_edit_agent_role_input(app: &mut App, key: KeyEvent) -> Opti
     }
 
     // Esc: go back to step 1 without saving
-    if is_cancel(key, app.config.platform) {
+    if is_cancel(key, &app.config) {
         app.active_dialog = Some(DialogState::EditAgent {
             editing_id,
             name: name.clone(),
@@ -1337,7 +1465,7 @@ pub(super) fn handle_import_agents_input(app: &mut App, key: KeyEvent) -> Option
 
     let count = discovered.len();
     if count == 0 {
-        if is_cancel(key, app.config.platform) || key.code == KeyCode::Enter {
+        if is_cancel(key, &app.config) || key.code == KeyCode::Enter {
             app.active_dialog = Some(DialogState::ManageAgents { selected: 0 });
             app.mode = AppMode::ManageAgents;
         }
@@ -1388,7 +1516,7 @@ pub(super) fn handle_import_agents_input(app: &mut App, key: KeyEvent) -> Option
                 Some(Action::ImportAgents(to_import))
             }
         }
-        _ if is_cancel(key, app.config.platform) => {
+        _ if is_cancel(key, &app.config) => {
             app.active_dialog = Some(DialogState::ManageAgents { selected: 0 });
             app.mode = AppMode::ManageAgents;
             None
@@ -1491,7 +1619,7 @@ pub(super) fn handle_manage_providers_input(app: &mut App, key: KeyEvent) -> Opt
             }
             None
         }
-        _ if is_cancel(key, app.config.platform) => {
+        _ if is_cancel(key, &app.config) => {
             dismiss_dialog(app);
             None
         }
@@ -1573,7 +1701,7 @@ pub(super) fn handle_edit_provider_input(app: &mut App, key: KeyEvent) -> Option
     }
 
     // Esc: cancel back to manage
-    if is_cancel(key, app.config.platform) {
+    if is_cancel(key, &app.config) {
         app.active_dialog = Some(DialogState::ManageProviders { selected: 0 });
         app.mode = AppMode::ManageProviders;
         return None;

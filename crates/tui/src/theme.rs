@@ -19,6 +19,9 @@ fn parse_color(s: &str) -> Color {
         "LightMagenta" => Color::LightMagenta,
         "LightCyan" => Color::LightCyan,
         "White" => Color::White,
+        // Terminal default (no color) — lets ANSI fallback themes drop
+        // backgrounds instead of faking them.
+        "Reset" => Color::Reset,
         s if s.starts_with('#') && s.len() == 7 => {
             let r = u8::from_str_radix(&s[1..3], 16).unwrap_or(255);
             let g = u8::from_str_radix(&s[3..5], 16).unwrap_or(255);
@@ -37,11 +40,39 @@ fn resolve(opt: &Option<String>, default: Color) -> Color {
     }
 }
 
+/// Build a [`Palette`] from the `[palette]` section, filling any unset token
+/// from the dark default. This runs before role resolution so the whole theme
+/// (roles + direct `theme.palette.*` reads) derives from the resolved palette.
+fn resolve_palette(t: &PaletteToml) -> Palette {
+    let d = Palette::default();
+    Palette {
+        bg0: resolve(&t.bg0, d.bg0),
+        bg1: resolve(&t.bg1, d.bg1),
+        bg2: resolve(&t.bg2, d.bg2),
+        bg3: resolve(&t.bg3, d.bg3),
+        line: resolve(&t.line, d.line),
+        line_strong: resolve(&t.line_strong, d.line_strong),
+        fg0: resolve(&t.fg0, d.fg0),
+        fg1: resolve(&t.fg1, d.fg1),
+        fg2: resolve(&t.fg2, d.fg2),
+        fg3: resolve(&t.fg3, d.fg3),
+        iris: resolve(&t.iris, d.iris),
+        iris_wash: resolve(&t.iris_wash, d.iris_wash),
+        ok: resolve(&t.ok, d.ok),
+        warn: resolve(&t.warn, d.warn),
+        err: resolve(&t.err, d.err),
+        info: resolve(&t.info, d.info),
+        diff_add_bg: resolve(&t.diff_add_bg, d.diff_add_bg),
+        diff_del_bg: resolve(&t.diff_del_bg, d.diff_del_bg),
+    }
+}
+
 // ── TOML deserialization structs (all Option<String>) ──
 
 #[derive(Deserialize, Default)]
 #[serde(default)]
 struct ThemeToml {
+    palette: PaletteToml,
     border: BorderToml,
     workspace_list: WorkspaceListToml,
     file_list: FileListToml,
@@ -54,6 +85,8 @@ struct ThemeToml {
     general: GeneralToml,
     fuzzy_search: FuzzySearchToml,
     selection: SelectionToml,
+    status: StatusToml,
+    diff: DiffToml,
 }
 
 #[derive(Deserialize, Default)]
@@ -125,6 +158,9 @@ struct StatusBarToml {
     navigate_bg: Option<String>,
     mode_fg: Option<String>,
     separator_fg: Option<String>,
+    text_fg: Option<String>,
+    toast_info: Option<String>,
+    toast_success: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -180,6 +216,135 @@ struct SelectionToml {
     fg: Option<String>,
 }
 
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct StatusToml {
+    running: Option<String>,
+    needs_you: Option<String>,
+    done: Option<String>,
+    error: Option<String>,
+    exited: Option<String>,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct DiffToml {
+    add: Option<String>,
+    add_bg: Option<String>,
+    del: Option<String>,
+    del_bg: Option<String>,
+    context: Option<String>,
+    hunk: Option<String>,
+    comment: Option<String>,
+}
+
+/// A theme file may set any of the primitive `[palette]` tokens; unset ones
+/// fall back to the dark default. Every role and every direct `theme.palette.*`
+/// read then derives from the resolved palette, so overriding these is the one
+/// place a theme (notably a light one) can retint the whole UI at once.
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct PaletteToml {
+    bg0: Option<String>,
+    bg1: Option<String>,
+    bg2: Option<String>,
+    bg3: Option<String>,
+    line: Option<String>,
+    line_strong: Option<String>,
+    fg0: Option<String>,
+    fg1: Option<String>,
+    fg2: Option<String>,
+    fg3: Option<String>,
+    iris: Option<String>,
+    iris_wash: Option<String>,
+    ok: Option<String>,
+    warn: Option<String>,
+    err: Option<String>,
+    info: Option<String>,
+    diff_add_bg: Option<String>,
+    diff_del_bg: Option<String>,
+}
+
+// ── Cabina palette (primitive tokens) ──
+
+/// Build a Color from a `0xRRGGBB` literal.
+const fn rgb(hex: u32) -> Color {
+    Color::Rgb((hex >> 16) as u8, (hex >> 8) as u8, hex as u8)
+}
+
+/// Primitive color tokens of the "Cabina" visual language. The roles in
+/// [`Theme`] derive from these; render code prefers role tokens and may read
+/// `theme.palette` directly only for one-off semantic colors that have no
+/// role (e.g. a ✓/✗ verdict glyph).
+///
+/// Two rules govern the mapping:
+/// - `iris` (the single accent) marks focus/interactivity and never state.
+/// - The semantic colors (`ok`/`warn`/`err`/`info`) mark state and never focus.
+#[derive(Clone, Copy)]
+pub struct Palette {
+    /// Canvas: pane and terminal background.
+    pub bg0: Color,
+    /// Barely raised: alternate rows.
+    pub bg1: Color,
+    /// Raised: group headers, inactive tabs, unfocused selection.
+    pub bg2: Color,
+    /// Overlays and popups.
+    pub bg3: Color,
+    /// Borders of unfocused panes.
+    pub line: Color,
+    /// Borders of neutral dialogs.
+    pub line_strong: Color,
+    /// Primary text: names, values, the selected thing.
+    pub fg0: Color,
+    /// Secondary text: regular content.
+    pub fg1: Color,
+    /// Muted: details, unfocused titles, textual separators.
+    pub fg2: Color,
+    /// Ghost: placeholders, counters, the inactive.
+    pub fg3: Color,
+    /// THE accent: focus, active tab, matches, keys, cursor.
+    pub iris: Color,
+    /// Selection background in the focused pane.
+    pub iris_wash: Color,
+    /// Done, staged, additions, success toasts.
+    pub ok: Color,
+    /// "Needs you": permission prompts, idle with news, modified files.
+    pub warn: Color,
+    /// Errors, deletions, conflicts, destructive confirms.
+    pub err: Color,
+    /// Running activity, informative toasts, renames.
+    pub info: Color,
+    /// Background tint of added diff lines.
+    pub diff_add_bg: Color,
+    /// Background tint of deleted diff lines.
+    pub diff_del_bg: Color,
+}
+
+impl Default for Palette {
+    fn default() -> Self {
+        Self {
+            bg0: rgb(0x14141C),
+            bg1: rgb(0x1B1B26),
+            bg2: rgb(0x232331),
+            bg3: rgb(0x2A2A3C),
+            line: rgb(0x3D3D54),
+            line_strong: rgb(0x4C4C68),
+            fg0: rgb(0xECECF6),
+            fg1: rgb(0xB4B4CC),
+            fg2: rgb(0x7C7C99),
+            fg3: rgb(0x56566E),
+            iris: rgb(0xA78BFA),
+            iris_wash: rgb(0x322D4D),
+            ok: rgb(0x9BD186),
+            warn: rgb(0xE8B15E),
+            err: rgb(0xF0717D),
+            info: rgb(0x84B0F2),
+            diff_add_bg: rgb(0x1C271B),
+            diff_del_bg: rgb(0x2E1C22),
+        }
+    }
+}
+
 // ── Resolved Theme (Color values) ──
 
 pub struct BorderTheme {
@@ -233,11 +398,19 @@ pub struct SubtabsTheme {
 pub struct StatusBarTheme {
     pub error_bg: Color,
     pub error_fg: Color,
-    /// Background for the [PREFIX]/[SCROLL] mode chips
+    /// Background for the PREFIX/SCROLL mode chips
     pub prefix_bg: Color,
+    /// Quiet surface of the whole bar
     pub navigate_bg: Color,
+    /// Text on the mode chip
     pub mode_fg: Color,
     pub separator_fg: Color,
+    /// Body text of the bar (branch, counters)
+    pub text_fg: Color,
+    /// Glyph color of info toasts
+    pub toast_info: Color,
+    /// Glyph color of success toasts
+    pub toast_success: Color,
 }
 
 pub struct FooterTheme {
@@ -281,6 +454,38 @@ pub struct SelectionTheme {
     pub fg: Color,
 }
 
+/// Diff rendering tokens (code review). The background tints make the diff
+/// readable at a peripheral glance, without reading the +/- markers.
+pub struct DiffTheme {
+    /// Added lines.
+    pub add: Color,
+    pub add_bg: Color,
+    /// Deleted lines.
+    pub del: Color,
+    pub del_bg: Color,
+    /// Unchanged context lines.
+    pub context: Color,
+    /// Hunk headers (@@ ... @@).
+    pub hunk: Color,
+    /// Inline review comments attached to lines.
+    pub comment: Color,
+}
+
+/// Unified agent/process status vocabulary. Every surface that shows agent
+/// state (Agents pane, tab bar, dashboard, workspace switcher) reads these
+/// tokens; the glyphs live in `ui::cli_agent_status_view`.
+pub struct StatusTheme {
+    /// Activity: the running spinner (Agents pane only) and live processes.
+    pub running: Color,
+    /// "Your turn": permission prompts and idle-with-news. Propagates to
+    /// ambient chrome (tabs, sidebar, header) — activity does not.
+    pub needs_you: Color,
+    pub done: Color,
+    pub error: Color,
+    /// Exited / not-started processes; almost invisible on purpose.
+    pub exited: Color,
+}
+
 pub struct Theme {
     pub border: BorderTheme,
     pub workspace_list: WorkspaceListTheme,
@@ -294,102 +499,144 @@ pub struct Theme {
     pub general: GeneralTheme,
     pub fuzzy_search: FuzzySearchTheme,
     pub selection: SelectionTheme,
+    pub status: StatusTheme,
+    pub diff: DiffTheme,
+    /// The primitive tokens this theme derives from, for one-off semantic
+    /// colors that have no dedicated role.
+    pub palette: Palette,
 }
 
 impl Default for Theme {
     fn default() -> Self {
+        Self::from_palette(&Palette::default())
+    }
+}
+
+impl Theme {
+    /// Derive every role from the primitive palette. This is the single
+    /// place that decides what each token *means* visually.
+    pub fn from_palette(p: &Palette) -> Self {
         Self {
             border: BorderTheme {
-                active: Color::Green,
-                inactive: Color::DarkGray,
+                active: p.iris,
+                inactive: p.line,
             },
             workspace_list: WorkspaceListTheme {
-                empty_text: Color::DarkGray,
-                name_active: Color::White,
-                name_inactive: Color::Gray,
-                detail_selected: Color::Gray,
-                detail_normal: Color::DarkGray,
-                selected_bg: Color::DarkGray,
-                group_header_bg: Color::Rgb(30, 30, 45),
-                alt_bg: Color::Rgb(25, 25, 35),
+                empty_text: p.fg3,
+                name_active: p.fg0,
+                name_inactive: p.fg1,
+                detail_selected: p.fg2,
+                detail_normal: p.fg3,
+                selected_bg: p.iris_wash,
+                group_header_bg: p.bg2,
+                alt_bg: p.bg1,
             },
             file_list: FileListTheme {
-                empty_text: Color::DarkGray,
-                modified: Color::Yellow,
-                added: Color::Green,
-                deleted: Color::Red,
-                renamed: Color::Cyan,
-                untracked: Color::DarkGray,
-                conflicted: Color::Magenta,
-                staged: Color::Green,
-                staged_modified: Color::Yellow,
-                file_path: Color::White,
-                selected_bg: Color::DarkGray,
-                multi_select_bg: Color::Rgb(40, 40, 60),
+                empty_text: p.fg3,
+                modified: p.warn,
+                added: p.ok,
+                deleted: p.err,
+                renamed: p.info,
+                untracked: p.fg3,
+                conflicted: p.err,
+                staged: p.ok,
+                staged_modified: p.warn,
+                file_path: p.fg0,
+                selected_bg: p.iris_wash,
+                multi_select_bg: p.bg3,
             },
             tabs: TabsTheme {
-                active: Color::Yellow,
-                inactive: Color::DarkGray,
+                active: p.iris,
+                inactive: p.fg2,
             },
             subtabs: SubtabsTheme {
-                active: Color::Cyan,
-                active_fg: Color::Black,
-                // A raised surface + light-grey text so an inactive tab reads
-                // as a clearly distinct (but secondary) block, not a smudge
-                // against the bar background.
-                inactive: Color::Rgb(180, 180, 195),
-                inactive_bg: Color::Rgb(48, 48, 60),
+                active: p.iris,
+                active_fg: p.bg0,
+                // A raised surface + muted text so an inactive tab reads as a
+                // clearly distinct (but secondary) block, not a smudge against
+                // the bar background.
+                inactive: p.fg2,
+                inactive_bg: p.bg2,
             },
             status_bar: StatusBarTheme {
-                error_bg: Color::Red,
-                error_fg: Color::White,
-                prefix_bg: Color::Green,
-                navigate_bg: Color::Yellow,
-                mode_fg: Color::Black,
-                separator_fg: Color::DarkGray,
+                error_bg: p.err,
+                error_fg: p.bg0,
+                prefix_bg: p.iris,
+                navigate_bg: p.bg2,
+                mode_fg: p.bg0,
+                // Muted, not ghost: the `│` dividers derive from fg2 so they
+                // stay legible on the bar (fg3 lands ~2.2:1 — below the 3:1
+                // floor even for a decorative separator).
+                separator_fg: p.fg2,
+                text_fg: p.fg1,
+                toast_info: p.info,
+                toast_success: p.ok,
             },
             footer: FooterTheme {
-                key: Color::Yellow,
-                description: Color::Gray,
+                key: p.iris,
+                description: p.fg2,
             },
             dialog: DialogTheme {
-                new_ws_border: Color::Yellow,
-                new_ws_active: Color::Yellow,
-                new_ws_inactive: Color::DarkGray,
-                delete_border: Color::Red,
-                delete_text: Color::White,
-                delete_name: Color::Yellow,
-                delete_yes: Color::Red,
-                delete_no: Color::Green,
-                delete_cancel: Color::DarkGray,
+                new_ws_border: p.line_strong,
+                new_ws_active: p.iris,
+                new_ws_inactive: p.fg2,
+                delete_border: p.err,
+                delete_text: p.fg1,
+                delete_name: p.fg0,
+                delete_yes: p.err,
+                // The safe action stays neutral: green would say "this is the
+                // good one", and semantics never editorialize a choice.
+                delete_no: p.fg1,
+                delete_cancel: p.fg3,
             },
             help: HelpTheme {
-                border: Color::Cyan,
+                border: p.line_strong,
             },
             general: GeneralTheme {
-                welcome_text: Color::Gray,
-                muted_text: Color::DarkGray,
-                scrollbar_thumb: Color::Gray,
+                welcome_text: p.fg1,
+                muted_text: p.fg2,
+                scrollbar_thumb: p.fg2,
             },
             fuzzy_search: FuzzySearchTheme {
-                border: Color::Cyan,
-                input_text: Color::White,
-                match_highlight: Color::Yellow,
-                result_text: Color::Gray,
-                selected_bg: Color::DarkGray,
-                count_text: Color::DarkGray,
+                border: p.line_strong,
+                input_text: p.fg0,
+                match_highlight: p.iris,
+                result_text: p.fg1,
+                selected_bg: p.iris_wash,
+                count_text: p.fg3,
             },
             selection: SelectionTheme {
-                bg: Color::LightBlue,
-                fg: Color::Black,
+                bg: p.iris_wash,
+                fg: p.fg0,
             },
+            status: StatusTheme {
+                running: p.info,
+                needs_you: p.warn,
+                done: p.ok,
+                error: p.err,
+                exited: p.fg3,
+            },
+            diff: DiffTheme {
+                add: p.ok,
+                add_bg: p.diff_add_bg,
+                del: p.err,
+                del_bg: p.diff_del_bg,
+                context: p.fg2,
+                hunk: p.info,
+                comment: p.warn,
+            },
+            palette: *p,
         }
     }
 }
 
 impl Theme {
     fn from_toml(t: ThemeToml) -> Self {
-        let d = Self::default();
+        // Resolve the primitive palette first; every role default below (and
+        // every direct `theme.palette.*` read at render time) derives from it,
+        // so a theme that only sets `[palette]` retints the entire UI.
+        let p = resolve_palette(&t.palette);
+        let d = Self::from_palette(&p);
         Self {
             border: BorderTheme {
                 active: resolve(
@@ -464,6 +711,9 @@ impl Theme {
                 navigate_bg: resolve(&t.status_bar.navigate_bg, d.status_bar.navigate_bg),
                 mode_fg: resolve(&t.status_bar.mode_fg, d.status_bar.mode_fg),
                 separator_fg: resolve(&t.status_bar.separator_fg, d.status_bar.separator_fg),
+                text_fg: resolve(&t.status_bar.text_fg, d.status_bar.text_fg),
+                toast_info: resolve(&t.status_bar.toast_info, d.status_bar.toast_info),
+                toast_success: resolve(&t.status_bar.toast_success, d.status_bar.toast_success),
             },
             footer: FooterTheme {
                 key: resolve(&t.footer.key, d.footer.key),
@@ -506,6 +756,23 @@ impl Theme {
                 bg: resolve(&t.selection.bg, d.selection.bg),
                 fg: resolve(&t.selection.fg, d.selection.fg),
             },
+            status: StatusTheme {
+                running: resolve(&t.status.running, d.status.running),
+                needs_you: resolve(&t.status.needs_you, d.status.needs_you),
+                done: resolve(&t.status.done, d.status.done),
+                error: resolve(&t.status.error, d.status.error),
+                exited: resolve(&t.status.exited, d.status.exited),
+            },
+            diff: DiffTheme {
+                add: resolve(&t.diff.add, d.diff.add),
+                add_bg: resolve(&t.diff.add_bg, d.diff.add_bg),
+                del: resolve(&t.diff.del, d.diff.del),
+                del_bg: resolve(&t.diff.del_bg, d.diff.del_bg),
+                context: resolve(&t.diff.context, d.diff.context),
+                hunk: resolve(&t.diff.hunk, d.diff.hunk),
+                comment: resolve(&t.diff.comment, d.diff.comment),
+            },
+            palette: p,
         }
     }
 }
@@ -564,12 +831,24 @@ mod tests {
     }
 
     #[test]
-    fn test_default_theme_matches_hardcoded() {
+    fn test_parse_color_reset() {
+        assert_eq!(parse_color("Reset"), Color::Reset);
+    }
+
+    #[test]
+    fn test_default_theme_derives_from_palette() {
+        let p = Palette::default();
         let t = Theme::default();
-        assert_eq!(t.border.active, Color::Green);
-        assert_eq!(t.border.inactive, Color::DarkGray);
-        assert_eq!(t.file_list.modified, Color::Yellow);
-        assert_eq!(t.subtabs.active, Color::Cyan);
+        // The accent marks focus/interactivity...
+        assert_eq!(t.border.active, p.iris);
+        assert_eq!(t.subtabs.active, p.iris);
+        assert_eq!(t.footer.key, p.iris);
+        assert_eq!(t.fuzzy_search.match_highlight, p.iris);
+        // ...and semantics mark state.
+        assert_eq!(t.file_list.modified, p.warn);
+        assert_eq!(t.file_list.added, p.ok);
+        assert_eq!(t.file_list.deleted, p.err);
+        assert_eq!(t.border.inactive, p.line);
     }
 
     #[test]
@@ -580,13 +859,63 @@ mod tests {
         let theme = Theme::from_toml(t);
         assert_eq!(theme.border.active, Color::Rgb(255, 0, 0));
         // Unset fields keep defaults
-        assert_eq!(theme.border.inactive, Color::DarkGray);
+        assert_eq!(theme.border.inactive, Theme::default().border.inactive);
 
         // The new key wins over the deprecated one
         let toml_str = "[border]\nactive = \"#00ff00\"\nactive_interact = \"#ff0000\"\n";
         let t: ThemeToml = toml::from_str(toml_str).unwrap();
         let theme = Theme::from_toml(t);
         assert_eq!(theme.border.active, Color::Rgb(0, 255, 0));
+    }
+
+    #[test]
+    fn test_palette_override_retints_roles_and_palette() {
+        // Setting a `[palette]` primitive must flow into every role that
+        // derives from it AND into the exposed `theme.palette` (which render
+        // code reads directly), not just leave the dark default in place.
+        let toml_str = "[palette]\niris = \"#00ff00\"\nbg0 = \"#ffffff\"\nfg0 = \"#010203\"\n";
+        let t: ThemeToml = toml::from_str(toml_str).unwrap();
+        let theme = Theme::from_toml(t);
+        let green = Color::Rgb(0, 255, 0);
+        // Roles derived from `iris` follow the override.
+        assert_eq!(theme.border.active, green);
+        assert_eq!(theme.subtabs.active, green);
+        assert_eq!(theme.footer.key, green);
+        // `subtabs.active_fg` derives from bg0, `workspace_list.name_active`
+        // from fg0 — both must track the override.
+        assert_eq!(theme.subtabs.active_fg, Color::Rgb(255, 255, 255));
+        assert_eq!(theme.workspace_list.name_active, Color::Rgb(1, 2, 3));
+        // The exposed palette carries the override for direct reads.
+        assert_eq!(theme.palette.iris, green);
+        assert_eq!(theme.palette.bg0, Color::Rgb(255, 255, 255));
+        // A role override still wins over the palette-derived default.
+        let toml_str = "[palette]\niris = \"#00ff00\"\n[border]\nactive = \"#0000ff\"\n";
+        let t: ThemeToml = toml::from_str(toml_str).unwrap();
+        let theme = Theme::from_toml(t);
+        assert_eq!(theme.border.active, Color::Rgb(0, 0, 255));
+        assert_eq!(theme.subtabs.active, green); // untouched role still tracks palette
+    }
+
+    #[test]
+    fn test_shipped_theme_files_parse_and_apply() {
+        // Every theme under repo `themes/` must deserialize and resolve without
+        // panicking (guards against a typo'd hex or a malformed section in a
+        // shipped theme file).
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../themes");
+        let mut checked = 0;
+        for entry in std::fs::read_dir(&dir).expect("themes dir") {
+            let path = entry.unwrap().path();
+            if path.extension().and_then(|e| e.to_str()) != Some("toml") {
+                continue;
+            }
+            let src = std::fs::read_to_string(&path).unwrap();
+            let t: ThemeToml = toml::from_str(&src)
+                .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            let _ = Theme::from_toml(t); // must not panic
+            checked += 1;
+        }
+        assert!(checked >= 8, "expected the shipped themes, saw {checked}");
     }
 
     #[test]
@@ -618,7 +947,8 @@ mod tests {
         // Overridden
         assert_eq!(theme.file_list.modified, Color::Rgb(0xaa, 0xbb, 0xcc));
         // Other sections untouched
-        assert_eq!(theme.border.active, Color::Green);
-        assert_eq!(theme.footer.key, Color::Yellow);
+        let d = Theme::default();
+        assert_eq!(theme.border.active, d.border.active);
+        assert_eq!(theme.footer.key, d.footer.key);
     }
 }

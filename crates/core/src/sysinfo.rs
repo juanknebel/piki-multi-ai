@@ -69,7 +69,12 @@ pub struct DiskInfo {
 
 pub fn spawn_sysinfo_poller() -> Arc<Mutex<String>> {
     // Do a synchronous initial sample so the first frame isn't empty
+    let t0 = std::time::Instant::now();
     let initial = sample_system_info().format();
+    tracing::info!(
+        elapsed_ms = t0.elapsed().as_millis(),
+        "startup: sysinfo initial sample done"
+    );
     let formatted = Arc::new(Mutex::new(initial));
     let formatted_clone = formatted.clone();
 

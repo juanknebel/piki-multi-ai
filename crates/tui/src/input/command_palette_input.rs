@@ -5,9 +5,13 @@ use crate::app::{App, AppMode};
 use super::fuzzy_common::{FuzzyAction, handle_fuzzy_input};
 
 pub(super) fn handle_command_palette_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    // `config` and `command_palette` are disjoint fields, so the shared borrow
+    // of one coexists with the mutable borrow of the other.
+    let cfg = &app.config;
     let state = app.command_palette.as_mut()?;
     let matched_count = state.nucleo.snapshot().matched_item_count() as usize;
     let action = handle_fuzzy_input(
+        cfg,
         &mut state.query,
         &mut state.selected,
         matched_count,
@@ -48,7 +52,7 @@ pub(super) fn handle_command_palette_input(app: &mut App, key: KeyEvent) -> Opti
 fn execute_palette_command(app: &mut App, id: &str, switch_idx: Option<usize>) -> Option<Action> {
     // Handle dynamic workspace switch commands
     if let Some(idx) = switch_idx {
-        app.switch_workspace(idx);
+        app.switch_workspace_and_focus(idx);
         return None;
     }
 

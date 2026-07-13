@@ -1,82 +1,125 @@
-# piki-multi-ai default theme
+# piki-multi-ai default theme — the "Cabina" visual language
 #
-# Copy this file to ~/.config/piki-multi/themes/default.toml
-# and set theme = "default" in ~/.config/piki-multi/config.toml
+# Copy this file to ~/.config/piki-multi/themes/default.toml (install.sh does
+# it for you). It mirrors the built-in defaults: override only what you need.
+# piki-dark.toml is the same reference under an explicit name.
 #
-# Colors can be named (Red, Green, Yellow, Blue, Cyan, Magenta, White, Black,
-# Gray, DarkGray, LightRed, LightGreen, LightYellow, LightBlue, LightCyan,
-# LightMagenta) or hex (#rrggbb).
+# Colors can be named ANSI (Red, Green, Yellow, Blue, Cyan, Magenta, White,
+# Black, Gray, DarkGray, Light*), "Reset" (terminal default), or hex #rrggbb.
+#
+# The fastest way to build a theme is the primitive `[palette]` below: every
+# role (and every direct palette read in the UI) derives from it, so setting
+# just these retints the whole app — a light theme only needs a light ink ramp
+# and a dark text ramp. The role sections further down then fine-tune specifics.
+# See themes/tokyonight.toml (dark) or catppuccin-latte.toml (light) for
+# palette-only examples.
+#
+# [palette]
+# bg0 = "#14141C"   # canvas          line = "#3D3D54"        # unfocused borders
+# bg1 = "#1B1B26"   # alt rows        line_strong = "#4C4C68" # dialog borders
+# bg2 = "#232331"   # raised surface  fg0 = "#ECECF6"         # primary text
+# bg3 = "#2A2A3C"   # overlays        fg1 = "#B4B4CC"         # body text
+# iris = "#A78BFA"      # accent      fg2 = "#7C7C99"         # muted detail
+# iris_wash = "#322D4D" # selection   fg3 = "#56566E"         # ghost text
+# ok = "#9BD186"  warn = "#E8B15E"  err = "#F0717D"  info = "#84B0F2"
+# diff_add_bg = "#1C271B"   diff_del_bg = "#2E1C22"
 
 [border]
-active_interact = "Green"
-active_navigate = "Yellow"
-inactive = "DarkGray"
+active = "#A78BFA"      # focused pane — the single iris accent
+inactive = "#3D3D54"
 
 [workspace_list]
-empty_text = "DarkGray"
-name_active = "White"
-name_inactive = "Gray"
-detail_selected = "Gray"
-detail_normal = "DarkGray"
-selected_bg = "DarkGray"
-group_header_bg = "#1e1e2d"
-separator = "#32323c"
-alt_bg = "#19191f"
+empty_text = "#56566E"
+name_active = "#ECECF6"
+name_inactive = "#B4B4CC"
+detail_selected = "#7C7C99"
+detail_normal = "#56566E"
+selected_bg = "#322D4D"
+group_header_bg = "#232331"
+alt_bg = "#1B1B26"
 
 [file_list]
-empty_text = "DarkGray"
-modified = "Yellow"
-added = "Green"
-deleted = "Red"
-renamed = "Cyan"
-untracked = "DarkGray"
-conflicted = "Magenta"
-staged = "Green"
-staged_modified = "Yellow"
-file_path = "White"
-selected_bg = "DarkGray"
+empty_text = "#56566E"
+modified = "#E8B15E"
+added = "#9BD186"
+deleted = "#F0717D"
+renamed = "#84B0F2"
+untracked = "#56566E"
+conflicted = "#F0717D"
+staged = "#9BD186"
+staged_modified = "#E8B15E"
+file_path = "#ECECF6"
+selected_bg = "#322D4D"
+multi_select_bg = "#2A2A3C"
 
 [tabs]
-active = "Yellow"
-inactive = "DarkGray"
+active = "#A78BFA"
+inactive = "#7C7C99"
 
 [subtabs]
-active = "Cyan"          # active tab block background
-active_fg = "Black"      # text on the active block
-inactive = "#b4b4c3"     # light grey text — readable but secondary
-inactive_bg = "#30303c"  # raised surface, distinct from the bar bg
+active = "#A78BFA"       # active tab block background
+active_fg = "#14141C"    # text on the active block
+inactive = "#7C7C99"     # text of inactive blocks
+inactive_bg = "#232331"  # raised surface
 
 [status_bar]
-error_bg = "Red"
-error_fg = "White"
-diff_bg = "DarkGray"
-diff_fg = "White"
-interact_bg = "Green"
-navigate_bg = "Yellow"
-mode_fg = "Black"
+error_bg = "#F0717D"
+error_fg = "#14141C"
+prefix_bg = "#A78BFA"    # PREFIX/SCROLL mode chip
+navigate_bg = "#232331"  # quiet surface of the whole bar
+mode_fg = "#14141C"      # text on the mode chip
+separator_fg = "#7C7C99"
+text_fg = "#B4B4CC"      # bar body text (branch, counters)
+toast_info = "#84B0F2"
+toast_success = "#9BD186"
 
 [footer]
-key = "Yellow"
-description = "Gray"
-
-[diff]
-border = "Cyan"
-empty_text = "DarkGray"
+key = "#A78BFA"
+description = "#7C7C99"
 
 [dialog]
-new_ws_border = "Yellow"
-new_ws_active = "Yellow"
-new_ws_inactive = "DarkGray"
-delete_border = "Red"
-delete_text = "White"
-delete_name = "Yellow"
-delete_yes = "Red"
-delete_no = "Green"
-delete_cancel = "DarkGray"
+new_ws_border = "#4C4C68"
+new_ws_active = "#A78BFA"
+new_ws_inactive = "#7C7C99"
+delete_border = "#F0717D"
+delete_text = "#B4B4CC"
+delete_name = "#ECECF6"
+delete_yes = "#F0717D"
+delete_no = "#B4B4CC"
+delete_cancel = "#56566E"
 
 [help]
-border = "Cyan"
+border = "#4C4C68"
 
 [general]
-welcome_text = "Gray"
-muted_text = "DarkGray"
+welcome_text = "#B4B4CC"
+muted_text = "#7C7C99"
+scrollbar_thumb = "#7C7C99"
+
+[fuzzy_search]
+border = "#4C4C68"
+input_text = "#ECECF6"
+match_highlight = "#A78BFA"
+result_text = "#B4B4CC"
+selected_bg = "#322D4D"
+count_text = "#56566E"
+
+[selection]
+bg = "#322D4D"
+fg = "#ECECF6"
+
+[status]
+running = "#84B0F2"      # spinner, Agents pane only
+needs_you = "#E8B15E"    # permission prompts, idle with news
+done = "#9BD186"
+error = "#F0717D"
+exited = "#56566E"
+
+[diff]
+add = "#9BD186"
+add_bg = "#1C271B"
+del = "#F0717D"
+del_bg = "#2E1C22"
+context = "#7C7C99"
+hunk = "#84B0F2"
+comment = "#E8B15E"

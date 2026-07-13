@@ -1,21 +1,21 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 260
+assertion_line: 444
 expression: content
 ---
 
-┌ WORKSPACES ──┐
+╭ WORKSPACES ──╮
 │              │────────────────────────────────────────────────────────────────
-│ [C-g N] New w│┌ piki-multi-ai ───────────────────────────────────────────────┐
+│ [C-g s] New w│╭ piki-multi-ai ───────────────────────────────────────────────╮
 │              ││                                                              │
 │              ││  Welcome to piki-multi-ai                                    │
 │              ││                                                              │
 │              ││  Quick Start:                                                │
 │              ││                                                              │
-│              ││  1. [n] Create your first workspace                          │
-│              ││  2. [Tab] Switch between workspaces                          │
-└──────────────┘│  3. [Enter] Interact with the terminal                       │
-┌ AGENTS ──────┐│  4. [?] Full help                                            │
+│              ││  1. [C-g s] Create your first workspace                      │
+│              ││  2. [C-g w] Switch between workspaces                        │
+╰──────────────╯│  3. [Enter] Interact with the terminal                       │
+╭ AGENTS ──────╮│  4. [C-g ?] Full help                                        │
 │  No agents ru││                                                              │
 │  [C-g c] new ││                                                              │
 │              ││                                                              │
@@ -24,6 +24,6 @@ expression: content
 │              ││                                                              │
 │              ││                                                              │
 │              ││                                                              │
-│              │└──────────────────────────────────────────────────────────────┘
-└──────────────┘ No active workspace
- [k/j] select  [enter] open  [e] edit ws  [d] delete ws  [C-g] prefix
+│              │╰──────────────────────────────────────────────────────────────╯
+╰──────────────╯ No active workspace
+ [C-g w] workspaces  [C-g s] new ws  [C-g e] edit ws  [C-g d] delete ws

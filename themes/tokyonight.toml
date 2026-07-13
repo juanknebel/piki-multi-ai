@@ -1,76 +1,26 @@
-# Tokyo Night theme — dark blue-tinted palette
-# Based on https://github.com/folke/tokyonight.nvim
+# Tokyo Night — dark blue palette
+# https://github.com/folke/tokyonight.nvim (Night variant)
+#
+# Cabina themes need only override the primitive `[palette]`; every role and
+# every direct palette read derives from it. Add a `[section]` override below
+# only to fine-tune a specific role.
 
-[border]
-active_interact = "#9ece6a"   # green
-active_navigate = "#e0af68"   # yellow
-inactive = "#3b4261"          # comment
-
-[workspace_list]
-empty_text = "#3b4261"
-name_active = "#c0caf5"       # fg
-name_inactive = "#a9b1d6"     # fg_dark
-detail_selected = "#a9b1d6"
-detail_normal = "#3b4261"
-selected_bg = "#292e42"       # bg_highlight
-group_header_bg = "#292e42"   # bg_highlight
-separator = "#3b4261"
-alt_bg = "#24283b"
-
-[file_list]
-empty_text = "#3b4261"
-modified = "#e0af68"          # yellow
-added = "#9ece6a"             # green
-deleted = "#f7768e"           # red
-renamed = "#7dcfff"           # cyan
-untracked = "#3b4261"
-conflicted = "#bb9af7"        # magenta
-staged = "#9ece6a"
-staged_modified = "#e0af68"
-file_path = "#c0caf5"
-selected_bg = "#292e42"
-
-[tabs]
-active = "#e0af68"
-inactive = "#3b4261"
-
-[subtabs]
-active = "#7dcfff"
-active_fg = "#1a1b26"
-inactive = "#787c99"
-inactive_bg = "#292e42"
-
-[status_bar]
-error_bg = "#f7768e"
-error_fg = "#c0caf5"
-diff_bg = "#292e42"
-diff_fg = "#c0caf5"
-interact_bg = "#9ece6a"
-navigate_bg = "#e0af68"
-mode_fg = "#1a1b26"           # bg
-
-[footer]
-key = "#e0af68"
-description = "#a9b1d6"
-
-[diff]
-border = "#7dcfff"
-empty_text = "#3b4261"
-
-[dialog]
-new_ws_border = "#e0af68"
-new_ws_active = "#e0af68"
-new_ws_inactive = "#3b4261"
-delete_border = "#f7768e"
-delete_text = "#c0caf5"
-delete_name = "#e0af68"
-delete_yes = "#f7768e"
-delete_no = "#9ece6a"
-delete_cancel = "#3b4261"
-
-[help]
-border = "#7dcfff"
-
-[general]
-welcome_text = "#a9b1d6"
-muted_text = "#3b4261"
+[palette]
+bg0 = "#1a1b26"          # canvas
+bg1 = "#1f2335"          # alt rows
+bg2 = "#24283b"          # raised: group headers, inactive tabs, status bar
+bg3 = "#292e42"          # overlays / popups
+line = "#3b4261"         # unfocused borders
+line_strong = "#545c7e"  # dialog borders
+fg0 = "#c0caf5"          # primary text
+fg1 = "#a9b1d6"          # body text
+fg2 = "#828bb8"          # muted detail
+fg3 = "#565f89"          # ghost / placeholders
+iris = "#7aa2f7"         # THE accent (blue): focus, active tab, keys, matches
+iris_wash = "#283457"    # selection background in the focused pane
+ok = "#9ece6a"           # done, staged, additions, success
+warn = "#e0af68"         # needs-you, modified
+err = "#f7768e"          # errors, deletions, destructive confirms
+info = "#7dcfff"         # running, info toasts, renames
+diff_add_bg = "#1f2b22"
+diff_del_bg = "#2d2028"

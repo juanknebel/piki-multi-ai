@@ -29,7 +29,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
     let block = Block::default()
         .title(format!(" EDIT: {} ", file_path))
         .title_style(Style::default().fg(theme.border))
-        .borders(Borders::ALL)
+        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(Style::default().fg(theme.border));
 
     let inner = block.inner(area);
@@ -51,7 +51,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
             let line_num = format!("{:>width$} ", row + 1, width = line_num_width);
             let mut spans = vec![Span::styled(
                 line_num,
-                Style::default().fg(ratatui::style::Color::DarkGray),
+                Style::default().fg(app.theme.palette.fg2),
             )];
 
             if row == editor.cursor_row {
@@ -71,15 +71,15 @@ pub fn render(frame: &mut Frame, area: Rect, app: &App) {
                     spans.push(Span::styled(
                         " ",
                         Style::default()
-                            .bg(ratatui::style::Color::White)
-                            .fg(ratatui::style::Color::Black),
+                            .bg(app.theme.palette.fg0)
+                            .fg(app.theme.palette.bg0),
                     ));
                 } else {
                     // Split highlighted spans at cursor position
                     let next_byte = char_to_byte_idx(line_text, editor.cursor_col + 1);
                     let cursor_style = Style::default()
-                        .bg(ratatui::style::Color::White)
-                        .fg(ratatui::style::Color::Black);
+                        .bg(app.theme.palette.fg0)
+                        .fg(app.theme.palette.bg0);
                     let mut byte_pos: usize = 0;
                     for span in &highlighted {
                         let span_len = span.content.len();

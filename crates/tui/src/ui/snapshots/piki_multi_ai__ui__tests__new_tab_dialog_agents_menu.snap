@@ -1,5 +1,6 @@
 ---
 source: crates/tui/src/ui/mod.rs
+assertion_line: 407
 expression: content
 ---
 
@@ -10,10 +11,10 @@ expression: content
 
 
 
-                    ┌ AI Agents ───────────────────────────┐
+                    ╭ AI Agents ───────────────────────────╮
                     │                                      │
                     │  [1] Claude Code                     │
                     │  [2] Gemini                          │
                     │                                      │
-                    │  [Esc] Back                          │
-                    └──────────────────────────────────────┘
+                    │  [Esc] back                          │
+                    ╰──────────────────────────────────────╯
