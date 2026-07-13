@@ -1,0 +1,22 @@
+---
+source: crates/tui/src/ui/mod.rs
+expression: content
+---
+
+
+
+
+
+           ╭ Agent status unavailable ──────────────────────────────╮
+           │                                                        │
+           │                       Missing: jq                      │
+           │                                                        │
+           │ Antigravity runs fine, but piki can't read its status: │
+           │ the Agents pane will show bare liveness (alive/exited) │
+           │            instead of running / idle / done.           │
+           │                                                        │
+           │  Install it and reopen the tab to get the full status. │
+           │                                                        │
+           │              Press Esc or Enter to dismiss             │
+           │                                                        │
+           ╰────────────────────────────────────────────────────────╯

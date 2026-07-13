@@ -13,6 +13,7 @@ pub(crate) use self::dashboard::render_dashboard_overlay;
 pub(crate) use self::providers::{render_edit_provider_dialog, render_manage_providers_dialog};
 pub(crate) use self::system::{
     render_about_overlay, render_confirm_close_tab_dialog, render_confirm_quit_dialog,
+    render_missing_prereqs_overlay,
     render_help_overlay, render_logs_overlay, render_new_tab_dialog,
 };
 #[cfg(test)]

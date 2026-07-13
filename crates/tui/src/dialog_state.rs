@@ -150,6 +150,15 @@ pub enum DialogState {
         filter: String,
     },
     About,
+    /// A bridged agent tab was opened while the tools its hooks need are
+    /// missing from PATH. The tab spawned fine — this only warns that its
+    /// status will be guessed from PTY silence instead of read from the agent.
+    MissingPrereqs {
+        /// The agent whose bridge is degraded (e.g. `Antigravity`).
+        agent: String,
+        /// Tools that weren't found (e.g. `jq`).
+        missing: Vec<String>,
+    },
     WorkspaceInfo {
         hscroll: u16,
     },

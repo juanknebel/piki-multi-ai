@@ -106,6 +106,23 @@ mod tests {
     }
 
     #[test]
+    fn test_render_missing_prereqs_dialog() {
+        let mut terminal = test_terminal(80, 24);
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        app.active_dialog = Some(DialogState::MissingPrereqs {
+            agent: "Antigravity".to_string(),
+            missing: vec!["jq".to_string()],
+        });
+        terminal
+            .draw(|frame| {
+                super::dialogs::render_missing_prereqs_overlay(frame, frame.area(), &app);
+            })
+            .unwrap();
+        let content = buffer_to_snapshot(terminal.backend().buffer());
+        insta::assert_snapshot!("missing_prereqs_dialog", content);
+    }
+
+    #[test]
     fn test_render_confirm_close_tab_dialog() {
         let mut terminal = test_terminal(80, 24);
         let app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());

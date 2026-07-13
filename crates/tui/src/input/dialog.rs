@@ -795,6 +795,17 @@ pub(super) fn handle_help_input(app: &mut App, key: KeyEvent) -> Option<Action> 
     None
 }
 
+/// The missing-prereqs warning is purely informational: any dismiss key closes
+/// it. Nothing to rebind, so it takes no `[keybindings.*]` context of its own.
+pub(super) fn handle_missing_prereqs_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    if is_cancel(key, &app.config)
+        || matches!(key.code, KeyCode::Enter | KeyCode::Char(' ') | KeyCode::Char('q'))
+    {
+        dismiss_dialog(app);
+    }
+    None
+}
+
 pub(super) fn handle_about_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     if app.config.matches_about(key, "exit") || app.config.matches_about(key, "exit_about") {
         dismiss_dialog(app);

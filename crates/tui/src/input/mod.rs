@@ -29,7 +29,8 @@ use self::dialog::{
     handle_edit_agent_role_input, handle_edit_provider_input, handle_edit_workspace_input,
     handle_help_input, handle_import_agents_input,
     handle_logs_input, handle_manage_agents_input, handle_manage_providers_input,
-    handle_new_tab_input, handle_new_workspace_input, handle_workspace_info_input,
+    handle_missing_prereqs_input, handle_new_tab_input, handle_new_workspace_input,
+    handle_workspace_info_input,
 };
 use self::editor_input::handle_inline_edit_input;
 use self::fuzzy_input::handle_fuzzy_search_input;
@@ -132,6 +133,7 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
     match app.mode {
         AppMode::WorkspaceInfo => return handle_workspace_info_input(app, key),
         AppMode::About => return handle_about_input(app, key),
+        AppMode::MissingPrereqs => return handle_missing_prereqs_input(app, key),
         AppMode::Help => return handle_help_input(app, key),
         AppMode::FuzzySearch => return handle_fuzzy_search_input(app, key),
         AppMode::InlineEdit => return handle_inline_edit_input(app, key),

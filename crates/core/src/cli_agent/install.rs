@@ -145,7 +145,7 @@ fn materialize(base_dir: &Path) -> io::Result<ClaudeHookSetup> {
 /// A process-unique FIFO file name: pid + a process-global monotonic counter +
 /// wall-clock nanos. Collision-free across concurrent spawns in the same
 /// process (counter) and across separate piki processes (pid + nanos).
-fn unique_sock_name() -> String {
+pub(super) fn unique_sock_name() -> String {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let pid = std::process::id();
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -157,7 +157,7 @@ fn unique_sock_name() -> String {
 }
 
 #[cfg(unix)]
-fn set_executable(path: &Path) -> io::Result<()> {
+pub(super) fn set_executable(path: &Path) -> io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
     let mut perms = std::fs::metadata(path)?.permissions();
     perms.set_mode(0o755);
@@ -165,7 +165,7 @@ fn set_executable(path: &Path) -> io::Result<()> {
 }
 
 #[cfg(not(unix))]
-fn set_executable(_path: &Path) -> io::Result<()> {
+pub(super) fn set_executable(_path: &Path) -> io::Result<()> {
     Ok(())
 }
 

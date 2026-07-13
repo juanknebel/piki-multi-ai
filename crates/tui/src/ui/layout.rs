@@ -251,6 +251,9 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         AppMode::FuzzySearch => super::fuzzy::render(frame, area, app),
         AppMode::NewTab => super::dialogs::render_new_tab_dialog(frame, area, app),
         AppMode::About => super::dialogs::render_about_overlay(frame, area, app),
+        AppMode::MissingPrereqs => {
+            super::dialogs::render_missing_prereqs_overlay(frame, area, app)
+        }
         AppMode::WorkspaceInfo => super::dialogs::render_workspace_info_overlay(frame, area, app),
         AppMode::ConfirmCloseTab => {
             super::dialogs::render_confirm_close_tab_dialog(frame, area, app)

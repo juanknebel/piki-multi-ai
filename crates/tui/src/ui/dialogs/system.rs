@@ -152,6 +152,61 @@ pub(crate) fn render_about_overlay(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(text, popup);
 }
 
+/// Warn that a bridged agent (Claude Code, Antigravity) opened without the
+/// tools its hooks need. The tab itself is fine — only its *status* degrades to
+/// the byte-silence heuristic — so this is informational, not a failure.
+pub(crate) fn render_missing_prereqs_overlay(frame: &mut Frame, area: Rect, app: &App) {
+    let (agent, missing) = match app.active_dialog {
+        Some(DialogState::MissingPrereqs {
+            ref agent,
+            ref missing,
+        }) => (agent.clone(), missing.join(", ")),
+        _ => return,
+    };
+    let popup = super::clear_popup(frame, area, 58, 13);
+    let theme = &app.theme;
+
+    let lines: Vec<Line> = vec![
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(
+                "Missing: ",
+                Style::default().fg(theme.general.muted_text),
+            ),
+            Span::styled(
+                missing,
+                Style::default()
+                    .fg(theme.status.needs_you)
+                    .add_modifier(ratatui::style::Modifier::BOLD),
+            ),
+        ]),
+        Line::from(""),
+        Line::from(format!(
+            "{agent} runs fine, but piki can't read its status:"
+        )),
+        Line::from("the Agents pane will show bare liveness (alive/exited)"),
+        Line::from("instead of running / idle / done."),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Install it and reopen the tab to get the full status.",
+            Style::default().fg(theme.general.muted_text),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Press Esc or Enter to dismiss",
+            Style::default().fg(theme.general.muted_text),
+        )),
+    ];
+
+    let text = Paragraph::new(lines)
+        .block(super::popup_block(
+            "Agent status unavailable",
+            theme.status.needs_you,
+        ))
+        .alignment(ratatui::layout::Alignment::Center);
+    frame.render_widget(text, popup);
+}
+
 pub(crate) fn render_confirm_close_tab_dialog(frame: &mut Frame, area: Rect, app: &App) {
     let theme = &app.theme.dialog;
     let tab_name = match app.active_dialog {

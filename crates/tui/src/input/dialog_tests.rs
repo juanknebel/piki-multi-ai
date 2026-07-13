@@ -15,8 +15,8 @@ use super::dialog::{
     handle_dispatch_card_move_input, handle_edit_agent_input, handle_edit_agent_role_input,
     handle_edit_provider_input, handle_edit_workspace_input,
     handle_help_input, handle_import_agents_input, handle_logs_input,
-    handle_manage_agents_input, handle_manage_providers_input, handle_new_tab_input,
-    handle_new_workspace_input, handle_workspace_info_input,
+    handle_manage_agents_input, handle_manage_providers_input, handle_missing_prereqs_input,
+    handle_new_tab_input, handle_new_workspace_input, handle_workspace_info_input,
 };
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField};
@@ -756,6 +756,46 @@ fn help_returns_none_when_dialog_not_active() {
     let mut app = test_app();
     let action = handle_help_input(&mut app, key(KeyCode::Char('j')));
     assert!(action.is_none());
+}
+
+// ── Missing prereqs warning (dismiss-only dialog) ──────────────────────
+
+fn open_missing_prereqs(app: &mut App) {
+    app.mode = AppMode::MissingPrereqs;
+    app.active_dialog = Some(DialogState::MissingPrereqs {
+        agent: "Antigravity".to_string(),
+        missing: vec!["jq".to_string()],
+    });
+}
+
+#[test]
+fn missing_prereqs_any_dismiss_key_closes_it() {
+    // Purely informational: Esc, Enter, Space and q all get out of the way.
+    for k in [
+        key(KeyCode::Esc),
+        key(KeyCode::Enter),
+        key(KeyCode::Char(' ')),
+        key(KeyCode::Char('q')),
+    ] {
+        let mut app = test_app();
+        open_missing_prereqs(&mut app);
+
+        let action = handle_missing_prereqs_input(&mut app, k);
+
+        assert!(action.is_none());
+        assert!(app.active_dialog.is_none(), "{k:?} should dismiss");
+        assert_eq!(app.mode, AppMode::Normal);
+    }
+}
+
+#[test]
+fn missing_prereqs_ignores_other_keys() {
+    let mut app = test_app();
+    open_missing_prereqs(&mut app);
+
+    assert!(handle_missing_prereqs_input(&mut app, key(KeyCode::Char('x'))).is_none());
+    assert!(app.active_dialog.is_some());
+    assert_eq!(app.mode, AppMode::MissingPrereqs);
 }
 
 // ── About (dismiss-only dialog) ────────────────────────────────────────

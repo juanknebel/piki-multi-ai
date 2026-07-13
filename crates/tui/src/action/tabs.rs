@@ -3,6 +3,7 @@ use ratatui::DefaultTerminal;
 use super::Action;
 use crate::app::{App, AppMode, ToastLevel};
 use crate::code_review::CodeReviewState;
+use crate::dialog_state::DialogState;
 use crate::helpers::spawn_tab;
 use piki_core::workspace::WorkspaceManager;
 use piki_core::AIProvider;
@@ -101,6 +102,19 @@ pub(super) async fn handle(
                 let idx = spawn_tab(ws, &provider, app.pty_rows, app.pty_cols, None, Some(&app.provider_manager), &app.paths).await;
                 ws.active_tab = idx;
                 app.status_message = Some(format!("Opened {} tab", provider.label()));
+            }
+
+            // The tab is up either way; warn that its status will be guessed
+            // rather than read, so "alive" in the Agents pane isn't a mystery.
+            if let Some((agent, missing)) =
+                crate::helpers::missing_bridge_prereqs(&provider, &app.provider_manager)
+            {
+                tracing::warn!(
+                    %agent, ?missing,
+                    "agent hook bridge disabled — falling back to the idle heuristic"
+                );
+                app.active_dialog = Some(DialogState::MissingPrereqs { agent, missing });
+                app.mode = AppMode::MissingPrereqs;
             }
 
             // Code Review: check gh availability (lazy, cached) then load PR data

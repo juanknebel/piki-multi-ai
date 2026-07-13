@@ -89,6 +89,8 @@ pub enum AppMode {
     NewTab,
     /// About overlay
     About,
+    /// Warning overlay: a bridged agent opened without its hook prerequisites
+    MissingPrereqs,
     /// Workspace info overlay
     WorkspaceInfo,
     /// Confirmation dialog for closing a tab
