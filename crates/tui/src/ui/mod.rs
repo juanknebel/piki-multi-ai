@@ -375,6 +375,50 @@ mod tests {
     }
 
     #[test]
+    fn test_snapshot_workspace_list_collapsed_family_surfaces_child_attention() {
+        // Collapsing a family must not hide its children's attention — the
+        // parent row should surface the aggregated idle dot / changed-file
+        // count / ahead-behind instead of losing them behind the chevron.
+        let mut terminal = test_terminal(40, 6);
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+
+        let repo = std::path::PathBuf::from("/tmp/src-agent-multi");
+
+        app.workspaces.push(crate::app::Workspace::from_info(
+            piki_core::WorkspaceInfo {
+                workspace_type: piki_core::WorkspaceType::Simple,
+                source_repo: repo.clone(),
+                branch: "main".to_string(),
+                ..test_ws_info("agent-multi", 0)
+            },
+        ));
+
+        let mut child = crate::app::Workspace::from_info(piki_core::WorkspaceInfo {
+            source_repo: repo.clone(),
+            ..test_ws_info("nightly", 1)
+        });
+        child.changed_files.push(piki_core::ChangedFile {
+            path: "src/main.rs".to_string(),
+            status: piki_core::FileStatus::Modified,
+        });
+        child.ahead_behind = Some((1, 2));
+        child.has_idle_notification = true;
+        app.workspaces.push(child);
+
+        app.active_workspace = 0;
+        app.selected_sidebar_row = 0;
+        app.collapsed_groups.insert(repo.to_string_lossy().to_string());
+
+        terminal
+            .draw(|frame| {
+                super::sidebar::render_workspace_list(frame, frame.area(), &app);
+            })
+            .unwrap();
+        let content = buffer_to_snapshot(terminal.backend().buffer());
+        insta::assert_snapshot!("workspace_list_collapsed_family_surfaces_child_attention", content);
+    }
+
+    #[test]
     fn test_snapshot_agents_pane_with_rows() {
         let mut terminal = test_terminal(40, 8);
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());

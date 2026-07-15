@@ -331,6 +331,20 @@ impl std::ops::DerefMut for Workspace {
     }
 }
 
+/// Precedence for an agent (status, attention) pair, worst first: needs-
+/// permission > unseen news > running > everything else. Shared by
+/// `Workspace::agent_status_rollup()` (per-workspace) and the sidebar's
+/// worktree-family aggregation (across a collapsed family's members).
+pub(crate) fn agent_status_severity(status: piki_core::cli_agent::CliAgentStatus, attention: bool) -> u8 {
+    use piki_core::cli_agent::CliAgentStatus as S;
+    match (status, attention) {
+        (S::WaitingPermission, _) => 4,
+        (S::Idle | S::Done, true) => 3,
+        (S::Running, _) => 2,
+        _ => 0,
+    }
+}
+
 impl Workspace {
     /// Create from a WorkspaceInfo (e.g. returned by WorkspaceManager::create)
     pub fn from_info(info: piki_core::WorkspaceInfo) -> Self {
@@ -448,19 +462,10 @@ impl Workspace {
     /// Worst (status, attention) across this workspace's agent tabs, for the
     /// sidebar rollup. Priority: needs-permission > unseen news > running.
     pub fn agent_status_rollup(&self) -> Option<(piki_core::cli_agent::CliAgentStatus, bool)> {
-        use piki_core::cli_agent::CliAgentStatus as S;
-        fn severity(&(s, attention): &(S, bool)) -> u8 {
-            match (s, attention) {
-                (S::WaitingPermission, _) => 4,
-                (S::Idle | S::Done, true) => 3,
-                (S::Running, _) => 2,
-                _ => 0,
-            }
-        }
         self.tabs
             .iter()
             .filter_map(|t| t.cli_agent_snapshot().map(|(status, att, _)| (status, att)))
-            .max_by_key(severity)
+            .max_by_key(|&(s, a)| agent_status_severity(s, a))
     }
 
     pub fn status_label(&self) -> &str {

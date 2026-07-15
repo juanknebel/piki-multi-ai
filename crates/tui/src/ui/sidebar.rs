@@ -1,11 +1,15 @@
+use std::collections::HashMap;
+use std::path::PathBuf;
+
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph};
 
-use crate::app::{ActivePane, App, SidebarItem};
+use crate::app::{ActivePane, App, SidebarItem, Workspace, agent_status_severity};
 use piki_core::WorkspaceType;
+use piki_core::cli_agent::CliAgentStatus;
 
 use super::layout::{pane_border_style, pane_title_style};
 
@@ -16,6 +20,126 @@ fn workspace_type_icon(ws_type: WorkspaceType) -> &'static str {
         WorkspaceType::Project => "▣ ",
         WorkspaceType::Simple => "○ ",
     }
+}
+
+/// Per-`source_repo` rollup used to drive label choice (folder name vs. own
+/// name) and, when a family's parent row is collapsed, to surface its hidden
+/// children's attention signals (idle notification, agent status, changed
+/// files, ahead/behind) onto that one visible row instead of losing them.
+#[derive(Default, Clone)]
+struct FamilySummary {
+    count: usize,
+    has_parent: bool,
+    has_idle: bool,
+    worst_status: Option<(CliAgentStatus, bool)>,
+    changed_files: usize,
+    ahead: usize,
+    behind: usize,
+}
+
+/// How a row relates to its worktree family, resolved once per row and
+/// shared by both the gutter-width pre-pass and the actual render pass.
+struct RowClass<'a> {
+    is_parent: bool,
+    is_child: bool,
+    has_parent: bool,
+    summary: &'a FamilySummary,
+}
+
+fn classify_row<'a>(ws: &Workspace, family_info: &'a HashMap<PathBuf, FamilySummary>) -> RowClass<'a> {
+    static EMPTY: FamilySummary = FamilySummary {
+        count: 0,
+        has_parent: false,
+        has_idle: false,
+        worst_status: None,
+        changed_files: 0,
+        ahead: 0,
+        behind: 0,
+    };
+    let summary = family_info.get(&ws.info.source_repo).unwrap_or(&EMPTY);
+    let is_parent = summary.count > 1 && ws.info.workspace_type != WorkspaceType::Worktree;
+    let is_child = summary.count > 1 && ws.info.workspace_type == WorkspaceType::Worktree;
+    RowClass {
+        is_parent,
+        is_child,
+        has_parent: summary.has_parent,
+        summary,
+    }
+}
+
+/// A row's effective attention signals: its own values normally, or its
+/// worktree family's aggregate when it's a collapsed parent — otherwise a
+/// hidden child's attention would vanish entirely.
+struct EffectiveSignals {
+    has_idle: bool,
+    status: Option<(CliAgentStatus, bool)>,
+    changed: usize,
+    ahead_behind: Option<(usize, usize)>,
+}
+
+fn effective_signals(ws: &Workspace, class: &RowClass, collapsed: Option<bool>) -> EffectiveSignals {
+    if class.is_parent && collapsed.unwrap_or(false) {
+        let s = class.summary;
+        EffectiveSignals {
+            has_idle: s.has_idle,
+            status: s.worst_status,
+            changed: s.changed_files,
+            ahead_behind: (s.ahead > 0 || s.behind > 0).then_some((s.ahead, s.behind)),
+        }
+    } else {
+        EffectiveSignals {
+            has_idle: ws.has_idle_notification,
+            status: ws.agent_status_rollup(),
+            changed: ws.file_count(),
+            ahead_behind: ws.ahead_behind,
+        }
+    }
+}
+
+/// Right-aligned metadata spans (agent status glyph, changed-file count,
+/// ahead/behind) for a row's effective signals. `detail_color` styles the
+/// Δ/↑↓ text; the status glyph keeps its own semantic color regardless.
+fn right_metadata_spans(
+    app: &App,
+    detail_color: Color,
+    status: Option<(CliAgentStatus, bool)>,
+    changed: usize,
+    ahead_behind: Option<(usize, usize)>,
+) -> Vec<Span<'static>> {
+    let mut right: Vec<Span<'static>> = Vec::new();
+    if let Some((status, attention)) = status
+        && let Some((glyph, color)) = crate::ui::actionable_status_view(&app.theme, status, attention)
+    {
+        right.push(Span::styled(glyph.to_string(), Style::default().fg(color)));
+    }
+    if changed > 0 {
+        if !right.is_empty() {
+            right.push(Span::raw(" "));
+        }
+        right.push(Span::styled(
+            format!("{}∆", changed),
+            Style::default().fg(detail_color),
+        ));
+    }
+    if let Some((ahead, behind)) = ahead_behind
+        && (ahead > 0 || behind > 0)
+    {
+        if !right.is_empty() {
+            right.push(Span::raw(" "));
+        }
+        let mut ab = String::new();
+        if ahead > 0 {
+            ab.push_str(&format!("↑{}", ahead));
+        }
+        if behind > 0 {
+            if ahead > 0 {
+                ab.push(' ');
+            }
+            ab.push_str(&format!("↓{}", behind));
+        }
+        right.push(Span::styled(ab, Style::default().fg(detail_color)));
+    }
+    right
 }
 
 /// Returns the visual height (in lines) of a sidebar item at the given index.
@@ -68,21 +192,49 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
     let sidebar_items = app.sidebar_items();
     let visual_rows = app.sidebar_visual_rows();
 
-    // Precompute, per source_repo, how many loaded workspaces share it and
-    // whether one of them is a non-Worktree "parent". Drives label choice
-    // (repo folder name / branch name / ws.name) and whether a Worktree
-    // child gets the vertical guide tying it back to a rendered parent row.
-    let mut family_info: std::collections::HashMap<std::path::PathBuf, (usize, bool)> =
-        std::collections::HashMap::new();
+    // Precompute, per source_repo, how many loaded workspaces share it,
+    // whether one of them is a non-Worktree "parent", and the family's
+    // aggregated attention signals (folded in below). Drives label choice,
+    // the vertical guide, and what a collapsed parent surfaces on its own row.
+    let mut family_info: HashMap<PathBuf, FamilySummary> = HashMap::new();
     for ws in &app.workspaces {
-        let entry = family_info
-            .entry(ws.info.source_repo.clone())
-            .or_insert((0, false));
-        entry.0 += 1;
+        let entry = family_info.entry(ws.info.source_repo.clone()).or_default();
+        entry.count += 1;
         if ws.info.workspace_type != WorkspaceType::Worktree {
-            entry.1 = true;
+            entry.has_parent = true;
+        }
+        entry.has_idle |= ws.has_idle_notification;
+        if let Some((status, attention)) = ws.agent_status_rollup() {
+            let better = entry
+                .worst_status
+                .is_none_or(|(s, a)| agent_status_severity(status, attention) > agent_status_severity(s, a));
+            if better {
+                entry.worst_status = Some((status, attention));
+            }
+        }
+        entry.changed_files += ws.file_count();
+        if let Some((ahead, behind)) = ws.ahead_behind {
+            entry.ahead += ahead;
+            entry.behind += behind;
         }
     }
+
+    // Fixed right-hand gutter: computed once over every row (not just the
+    // visible slice, so it doesn't jitter while scrolling) so metadata always
+    // starts at the same column instead of hugging each row's name length.
+    let gutter_w = sidebar_items
+        .iter()
+        .map(|SidebarItem::Workspace { index, collapsed }| {
+            let ws = &app.workspaces[*index];
+            let class = classify_row(ws, &family_info);
+            let sig = effective_signals(ws, &class, *collapsed);
+            right_metadata_spans(app, theme.detail_normal, sig.status, sig.changed, sig.ahead_behind)
+                .iter()
+                .map(|sp| sp.width())
+                .sum::<usize>()
+        })
+        .max()
+        .unwrap_or(0);
 
     // All rows are one line tall; scroll follows the selection's position in
     // `visual_rows` (which may include blank separators sidebar_items() doesn't).
@@ -112,15 +264,10 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
             match item {
                 SidebarItem::Workspace { index, collapsed } => {
                     let ws = &app.workspaces[*index];
-                    let (family_count, has_parent) = family_info
-                        .get(&ws.info.source_repo)
-                        .copied()
-                        .unwrap_or((1, false));
-                    let is_parent = family_count > 1
-                        && ws.info.workspace_type != WorkspaceType::Worktree;
-                    let is_child = family_count > 1
-                        && ws.info.workspace_type == WorkspaceType::Worktree;
-                    let guide = is_child && has_parent;
+                    let class = classify_row(ws, &family_info);
+                    let is_parent = class.is_parent;
+                    let is_child = class.is_child;
+                    let guide = is_child && class.has_parent;
 
                     let detail_color = if is_selected {
                         theme.detail_selected
@@ -129,6 +276,18 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                     };
 
                     let is_active = *index == app.active_workspace;
+                    // Icon brightness carries a second signal: parent/active
+                    // rows are "the point of attention" and stay at full
+                    // brightness, plain flat/child rows recede to the same
+                    // muted token the tree guide already uses — so scanning
+                    // the list, only containers and the active workspace pop.
+                    let icon_color = if is_selected {
+                        theme.detail_selected
+                    } else if is_active || is_parent {
+                        theme.detail_normal
+                    } else {
+                        app.theme.palette.fg3
+                    };
                     let header_style = Style::default()
                         .fg(theme.name_inactive)
                         .add_modifier(Modifier::BOLD);
@@ -186,10 +345,15 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                     };
                     let type_icon = workspace_type_icon(ws.info.workspace_type);
 
+                    // A collapsed family parent surfaces its hidden children's
+                    // signals (idle dot + metadata below) instead of losing
+                    // them — see `effective_signals`.
+                    let sig = effective_signals(ws, &class, *collapsed);
+
                     let mut left: Vec<Span> = vec![
                         bar,
                         second_col,
-                        Span::styled(type_icon, Style::default().fg(detail_color)),
+                        Span::styled(type_icon, Style::default().fg(icon_color)),
                         Span::styled(
                             label,
                             if is_active {
@@ -201,7 +365,7 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                             },
                         ),
                     ];
-                    if ws.has_idle_notification {
+                    if sig.has_idle {
                         left.push(Span::styled(
                             " ●",
                             Style::default()
@@ -213,51 +377,22 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                     // Right-aligned metadata, shown only when it says something:
                     // actionable agent status, changed-file count, ahead/behind.
                     // Activity (running) stays in the Agents pane.
-                    let mut right: Vec<Span> = Vec::new();
-                    if let Some((status, attention)) = ws.agent_status_rollup()
-                        && let Some((glyph, color)) =
-                            crate::ui::actionable_status_view(&app.theme, status, attention)
-                    {
-                        right.push(Span::styled(
-                            glyph.to_string(),
-                            Style::default().fg(color),
-                        ));
-                    }
-                    let changed = ws.file_count();
-                    if changed > 0 {
-                        if !right.is_empty() {
-                            right.push(Span::raw(" "));
-                        }
-                        right.push(Span::styled(
-                            format!("{}∆", changed),
-                            Style::default().fg(detail_color),
-                        ));
-                    }
-                    if let Some((ahead, behind)) = ws.ahead_behind
-                        && (ahead > 0 || behind > 0)
-                    {
-                        if !right.is_empty() {
-                            right.push(Span::raw(" "));
-                        }
-                        let mut ab = String::new();
-                        if ahead > 0 {
-                            ab.push_str(&format!("↑{}", ahead));
-                        }
-                        if behind > 0 {
-                            if ahead > 0 {
-                                ab.push(' ');
-                            }
-                            ab.push_str(&format!("↓{}", behind));
-                        }
-                        right.push(Span::styled(ab, Style::default().fg(detail_color)));
-                    }
+                    let right =
+                        right_metadata_spans(app, detail_color, sig.status, sig.changed, sig.ahead_behind);
 
-                    // The name wins over metadata when width is tight
+                    // Metadata always starts at the same column across every
+                    // row (leaving a 1-column margin before the border, as
+                    // the old per-row layout did) instead of hugging each
+                    // row's own name length. A name long enough to reach that
+                    // column collapses `pad` to 0 and the metadata is
+                    // appended right after it rather than hidden outright —
+                    // a graceful squeeze, not a disappearing act.
                     let left_w: usize = left.iter().map(|sp| sp.width()).sum();
-                    let right_w: usize = right.iter().map(|sp| sp.width()).sum();
                     let mut spans = left;
-                    if right_w > 0 && left_w + right_w + 2 <= inner_width {
-                        spans.push(Span::raw(" ".repeat(inner_width - left_w - right_w - 1)));
+                    if gutter_w > 0 {
+                        let gutter_end = inner_width.saturating_sub(1);
+                        let pad = gutter_end.saturating_sub(left_w).saturating_sub(gutter_w);
+                        spans.push(Span::raw(" ".repeat(pad)));
                         spans.extend(right);
                     }
 
