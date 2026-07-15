@@ -226,7 +226,9 @@ mod tests {
 
     // ── New snapshot tests for dialogs ──
 
-    fn test_ws_info(name: &str, group: Option<&str>, order: u32) -> piki_core::WorkspaceInfo {
+    fn test_ws_info(name: &str, order: u32) -> piki_core::WorkspaceInfo {
+        // Each workspace gets its own source_repo so it's standalone (no
+        // worktree family) unless a test deliberately shares one.
         piki_core::WorkspaceInfo {
             name: name.to_string(),
             path: std::path::PathBuf::from(format!("/tmp/{name}")),
@@ -235,9 +237,8 @@ mod tests {
             description: String::new(),
             prompt: String::new(),
             kanban_path: None,
-            group: group.map(String::from),
             order,
-            source_repo: std::path::PathBuf::from("/tmp/src"),
+            source_repo: std::path::PathBuf::from(format!("/tmp/src-{name}")),
             source_repo_display: String::new(),
             dispatch_card_id: None,
             dispatch_source_kanban: None,
@@ -251,7 +252,7 @@ mod tests {
         let mut terminal = test_terminal(40, 10);
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
 
-        let mut a = crate::app::Workspace::from_info(test_ws_info("nightly", Some("piki"), 0));
+        let mut a = crate::app::Workspace::from_info(test_ws_info("nightly", 0));
         a.changed_files.push(piki_core::ChangedFile {
             path: "src/main.rs".to_string(),
             status: piki_core::FileStatus::Modified,
@@ -265,13 +266,11 @@ mod tests {
         app.workspaces
             .push(crate::app::Workspace::from_info(test_ws_info(
                 "void-setup",
-                Some("ricing"),
                 1,
             )));
         app.workspaces
             .push(crate::app::Workspace::from_info(test_ws_info(
                 "x220t",
-                Some("ricing"),
                 2,
             )));
         app.active_workspace = 0;
@@ -287,6 +286,169 @@ mod tests {
     }
 
     #[test]
+    fn test_snapshot_workspace_list_standalone_simple_shows_folder_and_branch() {
+        // A standalone (no worktree children) Simple/Project workspace shows
+        // its source folder's basename, not the free-typed ws.name, with its
+        // own branch alongside since it has one — the "(branch)" suffix
+        // isn't reserved for family parents, every git-backed row gets it.
+        let mut terminal = test_terminal(40, 6);
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+
+        app.workspaces.push(crate::app::Workspace::from_info(
+            piki_core::WorkspaceInfo {
+                workspace_type: piki_core::WorkspaceType::Simple,
+                name: "typed-nickname".to_string(),
+                branch: "main".to_string(),
+                source_repo: std::path::PathBuf::from("/tmp/my-project-folder"),
+                ..test_ws_info("typed-nickname", 0)
+            },
+        ));
+        app.active_workspace = 0;
+        app.selected_sidebar_row = 0;
+
+        terminal
+            .draw(|frame| {
+                super::sidebar::render_workspace_list(frame, frame.area(), &app);
+            })
+            .unwrap();
+        let content = buffer_to_snapshot(terminal.backend().buffer());
+        insta::assert_snapshot!("workspace_list_standalone_simple_shows_folder_and_branch", content);
+    }
+
+    #[test]
+    fn test_snapshot_workspace_list_non_repo_folder_shows_no_branch_suffix() {
+        // A `Project` workspace (or a `Simple` one pointed at a plain,
+        // non-git directory) has an empty `branch` — there's nothing to
+        // disambiguate, so the row shows just the bare folder name.
+        let mut terminal = test_terminal(40, 6);
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+
+        app.workspaces.push(crate::app::Workspace::from_info(
+            piki_core::WorkspaceInfo {
+                workspace_type: piki_core::WorkspaceType::Project,
+                name: "typed-nickname".to_string(),
+                branch: String::new(),
+                source_repo: std::path::PathBuf::from("/tmp/plain-folder"),
+                ..test_ws_info("typed-nickname", 0)
+            },
+        ));
+        app.active_workspace = 0;
+        app.selected_sidebar_row = 0;
+
+        terminal
+            .draw(|frame| {
+                super::sidebar::render_workspace_list(frame, frame.area(), &app);
+            })
+            .unwrap();
+        let content = buffer_to_snapshot(terminal.backend().buffer());
+        insta::assert_snapshot!("workspace_list_non_repo_folder_shows_no_branch_suffix", content);
+    }
+
+    #[test]
+    fn test_snapshot_workspace_list_family_separators() {
+        // A blank line must separate a worktree family's last visible row
+        // from a flat neighbor (or the next family) — otherwise a flat repo
+        // like "ferrum-trade" reads as if it belonged to the block above it.
+        let mut terminal = test_terminal(40, 12);
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+
+        let repo_a = std::path::PathBuf::from("/tmp/src-agent-multi");
+        let repo_b = std::path::PathBuf::from("/tmp/src-void-setup");
+
+        app.workspaces
+            .push(crate::app::Workspace::from_info(test_ws_info("flow", 0)));
+
+        app.workspaces.push(crate::app::Workspace::from_info(
+            piki_core::WorkspaceInfo {
+                workspace_type: piki_core::WorkspaceType::Simple,
+                source_repo: repo_a.clone(),
+                branch: "main".to_string(),
+                ..test_ws_info("agent-multi", 1)
+            },
+        ));
+        app.workspaces.push(crate::app::Workspace::from_info(
+            piki_core::WorkspaceInfo {
+                source_repo: repo_a,
+                ..test_ws_info("nightly", 2)
+            },
+        ));
+
+        app.workspaces.push(crate::app::Workspace::from_info(
+            test_ws_info("ferrum-trade", 3),
+        ));
+
+        app.workspaces.push(crate::app::Workspace::from_info(
+            piki_core::WorkspaceInfo {
+                workspace_type: piki_core::WorkspaceType::Simple,
+                source_repo: repo_b.clone(),
+                branch: "main".to_string(),
+                ..test_ws_info("void-setup", 4)
+            },
+        ));
+        app.workspaces.push(crate::app::Workspace::from_info(
+            piki_core::WorkspaceInfo {
+                source_repo: repo_b,
+                ..test_ws_info("x220t", 5)
+            },
+        ));
+
+        app.active_workspace = 0;
+        app.selected_sidebar_row = 0;
+
+        terminal
+            .draw(|frame| {
+                super::sidebar::render_workspace_list(frame, frame.area(), &app);
+            })
+            .unwrap();
+        let content = buffer_to_snapshot(terminal.backend().buffer());
+        insta::assert_snapshot!("workspace_list_family_separators", content);
+    }
+
+    #[test]
+    fn test_snapshot_workspace_list_collapsed_family_surfaces_child_attention() {
+        // Collapsing a family must not hide its children's attention — the
+        // parent row should surface the aggregated idle dot / changed-file
+        // count / ahead-behind instead of losing them behind the chevron.
+        let mut terminal = test_terminal(40, 6);
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+
+        let repo = std::path::PathBuf::from("/tmp/src-agent-multi");
+
+        app.workspaces.push(crate::app::Workspace::from_info(
+            piki_core::WorkspaceInfo {
+                workspace_type: piki_core::WorkspaceType::Simple,
+                source_repo: repo.clone(),
+                branch: "main".to_string(),
+                ..test_ws_info("agent-multi", 0)
+            },
+        ));
+
+        let mut child = crate::app::Workspace::from_info(piki_core::WorkspaceInfo {
+            source_repo: repo.clone(),
+            ..test_ws_info("nightly", 1)
+        });
+        child.changed_files.push(piki_core::ChangedFile {
+            path: "src/main.rs".to_string(),
+            status: piki_core::FileStatus::Modified,
+        });
+        child.ahead_behind = Some((1, 2));
+        child.has_idle_notification = true;
+        app.workspaces.push(child);
+
+        app.active_workspace = 0;
+        app.selected_sidebar_row = 0;
+        app.collapsed_groups.insert(repo.to_string_lossy().to_string());
+
+        terminal
+            .draw(|frame| {
+                super::sidebar::render_workspace_list(frame, frame.area(), &app);
+            })
+            .unwrap();
+        let content = buffer_to_snapshot(terminal.backend().buffer());
+        insta::assert_snapshot!("workspace_list_collapsed_family_surfaces_child_attention", content);
+    }
+
+    #[test]
     fn test_snapshot_agents_pane_with_rows() {
         let mut terminal = test_terminal(40, 8);
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
@@ -298,7 +460,6 @@ mod tests {
             description: String::new(),
             prompt: String::new(),
             kanban_path: None,
-            group: None,
             order: 0,
             source_repo: std::path::PathBuf::from("/tmp/demo"),
             source_repo_display: String::new(),
@@ -323,7 +484,7 @@ mod tests {
     fn test_snapshot_tab_bar_solid_blocks() {
         let mut terminal = test_terminal(60, 2);
         let app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
-        let mut ws = crate::app::Workspace::from_info(test_ws_info("demo", None, 0));
+        let mut ws = crate::app::Workspace::from_info(test_ws_info("demo", 0));
         ws.add_tab(piki_core::AIProvider::Custom("Claude".to_string()), true, None);
         ws.add_tab(piki_core::AIProvider::Shell, true, None);
         ws.active_tab = 0;
@@ -341,12 +502,12 @@ mod tests {
         let mut terminal = test_terminal(70, 16);
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
 
-        let mut a = crate::app::Workspace::from_info(test_ws_info("piki-nightly", Some("piki"), 0));
+        let mut a = crate::app::Workspace::from_info(test_ws_info("piki-nightly", 0));
         a.add_tab(piki_core::AIProvider::Shell, true, None);
         a.add_tab(piki_core::AIProvider::Custom("Claude".to_string()), true, None);
         app.workspaces.push(a);
 
-        let mut b = crate::app::Workspace::from_info(test_ws_info("bob-the-builder", None, 1));
+        let mut b = crate::app::Workspace::from_info(test_ws_info("bob-the-builder", 1));
         b.add_tab(piki_core::AIProvider::Custom("Claude".to_string()), true, None);
         app.workspaces.push(b);
 

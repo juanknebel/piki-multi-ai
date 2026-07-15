@@ -229,8 +229,6 @@ pub struct WorkspaceInfo {
     pub source_repo_display: String,
     #[serde(default)]
     pub workspace_type: WorkspaceType,
-    #[serde(default)]
-    pub group: Option<String>,
     /// Persistent display order (lower values appear first)
     #[serde(default)]
     pub order: u32,
@@ -273,7 +271,6 @@ impl WorkspaceInfo {
             source_repo,
             source_repo_display,
             workspace_type: WorkspaceType::default(),
-            group: None,
             order: 0,
             dispatch_card_id: None,
             dispatch_source_kanban: None,

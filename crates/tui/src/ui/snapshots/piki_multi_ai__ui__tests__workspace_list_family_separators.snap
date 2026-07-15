@@ -3,12 +3,14 @@ source: crates/tui/src/ui/mod.rs
 expression: content
 ---
 ╭ WORKSPACES ──────────────────────────╮
-│   ⎇ nightly                 2∆ ↑1 ↓2 │
-│▎  ⎇ void-setup                       │
-│   ⎇ x220t                            │
+│▎  ⎇ flow                             │
 │                                      │
+│ ▾ ○ src-agent-multi (main)           │
+│ │ ⎇ nightly                          │
 │                                      │
+│   ⎇ ferrum-trade                     │
 │                                      │
-│                                      │
+│ ▾ ○ src-void-setup (main)            │
+│ │ ⎇ x220t                            │
 │                                      │
 ╰──────────────────────────────────────╯

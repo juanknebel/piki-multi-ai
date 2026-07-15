@@ -23,7 +23,6 @@ export function createWorkspace(
   prompt: string,
   dir: string,
   wsType: string,
-  group: string | null,
   kanbanPath: string | null = null,
 ): Promise<WorkspaceInfo> {
   return invoke("create_workspace", {
@@ -32,7 +31,6 @@ export function createWorkspace(
     prompt,
     dir,
     wsType,
-    group,
     kanbanPath,
   });
 }
@@ -43,7 +41,6 @@ export function createGithubWorkspace(
   prompt: string,
   githubUrl: string,
   destinationDir: string,
-  group: string | null,
   kanbanPath: string | null = null,
 ): Promise<WorkspaceInfo> {
   return invoke("create_github_workspace", {
@@ -52,7 +49,6 @@ export function createGithubWorkspace(
     prompt,
     githubUrl,
     destinationDir,
-    group,
     kanbanPath,
   });
 }
@@ -68,11 +64,20 @@ export function deleteWorkspace(index: number): Promise<void> {
 export function updateWorkspace(
   index: number,
   prompt?: string,
-  group?: string,
   description?: string,
   kanbanPath?: string,
 ): Promise<void> {
-  return invoke("update_workspace", { index, prompt, group, description, kanbanPath });
+  return invoke("update_workspace", { index, prompt, description, kanbanPath });
+}
+
+// Worktree-family collapse state (keyed by source_repo path), mirrors the
+// TUI's `collapsed_groups`.
+export function getCollapsedGroups(): Promise<string[]> {
+  return invoke("get_collapsed_groups");
+}
+
+export function setCollapsedGroups(groups: string[]): Promise<void> {
+  return invoke("set_collapsed_groups", { groups });
 }
 
 export function switchWorkspace(index: number): Promise<WorkspaceDetail> {
@@ -581,13 +586,12 @@ export function dispatchAgent(
   prompt: string,
   createWorktree: boolean,
   wsName?: string,
-  group?: string,
   dispatchCardId?: string,
   dispatchSourceKanban?: string,
   dispatchAgentName?: string,
   dispatchCardTitle?: string,
 ): Promise<string> {
-  return invoke("dispatch_agent", { workspaceIdx, provider, prompt, createWorktree, wsName, group, dispatchCardId, dispatchSourceKanban, dispatchAgentName, dispatchCardTitle });
+  return invoke("dispatch_agent", { workspaceIdx, provider, prompt, createWorktree, wsName, dispatchCardId, dispatchSourceKanban, dispatchAgentName, dispatchCardTitle });
 }
 
 export function kanbanLoadBoardByPath(boardPath: string): Promise<KanbanBoard> {

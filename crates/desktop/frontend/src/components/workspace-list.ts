@@ -10,8 +10,100 @@ import {
 import { showAgentManager } from "./dialogs/agent-dialog";
 import type { WorkspaceInfo } from "../types";
 
+/** One visual sidebar row: always a real workspace (`idx`), decorated with
+ *  family metadata. Mirrors the TUI's `App::sidebar_items()` — workspaces
+ *  sharing `source_repo` form a family; the one member whose `workspace_type`
+ *  isn't `"Worktree"` is the parent (repo folder name + its own branch),
+ *  its `Worktree` siblings are children (branch name only, indented). A
+ *  family with no parent loaded, or no family at all, renders flat. */
+interface SidebarRow {
+  idx: number;
+  label: string;
+  isParent: boolean;
+  isChild: boolean;
+  /** Present on parent rows: the family identifier + current collapse state. */
+  familyKey?: string;
+  collapsed?: boolean;
+}
+
+function familyKey(info: WorkspaceInfo): string {
+  return info.source_repo;
+}
+
+function folderLabel(info: WorkspaceInfo): string {
+  const folder =
+    info.source_repo.replace(/\/+$/, "").split("/").pop() ||
+    info.source_repo_display ||
+    info.name;
+  return info.branch ? `${folder} (${info.branch})` : folder;
+}
+
+function computeSidebarRows(
+  workspaces: readonly { info: WorkspaceInfo }[],
+  collapsedGroups: Set<string>,
+): SidebarRow[] {
+  const rows: SidebarRow[] = [];
+  const consumed = new Array(workspaces.length).fill(false);
+
+  for (let i = 0; i < workspaces.length; i++) {
+    if (consumed[i]) continue;
+    const sourceRepo = workspaces[i].info.source_repo;
+    const siblings = workspaces
+      .map((ws, j) => ({ ws, j }))
+      .filter(({ ws, j }) => !consumed[j] && ws.info.source_repo === sourceRepo)
+      .map(({ j }) => j);
+
+    if (siblings.length <= 1) {
+      rows.push({ idx: i, label: workspaces[i].info.name, isParent: false, isChild: false });
+      consumed[i] = true;
+      continue;
+    }
+
+    const parentPos = siblings.find((j) => workspaces[j].info.workspace_type !== "Worktree");
+
+    if (parentPos !== undefined) {
+      const key = familyKey(workspaces[parentPos].info);
+      const collapsed = collapsedGroups.has(key);
+      rows.push({
+        idx: parentPos,
+        label: folderLabel(workspaces[parentPos].info),
+        isParent: true,
+        isChild: false,
+        familyKey: key,
+        collapsed,
+      });
+      for (const j of siblings) {
+        consumed[j] = true;
+        if (j !== parentPos && !collapsed) {
+          rows.push({ idx: j, label: workspaces[j].info.branch, isParent: false, isChild: true });
+        }
+      }
+    } else {
+      for (const j of siblings) {
+        consumed[j] = true;
+        rows.push({ idx: j, label: workspaces[j].info.branch, isParent: false, isChild: false });
+      }
+    }
+  }
+
+  return rows;
+}
+
 export function renderWorkspaceList(container: HTMLElement) {
   const collapsedGroups = new Set<string>();
+
+  // Load persisted collapse state once, then re-render.
+  ipc
+    .getCollapsedGroups()
+    .then((groups) => {
+      for (const g of groups) collapsedGroups.add(g);
+      render();
+    })
+    .catch(() => {});
+
+  function persistCollapsed() {
+    ipc.setCollapsedGroups([...collapsedGroups]).catch(() => {});
+  }
 
   function render() {
     const workspaces = appState.workspaces;
@@ -40,104 +132,89 @@ export function renderWorkspaceList(container: HTMLElement) {
       return;
     }
 
-    // Group workspaces
-    const groups = new Map<string, { idx: number; info: WorkspaceInfo }[]>();
-    workspaces.forEach((ws, idx) => {
-      const group = ws.info.group || "";
-      if (!groups.has(group)) groups.set(group, []);
-      groups.get(group)!.push({ idx, info: ws.info });
-    });
+    const rows = computeSidebarRows(workspaces, collapsedGroups);
 
-    const sortedGroups = [...groups.entries()].sort(([a], [b]) => {
-      if (a === "" && b !== "") return -1;
-      if (a !== "" && b === "") return 1;
-      return a.localeCompare(b);
-    });
+    for (const row of rows) {
+      const { idx, info } = { idx: row.idx, info: workspaces[row.idx].info };
+      const item = document.createElement("div");
+      item.className = `workspace-item${idx === activeIdx ? " active" : ""}${row.isChild ? " grouped" : ""}`;
+      item.dataset.idx = String(idx);
 
-    for (const [groupName, items] of sortedGroups) {
-      const isCollapsed = collapsedGroups.has(groupName);
-      const inGroup = !!groupName;
+      const ws = workspaces[idx];
+      const statusClass = getStatusClass(ws.status);
 
-      if (inGroup) {
-        const groupHeader = document.createElement("div");
-        groupHeader.className = "group-header";
-        groupHeader.innerHTML = `
-          <svg class="group-chevron${isCollapsed ? " collapsed" : ""}" viewBox="0 0 16 16">
-            <path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5"/>
-          </svg>
-          <span class="group-label">${escapeHtml(groupName)}</span>
-        `;
-        groupHeader.addEventListener("click", () => {
-          if (collapsedGroups.has(groupName)) {
-            collapsedGroups.delete(groupName);
+      const attentionDot = ws.needsAttention
+        ? '<span class="workspace-attention" title="Needs attention">●</span>'
+        : "";
+
+      const chevron = row.isParent
+        ? `<svg class="group-chevron${row.collapsed ? " collapsed" : ""}" viewBox="0 0 16 16">
+             <path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5"/>
+           </svg>`
+        : "";
+
+      item.innerHTML = `
+        ${chevron}
+        ${idx === activeIdx ? '<span class="workspace-active-marker"></span>' : ""}
+        <span class="workspace-name">${escapeHtml(row.label)}</span>
+        ${attentionDot}
+        <span class="workspace-actions">
+          <button class="ws-action-btn" data-action="agents" title="Manage Agents">⚙</button>
+          <button class="ws-action-btn" data-action="info" title="Info">i</button>
+          <button class="ws-action-btn" data-action="edit" title="Edit">✎</button>
+          ${info.origin?.kind === "GitHub" ? `<button class="ws-action-btn" data-action="create-worktree" title="Create Worktree">⧉</button>` : ""}
+          <button class="ws-action-btn ws-action-delete" data-action="delete" title="Delete">×</button>
+        </span>
+        <span class="workspace-status ${statusClass}">${getStatusIcon(ws.status)}</span>
+      `;
+
+      // Click the chevron to toggle collapse without switching workspace.
+      if (row.isParent && row.familyKey) {
+        const key = row.familyKey;
+        item.querySelector(".group-chevron")!.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (collapsedGroups.has(key)) {
+            collapsedGroups.delete(key);
           } else {
-            collapsedGroups.add(groupName);
+            collapsedGroups.add(key);
           }
+          persistCollapsed();
           render();
         });
-        container.appendChild(groupHeader);
       }
 
-      if (!isCollapsed) {
-        for (const { idx, info } of items) {
-          const item = document.createElement("div");
-          item.className = `workspace-item${idx === activeIdx ? " active" : ""}${inGroup ? " grouped" : ""}`;
-          item.dataset.idx = String(idx);
-
-          const ws = workspaces[idx];
-          const statusClass = getStatusClass(ws.status);
-
-          const attentionDot = ws.needsAttention
-            ? '<span class="workspace-attention" title="Needs attention">●</span>'
-            : "";
-
-          item.innerHTML = `
-            ${idx === activeIdx ? '<span class="workspace-active-marker"></span>' : ""}
-            <span class="workspace-name">${escapeHtml(info.name)}</span>
-            ${attentionDot}
-            <span class="workspace-actions">
-              <button class="ws-action-btn" data-action="agents" title="Manage Agents">⚙</button>
-              <button class="ws-action-btn" data-action="info" title="Info">i</button>
-              <button class="ws-action-btn" data-action="edit" title="Edit">✎</button>
-              ${info.origin?.kind === "GitHub" ? `<button class="ws-action-btn" data-action="create-worktree" title="Create Worktree">⧉</button>` : ""}
-              <button class="ws-action-btn ws-action-delete" data-action="delete" title="Delete">×</button>
-            </span>
-            <span class="workspace-status ${statusClass}">${getStatusIcon(ws.status)}</span>
-          `;
-
-          // Click to switch workspace
-          item.addEventListener("click", async (e) => {
-            if ((e.target as HTMLElement).closest(".ws-action-btn")) return;
-            try {
-              const detail = await ipc.switchWorkspace(idx);
-              appState.setActiveWorkspace(idx, detail);
-            } catch (err) {
-              console.error("Failed to switch workspace:", err);
-            }
-          });
-
-          // Action buttons
-          item.querySelectorAll<HTMLButtonElement>(".ws-action-btn").forEach((btn) => {
-            btn.addEventListener("click", (e) => {
-              e.stopPropagation();
-              const action = btn.dataset.action;
-              if (action === "agents") {
-                showAgentManager();
-              } else if (action === "info") {
-                showWorkspaceInfo(idx);
-              } else if (action === "edit") {
-                showWorkspaceDialog({ mode: "edit", editIndex: idx });
-              } else if (action === "create-worktree") {
-                showCreateWorktreeDialog(info);
-              } else if (action === "delete") {
-                showDeleteConfirm(idx, info.name);
-              }
-            });
-          });
-
-          container.appendChild(item);
+      // Click to switch workspace
+      item.addEventListener("click", async (e) => {
+        if ((e.target as HTMLElement).closest(".ws-action-btn")) return;
+        if ((e.target as HTMLElement).closest(".group-chevron")) return;
+        try {
+          const detail = await ipc.switchWorkspace(idx);
+          appState.setActiveWorkspace(idx, detail);
+        } catch (err) {
+          console.error("Failed to switch workspace:", err);
         }
-      }
+      });
+
+      // Action buttons
+      item.querySelectorAll<HTMLButtonElement>(".ws-action-btn").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const action = btn.dataset.action;
+          if (action === "agents") {
+            showAgentManager();
+          } else if (action === "info") {
+            showWorkspaceInfo(idx);
+          } else if (action === "edit") {
+            showWorkspaceDialog({ mode: "edit", editIndex: idx });
+          } else if (action === "create-worktree") {
+            showCreateWorktreeDialog(info);
+          } else if (action === "delete") {
+            showDeleteConfirm(idx, info.name);
+          }
+        });
+      });
+
+      container.appendChild(item);
     }
   }
 

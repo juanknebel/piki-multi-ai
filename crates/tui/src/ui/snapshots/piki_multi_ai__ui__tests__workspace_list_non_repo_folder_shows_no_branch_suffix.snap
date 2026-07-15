@@ -3,11 +3,7 @@ source: crates/tui/src/ui/mod.rs
 expression: content
 ---
 ╭ WORKSPACES ──────────────────────────╮
-│   ⎇ nightly                 2∆ ↑1 ↓2 │
-│▎  ⎇ void-setup                       │
-│   ⎇ x220t                            │
-│                                      │
-│                                      │
+│▎  ▣ plain-folder                     │
 │                                      │
 │                                      │
 │                                      │

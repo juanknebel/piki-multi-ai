@@ -435,24 +435,34 @@ pub(crate) fn handle_mouse_event(
                     let inner_y = app.ws_list_area.y + 1;
                     if row >= inner_y {
                         let sidebar_items = app.sidebar_items();
+                        let visual_rows = app.sidebar_visual_rows();
                         // Rows are one line tall; mirror the render's derived scroll
+                        // (walking visual_rows, which may include blank separators).
                         let visible = app.ws_list_area.height.saturating_sub(2) as usize;
-                        let selected = app
-                            .selected_sidebar_row
-                            .min(sidebar_items.len().saturating_sub(1));
-                        let scroll_offset = if visible > 0 && selected >= visible {
-                            selected + 1 - visible
+                        let selected_visual = visual_rows
+                            .iter()
+                            .position(|r| *r == Some(app.selected_sidebar_row))
+                            .unwrap_or(0);
+                        let scroll_offset = if visible > 0 && selected_visual >= visible {
+                            selected_visual + 1 - visible
                         } else {
                             0
                         };
-                        let clicked = (row - inner_y) as usize + scroll_offset;
-                        if let Some(item) = sidebar_items.get(clicked) {
+                        let clicked_visual = (row - inner_y) as usize + scroll_offset;
+                        if let Some(clicked) = visual_rows.get(clicked_visual).copied().flatten()
+                            && let Some(item) = sidebar_items.get(clicked)
+                        {
                             app.selected_sidebar_row = clicked;
                             match item {
-                                crate::app::SidebarItem::GroupHeader { .. } => {
+                                crate::app::SidebarItem::Workspace {
+                                    index,
+                                    collapsed: Some(_),
+                                } => {
+                                    app.selected_workspace = *index;
+                                    app.switch_workspace(*index);
                                     app.toggle_selected_group();
                                 }
-                                crate::app::SidebarItem::Workspace { index } => {
+                                crate::app::SidebarItem::Workspace { index, .. } => {
                                     app.selected_workspace = *index;
                                     app.switch_workspace(*index);
                                 }

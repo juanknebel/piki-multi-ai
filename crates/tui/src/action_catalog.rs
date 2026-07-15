@@ -270,9 +270,9 @@ static CATALOG: &[ActionMeta] = {
         // ── Workspace list pane ───────────────────────────────────────────
         local(C::WorkspacePane, Bind("workspaces", "down"), "Select the next workspace"),
         local(C::WorkspacePane, Bind("workspaces", "up"), "Select the previous workspace"),
-        local(C::WorkspacePane, Bind("workspaces", "collapse"), "Collapse the group"),
-        local(C::WorkspacePane, Bind("workspaces", "expand"), "Expand the group"),
-        local(C::WorkspacePane, Bind("workspaces", "select"), "Switch to it / toggle the group"),
+        local(C::WorkspacePane, Bind("workspaces", "collapse"), "Collapse a worktree family"),
+        local(C::WorkspacePane, Bind("workspaces", "expand"), "Expand a worktree family"),
+        local(C::WorkspacePane, Bind("workspaces", "select"), "Switch to it / toggle collapse"),
         // ── Agents pane ───────────────────────────────────────────────────
         local(C::AgentsPane, Bind("agents", "down"), "Select the next agent"),
         local(C::AgentsPane, Bind("agents", "up"), "Select the previous agent"),

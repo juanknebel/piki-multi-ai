@@ -241,7 +241,10 @@ impl WorkspaceManager {
                 let origin = detect_origin_from_repo(&root).await;
                 (root, branch, origin)
             }
-            Err(_) => (dir.clone(), "main".to_string(), WorkspaceOrigin::Local),
+            // Not a git repo at all — leave `branch` empty so callers (e.g.
+            // the TUI sidebar) can tell "no repo configured" apart from "a
+            // real repo whose branch happens to be main".
+            Err(_) => (dir.clone(), String::new(), WorkspaceOrigin::Local),
         };
 
         let mut info = WorkspaceInfo::new(

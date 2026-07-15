@@ -36,8 +36,6 @@ pub(super) fn handle_edit_workspace_input(app: &mut App, key: KeyEvent) -> Optio
         kanban_cursor,
         prompt,
         prompt_cursor,
-        group,
-        group_cursor,
         active_field,
     } => {
         match key.code {
@@ -53,7 +51,6 @@ pub(super) fn handle_edit_workspace_input(app: &mut App, key: KeyEvent) -> Optio
                 *target,
                 trim_some(kanban),
                 prompt.clone(),
-                trim_some(group),
             )))),
             _ if is_cancel(key, &app.config) => Some(Step::Cancel),
             _ => {
@@ -62,7 +59,6 @@ pub(super) fn handle_edit_workspace_input(app: &mut App, key: KeyEvent) -> Optio
                         (kanban as &mut String, kanban_cursor as &mut usize)
                     }
                     EditWorkspaceField::Prompt => (prompt, prompt_cursor),
-                    EditWorkspaceField::Group => (group, group_cursor),
                 };
                 handle_text_input(buf, cursor, key, |c| !c.is_control());
                 Some(Step::Stay)
@@ -85,8 +81,6 @@ pub(super) fn handle_edit_workspace_input(app: &mut App, key: KeyEvent) -> Optio
 
 pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     let Some(DialogState::NewWorkspace {
-        ref mut name,
-        ref mut name_cursor,
         ref mut dir,
         ref mut dir_cursor,
         ref mut destination,
@@ -97,8 +91,6 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
         ref mut prompt_cursor,
         ref mut kanban,
         ref mut kanban_cursor,
-        ref mut group,
-        ref mut group_cursor,
         ref mut source,
         ref mut active_field,
     }) = app.active_dialog
@@ -120,8 +112,6 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
             let description = desc.clone();
             let prompt_val = prompt.clone();
             let kanban_path = opt_trimmed(kanban);
-            let group_val = opt_trimmed(group);
-            let name_trimmed = name.trim();
             let source_val = *source;
 
             if dir_raw.is_empty() {
@@ -149,14 +139,10 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
                             Some(format!("Folder does not exist: {}", dir_str));
                         return None;
                     }
-                    let ws_name = if name_trimmed.is_empty() {
-                        dir_path
-                            .file_name()
-                            .map(|n| n.to_string_lossy().to_string())
-                            .unwrap_or_default()
-                    } else {
-                        name_trimmed.to_string()
-                    };
+                    let ws_name = dir_path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_default();
                     if ws_name.is_empty() {
                         app.status_message =
                             Some("Could not derive workspace name from folder".into());
@@ -172,7 +158,6 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
                         kanban_path,
                         dir_path,
                         WorkspaceType::Simple,
-                        group_val,
                     ));
                 }
                 NewWorkspaceSource::GitHub => {
@@ -193,11 +178,7 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
                         dest_raw.clone()
                     };
                     let dest_path = PathBuf::from(&dest_expanded);
-                    let ws_name = if name_trimmed.is_empty() {
-                        parse_github_repo_name(&url).unwrap_or_default()
-                    } else {
-                        name_trimmed.to_string()
-                    };
+                    let ws_name = parse_github_repo_name(&url).unwrap_or_default();
                     if ws_name.is_empty() {
                         app.status_message =
                             Some("Could not parse repo name from URL".into());
@@ -213,7 +194,6 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
                         kanban_path,
                         url,
                         dest_path,
-                        group_val,
                     ));
                 }
             }
@@ -246,23 +226,14 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
 
     let field = *active_field;
     let (buf, cursor) = match field {
-        DialogField::Name => (name as &mut String, name_cursor as &mut usize),
         DialogField::Directory => (dir, dir_cursor),
         DialogField::Destination => (destination, destination_cursor),
         DialogField::Description => (desc, desc_cursor),
         DialogField::Prompt => (prompt, prompt_cursor),
         DialogField::KanbanPath => (kanban, kanban_cursor),
-        DialogField::Group => (group, group_cursor),
         DialogField::Source => return None,
     };
-    let validator = |c: char| -> bool {
-        match field {
-            DialogField::Name => {
-                c.is_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '/'
-            }
-            _ => !c.is_control(),
-        }
-    };
+    let validator = |c: char| -> bool { !c.is_control() };
     handle_text_input(buf, cursor, key, validator);
     None
 }
@@ -331,8 +302,6 @@ fn handle_create_worktree_create_new(app: &mut App, key: KeyEvent) -> Option<Act
         ref mut prompt_cursor,
         ref mut kanban,
         ref mut kanban_cursor,
-        ref mut group,
-        ref mut group_cursor,
         ref mut active_field,
         ..
     }) = app.active_dialog
@@ -357,7 +326,6 @@ fn handle_create_worktree_create_new(app: &mut App, key: KeyEvent) -> Option<Act
             }
             let prompt_val = prompt.clone();
             let kanban_opt = opt_trimmed(kanban);
-            let group_opt = opt_trimmed(group);
             let Some(parent) = app.workspaces.get(parent_idx) else {
                 app.status_message = Some("Parent workspace no longer exists".into());
                 app.active_dialog = None;
@@ -376,7 +344,6 @@ fn handle_create_worktree_create_new(app: &mut App, key: KeyEvent) -> Option<Act
                 kanban_opt,
                 parent_dir,
                 WorkspaceType::Worktree,
-                group_opt,
             ));
         }
         _ if is_cancel(key, &app.config) => {
@@ -393,7 +360,6 @@ fn handle_create_worktree_create_new(app: &mut App, key: KeyEvent) -> Option<Act
         CreateWorktreeField::Name => (name as &mut String, name_cursor as &mut usize),
         CreateWorktreeField::Prompt => (prompt, prompt_cursor),
         CreateWorktreeField::KanbanPath => (kanban, kanban_cursor),
-        CreateWorktreeField::Group => (group, group_cursor),
     };
     let validator = |c: char| -> bool {
         match field {
@@ -1443,7 +1409,7 @@ fn char_count(text: &str) -> usize {
 }
 
 /// Trim a dialog buffer; return `None` when empty, `Some(trimmed)` otherwise.
-/// Used by the new-workspace handler to skip blank `kanban`/`group` fields.
+/// Used by the new-workspace handler to skip a blank `kanban` field.
 fn opt_trimmed(buf: &str) -> Option<String> {
     let trimmed = buf.trim();
     if trimmed.is_empty() {

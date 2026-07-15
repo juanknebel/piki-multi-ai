@@ -9,8 +9,6 @@ use crate::dialog_state::{CreateWorktreeField, CreateWorktreeMode, DialogState, 
 
 pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
     let Some(DialogState::NewWorkspace {
-        ref name,
-        name_cursor,
         ref dir,
         dir_cursor,
         ref destination,
@@ -21,8 +19,6 @@ pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
         prompt_cursor,
         ref kanban,
         kanban_cursor,
-        ref group,
-        group_cursor,
         source,
         active_field,
     }) = app.active_dialog
@@ -31,11 +27,11 @@ pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
     };
 
     let popup_width = area.width * 70 / 100;
-    // Layout: Source, Directory/URL, [Destination (GitHub only)], Name,
-    // Desc, Prompt, Kanban, Group → 7 fields for Local (19 lines), 8 for
-    // GitHub (21 lines including the extra "Clone into" row).
+    // Layout: Source, Directory/URL, [Destination (GitHub only)],
+    // Desc, Prompt, Kanban → 5 fields for Local (14 lines), 6 for
+    // GitHub (16 lines including the extra "Clone into" row).
     let is_github = source == NewWorkspaceSource::GitHub;
-    let popup_height: u16 = if is_github { 21 } else { 19 };
+    let popup_height: u16 = if is_github { 16 } else { 14 };
     let popup = super::clear_popup(frame, area, popup_width.max(40), popup_height);
     let theme = &app.theme.dialog;
 
@@ -47,11 +43,9 @@ pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
     let source_active = active_field == DialogField::Source;
     let dir_active = active_field == DialogField::Directory;
     let destination_active = active_field == DialogField::Destination;
-    let name_active = active_field == DialogField::Name;
     let desc_active = active_field == DialogField::Description;
     let prompt_active = active_field == DialogField::Prompt;
     let kanban_active = active_field == DialogField::KanbanPath;
-    let group_active = active_field == DialogField::Group;
 
     let source_text = match source {
         NewWorkspaceSource::Local => "[Local folder]  GitHub URL",
@@ -99,15 +93,6 @@ pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
 
     lines.extend([
         super::render_text_field(
-            "  Name:    ",
-            name,
-            name_active,
-            name_cursor,
-            fmax,
-            super::field_style(name_active, active_c, inactive_c),
-        ),
-        Line::from(""),
-        super::render_text_field(
             "  Desc:   ",
             desc,
             desc_active,
@@ -134,15 +119,6 @@ pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
             super::field_style(kanban_active, active_c, inactive_c),
         ),
         Line::from(""),
-        super::render_text_field(
-            "  Group:  ",
-            group,
-            group_active,
-            group_cursor,
-            fmax,
-            super::field_style(group_active, active_c, inactive_c),
-        ),
-        Line::from(""),
         Line::from(vec![Span::styled(
             "  [Esc] cancel",
             Style::default().fg(theme.new_ws_inactive),
@@ -159,8 +135,6 @@ pub(crate) fn render_edit_workspace_dialog(frame: &mut Frame, area: Rect, app: &
         kanban_cursor,
         ref prompt,
         prompt_cursor,
-        ref group,
-        group_cursor,
         active_field,
         ..
     }) = app.active_dialog
@@ -169,7 +143,7 @@ pub(crate) fn render_edit_workspace_dialog(frame: &mut Frame, area: Rect, app: &
     };
 
     let popup_width = area.width * 70 / 100;
-    let popup = super::clear_popup(frame, area, popup_width.max(40), 13);
+    let popup = super::clear_popup(frame, area, popup_width.max(40), 10);
     let theme = &app.theme.dialog;
 
     let active_c = theme.new_ws_active;
@@ -179,7 +153,6 @@ pub(crate) fn render_edit_workspace_dialog(frame: &mut Frame, area: Rect, app: &
 
     let kanban_active = active_field == EditWorkspaceField::KanbanPath;
     let prompt_active = active_field == EditWorkspaceField::Prompt;
-    let group_active = active_field == EditWorkspaceField::Group;
 
     let lines = vec![
         super::render_text_field(
@@ -198,15 +171,6 @@ pub(crate) fn render_edit_workspace_dialog(frame: &mut Frame, area: Rect, app: &
             prompt_cursor,
             fmax,
             super::field_style(prompt_active, active_c, inactive_c),
-        ),
-        Line::from(""),
-        super::render_text_field(
-            "  Group:  ",
-            group,
-            group_active,
-            group_cursor,
-            fmax,
-            super::field_style(group_active, active_c, inactive_c),
         ),
         Line::from(""),
         Line::from(vec![Span::styled(
@@ -274,8 +238,6 @@ fn render_create_worktree_create_new(frame: &mut Frame, area: Rect, app: &App) {
         prompt_cursor,
         ref kanban,
         kanban_cursor,
-        ref group,
-        group_cursor,
         active_field,
         ..
     }) = app.active_dialog
@@ -284,7 +246,7 @@ fn render_create_worktree_create_new(frame: &mut Frame, area: Rect, app: &App) {
     };
 
     let popup_width = area.width * 70 / 100;
-    let popup = super::clear_popup(frame, area, popup_width.max(40), 15);
+    let popup = super::clear_popup(frame, area, popup_width.max(40), 12);
     let theme = &app.theme.dialog;
 
     let active_c = theme.new_ws_active;
@@ -295,7 +257,6 @@ fn render_create_worktree_create_new(frame: &mut Frame, area: Rect, app: &App) {
     let name_active = active_field == CreateWorktreeField::Name;
     let prompt_active = active_field == CreateWorktreeField::Prompt;
     let kanban_active = active_field == CreateWorktreeField::KanbanPath;
-    let group_active = active_field == CreateWorktreeField::Group;
 
     let parent_label = app
         .workspaces
@@ -337,15 +298,6 @@ fn render_create_worktree_create_new(frame: &mut Frame, area: Rect, app: &App) {
             kanban_cursor,
             fmax,
             super::field_style(kanban_active, active_c, inactive_c),
-        ),
-        Line::from(""),
-        super::render_text_field(
-            "  Group:  ",
-            group,
-            group_active,
-            group_cursor,
-            fmax,
-            super::field_style(group_active, active_c, inactive_c),
         ),
         Line::from(""),
         Line::from(vec![Span::styled(
@@ -463,10 +415,6 @@ pub(crate) fn render_workspace_info_overlay(frame: &mut Frame, area: Rect, app: 
                 WorkspaceType::Worktree => "Worktree",
                 WorkspaceType::Project => "Project",
             }),
-        ]),
-        Line::from(vec![
-            Span::styled(" Group:   ", label_style),
-            Span::raw(ws.info.group.as_deref().unwrap_or("(none)").to_string()),
         ]),
         Line::from(""),
     ];

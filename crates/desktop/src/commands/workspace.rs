@@ -70,7 +70,6 @@ pub async fn create_workspace(
     prompt: String,
     dir: String,
     ws_type: String,
-    group: Option<String>,
     kanban_path: Option<String>,
 ) -> Result<WorkspaceInfo, String> {
     // Extract manager info with scoped lock
@@ -106,7 +105,6 @@ pub async fn create_workspace(
     };
 
     let mut result_info = info.clone();
-    result_info.group = group.clone();
 
     let watcher = FileWatcher::new(result_info.path.clone(), result_info.name.clone()).ok();
 
@@ -149,7 +147,6 @@ pub async fn create_github_workspace(
     prompt: String,
     github_url: String,
     destination_dir: String,
-    group: Option<String>,
     kanban_path: Option<String>,
 ) -> Result<WorkspaceInfo, String> {
     let (manager, storage) = {
@@ -174,7 +171,6 @@ pub async fn create_github_workspace(
         .map_err(|e| e.to_string())?;
 
     let mut result_info = info.clone();
-    result_info.group = group.clone();
 
     let watcher = FileWatcher::new(result_info.path.clone(), result_info.name.clone()).ok();
 
@@ -263,7 +259,6 @@ pub async fn update_workspace(
     state: State<'_, Mutex<DesktopApp>>,
     index: usize,
     prompt: Option<String>,
-    group: Option<String>,
     description: Option<String>,
     kanban_path: Option<String>,
 ) -> Result<(), String> {
@@ -275,9 +270,6 @@ pub async fn update_workspace(
     let ws = &mut app.workspaces[index];
     if let Some(p) = prompt {
         ws.info.prompt = p;
-    }
-    if let Some(g) = group {
-        ws.info.group = if g.is_empty() { None } else { Some(g) };
     }
     if let Some(d) = description {
         ws.info.description = d;
@@ -295,4 +287,38 @@ pub async fn update_workspace(
         .save_workspaces(&source_repo, &all_infos);
 
     Ok(())
+}
+
+/// Family collapse state, keyed by worktree-family identifier (a workspace's
+/// `source_repo` path as a string) — mirrors the TUI's `collapsed_groups`.
+#[tauri::command]
+pub async fn get_collapsed_groups(
+    state: State<'_, Mutex<DesktopApp>>,
+) -> Result<Vec<String>, String> {
+    let app = state.lock();
+    let prefs = app
+        .storage
+        .ui_prefs
+        .as_ref()
+        .ok_or("Storage not available")?;
+    let groups = prefs
+        .get_collapsed_groups()
+        .map_err(|e| format!("Failed to load collapsed groups: {e}"))?;
+    Ok(groups.into_iter().collect())
+}
+
+#[tauri::command]
+pub async fn set_collapsed_groups(
+    state: State<'_, Mutex<DesktopApp>>,
+    groups: Vec<String>,
+) -> Result<(), String> {
+    let app = state.lock();
+    let prefs = app
+        .storage
+        .ui_prefs
+        .as_ref()
+        .ok_or("Storage not available")?;
+    prefs
+        .set_collapsed_groups(&groups.into_iter().collect())
+        .map_err(|e| format!("Failed to save collapsed groups: {e}"))
 }

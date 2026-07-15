@@ -313,7 +313,6 @@ pub async fn dispatch_agent(
     prompt: String,
     create_worktree: bool,
     ws_name: Option<String>,
-    group: Option<String>,
     dispatch_card_id: Option<String>,
     dispatch_source_kanban: Option<String>,
     dispatch_agent_name: Option<String>,
@@ -370,9 +369,6 @@ pub async fn dispatch_agent(
         let order = app.workspaces.iter().map(|ws| ws.info.order).max().unwrap_or(0) + 1;
         let mut ws_info = info;
         ws_info.order = order;
-        if let Some(ref g) = group {
-            ws_info.group = Some(g.clone());
-        }
         ws_info.dispatch_card_id = dispatch_card_id;
         ws_info.dispatch_source_kanban = dispatch_source_kanban;
         ws_info.dispatch_agent_name = dispatch_agent_name;

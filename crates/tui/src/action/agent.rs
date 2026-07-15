@@ -30,8 +30,8 @@ pub(super) async fn handle(
             use_current_ws,
         } => {
             // 1. Extract source workspace data
-            let (source_dir, source_ws_name) = match app.workspaces.get(source_ws) {
-                Some(ws) => (ws.source_repo.clone(), ws.name.clone()),
+            let source_dir = match app.workspaces.get(source_ws) {
+                Some(ws) => ws.source_repo.clone(),
                 None => {
                     app.status_message = Some("Source workspace not found".into());
                     return Ok(());
@@ -119,7 +119,6 @@ pub(super) async fn handle(
                     })
                     .collect();
                 let ws_name = format!("{}/{}", type_prefix, sanitized_id);
-                let group_name = format!("{}-AGENTS", source_ws_name);
 
                 let result = manager
                     .create(
@@ -133,7 +132,6 @@ pub(super) async fn handle(
 
                 match result {
                     Ok(mut info) => {
-                        info.group = Some(group_name);
                         info.dispatch_card_id = Some(card_id.clone());
                         info.dispatch_source_kanban = kanban_path;
                         info.dispatch_agent_name = agent_name.clone();

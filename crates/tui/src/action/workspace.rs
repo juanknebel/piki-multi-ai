@@ -11,8 +11,7 @@ use piki_core::workspace::{FileWatcher, WorkspaceManager};
 /// Push a newly-created/imported workspace onto `app.workspaces`, switch to
 /// it and focus the main panel, start its file watcher, and persist config.
 /// Shared tail of `CreateWorkspace`/`CreateGithubWorkspace`/`ImportExistingWorktree`.
-fn finish_workspace_creation(app: &mut App, mut info: piki_core::WorkspaceInfo, group: Option<String>) {
-    info.group = group;
+fn finish_workspace_creation(app: &mut App, mut info: piki_core::WorkspaceInfo) {
     info.order = app
         .workspaces
         .iter()
@@ -49,7 +48,7 @@ pub(super) async fn handle(
     _terminal: &mut DefaultTerminal,
 ) -> anyhow::Result<()> {
     match action {
-        Action::CreateWorkspace(name, description, prompt, kanban_path, dir, ws_type, group) => {
+        Action::CreateWorkspace(name, description, prompt, kanban_path, dir, ws_type) => {
             let result = match ws_type {
                 WorkspaceType::Simple => {
                     manager
@@ -68,7 +67,7 @@ pub(super) async fn handle(
                 }
             };
             match result {
-                Ok(info) => finish_workspace_creation(app, info, group),
+                Ok(info) => finish_workspace_creation(app, info),
                 Err(e) => {
                     app.status_message = Some(format!("Error: {}", e));
                 }
@@ -81,7 +80,6 @@ pub(super) async fn handle(
             kanban_path,
             github_url,
             destination_dir,
-            group,
         ) => {
             let result = manager
                 .create_from_github(
@@ -94,7 +92,7 @@ pub(super) async fn handle(
                 )
                 .await;
             match result {
-                Ok(info) => finish_workspace_creation(app, info, group),
+                Ok(info) => finish_workspace_creation(app, info),
                 Err(e) => {
                     app.status_message = Some(format!("Error: {}", e));
                 }
@@ -140,19 +138,18 @@ pub(super) async fn handle(
                 return Ok(());
             };
             let source_repo = parent.info.source_repo.clone();
-            let group = parent.info.group.clone();
             let name = branch.rsplit('/').next().unwrap_or(&branch).to_string();
             let result = manager
                 .import_existing_worktree(&name, branch, path, source_repo)
                 .await;
             match result {
-                Ok(info) => finish_workspace_creation(app, info, group),
+                Ok(info) => finish_workspace_creation(app, info),
                 Err(e) => {
                     app.status_message = Some(format!("Error: {}", e));
                 }
             }
         }
-        Action::EditWorkspace(idx, kanban_path, prompt, group) => {
+        Action::EditWorkspace(idx, kanban_path, prompt) => {
             if let Some(ws) = app.workspaces.get_mut(idx) {
                 if ws.kanban_path != kanban_path {
                     ws.kanban_app = None;
@@ -160,7 +157,6 @@ pub(super) async fn handle(
                 }
                 ws.kanban_path = kanban_path;
                 ws.prompt = prompt;
-                ws.info.group = group;
                 {
                     let source = ws.source_repo.clone();
                     let infos: Vec<_> = app.workspaces.iter().map(|w| w.info.clone()).collect();

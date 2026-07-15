@@ -77,9 +77,9 @@ expression: body
   Workspace list pane
     j             Select the next workspace
     k             Select the previous workspace
-    h             Collapse the group
-    l             Expand the group
-    Enter         Switch to it / toggle the group
+    h             Collapse a worktree family
+    l             Expand a worktree family
+    Enter         Switch to it / toggle collapse
 
   Agents pane
     j             Select the next agent

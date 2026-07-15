@@ -144,13 +144,13 @@ theme = "default"
 # select = "enter"
 
 # [keybindings.workspaces]    # Workspaces pane (top-left tree)
-# down = "j"                  # select = switch workspace / toggle group header
+# down = "j"                  # select = switch workspace, or toggle collapse on a worktree-family parent row
 # up = "k"
 # down_alt = "down"
 # up_alt = "up"
-# collapse = "h"              # collapse the group (or the row's parent group)
+# collapse = "h"              # collapse a worktree family (only on its parent row)
 # collapse_alt = "left"
-# expand = "l"                # expand the selected collapsed group header
+# expand = "l"                # expand a collapsed worktree family
 # expand_alt = "right"
 # select = "enter"
 

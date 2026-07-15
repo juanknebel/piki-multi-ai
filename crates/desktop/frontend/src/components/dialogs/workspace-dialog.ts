@@ -89,10 +89,6 @@ export function showWorkspaceDialog(opts: DialogOptions) {
           <input class="dialog-input" id="ws-desc" placeholder="Brief description" value="${escapeAttr(prefill?.description ?? "")}" />
         </div>
         <div class="dialog-field">
-          <label class="dialog-label">Group</label>
-          <input class="dialog-input" id="ws-group" placeholder="Optional group name" value="${escapeAttr(prefill?.group ?? "")}" />
-        </div>
-        <div class="dialog-field">
           <label class="dialog-label">Kanban Path</label>
           <input class="dialog-input" id="ws-kanban" placeholder="Path to .board directory (optional)" value="${escapeAttr(prefill?.kanban_path ?? "")}" />
         </div>
@@ -191,8 +187,6 @@ async function submitCreate(backdrop: HTMLElement, source: string) {
     backdrop.querySelector<HTMLInputElement>("#ws-name")?.value.trim() ?? "";
   const desc =
     backdrop.querySelector<HTMLInputElement>("#ws-desc")?.value.trim() ?? "";
-  const group =
-    backdrop.querySelector<HTMLInputElement>("#ws-group")?.value.trim() ?? "";
   const kanban =
     backdrop.querySelector<HTMLInputElement>("#ws-kanban")?.value.trim() ?? "";
   const prompt =
@@ -228,7 +222,6 @@ async function submitCreate(backdrop: HTMLElement, source: string) {
         prompt,
         url,
         destinationDir,
-        group || null,
         kanban || null,
       );
       appState.addWorkspace(info);
@@ -264,7 +257,6 @@ async function submitCreate(backdrop: HTMLElement, source: string) {
       prompt,
       dir,
       "Simple",
-      group || null,
       kanban || null,
     );
     appState.addWorkspace(info);
@@ -293,8 +285,6 @@ function basenameFromPath(path: string): string {
 async function submitEdit(backdrop: HTMLElement, index: number) {
   const desc =
     backdrop.querySelector<HTMLInputElement>("#ws-desc")?.value.trim();
-  const group =
-    backdrop.querySelector<HTMLInputElement>("#ws-group")?.value.trim();
   const kanban =
     backdrop.querySelector<HTMLInputElement>("#ws-kanban")?.value.trim();
   const prompt =
@@ -305,13 +295,11 @@ async function submitEdit(backdrop: HTMLElement, index: number) {
   btn.textContent = "Saving...";
 
   try {
-    await ipc.updateWorkspace(index, prompt, group, desc, kanban);
+    await ipc.updateWorkspace(index, prompt, desc, kanban);
     // Update local state
     const ws = appState.workspaces[index];
     if (ws) {
       if (prompt !== undefined) ws.info.prompt = prompt;
-      if (group !== undefined)
-        ws.info.group = group === "" ? null : group;
       if (desc !== undefined) ws.info.description = desc;
       if (kanban !== undefined)
         ws.info.kanban_path = kanban === "" ? null : kanban;
@@ -346,7 +334,6 @@ export function showWorkspaceInfo(index: number) {
         ${infoRow("Branch", info.branch)}
         ${infoRow("Path", String(info.path))}
         ${infoRow("Source Repo", info.source_repo_display)}
-        ${infoRow("Group", info.group || "—")}
         ${infoRow("Kanban Path", info.kanban_path || "—")}
         ${infoRow("Description", info.description || "—")}
         ${infoRow("Prompt", info.prompt || "—")}
@@ -393,7 +380,7 @@ function escapeAttr(text: string): string {
 
 /** Layer 3: GitHub-only "Create Worktree" dialog. Spawns a worktree
  *  workspace anchored at the parent's source_repo. Only the branch name is
- *  required; prompt/kanban/group default to the parent's values. */
+ *  required; prompt/kanban default to the parent's values. */
 export function showCreateWorktreeDialog(parent: WorkspaceInfo) {
   document.querySelector(".dialog-backdrop")?.remove();
 
@@ -427,10 +414,6 @@ export function showCreateWorktreeDialog(parent: WorkspaceInfo) {
           <label class="dialog-label">Kanban Path</label>
           <input class="dialog-input" id="wt-kanban" placeholder="Path to .board directory (optional)" value="${escapeAttr(parent.kanban_path ?? "")}" />
         </div>
-        <div class="dialog-field">
-          <label class="dialog-label">Group</label>
-          <input class="dialog-input" id="wt-group" placeholder="Optional group name" value="${escapeAttr(parent.group ?? "")}" />
-        </div>
       </div>
       <div class="dialog-footer">
         <button class="dialog-btn dialog-btn-secondary" id="wt-cancel">Cancel</button>
@@ -463,8 +446,6 @@ export function showCreateWorktreeDialog(parent: WorkspaceInfo) {
       backdrop.querySelector<HTMLTextAreaElement>("#wt-prompt")?.value.trim() ?? "";
     const kanban =
       backdrop.querySelector<HTMLInputElement>("#wt-kanban")?.value.trim() ?? "";
-    const group =
-      backdrop.querySelector<HTMLInputElement>("#wt-group")?.value.trim() ?? "";
 
     if (!name) {
       toast("Branch name is required", "error");
@@ -481,7 +462,6 @@ export function showCreateWorktreeDialog(parent: WorkspaceInfo) {
         prompt,
         parent.source_repo,
         "Worktree",
-        group || null,
         kanban || null,
       );
       appState.addWorkspace(info);

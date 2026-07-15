@@ -1032,8 +1032,9 @@ pub(super) fn handle_agents_interaction(app: &mut App, key: KeyEvent) -> Option<
 
 /// Keyboard navigation for the focused Workspaces pane (bottom/top-left tree).
 /// Mirrors the mouse behaviour in `mouse.rs`: up/down move the selection over
-/// the flattened sidebar rows, and `select` (Enter) either switches to the
-/// selected workspace or toggles the selected group header.
+/// the flattened sidebar rows (which always switches — every row is a real
+/// workspace), and `select` (Enter) additionally toggles collapse when the
+/// selection is a worktree-family parent row.
 pub(super) fn handle_workspace_list_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
     if app.config.matches_workspaces(key, "down") || app.config.matches_workspaces(key, "down_alt")
     {
@@ -1052,11 +1053,14 @@ pub(super) fn handle_workspace_list_interaction(app: &mut App, key: KeyEvent) ->
         app.expand_selected_group();
     } else if app.config.matches_workspaces(key, "select") {
         match app.sidebar_items().get(app.selected_sidebar_row) {
-            Some(crate::app::SidebarItem::GroupHeader { .. }) => app.toggle_selected_group(),
-            Some(crate::app::SidebarItem::Workspace { index }) => {
+            Some(crate::app::SidebarItem::Workspace { index, collapsed }) => {
                 let idx = *index;
+                let is_parent = collapsed.is_some();
                 app.selected_workspace = idx;
                 app.switch_workspace(idx);
+                if is_parent {
+                    app.toggle_selected_group();
+                }
             }
             None => {}
         }
