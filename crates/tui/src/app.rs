@@ -1282,32 +1282,40 @@ impl App {
 
     /// Visual rows for the workspace sidebar, in render order: `Some(row)`
     /// indexes into `sidebar_items()`, `None` is a blank separator line
-    /// inserted after a worktree family's last visible row so the block
-    /// reads as bounded against a flat neighbor. Rendering and mouse
-    /// hit-testing must both walk this list (not `sidebar_items()` line-for-
-    /// line) once separators exist, or their row math drifts apart.
+    /// inserted on BOTH sides of a worktree family block (before its parent
+    /// row, after its last child) so the block reads as bounded against a
+    /// flat neighbor — not just closed off on one side. Two adjacent
+    /// families share a single separator between them, not one from each
+    /// side. Rendering and mouse hit-testing must both walk this list (not
+    /// `sidebar_items()` line-for-line) once separators exist, or their row
+    /// math drifts apart.
     pub fn sidebar_visual_rows(&self) -> Vec<Option<usize>> {
         let items = self.sidebar_items();
-        let source_repo = |idx: usize| &self.workspaces[idx].info.source_repo;
-        let is_family = |idx: usize| {
-            self.workspaces
+        // A row's "block key" is its source_repo when it's part of a
+        // worktree family (Some), or None for a standalone/flat row — two
+        // flat rows never get a separator between them, only a transition
+        // into or out of a family block does.
+        let block_key = |i: usize| -> Option<&std::path::PathBuf> {
+            let SidebarItem::Workspace { index, .. } = &items[i];
+            let repo = &self.workspaces[*index].info.source_repo;
+            let family_count = self
+                .workspaces
                 .iter()
-                .filter(|w| &w.info.source_repo == source_repo(idx))
-                .count()
-                > 1
+                .filter(|w| &w.info.source_repo == repo)
+                .count();
+            (family_count > 1).then_some(repo)
         };
 
         let mut rows = Vec::with_capacity(items.len());
-        for (i, SidebarItem::Workspace { index, .. }) in items.iter().enumerate() {
-            rows.push(Some(i));
-            let next_same_family = items.get(i + 1).is_some_and(
-                |SidebarItem::Workspace { index: next_idx, .. }| {
-                    source_repo(*next_idx) == source_repo(*index)
-                },
-            );
-            if is_family(*index) && !next_same_family && i + 1 < items.len() {
-                rows.push(None);
+        for i in 0..items.len() {
+            if i > 0 {
+                let prev = block_key(i - 1);
+                let cur = block_key(i);
+                if prev != cur && (prev.is_some() || cur.is_some()) {
+                    rows.push(None);
+                }
             }
+            rows.push(Some(i));
         }
         rows
     }
