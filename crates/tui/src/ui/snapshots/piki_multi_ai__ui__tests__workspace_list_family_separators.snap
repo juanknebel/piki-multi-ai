@@ -1,0 +1,16 @@
+---
+source: crates/tui/src/ui/mod.rs
+expression: content
+---
+╭ WORKSPACES ──────────────────────────╮
+│▎  ⎇ flow                             │
+│ ▾ ○ src-agent-multi (main)           │
+│ │ ⎇ nightly                          │
+│                                      │
+│   ⎇ ferrum-trade                     │
+│ ▾ ○ src-void-setup (main)            │
+│ │ ⎇ x220t                            │
+│                                      │
+│                                      │
+│                                      │
+╰──────────────────────────────────────╯

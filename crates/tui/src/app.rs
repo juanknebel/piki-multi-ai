@@ -1281,6 +1281,38 @@ impl App {
         items
     }
 
+    /// Visual rows for the workspace sidebar, in render order: `Some(row)`
+    /// indexes into `sidebar_items()`, `None` is a blank separator line
+    /// inserted after a worktree family's last visible row so the block
+    /// reads as bounded against a flat neighbor. Rendering and mouse
+    /// hit-testing must both walk this list (not `sidebar_items()` line-for-
+    /// line) once separators exist, or their row math drifts apart.
+    pub fn sidebar_visual_rows(&self) -> Vec<Option<usize>> {
+        let items = self.sidebar_items();
+        let source_repo = |idx: usize| &self.workspaces[idx].info.source_repo;
+        let is_family = |idx: usize| {
+            self.workspaces
+                .iter()
+                .filter(|w| &w.info.source_repo == source_repo(idx))
+                .count()
+                > 1
+        };
+
+        let mut rows = Vec::with_capacity(items.len());
+        for (i, SidebarItem::Workspace { index, .. }) in items.iter().enumerate() {
+            rows.push(Some(i));
+            let next_same_family = items.get(i + 1).is_some_and(
+                |SidebarItem::Workspace { index: next_idx, .. }| {
+                    source_repo(*next_idx) == source_repo(*index)
+                },
+            );
+            if is_family(*index) && !next_same_family && i + 1 < items.len() {
+                rows.push(None);
+            }
+        }
+        rows
+    }
+
     /// Map a sidebar visual row to a workspace index. Every row is a real
     /// workspace, so this only returns `None` when `row` is out of range.
     pub fn sidebar_row_to_workspace(&self, row: usize) -> Option<usize> {

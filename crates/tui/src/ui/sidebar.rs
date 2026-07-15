@@ -66,6 +66,7 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
     }
 
     let sidebar_items = app.sidebar_items();
+    let visual_rows = app.sidebar_visual_rows();
 
     // Precompute, per source_repo, how many loaded workspaces share it and
     // whether one of them is a non-Worktree "parent". Drives label choice
@@ -83,25 +84,30 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
         }
     }
 
-    // All rows are one line tall; scroll follows the selection.
+    // All rows are one line tall; scroll follows the selection's position in
+    // `visual_rows` (which may include blank separators sidebar_items() doesn't).
     let visible_height = area.height.saturating_sub(2) as usize;
-    let selected = app
-        .selected_sidebar_row
-        .min(sidebar_items.len().saturating_sub(1));
-    let scroll_offset = if visible_height > 0 && selected >= visible_height {
-        selected + 1 - visible_height
+    let selected_visual = visual_rows
+        .iter()
+        .position(|r| *r == Some(app.selected_sidebar_row))
+        .unwrap_or(0);
+    let scroll_offset = if visible_height > 0 && selected_visual >= visible_height {
+        selected_visual + 1 - visible_height
     } else {
         0
     };
 
     let inner_width = area.width.saturating_sub(2) as usize;
 
-    let items: Vec<ListItem> = sidebar_items
+    let items: Vec<ListItem> = visual_rows
         .iter()
-        .enumerate()
         .skip(scroll_offset)
         .take(visible_height)
-        .map(|(row, item)| {
+        .map(|slot| {
+            let Some(row) = *slot else {
+                return ListItem::new(vec![Line::from("")]);
+            };
+            let item = &sidebar_items[row];
             let is_selected = row == app.selected_sidebar_row;
             match item {
                 SidebarItem::Workspace { index, collapsed } => {
@@ -270,7 +276,7 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
         frame,
         area,
         scroll_offset,
-        sidebar_items.len(),
+        visual_rows.len(),
         visible_height,
         app.theme.general.scrollbar_thumb,
     );

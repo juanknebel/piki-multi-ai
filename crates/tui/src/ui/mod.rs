@@ -286,6 +286,66 @@ mod tests {
     }
 
     #[test]
+    fn test_snapshot_workspace_list_family_separators() {
+        // A blank line must separate a worktree family's last visible row
+        // from a flat neighbor (or the next family) — otherwise a flat repo
+        // like "ferrum-trade" reads as if it belonged to the block above it.
+        let mut terminal = test_terminal(40, 12);
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+
+        let repo_a = std::path::PathBuf::from("/tmp/src-agent-multi");
+        let repo_b = std::path::PathBuf::from("/tmp/src-void-setup");
+
+        app.workspaces
+            .push(crate::app::Workspace::from_info(test_ws_info("flow", 0)));
+
+        app.workspaces.push(crate::app::Workspace::from_info(
+            piki_core::WorkspaceInfo {
+                workspace_type: piki_core::WorkspaceType::Simple,
+                source_repo: repo_a.clone(),
+                branch: "main".to_string(),
+                ..test_ws_info("agent-multi", 1)
+            },
+        ));
+        app.workspaces.push(crate::app::Workspace::from_info(
+            piki_core::WorkspaceInfo {
+                source_repo: repo_a,
+                ..test_ws_info("nightly", 2)
+            },
+        ));
+
+        app.workspaces.push(crate::app::Workspace::from_info(
+            test_ws_info("ferrum-trade", 3),
+        ));
+
+        app.workspaces.push(crate::app::Workspace::from_info(
+            piki_core::WorkspaceInfo {
+                workspace_type: piki_core::WorkspaceType::Simple,
+                source_repo: repo_b.clone(),
+                branch: "main".to_string(),
+                ..test_ws_info("void-setup", 4)
+            },
+        ));
+        app.workspaces.push(crate::app::Workspace::from_info(
+            piki_core::WorkspaceInfo {
+                source_repo: repo_b,
+                ..test_ws_info("x220t", 5)
+            },
+        ));
+
+        app.active_workspace = 0;
+        app.selected_sidebar_row = 0;
+
+        terminal
+            .draw(|frame| {
+                super::sidebar::render_workspace_list(frame, frame.area(), &app);
+            })
+            .unwrap();
+        let content = buffer_to_snapshot(terminal.backend().buffer());
+        insta::assert_snapshot!("workspace_list_family_separators", content);
+    }
+
+    #[test]
     fn test_snapshot_agents_pane_with_rows() {
         let mut terminal = test_terminal(40, 8);
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
