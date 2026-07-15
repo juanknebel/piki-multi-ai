@@ -286,6 +286,35 @@ mod tests {
     }
 
     #[test]
+    fn test_snapshot_workspace_list_standalone_simple_shows_folder_name() {
+        // A standalone (no worktree children) Simple/Project workspace shows
+        // its source folder's basename, not the free-typed ws.name, and
+        // without a "(branch)" suffix since there's nothing to disambiguate.
+        let mut terminal = test_terminal(40, 6);
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+
+        app.workspaces.push(crate::app::Workspace::from_info(
+            piki_core::WorkspaceInfo {
+                workspace_type: piki_core::WorkspaceType::Simple,
+                name: "typed-nickname".to_string(),
+                branch: "main".to_string(),
+                source_repo: std::path::PathBuf::from("/tmp/my-project-folder"),
+                ..test_ws_info("typed-nickname", 0)
+            },
+        ));
+        app.active_workspace = 0;
+        app.selected_sidebar_row = 0;
+
+        terminal
+            .draw(|frame| {
+                super::sidebar::render_workspace_list(frame, frame.area(), &app);
+            })
+            .unwrap();
+        let content = buffer_to_snapshot(terminal.backend().buffer());
+        insta::assert_snapshot!("workspace_list_standalone_simple_shows_folder_name", content);
+    }
+
+    #[test]
     fn test_snapshot_workspace_list_family_separators() {
         // A blank line must separate a worktree family's last visible row
         // from a flat neighbor (or the next family) — otherwise a flat repo

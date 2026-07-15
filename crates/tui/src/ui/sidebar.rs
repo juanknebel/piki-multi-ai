@@ -133,11 +133,14 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                         .fg(theme.name_inactive)
                         .add_modifier(Modifier::BOLD);
 
-                    // Label: a family parent shows the repo folder name with
-                    // its own branch alongside ("agent-multi (master)"), a
-                    // worktree child shows just its branch, everything else
-                    // keeps its own workspace name.
-                    let label = if is_parent {
+                    // Label: any non-Worktree workspace shows the repo folder
+                    // name — a family parent appends its own branch
+                    // alongside ("agent-multi (master)"), a standalone
+                    // workspace just shows the bare folder name. A worktree
+                    // child shows just its branch; an orphaned worktree with
+                    // no recognized parent falls back to its own name.
+                    let is_worktree = ws.info.workspace_type == WorkspaceType::Worktree;
+                    let label = if !is_worktree {
                         let folder = ws
                             .info
                             .source_repo
@@ -151,10 +154,10 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                                     ws.name.clone()
                                 }
                             });
-                        if ws.info.branch.is_empty() {
-                            folder
-                        } else {
+                        if is_parent && !ws.info.branch.is_empty() {
                             format!("{folder} ({})", ws.info.branch)
+                        } else {
+                            folder
                         }
                     } else if is_child {
                         ws.info.branch.clone()

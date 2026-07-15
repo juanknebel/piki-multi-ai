@@ -81,8 +81,6 @@ pub(super) fn handle_edit_workspace_input(app: &mut App, key: KeyEvent) -> Optio
 
 pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     let Some(DialogState::NewWorkspace {
-        ref mut name,
-        ref mut name_cursor,
         ref mut dir,
         ref mut dir_cursor,
         ref mut destination,
@@ -114,7 +112,6 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
             let description = desc.clone();
             let prompt_val = prompt.clone();
             let kanban_path = opt_trimmed(kanban);
-            let name_trimmed = name.trim();
             let source_val = *source;
 
             if dir_raw.is_empty() {
@@ -142,14 +139,10 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
                             Some(format!("Folder does not exist: {}", dir_str));
                         return None;
                     }
-                    let ws_name = if name_trimmed.is_empty() {
-                        dir_path
-                            .file_name()
-                            .map(|n| n.to_string_lossy().to_string())
-                            .unwrap_or_default()
-                    } else {
-                        name_trimmed.to_string()
-                    };
+                    let ws_name = dir_path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_default();
                     if ws_name.is_empty() {
                         app.status_message =
                             Some("Could not derive workspace name from folder".into());
@@ -185,11 +178,7 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
                         dest_raw.clone()
                     };
                     let dest_path = PathBuf::from(&dest_expanded);
-                    let ws_name = if name_trimmed.is_empty() {
-                        parse_github_repo_name(&url).unwrap_or_default()
-                    } else {
-                        name_trimmed.to_string()
-                    };
+                    let ws_name = parse_github_repo_name(&url).unwrap_or_default();
                     if ws_name.is_empty() {
                         app.status_message =
                             Some("Could not parse repo name from URL".into());
@@ -237,7 +226,6 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
 
     let field = *active_field;
     let (buf, cursor) = match field {
-        DialogField::Name => (name as &mut String, name_cursor as &mut usize),
         DialogField::Directory => (dir, dir_cursor),
         DialogField::Destination => (destination, destination_cursor),
         DialogField::Description => (desc, desc_cursor),
@@ -245,14 +233,7 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
         DialogField::KanbanPath => (kanban, kanban_cursor),
         DialogField::Source => return None,
     };
-    let validator = |c: char| -> bool {
-        match field {
-            DialogField::Name => {
-                c.is_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '/'
-            }
-            _ => !c.is_control(),
-        }
-    };
+    let validator = |c: char| -> bool { !c.is_control() };
     handle_text_input(buf, cursor, key, validator);
     None
 }

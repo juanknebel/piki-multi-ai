@@ -257,8 +257,7 @@ Press `n` to open the New Workspace dialog. Provide:
 - **Source:** Toggle between `Local folder` and `GitHub URL` using `Space`, `Left`, or `Right`. Local folder points to any existing directory on disk (git not required); GitHub URL clones a public/private GitHub repo into a destination you choose. The resulting workspace is always a Simple workspace internally; worktrees are spawned later from a GitHub-origin workspace via the "Create Worktree" action.
 - **Folder / URL:** When Source = Local folder, this is the path to the directory (`~` expands to `$HOME`). When Source = GitHub URL, paste the clone URL (HTTPS, SSH, or `git@github.com:owner/repo.git`).
 - **Clone into:** *(GitHub source only)* Parent directory the repo is cloned into; the clone lands at `<clone-into>/<repo>`. Pre-filled with `<data_dir>/repos` as a hint — that default folder is auto-created on first use, but any other path you type must already exist (`~` expands to `$HOME`). In the desktop app a folder picker is available.
-- **Name:** *(optional)* Auto-derived when blank — folder basename for Local, repo name for GitHub. Provide your own value to disambiguate workspaces.
-- **Desc:** (Optional) A brief description of the task.
+- **Desc:** (Optional) A brief description of the task. The workspace name is always derived automatically — folder basename for Local, repo name for GitHub.
 - **Prompt:** (Optional) An initial prompt stored with the workspace.
 - **Kanban Path:** (Optional) Path to the Kanban board for this workspace (defaults to `~/.config/flow/boards/default`). If a local path is provided and no `board.txt` exists there, a default board with 4 columns (`todo`, `in_progress`, `in_review`, `done`) will be created automatically.
 

@@ -140,7 +140,6 @@ pub enum ActivePane {
 pub enum DialogField {
     /// Source toggle: Local folder vs GitHub URL.
     Source,
-    Name,
     /// Folder path (when source = Local) or URL (when source = GitHub).
     Directory,
     /// Parent directory the GitHub clone will land into. Only used when
@@ -1673,9 +1672,6 @@ mod tests {
         assert_eq!(get_field(&app), DialogField::Directory);
 
         crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
-        assert_eq!(get_field(&app), DialogField::Name);
-
-        crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
         assert_eq!(get_field(&app), DialogField::Description);
 
         crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
@@ -1699,7 +1695,8 @@ mod tests {
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('s')));
         assert_eq!(app.mode, AppMode::NewWorkspace);
 
-        // Tab from Source → Directory → Name to reach the Name field
+        // Tab from Source → Directory → Description (Destination is skipped
+        // for Local source) to reach the Description field
         crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
         crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
 
@@ -1708,10 +1705,10 @@ mod tests {
 
         match &app.active_dialog {
             Some(DialogState::NewWorkspace {
-                name, name_cursor, ..
+                desc, desc_cursor, ..
             }) => {
-                assert_eq!(name, "ab");
-                assert_eq!(*name_cursor, 2);
+                assert_eq!(desc, "ab");
+                assert_eq!(*desc_cursor, 2);
             }
             _ => panic!("Expected NewWorkspace dialog"),
         }

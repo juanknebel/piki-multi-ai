@@ -168,8 +168,6 @@ pub(crate) fn open_new_workspace(app: &mut App) -> Option<Action> {
     let default_dest = app.paths.repos_dir().to_string_lossy().to_string();
     let default_dest_cursor = default_dest.len();
     app.active_dialog = Some(DialogState::NewWorkspace {
-        name: String::new(),
-        name_cursor: 0,
         dir: String::new(),
         dir_cursor: 0,
         destination: default_dest,

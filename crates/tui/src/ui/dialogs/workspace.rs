@@ -9,8 +9,6 @@ use crate::dialog_state::{CreateWorktreeField, CreateWorktreeMode, DialogState, 
 
 pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
     let Some(DialogState::NewWorkspace {
-        ref name,
-        name_cursor,
         ref dir,
         dir_cursor,
         ref destination,
@@ -29,11 +27,11 @@ pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
     };
 
     let popup_width = area.width * 70 / 100;
-    // Layout: Source, Directory/URL, [Destination (GitHub only)], Name,
-    // Desc, Prompt, Kanban → 6 fields for Local (16 lines), 7 for
-    // GitHub (18 lines including the extra "Clone into" row).
+    // Layout: Source, Directory/URL, [Destination (GitHub only)],
+    // Desc, Prompt, Kanban → 5 fields for Local (14 lines), 6 for
+    // GitHub (16 lines including the extra "Clone into" row).
     let is_github = source == NewWorkspaceSource::GitHub;
-    let popup_height: u16 = if is_github { 18 } else { 16 };
+    let popup_height: u16 = if is_github { 16 } else { 14 };
     let popup = super::clear_popup(frame, area, popup_width.max(40), popup_height);
     let theme = &app.theme.dialog;
 
@@ -45,7 +43,6 @@ pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
     let source_active = active_field == DialogField::Source;
     let dir_active = active_field == DialogField::Directory;
     let destination_active = active_field == DialogField::Destination;
-    let name_active = active_field == DialogField::Name;
     let desc_active = active_field == DialogField::Description;
     let prompt_active = active_field == DialogField::Prompt;
     let kanban_active = active_field == DialogField::KanbanPath;
@@ -95,15 +92,6 @@ pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
     }
 
     lines.extend([
-        super::render_text_field(
-            "  Name:    ",
-            name,
-            name_active,
-            name_cursor,
-            fmax,
-            super::field_style(name_active, active_c, inactive_c),
-        ),
-        Line::from(""),
         super::render_text_field(
             "  Desc:   ",
             desc,

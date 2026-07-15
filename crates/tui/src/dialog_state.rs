@@ -15,8 +15,7 @@ impl CycleField for DialogField {
         match self {
             Self::Source => Self::Directory,
             Self::Directory => Self::Destination,
-            Self::Destination => Self::Name,
-            Self::Name => Self::Description,
+            Self::Destination => Self::Description,
             Self::Description => Self::Prompt,
             Self::Prompt => Self::KanbanPath,
             Self::KanbanPath => Self::Source,
@@ -28,8 +27,7 @@ impl CycleField for DialogField {
             Self::Source => Self::KanbanPath,
             Self::Directory => Self::Source,
             Self::Destination => Self::Directory,
-            Self::Name => Self::Destination,
-            Self::Description => Self::Name,
+            Self::Description => Self::Destination,
             Self::Prompt => Self::Description,
             Self::KanbanPath => Self::Prompt,
         }
@@ -74,8 +72,6 @@ pub enum NewTabMenu {
 #[derive(Debug, Clone)]
 pub enum DialogState {
     NewWorkspace {
-        name: String,
-        name_cursor: usize,
         /// Holds either the folder path (source=Local) or the GitHub URL
         /// (source=GitHub). The label rendered above this field switches
         /// between "Folder:" and "URL:" based on `source`.

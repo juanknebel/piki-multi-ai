@@ -136,8 +136,6 @@ pub(crate) fn handle_bulk_insert(app: &mut crate::app::App, text: &str) {
         AppMode::NewWorkspace | AppMode::EditWorkspace => {
             // Delegate to the active field in the workspace dialog
             if let Some(DialogState::NewWorkspace {
-                name,
-                name_cursor,
                 dir,
                 dir_cursor,
                 destination,
@@ -152,7 +150,6 @@ pub(crate) fn handle_bulk_insert(app: &mut crate::app::App, text: &str) {
             {
                 use crate::app::DialogField;
                 match active_field {
-                    DialogField::Name => bulk_insert(name, name_cursor, text),
                     DialogField::Directory => bulk_insert(dir, dir_cursor, text),
                     DialogField::Destination => bulk_insert(destination, destination_cursor, text),
                     DialogField::Description => bulk_insert(desc, desc_cursor, text),
