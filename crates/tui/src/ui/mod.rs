@@ -226,7 +226,9 @@ mod tests {
 
     // ── New snapshot tests for dialogs ──
 
-    fn test_ws_info(name: &str, group: Option<&str>, order: u32) -> piki_core::WorkspaceInfo {
+    fn test_ws_info(name: &str, order: u32) -> piki_core::WorkspaceInfo {
+        // Each workspace gets its own source_repo so it's standalone (no
+        // worktree family) unless a test deliberately shares one.
         piki_core::WorkspaceInfo {
             name: name.to_string(),
             path: std::path::PathBuf::from(format!("/tmp/{name}")),
@@ -235,9 +237,8 @@ mod tests {
             description: String::new(),
             prompt: String::new(),
             kanban_path: None,
-            group: group.map(String::from),
             order,
-            source_repo: std::path::PathBuf::from("/tmp/src"),
+            source_repo: std::path::PathBuf::from(format!("/tmp/src-{name}")),
             source_repo_display: String::new(),
             dispatch_card_id: None,
             dispatch_source_kanban: None,
@@ -251,7 +252,7 @@ mod tests {
         let mut terminal = test_terminal(40, 10);
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
 
-        let mut a = crate::app::Workspace::from_info(test_ws_info("nightly", Some("piki"), 0));
+        let mut a = crate::app::Workspace::from_info(test_ws_info("nightly", 0));
         a.changed_files.push(piki_core::ChangedFile {
             path: "src/main.rs".to_string(),
             status: piki_core::FileStatus::Modified,
@@ -265,13 +266,11 @@ mod tests {
         app.workspaces
             .push(crate::app::Workspace::from_info(test_ws_info(
                 "void-setup",
-                Some("ricing"),
                 1,
             )));
         app.workspaces
             .push(crate::app::Workspace::from_info(test_ws_info(
                 "x220t",
-                Some("ricing"),
                 2,
             )));
         app.active_workspace = 0;
@@ -298,7 +297,6 @@ mod tests {
             description: String::new(),
             prompt: String::new(),
             kanban_path: None,
-            group: None,
             order: 0,
             source_repo: std::path::PathBuf::from("/tmp/demo"),
             source_repo_display: String::new(),
@@ -323,7 +321,7 @@ mod tests {
     fn test_snapshot_tab_bar_solid_blocks() {
         let mut terminal = test_terminal(60, 2);
         let app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
-        let mut ws = crate::app::Workspace::from_info(test_ws_info("demo", None, 0));
+        let mut ws = crate::app::Workspace::from_info(test_ws_info("demo", 0));
         ws.add_tab(piki_core::AIProvider::Custom("Claude".to_string()), true, None);
         ws.add_tab(piki_core::AIProvider::Shell, true, None);
         ws.active_tab = 0;
@@ -341,12 +339,12 @@ mod tests {
         let mut terminal = test_terminal(70, 16);
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
 
-        let mut a = crate::app::Workspace::from_info(test_ws_info("piki-nightly", Some("piki"), 0));
+        let mut a = crate::app::Workspace::from_info(test_ws_info("piki-nightly", 0));
         a.add_tab(piki_core::AIProvider::Shell, true, None);
         a.add_tab(piki_core::AIProvider::Custom("Claude".to_string()), true, None);
         app.workspaces.push(a);
 
-        let mut b = crate::app::Workspace::from_info(test_ws_info("bob-the-builder", None, 1));
+        let mut b = crate::app::Workspace::from_info(test_ws_info("bob-the-builder", 1));
         b.add_tab(piki_core::AIProvider::Custom("Claude".to_string()), true, None);
         app.workspaces.push(b);
 

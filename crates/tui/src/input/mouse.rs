@@ -449,10 +449,15 @@ pub(crate) fn handle_mouse_event(
                         if let Some(item) = sidebar_items.get(clicked) {
                             app.selected_sidebar_row = clicked;
                             match item {
-                                crate::app::SidebarItem::GroupHeader { .. } => {
+                                crate::app::SidebarItem::Workspace {
+                                    index,
+                                    collapsed: Some(_),
+                                } => {
+                                    app.selected_workspace = *index;
+                                    app.switch_workspace(*index);
                                     app.toggle_selected_group();
                                 }
-                                crate::app::SidebarItem::Workspace { index } => {
+                                crate::app::SidebarItem::Workspace { index, .. } => {
                                     app.selected_workspace = *index;
                                     app.switch_workspace(*index);
                                 }

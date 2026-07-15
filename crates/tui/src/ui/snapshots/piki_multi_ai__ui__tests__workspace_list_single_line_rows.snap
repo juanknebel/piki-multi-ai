@@ -1,14 +1,13 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 253
 expression: content
 ---
 ╭ WORKSPACES ──────────────────────────╮
-│ ▾ PIKI (1)                           │
-│▎│ ⎇ nightly                 2∆ ↑1 ↓2 │
-│ ▾ RICING (2)                         │
-│ │ ⎇ void-setup                       │
-│ │ ⎇ x220t                            │
+│   ⎇ nightly                 2∆ ↑1 ↓2 │
+│▎  ⎇ void-setup                       │
+│   ⎇ x220t                            │
+│                                      │
+│                                      │
 │                                      │
 │                                      │
 │                                      │

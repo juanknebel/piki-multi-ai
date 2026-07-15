@@ -17,18 +17,30 @@ export function showDashboard() {
   const workspaces = appState.workspaces;
   const activeIdx = appState.activeWorkspace;
 
-  // Group workspaces by group field
-  type WsEntry = { idx: number; group: string; order: number };
+  // Group workspaces by worktree family (workspaces sharing `source_repo`),
+  // mirroring the sidebar. The section header is the repo folder name, only
+  // shown when more than one loaded workspace shares that source_repo.
+  type WsEntry = { idx: number; sourceRepo: string; order: number };
   const entries: WsEntry[] = workspaces.map((ws, i) => ({
     idx: i,
-    group: ws.info.group || "",
+    sourceRepo: ws.info.source_repo,
     order: ws.info.order,
   }));
 
-  const groups = new Map<string, WsEntry[]>();
+  function folderName(sourceRepo: string): string {
+    return sourceRepo.replace(/\/+$/, "").split("/").pop() || sourceRepo;
+  }
+
+  const bySourceRepo = new Map<string, WsEntry[]>();
   for (const entry of entries) {
-    if (!groups.has(entry.group)) groups.set(entry.group, []);
-    groups.get(entry.group)!.push(entry);
+    if (!bySourceRepo.has(entry.sourceRepo)) bySourceRepo.set(entry.sourceRepo, []);
+    bySourceRepo.get(entry.sourceRepo)!.push(entry);
+  }
+  const groups = new Map<string, WsEntry[]>();
+  for (const [sourceRepo, members] of bySourceRepo) {
+    const label = members.length > 1 ? folderName(sourceRepo) : "";
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label)!.push(...members);
   }
   const sortedGroups = [...groups.entries()]
     .sort(([a], [b]) => {
@@ -58,7 +70,6 @@ export function showDashboard() {
       const tabLabels = ws.tabs.map(t => getProviderLabel(t.provider)).join(", ");
       const ab = ws.aheadBehind;
       const syncInfo = ab ? `↑${ab[0]} ↓${ab[1]}` : "";
-      const inlineGroup = section.group && !showHeader ? `<div class="dash-card-group">${esc(section.group)}</div>` : "";
 
       cardsHtml += `
         <div class="dash-card${isActive ? " dash-active" : ""}" data-idx="${entry.idx}">
@@ -67,7 +78,6 @@ export function showDashboard() {
             <span class="dash-card-status ${statusClass}">${statusLabel}</span>
           </div>
           ${info.branch || syncInfo ? `<div class="dash-card-branch">${info.branch ? "⎇ " + esc(info.branch) : ""}${syncInfo ? (info.branch ? " " : "") + syncInfo : ""}</div>` : ""}
-          ${inlineGroup}
           <div class="dash-card-meta">
             <span>${fileCount} change${fileCount !== 1 ? "s" : ""}</span>
             <span>${tabCount} tab${tabCount !== 1 ? "s" : ""}${tabLabels ? ": " + esc(tabLabels) : ""}</span>

@@ -19,21 +19,19 @@ impl CycleField for DialogField {
             Self::Name => Self::Description,
             Self::Description => Self::Prompt,
             Self::Prompt => Self::KanbanPath,
-            Self::KanbanPath => Self::Group,
-            Self::Group => Self::Source,
+            Self::KanbanPath => Self::Source,
         }
     }
 
     fn prev(self) -> Self {
         match self {
-            Self::Source => Self::Group,
+            Self::Source => Self::KanbanPath,
             Self::Directory => Self::Source,
             Self::Destination => Self::Directory,
             Self::Name => Self::Destination,
             Self::Description => Self::Name,
             Self::Prompt => Self::Description,
             Self::KanbanPath => Self::Prompt,
-            Self::Group => Self::KanbanPath,
         }
     }
 }
@@ -94,8 +92,6 @@ pub enum DialogState {
         prompt_cursor: usize,
         kanban: String,
         kanban_cursor: usize,
-        group: String,
-        group_cursor: usize,
         source: NewWorkspaceSource,
         active_field: DialogField,
     },
@@ -105,14 +101,12 @@ pub enum DialogState {
         kanban_cursor: usize,
         prompt: String,
         prompt_cursor: usize,
-        group: String,
-        group_cursor: usize,
         active_field: EditWorkspaceField,
     },
     /// Create a git worktree from a GitHub-origin parent workspace, or load
     /// one that already exists on disk (via `git worktree list`). The parent
     /// is identified by index.
-    /// `mode` selects between the two flows; `name`/`prompt`/`kanban`/`group`/
+    /// `mode` selects between the two flows; `name`/`prompt`/`kanban`/
     /// `active_field` are only meaningful when `mode == CreateNew` (they
     /// capture the worktree branch name plus optional overrides, pre-filled
     /// from the parent). `existing`/`existing_selected`/`existing_loading`
@@ -126,8 +120,6 @@ pub enum DialogState {
         prompt_cursor: usize,
         kanban: String,
         kanban_cursor: usize,
-        group: String,
-        group_cursor: usize,
         active_field: CreateWorktreeField,
         existing: Vec<piki_core::workspace::ExistingWorktree>,
         existing_selected: usize,
@@ -327,24 +319,19 @@ impl CycleField for EditAgentField {
 pub enum EditWorkspaceField {
     KanbanPath,
     Prompt,
-    Group,
 }
 
 impl CycleField for EditWorkspaceField {
     fn next(self) -> Self {
         match self {
             Self::KanbanPath => Self::Prompt,
-            Self::Prompt => Self::Group,
-            Self::Group => Self::KanbanPath,
+            Self::Prompt => Self::KanbanPath,
         }
     }
 
     fn prev(self) -> Self {
-        match self {
-            Self::KanbanPath => Self::Group,
-            Self::Group => Self::Prompt,
-            Self::Prompt => Self::KanbanPath,
-        }
+        // Two-variant cycle: prev == next.
+        self.next()
     }
 }
 
@@ -353,7 +340,7 @@ impl CycleField for EditWorkspaceField {
 pub enum CreateWorktreeMode {
     /// Pick "Create new worktree" vs "Load existing worktree".
     ChooseSource,
-    /// Today's text-field flow: branch name + optional prompt/kanban/group.
+    /// Today's text-field flow: branch name + optional prompt/kanban.
     CreateNew,
     /// Pick from worktrees discovered on disk via `git worktree list`.
     LoadExisting,
@@ -365,7 +352,6 @@ pub enum CreateWorktreeField {
     Name,
     Prompt,
     KanbanPath,
-    Group,
 }
 
 impl CycleField for CreateWorktreeField {
@@ -373,17 +359,15 @@ impl CycleField for CreateWorktreeField {
         match self {
             Self::Name => Self::Prompt,
             Self::Prompt => Self::KanbanPath,
-            Self::KanbanPath => Self::Group,
-            Self::Group => Self::Name,
+            Self::KanbanPath => Self::Name,
         }
     }
 
     fn prev(self) -> Self {
         match self {
-            Self::Name => Self::Group,
+            Self::Name => Self::KanbanPath,
             Self::Prompt => Self::Name,
             Self::KanbanPath => Self::Prompt,
-            Self::Group => Self::KanbanPath,
         }
     }
 }

@@ -67,11 +67,21 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
 
     let sidebar_items = app.sidebar_items();
 
-    // A workspace is a group child iff a header precedes it; children get the
-    // vertical guide, top-level workspaces stay flush.
-    let first_group_row = sidebar_items
-        .iter()
-        .position(|it| matches!(it, SidebarItem::GroupHeader { .. }));
+    // Precompute, per source_repo, how many loaded workspaces share it and
+    // whether one of them is a non-Worktree "parent". Drives label choice
+    // (repo folder name / branch name / ws.name) and whether a Worktree
+    // child gets the vertical guide tying it back to a rendered parent row.
+    let mut family_info: std::collections::HashMap<std::path::PathBuf, (usize, bool)> =
+        std::collections::HashMap::new();
+    for ws in &app.workspaces {
+        let entry = family_info
+            .entry(ws.info.source_repo.clone())
+            .or_insert((0, false));
+        entry.0 += 1;
+        if ws.info.workspace_type != WorkspaceType::Worktree {
+            entry.1 = true;
+        }
+    }
 
     // All rows are one line tall; scroll follows the selection.
     let visible_height = area.height.saturating_sub(2) as usize;
@@ -94,35 +104,17 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
         .map(|(row, item)| {
             let is_selected = row == app.selected_sidebar_row;
             match item {
-                SidebarItem::GroupHeader {
-                    name,
-                    count,
-                    collapsed,
-                } => {
-                    let arrow = if *collapsed { "▸" } else { "▾" };
-                    let bar = if is_selected {
-                        Span::styled("▎", Style::default().fg(sel_bar_fg))
-                    } else {
-                        Span::raw(" ")
-                    };
-                    let header_style = Style::default()
-                        .fg(theme.name_inactive)
-                        .add_modifier(Modifier::BOLD);
-                    let line = Line::from(vec![
-                        bar,
-                        Span::styled(format!("{} ", arrow), header_style),
-                        Span::styled(format!("{} ({})", name.to_uppercase(), count), header_style),
-                    ]);
-                    let style = if is_selected {
-                        Style::default().bg(sel_bg)
-                    } else {
-                        Style::default()
-                    };
-                    ListItem::new(vec![line]).style(style)
-                }
-                SidebarItem::Workspace { index } => {
+                SidebarItem::Workspace { index, collapsed } => {
                     let ws = &app.workspaces[*index];
-                    let grouped = first_group_row.is_some_and(|h| row > h);
+                    let (family_count, has_parent) = family_info
+                        .get(&ws.info.source_repo)
+                        .copied()
+                        .unwrap_or((1, false));
+                    let is_parent = family_count > 1
+                        && ws.info.workspace_type != WorkspaceType::Worktree;
+                    let is_child = family_count > 1
+                        && ws.info.workspace_type == WorkspaceType::Worktree;
+                    let guide = is_child && has_parent;
 
                     let detail_color = if is_selected {
                         theme.detail_selected
@@ -131,15 +123,54 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                     };
 
                     let is_active = *index == app.active_workspace;
-                    // Selection rail in col 0; group guide in col 1. The active
-                    // workspace is now carried by the name weight/brightness —
-                    // no triangle, so it can't be mistaken for a group header.
+                    let header_style = Style::default()
+                        .fg(theme.name_inactive)
+                        .add_modifier(Modifier::BOLD);
+
+                    // Label: a family parent shows the repo folder name with
+                    // its own branch alongside ("agent-multi (master)"), a
+                    // worktree child shows just its branch, everything else
+                    // keeps its own workspace name.
+                    let label = if is_parent {
+                        let folder = ws
+                            .info
+                            .source_repo
+                            .file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .filter(|s| !s.is_empty())
+                            .unwrap_or_else(|| {
+                                if !ws.info.source_repo_display.is_empty() {
+                                    ws.info.source_repo_display.clone()
+                                } else {
+                                    ws.name.clone()
+                                }
+                            });
+                        if ws.info.branch.is_empty() {
+                            folder
+                        } else {
+                            format!("{folder} ({})", ws.info.branch)
+                        }
+                    } else if is_child {
+                        ws.info.branch.clone()
+                    } else {
+                        ws.name.clone()
+                    };
+
+                    // Selection rail in col 0; chevron/guide in col 1. The
+                    // active workspace is carried by the name weight/brightness.
                     let bar = if is_selected {
                         Span::styled("▎", Style::default().fg(sel_bar_fg))
                     } else {
                         Span::raw(" ")
                     };
-                    let guide = if grouped {
+                    let second_col = if is_parent {
+                        let arrow = if collapsed.unwrap_or(false) {
+                            "▸"
+                        } else {
+                            "▾"
+                        };
+                        Span::styled(format!("{} ", arrow), header_style)
+                    } else if guide {
                         Span::styled("│ ", Style::default().fg(guide_fg))
                     } else {
                         Span::raw("  ")
@@ -148,10 +179,10 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
 
                     let mut left: Vec<Span> = vec![
                         bar,
-                        guide,
+                        second_col,
                         Span::styled(type_icon, Style::default().fg(detail_color)),
                         Span::styled(
-                            ws.name.clone(),
+                            label,
                             if is_active {
                                 Style::default()
                                     .fg(theme.name_active)

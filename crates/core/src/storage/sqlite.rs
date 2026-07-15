@@ -139,6 +139,15 @@ impl SqliteStorage {
             tx.commit()?;
         }
 
+        // Manual workspace grouping is gone (grouping is now derived from
+        // worktree family / source_repo at render time) — drop the column.
+        if version < 7 {
+            let tx = conn.transaction()?;
+            tx.execute_batch("ALTER TABLE workspaces DROP COLUMN group_name;")?;
+            tx.execute("INSERT INTO schema_version (version) VALUES (7)", [])?;
+            tx.commit()?;
+        }
+
         Ok(())
     }
 
@@ -152,7 +161,7 @@ impl SqliteStorage {
 
         for entry in &entries {
             let rows = tx.execute(
-                "INSERT OR IGNORE INTO workspaces (project_root, name, description, prompt, kanban_path, branch, worktree_path, source_repo, workspace_type, group_name, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name, origin, origin_github_url) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+                "INSERT OR IGNORE INTO workspaces (project_root, name, description, prompt, kanban_path, branch, worktree_path, source_repo, workspace_type, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name, origin, origin_github_url) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
                 rusqlite::params![
                     entry.source_repo.to_string_lossy(),
                     entry.name,
@@ -163,7 +172,6 @@ impl SqliteStorage {
                     entry.worktree_path.to_string_lossy(),
                     entry.source_repo.to_string_lossy(),
                     workspace_type_str(entry.workspace_type),
-                    entry.group,
                     entry.order,
                     entry.dispatch_card_id,
                     entry.dispatch_source_kanban,
@@ -283,8 +291,8 @@ fn detect_github_origin(source_repo: &str) -> Option<String> {
 }
 
 fn row_to_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkspaceEntry> {
-    let origin_tag: String = row.get(13)?;
-    let origin_url: Option<String> = row.get(14)?;
+    let origin_tag: String = row.get(12)?;
+    let origin_url: Option<String> = row.get(13)?;
     Ok(WorkspaceEntry {
         name: row.get(0)?,
         description: row.get(1)?,
@@ -294,11 +302,10 @@ fn row_to_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkspaceEntry> {
         worktree_path: PathBuf::from(row.get::<_, String>(5)?),
         source_repo: PathBuf::from(row.get::<_, String>(6)?),
         workspace_type: parse_workspace_type(&row.get::<_, String>(7)?),
-        group: row.get(8)?,
-        order: row.get(9)?,
-        dispatch_card_id: row.get(10)?,
-        dispatch_source_kanban: row.get(11)?,
-        dispatch_agent_name: row.get(12)?,
+        order: row.get(8)?,
+        dispatch_card_id: row.get(9)?,
+        dispatch_source_kanban: row.get(10)?,
+        dispatch_agent_name: row.get(11)?,
         origin: crate::domain::WorkspaceOrigin::from_sql(&origin_tag, origin_url),
     })
 }
@@ -334,7 +341,7 @@ impl WorkspaceStorage for Arc<SqliteStorage> {
 
         for ws in workspaces.iter().filter(|ws| ws.source_repo == git_root) {
             tx.execute(
-                "INSERT INTO workspaces (project_root, name, description, prompt, kanban_path, branch, worktree_path, source_repo, workspace_type, group_name, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name, origin, origin_github_url) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+                "INSERT INTO workspaces (project_root, name, description, prompt, kanban_path, branch, worktree_path, source_repo, workspace_type, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name, origin, origin_github_url) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
                 rusqlite::params![
                     git_root_str,
                     ws.name,
@@ -345,7 +352,6 @@ impl WorkspaceStorage for Arc<SqliteStorage> {
                     ws.path.to_string_lossy(),
                     ws.source_repo.to_string_lossy(),
                     workspace_type_str(ws.workspace_type),
-                    ws.group,
                     ws.order,
                     ws.dispatch_card_id,
                     ws.dispatch_source_kanban,
@@ -364,7 +370,7 @@ impl WorkspaceStorage for Arc<SqliteStorage> {
         let conn = self.conn.lock();
         let git_root_str = git_root.to_string_lossy();
         let mut stmt = conn.prepare(
-            "SELECT name, description, prompt, kanban_path, branch, worktree_path, source_repo, workspace_type, group_name, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name, origin, origin_github_url FROM workspaces WHERE source_repo = ?1 ORDER BY display_order",
+            "SELECT name, description, prompt, kanban_path, branch, worktree_path, source_repo, workspace_type, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name, origin, origin_github_url FROM workspaces WHERE source_repo = ?1 ORDER BY display_order",
         )?;
 
         let entries: Vec<WorkspaceEntry> = stmt
@@ -379,7 +385,7 @@ impl WorkspaceStorage for Arc<SqliteStorage> {
     fn load_all_workspaces(&self) -> Vec<WorkspaceEntry> {
         let conn = self.conn.lock();
         let mut stmt = match conn.prepare(
-            "SELECT name, description, prompt, kanban_path, branch, worktree_path, source_repo, workspace_type, group_name, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name, origin, origin_github_url FROM workspaces ORDER BY display_order",
+            "SELECT name, description, prompt, kanban_path, branch, worktree_path, source_repo, workspace_type, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name, origin, origin_github_url FROM workspaces ORDER BY display_order",
         ) {
             Ok(s) => s,
             Err(_) => return Vec::new(),

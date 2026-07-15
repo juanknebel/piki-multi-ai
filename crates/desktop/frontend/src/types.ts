@@ -56,7 +56,6 @@ export interface WorkspaceInfo {
   source_repo: string;
   source_repo_display: string;
   workspace_type: WorkspaceType;
-  group: string | null;
   order: number;
   dispatch_card_id: string | null;
   dispatch_source_kanban: string | null;

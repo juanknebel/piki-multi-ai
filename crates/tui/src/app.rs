@@ -149,7 +149,6 @@ pub enum DialogField {
     Description,
     Prompt,
     KanbanPath,
-    Group,
 }
 
 /// Source mode for the New Workspace dialog. Drives whether the dialog asks
@@ -162,16 +161,23 @@ pub enum NewWorkspaceSource {
     GitHub,
 }
 
-/// An item in the sidebar workspace list
+/// An item in the sidebar workspace list. Every row is a real workspace now —
+/// manual grouping (a synthetic header row) is gone. Grouping is derived at
+/// render/navigation time from git worktree structure: workspaces that share
+/// a `source_repo` are a "family"; the one whose `workspace_type != Worktree`
+/// (if loaded) is the family's parent row and can collapse its worktree
+/// children.
 #[derive(Debug, Clone)]
 pub enum SidebarItem {
-    GroupHeader {
-        name: String,
-        count: usize,
-        collapsed: bool,
-    },
     Workspace {
         index: usize,
+        /// `Some(collapsed)` when this row is a worktree-family parent with
+        /// children — i.e. other loaded workspaces share its `source_repo`
+        /// and this one isn't itself a `Worktree`. `collapsed` says whether
+        /// those children are currently hidden. `None` for every other row
+        /// (standalone workspaces, family children, and orphaned worktree
+        /// families with no parent loaded).
+        collapsed: Option<bool>,
     },
 }
 
@@ -622,6 +628,13 @@ impl EditorState {
     }
 }
 
+/// Stable identity for a worktree family, used as the key into
+/// `App::collapsed_groups`. The family's `source_repo` path is unique per
+/// git root and stable across reorders/reloads, unlike a workspace index.
+fn family_key(info: &piki_core::WorkspaceInfo) -> String {
+    info.source_repo.to_string_lossy().to_string()
+}
+
 fn char_to_byte_idx(s: &str, char_idx: usize) -> usize {
     s.char_indices()
         .nth(char_idx)
@@ -1033,9 +1046,8 @@ impl App {
         let visible: Vec<usize> = self
             .sidebar_items()
             .iter()
-            .filter_map(|item| match item {
-                SidebarItem::Workspace { index } => Some(*index),
-                _ => None,
+            .map(|item| match item {
+                SidebarItem::Workspace { index, .. } => *index,
             })
             .collect();
         if visible.is_empty() {
@@ -1053,9 +1065,8 @@ impl App {
         let visible: Vec<usize> = self
             .sidebar_items()
             .iter()
-            .filter_map(|item| match item {
-                SidebarItem::Workspace { index } => Some(*index),
-                _ => None,
+            .map(|item| match item {
+                SidebarItem::Workspace { index, .. } => *index,
             })
             .collect();
         if visible.is_empty() {
@@ -1193,34 +1204,76 @@ impl App {
         }
     }
 
+    /// Build the visual sidebar item list. Workspaces are grouped by
+    /// `source_repo`: a "family" is any set of 2+ workspaces sharing one.
+    /// Within a family, the (at most one) workspace whose `workspace_type !=
+    /// Worktree` is the parent and is emitted first with a collapse chevron;
+    /// its `Worktree` siblings follow (in their existing relative order)
+    /// unless collapsed, in which case they're omitted entirely. A family
+    /// with no parent loaded (every member is a `Worktree`) has nothing to
+    /// attach a chevron to, so its members are emitted flat and uncollapsible.
+    /// Standalone workspaces (no siblings sharing `source_repo`) are emitted
+    /// exactly as before.
+    ///
+    /// The family block is emitted at the position of its first member
+    /// encountered in `self.workspaces` order.
     pub fn sidebar_items(&self) -> Vec<SidebarItem> {
         let mut items = Vec::new();
-        let mut groups: std::collections::BTreeMap<String, Vec<usize>> =
-            std::collections::BTreeMap::new();
-        let mut ungrouped = Vec::new();
+        let mut consumed = vec![false; self.workspaces.len()];
 
-        for (i, ws) in self.workspaces.iter().enumerate() {
-            if let Some(ref group) = ws.info.group {
-                groups.entry(group.clone()).or_default().push(i);
-            } else {
-                ungrouped.push(i);
+        for i in 0..self.workspaces.len() {
+            if consumed[i] {
+                continue;
             }
-        }
+            let source_repo = &self.workspaces[i].info.source_repo;
+            let siblings: Vec<usize> = self
+                .workspaces
+                .iter()
+                .enumerate()
+                .filter(|(j, w)| !consumed[*j] && &w.info.source_repo == source_repo)
+                .map(|(j, _)| j)
+                .collect();
 
-        for idx in ungrouped {
-            items.push(SidebarItem::Workspace { index: idx });
-        }
+            if siblings.len() <= 1 {
+                items.push(SidebarItem::Workspace {
+                    index: i,
+                    collapsed: None,
+                });
+                consumed[i] = true;
+                continue;
+            }
 
-        for (name, indices) in &groups {
-            let collapsed = self.collapsed_groups.contains(name);
-            items.push(SidebarItem::GroupHeader {
-                name: name.clone(),
-                count: indices.len(),
-                collapsed,
-            });
-            if !collapsed {
-                for &idx in indices {
-                    items.push(SidebarItem::Workspace { index: idx });
+            let parent_pos = siblings
+                .iter()
+                .position(|&idx| self.workspaces[idx].info.workspace_type != WorkspaceType::Worktree);
+
+            match parent_pos {
+                Some(pp) => {
+                    let parent_idx = siblings[pp];
+                    let key = family_key(&self.workspaces[parent_idx].info);
+                    let collapsed = self.collapsed_groups.contains(&key);
+                    items.push(SidebarItem::Workspace {
+                        index: parent_idx,
+                        collapsed: Some(collapsed),
+                    });
+                    for &idx in &siblings {
+                        consumed[idx] = true;
+                        if idx != parent_idx && !collapsed {
+                            items.push(SidebarItem::Workspace {
+                                index: idx,
+                                collapsed: None,
+                            });
+                        }
+                    }
+                }
+                None => {
+                    for &idx in &siblings {
+                        consumed[idx] = true;
+                        items.push(SidebarItem::Workspace {
+                            index: idx,
+                            collapsed: None,
+                        });
+                    }
                 }
             }
         }
@@ -1228,12 +1281,12 @@ impl App {
         items
     }
 
-    /// Map a sidebar visual row to a workspace index.
+    /// Map a sidebar visual row to a workspace index. Every row is a real
+    /// workspace, so this only returns `None` when `row` is out of range.
     pub fn sidebar_row_to_workspace(&self, row: usize) -> Option<usize> {
-        self.sidebar_items().get(row).and_then(|item| match item {
-            SidebarItem::Workspace { index } => Some(*index),
-            _ => None,
-        })
+        self.sidebar_items()
+            .get(row)
+            .map(|SidebarItem::Workspace { index, .. }| *index)
     }
 
     pub fn select_next_sidebar_row(&mut self) {
@@ -1250,14 +1303,13 @@ impl App {
         }
     }
 
-    /// Land the sidebar cursor on `row` and make that workspace the active one
-    /// (a group header has none, so the cursor moves alone).
+    /// Land the sidebar cursor on `row` and switch to that row's workspace.
     ///
     /// Follow-focus: the cursor and the workspace every action targets are the
     /// same thing. Without it the two drift apart — the cursor sits on one
     /// workspace while `prefix c` opens its tab in whichever workspace the main
     /// panel still shows — and every workspace-scoped action becomes a coin
-    /// flip. A sidebar click already switched (`input/mouse.rs`); j/k didn't.
+    /// flip. Every sidebar row is a workspace now, so this always switches.
     fn follow_sidebar_row(&mut self, row: usize) {
         self.selected_sidebar_row = row;
         if let Some(idx) = self.sidebar_row_to_workspace(row) {
@@ -1265,14 +1317,31 @@ impl App {
         }
     }
 
+    /// If the currently selected sidebar row is a worktree-family parent
+    /// (has a collapse chevron), its family key and current collapsed state.
+    fn selected_family_state(&self) -> Option<(String, bool)> {
+        match self.sidebar_items().get(self.selected_sidebar_row)? {
+            SidebarItem::Workspace {
+                index,
+                collapsed: Some(collapsed),
+            } => {
+                let ws = self.workspaces.get(*index)?;
+                Some((family_key(&ws.info), *collapsed))
+            }
+            _ => None,
+        }
+    }
+
+    /// Toggle collapse on the selected row if it's a worktree-family parent.
+    /// No-op otherwise.
     pub fn toggle_selected_group(&mut self) {
-        let items = self.sidebar_items();
-        let name = match items.get(self.selected_sidebar_row) {
-            Some(SidebarItem::GroupHeader { name, .. }) => name.clone(),
-            _ => return,
+        let Some((key, collapsed)) = self.selected_family_state() else {
+            return;
         };
-        if !self.collapsed_groups.remove(&name) {
-            self.collapsed_groups.insert(name);
+        if collapsed {
+            self.collapsed_groups.remove(&key);
+        } else {
+            self.collapsed_groups.insert(key);
         }
         self.persist_collapsed_groups();
     }
@@ -1283,45 +1352,26 @@ impl App {
         }
     }
 
-    /// The group name for the currently selected sidebar row: the header's own
-    /// name, or the parent group of a selected workspace (`None` if ungrouped).
-    fn selected_group_name(&self) -> Option<String> {
-        match self.sidebar_items().get(self.selected_sidebar_row)? {
-            SidebarItem::GroupHeader { name, .. } => Some(name.clone()),
-            SidebarItem::Workspace { index } => {
-                self.workspaces.get(*index).and_then(|w| w.info.group.clone())
-            }
-        }
-    }
-
-    /// Collapse the group the selection belongs to (its own header, or the
-    /// parent group of a selected workspace) and park the selection on that
-    /// header row. Tree-style `←` behaviour. No-op for ungrouped rows.
+    /// Collapse the selected row's worktree family. Tree-style `←` behaviour;
+    /// a no-op unless the selection is on an (expanded) family parent row.
     pub fn collapse_selected_group(&mut self) {
-        let Some(name) = self.selected_group_name() else {
+        let Some((key, collapsed)) = self.selected_family_state() else {
             return;
         };
-        self.collapsed_groups.insert(name.clone());
-        self.persist_collapsed_groups();
-        // Land on the (now collapsed) header so a following `→` re-expands it.
-        for (i, item) in self.sidebar_items().iter().enumerate() {
-            if let SidebarItem::GroupHeader { name: n, .. } = item
-                && *n == name
-            {
-                self.selected_sidebar_row = i;
-                break;
-            }
+        if !collapsed {
+            self.collapsed_groups.insert(key);
+            self.persist_collapsed_groups();
         }
     }
 
-    /// Expand the selected collapsed group header. Tree-style `→` behaviour;
-    /// a no-op unless the selection is on a collapsed header.
+    /// Expand the selected row's worktree family. Tree-style `→` behaviour;
+    /// a no-op unless the selection is on a collapsed family parent row.
     pub fn expand_selected_group(&mut self) {
-        let name = match self.sidebar_items().get(self.selected_sidebar_row) {
-            Some(SidebarItem::GroupHeader { name, .. }) => name.clone(),
-            _ => return,
+        let Some((key, collapsed)) = self.selected_family_state() else {
+            return;
         };
-        if self.collapsed_groups.remove(&name) {
+        if collapsed {
+            self.collapsed_groups.remove(&key);
             self.persist_collapsed_groups();
         }
     }
@@ -1329,10 +1379,8 @@ impl App {
     /// Update selected_sidebar_row to point to the given workspace index.
     pub fn sync_sidebar_row(&mut self, ws_idx: usize) {
         let items = self.sidebar_items();
-        for (i, item) in items.iter().enumerate() {
-            if let SidebarItem::Workspace { index } = item
-                && *index == ws_idx
-            {
+        for (i, SidebarItem::Workspace { index, .. }) in items.iter().enumerate() {
+            if *index == ws_idx {
                 self.selected_sidebar_row = i;
                 return;
             }
@@ -1605,9 +1653,6 @@ mod tests {
         assert_eq!(get_field(&app), DialogField::KanbanPath);
 
         crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
-        assert_eq!(get_field(&app), DialogField::Group);
-
-        crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
         assert_eq!(get_field(&app), DialogField::Source);
     }
 
@@ -1825,17 +1870,20 @@ mod tests {
     // ── Helper: add a minimal test workspace ──
 
     fn add_test_workspace(app: &mut App) -> usize {
+        let idx = app.workspaces.len();
+        // Each test workspace gets its own source_repo by default, so it's
+        // standalone (no worktree family) unless a test deliberately shares
+        // one across workspaces to exercise the family/collapse behavior.
         let info = piki_core::WorkspaceInfo {
-            name: format!("test-ws-{}", app.workspaces.len()),
+            name: format!("test-ws-{}", idx),
             path: std::path::PathBuf::from("/tmp/test"),
             branch: "main".to_string(),
             workspace_type: piki_core::WorkspaceType::Simple,
             description: String::new(),
             prompt: String::new(),
             kanban_path: None,
-            group: None,
-            order: app.workspaces.len() as u32,
-            source_repo: std::path::PathBuf::from("/tmp/test"),
+            order: idx as u32,
+            source_repo: std::path::PathBuf::from(format!("/tmp/test-{idx}")),
             source_repo_display: String::new(),
             dispatch_card_id: None,
             dispatch_source_kanban: None,
@@ -2220,24 +2268,32 @@ mod tests {
     }
 
     #[test]
-    fn test_sidebar_cursor_on_a_group_header_keeps_the_active_workspace() {
+    fn test_sidebar_cursor_on_a_worktree_family_parent_switches_to_it() {
+        // Every row is a real workspace now (no synthetic header), so the
+        // cursor always follows onto whatever it lands on — including a
+        // worktree-family parent row.
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
         let a = add_test_workspace(&mut app);
-        let b = add_test_workspace(&mut app);
-        app.workspaces[b].info.group = Some("GROUP".to_string());
+        let parent = add_test_workspace(&mut app);
+        let child = add_test_workspace(&mut app);
+        let shared_repo = app.workspaces[parent].info.source_repo.clone();
+        app.workspaces[child].info.source_repo = shared_repo.clone();
+        app.workspaces[child].info.workspace_type = piki_core::WorkspaceType::Worktree;
         app.switch_workspace(a);
 
-        // Rows are [Workspace a, GroupHeader GROUP, Workspace b] — the header
-        // has no workspace of its own, so the cursor moves alone.
+        // Rows are [Workspace a, Workspace parent (collapsible), Workspace child].
         app.select_next_sidebar_row();
         assert!(matches!(
             app.sidebar_items()[app.selected_sidebar_row],
-            SidebarItem::GroupHeader { .. }
+            SidebarItem::Workspace {
+                collapsed: Some(false),
+                ..
+            }
         ));
-        assert_eq!(app.active_workspace, a);
+        assert_eq!(app.active_workspace, parent);
 
         app.select_next_sidebar_row();
-        assert_eq!(app.active_workspace, b);
+        assert_eq!(app.active_workspace, child);
     }
 
     #[test]
@@ -2385,32 +2441,36 @@ mod tests {
 
     #[test]
     fn test_workspace_list_collapse_expand_group() {
-        // Side arrows (or h/l) collapse/expand a group in the Workspaces tree.
+        // Side arrows (or h/l) collapse/expand a worktree family's children
+        // while the selection sits on the family's parent row.
         let mut app = App::new(
             test_storage(),
             &piki_core::paths::DataPaths::default_paths(),
         );
-        add_test_workspace(&mut app); // index 0
-        add_test_workspace(&mut app); // index 1
-        app.workspaces[0].info.group = Some("G".to_string());
-        app.workspaces[1].info.group = Some("G".to_string());
+        let parent = add_test_workspace(&mut app); // index 0
+        let child = add_test_workspace(&mut app); // index 1
+        let shared_repo = app.workspaces[parent].info.source_repo.clone();
+        app.workspaces[child].info.source_repo = shared_repo;
+        app.workspaces[child].info.workspace_type = piki_core::WorkspaceType::Worktree;
         app.active_pane = ActivePane::WorkspaceList;
-        // sidebar_items: [GroupHeader{G}, Workspace{0}, Workspace{1}]
-        app.selected_sidebar_row = 1; // a workspace inside the group
+        let fam_key = family_key(&app.workspaces[parent].info);
+        // sidebar_items: [Workspace{parent, collapsed:Some(false)}, Workspace{child}]
+        app.selected_sidebar_row = 0; // the family parent row
 
-        // h collapses the parent group and parks selection on its header.
+        // h collapses the family, hiding the child row.
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('h')));
-        assert!(app.collapsed_groups.contains("G"));
-        assert_eq!(app.selected_sidebar_row, 0);
+        assert!(app.collapsed_groups.contains(&fam_key));
+        assert_eq!(app.sidebar_items().len(), 1);
         // l re-expands it.
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('l')));
-        assert!(!app.collapsed_groups.contains("G"));
-        // Arrow Left collapses again straight from the header row.
+        assert!(!app.collapsed_groups.contains(&fam_key));
+        assert_eq!(app.sidebar_items().len(), 2);
+        // Arrow Left collapses again.
         crate::input::handle_key_event(&mut app, key(KeyCode::Left));
-        assert!(app.collapsed_groups.contains("G"));
+        assert!(app.collapsed_groups.contains(&fam_key));
         // Arrow Right expands.
         crate::input::handle_key_event(&mut app, key(KeyCode::Right));
-        assert!(!app.collapsed_groups.contains("G"));
+        assert!(!app.collapsed_groups.contains(&fam_key));
     }
 
     // ── PTY idle notifications ──

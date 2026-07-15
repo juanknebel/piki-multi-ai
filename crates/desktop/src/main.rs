@@ -217,6 +217,8 @@ fn main() {
             commands::workspace::delete_workspace,
             commands::workspace::update_workspace,
             commands::workspace::list_project_subdirs,
+            commands::workspace::get_collapsed_groups,
+            commands::workspace::set_collapsed_groups,
             commands::pty::spawn_tab,
             commands::pty::write_pty,
             commands::pty::resize_pty,

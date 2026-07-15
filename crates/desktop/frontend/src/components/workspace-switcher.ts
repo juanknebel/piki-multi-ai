@@ -28,23 +28,45 @@ export function openWorkspaceSwitcher() {
   const results = palette.querySelector<HTMLElement>(".palette-results")!;
   let selectedIdx = 0;
 
-  type WsItem = { idx: number; name: string; group: string; branch: string; order: number };
+  // Family = workspaces sharing `source_repo` (mirrors the sidebar's
+  // worktree-family grouping). Families with more than one loaded member get
+  // a section header showing the repo folder name; everything else is
+  // ungrouped and sorts first, same as before.
+  type WsItem = {
+    idx: number;
+    name: string;
+    sourceRepo: string;
+    branch: string;
+    order: number;
+  };
   const allItems: WsItem[] = appState.workspaces.map((ws, i) => ({
     idx: i,
     name: ws.info.name,
-    group: ws.info.group || "",
+    sourceRepo: ws.info.source_repo,
     branch: ws.info.branch,
     order: ws.info.order,
   }));
+
+  function folderName(sourceRepo: string): string {
+    return sourceRepo.replace(/\/+$/, "").split("/").pop() || sourceRepo;
+  }
 
   let filtered = allItems;
   let renderedItems: WsItem[] = [];
 
   function groupAndSort(items: WsItem[]): { group: string; items: WsItem[] }[] {
-    const groups = new Map<string, WsItem[]>();
+    const bySourceRepo = new Map<string, WsItem[]>();
     for (const item of items) {
-      if (!groups.has(item.group)) groups.set(item.group, []);
-      groups.get(item.group)!.push(item);
+      if (!bySourceRepo.has(item.sourceRepo)) bySourceRepo.set(item.sourceRepo, []);
+      bySourceRepo.get(item.sourceRepo)!.push(item);
+    }
+    // Family label is "" (ungrouped) when it's the only loaded workspace for
+    // that source_repo; otherwise the repo folder name becomes the header.
+    const groups = new Map<string, WsItem[]>();
+    for (const [sourceRepo, members] of bySourceRepo) {
+      const label = members.length > 1 ? folderName(sourceRepo) : "";
+      if (!groups.has(label)) groups.set(label, []);
+      groups.get(label)!.push(...members);
     }
     return [...groups.entries()]
       .sort(([a], [b]) => {
@@ -116,7 +138,7 @@ export function openWorkspaceSwitcher() {
       filtered = allItems.filter(
         (item) =>
           item.name.toLowerCase().includes(q) ||
-          item.group.toLowerCase().includes(q) ||
+          folderName(item.sourceRepo).toLowerCase().includes(q) ||
           item.branch.toLowerCase().includes(q),
       );
     }

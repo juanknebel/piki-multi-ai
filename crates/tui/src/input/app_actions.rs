@@ -118,15 +118,12 @@ pub(crate) fn open_edit_workspace(app: &mut App) -> Option<Action> {
         let ws = &app.workspaces[app.selected_workspace];
         let kanban = ws.kanban_path.clone().unwrap_or_default();
         let prompt = ws.prompt.clone();
-        let group = ws.info.group.clone().unwrap_or_default();
         app.active_dialog = Some(DialogState::EditWorkspace {
             target: app.selected_workspace,
             kanban_cursor: kanban.chars().count(),
             kanban,
             prompt_cursor: prompt.chars().count(),
             prompt,
-            group_cursor: group.chars().count(),
-            group,
             active_field: EditWorkspaceField::KanbanPath,
         });
         app.mode = AppMode::EditWorkspace;
@@ -142,7 +139,6 @@ pub(crate) fn open_clone_workspace(app: &mut App) -> Option<Action> {
             piki_core::WorkspaceOrigin::GitHub { .. } => {
                 let kanban = ws.kanban_path.clone().unwrap_or_default();
                 let prompt = ws.prompt.clone();
-                let group = ws.info.group.clone().unwrap_or_default();
                 app.active_dialog = Some(crate::dialog_state::DialogState::CreateWorktree {
                     parent_idx: app.selected_workspace,
                     mode: crate::dialog_state::CreateWorktreeMode::ChooseSource,
@@ -152,8 +148,6 @@ pub(crate) fn open_clone_workspace(app: &mut App) -> Option<Action> {
                     prompt,
                     kanban_cursor: kanban.chars().count(),
                     kanban,
-                    group_cursor: group.chars().count(),
-                    group,
                     active_field: crate::dialog_state::CreateWorktreeField::Name,
                     existing: Vec::new(),
                     existing_selected: 0,
@@ -186,8 +180,6 @@ pub(crate) fn open_new_workspace(app: &mut App) -> Option<Action> {
         prompt_cursor: 0,
         kanban: String::new(),
         kanban_cursor: 0,
-        group: String::new(),
-        group_cursor: 0,
         source: crate::app::NewWorkspaceSource::default(),
         active_field: DialogField::Source,
     });

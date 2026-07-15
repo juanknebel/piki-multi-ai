@@ -148,10 +148,9 @@ export async function showDispatchDialog(cardContext?: CardContext) {
       const agentLabel = agentOptions.find((o) => o.value === agentDropdown.value)?.label ?? provider;
       const agentName = agentLabel.split(" (")[0];
 
-      const currentGroup = appState.activeWs?.info.group || undefined;
       const sourceKanban = appState.activeWs?.info.kanban_path || undefined;
       const tabId = await ipc.dispatchAgent(
-        wsIdx, provider, prompt, createWorktree, wsName, currentGroup,
+        wsIdx, provider, prompt, createWorktree, wsName,
         cardContext?.id, sourceKanban, agentName, cardContext?.title,
       );
 

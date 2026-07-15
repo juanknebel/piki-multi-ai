@@ -24,11 +24,10 @@ pub(crate) enum Action {
         Option<String>,
         PathBuf,
         WorkspaceType,
-        Option<String>,
     ),
     /// Clone a GitHub URL into a user-chosen destination directory and
     /// register as Simple. Args:
-    /// (name, description, prompt, kanban_path, github_url, destination_dir, group)
+    /// (name, description, prompt, kanban_path, github_url, destination_dir)
     CreateGithubWorkspace(
         String,
         String,
@@ -36,9 +35,8 @@ pub(crate) enum Action {
         Option<String>,
         String,
         std::path::PathBuf,
-        Option<String>,
     ),
-    EditWorkspace(usize, Option<String>, String, Option<String>),
+    EditWorkspace(usize, Option<String>, String),
     /// Second field: optional target kanban column for dispatched cards
     DeleteWorkspace(usize, Option<String>),
     /// Scan disk (via `git worktree list`) for worktrees of the parent
