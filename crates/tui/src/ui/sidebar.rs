@@ -293,11 +293,14 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                         .add_modifier(Modifier::BOLD);
 
                     // Label: any non-Worktree workspace shows the repo folder
-                    // name — a family parent appends its own branch
-                    // alongside ("agent-multi (master)"), a standalone
-                    // workspace just shows the bare folder name. A worktree
-                    // child shows just its branch; an orphaned worktree with
-                    // no recognized parent falls back to its own name.
+                    // name, with its own branch alongside whenever it has one
+                    // ("agent-multi (master)") — empty `branch` means the
+                    // configured folder isn't actually a git repo (`Project`
+                    // workspaces, or a `Simple` one pointed at a plain
+                    // directory), so there's nothing to show there. A
+                    // worktree child shows just its branch; an orphaned
+                    // worktree with no recognized parent falls back to its
+                    // own name.
                     let is_worktree = ws.info.workspace_type == WorkspaceType::Worktree;
                     let label = if !is_worktree {
                         let folder = ws
@@ -313,10 +316,10 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                                     ws.name.clone()
                                 }
                             });
-                        if is_parent && !ws.info.branch.is_empty() {
-                            format!("{folder} ({})", ws.info.branch)
-                        } else {
+                        if ws.info.branch.is_empty() {
                             folder
+                        } else {
+                            format!("{folder} ({})", ws.info.branch)
                         }
                     } else if is_child {
                         ws.info.branch.clone()

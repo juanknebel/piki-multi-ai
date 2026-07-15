@@ -3,7 +3,7 @@ source: crates/tui/src/ui/mod.rs
 expression: content
 ---
 ╭ WORKSPACES ──────────────────────────╮
-│▎  ○ my-project-folder                │
+│▎  ○ my-project-folder (main)         │
 │                                      │
 │                                      │
 │                                      │

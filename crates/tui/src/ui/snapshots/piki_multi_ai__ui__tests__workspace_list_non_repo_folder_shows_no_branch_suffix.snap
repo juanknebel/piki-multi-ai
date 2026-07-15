@@ -1,0 +1,10 @@
+---
+source: crates/tui/src/ui/mod.rs
+expression: content
+---
+╭ WORKSPACES ──────────────────────────╮
+│▎  ▣ plain-folder                     │
+│                                      │
+│                                      │
+│                                      │
+╰──────────────────────────────────────╯

@@ -286,10 +286,11 @@ mod tests {
     }
 
     #[test]
-    fn test_snapshot_workspace_list_standalone_simple_shows_folder_name() {
+    fn test_snapshot_workspace_list_standalone_simple_shows_folder_and_branch() {
         // A standalone (no worktree children) Simple/Project workspace shows
-        // its source folder's basename, not the free-typed ws.name, and
-        // without a "(branch)" suffix since there's nothing to disambiguate.
+        // its source folder's basename, not the free-typed ws.name, with its
+        // own branch alongside since it has one — the "(branch)" suffix
+        // isn't reserved for family parents, every git-backed row gets it.
         let mut terminal = test_terminal(40, 6);
         let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
 
@@ -311,7 +312,36 @@ mod tests {
             })
             .unwrap();
         let content = buffer_to_snapshot(terminal.backend().buffer());
-        insta::assert_snapshot!("workspace_list_standalone_simple_shows_folder_name", content);
+        insta::assert_snapshot!("workspace_list_standalone_simple_shows_folder_and_branch", content);
+    }
+
+    #[test]
+    fn test_snapshot_workspace_list_non_repo_folder_shows_no_branch_suffix() {
+        // A `Project` workspace (or a `Simple` one pointed at a plain,
+        // non-git directory) has an empty `branch` — there's nothing to
+        // disambiguate, so the row shows just the bare folder name.
+        let mut terminal = test_terminal(40, 6);
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+
+        app.workspaces.push(crate::app::Workspace::from_info(
+            piki_core::WorkspaceInfo {
+                workspace_type: piki_core::WorkspaceType::Project,
+                name: "typed-nickname".to_string(),
+                branch: String::new(),
+                source_repo: std::path::PathBuf::from("/tmp/plain-folder"),
+                ..test_ws_info("typed-nickname", 0)
+            },
+        ));
+        app.active_workspace = 0;
+        app.selected_sidebar_row = 0;
+
+        terminal
+            .draw(|frame| {
+                super::sidebar::render_workspace_list(frame, frame.area(), &app);
+            })
+            .unwrap();
+        let content = buffer_to_snapshot(terminal.backend().buffer());
+        insta::assert_snapshot!("workspace_list_non_repo_folder_shows_no_branch_suffix", content);
     }
 
     #[test]

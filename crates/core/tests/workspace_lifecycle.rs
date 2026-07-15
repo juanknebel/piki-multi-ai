@@ -69,7 +69,7 @@ async fn test_create_simple_accepts_non_git_folder() {
         .expect("create_simple should accept a non-git folder");
 
     assert_eq!(info.origin, WorkspaceOrigin::Local);
-    assert_eq!(info.branch, "main");
+    assert_eq!(info.branch, "");
     assert_eq!(info.source_repo, dir.path());
 }
 
