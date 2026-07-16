@@ -45,7 +45,7 @@ fn encode_mouse_scroll(
     }
 }
 
-/// Try to forward a scroll event to the PTY if the child is in alternate screen with mouse capture.
+/// Try to forward a scroll event to the PTY if the child is in alternate screen.
 /// Returns `true` if the event was forwarded, `false` if normal scrollback handling should be used.
 /// `button`: 64 = scroll up, 65 = scroll down.
 fn try_forward_scroll_to_pty(app: &mut App, col: u16, row: u16, button: u8) -> bool {
@@ -72,17 +72,33 @@ fn try_forward_scroll_to_pty(app: &mut App, col: u16, row: u16, button: u8) -> b
     let alt = screen.alternate_screen();
     let mouse_mode = screen.mouse_protocol_mode();
     let mouse_enc = screen.mouse_protocol_encoding();
+    let app_cursor = screen.application_cursor();
     drop(guard);
 
-    if !alt || matches!(mouse_mode, vt100::MouseProtocolMode::None) {
+    if !alt {
         return false;
     }
 
-    // Translate from outer terminal coords to 1-based PTY coords
-    let pty_col = col.saturating_sub(inner.x) + 1;
-    let pty_row = row.saturating_sub(inner.y) + 1;
-
-    let bytes = encode_mouse_scroll(button, pty_col, pty_row, mouse_enc);
+    // vt100 gives the alternate-screen grid zero scrollback capacity, so
+    // piki's local scrollback fallback is always a no-op here. If the child
+    // hasn't opted into mouse reporting, mirror what xterm does in this
+    // situation: translate the wheel tick into arrow-key presses so
+    // alt-screen apps that only support keyboard scrolling (e.g. codex)
+    // still respond to the wheel.
+    let bytes = if matches!(mouse_mode, vt100::MouseProtocolMode::None) {
+        let key: &[u8] = match (app_cursor, button) {
+            (true, 64) => b"\x1bOA",
+            (true, _) => b"\x1bOB",
+            (false, 64) => b"\x1b[A",
+            (false, _) => b"\x1b[B",
+        };
+        key.repeat(3)
+    } else {
+        // Translate from outer terminal coords to 1-based PTY coords
+        let pty_col = col.saturating_sub(inner.x) + 1;
+        let pty_row = row.saturating_sub(inner.y) + 1;
+        encode_mouse_scroll(button, pty_col, pty_row, mouse_enc)
+    };
 
     if let Some(ref mut session) = tab.pty_session {
         let _ = session.write(&bytes);
