@@ -15,6 +15,7 @@ dependencies = [
  "ansi-to-tui",
  "anyhow",
  "arboard",
+ "base64 0.22.1",
  "chrono",
  "clap",
  "crossterm 0.28.1",
