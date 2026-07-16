@@ -154,11 +154,20 @@ pub(crate) async fn run(
     // sidebar counts as they land. (Harmless no-op for non-git directories.)
     for (idx, ws) in app.workspaces.iter().enumerate() {
         let path = ws.info.path.clone();
+        // Branch is inferred, never persisted (see `Workspace::branch`) — and
+        // only inferred once some tool (shell/agent/git) has actually run in
+        // this workspace, i.e. it has a tab. Startup itself doesn't count,
+        // so a workspace with no tabs yet shows no branch until one opens.
+        let has_tab = !ws.tabs.is_empty();
         let tx = app.refresh_tx.clone();
         tokio::spawn(async move {
             let files = app::get_changed_files(&path).await.unwrap_or_default();
             let ab = app::get_ahead_behind(&path).await;
-            let branch = app::get_current_branch(&path).await;
+            let branch = if has_tab {
+                app::get_current_branch(&path).await
+            } else {
+                None
+            };
             let _ = tx.send(app::RefreshResult {
                 workspace_idx: idx,
                 changed_files: files,
@@ -545,6 +554,83 @@ pub(crate) async fn run(
             }
         }
 
+        // Passive agent-state detection (every tick).
+        //
+        // Providers with no hook bridge (currently just Codex) get no
+        // `cli_agent_sock`, but `spawn_tab` still turns shell integration on
+        // for them when `agent_state_detect::manifest_for_command` matches,
+        // so `OscParser` captures their OSC window-title. Combined with a
+        // screen-text sample, that's enough to classify Working/Blocked/Idle
+        // without a hook — write the result into the same `cli_agent` field
+        // the hook bridges use so the Agents pane needs no extra rendering.
+        {
+            for ws in app.workspaces.iter_mut() {
+                for tab in ws.tabs.iter_mut() {
+                    let Some(ref pty) = tab.pty_session else {
+                        continue;
+                    };
+                    let piki_core::AIProvider::Custom(name) = &tab.provider else {
+                        continue;
+                    };
+                    let Some(cmd) = app.provider_manager.get(name).map(|c| c.command.clone())
+                    else {
+                        continue;
+                    };
+                    let Some(manifest) = piki_core::agent_state_detect::manifest_for_command(&cmd)
+                    else {
+                        continue;
+                    };
+                    let Some(shell) = pty.shell() else {
+                        continue;
+                    };
+                    let title = shell.lock().state.window_title.clone();
+
+                    let screen_tail = if let Some(ref parser) = tab.pty_parser {
+                        let guard = parser.lock();
+                        let (rows, cols) = guard.screen().size();
+                        let tail: Vec<String> = guard
+                            .screen()
+                            .rows(0, cols)
+                            .take(rows as usize)
+                            .filter(|r| !r.trim().is_empty())
+                            .collect();
+                        drop(guard);
+                        tail.into_iter().rev().take(6).collect::<Vec<_>>().join("\n")
+                    } else {
+                        String::new()
+                    };
+
+                    let Some(new_status) =
+                        piki_core::agent_state_detect::detect(manifest, title.as_deref(), &screen_tail)
+                    else {
+                        continue;
+                    };
+
+                    let mut guard = shell.lock();
+                    let agent = guard
+                        .state
+                        .cli_agent
+                        .get_or_insert_with(piki_core::cli_agent::CliAgentState::new);
+                    if agent.status != new_status {
+                        let was_running =
+                            agent.status == piki_core::cli_agent::CliAgentStatus::Running;
+                        agent.status = new_status;
+                        if was_running
+                            && matches!(
+                                new_status,
+                                piki_core::cli_agent::CliAgentStatus::WaitingPermission
+                                    | piki_core::cli_agent::CliAgentStatus::Idle
+                                    | piki_core::cli_agent::CliAgentStatus::Done
+                            )
+                        {
+                            agent.last_attention_at = Some(std::time::Instant::now());
+                        }
+                        app.needs_redraw = true;
+                    }
+                }
+            }
+        }
+
         // Shell + cli-agent OSC drain (every tick).
         //
         // Tabs spawned with OSC integration accumulate `ShellEvent`s on
@@ -654,13 +740,20 @@ pub(crate) async fn run(
                 };
                 if should_refresh && !app.refresh_pending {
                     let path = ws.info.path.clone();
+                    // See the startup loop above: branch is only inferred
+                    // once a tool has actually run in this workspace.
+                    let has_tab = !ws.tabs.is_empty();
                     let tx = app.refresh_tx.clone();
                     app.refresh_pending = true;
                     tokio::spawn(async move {
                         // Non-git dirs (Project workspaces) yield an empty list
                         let files = app::get_changed_files(&path).await.unwrap_or_default();
                         let ab = app::get_ahead_behind(&path).await;
-                        let branch = app::get_current_branch(&path).await;
+                        let branch = if has_tab {
+                            app::get_current_branch(&path).await
+                        } else {
+                            None
+                        };
                         let _ = tx.send(app::RefreshResult {
                             workspace_idx: idx,
                             changed_files: files,

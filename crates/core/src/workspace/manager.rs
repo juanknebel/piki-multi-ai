@@ -222,12 +222,12 @@ impl WorkspaceManager {
         kanban_path: Option<String>,
         dir: &PathBuf,
     ) -> anyhow::Result<WorkspaceInfo> {
-        let (source_repo, origin) = match Self::git_root(dir).await {
+        let (source_repo, origin, is_git_repo) = match Self::git_root(dir).await {
             Ok(root) => {
                 let origin = detect_origin_from_repo(&root).await;
-                (root, origin)
+                (root, origin, true)
             }
-            Err(_) => (dir.clone(), WorkspaceOrigin::Local),
+            Err(_) => (dir.clone(), WorkspaceOrigin::Local, false),
         };
 
         let mut info = WorkspaceInfo::new(
@@ -240,6 +240,7 @@ impl WorkspaceManager {
         );
         info.workspace_type = WorkspaceType::Simple;
         info.origin = origin;
+        info.is_git_repo = is_git_repo;
         tracing::info!(workspace = name, path = %dir.display(), "simple workspace created");
         Ok(info)
     }

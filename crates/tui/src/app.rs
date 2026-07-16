@@ -1936,6 +1936,7 @@ mod tests {
             dispatch_source_kanban: None,
             dispatch_agent_name: None,
             origin: piki_core::WorkspaceOrigin::default(),
+            is_git_repo: true,
         };
         let ws = Workspace::from_info(info);
         app.workspaces.push(ws);

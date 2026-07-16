@@ -45,6 +45,10 @@ pub enum ShellEvent {
     /// Code lifecycle event (Warp-style). Emitted only for the
     /// `piki://cli-agent` target; foreign OSC 777 sequences are ignored.
     CliAgent(crate::cli_agent::CliAgentEvent),
+    /// `\x1b]0;`/`\x1b]1;`/`\x1b]2;<text>\x07` — window/icon title update.
+    /// Used passively by [`crate::agent_state_detect`] to read a provider's
+    /// own spinner/title convention (e.g. Codex) when there's no hook bridge.
+    WindowTitle(String),
 }
 
 /// One executed command, captured between [`ShellEvent::CommandOutputStart`]
@@ -78,6 +82,8 @@ pub struct ShellTabState {
     /// [`ShellEvent::CliAgent`] on Claude tabs. `None` until the first
     /// cli-agent event arrives (shell-only tabs never set it).
     pub cli_agent: Option<CliAgentState>,
+    /// Latest window/icon title reported via OSC 0/1/2, if any.
+    pub window_title: Option<String>,
 }
 
 impl ShellTabState {
@@ -115,6 +121,9 @@ impl ShellTabState {
                 self.cli_agent
                     .get_or_insert_with(CliAgentState::new)
                     .apply(ev);
+            }
+            ShellEvent::WindowTitle(t) => {
+                self.window_title = Some(t.clone());
             }
             ShellEvent::PromptStart | ShellEvent::CommandInputStart => {
                 // No-op — markers we keep for future UX (e.g. "scroll to

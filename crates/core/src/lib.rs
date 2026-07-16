@@ -1,3 +1,4 @@
+pub mod agent_state_detect;
 pub mod chat;
 pub mod cli_agent;
 pub mod domain;

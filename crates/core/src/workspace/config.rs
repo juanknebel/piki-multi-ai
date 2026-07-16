@@ -28,6 +28,8 @@ pub struct WorkspaceEntry {
     pub dispatch_agent_name: Option<String>,
     #[serde(default)]
     pub origin: WorkspaceOrigin,
+    #[serde(default = "crate::domain::default_is_git_repo")]
+    pub is_git_repo: bool,
 }
 
 impl WorkspaceEntry {
@@ -47,6 +49,7 @@ impl WorkspaceEntry {
         info.dispatch_source_kanban = self.dispatch_source_kanban;
         info.dispatch_agent_name = self.dispatch_agent_name;
         info.origin = self.origin;
+        info.is_git_repo = self.is_git_repo;
         info
     }
 }
@@ -90,6 +93,7 @@ pub fn save(git_root: &Path, workspaces: &[WorkspaceInfo]) -> anyhow::Result<()>
             dispatch_source_kanban: ws.dispatch_source_kanban.clone(),
             dispatch_agent_name: ws.dispatch_agent_name.clone(),
             origin: ws.origin.clone(),
+            is_git_repo: ws.is_git_repo,
         })
         .collect();
 

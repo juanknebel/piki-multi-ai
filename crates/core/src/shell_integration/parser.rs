@@ -167,6 +167,7 @@ fn parse_payload(payload: &[u8]) -> Option<ShellEvent> {
         "133" => parse_osc_133(rest),
         "7" => parse_osc_7(rest),
         "777" => parse_osc_777(rest),
+        "0" | "1" | "2" => Some(ShellEvent::WindowTitle(rest.to_string())),
         _ => None,
     }
 }
@@ -484,6 +485,22 @@ mod tests {
     fn osc_777_malformed_json_yields_no_event() {
         let seq = b"\x1b]777;notify;piki://cli-agent;not json at all\x07";
         assert!(parse_one(seq).is_empty());
+    }
+
+    #[test]
+    fn osc_0_1_2_emit_window_title() {
+        assert_eq!(
+            parse_one(b"\x1b]0;my title\x07"),
+            vec![ShellEvent::WindowTitle("my title".into())]
+        );
+        assert_eq!(
+            parse_one(b"\x1b]1;icon title\x07"),
+            vec![ShellEvent::WindowTitle("icon title".into())]
+        );
+        assert_eq!(
+            parse_one(b"\x1b]2;\xe2\xa0\x8b\x07"),
+            vec![ShellEvent::WindowTitle("⠋".into())]
+        );
     }
 
     #[test]

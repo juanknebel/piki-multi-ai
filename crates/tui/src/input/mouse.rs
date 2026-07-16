@@ -45,7 +45,8 @@ fn encode_mouse_scroll(
     }
 }
 
-/// Try to forward a scroll event to the PTY if the child is in alternate screen.
+/// Try to forward a scroll event to the PTY instead of using piki's local
+/// vt100 scrollback fallback.
 /// Returns `true` if the event was forwarded, `false` if normal scrollback handling should be used.
 /// `button`: 64 = scroll up, 65 = scroll down.
 fn try_forward_scroll_to_pty(app: &mut App, col: u16, row: u16, button: u8) -> bool {
@@ -75,31 +76,51 @@ fn try_forward_scroll_to_pty(app: &mut App, col: u16, row: u16, button: u8) -> b
     let app_cursor = screen.application_cursor();
     drop(guard);
 
-    if !alt {
-        return false;
-    }
+    let mouse_tracking = !matches!(mouse_mode, vt100::MouseProtocolMode::None);
 
-    // vt100 gives the alternate-screen grid zero scrollback capacity, so
-    // piki's local scrollback fallback is always a no-op here. If the child
-    // hasn't opted into mouse reporting, mirror what xterm does in this
-    // situation: translate the wheel tick into arrow-key presses so
-    // alt-screen apps that only support keyboard scrolling (e.g. codex)
-    // still respond to the wheel.
-    let bytes = if matches!(mouse_mode, vt100::MouseProtocolMode::None) {
-        let key: &[u8] = match (app_cursor, button) {
-            (true, 64) => b"\x1bOA",
-            (true, _) => b"\x1bOB",
-            (false, 64) => b"\x1b[A",
-            (false, _) => b"\x1b[B",
-        };
-        key.repeat(3)
-    } else {
+    if alt && mouse_tracking {
         // Translate from outer terminal coords to 1-based PTY coords
         let pty_col = col.saturating_sub(inner.x) + 1;
         let pty_row = row.saturating_sub(inner.y) + 1;
-        encode_mouse_scroll(button, pty_col, pty_row, mouse_enc)
-    };
+        let bytes = encode_mouse_scroll(button, pty_col, pty_row, mouse_enc);
+        if let Some(ref mut session) = tab.pty_session {
+            let _ = session.write(&bytes);
+        }
+        return true;
+    }
 
+    if mouse_tracking {
+        // Mouse tracking enabled outside alt screen: leave scroll to piki's
+        // local scrollback fallback, which still applies to the primary grid.
+        return false;
+    }
+
+    // No mouse tracking. piki's local vt100 scrollback is the normal
+    // fallback (handled by the caller), but it's a structural dead end
+    // whenever there's nothing in it: always on the alternate-screen grid
+    // (vt100 gives it zero scrollback capacity), and on the primary grid
+    // too for apps that redraw their whole viewport via cursor addressing
+    // instead of emitting real scrolling newlines (e.g. codex, whose
+    // transcript view never touches the alt screen either). In those
+    // cases, mirror what xterm does for alt-screen apps and translate the
+    // wheel into arrow keys — codex's own transcript documents exactly
+    // this binding ("↑/↓ to scroll"). Skip this for plain shells: an idle,
+    // just-opened shell also reports zero scrollback, and an arrow
+    // keystroke there would wrongly recall shell history instead of doing
+    // nothing.
+    let is_shell = matches!(tab.provider, piki_core::AIProvider::Shell);
+    let dead_end_locally = alt || (!is_shell && scrollback_max(&parser) == 0);
+    if !dead_end_locally {
+        return false;
+    }
+
+    let key: &[u8] = match (app_cursor, button) {
+        (true, 64) => b"\x1bOA",
+        (true, _) => b"\x1bOB",
+        (false, 64) => b"\x1b[A",
+        (false, _) => b"\x1b[B",
+    };
+    let bytes = key.repeat(3);
     if let Some(ref mut session) = tab.pty_session {
         let _ = session.write(&bytes);
     }

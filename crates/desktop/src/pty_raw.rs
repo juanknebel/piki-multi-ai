@@ -486,6 +486,9 @@ fn shell_event_payload(tab_id: &str, event: ShellEvent) -> PtyShellEventPayload 
         // M0: the structured agent event rides the same channel but the
         // frontend doesn't consume it yet (that's M1 — per-tab status UI).
         ShellEvent::CliAgent(_) => p.kind = "cli-agent",
+        // Passive agent-state detection (`agent_state_detect`) is TUI-only
+        // for now; desktop has no consumer for window-title events yet.
+        ShellEvent::WindowTitle(_) => p.kind = "window-title",
     }
     p
 }

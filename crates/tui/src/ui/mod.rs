@@ -243,6 +243,7 @@ mod tests {
             dispatch_source_kanban: None,
             dispatch_agent_name: None,
             origin: piki_core::WorkspaceOrigin::default(),
+            is_git_repo: true,
         }
     }
 
@@ -340,6 +341,35 @@ mod tests {
             .unwrap();
         let content = buffer_to_snapshot(terminal.backend().buffer());
         insta::assert_snapshot!("workspace_list_non_repo_folder_shows_no_branch_suffix", content);
+    }
+
+    #[test]
+    fn test_snapshot_workspace_list_simple_non_git_shows_folder_icon() {
+        // A `Simple` workspace pointed at a plain directory (no `.git`) gets
+        // a distinct folder icon instead of the git-backed "○", since it can
+        // never resolve a branch.
+        let mut terminal = test_terminal(40, 6);
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+
+        app.workspaces.push(crate::app::Workspace::from_info(
+            piki_core::WorkspaceInfo {
+                workspace_type: piki_core::WorkspaceType::Simple,
+                name: "scratch-notes".to_string(),
+                source_repo: std::path::PathBuf::from("/tmp/scratch-notes"),
+                is_git_repo: false,
+                ..test_ws_info("scratch-notes", 0)
+            },
+        ));
+        app.active_workspace = 0;
+        app.selected_sidebar_row = 0;
+
+        terminal
+            .draw(|frame| {
+                super::sidebar::render_workspace_list(frame, frame.area(), &app);
+            })
+            .unwrap();
+        let content = buffer_to_snapshot(terminal.backend().buffer());
+        insta::assert_snapshot!("workspace_list_simple_non_git_shows_folder_icon", content);
     }
 
     #[test]
@@ -461,6 +491,7 @@ mod tests {
             dispatch_source_kanban: None,
             dispatch_agent_name: None,
             origin: piki_core::WorkspaceOrigin::default(),
+            is_git_repo: true,
         };
         let mut ws = crate::app::Workspace::from_info(info);
         ws.add_tab(piki_core::AIProvider::Custom("Claude".to_string()), true, None);
