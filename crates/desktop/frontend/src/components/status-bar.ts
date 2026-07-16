@@ -20,7 +20,7 @@ export function renderStatusBar(container: HTMLElement) {
     container.appendChild(appName);
 
     // Left side
-    const branch = ws?.info.branch ?? "—";
+    const branch = ws?.branch ?? "—";
     addItem(container, `⎇ ${branch}`, "clickable");
 
     if (ws?.aheadBehind) {

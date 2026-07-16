@@ -66,6 +66,9 @@ interface WorkspaceState {
   status: WorkspaceStatus;
   changedFiles: ChangedFile[];
   aheadBehind: [number, number] | null;
+  /** Current git branch, refreshed in the background. `null` until the
+   *  first refresh completes, or if the workspace isn't a git repo. */
+  branch: string | null;
   /** Flat list of content items (terminals/agents/editors) across all tabs.
    *  Mirrors the backend tab list order so ipc index calls stay consistent. */
   tabs: TabInfo[];
@@ -178,6 +181,7 @@ class AppState extends EventTarget {
       status: "Idle" as WorkspaceStatus,
       changedFiles: [],
       aheadBehind: null,
+      branch: null,
       tabs: [],
       activeTab: 0,
       wsTabs: [],
@@ -213,6 +217,7 @@ class AppState extends EventTarget {
       ws.status = detail.status;
       ws.changedFiles = detail.changed_files;
       ws.aheadBehind = detail.ahead_behind;
+      ws.branch = detail.branch;
       ws.tabs = detail.tabs;
       this._hydrateLayout(ws, detail.active_tab);
     }
@@ -228,11 +233,19 @@ class AppState extends EventTarget {
     this.emit("active-pane-changed");
   }
 
-  updateFiles(workspaceIdx: number, files: ChangedFile[], aheadBehind: [number, number] | null) {
+  updateFiles(
+    workspaceIdx: number,
+    files: ChangedFile[],
+    aheadBehind: [number, number] | null,
+    branch?: string | null,
+  ) {
     const ws = this._workspaces[workspaceIdx];
     if (!ws) return;
     ws.changedFiles = files;
     ws.aheadBehind = aheadBehind;
+    if (branch !== undefined) {
+      ws.branch = branch;
+    }
     if (workspaceIdx === this._activeWorkspace) {
       this.emit("files-changed");
     }

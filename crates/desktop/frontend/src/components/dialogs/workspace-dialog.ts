@@ -331,7 +331,7 @@ export function showWorkspaceInfo(index: number) {
       <div class="dialog-body">
         ${infoRow("Name", info.name)}
         ${infoRow("Type", info.workspace_type)}
-        ${infoRow("Branch", info.branch)}
+        ${infoRow("Branch", ws.branch ?? "—")}
         ${infoRow("Path", String(info.path))}
         ${infoRow("Source Repo", info.source_repo_display)}
         ${infoRow("Kanban Path", info.kanban_path || "—")}

@@ -70,6 +70,7 @@ export function showDashboard() {
       const tabLabels = ws.tabs.map(t => getProviderLabel(t.provider)).join(", ");
       const ab = ws.aheadBehind;
       const syncInfo = ab ? `↑${ab[0]} ↓${ab[1]}` : "";
+      const branch = ws.branch;
 
       cardsHtml += `
         <div class="dash-card${isActive ? " dash-active" : ""}" data-idx="${entry.idx}">
@@ -77,7 +78,7 @@ export function showDashboard() {
             <span class="dash-card-name">${esc(info.name)}</span>
             <span class="dash-card-status ${statusClass}">${statusLabel}</span>
           </div>
-          ${info.branch || syncInfo ? `<div class="dash-card-branch">${info.branch ? "⎇ " + esc(info.branch) : ""}${syncInfo ? (info.branch ? " " : "") + syncInfo : ""}</div>` : ""}
+          ${branch || syncInfo ? `<div class="dash-card-branch">${branch ? "⎇ " + esc(branch) : ""}${syncInfo ? (branch ? " " : "") + syncInfo : ""}</div>` : ""}
           <div class="dash-card-meta">
             <span>${fileCount} change${fileCount !== 1 ? "s" : ""}</span>
             <span>${tabCount} tab${tabCount !== 1 ? "s" : ""}${tabLabels ? ": " + esc(tabLabels) : ""}</span>

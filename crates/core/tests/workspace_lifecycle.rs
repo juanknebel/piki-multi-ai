@@ -13,8 +13,11 @@ async fn test_create_and_remove_workspace() {
         .expect("create should succeed");
 
     assert_eq!(ws.name, "test-ws-create");
-    assert_eq!(ws.branch, "test-ws-create");
     assert!(ws.path.exists(), "worktree directory should exist");
+    assert_eq!(
+        piki_core::git::get_current_branch(&ws.path).await,
+        Some("test-ws-create".to_string())
+    );
 
     manager
         .remove("test-ws-create", &repo_path)
@@ -69,7 +72,7 @@ async fn test_create_simple_accepts_non_git_folder() {
         .expect("create_simple should accept a non-git folder");
 
     assert_eq!(info.origin, WorkspaceOrigin::Local);
-    assert_eq!(info.branch, "");
+    assert_eq!(piki_core::git::get_current_branch(&info.path).await, None);
     assert_eq!(info.source_repo, dir.path());
 }
 
@@ -246,17 +249,11 @@ async fn test_import_existing_worktree_registers_without_git_worktree_add() {
     assert_eq!(worktrees_before.len(), 1);
 
     let info = manager
-        .import_existing_worktree(
-            "import-ws",
-            created.branch.clone(),
-            created.path.clone(),
-            repo_path.clone(),
-        )
+        .import_existing_worktree("import-ws", created.path.clone(), repo_path.clone())
         .await
         .expect("import should succeed");
 
     assert_eq!(info.path, created.path);
-    assert_eq!(info.branch, created.branch);
     assert_eq!(info.workspace_type, piki_core::WorkspaceType::Worktree);
 
     // No new worktree should have been created on disk.
@@ -276,12 +273,7 @@ async fn test_import_existing_worktree_rejects_missing_path() {
 
     let missing = repo_path.join("does-not-exist-on-disk");
     let err = manager
-        .import_existing_worktree(
-            "ghost-ws",
-            "some-branch".to_string(),
-            missing,
-            repo_path.clone(),
-        )
+        .import_existing_worktree("ghost-ws", missing, repo_path.clone())
         .await
         .expect_err("importing a missing path should fail");
     assert!(

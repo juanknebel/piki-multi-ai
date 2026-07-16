@@ -201,7 +201,6 @@ impl WorkspaceManager {
             description.to_string(),
             prompt.to_string(),
             kanban_path,
-            branch_name,
             worktree_path,
             git_root,
         );
@@ -211,8 +210,8 @@ impl WorkspaceManager {
 
     /// Create a simple workspace pointing to an existing directory.
     /// The directory is **not** required to be inside a git repository; when
-    /// no git root can be detected, `source_repo` falls back to `dir` itself,
-    /// the branch is set to "main" as a placeholder, and `origin` is `Local`.
+    /// no git root can be detected, `source_repo` falls back to `dir` itself
+    /// and `origin` is `Local`.
     /// When the directory is inside a git repo with a github.com remote, the
     /// resulting workspace is tagged `origin = GitHub { url }`.
     pub async fn create_simple(
@@ -223,28 +222,12 @@ impl WorkspaceManager {
         kanban_path: Option<String>,
         dir: &PathBuf,
     ) -> anyhow::Result<WorkspaceInfo> {
-        let (source_repo, branch, origin) = match Self::git_root(dir).await {
+        let (source_repo, origin) = match Self::git_root(dir).await {
             Ok(root) => {
-                let branch_output = shell_env::command("git")
-                    .args(["rev-parse", "--abbrev-ref", "HEAD"])
-                    .current_dir(dir)
-                    .output()
-                    .await
-                    .context("failed to detect branch")?;
-                let branch = if branch_output.status.success() {
-                    String::from_utf8_lossy(&branch_output.stdout)
-                        .trim()
-                        .to_string()
-                } else {
-                    "main".to_string()
-                };
                 let origin = detect_origin_from_repo(&root).await;
-                (root, branch, origin)
+                (root, origin)
             }
-            // Not a git repo at all — leave `branch` empty so callers (e.g.
-            // the TUI sidebar) can tell "no repo configured" apart from "a
-            // real repo whose branch happens to be main".
-            Err(_) => (dir.clone(), String::new(), WorkspaceOrigin::Local),
+            Err(_) => (dir.clone(), WorkspaceOrigin::Local),
         };
 
         let mut info = WorkspaceInfo::new(
@@ -252,7 +235,6 @@ impl WorkspaceManager {
             description.to_string(),
             prompt.to_string(),
             kanban_path,
-            branch,
             dir.clone(),
             source_repo,
         );
@@ -323,14 +305,11 @@ impl WorkspaceManager {
             );
         }
 
-        let branch = Self::detect_main_branch(&destination).await;
-
         let mut info = WorkspaceInfo::new(
             name.to_string(),
             description.to_string(),
             prompt.to_string(),
             kanban_path,
-            branch,
             destination.clone(),
             destination,
         );
@@ -362,7 +341,6 @@ impl WorkspaceManager {
             description.to_string(),
             prompt.to_string(),
             kanban_path,
-            String::new(),
             dir.to_path_buf(),
             dir.to_path_buf(),
         );
@@ -462,12 +440,11 @@ impl WorkspaceManager {
     }
 
     /// Register an already-existing worktree directory as a new workspace,
-    /// without shelling out to `git worktree add`. `worktree_path` and
-    /// `branch` are expected to come from `list_worktrees()`.
+    /// without shelling out to `git worktree add`. `worktree_path` is
+    /// expected to come from `list_worktrees()`.
     pub async fn import_existing_worktree(
         &self,
         name: &str,
-        branch: String,
         worktree_path: PathBuf,
         source_repo: PathBuf,
     ) -> anyhow::Result<WorkspaceInfo> {
@@ -484,7 +461,6 @@ impl WorkspaceManager {
             String::new(),
             String::new(),
             None,
-            branch,
             worktree_path,
             source_repo,
         );

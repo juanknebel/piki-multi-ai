@@ -64,14 +64,16 @@ pub async fn get_side_by_side_diff(
     file_path: String,
     staged: bool,
 ) -> Result<SideBySideDiff, String> {
-    let (ws_path, branch) = {
+    let ws_path = {
         let app = state.lock();
         if workspace_idx >= app.workspaces.len() {
             return Err("Workspace index out of range".to_string());
         }
-        let ws = &app.workspaces[workspace_idx];
-        (ws.info.path.clone(), ws.info.branch.clone())
+        app.workspaces[workspace_idx].info.path.clone()
     };
+    let branch = piki_core::git::get_current_branch(&ws_path)
+        .await
+        .unwrap_or_default();
 
     let mut args = vec!["diff".to_string(), "--no-color".to_string(), "-U3".to_string()];
     if staged {

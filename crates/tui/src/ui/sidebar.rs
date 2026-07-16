@@ -294,13 +294,13 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
 
                     // Label: any non-Worktree workspace shows the repo folder
                     // name, with its own branch alongside whenever it has one
-                    // ("agent-multi (master)") — empty `branch` means the
+                    // ("agent-multi (master)") — `branch == None` means the
                     // configured folder isn't actually a git repo (`Project`
                     // workspaces, or a `Simple` one pointed at a plain
-                    // directory), so there's nothing to show there. A
-                    // worktree child shows just its branch; an orphaned
-                    // worktree with no recognized parent falls back to its
-                    // own name.
+                    // directory) or the background refresh hasn't landed yet,
+                    // so there's nothing to show there. A worktree child shows
+                    // just its branch; an orphaned worktree with no recognized
+                    // parent falls back to its own name.
                     let is_worktree = ws.info.workspace_type == WorkspaceType::Worktree;
                     let label = if !is_worktree {
                         let folder = ws
@@ -316,13 +316,12 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                                     ws.name.clone()
                                 }
                             });
-                        if ws.info.branch.is_empty() {
-                            folder
-                        } else {
-                            format!("{folder} ({})", ws.info.branch)
+                        match &ws.branch {
+                            Some(branch) => format!("{folder} ({branch})"),
+                            None => folder,
                         }
                     } else if is_child {
-                        ws.info.branch.clone()
+                        ws.branch.clone().unwrap_or_default()
                     } else {
                         ws.name.clone()
                     };

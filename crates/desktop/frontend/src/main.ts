@@ -83,7 +83,7 @@ async function init() {
   });
 
   ipc.onGitRefresh((event) => {
-    appState.updateFiles(event.workspace_idx, event.files, event.ahead_behind);
+    appState.updateFiles(event.workspace_idx, event.files, event.ahead_behind, event.branch);
   });
   ipc.onSysinfoUpdate((formatted) => {
     appState.setSysinfo(formatted);

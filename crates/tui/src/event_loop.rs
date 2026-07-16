@@ -22,6 +22,7 @@ fn process_refresh_result(app: &mut App, result: app::RefreshResult) {
     if let Some(ws) = app.workspaces.get_mut(result.workspace_idx) {
         ws.changed_files = result.changed_files;
         ws.ahead_behind = result.ahead_behind;
+        ws.branch = result.branch;
         ws.dirty = false;
         ws.last_refresh = Some(Instant::now());
     }
@@ -157,10 +158,12 @@ pub(crate) async fn run(
         tokio::spawn(async move {
             let files = app::get_changed_files(&path).await.unwrap_or_default();
             let ab = app::get_ahead_behind(&path).await;
+            let branch = app::get_current_branch(&path).await;
             let _ = tx.send(app::RefreshResult {
                 workspace_idx: idx,
                 changed_files: files,
                 ahead_behind: ab,
+                branch,
             });
         });
     }
@@ -657,10 +660,12 @@ pub(crate) async fn run(
                         // Non-git dirs (Project workspaces) yield an empty list
                         let files = app::get_changed_files(&path).await.unwrap_or_default();
                         let ab = app::get_ahead_behind(&path).await;
+                        let branch = app::get_current_branch(&path).await;
                         let _ = tx.send(app::RefreshResult {
                             workspace_idx: idx,
                             changed_files: files,
                             ahead_behind: ab,
+                            branch,
                         });
                     });
                 }

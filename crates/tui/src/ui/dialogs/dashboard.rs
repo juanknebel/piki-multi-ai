@@ -76,7 +76,13 @@ pub(crate) fn render_dashboard_overlay(frame: &mut Frame, area: Rect, app: &App)
                 Span::styled(format!("{}f", files), muted),
             ]));
         } else {
-            let branch: String = ws.branch.chars().take(20).collect();
+            let branch: String = ws
+                .branch
+                .as_deref()
+                .unwrap_or("")
+                .chars()
+                .take(20)
+                .collect();
             let files = ws.file_count();
             let ab = match ws.ahead_behind {
                 Some((ahead, behind)) if ahead > 0 || behind > 0 => {

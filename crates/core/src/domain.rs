@@ -220,7 +220,6 @@ pub struct WorkspaceInfo {
     pub description: String,
     pub prompt: String,
     pub kanban_path: Option<String>,
-    pub branch: String,
     pub path: PathBuf,
     /// Git root of the source repository this workspace was created from
     pub source_repo: PathBuf,
@@ -253,7 +252,6 @@ impl WorkspaceInfo {
         description: String,
         prompt: String,
         kanban_path: Option<String>,
-        branch: String,
         path: PathBuf,
         source_repo: PathBuf,
     ) -> Self {
@@ -266,7 +264,6 @@ impl WorkspaceInfo {
             description,
             prompt,
             kanban_path,
-            branch,
             path,
             source_repo,
             source_repo_display,

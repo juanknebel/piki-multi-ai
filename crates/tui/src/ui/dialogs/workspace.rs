@@ -386,7 +386,7 @@ pub(crate) fn render_workspace_info_overlay(frame: &mut Frame, area: Rect, app: 
         Line::from(""),
         Line::from(vec![
             Span::styled(" Branch:  ", label_style),
-            Span::raw(ws.branch.clone()),
+            Span::raw(ws.branch.clone().unwrap_or_default()),
         ]),
         Line::from(vec![
             Span::styled(" Project: ", label_style),

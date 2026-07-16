@@ -14,7 +14,6 @@ fn test_save_and_load_config() {
         "test workspace".to_string(),
         "".to_string(),
         None,
-        "ws-config-test".to_string(),
         repo_path.join("ws-config-test"),
         repo_path.clone(),
     )];
@@ -51,7 +50,6 @@ fn test_stale_entries_filtered() {
         "stale".to_string(),
         "".to_string(),
         None,
-        "stale-ws".to_string(),
         stale_path,
         repo_path.clone(),
     )];

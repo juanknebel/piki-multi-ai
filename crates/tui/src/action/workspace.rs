@@ -140,7 +140,7 @@ pub(super) async fn handle(
             let source_repo = parent.info.source_repo.clone();
             let name = branch.rsplit('/').next().unwrap_or(&branch).to_string();
             let result = manager
-                .import_existing_worktree(&name, branch, path, source_repo)
+                .import_existing_worktree(&name, path, source_repo)
                 .await;
             match result {
                 Ok(info) => finish_workspace_creation(app, info),

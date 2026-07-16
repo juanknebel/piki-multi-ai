@@ -1056,10 +1056,13 @@ pub(super) fn handle_workspace_list_interaction(app: &mut App, key: KeyEvent) ->
             Some(crate::app::SidebarItem::Workspace { index, collapsed }) => {
                 let idx = *index;
                 let is_parent = collapsed.is_some();
-                app.selected_workspace = idx;
-                app.switch_workspace(idx);
                 if is_parent {
+                    app.switch_workspace(idx);
                     app.toggle_selected_group();
+                } else if app.workspaces.get(idx).is_some_and(|ws| !ws.tabs.is_empty()) {
+                    app.switch_workspace_and_focus(idx);
+                } else {
+                    app.switch_workspace(idx);
                 }
             }
             None => {}

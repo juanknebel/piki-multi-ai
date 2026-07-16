@@ -51,7 +51,6 @@ export interface WorkspaceInfo {
   description: string;
   prompt: string;
   kanban_path: string | null;
-  branch: string;
   path: string;
   source_repo: string;
   source_repo_display: string;
@@ -74,6 +73,9 @@ export interface WorkspaceDetail {
   status: WorkspaceStatus;
   changed_files: ChangedFile[];
   ahead_behind: [number, number] | null;
+  /** Current git branch, refreshed in the background. `null` until the
+   * first refresh completes, or if the workspace isn't a git repo. */
+  branch: string | null;
   tabs: TabInfo[];
   active_tab: number;
 }
@@ -92,6 +94,7 @@ export interface GitRefreshEvent {
   workspace_idx: number;
   files: ChangedFile[];
   ahead_behind: [number, number] | null;
+  branch: string | null;
 }
 
 export interface ToastEvent {

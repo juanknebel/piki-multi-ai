@@ -7,7 +7,7 @@ use ratatui::layout::Rect;
 use ratatui::text::Text;
 
 // Re-export domain types from core for convenience
-pub use piki_core::git::{get_ahead_behind, get_changed_files};
+pub use piki_core::git::{get_ahead_behind, get_changed_files, get_current_branch};
 pub use piki_core::pty::PtySession;
 pub use piki_core::workspace::FileWatcher;
 pub use piki_core::{AIProvider, ChangedFile, WorkspaceStatus, WorkspaceType};
@@ -56,6 +56,7 @@ pub struct RefreshResult {
     pub workspace_idx: usize,
     pub changed_files: Vec<ChangedFile>,
     pub ahead_behind: Option<(usize, usize)>,
+    pub branch: Option<String>,
 }
 
 /// Result of backgrounded `FileWatcher::new` setup for a restored workspace.
@@ -306,6 +307,10 @@ pub struct Workspace {
     pub last_refresh: Option<Instant>,
     /// Commits ahead/behind upstream (ahead, behind)
     pub ahead_behind: Option<(usize, usize)>,
+    /// Current git branch, refreshed in the background alongside `ahead_behind`.
+    /// `None` until the first refresh completes, or if the workspace isn't a
+    /// git repo / is in detached HEAD.
+    pub branch: Option<String>,
     /// Kanban app state
     pub kanban_app: Option<flow_tui::App>,
     /// Kanban provider
@@ -359,6 +364,7 @@ impl Workspace {
             dirty: false,
             last_refresh: None,
             ahead_behind: None,
+            branch: None,
             kanban_app: None,
             kanban_provider: None,
             code_review: None,
@@ -1919,7 +1925,6 @@ mod tests {
         let info = piki_core::WorkspaceInfo {
             name: format!("test-ws-{}", idx),
             path: std::path::PathBuf::from("/tmp/test"),
-            branch: "main".to_string(),
             workspace_type: piki_core::WorkspaceType::Simple,
             description: String::new(),
             prompt: String::new(),
