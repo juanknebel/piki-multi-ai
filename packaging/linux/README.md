@@ -6,6 +6,8 @@ This package contains:
 - **piki-desktop** — Desktop GUI application (Tauri)
 - **install.sh** — Automated installer
 - **icon.png** — Application icon
+- **themes/** — Built-in themes
+- **config.example.toml** — Default config
 
 ## Quick Install
 
@@ -16,8 +18,9 @@ cd piki-linux-amd64
 ```
 
 The installer copies binaries to `~/.local/bin/`, installs the app icon,
-and creates desktop launchers (`.desktop` files) so both apps appear in
-your application menu.
+creates desktop launchers (`.desktop` files) so both apps appear in your
+application menu, and installs the built-in themes and default config to
+`~/.config/piki-multi/`.
 
 ## Manual Install
 
@@ -30,6 +33,14 @@ your application menu.
 
 2. Optionally copy the icon and create `.desktop` launchers — see
    `install.sh` for the exact format.
+
+3. Optionally install themes and the default config:
+
+   ```bash
+   mkdir -p ~/.config/piki-multi/themes
+   cp themes/*.toml ~/.config/piki-multi/themes/
+   cp config.example.toml ~/.config/piki-multi/config.toml
+   ```
 
 ## Requirements
 

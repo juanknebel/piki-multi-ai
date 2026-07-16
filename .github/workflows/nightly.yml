@@ -49,9 +49,6 @@ jobs:
           - target: aarch64-apple-darwin
             os: macos-latest
             artifact: piki-multi-ai-macos-arm64
-          - target: x86_64-apple-darwin
-            os: macos-latest
-            artifact: piki-multi-ai-macos-amd64
 
     runs-on: ${{ matrix.os }}
 
@@ -92,9 +89,6 @@ jobs:
             bundles: deb
           - os: macos-latest
             target: aarch64-apple-darwin
-            bundles: dmg
-          - os: macos-latest
-            target: x86_64-apple-darwin
             bundles: dmg
 
     runs-on: ${{ matrix.os }}
@@ -139,6 +133,10 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: tar czf desktop-bundles/piki-desktop-linux-amd64.tar.gz -C target/${{ matrix.target }}/release piki-desktop
 
+      - name: Package desktop binary (macOS only)
+        if: matrix.os == 'macos-latest'
+        run: tar czf desktop-bundles/piki-desktop-macos-arm64.tar.gz -C target/${{ matrix.target }}/release piki-desktop
+
       - name: Upload desktop artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -165,8 +163,22 @@ jobs:
           cp packaging/linux/install.sh piki-linux-amd64/
           cp packaging/linux/README.md piki-linux-amd64/
           cp crates/desktop/icons/icon.png piki-linux-amd64/
+          cp -r themes piki-linux-amd64/themes
+          cp config.example.toml piki-linux-amd64/
           chmod +x piki-linux-amd64/install.sh
           tar czf piki-linux-amd64.tar.gz piki-linux-amd64/
+
+      - name: Package macOS bundle
+        run: |
+          mkdir -p piki-macos-arm64
+          tar xzf piki-multi-ai-macos-arm64.tar.gz -C piki-macos-arm64/
+          tar xzf piki-desktop-macos-arm64.tar.gz -C piki-macos-arm64/
+          cp packaging/macos/install.sh piki-macos-arm64/
+          cp packaging/macos/README.md piki-macos-arm64/
+          cp -r themes piki-macos-arm64/themes
+          cp config.example.toml piki-macos-arm64/
+          chmod +x piki-macos-arm64/install.sh
+          tar czf piki-macos-arm64.tar.gz piki-macos-arm64/
 
       - name: Delete existing nightly release
         run: |

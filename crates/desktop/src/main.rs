@@ -81,6 +81,7 @@ fn main() {
                         status: WorkspaceStatus::Idle,
                         changed_files: Vec::new(),
                         ahead_behind: None,
+                        branch: None,
                         tabs: Vec::new(),
                         active_tab: 0,
                         watcher,

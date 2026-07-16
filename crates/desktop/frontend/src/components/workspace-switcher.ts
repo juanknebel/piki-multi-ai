@@ -43,7 +43,7 @@ export function openWorkspaceSwitcher() {
     idx: i,
     name: ws.info.name,
     sourceRepo: ws.info.source_repo,
-    branch: ws.info.branch,
+    branch: ws.branch ?? "",
     order: ws.info.order,
   }));
 

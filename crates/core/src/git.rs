@@ -128,6 +128,28 @@ pub async fn get_ahead_behind(worktree_path: &PathBuf) -> Option<(usize, usize)>
     }
 }
 
+/// Get the current branch name for a worktree.
+/// Returns None if not a git repo, detached HEAD, or on any failure — never a stale value.
+pub async fn get_current_branch(worktree_path: &PathBuf) -> Option<String> {
+    let output = crate::shell_env::command("git")
+        .args(["branch", "--show-current"])
+        .current_dir(worktree_path)
+        .output()
+        .await
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if branch.is_empty() {
+        None
+    } else {
+        Some(branch)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

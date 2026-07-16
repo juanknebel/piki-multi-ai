@@ -171,18 +171,17 @@ pub async fn git_merge(
     workspace_idx: usize,
     strategy: String,
 ) -> Result<MergeResult, String> {
-    let (ws_path, source_repo, branch) = {
+    let (ws_path, source_repo) = {
         let app = state.lock();
         if workspace_idx >= app.workspaces.len() {
             return Err("Workspace index out of range".to_string());
         }
         let ws = &app.workspaces[workspace_idx];
-        (
-            ws.info.path.clone(),
-            ws.info.source_repo.clone(),
-            ws.info.branch.clone(),
-        )
+        (ws.info.path.clone(), ws.info.source_repo.clone())
     };
+    let branch = piki_core::git::get_current_branch(&ws_path)
+        .await
+        .ok_or_else(|| "Could not determine the workspace's current branch".to_string())?;
 
     // Check for uncommitted changes
     let status = piki_core::shell_env::command("git")

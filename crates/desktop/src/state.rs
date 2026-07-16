@@ -37,6 +37,9 @@ pub struct DesktopWorkspace {
     pub status: WorkspaceStatus,
     pub changed_files: Vec<ChangedFile>,
     pub ahead_behind: Option<(usize, usize)>,
+    /// Current git branch, refreshed alongside `ahead_behind`. `None` until
+    /// the first refresh completes, or if the workspace isn't a git repo.
+    pub branch: Option<String>,
     pub tabs: Vec<DesktopTab>,
     pub active_tab: usize,
     pub watcher: Option<FileWatcher>,
@@ -86,6 +89,7 @@ pub struct WorkspaceDetail {
     pub status: WorkspaceStatus,
     pub changed_files: Vec<ChangedFile>,
     pub ahead_behind: Option<(usize, usize)>,
+    pub branch: Option<String>,
     pub tabs: Vec<TabInfo>,
     pub active_tab: usize,
 }
@@ -97,6 +101,7 @@ impl DesktopWorkspace {
             status: self.status.clone(),
             changed_files: self.changed_files.clone(),
             ahead_behind: self.ahead_behind,
+            branch: self.branch.clone(),
             tabs: self
                 .tabs
                 .iter()

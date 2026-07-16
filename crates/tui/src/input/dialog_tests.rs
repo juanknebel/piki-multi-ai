@@ -3020,7 +3020,6 @@ fn push_test_ws(app: &mut App, name: &str, origin: WorkspaceOrigin) -> usize {
         String::new(),
         String::new(),
         None,
-        "main".to_string(),
         std::path::PathBuf::from("/tmp/test"),
         std::path::PathBuf::from("/tmp/test/parent"),
     );
@@ -3160,7 +3159,6 @@ fn create_worktree_enter_dispatches_create_workspace_with_worktree_type() {
             String::new(),
             String::new(),
             None,
-            "main".into(),
             parent_repo.clone(),
             parent_repo.clone(),
         );

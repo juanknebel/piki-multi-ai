@@ -14,7 +14,6 @@ pub struct WorkspaceEntry {
     pub prompt: String,
     #[serde(default)]
     pub kanban_path: Option<String>,
-    pub branch: String,
     pub worktree_path: PathBuf,
     pub source_repo: PathBuf,
     #[serde(default)]
@@ -29,6 +28,8 @@ pub struct WorkspaceEntry {
     pub dispatch_agent_name: Option<String>,
     #[serde(default)]
     pub origin: WorkspaceOrigin,
+    #[serde(default = "crate::domain::default_is_git_repo")]
+    pub is_git_repo: bool,
 }
 
 impl WorkspaceEntry {
@@ -39,7 +40,6 @@ impl WorkspaceEntry {
             self.description,
             self.prompt,
             self.kanban_path,
-            self.branch,
             self.worktree_path,
             self.source_repo,
         );
@@ -49,6 +49,7 @@ impl WorkspaceEntry {
         info.dispatch_source_kanban = self.dispatch_source_kanban;
         info.dispatch_agent_name = self.dispatch_agent_name;
         info.origin = self.origin;
+        info.is_git_repo = self.is_git_repo;
         info
     }
 }
@@ -84,7 +85,6 @@ pub fn save(git_root: &Path, workspaces: &[WorkspaceInfo]) -> anyhow::Result<()>
             description: ws.description.clone(),
             prompt: ws.prompt.clone(),
             kanban_path: ws.kanban_path.clone(),
-            branch: ws.branch.clone(),
             worktree_path: ws.path.clone(),
             source_repo: ws.source_repo.clone(),
             workspace_type: ws.workspace_type,
@@ -93,6 +93,7 @@ pub fn save(git_root: &Path, workspaces: &[WorkspaceInfo]) -> anyhow::Result<()>
             dispatch_source_kanban: ws.dispatch_source_kanban.clone(),
             dispatch_agent_name: ws.dispatch_agent_name.clone(),
             origin: ws.origin.clone(),
+            is_git_repo: ws.is_git_repo,
         })
         .collect();
 

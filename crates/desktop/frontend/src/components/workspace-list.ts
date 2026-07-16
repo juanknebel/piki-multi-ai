@@ -30,16 +30,16 @@ function familyKey(info: WorkspaceInfo): string {
   return info.source_repo;
 }
 
-function folderLabel(info: WorkspaceInfo): string {
+function folderLabel(info: WorkspaceInfo, branch: string | null): string {
   const folder =
     info.source_repo.replace(/\/+$/, "").split("/").pop() ||
     info.source_repo_display ||
     info.name;
-  return info.branch ? `${folder} (${info.branch})` : folder;
+  return branch ? `${folder} (${branch})` : folder;
 }
 
 function computeSidebarRows(
-  workspaces: readonly { info: WorkspaceInfo }[],
+  workspaces: readonly { info: WorkspaceInfo; branch: string | null }[],
   collapsedGroups: Set<string>,
 ): SidebarRow[] {
   const rows: SidebarRow[] = [];
@@ -66,7 +66,7 @@ function computeSidebarRows(
       const collapsed = collapsedGroups.has(key);
       rows.push({
         idx: parentPos,
-        label: folderLabel(workspaces[parentPos].info),
+        label: folderLabel(workspaces[parentPos].info, workspaces[parentPos].branch),
         isParent: true,
         isChild: false,
         familyKey: key,
@@ -75,13 +75,13 @@ function computeSidebarRows(
       for (const j of siblings) {
         consumed[j] = true;
         if (j !== parentPos && !collapsed) {
-          rows.push({ idx: j, label: workspaces[j].info.branch, isParent: false, isChild: true });
+          rows.push({ idx: j, label: workspaces[j].branch ?? "", isParent: false, isChild: true });
         }
       }
     } else {
       for (const j of siblings) {
         consumed[j] = true;
-        rows.push({ idx: j, label: workspaces[j].info.branch, isParent: false, isChild: false });
+        rows.push({ idx: j, label: workspaces[j].branch ?? "", isParent: false, isChild: false });
       }
     }
   }

@@ -1,17 +1,11 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 399
+assertion_line: 372
 expression: content
 ---
 ╭ WORKSPACES ──────────────────────────╮
-│▎  ⎇ flow                             │
+│▎  🗁 scratch-notes                    │
 │                                      │
-│ ▾ ○ src-agent-multi (main)           │
-│ │ ⎇ nightly (nightly)                │
 │                                      │
-│   ⎇ ferrum-trade                     │
-│                                      │
-│ ▾ ○ src-void-setup (main)            │
-│ │ ⎇ x220t (x220t)                    │
 │                                      │
 ╰──────────────────────────────────────╯

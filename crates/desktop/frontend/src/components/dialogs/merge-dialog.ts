@@ -20,7 +20,7 @@ export function showMergeDialog() {
       </div>
       <div class="dialog-body">
         <p style="font-size:13px;color:var(--text-primary);margin-bottom:8px">
-          Merge <strong>${escapeHtml(ws.info.branch)}</strong> into main branch.
+          Merge <strong>${escapeHtml(ws.branch ?? "")}</strong> into main branch.
         </p>
         <div class="dialog-field">
           <label class="dialog-label">Strategy</label>

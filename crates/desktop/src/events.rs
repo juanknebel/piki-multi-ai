@@ -15,6 +15,7 @@ pub struct GitRefreshPayload {
     pub workspace_idx: usize,
     pub files: Vec<ChangedFile>,
     pub ahead_behind: Option<(usize, usize)>,
+    pub branch: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -261,6 +262,7 @@ pub fn spawn_git_watcher(app_handle: AppHandle) {
                     continue;
                 };
                 let ahead_behind = piki_core::git::get_ahead_behind(&path).await;
+                let branch = piki_core::git::get_current_branch(&path).await;
 
                 let changed = {
                     let app = state.lock();
@@ -268,7 +270,7 @@ pub fn spawn_git_watcher(app_handle: AppHandle) {
                         continue;
                     }
                     let ws = &app.workspaces[idx];
-                    ws.changed_files != files || ws.ahead_behind != ahead_behind
+                    ws.changed_files != files || ws.ahead_behind != ahead_behind || ws.branch != branch
                 };
 
                 if changed {
@@ -277,6 +279,7 @@ pub fn spawn_git_watcher(app_handle: AppHandle) {
                         if idx < app.workspaces.len() {
                             app.workspaces[idx].changed_files = files.clone();
                             app.workspaces[idx].ahead_behind = ahead_behind;
+                            app.workspaces[idx].branch = branch.clone();
                         }
                     }
                     let _ = app_handle.emit(
@@ -285,6 +288,7 @@ pub fn spawn_git_watcher(app_handle: AppHandle) {
                             workspace_idx: idx,
                             files,
                             ahead_behind,
+                            branch,
                         },
                     );
                 }

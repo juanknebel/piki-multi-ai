@@ -220,7 +220,6 @@ pub struct WorkspaceInfo {
     pub description: String,
     pub prompt: String,
     pub kanban_path: Option<String>,
-    pub branch: String,
     pub path: PathBuf,
     /// Git root of the source repository this workspace was created from
     pub source_repo: PathBuf,
@@ -245,6 +244,16 @@ pub struct WorkspaceInfo {
     /// Drives source-control panel visibility and worktree-action availability.
     #[serde(default)]
     pub origin: WorkspaceOrigin,
+    /// Whether `path` is actually inside a git repository. Always `true` for
+    /// `Worktree`/GitHub-clone workspaces; `Simple` workspaces pointed at a
+    /// plain directory set this `false` at creation time — fixed metadata,
+    /// not something that needs re-checking like the inferred branch.
+    #[serde(default = "default_is_git_repo")]
+    pub is_git_repo: bool,
+}
+
+pub(crate) fn default_is_git_repo() -> bool {
+    true
 }
 
 impl WorkspaceInfo {
@@ -253,7 +262,6 @@ impl WorkspaceInfo {
         description: String,
         prompt: String,
         kanban_path: Option<String>,
-        branch: String,
         path: PathBuf,
         source_repo: PathBuf,
     ) -> Self {
@@ -266,7 +274,6 @@ impl WorkspaceInfo {
             description,
             prompt,
             kanban_path,
-            branch,
             path,
             source_repo,
             source_repo_display,
@@ -276,6 +283,7 @@ impl WorkspaceInfo {
             dispatch_source_kanban: None,
             dispatch_agent_name: None,
             origin: WorkspaceOrigin::default(),
+            is_git_repo: true,
         }
     }
 }

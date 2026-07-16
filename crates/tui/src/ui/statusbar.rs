@@ -118,8 +118,10 @@ fn render_normal_status(frame: &mut Frame, area: Rect, app: &App) {
         if first_sep_needed {
             left.push(sep.clone());
         }
-        left.push(Span::styled(format!("⎇ {}", ws.branch), text_style));
-        left.push(sep.clone());
+        if let Some(branch) = &ws.branch {
+            left.push(Span::styled(format!("⎇ {branch}"), text_style));
+            left.push(sep.clone());
+        }
         left.push(Span::styled(
             format!("{} files", ws.file_count()),
             text_style,

@@ -13,11 +13,15 @@ use piki_core::cli_agent::CliAgentStatus;
 
 use super::layout::{pane_border_style, pane_title_style};
 
-/// Icon prefix for each workspace type.
-fn workspace_type_icon(ws_type: WorkspaceType) -> &'static str {
+/// Icon prefix for a workspace row. A `Simple` workspace pointed at a plain
+/// (non-git) directory gets a distinct folder icon — otherwise it's
+/// indistinguishable from a git-backed one until its branch happens to
+/// resolve (see `Workspace::branch`).
+fn workspace_type_icon(ws_type: WorkspaceType, is_git_repo: bool) -> &'static str {
     match ws_type {
         WorkspaceType::Worktree => "⎇ ",
         WorkspaceType::Project => "▣ ",
+        WorkspaceType::Simple if !is_git_repo => "🗁 ",
         WorkspaceType::Simple => "○ ",
     }
 }
@@ -294,13 +298,16 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
 
                     // Label: any non-Worktree workspace shows the repo folder
                     // name, with its own branch alongside whenever it has one
-                    // ("agent-multi (master)") — empty `branch` means the
+                    // ("agent-multi (master)") — `branch == None` means the
                     // configured folder isn't actually a git repo (`Project`
                     // workspaces, or a `Simple` one pointed at a plain
-                    // directory), so there's nothing to show there. A
-                    // worktree child shows just its branch; an orphaned
-                    // worktree with no recognized parent falls back to its
-                    // own name.
+                    // directory) or the background refresh hasn't landed yet,
+                    // so there's nothing to show there. A worktree child shows
+                    // its own directory's last path segment the same way,
+                    // since `branch` is inferred lazily (see `Workspace::branch`)
+                    // and must never leave the row blank while that's pending;
+                    // an orphaned worktree with no recognized parent falls back
+                    // to its own name.
                     let is_worktree = ws.info.workspace_type == WorkspaceType::Worktree;
                     let label = if !is_worktree {
                         let folder = ws
@@ -316,13 +323,22 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                                     ws.name.clone()
                                 }
                             });
-                        if ws.info.branch.is_empty() {
-                            folder
-                        } else {
-                            format!("{folder} ({})", ws.info.branch)
+                        match &ws.branch {
+                            Some(branch) => format!("{folder} ({branch})"),
+                            None => folder,
                         }
                     } else if is_child {
-                        ws.info.branch.clone()
+                        let leaf = ws
+                            .info
+                            .path
+                            .file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .filter(|s| !s.is_empty())
+                            .unwrap_or_else(|| ws.name.clone());
+                        match &ws.branch {
+                            Some(branch) => format!("{leaf} ({branch})"),
+                            None => leaf,
+                        }
                     } else {
                         ws.name.clone()
                     };
@@ -346,7 +362,8 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                     } else {
                         Span::raw("  ")
                     };
-                    let type_icon = workspace_type_icon(ws.info.workspace_type);
+                    let type_icon =
+                        workspace_type_icon(ws.info.workspace_type, ws.info.is_git_repo);
 
                     // A collapsed family parent surfaces its hidden children's
                     // signals (idle dot + metadata below) instead of losing

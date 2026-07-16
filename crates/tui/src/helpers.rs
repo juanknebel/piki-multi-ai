@@ -167,6 +167,12 @@ pub(crate) async fn spawn_tab(
                     (Vec::new(), Vec::new(), false, None)
                 }
             }
+        } else if piki_core::agent_state_detect::manifest_for_command(&cmd).is_some() {
+            // No hook bridge for this provider (e.g. Codex) — turn on shell
+            // integration so `OscParser` captures its window-title spinner,
+            // but withhold `cli_agent_sock`: that FIFO is exclusive to the
+            // real hook bridges above.
+            (Vec::new(), Vec::new(), true, None)
         } else {
             (Vec::new(), Vec::new(), false, None)
         };
@@ -188,6 +194,12 @@ pub(crate) async fn spawn_tab(
         ws.tabs[idx].pty_session = Some(session);
         ws.status = app::WorkspaceStatus::Busy;
     }
+    // A tool (shell/agent/git) just activated for this workspace — that's
+    // the trigger for inferring its branch (never persisted, see
+    // `ws.branch`), so kick the background refresh loop immediately instead
+    // of waiting for its next periodic tick.
+    ws.dirty = true;
+    ws.last_refresh = None;
     idx
 }
 
