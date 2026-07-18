@@ -807,6 +807,9 @@ pub struct App {
     /// Tick counter driving the running-agent spinner in the Agents pane
     /// (advanced by the event loop only while some agent is running)
     pub spinner_frame: usize,
+    /// Last time the spinner advanced (and forced a redraw) — throttles the
+    /// spinner to `SPINNER_INTERVAL` instead of the raw tick rate
+    pub last_spinner_at: Instant,
     pub config: crate::config::Config,
     /// Channel for receiving async git refresh results
     pub refresh_tx: tokio::sync::mpsc::UnboundedSender<RefreshResult>,
@@ -966,6 +969,7 @@ impl App {
             code_review_body_rect: Rect::default(),
             needs_redraw: true,
             spinner_frame: 0,
+            last_spinner_at: Instant::now(),
             config,
             refresh_tx,
             refresh_rx,

@@ -17,6 +17,10 @@ use piki_core::workspace::FileWatcher;
 const TICK_RATE: Duration = Duration::from_millis(50);
 const DEBOUNCE: Duration = Duration::from_millis(500);
 const PERIODIC_REFRESH: Duration = Duration::from_secs(3);
+/// Cadence of the Agents-pane activity spinner. Each advance forces a full
+/// UI redraw, so this — not `TICK_RATE` — bounds the steady-state frame rate
+/// while any agent is running.
+const SPINNER_INTERVAL: Duration = Duration::from_millis(150);
 
 fn process_refresh_result(app: &mut App, result: app::RefreshResult) {
     if let Some(ws) = app.workspaces.get_mut(result.workspace_idx) {
@@ -481,15 +485,23 @@ pub(crate) async fn run(
         // Phase 4: Tick-gated periodic work
         if is_tick {
             // Advance the Agents-pane activity spinner while any agent runs.
-            let any_running = app.agent_rows().iter().any(|&(wi, ti)| {
-                matches!(
-                    app.workspaces[wi].tabs[ti].cli_agent_snapshot(),
-                    Some((piki_core::cli_agent::CliAgentStatus::Running, _, _))
-                )
-            });
-            if any_running {
-                app.spinner_frame = app.spinner_frame.wrapping_add(1);
-                app.needs_redraw = true;
+            // Throttled to its own cadence (not every tick): the redraw this
+            // forces rebuilds the whole UI, so at the raw tick rate a single
+            // running agent anywhere kept the app rendering at 20 fps
+            // indefinitely. The check itself also allocates `agent_rows()`
+            // and takes a mutex per tab, so it rides the same throttle.
+            if now.duration_since(app.last_spinner_at) >= SPINNER_INTERVAL {
+                app.last_spinner_at = now;
+                let any_running = app.agent_rows().iter().any(|&(wi, ti)| {
+                    matches!(
+                        app.workspaces[wi].tabs[ti].cli_agent_snapshot(),
+                        Some((piki_core::cli_agent::CliAgentStatus::Running, _, _))
+                    )
+                });
+                if any_running {
+                    app.spinner_frame = app.spinner_frame.wrapping_add(1);
+                    app.needs_redraw = true;
+                }
             }
 
             // Looking at a tab acknowledges its "unseen news" marker, so the
