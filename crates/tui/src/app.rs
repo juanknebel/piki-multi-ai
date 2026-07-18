@@ -819,6 +819,10 @@ pub struct App {
     /// Last time passive agent-state detection ran — throttles the
     /// screen-scrape sweep to `PASSIVE_DETECT_INTERVAL`
     pub last_passive_detect: Instant,
+    /// App-wide coalesced "PTY produced output" signal. Cloned into every
+    /// spawned session; the event loop sleeps on it instead of polling byte
+    /// counters at the tick rate.
+    pub pty_output: piki_core::pty::PtyOutputSignal,
     pub config: crate::config::Config,
     /// Channel for receiving async git refresh results
     pub refresh_tx: tokio::sync::mpsc::UnboundedSender<RefreshResult>,
@@ -980,6 +984,7 @@ impl App {
             spinner_frame: 0,
             last_spinner_at: Instant::now(),
             last_passive_detect: Instant::now(),
+            pty_output: piki_core::pty::PtyOutputSignal::new(),
             config,
             refresh_tx,
             refresh_rx,

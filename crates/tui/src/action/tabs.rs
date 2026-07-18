@@ -99,7 +99,7 @@ pub(super) async fn handle(
                     return Ok(());
                 }
 
-                let idx = spawn_tab(ws, &provider, app.pty_rows, app.pty_cols, None, Some(&app.provider_manager), &app.paths).await;
+                let idx = spawn_tab(ws, &provider, app.pty_rows, app.pty_cols, None, Some(&app.provider_manager), &app.paths, app.pty_output.clone()).await;
                 ws.active_tab = idx;
                 app.status_message = Some(format!("Opened {} tab", provider.label()));
             }

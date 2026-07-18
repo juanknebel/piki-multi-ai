@@ -14,9 +14,17 @@ use piki_core::notifications;
 use piki_core::shell_integration::ShellEvent;
 use piki_core::workspace::FileWatcher;
 
-const TICK_RATE: Duration = Duration::from_millis(50);
+/// Fallback cadence for periodic work (liveness checks, idle detection, OSC
+/// drains, git-refresh scheduling). PTY output no longer rides this: reader
+/// threads wake the loop directly through `App::pty_output`, so the tick can
+/// be slow — it only bounds how stale the periodic bookkeeping may get.
+const TICK_RATE: Duration = Duration::from_millis(250);
 const DEBOUNCE: Duration = Duration::from_millis(500);
 const PERIODIC_REFRESH: Duration = Duration::from_secs(3);
+/// Minimum interval between frames (~30 fps cap). Output-driven wakeups can
+/// arrive per PTY read; without this cap a fast-streaming agent would have
+/// the loop rebuilding the full UI once per chunk.
+const MIN_RENDER_INTERVAL: Duration = Duration::from_millis(33);
 /// Cadence of the Agents-pane activity spinner. Each advance forces a full
 /// UI redraw, so this — not `TICK_RATE` — bounds the steady-state frame rate
 /// while any agent is running.
@@ -214,20 +222,42 @@ pub(crate) async fn run(
     let mut reader = EventStream::new();
     let mut tick_interval = tokio::time::interval(TICK_RATE);
     tick_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    // Render throttle state: when a redraw is due but the last frame is less
+    // than MIN_RENDER_INTERVAL old, `render_deadline` arms a select branch
+    // that wakes the loop exactly when the frame becomes eligible.
+    let mut last_draw_at: Option<Instant> = None;
+    let mut render_deadline: Option<Instant> = None;
+    let pty_output = app.pty_output.clone();
 
     loop {
         // Phase 0: Keep the Agents highlight on the tab the user is standing on
         app.sync_agent_selection();
 
-        // Phase 1: Render only when state has changed
+        // Phase 1: Render only when state has changed, capped at ~30 fps
         if app.needs_redraw {
-            terminal.draw(|frame| {
-                ui::layout::render(frame, &mut app);
-            })?;
-            app.needs_redraw = false;
+            let now = Instant::now();
+            let eligible = last_draw_at
+                .is_none_or(|t| now.duration_since(t) >= MIN_RENDER_INTERVAL);
+            if eligible {
+                terminal.draw(|frame| {
+                    ui::layout::render(frame, &mut app);
+                })?;
+                app.needs_redraw = false;
+                last_draw_at = Some(Instant::now());
+                render_deadline = None;
+            } else if render_deadline.is_none() {
+                // Safe: `eligible` is false only when `last_draw_at` is Some.
+                render_deadline = Some(last_draw_at.unwrap() + MIN_RENDER_INTERVAL);
+            }
+        } else {
+            render_deadline = None;
         }
+        // Evaluated unconditionally (select! builds every future even for
+        // disabled branches); the far-future fallback is never polled.
+        let render_wakeup =
+            render_deadline.unwrap_or_else(|| Instant::now() + Duration::from_secs(3600));
 
-        // Phase 2: Wait for terminal event, refresh result, or tick
+        // Phase 2: Wait for terminal event, PTY output, refresh result, or tick
         let mut is_tick = false;
 
         tokio::select! {
@@ -275,6 +305,15 @@ pub(crate) async fn run(
                     Some(Err(_)) => {}
                     None => break,
                 }
+            }
+
+            // Coalesced "some PTY produced output" wakeup from the reader
+            // threads. `take()` re-arms the signal; only the active tab can
+            // need a redraw from output, and its byte probe is one atomic
+            // load — background tabs cost nothing here.
+            _ = pty_output.notified() => {
+                pty_output.take();
+                check_active_tab_output(&mut app);
             }
 
             result = app.refresh_rx.recv() => {
@@ -439,6 +478,10 @@ pub(crate) async fn run(
                 }
             }
 
+            // A frame became eligible after being deferred by the ~30 fps
+            // cap — wake with no other work so Phase 1 can draw it.
+            _ = tokio::time::sleep_until(render_wakeup.into()), if render_deadline.is_some() => {}
+
             _ = tick_interval.tick() => {
                 is_tick = true;
             }
@@ -565,6 +608,23 @@ pub(crate) async fn run(
     Ok(())
 }
 
+/// Redraw check for the active tab's PTY output: one atomic load comparing
+/// the byte counter against the last render. Called from the output-signal
+/// wakeup (immediate) and from [`poll_workspaces`] (tick fallback).
+fn check_active_tab_output(app: &mut App) {
+    let idx = app.active_workspace;
+    if let Some(ws) = app.workspaces.get_mut(idx)
+        && let Some(tab) = ws.current_tab_mut()
+        && let Some(ref pty) = tab.pty_session
+    {
+        let current_bytes = pty.bytes_processed();
+        if current_bytes != tab.last_bytes_processed {
+            tab.last_bytes_processed = current_bytes;
+            app.needs_redraw = true;
+        }
+    }
+}
+
 /// Per-tab polling across every workspace: file-watcher drain, PTY byte /
 /// liveness checks, idle detection, passive agent-state detection, shell +
 /// cli-agent OSC drain, API Explorer polling and git-refresh scheduling.
@@ -584,19 +644,10 @@ fn poll_workspaces(app: &mut App, now: Instant) {
     }
 
     // Active workspace — check PTY bytes + is_alive for all tabs
+    check_active_tab_output(app);
     {
         let idx = app.active_workspace;
         if let Some(ws) = app.workspaces.get_mut(idx) {
-            // Check bytes on active tab for redraw
-            if let Some(tab) = ws.current_tab_mut()
-                && let Some(ref mut pty) = tab.pty_session
-            {
-                let current_bytes = pty.bytes_processed();
-                if current_bytes != tab.last_bytes_processed {
-                    tab.last_bytes_processed = current_bytes;
-                    app.needs_redraw = true;
-                }
-            }
             // Check is_alive for all tabs, recompute workspace status
             let mut any_alive = false;
             let mut any_tab = false;
