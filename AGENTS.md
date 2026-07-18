@@ -48,7 +48,7 @@ Requires Rust >= 1.85 (edition 2024). Runtime deps: `claude` CLI in PATH, git >=
 
 ## Architecture
 
-**Event loop** (`main.rs`): Single tokio async loop at 50ms tick rate. Key events produce `Action` variants, which are executed asynchronously. File watcher events are polled each tick with 500ms debounce.
+**Event loop** (`main.rs`): Single tokio async loop, event-driven — input, PTY output (coalesced `PtyOutputSignal` wakeups from reader threads) and background channels wake it; a 250ms fallback tick gates all O(workspaces × tabs) polling, and renders are capped at ~30fps. Key events produce `Action` variants, which are executed asynchronously. File watcher events are polled on tick with 500ms debounce. Performance invariants live in `docs/performance.md` — read it before touching event-loop timing.
 
 **App state** (`app.rs`): Centralized state in the `App` struct. Modal UI with `AppMode` (Normal/NewWorkspace/Help/WorkspaceSwitcher/etc.).
 

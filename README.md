@@ -949,7 +949,10 @@ sequenceDiagram
 
 ### Performance optimizations
 
-- **Dirty-flag rendering** — UI only redraws when state actually changes (key/mouse events, PTY output, file watcher, resize), eliminating redundant 50ms tick redraws and reducing idle CPU usage
+- **Dirty-flag rendering** — UI only redraws when state actually changes (key/mouse events, PTY output, file watcher, resize), capped at ~30fps, reducing idle CPU usage
+- **Output-driven wakeups** — PTY reader threads wake the event loop through a coalesced dirty-bit + notify signal instead of the loop polling byte counters on a fast tick; the fallback tick runs at just 250ms and only bounds periodic bookkeeping (see `docs/performance.md`)
+- **Tick-gated per-tab polling** — All O(workspaces × tabs) bookkeeping (idle detection, OSC drains, liveness checks) runs only on the tick, never on keystrokes, so input latency doesn't grow with the number of open projects
+- **Selective file watching (Linux)** — One inotify watch per real source directory instead of a blind recursive watch; `target/`, `node_modules/`, `.git/` subtrees are never registered, avoiding tens of thousands of kernel watches per workspace and event storms during builds
 - **parking_lot::Mutex** — Fast, non-poisoning mutex for the vt100 parser eliminates frame drops caused by `try_lock` failures during heavy PTY output
 - **Zero-allocation fuzzy search** — Fuzzy match results store indices into the file list instead of cloning path strings, eliminating per-keystroke allocations
 - **Async config persistence** — Workspace config saves run in background tasks via `tokio::spawn`, preventing event loop blocking on file I/O
@@ -957,7 +960,7 @@ sequenceDiagram
 - **LRU diff cache** — Replaces naive clear-all-at-capacity eviction with LRU, preserving recently-viewed diffs when the cache is full
 - **Zero-allocation footer** — Footer key descriptions use `&'static str` instead of per-frame `String` allocations, and width calculations use arithmetic instead of `format!()`
 - **Minimal tokio features** — Only compiles required tokio features (`rt-multi-thread`, `macros`, `process`, `time`, `sync`, `fs`) instead of `"full"`, reducing compile time and binary size
-- **Event-driven loop** — Uses `crossterm::EventStream` + `tokio::select!` instead of blocking `event::poll`, eliminating 0-50ms latency on async results (git refresh, fuzzy scan) and achieving true zero-CPU idle
+- **Event-driven loop** — Uses `crossterm::EventStream` + `tokio::select!` instead of blocking `event::poll`, so async results (git refresh, fuzzy scan, PTY output) apply the moment they arrive
 
 ## License
 

@@ -81,7 +81,7 @@ Conventions:
 - `app.rs` — `App` struct (centralized state), `AppMode`, `ActivePane`, `Workspace`
 - `action/` — `Action` enum + `execute_action()` dispatch in `mod.rs`; per-domain `handle()` in `workspace.rs`, `files.rs`, `review.rs`, `tabs.rs`, `api.rs`, `chat.rs`, `agent.rs`. All git handling is delegated to the lazygit tab (`AIProvider::Git`, prefix g) — do NOT add native git actions back
 - `dialog_state.rs` — `DialogState` enum with per-dialog data, `CycleField` trait, per-dialog field enums
-- `event_loop.rs` — Main async loop at 50ms tick rate
+- `event_loop.rs` — Main async loop: event-driven wakeups (input, PTY output via `PtyOutputSignal`, channels) + a 250ms fallback tick that gates all O(workspaces × tabs) polling (`poll_workspaces`); renders capped at ~30fps. **Read `docs/performance.md` before changing its timing or adding per-wakeup work** — it documents the invariants
 - `input/` — Key routing + prefix dispatch (`mod.rs`), app action bodies (`app_actions.rs`), dialog handlers (`dialog.rs`), focused-pane handlers (`interaction.rs`), mouse (`mouse.rs`), text fields (`text_field_common.rs`), confirm helpers + `with_dialog_mut!` (`confirm_common.rs`), list navigation (`list_nav.rs`), input handler tests (`dialog_tests.rs`)
 - `ui/` — Rendering: `layout.rs` (compositor), `dialogs.rs` (overlays), component sub-modules
 - `config.rs` — Keybindings and settings from `config.toml`
