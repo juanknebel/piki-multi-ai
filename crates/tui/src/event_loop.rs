@@ -21,6 +21,10 @@ const PERIODIC_REFRESH: Duration = Duration::from_secs(3);
 /// UI redraw, so this — not `TICK_RATE` — bounds the steady-state frame rate
 /// while any agent is running.
 const SPINNER_INTERVAL: Duration = Duration::from_millis(150);
+/// Cadence of passive (screen-scrape) agent-state detection. Status changes
+/// on a hookless agent are human-scale events; scraping faster than this just
+/// burns locks against the PTY reader thread.
+const PASSIVE_DETECT_INTERVAL: Duration = Duration::from_millis(300);
 
 fn process_refresh_result(app: &mut App, result: app::RefreshResult) {
     if let Some(ws) = app.workspaces.get_mut(result.workspace_idx) {
@@ -684,7 +688,7 @@ fn poll_workspaces(app: &mut App, now: Instant) {
         }
     }
 
-    // Passive agent-state detection (every tick).
+    // Passive agent-state detection.
     //
     // Providers with no hook bridge (currently just Codex) get no
     // `cli_agent_sock`, but `spawn_tab` still turns shell integration on
@@ -693,12 +697,24 @@ fn poll_workspaces(app: &mut App, now: Instant) {
     // screen-text sample, that's enough to classify Working/Blocked/Idle
     // without a hook — write the result into the same `cli_agent` field
     // the hook bridges use so the Agents pane needs no extra rendering.
-    {
+    //
+    // The screen sample locks the same vt100 parser the PTY reader thread
+    // holds while processing output batches, and materializes the whole
+    // screen as strings — so it runs at most every `PASSIVE_DETECT_INTERVAL`,
+    // and per tab only when new output has actually arrived (the byte
+    // counter is a lock-free atomic load).
+    if now.duration_since(app.last_passive_detect) >= PASSIVE_DETECT_INTERVAL {
+        app.last_passive_detect = now;
         for ws in app.workspaces.iter_mut() {
             for tab in ws.tabs.iter_mut() {
                 let Some(ref pty) = tab.pty_session else {
                     continue;
                 };
+                let bytes = pty.bytes_processed();
+                if bytes == tab.last_detect_bytes {
+                    continue;
+                }
+                tab.last_detect_bytes = bytes;
                 let piki_core::AIProvider::Custom(name) = &tab.provider else {
                     continue;
                 };
