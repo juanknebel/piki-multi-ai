@@ -216,7 +216,18 @@ fn is_ignored_dir(name: &str) -> bool {
 }
 
 /// Returns true for paths that should be ignored by the watcher.
+///
+/// The `contains` checks match paths *inside* an ignored directory; the
+/// `file_name` check matches an event about the ignored directory itself
+/// (e.g. macOS FSEvents reports `.../node_modules` with no trailing slash
+/// when the directory is created or coalesces events at dir granularity).
 fn should_ignore(path: &Path) -> bool {
+    if path
+        .file_name()
+        .is_some_and(|n| is_ignored_dir(&n.to_string_lossy()))
+    {
+        return true;
+    }
     let s = path.to_string_lossy();
     s.contains("/.git/")
         || s.contains("/target/")
