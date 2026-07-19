@@ -67,7 +67,7 @@ Built with Rust and [ratatui](https://ratatui.rs/).
 - **Clipboard support** — Paste from clipboard (`Ctrl+Shift+V`), copy visible terminal (`Ctrl+Shift+C`), and mouse drag-to-select with auto-copy; cross-platform (Wayland, X11, macOS, Windows)
 - **Workspace prompts** — Optionally provide an initial prompt when creating a workspace, stored for reference and used when spawning AI tabs
 - **System status header** — Live CPU%, RAM usage, battery level, and date/time displayed in a top header bar (powered by `systemstat`)
-- **Full mouse support** — Click to focus panes, select workspaces/files, switch tabs, close tabs (×), scroll anywhere contextually; mouse scroll forwarded to TUI apps (OpenCode, Kilo) in alternate screen mode; drag to resize borders or select text; overlays dismiss on click
+- **Full mouse support** — Click to focus panes, select workspaces/files, switch tabs, close tabs (×), scroll anywhere contextually; mouse scroll forwarded to TUI apps in alternate screen mode, and translated to keyboard scroll for Codex-like providers that run on the primary screen without mouse tracking; drag to resize borders or select text; overlays dismiss on click
 - **Resizable panes** — Resize sidebar and workspace/file split with keyboard (`<`/`>`, `+`/`-`) or mouse drag on borders
 - **Markdown viewer** — Preview `.md` files rendered in-terminal via `tui-markdown`; open from fuzzy search with `Ctrl+o`, scroll with `j/k`, `Ctrl+d/u`, `g/G`, or mouse wheel; read-only interact mode; close tab with `w`
 - **Customizable configuration** — Keybindings and themes loaded from `~/.config/piki-multi/config.toml`
@@ -494,7 +494,7 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 | Click + after the tabs | Open the New Tab dialog |
 | Scroll in workspace list | Navigate workspaces up/down |
 | Scroll in agents pane | Navigate agents up/down |
-| Scroll in main panel | Scroll terminal scrollback/markdown; forwarded as escape sequences to TUI apps (alternate screen with mouse capture) |
+| Scroll in main panel | Scroll terminal scrollback/markdown; forwarded as escape sequences to TUI apps, or translated to keyboard scroll for Codex-like providers |
 | Scroll in Help overlay | Scroll overlay content |
 | Scroll in fuzzy search | Navigate results |
 | Click on Help/About/Info overlay | Dismiss overlay |

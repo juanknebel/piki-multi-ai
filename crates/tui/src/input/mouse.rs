@@ -9,6 +9,13 @@ use crate::clipboard;
 use crate::dialog_state::DialogState;
 use crate::helpers::{SubtabHit, rect_contains, resize_all_ptys, scrollback_max, subtab_index_at};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PtyScrollRoute {
+    MouseReport,
+    ArrowKeys,
+    LocalScrollback,
+}
+
 /// Encode a mouse scroll event as terminal escape bytes based on the protocol encoding.
 /// `button` is 64 for scroll-up, 65 for scroll-down. `col`/`row` are 1-based PTY coordinates.
 fn encode_mouse_scroll(
@@ -45,6 +52,52 @@ fn encode_mouse_scroll(
     }
 }
 
+fn provider_uses_keyboard_scroll(
+    provider: &piki_core::AIProvider,
+    provider_manager: &piki_core::providers::ProviderManager,
+) -> bool {
+    let piki_core::AIProvider::Custom(name) = provider else {
+        return false;
+    };
+    provider_manager
+        .get(name)
+        .is_some_and(|config| piki_core::agent_state_detect::manifest_for_command(&config.command).is_some())
+}
+
+fn pty_scroll_route(
+    alt_screen: bool,
+    mouse_tracking: bool,
+    is_shell: bool,
+    local_scrollback_max: usize,
+    keyboard_scroll_provider: bool,
+) -> PtyScrollRoute {
+    if alt_screen && mouse_tracking {
+        return PtyScrollRoute::MouseReport;
+    }
+
+    if mouse_tracking {
+        // Mouse tracking enabled outside alt screen: leave scroll to piki's
+        // local scrollback fallback, which still applies to the primary grid.
+        return PtyScrollRoute::LocalScrollback;
+    }
+
+    // No mouse tracking. piki's local vt100 scrollback is the normal
+    // fallback (handled by the caller), but it's a structural dead end
+    // whenever there's nothing in it: always on the alternate-screen grid
+    // (vt100 gives it zero scrollback capacity), and on the primary grid
+    // too for apps that redraw their whole viewport via cursor addressing
+    // instead of emitting real scrolling newlines. Codex is the known primary
+    // screen case: it exposes keyboard scroll actions but does not announce
+    // alternate screen or mouse tracking, and its primary-grid redraws can
+    // still leave vt100 with unrelated local scrollback. Skip plain shells so
+    // a wheel tick cannot recall shell history.
+    if alt_screen || keyboard_scroll_provider || (!is_shell && local_scrollback_max == 0) {
+        PtyScrollRoute::ArrowKeys
+    } else {
+        PtyScrollRoute::LocalScrollback
+    }
+}
+
 /// Try to forward a scroll event to the PTY instead of using piki's local
 /// vt100 scrollback fallback.
 /// Returns `true` if the event was forwarded, `false` if normal scrollback handling should be used.
@@ -54,6 +107,12 @@ fn try_forward_scroll_to_pty(app: &mut App, col: u16, row: u16, button: u8) -> b
         Some(r) => r,
         None => return false,
     };
+
+    let keyboard_scroll_provider = app
+        .workspaces
+        .get(app.active_workspace)
+        .and_then(|ws| ws.current_tab())
+        .is_some_and(|tab| provider_uses_keyboard_scroll(&tab.provider, &app.provider_manager));
 
     let ws = match app.workspaces.get_mut(app.active_workspace) {
         Some(ws) => ws,
@@ -77,54 +136,40 @@ fn try_forward_scroll_to_pty(app: &mut App, col: u16, row: u16, button: u8) -> b
     drop(guard);
 
     let mouse_tracking = !matches!(mouse_mode, vt100::MouseProtocolMode::None);
-
-    if alt && mouse_tracking {
-        // Translate from outer terminal coords to 1-based PTY coords
-        let pty_col = col.saturating_sub(inner.x) + 1;
-        let pty_row = row.saturating_sub(inner.y) + 1;
-        let bytes = encode_mouse_scroll(button, pty_col, pty_row, mouse_enc);
-        if let Some(ref mut session) = tab.pty_session {
-            let _ = session.write(&bytes);
-        }
-        return true;
-    }
-
-    if mouse_tracking {
-        // Mouse tracking enabled outside alt screen: leave scroll to piki's
-        // local scrollback fallback, which still applies to the primary grid.
-        return false;
-    }
-
-    // No mouse tracking. piki's local vt100 scrollback is the normal
-    // fallback (handled by the caller), but it's a structural dead end
-    // whenever there's nothing in it: always on the alternate-screen grid
-    // (vt100 gives it zero scrollback capacity), and on the primary grid
-    // too for apps that redraw their whole viewport via cursor addressing
-    // instead of emitting real scrolling newlines (e.g. codex, whose
-    // transcript view never touches the alt screen either). In those
-    // cases, mirror what xterm does for alt-screen apps and translate the
-    // wheel into arrow keys — codex's own transcript documents exactly
-    // this binding ("↑/↓ to scroll"). Skip this for plain shells: an idle,
-    // just-opened shell also reports zero scrollback, and an arrow
-    // keystroke there would wrongly recall shell history instead of doing
-    // nothing.
     let is_shell = matches!(tab.provider, piki_core::AIProvider::Shell);
-    let dead_end_locally = alt || (!is_shell && scrollback_max(&parser) == 0);
-    if !dead_end_locally {
-        return false;
-    }
 
-    let key: &[u8] = match (app_cursor, button) {
-        (true, 64) => b"\x1bOA",
-        (true, _) => b"\x1bOB",
-        (false, 64) => b"\x1b[A",
-        (false, _) => b"\x1b[B",
-    };
-    let bytes = key.repeat(3);
-    if let Some(ref mut session) = tab.pty_session {
-        let _ = session.write(&bytes);
+    match pty_scroll_route(
+        alt,
+        mouse_tracking,
+        is_shell,
+        scrollback_max(&parser),
+        keyboard_scroll_provider,
+    ) {
+        PtyScrollRoute::MouseReport => {
+            // Translate from outer terminal coords to 1-based PTY coords.
+            let pty_col = col.saturating_sub(inner.x) + 1;
+            let pty_row = row.saturating_sub(inner.y) + 1;
+            let bytes = encode_mouse_scroll(button, pty_col, pty_row, mouse_enc);
+            if let Some(ref mut session) = tab.pty_session {
+                let _ = session.write(&bytes);
+            }
+            true
+        }
+        PtyScrollRoute::ArrowKeys => {
+            let key: &[u8] = match (app_cursor, button) {
+                (true, 64) => b"\x1bOA",
+                (true, _) => b"\x1bOB",
+                (false, 64) => b"\x1b[A",
+                (false, _) => b"\x1b[B",
+            };
+            let bytes = key.repeat(3);
+            if let Some(ref mut session) = tab.pty_session {
+                let _ = session.write(&bytes);
+            }
+            true
+        }
+        PtyScrollRoute::LocalScrollback => false,
     }
-    true
 }
 
 /// Handle mouse events when code review is locked (full-screen mode).
@@ -683,4 +728,57 @@ fn extract_text_from_lines(
         }
     }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{PtyScrollRoute, pty_scroll_route};
+
+    #[test]
+    fn alt_screen_with_mouse_tracking_forwards_mouse_reports() {
+        assert_eq!(
+            pty_scroll_route(true, true, false, 10, false),
+            PtyScrollRoute::MouseReport
+        );
+    }
+
+    #[test]
+    fn alt_screen_without_mouse_tracking_uses_arrow_keys() {
+        assert_eq!(
+            pty_scroll_route(true, false, false, 10, false),
+            PtyScrollRoute::ArrowKeys
+        );
+    }
+
+    #[test]
+    fn primary_screen_mouse_tracking_keeps_local_scrollback() {
+        assert_eq!(
+            pty_scroll_route(false, true, false, 10, false),
+            PtyScrollRoute::LocalScrollback
+        );
+    }
+
+    #[test]
+    fn codex_like_primary_screen_uses_arrow_keys_even_with_local_scrollback() {
+        assert_eq!(
+            pty_scroll_route(false, false, false, 10, true),
+            PtyScrollRoute::ArrowKeys
+        );
+    }
+
+    #[test]
+    fn primary_screen_without_local_scrollback_uses_arrow_keys_for_non_shell_apps() {
+        assert_eq!(
+            pty_scroll_route(false, false, false, 0, false),
+            PtyScrollRoute::ArrowKeys
+        );
+    }
+
+    #[test]
+    fn shell_primary_screen_keeps_local_scrollback_even_when_empty() {
+        assert_eq!(
+            pty_scroll_route(false, false, true, 0, false),
+            PtyScrollRoute::LocalScrollback
+        );
+    }
 }
