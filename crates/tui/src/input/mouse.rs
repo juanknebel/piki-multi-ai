@@ -52,50 +52,26 @@ fn encode_mouse_scroll(
     }
 }
 
-fn provider_uses_keyboard_scroll(
-    provider: &piki_core::AIProvider,
-    provider_manager: &piki_core::providers::ProviderManager,
-) -> bool {
-    let piki_core::AIProvider::Custom(name) = provider else {
-        return false;
-    };
-    provider_manager
-        .get(name)
-        .is_some_and(|config| piki_core::agent_state_detect::manifest_for_command(&config.command).is_some())
-}
-
-fn pty_scroll_route(
-    alt_screen: bool,
-    mouse_tracking: bool,
-    is_shell: bool,
-    local_scrollback_max: usize,
-    keyboard_scroll_provider: bool,
-) -> PtyScrollRoute {
+fn pty_scroll_route(alt_screen: bool, mouse_tracking: bool) -> PtyScrollRoute {
     if alt_screen && mouse_tracking {
         return PtyScrollRoute::MouseReport;
     }
 
-    if mouse_tracking {
-        // Mouse tracking enabled outside alt screen: leave scroll to piki's
-        // local scrollback fallback, which still applies to the primary grid.
-        return PtyScrollRoute::LocalScrollback;
+    if alt_screen {
+        // Alt-screen app that doesn't track the mouse (a pager, `git diff`):
+        // vt100 gives the alternate grid zero scrollback capacity, so local
+        // scrollback is a structural dead end. Mirror what xterm does and
+        // translate the wheel into arrow keys.
+        return PtyScrollRoute::ArrowKeys;
     }
 
-    // No mouse tracking. piki's local vt100 scrollback is the normal
-    // fallback (handled by the caller), but it's a structural dead end
-    // whenever there's nothing in it: always on the alternate-screen grid
-    // (vt100 gives it zero scrollback capacity), and on the primary grid
-    // too for apps that redraw their whole viewport via cursor addressing
-    // instead of emitting real scrolling newlines. Codex is the known primary
-    // screen case: it exposes keyboard scroll actions but does not announce
-    // alternate screen or mouse tracking, and its primary-grid redraws can
-    // still leave vt100 with unrelated local scrollback. Skip plain shells so
-    // a wheel tick cannot recall shell history.
-    if alt_screen || keyboard_scroll_provider || (!is_shell && local_scrollback_max == 0) {
-        PtyScrollRoute::ArrowKeys
-    } else {
-        PtyScrollRoute::LocalScrollback
-    }
+    // Primary screen: piki's local vt100 scrollback is authoritative. The
+    // vendored vt100 patch (vendor/vt100) captures lines that inline TUIs
+    // like Codex publish through a top-anchored scroll region, so the
+    // transcript is really in there. Never fall back to arrow keys here —
+    // on the primary screen they recall history (shell history, Codex's
+    // composer history) instead of scrolling.
+    PtyScrollRoute::LocalScrollback
 }
 
 /// Try to forward a scroll event to the PTY instead of using piki's local
@@ -107,12 +83,6 @@ fn try_forward_scroll_to_pty(app: &mut App, col: u16, row: u16, button: u8) -> b
         Some(r) => r,
         None => return false,
     };
-
-    let keyboard_scroll_provider = app
-        .workspaces
-        .get(app.active_workspace)
-        .and_then(|ws| ws.current_tab())
-        .is_some_and(|tab| provider_uses_keyboard_scroll(&tab.provider, &app.provider_manager));
 
     let ws = match app.workspaces.get_mut(app.active_workspace) {
         Some(ws) => ws,
@@ -136,15 +106,8 @@ fn try_forward_scroll_to_pty(app: &mut App, col: u16, row: u16, button: u8) -> b
     drop(guard);
 
     let mouse_tracking = !matches!(mouse_mode, vt100::MouseProtocolMode::None);
-    let is_shell = matches!(tab.provider, piki_core::AIProvider::Shell);
 
-    match pty_scroll_route(
-        alt,
-        mouse_tracking,
-        is_shell,
-        scrollback_max(&parser),
-        keyboard_scroll_provider,
-    ) {
+    match pty_scroll_route(alt, mouse_tracking) {
         PtyScrollRoute::MouseReport => {
             // Translate from outer terminal coords to 1-based PTY coords.
             let pty_col = col.saturating_sub(inner.x) + 1;
@@ -736,49 +699,24 @@ mod tests {
 
     #[test]
     fn alt_screen_with_mouse_tracking_forwards_mouse_reports() {
-        assert_eq!(
-            pty_scroll_route(true, true, false, 10, false),
-            PtyScrollRoute::MouseReport
-        );
+        assert_eq!(pty_scroll_route(true, true), PtyScrollRoute::MouseReport);
     }
 
     #[test]
     fn alt_screen_without_mouse_tracking_uses_arrow_keys() {
-        assert_eq!(
-            pty_scroll_route(true, false, false, 10, false),
-            PtyScrollRoute::ArrowKeys
-        );
+        assert_eq!(pty_scroll_route(true, false), PtyScrollRoute::ArrowKeys);
     }
 
     #[test]
     fn primary_screen_mouse_tracking_keeps_local_scrollback() {
-        assert_eq!(
-            pty_scroll_route(false, true, false, 10, false),
-            PtyScrollRoute::LocalScrollback
-        );
+        assert_eq!(pty_scroll_route(false, true), PtyScrollRoute::LocalScrollback);
     }
 
     #[test]
-    fn codex_like_primary_screen_uses_arrow_keys_even_with_local_scrollback() {
-        assert_eq!(
-            pty_scroll_route(false, false, false, 10, true),
-            PtyScrollRoute::ArrowKeys
-        );
-    }
-
-    #[test]
-    fn primary_screen_without_local_scrollback_uses_arrow_keys_for_non_shell_apps() {
-        assert_eq!(
-            pty_scroll_route(false, false, false, 0, false),
-            PtyScrollRoute::ArrowKeys
-        );
-    }
-
-    #[test]
-    fn shell_primary_screen_keeps_local_scrollback_even_when_empty() {
-        assert_eq!(
-            pty_scroll_route(false, false, true, 0, false),
-            PtyScrollRoute::LocalScrollback
-        );
+    fn primary_screen_without_mouse_tracking_keeps_local_scrollback() {
+        // Codex and shells alike: the patched vt100 captures inline-TUI
+        // transcripts into local scrollback, and arrow keys on the primary
+        // screen would recall history instead of scrolling.
+        assert_eq!(pty_scroll_route(false, false), PtyScrollRoute::LocalScrollback);
     }
 }

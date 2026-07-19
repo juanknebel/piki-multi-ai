@@ -4,3 +4,11 @@ resolver = "3"
 
 [workspace.package]
 version = "2.3.0-nightly"
+
+# Vendored with a one-line scrollback patch: lines scrolled off a scroll
+# region anchored at row 0 are pushed into scrollback, matching real
+# terminals. Codex-style inline TUIs (ratatui `insert_before`) publish their
+# transcript that way; without the patch vt100 discards it and mouse-wheel
+# scrollback over those tabs has nothing to show. See vendor/vt100/src/grid.rs.
+[patch.crates-io]
+vt100 = { path = "vendor/vt100" }
