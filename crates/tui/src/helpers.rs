@@ -52,6 +52,7 @@ pub(crate) fn missing_bridge_prereqs(
 
 /// Spawn a new tab with the given provider in a workspace.
 /// For Custom providers, `provider_manager` is used to resolve the command and prompt args.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn spawn_tab(
     ws: &mut app::Workspace,
     provider: &AIProvider,
@@ -60,6 +61,7 @@ pub(crate) async fn spawn_tab(
     prompt: Option<&str>,
     provider_manager: Option<&piki_core::providers::ProviderManager>,
     paths: &piki_core::paths::DataPaths,
+    output_signal: piki_core::pty::PtyOutputSignal,
 ) -> usize {
     // Resolve the provider's `providers.toml` entry up front so its
     // per-provider idle knobs drive the tab's IdleWatcher (re-used below for
@@ -187,6 +189,7 @@ pub(crate) async fn spawn_tab(
         &extra_args,
         integration_on,
         cli_agent_sock,
+        Some(output_signal),
     )
     .await
     {

@@ -93,7 +93,7 @@ pub(super) async fn handle(
                 // Spawn tab in current workspace
                 let ws = &mut app.workspaces[source_ws];
                 let idx =
-                    spawn_tab(ws, &provider, app.pty_rows, app.pty_cols, Some(&task_prompt), Some(&app.provider_manager), &app.paths).await;
+                    spawn_tab(ws, &provider, app.pty_rows, app.pty_cols, Some(&task_prompt), Some(&app.provider_manager), &app.paths, app.pty_output.clone()).await;
                 ws.active_tab = idx;
 
                 app.set_toast(
@@ -195,6 +195,7 @@ pub(super) async fn handle(
                             Some(&task_prompt),
                             Some(&app.provider_manager),
                             &app.paths,
+                            app.pty_output.clone(),
                         )
                         .await;
                         ws.active_tab = idx;

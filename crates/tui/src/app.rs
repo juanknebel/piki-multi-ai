@@ -248,6 +248,10 @@ pub struct Tab {
     pub term_scroll: usize,
     /// Last byte count from PTY for auto-scroll detection
     pub last_bytes_processed: u64,
+    /// PTY byte count as of the last passive agent-state scrape — the
+    /// event loop skips the (parser-lock + full-screen-sample) detection
+    /// for this tab when no new output has arrived since
+    pub last_detect_bytes: u64,
     /// Idle watcher for provider tabs. `Some` only for `AIProvider::Custom(_)`
     /// tabs (built-in tabs are interactive and never "idle"). The TUI ticks
     /// this every 50 ms and surfaces a notification + sidebar badge when it
@@ -404,6 +408,7 @@ impl Workspace {
             closable,
             term_scroll: 0,
             last_bytes_processed: 0,
+            last_detect_bytes: 0,
             idle_watcher,
             markdown_content: None,
             markdown_label: None,
@@ -447,6 +452,7 @@ impl Workspace {
             closable: true,
             term_scroll: 0,
             last_bytes_processed: 0,
+            last_detect_bytes: 0,
             idle_watcher: None,
             markdown_content: Some(content),
             markdown_label: Some(label),
@@ -807,6 +813,16 @@ pub struct App {
     /// Tick counter driving the running-agent spinner in the Agents pane
     /// (advanced by the event loop only while some agent is running)
     pub spinner_frame: usize,
+    /// Last time the spinner advanced (and forced a redraw) — throttles the
+    /// spinner to `SPINNER_INTERVAL` instead of the raw tick rate
+    pub last_spinner_at: Instant,
+    /// Last time passive agent-state detection ran — throttles the
+    /// screen-scrape sweep to `PASSIVE_DETECT_INTERVAL`
+    pub last_passive_detect: Instant,
+    /// App-wide coalesced "PTY produced output" signal. Cloned into every
+    /// spawned session; the event loop sleeps on it instead of polling byte
+    /// counters at the tick rate.
+    pub pty_output: piki_core::pty::PtyOutputSignal,
     pub config: crate::config::Config,
     /// Channel for receiving async git refresh results
     pub refresh_tx: tokio::sync::mpsc::UnboundedSender<RefreshResult>,
@@ -966,6 +982,9 @@ impl App {
             code_review_body_rect: Rect::default(),
             needs_redraw: true,
             spinner_frame: 0,
+            last_spinner_at: Instant::now(),
+            last_passive_detect: Instant::now(),
+            pty_output: piki_core::pty::PtyOutputSignal::new(),
             config,
             refresh_tx,
             refresh_rx,

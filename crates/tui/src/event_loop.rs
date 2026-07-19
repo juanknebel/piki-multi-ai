@@ -14,9 +14,25 @@ use piki_core::notifications;
 use piki_core::shell_integration::ShellEvent;
 use piki_core::workspace::FileWatcher;
 
-const TICK_RATE: Duration = Duration::from_millis(50);
+/// Fallback cadence for periodic work (liveness checks, idle detection, OSC
+/// drains, git-refresh scheduling). PTY output no longer rides this: reader
+/// threads wake the loop directly through `App::pty_output`, so the tick can
+/// be slow — it only bounds how stale the periodic bookkeeping may get.
+const TICK_RATE: Duration = Duration::from_millis(250);
 const DEBOUNCE: Duration = Duration::from_millis(500);
 const PERIODIC_REFRESH: Duration = Duration::from_secs(3);
+/// Minimum interval between frames (~30 fps cap). Output-driven wakeups can
+/// arrive per PTY read; without this cap a fast-streaming agent would have
+/// the loop rebuilding the full UI once per chunk.
+const MIN_RENDER_INTERVAL: Duration = Duration::from_millis(33);
+/// Cadence of the Agents-pane activity spinner. Each advance forces a full
+/// UI redraw, so this — not `TICK_RATE` — bounds the steady-state frame rate
+/// while any agent is running.
+const SPINNER_INTERVAL: Duration = Duration::from_millis(150);
+/// Cadence of passive (screen-scrape) agent-state detection. Status changes
+/// on a hookless agent are human-scale events; scraping faster than this just
+/// burns locks against the PTY reader thread.
+const PASSIVE_DETECT_INTERVAL: Duration = Duration::from_millis(300);
 
 fn process_refresh_result(app: &mut App, result: app::RefreshResult) {
     if let Some(ws) = app.workspaces.get_mut(result.workspace_idx) {
@@ -206,20 +222,42 @@ pub(crate) async fn run(
     let mut reader = EventStream::new();
     let mut tick_interval = tokio::time::interval(TICK_RATE);
     tick_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    // Render throttle state: when a redraw is due but the last frame is less
+    // than MIN_RENDER_INTERVAL old, `render_deadline` arms a select branch
+    // that wakes the loop exactly when the frame becomes eligible.
+    let mut last_draw_at: Option<Instant> = None;
+    let mut render_deadline: Option<Instant> = None;
+    let pty_output = app.pty_output.clone();
 
     loop {
         // Phase 0: Keep the Agents highlight on the tab the user is standing on
         app.sync_agent_selection();
 
-        // Phase 1: Render only when state has changed
+        // Phase 1: Render only when state has changed, capped at ~30 fps
         if app.needs_redraw {
-            terminal.draw(|frame| {
-                ui::layout::render(frame, &mut app);
-            })?;
-            app.needs_redraw = false;
+            let now = Instant::now();
+            let eligible = last_draw_at
+                .is_none_or(|t| now.duration_since(t) >= MIN_RENDER_INTERVAL);
+            if eligible {
+                terminal.draw(|frame| {
+                    ui::layout::render(frame, &mut app);
+                })?;
+                app.needs_redraw = false;
+                last_draw_at = Some(Instant::now());
+                render_deadline = None;
+            } else if render_deadline.is_none() {
+                // Safe: `eligible` is false only when `last_draw_at` is Some.
+                render_deadline = Some(last_draw_at.unwrap() + MIN_RENDER_INTERVAL);
+            }
+        } else {
+            render_deadline = None;
         }
+        // Evaluated unconditionally (select! builds every future even for
+        // disabled branches); the far-future fallback is never polled.
+        let render_wakeup =
+            render_deadline.unwrap_or_else(|| Instant::now() + Duration::from_secs(3600));
 
-        // Phase 2: Wait for terminal event, refresh result, or tick
+        // Phase 2: Wait for terminal event, PTY output, refresh result, or tick
         let mut is_tick = false;
 
         tokio::select! {
@@ -267,6 +305,15 @@ pub(crate) async fn run(
                     Some(Err(_)) => {}
                     None => break,
                 }
+            }
+
+            // Coalesced "some PTY produced output" wakeup from the reader
+            // threads. `take()` re-arms the signal; only the active tab can
+            // need a redraw from output, and its byte probe is one atomic
+            // load — background tabs cost nothing here.
+            _ = pty_output.notified() => {
+                pty_output.take();
+                check_active_tab_output(&mut app);
             }
 
             result = app.refresh_rx.recv() => {
@@ -431,6 +478,10 @@ pub(crate) async fn run(
                 }
             }
 
+            // A frame became eligible after being deferred by the ~30 fps
+            // cap — wake with no other work so Phase 1 can draw it.
+            _ = tokio::time::sleep_until(render_wakeup.into()), if render_deadline.is_some() => {}
+
             _ = tick_interval.tick() => {
                 is_tick = true;
             }
@@ -439,330 +490,10 @@ pub(crate) async fn run(
         // Phase 3: Sync work after every wakeup
         let now = Instant::now();
 
-        // Poll file watcher events — mark workspaces as dirty when files change
-        for ws in &mut app.workspaces {
-            if let Some(ref mut watcher) = ws.watcher
-                && watcher.try_recv().is_some()
-            {
-                watcher.drain();
-                ws.dirty = true;
-            }
-        }
-
-        // Active workspace — check PTY bytes + is_alive for all tabs
-        {
-            let idx = app.active_workspace;
-            if let Some(ws) = app.workspaces.get_mut(idx) {
-                // Check bytes on active tab for redraw
-                if let Some(tab) = ws.current_tab_mut()
-                    && let Some(ref mut pty) = tab.pty_session
-                {
-                    let current_bytes = pty.bytes_processed();
-                    if current_bytes != tab.last_bytes_processed {
-                        tab.last_bytes_processed = current_bytes;
-                        app.needs_redraw = true;
-                    }
-                }
-                // Check is_alive for all tabs, recompute workspace status
-                let mut any_alive = false;
-                let mut any_tab = false;
-                for tab in &mut ws.tabs {
-                    if let Some(ref mut pty) = tab.pty_session {
-                        any_tab = true;
-                        if pty.is_alive() {
-                            any_alive = true;
-                        }
-                    }
-                }
-                let new_status = if any_alive {
-                    app::WorkspaceStatus::Busy
-                } else if any_tab {
-                    app::WorkspaceStatus::Done
-                } else {
-                    app::WorkspaceStatus::Idle
-                };
-                if ws.status != new_status {
-                    ws.status = new_status;
-                    app.needs_redraw = true;
-                }
-            }
-        }
-
-        // PTY idle detection across ALL workspaces (every tick).
-        //
-        // Each provider tab carries its own `IdleWatcher` (`tab.idle_watcher`,
-        // `Some` only for `AIProvider::Custom(_)`). The watcher tracks the
-        // PTY byte counter and emits a one-shot signal when bytes have been
-        // still for the configured threshold (default 3s). The OS
-        // notification fires regardless of whether the workspace is active.
-        {
-            let active_ws = app.active_workspace;
-            let mut idle_events: Vec<IdleEvent> = Vec::new();
-            for (ws_idx, ws) in app.workspaces.iter_mut().enumerate() {
-                let active_tab = ws.active_tab;
-                for (tab_idx, tab) in ws.tabs.iter_mut().enumerate() {
-                    let Some(ref pty) = tab.pty_session else {
-                        continue;
-                    };
-                    let Some(ref mut watcher) = tab.idle_watcher else {
-                        continue;
-                    };
-                    if !pty.peek_alive() {
-                        continue;
-                    }
-                    // The structured cli-agent channel proved itself live for
-                    // this tab (≥1 OSC 777 event parsed) → it owns attention;
-                    // skip the byte-silence heuristic so it can't double-fire.
-                    // If hooks are missing / version-skewed, no events arrive,
-                    // `cli_agent` stays `None`, and the watcher remains the
-                    // graceful fallback.
-                    if pty
-                        .shell()
-                        .is_some_and(|s| s.lock().state.cli_agent.is_some())
-                    {
-                        continue;
-                    }
-                    if let Some(sig) = watcher.poll(pty.bytes_processed()) {
-                        idle_events.push(IdleEvent {
-                            workspace_idx: ws_idx,
-                            workspace_name: ws.info.name.clone(),
-                            provider_label: tab.provider.label().to_string(),
-                            origin: format!("ws-{ws_idx}#tab-{}", tab.id),
-                            silent_for: sig.silent_for,
-                            from_active_view: ws_idx == active_ws && tab_idx == active_tab,
-                        });
-                    }
-                }
-            }
-            for event in idle_events {
-                if let Some(ws) = app.workspaces.get_mut(event.workspace_idx) {
-                    ws.has_idle_notification = true;
-                }
-                app.needs_redraw = true;
-                let icon = app
-                    .provider_manager
-                    .get(&event.provider_label)
-                    .and_then(|c| c.icon.clone());
-                notifications::notify_agent_idle(
-                    &event.origin,
-                    &event.workspace_name,
-                    &event.provider_label,
-                    event.silent_for,
-                    icon.as_deref(),
-                    event.from_active_view,
-                );
-            }
-        }
-
-        // Passive agent-state detection (every tick).
-        //
-        // Providers with no hook bridge (currently just Codex) get no
-        // `cli_agent_sock`, but `spawn_tab` still turns shell integration on
-        // for them when `agent_state_detect::manifest_for_command` matches,
-        // so `OscParser` captures their OSC window-title. Combined with a
-        // screen-text sample, that's enough to classify Working/Blocked/Idle
-        // without a hook — write the result into the same `cli_agent` field
-        // the hook bridges use so the Agents pane needs no extra rendering.
-        {
-            for ws in app.workspaces.iter_mut() {
-                for tab in ws.tabs.iter_mut() {
-                    let Some(ref pty) = tab.pty_session else {
-                        continue;
-                    };
-                    let piki_core::AIProvider::Custom(name) = &tab.provider else {
-                        continue;
-                    };
-                    let Some(cmd) = app.provider_manager.get(name).map(|c| c.command.clone())
-                    else {
-                        continue;
-                    };
-                    let Some(manifest) = piki_core::agent_state_detect::manifest_for_command(&cmd)
-                    else {
-                        continue;
-                    };
-                    let Some(shell) = pty.shell() else {
-                        continue;
-                    };
-                    let title = shell.lock().state.window_title.clone();
-
-                    let screen_tail = if let Some(ref parser) = tab.pty_parser {
-                        let guard = parser.lock();
-                        let (rows, cols) = guard.screen().size();
-                        let tail: Vec<String> = guard
-                            .screen()
-                            .rows(0, cols)
-                            .take(rows as usize)
-                            .filter(|r| !r.trim().is_empty())
-                            .collect();
-                        drop(guard);
-                        tail.into_iter().rev().take(6).collect::<Vec<_>>().join("\n")
-                    } else {
-                        String::new()
-                    };
-
-                    let Some(new_status) =
-                        piki_core::agent_state_detect::detect(manifest, title.as_deref(), &screen_tail)
-                    else {
-                        continue;
-                    };
-
-                    let mut guard = shell.lock();
-                    let agent = guard
-                        .state
-                        .cli_agent
-                        .get_or_insert_with(piki_core::cli_agent::CliAgentState::new);
-                    if agent.status != new_status {
-                        let was_running =
-                            agent.status == piki_core::cli_agent::CliAgentStatus::Running;
-                        agent.status = new_status;
-                        if was_running
-                            && matches!(
-                                new_status,
-                                piki_core::cli_agent::CliAgentStatus::WaitingPermission
-                                    | piki_core::cli_agent::CliAgentStatus::Idle
-                                    | piki_core::cli_agent::CliAgentStatus::Done
-                            )
-                        {
-                            agent.last_attention_at = Some(std::time::Instant::now());
-                        }
-                        app.needs_redraw = true;
-                    }
-                }
-            }
-        }
-
-        // Shell + cli-agent OSC drain (every tick).
-        //
-        // Tabs spawned with OSC integration accumulate `ShellEvent`s on
-        // `PtySession.shell().pending_events`. Shell `command-end` markers
-        // become a notification with the workspace name + exit code.
-        // Structured Claude `CliAgent` events that warrant attention
-        // (permission / idle / done) set the workspace's idle badge and
-        // fire a precise notification — this replaces the byte-silence
-        // `IdleWatcher` for Claude-with-hooks tabs (whose watcher is now
-        // `None`). Other lifecycle events are informational and dropped.
-        {
-            let active_ws = app.active_workspace;
-            let mut command_end_events: Vec<CommandEndNotice> = Vec::new();
-            let mut cli_agent_events: Vec<CliAgentNotice> = Vec::new();
-            for (ws_idx, ws) in app.workspaces.iter_mut().enumerate() {
-                let ws_name = ws.info.name.clone();
-                let active_tab = ws.active_tab;
-                for (tab_idx, tab) in ws.tabs.iter_mut().enumerate() {
-                    let Some(ref pty) = tab.pty_session else {
-                        continue;
-                    };
-                    let Some(shell) = pty.shell() else { continue };
-                    let from_active_view = ws_idx == active_ws && tab_idx == active_tab;
-                    let drained = shell.lock().drain_events();
-                    for ev in drained {
-                        match ev {
-                            ShellEvent::CommandEnd { exit_code, command } => {
-                                command_end_events.push(CommandEndNotice {
-                                    origin: format!("ws-{ws_idx}#tab-{}", tab.id),
-                                    workspace_name: ws_name.clone(),
-                                    exit_code,
-                                    command,
-                                    from_active_view,
-                                });
-                            }
-                            ShellEvent::CliAgent(a) => {
-                                if let Some((kind, summary)) = a.attention() {
-                                    cli_agent_events.push(CliAgentNotice {
-                                        workspace_idx: ws_idx,
-                                        workspace_name: ws_name.clone(),
-                                        provider_label: tab.provider.label().to_string(),
-                                        origin: format!("ws-{ws_idx}#tab-{}", tab.id),
-                                        kind,
-                                        summary: summary.map(|s| s.to_string()),
-                                        from_active_view,
-                                    });
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-            }
-            for n in command_end_events {
-                notifications::notify_command_end(
-                    &n.origin,
-                    &n.workspace_name,
-                    n.exit_code,
-                    n.command.as_deref(),
-                    n.from_active_view,
-                );
-            }
-            for n in cli_agent_events {
-                if let Some(ws) = app.workspaces.get_mut(n.workspace_idx) {
-                    ws.has_idle_notification = true;
-                }
-                app.needs_redraw = true;
-                let icon = app
-                    .provider_manager
-                    .get(&n.provider_label)
-                    .and_then(|c| c.icon.clone());
-                notifications::notify_cli_agent(
-                    &n.origin,
-                    &n.workspace_name,
-                    n.kind,
-                    n.summary.as_deref(),
-                    icon.as_deref(),
-                    n.from_active_view,
-                );
-            }
-        }
-
-        // Poll API Explorer pending responses
-        if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-            && let Some(tab) = ws.current_tab_mut()
-            && let Some(ref mut api) = tab.api_state
-            && api.loading
-        {
-            let mut slot = api.pending_responses.lock();
-            if let Some(responses) = slot.take() {
-                api.responses = responses;
-                api.loading = false;
-                api.response_scroll = 0;
-                app.needs_redraw = true;
-            }
-        }
-
-        // Spawn background git refresh ONLY for active workspace
-        {
-            let idx = app.active_workspace;
-            if let Some(ws) = app.workspaces.get(idx) {
-                let since_last = ws.last_refresh.map(|t| now.duration_since(t));
-                let should_refresh = if ws.dirty {
-                    since_last.map(|d| d >= DEBOUNCE).unwrap_or(true)
-                } else {
-                    since_last.map(|d| d >= PERIODIC_REFRESH).unwrap_or(true)
-                };
-                if should_refresh && !app.refresh_pending {
-                    let path = ws.info.path.clone();
-                    // See the startup loop above: branch is only inferred
-                    // once a tool has actually run in this workspace.
-                    let has_tab = !ws.tabs.is_empty();
-                    let tx = app.refresh_tx.clone();
-                    app.refresh_pending = true;
-                    tokio::spawn(async move {
-                        // Non-git dirs (Project workspaces) yield an empty list
-                        let files = app::get_changed_files(&path).await.unwrap_or_default();
-                        let ab = app::get_ahead_behind(&path).await;
-                        let branch = if has_tab {
-                            app::get_current_branch(&path).await
-                        } else {
-                            None
-                        };
-                        let _ = tx.send(app::RefreshResult {
-                            workspace_idx: idx,
-                            changed_files: files,
-                            ahead_behind: ab,
-                            branch,
-                        });
-                    });
-                }
-            }
+        // O(workspaces × tabs) polling with per-tab mutex locks — tick-gated
+        // so keystrokes and stream events never pay the full per-tab sweep.
+        if is_tick {
+            poll_workspaces(&mut app, now);
         }
 
         // Tick nucleo fuzzy matcher — processes new items and pattern changes
@@ -801,15 +532,23 @@ pub(crate) async fn run(
         // Phase 4: Tick-gated periodic work
         if is_tick {
             // Advance the Agents-pane activity spinner while any agent runs.
-            let any_running = app.agent_rows().iter().any(|&(wi, ti)| {
-                matches!(
-                    app.workspaces[wi].tabs[ti].cli_agent_snapshot(),
-                    Some((piki_core::cli_agent::CliAgentStatus::Running, _, _))
-                )
-            });
-            if any_running {
-                app.spinner_frame = app.spinner_frame.wrapping_add(1);
-                app.needs_redraw = true;
+            // Throttled to its own cadence (not every tick): the redraw this
+            // forces rebuilds the whole UI, so at the raw tick rate a single
+            // running agent anywhere kept the app rendering at 20 fps
+            // indefinitely. The check itself also allocates `agent_rows()`
+            // and takes a mutex per tab, so it rides the same throttle.
+            if now.duration_since(app.last_spinner_at) >= SPINNER_INTERVAL {
+                app.last_spinner_at = now;
+                let any_running = app.agent_rows().iter().any(|&(wi, ti)| {
+                    matches!(
+                        app.workspaces[wi].tabs[ti].cli_agent_snapshot(),
+                        Some((piki_core::cli_agent::CliAgentStatus::Running, _, _))
+                    )
+                });
+                if any_running {
+                    app.spinner_frame = app.spinner_frame.wrapping_add(1);
+                    app.needs_redraw = true;
+                }
             }
 
             // Looking at a tab acknowledges its "unseen news" marker, so the
@@ -867,6 +606,363 @@ pub(crate) async fn run(
     }
 
     Ok(())
+}
+
+/// Redraw check for the active tab's PTY output: one atomic load comparing
+/// the byte counter against the last render. Called from the output-signal
+/// wakeup (immediate) and from [`poll_workspaces`] (tick fallback).
+fn check_active_tab_output(app: &mut App) {
+    let idx = app.active_workspace;
+    if let Some(ws) = app.workspaces.get_mut(idx)
+        && let Some(tab) = ws.current_tab_mut()
+        && let Some(ref pty) = tab.pty_session
+    {
+        let current_bytes = pty.bytes_processed();
+        if current_bytes != tab.last_bytes_processed {
+            tab.last_bytes_processed = current_bytes;
+            app.needs_redraw = true;
+        }
+    }
+}
+
+/// Per-tab polling across every workspace: file-watcher drain, PTY byte /
+/// liveness checks, idle detection, passive agent-state detection, shell +
+/// cli-agent OSC drain, API Explorer polling and git-refresh scheduling.
+///
+/// Everything here is O(workspaces × tabs) and takes per-tab mutex locks, so
+/// the event loop calls it only on the tick — input and stream wakeups must
+/// not pay this sweep on every keystroke.
+fn poll_workspaces(app: &mut App, now: Instant) {
+    // Poll file watcher events — mark workspaces as dirty when files change
+    for ws in &mut app.workspaces {
+        if let Some(ref mut watcher) = ws.watcher
+            && watcher.try_recv().is_some()
+        {
+            watcher.drain();
+            ws.dirty = true;
+        }
+    }
+
+    // Active workspace — check PTY bytes + is_alive for all tabs
+    check_active_tab_output(app);
+    {
+        let idx = app.active_workspace;
+        if let Some(ws) = app.workspaces.get_mut(idx) {
+            // Check is_alive for all tabs, recompute workspace status
+            let mut any_alive = false;
+            let mut any_tab = false;
+            for tab in &mut ws.tabs {
+                if let Some(ref mut pty) = tab.pty_session {
+                    any_tab = true;
+                    if pty.is_alive() {
+                        any_alive = true;
+                    }
+                }
+            }
+            let new_status = if any_alive {
+                app::WorkspaceStatus::Busy
+            } else if any_tab {
+                app::WorkspaceStatus::Done
+            } else {
+                app::WorkspaceStatus::Idle
+            };
+            if ws.status != new_status {
+                ws.status = new_status;
+                app.needs_redraw = true;
+            }
+        }
+    }
+
+    // PTY idle detection across ALL workspaces (every tick).
+    //
+    // Each provider tab carries its own `IdleWatcher` (`tab.idle_watcher`,
+    // `Some` only for `AIProvider::Custom(_)`). The watcher tracks the
+    // PTY byte counter and emits a one-shot signal when bytes have been
+    // still for the configured threshold (default 3s). The OS
+    // notification fires regardless of whether the workspace is active.
+    {
+        let active_ws = app.active_workspace;
+        let mut idle_events: Vec<IdleEvent> = Vec::new();
+        for (ws_idx, ws) in app.workspaces.iter_mut().enumerate() {
+            let active_tab = ws.active_tab;
+            for (tab_idx, tab) in ws.tabs.iter_mut().enumerate() {
+                let Some(ref pty) = tab.pty_session else {
+                    continue;
+                };
+                let Some(ref mut watcher) = tab.idle_watcher else {
+                    continue;
+                };
+                if !pty.peek_alive() {
+                    continue;
+                }
+                // The structured cli-agent channel proved itself live for
+                // this tab (≥1 OSC 777 event parsed) → it owns attention;
+                // skip the byte-silence heuristic so it can't double-fire.
+                // If hooks are missing / version-skewed, no events arrive,
+                // `cli_agent` stays `None`, and the watcher remains the
+                // graceful fallback.
+                if pty
+                    .shell()
+                    .is_some_and(|s| s.lock().state.cli_agent.is_some())
+                {
+                    continue;
+                }
+                if let Some(sig) = watcher.poll(pty.bytes_processed()) {
+                    idle_events.push(IdleEvent {
+                        workspace_idx: ws_idx,
+                        workspace_name: ws.info.name.clone(),
+                        provider_label: tab.provider.label().to_string(),
+                        origin: format!("ws-{ws_idx}#tab-{}", tab.id),
+                        silent_for: sig.silent_for,
+                        from_active_view: ws_idx == active_ws && tab_idx == active_tab,
+                    });
+                }
+            }
+        }
+        for event in idle_events {
+            if let Some(ws) = app.workspaces.get_mut(event.workspace_idx) {
+                ws.has_idle_notification = true;
+            }
+            app.needs_redraw = true;
+            let icon = app
+                .provider_manager
+                .get(&event.provider_label)
+                .and_then(|c| c.icon.clone());
+            notifications::notify_agent_idle(
+                &event.origin,
+                &event.workspace_name,
+                &event.provider_label,
+                event.silent_for,
+                icon.as_deref(),
+                event.from_active_view,
+            );
+        }
+    }
+
+    // Passive agent-state detection.
+    //
+    // Providers with no hook bridge (currently just Codex) get no
+    // `cli_agent_sock`, but `spawn_tab` still turns shell integration on
+    // for them when `agent_state_detect::manifest_for_command` matches,
+    // so `OscParser` captures their OSC window-title. Combined with a
+    // screen-text sample, that's enough to classify Working/Blocked/Idle
+    // without a hook — write the result into the same `cli_agent` field
+    // the hook bridges use so the Agents pane needs no extra rendering.
+    //
+    // The screen sample locks the same vt100 parser the PTY reader thread
+    // holds while processing output batches, and materializes the whole
+    // screen as strings — so it runs at most every `PASSIVE_DETECT_INTERVAL`,
+    // and per tab only when new output has actually arrived (the byte
+    // counter is a lock-free atomic load).
+    if now.duration_since(app.last_passive_detect) >= PASSIVE_DETECT_INTERVAL {
+        app.last_passive_detect = now;
+        for ws in app.workspaces.iter_mut() {
+            for tab in ws.tabs.iter_mut() {
+                let Some(ref pty) = tab.pty_session else {
+                    continue;
+                };
+                let bytes = pty.bytes_processed();
+                if bytes == tab.last_detect_bytes {
+                    continue;
+                }
+                tab.last_detect_bytes = bytes;
+                let piki_core::AIProvider::Custom(name) = &tab.provider else {
+                    continue;
+                };
+                let Some(cmd) = app.provider_manager.get(name).map(|c| c.command.clone()) else {
+                    continue;
+                };
+                let Some(manifest) = piki_core::agent_state_detect::manifest_for_command(&cmd)
+                else {
+                    continue;
+                };
+                let Some(shell) = pty.shell() else {
+                    continue;
+                };
+                let title = shell.lock().state.window_title.clone();
+
+                let screen_tail = if let Some(ref parser) = tab.pty_parser {
+                    let guard = parser.lock();
+                    let (rows, cols) = guard.screen().size();
+                    let tail: Vec<String> = guard
+                        .screen()
+                        .rows(0, cols)
+                        .take(rows as usize)
+                        .filter(|r| !r.trim().is_empty())
+                        .collect();
+                    drop(guard);
+                    tail.into_iter()
+                        .rev()
+                        .take(6)
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                } else {
+                    String::new()
+                };
+
+                let Some(new_status) =
+                    piki_core::agent_state_detect::detect(manifest, title.as_deref(), &screen_tail)
+                else {
+                    continue;
+                };
+
+                let mut guard = shell.lock();
+                let agent = guard
+                    .state
+                    .cli_agent
+                    .get_or_insert_with(piki_core::cli_agent::CliAgentState::new);
+                if agent.status != new_status {
+                    let was_running = agent.status == piki_core::cli_agent::CliAgentStatus::Running;
+                    agent.status = new_status;
+                    if was_running
+                        && matches!(
+                            new_status,
+                            piki_core::cli_agent::CliAgentStatus::WaitingPermission
+                                | piki_core::cli_agent::CliAgentStatus::Idle
+                                | piki_core::cli_agent::CliAgentStatus::Done
+                        )
+                    {
+                        agent.last_attention_at = Some(std::time::Instant::now());
+                    }
+                    app.needs_redraw = true;
+                }
+            }
+        }
+    }
+
+    // Shell + cli-agent OSC drain (every tick).
+    //
+    // Tabs spawned with OSC integration accumulate `ShellEvent`s on
+    // `PtySession.shell().pending_events`. Shell `command-end` markers
+    // become a notification with the workspace name + exit code.
+    // Structured Claude `CliAgent` events that warrant attention
+    // (permission / idle / done) set the workspace's idle badge and
+    // fire a precise notification — this replaces the byte-silence
+    // `IdleWatcher` for Claude-with-hooks tabs (whose watcher is now
+    // `None`). Other lifecycle events are informational and dropped.
+    {
+        let active_ws = app.active_workspace;
+        let mut command_end_events: Vec<CommandEndNotice> = Vec::new();
+        let mut cli_agent_events: Vec<CliAgentNotice> = Vec::new();
+        for (ws_idx, ws) in app.workspaces.iter_mut().enumerate() {
+            let ws_name = ws.info.name.clone();
+            let active_tab = ws.active_tab;
+            for (tab_idx, tab) in ws.tabs.iter_mut().enumerate() {
+                let Some(ref pty) = tab.pty_session else {
+                    continue;
+                };
+                let Some(shell) = pty.shell() else { continue };
+                let from_active_view = ws_idx == active_ws && tab_idx == active_tab;
+                let drained = shell.lock().drain_events();
+                for ev in drained {
+                    match ev {
+                        ShellEvent::CommandEnd { exit_code, command } => {
+                            command_end_events.push(CommandEndNotice {
+                                origin: format!("ws-{ws_idx}#tab-{}", tab.id),
+                                workspace_name: ws_name.clone(),
+                                exit_code,
+                                command,
+                                from_active_view,
+                            });
+                        }
+                        ShellEvent::CliAgent(a) => {
+                            if let Some((kind, summary)) = a.attention() {
+                                cli_agent_events.push(CliAgentNotice {
+                                    workspace_idx: ws_idx,
+                                    workspace_name: ws_name.clone(),
+                                    provider_label: tab.provider.label().to_string(),
+                                    origin: format!("ws-{ws_idx}#tab-{}", tab.id),
+                                    kind,
+                                    summary: summary.map(|s| s.to_string()),
+                                    from_active_view,
+                                });
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        for n in command_end_events {
+            notifications::notify_command_end(
+                &n.origin,
+                &n.workspace_name,
+                n.exit_code,
+                n.command.as_deref(),
+                n.from_active_view,
+            );
+        }
+        for n in cli_agent_events {
+            if let Some(ws) = app.workspaces.get_mut(n.workspace_idx) {
+                ws.has_idle_notification = true;
+            }
+            app.needs_redraw = true;
+            let icon = app
+                .provider_manager
+                .get(&n.provider_label)
+                .and_then(|c| c.icon.clone());
+            notifications::notify_cli_agent(
+                &n.origin,
+                &n.workspace_name,
+                n.kind,
+                n.summary.as_deref(),
+                icon.as_deref(),
+                n.from_active_view,
+            );
+        }
+    }
+
+    // Poll API Explorer pending responses
+    if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+        && let Some(tab) = ws.current_tab_mut()
+        && let Some(ref mut api) = tab.api_state
+        && api.loading
+    {
+        let mut slot = api.pending_responses.lock();
+        if let Some(responses) = slot.take() {
+            api.responses = responses;
+            api.loading = false;
+            api.response_scroll = 0;
+            app.needs_redraw = true;
+        }
+    }
+
+    // Spawn background git refresh ONLY for active workspace
+    {
+        let idx = app.active_workspace;
+        if let Some(ws) = app.workspaces.get(idx) {
+            let since_last = ws.last_refresh.map(|t| now.duration_since(t));
+            let should_refresh = if ws.dirty {
+                since_last.map(|d| d >= DEBOUNCE).unwrap_or(true)
+            } else {
+                since_last.map(|d| d >= PERIODIC_REFRESH).unwrap_or(true)
+            };
+            if should_refresh && !app.refresh_pending {
+                let path = ws.info.path.clone();
+                // See the startup loop above: branch is only inferred
+                // once a tool has actually run in this workspace.
+                let has_tab = !ws.tabs.is_empty();
+                let tx = app.refresh_tx.clone();
+                app.refresh_pending = true;
+                tokio::spawn(async move {
+                    // Non-git dirs (Project workspaces) yield an empty list
+                    let files = app::get_changed_files(&path).await.unwrap_or_default();
+                    let ab = app::get_ahead_behind(&path).await;
+                    let branch = if has_tab {
+                        app::get_current_branch(&path).await
+                    } else {
+                        None
+                    };
+                    let _ = tx.send(app::RefreshResult {
+                        workspace_idx: idx,
+                        changed_files: files,
+                        ahead_behind: ab,
+                        branch,
+                    });
+                });
+            }
+        }
+    }
 }
 
 /// A queued shell `command-end` notification, applied after the

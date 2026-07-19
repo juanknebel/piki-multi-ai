@@ -2,7 +2,7 @@ use parking_lot::Mutex;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 
@@ -21,6 +21,44 @@ impl ShellSession {
     /// Drain accumulated events for forwarding (e.g. as Tauri events).
     pub fn drain_events(&mut self) -> Vec<ShellEvent> {
         std::mem::take(&mut self.pending_events)
+    }
+}
+
+/// Coalesced "some PTY produced output" signal, shared by every session of a
+/// frontend: reader threads call [`raise`](Self::raise) after flushing bytes
+/// into their parser, and only the first raise after a consumer
+/// [`take`](Self::take) actually notifies — so an event loop gets exactly one
+/// wakeup per batch of output no matter how many sessions are streaming.
+#[derive(Clone, Default)]
+pub struct PtyOutputSignal {
+    dirty: Arc<AtomicBool>,
+    notify: Arc<tokio::sync::Notify>,
+}
+
+impl PtyOutputSignal {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Producer side (reader threads): flag new output, waking the consumer
+    /// only on the first raise since its last `take`.
+    pub fn raise(&self) {
+        if !self.dirty.swap(true, Ordering::AcqRel) {
+            self.notify.notify_one();
+        }
+    }
+
+    /// Consumer side: clear the flag (re-arming `raise` to notify again) and
+    /// report whether output had arrived since the last call.
+    pub fn take(&self) -> bool {
+        self.dirty.swap(false, Ordering::AcqRel)
+    }
+
+    /// Resolves on the next [`raise`](Self::raise) after a
+    /// [`take`](Self::take). Cancel-safe: `tokio::sync::Notify` stores the
+    /// permit, so a raise landing between polls is not lost.
+    pub async fn notified(&self) {
+        self.notify.notified().await
     }
 }
 
@@ -58,6 +96,10 @@ impl PtySession {
     /// events to out-of-band; we start a reader that feeds the same
     /// [`ShellSession`] the OSC parser feeds (the in-band OSC 777 path stays as
     /// a fallback).
+    ///
+    /// `output_signal` (usually one shared instance per frontend) is raised by
+    /// the reader thread after each parser flush, so an event loop can sleep
+    /// until output actually arrives instead of polling byte counters.
     #[allow(clippy::too_many_arguments)]
     pub async fn spawn(
         worktree_path: &Path,
@@ -69,6 +111,7 @@ impl PtySession {
         extra_args: &[String],
         enable_shell_integration: bool,
         cli_agent_sock: Option<std::path::PathBuf>,
+        output_signal: Option<PtyOutputSignal>,
     ) -> anyhow::Result<Self> {
         let pty_system = native_pty_system();
 
@@ -141,9 +184,16 @@ impl PtySession {
                         bytes_clone.fetch_add(n as u64, Ordering::Relaxed);
                         // Flush when batch is full or PTY buffer is likely drained
                         if batch.len() >= 65536 || n < buf.len() {
-                            let mut p = parser_clone.lock();
-                            p.process(&batch);
+                            {
+                                let mut p = parser_clone.lock();
+                                p.process(&batch);
+                            }
                             batch.clear();
+                            // Raise after releasing the parser lock so a woken
+                            // renderer never contends with this thread.
+                            if let Some(ref sig) = output_signal {
+                                sig.raise();
+                            }
                         }
                     }
                     Err(_) => break,
@@ -151,8 +201,13 @@ impl PtySession {
             }
             // Flush remaining bytes
             if !batch.is_empty() {
-                let mut p = parser_clone.lock();
-                p.process(&batch);
+                {
+                    let mut p = parser_clone.lock();
+                    p.process(&batch);
+                }
+                if let Some(ref sig) = output_signal {
+                    sig.raise();
+                }
             }
         });
 
