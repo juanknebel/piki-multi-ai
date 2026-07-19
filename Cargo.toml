@@ -3,7 +3,7 @@ members = ["crates/core", "crates/tui", "crates/api-client", "crates/agent", "cr
 resolver = "3"
 
 [workspace.package]
-version = "2.3.0"
+version = "2.4.0-nightly"
 
 # Vendored with a one-line scrollback patch: lines scrolled off a scroll
 # region anchored at row 0 are pushed into scrollback, matching real
