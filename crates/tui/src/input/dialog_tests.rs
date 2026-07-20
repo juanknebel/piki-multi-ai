@@ -315,6 +315,31 @@ fn confirm_delete_no_emits_remove_from_list_and_dismisses() {
 }
 
 #[test]
+fn confirm_delete_no_on_ephemeral_cancels_instead_of_remove_from_list() {
+    // Ephemeral (PR review) workspaces don't offer RemoveFromList's
+    // "detach but keep the checkout on disk" semantics — deleting one must
+    // always delete its checkout, so "No" here is a plain cancel.
+    let mut app = test_app();
+    let mut info = piki_core::WorkspaceInfo::new(
+        "o/r#1".to_string(),
+        String::new(),
+        String::new(),
+        None,
+        std::path::PathBuf::from("/tmp/review"),
+        std::path::PathBuf::from("/tmp/review"),
+    );
+    info.ephemeral = true;
+    app.workspaces.push(crate::app::Workspace::from_info(info));
+    open_confirm_delete(&mut app, 0);
+
+    let action = handle_confirm_delete_input(&mut app, key(KeyCode::Char('n')));
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.workspaces.len(), 1, "the ephemeral workspace must survive a cancel");
+}
+
+#[test]
 fn confirm_delete_esc_dismisses_without_action() {
     let mut app = test_app();
     open_confirm_delete(&mut app, 5);

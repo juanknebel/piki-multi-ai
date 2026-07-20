@@ -44,40 +44,16 @@ pub(super) fn handle_code_review_key(app: &mut App, key: KeyEvent) -> Option<Act
         return handle_submit_review_input(app, key);
     }
 
-    // If the discard-and-delete confirmation is open, route there
-    if app
-        .current_workspace()
-        .and_then(|ws| ws.code_review.as_ref())
-        .is_some_and(|cr| cr.confirm_close)
-    {
-        return handle_review_confirm_close_input(app, key);
-    }
-
-    // q → close code review. For an ephemeral review workspace this deletes
-    // its checkout from disk, so ask first instead of doing it silently.
+    // q → back to the general view. This is just a focus change, not a
+    // destructive action: the tab and its CodeReviewState (draft, loaded
+    // diffs, etc.) stay exactly as they are, so clicking or pressing Enter
+    // on the workspace again (which refocuses the main panel) reopens the
+    // same review right where it was left. Actually discarding the review
+    // — which deletes an ephemeral workspace's checkout from disk — only
+    // happens through the workspace-delete flow (sidebar `ConfirmDelete`),
+    // never implicitly from inside the review.
     if key.code == KeyCode::Char('q') {
-        let is_ephemeral = app
-            .workspaces
-            .get(app.active_workspace)
-            .is_some_and(|ws| ws.info.ephemeral);
-        if is_ephemeral {
-            if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-                && let Some(cr) = ws.code_review.as_mut()
-            {
-                cr.confirm_close = true;
-            }
-            return None;
-        }
-        if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
-            ws.code_review = None;
-            if ws
-                .current_tab()
-                .is_some_and(|t| t.provider == piki_core::AIProvider::CodeReview)
-            {
-                ws.close_tab(ws.active_tab);
-            }
-        }
-        app.mode = AppMode::Normal;
+        app.active_pane = crate::app::ActivePane::WorkspaceList;
         return None;
     }
 
@@ -112,29 +88,6 @@ pub(super) fn handle_code_review_key(app: &mut App, key: KeyEvent) -> Option<Act
     }
 
     result
-}
-
-/// Handle input when the "discard and delete checkout" confirmation is
-/// showing (only reachable for ephemeral review workspaces — see `q` above).
-pub(super) fn handle_review_confirm_close_input(app: &mut App, key: KeyEvent) -> Option<Action> {
-    match key.code {
-        KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
-            // DeleteWorkspace's ephemeral branch always removes the
-            // checkout directory from disk — same path the sidebar's own
-            // delete-workspace confirmation uses.
-            app.mode = AppMode::Normal;
-            Some(Action::DeleteWorkspace(app.active_workspace, None))
-        }
-        KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
-            if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-                && let Some(cr) = ws.code_review.as_mut()
-            {
-                cr.confirm_close = false;
-            }
-            None
-        }
-        _ => None,
-    }
 }
 
 /// Handle input when the submit review overlay is visible
@@ -593,52 +546,44 @@ mod confirm_close_tests {
     }
 
     #[test]
-    fn q_on_ephemeral_opens_confirm_instead_of_closing() {
+    fn q_on_ephemeral_returns_to_general_view_without_deleting_anything() {
         let mut app = test_app();
         push_review_workspace(&mut app, true);
 
         let action = handle_code_review_key(&mut app, crate::test_support::key(KeyCode::Char('q')));
 
         assert!(action.is_none());
-        let cr = app.workspaces[0].code_review.as_ref().unwrap();
-        assert!(cr.confirm_close, "q on an ephemeral review must ask before deleting");
-        // Tab must still be there — nothing was closed yet.
+        assert_eq!(app.active_pane, ActivePane::WorkspaceList);
+        // Nothing was closed or deleted — the review can be reopened as-is.
+        assert_eq!(app.workspaces.len(), 1);
         assert_eq!(app.workspaces[0].tabs.len(), 1);
+        assert!(app.workspaces[0].code_review.is_some());
+        assert!(!is_code_review_locked(&app), "leaving the main panel must unlock input");
     }
 
     #[test]
-    fn q_on_non_ephemeral_closes_immediately() {
+    fn q_on_non_ephemeral_also_just_returns_to_general_view() {
         let mut app = test_app();
         push_review_workspace(&mut app, false);
 
         let action = handle_code_review_key(&mut app, crate::test_support::key(KeyCode::Char('q')));
 
         assert!(action.is_none());
-        assert!(app.workspaces[0].code_review.is_none());
-        assert_eq!(app.workspaces[0].tabs.len(), 0);
+        assert_eq!(app.active_pane, ActivePane::WorkspaceList);
+        assert_eq!(app.workspaces[0].tabs.len(), 1);
+        assert!(app.workspaces[0].code_review.is_some());
     }
 
     #[test]
-    fn confirm_close_yes_emits_delete_workspace() {
+    fn reentering_main_panel_relocks_the_review() {
         let mut app = test_app();
         push_review_workspace(&mut app, true);
-        app.workspaces[0].code_review.as_mut().unwrap().confirm_close = true;
 
-        let action = handle_review_confirm_close_input(&mut app, crate::test_support::key(KeyCode::Char('y')));
+        handle_code_review_key(&mut app, crate::test_support::key(KeyCode::Char('q')));
+        assert!(!is_code_review_locked(&app));
 
-        assert!(matches!(action, Some(Action::DeleteWorkspace(0, None))));
-    }
-
-    #[test]
-    fn confirm_close_no_cancels_without_deleting() {
-        let mut app = test_app();
-        push_review_workspace(&mut app, true);
-        app.workspaces[0].code_review.as_mut().unwrap().confirm_close = true;
-
-        let action = handle_review_confirm_close_input(&mut app, crate::test_support::key(KeyCode::Char('n')));
-
-        assert!(action.is_none());
-        assert!(!app.workspaces[0].code_review.as_ref().unwrap().confirm_close);
-        assert_eq!(app.workspaces.len(), 1, "workspace must survive a cancel");
+        // Enter/click on the workspace row focuses the main panel again.
+        app.active_pane = ActivePane::MainPanel;
+        assert!(is_code_review_locked(&app), "re-focusing the main panel must reopen the review");
     }
 }

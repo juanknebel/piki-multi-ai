@@ -462,6 +462,17 @@ pub(super) fn handle_confirm_delete_input(app: &mut App, key: KeyEvent) -> Optio
         return None;
     };
 
+    // Ephemeral (PR review) workspaces only ever offer Yes/Cancel: "No" would
+    // otherwise fall through to `RemoveFromList`, which detaches the
+    // workspace from the list WITHOUT deleting its checkout — orphaning the
+    // directory on disk instead of the "keep reviewing, don't lose it"
+    // behavior the missing delete implies. Deleting one must always delete
+    // its checkout; anything less than "Yes" just cancels.
+    let is_ephemeral = app
+        .workspaces
+        .get(target)
+        .is_some_and(|ws| ws.info.ephemeral);
+
     match handle_yn_input(key) {
         ConfirmResult::Yes => {
             // If this is a dispatched workspace, show column picker instead of deleting immediately
@@ -482,6 +493,10 @@ pub(super) fn handle_confirm_delete_input(app: &mut App, key: KeyEvent) -> Optio
             }
             dismiss_dialog_to_pane(app, ActivePane::WorkspaceList);
             Some(Action::DeleteWorkspace(target, None))
+        }
+        ConfirmResult::No if is_ephemeral => {
+            dismiss_dialog_to_pane(app, ActivePane::WorkspaceList);
+            None
         }
         ConfirmResult::No => {
             dismiss_dialog_to_pane(app, ActivePane::WorkspaceList);
