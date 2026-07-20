@@ -6,7 +6,6 @@ use super::Action;
 use crate::app::{App, AppMode, ToastLevel};
 use crate::dialog_state::DialogState;
 use piki_core::workspace::WorkspaceManager;
-use piki_core::AIProvider;
 
 pub(super) async fn handle(
     app: &mut App,
@@ -144,47 +143,25 @@ pub(super) async fn handle(
                                 failed_replies += 1;
                             }
                         }
-                        // The active workspace is the ephemeral review
-                        // checkout — close it entirely (tab + PTYs + the
-                        // checkout directory on disk) instead of just the
-                        // tab, mirroring DeleteWorkspace's ephemeral branch.
-                        let idx = app.active_workspace;
-                        let is_review_workspace = app
-                            .workspaces
-                            .get(idx)
-                            .is_some_and(|ws| ws.info.ephemeral && ws.code_review.is_some());
-                        if is_review_workspace {
-                            for tab in &mut app.workspaces[idx].tabs {
-                                if let Some(ref mut pty) = tab.pty_session {
-                                    let _ = pty.kill();
-                                }
-                            }
-                            app.workspaces[idx].watcher = None;
-                            let path = app.workspaces[idx].path.clone();
-                            app.workspaces.remove(idx);
-                            tokio::spawn(async move {
-                                let _ = tokio::fs::remove_dir_all(&path).await;
-                            });
-                            if app.workspaces.is_empty() {
-                                app.active_workspace = 0;
-                                app.selected_workspace = 0;
-                            } else {
-                                if app.active_workspace >= app.workspaces.len() {
-                                    app.active_workspace = app.workspaces.len() - 1;
-                                }
-                                if app.selected_workspace >= app.workspaces.len() {
-                                    app.selected_workspace = app.workspaces.len() - 1;
-                                }
-                            }
-                        } else if let Some(ws) = app.workspaces.get_mut(idx) {
-                            ws.code_review = None;
-                            if ws
-                                .current_tab()
-                                .is_some_and(|t| t.provider == AIProvider::CodeReview)
-                            {
-                                ws.close_tab(ws.active_tab);
-                            }
+                        // Submitting only closes the *view*, same as `q` —
+                        // the workspace, its tab, and the checkout on disk
+                        // are left alone. Deleting the review workspace (and
+                        // always deleting its checkout) only ever happens
+                        // through the explicit delete-workspace flow.
+                        if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+                            && let Some(cr) = ws.code_review.as_mut()
+                        {
+                            // Clear the just-sent draft so reopening the
+                            // review can't accidentally resubmit the same
+                            // comments; the diffs and existing threads
+                            // (including what we just posted, once
+                            // refreshed) stay for reference.
+                            cr.draft.comments.clear();
+                            cr.draft.body.clear();
+                            cr.draft.body_cursor = 0;
+                            cr.reply_drafts.clear();
                         }
+                        app.active_pane = crate::app::ActivePane::WorkspaceList;
                         app.mode = AppMode::Normal;
                         app.active_dialog = None;
                         let msg = if failed_replies > 0 {
