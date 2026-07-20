@@ -551,16 +551,21 @@ pub(crate) fn render_pr_picker_dialog(frame: &mut Frame, area: Rect, app: &App) 
     let inactive_c = theme.new_ws_inactive;
 
     // Row count drives popup height — whichever list is currently visible.
+    // Capped to the available screen height (minus a small margin) so a
+    // long PR list gets scrolled instead of silently overflowing off
+    // screen with no way to see or reach the rows past the bottom edge.
     let row_count = match repo_browse {
         RepoBrowse::Loaded { items, .. } => items.len(),
         _ => items.len(),
     };
     let popup_width = area.width * 80 / 100;
+    let max_popup_height = area.height.saturating_sub(4).max(10);
     let visible_rows = row_count.clamp(1, 16) as u16;
-    let height = 6u16.saturating_add(visible_rows);
+    let height = (6u16.saturating_add(visible_rows)).min(max_popup_height);
     let popup = super::clear_popup(frame, area, popup_width.max(50), height);
 
     let mut lines: Vec<Line<'_>> = vec![Line::from("")];
+    let mut selected_line_idx = 0usize;
 
     if let RepoBrowse::Input { text, cursor } = repo_browse {
         lines.push(super::render_text_field(
@@ -616,6 +621,9 @@ pub(crate) fn render_pr_picker_dialog(frame: &mut Frame, area: Rect, app: &App) 
                     )));
                 } else {
                     for (idx, item) in repo_items.iter().enumerate() {
+                        if idx == *selected {
+                            selected_line_idx = lines.len();
+                        }
                         lines.push(render_pr_row(item, idx, *selected, *checking_out, active_c, inactive_c));
                     }
                 }
@@ -649,6 +657,9 @@ pub(crate) fn render_pr_picker_dialog(frame: &mut Frame, area: Rect, app: &App) 
                             )));
                             last_section = Some(section);
                         }
+                        if idx == *selected {
+                            selected_line_idx = lines.len();
+                        }
                         lines.push(render_pr_row(item, idx, *selected, *checking_out, active_c, inactive_c));
                     }
                 }
@@ -670,7 +681,23 @@ pub(crate) fn render_pr_picker_dialog(frame: &mut Frame, area: Rect, app: &App) 
         RepoBrowse::Loaded { repo_nwo, .. } => format!("Code Review — {repo_nwo}"),
         _ => "Code Review — Pick a PR".to_string(),
     };
-    let text = Paragraph::new(lines).block(super::popup_block(&title, theme.new_ws_border));
+    let mut block = super::popup_block(&title, theme.new_ws_border);
+
+    // Auto-scroll so the selected row always stays in view, same idea as
+    // the agents pane and the help overlay.
+    let total_lines = lines.len() as u16;
+    let inner_height = popup.height.saturating_sub(2);
+    let max_scroll = total_lines.saturating_sub(inner_height);
+    let scroll = (selected_line_idx as u16)
+        .saturating_sub(inner_height.saturating_sub(1))
+        .min(max_scroll);
+    if max_scroll > 0 {
+        block = block.title_bottom(
+            Line::from(format!(" [{}/{}] ", selected_line_idx + 1, total_lines)).right_aligned(),
+        );
+    }
+
+    let text = Paragraph::new(lines).block(block).scroll((scroll, 0));
     frame.render_widget(text, popup);
 }
 
