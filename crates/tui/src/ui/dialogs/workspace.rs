@@ -1,11 +1,13 @@
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
 use crate::app::{App, DialogField, NewWorkspaceSource, WorkspaceType};
-use crate::dialog_state::{CreateWorktreeField, CreateWorktreeMode, DialogState, EditWorkspaceField};
+use crate::dialog_state::{
+    CreateWorktreeField, CreateWorktreeMode, DialogState, EditWorkspaceField, RepoBrowse,
+};
 
 pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
     let Some(DialogState::NewWorkspace {
@@ -538,20 +540,61 @@ pub(crate) fn render_pr_picker_dialog(frame: &mut Frame, area: Rect, app: &App) 
         items,
         selected,
         checking_out,
+        repo_browse,
     }) = &app.active_dialog
     else {
         return;
     };
 
-    let popup_width = area.width * 80 / 100;
-    let visible_rows = items.len().clamp(1, 16) as u16;
-    let height = 6u16.saturating_add(visible_rows);
-    let popup = super::clear_popup(frame, area, popup_width.max(50), height);
     let theme = &app.theme.dialog;
     let active_c = theme.new_ws_active;
     let inactive_c = theme.new_ws_inactive;
 
+    // Row count drives popup height — whichever list is currently visible.
+    let row_count = match repo_browse {
+        RepoBrowse::Loaded { items, .. } => items.len(),
+        _ => items.len(),
+    };
+    let popup_width = area.width * 80 / 100;
+    let visible_rows = row_count.clamp(1, 16) as u16;
+    let height = 6u16.saturating_add(visible_rows);
+    let popup = super::clear_popup(frame, area, popup_width.max(50), height);
+
     let mut lines: Vec<Line<'_>> = vec![Line::from("")];
+
+    if let RepoBrowse::Input { text, cursor } = repo_browse {
+        lines.push(super::render_text_field(
+            "  Repo (owner/repo): ",
+            text,
+            true,
+            *cursor,
+            (popup.width as usize).saturating_sub(23),
+            Style::default().fg(active_c),
+        ));
+        if *loading {
+            lines.push(Line::from(""));
+            lines.push(Line::from(Span::styled(
+                "  Loading PRs from GitHub...",
+                Style::default().fg(inactive_c),
+            )));
+        } else if let Some(err) = error {
+            lines.push(Line::from(""));
+            lines.push(Line::from(Span::styled(
+                format!("  Error: {err}"),
+                Style::default().fg(theme.new_ws_border),
+            )));
+        }
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            "  [Enter] load PRs for this repo  [Esc] cancel",
+            Style::default().fg(inactive_c),
+        )));
+
+        let text_widget =
+            Paragraph::new(lines).block(super::popup_block("Code Review — Browse a Repo", theme.new_ws_border));
+        frame.render_widget(text_widget, popup);
+        return;
+    }
 
     if *loading {
         lines.push(Line::from(Span::styled(
@@ -563,67 +606,109 @@ pub(crate) fn render_pr_picker_dialog(frame: &mut Frame, area: Rect, app: &App) 
             format!("  Error: {err}"),
             Style::default().fg(theme.new_ws_border),
         )));
-    } else if items.is_empty() {
-        lines.push(Line::from(Span::styled(
-            "  No relevant PRs found.",
-            Style::default().fg(inactive_c),
-        )));
     } else {
-        use piki_core::github::PrInclusionReason;
-
-        let mut last_section: Option<&str> = None;
-        for (idx, item) in items.iter().enumerate() {
-            let section = match item.reason {
-                PrInclusionReason::Authored => "My PRs",
-                PrInclusionReason::Interacted { .. } => "Interacted With",
-                PrInclusionReason::ReviewRequestedPending => "Review Requested",
-            };
-            if last_section != Some(section) {
-                if last_section.is_some() {
-                    lines.push(Line::from(""));
+        match repo_browse {
+            RepoBrowse::Loaded { items: repo_items, .. } => {
+                if repo_items.is_empty() {
+                    lines.push(Line::from(Span::styled(
+                        "  No open PRs in this repo.",
+                        Style::default().fg(inactive_c),
+                    )));
+                } else {
+                    for (idx, item) in repo_items.iter().enumerate() {
+                        lines.push(render_pr_row(item, idx, *selected, *checking_out, active_c, inactive_c));
+                    }
                 }
-                lines.push(Line::from(Span::styled(
-                    format!("  {section}"),
-                    Style::default().fg(inactive_c).add_modifier(Modifier::BOLD),
-                )));
-                last_section = Some(section);
             }
+            RepoBrowse::Closed => {
+                if items.is_empty() {
+                    lines.push(Line::from(Span::styled(
+                        "  No relevant PRs found.",
+                        Style::default().fg(inactive_c),
+                    )));
+                } else {
+                    use piki_core::github::PrInclusionReason;
 
-            let is_selected = idx == *selected;
-            let prefix = if is_selected { "  > " } else { "    " };
-            let style = if is_selected {
-                Style::default().fg(active_c).add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(inactive_c)
-            };
-            let requested_chip = matches!(
-                item.reason,
-                PrInclusionReason::Interacted { review_requested: true }
-            );
-            let spinner = checking_out.is_some_and(|c| c == idx);
-            let mut label = format!(
-                "{}#{} {}{}",
-                item.repo_nwo,
-                item.number,
-                item.title,
-                if item.is_draft { " (draft)" } else { "" },
-            );
-            if requested_chip {
-                label.push_str(" [requested]");
+                    let mut last_section: Option<&str> = None;
+                    for (idx, item) in items.iter().enumerate() {
+                        let section = match item.reason {
+                            PrInclusionReason::Authored => "My PRs",
+                            PrInclusionReason::Interacted { .. } => "Interacted With",
+                            PrInclusionReason::ReviewRequestedPending => "Review Requested",
+                            PrInclusionReason::RepoBrowse => {
+                                unreachable!("RepoBrowse items only ever live in repo_browse.items")
+                            }
+                        };
+                        if last_section != Some(section) {
+                            if last_section.is_some() {
+                                lines.push(Line::from(""));
+                            }
+                            lines.push(Line::from(Span::styled(
+                                format!("  {section}"),
+                                Style::default().fg(inactive_c).add_modifier(Modifier::BOLD),
+                            )));
+                            last_section = Some(section);
+                        }
+                        lines.push(render_pr_row(item, idx, *selected, *checking_out, active_c, inactive_c));
+                    }
+                }
             }
-            if spinner {
-                label.push_str(" ...");
-            }
-            lines.push(Line::from(Span::styled(format!("{prefix}{label}"), style)));
+            RepoBrowse::Input { .. } => unreachable!("handled above"),
         }
     }
 
     lines.push(Line::from(""));
-    lines.push(Line::from(vec![Span::styled(
-        "  [j/k] move  [Enter] review  [r] reload  [Esc] cancel",
-        Style::default().fg(inactive_c),
-    )]));
+    let hint = match repo_browse {
+        RepoBrowse::Loaded { .. } => {
+            "  [j/k] move  [Enter] review  [r] reload  [o] change repo  [m] my PRs  [Esc] cancel"
+        }
+        _ => "  [j/k] move  [Enter] review  [r] reload  [o] browse a repo  [Esc] cancel",
+    };
+    lines.push(Line::from(Span::styled(hint, Style::default().fg(inactive_c))));
 
-    let text = Paragraph::new(lines).block(super::popup_block("Code Review — Pick a PR", theme.new_ws_border));
+    let title = match repo_browse {
+        RepoBrowse::Loaded { repo_nwo, .. } => format!("Code Review — {repo_nwo}"),
+        _ => "Code Review — Pick a PR".to_string(),
+    };
+    let text = Paragraph::new(lines).block(super::popup_block(&title, theme.new_ws_border));
     frame.render_widget(text, popup);
+}
+
+/// One PR row, shared by the categorized list and the repo-browse list.
+fn render_pr_row<'a>(
+    item: &'a piki_core::github::PrListItem,
+    idx: usize,
+    selected: usize,
+    checking_out: Option<usize>,
+    active_c: Color,
+    inactive_c: Color,
+) -> Line<'a> {
+    use piki_core::github::PrInclusionReason;
+
+    let is_selected = idx == selected;
+    let prefix = if is_selected { "  > " } else { "    " };
+    let style = if is_selected {
+        Style::default().fg(active_c).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(inactive_c)
+    };
+    let requested_chip = matches!(
+        item.reason,
+        PrInclusionReason::Interacted { review_requested: true }
+    );
+    let spinner = checking_out.is_some_and(|c| c == idx);
+    let mut label = format!(
+        "{}#{} {}{}",
+        item.repo_nwo,
+        item.number,
+        item.title,
+        if item.is_draft { " (draft)" } else { "" },
+    );
+    if requested_chip {
+        label.push_str(" [requested]");
+    }
+    if spinner {
+        label.push_str(" ...");
+    }
+    Line::from(Span::styled(format!("{prefix}{label}"), style))
 }

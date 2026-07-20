@@ -528,14 +528,16 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 
 **PR picker** (New Tab → Tools → Code Review, `2`):
 
-Lists PRs relevant to the current `gh` user across every accessible repo, grouped into three sections: "My PRs" (authored), "Interacted With" (already commented/reviewed — tagged `[requested]` if a review was also asked for), and "Review Requested" (requested, no interaction yet). Picking one checks out the PR (cloning or reusing/fast-forwarding as needed) and opens it as an ephemeral review workspace.
+Lists PRs relevant to the current `gh` user across every accessible repo, grouped into three sections: "My PRs" (authored), "Interacted With" (already commented/reviewed — tagged `[requested]` if a review was also asked for), and "Review Requested" (requested, no interaction yet). Picking one checks out the PR (cloning or reusing/fast-forwarding as needed) and opens it as an ephemeral review workspace. Press `o` to browse a specific repo instead: type `owner/repo` and `Enter` lists every open PR in it (unfiltered by relevance-to-you), so you can pick any PR in a repo you know even if GitHub wouldn't otherwise surface it. `m` returns to the default categorized list; `r` reloads whichever list is showing.
 
 | Key | Action |
 |-----|--------|
 | `j` / `k` | Navigate PRs |
 | `Enter` | Check out the selected PR and open its review |
-| `r` | Reload the list from GitHub |
-| `Esc` | Cancel |
+| `r` | Reload the current list from GitHub |
+| `o` | Browse a specific repo's PRs (prompts for `owner/repo`) |
+| `m` | Back to the default categorized list (only shown while browsing a repo) |
+| `Esc` | Cancel the repo prompt, or close the picker entirely |
 
 **Code Review** (locked mode — all other keys blocked):
 

@@ -949,6 +949,42 @@ fn poll_workspaces(app: &mut App, now: Instant) {
         }
     }
 
+    // Poll "browse a repo" PR list load
+    {
+        let result = { app.pending_repo_prs.lock().take() };
+        if let Some((queried_repo, result)) = result {
+            if let Some(crate::dialog_state::DialogState::PrPicker {
+                loading, error, selected, repo_browse, ..
+            }) = &mut app.active_dialog
+            {
+                // Only apply if the user hasn't since typed a different repo
+                // and re-submitted — an in-flight response for an old query
+                // must not clobber a newer one.
+                let stale = match repo_browse {
+                    crate::dialog_state::RepoBrowse::Input { text, .. } => {
+                        text.trim() != queried_repo
+                    }
+                    _ => false,
+                };
+                if !stale {
+                    *loading = false;
+                    match result {
+                        Ok(items) => {
+                            *repo_browse = crate::dialog_state::RepoBrowse::Loaded {
+                                repo_nwo: queried_repo,
+                                items,
+                            };
+                            *selected = 0;
+                            *error = None;
+                        }
+                        Err(e) => *error = Some(e),
+                    }
+                }
+            }
+            app.needs_redraw = true;
+        }
+    }
+
     // Poll PR checkout resolution — opens the ephemeral review workspace
     {
         let result = { app.pending_pr_checkout.lock().take() };

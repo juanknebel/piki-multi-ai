@@ -4,7 +4,7 @@ use ratatui::DefaultTerminal;
 
 use super::Action;
 use crate::app::{App, AppMode, ToastLevel};
-use crate::dialog_state::DialogState;
+use crate::dialog_state::{DialogState, RepoBrowse};
 use piki_core::workspace::WorkspaceManager;
 
 pub(super) async fn handle(
@@ -238,8 +238,22 @@ pub(super) async fn handle(
                 *slot.lock() = Some(result);
             });
         }
+        Action::LoadRepoPrs(repo_nwo) => {
+            let slot = Arc::clone(&app.pending_repo_prs);
+            let repo = repo_nwo.clone();
+            tokio::spawn(async move {
+                let result = piki_core::github::list_repo_prs(&repo_nwo, 100)
+                    .await
+                    .map_err(|e| e.to_string());
+                *slot.lock() = Some((repo, result));
+            });
+        }
         Action::OpenPrReview(item_idx) => {
             let item = match &app.active_dialog {
+                Some(DialogState::PrPicker {
+                    repo_browse: RepoBrowse::Loaded { items: repo_items, .. },
+                    ..
+                }) => repo_items.get(item_idx).cloned(),
                 Some(DialogState::PrPicker { items, .. }) => items.get(item_idx).cloned(),
                 _ => None,
             };

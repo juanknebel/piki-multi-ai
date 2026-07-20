@@ -16,7 +16,8 @@ use super::dialog::{
     handle_edit_provider_input, handle_edit_workspace_input,
     handle_help_input, handle_import_agents_input, handle_logs_input,
     handle_manage_agents_input, handle_manage_providers_input, handle_missing_prereqs_input,
-    handle_new_tab_input, handle_new_workspace_input, handle_workspace_info_input,
+    handle_new_tab_input, handle_new_workspace_input, handle_pr_picker_input,
+    handle_workspace_info_input,
 };
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField};
@@ -3493,4 +3494,164 @@ fn about_toggle_key_a_also_dismisses() {
 
     assert!(app.active_dialog.is_none());
     assert_eq!(app.mode, AppMode::Normal);
+}
+
+// ── PR picker: "browse a repo" mode ──
+
+fn open_pr_picker(app: &mut App, repo_browse: crate::dialog_state::RepoBrowse) {
+    app.active_dialog = Some(crate::dialog_state::DialogState::PrPicker {
+        loading: false,
+        error: None,
+        items: Vec::new(),
+        selected: 0,
+        checking_out: None,
+        repo_browse,
+    });
+    app.mode = AppMode::PrPicker;
+}
+
+fn current_repo_browse(app: &App) -> &crate::dialog_state::RepoBrowse {
+    match &app.active_dialog {
+        Some(crate::dialog_state::DialogState::PrPicker { repo_browse, .. }) => repo_browse,
+        _ => panic!("PrPicker dialog not active"),
+    }
+}
+
+#[test]
+fn pr_picker_o_opens_repo_input_empty_from_closed() {
+    let mut app = test_app();
+    open_pr_picker(&mut app, crate::dialog_state::RepoBrowse::Closed);
+
+    let action = handle_pr_picker_input(&mut app, key(KeyCode::Char('o')));
+
+    assert!(action.is_none());
+    assert!(matches!(
+        current_repo_browse(&app),
+        crate::dialog_state::RepoBrowse::Input { text, .. } if text.is_empty()
+    ));
+}
+
+#[test]
+fn pr_picker_o_prefills_repo_input_from_loaded() {
+    let mut app = test_app();
+    open_pr_picker(
+        &mut app,
+        crate::dialog_state::RepoBrowse::Loaded {
+            repo_nwo: "owner/repo".to_string(),
+            items: Vec::new(),
+        },
+    );
+
+    handle_pr_picker_input(&mut app, key(KeyCode::Char('o')));
+
+    assert!(matches!(
+        current_repo_browse(&app),
+        crate::dialog_state::RepoBrowse::Input { text, .. } if text == "owner/repo"
+    ));
+}
+
+#[test]
+fn pr_picker_repo_input_typing_and_enter_emits_load_repo_prs() {
+    let mut app = test_app();
+    open_pr_picker(
+        &mut app,
+        crate::dialog_state::RepoBrowse::Input { text: String::new(), cursor: 0 },
+    );
+
+    for c in "owner/repo".chars() {
+        handle_pr_picker_input(&mut app, key(KeyCode::Char(c)));
+    }
+    assert!(matches!(
+        current_repo_browse(&app),
+        crate::dialog_state::RepoBrowse::Input { text, .. } if text == "owner/repo"
+    ));
+
+    let action = handle_pr_picker_input(&mut app, key(KeyCode::Enter));
+
+    assert!(matches!(action, Some(Action::LoadRepoPrs(repo)) if repo == "owner/repo"));
+}
+
+#[test]
+fn pr_picker_repo_input_enter_without_slash_is_rejected() {
+    let mut app = test_app();
+    open_pr_picker(
+        &mut app,
+        crate::dialog_state::RepoBrowse::Input { text: "notarepo".to_string(), cursor: 8 },
+    );
+
+    let action = handle_pr_picker_input(&mut app, key(KeyCode::Enter));
+
+    assert!(action.is_none(), "a repo without an owner/name slash must not submit");
+}
+
+#[test]
+fn pr_picker_esc_from_repo_input_cancels_to_closed_not_whole_dialog() {
+    let mut app = test_app();
+    open_pr_picker(
+        &mut app,
+        crate::dialog_state::RepoBrowse::Input { text: "owner/repo".to_string(), cursor: 10 },
+    );
+
+    let action = handle_pr_picker_input(&mut app, key(KeyCode::Esc));
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_some(), "Esc from repo input must not close the whole picker");
+    assert!(matches!(current_repo_browse(&app), crate::dialog_state::RepoBrowse::Closed));
+}
+
+#[test]
+fn pr_picker_esc_from_closed_dismisses_whole_dialog() {
+    let mut app = test_app();
+    open_pr_picker(&mut app, crate::dialog_state::RepoBrowse::Closed);
+
+    handle_pr_picker_input(&mut app, key(KeyCode::Esc));
+
+    assert!(app.active_dialog.is_none());
+}
+
+#[test]
+fn pr_picker_m_returns_from_loaded_repo_to_closed() {
+    let mut app = test_app();
+    open_pr_picker(
+        &mut app,
+        crate::dialog_state::RepoBrowse::Loaded {
+            repo_nwo: "owner/repo".to_string(),
+            items: Vec::new(),
+        },
+    );
+
+    let action = handle_pr_picker_input(&mut app, key(KeyCode::Char('m')));
+
+    assert!(action.is_none());
+    assert!(matches!(current_repo_browse(&app), crate::dialog_state::RepoBrowse::Closed));
+}
+
+#[test]
+fn pr_picker_m_is_a_no_op_when_already_closed() {
+    // 'm' isn't a generic key — it must not be swallowed as a no-op key
+    // when there's nothing to return from (guards against a stray 'm' in a
+    // PR title triggering it, since it's letter-gated to Loaded only).
+    let mut app = test_app();
+    open_pr_picker(&mut app, crate::dialog_state::RepoBrowse::Closed);
+
+    let action = handle_pr_picker_input(&mut app, key(KeyCode::Char('m')));
+
+    assert!(action.is_none());
+    assert!(matches!(current_repo_browse(&app), crate::dialog_state::RepoBrowse::Closed));
+}
+
+#[test]
+fn pr_picker_r_reloads_repo_list_when_loaded() {
+    let mut app = test_app();
+    open_pr_picker(
+        &mut app,
+        crate::dialog_state::RepoBrowse::Loaded {
+            repo_nwo: "owner/repo".to_string(),
+            items: Vec::new(),
+        },
+    );
+
+    let action = handle_pr_picker_input(&mut app, key(KeyCode::Char('r')));
+
+    assert!(matches!(action, Some(Action::LoadRepoPrs(repo)) if repo == "owner/repo"));
 }

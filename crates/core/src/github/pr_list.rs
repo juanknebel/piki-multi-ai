@@ -14,6 +14,9 @@ pub enum PrInclusionReason {
     Interacted { review_requested: bool },
     /// A review was requested and the user hasn't interacted yet.
     ReviewRequestedPending,
+    /// Not one of the "relevant to me" buckets — surfaced by browsing every
+    /// open PR of a specific repo the user typed in (see [`list_repo_prs`]).
+    RepoBrowse,
 }
 
 /// One row in the PR picker.
@@ -104,6 +107,62 @@ pub async fn list_relevant_prs(limit: usize) -> anyhow::Result<Vec<PrListItem>> 
     }
 
     Ok(items)
+}
+
+/// Raw shape of one row from `gh pr list --json ...` — same fields as
+/// [`SearchPr`] minus `repository` (the repo is already known: it's the one
+/// we asked `gh pr list -R` for).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct RepoPr {
+    pub number: u64,
+    pub title: String,
+    pub url: String,
+    pub author: SearchPrAuthor,
+    #[serde(default)]
+    pub is_draft: bool,
+    pub updated_at: String,
+}
+
+/// List every open PR in one specific repo, for browsing a repo the user
+/// picks explicitly rather than searching across everything they can see.
+pub async fn list_repo_prs(repo_nwo: &str, limit: usize) -> anyhow::Result<Vec<PrListItem>> {
+    let output = crate::shell_env::command("gh")
+        .args([
+            "pr",
+            "list",
+            "-R",
+            repo_nwo,
+            "--state",
+            "open",
+            "--json",
+            "number,title,url,author,isDraft,updatedAt",
+            "--limit",
+            &limit.to_string(),
+        ])
+        .output()
+        .await?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        tracing::error!(stderr = %stderr.trim(), repo = repo_nwo, "gh pr list failed");
+        anyhow::bail!("gh pr list -R {repo_nwo} failed: {}", stderr.trim());
+    }
+
+    let prs: Vec<RepoPr> = serde_json::from_slice(&output.stdout)?;
+    Ok(prs
+        .into_iter()
+        .map(|pr| PrListItem {
+            number: pr.number,
+            title: pr.title,
+            repo_nwo: repo_nwo.to_string(),
+            url: pr.url,
+            author: pr.author.login,
+            is_draft: pr.is_draft,
+            updated_at: pr.updated_at,
+            reason: PrInclusionReason::RepoBrowse,
+        })
+        .collect())
 }
 
 fn pr_key(pr: &SearchPr) -> (String, u64) {
@@ -351,6 +410,23 @@ mod tests {
         assert_eq!(prs[0].repository.name_with_owner, "owner/repo");
         assert_eq!(prs[0].author.login, "octocat");
         assert!(!prs[0].is_draft);
+    }
+
+    #[test]
+    fn repo_pr_json_deserializes() {
+        let raw = r#"[{
+            "number": 7,
+            "title": "Add feature",
+            "url": "https://github.com/owner/repo/pull/7",
+            "author": {"id": "abc", "is_bot": false, "login": "octocat", "name": "The Octocat", "type": "User"},
+            "isDraft": true,
+            "updatedAt": "2026-07-01T12:00:00Z"
+        }]"#;
+        let prs: Vec<RepoPr> = serde_json::from_str(raw).unwrap();
+        assert_eq!(prs.len(), 1);
+        assert_eq!(prs[0].number, 7);
+        assert_eq!(prs[0].author.login, "octocat");
+        assert!(prs[0].is_draft);
     }
 
     #[test]

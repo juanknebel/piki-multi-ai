@@ -7,7 +7,7 @@ use crate::app::{ActivePane, App, AppMode, DialogField, NewWorkspaceSource};
 use crate::config::has_ctrl;
 use crate::dialog_state::{
     CreateWorktreeField, CreateWorktreeMode, CycleField, DialogState, EditAgentField,
-    EditProviderField, EditWorkspaceField, NewTabMenu,
+    EditProviderField, EditWorkspaceField, NewTabMenu, RepoBrowse,
 };
 use piki_core::workspace::manager::parse_github_repo_name;
 use piki_core::{AIProvider, WorkspaceType};
@@ -657,6 +657,7 @@ pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Actio
                     items: Vec::new(),
                     selected: 0,
                     checking_out: None,
+                    repo_browse: crate::dialog_state::RepoBrowse::Closed,
                 });
                 app.mode = AppMode::PrPicker;
                 Some(Action::LoadPrList)
@@ -1755,6 +1756,19 @@ pub(super) fn handle_edit_provider_input(app: &mut App, key: KeyEvent) -> Option
 }
 
 pub(super) fn handle_pr_picker_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    // While typing a repo to browse, Esc cancels back to the default list
+    // instead of closing the whole picker.
+    if let Some(DialogState::PrPicker {
+        repo_browse: RepoBrowse::Input { .. },
+        ..
+    }) = &app.active_dialog
+        && is_cancel(key, &app.config)
+    {
+        if let Some(DialogState::PrPicker { repo_browse, .. }) = &mut app.active_dialog {
+            *repo_browse = RepoBrowse::Closed;
+        }
+        return None;
+    }
     if is_cancel(key, &app.config) {
         dismiss_dialog(app);
         return None;
@@ -1765,35 +1779,78 @@ pub(super) fn handle_pr_picker_input(app: &mut App, key: KeyEvent) -> Option<Act
         items,
         selected,
         checking_out,
+        repo_browse,
         ..
     }) = &mut app.active_dialog
     else {
         return None;
     };
 
+    if let RepoBrowse::Input { text, cursor } = repo_browse {
+        return match key.code {
+            KeyCode::Enter => {
+                let repo = text.trim().to_string();
+                if repo.is_empty() || !repo.contains('/') {
+                    return None;
+                }
+                *loading = true;
+                Some(Action::LoadRepoPrs(repo))
+            }
+            _ => {
+                handle_text_input(text, cursor, key, |c| !c.is_control());
+                None
+            }
+        };
+    }
+
     if *loading || checking_out.is_some() {
         return None;
     }
 
+    let total = match repo_browse {
+        RepoBrowse::Closed => items.len(),
+        RepoBrowse::Loaded { items, .. } => items.len(),
+        RepoBrowse::Input { .. } => unreachable!("handled above"),
+    };
+
     match key.code {
         KeyCode::Char('j') | KeyCode::Down => {
-            move_selection(selected, items.len(), 1, true);
+            move_selection(selected, total, 1, true);
             None
         }
         KeyCode::Char('k') | KeyCode::Up => {
-            move_selection(selected, items.len(), -1, true);
+            move_selection(selected, total, -1, true);
+            None
+        }
+        KeyCode::Char('o') => {
+            let prefill = match repo_browse {
+                RepoBrowse::Loaded { repo_nwo, .. } => repo_nwo.clone(),
+                _ => String::new(),
+            };
+            let cursor = prefill.len();
+            *repo_browse = RepoBrowse::Input { text: prefill, cursor };
+            None
+        }
+        KeyCode::Char('m') if matches!(repo_browse, RepoBrowse::Loaded { .. }) => {
+            *repo_browse = RepoBrowse::Closed;
+            *selected = 0;
             None
         }
         KeyCode::Char('r') => {
             *loading = true;
             *checking_out = None;
+            let action = match repo_browse {
+                RepoBrowse::Closed => Action::LoadPrList,
+                RepoBrowse::Loaded { repo_nwo, .. } => Action::LoadRepoPrs(repo_nwo.clone()),
+                RepoBrowse::Input { .. } => unreachable!("handled above"),
+            };
             if let Some(DialogState::PrPicker { error, .. }) = &mut app.active_dialog {
                 *error = None;
             }
-            Some(Action::LoadPrList)
+            Some(action)
         }
         KeyCode::Enter => {
-            if items.is_empty() {
+            if total == 0 {
                 return None;
             }
             let idx = *selected;

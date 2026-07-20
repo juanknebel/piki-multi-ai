@@ -752,6 +752,11 @@ pub type PendingPrList = Arc<Mutex<Option<Result<Vec<piki_core::github::PrListIt
 /// Background result slot for `Action::OpenPrReview`.
 pub type PendingPrCheckout =
     Arc<Mutex<Option<Result<crate::code_review::ReviewSessionData, String>>>>;
+/// Background result slot for `Action::LoadRepoPrs`. Carries the repo
+/// alongside the result so a stale response (user re-typed a different repo
+/// before this one landed) can be told apart from the current query.
+pub type PendingRepoPrs =
+    Arc<Mutex<Option<(String, Result<Vec<piki_core::github::PrListItem>, String>)>>>;
 
 pub struct App {
     pub should_quit: bool,
@@ -863,6 +868,8 @@ pub struct App {
     pub pending_pr_list: PendingPrList,
     /// Background result slot for `Action::OpenPrReview`.
     pub pending_pr_checkout: PendingPrCheckout,
+    /// Background result slot for `Action::LoadRepoPrs`.
+    pub pending_repo_prs: PendingRepoPrs,
     /// Storage backend (SQLite)
     pub storage: std::sync::Arc<piki_core::storage::AppStorage>,
     /// Cached agent profiles for the current project
@@ -1018,6 +1025,7 @@ impl App {
             gh_available: None,
             pending_pr_list: Arc::new(Mutex::new(None)),
             pending_pr_checkout: Arc::new(Mutex::new(None)),
+            pending_repo_prs: Arc::new(Mutex::new(None)),
             storage,
             agent_profiles: Vec::new(),
             provider_manager: piki_core::providers::ProviderManager::load_or_init(
