@@ -574,9 +574,9 @@ pub(crate) fn render_pr_picker_dialog(frame: &mut Frame, area: Rect, app: &App) 
         let mut last_section: Option<&str> = None;
         for (idx, item) in items.iter().enumerate() {
             let section = match item.reason {
-                PrInclusionReason::Authored => "Mis PRs",
-                PrInclusionReason::Interacted { .. } => "Con interacción",
-                PrInclusionReason::ReviewRequestedPending => "Review pendiente",
+                PrInclusionReason::Authored => "My PRs",
+                PrInclusionReason::Interacted { .. } => "Interacted With",
+                PrInclusionReason::ReviewRequestedPending => "Review Requested",
             };
             if last_section != Some(section) {
                 if last_section.is_some() {

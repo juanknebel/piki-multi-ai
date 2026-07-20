@@ -528,7 +528,7 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 
 **PR picker** (New Tab → Tools → Code Review, `2`):
 
-Lists PRs relevant to the current `gh` user across every accessible repo, grouped into three sections: "Mis PRs" (authored), "Con interacción" (already commented/reviewed — tagged `[requested]` if a review was also asked for), and "Review pendiente" (requested, no interaction yet). Picking one checks out the PR (cloning or reusing/fast-forwarding as needed) and opens it as an ephemeral review workspace.
+Lists PRs relevant to the current `gh` user across every accessible repo, grouped into three sections: "My PRs" (authored), "Interacted With" (already commented/reviewed — tagged `[requested]` if a review was also asked for), and "Review Requested" (requested, no interaction yet). Picking one checks out the PR (cloning or reusing/fast-forwarding as needed) and opens it as an ephemeral review workspace.
 
 | Key | Action |
 |-----|--------|
