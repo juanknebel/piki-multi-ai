@@ -927,6 +927,111 @@ fn poll_workspaces(app: &mut App, now: Instant) {
         }
     }
 
+    // Poll PR picker list load
+    {
+        let result = { app.pending_pr_list.lock().take() };
+        if let Some(result) = result {
+            if let Some(crate::dialog_state::DialogState::PrPicker {
+                loading, items, error, selected, ..
+            }) = &mut app.active_dialog
+            {
+                *loading = false;
+                match result {
+                    Ok(list) => {
+                        *items = list;
+                        *selected = 0;
+                        *error = None;
+                    }
+                    Err(e) => *error = Some(e),
+                }
+            }
+            app.needs_redraw = true;
+        }
+    }
+
+    // Poll "browse a repo" PR list load
+    {
+        let result = { app.pending_repo_prs.lock().take() };
+        if let Some((queried_repo, result)) = result {
+            if let Some(crate::dialog_state::DialogState::PrPicker {
+                loading, error, selected, repo_browse, ..
+            }) = &mut app.active_dialog
+            {
+                // Only apply if the user hasn't since typed a different repo
+                // and re-submitted — an in-flight response for an old query
+                // must not clobber a newer one.
+                let stale = match repo_browse {
+                    crate::dialog_state::RepoBrowse::Input { text, .. } => {
+                        text.trim() != queried_repo
+                    }
+                    _ => false,
+                };
+                if !stale {
+                    *loading = false;
+                    match result {
+                        Ok(items) => {
+                            *repo_browse = crate::dialog_state::RepoBrowse::Loaded {
+                                repo_nwo: queried_repo,
+                                items,
+                            };
+                            *selected = 0;
+                            *error = None;
+                        }
+                        Err(e) => *error = Some(e),
+                    }
+                }
+            }
+            app.needs_redraw = true;
+        }
+    }
+
+    // Poll PR checkout resolution — opens the ephemeral review workspace
+    {
+        let result = { app.pending_pr_checkout.lock().take() };
+        if let Some(result) = result {
+            match result {
+                Ok(session) => {
+                    let info = piki_core::workspace::WorkspaceManager::create_review_workspace(
+                        &session.checkout,
+                    );
+                    let review_dir = session.checkout.path.clone();
+                    let base_spec = session.checkout.base_spec.clone();
+                    let repo_nwo = session.checkout.repo_nwo.clone();
+                    let idx = app.open_review_workspace(info);
+                    // Not closable: this workspace exists only to host this
+                    // review, so closing its one tab would strand it in the
+                    // sidebar with nothing to reopen. Disposing of the
+                    // review happens only through the explicit
+                    // workspace-delete flow, same invariant as `q`/submit.
+                    let tab_idx = app.workspaces[idx].add_tab(piki_core::AIProvider::CodeReview, false, None);
+                    app.workspaces[idx].active_tab = tab_idx;
+                    let mut cr = crate::code_review::CodeReviewState::new(
+                        session.checkout.pr,
+                        review_dir,
+                        base_spec,
+                        repo_nwo,
+                        session.files,
+                    );
+                    cr.existing_comments = session.existing_comments;
+                    app.workspaces[idx].code_review = Some(cr);
+                    app.active_dialog = None;
+                    app.mode = app::AppMode::Normal;
+                    app.set_toast("PR loaded", app::ToastLevel::Success);
+                }
+                Err(e) => {
+                    if let Some(crate::dialog_state::DialogState::PrPicker {
+                        checking_out, error, ..
+                    }) = &mut app.active_dialog
+                    {
+                        *checking_out = None;
+                        *error = Some(e);
+                    }
+                }
+            }
+            app.needs_redraw = true;
+        }
+    }
+
     // Spawn background git refresh ONLY for active workspace
     {
         let idx = app.active_workspace;

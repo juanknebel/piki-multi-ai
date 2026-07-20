@@ -7,7 +7,7 @@ use crate::app::{ActivePane, App, AppMode, DialogField, NewWorkspaceSource};
 use crate::config::has_ctrl;
 use crate::dialog_state::{
     CreateWorktreeField, CreateWorktreeMode, CycleField, DialogState, EditAgentField,
-    EditProviderField, EditWorkspaceField, NewTabMenu,
+    EditProviderField, EditWorkspaceField, NewTabMenu, RepoBrowse,
 };
 use piki_core::workspace::manager::parse_github_repo_name;
 use piki_core::{AIProvider, WorkspaceType};
@@ -462,6 +462,17 @@ pub(super) fn handle_confirm_delete_input(app: &mut App, key: KeyEvent) -> Optio
         return None;
     };
 
+    // Ephemeral (PR review) workspaces only ever offer Yes/Cancel: "No" would
+    // otherwise fall through to `RemoveFromList`, which detaches the
+    // workspace from the list WITHOUT deleting its checkout — orphaning the
+    // directory on disk instead of the "keep reviewing, don't lose it"
+    // behavior the missing delete implies. Deleting one must always delete
+    // its checkout; anything less than "Yes" just cancels.
+    let is_ephemeral = app
+        .workspaces
+        .get(target)
+        .is_some_and(|ws| ws.info.ephemeral);
+
     match handle_yn_input(key) {
         ConfirmResult::Yes => {
             // If this is a dispatched workspace, show column picker instead of deleting immediately
@@ -482,6 +493,10 @@ pub(super) fn handle_confirm_delete_input(app: &mut App, key: KeyEvent) -> Optio
             }
             dismiss_dialog_to_pane(app, ActivePane::WorkspaceList);
             Some(Action::DeleteWorkspace(target, None))
+        }
+        ConfirmResult::No if is_ephemeral => {
+            dismiss_dialog_to_pane(app, ActivePane::WorkspaceList);
+            None
         }
         ConfirmResult::No => {
             dismiss_dialog_to_pane(app, ActivePane::WorkspaceList);
@@ -636,9 +651,31 @@ pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Actio
                 Some(Action::SpawnTab(AIProvider::Kanban))
             }
             KeyCode::Char('2') => {
-                app.active_dialog = None;
-                app.mode = AppMode::Normal;
-                Some(Action::SpawnTab(AIProvider::CodeReview))
+                // Standing on a review workspace already? Reopen its tab
+                // directly instead of routing through the PR search panel.
+                if let Some(ws) = app.workspaces.get(app.active_workspace)
+                    && ws.code_review.is_some()
+                {
+                    if let Some(tab_idx) =
+                        ws.tabs.iter().position(|t| t.provider == piki_core::AIProvider::CodeReview)
+                    {
+                        app.workspaces[app.active_workspace].active_tab = tab_idx;
+                    }
+                    app.active_pane = crate::app::ActivePane::MainPanel;
+                    app.active_dialog = None;
+                    app.mode = AppMode::Normal;
+                    return None;
+                }
+                app.active_dialog = Some(DialogState::PrPicker {
+                    loading: true,
+                    error: None,
+                    items: Vec::new(),
+                    selected: 0,
+                    checking_out: None,
+                    repo_browse: crate::dialog_state::RepoBrowse::Closed,
+                });
+                app.mode = AppMode::PrPicker;
+                Some(Action::LoadPrList)
             }
             KeyCode::Char('3') => {
                 app.active_dialog = None;
@@ -1731,4 +1768,114 @@ pub(super) fn handle_edit_provider_input(app: &mut App, key: KeyEvent) -> Option
         EditProviderField::AgentDir => { handle_text_input(agent_dir, agent_dir_cursor, key, accept_any); }
     }
     None
+}
+
+pub(super) fn handle_pr_picker_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    // While typing a repo to browse, Esc cancels back to the default list
+    // instead of closing the whole picker.
+    if let Some(DialogState::PrPicker {
+        repo_browse: RepoBrowse::Input { .. },
+        ..
+    }) = &app.active_dialog
+        && is_cancel(key, &app.config)
+    {
+        if let Some(DialogState::PrPicker { repo_browse, .. }) = &mut app.active_dialog {
+            *repo_browse = RepoBrowse::Closed;
+        }
+        return None;
+    }
+    if is_cancel(key, &app.config) {
+        dismiss_dialog(app);
+        return None;
+    }
+
+    let Some(DialogState::PrPicker {
+        loading,
+        items,
+        selected,
+        checking_out,
+        repo_browse,
+        ..
+    }) = &mut app.active_dialog
+    else {
+        return None;
+    };
+
+    if let RepoBrowse::Input { text, cursor } = repo_browse {
+        return match key.code {
+            KeyCode::Enter => {
+                let repo = piki_core::github::normalize_repo_nwo(text)?;
+                // Rewrite the field to the canonical form the query uses —
+                // keeps the staleness check in poll_workspaces (which
+                // compares this text against the resolved query) correct
+                // for pasted URLs, and shows the user what was actually
+                // queried.
+                *text = repo.clone();
+                *cursor = text.len();
+                *loading = true;
+                Some(Action::LoadRepoPrs(repo))
+            }
+            _ => {
+                handle_text_input(text, cursor, key, |c| !c.is_control());
+                None
+            }
+        };
+    }
+
+    if *loading || checking_out.is_some() {
+        return None;
+    }
+
+    let total = match repo_browse {
+        RepoBrowse::Closed => items.len(),
+        RepoBrowse::Loaded { items, .. } => items.len(),
+        RepoBrowse::Input { .. } => unreachable!("handled above"),
+    };
+
+    match key.code {
+        KeyCode::Char('j') | KeyCode::Down => {
+            move_selection(selected, total, 1, true);
+            None
+        }
+        KeyCode::Char('k') | KeyCode::Up => {
+            move_selection(selected, total, -1, true);
+            None
+        }
+        KeyCode::Char('o') => {
+            let prefill = match repo_browse {
+                RepoBrowse::Loaded { repo_nwo, .. } => repo_nwo.clone(),
+                _ => String::new(),
+            };
+            let cursor = prefill.len();
+            *repo_browse = RepoBrowse::Input { text: prefill, cursor };
+            None
+        }
+        KeyCode::Char('m') if matches!(repo_browse, RepoBrowse::Loaded { .. }) => {
+            *repo_browse = RepoBrowse::Closed;
+            *selected = 0;
+            None
+        }
+        KeyCode::Char('r') => {
+            *loading = true;
+            *checking_out = None;
+            let action = match repo_browse {
+                RepoBrowse::Closed => Action::LoadPrList,
+                RepoBrowse::Loaded { repo_nwo, .. } => Action::LoadRepoPrs(repo_nwo.clone()),
+                RepoBrowse::Input { .. } => unreachable!("handled above"),
+            };
+            if let Some(DialogState::PrPicker { error, .. }) = &mut app.active_dialog {
+                *error = None;
+            }
+            Some(action)
+        }
+        KeyCode::Enter => {
+            if total == 0 {
+                return None;
+            }
+            let idx = *selected;
+            *checking_out = Some(idx);
+            Some(Action::OpenPrReview(idx))
+        }
+        _ => None,
+    }
 }

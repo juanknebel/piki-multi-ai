@@ -67,6 +67,21 @@ pub enum NewTabMenu {
     Tools,
 }
 
+/// Sub-state of the PR picker (`DialogState::PrPicker`) for browsing every
+/// open PR of one specific repo instead of the default categorized list.
+#[derive(Debug, Clone)]
+pub enum RepoBrowse {
+    /// Showing the default categorized "my PRs" list.
+    Closed,
+    /// Typing the `owner/repo` to browse (`o` to enter, `Enter` to load).
+    Input { text: String, cursor: usize },
+    /// Loaded: every open PR in `repo_nwo`, flat (no category grouping).
+    Loaded {
+        repo_nwo: String,
+        items: Vec<piki_core::github::PrListItem>,
+    },
+}
+
 /// Centralized dialog state — replaces 20+ scattered fields on App.
 /// Dismissing any dialog is simply `app.active_dialog = None`.
 #[derive(Debug, Clone)]
@@ -149,6 +164,21 @@ pub enum DialogState {
     },
     WorkspaceInfo {
         hscroll: u16,
+    },
+    /// PR picker — the Code Review entry point. Lists PRs relevant to the
+    /// current `gh` user across all accessible repos, grouped by why they
+    /// showed up (`PrInclusionReason`), independent of any open workspace.
+    /// `repo_browse` swaps the list for "every open PR in one repo I typed
+    /// in" (`o`) instead of the default categorized "my PRs" view.
+    PrPicker {
+        loading: bool,
+        error: Option<String>,
+        items: Vec<piki_core::github::PrListItem>,
+        selected: usize,
+        /// Index into the *currently visible* list (see
+        /// `App::pr_picker_visible_items`) that's being checked out.
+        checking_out: Option<usize>,
+        repo_browse: RepoBrowse,
     },
     Dashboard {
         selected: usize,

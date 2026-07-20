@@ -1,9 +1,10 @@
 ---
 source: crates/tui/src/ui/mod.rs
+assertion_line: 287
 expression: content
 ---
 ╭ WORKSPACES ──────────────────────────╮
-│   ⎇ nightly                 2∆ ↑1 ↓2 │
+│   ⎇ nightly 2∆ ↑1 ↓2                 │
 │▎  ⎇ void-setup                       │
 │   ⎇ x220t                            │
 │                                      │

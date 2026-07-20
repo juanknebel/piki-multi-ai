@@ -498,16 +498,29 @@ pub(crate) fn handle_mouse_event(
                             && let Some(item) = sidebar_items.get(clicked)
                         {
                             app.selected_sidebar_row = clicked;
+                            // Chevron glyph occupies the column right after
+                            // the selection rail (see `second_col` in
+                            // ui/sidebar.rs): rail at inner_x, chevron+space
+                            // at inner_x+1..=inner_x+2.
+                            let inner_x = app.ws_list_area.x + 1;
+                            let on_chevron = col == inner_x + 1 || col == inner_x + 2;
                             match item {
                                 crate::app::SidebarItem::Workspace {
                                     index,
                                     collapsed: Some(_),
-                                } => {
-                                    app.selected_workspace = *index;
-                                    app.switch_workspace(*index);
+                                } if on_chevron => {
+                                    // Chevron hit: toggle the group without
+                                    // switching workspace/focus — collapsing
+                                    // a family you're not looking at shouldn't
+                                    // also jump you into it.
                                     app.toggle_selected_group();
                                 }
                                 crate::app::SidebarItem::Workspace { index, .. } => {
+                                    // Anywhere else on the row (including a
+                                    // family parent's own name/metadata) just
+                                    // focuses it — collapsing is chevron-only,
+                                    // so a plain click never hides what you
+                                    // just clicked on.
                                     app.selected_workspace = *index;
                                     app.switch_workspace(*index);
                                 }

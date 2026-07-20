@@ -41,7 +41,7 @@ Built with Rust and [ratatui](https://ratatui.rs/).
 ## Features
 
 - **Parallel workspaces** — Run multiple AI coding sessions simultaneously, each in an isolated git worktree, pointing directly to an existing directory (Simple mode), or managing a multi-service project root (Project mode)
-- **Dynamic tabs** — Workspaces start empty; create tabs on demand (`Ctrl+G c`) organized in categories: Shell (direct), AI Agents (Claude Code, Gemini, OpenCode, Kilo, Codex), and Tools (Kanban Board, Code Review, API Explorer, Git); close tabs with `Ctrl+G x`; cycle with `Ctrl+G n`/`Ctrl+G p`; Kanban Board, API Explorer and Git are singletons — re-opening one focuses the existing tab instead of creating a duplicate
+- **Dynamic tabs** — Workspaces start empty; create tabs on demand (`Ctrl+G c`) organized in categories: Shell (direct), AI Agents (Claude Code, Gemini, OpenCode, Kilo, Codex), and Tools (Kanban Board, Code Review — opens a PR picker rather than a tab directly, see below, API Explorer, Git); close tabs with `Ctrl+G x`; cycle with `Ctrl+G n`/`Ctrl+G p`; Kanban Board, API Explorer and Git are singletons — re-opening one focuses the existing tab instead of creating a duplicate
 - **Workspace dashboard** — Press `Ctrl+G D` for a bird's-eye overview of all workspaces with their tabs, status (idle/busy/done), changed files, and ahead/behind; `j`/`k` to navigate, `Enter` to switch, `Esc` to close
 - **Git via lazygit** — All git handling (status, stage, commit, push, pull, branches, log, stash, rebase, conflicts) is delegated to [lazygit](https://github.com/jesseduffield/lazygit) running in a PTY tab per workspace; open-or-focus it with `Ctrl+G g` (respawns automatically if you quit lazygit), or from New Tab → Tools → Git
 - **Agents pane** — The bottom-left pane lists every running AI agent across ALL workspaces with its live status from the structured OSC 777 channel (running / needs permission / waiting / done) plus idle badges; `j`/`k` to select, `Enter` or click to jump straight to that workspace and tab
@@ -83,7 +83,7 @@ Built with Rust and [ratatui](https://ratatui.rs/).
 - **Agent Profiles** — Configure named agents per project (`A` key, Simple workspaces only) with a two-step wizard: step 1 selects name + provider, step 2 opens a large floating editor for the agent's role/instructions; agents are stored in SQLite per `source_repo` with version tracking; press `p` to sync agent config to the repo as provider-native subagent files (e.g., `.claude/agents/<name>.md`); press `i` to import agents from repo files (reverse sync) — scans all provider directories for `.md` files, shows a checklist with `(new)`/`(exists)` status, and imports selected agents marked as synced; version indicator shows sync status (`v3 ✓` synced, `v2 ✗` pending); editing an agent increments its version and resets sync status; falls back to raw provider selector when no agents are configured
 - **Agent Dispatch** — Select a kanban card, press `D` to dispatch a configured agent or raw provider: the agent selector includes a `(None)` option to dispatch without a profile; when no agent is selected, a second step asks whether to create a new worktree workspace or use the current one; with an agent selected, automatically creates a git worktree with a convention-based branch (`feature/`, `bug/`, or `spike/` based on card priority), nesting it under its parent's worktree family in the sidebar; inherits the parent's kanban board, and launches the agent with an auto-composed prompt (`Use the <agent> agent to plan and then implement the task: <card title>` + card description + optional additional prompt); the agent's role is materialized as a provider-native subagent file in the worktree; card moves to "in progress" with assignee set to agent name; deleting the agent workspace moves the card back to "todo" and clears the assignee
 - **AI Chat** — Global chat panel powered by local LLMs via [Ollama](https://ollama.ai/) or [llama.cpp](https://github.com/ggerganov/llama.cpp) server; `Ctrl+Y` in TUI opens a centered floating overlay, `Ctrl+Shift+L` in desktop toggles a right-side panel; not tied to any workspace — conversation persists across workspace switches; select server type (Ollama / llama.cpp) in settings (`Ctrl+O` in TUI, gear icon in Desktop), then choose from available models via Tab (TUI) or dropdown (Desktop); streaming responses with token-by-token rendering; clear with `Ctrl+L`; config (server type, model, base URL, system prompt) persisted in settings; **Agent Mode** (`Ctrl+A` in TUI) enables agentic tool-use — the LLM can call tools (`git_status`, `read_file`, `list_files`, `search_code`) to inspect the active workspace and iterate until the question is resolved; tool results are displayed inline in the chat; powered by `piki-agent` crate
-- **Code Review** — Full-screen PR review tab powered by `gh` CLI; browse changed files in a resizable file-list panel (press `[`/`]` to shrink/grow ±5%, or drag the divider with the mouse; ratio persists across restarts); view diffs with line numbers and a cursor; add inline comments on any line (`c`), delete comments (`d`); submit reviews (approve/request changes/comment) with inline comments via GitHub API; persistent draft overlay; tab only opens if the current branch has an open PR; locked mode prevents accidental workspace switching — press `q` to close or `s` to submit; `gh` availability and authentication are checked lazily on first use and cached for the session
+- **Code Review** — Full-screen PR review, independent of any open workspace: New Tab → Tools → Code Review opens a PR picker listing PRs relevant to the current `gh` user across all accessible repos (authored, already-interacted-with, review-requested-but-pending), fetched via `gh search prs`; picking one checks out the PR into an app-managed directory (`<data-dir>/review-checkouts`, separate from your regular worktrees) — cloning it on first use and just fetching/resetting on later opens (a no-op if the PR's head hasn't moved), then opens it as a throwaway "ephemeral" workspace that never persists across restarts, shown in the sidebar with its own icon (`◎`); browse changed files in a resizable file-list panel (press `[`/`]` to shrink/grow ±5%, or drag the divider with the mouse; ratio persists across restarts); view diffs with line numbers and a cursor; existing comments from other reviewers show inline as threads; add inline comments on any line (`c`), reply to an existing thread (`R`), delete your own comment (`d`); submit reviews (approve/request changes/comment) with inline comments via GitHub API, then your thread replies are sent individually; both `s` → `Enter` (submit) and `q` (back out) just leave the review view — the workspace, its tab, and the checkout on disk stay put either way, so click or `Enter` on it in the sidebar reopens it (submit also clears the just-sent draft so reopening can't resubmit the same comments); deleting the review workspace from the sidebar (like any other workspace) always deletes its checkout from disk, after confirming; locked mode prevents accidental workspace switching while the review has focus; `gh` availability and authentication are checked lazily on first use and cached for the session
 - **API Explorer** — Interactive HTTP client tab (New Tab → Tools) with Hurl-like syntax; write `METHOD URL`, headers, and body in a built-in editor (starts empty); `Ctrl+S` to send; response displayed with status code, elapsed time, and pretty-printed JSON; `Ctrl+J`/`Ctrl+K` to scroll response; `Ctrl+F` to search response; contextual footer hints for API-specific shortcuts; errors (parse failures, client init, network errors) and successful requests are logged to the in-app log viewer (`Ctrl+G o`)
 
 ## Desktop Application (Tauri)
@@ -526,36 +526,50 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 | Arrow keys | Move cursor |
 | `Tab` | Insert 4 spaces |
 
+**PR picker** (New Tab → Tools → Code Review, `2`):
+
+Lists PRs relevant to the current `gh` user across every accessible repo, grouped into three sections: "My PRs" (authored), "Interacted With" (already commented/reviewed — tagged `[requested]` if a review was also asked for), and "Review Requested" (requested, no interaction yet). Picking one checks out the PR (cloning or reusing/fast-forwarding as needed) and opens it as an ephemeral review workspace. Press `o` to browse a specific repo instead: type `owner/repo` (or paste a GitHub URL — `https://github.com/owner/repo`, `.../pull/N`, an SSH remote, all normalized to `owner/repo`) and `Enter` lists every open PR in it (unfiltered by relevance-to-you), so you can pick any PR in a repo you know even if GitHub wouldn't otherwise surface it. `m` returns to the default categorized list; `r` reloads whichever list is showing. Picking a PR that's already open in an ephemeral review workspace reopens that workspace instead of checking it out again. If the workspace you're standing on already holds a review, `2` reopens its tab directly instead of opening this picker. Long lists scroll to keep the selection in view (a `[n/total]` indicator appears bottom-right once the list overflows the popup).
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Navigate PRs |
+| `Enter` | Check out the selected PR and open its review |
+| `r` | Reload the current list from GitHub |
+| `o` | Browse a specific repo's PRs (prompts for `owner/repo`) |
+| `m` | Back to the default categorized list (only shown while browsing a repo) |
+| `Esc` | Cancel the repo prompt, or close the picker entirely |
+
 **Code Review** (locked mode — all other keys blocked):
 
-The Code Review tab takes over the full screen. While active, workspace switching, pane navigation, and all other global keybindings are disabled. You must close the review (`q`) or submit it (`s` → `Enter`) to return to normal mode. The diff pane shows a **side-by-side split view**: the left panel displays the old file (deletions in red), the right panel displays the new file (additions in green), and context lines appear on both sides. Deletions and additions are paired row-by-row; file and hunk headers span the full width. Press `c` on any line to add an inline comment, `d` to remove it. Comments are displayed as yellow blocks inline on the appropriate side (left for deletions, right for additions) and submitted alongside the review via the GitHub API. The cursor highlights both halves simultaneously. Note: GitHub does not allow Approve or Request Changes on your own PRs — use Comment instead.
+The Code Review tab takes over the full screen. While active, workspace switching, pane navigation, and all other global keybindings are disabled. Both `q` and submitting (`s` → `Enter`) just back out to the general view — neither closes the tab, clears the workspace, nor touches the checkout on disk; clicking or pressing Enter on the workspace in the sidebar reopens it. The Code Review tab itself isn't closable (`×`/`Ctrl+G x` are no-ops on it) — since a review workspace exists only to hold this one tab, closing it would leave the workspace stranded in the sidebar with nothing to reopen. Submitting additionally clears the just-sent draft (comments, body, reply drafts) so reopening the review can't accidentally resubmit them. To actually discard a review workspace and delete its checkout, delete it from the sidebar like any other workspace (`prefix d`) — that always asks first and always deletes the checkout, never just detaches it. The diff pane shows a **side-by-side split view**: the left panel displays the old file (deletions in red), the right panel displays the new file (additions in green), and context lines appear on both sides. Deletions and additions are paired row-by-row; file and hunk headers span the full width. Existing comments from other reviewers appear inline as threads (root comment + replies); press `c` on any line to add your own inline comment, `R` to reply to an existing thread anchored there, `d` to delete your own comment. Comments are displayed as yellow blocks inline on the appropriate side (left for deletions, right for additions); your inline comments submit alongside the review via the GitHub API, and thread replies are sent individually right after. The cursor highlights both halves simultaneously. Note: GitHub does not allow Approve or Request Changes on your own PRs — use Comment instead.
 
 | Key | Context | Action |
 |-----|---------|--------|
 | `j` / `k` | File list | Navigate files |
 | `Enter` | File list | View diff for selected file |
 | `l` | File list | Switch focus to diff pane |
-| `r` | File list | Refresh PR data from GitHub |
+| `r` | File list | Refresh PR data from GitHub (re-checks out only if the PR moved) |
 | `j` / `k` | Diff pane | Move cursor up/down |
 | `Ctrl+d` / `Ctrl+u` | Diff pane | Page down/up (cursor jumps ±20) |
 | `g` / `G` | Diff pane | Jump cursor to top/bottom |
 | `c` | Diff pane | Add inline comment on cursor line (opens editor) |
-| `d` | Diff pane | Delete inline comment on cursor line |
+| `R` | Diff pane | Reply to the existing comment thread on cursor line, if any (opens editor) |
+| `d` | Diff pane | Delete your own inline comment on cursor line |
 | `h` | Diff pane | Switch focus to file list |
 | `n` / `p` | Diff pane | Next/previous file (auto-loads diff) |
 | `[` / `]` | Any | Shrink / grow file-list panel (±5%, clamped 10–90%; persists across restarts) |
 | `s` | Any | Open submit review overlay |
-| `q` | Any | Close code review (discard state) |
+| `q` | Any | Back to the general view (nothing is closed or deleted — reopen from the sidebar) |
 | Mouse scroll | File list / Diff | Scroll content (moves cursor in diff) |
 | Mouse click | Left/right pane | Switch focus / set cursor |
 | Drag divider | File list / Diff border | Resize file-list panel interactively |
 
-**In comment editor** (opened with `c` on a diff line):
+**In comment editor** (opened with `c` for a new comment, or `R` to reply to an existing thread):
 
 | Key | Action |
 |-----|--------|
 | *type* | Edit comment text |
-| `Enter` | Save comment (empty body removes it) |
+| `Enter` | Save comment/reply (empty body removes it) |
 | `Esc` | Cancel without saving |
 | `Left` / `Right` / `Home` / `End` | Move cursor |
 | `Backspace` | Delete character |

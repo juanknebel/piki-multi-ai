@@ -16,7 +16,8 @@ use super::dialog::{
     handle_edit_provider_input, handle_edit_workspace_input,
     handle_help_input, handle_import_agents_input, handle_logs_input,
     handle_manage_agents_input, handle_manage_providers_input, handle_missing_prereqs_input,
-    handle_new_tab_input, handle_new_workspace_input, handle_workspace_info_input,
+    handle_new_tab_input, handle_new_workspace_input, handle_pr_picker_input,
+    handle_workspace_info_input,
 };
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField};
@@ -312,6 +313,31 @@ fn confirm_delete_no_emits_remove_from_list_and_dismisses() {
     assert!(app.active_dialog.is_none());
     assert_eq!(app.mode, AppMode::Normal);
     assert_eq!(app.active_pane, ActivePane::WorkspaceList);
+}
+
+#[test]
+fn confirm_delete_no_on_ephemeral_cancels_instead_of_remove_from_list() {
+    // Ephemeral (PR review) workspaces don't offer RemoveFromList's
+    // "detach but keep the checkout on disk" semantics — deleting one must
+    // always delete its checkout, so "No" here is a plain cancel.
+    let mut app = test_app();
+    let mut info = piki_core::WorkspaceInfo::new(
+        "o/r#1".to_string(),
+        String::new(),
+        String::new(),
+        None,
+        std::path::PathBuf::from("/tmp/review"),
+        std::path::PathBuf::from("/tmp/review"),
+    );
+    info.ephemeral = true;
+    app.workspaces.push(crate::app::Workspace::from_info(info));
+    open_confirm_delete(&mut app, 0);
+
+    let action = handle_confirm_delete_input(&mut app, key(KeyCode::Char('n')));
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.workspaces.len(), 1, "the ephemeral workspace must survive a cancel");
 }
 
 #[test]
@@ -1775,17 +1801,18 @@ fn new_tab_tools_key_1_spawns_kanban() {
 }
 
 #[test]
-fn new_tab_tools_key_2_spawns_code_review() {
+fn new_tab_tools_key_2_opens_pr_picker() {
     let mut app = test_app();
     open_new_tab_tools(&mut app);
 
     let action = handle_new_tab_input(&mut app, key(KeyCode::Char('2')));
 
+    assert!(matches!(action, Some(Action::LoadPrList)));
     assert!(matches!(
-        action,
-        Some(Action::SpawnTab(AIProvider::CodeReview))
+        app.active_dialog,
+        Some(crate::dialog_state::DialogState::PrPicker { loading: true, .. })
     ));
-    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::PrPicker);
 }
 
 #[test]
@@ -3467,4 +3494,246 @@ fn about_toggle_key_a_also_dismisses() {
 
     assert!(app.active_dialog.is_none());
     assert_eq!(app.mode, AppMode::Normal);
+}
+
+// ── PR picker: "browse a repo" mode ──
+
+fn open_pr_picker(app: &mut App, repo_browse: crate::dialog_state::RepoBrowse) {
+    app.active_dialog = Some(crate::dialog_state::DialogState::PrPicker {
+        loading: false,
+        error: None,
+        items: Vec::new(),
+        selected: 0,
+        checking_out: None,
+        repo_browse,
+    });
+    app.mode = AppMode::PrPicker;
+}
+
+fn current_repo_browse(app: &App) -> &crate::dialog_state::RepoBrowse {
+    match &app.active_dialog {
+        Some(crate::dialog_state::DialogState::PrPicker { repo_browse, .. }) => repo_browse,
+        _ => panic!("PrPicker dialog not active"),
+    }
+}
+
+#[test]
+fn pr_picker_o_opens_repo_input_empty_from_closed() {
+    let mut app = test_app();
+    open_pr_picker(&mut app, crate::dialog_state::RepoBrowse::Closed);
+
+    let action = handle_pr_picker_input(&mut app, key(KeyCode::Char('o')));
+
+    assert!(action.is_none());
+    assert!(matches!(
+        current_repo_browse(&app),
+        crate::dialog_state::RepoBrowse::Input { text, .. } if text.is_empty()
+    ));
+}
+
+#[test]
+fn pr_picker_o_prefills_repo_input_from_loaded() {
+    let mut app = test_app();
+    open_pr_picker(
+        &mut app,
+        crate::dialog_state::RepoBrowse::Loaded {
+            repo_nwo: "owner/repo".to_string(),
+            items: Vec::new(),
+        },
+    );
+
+    handle_pr_picker_input(&mut app, key(KeyCode::Char('o')));
+
+    assert!(matches!(
+        current_repo_browse(&app),
+        crate::dialog_state::RepoBrowse::Input { text, .. } if text == "owner/repo"
+    ));
+}
+
+#[test]
+fn pr_picker_repo_input_typing_and_enter_emits_load_repo_prs() {
+    let mut app = test_app();
+    open_pr_picker(
+        &mut app,
+        crate::dialog_state::RepoBrowse::Input { text: String::new(), cursor: 0 },
+    );
+
+    for c in "owner/repo".chars() {
+        handle_pr_picker_input(&mut app, key(KeyCode::Char(c)));
+    }
+    assert!(matches!(
+        current_repo_browse(&app),
+        crate::dialog_state::RepoBrowse::Input { text, .. } if text == "owner/repo"
+    ));
+
+    let action = handle_pr_picker_input(&mut app, key(KeyCode::Enter));
+
+    assert!(matches!(action, Some(Action::LoadRepoPrs(repo)) if repo == "owner/repo"));
+}
+
+#[test]
+fn pr_picker_repo_input_enter_without_slash_is_rejected() {
+    let mut app = test_app();
+    open_pr_picker(
+        &mut app,
+        crate::dialog_state::RepoBrowse::Input { text: "notarepo".to_string(), cursor: 8 },
+    );
+
+    let action = handle_pr_picker_input(&mut app, key(KeyCode::Enter));
+
+    assert!(action.is_none(), "a repo without an owner/name slash must not submit");
+}
+
+#[test]
+fn pr_picker_esc_from_repo_input_cancels_to_closed_not_whole_dialog() {
+    let mut app = test_app();
+    open_pr_picker(
+        &mut app,
+        crate::dialog_state::RepoBrowse::Input { text: "owner/repo".to_string(), cursor: 10 },
+    );
+
+    let action = handle_pr_picker_input(&mut app, key(KeyCode::Esc));
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_some(), "Esc from repo input must not close the whole picker");
+    assert!(matches!(current_repo_browse(&app), crate::dialog_state::RepoBrowse::Closed));
+}
+
+#[test]
+fn pr_picker_esc_from_closed_dismisses_whole_dialog() {
+    let mut app = test_app();
+    open_pr_picker(&mut app, crate::dialog_state::RepoBrowse::Closed);
+
+    handle_pr_picker_input(&mut app, key(KeyCode::Esc));
+
+    assert!(app.active_dialog.is_none());
+}
+
+#[test]
+fn pr_picker_m_returns_from_loaded_repo_to_closed() {
+    let mut app = test_app();
+    open_pr_picker(
+        &mut app,
+        crate::dialog_state::RepoBrowse::Loaded {
+            repo_nwo: "owner/repo".to_string(),
+            items: Vec::new(),
+        },
+    );
+
+    let action = handle_pr_picker_input(&mut app, key(KeyCode::Char('m')));
+
+    assert!(action.is_none());
+    assert!(matches!(current_repo_browse(&app), crate::dialog_state::RepoBrowse::Closed));
+}
+
+#[test]
+fn pr_picker_m_is_a_no_op_when_already_closed() {
+    // 'm' isn't a generic key — it must not be swallowed as a no-op key
+    // when there's nothing to return from (guards against a stray 'm' in a
+    // PR title triggering it, since it's letter-gated to Loaded only).
+    let mut app = test_app();
+    open_pr_picker(&mut app, crate::dialog_state::RepoBrowse::Closed);
+
+    let action = handle_pr_picker_input(&mut app, key(KeyCode::Char('m')));
+
+    assert!(action.is_none());
+    assert!(matches!(current_repo_browse(&app), crate::dialog_state::RepoBrowse::Closed));
+}
+
+#[test]
+fn pr_picker_r_reloads_repo_list_when_loaded() {
+    let mut app = test_app();
+    open_pr_picker(
+        &mut app,
+        crate::dialog_state::RepoBrowse::Loaded {
+            repo_nwo: "owner/repo".to_string(),
+            items: Vec::new(),
+        },
+    );
+
+    let action = handle_pr_picker_input(&mut app, key(KeyCode::Char('r')));
+
+    assert!(matches!(action, Some(Action::LoadRepoPrs(repo)) if repo == "owner/repo"));
+}
+
+// ── bracketed paste into dialog text fields ─────────────────────────────────
+// `input::handle_paste` used to only cover a handful of dialogs
+// (`handle_bulk_insert`'s match had no arms for PrPicker, EditWorkspace,
+// CreateWorktree, EditProvider) so pasting into those text fields was a
+// silent no-op — Ctrl+Shift+V just did nothing.
+
+#[test]
+fn paste_into_pr_picker_repo_input_inserts_text() {
+    let mut app = test_app();
+    open_pr_picker(
+        &mut app,
+        crate::dialog_state::RepoBrowse::Input { text: String::new(), cursor: 0 },
+    );
+
+    crate::input::handle_paste(&mut app, "https://github.com/owner/repo");
+
+    match current_repo_browse(&app) {
+        crate::dialog_state::RepoBrowse::Input { text, cursor } => {
+            assert_eq!(text, "https://github.com/owner/repo");
+            assert_eq!(*cursor, text.len());
+        }
+        other => panic!("expected RepoBrowse::Input, got {other:?}"),
+    }
+}
+
+#[test]
+fn paste_into_edit_workspace_prompt_inserts_text() {
+    let mut app = test_app();
+    open_edit_workspace(&mut app, EditWorkspaceField::Prompt);
+
+    crate::input::handle_paste(&mut app, "pasted prompt");
+
+    let Some(DialogState::EditWorkspace { prompt, .. }) = &app.active_dialog else {
+        panic!("expected EditWorkspace dialog");
+    };
+    assert_eq!(prompt, "pasted prompt");
+}
+
+#[test]
+fn paste_into_create_worktree_name_inserts_text() {
+    let mut app = test_app();
+    app.mode = AppMode::CreateWorktree;
+    app.active_dialog = Some(DialogState::CreateWorktree {
+        parent_idx: 0,
+        mode: crate::dialog_state::CreateWorktreeMode::CreateNew,
+        name: String::new(),
+        name_cursor: 0,
+        prompt: String::new(),
+        prompt_cursor: 0,
+        kanban: String::new(),
+        kanban_cursor: 0,
+        active_field: crate::dialog_state::CreateWorktreeField::Name,
+        existing: Vec::new(),
+        existing_selected: 0,
+        existing_loading: false,
+    });
+
+    crate::input::handle_paste(&mut app, "feature/pasted-branch");
+
+    let Some(DialogState::CreateWorktree { name, .. }) = &app.active_dialog else {
+        panic!("expected CreateWorktree dialog");
+    };
+    assert_eq!(name, "feature/pasted-branch");
+}
+
+#[test]
+fn paste_into_edit_provider_command_inserts_text() {
+    let mut app = test_app();
+    open_edit_provider(&mut app);
+    let Some(DialogState::EditProvider { active_field, .. }) = &mut app.active_dialog else {
+        panic!("expected EditProvider dialog");
+    };
+    *active_field = EditProviderField::Command;
+
+    crate::input::handle_paste(&mut app, "/usr/local/bin/my-agent");
+
+    let Some(DialogState::EditProvider { command, .. }) = &app.active_dialog else {
+        panic!("expected EditProvider dialog");
+    };
+    assert_eq!(command, "/usr/local/bin/my-agent");
 }

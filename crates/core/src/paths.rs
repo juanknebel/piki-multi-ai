@@ -99,4 +99,14 @@ impl DataPaths {
     pub fn antigravity_hooks_dir(&self) -> PathBuf {
         self.base.join("antigravity-hooks")
     }
+
+    /// Ad-hoc PR checkouts for code review: `<base>/review-checkouts`. Each
+    /// repo gets one base clone (`<owner>__<repo>`) with one `git worktree`
+    /// per PR (`<owner>__<repo>--pr-<N>`), managed by
+    /// [`github::ReviewCheckoutManager`](crate::github::ReviewCheckoutManager).
+    /// Unlike `repos_dir()` (user-initiated clones meant to be kept), this
+    /// directory is fully owned by piki and safe to prune/overwrite.
+    pub fn review_checkouts_dir(&self) -> PathBuf {
+        self.base.join("review-checkouts")
+    }
 }

@@ -2,6 +2,14 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+pub mod checkout;
+pub mod pr_list;
+
+pub use checkout::{CheckoutPlan, PrCheckout, ReviewCheckoutManager};
+pub use pr_list::{
+    PrInclusionReason, PrListItem, list_relevant_prs, list_repo_prs, normalize_repo_nwo,
+};
+
 /// PR metadata from `gh pr view --json ...`
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -22,6 +30,11 @@ pub struct PrInfo {
     pub review_requests: Vec<ReviewRequest>,
     #[serde(default)]
     pub latest_reviews: Vec<PrReviewSummary>,
+    /// The head commit SHA. Absent from older call sites that didn't request
+    /// it; used by [`checkout`] to detect whether a local checkout is stale
+    /// without doing a full `git fetch`.
+    #[serde(default)]
+    pub head_ref_oid: String,
 }
 
 /// A reviewer requested on the PR. For users `login` is set; for teams `name`.
@@ -253,7 +266,7 @@ pub async fn get_pr_for_branch(worktree_path: &Path) -> anyhow::Result<Option<Pr
             "pr",
             "view",
             "--json",
-            "number,title,body,state,reviewDecision,url,headRefName,baseRefName,additions,deletions,reviewRequests,latestReviews",
+            "number,title,body,state,reviewDecision,url,headRefName,baseRefName,additions,deletions,reviewRequests,latestReviews,headRefOid",
         ])
         .current_dir(worktree_path)
         .output()
@@ -274,6 +287,34 @@ pub async fn get_pr_for_branch(worktree_path: &Path) -> anyhow::Result<Option<Pr
     Ok(Some(info))
 }
 
+/// Fetch PR info by explicit number and repo, without relying on the current
+/// branch/working directory. Works from anywhere (no `current_dir` checkout
+/// required), which is what makes ad-hoc review checkouts possible.
+pub async fn get_pr_view(repo_nwo: &str, number: u64) -> anyhow::Result<PrInfo> {
+    tracing::info!(repo = repo_nwo, pr = number, "gh: fetching PR view by number");
+    let output = crate::shell_env::command("gh")
+        .args([
+            "pr",
+            "view",
+            &number.to_string(),
+            "-R",
+            repo_nwo,
+            "--json",
+            "number,title,body,state,reviewDecision,url,headRefName,baseRefName,additions,deletions,reviewRequests,latestReviews,headRefOid",
+        ])
+        .output()
+        .await?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        tracing::error!(stderr = %stderr.trim(), "gh pr view -R failed");
+        anyhow::bail!("gh pr view {number} -R {repo_nwo} failed: {}", stderr.trim());
+    }
+
+    let info: PrInfo = serde_json::from_slice(&output.stdout)?;
+    Ok(info)
+}
+
 /// Fetch the list of changed files in the PR.
 pub async fn get_pr_files(worktree_path: &Path) -> anyhow::Result<Vec<PrFile>> {
     tracing::info!(path = %worktree_path.display(), "gh: fetching PR files");
@@ -287,6 +328,28 @@ pub async fn get_pr_files(worktree_path: &Path) -> anyhow::Result<Vec<PrFile>> {
         let stderr = String::from_utf8_lossy(&output.stderr);
         tracing::error!(stderr = %stderr.trim(), "gh pr view --json files failed");
         anyhow::bail!("gh pr view --json files failed: {}", stderr.trim());
+    }
+
+    let resp: PrFilesResponse = serde_json::from_slice(&output.stdout)?;
+    tracing::info!(count = resp.files.len(), "gh: PR files loaded");
+    Ok(resp.files)
+}
+
+/// Fetch the list of changed files by explicit PR number. Unlike
+/// [`get_pr_files`], this does not resolve the PR via the current branch, so
+/// it works against a detached-HEAD checkout (e.g. an ad-hoc review worktree).
+pub async fn get_pr_files_by_number(worktree_path: &Path, number: u64) -> anyhow::Result<Vec<PrFile>> {
+    tracing::info!(path = %worktree_path.display(), pr = number, "gh: fetching PR files by number");
+    let output = crate::shell_env::command("gh")
+        .args(["pr", "view", &number.to_string(), "--json", "files"])
+        .current_dir(worktree_path)
+        .output()
+        .await?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        tracing::error!(stderr = %stderr.trim(), "gh pr view N --json files failed");
+        anyhow::bail!("gh pr view {number} --json files failed: {}", stderr.trim());
     }
 
     let resp: PrFilesResponse = serde_json::from_slice(&output.stdout)?;
@@ -581,6 +644,45 @@ pub async fn submit_review(
         let stderr = String::from_utf8_lossy(&output.stderr);
         tracing::error!(stderr = %stderr.trim(), "gh pr review failed");
         anyhow::bail!("gh pr review failed: {}", stderr.trim());
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    tracing::info!("gh: review submitted successfully (no inline comments)");
+    Ok(stdout.trim().to_string())
+}
+
+/// Submit a review by explicit PR number (no inline comments). Unlike
+/// [`submit_review`], this does not resolve the PR via the current branch, so
+/// it works against a detached-HEAD checkout (e.g. an ad-hoc review worktree).
+pub async fn submit_review_by_number(
+    worktree_path: &Path,
+    number: u64,
+    verdict: ReviewVerdict,
+    body: &str,
+) -> anyhow::Result<String> {
+    tracing::info!(
+        pr = number,
+        verdict = verdict.label(),
+        body_len = body.len(),
+        "gh: submitting review by number (no inline comments)"
+    );
+    let number_str = number.to_string();
+    let mut args = vec!["pr", "review", &number_str, verdict.flag()];
+    if !body.is_empty() {
+        args.push("--body");
+        args.push(body);
+    }
+
+    let output = crate::shell_env::command("gh")
+        .args(&args)
+        .current_dir(worktree_path)
+        .output()
+        .await?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        tracing::error!(stderr = %stderr.trim(), "gh pr review N failed");
+        anyhow::bail!("gh pr review {number} failed: {}", stderr.trim());
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);

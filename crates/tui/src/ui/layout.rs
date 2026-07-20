@@ -69,11 +69,18 @@ fn compute_footer_height_from_keys(keys: &[(String, &str)], total_width: u16) ->
     if total as u16 <= total_width { 1 } else { 2 }
 }
 
-/// Check if the active tab is a CodeReview tab with loaded state
+/// Check if the active tab is a CodeReview tab with loaded state and the
+/// main panel actually has focus. The focus check matters because
+/// `active_workspace` changes on mere sidebar cursor movement (follow-focus,
+/// see `App::follow_sidebar_row`) — without it, arrowing past a review
+/// workspace's row would yank the whole screen into the locked full-screen
+/// review before the user ever pressed Enter or clicked it.
 fn is_code_review_active(app: &App) -> bool {
-    app.current_workspace()
-        .and_then(|ws| ws.current_tab())
-        .is_some_and(|tab| tab.provider == piki_core::AIProvider::CodeReview)
+    app.active_pane == crate::app::ActivePane::MainPanel
+        && app
+            .current_workspace()
+            .and_then(|ws| ws.current_tab())
+            .is_some_and(|tab| tab.provider == piki_core::AIProvider::CodeReview)
         && app
             .current_workspace()
             .is_some_and(|ws| ws.code_review.is_some())
@@ -275,6 +282,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
             super::dialogs::render_manage_providers_dialog(frame, area, app)
         }
         AppMode::EditProvider => super::dialogs::render_edit_provider_dialog(frame, area, app),
+        AppMode::PrPicker => super::dialogs::render_pr_picker_dialog(frame, area, app),
         AppMode::InlineEdit => {}   // handled by main content render
         AppMode::SubmitReview => {} // handled by full-screen code review bypass above
         AppMode::ChatPanel => super::chat::render_chat_overlay(frame, area, app),

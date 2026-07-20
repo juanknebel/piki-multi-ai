@@ -16,8 +16,15 @@ use super::layout::{pane_border_style, pane_title_style};
 /// Icon prefix for a workspace row. A `Simple` workspace pointed at a plain
 /// (non-git) directory gets a distinct folder icon — otherwise it's
 /// indistinguishable from a git-backed one until its branch happens to
-/// resolve (see `Workspace::branch`).
-fn workspace_type_icon(ws_type: WorkspaceType, is_git_repo: bool) -> &'static str {
+/// resolve (see `Workspace::branch`). An ephemeral PR review checkout gets
+/// its own icon regardless of type, since it's transient in a way none of
+/// the other workspace kinds are.
+fn workspace_type_icon(ws_type: WorkspaceType, is_git_repo: bool, ephemeral: bool) -> &'static str {
+    if ephemeral {
+        // Ad-hoc PR review checkout — never persisted, deleted on close.
+        // Distinct from every other icon so it reads as "throwaway" at a glance.
+        return "◎ ";
+    }
     match ws_type {
         WorkspaceType::Worktree => "⎇ ",
         WorkspaceType::Project => "▣ ",
@@ -223,23 +230,6 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
         }
     }
 
-    // Fixed right-hand gutter: computed once over every row (not just the
-    // visible slice, so it doesn't jitter while scrolling) so metadata always
-    // starts at the same column instead of hugging each row's name length.
-    let gutter_w = sidebar_items
-        .iter()
-        .map(|SidebarItem::Workspace { index, collapsed }| {
-            let ws = &app.workspaces[*index];
-            let class = classify_row(ws, &family_info);
-            let sig = effective_signals(ws, &class, *collapsed);
-            right_metadata_spans(app, theme.detail_normal, sig.status, sig.changed, sig.ahead_behind)
-                .iter()
-                .map(|sp| sp.width())
-                .sum::<usize>()
-        })
-        .max()
-        .unwrap_or(0);
-
     // All rows are one line tall; scroll follows the selection's position in
     // `visual_rows` (which may include blank separators sidebar_items() doesn't).
     let visible_height = area.height.saturating_sub(2) as usize;
@@ -252,8 +242,6 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
     } else {
         0
     };
-
-    let inner_width = area.width.saturating_sub(2) as usize;
 
     let items: Vec<ListItem> = visual_rows
         .iter()
@@ -362,8 +350,11 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                     } else {
                         Span::raw("  ")
                     };
-                    let type_icon =
-                        workspace_type_icon(ws.info.workspace_type, ws.info.is_git_repo);
+                    let type_icon = workspace_type_icon(
+                        ws.info.workspace_type,
+                        ws.info.is_git_repo,
+                        ws.info.ephemeral,
+                    );
 
                     // A collapsed family parent surfaces its hidden children's
                     // signals (idle dot + metadata below) instead of losing
@@ -394,25 +385,19 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                         ));
                     }
 
-                    // Right-aligned metadata, shown only when it says something:
-                    // actionable agent status, changed-file count, ahead/behind.
-                    // Activity (running) stays in the Agents pane.
+                    // Metadata (agent status glyph, changed-file count,
+                    // ahead/behind), shown only when it says something.
+                    // Activity (running) stays in the Agents pane. Placed
+                    // right after the name instead of right-aligned against
+                    // the border — right alignment meant a narrow pane (or a
+                    // long name) pushed it clean off the visible edge; here
+                    // it's always the next thing rendered, so it survives
+                    // any pane width down to the name itself getting cut.
                     let right =
                         right_metadata_spans(app, detail_color, sig.status, sig.changed, sig.ahead_behind);
-
-                    // Metadata always starts at the same column across every
-                    // row (leaving a 1-column margin before the border, as
-                    // the old per-row layout did) instead of hugging each
-                    // row's own name length. A name long enough to reach that
-                    // column collapses `pad` to 0 and the metadata is
-                    // appended right after it rather than hidden outright —
-                    // a graceful squeeze, not a disappearing act.
-                    let left_w: usize = left.iter().map(|sp| sp.width()).sum();
                     let mut spans = left;
-                    if gutter_w > 0 {
-                        let gutter_end = inner_width.saturating_sub(1);
-                        let pad = gutter_end.saturating_sub(left_w).saturating_sub(gutter_w);
-                        spans.push(Span::raw(" ".repeat(pad)));
+                    if !right.is_empty() {
+                        spans.push(Span::raw(" "));
                         spans.extend(right);
                     }
 
@@ -535,4 +520,21 @@ pub(super) fn render_agents_pane(frame: &mut Frame, area: Rect, app: &App) {
         visible_height,
         app.theme.general.scrollbar_thumb,
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ephemeral_icon_overrides_workspace_type() {
+        // An ephemeral review checkout is visually distinct regardless of
+        // its underlying WorkspaceType, so it never gets mistaken for a
+        // regular worktree/project/simple workspace in the sidebar.
+        let ephemeral_icon = workspace_type_icon(WorkspaceType::Simple, true, true);
+        assert_ne!(ephemeral_icon, workspace_type_icon(WorkspaceType::Simple, true, false));
+        assert_ne!(ephemeral_icon, workspace_type_icon(WorkspaceType::Worktree, true, false));
+        assert_ne!(ephemeral_icon, workspace_type_icon(WorkspaceType::Project, true, false));
+        assert_eq!(ephemeral_icon, workspace_type_icon(WorkspaceType::Worktree, true, true));
+    }
 }

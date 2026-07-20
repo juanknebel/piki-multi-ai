@@ -2,16 +2,21 @@ use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::action::Action;
 use crate::app::{App, AppMode};
-use crate::code_review::{EditingComment, ReviewFocus};
+use crate::code_review::{CommentTarget, EditingComment, ReviewFocus};
 use crate::config::has_ctrl;
 use piki_core::github::{DiffLineType, InlineComment, ReviewVerdict};
 
-/// Check if the active tab is a CodeReview tab with loaded state.
-/// Used to intercept ALL input before any navigation/interaction dispatch.
+/// Check if the active tab is a CodeReview tab with loaded state and the
+/// main panel has focus. Used to intercept ALL input before any
+/// navigation/interaction dispatch — gated on focus (not just
+/// `active_workspace`) so browsing the sidebar with j/k past a review
+/// workspace's row never hijacks the keyboard; see `ui::layout::is_code_review_active`.
 pub(super) fn is_code_review_locked(app: &App) -> bool {
-    app.current_workspace()
-        .and_then(|ws| ws.current_tab())
-        .is_some_and(|tab| tab.provider == piki_core::AIProvider::CodeReview)
+    app.active_pane == crate::app::ActivePane::MainPanel
+        && app
+            .current_workspace()
+            .and_then(|ws| ws.current_tab())
+            .is_some_and(|tab| tab.provider == piki_core::AIProvider::CodeReview)
         && app
             .current_workspace()
             .and_then(|ws| ws.code_review.as_ref())
@@ -39,18 +44,16 @@ pub(super) fn handle_code_review_key(app: &mut App, key: KeyEvent) -> Option<Act
         return handle_submit_review_input(app, key);
     }
 
-    // q → close code review tab (discard review state)
+    // q → back to the general view. This is just a focus change, not a
+    // destructive action: the tab and its CodeReviewState (draft, loaded
+    // diffs, etc.) stay exactly as they are, so clicking or pressing Enter
+    // on the workspace again (which refocuses the main panel) reopens the
+    // same review right where it was left. Actually discarding the review
+    // — which deletes an ephemeral workspace's checkout from disk — only
+    // happens through the workspace-delete flow (sidebar `ConfirmDelete`),
+    // never implicitly from inside the review.
     if key.code == KeyCode::Char('q') {
-        if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
-            ws.code_review = None;
-            if ws
-                .current_tab()
-                .is_some_and(|t| t.provider == piki_core::AIProvider::CodeReview)
-            {
-                ws.close_tab(ws.active_tab);
-            }
-        }
-        app.mode = AppMode::Normal;
+        app.active_pane = crate::app::ActivePane::WorkspaceList;
         return None;
     }
 
@@ -164,19 +167,29 @@ fn handle_comment_editing_input(app: &mut App, key: KeyEvent) -> Option<Action> 
 
     match key.code {
         KeyCode::Enter => {
-            // Save comment
-            let comment = InlineComment {
-                path: ec.file_path.clone(),
-                line: ec.line,
-                side: ec.side.clone(),
-                body: ec.body.clone(),
-            };
-            // Remove existing comment at same path+line (dedup)
-            cr.draft
-                .comments
-                .retain(|c| !(c.path == comment.path && c.line == comment.line));
-            if !comment.body.is_empty() {
-                cr.draft.comments.push(comment);
+            match ec.target {
+                CommentTarget::NewInline => {
+                    let comment = InlineComment {
+                        path: ec.file_path.clone(),
+                        line: ec.line,
+                        side: ec.side.clone(),
+                        body: ec.body.clone(),
+                    };
+                    // Remove existing comment at same path+line (dedup)
+                    cr.draft
+                        .comments
+                        .retain(|c| !(c.path == comment.path && c.line == comment.line));
+                    if !comment.body.is_empty() {
+                        cr.draft.comments.push(comment);
+                    }
+                }
+                CommentTarget::Reply { comment_id } => {
+                    if ec.body.is_empty() {
+                        cr.reply_drafts.remove(&comment_id);
+                    } else {
+                        cr.reply_drafts.insert(comment_id, ec.body.clone());
+                    }
+                }
             }
             cr.editing_comment = None;
             None
@@ -339,6 +352,7 @@ fn handle_diff_view_keys(
                                 side: "RIGHT".to_string(),
                                 body: existing_body,
                                 body_cursor: cursor,
+                                target: CommentTarget::NewInline,
                             });
                         }
                     }
@@ -357,12 +371,45 @@ fn handle_diff_view_keys(
                                 side: "LEFT".to_string(),
                                 body: existing_body,
                                 body_cursor: cursor,
+                                target: CommentTarget::NewInline,
                             });
                         }
                     }
                     _ => {
                         // Can't comment on headers
                     }
+                }
+            }
+            None
+        }
+        KeyCode::Char('R') => {
+            // Reply to the existing comment thread anchored at the cursor
+            // line, if any — no-op when the line has no thread.
+            if let Some(diff) = cr.current_diff()
+                && let Some(diff_line) = diff.lines.get(cr.cursor_line)
+            {
+                let (ln, side) = match diff_line.line_type {
+                    DiffLineType::Deletion => (diff_line.old_line, "LEFT"),
+                    DiffLineType::Addition | DiffLineType::Context => {
+                        (diff_line.new_line, "RIGHT")
+                    }
+                    _ => (None, ""),
+                };
+                if let Some(ln) = ln
+                    && let Some(root) = cr.thread_root_at(cr.current_file_path().unwrap_or(""), ln, side)
+                {
+                    let comment_id = root.id;
+                    let file_path = cr.current_file_path().unwrap_or("").to_string();
+                    let existing_body = cr.reply_drafts.get(&comment_id).cloned().unwrap_or_default();
+                    let cursor = existing_body.len();
+                    cr.editing_comment = Some(EditingComment {
+                        file_path,
+                        line: ln,
+                        side: side.to_string(),
+                        body: existing_body,
+                        body_cursor: cursor,
+                        target: CommentTarget::Reply { comment_id },
+                    });
                 }
             }
             None
@@ -435,7 +482,7 @@ fn compute_visual_row_for_cursor(cr: &crate::code_review::CodeReviewState) -> us
         None => return cr.cursor_line,
     };
     let file_path = cr.current_file_path().unwrap_or("");
-    let split_rows = crate::ui::code_review::compute_split_rows(diff, &cr.draft, file_path);
+    let split_rows = crate::ui::code_review::compute_split_rows(diff, cr, file_path);
     for (row_idx, srow) in split_rows.iter().enumerate() {
         if srow.contains_diff_idx(cr.cursor_line) {
             return row_idx;
@@ -443,4 +490,100 @@ fn compute_visual_row_for_cursor(cr: &crate::code_review::CodeReviewState) -> us
     }
     // Fallback: cursor beyond all rows
     split_rows.len().saturating_sub(1)
+}
+
+#[cfg(test)]
+mod confirm_close_tests {
+    use super::*;
+    use crate::app::{ActivePane, Workspace};
+    use crate::code_review::CodeReviewState;
+    use crate::test_support::test_app;
+    use piki_core::github::PrInfo;
+
+    fn pr_info() -> PrInfo {
+        PrInfo {
+            number: 1,
+            title: "test".into(),
+            body: String::new(),
+            state: "OPEN".into(),
+            review_decision: None,
+            url: "https://github.com/o/r/pull/1".into(),
+            head_ref_name: "feature".into(),
+            base_ref_name: "main".into(),
+            additions: 0,
+            deletions: 0,
+            review_requests: vec![],
+            latest_reviews: vec![],
+            head_ref_oid: "abc".into(),
+        }
+    }
+
+    /// Push a workspace with an already-open CodeReview tab, focused on the
+    /// main panel (the only way `is_code_review_locked` engages).
+    fn push_review_workspace(app: &mut App, ephemeral: bool) {
+        let mut info = piki_core::WorkspaceInfo::new(
+            "o/r#1".to_string(),
+            String::new(),
+            String::new(),
+            None,
+            std::path::PathBuf::from("/tmp/review"),
+            std::path::PathBuf::from("/tmp/review"),
+        );
+        info.ephemeral = ephemeral;
+        let mut ws = Workspace::from_info(info);
+        let tab_idx = ws.add_tab(piki_core::AIProvider::CodeReview, true, None);
+        ws.active_tab = tab_idx;
+        ws.code_review = Some(CodeReviewState::new(
+            pr_info(),
+            std::path::PathBuf::from("/tmp/review"),
+            "origin/main".into(),
+            "o/r".into(),
+            vec![],
+        ));
+        app.workspaces.push(ws);
+        app.active_workspace = app.workspaces.len() - 1;
+        app.active_pane = ActivePane::MainPanel;
+    }
+
+    #[test]
+    fn q_on_ephemeral_returns_to_general_view_without_deleting_anything() {
+        let mut app = test_app();
+        push_review_workspace(&mut app, true);
+
+        let action = handle_code_review_key(&mut app, crate::test_support::key(KeyCode::Char('q')));
+
+        assert!(action.is_none());
+        assert_eq!(app.active_pane, ActivePane::WorkspaceList);
+        // Nothing was closed or deleted — the review can be reopened as-is.
+        assert_eq!(app.workspaces.len(), 1);
+        assert_eq!(app.workspaces[0].tabs.len(), 1);
+        assert!(app.workspaces[0].code_review.is_some());
+        assert!(!is_code_review_locked(&app), "leaving the main panel must unlock input");
+    }
+
+    #[test]
+    fn q_on_non_ephemeral_also_just_returns_to_general_view() {
+        let mut app = test_app();
+        push_review_workspace(&mut app, false);
+
+        let action = handle_code_review_key(&mut app, crate::test_support::key(KeyCode::Char('q')));
+
+        assert!(action.is_none());
+        assert_eq!(app.active_pane, ActivePane::WorkspaceList);
+        assert_eq!(app.workspaces[0].tabs.len(), 1);
+        assert!(app.workspaces[0].code_review.is_some());
+    }
+
+    #[test]
+    fn reentering_main_panel_relocks_the_review() {
+        let mut app = test_app();
+        push_review_workspace(&mut app, true);
+
+        handle_code_review_key(&mut app, crate::test_support::key(KeyCode::Char('q')));
+        assert!(!is_code_review_locked(&app));
+
+        // Enter/click on the workspace row focuses the main panel again.
+        app.active_pane = ActivePane::MainPanel;
+        assert!(is_code_review_locked(&app), "re-focusing the main panel must reopen the review");
+    }
 }
