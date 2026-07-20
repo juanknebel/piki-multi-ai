@@ -998,7 +998,12 @@ fn poll_workspaces(app: &mut App, now: Instant) {
                     let base_spec = session.checkout.base_spec.clone();
                     let repo_nwo = session.checkout.repo_nwo.clone();
                     let idx = app.open_review_workspace(info);
-                    let tab_idx = app.workspaces[idx].add_tab(piki_core::AIProvider::CodeReview, true, None);
+                    // Not closable: this workspace exists only to host this
+                    // review, so closing its one tab would strand it in the
+                    // sidebar with nothing to reopen. Disposing of the
+                    // review happens only through the explicit
+                    // workspace-delete flow, same invariant as `q`/submit.
+                    let tab_idx = app.workspaces[idx].add_tab(piki_core::AIProvider::CodeReview, false, None);
                     app.workspaces[idx].active_tab = tab_idx;
                     let mut cr = crate::code_review::CodeReviewState::new(
                         session.checkout.pr,

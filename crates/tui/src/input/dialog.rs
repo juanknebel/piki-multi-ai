@@ -651,6 +651,21 @@ pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Actio
                 Some(Action::SpawnTab(AIProvider::Kanban))
             }
             KeyCode::Char('2') => {
+                // Standing on a review workspace already? Reopen its tab
+                // directly instead of routing through the PR search panel.
+                if let Some(ws) = app.workspaces.get(app.active_workspace)
+                    && ws.code_review.is_some()
+                {
+                    if let Some(tab_idx) =
+                        ws.tabs.iter().position(|t| t.provider == piki_core::AIProvider::CodeReview)
+                    {
+                        app.workspaces[app.active_workspace].active_tab = tab_idx;
+                    }
+                    app.active_pane = crate::app::ActivePane::MainPanel;
+                    app.active_dialog = None;
+                    app.mode = AppMode::Normal;
+                    return None;
+                }
                 app.active_dialog = Some(DialogState::PrPicker {
                     loading: true,
                     error: None,

@@ -260,6 +260,27 @@ pub(super) async fn handle(
             let Some(item) = item else {
                 return Ok(());
             };
+            // Reuse an already-open review workspace for the same PR
+            // instead of cloning/checking it out again — picking the same
+            // PR twice used to spawn a second ephemeral workspace+checkout
+            // side by side with the first.
+            let existing = app.workspaces.iter().position(|ws| {
+                ws.code_review.as_ref().is_some_and(|cr| {
+                    cr.repo_nwo == item.repo_nwo && cr.pr_info.number == item.number
+                })
+            });
+            if let Some(idx) = existing {
+                if let Some(tab_idx) =
+                    app.workspaces[idx].tabs.iter().position(|t| t.provider == piki_core::AIProvider::CodeReview)
+                {
+                    app.workspaces[idx].active_tab = tab_idx;
+                }
+                app.switch_workspace_and_focus(idx);
+                app.active_dialog = None;
+                app.mode = AppMode::Normal;
+                app.set_toast("Reopened existing review", ToastLevel::Success);
+                return Ok(());
+            }
             let checkout_mgr = manager.review_checkout_manager();
             let slot = Arc::clone(&app.pending_pr_checkout);
             tokio::spawn(async move {
