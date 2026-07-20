@@ -474,12 +474,13 @@ pub(crate) fn render_confirm_delete_dialog(frame: &mut Frame, area: Rect, app: &
     let is_worktree = ws
         .map(|ws| ws.info.workspace_type == WorkspaceType::Worktree)
         .unwrap_or(false);
+    let is_ephemeral = ws.is_some_and(|ws| ws.info.ephemeral);
 
     let mut lines = vec![
         Line::from(""),
         Line::from(vec![
             Span::styled(
-                if is_worktree {
+                if is_worktree || is_ephemeral {
                     "  Delete "
                 } else {
                     "  Remove "
@@ -497,7 +498,16 @@ pub(crate) fn render_confirm_delete_dialog(frame: &mut Frame, area: Rect, app: &
         Line::from(""),
     ];
 
-    if !is_worktree {
+    if is_ephemeral {
+        lines.push(Line::from(Span::styled(
+            "  [y] Yes, delete PR checkout from disk",
+            Style::default().fg(theme.delete_yes),
+        )));
+        lines.push(Line::from(Span::styled(
+            "  [n] No, keep reviewing",
+            Style::default().fg(theme.delete_no),
+        )));
+    } else if !is_worktree {
         lines.push(Line::from(Span::styled(
             "  [y] Yes, remove from list",
             Style::default().fg(theme.delete_yes),

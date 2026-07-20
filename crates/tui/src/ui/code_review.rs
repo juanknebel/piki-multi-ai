@@ -75,6 +75,46 @@ pub(super) fn render_fullscreen(frame: &mut Frame, area: Rect, app: &mut App) {
     if state.editing_comment.is_some() {
         render_comment_input_overlay(frame, area, state, &app.theme);
     }
+    if state.confirm_close {
+        render_confirm_close_overlay(frame, area, &app.theme);
+    }
+}
+
+/// Confirm-before-discard overlay: `q` on an ephemeral review workspace
+/// deletes its checkout from disk, so we ask before doing it.
+fn render_confirm_close_overlay(frame: &mut Frame, area: Rect, theme: &Theme) {
+    let popup_width = 54u16.min(area.width.saturating_sub(4));
+    let popup_height = 7u16.min(area.height.saturating_sub(4));
+    let x = area.x + (area.width.saturating_sub(popup_width)) / 2;
+    let y = area.y + (area.height.saturating_sub(popup_height)) / 2;
+    let popup = Rect::new(x, y, popup_width, popup_height);
+
+    frame.render_widget(Clear, popup);
+
+    let block = Block::default()
+        .title(" Discard Review ")
+        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
+        .border_style(Style::default().fg(theme.palette.err));
+    let inner = block.inner(popup);
+    frame.render_widget(block, popup);
+
+    let lines = vec![
+        Line::from(""),
+        Line::from(Span::styled(
+            "  Discard this review? The PR checkout will be",
+            Style::default().fg(theme.palette.fg0),
+        )),
+        Line::from(Span::styled(
+            "  deleted from disk — this cannot be undone.",
+            Style::default().fg(theme.palette.fg0),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            "  [y] Yes, delete it    [n] No, keep reviewing",
+            Style::default().fg(theme.palette.fg2),
+        )),
+    ];
+    frame.render_widget(Paragraph::new(lines), inner);
 }
 
 /// Render PR info header bar
@@ -839,6 +879,8 @@ fn render_footer(
 ) {
     let keys = if state.editing_comment.is_some() {
         "[Enter] save comment  [Esc] cancel".to_string()
+    } else if state.confirm_close {
+        "[y] delete checkout  [n] keep reviewing".to_string()
     } else if state.show_submit {
         format!(
             "[Tab] cycle verdict  [Enter] submit  [Esc] close  [{}] discard",

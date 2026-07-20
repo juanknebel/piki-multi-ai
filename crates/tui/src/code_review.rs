@@ -121,6 +121,9 @@ pub struct CodeReviewState {
     /// Error message to display inside the submit overlay
     pub submit_error: Option<String>,
     pub loading: bool,
+    /// Confirm-before-discard overlay for `q` on an ephemeral review
+    /// workspace — its checkout gets deleted from disk, so we ask first.
+    pub confirm_close: bool,
 }
 
 impl CodeReviewState {
@@ -150,6 +153,7 @@ impl CodeReviewState {
             show_submit: false,
             submit_error: None,
             loading: false,
+            confirm_close: false,
         }
     }
 

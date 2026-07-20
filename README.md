@@ -539,7 +539,7 @@ Lists PRs relevant to the current `gh` user across every accessible repo, groupe
 
 **Code Review** (locked mode — all other keys blocked):
 
-The Code Review tab takes over the full screen. While active, workspace switching, pane navigation, and all other global keybindings are disabled. You must close the review (`q`) or submit it (`s` → `Enter`) to return to normal mode — either way, the ephemeral review workspace and its checkout directory are discarded. The diff pane shows a **side-by-side split view**: the left panel displays the old file (deletions in red), the right panel displays the new file (additions in green), and context lines appear on both sides. Deletions and additions are paired row-by-row; file and hunk headers span the full width. Existing comments from other reviewers appear inline as threads (root comment + replies); press `c` on any line to add your own inline comment, `R` to reply to an existing thread anchored there, `d` to delete your own comment. Comments are displayed as yellow blocks inline on the appropriate side (left for deletions, right for additions); your inline comments submit alongside the review via the GitHub API, and thread replies are sent individually right after. The cursor highlights both halves simultaneously. Note: GitHub does not allow Approve or Request Changes on your own PRs — use Comment instead.
+The Code Review tab takes over the full screen. While active, workspace switching, pane navigation, and all other global keybindings are disabled. You must close the review (`q`) or submit it (`s` → `Enter`) to return to normal mode — either way, the ephemeral review workspace and its checkout directory are deleted from disk. `q` asks for confirmation first (`[y]`/`[n]`) since it can't be undone; submitting doesn't prompt again since that's already an explicit action. The diff pane shows a **side-by-side split view**: the left panel displays the old file (deletions in red), the right panel displays the new file (additions in green), and context lines appear on both sides. Deletions and additions are paired row-by-row; file and hunk headers span the full width. Existing comments from other reviewers appear inline as threads (root comment + replies); press `c` on any line to add your own inline comment, `R` to reply to an existing thread anchored there, `d` to delete your own comment. Comments are displayed as yellow blocks inline on the appropriate side (left for deletions, right for additions); your inline comments submit alongside the review via the GitHub API, and thread replies are sent individually right after. The cursor highlights both halves simultaneously. Note: GitHub does not allow Approve or Request Changes on your own PRs — use Comment instead.
 
 | Key | Context | Action |
 |-----|---------|--------|
@@ -557,7 +557,7 @@ The Code Review tab takes over the full screen. While active, workspace switchin
 | `n` / `p` | Diff pane | Next/previous file (auto-loads diff) |
 | `[` / `]` | Any | Shrink / grow file-list panel (±5%, clamped 10–90%; persists across restarts) |
 | `s` | Any | Open submit review overlay |
-| `q` | Any | Close code review (discard state, delete the checkout) |
+| `q` | Any | Close code review (asks to confirm and delete the checkout on an ephemeral review; discards state only otherwise) |
 | Mouse scroll | File list / Diff | Scroll content (moves cursor in diff) |
 | Mouse click | Left/right pane | Switch focus / set cursor |
 | Drag divider | File list / Diff border | Resize file-list panel interactively |
@@ -571,6 +571,13 @@ The Code Review tab takes over the full screen. While active, workspace switchin
 | `Esc` | Cancel without saving |
 | `Left` / `Right` / `Home` / `End` | Move cursor |
 | `Backspace` | Delete character |
+
+**In discard confirmation** (opened with `q` on an ephemeral review):
+
+| Key | Action |
+|-----|--------|
+| `y` / `Y` / `Enter` | Confirm — delete the PR checkout from disk |
+| `n` / `N` / `Esc` | Cancel — keep reviewing |
 
 **In submit review overlay** (opened with `s`):
 

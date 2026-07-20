@@ -44,8 +44,30 @@ pub(super) fn handle_code_review_key(app: &mut App, key: KeyEvent) -> Option<Act
         return handle_submit_review_input(app, key);
     }
 
-    // q → close code review tab (discard review state)
+    // If the discard-and-delete confirmation is open, route there
+    if app
+        .current_workspace()
+        .and_then(|ws| ws.code_review.as_ref())
+        .is_some_and(|cr| cr.confirm_close)
+    {
+        return handle_review_confirm_close_input(app, key);
+    }
+
+    // q → close code review. For an ephemeral review workspace this deletes
+    // its checkout from disk, so ask first instead of doing it silently.
     if key.code == KeyCode::Char('q') {
+        let is_ephemeral = app
+            .workspaces
+            .get(app.active_workspace)
+            .is_some_and(|ws| ws.info.ephemeral);
+        if is_ephemeral {
+            if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+                && let Some(cr) = ws.code_review.as_mut()
+            {
+                cr.confirm_close = true;
+            }
+            return None;
+        }
         if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
             ws.code_review = None;
             if ws
@@ -90,6 +112,29 @@ pub(super) fn handle_code_review_key(app: &mut App, key: KeyEvent) -> Option<Act
     }
 
     result
+}
+
+/// Handle input when the "discard and delete checkout" confirmation is
+/// showing (only reachable for ephemeral review workspaces — see `q` above).
+pub(super) fn handle_review_confirm_close_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    match key.code {
+        KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
+            // DeleteWorkspace's ephemeral branch always removes the
+            // checkout directory from disk — same path the sidebar's own
+            // delete-workspace confirmation uses.
+            app.mode = AppMode::Normal;
+            Some(Action::DeleteWorkspace(app.active_workspace, None))
+        }
+        KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+            if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+                && let Some(cr) = ws.code_review.as_mut()
+            {
+                cr.confirm_close = false;
+            }
+            None
+        }
+        _ => None,
+    }
 }
 
 /// Handle input when the submit review overlay is visible
@@ -492,4 +537,108 @@ fn compute_visual_row_for_cursor(cr: &crate::code_review::CodeReviewState) -> us
     }
     // Fallback: cursor beyond all rows
     split_rows.len().saturating_sub(1)
+}
+
+#[cfg(test)]
+mod confirm_close_tests {
+    use super::*;
+    use crate::app::{ActivePane, Workspace};
+    use crate::code_review::CodeReviewState;
+    use crate::test_support::test_app;
+    use piki_core::github::PrInfo;
+
+    fn pr_info() -> PrInfo {
+        PrInfo {
+            number: 1,
+            title: "test".into(),
+            body: String::new(),
+            state: "OPEN".into(),
+            review_decision: None,
+            url: "https://github.com/o/r/pull/1".into(),
+            head_ref_name: "feature".into(),
+            base_ref_name: "main".into(),
+            additions: 0,
+            deletions: 0,
+            review_requests: vec![],
+            latest_reviews: vec![],
+            head_ref_oid: "abc".into(),
+        }
+    }
+
+    /// Push a workspace with an already-open CodeReview tab, focused on the
+    /// main panel (the only way `is_code_review_locked` engages).
+    fn push_review_workspace(app: &mut App, ephemeral: bool) {
+        let mut info = piki_core::WorkspaceInfo::new(
+            "o/r#1".to_string(),
+            String::new(),
+            String::new(),
+            None,
+            std::path::PathBuf::from("/tmp/review"),
+            std::path::PathBuf::from("/tmp/review"),
+        );
+        info.ephemeral = ephemeral;
+        let mut ws = Workspace::from_info(info);
+        let tab_idx = ws.add_tab(piki_core::AIProvider::CodeReview, true, None);
+        ws.active_tab = tab_idx;
+        ws.code_review = Some(CodeReviewState::new(
+            pr_info(),
+            std::path::PathBuf::from("/tmp/review"),
+            "origin/main".into(),
+            "o/r".into(),
+            vec![],
+        ));
+        app.workspaces.push(ws);
+        app.active_workspace = app.workspaces.len() - 1;
+        app.active_pane = ActivePane::MainPanel;
+    }
+
+    #[test]
+    fn q_on_ephemeral_opens_confirm_instead_of_closing() {
+        let mut app = test_app();
+        push_review_workspace(&mut app, true);
+
+        let action = handle_code_review_key(&mut app, crate::test_support::key(KeyCode::Char('q')));
+
+        assert!(action.is_none());
+        let cr = app.workspaces[0].code_review.as_ref().unwrap();
+        assert!(cr.confirm_close, "q on an ephemeral review must ask before deleting");
+        // Tab must still be there — nothing was closed yet.
+        assert_eq!(app.workspaces[0].tabs.len(), 1);
+    }
+
+    #[test]
+    fn q_on_non_ephemeral_closes_immediately() {
+        let mut app = test_app();
+        push_review_workspace(&mut app, false);
+
+        let action = handle_code_review_key(&mut app, crate::test_support::key(KeyCode::Char('q')));
+
+        assert!(action.is_none());
+        assert!(app.workspaces[0].code_review.is_none());
+        assert_eq!(app.workspaces[0].tabs.len(), 0);
+    }
+
+    #[test]
+    fn confirm_close_yes_emits_delete_workspace() {
+        let mut app = test_app();
+        push_review_workspace(&mut app, true);
+        app.workspaces[0].code_review.as_mut().unwrap().confirm_close = true;
+
+        let action = handle_review_confirm_close_input(&mut app, crate::test_support::key(KeyCode::Char('y')));
+
+        assert!(matches!(action, Some(Action::DeleteWorkspace(0, None))));
+    }
+
+    #[test]
+    fn confirm_close_no_cancels_without_deleting() {
+        let mut app = test_app();
+        push_review_workspace(&mut app, true);
+        app.workspaces[0].code_review.as_mut().unwrap().confirm_close = true;
+
+        let action = handle_review_confirm_close_input(&mut app, crate::test_support::key(KeyCode::Char('n')));
+
+        assert!(action.is_none());
+        assert!(!app.workspaces[0].code_review.as_ref().unwrap().confirm_close);
+        assert_eq!(app.workspaces.len(), 1, "workspace must survive a cancel");
+    }
 }
