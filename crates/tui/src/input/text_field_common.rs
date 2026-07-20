@@ -133,7 +133,7 @@ pub(crate) fn handle_bulk_insert(app: &mut crate::app::App, text: &str) {
                 bulk_insert(name, name_cursor, &filtered);
             }
         }
-        AppMode::NewWorkspace | AppMode::EditWorkspace => {
+        AppMode::NewWorkspace => {
             // Delegate to the active field in the workspace dialog
             if let Some(DialogState::NewWorkspace {
                 dir,
@@ -156,6 +156,82 @@ pub(crate) fn handle_bulk_insert(app: &mut crate::app::App, text: &str) {
                     DialogField::Prompt => bulk_insert(prompt, prompt_cursor, text),
                     _ => {}
                 }
+            }
+        }
+        AppMode::EditWorkspace => {
+            if let Some(DialogState::EditWorkspace {
+                kanban,
+                kanban_cursor,
+                prompt,
+                prompt_cursor,
+                active_field,
+                ..
+            }) = &mut app.active_dialog
+            {
+                use crate::dialog_state::EditWorkspaceField;
+                match active_field {
+                    EditWorkspaceField::KanbanPath => bulk_insert(kanban, kanban_cursor, text),
+                    EditWorkspaceField::Prompt => bulk_insert(prompt, prompt_cursor, text),
+                }
+            }
+        }
+        AppMode::CreateWorktree => {
+            if let Some(DialogState::CreateWorktree {
+                name,
+                name_cursor,
+                prompt,
+                prompt_cursor,
+                kanban,
+                kanban_cursor,
+                active_field,
+                ..
+            }) = &mut app.active_dialog
+            {
+                use crate::dialog_state::CreateWorktreeField;
+                match active_field {
+                    CreateWorktreeField::Name => bulk_insert(name, name_cursor, text),
+                    CreateWorktreeField::Prompt => bulk_insert(prompt, prompt_cursor, text),
+                    CreateWorktreeField::KanbanPath => bulk_insert(kanban, kanban_cursor, text),
+                }
+            }
+        }
+        AppMode::EditProvider => {
+            if let Some(DialogState::EditProvider {
+                name,
+                name_cursor,
+                description,
+                desc_cursor,
+                command,
+                command_cursor,
+                default_args,
+                args_cursor,
+                prompt_flag,
+                flag_cursor,
+                agent_dir,
+                agent_dir_cursor,
+                active_field,
+                ..
+            }) = &mut app.active_dialog
+            {
+                use crate::dialog_state::EditProviderField;
+                match active_field {
+                    EditProviderField::Name => bulk_insert(name, name_cursor, text),
+                    EditProviderField::Description => bulk_insert(description, desc_cursor, text),
+                    EditProviderField::Command => bulk_insert(command, command_cursor, text),
+                    EditProviderField::DefaultArgs => bulk_insert(default_args, args_cursor, text),
+                    EditProviderField::PromptFlag => bulk_insert(prompt_flag, flag_cursor, text),
+                    EditProviderField::AgentDir => bulk_insert(agent_dir, agent_dir_cursor, text),
+                    EditProviderField::PromptFormat | EditProviderField::Dispatchable => {}
+                }
+            }
+        }
+        AppMode::PrPicker => {
+            if let Some(DialogState::PrPicker {
+                repo_browse: crate::dialog_state::RepoBrowse::Input { text: buf, cursor },
+                ..
+            }) = &mut app.active_dialog
+            {
+                bulk_insert(buf, cursor, text);
             }
         }
         AppMode::DispatchAgent => {

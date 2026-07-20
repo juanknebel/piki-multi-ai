@@ -3655,3 +3655,85 @@ fn pr_picker_r_reloads_repo_list_when_loaded() {
 
     assert!(matches!(action, Some(Action::LoadRepoPrs(repo)) if repo == "owner/repo"));
 }
+
+// ── bracketed paste into dialog text fields ─────────────────────────────────
+// `input::handle_paste` used to only cover a handful of dialogs
+// (`handle_bulk_insert`'s match had no arms for PrPicker, EditWorkspace,
+// CreateWorktree, EditProvider) so pasting into those text fields was a
+// silent no-op — Ctrl+Shift+V just did nothing.
+
+#[test]
+fn paste_into_pr_picker_repo_input_inserts_text() {
+    let mut app = test_app();
+    open_pr_picker(
+        &mut app,
+        crate::dialog_state::RepoBrowse::Input { text: String::new(), cursor: 0 },
+    );
+
+    crate::input::handle_paste(&mut app, "https://github.com/owner/repo");
+
+    match current_repo_browse(&app) {
+        crate::dialog_state::RepoBrowse::Input { text, cursor } => {
+            assert_eq!(text, "https://github.com/owner/repo");
+            assert_eq!(*cursor, text.len());
+        }
+        other => panic!("expected RepoBrowse::Input, got {other:?}"),
+    }
+}
+
+#[test]
+fn paste_into_edit_workspace_prompt_inserts_text() {
+    let mut app = test_app();
+    open_edit_workspace(&mut app, EditWorkspaceField::Prompt);
+
+    crate::input::handle_paste(&mut app, "pasted prompt");
+
+    let Some(DialogState::EditWorkspace { prompt, .. }) = &app.active_dialog else {
+        panic!("expected EditWorkspace dialog");
+    };
+    assert_eq!(prompt, "pasted prompt");
+}
+
+#[test]
+fn paste_into_create_worktree_name_inserts_text() {
+    let mut app = test_app();
+    app.mode = AppMode::CreateWorktree;
+    app.active_dialog = Some(DialogState::CreateWorktree {
+        parent_idx: 0,
+        mode: crate::dialog_state::CreateWorktreeMode::CreateNew,
+        name: String::new(),
+        name_cursor: 0,
+        prompt: String::new(),
+        prompt_cursor: 0,
+        kanban: String::new(),
+        kanban_cursor: 0,
+        active_field: crate::dialog_state::CreateWorktreeField::Name,
+        existing: Vec::new(),
+        existing_selected: 0,
+        existing_loading: false,
+    });
+
+    crate::input::handle_paste(&mut app, "feature/pasted-branch");
+
+    let Some(DialogState::CreateWorktree { name, .. }) = &app.active_dialog else {
+        panic!("expected CreateWorktree dialog");
+    };
+    assert_eq!(name, "feature/pasted-branch");
+}
+
+#[test]
+fn paste_into_edit_provider_command_inserts_text() {
+    let mut app = test_app();
+    open_edit_provider(&mut app);
+    let Some(DialogState::EditProvider { active_field, .. }) = &mut app.active_dialog else {
+        panic!("expected EditProvider dialog");
+    };
+    *active_field = EditProviderField::Command;
+
+    crate::input::handle_paste(&mut app, "/usr/local/bin/my-agent");
+
+    let Some(DialogState::EditProvider { command, .. }) = &app.active_dialog else {
+        panic!("expected EditProvider dialog");
+    };
+    assert_eq!(command, "/usr/local/bin/my-agent");
+}
