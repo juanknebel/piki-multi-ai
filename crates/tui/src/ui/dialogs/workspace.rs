@@ -520,3 +520,100 @@ pub(crate) fn render_confirm_delete_dialog(frame: &mut Frame, area: Rect, app: &
     let text = Paragraph::new(lines).block(super::popup_block("Delete Workspace", theme.delete_border));
     frame.render_widget(text, popup);
 }
+
+pub(crate) fn render_pr_picker_dialog(frame: &mut Frame, area: Rect, app: &App) {
+    let Some(DialogState::PrPicker {
+        loading,
+        error,
+        items,
+        selected,
+        checking_out,
+    }) = &app.active_dialog
+    else {
+        return;
+    };
+
+    let popup_width = area.width * 80 / 100;
+    let visible_rows = items.len().clamp(1, 16) as u16;
+    let height = 6u16.saturating_add(visible_rows);
+    let popup = super::clear_popup(frame, area, popup_width.max(50), height);
+    let theme = &app.theme.dialog;
+    let active_c = theme.new_ws_active;
+    let inactive_c = theme.new_ws_inactive;
+
+    let mut lines: Vec<Line<'_>> = vec![Line::from("")];
+
+    if *loading {
+        lines.push(Line::from(Span::styled(
+            "  Loading PRs from GitHub...",
+            Style::default().fg(inactive_c),
+        )));
+    } else if let Some(err) = error {
+        lines.push(Line::from(Span::styled(
+            format!("  Error: {err}"),
+            Style::default().fg(theme.new_ws_border),
+        )));
+    } else if items.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "  No relevant PRs found.",
+            Style::default().fg(inactive_c),
+        )));
+    } else {
+        use piki_core::github::PrInclusionReason;
+
+        let mut last_section: Option<&str> = None;
+        for (idx, item) in items.iter().enumerate() {
+            let section = match item.reason {
+                PrInclusionReason::Authored => "Mis PRs",
+                PrInclusionReason::Interacted { .. } => "Con interacción",
+                PrInclusionReason::ReviewRequestedPending => "Review pendiente",
+            };
+            if last_section != Some(section) {
+                if last_section.is_some() {
+                    lines.push(Line::from(""));
+                }
+                lines.push(Line::from(Span::styled(
+                    format!("  {section}"),
+                    Style::default().fg(inactive_c).add_modifier(Modifier::BOLD),
+                )));
+                last_section = Some(section);
+            }
+
+            let is_selected = idx == *selected;
+            let prefix = if is_selected { "  > " } else { "    " };
+            let style = if is_selected {
+                Style::default().fg(active_c).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(inactive_c)
+            };
+            let requested_chip = matches!(
+                item.reason,
+                PrInclusionReason::Interacted { review_requested: true }
+            );
+            let spinner = checking_out.is_some_and(|c| c == idx);
+            let mut label = format!(
+                "{}#{} {}{}",
+                item.repo_nwo,
+                item.number,
+                item.title,
+                if item.is_draft { " (draft)" } else { "" },
+            );
+            if requested_chip {
+                label.push_str(" [requested]");
+            }
+            if spinner {
+                label.push_str(" ...");
+            }
+            lines.push(Line::from(Span::styled(format!("{prefix}{label}"), style)));
+        }
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![Span::styled(
+        "  [j/k] move  [Enter] review  [r] reload  [Esc] cancel",
+        Style::default().fg(inactive_c),
+    )]));
+
+    let text = Paragraph::new(lines).block(super::popup_block("Code Review — Pick a PR", theme.new_ws_border));
+    frame.render_widget(text, popup);
+}

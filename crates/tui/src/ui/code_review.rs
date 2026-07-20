@@ -223,8 +223,9 @@ pub(crate) enum SplitRow {
     },
     /// Comment box header on one side.
     CommentHeader { diff_idx: usize, side: CommentSide },
-    /// Comment box body on one side.
-    CommentBody { diff_idx: usize, side: CommentSide },
+    /// Comment box body on one side — `msg_idx` indexes into
+    /// `CodeReviewState::thread_lines()` for this diff line/side.
+    CommentBody { diff_idx: usize, side: CommentSide, msg_idx: usize },
     /// Comment box footer on one side.
     CommentFooter { diff_idx: usize, side: CommentSide },
 }
@@ -247,7 +248,7 @@ impl SplitRow {
 /// Build the list of split rows from a parsed diff, pairing deletions with additions.
 pub(crate) fn compute_split_rows(
     diff: &ParsedDiff,
-    draft: &super::super::code_review::ReviewDraft,
+    state: &CodeReviewState,
     file_path: &str,
 ) -> Vec<SplitRow> {
     let mut rows: Vec<SplitRow> = Vec::new();
@@ -258,14 +259,14 @@ pub(crate) fn compute_split_rows(
     // Flush pending deletions as left-only rows (right=None), with comment decorations.
     let flush_dels = |del_buf: &mut Vec<usize>,
                       rows: &mut Vec<SplitRow>,
-                      draft: &super::super::code_review::ReviewDraft,
+                      state: &CodeReviewState,
                       file_path: &str| {
         for &di in del_buf.iter() {
             rows.push(SplitRow::Paired {
                 left: Some(di),
                 right: None,
             });
-            append_comment_decorations(rows, diff, draft, file_path, di);
+            append_comment_decorations(rows, diff, state, file_path, di);
         }
         del_buf.clear();
     };
@@ -275,7 +276,7 @@ pub(crate) fn compute_split_rows(
         let line = &lines[i];
         match line.line_type {
             DiffLineType::FileHeader | DiffLineType::HunkHeader => {
-                flush_dels(&mut del_buf, &mut rows, draft, file_path);
+                flush_dels(&mut del_buf, &mut rows, state, file_path);
                 rows.push(SplitRow::FullWidth { diff_idx: i });
                 i += 1;
             }
@@ -290,7 +291,7 @@ pub(crate) fn compute_split_rows(
                         left: None,
                         right: Some(i),
                     });
-                    append_comment_decorations(&mut rows, diff, draft, file_path, i);
+                    append_comment_decorations(&mut rows, diff, state, file_path, i);
                     i += 1;
                 } else {
                     // Pair deletions with additions 1:1
@@ -307,10 +308,10 @@ pub(crate) fn compute_split_rows(
                         rows.push(SplitRow::Paired { left, right });
                         // Append comment decorations for whichever side(s) exist
                         if let Some(li) = left {
-                            append_comment_decorations(&mut rows, diff, draft, file_path, li);
+                            append_comment_decorations(&mut rows, diff, state, file_path, li);
                         }
                         if let Some(ri) = right {
-                            append_comment_decorations(&mut rows, diff, draft, file_path, ri);
+                            append_comment_decorations(&mut rows, diff, state, file_path, ri);
                         }
                     }
                     del_buf.clear();
@@ -318,26 +319,27 @@ pub(crate) fn compute_split_rows(
                 }
             }
             DiffLineType::Context => {
-                flush_dels(&mut del_buf, &mut rows, draft, file_path);
+                flush_dels(&mut del_buf, &mut rows, state, file_path);
                 rows.push(SplitRow::Paired {
                     left: Some(i),
                     right: Some(i),
                 });
-                append_comment_decorations(&mut rows, diff, draft, file_path, i);
+                append_comment_decorations(&mut rows, diff, state, file_path, i);
                 i += 1;
             }
         }
     }
     // Flush any trailing deletions
-    flush_dels(&mut del_buf, &mut rows, draft, file_path);
+    flush_dels(&mut del_buf, &mut rows, state, file_path);
     rows
 }
 
-/// Append comment decoration rows (header/body/footer) for a diff line if it has a comment.
+/// Append comment decoration rows (header/body*/footer) for a diff line if
+/// it has an existing thread and/or our own draft comment.
 fn append_comment_decorations(
     rows: &mut Vec<SplitRow>,
     diff: &ParsedDiff,
-    draft: &super::super::code_review::ReviewDraft,
+    state: &CodeReviewState,
     file_path: &str,
     diff_idx: usize,
 ) {
@@ -359,14 +361,15 @@ fn append_comment_decorations(
         }
         _ => return,
     };
-    if draft
-        .comment_at_line_and_side(file_path, ln, side_str)
-        .is_some()
-    {
-        rows.push(SplitRow::CommentHeader { diff_idx, side });
-        rows.push(SplitRow::CommentBody { diff_idx, side });
-        rows.push(SplitRow::CommentFooter { diff_idx, side });
+    let thread = state.thread_lines(file_path, ln, side_str);
+    if thread.is_empty() {
+        return;
     }
+    rows.push(SplitRow::CommentHeader { diff_idx, side });
+    for msg_idx in 0..thread.len() {
+        rows.push(SplitRow::CommentBody { diff_idx, side, msg_idx });
+    }
+    rows.push(SplitRow::CommentFooter { diff_idx, side });
 }
 
 /// Render the side-by-side split diff pane with line numbers, cursor, and inline comments
@@ -404,7 +407,7 @@ fn render_diff(
     if let Some(diff) = state.current_diff() {
         let file_path = state.current_file_path().unwrap_or("");
         let file_syntax = syntax_hl.find_syntax(file_path);
-        let split_rows = compute_split_rows(diff, &state.draft, file_path);
+        let split_rows = compute_split_rows(diff, state, file_path);
         let viewport_height = inner.height as usize;
         let scroll = state.diff_scroll;
 
@@ -525,7 +528,7 @@ fn render_diff(
                         left_half,
                         right_half,
                         diff,
-                        &state.draft,
+                        state,
                         file_path,
                         *diff_idx,
                         *side,
@@ -533,7 +536,7 @@ fn render_diff(
                         theme,
                     );
                 }
-                SplitRow::CommentBody { diff_idx, side } => {
+                SplitRow::CommentBody { diff_idx, side, msg_idx } => {
                     render_comment_decoration_row(
                         frame,
                         inner,
@@ -541,11 +544,11 @@ fn render_diff(
                         left_half,
                         right_half,
                         diff,
-                        &state.draft,
+                        state,
                         file_path,
                         *diff_idx,
                         *side,
-                        CommentDecorPart::Body,
+                        CommentDecorPart::Body(*msg_idx),
                         theme,
                     );
                 }
@@ -557,7 +560,7 @@ fn render_diff(
                         left_half,
                         right_half,
                         diff,
-                        &state.draft,
+                        state,
                         file_path,
                         *diff_idx,
                         *side,
@@ -712,7 +715,8 @@ fn render_half_line(
 #[derive(Debug, Clone, Copy)]
 enum CommentDecorPart {
     Header,
-    Body,
+    /// Index into `CodeReviewState::thread_lines()` for this diff line/side.
+    Body(usize),
     Footer,
 }
 
@@ -725,7 +729,7 @@ fn render_comment_decoration_row(
     left_half: u16,
     right_half: u16,
     diff: &ParsedDiff,
-    draft: &super::super::code_review::ReviewDraft,
+    state: &CodeReviewState,
     file_path: &str,
     diff_idx: usize,
     side: CommentSide,
@@ -750,11 +754,9 @@ fn render_comment_decoration_row(
         CommentDecorPart::Header => {
             format!("  \u{250c}\u{2500}\u{2500} line {} \u{2500}\u{2500}", ln)
         }
-        CommentDecorPart::Body => {
-            let body = draft
-                .comment_at_line_and_side(file_path, ln, side_str)
-                .map(|c| c.body.as_str())
-                .unwrap_or("");
+        CommentDecorPart::Body(msg_idx) => {
+            let lines = state.thread_lines(file_path, ln, side_str);
+            let body = lines.get(msg_idx).map(String::as_str).unwrap_or("");
             format!("  \u{2502} {}", body)
         }
         CommentDecorPart::Footer => {
@@ -849,7 +851,7 @@ fn render_footer(
             }
             ReviewFocus::DiffView => {
                 format!(
-                    "[j/k] cursor  [{}/{}] page  [g/G] top/bottom  [c] comment  [d] del comment  [h] files  [n/p] next/prev  [s] submit  [q] close",
+                    "[j/k] cursor  [{}/{}] page  [g/G] top/bottom  [c] comment  [R] reply  [d] del comment  [h] files  [n/p] next/prev  [s] submit  [q] close",
                     config.format_binding("ctrl-d"),
                     config.format_binding("ctrl-u"),
                 )
@@ -884,7 +886,10 @@ fn render_comment_input_overlay(
 
     frame.render_widget(Clear, popup);
 
-    let title = format!(" Comment on line {} ", ec.line);
+    let title = match ec.target {
+        crate::code_review::CommentTarget::NewInline => format!(" Comment on line {} ", ec.line),
+        crate::code_review::CommentTarget::Reply { .. } => format!(" Reply on line {} ", ec.line),
+    };
     let block = Block::default()
         .title(title)
         .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)

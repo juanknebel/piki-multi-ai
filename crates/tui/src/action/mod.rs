@@ -65,6 +65,14 @@ pub(crate) enum Action {
     LoadPrFileDiff(usize),
     /// Submit the PR review using the draft state
     SubmitPrReview,
+    /// Fetch PRs relevant to the current `gh` user (authored / interacted /
+    /// review-requested), for the PR picker. Runs in the background; result
+    /// lands in `App::pending_pr_list`.
+    LoadPrList,
+    /// Checkout the PR at `PrPicker`'s `items[item_idx]` into its own
+    /// app-managed directory and open it as an ephemeral review workspace.
+    /// Runs in the background; result lands in `App::pending_pr_checkout`.
+    OpenPrReview(usize),
     /// Send an API request (raw Hurl text)
     SendApiRequest(String),
     /// Dispatch an agent to work on a kanban card
@@ -119,9 +127,11 @@ pub(crate) async fn execute_action(
         Action::OpenEditor(..) => {
             files::handle(app, manager, action, terminal).await?
         }
-        Action::LoadPrReview | Action::LoadPrFileDiff(..) | Action::SubmitPrReview => {
-            review::handle(app, manager, action, terminal).await?
-        }
+        Action::LoadPrReview
+        | Action::LoadPrFileDiff(..)
+        | Action::SubmitPrReview
+        | Action::LoadPrList
+        | Action::OpenPrReview(..) => review::handle(app, manager, action, terminal).await?,
         Action::SpawnTab(..) | Action::OpenMarkdown(..) | Action::OpenMdr(..) => {
             tabs::handle(app, manager, action, terminal).await?
         }

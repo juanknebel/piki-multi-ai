@@ -150,6 +150,17 @@ pub enum DialogState {
     WorkspaceInfo {
         hscroll: u16,
     },
+    /// PR picker — the Code Review entry point. Lists PRs relevant to the
+    /// current `gh` user across all accessible repos, grouped by why they
+    /// showed up (`PrInclusionReason`), independent of any open workspace.
+    PrPicker {
+        loading: bool,
+        error: Option<String>,
+        items: Vec<piki_core::github::PrListItem>,
+        selected: usize,
+        /// Index into `items` currently being checked out (spinner row).
+        checking_out: Option<usize>,
+    },
     Dashboard {
         selected: usize,
         scroll_offset: usize,

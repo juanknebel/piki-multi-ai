@@ -1775,17 +1775,18 @@ fn new_tab_tools_key_1_spawns_kanban() {
 }
 
 #[test]
-fn new_tab_tools_key_2_spawns_code_review() {
+fn new_tab_tools_key_2_opens_pr_picker() {
     let mut app = test_app();
     open_new_tab_tools(&mut app);
 
     let action = handle_new_tab_input(&mut app, key(KeyCode::Char('2')));
 
+    assert!(matches!(action, Some(Action::LoadPrList)));
     assert!(matches!(
-        action,
-        Some(Action::SpawnTab(AIProvider::CodeReview))
+        app.active_dialog,
+        Some(crate::dialog_state::DialogState::PrPicker { loading: true, .. })
     ));
-    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::PrPicker);
 }
 
 #[test]

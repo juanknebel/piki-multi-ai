@@ -275,6 +275,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
             super::dialogs::render_manage_providers_dialog(frame, area, app)
         }
         AppMode::EditProvider => super::dialogs::render_edit_provider_dialog(frame, area, app),
+        AppMode::PrPicker => super::dialogs::render_pr_picker_dialog(frame, area, app),
         AppMode::InlineEdit => {}   // handled by main content render
         AppMode::SubmitReview => {} // handled by full-screen code review bypass above
         AppMode::ChatPanel => super::chat::render_chat_overlay(frame, area, app),

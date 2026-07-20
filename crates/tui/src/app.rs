@@ -106,6 +106,9 @@ pub enum AppMode {
     CommandPalette,
     /// Submit review overlay (code review)
     SubmitReview,
+    /// PR picker overlay — lists PRs relevant to the current `gh` user,
+    /// independent of any workspace, entry point for the Code Review flow
+    PrPicker,
     /// Fuzzy workspace switcher overlay
     WorkspaceSwitcher,
     /// Dispatch agent dialog
@@ -744,6 +747,12 @@ pub type FooterCache = (
     Vec<(String, &'static str)>,
 );
 
+/// Background result slot for `Action::LoadPrList`.
+pub type PendingPrList = Arc<Mutex<Option<Result<Vec<piki_core::github::PrListItem>, String>>>>;
+/// Background result slot for `Action::OpenPrReview`.
+pub type PendingPrCheckout =
+    Arc<Mutex<Option<Result<crate::code_review::ReviewSessionData, String>>>>;
+
 pub struct App {
     pub should_quit: bool,
     pub mode: AppMode,
@@ -849,6 +858,11 @@ pub struct App {
     pub last_inactive_pty_check: Instant,
     /// Cached result of `gh` CLI availability check (None = not yet checked)
     pub gh_available: Option<bool>,
+    /// Background result slot for `Action::LoadPrList`, polled in
+    /// `event_loop.rs`'s tick. `Some` once the spawned task finishes.
+    pub pending_pr_list: PendingPrList,
+    /// Background result slot for `Action::OpenPrReview`.
+    pub pending_pr_checkout: PendingPrCheckout,
     /// Storage backend (SQLite)
     pub storage: std::sync::Arc<piki_core::storage::AppStorage>,
     /// Cached agent profiles for the current project
@@ -1002,6 +1016,8 @@ impl App {
             footer_cache: None,
             last_inactive_pty_check: Instant::now(),
             gh_available: None,
+            pending_pr_list: Arc::new(Mutex::new(None)),
+            pending_pr_checkout: Arc::new(Mutex::new(None)),
             storage,
             agent_profiles: Vec::new(),
             provider_manager: piki_core::providers::ProviderManager::load_or_init(
@@ -1069,6 +1085,43 @@ impl App {
 
     pub fn current_workspace_mut(&mut self) -> Option<&mut Workspace> {
         self.workspaces.get_mut(self.active_workspace)
+    }
+
+    /// Push an ephemeral PR-review `WorkspaceInfo` (see
+    /// `WorkspaceManager::create_review_workspace`), switch focus to it, and
+    /// start its file watcher. Unlike `finish_workspace_creation`
+    /// (`action/workspace.rs`) this never persists — ephemeral workspaces
+    /// are filtered out of `persistable_workspaces()` by design. Returns the
+    /// new workspace's index.
+    pub fn open_review_workspace(&mut self, mut info: piki_core::WorkspaceInfo) -> usize {
+        info.order = self
+            .workspaces
+            .iter()
+            .map(|w| w.info.order)
+            .max()
+            .map(|m| m + 1)
+            .unwrap_or(0);
+        self.workspaces.push(Workspace::from_info(info));
+        let idx = self.workspaces.len() - 1;
+        self.switch_workspace_and_focus(idx);
+        let ws = &mut self.workspaces[idx];
+        if let Ok(watcher) =
+            piki_core::workspace::FileWatcher::new(ws.path.clone(), ws.name.clone())
+        {
+            ws.watcher = Some(watcher);
+        }
+        idx
+    }
+
+    /// `WorkspaceInfo`s to hand to `save_workspaces`, excluding `ephemeral`
+    /// ones (ad-hoc PR review workspaces) — they must never reappear in the
+    /// sidebar after a restart.
+    pub fn persistable_workspaces(&self) -> Vec<piki_core::WorkspaceInfo> {
+        self.workspaces
+            .iter()
+            .filter(|w| !w.info.ephemeral)
+            .map(|w| w.info.clone())
+            .collect()
     }
 
     pub fn next_workspace(&mut self) {
@@ -1956,6 +2009,7 @@ mod tests {
             dispatch_agent_name: None,
             origin: piki_core::WorkspaceOrigin::default(),
             is_git_repo: true,
+            ephemeral: false,
         };
         let ws = Workspace::from_info(info);
         app.workspaces.push(ws);

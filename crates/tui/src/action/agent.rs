@@ -203,8 +203,7 @@ pub(super) async fn handle(
                         // Persist config async
                         {
                             let source = app.workspaces[new_idx].source_repo.clone();
-                            let infos: Vec<_> =
-                                app.workspaces.iter().map(|w| w.info.clone()).collect();
+                            let infos = app.persistable_workspaces();
                             let storage = Arc::clone(&app.storage);
                             tokio::spawn(async move {
                                 let _ = storage.workspaces.save_workspaces(&source, &infos);

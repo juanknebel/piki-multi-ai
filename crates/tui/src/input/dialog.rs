@@ -636,9 +636,15 @@ pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Actio
                 Some(Action::SpawnTab(AIProvider::Kanban))
             }
             KeyCode::Char('2') => {
-                app.active_dialog = None;
-                app.mode = AppMode::Normal;
-                Some(Action::SpawnTab(AIProvider::CodeReview))
+                app.active_dialog = Some(DialogState::PrPicker {
+                    loading: true,
+                    error: None,
+                    items: Vec::new(),
+                    selected: 0,
+                    checking_out: None,
+                });
+                app.mode = AppMode::PrPicker;
+                Some(Action::LoadPrList)
             }
             KeyCode::Char('3') => {
                 app.active_dialog = None;
@@ -1731,4 +1737,54 @@ pub(super) fn handle_edit_provider_input(app: &mut App, key: KeyEvent) -> Option
         EditProviderField::AgentDir => { handle_text_input(agent_dir, agent_dir_cursor, key, accept_any); }
     }
     None
+}
+
+pub(super) fn handle_pr_picker_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    if is_cancel(key, &app.config) {
+        dismiss_dialog(app);
+        return None;
+    }
+
+    let Some(DialogState::PrPicker {
+        loading,
+        items,
+        selected,
+        checking_out,
+        ..
+    }) = &mut app.active_dialog
+    else {
+        return None;
+    };
+
+    if *loading || checking_out.is_some() {
+        return None;
+    }
+
+    match key.code {
+        KeyCode::Char('j') | KeyCode::Down => {
+            move_selection(selected, items.len(), 1, true);
+            None
+        }
+        KeyCode::Char('k') | KeyCode::Up => {
+            move_selection(selected, items.len(), -1, true);
+            None
+        }
+        KeyCode::Char('r') => {
+            *loading = true;
+            *checking_out = None;
+            if let Some(DialogState::PrPicker { error, .. }) = &mut app.active_dialog {
+                *error = None;
+            }
+            Some(Action::LoadPrList)
+        }
+        KeyCode::Enter => {
+            if items.is_empty() {
+                return None;
+            }
+            let idx = *selected;
+            *checking_out = Some(idx);
+            Some(Action::OpenPrReview(idx))
+        }
+        _ => None,
+    }
 }

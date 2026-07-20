@@ -244,6 +244,7 @@ mod tests {
             dispatch_agent_name: None,
             origin: piki_core::WorkspaceOrigin::default(),
             is_git_repo: true,
+            ephemeral: false,
         }
     }
 
@@ -492,6 +493,7 @@ mod tests {
             dispatch_agent_name: None,
             origin: piki_core::WorkspaceOrigin::default(),
             is_git_repo: true,
+            ephemeral: false,
         };
         let mut ws = crate::app::Workspace::from_info(info);
         ws.add_tab(piki_core::AIProvider::Custom("Claude".to_string()), true, None);

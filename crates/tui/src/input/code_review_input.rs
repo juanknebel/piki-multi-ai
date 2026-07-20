@@ -2,7 +2,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::action::Action;
 use crate::app::{App, AppMode};
-use crate::code_review::{EditingComment, ReviewFocus};
+use crate::code_review::{CommentTarget, EditingComment, ReviewFocus};
 use crate::config::has_ctrl;
 use piki_core::github::{DiffLineType, InlineComment, ReviewVerdict};
 
@@ -164,19 +164,29 @@ fn handle_comment_editing_input(app: &mut App, key: KeyEvent) -> Option<Action> 
 
     match key.code {
         KeyCode::Enter => {
-            // Save comment
-            let comment = InlineComment {
-                path: ec.file_path.clone(),
-                line: ec.line,
-                side: ec.side.clone(),
-                body: ec.body.clone(),
-            };
-            // Remove existing comment at same path+line (dedup)
-            cr.draft
-                .comments
-                .retain(|c| !(c.path == comment.path && c.line == comment.line));
-            if !comment.body.is_empty() {
-                cr.draft.comments.push(comment);
+            match ec.target {
+                CommentTarget::NewInline => {
+                    let comment = InlineComment {
+                        path: ec.file_path.clone(),
+                        line: ec.line,
+                        side: ec.side.clone(),
+                        body: ec.body.clone(),
+                    };
+                    // Remove existing comment at same path+line (dedup)
+                    cr.draft
+                        .comments
+                        .retain(|c| !(c.path == comment.path && c.line == comment.line));
+                    if !comment.body.is_empty() {
+                        cr.draft.comments.push(comment);
+                    }
+                }
+                CommentTarget::Reply { comment_id } => {
+                    if ec.body.is_empty() {
+                        cr.reply_drafts.remove(&comment_id);
+                    } else {
+                        cr.reply_drafts.insert(comment_id, ec.body.clone());
+                    }
+                }
             }
             cr.editing_comment = None;
             None
@@ -339,6 +349,7 @@ fn handle_diff_view_keys(
                                 side: "RIGHT".to_string(),
                                 body: existing_body,
                                 body_cursor: cursor,
+                                target: CommentTarget::NewInline,
                             });
                         }
                     }
@@ -357,12 +368,45 @@ fn handle_diff_view_keys(
                                 side: "LEFT".to_string(),
                                 body: existing_body,
                                 body_cursor: cursor,
+                                target: CommentTarget::NewInline,
                             });
                         }
                     }
                     _ => {
                         // Can't comment on headers
                     }
+                }
+            }
+            None
+        }
+        KeyCode::Char('R') => {
+            // Reply to the existing comment thread anchored at the cursor
+            // line, if any — no-op when the line has no thread.
+            if let Some(diff) = cr.current_diff()
+                && let Some(diff_line) = diff.lines.get(cr.cursor_line)
+            {
+                let (ln, side) = match diff_line.line_type {
+                    DiffLineType::Deletion => (diff_line.old_line, "LEFT"),
+                    DiffLineType::Addition | DiffLineType::Context => {
+                        (diff_line.new_line, "RIGHT")
+                    }
+                    _ => (None, ""),
+                };
+                if let Some(ln) = ln
+                    && let Some(root) = cr.thread_root_at(cr.current_file_path().unwrap_or(""), ln, side)
+                {
+                    let comment_id = root.id;
+                    let file_path = cr.current_file_path().unwrap_or("").to_string();
+                    let existing_body = cr.reply_drafts.get(&comment_id).cloned().unwrap_or_default();
+                    let cursor = existing_body.len();
+                    cr.editing_comment = Some(EditingComment {
+                        file_path,
+                        line: ln,
+                        side: side.to_string(),
+                        body: existing_body,
+                        body_cursor: cursor,
+                        target: CommentTarget::Reply { comment_id },
+                    });
                 }
             }
             None
@@ -435,7 +479,7 @@ fn compute_visual_row_for_cursor(cr: &crate::code_review::CodeReviewState) -> us
         None => return cr.cursor_line,
     };
     let file_path = cr.current_file_path().unwrap_or("");
-    let split_rows = crate::ui::code_review::compute_split_rows(diff, &cr.draft, file_path);
+    let split_rows = crate::ui::code_review::compute_split_rows(diff, cr, file_path);
     for (row_idx, srow) in split_rows.iter().enumerate() {
         if srow.contains_diff_idx(cr.cursor_line) {
             return row_idx;

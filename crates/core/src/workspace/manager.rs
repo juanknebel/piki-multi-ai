@@ -327,6 +327,34 @@ impl WorkspaceManager {
         Ok(info)
     }
 
+    /// Checkout manager for ad-hoc PR reviews, rooted at
+    /// `DataPaths::review_checkouts_dir()`.
+    pub fn review_checkout_manager(&self) -> crate::github::ReviewCheckoutManager {
+        crate::github::ReviewCheckoutManager::new(self.paths.review_checkouts_dir())
+    }
+
+    /// Build a `WorkspaceInfo` for an ad-hoc PR review checkout (see
+    /// [`crate::github::ReviewCheckoutManager::ensure_pr_checkout`]). Marked
+    /// `ephemeral` so it's excluded from persistence and its directory is
+    /// deleted (not just detached) when the workspace is closed.
+    pub fn create_review_workspace(checkout: &crate::github::PrCheckout) -> WorkspaceInfo {
+        let name = format!("{}#{}", checkout.repo_nwo, checkout.pr.number);
+        let mut info = WorkspaceInfo::new(
+            name,
+            checkout.pr.title.clone(),
+            String::new(),
+            None,
+            checkout.path.clone(),
+            checkout.path.clone(),
+        );
+        info.workspace_type = WorkspaceType::Simple;
+        info.origin = WorkspaceOrigin::GitHub {
+            url: checkout.pr.url.clone(),
+        };
+        info.ephemeral = true;
+        info
+    }
+
     /// Create a project workspace pointing to a directory with sub-services.
     /// No git operations — the directory doesn't need to be a git repo.
     pub async fn create_project(

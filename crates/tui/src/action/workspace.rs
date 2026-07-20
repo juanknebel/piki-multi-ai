@@ -34,7 +34,7 @@ fn finish_workspace_creation(app: &mut App, mut info: piki_core::WorkspaceInfo) 
     }
 
     let source = app.workspaces[new_idx].source_repo.clone();
-    let infos: Vec<_> = app.workspaces.iter().map(|w| w.info.clone()).collect();
+    let infos = app.persistable_workspaces();
     let storage = Arc::clone(&app.storage);
     tokio::spawn(async move {
         let _ = storage.workspaces.save_workspaces(&source, &infos);
@@ -159,7 +159,7 @@ pub(super) async fn handle(
                 ws.prompt = prompt;
                 {
                     let source = ws.source_repo.clone();
-                    let infos: Vec<_> = app.workspaces.iter().map(|w| w.info.clone()).collect();
+                    let infos = app.persistable_workspaces();
                     let storage = Arc::clone(&app.storage);
                     tokio::spawn(async move {
                         let _ = storage.workspaces.save_workspaces(&source, &infos);
@@ -214,6 +214,7 @@ pub(super) async fn handle(
 
                 let is_worktree =
                     app.workspaces[idx].info.workspace_type == WorkspaceType::Worktree;
+                let is_ephemeral = app.workspaces[idx].info.ephemeral;
 
                 // Kill all PTY sessions before removing
                 for tab in &mut app.workspaces[idx].tabs {
@@ -226,7 +227,17 @@ pub(super) async fn handle(
 
                 let source_repo = app.workspaces[idx].source_repo.clone();
 
-                let removed = if !is_worktree {
+                let removed = if is_ephemeral {
+                    // Ad-hoc PR review checkout: delete its worktree from disk
+                    // too, unlike a regular Simple workspace which only ever
+                    // gets detached from the list.
+                    let path = app.workspaces[idx].path.clone();
+                    app.workspaces.remove(idx);
+                    tokio::spawn(async move {
+                        let _ = tokio::fs::remove_dir_all(&path).await;
+                    });
+                    true
+                } else if !is_worktree {
                     // Simple workspaces: just remove from list
                     app.workspaces.remove(idx);
                     true
@@ -261,7 +272,7 @@ pub(super) async fn handle(
                     // Persist config
                     {
                         let source = source_repo.clone();
-                        let infos: Vec<_> = app.workspaces.iter().map(|w| w.info.clone()).collect();
+                        let infos = app.persistable_workspaces();
                         let storage = Arc::clone(&app.storage);
                         tokio::spawn(async move {
                             let _ = storage.workspaces.save_workspaces(&source, &infos);
@@ -299,7 +310,7 @@ pub(super) async fn handle(
                 // Persist config
                 {
                     let source = source_repo.clone();
-                    let infos: Vec<_> = app.workspaces.iter().map(|w| w.info.clone()).collect();
+                    let infos = app.persistable_workspaces();
                     let storage = Arc::clone(&app.storage);
                     tokio::spawn(async move {
                         let _ = storage.workspaces.save_workspaces(&source, &infos);

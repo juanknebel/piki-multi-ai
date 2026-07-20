@@ -250,6 +250,12 @@ pub struct WorkspaceInfo {
     /// not something that needs re-checking like the inferred branch.
     #[serde(default = "default_is_git_repo")]
     pub is_git_repo: bool,
+    /// Ad-hoc workspace created to review a single PR (e.g. via
+    /// `WorkspaceManager::create_review_workspace`). Excluded from
+    /// persistence — it must not reappear in the sidebar after a restart —
+    /// and closing it deletes `path` from disk instead of just detaching it.
+    #[serde(default)]
+    pub ephemeral: bool,
 }
 
 pub(crate) fn default_is_git_repo() -> bool {
@@ -284,6 +290,7 @@ impl WorkspaceInfo {
             dispatch_agent_name: None,
             origin: WorkspaceOrigin::default(),
             is_git_repo: true,
+            ephemeral: false,
         }
     }
 }
