@@ -6,7 +6,9 @@ pub mod checkout;
 pub mod pr_list;
 
 pub use checkout::{CheckoutPlan, PrCheckout, ReviewCheckoutManager};
-pub use pr_list::{PrInclusionReason, PrListItem, list_relevant_prs, list_repo_prs};
+pub use pr_list::{
+    PrInclusionReason, PrListItem, list_relevant_prs, list_repo_prs, normalize_repo_nwo,
+};
 
 /// PR metadata from `gh pr view --json ...`
 #[derive(Debug, Clone, Serialize, Deserialize)]

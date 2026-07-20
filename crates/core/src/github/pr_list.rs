@@ -165,6 +165,37 @@ pub async fn list_repo_prs(repo_nwo: &str, limit: usize) -> anyhow::Result<Vec<P
         .collect())
 }
 
+/// Normalize free-form repo input (typed `owner/repo`, a pasted GitHub URL,
+/// or an SSH remote) down to a bare `owner/repo`. Used by the PR picker's
+/// "browse a repo" prompt so a pasted `https://github.com/owner/repo` (or
+/// `.../pull/N`, or a trailing `.git`/`/`) doesn't get passed straight into
+/// `gh`/the clone URL builder verbatim — that used to double up the host
+/// (`https://github.com/https://github.com/owner/repo.git`). Returns `None`
+/// if the result isn't a plausible `owner/repo`.
+pub fn normalize_repo_nwo(input: &str) -> Option<String> {
+    let mut s = input.trim();
+    for prefix in [
+        "https://github.com/",
+        "http://github.com/",
+        "ssh://git@github.com/",
+        "git@github.com:",
+        "github.com/",
+    ] {
+        if let Some(rest) = s.strip_prefix(prefix) {
+            s = rest;
+            break;
+        }
+    }
+    let s = s.trim_end_matches('/').trim_end_matches(".git");
+    let mut parts = s.splitn(3, '/');
+    let owner = parts.next()?;
+    let repo = parts.next()?;
+    if owner.is_empty() || repo.is_empty() {
+        return None;
+    }
+    Some(format!("{owner}/{repo}"))
+}
+
 fn pr_key(pr: &SearchPr) -> (String, u64) {
     (pr.repository.name_with_owner.clone(), pr.number)
 }
@@ -304,6 +335,62 @@ async fn current_login() -> anyhow::Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn normalize_plain_owner_repo_is_unchanged() {
+        assert_eq!(normalize_repo_nwo("9001/copyparty"), Some("9001/copyparty".to_string()));
+    }
+
+    #[test]
+    fn normalize_strips_https_github_prefix() {
+        assert_eq!(
+            normalize_repo_nwo("https://github.com/9001/copyparty"),
+            Some("9001/copyparty".to_string())
+        );
+    }
+
+    #[test]
+    fn normalize_strips_http_prefix_trailing_slash_and_dot_git() {
+        assert_eq!(
+            normalize_repo_nwo("http://github.com/9001/copyparty.git/"),
+            Some("9001/copyparty".to_string())
+        );
+    }
+
+    #[test]
+    fn normalize_strips_ssh_remote() {
+        assert_eq!(
+            normalize_repo_nwo("git@github.com:9001/copyparty.git"),
+            Some("9001/copyparty".to_string())
+        );
+        assert_eq!(
+            normalize_repo_nwo("ssh://git@github.com/9001/copyparty.git"),
+            Some("9001/copyparty".to_string())
+        );
+    }
+
+    #[test]
+    fn normalize_strips_bare_host_and_trailing_path() {
+        assert_eq!(
+            normalize_repo_nwo("github.com/9001/copyparty"),
+            Some("9001/copyparty".to_string())
+        );
+        assert_eq!(
+            normalize_repo_nwo("https://github.com/9001/copyparty/pull/42"),
+            Some("9001/copyparty".to_string())
+        );
+    }
+
+    #[test]
+    fn normalize_rejects_missing_slash() {
+        assert_eq!(normalize_repo_nwo("copyparty"), None);
+    }
+
+    #[test]
+    fn normalize_rejects_empty_owner_or_repo() {
+        assert_eq!(normalize_repo_nwo("/copyparty"), None);
+        assert_eq!(normalize_repo_nwo("owner/"), None);
+    }
 
     fn pr(nwo: &str, number: u64, updated_at: &str) -> SearchPr {
         SearchPr {

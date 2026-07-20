@@ -1804,10 +1804,14 @@ pub(super) fn handle_pr_picker_input(app: &mut App, key: KeyEvent) -> Option<Act
     if let RepoBrowse::Input { text, cursor } = repo_browse {
         return match key.code {
             KeyCode::Enter => {
-                let repo = text.trim().to_string();
-                if repo.is_empty() || !repo.contains('/') {
-                    return None;
-                }
+                let repo = piki_core::github::normalize_repo_nwo(text)?;
+                // Rewrite the field to the canonical form the query uses —
+                // keeps the staleness check in poll_workspaces (which
+                // compares this text against the resolved query) correct
+                // for pasted URLs, and shows the user what was actually
+                // queried.
+                *text = repo.clone();
+                *cursor = text.len();
                 *loading = true;
                 Some(Action::LoadRepoPrs(repo))
             }
