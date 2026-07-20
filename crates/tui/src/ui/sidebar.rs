@@ -16,8 +16,15 @@ use super::layout::{pane_border_style, pane_title_style};
 /// Icon prefix for a workspace row. A `Simple` workspace pointed at a plain
 /// (non-git) directory gets a distinct folder icon — otherwise it's
 /// indistinguishable from a git-backed one until its branch happens to
-/// resolve (see `Workspace::branch`).
-fn workspace_type_icon(ws_type: WorkspaceType, is_git_repo: bool) -> &'static str {
+/// resolve (see `Workspace::branch`). An ephemeral PR review checkout gets
+/// its own icon regardless of type, since it's transient in a way none of
+/// the other workspace kinds are.
+fn workspace_type_icon(ws_type: WorkspaceType, is_git_repo: bool, ephemeral: bool) -> &'static str {
+    if ephemeral {
+        // Ad-hoc PR review checkout — never persisted, deleted on close.
+        // Distinct from every other icon so it reads as "throwaway" at a glance.
+        return "◎ ";
+    }
     match ws_type {
         WorkspaceType::Worktree => "⎇ ",
         WorkspaceType::Project => "▣ ",
@@ -362,8 +369,11 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                     } else {
                         Span::raw("  ")
                     };
-                    let type_icon =
-                        workspace_type_icon(ws.info.workspace_type, ws.info.is_git_repo);
+                    let type_icon = workspace_type_icon(
+                        ws.info.workspace_type,
+                        ws.info.is_git_repo,
+                        ws.info.ephemeral,
+                    );
 
                     // A collapsed family parent surfaces its hidden children's
                     // signals (idle dot + metadata below) instead of losing
@@ -535,4 +545,21 @@ pub(super) fn render_agents_pane(frame: &mut Frame, area: Rect, app: &App) {
         visible_height,
         app.theme.general.scrollbar_thumb,
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ephemeral_icon_overrides_workspace_type() {
+        // An ephemeral review checkout is visually distinct regardless of
+        // its underlying WorkspaceType, so it never gets mistaken for a
+        // regular worktree/project/simple workspace in the sidebar.
+        let ephemeral_icon = workspace_type_icon(WorkspaceType::Simple, true, true);
+        assert_ne!(ephemeral_icon, workspace_type_icon(WorkspaceType::Simple, true, false));
+        assert_ne!(ephemeral_icon, workspace_type_icon(WorkspaceType::Worktree, true, false));
+        assert_ne!(ephemeral_icon, workspace_type_icon(WorkspaceType::Project, true, false));
+        assert_eq!(ephemeral_icon, workspace_type_icon(WorkspaceType::Worktree, true, true));
+    }
 }

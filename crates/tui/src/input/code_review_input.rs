@@ -6,12 +6,17 @@ use crate::code_review::{CommentTarget, EditingComment, ReviewFocus};
 use crate::config::has_ctrl;
 use piki_core::github::{DiffLineType, InlineComment, ReviewVerdict};
 
-/// Check if the active tab is a CodeReview tab with loaded state.
-/// Used to intercept ALL input before any navigation/interaction dispatch.
+/// Check if the active tab is a CodeReview tab with loaded state and the
+/// main panel has focus. Used to intercept ALL input before any
+/// navigation/interaction dispatch — gated on focus (not just
+/// `active_workspace`) so browsing the sidebar with j/k past a review
+/// workspace's row never hijacks the keyboard; see `ui::layout::is_code_review_active`.
 pub(super) fn is_code_review_locked(app: &App) -> bool {
-    app.current_workspace()
-        .and_then(|ws| ws.current_tab())
-        .is_some_and(|tab| tab.provider == piki_core::AIProvider::CodeReview)
+    app.active_pane == crate::app::ActivePane::MainPanel
+        && app
+            .current_workspace()
+            .and_then(|ws| ws.current_tab())
+            .is_some_and(|tab| tab.provider == piki_core::AIProvider::CodeReview)
         && app
             .current_workspace()
             .and_then(|ws| ws.code_review.as_ref())
