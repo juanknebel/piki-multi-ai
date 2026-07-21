@@ -618,6 +618,18 @@ pub(crate) async fn run(
 /// Redraw check for the active tab's PTY output: one atomic load comparing
 /// the byte counter against the last render. Called from the output-signal
 /// wakeup (immediate) and from [`poll_workspaces`] (tick fallback).
+/// Fire-and-forget save of the current workspace list under `source`'s key,
+/// mirroring the save sites in `action::workspace`. `save_workspaces` only
+/// touches rows whose `source_repo` matches, so callers must pass the repo
+/// of the workspace that changed.
+fn persist_workspaces(app: &App, source: std::path::PathBuf) {
+    let infos = app.persistable_workspaces();
+    let storage = std::sync::Arc::clone(&app.storage);
+    tokio::spawn(async move {
+        let _ = storage.workspaces.save_workspaces(&source, &infos);
+    });
+}
+
 fn check_active_tab_output(app: &mut App) {
     let idx = app.active_workspace;
     if let Some(ws) = app.workspaces.get_mut(idx)
@@ -1021,6 +1033,12 @@ fn poll_workspaces(app: &mut App, now: Instant) {
                     );
                     cr.existing_comments = session.existing_comments;
                     app.workspaces[idx].code_review = Some(cr);
+                    // Persist right here: the review workspace is born in
+                    // this poll arm, outside every action::workspace save
+                    // site — without this it only reaches storage if some
+                    // later workspace action happens to save, and a plain
+                    // open-review-then-quit session lost it on restart.
+                    persist_workspaces(app, app.workspaces[idx].info.source_repo.clone());
                     app.active_dialog = None;
                     app.mode = app::AppMode::Normal;
                     app.set_toast("PR loaded", app::ToastLevel::Success);
@@ -1048,9 +1066,19 @@ fn poll_workspaces(app: &mut App, now: Instant) {
             if let Some(ws) = app.workspaces.get_mut(idx) {
                 match result {
                     Ok(checkout) => {
+                        // save_workspaces is keyed by source_repo: if the
+                        // fresh checkout landed somewhere else, save under
+                        // the old key too so its row is deleted rather than
+                        // left behind as a duplicate on the next load.
+                        let old_source = ws.info.source_repo.clone();
                         ws.info.path = checkout.path.clone();
                         ws.info.source_repo = checkout.path;
                         ws.review_broken = false;
+                        let new_source = ws.info.source_repo.clone();
+                        if old_source != new_source {
+                            persist_workspaces(app, old_source);
+                        }
+                        persist_workspaces(app, new_source);
                         app.set_toast("Review checkout restored", app::ToastLevel::Success);
                     }
                     Err(e) => {
