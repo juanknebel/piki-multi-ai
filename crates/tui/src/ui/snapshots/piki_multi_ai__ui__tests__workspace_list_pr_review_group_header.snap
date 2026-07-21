@@ -5,9 +5,9 @@ expression: content
 ---
 ╭ WORKSPACES ──────────────────────────╮
 │▎▾ pr-review                          │
-│   ◎ owner/repo#1                     │
-│   ◎ owner/repo#2                     │
-│   ⎇ plain-ws                         │
+│   ◎ owner/repo#1 [PR]                │
+│   ◎ owner/repo#2 [PR]                │
 │                                      │
+│   ⎇ plain-ws                         │
 │                                      │
 ╰──────────────────────────────────────╯

@@ -376,6 +376,12 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                             },
                         ),
                     ];
+                    if ws.info.ephemeral {
+                        left.push(Span::styled(
+                            " [PR]",
+                            Style::default().fg(app.theme.palette.info),
+                        ));
+                    }
                     if sig.has_idle {
                         left.push(Span::styled(
                             " ●",

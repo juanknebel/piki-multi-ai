@@ -1419,8 +1419,9 @@ impl App {
 
     /// Visual rows for the workspace sidebar, in render order: `Some(row)`
     /// indexes into `sidebar_items()`, `None` is a blank separator line
-    /// inserted on BOTH sides of a worktree family block (before its parent
-    /// row, after its last child) so the block reads as bounded against a
+    /// inserted on BOTH sides of a block — a worktree family (before its
+    /// parent row, after its last child) or the synthetic pr-review group
+    /// (after its last child) — so the block reads as bounded against a
     /// flat neighbor — not just closed off on one side. Two adjacent
     /// families share a single separator between them, not one from each
     /// side. Rendering and mouse hit-testing must both walk this list (not
@@ -1428,24 +1429,31 @@ impl App {
     /// math drifts apart.
     pub fn sidebar_visual_rows(&self) -> Vec<Option<usize>> {
         let items = self.sidebar_items();
-        // A row's "block key" is its source_repo when it's part of a
-        // worktree family (Some), or None for a standalone/flat row — two
-        // flat rows never get a separator between them, only a transition
-        // into or out of a family block does.
-        let block_key = |i: usize| -> Option<&std::path::PathBuf> {
+        // A row's "block key" is the pr-review group when it belongs to the
+        // synthetic header (the header row itself or an ephemeral child), its
+        // source_repo when it's part of a worktree family, or None for a
+        // standalone/flat row — two flat rows never get a separator between
+        // them, only a transition into or out of a block does.
+        #[derive(PartialEq)]
+        enum BlockKey<'a> {
+            PrReview,
+            Family(&'a std::path::PathBuf),
+        }
+        let block_key = |i: usize| -> Option<BlockKey<'_>> {
             let SidebarItem::Workspace { index, .. } = &items[i] else {
-                // GroupHeader / its pr-review children read as their own
-                // block: a leading/trailing separator around the group is
-                // handled by the header itself, not this per-family key.
-                return None;
+                return Some(BlockKey::PrReview);
             };
-            let repo = &self.workspaces[*index].info.source_repo;
+            let ws = &self.workspaces[*index];
+            if ws.info.ephemeral {
+                return Some(BlockKey::PrReview);
+            }
+            let repo = &ws.info.source_repo;
             let family_count = self
                 .workspaces
                 .iter()
                 .filter(|w| &w.info.source_repo == repo)
                 .count();
-            (family_count > 1).then_some(repo)
+            (family_count > 1).then_some(BlockKey::Family(repo))
         };
 
         let mut rows = Vec::with_capacity(items.len());
