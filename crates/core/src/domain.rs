@@ -251,11 +251,23 @@ pub struct WorkspaceInfo {
     #[serde(default = "default_is_git_repo")]
     pub is_git_repo: bool,
     /// Ad-hoc workspace created to review a single PR (e.g. via
-    /// `WorkspaceManager::create_review_workspace`). Excluded from
-    /// persistence — it must not reappear in the sidebar after a restart —
-    /// and closing it deletes `path` from disk instead of just detaching it.
+    /// `WorkspaceManager::create_review_workspace`). Persisted like any other
+    /// workspace, but: grouped under one synthetic "pr-review" sidebar group
+    /// instead of by `source_repo` (see `family_key`/`sidebar_items` in
+    /// `crates/tui/src/app.rs`), has no user-editable name (no dialog exposes
+    /// a name field for any workspace today — if one is ever added, guard it
+    /// here), and closing it deletes `path` from disk instead of just
+    /// detaching it.
     #[serde(default)]
     pub ephemeral: bool,
+    /// `owner/repo` the review checkout was made from. Set only when
+    /// `ephemeral` is true; used to redo `ReviewCheckoutManager::ensure_pr_checkout`
+    /// if the checkout directory is missing after a restart.
+    #[serde(default)]
+    pub pr_repo_nwo: Option<String>,
+    /// PR number the review checkout was made from. See `pr_repo_nwo`.
+    #[serde(default)]
+    pub pr_number: Option<u64>,
 }
 
 pub(crate) fn default_is_git_repo() -> bool {
@@ -291,6 +303,8 @@ impl WorkspaceInfo {
             origin: WorkspaceOrigin::default(),
             is_git_repo: true,
             ephemeral: false,
+            pr_repo_nwo: None,
+            pr_number: None,
         }
     }
 }

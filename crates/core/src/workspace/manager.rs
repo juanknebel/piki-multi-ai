@@ -335,8 +335,10 @@ impl WorkspaceManager {
 
     /// Build a `WorkspaceInfo` for an ad-hoc PR review checkout (see
     /// [`crate::github::ReviewCheckoutManager::ensure_pr_checkout`]). Marked
-    /// `ephemeral` so it's excluded from persistence and its directory is
-    /// deleted (not just detached) when the workspace is closed.
+    /// `ephemeral`: grouped under the sidebar's synthetic "pr-review" group,
+    /// unnamed-editable, and its directory is deleted (not just detached)
+    /// when the workspace is closed. `pr_repo_nwo`/`pr_number` are stored so
+    /// the checkout can be redone if it's missing after a restart.
     pub fn create_review_workspace(checkout: &crate::github::PrCheckout) -> WorkspaceInfo {
         let name = format!("{}#{}", checkout.repo_nwo, checkout.pr.number);
         let mut info = WorkspaceInfo::new(
@@ -352,6 +354,8 @@ impl WorkspaceManager {
             url: checkout.pr.url.clone(),
         };
         info.ephemeral = true;
+        info.pr_repo_nwo = Some(checkout.repo_nwo.clone());
+        info.pr_number = Some(checkout.pr.number);
         info
     }
 

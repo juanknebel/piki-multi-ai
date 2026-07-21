@@ -306,6 +306,23 @@ pub(super) async fn handle(
                 *slot.lock() = Some(result);
             });
         }
+        Action::RetryReviewCheckout(idx) => {
+            let target = app.workspaces.get(idx).and_then(|ws| {
+                Some((ws.info.pr_repo_nwo.clone()?, ws.info.pr_number?))
+            });
+            let Some((repo_nwo, number)) = target else {
+                return Ok(());
+            };
+            let checkout_mgr = manager.review_checkout_manager();
+            let slot = Arc::clone(&app.pending_review_retry);
+            tokio::spawn(async move {
+                let result = checkout_mgr
+                    .ensure_pr_checkout(&repo_nwo, number)
+                    .await
+                    .map_err(|e| e.to_string());
+                *slot.lock() = Some((idx, result));
+            });
+        }
         other => unreachable!("non-review action routed to action::review: {other:?}"),
     }
     Ok(())

@@ -30,6 +30,12 @@ pub struct WorkspaceEntry {
     pub origin: WorkspaceOrigin,
     #[serde(default = "crate::domain::default_is_git_repo")]
     pub is_git_repo: bool,
+    #[serde(default)]
+    pub ephemeral: bool,
+    #[serde(default)]
+    pub pr_repo_nwo: Option<String>,
+    #[serde(default)]
+    pub pr_number: Option<u64>,
 }
 
 impl WorkspaceEntry {
@@ -50,6 +56,9 @@ impl WorkspaceEntry {
         info.dispatch_agent_name = self.dispatch_agent_name;
         info.origin = self.origin;
         info.is_git_repo = self.is_git_repo;
+        info.ephemeral = self.ephemeral;
+        info.pr_repo_nwo = self.pr_repo_nwo;
+        info.pr_number = self.pr_number;
         info
     }
 }
@@ -94,6 +103,9 @@ pub fn save(git_root: &Path, workspaces: &[WorkspaceInfo]) -> anyhow::Result<()>
             dispatch_agent_name: ws.dispatch_agent_name.clone(),
             origin: ws.origin.clone(),
             is_git_repo: ws.is_git_repo,
+            ephemeral: ws.ephemeral,
+            pr_repo_nwo: ws.pr_repo_nwo.clone(),
+            pr_number: ws.pr_number,
         })
         .collect();
 
@@ -120,11 +132,14 @@ pub fn load(git_root: &Path) -> anyhow::Result<Vec<WorkspaceEntry>> {
     let config: ProjectConfig =
         serde_json::from_str(&data).context("failed to parse config file")?;
 
-    // Filter out stale entries
+    // Filter out stale entries. Review-checkout (`ephemeral`) entries are kept
+    // even if `worktree_path` is currently missing — the TUI marks them
+    // `review_broken` and retries the checkout on open rather than dropping
+    // the entry outright.
     let mut entries: Vec<WorkspaceEntry> = config
         .workspaces
         .into_iter()
-        .filter(|e| e.worktree_path.exists())
+        .filter(|e| e.ephemeral || e.worktree_path.exists())
         .collect();
 
     // Sort by order field
@@ -180,7 +195,8 @@ fn load_all_from_dir(dir: &Path) -> Vec<WorkspaceEntry> {
         };
 
         for e in config.workspaces {
-            if e.worktree_path.exists() && !seen_paths.contains(&e.worktree_path) {
+            let keep = e.ephemeral || e.worktree_path.exists();
+            if keep && !seen_paths.contains(&e.worktree_path) {
                 seen_paths.insert(e.worktree_path.clone());
                 all_entries.push(e);
             }

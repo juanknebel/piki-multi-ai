@@ -1,0 +1,13 @@
+---
+source: crates/tui/src/ui/mod.rs
+assertion_line: 356
+expression: content
+---
+╭ WORKSPACES ──────────────────────────╮
+│▎▾ pr-review                          │
+│   ◎ owner/repo#1                     │
+│   ◎ owner/repo#2                     │
+│   ⎇ plain-ws                         │
+│                                      │
+│                                      │
+╰──────────────────────────────────────╯

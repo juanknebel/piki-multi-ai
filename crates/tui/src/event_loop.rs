@@ -124,7 +124,14 @@ pub(crate) async fn run(
     let restore_t0 = Instant::now();
     let entries = storage.workspaces.load_all_workspaces();
     for entry in entries {
-        let ws = app::Workspace::from_info(entry.into_info());
+        let mut ws = app::Workspace::from_info(entry.into_info());
+        // Review-checkout directories are durable but not guaranteed to
+        // survive (manual cleanup, disk pruning, moved data dir). Only a
+        // cheap fs check here — no network — the checkout is only redone
+        // when the user actually opens the workspace (RetryReviewCheckout).
+        if ws.info.ephemeral && !ws.info.path.exists() {
+            ws.review_broken = true;
+        }
         app.workspaces.push(ws);
     }
     // Sort by persistent order field for deterministic ordering across restarts
@@ -1025,6 +1032,30 @@ fn poll_workspaces(app: &mut App, now: Instant) {
                     {
                         *checking_out = None;
                         *error = Some(e);
+                    }
+                }
+            }
+            app.needs_redraw = true;
+        }
+    }
+
+    // Poll review-checkout retry — redoes ensure_pr_checkout for a
+    // `review_broken` workspace opened by the user (see
+    // Action::RetryReviewCheckout / App::review_broken).
+    {
+        let result = { app.pending_review_retry.lock().take() };
+        if let Some((idx, result)) = result {
+            if let Some(ws) = app.workspaces.get_mut(idx) {
+                match result {
+                    Ok(checkout) => {
+                        ws.info.path = checkout.path.clone();
+                        ws.info.source_repo = checkout.path;
+                        ws.review_broken = false;
+                        app.set_toast("Review checkout restored", app::ToastLevel::Success);
+                    }
+                    Err(e) => {
+                        ws.review_broken = true;
+                        app.set_toast(format!("Couldn't restore PR checkout: {e}"), app::ToastLevel::Error);
                     }
                 }
             }

@@ -245,6 +245,8 @@ mod tests {
             origin: piki_core::WorkspaceOrigin::default(),
             is_git_repo: true,
             ephemeral: false,
+            pr_repo_nwo: None,
+            pr_number: None,
         }
     }
 
@@ -314,6 +316,44 @@ mod tests {
             .unwrap();
         let content = buffer_to_snapshot(terminal.backend().buffer());
         insta::assert_snapshot!("workspace_list_standalone_simple_shows_folder_and_branch", content);
+    }
+
+    #[test]
+    fn test_snapshot_workspace_list_pr_review_group_header() {
+        // Ephemeral PR review workspaces are collected under one synthetic
+        // "pr-review" GroupHeader row instead of the usual source_repo family
+        // grouping (each review checkout has its own source_repo).
+        let mut terminal = test_terminal(40, 8);
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+
+        let mut review_a = crate::app::Workspace::from_info(piki_core::WorkspaceInfo {
+            name: "owner/repo#1".to_string(),
+            ephemeral: true,
+            ..test_ws_info("owner/repo#1", 0)
+        });
+        review_a.branch = None;
+        app.workspaces.push(review_a);
+
+        let mut review_b = crate::app::Workspace::from_info(piki_core::WorkspaceInfo {
+            name: "owner/repo#2".to_string(),
+            ephemeral: true,
+            ..test_ws_info("owner/repo#2", 1)
+        });
+        review_b.branch = None;
+        app.workspaces.push(review_b);
+
+        app.workspaces.push(test_workspace("plain-ws", 2));
+
+        app.active_workspace = 0;
+        app.selected_sidebar_row = 0;
+
+        terminal
+            .draw(|frame| {
+                super::sidebar::render_workspace_list(frame, frame.area(), &app);
+            })
+            .unwrap();
+        let content = buffer_to_snapshot(terminal.backend().buffer());
+        insta::assert_snapshot!("workspace_list_pr_review_group_header", content);
     }
 
     #[test]
@@ -494,6 +534,8 @@ mod tests {
             origin: piki_core::WorkspaceOrigin::default(),
             is_git_repo: true,
             ephemeral: false,
+            pr_repo_nwo: None,
+            pr_number: None,
         };
         let mut ws = crate::app::Workspace::from_info(info);
         ws.add_tab(piki_core::AIProvider::Custom("Claude".to_string()), true, None);

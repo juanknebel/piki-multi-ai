@@ -408,6 +408,28 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                     };
                     ListItem::new(vec![Line::from(spans)]).style(style)
                 }
+                SidebarItem::GroupHeader { collapsed } => {
+                    let bar = if is_selected {
+                        Span::styled("▎", Style::default().fg(sel_bar_fg))
+                    } else {
+                        Span::raw(" ")
+                    };
+                    let header_style = Style::default()
+                        .fg(theme.name_inactive)
+                        .add_modifier(Modifier::BOLD);
+                    let arrow = if *collapsed { "▸" } else { "▾" };
+                    let spans = vec![
+                        bar,
+                        Span::styled(format!("{} ", arrow), header_style),
+                        Span::styled("pr-review", header_style),
+                    ];
+                    let style = if is_selected {
+                        Style::default().bg(sel_bg)
+                    } else {
+                        Style::default()
+                    };
+                    ListItem::new(vec![Line::from(spans)]).style(style)
+                }
             }
         })
         .collect();

@@ -523,6 +523,16 @@ pub(crate) fn handle_mouse_event(
                                     // just clicked on.
                                     app.selected_workspace = *index;
                                     app.switch_workspace(*index);
+                                    if app.workspaces.get(*index).is_some_and(|ws| ws.review_broken) {
+                                        app.active_pane = ActivePane::MainPanel;
+                                        return Some(Action::RetryReviewCheckout(*index));
+                                    }
+                                }
+                                // Synthetic pr-review header — any click
+                                // just toggles collapse, mirroring a
+                                // worktree-family parent's chevron.
+                                crate::app::SidebarItem::GroupHeader { .. } => {
+                                    app.toggle_selected_group();
                                 }
                             }
                         }

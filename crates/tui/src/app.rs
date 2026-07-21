@@ -164,12 +164,14 @@ pub enum NewWorkspaceSource {
     GitHub,
 }
 
-/// An item in the sidebar workspace list. Every row is a real workspace now —
-/// manual grouping (a synthetic header row) is gone. Grouping is derived at
+/// An item in the sidebar workspace list. Grouping is derived at
 /// render/navigation time from git worktree structure: workspaces that share
 /// a `source_repo` are a "family"; the one whose `workspace_type != Worktree`
 /// (if loaded) is the family's parent row and can collapse its worktree
-/// children.
+/// children. The one exception is `GroupHeader`: every `ephemeral` (PR
+/// review) workspace is collected under a single synthetic "pr-review" group
+/// regardless of `source_repo` (each review's checkout is its own repo, so
+/// they'd never share a family key otherwise) — see `App::sidebar_items`.
 #[derive(Debug, Clone)]
 pub enum SidebarItem {
     Workspace {
@@ -182,7 +184,15 @@ pub enum SidebarItem {
         /// families with no parent loaded).
         collapsed: Option<bool>,
     },
+    /// Synthetic header for the "pr-review" group — not backed by any real
+    /// workspace. `collapsed_groups` key is the fixed string `"pr-review"`
+    /// (an absolute filesystem path, which every real `source_repo` family
+    /// key is, can never collide with it).
+    GroupHeader { collapsed: bool },
 }
+
+/// `collapsed_groups` key for the synthetic PR-review sidebar group.
+pub const PR_REVIEW_GROUP_KEY: &str = "pr-review";
 
 /// Response data for the API Explorer tab
 #[allow(dead_code)]
@@ -328,6 +338,11 @@ pub struct Workspace {
     /// notification that the user has not yet acknowledged. Cleared when the
     /// user switches to this workspace. Drives the sidebar idle badge.
     pub has_idle_notification: bool,
+    /// Runtime-only: true for a restored `ephemeral` (PR review) workspace
+    /// whose checkout directory was missing on load. Not persisted — it's
+    /// recomputed at startup and cleared (or re-set) by
+    /// `Action::RetryReviewCheckout` when the user opens it.
+    pub review_broken: bool,
 }
 
 impl std::ops::Deref for Workspace {
@@ -376,6 +391,7 @@ impl Workspace {
             kanban_provider: None,
             code_review: None,
             has_idle_notification: false,
+            review_broken: false,
         }
     }
 
@@ -757,6 +773,10 @@ pub type PendingPrCheckout =
 /// before this one landed) can be told apart from the current query.
 pub type PendingRepoPrs =
     Arc<Mutex<Option<(String, Result<Vec<piki_core::github::PrListItem>, String>)>>>;
+/// Background result slot for `Action::RetryReviewCheckout`. Carries the
+/// target workspace index alongside the result.
+pub type PendingReviewRetry =
+    Arc<Mutex<Option<(usize, Result<piki_core::github::PrCheckout, String>)>>>;
 
 pub struct App {
     pub should_quit: bool,
@@ -870,6 +890,8 @@ pub struct App {
     pub pending_pr_checkout: PendingPrCheckout,
     /// Background result slot for `Action::LoadRepoPrs`.
     pub pending_repo_prs: PendingRepoPrs,
+    /// Background result slot for `Action::RetryReviewCheckout`.
+    pub pending_review_retry: PendingReviewRetry,
     /// Storage backend (SQLite)
     pub storage: std::sync::Arc<piki_core::storage::AppStorage>,
     /// Cached agent profiles for the current project
@@ -1026,6 +1048,7 @@ impl App {
             pending_pr_list: Arc::new(Mutex::new(None)),
             pending_pr_checkout: Arc::new(Mutex::new(None)),
             pending_repo_prs: Arc::new(Mutex::new(None)),
+            pending_review_retry: Arc::new(Mutex::new(None)),
             storage,
             agent_profiles: Vec::new(),
             provider_manager: piki_core::providers::ProviderManager::load_or_init(
@@ -1121,23 +1144,20 @@ impl App {
         idx
     }
 
-    /// `WorkspaceInfo`s to hand to `save_workspaces`, excluding `ephemeral`
-    /// ones (ad-hoc PR review workspaces) — they must never reappear in the
-    /// sidebar after a restart.
+    /// `WorkspaceInfo`s to hand to `save_workspaces`. `ephemeral` (PR review)
+    /// workspaces are included — they survive a restart, restored under the
+    /// synthetic "pr-review" sidebar group (see `sidebar_items`).
     pub fn persistable_workspaces(&self) -> Vec<piki_core::WorkspaceInfo> {
-        self.workspaces
-            .iter()
-            .filter(|w| !w.info.ephemeral)
-            .map(|w| w.info.clone())
-            .collect()
+        self.workspaces.iter().map(|w| w.info.clone()).collect()
     }
 
     pub fn next_workspace(&mut self) {
         let visible: Vec<usize> = self
             .sidebar_items()
             .iter()
-            .map(|item| match item {
-                SidebarItem::Workspace { index, .. } => *index,
+            .filter_map(|item| match item {
+                SidebarItem::Workspace { index, .. } => Some(*index),
+                SidebarItem::GroupHeader { .. } => None,
             })
             .collect();
         if visible.is_empty() {
@@ -1155,8 +1175,9 @@ impl App {
         let visible: Vec<usize> = self
             .sidebar_items()
             .iter()
-            .map(|item| match item {
-                SidebarItem::Workspace { index, .. } => *index,
+            .filter_map(|item| match item {
+                SidebarItem::Workspace { index, .. } => Some(*index),
+                SidebarItem::GroupHeader { .. } => None,
             })
             .collect();
         if visible.is_empty() {
@@ -1311,6 +1332,31 @@ impl App {
         let mut items = Vec::new();
         let mut consumed = vec![false; self.workspaces.len()];
 
+        // PR review workspaces don't share a `source_repo` with each other
+        // (each is its own ad-hoc checkout) so the family logic below would
+        // never group them. Instead collect them all under one synthetic
+        // "pr-review" header, emitted first.
+        let review_indices: Vec<usize> = self
+            .workspaces
+            .iter()
+            .enumerate()
+            .filter(|(_, w)| w.info.ephemeral)
+            .map(|(i, _)| i)
+            .collect();
+        if !review_indices.is_empty() {
+            let collapsed = self.collapsed_groups.contains(PR_REVIEW_GROUP_KEY);
+            items.push(SidebarItem::GroupHeader { collapsed });
+            for idx in review_indices {
+                consumed[idx] = true;
+                if !collapsed {
+                    items.push(SidebarItem::Workspace {
+                        index: idx,
+                        collapsed: None,
+                    });
+                }
+            }
+        }
+
         for i in 0..self.workspaces.len() {
             if consumed[i] {
                 continue;
@@ -1387,7 +1433,12 @@ impl App {
         // flat rows never get a separator between them, only a transition
         // into or out of a family block does.
         let block_key = |i: usize| -> Option<&std::path::PathBuf> {
-            let SidebarItem::Workspace { index, .. } = &items[i];
+            let SidebarItem::Workspace { index, .. } = &items[i] else {
+                // GroupHeader / its pr-review children read as their own
+                // block: a leading/trailing separator around the group is
+                // handled by the header itself, not this per-family key.
+                return None;
+            };
             let repo = &self.workspaces[*index].info.source_repo;
             let family_count = self
                 .workspaces
@@ -1411,12 +1462,14 @@ impl App {
         rows
     }
 
-    /// Map a sidebar visual row to a workspace index. Every row is a real
-    /// workspace, so this only returns `None` when `row` is out of range.
+    /// Map a sidebar visual row to a workspace index. Returns `None` when
+    /// `row` is out of range, or lands on the synthetic pr-review
+    /// `GroupHeader` (no workspace behind it to switch to).
     pub fn sidebar_row_to_workspace(&self, row: usize) -> Option<usize> {
-        self.sidebar_items()
-            .get(row)
-            .map(|SidebarItem::Workspace { index, .. }| *index)
+        match self.sidebar_items().get(row) {
+            Some(SidebarItem::Workspace { index, .. }) => Some(*index),
+            Some(SidebarItem::GroupHeader { .. }) | None => None,
+        }
     }
 
     pub fn select_next_sidebar_row(&mut self) {
@@ -1447,8 +1500,9 @@ impl App {
         }
     }
 
-    /// If the currently selected sidebar row is a worktree-family parent
-    /// (has a collapse chevron), its family key and current collapsed state.
+    /// If the currently selected sidebar row is collapsible (a worktree-family
+    /// parent, or the synthetic pr-review `GroupHeader`), its group key and
+    /// current collapsed state.
     fn selected_family_state(&self) -> Option<(String, bool)> {
         match self.sidebar_items().get(self.selected_sidebar_row)? {
             SidebarItem::Workspace {
@@ -1457,6 +1511,9 @@ impl App {
             } => {
                 let ws = self.workspaces.get(*index)?;
                 Some((family_key(&ws.info), *collapsed))
+            }
+            SidebarItem::GroupHeader { collapsed } => {
+                Some((PR_REVIEW_GROUP_KEY.to_string(), *collapsed))
             }
             _ => None,
         }
@@ -1509,8 +1566,10 @@ impl App {
     /// Update selected_sidebar_row to point to the given workspace index.
     pub fn sync_sidebar_row(&mut self, ws_idx: usize) {
         let items = self.sidebar_items();
-        for (i, SidebarItem::Workspace { index, .. }) in items.iter().enumerate() {
-            if *index == ws_idx {
+        for (i, item) in items.iter().enumerate() {
+            if let SidebarItem::Workspace { index, .. } = item
+                && *index == ws_idx
+            {
                 self.selected_sidebar_row = i;
                 return;
             }
@@ -2018,6 +2077,8 @@ mod tests {
             origin: piki_core::WorkspaceOrigin::default(),
             is_git_repo: true,
             ephemeral: false,
+            pr_repo_nwo: None,
+            pr_number: None,
         };
         let ws = Workspace::from_info(info);
         app.workspaces.push(ws);
@@ -2600,6 +2661,52 @@ mod tests {
         // Arrow Right expands.
         crate::input::handle_key_event(&mut app, key(KeyCode::Right));
         assert!(!app.collapsed_groups.contains(&fam_key));
+    }
+
+    #[test]
+    fn ephemeral_workspaces_group_under_pr_review_header() {
+        // Review workspaces each have their own source_repo (their own
+        // checkout path), so they'd never share a worktree-family key — they
+        // must instead land under one synthetic GroupHeader regardless.
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let plain = add_test_workspace(&mut app); // index 0, non-ephemeral
+        let review_a = add_test_workspace(&mut app); // index 1
+        let review_b = add_test_workspace(&mut app); // index 2
+        app.workspaces[review_a].info.ephemeral = true;
+        app.workspaces[review_b].info.ephemeral = true;
+
+        let items = app.sidebar_items();
+        // GroupHeader first, then its two review children, then the
+        // standalone plain workspace.
+        assert!(matches!(
+            items[0],
+            SidebarItem::GroupHeader { collapsed: false }
+        ));
+        let review_indices: Vec<usize> = items[1..3]
+            .iter()
+            .map(|item| match item {
+                SidebarItem::Workspace { index, collapsed: None } => *index,
+                other => panic!("expected a flat review workspace row, got {other:?}"),
+            })
+            .collect();
+        assert_eq!(review_indices, vec![review_a, review_b]);
+        assert!(matches!(
+            items[3],
+            SidebarItem::Workspace { index, collapsed: None } if index == plain
+        ));
+
+        // Collapsing the header hides both review rows but keeps the plain
+        // workspace visible.
+        app.active_pane = ActivePane::WorkspaceList;
+        app.selected_sidebar_row = 0;
+        app.toggle_selected_group();
+        assert!(app.collapsed_groups.contains(crate::app::PR_REVIEW_GROUP_KEY));
+        let collapsed_items = app.sidebar_items();
+        assert_eq!(collapsed_items.len(), 2);
+        assert!(matches!(
+            collapsed_items[0],
+            SidebarItem::GroupHeader { collapsed: true }
+        ));
     }
 
     // ── PTY idle notifications ──

@@ -187,6 +187,22 @@ impl SqliteStorage {
             tx.commit()?;
         }
 
+        // PR review workspaces now survive a restart instead of being
+        // excluded from persistence: `ephemeral` marks them (keeps their
+        // dedicated pr-review sidebar group / delete-on-close behavior),
+        // `pr_repo_nwo`/`pr_number` let the TUI redo `ensure_pr_checkout` if
+        // the checkout directory is missing when the row is restored.
+        if version < 10 {
+            let tx = conn.transaction()?;
+            tx.execute_batch(
+                "ALTER TABLE workspaces ADD COLUMN ephemeral INTEGER NOT NULL DEFAULT 0;
+                 ALTER TABLE workspaces ADD COLUMN pr_repo_nwo TEXT;
+                 ALTER TABLE workspaces ADD COLUMN pr_number INTEGER;",
+            )?;
+            tx.execute("INSERT INTO schema_version (version) VALUES (10)", [])?;
+            tx.commit()?;
+        }
+
         Ok(())
     }
 
@@ -200,7 +216,7 @@ impl SqliteStorage {
 
         for entry in &entries {
             let rows = tx.execute(
-                "INSERT OR IGNORE INTO workspaces (project_root, name, description, prompt, kanban_path, worktree_path, source_repo, workspace_type, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name, origin, origin_github_url, is_git_repo) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                "INSERT OR IGNORE INTO workspaces (project_root, name, description, prompt, kanban_path, worktree_path, source_repo, workspace_type, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name, origin, origin_github_url, is_git_repo, ephemeral, pr_repo_nwo, pr_number) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
                 rusqlite::params![
                     entry.source_repo.to_string_lossy(),
                     entry.name,
@@ -217,6 +233,9 @@ impl SqliteStorage {
                     entry.origin.tag(),
                     entry.origin.github_url(),
                     entry.is_git_repo,
+                    entry.ephemeral,
+                    entry.pr_repo_nwo,
+                    entry.pr_number,
                 ],
             )?;
             count += rows;
@@ -346,6 +365,9 @@ fn row_to_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkspaceEntry> {
         dispatch_agent_name: row.get(10)?,
         origin: crate::domain::WorkspaceOrigin::from_sql(&origin_tag, origin_url),
         is_git_repo: row.get(13)?,
+        ephemeral: row.get(14)?,
+        pr_repo_nwo: row.get(15)?,
+        pr_number: row.get(16)?,
     })
 }
 
@@ -380,7 +402,7 @@ impl WorkspaceStorage for Arc<SqliteStorage> {
 
         for ws in workspaces.iter().filter(|ws| ws.source_repo == git_root) {
             tx.execute(
-                "INSERT INTO workspaces (project_root, name, description, prompt, kanban_path, worktree_path, source_repo, workspace_type, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name, origin, origin_github_url, is_git_repo) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                "INSERT INTO workspaces (project_root, name, description, prompt, kanban_path, worktree_path, source_repo, workspace_type, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name, origin, origin_github_url, is_git_repo, ephemeral, pr_repo_nwo, pr_number) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
                 rusqlite::params![
                     git_root_str,
                     ws.name,
@@ -397,6 +419,9 @@ impl WorkspaceStorage for Arc<SqliteStorage> {
                     ws.origin.tag(),
                     ws.origin.github_url(),
                     ws.is_git_repo,
+                    ws.ephemeral,
+                    ws.pr_repo_nwo,
+                    ws.pr_number,
                 ],
             )?;
         }
@@ -409,13 +434,17 @@ impl WorkspaceStorage for Arc<SqliteStorage> {
         let conn = self.conn.lock();
         let git_root_str = git_root.to_string_lossy();
         let mut stmt = conn.prepare(
-            "SELECT name, description, prompt, kanban_path, worktree_path, source_repo, workspace_type, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name, origin, origin_github_url, is_git_repo FROM workspaces WHERE source_repo = ?1 ORDER BY display_order",
+            "SELECT name, description, prompt, kanban_path, worktree_path, source_repo, workspace_type, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name, origin, origin_github_url, is_git_repo, ephemeral, pr_repo_nwo, pr_number FROM workspaces WHERE source_repo = ?1 ORDER BY display_order",
         )?;
 
+        // Review-checkout (`ephemeral`) entries are kept even if
+        // `worktree_path` is currently missing — the TUI marks them
+        // `review_broken` and retries the checkout on open instead of
+        // dropping the row outright.
         let entries: Vec<WorkspaceEntry> = stmt
             .query_map([&*git_root_str], row_to_entry)?
             .filter_map(|r| r.ok())
-            .filter(|e| e.worktree_path.exists())
+            .filter(|e| e.ephemeral || e.worktree_path.exists())
             .collect();
 
         Ok(entries)
@@ -424,7 +453,7 @@ impl WorkspaceStorage for Arc<SqliteStorage> {
     fn load_all_workspaces(&self) -> Vec<WorkspaceEntry> {
         let conn = self.conn.lock();
         let mut stmt = match conn.prepare(
-            "SELECT name, description, prompt, kanban_path, worktree_path, source_repo, workspace_type, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name, origin, origin_github_url, is_git_repo FROM workspaces ORDER BY display_order",
+            "SELECT name, description, prompt, kanban_path, worktree_path, source_repo, workspace_type, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name, origin, origin_github_url, is_git_repo, ephemeral, pr_repo_nwo, pr_number FROM workspaces ORDER BY display_order",
         ) {
             Ok(s) => s,
             Err(_) => return Vec::new(),
@@ -434,7 +463,7 @@ impl WorkspaceStorage for Arc<SqliteStorage> {
         match stmt.query_map([], row_to_entry) {
             Ok(rows) => rows
                 .filter_map(|r| r.ok())
-                .filter(|e| e.worktree_path.exists())
+                .filter(|e| e.ephemeral || e.worktree_path.exists())
                 .filter(|e| seen.insert(e.worktree_path.clone()))
                 .collect(),
             Err(_) => Vec::new(),
@@ -616,5 +645,70 @@ impl super::AgentProfileStorage for Arc<SqliteStorage> {
             [id],
         )?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod review_workspace_tests {
+    use super::*;
+    use crate::domain::WorkspaceInfo;
+
+    #[test]
+    fn ephemeral_review_workspace_survives_missing_checkout() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Arc::new(SqliteStorage::open(&dir.path().join("db.sqlite")).unwrap());
+
+        let git_root = dir.path().join("repo");
+        std::fs::create_dir_all(&git_root).unwrap();
+
+        // Checkout directory never actually created — mimics a review
+        // workspace whose worktree was pruned/deleted since the last run.
+        let missing_checkout = git_root.join("review-checkout-gone");
+        let mut ws = WorkspaceInfo::new(
+            "owner/repo#7".to_string(),
+            "Some PR".to_string(),
+            "".to_string(),
+            None,
+            missing_checkout,
+            git_root.clone(),
+        );
+        ws.ephemeral = true;
+        ws.pr_repo_nwo = Some("owner/repo".to_string());
+        ws.pr_number = Some(7);
+
+        storage.save_workspaces(&git_root, &[ws]).unwrap();
+
+        let by_repo = storage.load_workspaces(&git_root).unwrap();
+        assert_eq!(by_repo.len(), 1, "ephemeral entry must not be filtered as stale");
+        assert!(by_repo[0].ephemeral);
+        assert_eq!(by_repo[0].pr_repo_nwo.as_deref(), Some("owner/repo"));
+        assert_eq!(by_repo[0].pr_number, Some(7));
+
+        let all = storage.load_all_workspaces();
+        assert_eq!(all.len(), 1);
+        assert!(all[0].ephemeral);
+    }
+
+    #[test]
+    fn non_ephemeral_stale_workspace_still_filtered() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Arc::new(SqliteStorage::open(&dir.path().join("db.sqlite")).unwrap());
+
+        let git_root = dir.path().join("repo");
+        std::fs::create_dir_all(&git_root).unwrap();
+
+        let ws = WorkspaceInfo::new(
+            "regular-ws".to_string(),
+            "".to_string(),
+            "".to_string(),
+            None,
+            git_root.join("does-not-exist"),
+            git_root.clone(),
+        );
+
+        storage.save_workspaces(&git_root, &[ws]).unwrap();
+
+        let by_repo = storage.load_workspaces(&git_root).unwrap();
+        assert!(by_repo.is_empty(), "non-ephemeral stale entries must still be dropped");
     }
 }

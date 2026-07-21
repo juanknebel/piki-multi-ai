@@ -79,6 +79,10 @@ pub(crate) enum Action {
     /// a repo" mode (`o`). Runs in the background; result lands in
     /// `App::pending_repo_prs`.
     LoadRepoPrs(String),
+    /// Redo `ensure_pr_checkout` for a restored `ephemeral` workspace whose
+    /// checkout directory was missing on load (`Workspace::review_broken`).
+    /// Runs in the background; result lands in `App::pending_review_retry`.
+    RetryReviewCheckout(usize),
     /// Send an API request (raw Hurl text)
     SendApiRequest(String),
     /// Dispatch an agent to work on a kanban card
@@ -138,7 +142,8 @@ pub(crate) async fn execute_action(
         | Action::SubmitPrReview
         | Action::LoadPrList
         | Action::OpenPrReview(..)
-        | Action::LoadRepoPrs(..) => review::handle(app, manager, action, terminal).await?,
+        | Action::LoadRepoPrs(..)
+        | Action::RetryReviewCheckout(..) => review::handle(app, manager, action, terminal).await?,
         Action::SpawnTab(..) | Action::OpenMarkdown(..) | Action::OpenMdr(..) => {
             tabs::handle(app, manager, action, terminal).await?
         }
