@@ -53,6 +53,9 @@ jobs:
     # the `test` job above.
     if: github.event_name == 'push'
     strategy:
+      # Report both platforms; a macOS-only failure shouldn't cancel Linux
+      # and leave you guessing whether it was platform-specific.
+      fail-fast: false
       matrix:
         include:
           - target: x86_64-unknown-linux-musl
@@ -104,6 +107,7 @@ jobs:
     needs: test
     if: github.event_name == 'push'
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest

@@ -33,6 +33,12 @@ pub async fn start_ws_server(lsp_manager: Arc<Mutex<LspManager>>) -> anyhow::Res
     Ok(port)
 }
 
+// The handshake callback's error type is fixed by `accept_hdr_async`
+// (`Result<Response, ErrorResponse>`), so the large `Err` variant can't be
+// boxed away here. It only trips the lint on macOS, where `http::Response`
+// is wide enough to cross the threshold — hence `allow` and not `expect`,
+// which would itself warn on the platforms where the lint stays quiet.
+#[allow(clippy::result_large_err)]
 async fn handle_connection(stream: tokio::net::TcpStream, lsp_manager: Arc<Mutex<LspManager>>) {
     // Perform the WebSocket handshake and extract the request path
     let mut ws_path = String::new();
