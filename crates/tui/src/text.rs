@@ -116,25 +116,21 @@ pub fn field_window(text: &str, cursor: usize, max_width: usize) -> (&str, &str,
     } else {
         0
     };
-    let end = cursor
-        + byte_at_width(
-            &text[cursor..],
-            max_width.saturating_sub(width(&text[start..cursor])),
-        );
-    let end = end.max(cursor);
-
     let before = &text[start..cursor];
-    let cursor_char = if cursor < text.len() {
-        &text[cursor..ceil_boundary(text, cursor + 1)]
-    } else {
-        " "
-    };
-    let after_start = if cursor < text.len() {
-        ceil_boundary(text, cursor + 1)
-    } else {
-        cursor
-    };
-    let after = &text[after_start.min(end.max(after_start))..end.max(after_start)];
+
+    // Columns left for the caret and whatever follows it.
+    let tail_budget = max_width.saturating_sub(width(before));
+    // `byte_at_width` returns an offset from `char_indices`, so `end` is always
+    // a char boundary and is never below `cursor`.
+    let end = cursor + byte_at_width(&text[cursor..], tail_budget);
+
+    // Past the end of the text the caret is a blank cell and there is no tail.
+    if cursor >= text.len() {
+        return (before, " ", "");
+    }
+    let after_start = ceil_boundary(text, cursor + 1);
+    let cursor_char = &text[cursor..after_start];
+    let after = &text[after_start.min(end)..end.max(after_start)];
     (before, cursor_char, after)
 }
 
