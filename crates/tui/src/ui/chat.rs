@@ -72,16 +72,8 @@ pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let cursor = app.chat_panel.input_cursor;
     let max_width = input_area.width.saturating_sub(2) as usize;
 
-    // Simple visible window around cursor
-    let visible_start = cursor.saturating_sub(max_width);
-    let visible_end = (visible_start + max_width).min(input_text.len());
-    let visible = &input_text[visible_start..visible_end];
-
-    let cursor_pos = cursor - visible_start;
-    let before = &visible[..cursor_pos.min(visible.len())];
-    let cursor_char = visible.get(cursor_pos..cursor_pos + 1).unwrap_or(" ");
-    let after_start = (cursor_pos + 1).min(visible.len());
-    let after = &visible[after_start..];
+    // Visible window around the cursor, cut on char boundaries
+    let (before, cursor_char, after) = crate::text::field_window(input_text, cursor, max_width);
 
     let input_line = Line::from(vec![
         Span::styled("> ", Style::default().fg(theme.help.border)),
@@ -397,14 +389,7 @@ fn render_text_field<'a>(
     let prefix = "    ";
     match cursor_pos {
         Some(pos) => {
-            let visible_start = pos.saturating_sub(max_width);
-            let visible_end = (visible_start + max_width).min(text.len());
-            let visible = &text[visible_start..visible_end];
-            let cp = pos - visible_start;
-            let before = &visible[..cp.min(visible.len())];
-            let cursor_char = visible.get(cp..cp + 1).unwrap_or(" ");
-            let after_start = (cp + 1).min(visible.len());
-            let after = &visible[after_start..];
+            let (before, cursor_char, after) = crate::text::field_window(text, pos, max_width);
             Line::from(vec![
                 Span::raw(prefix),
                 Span::raw(before.to_string()),
@@ -418,22 +403,8 @@ fn render_text_field<'a>(
     }
 }
 
-/// Simple word-wrapping: split text at `width` boundaries.
+/// Word-wrap at `width` display columns. See `crate::text::wrap` — the
+/// previous local version sliced by bytes and panicked on any accent.
 fn wrap_text(text: &str, width: usize) -> Vec<String> {
-    if width == 0 {
-        return vec![text.to_string()];
-    }
-    let mut result = Vec::new();
-    let mut remaining = text;
-    while remaining.len() > width {
-        // Try to find a word break
-        let break_at = remaining[..width]
-            .rfind(' ')
-            .map(|p| p + 1)
-            .unwrap_or(width);
-        result.push(remaining[..break_at].to_string());
-        remaining = &remaining[break_at..];
-    }
-    result.push(remaining.to_string());
-    result
+    crate::text::wrap(text, width)
 }

@@ -12,6 +12,7 @@ mod input;
 mod log_buffer;
 mod pty;
 mod syntax;
+mod text;
 #[cfg(test)]
 mod test_support;
 mod theme;

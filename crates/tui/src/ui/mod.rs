@@ -105,6 +105,45 @@ mod tests {
         insta::assert_snapshot!("confirm_quit_dialog", content);
     }
 
+    /// Regression: the chat overlay used to slice by bytes with a column
+    /// count, so any accented word crossing the wrap point panicked *inside*
+    /// `terminal.draw` and killed the session. Agents answer in Spanish, so
+    /// this was a matter of time. Drive the real render path at a narrow
+    /// width with accents in every position that gets sliced: the message
+    /// body, the streaming buffer and the input line under the cursor.
+    #[test]
+    fn test_render_chat_overlay_with_accents_does_not_panic() {
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        app.chat_panel.messages.push(piki_core::chat::ChatMessage {
+            role: piki_core::chat::ChatRole::Assistant,
+            content: "instalación completada correctamente en el sistema — revisá la configuración"
+                .to_string(),
+            tool_call_id: None,
+            tool_calls: None,
+        });
+        app.chat_panel.streaming = true;
+        app.chat_panel.current_response =
+            "compilación en curso… aún faltan añadir más añadidos".to_string();
+        app.chat_panel.input = "¿cómo está la configuración?".to_string();
+
+        // Sweep terminal widths: the panel width decides where the wrap falls,
+        // and only some widths land the cut inside a multibyte char. Pinning
+        // one width would let the bug slip back in unnoticed.
+        for term_width in 20u16..=90 {
+            let mut terminal = test_terminal(term_width, 20);
+            // Sweep the cursor over every byte offset too, including those
+            // inside a multibyte char.
+            for cursor in 0..=app.chat_panel.input.len() {
+                app.chat_panel.input_cursor = cursor;
+                terminal
+                    .draw(|frame| {
+                        super::chat::render_chat_overlay(frame, frame.area(), &app);
+                    })
+                    .expect("chat overlay must render at any width/cursor");
+            }
+        }
+    }
+
     #[test]
     fn test_render_missing_prereqs_dialog() {
         let mut terminal = test_terminal(80, 24);

@@ -471,8 +471,11 @@ pub(crate) async fn run(
                             let prefix = if is_error { "[Error] " } else { "" };
                             let display = format!("[{name}] {prefix}{result}");
                             // Truncate long results for display
+                            // Tool results are arbitrary external text (file
+                            // contents, git output): cut on a char boundary,
+                            // never mid-codepoint.
                             let truncated = if display.len() > 500 {
-                                format!("{}...", &display[..500])
+                                format!("{}...", crate::text::truncate_bytes(&display, 500))
                             } else {
                                 display
                             };

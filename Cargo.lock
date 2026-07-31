@@ -42,6 +42,7 @@ dependencies = [
  "tracing-subscriber",
  "tui-markdown",
  "tui-term",
+ "unicode-width",
  "vt100",
 ]
 
