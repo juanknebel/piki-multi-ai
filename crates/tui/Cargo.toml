@@ -18,7 +18,7 @@ ratatui = { version = "0.30", features = ["crossterm"] }
 # Display-width measurement for char-safe wrapping (see src/text.rs).
 # Already in the tree via ratatui; declared explicitly because we call it.
 unicode-width = "0.2"
-crossterm = { version = "0.28", features = ["event-stream"] }
+crossterm = { version = "0.29", features = ["event-stream"] }
 futures = "0.3"
 
 # Async runtime
