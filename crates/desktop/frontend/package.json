@@ -39,7 +39,7 @@
     "codemirror": "^6.0.2",
     "codemirror-languageserver": "^1.22.0",
     "highlight.js": "^11.10.0",
-    "marked": "^15.0.0",
+    "marked": "^18.0.7",
     "marked-highlight": "^2.2.1"
   },
   "devDependencies": {
