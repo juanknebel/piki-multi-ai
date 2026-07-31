@@ -1,6 +1,17 @@
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 
 use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+
+/// Upper bound on how many directories `register_new_dirs` will register (and
+/// walk one level into) per call. Each registration is a blocking round-trip
+/// to notify's background inotify thread; without a cap, a single burst of
+/// directory creation (e.g. `git clone`, a big worktree add, a build tool
+/// materializing a tree) could queue thousands of them and block the main
+/// event-loop thread — and therefore all keyboard input — until the whole
+/// backlog drained. Capping it spreads the work over subsequent ticks
+/// instead.
+const MAX_WATCHES_PER_TICK: usize = 64;
 
 /// Kind of filesystem change detected
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,6 +38,9 @@ pub struct FileWatcher {
     /// queued by the event callback for `try_recv`/`drain` to register
     /// watches on. `None` when the root watch is recursive.
     new_dirs: Option<std::sync::mpsc::Receiver<PathBuf>>,
+    /// Selective mode only: directories still waiting to be registered,
+    /// carried over between calls when a burst exceeds `MAX_WATCHES_PER_TICK`.
+    pending: VecDeque<PathBuf>,
 }
 
 impl FileWatcher {
@@ -122,21 +136,53 @@ impl FileWatcher {
             watcher,
             rx,
             new_dirs,
+            pending: VecDeque::new(),
         })
     }
 
     /// Register watches for directories created after startup (queued by the
-    /// event callback). Selective (Linux) mode only; no-op otherwise.
+    /// event callback), plus any left over from a previous call. Selective
+    /// (Linux) mode only; no-op otherwise. Bounded by `MAX_WATCHES_PER_TICK`
+    /// so a large burst is spread across calls instead of blocking the
+    /// caller (the main event-loop thread) until it fully drains.
     fn register_new_dirs(&mut self) {
         let Some(ref dir_rx) = self.new_dirs else {
             return;
         };
-        // Drain first: registering needs `&mut self.watcher`.
-        let dirs: Vec<PathBuf> = std::iter::from_fn(|| dir_rx.try_recv().ok()).collect();
-        for dir in dirs {
+        self.pending
+            .extend(std::iter::from_fn(|| dir_rx.try_recv().ok()));
+
+        for _ in 0..MAX_WATCHES_PER_TICK {
+            let Some(dir) = self.pending.pop_front() else {
+                break;
+            };
             // Best-effort: the directory may already be gone, or a watch may
-            // already exist (re-adding is fine for inotify).
-            let _ = watch_tree(&mut self.watcher, &dir, false);
+            // already exist (re-adding is fine for inotify). One level only
+            // per directory here — deeper subdirectories are queued onto
+            // `pending` rather than walked recursively in this call.
+            let Ok(()) = self.watcher.watch(&dir, RecursiveMode::NonRecursive) else {
+                continue;
+            };
+            let Ok(entries) = std::fs::read_dir(&dir) else {
+                continue;
+            };
+            for entry in entries.flatten() {
+                let Ok(ft) = entry.file_type() else { continue };
+                if !ft.is_dir() {
+                    continue;
+                }
+                if is_ignored_dir(&entry.file_name().to_string_lossy()) {
+                    continue;
+                }
+                self.pending.push_back(entry.path());
+            }
+        }
+
+        if !self.pending.is_empty() {
+            tracing::debug!(
+                remaining = self.pending.len(),
+                "watch registration backlog continues next tick"
+            );
         }
     }
 
