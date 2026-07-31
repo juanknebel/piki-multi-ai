@@ -2,3 +2,4 @@
 dist/
 dashboard.sh
 .claude/scheduled_tasks.lock
+.antigravitycli/
