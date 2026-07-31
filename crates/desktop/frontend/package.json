@@ -43,7 +43,7 @@
     "marked-highlight": "^2.2.1"
   },
   "devDependencies": {
-    "typescript": "^5.6.0",
+    "typescript": "^7.0.2",
     "vite": "^8.1.5"
   }
 }
