@@ -1,0 +1,27 @@
+# Read by both `cargo audit` locally and the rustsec/audit-check CI job, so
+# the two always agree.
+#
+# Only add an entry with a reason and the condition that removes it. An audit
+# job that is permanently red teaches everyone to ignore it, which is worse
+# than not having one.
+
+[advisories]
+ignore = [
+    # quick-xml: quadratic parse of duplicate attribute names, and unbounded
+    # namespace-declaration allocation in NsReader. Both are denial-of-service
+    # against a parser fed hostile XML.
+    #
+    # Not reachable here. quick-xml arrives only transitively and never sees
+    # untrusted input:
+    #   0.38.x <- plist <- syntect / tui-markdown  (parses the .tmTheme syntax
+    #             and theme files WE ship, not user or network data)
+    #   0.39.x <- wayland-scanner <- ... <- wl-clipboard-rs  (a proc-macro:
+    #             runs at build time against the wayland protocol XML in the
+    #             dependency itself)
+    #
+    # Fix requires syntect/plist and the wayland stack to move to
+    # quick-xml >= 0.41; nothing in this repo pins it. Re-check on any
+    # syntect or wl-clipboard-rs bump and drop these lines when they clear.
+    "RUSTSEC-2026-0194",
+    "RUSTSEC-2026-0195",
+]

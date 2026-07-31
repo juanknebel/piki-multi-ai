@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - nightly
+  # Without this a PR (from a fork or otherwise) gets no checks at all.
+  # Only the `test` job runs for PRs — see the `if:` guards on the build,
+  # build-desktop and release jobs, which stay push-only.
+  pull_request:
 
 permissions:
   contents: write
@@ -28,9 +32,14 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          components: clippy, rustfmt
 
       - uses: Swatinem/rust-cache@v2
+
+      # Formatting is platform-independent; one leg is enough.
+      - name: Format check
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo fmt --all -- --check
 
       - name: Clippy
         run: cargo clippy --workspace --exclude piki-desktop --all-targets -- -D warnings
@@ -40,6 +49,9 @@ jobs:
 
   build:
     needs: test
+    # Artifacts and releases are for the nightly branch only; a PR just needs
+    # the `test` job above.
+    if: github.event_name == 'push'
     strategy:
       matrix:
         include:
@@ -60,12 +72,21 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
       - name: Install musl tools
         if: contains(matrix.target, 'musl')
         run: sudo apt-get update && sudo apt-get install -y musl-tools
 
       - name: Build
         run: cargo build --release --target ${{ matrix.target }} -p agent-multi
+
+      # Cheapest possible proof the binary actually links and starts —
+      # snapshot tests render into a TestBackend and never exec anything.
+      - name: Smoke test the binary
+        run: ./target/${{ matrix.target }}/release/piki-multi-ai --version
 
       - name: Package binary
         run: |
@@ -81,6 +102,7 @@ jobs:
 
   build-desktop:
     needs: test
+    if: github.event_name == 'push'
     strategy:
       matrix:
         include:
@@ -99,9 +121,13 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 20
+          cache: npm
+          cache-dependency-path: crates/desktop/frontend/package-lock.json
 
+      # `npm ci` (not `install`): reproducible from the lockfile, and it fails
+      # loudly when package.json and the lockfile disagree.
       - name: Build frontend
-        run: cd crates/desktop/frontend && npm install && npm run build
+        run: cd crates/desktop/frontend && npm ci && npm run build
 
       - name: Generate platform icons
         run: npx @tauri-apps/cli icon crates/desktop/icons/icon.png --output crates/desktop/icons
@@ -110,12 +136,26 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+          components: clippy
 
       - name: Install Linux dependencies
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: desktop-${{ matrix.target }}
+
+      # piki-desktop is excluded from the `test` job (tauri-build needs
+      # frontend/dist, built above), so this is the only place its Rust is
+      # linted and tested at all.
+      - name: Clippy (desktop)
+        run: cargo clippy -p piki-desktop --all-targets -- -D warnings
+
+      - name: Test (desktop)
+        run: cargo test -p piki-desktop
 
       - uses: tauri-apps/tauri-action@v0
         with:
@@ -145,6 +185,9 @@ jobs:
 
   release:
     needs: [build, build-desktop]
+    # Implied by its needs being skipped on a PR, but stated so nobody has to
+    # reason about skip propagation to be sure a PR can't publish a release.
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
 
     steps:

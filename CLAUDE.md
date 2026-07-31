@@ -13,22 +13,31 @@
 
 ## CI parity check
 
-Before pushing, run the same commands GitHub Actions runs so failures are caught locally:
+Before pushing, run what GitHub Actions runs:
 
 ```bash
-# nightly.yml::test — runs on push to nightly (matrix: ubuntu + macos)
+just ci
+```
+
+That is the single source of truth for the parity list — the recipes live in the `justfile` at the repo root (`cargo install just`). It expands to:
+
+```bash
+# nightly.yml::test — push to nightly + every PR (matrix: ubuntu + macos)
+cargo fmt --all -- --check                    # ubuntu leg only in CI
 cargo clippy --workspace --exclude piki-desktop --all-targets -- -D warnings
 cargo test --workspace --exclude piki-desktop
 
-# nightly.yml::build-desktop — runs on push to nightly; builds the desktop bundle
+# nightly.yml::build-desktop — push to nightly only; builds the desktop bundle
 cd crates/desktop/frontend && npm run build   # = tsc && vite build
 ```
 
 Notes:
-- The `test` job excludes `piki-desktop` — its Rust code is only built by `nightly.yml::build-desktop` / `release.yml`.
+- The `test` job excludes `piki-desktop` because `tauri-build` needs `frontend/dist` to exist. Its Rust *is* linted and tested, in `build-desktop`, after the frontend build (`just lint-desktop` locally).
 - The frontend's TypeScript is only typechecked via `npm run build` in `nightly.yml::build-desktop`; the `test` job does not touch it.
-- All three commands must be clean before pushing to `nightly` (the only branch that triggers `nightly.yml`).
+- Everything must be clean before pushing to `nightly`. PRs run the `test` job too; `build`/`build-desktop`/`release` are gated on `github.event_name == 'push'` so a PR never publishes artifacts.
 - The `build` and `build-desktop` jobs have `needs: test`, so a failing test blocks the nightly artifacts from publishing.
+- `.github/workflows/audit.yml` runs `cargo audit` weekly and on any dependency change. Advisories we cannot act on are ignored in `.cargo/audit.toml`, each with a reason and the condition that clears it — add entries there, never by silencing the job.
+- The `cargo fmt` baseline commit is listed in `.git-blame-ignore-revs`; run `git config blame.ignoreRevsFile .git-blame-ignore-revs` once so local blame skips it.
 
 ## Subagents
 

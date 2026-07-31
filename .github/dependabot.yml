@@ -1,0 +1,39 @@
+version: 2
+
+# PRs land on `nightly` — `main` only receives release merges (see CLAUDE.md).
+#
+# Note: the `flow-core` / `flow-tui` dependencies are git deps pinned by tag,
+# which Dependabot cannot bump. Those still need a manual tag change in
+# crates/tui/Cargo.toml and crates/desktop/Cargo.toml.
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    target-branch: nightly
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # One PR for the routine patch/minor churn; majors stay separate so
+      # they get reviewed on their own.
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: npm
+    directory: /crates/desktop/frontend
+    target-branch: nightly
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: nightly
+    schedule:
+      interval: monthly
