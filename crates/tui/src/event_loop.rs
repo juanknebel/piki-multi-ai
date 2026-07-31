@@ -234,6 +234,13 @@ pub(crate) async fn run(
     // that wakes the loop exactly when the frame becomes eligible.
     let mut last_draw_at: Option<Instant> = None;
     let mut render_deadline: Option<Instant> = None;
+    // Layout identity of the last drawn frame. When it changes (workspace,
+    // tab or focused-pane switch) the next draw does a full clear+repaint:
+    // ratatui only rewrites cells that differ from ITS back buffer, so any
+    // real-terminal drift (e.g. an emulator disagreeing with unicode-width
+    // about an emoji's width in agent output) leaves ghost cells behind
+    // that an ordinary diff-draw can never heal.
+    let mut last_layout_key: Option<(usize, Option<usize>, crate::app::ActivePane)> = None;
     let pty_output = app.pty_output.clone();
 
     loop {
@@ -249,6 +256,16 @@ pub(crate) async fn run(
             let eligible = last_draw_at
                 .is_none_or(|t| now.duration_since(t) >= MIN_RENDER_INTERVAL);
             if eligible {
+                let layout_key = (
+                    app.active_workspace,
+                    app.current_workspace()
+                        .and_then(|ws| ws.tabs.get(ws.active_tab).map(|tab| tab.id)),
+                    app.active_pane,
+                );
+                if last_layout_key.is_some_and(|k| k != layout_key) {
+                    terminal.clear()?;
+                }
+                last_layout_key = Some(layout_key);
                 terminal.draw(|frame| {
                     ui::layout::render(frame, &mut app);
                 })?;
