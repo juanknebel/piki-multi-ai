@@ -161,7 +161,7 @@ jobs:
       - name: Test (desktop)
         run: cargo test -p piki-desktop
 
-      - uses: tauri-apps/tauri-action@v0
+      - uses: tauri-apps/tauri-action@v1
         with:
           projectPath: crates/desktop
           args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --config '{"build":{"beforeBuildCommand":""}}'
