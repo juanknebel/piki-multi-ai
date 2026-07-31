@@ -192,7 +192,8 @@ pub enum SidebarItem {
 }
 
 /// `collapsed_groups` key for the synthetic PR-review sidebar group.
-pub const PR_REVIEW_GROUP_KEY: &str = "pr-review";
+/// Defined in core alongside the grouping rule that emits it.
+pub use piki_core::workspace::PR_REVIEW_GROUP_KEY;
 
 /// Response data for the API Explorer tab
 #[allow(dead_code)]
@@ -668,9 +669,7 @@ impl EditorState {
 /// Stable identity for a worktree family, used as the key into
 /// `App::collapsed_groups`. The family's `source_repo` path is unique per
 /// git root and stable across reorders/reloads, unlike a workspace index.
-fn family_key(info: &piki_core::WorkspaceInfo) -> String {
-    info.source_repo.to_string_lossy().to_string()
-}
+use piki_core::workspace::family_key;
 
 fn char_to_byte_idx(s: &str, char_idx: usize) -> usize {
     s.char_indices()
@@ -1361,92 +1360,32 @@ impl App {
     /// The family block is emitted at the position of its first member
     /// encountered in `self.workspaces` order.
     pub fn sidebar_items(&self) -> Vec<SidebarItem> {
-        let mut items = Vec::new();
-        let mut consumed = vec![false; self.workspaces.len()];
-
-        // PR review workspaces don't share a `source_repo` with each other
-        // (each is its own ad-hoc checkout) so the family logic below would
-        // never group them. Instead collect them all under one synthetic
-        // "pr-review" header, emitted first.
-        let review_indices: Vec<usize> = self
-            .workspaces
-            .iter()
-            .enumerate()
-            .filter(|(_, w)| w.info.ephemeral)
-            .map(|(i, _)| i)
-            .collect();
-        if !review_indices.is_empty() {
-            let collapsed = self.collapsed_groups.contains(PR_REVIEW_GROUP_KEY);
-            items.push(SidebarItem::GroupHeader { collapsed });
-            for idx in review_indices {
-                consumed[idx] = true;
-                if !collapsed {
-                    items.push(SidebarItem::Workspace {
-                        index: idx,
-                        collapsed: None,
-                    });
+        // The grouping rule itself lives in core so the desktop app applies
+        // the identical one (see `core::workspace::sidebar_rows`); this only
+        // adapts its output to the TUI's row type.
+        let infos: Vec<piki_core::WorkspaceInfo> =
+            self.workspaces.iter().map(|w| w.info.clone()).collect();
+        piki_core::workspace::sidebar_rows(&infos, &self.collapsed_groups)
+            .into_iter()
+            .map(|row| match row {
+                piki_core::workspace::SidebarRow::PrReviewHeader { collapsed } => {
+                    SidebarItem::GroupHeader { collapsed }
                 }
-            }
-        }
-
-        for i in 0..self.workspaces.len() {
-            if consumed[i] {
-                continue;
-            }
-            let source_repo = &self.workspaces[i].info.source_repo;
-            let siblings: Vec<usize> = self
-                .workspaces
-                .iter()
-                .enumerate()
-                .filter(|(j, w)| !consumed[*j] && &w.info.source_repo == source_repo)
-                .map(|(j, _)| j)
-                .collect();
-
-            if siblings.len() <= 1 {
-                items.push(SidebarItem::Workspace {
-                    index: i,
-                    collapsed: None,
-                });
-                consumed[i] = true;
-                continue;
-            }
-
-            let parent_pos = siblings.iter().position(|&idx| {
-                self.workspaces[idx].info.workspace_type != WorkspaceType::Worktree
-            });
-
-            match parent_pos {
-                Some(pp) => {
-                    let parent_idx = siblings[pp];
-                    let key = family_key(&self.workspaces[parent_idx].info);
-                    let collapsed = self.collapsed_groups.contains(&key);
-                    items.push(SidebarItem::Workspace {
-                        index: parent_idx,
-                        collapsed: Some(collapsed),
-                    });
-                    for &idx in &siblings {
-                        consumed[idx] = true;
-                        if idx != parent_idx && !collapsed {
-                            items.push(SidebarItem::Workspace {
-                                index: idx,
-                                collapsed: None,
-                            });
-                        }
+                piki_core::workspace::SidebarRow::Workspace { index, kind } => {
+                    SidebarItem::Workspace {
+                        index,
+                        // `Some(_)` marks a family parent; children and
+                        // standalone rows both carry `None`.
+                        collapsed: match kind {
+                            piki_core::workspace::RowKind::Parent { collapsed, .. } => {
+                                Some(collapsed)
+                            }
+                            _ => None,
+                        },
                     }
                 }
-                None => {
-                    for &idx in &siblings {
-                        consumed[idx] = true;
-                        items.push(SidebarItem::Workspace {
-                            index: idx,
-                            collapsed: None,
-                        });
-                    }
-                }
-            }
-        }
-
-        items
+            })
+            .collect()
     }
 
     /// Visual rows for the workspace sidebar, in render order: `Some(row)`
