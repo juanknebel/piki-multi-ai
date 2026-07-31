@@ -233,7 +233,7 @@ impl SqliteStorage {
                     entry.is_git_repo,
                     entry.ephemeral,
                     entry.pr_repo_nwo,
-                    entry.pr_number,
+                    entry.pr_number.map(|n| n as i64),
                 ],
             )?;
             count += rows;
@@ -365,7 +365,7 @@ fn row_to_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkspaceEntry> {
         is_git_repo: row.get(13)?,
         ephemeral: row.get(14)?,
         pr_repo_nwo: row.get(15)?,
-        pr_number: row.get(16)?,
+        pr_number: row.get::<_, Option<i64>>(16)?.map(|n| n as u64),
     })
 }
 
@@ -419,7 +419,7 @@ impl WorkspaceStorage for Arc<SqliteStorage> {
                     ws.is_git_repo,
                     ws.ephemeral,
                     ws.pr_repo_nwo,
-                    ws.pr_number,
+                    ws.pr_number.map(|n| n as i64),
                 ],
             )?;
         }
