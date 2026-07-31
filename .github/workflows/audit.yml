@@ -11,11 +11,13 @@ on:
     paths:
       - "**/Cargo.toml"
       - "Cargo.lock"
+      - ".cargo/audit.toml"
       - ".github/workflows/audit.yml"
   pull_request:
     paths:
       - "**/Cargo.toml"
       - "Cargo.lock"
+      - ".cargo/audit.toml"
   workflow_dispatch:
 
 permissions:
@@ -26,6 +28,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: rustsec/audit-check@v2
+
+      # Plain `cargo audit` rather than rustsec/audit-check: that action
+      # publishes results through the checks API, which needs `checks: write`
+      # and is unavailable to the read-only token a fork's pull request gets —
+      # it fails the job even when the audit itself is clean. Running the tool
+      # directly needs no API access and behaves the same everywhere.
+      - uses: taiki-e/install-action@v2
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          tool: cargo-audit
+
+      # Reads .cargo/audit.toml for the ignore list (same as running it
+      # locally). Exits non-zero on vulnerabilities; unmaintained/unsound
+      # advisories are reported as warnings and do not fail the build.
+      - name: cargo audit
+        run: cargo audit
