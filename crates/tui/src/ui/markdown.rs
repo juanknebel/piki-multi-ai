@@ -104,7 +104,8 @@ pub fn render_cached(
     let block = Block::default()
         .title(format!(" {} ", label))
         .title_style(title_style)
-        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
+        .borders(Borders::ALL)
+        .border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(border_style);
 
     let paragraph = Paragraph::new(text.clone())
@@ -138,5 +139,14 @@ pub fn render(
     scrollbar_color: Color,
 ) {
     let text = parse_to_static(content, syntax_hl);
-    render_cached(frame, area, &text, label, scroll, border_style, title_style, scrollbar_color);
+    render_cached(
+        frame,
+        area,
+        &text,
+        label,
+        scroll,
+        border_style,
+        title_style,
+        scrollbar_color,
+    );
 }

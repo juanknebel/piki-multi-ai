@@ -9,26 +9,23 @@ use crossterm::event::{KeyCode, KeyModifiers};
 use piki_core::storage::AgentProfile;
 
 use super::dialog::{
-    handle_about_input, handle_confirm_close_tab_input,
-    handle_confirm_delete_input, handle_confirm_quit_input,
-    handle_dashboard_input, handle_dispatch_agent_input,
+    handle_about_input, handle_confirm_close_tab_input, handle_confirm_delete_input,
+    handle_confirm_quit_input, handle_dashboard_input, handle_dispatch_agent_input,
     handle_dispatch_card_move_input, handle_edit_agent_input, handle_edit_agent_role_input,
-    handle_edit_provider_input, handle_edit_workspace_input,
-    handle_help_input, handle_import_agents_input, handle_logs_input,
-    handle_manage_agents_input, handle_manage_providers_input, handle_missing_prereqs_input,
-    handle_new_tab_input, handle_new_workspace_input, handle_pr_picker_input,
-    handle_workspace_info_input,
+    handle_edit_provider_input, handle_edit_workspace_input, handle_help_input,
+    handle_import_agents_input, handle_logs_input, handle_manage_agents_input,
+    handle_manage_providers_input, handle_missing_prereqs_input, handle_new_tab_input,
+    handle_new_workspace_input, handle_pr_picker_input, handle_workspace_info_input,
 };
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField};
 use crate::dialog_state::{
-    DialogState, EditAgentField, EditProviderField,
-    EditWorkspaceField, NewTabMenu,
+    DialogState, EditAgentField, EditProviderField, EditWorkspaceField, NewTabMenu,
 };
-use piki_core::WorkspaceType;
 use crate::log_buffer::LogEntry;
 use crate::test_support::{key, key_with_mods, test_app, test_app_isolated};
 use piki_core::AIProvider;
+use piki_core::WorkspaceType;
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -244,7 +241,12 @@ fn edit_provider_field_state(app: &App) -> (String, usize, usize, bool) {
             prompt_format_idx,
             dispatchable,
             ..
-        }) => (name.clone(), *prompt_format_idx, *name_cursor, *dispatchable),
+        }) => (
+            name.clone(),
+            *prompt_format_idx,
+            *name_cursor,
+            *dispatchable,
+        ),
         _ => panic!("not in EditProvider dialog"),
     }
 }
@@ -258,9 +260,7 @@ fn current_active_field(app: &App) -> EditWorkspaceField {
 
 fn current_edit_buffers(app: &App) -> (String, String) {
     match &app.active_dialog {
-        Some(DialogState::EditWorkspace { kanban, prompt, .. }) => {
-            (kanban.clone(), prompt.clone())
-        }
+        Some(DialogState::EditWorkspace { kanban, prompt, .. }) => (kanban.clone(), prompt.clone()),
         _ => panic!("not in EditWorkspace dialog"),
     }
 }
@@ -337,7 +337,11 @@ fn confirm_delete_no_on_ephemeral_cancels_instead_of_remove_from_list() {
 
     assert!(action.is_none());
     assert!(app.active_dialog.is_none());
-    assert_eq!(app.workspaces.len(), 1, "the ephemeral workspace must survive a cancel");
+    assert_eq!(
+        app.workspaces.len(),
+        1,
+        "the ephemeral workspace must survive a cancel"
+    );
 }
 
 #[test]
@@ -1072,9 +1076,24 @@ fn logs_returns_none_when_dialog_not_active() {
 
 fn sample_imports() -> Vec<(String, String, String, bool)> {
     vec![
-        ("alice".to_string(), "claude".to_string(), "role a".to_string(), false),
-        ("bob".to_string(), "claude".to_string(), "role b".to_string(), false),
-        ("carol".to_string(), "claude".to_string(), "role c".to_string(), true),
+        (
+            "alice".to_string(),
+            "claude".to_string(),
+            "role a".to_string(),
+            false,
+        ),
+        (
+            "bob".to_string(),
+            "claude".to_string(),
+            "role b".to_string(),
+            false,
+        ),
+        (
+            "carol".to_string(),
+            "claude".to_string(),
+            "role c".to_string(),
+            true,
+        ),
     ]
 }
 
@@ -1339,7 +1358,10 @@ fn edit_provider_back_tab_cycles_in_reverse() {
     open_edit_provider(&mut app);
 
     handle_edit_provider_input(&mut app, key(KeyCode::BackTab));
-    assert_eq!(edit_provider_active_field(&app), EditProviderField::AgentDir);
+    assert_eq!(
+        edit_provider_active_field(&app),
+        EditProviderField::AgentDir
+    );
 
     handle_edit_provider_input(&mut app, key(KeyCode::BackTab));
     assert_eq!(
@@ -1651,14 +1673,20 @@ fn new_tab_honors_a_rebound_exit_key() {
 
     // The displaced default no longer closes it — a rebind replaces, not adds.
     handle_new_tab_input(&mut app, key(KeyCode::Esc));
-    assert!(app.active_dialog.is_some(), "the displaced Esc still closed the dialog");
+    assert!(
+        app.active_dialog.is_some(),
+        "the displaced Esc still closed the dialog"
+    );
 
     handle_new_tab_input(
         &mut app,
         key_with_mods(KeyCode::Char('c'), KeyModifiers::CONTROL),
     );
 
-    assert!(app.active_dialog.is_none(), "rebound exit key did not close the dialog");
+    assert!(
+        app.active_dialog.is_none(),
+        "rebound exit key did not close the dialog"
+    );
     assert_eq!(app.mode, AppMode::Normal);
 }
 
@@ -1677,7 +1705,10 @@ fn new_tab_main_unknown_key_is_noop() {
 fn new_tab_agents_j_advances_selection_with_wrap() {
     let (mut app, _tmp) = test_app_isolated();
     let count = app.new_tab_agent_list().len();
-    assert!(count >= 2, "default providers.toml seeds at least 2 entries");
+    assert!(
+        count >= 2,
+        "default providers.toml seeds at least 2 entries"
+    );
     open_new_tab_agents(&mut app, 0);
 
     handle_new_tab_input(&mut app, key(KeyCode::Char('j')));
@@ -1761,7 +1792,10 @@ fn new_tab_agents_digit_shortcut_spawns_indexed_provider() {
 fn new_tab_agents_digit_out_of_range_is_noop() {
     let (mut app, _tmp) = test_app_isolated();
     let count = app.new_tab_agent_list().len();
-    assert!(count < 9, "this test assumes fewer than 9 default providers");
+    assert!(
+        count < 9,
+        "this test assumes fewer than 9 default providers"
+    );
     open_new_tab_agents(&mut app, 0);
 
     let action = handle_new_tab_input(&mut app, key(KeyCode::Char('9')));
@@ -1792,10 +1826,7 @@ fn new_tab_tools_key_1_spawns_kanban() {
 
     let action = handle_new_tab_input(&mut app, key(KeyCode::Char('1')));
 
-    assert!(matches!(
-        action,
-        Some(Action::SpawnTab(AIProvider::Kanban))
-    ));
+    assert!(matches!(action, Some(Action::SpawnTab(AIProvider::Kanban))));
     assert!(app.active_dialog.is_none());
     assert_eq!(app.mode, AppMode::Normal);
 }
@@ -2356,8 +2387,16 @@ fn edit_agent_role_returns_none_when_dialog_not_active() {
 
 fn sample_dispatch_agents() -> Vec<(String, String, String)> {
     vec![
-        ("alpha".to_string(), "Claude Code".to_string(), "role-a".to_string()),
-        ("beta".to_string(), "Gemini".to_string(), "role-b".to_string()),
+        (
+            "alpha".to_string(),
+            "Claude Code".to_string(),
+            "role-a".to_string(),
+        ),
+        (
+            "beta".to_string(),
+            "Gemini".to_string(),
+            "role-b".to_string(),
+        ),
     ]
 }
 
@@ -2412,13 +2451,7 @@ fn dispatch_step0_right_cycles_forward_through_agents_then_providers() {
     assert_eq!(current_dispatch_state(&app).1, agent_count);
 
     // Wrap-around at the end
-    open_dispatch_agent(
-        &mut app,
-        sample_dispatch_agents(),
-        0,
-        total - 1,
-        false,
-    );
+    open_dispatch_agent(&mut app, sample_dispatch_agents(), 0, total - 1, false);
     handle_dispatch_agent_input(&mut app, key(KeyCode::Right));
     assert_eq!(current_dispatch_state(&app).1, 0);
 }
@@ -2811,10 +2844,16 @@ fn new_workspace_source_field_space_toggles_local_github() {
     open_new_workspace(&mut app, NewWorkspaceSource::Local, DialogField::Source);
 
     handle_new_workspace_input(&mut app, key(KeyCode::Char(' ')));
-    assert_eq!(current_new_workspace_source(&app), NewWorkspaceSource::GitHub);
+    assert_eq!(
+        current_new_workspace_source(&app),
+        NewWorkspaceSource::GitHub
+    );
 
     handle_new_workspace_input(&mut app, key(KeyCode::Char(' ')));
-    assert_eq!(current_new_workspace_source(&app), NewWorkspaceSource::Local);
+    assert_eq!(
+        current_new_workspace_source(&app),
+        NewWorkspaceSource::Local
+    );
 }
 
 #[test]
@@ -2823,10 +2862,16 @@ fn new_workspace_source_field_right_and_left_also_toggle() {
     open_new_workspace(&mut app, NewWorkspaceSource::Local, DialogField::Source);
 
     handle_new_workspace_input(&mut app, key(KeyCode::Right));
-    assert_eq!(current_new_workspace_source(&app), NewWorkspaceSource::GitHub);
+    assert_eq!(
+        current_new_workspace_source(&app),
+        NewWorkspaceSource::GitHub
+    );
 
     handle_new_workspace_input(&mut app, key(KeyCode::Left));
-    assert_eq!(current_new_workspace_source(&app), NewWorkspaceSource::Local);
+    assert_eq!(
+        current_new_workspace_source(&app),
+        NewWorkspaceSource::Local
+    );
 }
 
 #[test]
@@ -2846,7 +2891,11 @@ fn new_workspace_source_toggle_clears_dir_buffer() {
 #[test]
 fn new_workspace_description_field_accepts_any_non_control_char() {
     let mut app = test_app();
-    open_new_workspace(&mut app, NewWorkspaceSource::Local, DialogField::Description);
+    open_new_workspace(
+        &mut app,
+        NewWorkspaceSource::Local,
+        DialogField::Description,
+    );
 
     for c in "Hello, world! 🚀".chars() {
         handle_new_workspace_input(&mut app, key(KeyCode::Char(c)));
@@ -2916,14 +2965,7 @@ fn new_workspace_enter_local_dispatches_create_with_all_fields() {
     let action = handle_new_workspace_input(&mut app, key(KeyCode::Enter));
 
     match action {
-        Some(Action::CreateWorkspace(
-            name,
-            desc,
-            prompt,
-            kanban,
-            dir_path,
-            ws_type,
-        )) => {
+        Some(Action::CreateWorkspace(name, desc, prompt, kanban, dir_path, ws_type)) => {
             assert_eq!(name, basename);
             assert_eq!(desc, "desc");
             assert_eq!(prompt, "go");
@@ -2942,11 +2984,7 @@ fn new_workspace_enter_local_derives_name_from_folder_basename() {
     let mut app = test_app();
     let tmp = tempfile::tempdir().expect("create temp dir");
     let dir_path = tmp.path().to_path_buf();
-    let basename = dir_path
-        .file_name()
-        .unwrap()
-        .to_string_lossy()
-        .to_string();
+    let basename = dir_path.file_name().unwrap().to_string_lossy().to_string();
     open_new_workspace(&mut app, NewWorkspaceSource::Local, DialogField::Directory);
     set_new_workspace_buffer(
         &mut app,
@@ -2967,8 +3005,7 @@ fn new_workspace_enter_local_derives_name_from_folder_basename() {
 
 #[test]
 fn new_workspace_enter_local_expands_tilde() {
-    let home =
-        std::env::var("HOME").expect("HOME must be set for tilde-expansion test");
+    let home = std::env::var("HOME").expect("HOME must be set for tilde-expansion test");
     let mut app = test_app();
     open_new_workspace(&mut app, NewWorkspaceSource::Local, DialogField::Directory);
     set_new_workspace_buffer(&mut app, DialogField::Directory, "~");
@@ -3017,7 +3054,11 @@ fn new_workspace_enter_github_dispatches_create_github_action() {
 fn new_workspace_esc_dismisses_and_focuses_workspace_list() {
     let mut app = test_app();
     app.active_pane = ActivePane::MainPanel;
-    open_new_workspace(&mut app, NewWorkspaceSource::Local, DialogField::Description);
+    open_new_workspace(
+        &mut app,
+        NewWorkspaceSource::Local,
+        DialogField::Description,
+    );
 
     let action = handle_new_workspace_input(&mut app, key(KeyCode::Esc));
 
@@ -3036,10 +3077,10 @@ fn new_workspace_returns_none_when_dialog_not_active() {
 
 // ── Layer 3: CreateWorktree dialog + clone_workspace keybinding gating ────
 
+use super::dialog::handle_create_worktree_input;
 use crate::app::Workspace;
 use crate::dialog_state::{CreateWorktreeField, CreateWorktreeMode};
 use piki_core::WorkspaceOrigin;
-use super::dialog::handle_create_worktree_input;
 
 fn push_test_ws(app: &mut App, name: &str, origin: WorkspaceOrigin) -> usize {
     let mut info = piki_core::WorkspaceInfo::new(
@@ -3068,7 +3109,10 @@ fn clone_keybinding_on_github_workspace_opens_create_worktree() {
     );
     app.selected_workspace = idx;
 
-    crate::input::handle_key_event(&mut app, key_with_mods(KeyCode::Char('g'), KeyModifiers::CONTROL));
+    crate::input::handle_key_event(
+        &mut app,
+        key_with_mods(KeyCode::Char('g'), KeyModifiers::CONTROL),
+    );
     crate::input::handle_key_event(&mut app, key(KeyCode::Char('r')));
 
     assert_eq!(app.mode, AppMode::CreateWorktree);
@@ -3087,7 +3131,10 @@ fn clone_keybinding_on_local_workspace_shows_status_message() {
     let idx = push_test_ws(&mut app, "local-ws", WorkspaceOrigin::Local);
     app.selected_workspace = idx;
 
-    crate::input::handle_key_event(&mut app, key_with_mods(KeyCode::Char('g'), KeyModifiers::CONTROL));
+    crate::input::handle_key_event(
+        &mut app,
+        key_with_mods(KeyCode::Char('g'), KeyModifiers::CONTROL),
+    );
     crate::input::handle_key_event(&mut app, key(KeyCode::Char('r')));
 
     assert_eq!(app.mode, AppMode::Normal);
@@ -3302,7 +3349,10 @@ fn choose_source_enter_on_first_row_switches_to_create_new() {
     let action = handle_create_worktree_input(&mut app, key(KeyCode::Enter));
 
     assert!(action.is_none());
-    assert_eq!(current_create_worktree_mode(&app), CreateWorktreeMode::CreateNew);
+    assert_eq!(
+        current_create_worktree_mode(&app),
+        CreateWorktreeMode::CreateNew
+    );
 }
 
 #[test]
@@ -3325,7 +3375,9 @@ fn choose_source_enter_on_second_row_dispatches_list_worktrees() {
         other => panic!("expected ListWorktrees action, got {other:?}"),
     }
     match app.active_dialog {
-        Some(DialogState::CreateWorktree { existing_loading, .. }) => {
+        Some(DialogState::CreateWorktree {
+            existing_loading, ..
+        }) => {
             assert!(existing_loading);
         }
         _ => panic!("expected CreateWorktree dialog"),
@@ -3399,7 +3451,11 @@ fn load_existing_enter_dispatches_import_with_selected_entry() {
     let action = handle_create_worktree_input(&mut app, key(KeyCode::Enter));
 
     match action {
-        Some(Action::ImportExistingWorktree { parent_idx, path, branch }) => {
+        Some(Action::ImportExistingWorktree {
+            parent_idx,
+            path,
+            branch,
+        }) => {
             assert_eq!(parent_idx, idx);
             assert_eq!(path, std::path::PathBuf::from("/tmp/wt-b"));
             assert_eq!(branch, "feature-b");
@@ -3555,7 +3611,10 @@ fn pr_picker_repo_input_typing_and_enter_emits_load_repo_prs() {
     let mut app = test_app();
     open_pr_picker(
         &mut app,
-        crate::dialog_state::RepoBrowse::Input { text: String::new(), cursor: 0 },
+        crate::dialog_state::RepoBrowse::Input {
+            text: String::new(),
+            cursor: 0,
+        },
     );
 
     for c in "owner/repo".chars() {
@@ -3576,12 +3635,18 @@ fn pr_picker_repo_input_enter_without_slash_is_rejected() {
     let mut app = test_app();
     open_pr_picker(
         &mut app,
-        crate::dialog_state::RepoBrowse::Input { text: "notarepo".to_string(), cursor: 8 },
+        crate::dialog_state::RepoBrowse::Input {
+            text: "notarepo".to_string(),
+            cursor: 8,
+        },
     );
 
     let action = handle_pr_picker_input(&mut app, key(KeyCode::Enter));
 
-    assert!(action.is_none(), "a repo without an owner/name slash must not submit");
+    assert!(
+        action.is_none(),
+        "a repo without an owner/name slash must not submit"
+    );
 }
 
 #[test]
@@ -3589,14 +3654,23 @@ fn pr_picker_esc_from_repo_input_cancels_to_closed_not_whole_dialog() {
     let mut app = test_app();
     open_pr_picker(
         &mut app,
-        crate::dialog_state::RepoBrowse::Input { text: "owner/repo".to_string(), cursor: 10 },
+        crate::dialog_state::RepoBrowse::Input {
+            text: "owner/repo".to_string(),
+            cursor: 10,
+        },
     );
 
     let action = handle_pr_picker_input(&mut app, key(KeyCode::Esc));
 
     assert!(action.is_none());
-    assert!(app.active_dialog.is_some(), "Esc from repo input must not close the whole picker");
-    assert!(matches!(current_repo_browse(&app), crate::dialog_state::RepoBrowse::Closed));
+    assert!(
+        app.active_dialog.is_some(),
+        "Esc from repo input must not close the whole picker"
+    );
+    assert!(matches!(
+        current_repo_browse(&app),
+        crate::dialog_state::RepoBrowse::Closed
+    ));
 }
 
 #[test]
@@ -3623,7 +3697,10 @@ fn pr_picker_m_returns_from_loaded_repo_to_closed() {
     let action = handle_pr_picker_input(&mut app, key(KeyCode::Char('m')));
 
     assert!(action.is_none());
-    assert!(matches!(current_repo_browse(&app), crate::dialog_state::RepoBrowse::Closed));
+    assert!(matches!(
+        current_repo_browse(&app),
+        crate::dialog_state::RepoBrowse::Closed
+    ));
 }
 
 #[test]
@@ -3637,7 +3714,10 @@ fn pr_picker_m_is_a_no_op_when_already_closed() {
     let action = handle_pr_picker_input(&mut app, key(KeyCode::Char('m')));
 
     assert!(action.is_none());
-    assert!(matches!(current_repo_browse(&app), crate::dialog_state::RepoBrowse::Closed));
+    assert!(matches!(
+        current_repo_browse(&app),
+        crate::dialog_state::RepoBrowse::Closed
+    ));
 }
 
 #[test]
@@ -3667,7 +3747,10 @@ fn paste_into_pr_picker_repo_input_inserts_text() {
     let mut app = test_app();
     open_pr_picker(
         &mut app,
-        crate::dialog_state::RepoBrowse::Input { text: String::new(), cursor: 0 },
+        crate::dialog_state::RepoBrowse::Input {
+            text: String::new(),
+            cursor: 0,
+        },
     );
 
     crate::input::handle_paste(&mut app, "https://github.com/owner/repo");

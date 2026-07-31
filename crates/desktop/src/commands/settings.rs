@@ -4,9 +4,7 @@ use tauri::State;
 use crate::state::DesktopApp;
 
 #[tauri::command]
-pub async fn get_settings(
-    state: State<'_, Mutex<DesktopApp>>,
-) -> Result<Option<String>, String> {
+pub async fn get_settings(state: State<'_, Mutex<DesktopApp>>) -> Result<Option<String>, String> {
     let app = state.lock();
     let prefs = app
         .storage

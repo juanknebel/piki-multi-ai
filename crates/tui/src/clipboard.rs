@@ -34,13 +34,20 @@ fn copy_via_osc52(text: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Copy text using system clipboard tools (wl-copy, xclip, xsel).
+/// Copy text using system clipboard tools (pbcopy on macOS; wl-copy, xclip,
+/// xsel on Linux). Runs out-of-process with stderr nulled — unlike arboard,
+/// which on macOS talks to NSPasteboard in-process and lets Cocoa NSLog
+/// warnings land on our TTY, corrupting the TUI.
 fn copy_via_system_tool(text: &str) -> anyhow::Result<()> {
-    let tools: &[(&str, &[&str])] = &[
-        ("wl-copy", &[]),
-        ("xclip", &["-selection", "clipboard"]),
-        ("xsel", &["--clipboard", "--input"]),
-    ];
+    let tools: &[(&str, &[&str])] = if cfg!(target_os = "macos") {
+        &[("pbcopy", &[])]
+    } else {
+        &[
+            ("wl-copy", &[]),
+            ("xclip", &["-selection", "clipboard"]),
+            ("xsel", &["--clipboard", "--input"]),
+        ]
+    };
 
     for &(cmd, args) in tools {
         if let Ok(mut child) = Command::new(cmd)
@@ -61,16 +68,21 @@ fn copy_via_system_tool(text: &str) -> anyhow::Result<()> {
         }
     }
 
-    anyhow::bail!("No clipboard tool available (tried wl-copy, xclip, xsel)")
+    anyhow::bail!("No clipboard copy tool available")
 }
 
-/// Paste text using system clipboard tools (wl-paste, xclip, xsel).
+/// Paste text using system clipboard tools (pbpaste on macOS; wl-paste,
+/// xclip, xsel on Linux).
 fn paste_via_system_tool() -> anyhow::Result<String> {
-    let tools: &[(&str, &[&str])] = &[
-        ("wl-paste", &["--no-newline"]),
-        ("xclip", &["-selection", "clipboard", "-o"]),
-        ("xsel", &["--clipboard", "--output"]),
-    ];
+    let tools: &[(&str, &[&str])] = if cfg!(target_os = "macos") {
+        &[("pbpaste", &[])]
+    } else {
+        &[
+            ("wl-paste", &["--no-newline"]),
+            ("xclip", &["-selection", "clipboard", "-o"]),
+            ("xsel", &["--clipboard", "--output"]),
+        ]
+    };
 
     for &(cmd, args) in tools {
         if let Ok(output) = Command::new(cmd)
@@ -84,7 +96,7 @@ fn paste_via_system_tool() -> anyhow::Result<String> {
         }
     }
 
-    anyhow::bail!("No clipboard tool available (tried wl-paste, xclip, xsel)")
+    anyhow::bail!("No clipboard paste tool available")
 }
 
 pub fn copy_to_clipboard(text: &str) -> anyhow::Result<()> {
@@ -99,15 +111,16 @@ pub fn copy_to_clipboard(text: &str) -> anyhow::Result<()> {
     // on top of that, not a substitute for it.
     let osc52_ok = copy_via_osc52(&clean).is_ok();
 
-    // Prefer system tools on Linux — arboard can silently fail to set
-    // clipboard content with non-ASCII characters on Wayland.
-    if cfg!(target_os = "linux")
+    // Prefer system tools on Linux and macOS — arboard can silently fail to
+    // set clipboard content with non-ASCII characters on Wayland, and on
+    // macOS its in-process NSPasteboard calls spray NSLog lines onto the TTY.
+    if cfg!(any(target_os = "linux", target_os = "macos"))
         && let Ok(()) = copy_via_system_tool(&clean)
     {
         return Ok(());
     }
 
-    // Fallback to arboard (primary on macOS/Windows)
+    // Fallback to arboard (primary on Windows)
     match Clipboard::new().and_then(|mut c| c.set_text(clean)) {
         Ok(()) => Ok(()),
         Err(e) => {
@@ -121,7 +134,7 @@ pub fn copy_to_clipboard(text: &str) -> anyhow::Result<()> {
 }
 
 pub fn paste_from_clipboard() -> anyhow::Result<String> {
-    if cfg!(target_os = "linux")
+    if cfg!(any(target_os = "linux", target_os = "macos"))
         && let Ok(text) = paste_via_system_tool()
     {
         return Ok(text);

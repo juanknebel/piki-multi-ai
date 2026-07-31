@@ -683,10 +683,7 @@ impl Theme {
                 staged_modified: resolve(&t.file_list.staged_modified, d.file_list.staged_modified),
                 file_path: resolve(&t.file_list.file_path, d.file_list.file_path),
                 selected_bg: resolve(&t.file_list.selected_bg, d.file_list.selected_bg),
-                multi_select_bg: resolve(
-                    &t.file_list.multi_select_bg,
-                    d.file_list.multi_select_bg,
-                ),
+                multi_select_bg: resolve(&t.file_list.multi_select_bg, d.file_list.multi_select_bg),
             },
             tabs: TabsTheme {
                 active: resolve(&t.tabs.active, d.tabs.active),
@@ -736,10 +733,7 @@ impl Theme {
             general: GeneralTheme {
                 welcome_text: resolve(&t.general.welcome_text, d.general.welcome_text),
                 muted_text: resolve(&t.general.muted_text, d.general.muted_text),
-                scrollbar_thumb: resolve(
-                    &t.general.scrollbar_thumb,
-                    d.general.scrollbar_thumb,
-                ),
+                scrollbar_thumb: resolve(&t.general.scrollbar_thumb, d.general.scrollbar_thumb),
             },
             fuzzy_search: FuzzySearchTheme {
                 border: resolve(&t.fuzzy_search.border, d.fuzzy_search.border),
@@ -901,8 +895,7 @@ mod tests {
         // Every theme under repo `themes/` must deserialize and resolve without
         // panicking (guards against a typo'd hex or a malformed section in a
         // shipped theme file).
-        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../themes");
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../themes");
         let mut checked = 0;
         for entry in std::fs::read_dir(&dir).expect("themes dir") {
             let path = entry.unwrap().path();
@@ -910,8 +903,8 @@ mod tests {
                 continue;
             }
             let src = std::fs::read_to_string(&path).unwrap();
-            let t: ThemeToml = toml::from_str(&src)
-                .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            let t: ThemeToml =
+                toml::from_str(&src).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
             let _ = Theme::from_toml(t); // must not panic
             checked += 1;
         }

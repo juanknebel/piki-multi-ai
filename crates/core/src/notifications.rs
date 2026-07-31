@@ -199,9 +199,7 @@ pub fn notify_agent_idle(
         workspace: workspace_name.to_string(),
         category: NotificationCategory::Complete,
         title: format!("{icon_prefix}Agent idle: {agent_label}"),
-        body: format!(
-            "{workspace_name} — {agent_label} finished the task (idle {idle_secs}s)"
-        ),
+        body: format!("{workspace_name} — {agent_label} finished the task (idle {idle_secs}s)"),
         created_at: Instant::now(),
     };
     push_and_toast(item, from_active_view, Some(crate::sound::Sound::Done));
@@ -219,9 +217,7 @@ pub fn notify_command_end(
     command: Option<&str>,
     from_active_view: bool,
 ) {
-    let cmd_suffix = command
-        .map(|c| format!(" `{c}`"))
-        .unwrap_or_default();
+    let cmd_suffix = command.map(|c| format!(" `{c}`")).unwrap_or_default();
     let (category, title, body) = match exit_code {
         Some(0) => (
             NotificationCategory::Complete,
@@ -353,7 +349,9 @@ fn emit_terminal_notification(title: &str, body: &str) {
             Ok(mut tty) => {
                 let _ = tty.write_all(&bytes);
             }
-            Err(e) => tracing::warn!(error = %e, "terminal notification failed: /dev/tty not writable"),
+            Err(e) => {
+                tracing::warn!(error = %e, "terminal notification failed: /dev/tty not writable")
+            }
         }
     }
     #[cfg(not(unix))]
@@ -443,10 +441,7 @@ mod tests {
         assert_eq!(snap[0].title, "new");
         assert_eq!(snap[1].title, "other");
         // No two items share the same origin.
-        assert_eq!(
-            snap.iter().filter(|i| i.origin == "tab-1").count(),
-            1
-        );
+        assert_eq!(snap.iter().filter(|i| i.origin == "tab-1").count(), 1);
     }
 
     #[test]

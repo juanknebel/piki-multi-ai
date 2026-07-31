@@ -21,7 +21,10 @@ pub(crate) fn test_storage() -> std::sync::Arc<piki_core::storage::AppStorage> {
 }
 
 pub(crate) fn test_app() -> App {
-    App::new(test_storage(), &piki_core::paths::DataPaths::default_paths())
+    App::new(
+        test_storage(),
+        &piki_core::paths::DataPaths::default_paths(),
+    )
 }
 
 /// Build an `App` whose `DataPaths` resolve under an isolated temp directory.
@@ -77,4 +80,63 @@ pub(crate) fn key_with_mods(code: KeyCode, modifiers: KeyModifiers) -> KeyEvent 
         kind: KeyEventKind::Press,
         state: KeyEventState::NONE,
     }
+}
+
+// ── Workspaces and tabs ───────────────────────────────────────────────
+//
+// `Workspace` is perfectly unit-testable: `Workspace::from_info` is a plain
+// synchronous constructor and every PTY/git field defaults to empty (no
+// session, no watcher, no git calls). Attach a bare `vt100::Parser` when a
+// test needs a terminal to look at. These helpers used to be private to
+// `app.rs`'s test module, which made everything workspace-shaped look
+// untestable from the other test modules.
+
+/// A `WorkspaceInfo` with sane defaults. `source_repo` is derived from `order`
+/// so separate calls produce standalone workspaces; pass the same
+/// `source_repo` to two of them to build a worktree "family".
+pub(crate) fn test_ws_info(name: &str, order: u32) -> piki_core::WorkspaceInfo {
+    piki_core::WorkspaceInfo {
+        name: name.to_string(),
+        path: std::path::PathBuf::from("/tmp/test"),
+        workspace_type: piki_core::WorkspaceType::Simple,
+        description: String::new(),
+        prompt: String::new(),
+        kanban_path: None,
+        order,
+        source_repo: std::path::PathBuf::from(format!("/tmp/test-{order}")),
+        source_repo_display: String::new(),
+        dispatch_card_id: None,
+        dispatch_source_kanban: None,
+        dispatch_agent_name: None,
+        origin: piki_core::WorkspaceOrigin::default(),
+        is_git_repo: true,
+        ephemeral: false,
+        pr_repo_nwo: None,
+        pr_number: None,
+    }
+}
+
+/// Push a standalone workspace onto `app` and return its index.
+pub(crate) fn add_test_workspace(app: &mut App) -> usize {
+    let idx = app.workspaces.len();
+    let info = test_ws_info(&format!("test-ws-{idx}"), idx as u32);
+    app.workspaces.push(crate::app::Workspace::from_info(info));
+    app.workspaces.len() - 1
+}
+
+/// Give the active tab of `ws_idx` a live in-memory terminal (a bare vt100
+/// parser, no real PTY) so terminal-dependent paths see a searchable pane.
+pub(crate) fn add_terminal_tab(app: &mut App, ws_idx: usize) -> usize {
+    let ws = &mut app.workspaces[ws_idx];
+    let idx = ws.add_tab(piki_core::AIProvider::Shell, true, None);
+    ws.tabs[idx].pty_parser = Some(std::sync::Arc::new(parking_lot::Mutex::new(
+        vt100::Parser::new(24, 80, 0),
+    )));
+    ws.active_tab = idx;
+    idx
+}
+
+/// Add a Custom-provider (agent) tab to `ws_idx` and return its index.
+pub(crate) fn add_agent_tab(app: &mut App, ws_idx: usize, name: &str) -> usize {
+    app.workspaces[ws_idx].add_tab(piki_core::AIProvider::Custom(name.to_string()), true, None)
 }

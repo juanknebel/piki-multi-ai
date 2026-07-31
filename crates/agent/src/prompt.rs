@@ -113,7 +113,11 @@ async fn read_project_snippet(workspace: &std::path::Path) -> Option<String> {
             }
             // Truncate to keep prompt reasonable
             let truncated = if content.len() > MAX_SNIPPET_CHARS {
-                format!("{}...\n(truncated from {})", &content[..MAX_SNIPPET_CHARS], name)
+                format!(
+                    "{}...\n(truncated from {})",
+                    &content[..MAX_SNIPPET_CHARS],
+                    name
+                )
             } else {
                 content
             };

@@ -1,13 +1,11 @@
-use std::sync::Arc;
-
 use ratatui::DefaultTerminal;
 
 use super::Action;
 use crate::app::{self, App, AppMode, ToastLevel};
 use crate::dialog_state::DialogState;
 use crate::helpers::spawn_tab;
-use piki_core::workspace::{FileWatcher, WorkspaceManager};
 use piki_core::AIProvider;
+use piki_core::workspace::{FileWatcher, WorkspaceManager};
 
 pub(super) async fn handle(
     app: &mut App,
@@ -92,14 +90,27 @@ pub(super) async fn handle(
 
                 // Spawn tab in current workspace
                 let ws = &mut app.workspaces[source_ws];
-                let idx =
-                    spawn_tab(ws, &provider, app.pty_rows, app.pty_cols, Some(&task_prompt), Some(&app.provider_manager), &app.paths, app.pty_output.clone()).await;
+                let (idx, spawn_error) = spawn_tab(
+                    ws,
+                    &provider,
+                    app.pty_rows,
+                    app.pty_cols,
+                    Some(&task_prompt),
+                    Some(&app.provider_manager),
+                    &app.paths,
+                    app.pty_output.clone(),
+                )
+                .await;
                 ws.active_tab = idx;
+                app.active_pane = crate::app::ActivePane::MainPanel;
 
-                app.set_toast(
-                    format!("Task started: {} via {}", card_title, provider.label()),
-                    ToastLevel::Success,
-                );
+                match spawn_error {
+                    Some(err) => app.set_toast(err, ToastLevel::Error),
+                    None => app.set_toast(
+                        format!("Task started: {} via {}", card_title, provider.label()),
+                        ToastLevel::Success,
+                    ),
+                }
             } else {
                 // Create new worktree workspace (original flow)
                 // Build branch name: <type>/<sanitized_card_id>
@@ -145,12 +156,17 @@ pub(super) async fn handle(
 
                         // Materialize agent config files in worktree
                         if let (Some(name), Some(role)) = (&agent_name, &agent_role) {
-                            let _ = materialize_agent_config(&info.path, name, &provider, role, Some(&app.provider_manager));
+                            let _ = materialize_agent_config(
+                                &info.path,
+                                name,
+                                &provider,
+                                role,
+                                Some(&app.provider_manager),
+                            );
                         }
 
                         // Update kanban card: set assignee and move to IN PROGRESS
-                        let assignee_label =
-                            agent_name.as_deref().unwrap_or(provider.label());
+                        let assignee_label = agent_name.as_deref().unwrap_or(provider.label());
                         if let Some(src_ws) = app.workspaces.get_mut(source_ws)
                             && let Some(ref mut kp) = src_ws.kanban_provider
                         {
@@ -187,7 +203,7 @@ pub(super) async fn handle(
 
                         // Spawn AI provider tab with task prompt
                         let ws = &mut app.workspaces[new_idx];
-                        let idx = spawn_tab(
+                        let (idx, spawn_error) = spawn_tab(
                             ws,
                             &provider,
                             app.pty_rows,
@@ -203,21 +219,20 @@ pub(super) async fn handle(
                         // Persist config async
                         {
                             let source = app.workspaces[new_idx].source_repo.clone();
-                            let infos = app.persistable_workspaces();
-                            let storage = Arc::clone(&app.storage);
-                            tokio::spawn(async move {
-                                let _ = storage.workspaces.save_workspaces(&source, &infos);
-                            });
+                            crate::helpers::persist_workspaces(app, source);
                         }
 
-                        app.set_toast(
-                            format!(
-                                "Agent dispatched: {} via {}",
-                                card_title,
-                                provider.label()
+                        match spawn_error {
+                            Some(err) => app.set_toast(err, ToastLevel::Error),
+                            None => app.set_toast(
+                                format!(
+                                    "Agent dispatched: {} via {}",
+                                    card_title,
+                                    provider.label()
+                                ),
+                                ToastLevel::Success,
                             ),
-                            ToastLevel::Success,
-                        );
+                        }
                     }
                     Err(e) => {
                         app.status_message = Some(format!("Dispatch failed: {}", e));
@@ -260,9 +275,9 @@ pub(super) async fn handle(
             }
         }
         Action::SyncAgentToRepo(id) => {
-            let ws_info = app.current_workspace().map(|ws| {
-                (ws.path.clone(), ws.source_repo.clone())
-            });
+            let ws_info = app
+                .current_workspace()
+                .map(|ws| (ws.path.clone(), ws.source_repo.clone()));
             let agent_data = app
                 .agent_profiles
                 .iter()
@@ -273,7 +288,13 @@ pub(super) async fn handle(
                 && let Some((name, provider_str, role)) = agent_data
             {
                 let provider = AIProvider::from_label(&provider_str);
-                match materialize_agent_config(&ws_path, &name, &provider, &role, Some(&app.provider_manager)) {
+                match materialize_agent_config(
+                    &ws_path,
+                    &name,
+                    &provider,
+                    &role,
+                    Some(&app.provider_manager),
+                ) {
                     Ok(()) => {
                         if let Some(ref storage) = app.storage.agent_profiles {
                             let _ = storage.mark_synced(id);
@@ -281,10 +302,7 @@ pub(super) async fn handle(
                                 app.agent_profiles = agents;
                             }
                         }
-                        app.set_toast(
-                            format!("Agent synced: {}", name),
-                            ToastLevel::Success,
-                        );
+                        app.set_toast(format!("Agent synced: {}", name), ToastLevel::Success);
                     }
                     Err(e) => {
                         app.status_message = Some(format!("Sync failed: {}", e));
@@ -296,51 +314,21 @@ pub(super) async fn handle(
             if let Some(ws) = app.current_workspace() {
                 let source_repo = ws.source_repo.clone();
 
-                // Scan provider agent directories for .md files — all come from ProviderManager.
-                let provider_dirs: Vec<(String, String)> = app
-                    .provider_manager
-                    .all()
-                    .iter()
-                    .filter_map(|config| {
-                        config
-                            .agent_dir
-                            .as_ref()
-                            .map(|d| (d.clone(), config.name.clone()))
-                    })
+                // Directory list, provider attribution and the
+                // already-imported check all live in core so the desktop
+                // applies the identical rules (see core::agent_scan).
+                let discovered: Vec<(String, String, String, bool)> =
+                    piki_core::agent_scan::scan_repo_agents(
+                        &source_repo,
+                        &app.provider_manager,
+                        &app.agent_profiles,
+                    )
+                    .into_iter()
+                    .map(|a| (a.name, a.provider, a.role, a.exists))
                     .collect();
 
-                let mut discovered: Vec<(String, String, String, bool)> = Vec::new();
-
-                for (dir, provider_label) in &provider_dirs {
-                    let agent_dir = source_repo.join(dir);
-                    if let Ok(entries) = std::fs::read_dir(&agent_dir) {
-                        for entry in entries.flatten() {
-                            let path = entry.path();
-                            if path.extension().is_some_and(|e| e == "md")
-                                && let Some(stem) = path.file_stem()
-                            {
-                                let name = stem.to_string_lossy().to_string();
-                                let role =
-                                    std::fs::read_to_string(&path).unwrap_or_default();
-                                let exists = app.agent_profiles.iter().any(|a| {
-                                    a.name == name && a.provider == *provider_label
-                                });
-                                discovered.push((
-                                    name,
-                                    provider_label.clone(),
-                                    role,
-                                    exists,
-                                ));
-                            }
-                        }
-                    }
-                }
-
                 if discovered.is_empty() {
-                    app.set_toast(
-                        "No agent files found in repo".to_string(),
-                        ToastLevel::Info,
-                    );
+                    app.set_toast("No agent files found in repo".to_string(), ToastLevel::Info);
                 } else {
                     // Pre-select only new agents (not already in DB)
                     let selected: Vec<bool> =

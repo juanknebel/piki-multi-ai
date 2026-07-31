@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use ratatui::DefaultTerminal;
 
 use super::Action;
@@ -34,11 +32,7 @@ fn finish_workspace_creation(app: &mut App, mut info: piki_core::WorkspaceInfo) 
     }
 
     let source = app.workspaces[new_idx].source_repo.clone();
-    let infos = app.persistable_workspaces();
-    let storage = Arc::clone(&app.storage);
-    tokio::spawn(async move {
-        let _ = storage.workspaces.save_workspaces(&source, &infos);
-    });
+    crate::helpers::persist_workspaces(app, source);
 }
 
 pub(super) async fn handle(
@@ -159,11 +153,7 @@ pub(super) async fn handle(
                 ws.prompt = prompt;
                 {
                     let source = ws.source_repo.clone();
-                    let infos = app.persistable_workspaces();
-                    let storage = Arc::clone(&app.storage);
-                    tokio::spawn(async move {
-                        let _ = storage.workspaces.save_workspaces(&source, &infos);
-                    });
+                    crate::helpers::persist_workspaces(app, source);
                 }
                 app.set_toast("Workspace updated", ToastLevel::Success);
             }
@@ -270,14 +260,7 @@ pub(super) async fn handle(
                     }
 
                     // Persist config
-                    {
-                        let source = source_repo.clone();
-                        let infos = app.persistable_workspaces();
-                        let storage = Arc::clone(&app.storage);
-                        tokio::spawn(async move {
-                            let _ = storage.workspaces.save_workspaces(&source, &infos);
-                        });
-                    }
+                    crate::helpers::persist_workspaces(app, source_repo.clone());
                 }
             }
         }
@@ -308,14 +291,7 @@ pub(super) async fn handle(
                 }
 
                 // Persist config
-                {
-                    let source = source_repo.clone();
-                    let infos = app.persistable_workspaces();
-                    let storage = Arc::clone(&app.storage);
-                    tokio::spawn(async move {
-                        let _ = storage.workspaces.save_workspaces(&source, &infos);
-                    });
-                }
+                crate::helpers::persist_workspaces(app, source_repo.clone());
             }
         }
         other => unreachable!("non-workspace action routed to action::workspace: {other:?}"),

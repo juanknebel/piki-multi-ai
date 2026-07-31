@@ -176,9 +176,7 @@ pub fn sample_snapshot() -> SysInfoSnapshot {
     snap.os_name = format!("{} {}", std::env::consts::OS, std::env::consts::ARCH);
 
     // Timestamp
-    snap.timestamp = chrono::Local::now()
-        .format("%Y-%m-%d %H:%M:%S")
-        .to_string();
+    snap.timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
     snap
 }

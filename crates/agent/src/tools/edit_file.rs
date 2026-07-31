@@ -1,5 +1,5 @@
-use crate::context::ToolContext;
 use super::Tool;
+use crate::context::ToolContext;
 
 pub struct EditFileTool;
 
@@ -38,11 +38,7 @@ impl Tool for EditFileTool {
         true
     }
 
-    async fn execute(
-        &self,
-        args: serde_json::Value,
-        ctx: &ToolContext,
-    ) -> anyhow::Result<String> {
+    async fn execute(&self, args: serde_json::Value, ctx: &ToolContext) -> anyhow::Result<String> {
         let path_str = args
             .get("path")
             .and_then(|v| v.as_str())

@@ -252,11 +252,7 @@ impl RawPtySession {
                 let cb_tab = sock_tab_id;
                 let cb: piki_core::cli_agent::sock::CliAgentCallback =
                     Box::new(move |ev| handle_cli_agent(&cb_app, &cb_tab, ev));
-                match piki_core::cli_agent::sock::spawn_reader(
-                    path,
-                    Arc::clone(shell),
-                    Some(cb),
-                ) {
+                match piki_core::cli_agent::sock::spawn_reader(path, Arc::clone(shell), Some(cb)) {
                     Ok(reader) => Some(reader),
                     Err(e) => {
                         tracing::warn!(error = %e, "cli-agent FIFO reader failed to start; OSC 777 fallback only");

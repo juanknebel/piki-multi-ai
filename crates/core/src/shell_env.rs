@@ -47,7 +47,10 @@ pub fn user_login_env() -> &'static HashMap<String, String> {
         if std::env::var_os("PIKI_FORCE_LOGIN_ENV").is_none() && std::io::stdin().is_terminal() {
             let mut env_map: HashMap<String, String> = std::env::vars().collect();
             augment_path_with_common_dirs(&mut env_map);
-            tracing::debug!(vars = env_map.len(), "Using inherited terminal environment (skipped login-shell capture)");
+            tracing::debug!(
+                vars = env_map.len(),
+                "Using inherited terminal environment (skipped login-shell capture)"
+            );
             return env_map;
         }
 
@@ -56,7 +59,11 @@ pub fn user_login_env() -> &'static HashMap<String, String> {
         // Strategy 1: self-invocation (preferred — clean JSON, no parsing ambiguity)
         let mut env_map = match capture_env_via_self_invocation(&shell) {
             Ok(map) if !map.is_empty() => {
-                tracing::debug!(shell, vars = map.len(), "Loaded shell env via self-invocation");
+                tracing::debug!(
+                    shell,
+                    vars = map.len(),
+                    "Loaded shell env via self-invocation"
+                );
                 map
             }
             Ok(_) => {
@@ -113,13 +120,20 @@ pub fn resolve_command(name: &str) -> String {
                     && meta.permissions().mode() & 0o111 != 0
                     && let Some(s) = candidate.to_str()
                 {
-                    tracing::debug!(command = name, resolved = s, "Resolved command via login env PATH");
+                    tracing::debug!(
+                        command = name,
+                        resolved = s,
+                        "Resolved command via login env PATH"
+                    );
                     return s.to_string();
                 }
             }
         }
     }
-    tracing::warn!(command = name, "Could not resolve command in login env PATH, using bare name");
+    tracing::warn!(
+        command = name,
+        "Could not resolve command in login env PATH, using bare name"
+    );
     name.to_string()
 }
 
@@ -253,9 +267,7 @@ fn parse_env_json_from_output(data: &[u8]) -> anyhow::Result<HashMap<String, Str
 /// startup noise.  Does NOT use `env -0` which is unavailable on macOS/BSD.
 fn capture_env_via_shell_command(shell: &str) -> HashMap<String, String> {
     let marker = "___PIKI_ENV_8f3a___";
-    let script = format!(
-        "printf '\\n{marker}\\n'; env; printf '\\n{marker}\\n'"
-    );
+    let script = format!("printf '\\n{marker}\\n'; env; printf '\\n{marker}\\n'");
 
     let mut cmd = new_shell_command(shell, &script);
     cmd.stdout(std::process::Stdio::piped());
@@ -420,7 +432,10 @@ fn augment_path_with_common_dirs(env: &mut HashMap<String, String>) {
         } else {
             format!("{}:{}", current_path, new_dirs.join(":"))
         };
-        tracing::debug!(added = new_dirs.join(":"), "Augmented PATH with common directories");
+        tracing::debug!(
+            added = new_dirs.join(":"),
+            "Augmented PATH with common directories"
+        );
         env.insert("PATH".to_string(), augmented);
     }
 }
@@ -477,9 +492,8 @@ mod tests {
     #[test]
     fn test_extract_env_between_markers() {
         let marker = "___PIKI_ENV_8f3a___";
-        let data = format!(
-            "startup noise\n\n{marker}\nHOME=/Users/test\nPATH=/usr/bin\n\n{marker}\n"
-        );
+        let data =
+            format!("startup noise\n\n{marker}\nHOME=/Users/test\nPATH=/usr/bin\n\n{marker}\n");
         let map = extract_env_between_markers(data.as_bytes(), marker);
         assert_eq!(map.get("HOME").unwrap(), "/Users/test");
         assert_eq!(map.get("PATH").unwrap(), "/usr/bin");
@@ -549,7 +563,11 @@ mod tests {
         augment_path_with_common_dirs(&mut env);
 
         let path = env.get("PATH").unwrap();
-        let npm_bin_str = home.join(".npm-global").join("bin").to_string_lossy().to_string();
+        let npm_bin_str = home
+            .join(".npm-global")
+            .join("bin")
+            .to_string_lossy()
+            .to_string();
         assert!(
             !path.split(':').any(|p| p == npm_bin_str),
             "PATH {path} should NOT include missing dir {npm_bin_str}"

@@ -1,8 +1,8 @@
 use crossterm::event::KeyEvent;
 
+use super::fuzzy_common::{FuzzyAction, handle_fuzzy_input};
 use crate::action::Action;
 use crate::app::{App, AppMode};
-use super::fuzzy_common::{FuzzyAction, handle_fuzzy_input};
 
 pub(super) fn handle_command_palette_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     // `config` and `command_palette` are disjoint fields, so the shared borrow
@@ -67,12 +67,14 @@ fn execute_palette_command(app: &mut App, id: &str, switch_idx: Option<usize>) -
                     app.agent_profiles = agents;
                 }
             }
-            app.active_dialog = Some(crate::dialog_state::DialogState::ManageAgents { selected: 0 });
+            app.active_dialog =
+                Some(crate::dialog_state::DialogState::ManageAgents { selected: 0 });
             app.mode = crate::app::AppMode::ManageAgents;
             return None;
         }
         "manage_providers" => {
-            app.active_dialog = Some(crate::dialog_state::DialogState::ManageProviders { selected: 0 });
+            app.active_dialog =
+                Some(crate::dialog_state::DialogState::ManageProviders { selected: 0 });
             app.mode = crate::app::AppMode::ManageProviders;
             return None;
         }

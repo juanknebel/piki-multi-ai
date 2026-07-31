@@ -39,7 +39,8 @@ pub(super) fn render_fullscreen(frame: &mut Frame, area: Rect, app: &mut App) {
         None => {
             let block = Block::default()
                 .title(" Code Review ")
-                .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
+                .borders(Borders::ALL)
+                .border_type(ratatui::widgets::BorderType::Rounded)
                 .border_style(Style::default().fg(app.theme.palette.line));
             let text = Paragraph::new("  Loading PR data...")
                 .style(Style::default().fg(app.theme.palette.fg3))
@@ -135,7 +136,8 @@ fn render_file_list(frame: &mut Frame, area: Rect, state: &CodeReviewState, them
 
     let block = Block::default()
         .title(" Changed Files ")
-        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
+        .borders(Borders::ALL)
+        .border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(Style::default().fg(focus_color));
 
     let inner = block.inner(area);
@@ -225,7 +227,11 @@ pub(crate) enum SplitRow {
     CommentHeader { diff_idx: usize, side: CommentSide },
     /// Comment box body on one side — `msg_idx` indexes into
     /// `CodeReviewState::thread_lines()` for this diff line/side.
-    CommentBody { diff_idx: usize, side: CommentSide, msg_idx: usize },
+    CommentBody {
+        diff_idx: usize,
+        side: CommentSide,
+        msg_idx: usize,
+    },
     /// Comment box footer on one side.
     CommentFooter { diff_idx: usize, side: CommentSide },
 }
@@ -367,7 +373,11 @@ fn append_comment_decorations(
     }
     rows.push(SplitRow::CommentHeader { diff_idx, side });
     for msg_idx in 0..thread.len() {
-        rows.push(SplitRow::CommentBody { diff_idx, side, msg_idx });
+        rows.push(SplitRow::CommentBody {
+            diff_idx,
+            side,
+            msg_idx,
+        });
     }
     rows.push(SplitRow::CommentFooter { diff_idx, side });
 }
@@ -394,7 +404,8 @@ fn render_diff(
 
     let block = Block::default()
         .title(title)
-        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
+        .borders(Borders::ALL)
+        .border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(Style::default().fg(focus_color));
 
     let inner = block.inner(area);
@@ -536,7 +547,11 @@ fn render_diff(
                         theme,
                     );
                 }
-                SplitRow::CommentBody { diff_idx, side, msg_idx } => {
+                SplitRow::CommentBody {
+                    diff_idx,
+                    side,
+                    msg_idx,
+                } => {
                     render_comment_decoration_row(
                         frame,
                         inner,
@@ -892,7 +907,8 @@ fn render_comment_input_overlay(
     };
     let block = Block::default()
         .title(title)
-        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
+        .borders(Borders::ALL)
+        .border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(Style::default().fg(theme.palette.iris));
     let inner = block.inner(popup);
     frame.render_widget(block, popup);
@@ -955,7 +971,8 @@ pub(super) fn render_submit_overlay(frame: &mut Frame, area: Rect, app: &App) {
 
     let block = Block::default()
         .title(" Submit Review ")
-        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
+        .borders(Borders::ALL)
+        .border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(Style::default().fg(theme.palette.line_strong));
     let inner = block.inner(popup);
     frame.render_widget(block, popup);
@@ -1052,7 +1069,8 @@ pub(super) fn render_submit_overlay(frame: &mut Frame, area: Rect, app: &App) {
 
     // Body input area
     let body_block = Block::default()
-        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
+        .borders(Borders::ALL)
+        .border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(Style::default().fg(theme.palette.iris));
     let body_inner = body_block.inner(body_area);
     frame.render_widget(body_block, body_area);

@@ -14,10 +14,15 @@ pub(super) async fn handle(
         Action::ChatSendMessage => {
             let input = std::mem::take(&mut app.chat_panel.input);
             let input = input.trim().to_string();
-            if input.is_empty() || app.chat_panel.streaming || app.chat_panel.config.model.is_empty()
+            if input.is_empty()
+                || app.chat_panel.streaming
+                || app.chat_panel.config.model.is_empty()
             {
                 if app.chat_panel.config.model.is_empty() {
-                    app.set_toast("No model selected. Press Tab to pick one.", ToastLevel::Error);
+                    app.set_toast(
+                        "No model selected. Press Tab to pick one.",
+                        ToastLevel::Error,
+                    );
                 }
                 return Ok(());
             }
@@ -59,14 +64,7 @@ pub(super) async fn handle(
                     "TUI: sending agent message"
                 );
 
-                let client: Box<dyn piki_api_client::ChatClient> = match server_type {
-                    piki_core::chat::ChatServerType::Ollama => {
-                        Box::new(piki_api_client::OllamaClient::new(&base_url))
-                    }
-                    piki_core::chat::ChatServerType::LlamaCpp => {
-                        Box::new(piki_api_client::LlamaCppClient::new(&base_url))
-                    }
-                };
+                let client = piki_agent::chat_client_for(server_type, &base_url);
 
                 let registry = piki_agent::ToolRegistry::default_all();
                 let context = piki_agent::ToolContext {
@@ -75,77 +73,34 @@ pub(super) async fn handle(
                 };
 
                 tokio::spawn(async move {
-                    let mut agent = piki_agent::AgentLoop::new(
-                        client, model, registry, context,
-                    );
+                    let mut agent = piki_agent::AgentLoop::new(client, model, registry, context);
                     if let Err(e) = agent.run(messages, system_prompt, event_tx.clone()).await {
                         tracing::error!(error = %e, "Agent loop error");
                         let _ = event_tx.send(piki_agent::AgentEvent::Error(e.to_string()));
                     }
                 });
             } else {
-                // ── Plain chat mode (existing behavior) ──
+                // ── Plain chat mode ──
                 let tx = app.chat_token_tx.clone();
-
-                let mut role_contents: Vec<(&str, String)> = Vec::new();
-                if let Some(ref sys) = app.chat_panel.config.system_prompt
-                    && !sys.is_empty()
-                {
-                    role_contents.push(("system", sys.clone()));
-                }
-                for msg in &app.chat_panel.messages {
-                    let role = match msg.role {
-                        piki_core::chat::ChatRole::System => "system",
-                        piki_core::chat::ChatRole::User => "user",
-                        piki_core::chat::ChatRole::Assistant => "assistant",
-                        piki_core::chat::ChatRole::Tool => "tool",
-                    };
-                    role_contents.push((role, msg.content.clone()));
-                }
+                let msgs =
+                    piki_agent::wire_conversation(&app.chat_panel.config, &app.chat_panel.messages);
 
                 tracing::info!(
                     model = %model,
                     base_url = %base_url,
                     server = %server_type.label(),
-                    msg_count = role_contents.len(),
+                    msg_count = msgs.len(),
                     "TUI: sending chat message"
                 );
 
-                match server_type {
-                    piki_core::chat::ChatServerType::Ollama => {
-                        let msgs: Vec<piki_api_client::OllamaMessage> = role_contents
-                            .into_iter()
-                            .map(|(r, c)| piki_api_client::OllamaMessage {
-                                role: r.to_string(),
-                                content: c,
-                                tool_calls: None,
-                            })
-                            .collect();
-                        let client = piki_api_client::OllamaClient::new(&base_url);
-                        tokio::spawn(async move {
-                            if let Err(e) = client.chat_stream(&model, &msgs, tx).await {
-                                tracing::error!(error = %e, "Ollama chat_stream error");
-                            }
-                        });
+                // `ChatClient` hides each backend's message format, so this
+                // no longer has to know one from the other.
+                let client = piki_agent::chat_client_for(server_type, &base_url);
+                tokio::spawn(async move {
+                    if let Err(e) = client.chat_stream(&model, &msgs, None, tx).await {
+                        tracing::error!(error = %e, "chat_stream error");
                     }
-                    piki_core::chat::ChatServerType::LlamaCpp => {
-                        let msgs: Vec<piki_api_client::LlamaCppMessage> = role_contents
-                            .into_iter()
-                            .map(|(r, c)| piki_api_client::LlamaCppMessage {
-                                role: r.to_string(),
-                                content: c,
-                                tool_calls: None,
-                                tool_call_id: None,
-                            })
-                            .collect();
-                        let client = piki_api_client::LlamaCppClient::new(&base_url);
-                        tokio::spawn(async move {
-                            if let Err(e) = client.chat_stream(&model, &msgs, tx).await {
-                                tracing::error!(error = %e, "llama.cpp chat_stream error");
-                            }
-                        });
-                    }
-                }
+                });
             }
         }
         Action::ChatLoadModels => {
@@ -164,8 +119,8 @@ pub(super) async fn handle(
                                 let names: Vec<String> =
                                     models.into_iter().map(|m| m.name).collect();
                                 let payload = format!("__MODELS__{}", names.join("\n"));
-                                let _ = chat_tx
-                                    .send(piki_api_client::ChatStreamEvent::Done(payload));
+                                let _ =
+                                    chat_tx.send(piki_api_client::ChatStreamEvent::Done(payload));
                             }
                             Err(e) => {
                                 let msg = format!("{e}. Is Ollama running? (ollama serve)");
@@ -179,11 +134,10 @@ pub(super) async fn handle(
                         let client = piki_api_client::LlamaCppClient::new(&base_url);
                         match client.list_models().await {
                             Ok(models) => {
-                                let names: Vec<String> =
-                                    models.into_iter().map(|m| m.id).collect();
+                                let names: Vec<String> = models.into_iter().map(|m| m.id).collect();
                                 let payload = format!("__MODELS__{}", names.join("\n"));
-                                let _ = chat_tx
-                                    .send(piki_api_client::ChatStreamEvent::Done(payload));
+                                let _ =
+                                    chat_tx.send(piki_api_client::ChatStreamEvent::Done(payload));
                             }
                             Err(e) => {
                                 let msg = format!(

@@ -169,10 +169,7 @@ pub(crate) fn render_missing_prereqs_overlay(frame: &mut Frame, area: Rect, app:
     let lines: Vec<Line> = vec![
         Line::from(""),
         Line::from(vec![
-            Span::styled(
-                "Missing: ",
-                Style::default().fg(theme.general.muted_text),
-            ),
+            Span::styled("Missing: ", Style::default().fg(theme.general.muted_text)),
             Span::styled(
                 missing,
                 Style::default()
@@ -240,20 +237,37 @@ pub(crate) fn render_confirm_quit_dialog(frame: &mut Frame, area: Rect, app: &Ap
 }
 
 pub(crate) fn render_logs_overlay(frame: &mut Frame, area: Rect, app: &App) {
-    let (log_scroll, level_filter, log_selected, log_hscroll, search_active, search_buffer, search_cursor, auto_refresh) =
-        match &app.active_dialog {
-            Some(DialogState::Logs {
-                scroll,
-                level_filter,
-                selected,
-                hscroll,
-                search_active,
-                search_buffer,
-                search_cursor,
-                auto_refresh,
-            }) => (*scroll, *level_filter, *selected, *hscroll, *search_active, search_buffer.as_str(), *search_cursor, *auto_refresh),
-            _ => (u16::MAX, 0, usize::MAX, 0, false, "", 0, true),
-        };
+    let (
+        log_scroll,
+        level_filter,
+        log_selected,
+        log_hscroll,
+        search_active,
+        search_buffer,
+        search_cursor,
+        auto_refresh,
+    ) = match &app.active_dialog {
+        Some(DialogState::Logs {
+            scroll,
+            level_filter,
+            selected,
+            hscroll,
+            search_active,
+            search_buffer,
+            search_cursor,
+            auto_refresh,
+        }) => (
+            *scroll,
+            *level_filter,
+            *selected,
+            *hscroll,
+            *search_active,
+            search_buffer.as_str(),
+            *search_cursor,
+            *auto_refresh,
+        ),
+        _ => (u16::MAX, 0, usize::MAX, 0, false, "", 0, true),
+    };
 
     let width = area.width * 90 / 100;
     let height = area.height * 85 / 100;
@@ -290,7 +304,11 @@ pub(crate) fn render_logs_overlay(frame: &mut Frame, area: Rect, app: &App) {
         .collect();
 
     let total = filtered.len();
-    let effective_selected = if auto_refresh { total.saturating_sub(1) } else { log_selected };
+    let effective_selected = if auto_refresh {
+        total.saturating_sub(1)
+    } else {
+        log_selected
+    };
     // Clamp selected to valid range
     let selected = if total == 0 {
         0
@@ -459,8 +477,8 @@ pub(crate) fn render_new_tab_dialog(frame: &mut Frame, area: Rect, app: &App) {
                 Line::from(""),
                 Line::from("  [Esc] cancel"),
             ];
-            let text = Paragraph::new(lines)
-                .block(super::popup_block("New Tab", app.theme.palette.iris));
+            let text =
+                Paragraph::new(lines).block(super::popup_block("New Tab", app.theme.palette.iris));
             frame.render_widget(text, popup);
         }
         NewTabMenu::Agents { selected } => {
@@ -502,8 +520,8 @@ pub(crate) fn render_new_tab_dialog(frame: &mut Frame, area: Rect, app: &App) {
                 Line::from(""),
                 Line::from("  [Esc] back"),
             ];
-            let text = Paragraph::new(lines)
-                .block(super::popup_block("Tools", app.theme.palette.iris));
+            let text =
+                Paragraph::new(lines).block(super::popup_block("Tools", app.theme.palette.iris));
             frame.render_widget(text, popup);
         }
     }

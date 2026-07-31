@@ -26,9 +26,20 @@ async fn test_spawn_echo() {
 async fn test_is_alive() {
     let (_dir, repo_path) = common::setup_test_repo();
 
-    let mut pty = PtySession::spawn(&repo_path, 24, 80, "sleep", &[], &[], &[], false, None, None)
-        .await
-        .expect("spawn sleep should succeed");
+    let mut pty = PtySession::spawn(
+        &repo_path,
+        24,
+        80,
+        "sleep",
+        &[],
+        &[],
+        &[],
+        false,
+        None,
+        None,
+    )
+    .await
+    .expect("spawn sleep should succeed");
 
     // sleep with no argument may exit immediately, so just check it doesn't panic
     // The important thing is that is_alive() works without crashing

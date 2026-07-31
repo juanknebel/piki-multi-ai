@@ -20,7 +20,10 @@ pub(super) fn handle_chat_panel_input(app: &mut App, key: KeyEvent) -> Option<Ac
             KeyCode::Char('a') | KeyCode::Char('A') => {
                 if let Some(req) = app.chat_panel.pending_approval.take() {
                     let _ = req.response_tx.send(piki_agent::ApprovalResponse::AllowAll);
-                    app.set_toast("Auto-approve enabled for this session", crate::app::ToastLevel::Info);
+                    app.set_toast(
+                        "Auto-approve enabled for this session",
+                        crate::app::ToastLevel::Info,
+                    );
                 }
             }
             _ => {}
@@ -68,8 +71,12 @@ pub(super) fn handle_chat_panel_input(app: &mut App, key: KeyEvent) -> Option<Ac
             // Open settings
             app.chat_panel.settings_server_type = app.chat_panel.config.server_type;
             app.chat_panel.settings_url = app.chat_panel.config.base_url.clone();
-            app.chat_panel.settings_prompt =
-                app.chat_panel.config.system_prompt.clone().unwrap_or_default();
+            app.chat_panel.settings_prompt = app
+                .chat_panel
+                .config
+                .system_prompt
+                .clone()
+                .unwrap_or_default();
             app.chat_panel.settings_field = ChatSettingsField::ServerType;
             app.chat_panel.settings_cursor = 0;
             app.chat_panel.sub_mode = ChatSubMode::Settings;
@@ -100,12 +107,16 @@ pub(super) fn handle_chat_panel_input(app: &mut App, key: KeyEvent) -> Option<Ac
         }
         KeyCode::Backspace if app.chat_panel.input_cursor > 0 => {
             let prev = prev_char_boundary(&app.chat_panel.input, app.chat_panel.input_cursor);
-            app.chat_panel.input.drain(prev..app.chat_panel.input_cursor);
+            app.chat_panel
+                .input
+                .drain(prev..app.chat_panel.input_cursor);
             app.chat_panel.input_cursor = prev;
         }
         KeyCode::Delete if app.chat_panel.input_cursor < app.chat_panel.input.len() => {
             let next = next_char_boundary(&app.chat_panel.input, app.chat_panel.input_cursor);
-            app.chat_panel.input.drain(app.chat_panel.input_cursor..next);
+            app.chat_panel
+                .input
+                .drain(app.chat_panel.input_cursor..next);
         }
         KeyCode::Left if app.chat_panel.input_cursor > 0 => {
             app.chat_panel.input_cursor =
@@ -193,15 +204,15 @@ fn handle_settings(app: &mut App, key: KeyEvent) -> Option<Action> {
         KeyCode::Tab | KeyCode::Down => {
             // Cycle forward: BaseUrl -> SystemPrompt -> ServerType -> ...
             let (new_field, new_cursor) = match app.chat_panel.settings_field {
-                ChatSettingsField::ServerType => {
-                    (ChatSettingsField::BaseUrl, app.chat_panel.settings_url.len())
-                }
-                ChatSettingsField::BaseUrl => {
-                    (ChatSettingsField::SystemPrompt, app.chat_panel.settings_prompt.len())
-                }
-                ChatSettingsField::SystemPrompt => {
-                    (ChatSettingsField::ServerType, 0)
-                }
+                ChatSettingsField::ServerType => (
+                    ChatSettingsField::BaseUrl,
+                    app.chat_panel.settings_url.len(),
+                ),
+                ChatSettingsField::BaseUrl => (
+                    ChatSettingsField::SystemPrompt,
+                    app.chat_panel.settings_prompt.len(),
+                ),
+                ChatSettingsField::SystemPrompt => (ChatSettingsField::ServerType, 0),
             };
             app.chat_panel.settings_field = new_field;
             app.chat_panel.settings_cursor = new_cursor;
@@ -209,15 +220,15 @@ fn handle_settings(app: &mut App, key: KeyEvent) -> Option<Action> {
         KeyCode::Up => {
             // Cycle backward: SystemPrompt -> BaseUrl -> ServerType -> ...
             let (new_field, new_cursor) = match app.chat_panel.settings_field {
-                ChatSettingsField::ServerType => {
-                    (ChatSettingsField::SystemPrompt, app.chat_panel.settings_prompt.len())
-                }
-                ChatSettingsField::BaseUrl => {
-                    (ChatSettingsField::ServerType, 0)
-                }
-                ChatSettingsField::SystemPrompt => {
-                    (ChatSettingsField::BaseUrl, app.chat_panel.settings_url.len())
-                }
+                ChatSettingsField::ServerType => (
+                    ChatSettingsField::SystemPrompt,
+                    app.chat_panel.settings_prompt.len(),
+                ),
+                ChatSettingsField::BaseUrl => (ChatSettingsField::ServerType, 0),
+                ChatSettingsField::SystemPrompt => (
+                    ChatSettingsField::BaseUrl,
+                    app.chat_panel.settings_url.len(),
+                ),
             };
             app.chat_panel.settings_field = new_field;
             app.chat_panel.settings_cursor = new_cursor;

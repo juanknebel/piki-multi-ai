@@ -1,7 +1,7 @@
+use crate::state::DesktopApp;
 use parking_lot::Mutex;
 use serde::Serialize;
 use tauri::State;
-use crate::state::DesktopApp;
 
 #[derive(Serialize, Clone)]
 pub struct StashEntry {

@@ -164,12 +164,14 @@ pub enum NewWorkspaceSource {
     GitHub,
 }
 
-/// An item in the sidebar workspace list. Every row is a real workspace now —
-/// manual grouping (a synthetic header row) is gone. Grouping is derived at
+/// An item in the sidebar workspace list. Grouping is derived at
 /// render/navigation time from git worktree structure: workspaces that share
 /// a `source_repo` are a "family"; the one whose `workspace_type != Worktree`
 /// (if loaded) is the family's parent row and can collapse its worktree
-/// children.
+/// children. The one exception is `GroupHeader`: every `ephemeral` (PR
+/// review) workspace is collected under a single synthetic "pr-review" group
+/// regardless of `source_repo` (each review's checkout is its own repo, so
+/// they'd never share a family key otherwise) — see `App::sidebar_items`.
 #[derive(Debug, Clone)]
 pub enum SidebarItem {
     Workspace {
@@ -182,7 +184,16 @@ pub enum SidebarItem {
         /// families with no parent loaded).
         collapsed: Option<bool>,
     },
+    /// Synthetic header for the "pr-review" group — not backed by any real
+    /// workspace. `collapsed_groups` key is the fixed string `"pr-review"`
+    /// (an absolute filesystem path, which every real `source_repo` family
+    /// key is, can never collide with it).
+    GroupHeader { collapsed: bool },
 }
+
+/// `collapsed_groups` key for the synthetic PR-review sidebar group.
+/// Defined in core alongside the grouping rule that emits it.
+pub use piki_core::workspace::PR_REVIEW_GROUP_KEY;
 
 /// Response data for the API Explorer tab
 #[allow(dead_code)]
@@ -328,6 +339,11 @@ pub struct Workspace {
     /// notification that the user has not yet acknowledged. Cleared when the
     /// user switches to this workspace. Drives the sidebar idle badge.
     pub has_idle_notification: bool,
+    /// Runtime-only: true for a restored `ephemeral` (PR review) workspace
+    /// whose checkout directory was missing on load. Not persisted — it's
+    /// recomputed at startup and cleared (or re-set) by
+    /// `Action::RetryReviewCheckout` when the user opens it.
+    pub review_broken: bool,
 }
 
 impl std::ops::Deref for Workspace {
@@ -347,7 +363,10 @@ impl std::ops::DerefMut for Workspace {
 /// permission > unseen news > running > everything else. Shared by
 /// `Workspace::agent_status_rollup()` (per-workspace) and the sidebar's
 /// worktree-family aggregation (across a collapsed family's members).
-pub(crate) fn agent_status_severity(status: piki_core::cli_agent::CliAgentStatus, attention: bool) -> u8 {
+pub(crate) fn agent_status_severity(
+    status: piki_core::cli_agent::CliAgentStatus,
+    attention: bool,
+) -> u8 {
     use piki_core::cli_agent::CliAgentStatus as S;
     match (status, attention) {
         (S::WaitingPermission, _) => 4,
@@ -376,6 +395,7 @@ impl Workspace {
             kanban_provider: None,
             code_review: None,
             has_idle_notification: false,
+            review_broken: false,
         }
     }
 
@@ -491,7 +511,6 @@ impl Workspace {
             WorkspaceStatus::Error(_) => "error",
         }
     }
-
 }
 
 /// State for the fuzzy file search overlay (backed by nucleo async matcher)
@@ -650,9 +669,7 @@ impl EditorState {
 /// Stable identity for a worktree family, used as the key into
 /// `App::collapsed_groups`. The family's `source_repo` path is unique per
 /// git root and stable across reorders/reloads, unlike a workspace index.
-fn family_key(info: &piki_core::WorkspaceInfo) -> String {
-    info.source_repo.to_string_lossy().to_string()
-}
+use piki_core::workspace::family_key;
 
 fn char_to_byte_idx(s: &str, char_idx: usize) -> usize {
     s.char_indices()
@@ -668,16 +685,21 @@ pub struct Selection {
     pub end_row: u16,
     pub end_col: u16,
     pub active: bool,
+    /// (workspace index, tab id) the selection was made on. Cell coordinates
+    /// are meaningless on any other tab, so the selection is dropped as soon
+    /// as the active tab stops matching (see `App::drop_stale_selection`).
+    pub owner: (usize, usize),
 }
 
 impl Selection {
-    pub fn new(row: u16, col: u16) -> Self {
+    pub fn new(row: u16, col: u16, owner: (usize, usize)) -> Self {
         Self {
             anchor_row: row,
             anchor_col: col,
             end_row: row,
             end_col: col,
             active: true,
+            owner,
         }
     }
 
@@ -757,6 +779,10 @@ pub type PendingPrCheckout =
 /// before this one landed) can be told apart from the current query.
 pub type PendingRepoPrs =
     Arc<Mutex<Option<(String, Result<Vec<piki_core::github::PrListItem>, String>)>>>;
+/// Background result slot for `Action::RetryReviewCheckout`. Carries the
+/// target workspace index alongside the result.
+pub type PendingReviewRetry =
+    Arc<Mutex<Option<(usize, Result<piki_core::github::PrCheckout, String>)>>>;
 
 pub struct App {
     pub should_quit: bool,
@@ -870,6 +896,8 @@ pub struct App {
     pub pending_pr_checkout: PendingPrCheckout,
     /// Background result slot for `Action::LoadRepoPrs`.
     pub pending_repo_prs: PendingRepoPrs,
+    /// Background result slot for `Action::RetryReviewCheckout`.
+    pub pending_review_retry: PendingReviewRetry,
     /// Storage backend (SQLite)
     pub storage: std::sync::Arc<piki_core::storage::AppStorage>,
     /// Cached agent profiles for the current project
@@ -1026,6 +1054,7 @@ impl App {
             pending_pr_list: Arc::new(Mutex::new(None)),
             pending_pr_checkout: Arc::new(Mutex::new(None)),
             pending_repo_prs: Arc::new(Mutex::new(None)),
+            pending_review_retry: Arc::new(Mutex::new(None)),
             storage,
             agent_profiles: Vec::new(),
             provider_manager: piki_core::providers::ProviderManager::load_or_init(
@@ -1121,23 +1150,20 @@ impl App {
         idx
     }
 
-    /// `WorkspaceInfo`s to hand to `save_workspaces`, excluding `ephemeral`
-    /// ones (ad-hoc PR review workspaces) — they must never reappear in the
-    /// sidebar after a restart.
+    /// `WorkspaceInfo`s to hand to `save_workspaces`. `ephemeral` (PR review)
+    /// workspaces are included — they survive a restart, restored under the
+    /// synthetic "pr-review" sidebar group (see `sidebar_items`).
     pub fn persistable_workspaces(&self) -> Vec<piki_core::WorkspaceInfo> {
-        self.workspaces
-            .iter()
-            .filter(|w| !w.info.ephemeral)
-            .map(|w| w.info.clone())
-            .collect()
+        self.workspaces.iter().map(|w| w.info.clone()).collect()
     }
 
     pub fn next_workspace(&mut self) {
         let visible: Vec<usize> = self
             .sidebar_items()
             .iter()
-            .map(|item| match item {
-                SidebarItem::Workspace { index, .. } => *index,
+            .filter_map(|item| match item {
+                SidebarItem::Workspace { index, .. } => Some(*index),
+                SidebarItem::GroupHeader { .. } => None,
             })
             .collect();
         if visible.is_empty() {
@@ -1155,8 +1181,9 @@ impl App {
         let visible: Vec<usize> = self
             .sidebar_items()
             .iter()
-            .map(|item| match item {
-                SidebarItem::Workspace { index, .. } => *index,
+            .filter_map(|item| match item {
+                SidebarItem::Workspace { index, .. } => Some(*index),
+                SidebarItem::GroupHeader { .. } => None,
             })
             .collect();
         if visible.is_empty() {
@@ -1273,6 +1300,31 @@ impl App {
     /// only re-selects when the active tab changed — so browsing the pane with
     /// j/k isn't yanked back. A non-agent tab (shell, lazygit) leaves the
     /// highlight where it was: there is no row to move it to.
+    /// (workspace index, tab id) of the tab currently on screen — the identity
+    /// a text selection is owned by. Tab *id* (not position) so closing or
+    /// reordering sibling tabs can't make a stale selection look current.
+    pub fn selection_owner_key(&self) -> Option<(usize, usize)> {
+        self.current_workspace()
+            .and_then(|ws| ws.tabs.get(ws.active_tab))
+            .map(|tab| (self.active_workspace, tab.id))
+    }
+
+    /// Drop the text selection when it no longer belongs to the tab on screen.
+    ///
+    /// Selections are plain cell rectangles; after a tab or workspace switch
+    /// the same rectangle silently addresses the *new* tab's content, so a
+    /// leftover selection both renders a bogus highlight and — worse — gets
+    /// re-copied from the wrong tab by the next mouse-up. Called once per
+    /// event-loop iteration instead of at every tab-switch site (there are
+    /// many; see `sync_agent_selection` for the same reasoning).
+    pub fn drop_stale_selection(&mut self) {
+        if let Some(ref sel) = self.selection
+            && Some(sel.owner) != self.selection_owner_key()
+        {
+            self.selection = None;
+        }
+    }
+
     pub fn sync_agent_selection(&mut self) {
         let key = self
             .current_workspace()
@@ -1308,73 +1360,39 @@ impl App {
     /// The family block is emitted at the position of its first member
     /// encountered in `self.workspaces` order.
     pub fn sidebar_items(&self) -> Vec<SidebarItem> {
-        let mut items = Vec::new();
-        let mut consumed = vec![false; self.workspaces.len()];
-
-        for i in 0..self.workspaces.len() {
-            if consumed[i] {
-                continue;
-            }
-            let source_repo = &self.workspaces[i].info.source_repo;
-            let siblings: Vec<usize> = self
-                .workspaces
-                .iter()
-                .enumerate()
-                .filter(|(j, w)| !consumed[*j] && &w.info.source_repo == source_repo)
-                .map(|(j, _)| j)
-                .collect();
-
-            if siblings.len() <= 1 {
-                items.push(SidebarItem::Workspace {
-                    index: i,
-                    collapsed: None,
-                });
-                consumed[i] = true;
-                continue;
-            }
-
-            let parent_pos = siblings
-                .iter()
-                .position(|&idx| self.workspaces[idx].info.workspace_type != WorkspaceType::Worktree);
-
-            match parent_pos {
-                Some(pp) => {
-                    let parent_idx = siblings[pp];
-                    let key = family_key(&self.workspaces[parent_idx].info);
-                    let collapsed = self.collapsed_groups.contains(&key);
-                    items.push(SidebarItem::Workspace {
-                        index: parent_idx,
-                        collapsed: Some(collapsed),
-                    });
-                    for &idx in &siblings {
-                        consumed[idx] = true;
-                        if idx != parent_idx && !collapsed {
-                            items.push(SidebarItem::Workspace {
-                                index: idx,
-                                collapsed: None,
-                            });
-                        }
+        // The grouping rule itself lives in core so the desktop app applies
+        // the identical one (see `core::workspace::sidebar_rows`); this only
+        // adapts its output to the TUI's row type.
+        let infos: Vec<piki_core::WorkspaceInfo> =
+            self.workspaces.iter().map(|w| w.info.clone()).collect();
+        piki_core::workspace::sidebar_rows(&infos, &self.collapsed_groups)
+            .into_iter()
+            .map(|row| match row {
+                piki_core::workspace::SidebarRow::PrReviewHeader { collapsed } => {
+                    SidebarItem::GroupHeader { collapsed }
+                }
+                piki_core::workspace::SidebarRow::Workspace { index, kind } => {
+                    SidebarItem::Workspace {
+                        index,
+                        // `Some(_)` marks a family parent; children and
+                        // standalone rows both carry `None`.
+                        collapsed: match kind {
+                            piki_core::workspace::RowKind::Parent { collapsed, .. } => {
+                                Some(collapsed)
+                            }
+                            _ => None,
+                        },
                     }
                 }
-                None => {
-                    for &idx in &siblings {
-                        consumed[idx] = true;
-                        items.push(SidebarItem::Workspace {
-                            index: idx,
-                            collapsed: None,
-                        });
-                    }
-                }
-            }
-        }
-
-        items
+            })
+            .collect()
     }
 
     /// Visual rows for the workspace sidebar, in render order: `Some(row)`
     /// indexes into `sidebar_items()`, `None` is a blank separator line
-    /// inserted on BOTH sides of a worktree family block (before its parent
-    /// row, after its last child) so the block reads as bounded against a
+    /// inserted on BOTH sides of a block — a worktree family (before its
+    /// parent row, after its last child) or the synthetic pr-review group
+    /// (after its last child) — so the block reads as bounded against a
     /// flat neighbor — not just closed off on one side. Two adjacent
     /// families share a single separator between them, not one from each
     /// side. Rendering and mouse hit-testing must both walk this list (not
@@ -1382,19 +1400,31 @@ impl App {
     /// math drifts apart.
     pub fn sidebar_visual_rows(&self) -> Vec<Option<usize>> {
         let items = self.sidebar_items();
-        // A row's "block key" is its source_repo when it's part of a
-        // worktree family (Some), or None for a standalone/flat row — two
-        // flat rows never get a separator between them, only a transition
-        // into or out of a family block does.
-        let block_key = |i: usize| -> Option<&std::path::PathBuf> {
-            let SidebarItem::Workspace { index, .. } = &items[i];
-            let repo = &self.workspaces[*index].info.source_repo;
+        // A row's "block key" is the pr-review group when it belongs to the
+        // synthetic header (the header row itself or an ephemeral child), its
+        // source_repo when it's part of a worktree family, or None for a
+        // standalone/flat row — two flat rows never get a separator between
+        // them, only a transition into or out of a block does.
+        #[derive(PartialEq)]
+        enum BlockKey<'a> {
+            PrReview,
+            Family(&'a std::path::PathBuf),
+        }
+        let block_key = |i: usize| -> Option<BlockKey<'_>> {
+            let SidebarItem::Workspace { index, .. } = &items[i] else {
+                return Some(BlockKey::PrReview);
+            };
+            let ws = &self.workspaces[*index];
+            if ws.info.ephemeral {
+                return Some(BlockKey::PrReview);
+            }
+            let repo = &ws.info.source_repo;
             let family_count = self
                 .workspaces
                 .iter()
                 .filter(|w| &w.info.source_repo == repo)
                 .count();
-            (family_count > 1).then_some(repo)
+            (family_count > 1).then_some(BlockKey::Family(repo))
         };
 
         let mut rows = Vec::with_capacity(items.len());
@@ -1411,12 +1441,14 @@ impl App {
         rows
     }
 
-    /// Map a sidebar visual row to a workspace index. Every row is a real
-    /// workspace, so this only returns `None` when `row` is out of range.
+    /// Map a sidebar visual row to a workspace index. Returns `None` when
+    /// `row` is out of range, or lands on the synthetic pr-review
+    /// `GroupHeader` (no workspace behind it to switch to).
     pub fn sidebar_row_to_workspace(&self, row: usize) -> Option<usize> {
-        self.sidebar_items()
-            .get(row)
-            .map(|SidebarItem::Workspace { index, .. }| *index)
+        match self.sidebar_items().get(row) {
+            Some(SidebarItem::Workspace { index, .. }) => Some(*index),
+            Some(SidebarItem::GroupHeader { .. }) | None => None,
+        }
     }
 
     pub fn select_next_sidebar_row(&mut self) {
@@ -1447,8 +1479,9 @@ impl App {
         }
     }
 
-    /// If the currently selected sidebar row is a worktree-family parent
-    /// (has a collapse chevron), its family key and current collapsed state.
+    /// If the currently selected sidebar row is collapsible (a worktree-family
+    /// parent, or the synthetic pr-review `GroupHeader`), its group key and
+    /// current collapsed state.
     fn selected_family_state(&self) -> Option<(String, bool)> {
         match self.sidebar_items().get(self.selected_sidebar_row)? {
             SidebarItem::Workspace {
@@ -1457,6 +1490,9 @@ impl App {
             } => {
                 let ws = self.workspaces.get(*index)?;
                 Some((family_key(&ws.info), *collapsed))
+            }
+            SidebarItem::GroupHeader { collapsed } => {
+                Some((PR_REVIEW_GROUP_KEY.to_string(), *collapsed))
             }
             _ => None,
         }
@@ -1509,8 +1545,10 @@ impl App {
     /// Update selected_sidebar_row to point to the given workspace index.
     pub fn sync_sidebar_row(&mut self, ws_idx: usize) {
         let items = self.sidebar_items();
-        for (i, SidebarItem::Workspace { index, .. }) in items.iter().enumerate() {
-            if *index == ws_idx {
+        for (i, item) in items.iter().enumerate() {
+            if let SidebarItem::Workspace { index, .. } = item
+                && *index == ws_idx
+            {
                 self.selected_sidebar_row = i;
                 return;
             }
@@ -1600,6 +1638,7 @@ impl App {
 mod tests {
     use super::*;
     use crate::dialog_state::DialogState;
+    use crate::test_support::{add_agent_tab, add_terminal_tab, add_test_workspace};
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
     fn test_storage() -> std::sync::Arc<piki_core::storage::AppStorage> {
@@ -1995,43 +2034,8 @@ mod tests {
         assert_eq!(app.mode, AppMode::Normal); // No workspace → no commit dialog
     }
 
-    // ── Helper: add a minimal test workspace ──
-
-    fn add_test_workspace(app: &mut App) -> usize {
-        let idx = app.workspaces.len();
-        // Each test workspace gets its own source_repo by default, so it's
-        // standalone (no worktree family) unless a test deliberately shares
-        // one across workspaces to exercise the family/collapse behavior.
-        let info = piki_core::WorkspaceInfo {
-            name: format!("test-ws-{}", idx),
-            path: std::path::PathBuf::from("/tmp/test"),
-            workspace_type: piki_core::WorkspaceType::Simple,
-            description: String::new(),
-            prompt: String::new(),
-            kanban_path: None,
-            order: idx as u32,
-            source_repo: std::path::PathBuf::from(format!("/tmp/test-{idx}")),
-            source_repo_display: String::new(),
-            dispatch_card_id: None,
-            dispatch_source_kanban: None,
-            dispatch_agent_name: None,
-            origin: piki_core::WorkspaceOrigin::default(),
-            is_git_repo: true,
-            ephemeral: false,
-        };
-        let ws = Workspace::from_info(info);
-        app.workspaces.push(ws);
-        app.workspaces.len() - 1
-    }
-
-    /// Give the active tab of `ws_idx` a live in-memory terminal (a bare vt100
-    /// parser, no real PTY) so terminal-search gating sees a searchable pane.
-    fn add_terminal_tab(app: &mut App, ws_idx: usize) {
-        let ws = &mut app.workspaces[ws_idx];
-        let idx = ws.add_tab(AIProvider::Shell, true, None);
-        ws.tabs[idx].pty_parser = Some(Arc::new(Mutex::new(vt100::Parser::new(24, 80, 0))));
-        ws.active_tab = idx;
-    }
+    // Workspace/tab fixtures live in `crate::test_support` so every test
+    // module can build workspaces, not just this one.
 
     // ── Fuzzy overlay tests ──
 
@@ -2125,7 +2129,7 @@ mod tests {
         assert!(app.previous_workspace.is_none());
     }
 
-        #[test]
+    #[test]
     fn test_scroll_mode_requires_pty() {
         let mut app = App::new(
             test_storage(),
@@ -2283,13 +2287,12 @@ mod tests {
 
     // ── Agents pane ──
 
-    fn add_agent_tab(app: &mut App, ws_idx: usize, name: &str) {
-        app.workspaces[ws_idx].add_tab(AIProvider::Custom(name.to_string()), true, None);
-    }
-
     #[test]
     fn test_agent_rows_spans_all_workspaces() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         let a = add_test_workspace(&mut app);
         let b = add_test_workspace(&mut app);
         add_agent_tab(&mut app, a, "Claude");
@@ -2303,16 +2306,16 @@ mod tests {
         let rows = app.agent_rows();
         assert_eq!(rows.len(), 3);
         assert!(rows.iter().all(|&(wi, ti)| {
-            matches!(
-                app.workspaces[wi].tabs[ti].provider,
-                AIProvider::Custom(_)
-            )
+            matches!(app.workspaces[wi].tabs[ti].provider, AIProvider::Custom(_))
         }));
     }
 
     #[test]
     fn test_agent_row_at_maps_click_to_index() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         let a = add_test_workspace(&mut app);
         add_agent_tab(&mut app, a, "Claude");
         add_agent_tab(&mut app, a, "Codex");
@@ -2329,7 +2332,10 @@ mod tests {
 
     #[test]
     fn test_agent_row_at_accounts_for_scroll() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         let a = add_test_workspace(&mut app);
         for n in 0..6 {
             add_agent_tab(&mut app, a, &format!("Agent{n}"));
@@ -2338,21 +2344,35 @@ mod tests {
         // the render scrolls it into view (scroll_offset = 4, showing 4 & 5).
         app.agents_area = ratatui::layout::Rect::new(0, 0, 20, 4);
         app.selected_agent_row = 5;
-        assert_eq!(app.agent_row_at(1), Some(4), "first visible row after scroll");
-        assert_eq!(app.agent_row_at(2), Some(5), "selected row scrolled into view");
+        assert_eq!(
+            app.agent_row_at(1),
+            Some(4),
+            "first visible row after scroll"
+        );
+        assert_eq!(
+            app.agent_row_at(2),
+            Some(5),
+            "selected row scrolled into view"
+        );
         assert_eq!(app.agent_row_at(3), None, "below the pane border");
     }
 
     #[test]
     fn test_agent_row_at_empty_is_none() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         app.agents_area = ratatui::layout::Rect::new(0, 0, 20, 5);
         assert_eq!(app.agent_row_at(1), None);
     }
 
     #[test]
     fn test_agents_pane_navigation_and_jump() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         let a = add_test_workspace(&mut app);
         let b = add_test_workspace(&mut app);
         add_agent_tab(&mut app, a, "Claude");
@@ -2381,7 +2401,10 @@ mod tests {
 
     #[test]
     fn test_sidebar_cursor_switches_the_active_workspace() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         let a = add_test_workspace(&mut app);
         let b = add_test_workspace(&mut app);
         app.switch_workspace(a);
@@ -2401,7 +2424,10 @@ mod tests {
         // Every row is a real workspace now (no synthetic header), so the
         // cursor always follows onto whatever it lands on — including a
         // worktree-family parent row.
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         let a = add_test_workspace(&mut app);
         let parent = add_test_workspace(&mut app);
         let child = add_test_workspace(&mut app);
@@ -2426,8 +2452,60 @@ mod tests {
     }
 
     #[test]
+    fn test_selection_survives_on_its_own_tab_but_not_a_switch() {
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
+        let a = add_test_workspace(&mut app);
+        add_agent_tab(&mut app, a, "Claude");
+        add_agent_tab(&mut app, a, "Codex");
+        app.active_workspace = a;
+        app.workspaces[a].active_tab = 0;
+
+        let owner = app.selection_owner_key().unwrap();
+        app.selection = Some(Selection::new(1, 2, owner));
+
+        // Same tab on screen — the selection stays.
+        app.drop_stale_selection();
+        assert!(app.selection.is_some());
+
+        // Tab switch — the cell rectangle now addresses the other tab's
+        // content, so the selection must be dropped, not re-copied from it.
+        app.workspaces[a].active_tab = 1;
+        app.drop_stale_selection();
+        assert!(app.selection.is_none());
+    }
+
+    #[test]
+    fn test_selection_owner_is_the_tab_id_not_its_position() {
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
+        let a = add_test_workspace(&mut app);
+        add_agent_tab(&mut app, a, "Claude");
+        add_agent_tab(&mut app, a, "Codex");
+        app.active_workspace = a;
+        app.workspaces[a].active_tab = 1;
+
+        let owner = app.selection_owner_key().unwrap();
+        app.selection = Some(Selection::new(0, 0, owner));
+
+        // Closing the first tab shifts the owning tab to position 0; the id
+        // still matches, so the selection survives.
+        app.workspaces[a].tabs.remove(0);
+        app.workspaces[a].active_tab = 0;
+        app.drop_stale_selection();
+        assert!(app.selection.is_some());
+    }
+
+    #[test]
     fn test_agent_selection_follows_the_active_agent_tab() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         let a = add_test_workspace(&mut app);
         let b = add_test_workspace(&mut app);
         add_agent_tab(&mut app, a, "Antigravity");
@@ -2445,7 +2523,10 @@ mod tests {
 
     #[test]
     fn test_agent_selection_does_not_fight_pane_browsing() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         let a = add_test_workspace(&mut app);
         let b = add_test_workspace(&mut app);
         add_agent_tab(&mut app, a, "Antigravity");
@@ -2463,7 +2544,10 @@ mod tests {
 
     #[test]
     fn test_agent_selection_kept_on_a_non_agent_tab() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         let a = add_test_workspace(&mut app);
         add_agent_tab(&mut app, a, "Antigravity");
         let b = add_test_workspace(&mut app);
@@ -2481,7 +2565,10 @@ mod tests {
 
     #[test]
     fn test_agents_pane_empty_is_noop() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         add_test_workspace(&mut app);
         app.active_pane = ActivePane::Agents;
 
@@ -2600,6 +2687,61 @@ mod tests {
         // Arrow Right expands.
         crate::input::handle_key_event(&mut app, key(KeyCode::Right));
         assert!(!app.collapsed_groups.contains(&fam_key));
+    }
+
+    #[test]
+    fn ephemeral_workspaces_group_under_pr_review_header() {
+        // Review workspaces each have their own source_repo (their own
+        // checkout path), so they'd never share a worktree-family key — they
+        // must instead land under one synthetic GroupHeader regardless.
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
+        let plain = add_test_workspace(&mut app); // index 0, non-ephemeral
+        let review_a = add_test_workspace(&mut app); // index 1
+        let review_b = add_test_workspace(&mut app); // index 2
+        app.workspaces[review_a].info.ephemeral = true;
+        app.workspaces[review_b].info.ephemeral = true;
+
+        let items = app.sidebar_items();
+        // GroupHeader first, then its two review children, then the
+        // standalone plain workspace.
+        assert!(matches!(
+            items[0],
+            SidebarItem::GroupHeader { collapsed: false }
+        ));
+        let review_indices: Vec<usize> = items[1..3]
+            .iter()
+            .map(|item| match item {
+                SidebarItem::Workspace {
+                    index,
+                    collapsed: None,
+                } => *index,
+                other => panic!("expected a flat review workspace row, got {other:?}"),
+            })
+            .collect();
+        assert_eq!(review_indices, vec![review_a, review_b]);
+        assert!(matches!(
+            items[3],
+            SidebarItem::Workspace { index, collapsed: None } if index == plain
+        ));
+
+        // Collapsing the header hides both review rows but keeps the plain
+        // workspace visible.
+        app.active_pane = ActivePane::WorkspaceList;
+        app.selected_sidebar_row = 0;
+        app.toggle_selected_group();
+        assert!(
+            app.collapsed_groups
+                .contains(crate::app::PR_REVIEW_GROUP_KEY)
+        );
+        let collapsed_items = app.sidebar_items();
+        assert_eq!(collapsed_items.len(), 2);
+        assert!(matches!(
+            collapsed_items[0],
+            SidebarItem::GroupHeader { collapsed: true }
+        ));
     }
 
     // ── PTY idle notifications ──

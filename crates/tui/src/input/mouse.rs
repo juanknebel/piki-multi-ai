@@ -523,6 +523,20 @@ pub(crate) fn handle_mouse_event(
                                     // just clicked on.
                                     app.selected_workspace = *index;
                                     app.switch_workspace(*index);
+                                    if app
+                                        .workspaces
+                                        .get(*index)
+                                        .is_some_and(|ws| ws.review_broken)
+                                    {
+                                        app.active_pane = ActivePane::MainPanel;
+                                        return Some(Action::RetryReviewCheckout(*index));
+                                    }
+                                }
+                                // Synthetic pr-review header — any click
+                                // just toggles collapse, mirroring a
+                                // worktree-family parent's chevron.
+                                crate::app::SidebarItem::GroupHeader { .. } => {
+                                    app.toggle_selected_group();
                                 }
                             }
                         }
@@ -544,10 +558,11 @@ pub(crate) fn handle_mouse_event(
                     app.active_pane = ActivePane::MainPanel;
                     if let Some(inner) = app.terminal_inner_area
                         && rect_contains(inner, col, row)
+                        && let Some(owner) = app.selection_owner_key()
                     {
                         let cell_row = row - inner.y;
                         let cell_col = col - inner.x;
-                        app.selection = Some(app::Selection::new(cell_row, cell_col));
+                        app.selection = Some(app::Selection::new(cell_row, cell_col, owner));
                     }
                 }
             }
@@ -581,6 +596,7 @@ pub(crate) fn handle_mouse_event(
                     }
                 }
             } else if let Some(ref mut sel) = app.selection
+                && sel.active
                 && let Some(inner) = app.terminal_inner_area
             {
                 let cell_row = row
@@ -597,7 +613,13 @@ pub(crate) fn handle_mouse_event(
             if app.resize_drag.is_some() {
                 app.resize_drag = None;
                 app.save_layout_prefs();
-            } else if let Some(ref mut sel) = app.selection {
+            } else if let Some(ref mut sel) = app.selection
+                && sel.active
+            {
+                // Only a drag that is still in progress copies on release; a
+                // finished selection left on screen must not re-copy on the
+                // next unrelated click (e.g. the mouse-up of a tab-bar click,
+                // which would extract the NEW tab's text at the old cells).
                 sel.active = false;
                 let (sr, sc, er, ec) = sel.normalized();
                 if sr != er || sc != ec {
@@ -722,7 +744,10 @@ mod tests {
 
     #[test]
     fn primary_screen_mouse_tracking_keeps_local_scrollback() {
-        assert_eq!(pty_scroll_route(false, true), PtyScrollRoute::LocalScrollback);
+        assert_eq!(
+            pty_scroll_route(false, true),
+            PtyScrollRoute::LocalScrollback
+        );
     }
 
     #[test]
@@ -730,6 +755,9 @@ mod tests {
         // Codex and shells alike: the patched vt100 captures inline-TUI
         // transcripts into local scrollback, and arrow keys on the primary
         // screen would recall history instead of scrolling.
-        assert_eq!(pty_scroll_route(false, false), PtyScrollRoute::LocalScrollback);
+        assert_eq!(
+            pty_scroll_route(false, false),
+            PtyScrollRoute::LocalScrollback
+        );
     }
 }

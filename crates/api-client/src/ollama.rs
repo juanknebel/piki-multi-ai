@@ -93,7 +93,10 @@ impl OllamaClient {
             })
             .unwrap_or_default();
 
-        Self { client, base_url: base }
+        Self {
+            client,
+            base_url: base,
+        }
     }
 
     /// List installed models via `GET /api/tags`.
@@ -101,15 +104,10 @@ impl OllamaClient {
         let url = format!("{}/api/tags", self.base_url);
         tracing::debug!(url = %url, "Fetching Ollama models");
 
-        let resp = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| {
-                tracing::error!(url = %url, error = %e, "Failed to connect to Ollama");
-                anyhow::anyhow!("Cannot connect to Ollama at {}: {e}", self.base_url)
-            })?;
+        let resp = self.client.get(&url).send().await.map_err(|e| {
+            tracing::error!(url = %url, error = %e, "Failed to connect to Ollama");
+            anyhow::anyhow!("Cannot connect to Ollama at {}: {e}", self.base_url)
+        })?;
 
         if !resp.status().is_success() {
             let status = resp.status();
@@ -145,7 +143,12 @@ impl OllamaClient {
         tx: mpsc::UnboundedSender<ChatStreamEvent>,
     ) -> anyhow::Result<()> {
         let url = format!("{}/api/chat", self.base_url);
-        tracing::info!(model, msg_count = messages.len(), has_tools = tools.is_some(), "Starting Ollama chat stream");
+        tracing::info!(
+            model,
+            msg_count = messages.len(),
+            has_tools = tools.is_some(),
+            "Starting Ollama chat stream"
+        );
 
         let payload = ChatRequest {
             model: model.to_string(),
@@ -159,7 +162,8 @@ impl OllamaClient {
             Err(e) => {
                 tracing::error!(url = %url, error = %e, "Failed to send chat request to Ollama");
                 let _ = tx.send(ChatStreamEvent::Error(format!(
-                    "Cannot connect to Ollama at {}: {e}", self.base_url
+                    "Cannot connect to Ollama at {}: {e}",
+                    self.base_url
                 )));
                 return Err(e.into());
             }
@@ -240,7 +244,10 @@ impl OllamaClient {
 
         // Stream ended without a done=true — send what we have
         if !full_content.is_empty() {
-            tracing::debug!(chars = full_content.len(), "Ollama stream ended (no done flag), sending accumulated content");
+            tracing::debug!(
+                chars = full_content.len(),
+                "Ollama stream ended (no done flag), sending accumulated content"
+            );
             let _ = tx.send(ChatStreamEvent::Done(full_content));
         } else {
             tracing::warn!("Ollama stream ended with no content and no done flag");
@@ -253,13 +260,13 @@ impl OllamaClient {
     }
 
     /// Send a non-streaming chat request and return the full response.
-    pub async fn chat(
-        &self,
-        model: &str,
-        messages: &[OllamaMessage],
-    ) -> anyhow::Result<String> {
+    pub async fn chat(&self, model: &str, messages: &[OllamaMessage]) -> anyhow::Result<String> {
         let url = format!("{}/api/chat", self.base_url);
-        tracing::info!(model, msg_count = messages.len(), "Sending non-streaming Ollama chat request");
+        tracing::info!(
+            model,
+            msg_count = messages.len(),
+            "Sending non-streaming Ollama chat request"
+        );
 
         let payload = ChatRequest {
             model: model.to_string(),
@@ -268,7 +275,12 @@ impl OllamaClient {
             tools: None,
         };
 
-        let resp = self.client.post(&url).json(&payload).send().await
+        let resp = self
+            .client
+            .post(&url)
+            .json(&payload)
+            .send()
+            .await
             .map_err(|e| {
                 tracing::error!(url = %url, error = %e, "Failed to send chat request");
                 e
@@ -282,7 +294,10 @@ impl OllamaClient {
         }
 
         let parsed: ChatStreamResponse = resp.json().await?;
-        tracing::debug!(chars = parsed.message.content.len(), "Ollama chat response received");
+        tracing::debug!(
+            chars = parsed.message.content.len(),
+            "Ollama chat response received"
+        );
         Ok(parsed.message.content)
     }
 }
@@ -338,7 +353,8 @@ mod tests {
 
     #[test]
     fn test_parse_stream_response() {
-        let json = r#"{"model":"llama3.2","message":{"role":"assistant","content":"Hello"},"done":false}"#;
+        let json =
+            r#"{"model":"llama3.2","message":{"role":"assistant","content":"Hello"},"done":false}"#;
         let parsed: ChatStreamResponse = serde_json::from_str(json).unwrap();
         assert_eq!(parsed.message.content, "Hello");
         assert!(!parsed.done);

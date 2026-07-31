@@ -976,6 +976,29 @@ sequenceDiagram
 - **Minimal tokio features** — Only compiles required tokio features (`rt-multi-thread`, `macros`, `process`, `time`, `sync`, `fs`) instead of `"full"`, reducing compile time and binary size
 - **Event-driven loop** — Uses `crossterm::EventStream` + `tokio::select!` instead of blocking `event::poll`, so async results (git refresh, fuzzy scan, PTY output) apply the moment they arrive
 
+## Development
+
+Recipes live in the `justfile` (`cargo install just`):
+
+```bash
+just ci        # everything CI runs — do this before pushing
+just fmt       # reformat in place
+just lint      # clippy, warnings denied
+just test      # rust test suite
+just frontend  # typecheck + build the desktop frontend
+just run       # run the TUI
+```
+
+`just ci` mirrors `.github/workflows/nightly.yml` exactly, so a green run locally means a green run on CI. Pull requests run the same checks automatically.
+
+A few things worth knowing:
+
+- **Branches** — work lands on `nightly`; `main` only receives release merges via `scripts/release.sh`.
+- **`piki-desktop` is excluded from `just test`** because `tauri-build` needs `crates/desktop/frontend/dist` to exist. Use `just lint-desktop`, which builds the frontend first.
+- **Snapshot tests** — UI rendering is covered by `insta` snapshots. After an intentional UI change, review the diffs with `just snapshots` (`cargo install cargo-insta`) and commit the updated `.snap` files.
+- **Blame** — the repo was reformatted once, in a single commit listed in `.git-blame-ignore-revs`. Run `git config blame.ignoreRevsFile .git-blame-ignore-revs` so local `git blame` skips it.
+- **Security advisories** — `cargo audit` runs weekly and on dependency changes. Advisories that can't be acted on are listed in `.cargo/audit.toml` with the reason and what would clear them.
+
 ## License
 
 GPL-2.0 — See [LICENSE](LICENSE) for details.

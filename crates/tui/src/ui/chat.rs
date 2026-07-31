@@ -24,13 +24,18 @@ pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &App) {
     } else {
         app.chat_panel.config.model.clone()
     };
-    let agent_indicator = if app.chat_panel.agent_mode { " Agent" } else { "" };
+    let agent_indicator = if app.chat_panel.agent_mode {
+        " Agent"
+    } else {
+        ""
+    };
     let title = format!(" AI Chat{} [{}] ", agent_indicator, model_label);
 
     let block = Block::default()
         .title(title)
         .title_style(Style::default().fg(theme.help.border))
-        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
+        .borders(Borders::ALL)
+        .border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(Style::default().fg(theme.help.border));
 
     let inner = block.inner(popup);
@@ -72,21 +77,16 @@ pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let cursor = app.chat_panel.input_cursor;
     let max_width = input_area.width.saturating_sub(2) as usize;
 
-    // Simple visible window around cursor
-    let visible_start = cursor.saturating_sub(max_width);
-    let visible_end = (visible_start + max_width).min(input_text.len());
-    let visible = &input_text[visible_start..visible_end];
-
-    let cursor_pos = cursor - visible_start;
-    let before = &visible[..cursor_pos.min(visible.len())];
-    let cursor_char = visible.get(cursor_pos..cursor_pos + 1).unwrap_or(" ");
-    let after_start = (cursor_pos + 1).min(visible.len());
-    let after = &visible[after_start..];
+    // Visible window around the cursor, cut on char boundaries
+    let (before, cursor_char, after) = crate::text::field_window(input_text, cursor, max_width);
 
     let input_line = Line::from(vec![
         Span::styled("> ", Style::default().fg(theme.help.border)),
         Span::raw(before),
-        Span::styled(cursor_char, Style::default().bg(theme.help.border).fg(theme.palette.bg0)),
+        Span::styled(
+            cursor_char,
+            Style::default().bg(theme.help.border).fg(theme.palette.bg0),
+        ),
         Span::raw(after),
     ]);
     frame.render_widget(Paragraph::new(input_line), input_area);
@@ -118,7 +118,10 @@ pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &App) {
                 .map(|r| r.tool_name.as_str())
                 .unwrap_or("?");
             vec![
-                Span::styled(format!("Approve {tool_name}? "), Style::default().fg(theme.palette.warn)),
+                Span::styled(
+                    format!("Approve {tool_name}? "),
+                    Style::default().fg(theme.palette.warn),
+                ),
                 Span::styled("[y]", Style::default().fg(h)),
                 Span::raw(" allow  "),
                 Span::styled("[n]", Style::default().fg(h)),
@@ -182,18 +185,14 @@ fn render_messages(frame: &mut Frame, area: Rect, app: &App) {
         for _ in 0..empty_y.saturating_sub(1) {
             lines.push(Line::from(""));
         }
-        lines.push(Line::from(
-            Span::styled(
-                "Start a conversation with a local AI model",
-                Style::default().fg(theme.general.muted_text),
-            ),
-        ));
-        lines.push(Line::from(
-            Span::styled(
-                "Press Tab to select a model",
-                Style::default().fg(theme.general.muted_text),
-            ),
-        ));
+        lines.push(Line::from(Span::styled(
+            "Start a conversation with a local AI model",
+            Style::default().fg(theme.general.muted_text),
+        )));
+        lines.push(Line::from(Span::styled(
+            "Press Tab to select a model",
+            Style::default().fg(theme.general.muted_text),
+        )));
     } else {
         for msg in &app.chat_panel.messages {
             let (role_label, role_color) = match msg.role {
@@ -321,7 +320,10 @@ fn render_settings(frame: &mut Frame, area: Rect, app: &App) {
         Span::raw("    "),
         Span::styled(server_label, server_value_style),
         if server_active {
-            Span::styled("  (Enter to switch)", Style::default().fg(theme.general.muted_text))
+            Span::styled(
+                "  (Enter to switch)",
+                Style::default().fg(theme.general.muted_text),
+            )
         } else {
             Span::raw("")
         },
@@ -368,7 +370,11 @@ fn render_settings(frame: &mut Frame, area: Rect, app: &App) {
             if i == 0 {
                 lines.push(render_text_field(
                     pline,
-                    if prompt_active { Some(cursor.min(pline.len())) } else { None },
+                    if prompt_active {
+                        Some(cursor.min(pline.len()))
+                    } else {
+                        None
+                    },
                     max_w,
                     h,
                     theme.palette.bg0,
@@ -397,43 +403,23 @@ fn render_text_field<'a>(
     let prefix = "    ";
     match cursor_pos {
         Some(pos) => {
-            let visible_start = pos.saturating_sub(max_width);
-            let visible_end = (visible_start + max_width).min(text.len());
-            let visible = &text[visible_start..visible_end];
-            let cp = pos - visible_start;
-            let before = &visible[..cp.min(visible.len())];
-            let cursor_char = visible.get(cp..cp + 1).unwrap_or(" ");
-            let after_start = (cp + 1).min(visible.len());
-            let after = &visible[after_start..];
+            let (before, cursor_char, after) = crate::text::field_window(text, pos, max_width);
             Line::from(vec![
                 Span::raw(prefix),
                 Span::raw(before.to_string()),
-                Span::styled(cursor_char.to_string(), Style::default().bg(accent).fg(cursor_fg)),
+                Span::styled(
+                    cursor_char.to_string(),
+                    Style::default().bg(accent).fg(cursor_fg),
+                ),
                 Span::raw(after.to_string()),
             ])
         }
-        None => {
-            Line::from(format!("{prefix}{text}"))
-        }
+        None => Line::from(format!("{prefix}{text}")),
     }
 }
 
-/// Simple word-wrapping: split text at `width` boundaries.
+/// Word-wrap at `width` display columns. See `crate::text::wrap` — the
+/// previous local version sliced by bytes and panicked on any accent.
 fn wrap_text(text: &str, width: usize) -> Vec<String> {
-    if width == 0 {
-        return vec![text.to_string()];
-    }
-    let mut result = Vec::new();
-    let mut remaining = text;
-    while remaining.len() > width {
-        // Try to find a word break
-        let break_at = remaining[..width]
-            .rfind(' ')
-            .map(|p| p + 1)
-            .unwrap_or(width);
-        result.push(remaining[..break_at].to_string());
-        remaining = &remaining[break_at..];
-    }
-    result.push(remaining.to_string());
-    result
+    crate::text::wrap(text, width)
 }

@@ -1,5 +1,5 @@
-use crate::context::ToolContext;
 use super::Tool;
+use crate::context::ToolContext;
 
 pub struct SearchCodeTool;
 
@@ -34,11 +34,7 @@ impl Tool for SearchCodeTool {
         })
     }
 
-    async fn execute(
-        &self,
-        args: serde_json::Value,
-        ctx: &ToolContext,
-    ) -> anyhow::Result<String> {
+    async fn execute(&self, args: serde_json::Value, ctx: &ToolContext) -> anyhow::Result<String> {
         let pattern = args
             .get("pattern")
             .and_then(|v| v.as_str())
@@ -49,10 +45,7 @@ impl Tool for SearchCodeTool {
         let search_dir = ctx.workspace_path.join(path);
 
         let mut cmd = piki_core::shell_env::command("grep");
-        cmd.arg("-rn")
-            .arg("--color=never")
-            .arg("-E")
-            .arg(pattern);
+        cmd.arg("-rn").arg("--color=never").arg("-E").arg(pattern);
 
         if let Some(g) = glob {
             cmd.arg("--include").arg(g);
@@ -86,7 +79,9 @@ impl Tool for SearchCodeTool {
         }
 
         if total_matches > 50 {
-            out.push_str(&format!("\n... ({total_matches} total matches, showing first 50)"));
+            out.push_str(&format!(
+                "\n... ({total_matches} total matches, showing first 50)"
+            ));
         }
 
         Ok(out)

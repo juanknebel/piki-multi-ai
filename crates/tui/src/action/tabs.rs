@@ -4,8 +4,8 @@ use super::Action;
 use crate::app::{App, AppMode};
 use crate::dialog_state::DialogState;
 use crate::helpers::spawn_tab;
-use piki_core::workspace::WorkspaceManager;
 use piki_core::AIProvider;
+use piki_core::workspace::WorkspaceManager;
 
 pub(super) async fn handle(
     app: &mut App,
@@ -95,12 +95,27 @@ pub(super) async fn handle(
                 ) && let Some(idx) = ws.tabs.iter().position(|t| t.provider == provider)
                 {
                     ws.active_tab = idx;
+                    app.active_pane = crate::app::ActivePane::MainPanel;
                     return Ok(());
                 }
 
-                let idx = spawn_tab(ws, &provider, app.pty_rows, app.pty_cols, None, Some(&app.provider_manager), &app.paths, app.pty_output.clone()).await;
+                let (idx, spawn_error) = spawn_tab(
+                    ws,
+                    &provider,
+                    app.pty_rows,
+                    app.pty_cols,
+                    None,
+                    Some(&app.provider_manager),
+                    &app.paths,
+                    app.pty_output.clone(),
+                )
+                .await;
                 ws.active_tab = idx;
-                app.status_message = Some(format!("Opened {} tab", provider.label()));
+                app.active_pane = crate::app::ActivePane::MainPanel;
+                match spawn_error {
+                    Some(err) => app.set_toast(err, crate::app::ToastLevel::Error),
+                    None => app.status_message = Some(format!("Opened {} tab", provider.label())),
+                }
             }
 
             // The tab is up either way; warn that its status will be guessed
@@ -124,6 +139,7 @@ pub(super) async fn handle(
                     .unwrap_or_else(|| "markdown".to_string());
                 if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
                     ws.add_markdown_tab(label.clone(), content, Some(&app.syntax));
+                    app.active_pane = crate::app::ActivePane::MainPanel;
                     app.status_message = Some(format!("Opened {}", label));
                 }
             }

@@ -1,13 +1,15 @@
 use parking_lot::Mutex;
 use tauri::State;
 
-use piki_core::{WorkspaceInfo, WorkspaceStatus};
 use piki_core::workspace::watcher::FileWatcher;
+use piki_core::{WorkspaceInfo, WorkspaceStatus};
 
 use crate::state::{DesktopApp, DesktopWorkspace, WorkspaceDetail};
 
 #[tauri::command]
-pub async fn list_workspaces(state: State<'_, Mutex<DesktopApp>>) -> Result<Vec<WorkspaceInfo>, String> {
+pub async fn list_workspaces(
+    state: State<'_, Mutex<DesktopApp>>,
+) -> Result<Vec<WorkspaceInfo>, String> {
     let app = state.lock();
     Ok(app.workspaces.iter().map(|ws| ws.info.clone()).collect())
 }
@@ -75,7 +77,8 @@ pub async fn create_workspace(
     // Extract manager info with scoped lock
     let (manager, storage) = {
         let app = state.lock();
-        let manager = piki_core::workspace::manager::WorkspaceManager::with_paths(app.paths.clone());
+        let manager =
+            piki_core::workspace::manager::WorkspaceManager::with_paths(app.paths.clone());
         let storage = std::sync::Arc::clone(&app.storage);
         (manager, storage)
     };
@@ -84,24 +87,30 @@ pub async fn create_workspace(
 
     // Async workspace creation (no lock held)
     let info = match ws_type.as_str() {
-        "Simple" => {
-            manager
-                .create_simple(&name, &description, &prompt, kanban_path.clone(), &source_repo)
-                .await
-                .map_err(|e| e.to_string())?
-        }
-        "Project" => {
-            manager
-                .create_project(&name, &description, &prompt, kanban_path.clone(), &source_repo)
-                .await
-                .map_err(|e| e.to_string())?
-        }
-        _ => {
-            manager
-                .create(&name, &description, &prompt, kanban_path, &source_repo)
-                .await
-                .map_err(|e| e.to_string())?
-        }
+        "Simple" => manager
+            .create_simple(
+                &name,
+                &description,
+                &prompt,
+                kanban_path.clone(),
+                &source_repo,
+            )
+            .await
+            .map_err(|e| e.to_string())?,
+        "Project" => manager
+            .create_project(
+                &name,
+                &description,
+                &prompt,
+                kanban_path.clone(),
+                &source_repo,
+            )
+            .await
+            .map_err(|e| e.to_string())?,
+        _ => manager
+            .create(&name, &description, &prompt, kanban_path, &source_repo)
+            .await
+            .map_err(|e| e.to_string())?,
     };
 
     let mut result_info = info.clone();
@@ -323,4 +332,78 @@ pub async fn set_collapsed_groups(
     prefs
         .set_collapsed_groups(&groups.into_iter().collect())
         .map_err(|e| format!("Failed to save collapsed groups: {e}"))
+}
+
+/// Serializable view of `core::workspace::SidebarRow` for the frontend.
+///
+/// The frontend used to compute this itself, in TypeScript, and had never
+/// implemented the PR-review group — so review workspaces rendered ungrouped
+/// here while the TUI grouped them. Grouping is now decided in one place.
+#[derive(serde::Serialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum SidebarRowDto {
+    /// Header for the synthetic PR-review group. Carries its own collapse key
+    /// so the frontend never has to hardcode one.
+    PrReviewHeader { collapsed: bool, family_key: String },
+    /// A real workspace: `index` points into `list_workspaces`' order.
+    Workspace {
+        index: usize,
+        /// "standalone" | "parent" | "child"
+        kind: &'static str,
+        /// Collapse key — present on parents only.
+        family_key: Option<String>,
+        /// Whether this parent's children are hidden — parents only.
+        collapsed: Option<bool>,
+    },
+}
+
+/// Visual sidebar rows in render order, with families and the PR-review group
+/// already resolved against the saved collapse state.
+#[tauri::command]
+pub async fn sidebar_rows(
+    state: State<'_, Mutex<DesktopApp>>,
+) -> Result<Vec<SidebarRowDto>, String> {
+    let app = state.lock();
+    let collapsed = app
+        .storage
+        .ui_prefs
+        .as_ref()
+        .and_then(|p| p.get_collapsed_groups().ok())
+        .unwrap_or_default();
+    let infos: Vec<piki_core::WorkspaceInfo> =
+        app.workspaces.iter().map(|w| w.info.clone()).collect();
+
+    Ok(piki_core::workspace::sidebar_rows(&infos, &collapsed)
+        .into_iter()
+        .map(|row| match row {
+            piki_core::workspace::SidebarRow::PrReviewHeader { collapsed } => {
+                SidebarRowDto::PrReviewHeader {
+                    collapsed,
+                    family_key: piki_core::workspace::PR_REVIEW_GROUP_KEY.to_string(),
+                }
+            }
+            piki_core::workspace::SidebarRow::Workspace { index, kind } => match kind {
+                piki_core::workspace::RowKind::Parent { key, collapsed } => {
+                    SidebarRowDto::Workspace {
+                        index,
+                        kind: "parent",
+                        family_key: Some(key),
+                        collapsed: Some(collapsed),
+                    }
+                }
+                piki_core::workspace::RowKind::Child => SidebarRowDto::Workspace {
+                    index,
+                    kind: "child",
+                    family_key: None,
+                    collapsed: None,
+                },
+                piki_core::workspace::RowKind::Standalone => SidebarRowDto::Workspace {
+                    index,
+                    kind: "standalone",
+                    family_key: None,
+                    collapsed: None,
+                },
+            },
+        })
+        .collect())
 }

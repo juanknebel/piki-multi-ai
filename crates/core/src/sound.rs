@@ -84,7 +84,10 @@ pub fn play(sound: Sound) {
         match builtin_wav_path(sound) {
             Ok(path) => {
                 if !play_file(&path) {
-                    tracing::warn!(?sound, "no working audio player found (tried pw-play/paplay/aplay/afplay)");
+                    tracing::warn!(
+                        ?sound,
+                        "no working audio player found (tried pw-play/paplay/aplay/afplay)"
+                    );
                 }
             }
             Err(e) => tracing::warn!(error = %e, "failed to materialize built-in sound"),
@@ -230,7 +233,10 @@ mod tests {
             done_path: Some(PathBuf::from("/tmp/done.wav")),
             attention_path: None,
         };
-        assert_eq!(s.path_for(Sound::Done), Some(PathBuf::from("/tmp/done.wav")));
+        assert_eq!(
+            s.path_for(Sound::Done),
+            Some(PathBuf::from("/tmp/done.wav"))
+        );
         assert_eq!(
             s.path_for(Sound::Attention),
             Some(PathBuf::from("/tmp/all.wav"))

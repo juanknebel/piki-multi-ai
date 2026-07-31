@@ -121,12 +121,16 @@ impl ReviewCheckoutManager {
     }
 
     fn pr_worktree_dir(&self, repo_nwo: &str, number: u64) -> PathBuf {
-        self.root.join(format!("{}--pr-{number}", sanitize_nwo(repo_nwo)))
+        self.root
+            .join(format!("{}--pr-{number}", sanitize_nwo(repo_nwo)))
     }
 
     async fn ensure_base_clone(&self, repo_nwo: &str, base_dir: &Path) -> anyhow::Result<()> {
         let git_dir_ok = base_dir.join(".git").is_dir()
-            && run_git(base_dir, &["rev-parse", "--git-dir"]).await.map(|o| o.status.success()).unwrap_or(false);
+            && run_git(base_dir, &["rev-parse", "--git-dir"])
+                .await
+                .map(|o| o.status.success())
+                .unwrap_or(false);
 
         if git_dir_ok {
             return Ok(());
@@ -143,12 +147,20 @@ impl ReviewCheckoutManager {
             .output()
             .await?;
         if !output.status.success() {
-            anyhow::bail!("git clone {url} failed: {}", String::from_utf8_lossy(&output.stderr).trim());
+            anyhow::bail!(
+                "git clone {url} failed: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            );
         }
         Ok(())
     }
 
-    async fn fetch_pr_refs(&self, base_dir: &Path, number: u64, base_ref_name: &str) -> anyhow::Result<String> {
+    async fn fetch_pr_refs(
+        &self,
+        base_dir: &Path,
+        number: u64,
+        base_ref_name: &str,
+    ) -> anyhow::Result<String> {
         let head_ref = pr_head_ref(number);
         let refspec_head = format!("refs/pull/{number}/head:{head_ref}");
         let refspec_base = format!("+{base_ref_name}:refs/remotes/origin/{base_ref_name}");
@@ -161,7 +173,12 @@ impl ReviewCheckoutManager {
         Ok(head_ref)
     }
 
-    async fn recreate_worktree(&self, base_dir: &Path, worktree_dir: &Path, head_ref: &str) -> anyhow::Result<()> {
+    async fn recreate_worktree(
+        &self,
+        base_dir: &Path,
+        worktree_dir: &Path,
+        head_ref: &str,
+    ) -> anyhow::Result<()> {
         // Best-effort teardown of any stale registration/directory.
         let worktree_str = worktree_dir.to_str().unwrap();
         let _ = run_git(base_dir, &["worktree", "remove", "--force", worktree_str]).await;
@@ -181,7 +198,11 @@ impl ReviewCheckoutManager {
     /// Idempotent: fetches the PR's current head SHA via `gh` (no git I/O),
     /// then reuses the existing checkout if it's already at that SHA and
     /// clean, or fetches+resets it in place, or clones+checks it out fresh.
-    pub async fn ensure_pr_checkout(&self, repo_nwo: &str, number: u64) -> anyhow::Result<PrCheckout> {
+    pub async fn ensure_pr_checkout(
+        &self,
+        repo_nwo: &str,
+        number: u64,
+    ) -> anyhow::Result<PrCheckout> {
         let pr = super::get_pr_view(repo_nwo, number).await?;
         if pr.state != "OPEN" {
             anyhow::bail!("PR #{number} is not open (state: {})", pr.state);
@@ -206,14 +227,24 @@ impl ReviewCheckoutManager {
             CheckoutPlan::Reuse => {}
             CheckoutPlan::UpdateExisting => {
                 self.ensure_base_clone(repo_nwo, &base_dir).await?;
-                let head_ref = self.fetch_pr_refs(&base_dir, number, &pr.base_ref_name).await?;
-                run_git_ok(&worktree_dir, &["reset", "--hard", &head_ref], "git reset --hard").await?;
+                let head_ref = self
+                    .fetch_pr_refs(&base_dir, number, &pr.base_ref_name)
+                    .await?;
+                run_git_ok(
+                    &worktree_dir,
+                    &["reset", "--hard", &head_ref],
+                    "git reset --hard",
+                )
+                .await?;
                 run_git_ok(&worktree_dir, &["clean", "-fd"], "git clean").await?;
             }
             CheckoutPlan::CloneAndCheckout => {
                 self.ensure_base_clone(repo_nwo, &base_dir).await?;
-                let head_ref = self.fetch_pr_refs(&base_dir, number, &pr.base_ref_name).await?;
-                self.recreate_worktree(&base_dir, &worktree_dir, &head_ref).await?;
+                let head_ref = self
+                    .fetch_pr_refs(&base_dir, number, &pr.base_ref_name)
+                    .await?;
+                self.recreate_worktree(&base_dir, &worktree_dir, &head_ref)
+                    .await?;
             }
         }
 
@@ -232,7 +263,16 @@ impl ReviewCheckoutManager {
         let base_dir = self.base_clone_dir(repo_nwo);
         let worktree_dir = self.pr_worktree_dir(repo_nwo, number);
         if base_dir.exists() {
-            let _ = run_git(&base_dir, &["worktree", "remove", "--force", worktree_dir.to_str().unwrap()]).await;
+            let _ = run_git(
+                &base_dir,
+                &[
+                    "worktree",
+                    "remove",
+                    "--force",
+                    worktree_dir.to_str().unwrap(),
+                ],
+            )
+            .await;
             let _ = run_git(&base_dir, &["worktree", "prune"]).await;
         }
         if worktree_dir.exists() {
@@ -259,7 +299,9 @@ impl ReviewCheckoutManager {
                 Ok(m) => m,
                 Err(_) => continue,
             };
-            let age = std::time::SystemTime::now().duration_since(modified).unwrap_or_default();
+            let age = std::time::SystemTime::now()
+                .duration_since(modified)
+                .unwrap_or_default();
             if age > max_age && tokio::fs::remove_dir_all(entry.path()).await.is_ok() {
                 removed += 1;
             }
@@ -274,27 +316,42 @@ mod tests {
 
     #[test]
     fn plan_no_existing_checkout_clones() {
-        assert_eq!(plan_checkout(false, None, "abc", false), CheckoutPlan::CloneAndCheckout);
+        assert_eq!(
+            plan_checkout(false, None, "abc", false),
+            CheckoutPlan::CloneAndCheckout
+        );
     }
 
     #[test]
     fn plan_corrupt_checkout_reclones() {
-        assert_eq!(plan_checkout(true, None, "abc", false), CheckoutPlan::CloneAndCheckout);
+        assert_eq!(
+            plan_checkout(true, None, "abc", false),
+            CheckoutPlan::CloneAndCheckout
+        );
     }
 
     #[test]
     fn plan_clean_and_up_to_date_reuses() {
-        assert_eq!(plan_checkout(true, Some("abc"), "abc", false), CheckoutPlan::Reuse);
+        assert_eq!(
+            plan_checkout(true, Some("abc"), "abc", false),
+            CheckoutPlan::Reuse
+        );
     }
 
     #[test]
     fn plan_stale_head_updates() {
-        assert_eq!(plan_checkout(true, Some("old"), "new", false), CheckoutPlan::UpdateExisting);
+        assert_eq!(
+            plan_checkout(true, Some("old"), "new", false),
+            CheckoutPlan::UpdateExisting
+        );
     }
 
     #[test]
     fn plan_dirty_updates_even_if_head_matches() {
-        assert_eq!(plan_checkout(true, Some("abc"), "abc", true), CheckoutPlan::UpdateExisting);
+        assert_eq!(
+            plan_checkout(true, Some("abc"), "abc", true),
+            CheckoutPlan::UpdateExisting
+        );
     }
 
     #[test]
@@ -308,7 +365,10 @@ mod tests {
         let base = mgr.base_clone_dir("owner/repo");
         let worktree = mgr.pr_worktree_dir("owner/repo", 42);
         assert_eq!(base, PathBuf::from("/tmp/piki-review-test/owner__repo"));
-        assert_eq!(worktree, PathBuf::from("/tmp/piki-review-test/owner__repo--pr-42"));
+        assert_eq!(
+            worktree,
+            PathBuf::from("/tmp/piki-review-test/owner__repo--pr-42")
+        );
         assert_ne!(base, worktree);
     }
 }

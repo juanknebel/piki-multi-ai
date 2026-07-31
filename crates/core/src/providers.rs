@@ -77,6 +77,14 @@ pub struct ProviderManager {
 }
 
 impl ProviderManager {
+    /// A manager with no providers configured. Mostly useful in tests, where
+    /// `load_or_init` would seed the defaults and touch the filesystem.
+    pub fn empty() -> Self {
+        Self {
+            providers: Vec::new(),
+        }
+    }
+
     /// Load providers from a TOML file. If the file is missing or empty,
     /// bootstrap it with a default Claude provider entry and return that.
     pub fn load_or_init(path: &Path) -> Self {
@@ -267,20 +275,18 @@ mod tests {
         let path = dir.path().join("providers.toml");
 
         let manager = ProviderManager {
-            providers: vec![
-                ProviderConfig {
-                    name: "My AI".into(),
-                    description: "Custom AI tool".into(),
-                    command: "/usr/bin/my-ai".into(),
-                    default_args: vec!["--json".into()],
-                    prompt_format: PromptFormat::Flag("--task".into()),
-                    dispatchable: true,
-                    agent_dir: Some(".my-ai/agents".into()),
-                    idle_threshold_secs: None,
-                    idle_notify: true,
-                    icon: None,
-                },
-            ],
+            providers: vec![ProviderConfig {
+                name: "My AI".into(),
+                description: "Custom AI tool".into(),
+                command: "/usr/bin/my-ai".into(),
+                default_args: vec!["--json".into()],
+                prompt_format: PromptFormat::Flag("--task".into()),
+                dispatchable: true,
+                agent_dir: Some(".my-ai/agents".into()),
+                idle_threshold_secs: None,
+                idle_notify: true,
+                icon: None,
+            }],
         };
         manager.save(&path).unwrap();
 
@@ -294,10 +300,7 @@ mod tests {
             PromptFormat::Flag("--task".into())
         );
         assert!(loaded.providers[0].dispatchable);
-        assert_eq!(
-            loaded.providers[0].agent_dir,
-            Some(".my-ai/agents".into())
-        );
+        assert_eq!(loaded.providers[0].agent_dir, Some(".my-ai/agents".into()));
     }
 
     #[test]

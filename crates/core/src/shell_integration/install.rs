@@ -63,9 +63,10 @@ pub fn setup_for(shell_path: &str, base_dir: &Path) -> std::io::Result<Option<In
         ShellFamily::Zsh => {
             // zsh sources `$ZDOTDIR/.zshrc` — point it at our bridge dir so
             // our integration runs before the user's real ~/.zshrc.
-            setup
-                .env
-                .insert("ZDOTDIR".to_string(), zsh_bridge_dir(base_dir).display().to_string());
+            setup.env.insert(
+                "ZDOTDIR".to_string(),
+                zsh_bridge_dir(base_dir).display().to_string(),
+            );
         }
         ShellFamily::Bash => {
             // bash with --rcfile bypasses ~/.bashrc; the bridge file sources
@@ -150,7 +151,10 @@ mod tests {
             ShellFamily::detect("/usr/local/bin/bash"),
             Some(ShellFamily::Bash)
         );
-        assert_eq!(ShellFamily::detect("/usr/bin/fish"), Some(ShellFamily::Fish));
+        assert_eq!(
+            ShellFamily::detect("/usr/bin/fish"),
+            Some(ShellFamily::Fish)
+        );
         assert_eq!(ShellFamily::detect("zsh"), Some(ShellFamily::Zsh));
         assert_eq!(ShellFamily::detect("fish"), Some(ShellFamily::Fish));
     }

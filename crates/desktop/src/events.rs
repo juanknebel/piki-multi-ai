@@ -184,12 +184,17 @@ pub fn spawn_git_watcher(app_handle: AppHandle) {
             // Drain file watcher events — instant trigger for file edits.
             // Also collect the per-path changes so we can emit `file-changed` events
             // for editor reload-on-external-change.
-            let (watcher_triggered, file_change_payloads): (Vec<(usize, PathBuf)>, Vec<FileChangedPayload>) = {
+            let (watcher_triggered, file_change_payloads): (
+                Vec<(usize, PathBuf)>,
+                Vec<FileChangedPayload>,
+            ) = {
                 let mut app = state.lock();
                 let mut triggered = Vec::new();
                 let mut payloads = Vec::new();
                 for (idx, ws) in app.workspaces.iter_mut().enumerate() {
-                    let Some(watcher) = ws.watcher.as_mut() else { continue };
+                    let Some(watcher) = ws.watcher.as_mut() else {
+                        continue;
+                    };
                     let events = watcher.drain();
                     if events.is_empty() {
                         continue;
@@ -229,7 +234,10 @@ pub fn spawn_git_watcher(app_handle: AppHandle) {
             if tick.is_multiple_of(120) {
                 let paths: Vec<PathBuf> = {
                     let app = state.lock();
-                    app.workspaces.iter().map(|ws| ws.info.path.clone()).collect()
+                    app.workspaces
+                        .iter()
+                        .map(|ws| ws.info.path.clone())
+                        .collect()
                 };
                 for path in paths {
                     let _ = piki_core::shell_env::command("git")
@@ -257,8 +265,7 @@ pub fn spawn_git_watcher(app_handle: AppHandle) {
             };
 
             for (idx, path) in to_refresh {
-                let Ok(files) = piki_core::git::get_changed_files(&path).await
-                else {
+                let Ok(files) = piki_core::git::get_changed_files(&path).await else {
                     continue;
                 };
                 let ahead_behind = piki_core::git::get_ahead_behind(&path).await;
@@ -270,7 +277,9 @@ pub fn spawn_git_watcher(app_handle: AppHandle) {
                         continue;
                     }
                     let ws = &app.workspaces[idx];
-                    ws.changed_files != files || ws.ahead_behind != ahead_behind || ws.branch != branch
+                    ws.changed_files != files
+                        || ws.ahead_behind != ahead_behind
+                        || ws.branch != branch
                 };
 
                 if changed {

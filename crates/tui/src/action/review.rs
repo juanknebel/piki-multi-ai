@@ -27,29 +27,38 @@ pub(super) async fn handle(
             };
             let checkout_mgr = manager.review_checkout_manager();
             match checkout_mgr.ensure_pr_checkout(&repo_nwo, number).await {
-                Ok(checkout) => match piki_core::github::get_pr_files_by_number(&checkout.path, number).await {
-                    Ok(files) => {
-                        let existing_comments =
-                            piki_core::github::get_pr_review_comments(&checkout.path, number)
-                                .await
-                                .unwrap_or_default();
-                        if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
-                            && let Some(cr) = ws.code_review.as_mut()
-                        {
-                            cr.pr_info = checkout.pr;
-                            cr.files = files;
-                            cr.existing_comments = existing_comments;
-                            cr.file_diffs.clear();
-                            cr.diff_scroll = 0;
-                            cr.cursor_line = 0;
+                Ok(checkout) => {
+                    match piki_core::github::get_pr_files_by_number(&checkout.path, number).await {
+                        Ok(files) => {
+                            let existing_comments =
+                                piki_core::github::get_pr_review_comments(&checkout.path, number)
+                                    .await
+                                    .unwrap_or_default();
+                            if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+                                && let Some(cr) = ws.code_review.as_mut()
+                            {
+                                cr.pr_info = checkout.pr;
+                                cr.files = files;
+                                cr.existing_comments = existing_comments;
+                                cr.file_diffs.clear();
+                                cr.diff_scroll = 0;
+                                cr.cursor_line = 0;
+                            }
+                            let msg = if checkout.reused {
+                                "PR up to date"
+                            } else {
+                                "PR refreshed"
+                            };
+                            app.set_toast(msg, ToastLevel::Success);
                         }
-                        let msg = if checkout.reused { "PR up to date" } else { "PR refreshed" };
-                        app.set_toast(msg, ToastLevel::Success);
+                        Err(e) => {
+                            app.set_toast(
+                                format!("Failed to load PR files: {}", e),
+                                ToastLevel::Error,
+                            );
+                        }
                     }
-                    Err(e) => {
-                        app.set_toast(format!("Failed to load PR files: {}", e), ToastLevel::Error);
-                    }
-                },
+                }
                 Err(e) => {
                     app.set_toast(format!("gh error: {}", e), ToastLevel::Error);
                 }
@@ -100,19 +109,37 @@ pub(super) async fn handle(
                     let body = cr.draft.body.clone();
                     let comments = cr.draft.comments.clone();
                     let pr_number = cr.pr_info.number;
-                    let reply_drafts: Vec<(u64, String)> =
-                        cr.reply_drafts.iter().map(|(id, body)| (*id, body.clone())).collect();
+                    let reply_drafts: Vec<(u64, String)> = cr
+                        .reply_drafts
+                        .iter()
+                        .map(|(id, body)| (*id, body.clone()))
+                        .collect();
                     cr.show_submit = false;
-                    Some((cr.review_dir.clone(), verdict, body, comments, pr_number, reply_drafts))
+                    Some((
+                        cr.review_dir.clone(),
+                        verdict,
+                        body,
+                        comments,
+                        pr_number,
+                        reply_drafts,
+                    ))
                 } else {
                     None
                 }
             } else {
                 None
             };
-            if let Some((review_dir, verdict, body, comments, pr_number, reply_drafts)) = submit_data {
+            if let Some((review_dir, verdict, body, comments, pr_number, reply_drafts)) =
+                submit_data
+            {
                 let result = if comments.is_empty() {
-                    piki_core::github::submit_review_by_number(&review_dir, pr_number, verdict, &body).await
+                    piki_core::github::submit_review_by_number(
+                        &review_dir,
+                        pr_number,
+                        verdict,
+                        &body,
+                    )
+                    .await
                 } else {
                     piki_core::github::submit_review_with_comments(
                         &review_dir,
@@ -251,7 +278,10 @@ pub(super) async fn handle(
         Action::OpenPrReview(item_idx) => {
             let item = match &app.active_dialog {
                 Some(DialogState::PrPicker {
-                    repo_browse: RepoBrowse::Loaded { items: repo_items, .. },
+                    repo_browse:
+                        RepoBrowse::Loaded {
+                            items: repo_items, ..
+                        },
                     ..
                 }) => repo_items.get(item_idx).cloned(),
                 Some(DialogState::PrPicker { items, .. }) => items.get(item_idx).cloned(),
@@ -270,8 +300,10 @@ pub(super) async fn handle(
                 })
             });
             if let Some(idx) = existing {
-                if let Some(tab_idx) =
-                    app.workspaces[idx].tabs.iter().position(|t| t.provider == piki_core::AIProvider::CodeReview)
+                if let Some(tab_idx) = app.workspaces[idx]
+                    .tabs
+                    .iter()
+                    .position(|t| t.provider == piki_core::AIProvider::CodeReview)
                 {
                     app.workspaces[idx].active_tab = tab_idx;
                 }
@@ -304,6 +336,24 @@ pub(super) async fn handle(
                 .await
                 .map_err(|e| e.to_string());
                 *slot.lock() = Some(result);
+            });
+        }
+        Action::RetryReviewCheckout(idx) => {
+            let target = app
+                .workspaces
+                .get(idx)
+                .and_then(|ws| Some((ws.info.pr_repo_nwo.clone()?, ws.info.pr_number?)));
+            let Some((repo_nwo, number)) = target else {
+                return Ok(());
+            };
+            let checkout_mgr = manager.review_checkout_manager();
+            let slot = Arc::clone(&app.pending_review_retry);
+            tokio::spawn(async move {
+                let result = checkout_mgr
+                    .ensure_pr_checkout(&repo_nwo, number)
+                    .await
+                    .map_err(|e| e.to_string());
+                *slot.lock() = Some((idx, result));
             });
         }
         other => unreachable!("non-review action routed to action::review: {other:?}"),

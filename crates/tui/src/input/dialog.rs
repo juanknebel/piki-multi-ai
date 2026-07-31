@@ -12,7 +12,9 @@ use crate::dialog_state::{
 use piki_core::workspace::manager::parse_github_repo_name;
 use piki_core::{AIProvider, WorkspaceType};
 
-use super::confirm_common::{ConfirmResult, dismiss_dialog, dismiss_dialog_to_pane, handle_yn_input, with_dialog_mut};
+use super::confirm_common::{
+    ConfirmResult, dismiss_dialog, dismiss_dialog_to_pane, handle_yn_input, with_dialog_mut,
+};
 use super::list_nav::move_selection;
 use super::text_field_common::{handle_text_input, is_cancel};
 
@@ -27,7 +29,11 @@ pub(super) fn handle_edit_workspace_input(app: &mut App, key: KeyEvent) -> Optio
 
     let trim_some = |s: &str| -> Option<String> {
         let t = s.trim();
-        if t.is_empty() { None } else { Some(t.to_string()) }
+        if t.is_empty() {
+            None
+        } else {
+            Some(t.to_string())
+        }
     };
 
     let step = with_dialog_mut!(app, EditWorkspace {
@@ -135,8 +141,7 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
                     };
                     let dir_path = PathBuf::from(&dir_str);
                     if !dir_path.exists() {
-                        app.status_message =
-                            Some(format!("Folder does not exist: {}", dir_str));
+                        app.status_message = Some(format!("Folder does not exist: {}", dir_str));
                         return None;
                     }
                     let ws_name = dir_path
@@ -164,8 +169,7 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
                     let url = dir_raw;
                     let dest_raw = destination.trim().to_string();
                     if dest_raw.is_empty() {
-                        app.status_message =
-                            Some("Destination folder is required".into());
+                        app.status_message = Some("Destination folder is required".into());
                         return None;
                     }
                     let dest_expanded = if dest_raw.starts_with('~') {
@@ -180,8 +184,7 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
                     let dest_path = PathBuf::from(&dest_expanded);
                     let ws_name = parse_github_repo_name(&url).unwrap_or_default();
                     if ws_name.is_empty() {
-                        app.status_message =
-                            Some("Could not parse repo name from URL".into());
+                        app.status_message = Some("Could not parse repo name from URL".into());
                         return None;
                     }
                     app.active_dialog = None;
@@ -265,14 +268,17 @@ fn handle_create_worktree_choose_source(app: &mut App, key: KeyEvent) -> Option<
     // Row 0 = "Create new worktree", row 1 = "Load existing worktree".
     // Reuse existing_selected to track the chosen row on this step.
     match key.code {
-        KeyCode::Down
-        | KeyCode::Char('j')
-            if !key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) =>
+        KeyCode::Down | KeyCode::Char('j')
+            if !key
+                .modifiers
+                .contains(crossterm::event::KeyModifiers::CONTROL) =>
         {
             move_selection(existing_selected, 2, 1, false);
         }
         KeyCode::Up | KeyCode::Char('k')
-            if !key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) =>
+            if !key
+                .modifiers
+                .contains(crossterm::event::KeyModifiers::CONTROL) =>
         {
             move_selection(existing_selected, 2, -1, false);
         }
@@ -480,9 +486,7 @@ pub(super) fn handle_confirm_delete_input(app: &mut App, key: KeyEvent) -> Optio
                 .workspaces
                 .get(target)
                 .is_some_and(|ws| ws.info.dispatch_card_id.is_some());
-            if is_dispatched
-                && let Some(columns) = get_dispatch_board_columns(app, target)
-            {
+            if is_dispatched && let Some(columns) = get_dispatch_board_columns(app, target) {
                 app.active_dialog = Some(DialogState::DispatchCardMove {
                     target,
                     columns,
@@ -525,7 +529,11 @@ fn get_dispatch_board_columns(app: &mut App, ws_idx: usize) -> Option<Vec<(Strin
         .iter()
         .map(|c| (c.id.clone(), c.title.clone()))
         .collect();
-    if columns.is_empty() { None } else { Some(columns) }
+    if columns.is_empty() {
+        None
+    } else {
+        Some(columns)
+    }
 }
 
 pub(super) fn handle_dispatch_card_move_input(app: &mut App, key: KeyEvent) -> Option<Action> {
@@ -560,8 +568,6 @@ pub(super) fn handle_dispatch_card_move_input(app: &mut App, key: KeyEvent) -> O
         _ => None,
     }
 }
-
-
 
 pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     let menu = match app.active_dialog {
@@ -602,14 +608,22 @@ pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Actio
 
             match key.code {
                 KeyCode::Char('j') | KeyCode::Down => {
-                    let next = if selected + 1 < count { selected + 1 } else { 0 };
+                    let next = if selected + 1 < count {
+                        selected + 1
+                    } else {
+                        0
+                    };
                     app.active_dialog = Some(DialogState::NewTab {
                         menu: NewTabMenu::Agents { selected: next },
                     });
                     None
                 }
                 KeyCode::Char('k') | KeyCode::Up => {
-                    let prev = if selected > 0 { selected - 1 } else { count.saturating_sub(1) };
+                    let prev = if selected > 0 {
+                        selected - 1
+                    } else {
+                        count.saturating_sub(1)
+                    };
                     app.active_dialog = Some(DialogState::NewTab {
                         menu: NewTabMenu::Agents { selected: prev },
                     });
@@ -656,8 +670,10 @@ pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Actio
                 if let Some(ws) = app.workspaces.get(app.active_workspace)
                     && ws.code_review.is_some()
                 {
-                    if let Some(tab_idx) =
-                        ws.tabs.iter().position(|t| t.provider == piki_core::AIProvider::CodeReview)
+                    if let Some(tab_idx) = ws
+                        .tabs
+                        .iter()
+                        .position(|t| t.provider == piki_core::AIProvider::CodeReview)
                     {
                         app.workspaces[app.active_workspace].active_tab = tab_idx;
                     }
@@ -697,7 +713,6 @@ pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Actio
         },
     }
 }
-
 
 pub(super) fn handle_dashboard_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     let Some(DialogState::Dashboard {
@@ -802,7 +817,10 @@ pub(super) fn handle_help_input(app: &mut App, key: KeyEvent) -> Option<Action> 
 /// it. Nothing to rebind, so it takes no `[keybindings.*]` context of its own.
 pub(super) fn handle_missing_prereqs_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     if is_cancel(key, &app.config)
-        || matches!(key.code, KeyCode::Enter | KeyCode::Char(' ') | KeyCode::Char('q'))
+        || matches!(
+            key.code,
+            KeyCode::Enter | KeyCode::Char(' ') | KeyCode::Char('q')
+        )
     {
         dismiss_dialog(app);
     }
@@ -819,9 +837,11 @@ pub(super) fn handle_about_input(app: &mut App, key: KeyEvent) -> Option<Action>
 pub(super) fn handle_logs_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     // Compute filtered count (respecting both level and search filters)
     let (filter_val, search_buf_clone) = match &app.active_dialog {
-        Some(DialogState::Logs { level_filter, search_buffer, .. }) => {
-            (*level_filter, search_buffer.clone())
-        }
+        Some(DialogState::Logs {
+            level_filter,
+            search_buffer,
+            ..
+        }) => (*level_filter, search_buffer.clone()),
         _ => return None,
     };
     let search_lower = search_buf_clone.to_lowercase();
@@ -1026,9 +1046,6 @@ pub(super) fn handle_workspace_info_input(app: &mut App, key: KeyEvent) -> Optio
     }
     None
 }
-
-
-
 
 pub(super) fn handle_dispatch_agent_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     // Pre-compute provider list before mutably borrowing dialog state
@@ -1614,11 +1631,22 @@ pub(super) fn handle_manage_providers_input(app: &mut App, key: KeyEvent) -> Opt
             if let Some(config) = app.provider_manager.all().get(*selected) {
                 let name = config.name.clone();
                 app.provider_manager.remove(&name);
-                let _ = app.provider_manager.save(&app.paths.providers_path());
+                let save_result = app.provider_manager.save(&app.paths.providers_path());
                 if *selected > 0 && *selected >= app.provider_manager.all().len() {
                     *selected = selected.saturating_sub(1);
                 }
-                app.set_toast(format!("Provider deleted: {}", name), crate::app::ToastLevel::Success);
+                // Report the write, not just the in-memory removal: a failed
+                // save means the provider is back after a restart.
+                match save_result {
+                    Ok(()) => app.set_toast(
+                        format!("Provider deleted: {name}"),
+                        crate::app::ToastLevel::Success,
+                    ),
+                    Err(e) => app.set_toast(
+                        format!("Could not save providers: {e}"),
+                        crate::app::ToastLevel::Error,
+                    ),
+                }
             }
             None
         }
@@ -1647,7 +1675,10 @@ pub(super) fn handle_edit_provider_input(app: &mut App, key: KeyEvent) -> Option
         }) = app.active_dialog
         {
             if name.is_empty() || command.is_empty() {
-                app.set_toast("Name and command are required", crate::app::ToastLevel::Error);
+                app.set_toast(
+                    "Name and command are required",
+                    crate::app::ToastLevel::Error,
+                );
                 return None;
             }
             let prompt_format = match prompt_format_idx {
@@ -1671,18 +1702,25 @@ pub(super) fn handle_edit_provider_input(app: &mut App, key: KeyEvent) -> Option
             let preserved_icon = prev.and_then(|c| c.icon.clone());
             let preserved_idle_threshold = prev.and_then(|c| c.idle_threshold_secs);
             let preserved_idle_notify = prev.map(|c| c.idle_notify).unwrap_or(true);
-            Some((old_name, piki_core::providers::ProviderConfig {
-                name: name.clone(),
-                description: description.clone(),
-                command: command.clone(),
-                default_args: args,
-                prompt_format,
-                dispatchable,
-                agent_dir: if agent_dir.is_empty() { None } else { Some(agent_dir.clone()) },
-                idle_threshold_secs: preserved_idle_threshold,
-                idle_notify: preserved_idle_notify,
-                icon: preserved_icon,
-            }))
+            Some((
+                old_name,
+                piki_core::providers::ProviderConfig {
+                    name: name.clone(),
+                    description: description.clone(),
+                    command: command.clone(),
+                    default_args: args,
+                    prompt_format,
+                    dispatchable,
+                    agent_dir: if agent_dir.is_empty() {
+                        None
+                    } else {
+                        Some(agent_dir.clone())
+                    },
+                    idle_threshold_secs: preserved_idle_threshold,
+                    idle_notify: preserved_idle_notify,
+                    icon: preserved_icon,
+                },
+            ))
         } else {
             None
         };
@@ -1695,8 +1733,18 @@ pub(super) fn handle_edit_provider_input(app: &mut App, key: KeyEvent) -> Option
                 app.provider_manager.remove(old);
             }
             app.provider_manager.upsert(config);
-            let _ = app.provider_manager.save(&app.paths.providers_path());
-            app.set_toast(format!("Provider saved: {saved_name}"), crate::app::ToastLevel::Success);
+            // Don't claim "saved" when the write failed — the dialog used to
+            // close with a success toast either way.
+            match app.provider_manager.save(&app.paths.providers_path()) {
+                Ok(()) => app.set_toast(
+                    format!("Provider saved: {saved_name}"),
+                    crate::app::ToastLevel::Success,
+                ),
+                Err(e) => app.set_toast(
+                    format!("Could not save provider: {e}"),
+                    crate::app::ToastLevel::Error,
+                ),
+            }
             app.active_dialog = Some(DialogState::ManageProviders { selected: 0 });
             app.mode = AppMode::ManageProviders;
         }
@@ -1745,27 +1793,35 @@ pub(super) fn handle_edit_provider_input(app: &mut App, key: KeyEvent) -> Option
     // Field-specific handling
     let accept_any = |c: char| !c.is_control();
     match *active_field {
-        EditProviderField::Name => { handle_text_input(name, name_cursor, key, accept_any); }
-        EditProviderField::Description => { handle_text_input(description, desc_cursor, key, accept_any); }
-        EditProviderField::Command => { handle_text_input(command, command_cursor, key, accept_any); }
-        EditProviderField::DefaultArgs => { handle_text_input(default_args, args_cursor, key, accept_any); }
-        EditProviderField::PromptFormat => {
-            match key.code {
-                KeyCode::Left => *prompt_format_idx = (*prompt_format_idx + 2) % 3,
-                KeyCode::Right => *prompt_format_idx = (*prompt_format_idx + 1) % 3,
-                _ => {}
-            }
+        EditProviderField::Name => {
+            handle_text_input(name, name_cursor, key, accept_any);
         }
-        EditProviderField::PromptFlag => { handle_text_input(prompt_flag, flag_cursor, key, accept_any); }
-        EditProviderField::Dispatchable => {
-            match key.code {
-                KeyCode::Left | KeyCode::Right | KeyCode::Char(' ') => {
-                    *dispatchable = !*dispatchable;
-                }
-                _ => {}
-            }
+        EditProviderField::Description => {
+            handle_text_input(description, desc_cursor, key, accept_any);
         }
-        EditProviderField::AgentDir => { handle_text_input(agent_dir, agent_dir_cursor, key, accept_any); }
+        EditProviderField::Command => {
+            handle_text_input(command, command_cursor, key, accept_any);
+        }
+        EditProviderField::DefaultArgs => {
+            handle_text_input(default_args, args_cursor, key, accept_any);
+        }
+        EditProviderField::PromptFormat => match key.code {
+            KeyCode::Left => *prompt_format_idx = (*prompt_format_idx + 2) % 3,
+            KeyCode::Right => *prompt_format_idx = (*prompt_format_idx + 1) % 3,
+            _ => {}
+        },
+        EditProviderField::PromptFlag => {
+            handle_text_input(prompt_flag, flag_cursor, key, accept_any);
+        }
+        EditProviderField::Dispatchable => match key.code {
+            KeyCode::Left | KeyCode::Right | KeyCode::Char(' ') => {
+                *dispatchable = !*dispatchable;
+            }
+            _ => {}
+        },
+        EditProviderField::AgentDir => {
+            handle_text_input(agent_dir, agent_dir_cursor, key, accept_any);
+        }
     }
     None
 }
@@ -1847,7 +1903,10 @@ pub(super) fn handle_pr_picker_input(app: &mut App, key: KeyEvent) -> Option<Act
                 _ => String::new(),
             };
             let cursor = prefill.len();
-            *repo_browse = RepoBrowse::Input { text: prefill, cursor };
+            *repo_browse = RepoBrowse::Input {
+                text: prefill,
+                cursor,
+            };
             None
         }
         KeyCode::Char('m') if matches!(repo_browse, RepoBrowse::Loaded { .. }) => {

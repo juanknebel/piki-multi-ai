@@ -1,5 +1,5 @@
-use crate::context::ToolContext;
 use super::Tool;
+use crate::context::ToolContext;
 
 pub struct ShellTool;
 
@@ -40,11 +40,7 @@ impl Tool for ShellTool {
         true
     }
 
-    async fn execute(
-        &self,
-        args: serde_json::Value,
-        ctx: &ToolContext,
-    ) -> anyhow::Result<String> {
+    async fn execute(&self, args: serde_json::Value, ctx: &ToolContext) -> anyhow::Result<String> {
         let command = args
             .get("command")
             .and_then(|v| v.as_str())
@@ -64,13 +60,10 @@ impl Tool for ShellTool {
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
 
-        let output = tokio::time::timeout(
-            std::time::Duration::from_secs(60),
-            cmd.output(),
-        )
-        .await
-        .map_err(|_| anyhow::anyhow!("Command timed out after 60 seconds"))?
-        .map_err(|e| anyhow::anyhow!("Failed to execute command: {e}"))?;
+        let output = tokio::time::timeout(std::time::Duration::from_secs(60), cmd.output())
+            .await
+            .map_err(|_| anyhow::anyhow!("Command timed out after 60 seconds"))?
+            .map_err(|e| anyhow::anyhow!("Failed to execute command: {e}"))?;
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -84,7 +77,10 @@ impl Tool for ShellTool {
             if lines.len() > 100 {
                 result.push_str("stdout:\n");
                 result.push_str(&lines[..100].join("\n"));
-                result.push_str(&format!("\n... ({} total lines, showing first 100)", lines.len()));
+                result.push_str(&format!(
+                    "\n... ({} total lines, showing first 100)",
+                    lines.len()
+                ));
             } else {
                 result.push_str("stdout:\n");
                 result.push_str(&stdout);

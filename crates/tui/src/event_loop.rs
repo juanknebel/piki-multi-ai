@@ -7,7 +7,7 @@ use ratatui::layout::Rect;
 
 use crate::action::execute_action;
 use crate::app::{self, App};
-use crate::helpers::shutdown;
+use crate::helpers::{persist_workspaces, shutdown};
 use crate::input;
 use crate::{theme, ui};
 use piki_core::notifications;
@@ -124,7 +124,14 @@ pub(crate) async fn run(
     let restore_t0 = Instant::now();
     let entries = storage.workspaces.load_all_workspaces();
     for entry in entries {
-        let ws = app::Workspace::from_info(entry.into_info());
+        let mut ws = app::Workspace::from_info(entry.into_info());
+        // Review-checkout directories are durable but not guaranteed to
+        // survive (manual cleanup, disk pruning, moved data dir). Only a
+        // cheap fs check here — no network — the checkout is only redone
+        // when the user actually opens the workspace (RetryReviewCheckout).
+        if ws.info.ephemeral && !ws.info.path.exists() {
+            ws.review_broken = true;
+        }
         app.workspaces.push(ws);
     }
     // Sort by persistent order field for deterministic ordering across restarts
@@ -227,18 +234,38 @@ pub(crate) async fn run(
     // that wakes the loop exactly when the frame becomes eligible.
     let mut last_draw_at: Option<Instant> = None;
     let mut render_deadline: Option<Instant> = None;
+    // Layout identity of the last drawn frame. When it changes (workspace,
+    // tab or focused-pane switch) the next draw does a full clear+repaint:
+    // ratatui only rewrites cells that differ from ITS back buffer, so any
+    // real-terminal drift (e.g. an emulator disagreeing with unicode-width
+    // about an emoji's width in agent output) leaves ghost cells behind
+    // that an ordinary diff-draw can never heal.
+    let mut last_layout_key: Option<(usize, Option<usize>, crate::app::ActivePane)> = None;
     let pty_output = app.pty_output.clone();
 
     loop {
         // Phase 0: Keep the Agents highlight on the tab the user is standing on
         app.sync_agent_selection();
+        // ...and drop any text selection left behind by a tab switch — its
+        // cell coordinates would otherwise address the new tab's content.
+        app.drop_stale_selection();
 
         // Phase 1: Render only when state has changed, capped at ~30 fps
         if app.needs_redraw {
             let now = Instant::now();
-            let eligible = last_draw_at
-                .is_none_or(|t| now.duration_since(t) >= MIN_RENDER_INTERVAL);
+            let eligible =
+                last_draw_at.is_none_or(|t| now.duration_since(t) >= MIN_RENDER_INTERVAL);
             if eligible {
+                let layout_key = (
+                    app.active_workspace,
+                    app.current_workspace()
+                        .and_then(|ws| ws.tabs.get(ws.active_tab).map(|tab| tab.id)),
+                    app.active_pane,
+                );
+                if last_layout_key.is_some_and(|k| k != layout_key) {
+                    terminal.clear()?;
+                }
+                last_layout_key = Some(layout_key);
                 terminal.draw(|frame| {
                     ui::layout::render(frame, &mut app);
                 })?;
@@ -444,8 +471,11 @@ pub(crate) async fn run(
                             let prefix = if is_error { "[Error] " } else { "" };
                             let display = format!("[{name}] {prefix}{result}");
                             // Truncate long results for display
+                            // Tool results are arbitrary external text (file
+                            // contents, git output): cut on a char boundary,
+                            // never mid-codepoint.
                             let truncated = if display.len() > 500 {
-                                format!("{}...", &display[..500])
+                                format!("{}...", crate::text::truncate_bytes(&display, 500))
                             } else {
                                 display
                             };
@@ -932,7 +962,11 @@ fn poll_workspaces(app: &mut App, now: Instant) {
         let result = { app.pending_pr_list.lock().take() };
         if let Some(result) = result {
             if let Some(crate::dialog_state::DialogState::PrPicker {
-                loading, items, error, selected, ..
+                loading,
+                items,
+                error,
+                selected,
+                ..
             }) = &mut app.active_dialog
             {
                 *loading = false;
@@ -954,7 +988,11 @@ fn poll_workspaces(app: &mut App, now: Instant) {
         let result = { app.pending_repo_prs.lock().take() };
         if let Some((queried_repo, result)) = result {
             if let Some(crate::dialog_state::DialogState::PrPicker {
-                loading, error, selected, repo_browse, ..
+                loading,
+                error,
+                selected,
+                repo_browse,
+                ..
             }) = &mut app.active_dialog
             {
                 // Only apply if the user hasn't since typed a different repo
@@ -1003,7 +1041,8 @@ fn poll_workspaces(app: &mut App, now: Instant) {
                     // sidebar with nothing to reopen. Disposing of the
                     // review happens only through the explicit
                     // workspace-delete flow, same invariant as `q`/submit.
-                    let tab_idx = app.workspaces[idx].add_tab(piki_core::AIProvider::CodeReview, false, None);
+                    let tab_idx =
+                        app.workspaces[idx].add_tab(piki_core::AIProvider::CodeReview, false, None);
                     app.workspaces[idx].active_tab = tab_idx;
                     let mut cr = crate::code_review::CodeReviewState::new(
                         session.checkout.pr,
@@ -1014,17 +1053,62 @@ fn poll_workspaces(app: &mut App, now: Instant) {
                     );
                     cr.existing_comments = session.existing_comments;
                     app.workspaces[idx].code_review = Some(cr);
+                    // Persist right here: the review workspace is born in
+                    // this poll arm, outside every action::workspace save
+                    // site — without this it only reaches storage if some
+                    // later workspace action happens to save, and a plain
+                    // open-review-then-quit session lost it on restart.
+                    persist_workspaces(app, app.workspaces[idx].info.source_repo.clone());
                     app.active_dialog = None;
                     app.mode = app::AppMode::Normal;
                     app.set_toast("PR loaded", app::ToastLevel::Success);
                 }
                 Err(e) => {
                     if let Some(crate::dialog_state::DialogState::PrPicker {
-                        checking_out, error, ..
+                        checking_out,
+                        error,
+                        ..
                     }) = &mut app.active_dialog
                     {
                         *checking_out = None;
                         *error = Some(e);
+                    }
+                }
+            }
+            app.needs_redraw = true;
+        }
+    }
+
+    // Poll review-checkout retry — redoes ensure_pr_checkout for a
+    // `review_broken` workspace opened by the user (see
+    // Action::RetryReviewCheckout / App::review_broken).
+    {
+        let result = { app.pending_review_retry.lock().take() };
+        if let Some((idx, result)) = result {
+            if let Some(ws) = app.workspaces.get_mut(idx) {
+                match result {
+                    Ok(checkout) => {
+                        // save_workspaces is keyed by source_repo: if the
+                        // fresh checkout landed somewhere else, save under
+                        // the old key too so its row is deleted rather than
+                        // left behind as a duplicate on the next load.
+                        let old_source = ws.info.source_repo.clone();
+                        ws.info.path = checkout.path.clone();
+                        ws.info.source_repo = checkout.path;
+                        ws.review_broken = false;
+                        let new_source = ws.info.source_repo.clone();
+                        if old_source != new_source {
+                            persist_workspaces(app, old_source);
+                        }
+                        persist_workspaces(app, new_source);
+                        app.set_toast("Review checkout restored", app::ToastLevel::Success);
+                    }
+                    Err(e) => {
+                        ws.review_broken = true;
+                        app.set_toast(
+                            format!("Couldn't restore PR checkout: {e}"),
+                            app::ToastLevel::Error,
+                        );
                     }
                 }
             }

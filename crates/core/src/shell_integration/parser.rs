@@ -411,7 +411,9 @@ mod tests {
         let events = parse_one(b"\x1b]7;file://host/path%20with%20space/sub\x07");
         assert_eq!(
             events,
-            vec![ShellEvent::CwdChanged(PathBuf::from("/path with space/sub"))]
+            vec![ShellEvent::CwdChanged(PathBuf::from(
+                "/path with space/sub"
+            ))]
         );
     }
 
@@ -603,7 +605,9 @@ mod tests {
         let end = events
             .iter()
             .find_map(|e| match e {
-                ShellEvent::CommandEnd { command, exit_code } => Some((command.clone(), *exit_code)),
+                ShellEvent::CommandEnd { command, exit_code } => {
+                    Some((command.clone(), *exit_code))
+                }
                 _ => None,
             })
             .expect("CommandEnd emitted");
@@ -614,9 +618,8 @@ mod tests {
     fn captures_command_strips_csi_color_codes() {
         // Shell syntax-highlights "git" in blue: `\x1b[34mgit\x1b[0m status`.
         let mut p = OscParser::new();
-        let events = p.feed(
-            b"\x1b]133;B\x07\x1b[34mgit\x1b[0m status\x1b]133;C\x07\x1b]133;D;0\x07",
-        );
+        let events =
+            p.feed(b"\x1b]133;B\x07\x1b[34mgit\x1b[0m status\x1b]133;C\x07\x1b]133;D;0\x07");
         let end = events
             .iter()
             .find_map(|e| match e {
@@ -631,9 +634,7 @@ mod tests {
     fn captures_command_handles_cr_redraw() {
         // Shell line editor emits CR + final rewritten line.
         let mut p = OscParser::new();
-        let events = p.feed(
-            b"\x1b]133;B\x07ls\rls -la\x1b]133;C\x07\x1b]133;D;0\x07",
-        );
+        let events = p.feed(b"\x1b]133;B\x07ls\rls -la\x1b]133;C\x07\x1b]133;D;0\x07");
         let end = events
             .iter()
             .find_map(|e| match e {

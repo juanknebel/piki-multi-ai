@@ -67,7 +67,13 @@ async fn test_create_simple_accepts_non_git_folder() {
     let manager = WorkspaceManager::new();
 
     let info = manager
-        .create_simple("plain-folder-ws", "desc", "", None, &dir.path().to_path_buf())
+        .create_simple(
+            "plain-folder-ws",
+            "desc",
+            "",
+            None,
+            &dir.path().to_path_buf(),
+        )
         .await
         .expect("create_simple should accept a non-git folder");
 

@@ -125,12 +125,11 @@ pub async fn send_api_request(
         let display = match result {
             Ok(resp) => {
                 let body_text = String::from_utf8_lossy(&resp.body).to_string();
-                let body =
-                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&body_text) {
-                        serde_json::to_string_pretty(&json).unwrap_or(body_text)
-                    } else {
-                        body_text
-                    };
+                let body = if let Ok(json) = serde_json::from_str::<serde_json::Value>(&body_text) {
+                    serde_json::to_string_pretty(&json).unwrap_or(body_text)
+                } else {
+                    body_text
+                };
                 let headers = resp
                     .headers
                     .iter()
@@ -260,13 +259,10 @@ pub async fn jq_filter(input: String, filter: String) -> Result<String, String> 
             .map_err(|e| format!("Failed to write to jq: {e}"))?;
     }
 
-    let output = tokio::time::timeout(
-        std::time::Duration::from_secs(10),
-        child.wait_with_output(),
-    )
-    .await
-    .map_err(|_| "jq timed out after 10s".to_string())?
-    .map_err(|e| format!("jq failed: {e}"))?;
+    let output = tokio::time::timeout(std::time::Duration::from_secs(10), child.wait_with_output())
+        .await
+        .map_err(|_| "jq timed out after 10s".to_string())?
+        .map_err(|e| format!("jq failed: {e}"))?;
 
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).to_string())

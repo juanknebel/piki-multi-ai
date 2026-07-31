@@ -390,17 +390,20 @@ fn handle_diff_view_keys(
             {
                 let (ln, side) = match diff_line.line_type {
                     DiffLineType::Deletion => (diff_line.old_line, "LEFT"),
-                    DiffLineType::Addition | DiffLineType::Context => {
-                        (diff_line.new_line, "RIGHT")
-                    }
+                    DiffLineType::Addition | DiffLineType::Context => (diff_line.new_line, "RIGHT"),
                     _ => (None, ""),
                 };
                 if let Some(ln) = ln
-                    && let Some(root) = cr.thread_root_at(cr.current_file_path().unwrap_or(""), ln, side)
+                    && let Some(root) =
+                        cr.thread_root_at(cr.current_file_path().unwrap_or(""), ln, side)
                 {
                     let comment_id = root.id;
                     let file_path = cr.current_file_path().unwrap_or("").to_string();
-                    let existing_body = cr.reply_drafts.get(&comment_id).cloned().unwrap_or_default();
+                    let existing_body = cr
+                        .reply_drafts
+                        .get(&comment_id)
+                        .cloned()
+                        .unwrap_or_default();
                     let cursor = existing_body.len();
                     cr.editing_comment = Some(EditingComment {
                         file_path,
@@ -558,7 +561,10 @@ mod confirm_close_tests {
         assert_eq!(app.workspaces.len(), 1);
         assert_eq!(app.workspaces[0].tabs.len(), 1);
         assert!(app.workspaces[0].code_review.is_some());
-        assert!(!is_code_review_locked(&app), "leaving the main panel must unlock input");
+        assert!(
+            !is_code_review_locked(&app),
+            "leaving the main panel must unlock input"
+        );
     }
 
     #[test]
@@ -584,6 +590,9 @@ mod confirm_close_tests {
 
         // Enter/click on the workspace row focuses the main panel again.
         app.active_pane = ActivePane::MainPanel;
-        assert!(is_code_review_locked(&app), "re-focusing the main panel must reopen the review");
+        assert!(
+            is_code_review_locked(&app),
+            "re-focusing the main panel must reopen the review"
+        );
     }
 }

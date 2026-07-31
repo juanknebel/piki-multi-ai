@@ -63,3 +63,38 @@ fn test_stale_entries_filtered() {
         entries.iter().map(|e| &e.name).collect::<Vec<_>>()
     );
 }
+
+#[test]
+fn test_review_workspace_survives_missing_checkout() {
+    let (_dir, repo_path) = common::setup_test_repo();
+
+    // Simulates a restored PR-review workspace whose checkout directory was
+    // pruned/deleted on disk since the last run: it must round-trip through
+    // save/load (unlike a regular stale workspace) with `ephemeral` and its
+    // PR identity intact, so the TUI can mark it `review_broken` and retry.
+    let missing_checkout = repo_path.join("review-checkout-gone");
+    let mut ws = WorkspaceInfo::new(
+        "owner/repo#42".to_string(),
+        "Some PR".to_string(),
+        "".to_string(),
+        None,
+        missing_checkout,
+        repo_path.clone(),
+    );
+    ws.ephemeral = true;
+    ws.pr_repo_nwo = Some("owner/repo".to_string());
+    ws.pr_number = Some(42);
+
+    config::save(&repo_path, &[ws]).expect("save should succeed");
+    let entries = config::load(&repo_path).expect("load should succeed");
+
+    assert_eq!(entries.len(), 1);
+    assert!(entries[0].ephemeral);
+    assert_eq!(entries[0].pr_repo_nwo.as_deref(), Some("owner/repo"));
+    assert_eq!(entries[0].pr_number, Some(42));
+
+    let info = entries.into_iter().next().unwrap().into_info();
+    assert!(info.ephemeral);
+    assert_eq!(info.pr_repo_nwo.as_deref(), Some("owner/repo"));
+    assert_eq!(info.pr_number, Some(42));
+}

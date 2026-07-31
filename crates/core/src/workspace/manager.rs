@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 use std::time::UNIX_EPOCH;
 
-use anyhow::{Context, bail};
 use crate::shell_env;
+use anyhow::{Context, bail};
 
 use crate::domain::{DirEntry, EntryKind, WorkspaceInfo, WorkspaceOrigin, WorkspaceType};
 use crate::paths::DataPaths;
@@ -88,7 +88,11 @@ impl WorkspaceManager {
 
         // Check if branch exists locally
         let local_check = shell_env::command("git")
-            .args(["rev-parse", "--verify", &format!("refs/heads/{}", branch_name)])
+            .args([
+                "rev-parse",
+                "--verify",
+                &format!("refs/heads/{}", branch_name),
+            ])
             .current_dir(&git_root)
             .output()
             .await
@@ -109,7 +113,11 @@ impl WorkspaceManager {
         let output = if remote_exists {
             // Fetch the remote branch and set up tracking
             let fetch = shell_env::command("git")
-                .args(["fetch", "origin", &format!("{}:{}", branch_name, branch_name)])
+                .args([
+                    "fetch",
+                    "origin",
+                    &format!("{}:{}", branch_name, branch_name),
+                ])
                 .current_dir(&git_root)
                 .output()
                 .await
@@ -335,8 +343,10 @@ impl WorkspaceManager {
 
     /// Build a `WorkspaceInfo` for an ad-hoc PR review checkout (see
     /// [`crate::github::ReviewCheckoutManager::ensure_pr_checkout`]). Marked
-    /// `ephemeral` so it's excluded from persistence and its directory is
-    /// deleted (not just detached) when the workspace is closed.
+    /// `ephemeral`: grouped under the sidebar's synthetic "pr-review" group,
+    /// unnamed-editable, and its directory is deleted (not just detached)
+    /// when the workspace is closed. `pr_repo_nwo`/`pr_number` are stored so
+    /// the checkout can be redone if it's missing after a restart.
     pub fn create_review_workspace(checkout: &crate::github::PrCheckout) -> WorkspaceInfo {
         let name = format!("{}#{}", checkout.repo_nwo, checkout.pr.number);
         let mut info = WorkspaceInfo::new(
@@ -352,6 +362,8 @@ impl WorkspaceManager {
             url: checkout.pr.url.clone(),
         };
         info.ephemeral = true;
+        info.pr_repo_nwo = Some(checkout.repo_nwo.clone());
+        info.pr_number = Some(checkout.pr.number);
         info
     }
 
@@ -448,7 +460,10 @@ impl WorkspaceManager {
     /// List git worktrees that already exist on disk for the repository
     /// containing `source_dir`, excluding the main/bare checkout. Used to
     /// offer "load an existing worktree" as an alternative to `create()`.
-    pub async fn list_worktrees(&self, source_dir: &PathBuf) -> anyhow::Result<Vec<ExistingWorktree>> {
+    pub async fn list_worktrees(
+        &self,
+        source_dir: &PathBuf,
+    ) -> anyhow::Result<Vec<ExistingWorktree>> {
         let git_root = Self::git_root(source_dir).await?;
         let output = shell_env::command("git")
             .args(["worktree", "list", "--porcelain"])
@@ -522,7 +537,9 @@ fn parse_worktree_list(text: &str, git_root: &std::path::Path) -> Vec<ExistingWo
             {
                 result.push(ExistingWorktree {
                     path,
-                    branch: cur_branch.take().unwrap_or_else(|| "(detached)".to_string()),
+                    branch: cur_branch
+                        .take()
+                        .unwrap_or_else(|| "(detached)".to_string()),
                 });
             }
             cur_branch = None;

@@ -10,27 +10,11 @@ import {
 import { showAgentManager } from "./dialogs/agent-dialog";
 import type { WorkspaceInfo } from "../types";
 
-/** One visual sidebar row: always a real workspace (`idx`), decorated with
- *  family metadata. Mirrors the TUI's `App::sidebar_items()` — workspaces
- *  sharing `source_repo` form a family; the one member whose `workspace_type`
- *  isn't `"Worktree"` is the parent (repo folder name + its own branch),
- *  its `Worktree` siblings are children (branch name only, indented). A
- *  family with no parent loaded, or no family at all, renders flat. */
-interface SidebarRow {
-  idx: number;
-  label: string;
-  isParent: boolean;
-  isChild: boolean;
-  /** Present on parent rows: the family identifier + current collapse state. */
-  familyKey?: string;
-  collapsed?: boolean;
-}
-
-function familyKey(info: WorkspaceInfo): string {
-  return info.source_repo;
-}
-
-function folderLabel(info: WorkspaceInfo, branch: string | null): string {
+/** Label for a row. Structure (families, the PR-review group, collapse
+ *  state) is decided by the backend; only the text is decided here.
+ *  Worktrees are named by their branch, a clone by its repo folder. */
+function rowLabel(info: WorkspaceInfo, branch: string | null): string {
+  if (info.workspace_type === "Worktree") return branch ?? info.name;
   const folder =
     info.source_repo.replace(/\/+$/, "").split("/").pop() ||
     info.source_repo_display ||
@@ -38,71 +22,36 @@ function folderLabel(info: WorkspaceInfo, branch: string | null): string {
   return branch ? `${folder} (${branch})` : folder;
 }
 
-function computeSidebarRows(
-  workspaces: readonly { info: WorkspaceInfo; branch: string | null }[],
-  collapsedGroups: Set<string>,
-): SidebarRow[] {
-  const rows: SidebarRow[] = [];
-  const consumed = new Array(workspaces.length).fill(false);
-
-  for (let i = 0; i < workspaces.length; i++) {
-    if (consumed[i]) continue;
-    const sourceRepo = workspaces[i].info.source_repo;
-    const siblings = workspaces
-      .map((ws, j) => ({ ws, j }))
-      .filter(({ ws, j }) => !consumed[j] && ws.info.source_repo === sourceRepo)
-      .map(({ j }) => j);
-
-    if (siblings.length <= 1) {
-      rows.push({ idx: i, label: workspaces[i].info.name, isParent: false, isChild: false });
-      consumed[i] = true;
-      continue;
-    }
-
-    const parentPos = siblings.find((j) => workspaces[j].info.workspace_type !== "Worktree");
-
-    if (parentPos !== undefined) {
-      const key = familyKey(workspaces[parentPos].info);
-      const collapsed = collapsedGroups.has(key);
-      rows.push({
-        idx: parentPos,
-        label: folderLabel(workspaces[parentPos].info, workspaces[parentPos].branch),
-        isParent: true,
-        isChild: false,
-        familyKey: key,
-        collapsed,
-      });
-      for (const j of siblings) {
-        consumed[j] = true;
-        if (j !== parentPos && !collapsed) {
-          rows.push({ idx: j, label: workspaces[j].branch ?? "", isParent: false, isChild: true });
-        }
-      }
-    } else {
-      for (const j of siblings) {
-        consumed[j] = true;
-        rows.push({ idx: j, label: workspaces[j].branch ?? "", isParent: false, isChild: false });
-      }
-    }
-  }
-
-  return rows;
-}
-
 export function renderWorkspaceList(container: HTMLElement) {
   const collapsedGroups = new Set<string>();
+  // Grouped rows straight from `core::workspace::sidebar_rows`, refreshed
+  // whenever the workspace list or the collapse state changes. Cached so
+  // render() stays synchronous for its many event-driven callers.
+  let rows: ipc.SidebarRow[] = [];
 
-  // Load persisted collapse state once, then re-render.
   ipc
     .getCollapsedGroups()
     .then((groups) => {
       for (const g of groups) collapsedGroups.add(g);
-      render();
+      return refreshRows();
     })
     .catch(() => {});
 
+  async function refreshRows() {
+    try {
+      rows = await ipc.sidebarRows();
+    } catch (err) {
+      console.error("Failed to load sidebar rows:", err);
+      rows = [];
+    }
+    render();
+  }
+
   function persistCollapsed() {
     ipc.setCollapsedGroups([...collapsedGroups]).catch(() => {});
+    // The backend resolves collapse state, so re-fetch rather than
+    // recompute here.
+    void refreshRows();
   }
 
   function render() {
@@ -132,12 +81,33 @@ export function renderWorkspaceList(container: HTMLElement) {
       return;
     }
 
-    const rows = computeSidebarRows(workspaces, collapsedGroups);
-
     for (const row of rows) {
-      const { idx, info } = { idx: row.idx, info: workspaces[row.idx].info };
+      if (row.type === "prReviewHeader") {
+        const header = document.createElement("div");
+        header.className = "group-header";
+        header.innerHTML = `
+          <svg class="group-chevron${row.collapsed ? " collapsed" : ""}" viewBox="0 0 16 16">
+            <path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+          <span class="group-label">PR Review</span>
+        `;
+        const key = row.family_key;
+        header.addEventListener("click", () => {
+          if (collapsedGroups.has(key)) collapsedGroups.delete(key);
+          else collapsedGroups.add(key);
+          persistCollapsed();
+        });
+        container.appendChild(header);
+        continue;
+      }
+
+      const idx = row.index;
+      // Rows are built from the same list this renders, but the fetch is
+      // async — skip anything the list no longer has.
+      if (idx >= workspaces.length) continue;
+      const info = workspaces[idx].info;
       const item = document.createElement("div");
-      item.className = `workspace-item${idx === activeIdx ? " active" : ""}${row.isChild ? " grouped" : ""}`;
+      item.className = `workspace-item${idx === activeIdx ? " active" : ""}${row.kind === "child" ? " grouped" : ""}`;
       item.dataset.idx = String(idx);
 
       const ws = workspaces[idx];
@@ -147,7 +117,7 @@ export function renderWorkspaceList(container: HTMLElement) {
         ? '<span class="workspace-attention" title="Needs attention">●</span>'
         : "";
 
-      const chevron = row.isParent
+      const chevron = row.kind === "parent"
         ? `<svg class="group-chevron${row.collapsed ? " collapsed" : ""}" viewBox="0 0 16 16">
              <path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5"/>
            </svg>`
@@ -156,7 +126,7 @@ export function renderWorkspaceList(container: HTMLElement) {
       item.innerHTML = `
         ${chevron}
         ${idx === activeIdx ? '<span class="workspace-active-marker"></span>' : ""}
-        <span class="workspace-name">${escapeHtml(row.label)}</span>
+        <span class="workspace-name">${escapeHtml(rowLabel(info, ws.branch))}</span>
         ${attentionDot}
         <span class="workspace-actions">
           <button class="ws-action-btn" data-action="agents" title="Manage Agents">⚙</button>
@@ -169,8 +139,8 @@ export function renderWorkspaceList(container: HTMLElement) {
       `;
 
       // Click the chevron to toggle collapse without switching workspace.
-      if (row.isParent && row.familyKey) {
-        const key = row.familyKey;
+      if (row.kind === "parent" && row.family_key) {
+        const key = row.family_key;
         item.querySelector(".group-chevron")!.addEventListener("click", (e) => {
           e.stopPropagation();
           if (collapsedGroups.has(key)) {
@@ -179,7 +149,6 @@ export function renderWorkspaceList(container: HTMLElement) {
             collapsedGroups.add(key);
           }
           persistCollapsed();
-          render();
         });
       }
 
@@ -218,7 +187,7 @@ export function renderWorkspaceList(container: HTMLElement) {
     }
   }
 
-  appState.on("workspaces-changed", render);
+  appState.on("workspaces-changed", () => void refreshRows());
   appState.on("active-workspace-changed", render);
   appState.on("workspace-attention-changed", render);
   render();

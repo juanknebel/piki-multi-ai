@@ -76,7 +76,10 @@ impl LlamaCppClient {
             })
             .unwrap_or_default();
 
-        Self { client, base_url: base }
+        Self {
+            client,
+            base_url: base,
+        }
     }
 
     /// List loaded models via `GET /v1/models`.
@@ -84,15 +87,10 @@ impl LlamaCppClient {
         let url = format!("{}/v1/models", self.base_url);
         tracing::debug!(url = %url, "Fetching llama.cpp models");
 
-        let resp = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| {
-                tracing::error!(url = %url, error = %e, "Failed to connect to llama.cpp server");
-                anyhow::anyhow!("Cannot connect to llama.cpp at {}: {e}", self.base_url)
-            })?;
+        let resp = self.client.get(&url).send().await.map_err(|e| {
+            tracing::error!(url = %url, error = %e, "Failed to connect to llama.cpp server");
+            anyhow::anyhow!("Cannot connect to llama.cpp at {}: {e}", self.base_url)
+        })?;
 
         if !resp.status().is_success() {
             let status = resp.status();
@@ -129,7 +127,12 @@ impl LlamaCppClient {
         tx: mpsc::UnboundedSender<ChatStreamEvent>,
     ) -> anyhow::Result<()> {
         let url = format!("{}/v1/chat/completions", self.base_url);
-        tracing::info!(model, msg_count = messages.len(), has_tools = tools.is_some(), "Starting llama.cpp chat stream");
+        tracing::info!(
+            model,
+            msg_count = messages.len(),
+            has_tools = tools.is_some(),
+            "Starting llama.cpp chat stream"
+        );
 
         let payload = ChatCompletionRequest {
             model: model.to_string(),
@@ -144,7 +147,8 @@ impl LlamaCppClient {
             Err(e) => {
                 tracing::error!(url = %url, error = %e, "Failed to send chat request to llama.cpp");
                 let _ = tx.send(ChatStreamEvent::Error(format!(
-                    "Cannot connect to llama.cpp at {}: {e}", self.base_url
+                    "Cannot connect to llama.cpp at {}: {e}",
+                    self.base_url
                 )));
                 return Err(e.into());
             }
@@ -244,7 +248,10 @@ impl LlamaCppClient {
                                             arguments: ptc.arguments,
                                         })
                                         .collect();
-                                    tracing::info!(count = raw_calls.len(), "llama.cpp returned tool calls");
+                                    tracing::info!(
+                                        count = raw_calls.len(),
+                                        "llama.cpp returned tool calls"
+                                    );
                                     let _ = tx.send(ChatStreamEvent::ToolCalls(raw_calls));
                                     return Ok(());
                                 }
@@ -264,7 +271,10 @@ impl LlamaCppClient {
 
         // Stream ended without explicit [DONE]
         if !full_content.is_empty() {
-            tracing::debug!(chars = full_content.len(), "llama.cpp stream ended without [DONE], sending accumulated content");
+            tracing::debug!(
+                chars = full_content.len(),
+                "llama.cpp stream ended without [DONE], sending accumulated content"
+            );
             let _ = tx.send(ChatStreamEvent::Done(full_content));
         } else {
             tracing::warn!("llama.cpp stream ended with no content");

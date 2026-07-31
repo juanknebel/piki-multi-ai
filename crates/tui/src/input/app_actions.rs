@@ -67,7 +67,10 @@ pub(crate) fn open_confirm_quit(app: &mut App) -> Option<Action> {
 }
 
 pub(crate) fn open_help(app: &mut App) -> Option<Action> {
-    app.active_dialog = Some(DialogState::Help { scroll: 0, filter: String::new() });
+    app.active_dialog = Some(DialogState::Help {
+        scroll: 0,
+        filter: String::new(),
+    });
     app.mode = AppMode::Help;
     None
 }
@@ -195,12 +198,6 @@ pub(crate) fn open_delete_workspace(app: &mut App) -> Option<Action> {
     None
 }
 
-
-
-
-
-
-
 pub(crate) fn open_manage_agents(app: &mut App) -> Option<Action> {
     if !app
         .current_workspace()
@@ -235,7 +232,6 @@ pub(crate) fn open_chat_panel(app: &mut App) -> Option<Action> {
     }
     None
 }
-
 
 // ── Workspaces & tabs ──
 
@@ -504,7 +500,10 @@ mod tests {
         focus_left(&mut app);
 
         assert_eq!(app.active_pane, ActivePane::WorkspaceList);
-        assert!(app.status_message.is_none(), "a successful move must not toast");
+        assert!(
+            app.status_message.is_none(),
+            "a successful move must not toast"
+        );
     }
 
     /// Agents sits below the workspace list, so `focus_left` from it has no

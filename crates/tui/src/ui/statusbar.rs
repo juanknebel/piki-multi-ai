@@ -147,7 +147,8 @@ fn render_normal_status(frame: &mut Frame, area: Rect, app: &App) {
     // Agent activity does not repeat in the status bar: running lives in the
     // Agents pane; only an actionable state for the active tab surfaces here.
     if let Some((status, attention, _)) = ws.current_tab().and_then(|t| t.cli_agent_snapshot())
-        && let Some((glyph, color)) = crate::ui::actionable_status_view(&app.theme, status, attention)
+        && let Some((glyph, color)) =
+            crate::ui::actionable_status_view(&app.theme, status, attention)
     {
         left.push(sep.clone());
         left.push(Span::styled(

@@ -1,4 +1,3 @@
-
 use ratatui::DefaultTerminal;
 
 use super::Action;

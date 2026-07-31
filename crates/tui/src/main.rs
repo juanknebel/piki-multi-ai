@@ -14,6 +14,7 @@ mod pty;
 mod syntax;
 #[cfg(test)]
 mod test_support;
+mod text;
 mod theme;
 mod ui;
 mod workspace_switcher;
@@ -136,7 +137,10 @@ async fn main() -> anyhow::Result<()> {
     let startup_t0 = std::time::Instant::now();
     let preflight_t0 = std::time::Instant::now();
     let preflight = piki_core::preflight::run_preflight_checks();
-    tracing::info!(elapsed_ms = preflight_t0.elapsed().as_millis(), "startup: preflight checks done");
+    tracing::info!(
+        elapsed_ms = preflight_t0.elapsed().as_millis(),
+        "startup: preflight checks done"
+    );
     if preflight.has_errors() {
         for error in &preflight.errors {
             tracing::error!("{}", error);

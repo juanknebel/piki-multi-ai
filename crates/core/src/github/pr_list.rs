@@ -62,7 +62,14 @@ pub(super) struct SearchPrAuthor {
 const SEARCH_JSON_FIELDS: &str = "number,title,repository,url,author,isDraft,updatedAt";
 
 async fn search_prs(extra_args: &[&str]) -> anyhow::Result<Vec<SearchPr>> {
-    let mut args = vec!["search", "prs", "--state", "open", "--json", SEARCH_JSON_FIELDS];
+    let mut args = vec![
+        "search",
+        "prs",
+        "--state",
+        "open",
+        "--json",
+        SEARCH_JSON_FIELDS,
+    ];
     args.extend_from_slice(extra_args);
 
     let output = crate::shell_env::command("gh").args(&args).output().await?;
@@ -240,7 +247,11 @@ pub(super) fn categorize_prs(
 
     let mut authored_sorted = authored;
     authored_sorted.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
-    out.extend(authored_sorted.into_iter().map(|pr| into_item(pr, PrInclusionReason::Authored)));
+    out.extend(
+        authored_sorted
+            .into_iter()
+            .map(|pr| into_item(pr, PrInclusionReason::Authored)),
+    );
 
     let mut interacted_sorted: Vec<SearchPr> = interacted.into_values().collect();
     interacted_sorted.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
@@ -338,7 +349,10 @@ mod tests {
 
     #[test]
     fn normalize_plain_owner_repo_is_unchanged() {
-        assert_eq!(normalize_repo_nwo("9001/copyparty"), Some("9001/copyparty".to_string()));
+        assert_eq!(
+            normalize_repo_nwo("9001/copyparty"),
+            Some("9001/copyparty".to_string())
+        );
     }
 
     #[test]
@@ -396,9 +410,13 @@ mod tests {
         SearchPr {
             number,
             title: format!("PR #{number}"),
-            repository: SearchPrRepo { name_with_owner: nwo.to_string() },
+            repository: SearchPrRepo {
+                name_with_owner: nwo.to_string(),
+            },
             url: format!("https://github.com/{nwo}/pull/{number}"),
-            author: SearchPrAuthor { login: "someone".to_string() },
+            author: SearchPrAuthor {
+                login: "someone".to_string(),
+            },
             is_draft: false,
             updated_at: updated_at.to_string(),
         }
@@ -423,7 +441,9 @@ mod tests {
         assert_eq!(items.len(), 1);
         assert!(matches!(
             items[0].reason,
-            PrInclusionReason::Interacted { review_requested: false }
+            PrInclusionReason::Interacted {
+                review_requested: false
+            }
         ));
     }
 
@@ -436,7 +456,9 @@ mod tests {
         assert_eq!(items.len(), 1);
         assert!(matches!(
             items[0].reason,
-            PrInclusionReason::Interacted { review_requested: true }
+            PrInclusionReason::Interacted {
+                review_requested: true
+            }
         ));
     }
 
@@ -527,6 +549,9 @@ mod tests {
         let events: Vec<TimelineEvent> = serde_json::from_str(raw).unwrap();
         assert_eq!(events.len(), 2);
         assert_eq!(events[0].event, "review_requested");
-        assert_eq!(events[0].requested_reviewer.as_ref().unwrap().login, "octocat");
+        assert_eq!(
+            events[0].requested_reviewer.as_ref().unwrap().login,
+            "octocat"
+        );
     }
 }

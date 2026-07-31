@@ -96,9 +96,7 @@ pub async fn lsp_stop_server(
 
 /// Get LSP registry configuration.
 #[tauri::command]
-pub async fn lsp_get_config(
-    lsp_state: State<'_, LspState>,
-) -> Result<LspConfigResponse, String> {
+pub async fn lsp_get_config(lsp_state: State<'_, LspState>) -> Result<LspConfigResponse, String> {
     let manager = lsp_state.lock().await;
     Ok(LspConfigResponse {
         servers: manager.registry.servers.clone(),
