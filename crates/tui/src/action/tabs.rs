@@ -95,11 +95,13 @@ pub(super) async fn handle(
                 ) && let Some(idx) = ws.tabs.iter().position(|t| t.provider == provider)
                 {
                     ws.active_tab = idx;
+                    app.active_pane = crate::app::ActivePane::MainPanel;
                     return Ok(());
                 }
 
                 let idx = spawn_tab(ws, &provider, app.pty_rows, app.pty_cols, None, Some(&app.provider_manager), &app.paths, app.pty_output.clone()).await;
                 ws.active_tab = idx;
+                app.active_pane = crate::app::ActivePane::MainPanel;
                 app.status_message = Some(format!("Opened {} tab", provider.label()));
             }
 
@@ -124,6 +126,7 @@ pub(super) async fn handle(
                     .unwrap_or_else(|| "markdown".to_string());
                 if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
                     ws.add_markdown_tab(label.clone(), content, Some(&app.syntax));
+                    app.active_pane = crate::app::ActivePane::MainPanel;
                     app.status_message = Some(format!("Opened {}", label));
                 }
             }

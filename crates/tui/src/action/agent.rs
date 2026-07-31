@@ -95,6 +95,7 @@ pub(super) async fn handle(
                 let idx =
                     spawn_tab(ws, &provider, app.pty_rows, app.pty_cols, Some(&task_prompt), Some(&app.provider_manager), &app.paths, app.pty_output.clone()).await;
                 ws.active_tab = idx;
+                app.active_pane = crate::app::ActivePane::MainPanel;
 
                 app.set_toast(
                     format!("Task started: {} via {}", card_title, provider.label()),
