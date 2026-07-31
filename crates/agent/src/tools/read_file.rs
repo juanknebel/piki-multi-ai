@@ -1,5 +1,5 @@
-use crate::context::ToolContext;
 use super::Tool;
+use crate::context::ToolContext;
 
 pub struct ReadFileTool;
 
@@ -34,11 +34,7 @@ impl Tool for ReadFileTool {
         })
     }
 
-    async fn execute(
-        &self,
-        args: serde_json::Value,
-        ctx: &ToolContext,
-    ) -> anyhow::Result<String> {
+    async fn execute(&self, args: serde_json::Value, ctx: &ToolContext) -> anyhow::Result<String> {
         let path_str = args
             .get("path")
             .and_then(|v| v.as_str())
@@ -49,16 +45,22 @@ impl Tool for ReadFileTool {
         let full_path = ctx.workspace_path.join(path_str);
         validate_path(&full_path, &ctx.workspace_path)?;
 
-        let content = tokio::fs::read_to_string(&full_path).await.map_err(|e| {
-            anyhow::anyhow!("Cannot read {}: {e}", path_str)
-        })?;
+        let content = tokio::fs::read_to_string(&full_path)
+            .await
+            .map_err(|e| anyhow::anyhow!("Cannot read {}: {e}", path_str))?;
 
         let lines: Vec<&str> = content.lines().collect();
         let total = lines.len();
         let start = offset.min(total);
         let end = (start + limit).min(total);
 
-        let mut out = format!("File: {} ({} lines total, showing {}-{})\n", path_str, total, start + 1, end);
+        let mut out = format!(
+            "File: {} ({} lines total, showing {}-{})\n",
+            path_str,
+            total,
+            start + 1,
+            end
+        );
         for (i, line) in lines[start..end].iter().enumerate() {
             out.push_str(&format!("{:>4} | {}\n", start + i + 1, line));
         }

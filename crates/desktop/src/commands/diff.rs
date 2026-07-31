@@ -1,7 +1,7 @@
+use crate::state::DesktopApp;
 use parking_lot::Mutex;
 use serde::Serialize;
 use tauri::State;
-use crate::state::DesktopApp;
 
 // ── Types ──────────────────────────────────────────────
 
@@ -75,7 +75,11 @@ pub async fn get_side_by_side_diff(
         .await
         .unwrap_or_default();
 
-    let mut args = vec!["diff".to_string(), "--no-color".to_string(), "-U3".to_string()];
+    let mut args = vec![
+        "diff".to_string(),
+        "--no-color".to_string(),
+        "-U3".to_string(),
+    ];
     if staged {
         args.push("--cached".to_string());
     }
@@ -94,7 +98,14 @@ pub async fn get_side_by_side_diff(
     // For untracked/new files, use --no-index
     let diff_text = if stdout.is_empty() {
         let show = piki_core::shell_env::command("git")
-            .args(["diff", "--no-color", "-U3", "--no-index", "/dev/null", &file_path])
+            .args([
+                "diff",
+                "--no-color",
+                "-U3",
+                "--no-index",
+                "/dev/null",
+                &file_path,
+            ])
             .current_dir(&ws_path)
             .output()
             .await
@@ -155,11 +166,7 @@ pub async fn get_commit_side_by_side_diff(
                 ));
             }
             // Extract file path: "diff --git a/path b/path"
-            current_file = line
-                .split(" b/")
-                .nth(1)
-                .unwrap_or("unknown")
-                .to_string();
+            current_file = line.split(" b/").nth(1).unwrap_or("unknown").to_string();
             current_chunk = format!("{line}\n");
         } else {
             current_chunk.push_str(line);

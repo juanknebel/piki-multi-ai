@@ -81,7 +81,8 @@ fn render_editor(
             ))
             .right_aligned(),
         )
-        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
+        .borders(Borders::ALL)
+        .border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(border_style);
 
     let inner = block.inner(area);
@@ -146,7 +147,8 @@ fn render_responses(
         let block = Block::default()
             .title(" Response ")
             .title_style(title_style)
-            .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
+            .borders(Borders::ALL)
+            .border_type(ratatui::widgets::BorderType::Rounded)
             .border_style(border_style);
         let text = Paragraph::new("  Sending...")
             .style(Style::default().fg(p.warn))
@@ -230,7 +232,8 @@ fn render_responses(
         .title_bottom(
             Line::from(Span::styled(help_hint, Style::default().fg(p.fg3))).right_aligned(),
         )
-        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
+        .borders(Borders::ALL)
+        .border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(border_style);
 
     let inner = block.inner(area);
@@ -485,7 +488,8 @@ fn render_history_overlay(
             ))
             .right_aligned(),
         )
-        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
+        .borders(Borders::ALL)
+        .border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(Style::default().fg(p.line_strong));
 
     let inner = block.inner(overlay_area);

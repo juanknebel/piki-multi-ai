@@ -26,14 +26,30 @@ pub async fn fuzzy_file_list(
     // Walk the workspace directory, skipping common non-project dirs
     let output = tokio::process::Command::new("find")
         .args([
-            ".", "-type", "f",
-            "-not", "-path", "*/.git/*",
-            "-not", "-path", "*/node_modules/*",
-            "-not", "-path", "*/target/*",
-            "-not", "-path", "*/.next/*",
-            "-not", "-path", "*/dist/*",
-            "-not", "-path", "*/__pycache__/*",
-            "-not", "-path", "*/.venv/*",
+            ".",
+            "-type",
+            "f",
+            "-not",
+            "-path",
+            "*/.git/*",
+            "-not",
+            "-path",
+            "*/node_modules/*",
+            "-not",
+            "-path",
+            "*/target/*",
+            "-not",
+            "-path",
+            "*/.next/*",
+            "-not",
+            "-path",
+            "*/dist/*",
+            "-not",
+            "-path",
+            "*/__pycache__/*",
+            "-not",
+            "-path",
+            "*/.venv/*",
         ])
         .current_dir(&ws_path)
         .output()

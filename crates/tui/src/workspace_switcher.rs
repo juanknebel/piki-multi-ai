@@ -106,7 +106,9 @@ fn build_rows(tree: &[WsNode], query: &str) -> Vec<SwitcherRow> {
         if !ws_match && matching_tabs.is_empty() {
             continue;
         }
-        rows.push(SwitcherRow::Workspace { ws_idx: node.ws_idx });
+        rows.push(SwitcherRow::Workspace {
+            ws_idx: node.ws_idx,
+        });
         for t in matching_tabs {
             rows.push(SwitcherRow::Tab {
                 ws_idx: node.ws_idx,
@@ -127,14 +129,23 @@ mod tests {
                 ws_idx: 0,
                 name: "piki-nightly".into(),
                 tabs: vec![
-                    TabNode { tab_idx: 0, label: "Shell".into() },
-                    TabNode { tab_idx: 1, label: "Claude".into() },
+                    TabNode {
+                        tab_idx: 0,
+                        label: "Shell".into(),
+                    },
+                    TabNode {
+                        tab_idx: 1,
+                        label: "Claude".into(),
+                    },
                 ],
             },
             WsNode {
                 ws_idx: 1,
                 name: "bob-the-builder".into(),
-                tabs: vec![TabNode { tab_idx: 0, label: "Claude".into() }],
+                tabs: vec![TabNode {
+                    tab_idx: 0,
+                    label: "Claude".into(),
+                }],
             },
         ]
     }
@@ -146,10 +157,19 @@ mod tests {
             rows,
             vec![
                 SwitcherRow::Workspace { ws_idx: 0 },
-                SwitcherRow::Tab { ws_idx: 0, tab_idx: 0 },
-                SwitcherRow::Tab { ws_idx: 0, tab_idx: 1 },
+                SwitcherRow::Tab {
+                    ws_idx: 0,
+                    tab_idx: 0
+                },
+                SwitcherRow::Tab {
+                    ws_idx: 0,
+                    tab_idx: 1
+                },
                 SwitcherRow::Workspace { ws_idx: 1 },
-                SwitcherRow::Tab { ws_idx: 1, tab_idx: 0 },
+                SwitcherRow::Tab {
+                    ws_idx: 1,
+                    tab_idx: 0
+                },
             ]
         );
     }
@@ -161,8 +181,14 @@ mod tests {
             rows,
             vec![
                 SwitcherRow::Workspace { ws_idx: 0 },
-                SwitcherRow::Tab { ws_idx: 0, tab_idx: 0 },
-                SwitcherRow::Tab { ws_idx: 0, tab_idx: 1 },
+                SwitcherRow::Tab {
+                    ws_idx: 0,
+                    tab_idx: 0
+                },
+                SwitcherRow::Tab {
+                    ws_idx: 0,
+                    tab_idx: 1
+                },
             ]
         );
     }
@@ -176,9 +202,15 @@ mod tests {
             rows,
             vec![
                 SwitcherRow::Workspace { ws_idx: 0 },
-                SwitcherRow::Tab { ws_idx: 0, tab_idx: 1 },
+                SwitcherRow::Tab {
+                    ws_idx: 0,
+                    tab_idx: 1
+                },
                 SwitcherRow::Workspace { ws_idx: 1 },
-                SwitcherRow::Tab { ws_idx: 1, tab_idx: 0 },
+                SwitcherRow::Tab {
+                    ws_idx: 1,
+                    tab_idx: 0
+                },
             ]
         );
     }

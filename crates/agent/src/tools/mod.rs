@@ -26,11 +26,7 @@ pub trait Tool: Send + Sync {
     }
 
     /// Execute the tool with the given arguments.
-    async fn execute(
-        &self,
-        args: serde_json::Value,
-        ctx: &ToolContext,
-    ) -> anyhow::Result<String>;
+    async fn execute(&self, args: serde_json::Value, ctx: &ToolContext) -> anyhow::Result<String>;
 }
 
 /// Registry of available tools.

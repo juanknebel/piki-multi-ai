@@ -1,13 +1,15 @@
 use parking_lot::Mutex;
 use tauri::State;
 
-use piki_core::{WorkspaceInfo, WorkspaceStatus};
 use piki_core::workspace::watcher::FileWatcher;
+use piki_core::{WorkspaceInfo, WorkspaceStatus};
 
 use crate::state::{DesktopApp, DesktopWorkspace, WorkspaceDetail};
 
 #[tauri::command]
-pub async fn list_workspaces(state: State<'_, Mutex<DesktopApp>>) -> Result<Vec<WorkspaceInfo>, String> {
+pub async fn list_workspaces(
+    state: State<'_, Mutex<DesktopApp>>,
+) -> Result<Vec<WorkspaceInfo>, String> {
     let app = state.lock();
     Ok(app.workspaces.iter().map(|ws| ws.info.clone()).collect())
 }
@@ -75,7 +77,8 @@ pub async fn create_workspace(
     // Extract manager info with scoped lock
     let (manager, storage) = {
         let app = state.lock();
-        let manager = piki_core::workspace::manager::WorkspaceManager::with_paths(app.paths.clone());
+        let manager =
+            piki_core::workspace::manager::WorkspaceManager::with_paths(app.paths.clone());
         let storage = std::sync::Arc::clone(&app.storage);
         (manager, storage)
     };
@@ -84,24 +87,30 @@ pub async fn create_workspace(
 
     // Async workspace creation (no lock held)
     let info = match ws_type.as_str() {
-        "Simple" => {
-            manager
-                .create_simple(&name, &description, &prompt, kanban_path.clone(), &source_repo)
-                .await
-                .map_err(|e| e.to_string())?
-        }
-        "Project" => {
-            manager
-                .create_project(&name, &description, &prompt, kanban_path.clone(), &source_repo)
-                .await
-                .map_err(|e| e.to_string())?
-        }
-        _ => {
-            manager
-                .create(&name, &description, &prompt, kanban_path, &source_repo)
-                .await
-                .map_err(|e| e.to_string())?
-        }
+        "Simple" => manager
+            .create_simple(
+                &name,
+                &description,
+                &prompt,
+                kanban_path.clone(),
+                &source_repo,
+            )
+            .await
+            .map_err(|e| e.to_string())?,
+        "Project" => manager
+            .create_project(
+                &name,
+                &description,
+                &prompt,
+                kanban_path.clone(),
+                &source_repo,
+            )
+            .await
+            .map_err(|e| e.to_string())?,
+        _ => manager
+            .create(&name, &description, &prompt, kanban_path, &source_repo)
+            .await
+            .map_err(|e| e.to_string())?,
     };
 
     let mut result_info = info.clone();

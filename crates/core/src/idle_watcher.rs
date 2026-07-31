@@ -212,7 +212,7 @@ mod tests {
 
     #[test]
     fn from_provider_config_honors_threshold_and_notify() {
-        use crate::providers::{ProviderConfig, PromptFormat};
+        use crate::providers::{PromptFormat, ProviderConfig};
         let base = ProviderConfig {
             name: "X".into(),
             description: String::new(),

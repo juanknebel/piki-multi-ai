@@ -9,9 +9,7 @@ use super::server::LspManager;
 
 /// Start the WebSocket proxy server on a random local port.
 /// Returns the bound port number.
-pub async fn start_ws_server(
-    lsp_manager: Arc<Mutex<LspManager>>,
-) -> anyhow::Result<u16> {
+pub async fn start_ws_server(lsp_manager: Arc<Mutex<LspManager>>) -> anyhow::Result<u16> {
     let listener = TcpListener::bind("127.0.0.1:0").await?;
     let port = listener.local_addr()?.port();
 
@@ -35,10 +33,7 @@ pub async fn start_ws_server(
     Ok(port)
 }
 
-async fn handle_connection(
-    stream: tokio::net::TcpStream,
-    lsp_manager: Arc<Mutex<LspManager>>,
-) {
+async fn handle_connection(stream: tokio::net::TcpStream, lsp_manager: Arc<Mutex<LspManager>>) {
     // Perform the WebSocket handshake and extract the request path
     let mut ws_path = String::new();
 
@@ -88,7 +83,9 @@ async fn handle_connection(
         while let Ok(msg) = stdout_rx.recv().await {
             // Send raw JSON body (no Content-Length) over WebSocket
             if ws_sink
-                .send(Message::Text(String::from_utf8_lossy(&msg).into_owned().into()))
+                .send(Message::Text(
+                    String::from_utf8_lossy(&msg).into_owned().into(),
+                ))
                 .await
                 .is_err()
             {
@@ -103,11 +100,7 @@ async fn handle_connection(
             match msg {
                 Message::Text(text) => {
                     // Wrap in Content-Length framing for the LSP server
-                    let framed = format!(
-                        "Content-Length: {}\r\n\r\n{}",
-                        text.len(),
-                        text
-                    );
+                    let framed = format!("Content-Length: {}\r\n\r\n{}", text.len(), text);
                     if stdin_tx.send(framed.into_bytes()).is_err() {
                         break;
                     }

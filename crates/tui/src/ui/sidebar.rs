@@ -57,7 +57,10 @@ struct RowClass<'a> {
     summary: &'a FamilySummary,
 }
 
-fn classify_row<'a>(ws: &Workspace, family_info: &'a HashMap<PathBuf, FamilySummary>) -> RowClass<'a> {
+fn classify_row<'a>(
+    ws: &Workspace,
+    family_info: &'a HashMap<PathBuf, FamilySummary>,
+) -> RowClass<'a> {
     static EMPTY: FamilySummary = FamilySummary {
         count: 0,
         has_parent: false,
@@ -88,7 +91,11 @@ struct EffectiveSignals {
     ahead_behind: Option<(usize, usize)>,
 }
 
-fn effective_signals(ws: &Workspace, class: &RowClass, collapsed: Option<bool>) -> EffectiveSignals {
+fn effective_signals(
+    ws: &Workspace,
+    class: &RowClass,
+    collapsed: Option<bool>,
+) -> EffectiveSignals {
     if class.is_parent && collapsed.unwrap_or(false) {
         let s = class.summary;
         EffectiveSignals {
@@ -119,7 +126,8 @@ fn right_metadata_spans(
 ) -> Vec<Span<'static>> {
     let mut right: Vec<Span<'static>> = Vec::new();
     if let Some((status, attention)) = status
-        && let Some((glyph, color)) = crate::ui::actionable_status_view(&app.theme, status, attention)
+        && let Some((glyph, color)) =
+            crate::ui::actionable_status_view(&app.theme, status, attention)
     {
         right.push(Span::styled(glyph.to_string(), Style::default().fg(color)));
     }
@@ -179,7 +187,8 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
     let block = Block::default()
         .title(" WORKSPACES ")
         .title_style(pane_title_style(app, ActivePane::WorkspaceList))
-        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
+        .borders(Borders::ALL)
+        .border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(border_style);
 
     if app.workspaces.is_empty() {
@@ -216,9 +225,9 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
         }
         entry.has_idle |= ws.has_idle_notification;
         if let Some((status, attention)) = ws.agent_status_rollup() {
-            let better = entry
-                .worst_status
-                .is_none_or(|(s, a)| agent_status_severity(status, attention) > agent_status_severity(s, a));
+            let better = entry.worst_status.is_none_or(|(s, a)| {
+                agent_status_severity(status, attention) > agent_status_severity(s, a)
+            });
             if better {
                 entry.worst_status = Some((status, attention));
             }
@@ -399,8 +408,13 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                     // long name) pushed it clean off the visible edge; here
                     // it's always the next thing rendered, so it survives
                     // any pane width down to the name itself getting cut.
-                    let right =
-                        right_metadata_spans(app, detail_color, sig.status, sig.changed, sig.ahead_behind);
+                    let right = right_metadata_spans(
+                        app,
+                        detail_color,
+                        sig.status,
+                        sig.changed,
+                        sig.ahead_behind,
+                    );
                     let mut spans = left;
                     if !right.is_empty() {
                         spans.push(Span::raw(" "));
@@ -464,7 +478,8 @@ pub(super) fn render_agents_pane(frame: &mut Frame, area: Rect, app: &App) {
     let block = Block::default()
         .title(" AGENTS ")
         .title_style(pane_title_style(app, ActivePane::Agents))
-        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
+        .borders(Borders::ALL)
+        .border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(border_style);
 
     let rows = app.agent_rows();
@@ -560,9 +575,21 @@ mod tests {
         // its underlying WorkspaceType, so it never gets mistaken for a
         // regular worktree/project/simple workspace in the sidebar.
         let ephemeral_icon = workspace_type_icon(WorkspaceType::Simple, true, true);
-        assert_ne!(ephemeral_icon, workspace_type_icon(WorkspaceType::Simple, true, false));
-        assert_ne!(ephemeral_icon, workspace_type_icon(WorkspaceType::Worktree, true, false));
-        assert_ne!(ephemeral_icon, workspace_type_icon(WorkspaceType::Project, true, false));
-        assert_eq!(ephemeral_icon, workspace_type_icon(WorkspaceType::Worktree, true, true));
+        assert_ne!(
+            ephemeral_icon,
+            workspace_type_icon(WorkspaceType::Simple, true, false)
+        );
+        assert_ne!(
+            ephemeral_icon,
+            workspace_type_icon(WorkspaceType::Worktree, true, false)
+        );
+        assert_ne!(
+            ephemeral_icon,
+            workspace_type_icon(WorkspaceType::Project, true, false)
+        );
+        assert_eq!(
+            ephemeral_icon,
+            workspace_type_icon(WorkspaceType::Worktree, true, true)
+        );
     }
 }

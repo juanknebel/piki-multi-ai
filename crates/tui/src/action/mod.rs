@@ -134,9 +134,7 @@ pub(crate) async fn execute_action(
         | Action::ImportExistingWorktree { .. } => {
             workspace::handle(app, manager, action, terminal).await?
         }
-        Action::OpenEditor(..) => {
-            files::handle(app, manager, action, terminal).await?
-        }
+        Action::OpenEditor(..) => files::handle(app, manager, action, terminal).await?,
         Action::LoadPrReview
         | Action::LoadPrFileDiff(..)
         | Action::SubmitPrReview
@@ -147,21 +145,16 @@ pub(crate) async fn execute_action(
         Action::SpawnTab(..) | Action::OpenMarkdown(..) | Action::OpenMdr(..) => {
             tabs::handle(app, manager, action, terminal).await?
         }
-        Action::SendApiRequest(..) => {
-            api::handle(app, manager, action, terminal).await?
-        }
+        Action::SendApiRequest(..) => api::handle(app, manager, action, terminal).await?,
         Action::DispatchAgent { .. }
         | Action::SaveAgent { .. }
         | Action::DeleteAgent(..)
         | Action::SyncAgentToRepo(..)
         | Action::ScanRepoAgents
-        | Action::ImportAgents(..) => {
-            agent::handle(app, manager, action, terminal).await?
-        }
+        | Action::ImportAgents(..) => agent::handle(app, manager, action, terminal).await?,
         Action::ChatSendMessage | Action::ChatLoadModels => {
             chat::handle(app, manager, action, terminal).await?
         }
     }
     Ok(())
 }
-

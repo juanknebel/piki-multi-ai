@@ -1,5 +1,5 @@
-use crate::context::ToolContext;
 use super::Tool;
+use crate::context::ToolContext;
 
 pub struct GitStatusTool;
 
@@ -21,11 +21,7 @@ impl Tool for GitStatusTool {
         })
     }
 
-    async fn execute(
-        &self,
-        _args: serde_json::Value,
-        ctx: &ToolContext,
-    ) -> anyhow::Result<String> {
+    async fn execute(&self, _args: serde_json::Value, ctx: &ToolContext) -> anyhow::Result<String> {
         let files = piki_core::git::get_changed_files(&ctx.workspace_path).await?;
         if files.is_empty() {
             return Ok("Working tree clean — no changes.".to_string());

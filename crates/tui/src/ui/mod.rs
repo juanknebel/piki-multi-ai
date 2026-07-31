@@ -8,8 +8,8 @@ pub mod fuzzy;
 pub mod layout;
 pub mod markdown;
 mod panels;
-mod sidebar;
 pub(crate) mod scrollbar;
+mod sidebar;
 pub(crate) mod statusbar;
 pub mod subtabs;
 pub mod terminal;
@@ -18,8 +18,7 @@ pub mod workspace_switcher;
 
 /// Braille frames for the running-activity spinner (~100ms per frame at the
 /// 50ms event-loop tick; see `App::spinner_frame`).
-pub(crate) const SPINNER_FRAMES: [&str; 10] =
-    ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+pub(crate) const SPINNER_FRAMES: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
 /// Glyph, short label, and color for a Claude agent status — the single
 /// source of the status vocabulary (mirrors the desktop `cliAgentStatusView`).
@@ -95,7 +94,10 @@ mod tests {
     #[test]
     fn test_render_confirm_quit_dialog() {
         let mut terminal = test_terminal(80, 24);
-        let app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         terminal
             .draw(|frame| {
                 super::dialogs::render_confirm_quit_dialog(frame, frame.area(), &app);
@@ -113,7 +115,10 @@ mod tests {
     /// body, the streaming buffer and the input line under the cursor.
     #[test]
     fn test_render_chat_overlay_with_accents_does_not_panic() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         app.chat_panel.messages.push(piki_core::chat::ChatMessage {
             role: piki_core::chat::ChatRole::Assistant,
             content: "instalación completada correctamente en el sistema — revisá la configuración"
@@ -147,7 +152,10 @@ mod tests {
     #[test]
     fn test_render_missing_prereqs_dialog() {
         let mut terminal = test_terminal(80, 24);
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         app.active_dialog = Some(DialogState::MissingPrereqs {
             agent: "Antigravity".to_string(),
             missing: vec!["jq".to_string()],
@@ -164,7 +172,10 @@ mod tests {
     #[test]
     fn test_render_confirm_close_tab_dialog() {
         let mut terminal = test_terminal(80, 24);
-        let app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         terminal
             .draw(|frame| {
                 super::dialogs::render_confirm_close_tab_dialog(frame, frame.area(), &app);
@@ -177,7 +188,10 @@ mod tests {
     #[test]
     fn test_render_new_tab_dialog() {
         let mut terminal = test_terminal(80, 24);
-        let app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         terminal
             .draw(|frame| {
                 super::dialogs::render_new_tab_dialog(frame, frame.area(), &app);
@@ -190,7 +204,10 @@ mod tests {
     #[test]
     fn test_render_status_bar_normal_no_workspace() {
         let mut terminal = test_terminal(80, 1);
-        let app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         terminal
             .draw(|frame| {
                 super::statusbar::render_status_bar(frame, frame.area(), &app);
@@ -203,7 +220,10 @@ mod tests {
     #[test]
     fn test_render_status_bar_prefix_pending() {
         let mut terminal = test_terminal(80, 1);
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         app.input_state = crate::app::InputState::PrefixPending;
         terminal
             .draw(|frame| {
@@ -251,7 +271,10 @@ mod tests {
     #[test]
     fn test_render_which_key_overlay() {
         let mut terminal = test_terminal(80, 24);
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         // Pin the platform: on macOS the prefix would render as "Cmd-g".
         app.config.platform = crate::config::Platform::Linux;
         terminal
@@ -301,7 +324,10 @@ mod tests {
     #[test]
     fn test_snapshot_workspace_list_single_line_rows() {
         let mut terminal = test_terminal(40, 10);
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
 
         let mut a = test_workspace("nightly", 0);
         a.changed_files.push(piki_core::ChangedFile {
@@ -335,7 +361,10 @@ mod tests {
         // own branch alongside since it has one — the "(branch)" suffix
         // isn't reserved for family parents, every git-backed row gets it.
         let mut terminal = test_terminal(40, 6);
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
 
         let mut ws = crate::app::Workspace::from_info(piki_core::WorkspaceInfo {
             workspace_type: piki_core::WorkspaceType::Simple,
@@ -354,7 +383,10 @@ mod tests {
             })
             .unwrap();
         let content = buffer_to_snapshot(terminal.backend().buffer());
-        insta::assert_snapshot!("workspace_list_standalone_simple_shows_folder_and_branch", content);
+        insta::assert_snapshot!(
+            "workspace_list_standalone_simple_shows_folder_and_branch",
+            content
+        );
     }
 
     #[test]
@@ -363,7 +395,10 @@ mod tests {
         // "pr-review" GroupHeader row instead of the usual source_repo family
         // grouping (each review checkout has its own source_repo).
         let mut terminal = test_terminal(40, 8);
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
 
         let mut review_a = crate::app::Workspace::from_info(piki_core::WorkspaceInfo {
             name: "owner/repo#1".to_string(),
@@ -401,16 +436,18 @@ mod tests {
         // non-git directory) has no `branch` — there's nothing to
         // disambiguate, so the row shows just the bare folder name.
         let mut terminal = test_terminal(40, 6);
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
 
-        app.workspaces.push(crate::app::Workspace::from_info(
-            piki_core::WorkspaceInfo {
+        app.workspaces
+            .push(crate::app::Workspace::from_info(piki_core::WorkspaceInfo {
                 workspace_type: piki_core::WorkspaceType::Project,
                 name: "typed-nickname".to_string(),
                 source_repo: std::path::PathBuf::from("/tmp/plain-folder"),
                 ..test_ws_info("typed-nickname", 0)
-            },
-        ));
+            }));
         app.active_workspace = 0;
         app.selected_sidebar_row = 0;
 
@@ -420,7 +457,10 @@ mod tests {
             })
             .unwrap();
         let content = buffer_to_snapshot(terminal.backend().buffer());
-        insta::assert_snapshot!("workspace_list_non_repo_folder_shows_no_branch_suffix", content);
+        insta::assert_snapshot!(
+            "workspace_list_non_repo_folder_shows_no_branch_suffix",
+            content
+        );
     }
 
     #[test]
@@ -429,17 +469,19 @@ mod tests {
         // a distinct folder icon instead of the git-backed "○", since it can
         // never resolve a branch.
         let mut terminal = test_terminal(40, 6);
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
 
-        app.workspaces.push(crate::app::Workspace::from_info(
-            piki_core::WorkspaceInfo {
+        app.workspaces
+            .push(crate::app::Workspace::from_info(piki_core::WorkspaceInfo {
                 workspace_type: piki_core::WorkspaceType::Simple,
                 name: "scratch-notes".to_string(),
                 source_repo: std::path::PathBuf::from("/tmp/scratch-notes"),
                 is_git_repo: false,
                 ..test_ws_info("scratch-notes", 0)
-            },
-        ));
+            }));
         app.active_workspace = 0;
         app.selected_sidebar_row = 0;
 
@@ -458,7 +500,10 @@ mod tests {
         // from a flat neighbor (or the next family) — otherwise a flat repo
         // like "ferrum-trade" reads as if it belonged to the block above it.
         let mut terminal = test_terminal(40, 12);
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
 
         let repo_a = std::path::PathBuf::from("/tmp/src-agent-multi");
         let repo_b = std::path::PathBuf::from("/tmp/src-void-setup");
@@ -515,7 +560,10 @@ mod tests {
         // parent row should surface the aggregated idle dot / changed-file
         // count / ahead-behind instead of losing them behind the chevron.
         let mut terminal = test_terminal(40, 6);
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
 
         let repo = std::path::PathBuf::from("/tmp/src-agent-multi");
 
@@ -542,7 +590,8 @@ mod tests {
 
         app.active_workspace = 0;
         app.selected_sidebar_row = 0;
-        app.collapsed_groups.insert(repo.to_string_lossy().to_string());
+        app.collapsed_groups
+            .insert(repo.to_string_lossy().to_string());
 
         terminal
             .draw(|frame| {
@@ -550,13 +599,19 @@ mod tests {
             })
             .unwrap();
         let content = buffer_to_snapshot(terminal.backend().buffer());
-        insta::assert_snapshot!("workspace_list_collapsed_family_surfaces_child_attention", content);
+        insta::assert_snapshot!(
+            "workspace_list_collapsed_family_surfaces_child_attention",
+            content
+        );
     }
 
     #[test]
     fn test_snapshot_agents_pane_with_rows() {
         let mut terminal = test_terminal(40, 8);
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         let info = piki_core::WorkspaceInfo {
             name: "demo-ws".to_string(),
             path: std::path::PathBuf::from("/tmp/demo"),
@@ -577,7 +632,11 @@ mod tests {
             pr_number: None,
         };
         let mut ws = crate::app::Workspace::from_info(info);
-        ws.add_tab(piki_core::AIProvider::Custom("Claude".to_string()), true, None);
+        ws.add_tab(
+            piki_core::AIProvider::Custom("Claude".to_string()),
+            true,
+            None,
+        );
         app.workspaces.push(ws);
         terminal
             .draw(|frame| {
@@ -591,9 +650,16 @@ mod tests {
     #[test]
     fn test_snapshot_tab_bar_solid_blocks() {
         let mut terminal = test_terminal(60, 2);
-        let app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         let mut ws = crate::app::Workspace::from_info(test_ws_info("demo", 0));
-        ws.add_tab(piki_core::AIProvider::Custom("Claude".to_string()), true, None);
+        ws.add_tab(
+            piki_core::AIProvider::Custom("Claude".to_string()),
+            true,
+            None,
+        );
         ws.add_tab(piki_core::AIProvider::Shell, true, None);
         ws.active_tab = 0;
         terminal
@@ -608,20 +674,30 @@ mod tests {
     #[test]
     fn test_snapshot_workspace_switcher_tree() {
         let mut terminal = test_terminal(70, 16);
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
 
         let mut a = crate::app::Workspace::from_info(test_ws_info("piki-nightly", 0));
         a.add_tab(piki_core::AIProvider::Shell, true, None);
-        a.add_tab(piki_core::AIProvider::Custom("Claude".to_string()), true, None);
+        a.add_tab(
+            piki_core::AIProvider::Custom("Claude".to_string()),
+            true,
+            None,
+        );
         app.workspaces.push(a);
 
         let mut b = crate::app::Workspace::from_info(test_ws_info("bob-the-builder", 1));
-        b.add_tab(piki_core::AIProvider::Custom("Claude".to_string()), true, None);
+        b.add_tab(
+            piki_core::AIProvider::Custom("Claude".to_string()),
+            true,
+            None,
+        );
         app.workspaces.push(b);
 
         app.active_workspace = 0;
-        app.workspace_switcher =
-            Some(crate::workspace_switcher::create_state(&app.workspaces));
+        app.workspace_switcher = Some(crate::workspace_switcher::create_state(&app.workspaces));
 
         terminal
             .draw(|frame| {
@@ -635,7 +711,10 @@ mod tests {
     #[test]
     fn test_snapshot_confirm_delete_dialog() {
         let mut terminal = test_terminal(80, 24);
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         app.active_dialog = Some(DialogState::ConfirmDelete { target: 0 });
         terminal
             .draw(|frame| {
@@ -646,14 +725,20 @@ mod tests {
         insta::assert_snapshot!("confirm_delete_dialog", content);
     }
 
-            #[test]
+    #[test]
     fn test_snapshot_help_overlay() {
         let mut terminal = test_terminal(80, 40);
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         // Force Linux so the snapshot is stable across CI runners. On macOS
         // the footer renders `cmd-*` instead of `ctrl-*`.
         app.config.platform = crate::config::Platform::Linux;
-        app.active_dialog = Some(DialogState::Help { scroll: 0, filter: String::new() });
+        app.active_dialog = Some(DialogState::Help {
+            scroll: 0,
+            filter: String::new(),
+        });
         terminal
             .draw(|frame| {
                 super::dialogs::render_help_overlay(frame, frame.area(), &app);
@@ -681,7 +766,10 @@ mod tests {
     #[test]
     fn test_snapshot_about_overlay() {
         let mut terminal = test_terminal(80, 30);
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         app.active_dialog = Some(DialogState::About);
         terminal
             .draw(|frame| {
@@ -695,7 +783,10 @@ mod tests {
     #[test]
     fn test_snapshot_dashboard_overlay() {
         let mut terminal = test_terminal(80, 24);
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         app.active_dialog = Some(DialogState::Dashboard {
             selected: 0,
             scroll_offset: 0,
@@ -735,7 +826,10 @@ mod tests {
     #[test]
     fn test_snapshot_empty_app_layout() {
         let mut terminal = test_terminal(80, 24);
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         // Force Linux so the snapshot is stable across CI runners.
         app.config.platform = crate::config::Platform::Linux;
         terminal

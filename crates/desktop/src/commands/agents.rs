@@ -162,8 +162,7 @@ pub async fn sync_agent_to_repo(
     };
 
     let agent_dir = source_repo.join(dir);
-    std::fs::create_dir_all(&agent_dir)
-        .map_err(|e| format!("Failed to create directory: {e}"))?;
+    std::fs::create_dir_all(&agent_dir).map_err(|e| format!("Failed to create directory: {e}"))?;
     std::fs::write(agent_dir.join(format!("{}.md", agent.name)), &agent.role)
         .map_err(|e| format!("Failed to write agent file: {e}"))?;
 
@@ -351,11 +350,18 @@ pub async fn dispatch_agent(
             (m, dir, kanban)
         };
 
-        let description = dispatch_card_title
-            .as_deref()
-            .unwrap_or("Agent dispatch");
+        let description = dispatch_card_title.as_deref().unwrap_or("Agent dispatch");
 
-        let name = ws_name.unwrap_or_else(|| format!("agent-{}", uuid::Uuid::new_v4().to_string().split('-').next().unwrap_or("x")));
+        let name = ws_name.unwrap_or_else(|| {
+            format!(
+                "agent-{}",
+                uuid::Uuid::new_v4()
+                    .to_string()
+                    .split('-')
+                    .next()
+                    .unwrap_or("x")
+            )
+        });
         let info = manager
             .create(&name, description, &prompt, source_kanban_path, &source_dir)
             .await
@@ -366,7 +372,13 @@ pub async fn dispatch_agent(
                 .ok();
 
         let mut app = state.lock();
-        let order = app.workspaces.iter().map(|ws| ws.info.order).max().unwrap_or(0) + 1;
+        let order = app
+            .workspaces
+            .iter()
+            .map(|ws| ws.info.order)
+            .max()
+            .unwrap_or(0)
+            + 1;
         let mut ws_info = info;
         ws_info.order = order;
         ws_info.dispatch_card_id = dispatch_card_id;
@@ -433,43 +445,43 @@ pub async fn dispatch_agent(
     // Dispatched agents with a hook bridge (Claude Code, Antigravity) get the
     // structured cli-agent channel so the kanban flow sees precise lifecycle
     // status. Other providers run bare (no shell wrapper, no hooks).
-    let (extra_env, extra_args, integration_on, cli_agent_sock) =
-        match bridge_for_command(&command) {
-            Some(AgentBridge::Claude) => {
-                match cli_agent_install::setup_for_claude(&claude_hooks_dir) {
-                    Ok(setup) => {
-                        let sock = setup.sock_path.clone();
-                        (
-                            setup.env.into_iter().collect::<Vec<_>>(),
-                            setup.extra_args,
-                            true,
-                            sock,
-                        )
-                    }
-                    Err(e) => {
-                        tracing::warn!(error = %e, "claude cli-agent hook setup failed");
-                        (Vec::new(), Vec::new(), false, None)
-                    }
+    let (extra_env, extra_args, integration_on, cli_agent_sock) = match bridge_for_command(&command)
+    {
+        Some(AgentBridge::Claude) => match cli_agent_install::setup_for_claude(&claude_hooks_dir) {
+            Ok(setup) => {
+                let sock = setup.sock_path.clone();
+                (
+                    setup.env.into_iter().collect::<Vec<_>>(),
+                    setup.extra_args,
+                    true,
+                    sock,
+                )
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "claude cli-agent hook setup failed");
+                (Vec::new(), Vec::new(), false, None)
+            }
+        },
+        Some(AgentBridge::Antigravity) => {
+            // agy takes no hook args — the plugin lives in its own root.
+            match agy_install::setup_for_antigravity(&agy_hooks_dir, &agy_install::plugins_root()) {
+                Ok(setup) => {
+                    let sock = setup.sock_path.clone();
+                    (
+                        setup.env.into_iter().collect::<Vec<_>>(),
+                        Vec::new(),
+                        true,
+                        sock,
+                    )
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "antigravity cli-agent hook setup failed");
+                    (Vec::new(), Vec::new(), false, None)
                 }
             }
-            Some(AgentBridge::Antigravity) => {
-                // agy takes no hook args — the plugin lives in its own root.
-                match agy_install::setup_for_antigravity(
-                    &agy_hooks_dir,
-                    &agy_install::plugins_root(),
-                ) {
-                    Ok(setup) => {
-                        let sock = setup.sock_path.clone();
-                        (setup.env.into_iter().collect::<Vec<_>>(), Vec::new(), true, sock)
-                    }
-                    Err(e) => {
-                        tracing::warn!(error = %e, "antigravity cli-agent hook setup failed");
-                        (Vec::new(), Vec::new(), false, None)
-                    }
-                }
-            }
-            None => (Vec::new(), Vec::new(), false, None),
-        };
+        }
+        None => (Vec::new(), Vec::new(), false, None),
+    };
 
     let pty = crate::pty_raw::RawPtySession::spawn(
         app_handle,
@@ -492,8 +504,7 @@ pub async fn dispatch_agent(
     let mut app = state.lock();
     if target_ws_idx < app.workspaces.len() {
         app.workspaces[target_ws_idx].tabs.push(tab);
-        app.workspaces[target_ws_idx].active_tab =
-            app.workspaces[target_ws_idx].tabs.len() - 1;
+        app.workspaces[target_ws_idx].active_tab = app.workspaces[target_ws_idx].tabs.len() - 1;
     }
 
     Ok(tab_id)

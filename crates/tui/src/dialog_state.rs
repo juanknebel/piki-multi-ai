@@ -63,7 +63,9 @@ pub enum NewTabMenu {
     Main,
     /// AI Agents submenu — selected index into the combined list of
     /// built-in dispatchable providers + custom providers from providers.toml.
-    Agents { selected: usize },
+    Agents {
+        selected: usize,
+    },
     Tools,
 }
 

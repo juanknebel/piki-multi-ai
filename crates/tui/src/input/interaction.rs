@@ -610,8 +610,6 @@ pub(super) fn handle_markdown_interaction(app: &mut App, key: KeyEvent) -> Optio
     None
 }
 
-
-
 const HTTP_METHODS: &[&str] = &["GET", "POST", "PUT", "DELETE", "PATCH", "GRPC"];
 
 /// Check if a line looks like a METHOD URL request line.
@@ -1059,7 +1057,11 @@ pub(super) fn handle_workspace_list_interaction(app: &mut App, key: KeyEvent) ->
                 if is_parent {
                     app.switch_workspace(idx);
                     app.toggle_selected_group();
-                } else if app.workspaces.get(idx).is_some_and(|ws| !ws.tabs.is_empty()) {
+                } else if app
+                    .workspaces
+                    .get(idx)
+                    .is_some_and(|ws| !ws.tabs.is_empty())
+                {
                     app.switch_workspace_and_focus(idx);
                 } else {
                     app.switch_workspace(idx);

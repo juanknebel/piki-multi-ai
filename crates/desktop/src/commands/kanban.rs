@@ -53,8 +53,7 @@ fn ensure_board_exists(path: &PathBuf) -> Result<(), String> {
     let board_txt = path.join("board.txt");
     if !board_txt.exists() {
         std::fs::create_dir_all(path).map_err(|e| format!("Failed to create kanban dir: {e}"))?;
-        let content =
-            "col todo \"TO DO\"\ncol in_progress \"IN PROGRESS\"\ncol in_review \"IN REVIEW\"\ncol done \"DONE\"\n";
+        let content = "col todo \"TO DO\"\ncol in_progress \"IN PROGRESS\"\ncol in_review \"IN REVIEW\"\ncol done \"DONE\"\n";
         std::fs::write(&board_txt, content)
             .map_err(|e| format!("Failed to write board.txt: {e}"))?;
         for col in &["todo", "in_progress", "in_review", "done"] {
@@ -66,14 +65,12 @@ fn ensure_board_exists(path: &PathBuf) -> Result<(), String> {
     Ok(())
 }
 
-fn create_provider(
-    path: PathBuf,
-) -> Result<Box<dyn flow_core::provider::Provider>, String> {
+fn create_provider(path: PathBuf) -> Result<Box<dyn flow_core::provider::Provider>, String> {
     let expanded = expand_tilde(path);
     ensure_board_exists(&expanded)?;
-    Ok(Box::new(
-        flow_core::provider_local::LocalProvider::new(expanded),
-    ))
+    Ok(Box::new(flow_core::provider_local::LocalProvider::new(
+        expanded,
+    )))
 }
 
 fn map_card(card: &flow_core::Card) -> KanbanCard {

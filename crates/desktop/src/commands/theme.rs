@@ -16,9 +16,7 @@ pub async fn get_theme(
         .ui_prefs
         .as_ref()
         .ok_or("UI prefs not available")?;
-    let preset = prefs
-        .get_preference("theme")
-        .map_err(|e| e.to_string())?;
+    let preset = prefs.get_preference("theme").map_err(|e| e.to_string())?;
     let overrides = prefs
         .get_preference("theme_overrides")
         .map_err(|e| e.to_string())?;
@@ -87,10 +85,7 @@ pub async fn list_custom_themes(
             .and_then(|s| serde_json::from_str::<CustomTheme>(&s).map_err(|e| e.to_string()))
         {
             Ok(theme) => themes.push(theme),
-            Err(err) => tracing::warn!(
-                "skipping invalid desktop theme {}: {err}",
-                path.display()
-            ),
+            Err(err) => tracing::warn!("skipping invalid desktop theme {}: {err}", path.display()),
         }
     }
 
@@ -111,7 +106,10 @@ pub async fn save_custom_theme(
     if id.is_empty() || id.len() > 64 {
         return Err("theme id must be 1..=64 characters".into());
     }
-    if !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+    if !id
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
         return Err("theme id may only contain letters, digits, '-' and '_'".into());
     }
 
@@ -119,8 +117,7 @@ pub async fn save_custom_theme(
         let app = state.lock();
         app.paths.config_dir().join("desktop-themes")
     };
-    std::fs::create_dir_all(&dir)
-        .map_err(|e| format!("create {}: {e}", dir.display()))?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("create {}: {e}", dir.display()))?;
 
     let path = dir.join(format!("{id}.json"));
     let json = serde_json::to_string_pretty(&theme).map_err(|e| e.to_string())?;

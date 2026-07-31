@@ -74,8 +74,7 @@ fn main() {
                 .into_iter()
                 .map(|entry| {
                     let info = entry.into_info();
-                    let watcher =
-                        FileWatcher::new(info.path.clone(), info.name.clone()).ok();
+                    let watcher = FileWatcher::new(info.path.clone(), info.name.clone()).ok();
                     DesktopWorkspace {
                         info,
                         status: WorkspaceStatus::Idle,
@@ -194,9 +193,7 @@ fn main() {
             // Track main-window OS focus so piki-core::notifications can gate
             // OS toasts: while piki has focus, the in-app toast is enough.
             if let Some(window) = app.get_webview_window("main") {
-                piki_core::notifications::set_window_focused(
-                    window.is_focused().unwrap_or(false),
-                );
+                piki_core::notifications::set_window_focused(window.is_focused().unwrap_or(false));
                 window.on_window_event(|event| {
                     if let tauri::WindowEvent::Focused(focused) = event {
                         piki_core::notifications::set_window_focused(*focused);

@@ -39,7 +39,12 @@ pub async fn list_providers(
     state: State<'_, Mutex<DesktopApp>>,
 ) -> Result<Vec<ProviderInfo>, String> {
     let app = state.lock();
-    Ok(app.provider_manager.all().iter().map(config_to_info).collect())
+    Ok(app
+        .provider_manager
+        .all()
+        .iter()
+        .map(config_to_info)
+        .collect())
 }
 
 #[derive(Deserialize)]

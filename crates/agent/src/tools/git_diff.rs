@@ -1,5 +1,5 @@
-use crate::context::ToolContext;
 use super::Tool;
+use crate::context::ToolContext;
 
 pub struct GitDiffTool;
 
@@ -30,13 +30,12 @@ impl Tool for GitDiffTool {
         })
     }
 
-    async fn execute(
-        &self,
-        args: serde_json::Value,
-        ctx: &ToolContext,
-    ) -> anyhow::Result<String> {
+    async fn execute(&self, args: serde_json::Value, ctx: &ToolContext) -> anyhow::Result<String> {
         let path = args.get("path").and_then(|v| v.as_str());
-        let staged = args.get("staged").and_then(|v| v.as_bool()).unwrap_or(false);
+        let staged = args
+            .get("staged")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
 
         let mut cmd = piki_core::shell_env::command("git");
         cmd.arg("diff");
@@ -56,14 +55,20 @@ impl Tool for GitDiffTool {
 
         if stdout.trim().is_empty() {
             let scope = if staged { "staged" } else { "unstaged" };
-            return Ok(format!("No {scope} changes{}", path.map_or(String::new(), |p| format!(" in {p}"))));
+            return Ok(format!(
+                "No {scope} changes{}",
+                path.map_or(String::new(), |p| format!(" in {p}"))
+            ));
         }
 
         // Truncate very large diffs
         let lines: Vec<&str> = stdout.lines().collect();
         if lines.len() > 300 {
             let truncated: String = lines[..300].join("\n");
-            Ok(format!("{truncated}\n\n... ({} total lines, showing first 300)", lines.len()))
+            Ok(format!(
+                "{truncated}\n\n... ({} total lines, showing first 300)",
+                lines.len()
+            ))
         } else {
             Ok(stdout.to_string())
         }

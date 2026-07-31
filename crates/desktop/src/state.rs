@@ -63,9 +63,8 @@ impl DesktopTab {
         provider: AIProvider,
         provider_cfg: Option<&piki_core::providers::ProviderConfig>,
     ) -> Self {
-        let idle_watcher = matches!(provider, AIProvider::Custom(_)).then(|| {
-            piki_core::idle_watcher::IdleWatcher::from_provider_config(provider_cfg)
-        });
+        let idle_watcher = matches!(provider, AIProvider::Custom(_))
+            .then(|| piki_core::idle_watcher::IdleWatcher::from_provider_config(provider_cfg));
         Self {
             id: Uuid::new_v4().to_string(),
             provider,

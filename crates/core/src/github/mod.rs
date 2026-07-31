@@ -291,7 +291,11 @@ pub async fn get_pr_for_branch(worktree_path: &Path) -> anyhow::Result<Option<Pr
 /// branch/working directory. Works from anywhere (no `current_dir` checkout
 /// required), which is what makes ad-hoc review checkouts possible.
 pub async fn get_pr_view(repo_nwo: &str, number: u64) -> anyhow::Result<PrInfo> {
-    tracing::info!(repo = repo_nwo, pr = number, "gh: fetching PR view by number");
+    tracing::info!(
+        repo = repo_nwo,
+        pr = number,
+        "gh: fetching PR view by number"
+    );
     let output = crate::shell_env::command("gh")
         .args([
             "pr",
@@ -308,7 +312,10 @@ pub async fn get_pr_view(repo_nwo: &str, number: u64) -> anyhow::Result<PrInfo> 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         tracing::error!(stderr = %stderr.trim(), "gh pr view -R failed");
-        anyhow::bail!("gh pr view {number} -R {repo_nwo} failed: {}", stderr.trim());
+        anyhow::bail!(
+            "gh pr view {number} -R {repo_nwo} failed: {}",
+            stderr.trim()
+        );
     }
 
     let info: PrInfo = serde_json::from_slice(&output.stdout)?;
@@ -338,7 +345,10 @@ pub async fn get_pr_files(worktree_path: &Path) -> anyhow::Result<Vec<PrFile>> {
 /// Fetch the list of changed files by explicit PR number. Unlike
 /// [`get_pr_files`], this does not resolve the PR via the current branch, so
 /// it works against a detached-HEAD checkout (e.g. an ad-hoc review worktree).
-pub async fn get_pr_files_by_number(worktree_path: &Path, number: u64) -> anyhow::Result<Vec<PrFile>> {
+pub async fn get_pr_files_by_number(
+    worktree_path: &Path,
+    number: u64,
+) -> anyhow::Result<Vec<PrFile>> {
     tracing::info!(path = %worktree_path.display(), pr = number, "gh: fetching PR files by number");
     let output = crate::shell_env::command("gh")
         .args(["pr", "view", &number.to_string(), "--json", "files"])
@@ -544,7 +554,11 @@ pub async fn get_pr_review_comments(
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         tracing::error!(stderr = %stderr.trim(), "gh api pulls/N/comments failed");
-        anyhow::bail!("gh api pulls/{}/comments failed: {}", pr_number, stderr.trim());
+        anyhow::bail!(
+            "gh api pulls/{}/comments failed: {}",
+            pr_number,
+            stderr.trim()
+        );
     }
 
     // `--paginate` concatenates JSON arrays as separate documents. Read them all.

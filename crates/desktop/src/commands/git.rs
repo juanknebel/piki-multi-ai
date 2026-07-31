@@ -1,8 +1,8 @@
 use parking_lot::Mutex;
-use serde::Serialize;
-use tauri::State;
 use piki_core::ChangedFile;
 use piki_core::workspace::manager::WorkspaceManager;
+use serde::Serialize;
+use tauri::State;
 
 use crate::state::DesktopApp;
 
@@ -63,7 +63,10 @@ pub async fn get_workspace_git_status(
         }
     }
 
-    Ok(WorkspaceGitStatus { files, ahead_behind })
+    Ok(WorkspaceGitStatus {
+        files,
+        ahead_behind,
+    })
 }
 
 #[tauri::command]

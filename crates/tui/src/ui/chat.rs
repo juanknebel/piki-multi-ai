@@ -24,13 +24,18 @@ pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &App) {
     } else {
         app.chat_panel.config.model.clone()
     };
-    let agent_indicator = if app.chat_panel.agent_mode { " Agent" } else { "" };
+    let agent_indicator = if app.chat_panel.agent_mode {
+        " Agent"
+    } else {
+        ""
+    };
     let title = format!(" AI Chat{} [{}] ", agent_indicator, model_label);
 
     let block = Block::default()
         .title(title)
         .title_style(Style::default().fg(theme.help.border))
-        .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
+        .borders(Borders::ALL)
+        .border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(Style::default().fg(theme.help.border));
 
     let inner = block.inner(popup);
@@ -78,7 +83,10 @@ pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let input_line = Line::from(vec![
         Span::styled("> ", Style::default().fg(theme.help.border)),
         Span::raw(before),
-        Span::styled(cursor_char, Style::default().bg(theme.help.border).fg(theme.palette.bg0)),
+        Span::styled(
+            cursor_char,
+            Style::default().bg(theme.help.border).fg(theme.palette.bg0),
+        ),
         Span::raw(after),
     ]);
     frame.render_widget(Paragraph::new(input_line), input_area);
@@ -110,7 +118,10 @@ pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &App) {
                 .map(|r| r.tool_name.as_str())
                 .unwrap_or("?");
             vec![
-                Span::styled(format!("Approve {tool_name}? "), Style::default().fg(theme.palette.warn)),
+                Span::styled(
+                    format!("Approve {tool_name}? "),
+                    Style::default().fg(theme.palette.warn),
+                ),
                 Span::styled("[y]", Style::default().fg(h)),
                 Span::raw(" allow  "),
                 Span::styled("[n]", Style::default().fg(h)),
@@ -174,18 +185,14 @@ fn render_messages(frame: &mut Frame, area: Rect, app: &App) {
         for _ in 0..empty_y.saturating_sub(1) {
             lines.push(Line::from(""));
         }
-        lines.push(Line::from(
-            Span::styled(
-                "Start a conversation with a local AI model",
-                Style::default().fg(theme.general.muted_text),
-            ),
-        ));
-        lines.push(Line::from(
-            Span::styled(
-                "Press Tab to select a model",
-                Style::default().fg(theme.general.muted_text),
-            ),
-        ));
+        lines.push(Line::from(Span::styled(
+            "Start a conversation with a local AI model",
+            Style::default().fg(theme.general.muted_text),
+        )));
+        lines.push(Line::from(Span::styled(
+            "Press Tab to select a model",
+            Style::default().fg(theme.general.muted_text),
+        )));
     } else {
         for msg in &app.chat_panel.messages {
             let (role_label, role_color) = match msg.role {
@@ -313,7 +320,10 @@ fn render_settings(frame: &mut Frame, area: Rect, app: &App) {
         Span::raw("    "),
         Span::styled(server_label, server_value_style),
         if server_active {
-            Span::styled("  (Enter to switch)", Style::default().fg(theme.general.muted_text))
+            Span::styled(
+                "  (Enter to switch)",
+                Style::default().fg(theme.general.muted_text),
+            )
         } else {
             Span::raw("")
         },
@@ -360,7 +370,11 @@ fn render_settings(frame: &mut Frame, area: Rect, app: &App) {
             if i == 0 {
                 lines.push(render_text_field(
                     pline,
-                    if prompt_active { Some(cursor.min(pline.len())) } else { None },
+                    if prompt_active {
+                        Some(cursor.min(pline.len()))
+                    } else {
+                        None
+                    },
                     max_w,
                     h,
                     theme.palette.bg0,
@@ -393,13 +407,14 @@ fn render_text_field<'a>(
             Line::from(vec![
                 Span::raw(prefix),
                 Span::raw(before.to_string()),
-                Span::styled(cursor_char.to_string(), Style::default().bg(accent).fg(cursor_fg)),
+                Span::styled(
+                    cursor_char.to_string(),
+                    Style::default().bg(accent).fg(cursor_fg),
+                ),
                 Span::raw(after.to_string()),
             ])
         }
-        None => {
-            Line::from(format!("{prefix}{text}"))
-        }
+        None => Line::from(format!("{prefix}{text}")),
     }
 }
 

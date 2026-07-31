@@ -42,10 +42,7 @@ pub(crate) fn render_manage_providers_dialog(frame: &mut Frame, area: Rect, app:
                     format!("{:<16}", config.command),
                     Style::default().fg(inactive_c),
                 ),
-                Span::styled(
-                    dispatch_marker,
-                    Style::default().fg(app.theme.palette.ok),
-                ),
+                Span::styled(dispatch_marker, Style::default().fg(app.theme.palette.ok)),
             ]));
         }
     }
@@ -58,8 +55,10 @@ pub(crate) fn render_manage_providers_dialog(frame: &mut Frame, area: Rect, app:
         Span::styled("[Esc] close", Style::default().fg(inactive_c)),
     ]));
 
-    let text = Paragraph::new(lines)
-        .block(super::popup_block("Manage Providers", app.theme.palette.iris));
+    let text = Paragraph::new(lines).block(super::popup_block(
+        "Manage Providers",
+        app.theme.palette.iris,
+    ));
     frame.render_widget(text, popup);
 }
 
@@ -100,15 +99,16 @@ pub(crate) fn render_edit_provider_dialog(frame: &mut Frame, area: Rect, app: &A
     let prompt_labels = ["Positional", "Flag", "None"];
     let fw = popup_width.saturating_sub(20) as usize; // field width for visible_field
 
-    let text_field = |label: &str, value: &str, cursor: usize, field_id: EditProviderField| -> Line<'_> {
-        let is_active = active_field == field_id;
-        let label_style = Style::default().fg(if is_active { active_c } else { inactive_c });
-        let display = super::visible_field(value, is_active, cursor, fw);
-        Line::from(vec![
-            Span::styled(format!("  {label:<15}"), label_style),
-            Span::styled(display, Style::default().fg(app.theme.palette.fg0)),
-        ])
-    };
+    let text_field =
+        |label: &str, value: &str, cursor: usize, field_id: EditProviderField| -> Line<'_> {
+            let is_active = active_field == field_id;
+            let label_style = Style::default().fg(if is_active { active_c } else { inactive_c });
+            let display = super::visible_field(value, is_active, cursor, fw);
+            Line::from(vec![
+                Span::styled(format!("  {label:<15}"), label_style),
+                Span::styled(display, Style::default().fg(app.theme.palette.fg0)),
+            ])
+        };
 
     let selector = |label: &str, display: &str, field_id: EditProviderField| -> Line<'_> {
         let is_active = active_field == field_id;
@@ -129,13 +129,46 @@ pub(crate) fn render_edit_provider_dialog(frame: &mut Frame, area: Rect, app: &A
     let lines = vec![
         Line::from(""),
         text_field("Name:", name, name_cursor, EditProviderField::Name),
-        text_field("Description:", description, desc_cursor, EditProviderField::Description),
-        text_field("Command:", command, command_cursor, EditProviderField::Command),
-        text_field("Default Args:", default_args, args_cursor, EditProviderField::DefaultArgs),
-        selector("Prompt Format:", prompt_labels[prompt_format_idx], EditProviderField::PromptFormat),
-        text_field("Flag (if Flag):", prompt_flag, flag_cursor, EditProviderField::PromptFlag),
-        selector("Dispatchable:", if dispatchable { "Yes" } else { "No" }, EditProviderField::Dispatchable),
-        text_field("Agent Dir:", agent_dir, agent_dir_cursor, EditProviderField::AgentDir),
+        text_field(
+            "Description:",
+            description,
+            desc_cursor,
+            EditProviderField::Description,
+        ),
+        text_field(
+            "Command:",
+            command,
+            command_cursor,
+            EditProviderField::Command,
+        ),
+        text_field(
+            "Default Args:",
+            default_args,
+            args_cursor,
+            EditProviderField::DefaultArgs,
+        ),
+        selector(
+            "Prompt Format:",
+            prompt_labels[prompt_format_idx],
+            EditProviderField::PromptFormat,
+        ),
+        text_field(
+            "Flag (if Flag):",
+            prompt_flag,
+            flag_cursor,
+            EditProviderField::PromptFlag,
+        ),
+        selector(
+            "Dispatchable:",
+            if dispatchable { "Yes" } else { "No" },
+            EditProviderField::Dispatchable,
+        ),
+        text_field(
+            "Agent Dir:",
+            agent_dir,
+            agent_dir_cursor,
+            EditProviderField::AgentDir,
+        ),
         Line::from(""),
         Line::from(vec![
             Span::styled(

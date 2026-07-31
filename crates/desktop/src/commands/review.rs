@@ -2,12 +2,10 @@ use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use piki_core::github::{
-    self, ExistingComment, InlineComment, PrFile, PrInfo, ReviewVerdict,
-};
+use piki_core::github::{self, ExistingComment, InlineComment, PrFile, PrInfo, ReviewVerdict};
 
-use crate::state::DesktopApp;
 use super::diff::SideBySideDiff;
+use crate::state::DesktopApp;
 
 #[derive(Serialize, Clone)]
 pub struct PrDetail {
@@ -182,10 +180,7 @@ pub async fn get_pr_file_side_by_side_diff(
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     Ok(super::diff::parse_side_by_side(
-        &stdout,
-        &base_ref,
-        "HEAD",
-        &file,
+        &stdout, &base_ref, "HEAD", &file,
     ))
 }
 

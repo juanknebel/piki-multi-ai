@@ -76,9 +76,7 @@ impl SqliteStorage {
 
         if version < 4 {
             let tx = conn.transaction()?;
-            tx.execute_batch(
-                "ALTER TABLE workspaces ADD COLUMN dispatch_agent_name TEXT;",
-            )?;
+            tx.execute_batch("ALTER TABLE workspaces ADD COLUMN dispatch_agent_name TEXT;")?;
             tx.execute("INSERT INTO schema_version (version) VALUES (4)", [])?;
             tx.commit()?;
         }
@@ -606,7 +604,12 @@ impl super::AgentProfileStorage for Arc<SqliteStorage> {
              VALUES (?1, ?2, ?3, ?4, 1)
              ON CONFLICT(source_repo, name) DO UPDATE SET
                  provider = ?3, role = ?4, version = version + 1, last_synced_at = NULL",
-            rusqlite::params![profile.source_repo, profile.name, profile.provider, profile.role],
+            rusqlite::params![
+                profile.source_repo,
+                profile.name,
+                profile.provider,
+                profile.role
+            ],
         )?;
         Ok(())
     }
@@ -679,7 +682,11 @@ mod review_workspace_tests {
         storage.save_workspaces(&git_root, &[ws]).unwrap();
 
         let by_repo = storage.load_workspaces(&git_root).unwrap();
-        assert_eq!(by_repo.len(), 1, "ephemeral entry must not be filtered as stale");
+        assert_eq!(
+            by_repo.len(),
+            1,
+            "ephemeral entry must not be filtered as stale"
+        );
         assert!(by_repo[0].ephemeral);
         assert_eq!(by_repo[0].pr_repo_nwo.as_deref(), Some("owner/repo"));
         assert_eq!(by_repo[0].pr_number, Some(7));
@@ -709,6 +716,9 @@ mod review_workspace_tests {
         storage.save_workspaces(&git_root, &[ws]).unwrap();
 
         let by_repo = storage.load_workspaces(&git_root).unwrap();
-        assert!(by_repo.is_empty(), "non-ephemeral stale entries must still be dropped");
+        assert!(
+            by_repo.is_empty(),
+            "non-ephemeral stale entries must still be dropped"
+        );
     }
 }

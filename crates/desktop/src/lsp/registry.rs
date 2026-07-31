@@ -44,12 +44,7 @@ impl Default for LspRegistry {
                     id: "typescript-language-server".into(),
                     command: "typescript-language-server".into(),
                     args: vec!["--stdio".into()],
-                    extensions: vec![
-                        "ts".into(),
-                        "tsx".into(),
-                        "js".into(),
-                        "jsx".into(),
-                    ],
+                    extensions: vec!["ts".into(), "tsx".into(), "js".into(), "jsx".into()],
                     init_options: None,
                 },
                 LspServerConfig {

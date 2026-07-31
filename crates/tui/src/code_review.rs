@@ -167,9 +167,17 @@ impl CodeReviewState {
     /// The root existing comment anchored at `(file_path, line, side)`, if
     /// any — the target for the `R` (reply) key. Outdated comments
     /// (`line == None`) are never surfaced here.
-    pub fn thread_root_at(&self, file_path: &str, line: u32, side: &str) -> Option<&ExistingComment> {
+    pub fn thread_root_at(
+        &self,
+        file_path: &str,
+        line: u32,
+        side: &str,
+    ) -> Option<&ExistingComment> {
         self.existing_comments.iter().find(|c| {
-            c.path == file_path && c.line == Some(line) && c.side == side && c.in_reply_to_id.is_none()
+            c.path == file_path
+                && c.line == Some(line)
+                && c.side == side
+                && c.in_reply_to_id.is_none()
         })
     }
 
@@ -179,7 +187,10 @@ impl CodeReviewState {
     pub fn thread_lines(&self, file_path: &str, line: u32, side: &str) -> Vec<String> {
         let mut out = Vec::new();
         for root in self.existing_comments.iter().filter(|c| {
-            c.path == file_path && c.line == Some(line) && c.side == side && c.in_reply_to_id.is_none()
+            c.path == file_path
+                && c.line == Some(line)
+                && c.side == side
+                && c.in_reply_to_id.is_none()
         }) {
             out.push(format!("{}: {}", root.author, root.body));
             for reply in self
@@ -230,7 +241,14 @@ mod tests {
         )
     }
 
-    fn existing(id: u64, line: u32, side: &str, author: &str, body: &str, in_reply_to: Option<u64>) -> ExistingComment {
+    fn existing(
+        id: u64,
+        line: u32,
+        side: &str,
+        author: &str,
+        body: &str,
+        in_reply_to: Option<u64>,
+    ) -> ExistingComment {
         ExistingComment {
             id,
             path: "src/main.rs".into(),
@@ -258,10 +276,13 @@ mod tests {
             existing(2, 10, "RIGHT", "author", "good point", Some(1)),
         ];
         let lines = state.thread_lines("src/main.rs", 10, "RIGHT");
-        assert_eq!(lines, vec![
-            "octocat: why not use X?".to_string(),
-            "  \u{21b3} author: good point".to_string(),
-        ]);
+        assert_eq!(
+            lines,
+            vec![
+                "octocat: why not use X?".to_string(),
+                "  \u{21b3} author: good point".to_string(),
+            ]
+        );
     }
 
     #[test]
@@ -305,6 +326,9 @@ mod tests {
         });
         assert!(state.thread_root_at("src/main.rs", 10, "RIGHT").is_none());
         // But it still shows up in thread_lines.
-        assert_eq!(state.thread_lines("src/main.rs", 10, "RIGHT"), vec!["you: mine".to_string()]);
+        assert_eq!(
+            state.thread_lines("src/main.rs", 10, "RIGHT"),
+            vec!["you: mine".to_string()]
+        );
     }
 }

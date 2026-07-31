@@ -40,7 +40,7 @@ use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use super::install::{jq_available, unique_sock_name, set_executable, CLI_AGENT_TARGET};
+use super::install::{CLI_AGENT_TARGET, jq_available, set_executable, unique_sock_name};
 
 const SCRIPT_PAYLOAD: &str = include_str!("scripts/agy-payload.sh");
 const SCRIPT_PRE_INVOCATION: &str = include_str!("scripts/agy-on-pre-invocation.sh");
@@ -218,7 +218,10 @@ mod tests {
         let dir = plugins.path().join(PLUGIN_NAME);
         let raw = std::fs::read_to_string(dir.join("hooks.json")).unwrap();
         let v: serde_json::Value = serde_json::from_str(&raw).expect("valid JSON");
-        let spec = v.get(PLUGIN_NAME).and_then(|s| s.as_object()).expect("spec");
+        let spec = v
+            .get(PLUGIN_NAME)
+            .and_then(|s| s.as_object())
+            .expect("spec");
 
         for key in ["PreInvocation", "PostToolUse", "Stop"] {
             assert!(spec.contains_key(key), "missing hook {key}");
@@ -310,10 +313,9 @@ mod tests {
                 .expect("hook script runs");
             assert!(out.status.success(), "{script} exited non-zero");
             let stdout = String::from_utf8_lossy(&out.stdout);
-            let v: serde_json::Value =
-                serde_json::from_str(stdout.trim()).unwrap_or_else(|e| {
-                    panic!("{script} must print a JSON object, got {stdout:?}: {e}")
-                });
+            let v: serde_json::Value = serde_json::from_str(stdout.trim()).unwrap_or_else(|e| {
+                panic!("{script} must print a JSON object, got {stdout:?}: {e}")
+            });
             assert!(v.is_object(), "{script} printed {v}");
         }
     }

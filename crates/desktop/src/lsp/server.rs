@@ -1,5 +1,5 @@
-use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -71,11 +71,7 @@ impl LspManager {
         root_path: &PathBuf,
     ) -> anyhow::Result<Option<LspConnectionInfo>> {
         // Find the appropriate server config based on file extension
-        let ext = file_path
-            .rsplit('.')
-            .next()
-            .unwrap_or("")
-            .to_lowercase();
+        let ext = file_path.rsplit('.').next().unwrap_or("").to_lowercase();
 
         let config = match self.registry.find_server_for_extension(&ext) {
             Some(c) => c.clone(),
@@ -103,11 +99,7 @@ impl LspManager {
         self.evict_if_needed().await;
 
         // Spawn new server
-        let ws_path = format!(
-            "/lsp/{}/{}",
-            config.id,
-            hash_path(root_path)
-        );
+        let ws_path = format!("/lsp/{}/{}", config.id, hash_path(root_path));
 
         let instance = spawn_server(&config, root_path, &ws_path).await?;
         let info = LspConnectionInfo {
@@ -130,9 +122,7 @@ impl LspManager {
     pub fn mark_idle_by_root(&mut self, root_path: &PathBuf) {
         let now = Instant::now();
         for instance in self.servers.values_mut() {
-            if &instance.key.root_path == root_path
-                && instance.status == LspServerStatus::Active
-            {
+            if &instance.key.root_path == root_path && instance.status == LspServerStatus::Active {
                 instance.status = LspServerStatus::Idle(now);
                 tracing::debug!(
                     server = %instance.key.server_id,
@@ -163,8 +153,7 @@ impl LspManager {
             instance.status = LspServerStatus::ShuttingDown;
 
             // Send LSP shutdown request
-            let shutdown_req =
-                r#"{"jsonrpc":"2.0","id":999999,"method":"shutdown","params":null}"#;
+            let shutdown_req = r#"{"jsonrpc":"2.0","id":999999,"method":"shutdown","params":null}"#;
             let msg = format_lsp_message(shutdown_req);
             let _ = instance.stdin_tx.send(msg);
 

@@ -22,23 +22,19 @@ use crate::app::{ActivePane, App, AppMode, InputState};
 
 use self::command_palette_input::handle_command_palette_input;
 use self::dialog::{
-    handle_about_input, handle_confirm_close_tab_input,
-    handle_confirm_delete_input, handle_confirm_quit_input,
-    handle_create_worktree_input, handle_dashboard_input,
+    handle_about_input, handle_confirm_close_tab_input, handle_confirm_delete_input,
+    handle_confirm_quit_input, handle_create_worktree_input, handle_dashboard_input,
     handle_dispatch_agent_input, handle_dispatch_card_move_input, handle_edit_agent_input,
     handle_edit_agent_role_input, handle_edit_provider_input, handle_edit_workspace_input,
-    handle_help_input, handle_import_agents_input,
-    handle_logs_input, handle_manage_agents_input, handle_manage_providers_input,
-    handle_missing_prereqs_input, handle_new_tab_input, handle_new_workspace_input,
-    handle_pr_picker_input, handle_workspace_info_input,
+    handle_help_input, handle_import_agents_input, handle_logs_input, handle_manage_agents_input,
+    handle_manage_providers_input, handle_missing_prereqs_input, handle_new_tab_input,
+    handle_new_workspace_input, handle_pr_picker_input, handle_workspace_info_input,
 };
 use self::editor_input::handle_inline_edit_input;
 use self::fuzzy_input::handle_fuzzy_search_input;
 use self::interaction::{
-    handle_agents_interaction, handle_api_interaction,
-    handle_kanban_interaction, handle_markdown_interaction, handle_terminal_interaction,
-    handle_workspace_list_interaction,
-    
+    handle_agents_interaction, handle_api_interaction, handle_kanban_interaction,
+    handle_markdown_interaction, handle_terminal_interaction, handle_workspace_list_interaction,
 };
 
 /// Handle a bracketed paste event — insert full text at once into the active context.
@@ -353,7 +349,10 @@ fn handle_prefix_key(app: &mut App, key: KeyEvent) -> Option<Action> {
     }
     // Don't dead-end: point at the keymap the user just had open.
     let prefix = app.config.prefix_display();
-    let help = app.config.prefix_chord("help").unwrap_or_else(|| "?".to_string());
+    let help = app
+        .config
+        .prefix_chord("help")
+        .unwrap_or_else(|| "?".to_string());
     app.set_toast(
         format!("Unbound key — press {prefix} {help} for the keymap"),
         crate::app::ToastLevel::Info,

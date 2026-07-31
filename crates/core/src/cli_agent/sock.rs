@@ -228,8 +228,7 @@ mod tests {
         let sock = dir.path().join("rt.sock");
 
         let shell = Arc::new(Mutex::new(ShellSession::default()));
-        let reader = spawn_reader(sock.clone(), Arc::clone(&shell), None)
-            .expect("reader starts");
+        let reader = spawn_reader(sock.clone(), Arc::clone(&shell), None).expect("reader starts");
 
         // Reader mkfifo's on a blocking task; wait for the FIFO to appear.
         for _ in 0..200 {

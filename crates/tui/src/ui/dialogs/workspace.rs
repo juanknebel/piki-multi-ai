@@ -127,7 +127,8 @@ pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
         )]),
     ]);
 
-    let text = Paragraph::new(lines).block(super::popup_block("New Workspace", theme.new_ws_border));
+    let text =
+        Paragraph::new(lines).block(super::popup_block("New Workspace", theme.new_ws_border));
     frame.render_widget(text, popup);
 }
 
@@ -181,7 +182,8 @@ pub(crate) fn render_edit_workspace_dialog(frame: &mut Frame, area: Rect, app: &
         )]),
     ];
 
-    let text = Paragraph::new(lines).block(super::popup_block("Edit Workspace", theme.new_ws_border));
+    let text =
+        Paragraph::new(lines).block(super::popup_block("Edit Workspace", theme.new_ws_border));
     frame.render_widget(text, popup);
 }
 
@@ -198,7 +200,10 @@ pub(crate) fn render_create_worktree_dialog(frame: &mut Frame, area: Rect, app: 
 }
 
 fn render_create_worktree_choose_source(frame: &mut Frame, area: Rect, app: &App) {
-    let Some(DialogState::CreateWorktree { existing_selected, .. }) = &app.active_dialog else {
+    let Some(DialogState::CreateWorktree {
+        existing_selected, ..
+    }) = &app.active_dialog
+    else {
         return;
     };
 
@@ -268,10 +273,7 @@ fn render_create_worktree_create_new(frame: &mut Frame, area: Rect, app: &App) {
 
     let lines = vec![
         Line::from(vec![
-            Span::styled(
-                "  Parent: ",
-                Style::default().fg(inactive_c),
-            ),
+            Span::styled("  Parent: ", Style::default().fg(inactive_c)),
             Span::raw(parent_label.to_string()),
         ]),
         Line::from(""),
@@ -361,8 +363,10 @@ fn render_create_worktree_load_existing(frame: &mut Frame, area: Rect, app: &App
         Style::default().fg(inactive_c),
     )]));
 
-    let text =
-        Paragraph::new(lines).block(super::popup_block("Load Existing Worktree", theme.new_ws_border));
+    let text = Paragraph::new(lines).block(super::popup_block(
+        "Load Existing Worktree",
+        theme.new_ws_border,
+    ));
     frame.render_widget(text, popup);
 }
 
@@ -529,7 +533,8 @@ pub(crate) fn render_confirm_delete_dialog(frame: &mut Frame, area: Rect, app: &
         Style::default().fg(theme.delete_cancel),
     )));
 
-    let text = Paragraph::new(lines).block(super::popup_block("Delete Workspace", theme.delete_border));
+    let text =
+        Paragraph::new(lines).block(super::popup_block("Delete Workspace", theme.delete_border));
     frame.render_widget(text, popup);
 }
 
@@ -595,8 +600,10 @@ pub(crate) fn render_pr_picker_dialog(frame: &mut Frame, area: Rect, app: &App) 
             Style::default().fg(inactive_c),
         )));
 
-        let text_widget =
-            Paragraph::new(lines).block(super::popup_block("Code Review — Browse a Repo", theme.new_ws_border));
+        let text_widget = Paragraph::new(lines).block(super::popup_block(
+            "Code Review — Browse a Repo",
+            theme.new_ws_border,
+        ));
         frame.render_widget(text_widget, popup);
         return;
     }
@@ -613,7 +620,9 @@ pub(crate) fn render_pr_picker_dialog(frame: &mut Frame, area: Rect, app: &App) 
         )));
     } else {
         match repo_browse {
-            RepoBrowse::Loaded { items: repo_items, .. } => {
+            RepoBrowse::Loaded {
+                items: repo_items, ..
+            } => {
                 if repo_items.is_empty() {
                     lines.push(Line::from(Span::styled(
                         "  No open PRs in this repo.",
@@ -624,7 +633,14 @@ pub(crate) fn render_pr_picker_dialog(frame: &mut Frame, area: Rect, app: &App) 
                         if idx == *selected {
                             selected_line_idx = lines.len();
                         }
-                        lines.push(render_pr_row(item, idx, *selected, *checking_out, active_c, inactive_c));
+                        lines.push(render_pr_row(
+                            item,
+                            idx,
+                            *selected,
+                            *checking_out,
+                            active_c,
+                            inactive_c,
+                        ));
                     }
                 }
             }
@@ -660,7 +676,14 @@ pub(crate) fn render_pr_picker_dialog(frame: &mut Frame, area: Rect, app: &App) 
                         if idx == *selected {
                             selected_line_idx = lines.len();
                         }
-                        lines.push(render_pr_row(item, idx, *selected, *checking_out, active_c, inactive_c));
+                        lines.push(render_pr_row(
+                            item,
+                            idx,
+                            *selected,
+                            *checking_out,
+                            active_c,
+                            inactive_c,
+                        ));
                     }
                 }
             }
@@ -675,7 +698,10 @@ pub(crate) fn render_pr_picker_dialog(frame: &mut Frame, area: Rect, app: &App) 
         }
         _ => "  [j/k] move  [Enter] review  [r] reload  [o] browse a repo  [Esc] cancel",
     };
-    lines.push(Line::from(Span::styled(hint, Style::default().fg(inactive_c))));
+    lines.push(Line::from(Span::styled(
+        hint,
+        Style::default().fg(inactive_c),
+    )));
 
     let title = match repo_browse {
         RepoBrowse::Loaded { repo_nwo, .. } => format!("Code Review — {repo_nwo}"),
@@ -721,7 +747,9 @@ fn render_pr_row<'a>(
     };
     let requested_chip = matches!(
         item.reason,
-        PrInclusionReason::Interacted { review_requested: true }
+        PrInclusionReason::Interacted {
+            review_requested: true
+        }
     );
     let spinner = checking_out.is_some_and(|c| c == idx);
     let mut label = format!(

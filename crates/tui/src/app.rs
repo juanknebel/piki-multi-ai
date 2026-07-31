@@ -362,7 +362,10 @@ impl std::ops::DerefMut for Workspace {
 /// permission > unseen news > running > everything else. Shared by
 /// `Workspace::agent_status_rollup()` (per-workspace) and the sidebar's
 /// worktree-family aggregation (across a collapsed family's members).
-pub(crate) fn agent_status_severity(status: piki_core::cli_agent::CliAgentStatus, attention: bool) -> u8 {
+pub(crate) fn agent_status_severity(
+    status: piki_core::cli_agent::CliAgentStatus,
+    attention: bool,
+) -> u8 {
     use piki_core::cli_agent::CliAgentStatus as S;
     match (status, attention) {
         (S::WaitingPermission, _) => 4,
@@ -507,7 +510,6 @@ impl Workspace {
             WorkspaceStatus::Error(_) => "error",
         }
     }
-
 }
 
 /// State for the fuzzy file search overlay (backed by nucleo async matcher)
@@ -1409,9 +1411,9 @@ impl App {
                 continue;
             }
 
-            let parent_pos = siblings
-                .iter()
-                .position(|&idx| self.workspaces[idx].info.workspace_type != WorkspaceType::Worktree);
+            let parent_pos = siblings.iter().position(|&idx| {
+                self.workspaces[idx].info.workspace_type != WorkspaceType::Worktree
+            });
 
             match parent_pos {
                 Some(pp) => {
@@ -2188,7 +2190,7 @@ mod tests {
         assert!(app.previous_workspace.is_none());
     }
 
-        #[test]
+    #[test]
     fn test_scroll_mode_requires_pty() {
         let mut app = App::new(
             test_storage(),
@@ -2348,7 +2350,10 @@ mod tests {
 
     #[test]
     fn test_agent_rows_spans_all_workspaces() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         let a = add_test_workspace(&mut app);
         let b = add_test_workspace(&mut app);
         add_agent_tab(&mut app, a, "Claude");
@@ -2362,16 +2367,16 @@ mod tests {
         let rows = app.agent_rows();
         assert_eq!(rows.len(), 3);
         assert!(rows.iter().all(|&(wi, ti)| {
-            matches!(
-                app.workspaces[wi].tabs[ti].provider,
-                AIProvider::Custom(_)
-            )
+            matches!(app.workspaces[wi].tabs[ti].provider, AIProvider::Custom(_))
         }));
     }
 
     #[test]
     fn test_agent_row_at_maps_click_to_index() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         let a = add_test_workspace(&mut app);
         add_agent_tab(&mut app, a, "Claude");
         add_agent_tab(&mut app, a, "Codex");
@@ -2388,7 +2393,10 @@ mod tests {
 
     #[test]
     fn test_agent_row_at_accounts_for_scroll() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         let a = add_test_workspace(&mut app);
         for n in 0..6 {
             add_agent_tab(&mut app, a, &format!("Agent{n}"));
@@ -2397,21 +2405,35 @@ mod tests {
         // the render scrolls it into view (scroll_offset = 4, showing 4 & 5).
         app.agents_area = ratatui::layout::Rect::new(0, 0, 20, 4);
         app.selected_agent_row = 5;
-        assert_eq!(app.agent_row_at(1), Some(4), "first visible row after scroll");
-        assert_eq!(app.agent_row_at(2), Some(5), "selected row scrolled into view");
+        assert_eq!(
+            app.agent_row_at(1),
+            Some(4),
+            "first visible row after scroll"
+        );
+        assert_eq!(
+            app.agent_row_at(2),
+            Some(5),
+            "selected row scrolled into view"
+        );
         assert_eq!(app.agent_row_at(3), None, "below the pane border");
     }
 
     #[test]
     fn test_agent_row_at_empty_is_none() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         app.agents_area = ratatui::layout::Rect::new(0, 0, 20, 5);
         assert_eq!(app.agent_row_at(1), None);
     }
 
     #[test]
     fn test_agents_pane_navigation_and_jump() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         let a = add_test_workspace(&mut app);
         let b = add_test_workspace(&mut app);
         add_agent_tab(&mut app, a, "Claude");
@@ -2440,7 +2462,10 @@ mod tests {
 
     #[test]
     fn test_sidebar_cursor_switches_the_active_workspace() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         let a = add_test_workspace(&mut app);
         let b = add_test_workspace(&mut app);
         app.switch_workspace(a);
@@ -2460,7 +2485,10 @@ mod tests {
         // Every row is a real workspace now (no synthetic header), so the
         // cursor always follows onto whatever it lands on — including a
         // worktree-family parent row.
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         let a = add_test_workspace(&mut app);
         let parent = add_test_workspace(&mut app);
         let child = add_test_workspace(&mut app);
@@ -2486,7 +2514,10 @@ mod tests {
 
     #[test]
     fn test_selection_survives_on_its_own_tab_but_not_a_switch() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         let a = add_test_workspace(&mut app);
         add_agent_tab(&mut app, a, "Claude");
         add_agent_tab(&mut app, a, "Codex");
@@ -2509,7 +2540,10 @@ mod tests {
 
     #[test]
     fn test_selection_owner_is_the_tab_id_not_its_position() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         let a = add_test_workspace(&mut app);
         add_agent_tab(&mut app, a, "Claude");
         add_agent_tab(&mut app, a, "Codex");
@@ -2529,7 +2563,10 @@ mod tests {
 
     #[test]
     fn test_agent_selection_follows_the_active_agent_tab() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         let a = add_test_workspace(&mut app);
         let b = add_test_workspace(&mut app);
         add_agent_tab(&mut app, a, "Antigravity");
@@ -2547,7 +2584,10 @@ mod tests {
 
     #[test]
     fn test_agent_selection_does_not_fight_pane_browsing() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         let a = add_test_workspace(&mut app);
         let b = add_test_workspace(&mut app);
         add_agent_tab(&mut app, a, "Antigravity");
@@ -2565,7 +2605,10 @@ mod tests {
 
     #[test]
     fn test_agent_selection_kept_on_a_non_agent_tab() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         let a = add_test_workspace(&mut app);
         add_agent_tab(&mut app, a, "Antigravity");
         let b = add_test_workspace(&mut app);
@@ -2583,7 +2626,10 @@ mod tests {
 
     #[test]
     fn test_agents_pane_empty_is_noop() {
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         add_test_workspace(&mut app);
         app.active_pane = ActivePane::Agents;
 
@@ -2709,7 +2755,10 @@ mod tests {
         // Review workspaces each have their own source_repo (their own
         // checkout path), so they'd never share a worktree-family key — they
         // must instead land under one synthetic GroupHeader regardless.
-        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
         let plain = add_test_workspace(&mut app); // index 0, non-ephemeral
         let review_a = add_test_workspace(&mut app); // index 1
         let review_b = add_test_workspace(&mut app); // index 2
@@ -2726,7 +2775,10 @@ mod tests {
         let review_indices: Vec<usize> = items[1..3]
             .iter()
             .map(|item| match item {
-                SidebarItem::Workspace { index, collapsed: None } => *index,
+                SidebarItem::Workspace {
+                    index,
+                    collapsed: None,
+                } => *index,
                 other => panic!("expected a flat review workspace row, got {other:?}"),
             })
             .collect();
@@ -2741,7 +2793,10 @@ mod tests {
         app.active_pane = ActivePane::WorkspaceList;
         app.selected_sidebar_row = 0;
         app.toggle_selected_group();
-        assert!(app.collapsed_groups.contains(crate::app::PR_REVIEW_GROUP_KEY));
+        assert!(
+            app.collapsed_groups
+                .contains(crate::app::PR_REVIEW_GROUP_KEY)
+        );
         let collapsed_items = app.sidebar_items();
         assert_eq!(collapsed_items.len(), 2);
         assert!(matches!(

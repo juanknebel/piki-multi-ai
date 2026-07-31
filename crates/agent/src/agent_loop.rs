@@ -49,18 +49,18 @@ impl AgentLoop {
                 // Collect tool names for the system prompt
                 tool_defs
                     .iter()
-                    .filter_map(|d| d.get("function").and_then(|f| f.get("name")).and_then(|n| n.as_str()))
+                    .filter_map(|d| {
+                        d.get("function")
+                            .and_then(|f| f.get("name"))
+                            .and_then(|n| n.as_str())
+                    })
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
 
         // Build enriched system prompt
-        let enriched_prompt = prompt::build_system_prompt(
-            system_prompt.as_deref(),
-            &self.context,
-            &tool_names,
-        )
-        .await;
+        let enriched_prompt =
+            prompt::build_system_prompt(system_prompt.as_deref(), &self.context, &tool_names).await;
 
         // Convert ChatMessages to wire format
         let mut wire_messages = self.to_wire_messages(&enriched_prompt, &messages);
@@ -150,21 +150,15 @@ impl AgentLoop {
                                 crate::context::ApprovalRequest {
                                     tool_call_id: tc.id.clone(),
                                     tool_name: tc.name.clone(),
-                                    description: format!(
-                                        "{} with args: {}",
-                                        tc.name,
-                                        tc.arguments
-                                    ),
+                                    description: format!("{} with args: {}", tc.name, tc.arguments),
                                     response_tx: resp_tx,
                                 },
                             ));
 
                             // Wait for approval with timeout
-                            let approval = tokio::time::timeout(
-                                std::time::Duration::from_secs(300),
-                                resp_rx,
-                            )
-                            .await;
+                            let approval =
+                                tokio::time::timeout(std::time::Duration::from_secs(300), resp_rx)
+                                    .await;
 
                             match approval {
                                 Ok(Ok(crate::context::ApprovalResponse::Allow)) => {
@@ -174,7 +168,9 @@ impl AgentLoop {
                                     self.auto_approve = true;
                                     // Proceed with execution
                                 }
-                                Ok(Ok(crate::context::ApprovalResponse::Deny)) | Ok(Err(_)) | Err(_) => {
+                                Ok(Ok(crate::context::ApprovalResponse::Deny))
+                                | Ok(Err(_))
+                                | Err(_) => {
                                     let err_msg = "User denied tool execution".to_string();
                                     let _ = event_tx.send(AgentEvent::ToolResult {
                                         tool_call_id: tc.id.clone(),

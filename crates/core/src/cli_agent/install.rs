@@ -288,9 +288,7 @@ mod tests {
             assert!(hooks.contains_key(key), "missing hook {key}");
         }
         // Command must reference the materialized script via `sh '...'`.
-        let cmd = hooks["Stop"][0]["hooks"][0]["command"]
-            .as_str()
-            .unwrap();
+        let cmd = hooks["Stop"][0]["hooks"][0]["command"].as_str().unwrap();
         assert!(cmd.starts_with("sh '"));
         assert!(cmd.contains("on-stop.sh"));
     }

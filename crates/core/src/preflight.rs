@@ -50,14 +50,16 @@ pub fn run_preflight_checks() -> PreflightResult {
 
     // lazygit (optional, powers the TUI Git tab)
     if !timed_command_ok("lazygit") {
-        warnings.push("lazygit not found — the Git tab needs it (https://github.com/jesseduffield/lazygit)".to_string());
+        warnings.push(
+            "lazygit not found — the Git tab needs it (https://github.com/jesseduffield/lazygit)"
+                .to_string(),
+        );
     }
 
     // claude (optional — only needed for Claude agent tabs / dispatch)
     if !timed_command_ok("claude") {
-        warnings.push(
-            "claude not found — Claude agent tabs and dispatch are unavailable".to_string(),
-        );
+        warnings
+            .push("claude not found — Claude agent tabs and dispatch are unavailable".to_string());
     }
 
     // jq (optional — required for the structured Claude integration; without

@@ -21,7 +21,10 @@ pub(crate) fn test_storage() -> std::sync::Arc<piki_core::storage::AppStorage> {
 }
 
 pub(crate) fn test_app() -> App {
-    App::new(test_storage(), &piki_core::paths::DataPaths::default_paths())
+    App::new(
+        test_storage(),
+        &piki_core::paths::DataPaths::default_paths(),
+    )
 }
 
 /// Build an `App` whose `DataPaths` resolve under an isolated temp directory.

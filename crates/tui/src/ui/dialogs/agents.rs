@@ -42,7 +42,10 @@ pub(crate) fn render_dispatch_card_move_dialog(frame: &mut Frame, area: Rect, ap
         } else {
             Style::default().fg(theme.delete_text)
         };
-        lines.push(Line::from(Span::styled(format!("  {marker}{title}"), style)));
+        lines.push(Line::from(Span::styled(
+            format!("  {marker}{title}"),
+            style,
+        )));
     }
 
     let text =
@@ -143,10 +146,7 @@ pub(crate) fn render_dispatch_agent_dialog(frame: &mut Frame, area: Rect, app: &
         };
         lines.push(Line::from(vec![
             Span::styled("  Workspace:", Style::default().fg(active_c)),
-            Span::styled(
-                format!(" {}", ws_selector),
-                Style::default().fg(active_c),
-            ),
+            Span::styled(format!(" {}", ws_selector), Style::default().fg(active_c)),
         ]));
         lines.push(Line::from(Span::styled(
             "              ◄/► to change",
@@ -182,8 +182,8 @@ pub(crate) fn render_dispatch_agent_dialog(frame: &mut Frame, area: Rect, app: &
         ]));
     }
 
-    let text = Paragraph::new(lines)
-        .block(super::popup_block("Dispatch Agent", app.theme.palette.iris));
+    let text =
+        Paragraph::new(lines).block(super::popup_block("Dispatch Agent", app.theme.palette.iris));
     frame.render_widget(text, popup);
 }
 
@@ -193,7 +193,9 @@ pub(crate) fn render_manage_agents_dialog(frame: &mut Frame, area: Rect, app: &A
     };
 
     let popup_width = (area.width * 60 / 100).max(50);
-    let popup_height = (app.agent_profiles.len() as u16 + 6).min(area.height - 4).max(8);
+    let popup_height = (app.agent_profiles.len() as u16 + 6)
+        .min(area.height - 4)
+        .max(8);
     let popup = super::clear_popup(frame, area, popup_width, popup_height);
     let active_c = app.theme.dialog.new_ws_active;
     let inactive_c = app.theme.dialog.new_ws_inactive;
@@ -431,7 +433,10 @@ pub(crate) fn render_edit_agent_role_dialog(frame: &mut Frame, area: Rect, app: 
 
     let visible_range = s..display_lines.len().min(s + inner_height);
     for (i, line_idx) in visible_range.enumerate() {
-        let text = display_lines.get(line_idx).map(|s| s.as_str()).unwrap_or("");
+        let text = display_lines
+            .get(line_idx)
+            .map(|s| s.as_str())
+            .unwrap_or("");
         if line_idx == cursor_line {
             // Show cursor
             let before: String = text.chars().take(cursor_col).collect();
@@ -517,10 +522,7 @@ pub(crate) fn render_import_agents_dialog(frame: &mut Frame, area: Rect, app: &A
             lines.push(Line::from(vec![
                 Span::styled(format!("  {}{}", marker, checkbox), style),
                 Span::styled(format!("{:<18}", name), style),
-                Span::styled(
-                    format!("{:<13}", provider),
-                    Style::default().fg(inactive_c),
-                ),
+                Span::styled(format!("{:<13}", provider), Style::default().fg(inactive_c)),
                 status,
             ]));
         }
@@ -534,7 +536,9 @@ pub(crate) fn render_import_agents_dialog(frame: &mut Frame, area: Rect, app: &A
         Span::styled("[Esc] cancel", Style::default().fg(inactive_c)),
     ]));
 
-    let text = Paragraph::new(lines)
-        .block(super::popup_block("Import Agents from Repo", app.theme.palette.iris));
+    let text = Paragraph::new(lines).block(super::popup_block(
+        "Import Agents from Repo",
+        app.theme.palette.iris,
+    ));
     frame.render_widget(text, popup);
 }

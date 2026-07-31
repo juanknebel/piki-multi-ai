@@ -41,7 +41,12 @@ fn shell_integration_setup(
 /// `(extra_env, extra_args, enabled, cli_agent_sock)` tuple; on failure the
 /// tab still spawns, just without the structured channel. `cli_agent_sock` is
 /// the per-spawn FIFO path the out-of-band transport uses.
-type CliAgentSetup = (Vec<(String, String)>, Vec<String>, bool, Option<std::path::PathBuf>);
+type CliAgentSetup = (
+    Vec<(String, String)>,
+    Vec<String>,
+    bool,
+    Option<std::path::PathBuf>,
+);
 
 fn cli_agent_setup(hooks_dir: &std::path::Path) -> CliAgentSetup {
     match cli_agent_install::setup_for_claude(hooks_dir) {
@@ -93,8 +98,7 @@ pub async fn spawn_tab(
             return Err("Workspace index out of range".to_string());
         }
         app.workspaces[workspace_idx].tabs.push(tab);
-        app.workspaces[workspace_idx].active_tab =
-            app.workspaces[workspace_idx].tabs.len() - 1;
+        app.workspaces[workspace_idx].active_tab = app.workspaces[workspace_idx].tabs.len() - 1;
         return Ok(tab_id);
     }
 
@@ -116,7 +120,10 @@ pub async fn spawn_tab(
                     .map(String::from)
             });
         drop(app);
-        (custom_shell.unwrap_or_else(|| ai_provider.resolved_command()), Vec::new())
+        (
+            custom_shell.unwrap_or_else(|| ai_provider.resolved_command()),
+            Vec::new(),
+        )
     } else if let AIProvider::Custom(ref name) = ai_provider {
         let app = state.lock();
         if let Some(config) = app.provider_manager.get(name) {
@@ -210,8 +217,7 @@ pub async fn spawn_tab(
     let mut app = state.lock();
     if workspace_idx < app.workspaces.len() {
         app.workspaces[workspace_idx].tabs.push(tab);
-        app.workspaces[workspace_idx].active_tab =
-            app.workspaces[workspace_idx].tabs.len() - 1;
+        app.workspaces[workspace_idx].active_tab = app.workspaces[workspace_idx].tabs.len() - 1;
     }
 
     Ok(tab_id)
@@ -232,7 +238,9 @@ pub async fn write_pty(
         for tab in &mut ws.tabs {
             if tab.id == tab_id {
                 if let Some(ref mut pty) = tab.pty {
-                    return pty.write(&bytes).map_err(|e| format!("PTY write error: {e}"));
+                    return pty
+                        .write(&bytes)
+                        .map_err(|e| format!("PTY write error: {e}"));
                 }
                 return Err("Tab has no PTY session".to_string());
             }
@@ -253,7 +261,9 @@ pub async fn resize_pty(
         for tab in &ws.tabs {
             if tab.id == tab_id {
                 if let Some(ref pty) = tab.pty {
-                    return pty.resize(rows, cols).map_err(|e| format!("PTY resize error: {e}"));
+                    return pty
+                        .resize(rows, cols)
+                        .map_err(|e| format!("PTY resize error: {e}"));
                 }
                 return Err("Tab has no PTY session".to_string());
             }
@@ -369,8 +379,7 @@ pub async fn spawn_editor_tab(
     let mut app = state.lock();
     if workspace_idx < app.workspaces.len() {
         app.workspaces[workspace_idx].tabs.push(tab);
-        app.workspaces[workspace_idx].active_tab =
-            app.workspaces[workspace_idx].tabs.len() - 1;
+        app.workspaces[workspace_idx].active_tab = app.workspaces[workspace_idx].tabs.len() - 1;
     }
 
     Ok(tab_id)
@@ -460,8 +469,7 @@ pub async fn spawn_terminal_at(
     let mut app = state.lock();
     if workspace_idx < app.workspaces.len() {
         app.workspaces[workspace_idx].tabs.push(tab);
-        app.workspaces[workspace_idx].active_tab =
-            app.workspaces[workspace_idx].tabs.len() - 1;
+        app.workspaces[workspace_idx].active_tab = app.workspaces[workspace_idx].tabs.len() - 1;
     }
 
     Ok(tab_id)

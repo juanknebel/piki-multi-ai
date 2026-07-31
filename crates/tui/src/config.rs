@@ -252,10 +252,22 @@ fn default_prefix_key() -> String {
 fn default_app() -> HashMap<String, BindingValue> {
     let mut m = HashMap::new();
     // Focus movement between panes
-    m.insert("focus_left".to_string(), BindingValue::many(&["prefix-h", "prefix-left"]));
-    m.insert("focus_down".to_string(), BindingValue::many(&["prefix-j", "prefix-down"]));
-    m.insert("focus_up".to_string(), BindingValue::many(&["prefix-k", "prefix-up"]));
-    m.insert("focus_right".to_string(), BindingValue::many(&["prefix-l", "prefix-right"]));
+    m.insert(
+        "focus_left".to_string(),
+        BindingValue::many(&["prefix-h", "prefix-left"]),
+    );
+    m.insert(
+        "focus_down".to_string(),
+        BindingValue::many(&["prefix-j", "prefix-down"]),
+    );
+    m.insert(
+        "focus_up".to_string(),
+        BindingValue::many(&["prefix-k", "prefix-up"]),
+    );
+    m.insert(
+        "focus_right".to_string(),
+        BindingValue::many(&["prefix-l", "prefix-right"]),
+    );
 
     // Tabs
     m.insert("new_tab".to_string(), BindingValue::one("prefix-c"));
@@ -264,15 +276,24 @@ fn default_app() -> HashMap<String, BindingValue> {
     m.insert("prev_tab".to_string(), BindingValue::one("prefix-p"));
 
     // Workspaces
-    m.insert("workspace_switcher".to_string(), BindingValue::one("prefix-w"));
+    m.insert(
+        "workspace_switcher".to_string(),
+        BindingValue::one("prefix-w"),
+    );
     // `}`/`{` — the "big next/prev" siblings of the tabs' n/p, mirroring vim's
     // paragraph-jump feel (moved off `)`/`(`, which read as nothing in particular).
     m.insert("next_workspace".to_string(), BindingValue::one("prefix-}"));
     m.insert("prev_workspace".to_string(), BindingValue::one("prefix-{"));
-    m.insert("toggle_prev_workspace".to_string(), BindingValue::one("prefix-`"));
+    m.insert(
+        "toggle_prev_workspace".to_string(),
+        BindingValue::one("prefix-`"),
+    );
     m.insert("new_workspace".to_string(), BindingValue::one("prefix-s"));
     m.insert("edit_workspace".to_string(), BindingValue::one("prefix-e"));
-    m.insert("delete_workspace".to_string(), BindingValue::one("prefix-d"));
+    m.insert(
+        "delete_workspace".to_string(),
+        BindingValue::one("prefix-d"),
+    );
     m.insert("workspace_info".to_string(), BindingValue::one("prefix-i"));
     m.insert("clone_workspace".to_string(), BindingValue::one("prefix-r"));
 
@@ -288,14 +309,26 @@ fn default_app() -> HashMap<String, BindingValue> {
     m.insert("chat_panel".to_string(), BindingValue::one("prefix-y"));
     m.insert("quit".to_string(), BindingValue::one("prefix-q"));
     m.insert("manage_agents".to_string(), BindingValue::one("prefix-m"));
-    m.insert("manage_providers".to_string(), BindingValue::one("prefix-v"));
+    m.insert(
+        "manage_providers".to_string(),
+        BindingValue::one("prefix-v"),
+    );
     m.insert("logs".to_string(), BindingValue::one("prefix-o"));
     m.insert("scroll_mode".to_string(), BindingValue::one("prefix-["));
 
     // Layout
-    m.insert("sidebar_shrink".to_string(), BindingValue::many(&["prefix-<", "prefix-,"]));
-    m.insert("sidebar_grow".to_string(), BindingValue::many(&["prefix->", "prefix-."]));
-    m.insert("split_up".to_string(), BindingValue::many(&["prefix-+", "prefix-="]));
+    m.insert(
+        "sidebar_shrink".to_string(),
+        BindingValue::many(&["prefix-<", "prefix-,"]),
+    );
+    m.insert(
+        "sidebar_grow".to_string(),
+        BindingValue::many(&["prefix->", "prefix-."]),
+    );
+    m.insert(
+        "split_up".to_string(),
+        BindingValue::many(&["prefix-+", "prefix-="]),
+    );
     m.insert("split_down".to_string(), BindingValue::one("prefix--"));
 
     // Terminal clipboard: direct chords, never sent to the PTY.
@@ -368,9 +401,6 @@ fn default_markdown() -> HashMap<String, String> {
     m
 }
 
-
-
-
 fn default_about() -> HashMap<String, String> {
     let mut m = HashMap::new();
     m.insert("exit".to_string(), "esc".to_string());
@@ -420,8 +450,6 @@ fn default_new_workspace() -> HashMap<String, String> {
     m
 }
 
-
-
 fn default_dashboard() -> HashMap<String, String> {
     let mut m = HashMap::new();
     m.insert("down".to_string(), "j".to_string());
@@ -462,9 +490,6 @@ fn default_new_tab() -> HashMap<String, String> {
     m
 }
 
-
-
-
 impl Config {
     pub fn generate_default_toml() -> String {
         toml::to_string_pretty(&Self::default()).unwrap_or_default()
@@ -486,8 +511,8 @@ impl Config {
                 .parent()
                 .map_or(Ok(()), std::fs::create_dir_all)
                 .and_then(|()| {
-                    let toml = toml::to_string_pretty(&default_config)
-                        .map_err(std::io::Error::other)?;
+                    let toml =
+                        toml::to_string_pretty(&default_config).map_err(std::io::Error::other)?;
                     std::fs::write(path, toml)
                 });
             if let Err(e) = seeded {
@@ -540,9 +565,9 @@ impl Config {
     /// Match a key against the direct-chord bindings of an `app` action
     /// (binding strings without the `prefix-` marker).
     pub fn matches_app_direct(&self, event: KeyEvent, action: &str) -> bool {
-        self.app_binding_strings(action).iter().any(|b| {
-            !b.starts_with("prefix-") && key_matches_platform(event, b, self.platform)
-        })
+        self.app_binding_strings(action)
+            .iter()
+            .any(|b| !b.starts_with("prefix-") && key_matches_platform(event, b, self.platform))
     }
 
     /// Match a key against one action of a pane/dialog-local binding table.
@@ -585,7 +610,11 @@ impl Config {
         let mut seen: HashMap<(bool, KeyCode, KeyModifiers), String> = HashMap::new();
         let mut actions: Vec<&String> = self.keybindings.app.keys().collect();
         let defaults = default_app();
-        actions.extend(defaults.keys().filter(|k| !self.keybindings.app.contains_key(*k)));
+        actions.extend(
+            defaults
+                .keys()
+                .filter(|k| !self.keybindings.app.contains_key(*k)),
+        );
         for action in actions {
             for binding in self.app_binding_strings(action) {
                 let Some(trigger) = parse_binding_trigger(&binding) else {
@@ -597,7 +626,8 @@ impl Config {
                     BindingTrigger::Direct(e) => (false, e),
                 };
                 if !is_prefix
-                    && prefix.is_some_and(|p| p.code == event.code && p.modifiers == event.modifiers)
+                    && prefix
+                        .is_some_and(|p| p.code == event.code && p.modifiers == event.modifiers)
                 {
                     tracing::warn!(
                         %action, %binding,
@@ -632,7 +662,12 @@ impl Config {
     }
 
     pub fn matches_workspaces(&self, event: KeyEvent, action: &str) -> bool {
-        self.matches_ctx(&self.keybindings.workspaces, default_workspaces, event, action)
+        self.matches_ctx(
+            &self.keybindings.workspaces,
+            default_workspaces,
+            event,
+            action,
+        )
     }
 
     pub fn matches_markdown(&self, event: KeyEvent, action: &str) -> bool {
@@ -653,7 +688,12 @@ impl Config {
     }
 
     pub fn matches_dashboard(&self, event: KeyEvent, action: &str) -> bool {
-        self.matches_ctx(&self.keybindings.dashboard, default_dashboard, event, action)
+        self.matches_ctx(
+            &self.keybindings.dashboard,
+            default_dashboard,
+            event,
+            action,
+        )
     }
 
     pub fn matches_logs(&self, event: KeyEvent, action: &str) -> bool {
@@ -682,9 +722,6 @@ impl Config {
     pub fn matches_new_tab(&self, event: KeyEvent, action: &str) -> bool {
         self.matches_ctx(&self.keybindings.new_tab, default_new_tab, event, action)
     }
-
-
-
 
     /// Canonical display form of a binding — the single key grammar every
     /// surface (footer, help, palette, dialog hints) renders through:
@@ -797,9 +834,10 @@ impl Config {
     /// `copy`). Used by the which-key overlay to list only keys reachable
     /// *after* the prefix.
     pub fn prefix_chord(&self, action: &str) -> Option<String> {
-        self.app_binding_strings(action)
-            .iter()
-            .find_map(|b| b.strip_prefix("prefix-").map(|rest| self.format_binding(rest)))
+        self.app_binding_strings(action).iter().find_map(|b| {
+            b.strip_prefix("prefix-")
+                .map(|rest| self.format_binding(rest))
+        })
     }
 
     /// Every key reachable after the prefix, across all actions and including
@@ -811,11 +849,18 @@ impl Config {
     #[cfg(test)]
     pub fn all_prefix_chords(&self) -> Vec<String> {
         let mut actions: Vec<String> = self.keybindings.app.keys().cloned().collect();
-        actions.extend(default_app().into_keys().filter(|k| !self.keybindings.app.contains_key(k)));
+        actions.extend(
+            default_app()
+                .into_keys()
+                .filter(|k| !self.keybindings.app.contains_key(k)),
+        );
         actions
             .iter()
             .flat_map(|a| self.app_binding_strings(a))
-            .filter_map(|b| b.strip_prefix("prefix-").map(|rest| self.format_binding(rest)))
+            .filter_map(|b| {
+                b.strip_prefix("prefix-")
+                    .map(|rest| self.format_binding(rest))
+            })
             .collect()
     }
 }
@@ -975,8 +1020,7 @@ pub fn key_matches_platform(event: KeyEvent, binding: &str, platform: Platform) 
         }
         // On macOS, also accept Super (Cmd) where the binding specifies Ctrl.
         if platform.is_macos() && code_match && target.modifiers.contains(KeyModifiers::CONTROL) {
-            let macos_mods =
-                (target.modifiers - KeyModifiers::CONTROL) | KeyModifiers::SUPER;
+            let macos_mods = (target.modifiers - KeyModifiers::CONTROL) | KeyModifiers::SUPER;
             if event.modifiers == macos_mods {
                 return true;
             }
@@ -984,8 +1028,7 @@ pub fn key_matches_platform(event: KeyEvent, binding: &str, platform: Platform) 
         // On macOS, also accept Super (Cmd) where the binding specifies Alt,
         // because macOS Option key sends special characters instead of ALT.
         if platform.is_macos() && code_match && target.modifiers.contains(KeyModifiers::ALT) {
-            let macos_mods =
-                (target.modifiers - KeyModifiers::ALT) | KeyModifiers::SUPER;
+            let macos_mods = (target.modifiers - KeyModifiers::ALT) | KeyModifiers::SUPER;
             if event.modifiers == macos_mods {
                 return true;
             }
@@ -1168,7 +1211,10 @@ mod tests {
         for (action, value) in default_app() {
             for binding in value.values() {
                 let trigger = parse_binding_trigger(binding);
-                assert!(trigger.is_some(), "app binding '{action}' = '{binding}' failed to parse");
+                assert!(
+                    trigger.is_some(),
+                    "app binding '{action}' = '{binding}' failed to parse"
+                );
                 let (is_prefix, event) = match trigger.unwrap() {
                     BindingTrigger::Prefix(e) => (true, e),
                     BindingTrigger::Direct(e) => (false, e),
@@ -1498,7 +1544,11 @@ exit = "ctrl-c"
     #[test]
     fn test_linux_ctrl_binding_does_not_accept_super() {
         let super_event = KeyEvent::new(KeyCode::Char('g'), KeyModifiers::SUPER);
-        assert!(!key_matches_platform(super_event, "ctrl-g", Platform::Linux));
+        assert!(!key_matches_platform(
+            super_event,
+            "ctrl-g",
+            Platform::Linux
+        ));
         // ctrl-g should still work on Linux
         let ctrl_event = KeyEvent::new(KeyCode::Char('g'), KeyModifiers::CONTROL);
         assert!(key_matches_platform(ctrl_event, "ctrl-g", Platform::Linux));

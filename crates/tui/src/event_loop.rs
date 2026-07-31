@@ -253,8 +253,8 @@ pub(crate) async fn run(
         // Phase 1: Render only when state has changed, capped at ~30 fps
         if app.needs_redraw {
             let now = Instant::now();
-            let eligible = last_draw_at
-                .is_none_or(|t| now.duration_since(t) >= MIN_RENDER_INTERVAL);
+            let eligible =
+                last_draw_at.is_none_or(|t| now.duration_since(t) >= MIN_RENDER_INTERVAL);
             if eligible {
                 let layout_key = (
                     app.active_workspace,
@@ -962,7 +962,11 @@ fn poll_workspaces(app: &mut App, now: Instant) {
         let result = { app.pending_pr_list.lock().take() };
         if let Some(result) = result {
             if let Some(crate::dialog_state::DialogState::PrPicker {
-                loading, items, error, selected, ..
+                loading,
+                items,
+                error,
+                selected,
+                ..
             }) = &mut app.active_dialog
             {
                 *loading = false;
@@ -984,7 +988,11 @@ fn poll_workspaces(app: &mut App, now: Instant) {
         let result = { app.pending_repo_prs.lock().take() };
         if let Some((queried_repo, result)) = result {
             if let Some(crate::dialog_state::DialogState::PrPicker {
-                loading, error, selected, repo_browse, ..
+                loading,
+                error,
+                selected,
+                repo_browse,
+                ..
             }) = &mut app.active_dialog
             {
                 // Only apply if the user hasn't since typed a different repo
@@ -1033,7 +1041,8 @@ fn poll_workspaces(app: &mut App, now: Instant) {
                     // sidebar with nothing to reopen. Disposing of the
                     // review happens only through the explicit
                     // workspace-delete flow, same invariant as `q`/submit.
-                    let tab_idx = app.workspaces[idx].add_tab(piki_core::AIProvider::CodeReview, false, None);
+                    let tab_idx =
+                        app.workspaces[idx].add_tab(piki_core::AIProvider::CodeReview, false, None);
                     app.workspaces[idx].active_tab = tab_idx;
                     let mut cr = crate::code_review::CodeReviewState::new(
                         session.checkout.pr,
@@ -1056,7 +1065,9 @@ fn poll_workspaces(app: &mut App, now: Instant) {
                 }
                 Err(e) => {
                     if let Some(crate::dialog_state::DialogState::PrPicker {
-                        checking_out, error, ..
+                        checking_out,
+                        error,
+                        ..
                     }) = &mut app.active_dialog
                     {
                         *checking_out = None;
@@ -1094,7 +1105,10 @@ fn poll_workspaces(app: &mut App, now: Instant) {
                     }
                     Err(e) => {
                         ws.review_broken = true;
-                        app.set_toast(format!("Couldn't restore PR checkout: {e}"), app::ToastLevel::Error);
+                        app.set_toast(
+                            format!("Couldn't restore PR checkout: {e}"),
+                            app::ToastLevel::Error,
+                        );
                     }
                 }
             }

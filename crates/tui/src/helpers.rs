@@ -121,16 +121,11 @@ pub(crate) async fn spawn_tab(
             all_args.extend(prompt_args);
             (config.command.clone(), all_args)
         } else {
-            return (
-                idx,
-                Some(format!("No provider configured named '{name}'")),
-            );
+            return (idx, Some(format!("No provider configured named '{name}'")));
         }
     } else {
         let cmd = provider.resolved_command();
-        let prompt_args = prompt
-            .map(|p| provider.prompt_args(p))
-            .unwrap_or_default();
+        let prompt_args = prompt.map(|p| provider.prompt_args(p)).unwrap_or_default();
         (cmd, prompt_args)
     };
 
@@ -142,74 +137,73 @@ pub(crate) async fn spawn_tab(
         AIProvider::Custom(_) => bridge_for_command(&cmd),
         _ => None,
     };
-    let (extra_env, extra_args, integration_on, cli_agent_sock) =
-        if *provider == AIProvider::Shell {
-            match shell_install::setup_for(&cmd, &paths.shell_integration_dir()) {
-                Ok(Some(setup)) => {
-                    let mut env: Vec<(String, String)> = setup.env.into_iter().collect();
-                    // Also wire the cli-agent channel so a manually-typed
-                    // `claude` inside this shell reports to the Agents pane:
-                    // the FIFO + hook env ride the shell's environment, and
-                    // the bridge script wraps `claude` with `--settings`.
-                    // Only the env is merged — the `--settings` extra_args
-                    // are claude args, not shell args.
-                    let sock = match cli_agent_install::setup_for_claude(&paths.claude_hooks_dir())
-                    {
-                        Ok(agent) => {
-                            env.extend(agent.env);
-                            agent.sock_path
-                        }
-                        Err(e) => {
-                            tracing::debug!(error = %e, "cli-agent channel skipped for shell tab");
-                            None
-                        }
-                    };
-                    (env, setup.extra_args, true, sock)
-                }
-                Ok(None) => (Vec::new(), Vec::new(), false, None),
-                Err(e) => {
-                    tracing::warn!(error = %e, shell = %cmd, "shell integration setup failed");
-                    (Vec::new(), Vec::new(), false, None)
-                }
+    let (extra_env, extra_args, integration_on, cli_agent_sock) = if *provider == AIProvider::Shell
+    {
+        match shell_install::setup_for(&cmd, &paths.shell_integration_dir()) {
+            Ok(Some(setup)) => {
+                let mut env: Vec<(String, String)> = setup.env.into_iter().collect();
+                // Also wire the cli-agent channel so a manually-typed
+                // `claude` inside this shell reports to the Agents pane:
+                // the FIFO + hook env ride the shell's environment, and
+                // the bridge script wraps `claude` with `--settings`.
+                // Only the env is merged — the `--settings` extra_args
+                // are claude args, not shell args.
+                let sock = match cli_agent_install::setup_for_claude(&paths.claude_hooks_dir()) {
+                    Ok(agent) => {
+                        env.extend(agent.env);
+                        agent.sock_path
+                    }
+                    Err(e) => {
+                        tracing::debug!(error = %e, "cli-agent channel skipped for shell tab");
+                        None
+                    }
+                };
+                (env, setup.extra_args, true, sock)
             }
-        } else if bridge == Some(AgentBridge::Claude) {
-            match cli_agent_install::setup_for_claude(&paths.claude_hooks_dir()) {
-                Ok(setup) => {
-                    let sock = setup.sock_path.clone();
-                    let env: Vec<(String, String)> = setup.env.into_iter().collect();
-                    (env, setup.extra_args, true, sock)
-                }
-                Err(e) => {
-                    tracing::warn!(error = %e, "claude cli-agent hook setup failed");
-                    (Vec::new(), Vec::new(), false, None)
-                }
+            Ok(None) => (Vec::new(), Vec::new(), false, None),
+            Err(e) => {
+                tracing::warn!(error = %e, shell = %cmd, "shell integration setup failed");
+                (Vec::new(), Vec::new(), false, None)
             }
-        } else if bridge == Some(AgentBridge::Antigravity) {
-            // No extra_args: agy discovers the bridge from its own plugins
-            // root, so the hooks ride the environment alone.
-            match agy_install::setup_for_antigravity(
-                &paths.antigravity_hooks_dir(),
-                &agy_install::plugins_root(),
-            ) {
-                Ok(setup) => {
-                    let sock = setup.sock_path.clone();
-                    let env: Vec<(String, String)> = setup.env.into_iter().collect();
-                    (env, Vec::new(), true, sock)
-                }
-                Err(e) => {
-                    tracing::warn!(error = %e, "antigravity cli-agent hook setup failed");
-                    (Vec::new(), Vec::new(), false, None)
-                }
+        }
+    } else if bridge == Some(AgentBridge::Claude) {
+        match cli_agent_install::setup_for_claude(&paths.claude_hooks_dir()) {
+            Ok(setup) => {
+                let sock = setup.sock_path.clone();
+                let env: Vec<(String, String)> = setup.env.into_iter().collect();
+                (env, setup.extra_args, true, sock)
             }
-        } else if piki_core::agent_state_detect::manifest_for_command(&cmd).is_some() {
-            // No hook bridge for this provider (e.g. Codex) — turn on shell
-            // integration so `OscParser` captures its window-title spinner,
-            // but withhold `cli_agent_sock`: that FIFO is exclusive to the
-            // real hook bridges above.
-            (Vec::new(), Vec::new(), true, None)
-        } else {
-            (Vec::new(), Vec::new(), false, None)
-        };
+            Err(e) => {
+                tracing::warn!(error = %e, "claude cli-agent hook setup failed");
+                (Vec::new(), Vec::new(), false, None)
+            }
+        }
+    } else if bridge == Some(AgentBridge::Antigravity) {
+        // No extra_args: agy discovers the bridge from its own plugins
+        // root, so the hooks ride the environment alone.
+        match agy_install::setup_for_antigravity(
+            &paths.antigravity_hooks_dir(),
+            &agy_install::plugins_root(),
+        ) {
+            Ok(setup) => {
+                let sock = setup.sock_path.clone();
+                let env: Vec<(String, String)> = setup.env.into_iter().collect();
+                (env, Vec::new(), true, sock)
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "antigravity cli-agent hook setup failed");
+                (Vec::new(), Vec::new(), false, None)
+            }
+        }
+    } else if piki_core::agent_state_detect::manifest_for_command(&cmd).is_some() {
+        // No hook bridge for this provider (e.g. Codex) — turn on shell
+        // integration so `OscParser` captures its window-title spinner,
+        // but withhold `cli_agent_sock`: that FIFO is exclusive to the
+        // real hook bridges above.
+        (Vec::new(), Vec::new(), true, None)
+    } else {
+        (Vec::new(), Vec::new(), false, None)
+    };
 
     let spawn_error = match PtySession::spawn(
         &ws.path,
@@ -349,9 +343,8 @@ pub(crate) fn subtab_index_at(app: &App, col: u16, area: Rect) -> Option<SubtabH
             // The block ends with " ×" (2 cols) then a trailing space (1 col).
             // The close target is just those two `" ×"` columns; excluding the
             // trailing space keeps a click in the padding from closing the tab.
-            let on_close = tab.closable
-                && col >= x + tab_display_width - 3
-                && col < x + tab_display_width - 1;
+            let on_close =
+                tab.closable && col >= x + tab_display_width - 3 && col < x + tab_display_width - 1;
             return Some(SubtabHit::Tab(i, on_close));
         }
         x += tab_display_width + 1; // +1 for the gap between blocks

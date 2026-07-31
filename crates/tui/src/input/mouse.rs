@@ -523,7 +523,11 @@ pub(crate) fn handle_mouse_event(
                                     // just clicked on.
                                     app.selected_workspace = *index;
                                     app.switch_workspace(*index);
-                                    if app.workspaces.get(*index).is_some_and(|ws| ws.review_broken) {
+                                    if app
+                                        .workspaces
+                                        .get(*index)
+                                        .is_some_and(|ws| ws.review_broken)
+                                    {
                                         app.active_pane = ActivePane::MainPanel;
                                         return Some(Action::RetryReviewCheckout(*index));
                                     }
@@ -740,7 +744,10 @@ mod tests {
 
     #[test]
     fn primary_screen_mouse_tracking_keeps_local_scrollback() {
-        assert_eq!(pty_scroll_route(false, true), PtyScrollRoute::LocalScrollback);
+        assert_eq!(
+            pty_scroll_route(false, true),
+            PtyScrollRoute::LocalScrollback
+        );
     }
 
     #[test]
@@ -748,6 +755,9 @@ mod tests {
         // Codex and shells alike: the patched vt100 captures inline-TUI
         // transcripts into local scrollback, and arrow keys on the primary
         // screen would recall history instead of scrolling.
-        assert_eq!(pty_scroll_route(false, false), PtyScrollRoute::LocalScrollback);
+        assert_eq!(
+            pty_scroll_route(false, false),
+            PtyScrollRoute::LocalScrollback
+        );
     }
 }

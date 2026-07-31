@@ -213,15 +213,35 @@ static CATALOG: &[ActionMeta] = {
     &[
         // ── Global: prefix actions ────────────────────────────────────────
         app("new_workspace", "Workspace", "New Workspace", "new"),
-        app("clone_workspace", "Workspace", "Create Worktree (GitHub-only)", "worktree"),
+        app(
+            "clone_workspace",
+            "Workspace",
+            "Create Worktree (GitHub-only)",
+            "worktree",
+        ),
         app("edit_workspace", "Workspace", "Edit Workspace", "edit"),
-        app("delete_workspace", "Workspace", "Delete Workspace", "delete"),
+        app(
+            "delete_workspace",
+            "Workspace",
+            "Delete Workspace",
+            "delete",
+        ),
         app("dashboard", "Workspace", "Dashboard", "dashboard"),
         app("workspace_info", "Workspace", "Workspace Info", "info"),
-        app("workspace_switcher", "Workspace", "Switch Workspace (fuzzy)", "switch"),
+        app(
+            "workspace_switcher",
+            "Workspace",
+            "Switch Workspace (fuzzy)",
+            "switch",
+        ),
         app("next_workspace", "Workspace", "Next Workspace", "next"),
         app("prev_workspace", "Workspace", "Previous Workspace", "prev"),
-        app("toggle_prev_workspace", "Workspace", "Toggle Last Workspace", "last"),
+        app(
+            "toggle_prev_workspace",
+            "Workspace",
+            "Toggle Last Workspace",
+            "last",
+        ),
         app("git", "Git", "Git (lazygit)", "lazygit"),
         app("new_tab", "Tabs", "New Tab", "new"),
         app("close_tab", "Tabs", "Close Tab", "close"),
@@ -243,14 +263,27 @@ static CATALOG: &[ActionMeta] = {
         app("sidebar_grow", "Layout", "Grow Sidebar", "sidebar +"),
         app("split_up", "Layout", "Grow Left Split", "split +"),
         app("split_down", "Layout", "Shrink Left Split", "split −"),
-        global_fixed("Layout", Fixed("Mouse drag"), "Drag a pane border to resize it"),
+        global_fixed(
+            "Layout",
+            Fixed("Mouse drag"),
+            "Drag a pane border to resize it",
+        ),
         app("copy", "Clipboard", "Copy Terminal", "copy"),
         app("manage_agents", "Agents", "Manage Agents", "agents"),
-        app("manage_providers", "Providers", "Manage Providers", "providers"),
+        app(
+            "manage_providers",
+            "Providers",
+            "Manage Providers",
+            "providers",
+        ),
         app("quit", "App", "Quit", "quit"),
         // Prefix-state keys the config doesn't own.
         global_fixed("Prefix", Fixed("{prefix} 1..9"), "Jump to tab N"),
-        global_fixed("Prefix", Fixed("{prefix} {prefix}"), "Send the prefix key to the terminal"),
+        global_fixed(
+            "Prefix",
+            Fixed("{prefix} {prefix}"),
+            "Send the prefix key to the terminal",
+        ),
         global_fixed("Prefix", Fixed("Esc"), "Cancel a pending prefix"),
         // ── Terminal scroll mode ──────────────────────────────────────────
         local(C::Scroll, Bind("scroll", "down"), "Scroll down a line"),
@@ -261,50 +294,150 @@ static CATALOG: &[ActionMeta] = {
         local(C::Scroll, Bind("scroll", "bottom"), "Jump to the bottom"),
         local(C::Scroll, Bind("scroll", "search"), "Search the scrollback"),
         local(C::Scroll, Bind("scroll", "exit"), "Exit scroll mode"),
-        local(C::Scroll, Bind("scroll", "exit_alt"), "Exit scroll mode (alt)"),
+        local(
+            C::Scroll,
+            Bind("scroll", "exit_alt"),
+            "Exit scroll mode (alt)",
+        ),
         // ── Terminal pane ─────────────────────────────────────────────────
-        local(C::Terminal, Fixed("(any)"), "Every key is forwarded to the active tab"),
-        local(C::Terminal, Bind("app", "paste"), "Paste from the clipboard"),
+        local(
+            C::Terminal,
+            Fixed("(any)"),
+            "Every key is forwarded to the active tab",
+        ),
+        local(
+            C::Terminal,
+            Bind("app", "paste"),
+            "Paste from the clipboard",
+        ),
         local(C::Terminal, Fixed("Mouse scroll"), "Scroll the terminal"),
-        local(C::Terminal, Fixed("Mouse drag"), "Select text (copies on release)"),
+        local(
+            C::Terminal,
+            Fixed("Mouse drag"),
+            "Select text (copies on release)",
+        ),
         // ── Workspace list pane ───────────────────────────────────────────
-        local(C::WorkspacePane, Bind("workspaces", "down"), "Select the next workspace"),
-        local(C::WorkspacePane, Bind("workspaces", "up"), "Select the previous workspace"),
-        local(C::WorkspacePane, Bind("workspaces", "collapse"), "Collapse a worktree family"),
-        local(C::WorkspacePane, Bind("workspaces", "expand"), "Expand a worktree family"),
-        local(C::WorkspacePane, Bind("workspaces", "select"), "Switch to it / toggle collapse"),
+        local(
+            C::WorkspacePane,
+            Bind("workspaces", "down"),
+            "Select the next workspace",
+        ),
+        local(
+            C::WorkspacePane,
+            Bind("workspaces", "up"),
+            "Select the previous workspace",
+        ),
+        local(
+            C::WorkspacePane,
+            Bind("workspaces", "collapse"),
+            "Collapse a worktree family",
+        ),
+        local(
+            C::WorkspacePane,
+            Bind("workspaces", "expand"),
+            "Expand a worktree family",
+        ),
+        local(
+            C::WorkspacePane,
+            Bind("workspaces", "select"),
+            "Switch to it / toggle collapse",
+        ),
         // ── Agents pane ───────────────────────────────────────────────────
-        local(C::AgentsPane, Bind("agents", "down"), "Select the next agent"),
-        local(C::AgentsPane, Bind("agents", "up"), "Select the previous agent"),
-        local(C::AgentsPane, Bind("agents", "select"), "Jump to that workspace and tab"),
-        local(C::AgentsPane, Fixed("Click"), "Jump to that workspace and tab"),
+        local(
+            C::AgentsPane,
+            Bind("agents", "down"),
+            "Select the next agent",
+        ),
+        local(
+            C::AgentsPane,
+            Bind("agents", "up"),
+            "Select the previous agent",
+        ),
+        local(
+            C::AgentsPane,
+            Bind("agents", "select"),
+            "Jump to that workspace and tab",
+        ),
+        local(
+            C::AgentsPane,
+            Fixed("Click"),
+            "Jump to that workspace and tab",
+        ),
         // ── Fuzzy file search ─────────────────────────────────────────────
         local(C::Fuzzy, Fixed("Type"), "Filter files"),
         local(C::Fuzzy, Bind("fuzzy", "down"), "Select the next result"),
         local(C::Fuzzy, Bind("fuzzy", "up"), "Select the previous result"),
         local(C::Fuzzy, Bind("fuzzy", "open"), "Open in $EDITOR"),
-        local(C::Fuzzy, Bind("fuzzy", "editor"), "Open in $EDITOR (without closing)"),
-        local(C::Fuzzy, Bind("fuzzy", "inline_edit"), "Open in the inline editor"),
-        local(C::Fuzzy, Bind("fuzzy", "markdown"), "Open a markdown file in a new tab"),
-        local(C::Fuzzy, Bind("fuzzy", "mdr"), "Open a markdown file in mdr (external)"),
+        local(
+            C::Fuzzy,
+            Bind("fuzzy", "editor"),
+            "Open in $EDITOR (without closing)",
+        ),
+        local(
+            C::Fuzzy,
+            Bind("fuzzy", "inline_edit"),
+            "Open in the inline editor",
+        ),
+        local(
+            C::Fuzzy,
+            Bind("fuzzy", "markdown"),
+            "Open a markdown file in a new tab",
+        ),
+        local(
+            C::Fuzzy,
+            Bind("fuzzy", "mdr"),
+            "Open a markdown file in mdr (external)",
+        ),
         local(C::Fuzzy, Bind("fuzzy", "exit"), "Close"),
         // ── Command palette ───────────────────────────────────────────────
         local(C::Palette, Fixed("Type"), "Filter commands"),
         local(C::Palette, Bind("fuzzy", "down"), "Select the next command"),
-        local(C::Palette, Bind("fuzzy", "up"), "Select the previous command"),
-        local(C::Palette, Bind("fuzzy", "open"), "Run the selected command"),
+        local(
+            C::Palette,
+            Bind("fuzzy", "up"),
+            "Select the previous command",
+        ),
+        local(
+            C::Palette,
+            Bind("fuzzy", "open"),
+            "Run the selected command",
+        ),
         local(C::Palette, Bind("fuzzy", "exit"), "Close"),
         // ── Workspace switcher ────────────────────────────────────────────
-        local(C::WorkspaceSwitcher, Fixed("Type"), "Filter workspaces and tabs"),
+        local(
+            C::WorkspaceSwitcher,
+            Fixed("Type"),
+            "Filter workspaces and tabs",
+        ),
         local(C::WorkspaceSwitcher, Fixed("↑/↓"), "Select a row"),
-        local(C::WorkspaceSwitcher, Raw("ctrl-p"), "Select the previous row"),
+        local(
+            C::WorkspaceSwitcher,
+            Raw("ctrl-p"),
+            "Select the previous row",
+        ),
         local(C::WorkspaceSwitcher, Raw("ctrl-n"), "Select the next row"),
-        local(C::WorkspaceSwitcher, Fixed("Enter"), "Jump to that workspace or tab"),
+        local(
+            C::WorkspaceSwitcher,
+            Fixed("Enter"),
+            "Jump to that workspace or tab",
+        ),
         local(C::WorkspaceSwitcher, Fixed("Esc"), "Close"),
         // ── Dashboard ─────────────────────────────────────────────────────
-        local(C::Dashboard, Bind("dashboard", "down"), "Select the next workspace"),
-        local(C::Dashboard, Bind("dashboard", "up"), "Select the previous workspace"),
-        local(C::Dashboard, Bind("dashboard", "select"), "Switch to it and focus the main panel"),
+        local(
+            C::Dashboard,
+            Bind("dashboard", "down"),
+            "Select the next workspace",
+        ),
+        local(
+            C::Dashboard,
+            Bind("dashboard", "up"),
+            "Select the previous workspace",
+        ),
+        local(
+            C::Dashboard,
+            Bind("dashboard", "select"),
+            "Switch to it and focus the main panel",
+        ),
         local(C::Dashboard, Bind("dashboard", "exit"), "Close"),
         // ── Logs ──────────────────────────────────────────────────────────
         local(C::Logs, Bind("logs", "down"), "Select the next entry"),
@@ -321,7 +454,11 @@ static CATALOG: &[ActionMeta] = {
         // ── AI Chat ───────────────────────────────────────────────────────
         local(C::Chat, Fixed("Enter"), "Send the message"),
         local(C::Chat, Fixed("Tab"), "Select the model"),
-        local(C::Chat, Raw("ctrl-o"), "Settings (server, URL, system prompt)"),
+        local(
+            C::Chat,
+            Raw("ctrl-o"),
+            "Settings (server, URL, system prompt)",
+        ),
         local(C::Chat, Raw("ctrl-a"), "Toggle agent mode (tool use)"),
         local(C::Chat, Raw("ctrl-l"), "Clear the conversation"),
         local(C::Chat, Fixed("Esc"), "Hide (keeps state)"),
@@ -339,20 +476,52 @@ static CATALOG: &[ActionMeta] = {
         local(C::Kanban, Fixed("p"), "Filter by project"),
         local(C::Kanban, Fixed("Esc"), "Close"),
         // ── Dispatch agent dialog ─────────────────────────────────────────
-        local(C::Dispatch, Fixed("←/→/Tab"), "Step 1: cycle the agent / provider"),
-        local(C::Dispatch, Fixed("Type"), "Step 1: add extra prompt instructions"),
-        local(C::Dispatch, Fixed("Enter"), "Step 1: continue to the destination"),
-        local(C::Dispatch, Fixed("←/→/Tab"), "Step 2: new worktree or current workspace"),
+        local(
+            C::Dispatch,
+            Fixed("←/→/Tab"),
+            "Step 1: cycle the agent / provider",
+        ),
+        local(
+            C::Dispatch,
+            Fixed("Type"),
+            "Step 1: add extra prompt instructions",
+        ),
+        local(
+            C::Dispatch,
+            Fixed("Enter"),
+            "Step 1: continue to the destination",
+        ),
+        local(
+            C::Dispatch,
+            Fixed("←/→/Tab"),
+            "Step 2: new worktree or current workspace",
+        ),
         local(C::Dispatch, Fixed("Enter"), "Step 2: dispatch"),
         local(C::Dispatch, Fixed("Esc"), "Back a step, or cancel"),
         // ── Move dispatched card ──────────────────────────────────────────
-        local(C::DispatchCardMove, Fixed("j/k"), "Select the target kanban column"),
-        local(C::DispatchCardMove, Fixed("Enter"), "Move the card and delete the workspace"),
+        local(
+            C::DispatchCardMove,
+            Fixed("j/k"),
+            "Select the target kanban column",
+        ),
+        local(
+            C::DispatchCardMove,
+            Fixed("Enter"),
+            "Move the card and delete the workspace",
+        ),
         local(C::DispatchCardMove, Fixed("Esc"), "Cancel"),
         // ── Manage agents ─────────────────────────────────────────────────
         local(C::ManageAgents, Fixed("j/k"), "Navigate the agent list"),
-        local(C::ManageAgents, Fixed("n"), "New agent (step 1: name + provider)"),
-        local(C::ManageAgents, Fixed("e / Enter"), "Edit the selected agent"),
+        local(
+            C::ManageAgents,
+            Fixed("n"),
+            "New agent (step 1: name + provider)",
+        ),
+        local(
+            C::ManageAgents,
+            Fixed("e / Enter"),
+            "Edit the selected agent",
+        ),
         local(C::ManageAgents, Fixed("d"), "Delete the selected agent"),
         local(C::ManageAgents, Fixed("p"), "Sync the agent to the repo"),
         local(C::ManageAgents, Fixed("i"), "Import agents from the repo"),
@@ -361,36 +530,84 @@ static CATALOG: &[ActionMeta] = {
         local(C::AgentRole, Raw("ctrl-s"), "Save the agent and close"),
         local(C::AgentRole, Fixed("Esc"), "Back to step 1 without saving"),
         // ── Import agents ─────────────────────────────────────────────────
-        local(C::ImportAgents, Fixed("j/k"), "Navigate the discovered agents"),
+        local(
+            C::ImportAgents,
+            Fixed("j/k"),
+            "Navigate the discovered agents",
+        ),
         local(C::ImportAgents, Fixed("Space"), "Toggle the selection"),
         local(C::ImportAgents, Fixed("a"), "Toggle select-all"),
-        local(C::ImportAgents, Fixed("Enter"), "Import the selected agents"),
+        local(
+            C::ImportAgents,
+            Fixed("Enter"),
+            "Import the selected agents",
+        ),
         local(C::ImportAgents, Fixed("Esc"), "Cancel"),
         // ── Manage providers ──────────────────────────────────────────────
-        local(C::ManageProviders, Fixed("j/k"), "Navigate the provider list"),
+        local(
+            C::ManageProviders,
+            Fixed("j/k"),
+            "Navigate the provider list",
+        ),
         local(C::ManageProviders, Fixed("n"), "New provider"),
-        local(C::ManageProviders, Fixed("e / Enter"), "Edit the selected provider"),
-        local(C::ManageProviders, Fixed("d"), "Delete the selected provider"),
+        local(
+            C::ManageProviders,
+            Fixed("e / Enter"),
+            "Edit the selected provider",
+        ),
+        local(
+            C::ManageProviders,
+            Fixed("d"),
+            "Delete the selected provider",
+        ),
         local(C::ManageProviders, Fixed("Esc"), "Close"),
         // ── Inline editor ─────────────────────────────────────────────────
         local(C::InlineEditor, Bind("editor", "save"), "Save"),
         local(C::InlineEditor, Bind("editor", "exit"), "Close"),
         // ── Code review ───────────────────────────────────────────────────
-        local(C::CodeReview, Fixed("j/k"), "Navigate files / scroll the diff"),
+        local(
+            C::CodeReview,
+            Fixed("j/k"),
+            "Navigate files / scroll the diff",
+        ),
         local(C::CodeReview, Fixed("Enter"), "View the file diff"),
-        local(C::CodeReview, Fixed("h/l"), "Switch between the file list and the diff"),
-        local(C::CodeReview, Fixed("n/p"), "Next / previous file (in the diff view)"),
+        local(
+            C::CodeReview,
+            Fixed("h/l"),
+            "Switch between the file list and the diff",
+        ),
+        local(
+            C::CodeReview,
+            Fixed("n/p"),
+            "Next / previous file (in the diff view)",
+        ),
         local(C::CodeReview, Fixed("g/G"), "Top / bottom of the diff"),
         local(C::CodeReview, Raw("ctrl-d"), "Page down in the diff"),
         local(C::CodeReview, Raw("ctrl-u"), "Page up in the diff"),
-        local(C::CodeReview, Fixed("c"), "Add or edit a comment on the line"),
+        local(
+            C::CodeReview,
+            Fixed("c"),
+            "Add or edit a comment on the line",
+        ),
         local(C::CodeReview, Fixed("d"), "Delete the comment on the line"),
-        local(C::CodeReview, Fixed("[ / ]"), "Resize the file list / diff split"),
+        local(
+            C::CodeReview,
+            Fixed("[ / ]"),
+            "Resize the file list / diff split",
+        ),
         local(C::CodeReview, Fixed("s"), "Open the submit-review dialog"),
         local(C::CodeReview, Fixed("r"), "Refresh the PR data"),
-        local(C::CodeReview, Fixed("q"), "Close the review (discards state)"),
+        local(
+            C::CodeReview,
+            Fixed("q"),
+            "Close the review (discards state)",
+        ),
         local(C::CodeReview, Fixed("Tab"), "Cycle the verdict (in submit)"),
-        local(C::CodeReview, Raw("ctrl-shift-d"), "Discard the draft (in submit)"),
+        local(
+            C::CodeReview,
+            Raw("ctrl-shift-d"),
+            "Discard the draft (in submit)",
+        ),
     ]
 };
 
@@ -439,7 +656,11 @@ mod tests {
     #[test]
     fn global_actions_have_a_short_label() {
         for a in global_actions() {
-            assert!(!a.short.is_empty(), "global action '{}' has no short label", a.id);
+            assert!(
+                !a.short.is_empty(),
+                "global action '{}' has no short label",
+                a.id
+            );
         }
     }
 

@@ -14,10 +14,15 @@ pub(super) async fn handle(
         Action::ChatSendMessage => {
             let input = std::mem::take(&mut app.chat_panel.input);
             let input = input.trim().to_string();
-            if input.is_empty() || app.chat_panel.streaming || app.chat_panel.config.model.is_empty()
+            if input.is_empty()
+                || app.chat_panel.streaming
+                || app.chat_panel.config.model.is_empty()
             {
                 if app.chat_panel.config.model.is_empty() {
-                    app.set_toast("No model selected. Press Tab to pick one.", ToastLevel::Error);
+                    app.set_toast(
+                        "No model selected. Press Tab to pick one.",
+                        ToastLevel::Error,
+                    );
                 }
                 return Ok(());
             }
@@ -75,9 +80,7 @@ pub(super) async fn handle(
                 };
 
                 tokio::spawn(async move {
-                    let mut agent = piki_agent::AgentLoop::new(
-                        client, model, registry, context,
-                    );
+                    let mut agent = piki_agent::AgentLoop::new(client, model, registry, context);
                     if let Err(e) = agent.run(messages, system_prompt, event_tx.clone()).await {
                         tracing::error!(error = %e, "Agent loop error");
                         let _ = event_tx.send(piki_agent::AgentEvent::Error(e.to_string()));
@@ -164,8 +167,8 @@ pub(super) async fn handle(
                                 let names: Vec<String> =
                                     models.into_iter().map(|m| m.name).collect();
                                 let payload = format!("__MODELS__{}", names.join("\n"));
-                                let _ = chat_tx
-                                    .send(piki_api_client::ChatStreamEvent::Done(payload));
+                                let _ =
+                                    chat_tx.send(piki_api_client::ChatStreamEvent::Done(payload));
                             }
                             Err(e) => {
                                 let msg = format!("{e}. Is Ollama running? (ollama serve)");
@@ -179,11 +182,10 @@ pub(super) async fn handle(
                         let client = piki_api_client::LlamaCppClient::new(&base_url);
                         match client.list_models().await {
                             Ok(models) => {
-                                let names: Vec<String> =
-                                    models.into_iter().map(|m| m.id).collect();
+                                let names: Vec<String> = models.into_iter().map(|m| m.id).collect();
                                 let payload = format!("__MODELS__{}", names.join("\n"));
-                                let _ = chat_tx
-                                    .send(piki_api_client::ChatStreamEvent::Done(payload));
+                                let _ =
+                                    chat_tx.send(piki_api_client::ChatStreamEvent::Done(payload));
                             }
                             Err(e) => {
                                 let msg = format!(

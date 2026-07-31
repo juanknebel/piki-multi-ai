@@ -17,9 +17,7 @@ fn cursor_to_byte(buf: &str, cursor: usize) -> usize {
     if buf.is_ascii() {
         cursor.min(buf.len())
     } else {
-        buf.char_indices()
-            .nth(cursor)
-            .map_or(buf.len(), |(i, _)| i)
+        buf.char_indices().nth(cursor).map_or(buf.len(), |(i, _)| i)
     }
 }
 

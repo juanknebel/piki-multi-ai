@@ -41,7 +41,8 @@ pub fn render(
         Block::default()
             .title(format!(" {} ", title))
             .title_style(title_style)
-            .borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded)
+            .borders(Borders::ALL)
+            .border_type(ratatui::widgets::BorderType::Rounded)
             .border_style(border_style),
     );
     if actual_offset > 0 {

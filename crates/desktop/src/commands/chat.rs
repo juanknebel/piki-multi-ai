@@ -153,8 +153,7 @@ pub async fn chat_send_message(
                         },
                     );
                     // Append assistant message to history
-                    let managed: tauri::State<'_, Mutex<DesktopApp>> =
-                        handle_for_events.state();
+                    let managed: tauri::State<'_, Mutex<DesktopApp>> = handle_for_events.state();
                     let mut app = managed.lock();
                     app.chat_messages.push(ChatMessage {
                         role: ChatRole::Assistant,
@@ -168,8 +167,7 @@ pub async fn chat_send_message(
                 piki_api_client::ChatStreamEvent::ToolCalls(_calls) => {
                     // Tool calls will be handled by agent loop (F5).
                     // In plain chat mode, treat as end of stream.
-                    let managed: tauri::State<'_, Mutex<DesktopApp>> =
-                        handle_for_events.state();
+                    let managed: tauri::State<'_, Mutex<DesktopApp>> = handle_for_events.state();
                     let mut app = managed.lock();
                     app.chat_streaming = false;
                     return;
@@ -182,8 +180,7 @@ pub async fn chat_send_message(
                             done: true,
                         },
                     );
-                    let managed: tauri::State<'_, Mutex<DesktopApp>> =
-                        handle_for_events.state();
+                    let managed: tauri::State<'_, Mutex<DesktopApp>> = handle_for_events.state();
                     let mut app = managed.lock();
                     app.chat_streaming = false;
                     return;
@@ -197,9 +194,7 @@ pub async fn chat_send_message(
 
 /// Get the current chat configuration.
 #[tauri::command]
-pub async fn chat_get_config(
-    state: State<'_, Mutex<DesktopApp>>,
-) -> Result<ChatConfig, String> {
+pub async fn chat_get_config(state: State<'_, Mutex<DesktopApp>>) -> Result<ChatConfig, String> {
     let app = state.lock();
     Ok(app.chat_config.clone())
 }
@@ -240,9 +235,7 @@ pub async fn chat_get_messages(
 
 /// Clear chat history.
 #[tauri::command]
-pub async fn chat_clear(
-    state: State<'_, Mutex<DesktopApp>>,
-) -> Result<(), String> {
+pub async fn chat_clear(state: State<'_, Mutex<DesktopApp>>) -> Result<(), String> {
     let mut app = state.lock();
     app.chat_messages.clear();
     Ok(())
@@ -292,9 +285,7 @@ pub async fn chat_list_models(
 
 /// Stop the current streaming response.
 #[tauri::command]
-pub async fn chat_stop(
-    state: State<'_, Mutex<DesktopApp>>,
-) -> Result<(), String> {
+pub async fn chat_stop(state: State<'_, Mutex<DesktopApp>>) -> Result<(), String> {
     let mut app = state.lock();
     app.chat_streaming = false;
     Ok(())
@@ -368,7 +359,10 @@ pub async fn chat_send_agent_message(
     let event_tx_clone = event_tx.clone();
     tokio::spawn(async move {
         let mut agent = piki_agent::AgentLoop::new(client, model, registry, context);
-        if let Err(e) = agent.run(messages, system_prompt, event_tx_clone.clone()).await {
+        if let Err(e) = agent
+            .run(messages, system_prompt, event_tx_clone.clone())
+            .await
+        {
             tracing::error!(error = %e, "Agent loop error");
             let _ = event_tx_clone.send(piki_agent::AgentEvent::Error(e.to_string()));
         }
@@ -384,12 +378,14 @@ pub async fn chat_send_agent_message(
                     full_content.push_str(&token);
                     let _ = handle_for_events.emit(
                         "chat-token",
-                        ChatTokenPayload { content: token, done: false },
+                        ChatTokenPayload {
+                            content: token,
+                            done: false,
+                        },
                     );
                 }
                 piki_agent::AgentEvent::Done(content) => {
-                    let managed: tauri::State<'_, Mutex<DesktopApp>> =
-                        handle_for_events.state();
+                    let managed: tauri::State<'_, Mutex<DesktopApp>> = handle_for_events.state();
                     let mut app = managed.lock();
                     let final_content = if full_content.is_empty() {
                         content
@@ -404,14 +400,20 @@ pub async fn chat_send_agent_message(
                     });
                     let _ = handle_for_events.emit(
                         "chat-token",
-                        ChatTokenPayload { content: String::new(), done: false },
+                        ChatTokenPayload {
+                            content: String::new(),
+                            done: false,
+                        },
                     );
                 }
                 piki_agent::AgentEvent::ToolCallsStarted(_calls) => {
                     full_content.clear();
                     let _ = handle_for_events.emit(
                         "chat-token",
-                        ChatTokenPayload { content: String::new(), done: false },
+                        ChatTokenPayload {
+                            content: String::new(),
+                            done: false,
+                        },
                     );
                 }
                 piki_agent::AgentEvent::ToolExecuting { name } => {
@@ -423,7 +425,12 @@ pub async fn chat_send_agent_message(
                         },
                     );
                 }
-                piki_agent::AgentEvent::ToolResult { name, result, is_error, .. } => {
+                piki_agent::AgentEvent::ToolResult {
+                    name,
+                    result,
+                    is_error,
+                    ..
+                } => {
                     let prefix = if is_error { "[Error] " } else { "" };
                     let display = format!("[{name}] {prefix}{result}");
                     let truncated = if display.len() > 500 {
@@ -431,8 +438,7 @@ pub async fn chat_send_agent_message(
                     } else {
                         display
                     };
-                    let managed: tauri::State<'_, Mutex<DesktopApp>> =
-                        handle_for_events.state();
+                    let managed: tauri::State<'_, Mutex<DesktopApp>> = handle_for_events.state();
                     let mut app = managed.lock();
                     app.chat_messages.push(ChatMessage {
                         role: ChatRole::Tool,
@@ -444,10 +450,12 @@ pub async fn chat_send_agent_message(
                 piki_agent::AgentEvent::Finished => {
                     let _ = handle_for_events.emit(
                         "chat-token",
-                        ChatTokenPayload { content: String::new(), done: true },
+                        ChatTokenPayload {
+                            content: String::new(),
+                            done: true,
+                        },
                     );
-                    let managed: tauri::State<'_, Mutex<DesktopApp>> =
-                        handle_for_events.state();
+                    let managed: tauri::State<'_, Mutex<DesktopApp>> = handle_for_events.state();
                     let mut app = managed.lock();
                     app.chat_streaming = false;
                     return;
@@ -460,8 +468,7 @@ pub async fn chat_send_agent_message(
                             done: true,
                         },
                     );
-                    let managed: tauri::State<'_, Mutex<DesktopApp>> =
-                        handle_for_events.state();
+                    let managed: tauri::State<'_, Mutex<DesktopApp>> = handle_for_events.state();
                     let mut app = managed.lock();
                     app.chat_streaming = false;
                     return;
@@ -489,9 +496,7 @@ pub async fn chat_set_agent_mode(
 
 /// Get current agent mode state.
 #[tauri::command]
-pub async fn chat_get_agent_mode(
-    state: State<'_, Mutex<DesktopApp>>,
-) -> Result<bool, String> {
+pub async fn chat_get_agent_mode(state: State<'_, Mutex<DesktopApp>>) -> Result<bool, String> {
     let app = state.lock();
     Ok(app.chat_agent_mode)
 }

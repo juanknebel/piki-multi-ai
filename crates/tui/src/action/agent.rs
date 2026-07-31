@@ -1,12 +1,11 @@
-
 use ratatui::DefaultTerminal;
 
 use super::Action;
 use crate::app::{self, App, AppMode, ToastLevel};
 use crate::dialog_state::DialogState;
 use crate::helpers::spawn_tab;
-use piki_core::workspace::{FileWatcher, WorkspaceManager};
 use piki_core::AIProvider;
+use piki_core::workspace::{FileWatcher, WorkspaceManager};
 
 pub(super) async fn handle(
     app: &mut App,
@@ -91,8 +90,17 @@ pub(super) async fn handle(
 
                 // Spawn tab in current workspace
                 let ws = &mut app.workspaces[source_ws];
-                let (idx, spawn_error) =
-                    spawn_tab(ws, &provider, app.pty_rows, app.pty_cols, Some(&task_prompt), Some(&app.provider_manager), &app.paths, app.pty_output.clone()).await;
+                let (idx, spawn_error) = spawn_tab(
+                    ws,
+                    &provider,
+                    app.pty_rows,
+                    app.pty_cols,
+                    Some(&task_prompt),
+                    Some(&app.provider_manager),
+                    &app.paths,
+                    app.pty_output.clone(),
+                )
+                .await;
                 ws.active_tab = idx;
                 app.active_pane = crate::app::ActivePane::MainPanel;
 
@@ -148,12 +156,17 @@ pub(super) async fn handle(
 
                         // Materialize agent config files in worktree
                         if let (Some(name), Some(role)) = (&agent_name, &agent_role) {
-                            let _ = materialize_agent_config(&info.path, name, &provider, role, Some(&app.provider_manager));
+                            let _ = materialize_agent_config(
+                                &info.path,
+                                name,
+                                &provider,
+                                role,
+                                Some(&app.provider_manager),
+                            );
                         }
 
                         // Update kanban card: set assignee and move to IN PROGRESS
-                        let assignee_label =
-                            agent_name.as_deref().unwrap_or(provider.label());
+                        let assignee_label = agent_name.as_deref().unwrap_or(provider.label());
                         if let Some(src_ws) = app.workspaces.get_mut(source_ws)
                             && let Some(ref mut kp) = src_ws.kanban_provider
                         {
@@ -262,9 +275,9 @@ pub(super) async fn handle(
             }
         }
         Action::SyncAgentToRepo(id) => {
-            let ws_info = app.current_workspace().map(|ws| {
-                (ws.path.clone(), ws.source_repo.clone())
-            });
+            let ws_info = app
+                .current_workspace()
+                .map(|ws| (ws.path.clone(), ws.source_repo.clone()));
             let agent_data = app
                 .agent_profiles
                 .iter()
@@ -275,7 +288,13 @@ pub(super) async fn handle(
                 && let Some((name, provider_str, role)) = agent_data
             {
                 let provider = AIProvider::from_label(&provider_str);
-                match materialize_agent_config(&ws_path, &name, &provider, &role, Some(&app.provider_manager)) {
+                match materialize_agent_config(
+                    &ws_path,
+                    &name,
+                    &provider,
+                    &role,
+                    Some(&app.provider_manager),
+                ) {
                     Ok(()) => {
                         if let Some(ref storage) = app.storage.agent_profiles {
                             let _ = storage.mark_synced(id);
@@ -283,10 +302,7 @@ pub(super) async fn handle(
                                 app.agent_profiles = agents;
                             }
                         }
-                        app.set_toast(
-                            format!("Agent synced: {}", name),
-                            ToastLevel::Success,
-                        );
+                        app.set_toast(format!("Agent synced: {}", name), ToastLevel::Success);
                     }
                     Err(e) => {
                         app.status_message = Some(format!("Sync failed: {}", e));
@@ -322,27 +338,19 @@ pub(super) async fn handle(
                                 && let Some(stem) = path.file_stem()
                             {
                                 let name = stem.to_string_lossy().to_string();
-                                let role =
-                                    std::fs::read_to_string(&path).unwrap_or_default();
-                                let exists = app.agent_profiles.iter().any(|a| {
-                                    a.name == name && a.provider == *provider_label
-                                });
-                                discovered.push((
-                                    name,
-                                    provider_label.clone(),
-                                    role,
-                                    exists,
-                                ));
+                                let role = std::fs::read_to_string(&path).unwrap_or_default();
+                                let exists = app
+                                    .agent_profiles
+                                    .iter()
+                                    .any(|a| a.name == name && a.provider == *provider_label);
+                                discovered.push((name, provider_label.clone(), role, exists));
                             }
                         }
                     }
                 }
 
                 if discovered.is_empty() {
-                    app.set_toast(
-                        "No agent files found in repo".to_string(),
-                        ToastLevel::Info,
-                    );
+                    app.set_toast("No agent files found in repo".to_string(), ToastLevel::Info);
                 } else {
                     // Pre-select only new agents (not already in DB)
                     let selected: Vec<bool> =

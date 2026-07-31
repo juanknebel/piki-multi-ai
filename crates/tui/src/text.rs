@@ -116,7 +116,11 @@ pub fn field_window(text: &str, cursor: usize, max_width: usize) -> (&str, &str,
     } else {
         0
     };
-    let end = cursor + byte_at_width(&text[cursor..], max_width.saturating_sub(width(&text[start..cursor])));
+    let end = cursor
+        + byte_at_width(
+            &text[cursor..],
+            max_width.saturating_sub(width(&text[start..cursor])),
+        );
     let end = end.max(cursor);
 
     let before = &text[start..cursor];

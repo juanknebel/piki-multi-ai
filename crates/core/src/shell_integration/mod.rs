@@ -150,7 +150,10 @@ mod tests {
         let mut s = ShellTabState::new();
         s.apply(&ShellEvent::CommandOutputStart);
         std::thread::sleep(Duration::from_millis(5));
-        s.apply(&ShellEvent::CommandEnd { exit_code: Some(0), command: None });
+        s.apply(&ShellEvent::CommandEnd {
+            exit_code: Some(0),
+            command: None,
+        });
         let cmd = s.last_command.expect("command recorded");
         assert!(cmd.ok());
         assert!(cmd.duration >= Duration::from_millis(5));
@@ -168,7 +171,10 @@ mod tests {
     fn acknowledge_clears_attention() {
         let mut s = ShellTabState::new();
         s.apply(&ShellEvent::CommandOutputStart);
-        s.apply(&ShellEvent::CommandEnd { exit_code: Some(1), command: None });
+        s.apply(&ShellEvent::CommandEnd {
+            exit_code: Some(1),
+            command: None,
+        });
         assert!(s.last_attention_at.is_some());
         s.acknowledge();
         assert!(s.last_attention_at.is_none());
@@ -177,7 +183,10 @@ mod tests {
     #[test]
     fn command_end_without_start_still_records() {
         let mut s = ShellTabState::new();
-        s.apply(&ShellEvent::CommandEnd { exit_code: Some(2), command: None });
+        s.apply(&ShellEvent::CommandEnd {
+            exit_code: Some(2),
+            command: None,
+        });
         let cmd = s.last_command.expect("command recorded");
         assert_eq!(cmd.exit_code, Some(2));
         assert_eq!(cmd.duration, Duration::ZERO);
@@ -198,7 +207,10 @@ mod tests {
 
         // ...and drops off when the CLI exits and the shell returns to its
         // prompt (OSC 133 command-end).
-        s.apply(&ShellEvent::CommandEnd { exit_code: Some(0), command: None });
+        s.apply(&ShellEvent::CommandEnd {
+            exit_code: Some(0),
+            command: None,
+        });
         assert!(
             s.cli_agent.is_none(),
             "cli-agent state cleared once claude exits"
