@@ -37,7 +37,7 @@ serde_json = "1"
 toml = "0.8"
 
 # Fuzzy search
-nucleo = "0.2"
+nucleo = "0.5"
 ignore = "0.4"
 
 # Clipboard
