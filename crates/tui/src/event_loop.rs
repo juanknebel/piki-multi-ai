@@ -239,6 +239,9 @@ pub(crate) async fn run(
     loop {
         // Phase 0: Keep the Agents highlight on the tab the user is standing on
         app.sync_agent_selection();
+        // ...and drop any text selection left behind by a tab switch — its
+        // cell coordinates would otherwise address the new tab's content.
+        app.drop_stale_selection();
 
         // Phase 1: Render only when state has changed, capped at ~30 fps
         if app.needs_redraw {

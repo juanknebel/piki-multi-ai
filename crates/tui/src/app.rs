@@ -684,16 +684,21 @@ pub struct Selection {
     pub end_row: u16,
     pub end_col: u16,
     pub active: bool,
+    /// (workspace index, tab id) the selection was made on. Cell coordinates
+    /// are meaningless on any other tab, so the selection is dropped as soon
+    /// as the active tab stops matching (see `App::drop_stale_selection`).
+    pub owner: (usize, usize),
 }
 
 impl Selection {
-    pub fn new(row: u16, col: u16) -> Self {
+    pub fn new(row: u16, col: u16, owner: (usize, usize)) -> Self {
         Self {
             anchor_row: row,
             anchor_col: col,
             end_row: row,
             end_col: col,
             active: true,
+            owner,
         }
     }
 
@@ -1294,6 +1299,31 @@ impl App {
     /// only re-selects when the active tab changed — so browsing the pane with
     /// j/k isn't yanked back. A non-agent tab (shell, lazygit) leaves the
     /// highlight where it was: there is no row to move it to.
+    /// (workspace index, tab id) of the tab currently on screen — the identity
+    /// a text selection is owned by. Tab *id* (not position) so closing or
+    /// reordering sibling tabs can't make a stale selection look current.
+    pub fn selection_owner_key(&self) -> Option<(usize, usize)> {
+        self.current_workspace()
+            .and_then(|ws| ws.tabs.get(ws.active_tab))
+            .map(|tab| (self.active_workspace, tab.id))
+    }
+
+    /// Drop the text selection when it no longer belongs to the tab on screen.
+    ///
+    /// Selections are plain cell rectangles; after a tab or workspace switch
+    /// the same rectangle silently addresses the *new* tab's content, so a
+    /// leftover selection both renders a bogus highlight and — worse — gets
+    /// re-copied from the wrong tab by the next mouse-up. Called once per
+    /// event-loop iteration instead of at every tab-switch site (there are
+    /// many; see `sync_agent_selection` for the same reasoning).
+    pub fn drop_stale_selection(&mut self) {
+        if let Some(ref sel) = self.selection
+            && Some(sel.owner) != self.selection_owner_key()
+        {
+            self.selection = None;
+        }
+    }
+
     pub fn sync_agent_selection(&mut self) {
         let key = self
             .current_workspace()
@@ -2492,6 +2522,49 @@ mod tests {
 
         app.select_next_sidebar_row();
         assert_eq!(app.active_workspace, child);
+    }
+
+    #[test]
+    fn test_selection_survives_on_its_own_tab_but_not_a_switch() {
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let a = add_test_workspace(&mut app);
+        add_agent_tab(&mut app, a, "Claude");
+        add_agent_tab(&mut app, a, "Codex");
+        app.active_workspace = a;
+        app.workspaces[a].active_tab = 0;
+
+        let owner = app.selection_owner_key().unwrap();
+        app.selection = Some(Selection::new(1, 2, owner));
+
+        // Same tab on screen — the selection stays.
+        app.drop_stale_selection();
+        assert!(app.selection.is_some());
+
+        // Tab switch — the cell rectangle now addresses the other tab's
+        // content, so the selection must be dropped, not re-copied from it.
+        app.workspaces[a].active_tab = 1;
+        app.drop_stale_selection();
+        assert!(app.selection.is_none());
+    }
+
+    #[test]
+    fn test_selection_owner_is_the_tab_id_not_its_position() {
+        let mut app = App::new(test_storage(), &piki_core::paths::DataPaths::default_paths());
+        let a = add_test_workspace(&mut app);
+        add_agent_tab(&mut app, a, "Claude");
+        add_agent_tab(&mut app, a, "Codex");
+        app.active_workspace = a;
+        app.workspaces[a].active_tab = 1;
+
+        let owner = app.selection_owner_key().unwrap();
+        app.selection = Some(Selection::new(0, 0, owner));
+
+        // Closing the first tab shifts the owning tab to position 0; the id
+        // still matches, so the selection survives.
+        app.workspaces[a].tabs.remove(0);
+        app.workspaces[a].active_tab = 0;
+        app.drop_stale_selection();
+        assert!(app.selection.is_some());
     }
 
     #[test]
