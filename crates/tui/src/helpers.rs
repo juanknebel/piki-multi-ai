@@ -6,11 +6,8 @@ use crate::app::{self, App};
 use crate::clipboard;
 use crate::ui;
 use piki_core::AIProvider;
-use piki_core::cli_agent::install as cli_agent_install;
-use piki_core::cli_agent::install_antigravity as agy_install;
-use piki_core::cli_agent::{AgentBridge, bridge_for_command};
+use piki_core::cli_agent::bridge_for_command;
 use piki_core::pty::PtySession;
-use piki_core::shell_integration::install as shell_install;
 
 /// Kill all PTY sessions and drop watchers for a clean exit.
 pub(crate) fn shutdown(app: &mut App) {
@@ -109,112 +106,28 @@ pub(crate) async fn spawn_tab(
         return (idx, None);
     }
 
-    // Resolve command and args: use ProviderManager for Custom providers, built-in methods otherwise
-    let (cmd, args) = if let AIProvider::Custom(name) = provider {
-        if let Some(mgr) = provider_manager
-            && let Some(config) = mgr.get(name)
-        {
-            let prompt_args = prompt
-                .map(|p| piki_core::providers::ProviderManager::prompt_args(config, p))
-                .unwrap_or_default();
-            let mut all_args = config.default_args.clone();
-            all_args.extend(prompt_args);
-            (config.command.clone(), all_args)
-        } else {
-            return (idx, Some(format!("No provider configured named '{name}'")));
-        }
-    } else {
-        let cmd = provider.resolved_command();
-        let prompt_args = prompt.map(|p| provider.prompt_args(p)).unwrap_or_default();
-        (cmd, prompt_args)
+    // Everything about how to start this tab — command, args, env, shell
+    // integration, cli-agent channel — is resolved by core so the desktop app
+    // makes the identical decisions (see core::pty::launch).
+    // `shell_override` is None: the TUI has no shell setting yet (the desktop
+    // reads one from its UI prefs). Adding one is now just a config key — the
+    // launch side already honours it.
+    let plan = match piki_core::pty::launch_plan(provider, prompt, provider_manager, paths, None) {
+        Ok(plan) => plan,
+        Err(e) => return (idx, Some(e.to_string())),
     };
 
-    // Shell tabs get OSC 133/7 shell integration. Provider tabs whose binary
-    // has a hook bridge (Claude Code, Antigravity) get the structured
-    // cli-agent channel. Both ride the same OSC parser, so both enable
-    // `integration_on`. Everything else runs bare.
-    let bridge = match provider {
-        AIProvider::Custom(_) => bridge_for_command(&cmd),
-        _ => None,
-    };
-    let (extra_env, extra_args, integration_on, cli_agent_sock) = if *provider == AIProvider::Shell
-    {
-        match shell_install::setup_for(&cmd, &paths.shell_integration_dir()) {
-            Ok(Some(setup)) => {
-                let mut env: Vec<(String, String)> = setup.env.into_iter().collect();
-                // Also wire the cli-agent channel so a manually-typed
-                // `claude` inside this shell reports to the Agents pane:
-                // the FIFO + hook env ride the shell's environment, and
-                // the bridge script wraps `claude` with `--settings`.
-                // Only the env is merged — the `--settings` extra_args
-                // are claude args, not shell args.
-                let sock = match cli_agent_install::setup_for_claude(&paths.claude_hooks_dir()) {
-                    Ok(agent) => {
-                        env.extend(agent.env);
-                        agent.sock_path
-                    }
-                    Err(e) => {
-                        tracing::debug!(error = %e, "cli-agent channel skipped for shell tab");
-                        None
-                    }
-                };
-                (env, setup.extra_args, true, sock)
-            }
-            Ok(None) => (Vec::new(), Vec::new(), false, None),
-            Err(e) => {
-                tracing::warn!(error = %e, shell = %cmd, "shell integration setup failed");
-                (Vec::new(), Vec::new(), false, None)
-            }
-        }
-    } else if bridge == Some(AgentBridge::Claude) {
-        match cli_agent_install::setup_for_claude(&paths.claude_hooks_dir()) {
-            Ok(setup) => {
-                let sock = setup.sock_path.clone();
-                let env: Vec<(String, String)> = setup.env.into_iter().collect();
-                (env, setup.extra_args, true, sock)
-            }
-            Err(e) => {
-                tracing::warn!(error = %e, "claude cli-agent hook setup failed");
-                (Vec::new(), Vec::new(), false, None)
-            }
-        }
-    } else if bridge == Some(AgentBridge::Antigravity) {
-        // No extra_args: agy discovers the bridge from its own plugins
-        // root, so the hooks ride the environment alone.
-        match agy_install::setup_for_antigravity(
-            &paths.antigravity_hooks_dir(),
-            &agy_install::plugins_root(),
-        ) {
-            Ok(setup) => {
-                let sock = setup.sock_path.clone();
-                let env: Vec<(String, String)> = setup.env.into_iter().collect();
-                (env, Vec::new(), true, sock)
-            }
-            Err(e) => {
-                tracing::warn!(error = %e, "antigravity cli-agent hook setup failed");
-                (Vec::new(), Vec::new(), false, None)
-            }
-        }
-    } else if piki_core::agent_state_detect::manifest_for_command(&cmd).is_some() {
-        // No hook bridge for this provider (e.g. Codex) — turn on shell
-        // integration so `OscParser` captures its window-title spinner,
-        // but withhold `cli_agent_sock`: that FIFO is exclusive to the
-        // real hook bridges above.
-        (Vec::new(), Vec::new(), true, None)
-    } else {
-        (Vec::new(), Vec::new(), false, None)
-    };
-
+    let cmd = plan.command;
     let spawn_error = match PtySession::spawn(
         &ws.path,
         rows,
         cols,
         &cmd,
-        &args,
-        &extra_env,
-        &extra_args,
-        integration_on,
-        cli_agent_sock,
+        &plan.args,
+        &plan.env,
+        &plan.extra_args,
+        plan.integration_on,
+        plan.cli_agent_sock,
         Some(output_signal),
     )
     .await

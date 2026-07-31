@@ -77,6 +77,14 @@ pub struct ProviderManager {
 }
 
 impl ProviderManager {
+    /// A manager with no providers configured. Mostly useful in tests, where
+    /// `load_or_init` would seed the defaults and touch the filesystem.
+    pub fn empty() -> Self {
+        Self {
+            providers: Vec::new(),
+        }
+    }
+
     /// Load providers from a TOML file. If the file is missing or empty,
     /// bootstrap it with a default Claude provider entry and return that.
     pub fn load_or_init(path: &Path) -> Self {

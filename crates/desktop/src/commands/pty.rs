@@ -4,78 +4,38 @@ use parking_lot::Mutex;
 use tauri::{AppHandle, State};
 
 use piki_core::AIProvider;
-use piki_core::cli_agent::install as cli_agent_install;
-use piki_core::cli_agent::install_antigravity as agy_install;
-use piki_core::cli_agent::{AgentBridge, bridge_for_command};
-use piki_core::shell_integration::install as shell_install;
+use piki_core::cli_agent::bridge_for_command;
 
 use crate::pty_raw::RawPtySession;
 use crate::state::{DesktopApp, DesktopTab};
 
-/// Decide if a shell tab should run with shell integration. Returns the
-/// `(extra_env, extra_args, enabled)` triple to pass to `RawPtySession::spawn`.
-/// Provider tabs always get `(empty, empty, false)` since they run binaries
-/// directly without a shell wrapper.
-fn shell_integration_setup(
-    provider: &AIProvider,
-    shell_command: &str,
-    integration_dir: &std::path::Path,
-) -> (Vec<(String, String)>, Vec<String>, bool) {
-    if *provider != AIProvider::Shell {
-        return (Vec::new(), Vec::new(), false);
-    }
-    match shell_install::setup_for(shell_command, integration_dir) {
-        Ok(Some(setup)) => {
-            let env: Vec<(String, String)> = setup.env.into_iter().collect();
-            (env, setup.extra_args, true)
-        }
-        Ok(None) => (Vec::new(), Vec::new(), false),
-        Err(e) => {
-            tracing::warn!(error = %e, shell = %shell_command, "shell integration setup failed");
-            (Vec::new(), Vec::new(), false)
-        }
-    }
+/// The user's configured shell from the settings blob in UI prefs, if set.
+fn configured_shell(app: &DesktopApp) -> Option<String> {
+    app.storage
+        .ui_prefs
+        .as_ref()
+        .and_then(|p| p.get_preference("settings").ok().flatten())
+        .and_then(|json| {
+            serde_json::from_str::<serde_json::Value>(&json)
+                .ok()?
+                .get("shell")?
+                .as_str()
+                .filter(|s| !s.is_empty())
+                .map(String::from)
+        })
 }
 
-/// Structured cli-agent hook setup for Claude provider tabs. Returns the
-/// `(extra_env, extra_args, enabled, cli_agent_sock)` tuple; on failure the
-/// tab still spawns, just without the structured channel. `cli_agent_sock` is
-/// the per-spawn FIFO path the out-of-band transport uses.
-type CliAgentSetup = (
-    Vec<(String, String)>,
-    Vec<String>,
-    bool,
-    Option<std::path::PathBuf>,
-);
-
-fn cli_agent_setup(hooks_dir: &std::path::Path) -> CliAgentSetup {
-    match cli_agent_install::setup_for_claude(hooks_dir) {
-        Ok(setup) => {
-            let sock = setup.sock_path.clone();
-            let env: Vec<(String, String)> = setup.env.into_iter().collect();
-            (env, setup.extra_args, true, sock)
-        }
-        Err(e) => {
-            tracing::warn!(error = %e, "claude cli-agent hook setup failed");
-            (Vec::new(), Vec::new(), false, None)
-        }
-    }
-}
-
-/// Same, for Antigravity tabs. No `extra_args` — agy picks the bridge up from
-/// its own plugins root, so only the env carries the per-tab FIFO.
-fn antigravity_agent_setup(hooks_dir: &std::path::Path) -> CliAgentSetup {
-    match agy_install::setup_for_antigravity(hooks_dir, &agy_install::plugins_root()) {
-        Ok(setup) => {
-            let sock = setup.sock_path.clone();
-            let env: Vec<(String, String)> = setup.env.into_iter().collect();
-            (env, Vec::new(), true, sock)
-        }
-        Err(e) => {
-            tracing::warn!(error = %e, "antigravity cli-agent hook setup failed");
-            (Vec::new(), Vec::new(), false, None)
-        }
-    }
+/// Launch plan for a plain shell tab — shared by the editor tab and the
+/// open-directory-in-terminal command, which both just want "a shell here".
+fn shell_launch_plan(app: &DesktopApp) -> Result<piki_core::pty::LaunchPlan, String> {
+    piki_core::pty::launch_plan(
+        &AIProvider::Shell,
+        None,
+        Some(&app.provider_manager),
+        &app.paths,
+        configured_shell(app).as_deref(),
+    )
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -102,87 +62,52 @@ pub async fn spawn_tab(
         return Ok(tab_id);
     }
 
-    // Resolve command: Shell uses $SHELL, Custom uses ProviderManager, built-in uses command()
-    let (command, default_args) = if ai_provider == AIProvider::Shell {
-        // Check user-configured shell from settings
-        let app = state.lock();
-        let custom_shell = app
-            .storage
-            .ui_prefs
-            .as_ref()
-            .and_then(|p| p.get_preference("settings").ok().flatten())
-            .and_then(|json| {
-                serde_json::from_str::<serde_json::Value>(&json)
-                    .ok()?
-                    .get("shell")?
-                    .as_str()
-                    .filter(|s| !s.is_empty())
-                    .map(String::from)
-            });
-        drop(app);
-        (
-            custom_shell.unwrap_or_else(|| ai_provider.resolved_command()),
-            Vec::new(),
-        )
-    } else if let AIProvider::Custom(ref name) = ai_provider {
-        let app = state.lock();
-        if let Some(config) = app.provider_manager.get(name) {
-            (config.command.clone(), config.default_args.clone())
-        } else {
-            return Err(format!("Unknown custom provider: {name}"));
-        }
-    } else {
-        (ai_provider.resolved_command(), Vec::new())
-    };
-    if command.is_empty() {
-        return Err(format!("{provider} does not use a terminal session"));
-    }
-
     // Resolve the provider's providers.toml entry (cloned, so the lock is
-    // released before the await-heavy spawn below) for its per-provider idle
-    // knobs. Built-in providers (Shell/…) have no entry → universal defaults.
+    // released before the spawn below) for its per-provider idle knobs.
+    // Built-in providers (Shell/…) have no entry → universal defaults.
     let provider_cfg = if let AIProvider::Custom(ref name) = ai_provider {
         state.lock().provider_manager.get(name).cloned()
     } else {
         None
     };
+
+    // Command, args, env, shell integration and the cli-agent channel all come
+    // from core, so this app and the TUI make the identical decisions. This
+    // used to be resolved here separately and had drifted: passive agent-state
+    // detection (Codex) was missing entirely, and shell tabs never got the
+    // cli-agent FIFO, so a manually-typed `claude` never showed up as an agent.
+    let plan = {
+        let app = state.lock();
+        piki_core::pty::launch_plan(
+            &ai_provider,
+            None,
+            Some(&app.provider_manager),
+            &app.paths,
+            configured_shell(&app).as_deref(),
+        )
+        .map_err(|e| e.to_string())?
+    };
+
     let mut tab = DesktopTab::new(ai_provider.clone(), provider_cfg.as_ref());
     let tab_id = tab.id.clone();
 
-    let (worktree_path, integration_dir, claude_hooks_dir, agy_hooks_dir) = {
+    let worktree_path = {
         let app = state.lock();
         if workspace_idx >= app.workspaces.len() {
             return Err("Workspace index out of range".to_string());
         }
-        (
-            app.workspaces[workspace_idx].info.path.clone(),
-            app.paths.shell_integration_dir(),
-            app.paths.claude_hooks_dir(),
-            app.paths.antigravity_hooks_dir(),
-        )
+        app.workspaces[workspace_idx].info.path.clone()
     };
-
-    let bridge = match ai_provider {
-        AIProvider::Custom(_) => bridge_for_command(&command),
-        _ => None,
-    };
-    let (extra_env, extra_args, integration_on, cli_agent_sock) =
-        if ai_provider == AIProvider::Shell {
-            let (e, a, on) = shell_integration_setup(&ai_provider, &command, &integration_dir);
-            (e, a, on, None)
-        } else {
-            match bridge {
-                Some(AgentBridge::Claude) => cli_agent_setup(&claude_hooks_dir),
-                Some(AgentBridge::Antigravity) => antigravity_agent_setup(&agy_hooks_dir),
-                None => (Vec::new(), Vec::new(), false, None),
-            }
-        };
 
     // The bridge exists for this agent but couldn't be installed (its hook
     // scripts need `jq`). The tab still runs — only its status degrades to the
     // byte-silence heuristic — so this warns instead of failing the spawn.
+    let bridge = match ai_provider {
+        AIProvider::Custom(_) => bridge_for_command(&plan.command),
+        _ => None,
+    };
     if let Some(b) = bridge
-        && !integration_on
+        && !plan.integration_on
     {
         let missing = piki_core::cli_agent::missing_prerequisites(b).join(", ");
         crate::events::emit_toast(
@@ -195,19 +120,18 @@ pub async fn spawn_tab(
         );
     }
 
-    // Spawn PTY session (use default_args from provider config)
     let pty = RawPtySession::spawn(
         app_handle,
         tab_id.clone(),
         &worktree_path,
         24,
         80,
-        &command,
-        &default_args,
-        &extra_env,
-        &extra_args,
-        integration_on,
-        cli_agent_sock,
+        &plan.command,
+        &plan.args,
+        &plan.env,
+        &plan.extra_args,
+        plan.integration_on,
+        plan.cli_agent_sock,
     )
     .map_err(|e| format!("Failed to spawn PTY: {e}"))?;
 
@@ -309,25 +233,8 @@ pub async fn spawn_editor_tab(
     workspace_idx: usize,
     file_path: String,
 ) -> Result<String, String> {
-    // Resolve shell command (same logic as Shell provider in spawn_tab)
-    let shell_command = {
-        let app = state.lock();
-        let custom_shell = app
-            .storage
-            .ui_prefs
-            .as_ref()
-            .and_then(|p| p.get_preference("settings").ok().flatten())
-            .and_then(|json| {
-                serde_json::from_str::<serde_json::Value>(&json)
-                    .ok()?
-                    .get("shell")?
-                    .as_str()
-                    .filter(|s| !s.is_empty())
-                    .map(String::from)
-            });
-        drop(app);
-        custom_shell.unwrap_or_else(|| AIProvider::Shell.resolved_command())
-    };
+    // Same shell resolution as a Shell tab, through the shared planner.
+    let plan = shell_launch_plan(&state.lock())?;
 
     // Resolve $EDITOR from login environment
     let editor = piki_core::shell_env::user_login_env()
@@ -338,20 +245,13 @@ pub async fn spawn_editor_tab(
     let mut tab = DesktopTab::new(AIProvider::Shell, None);
     let tab_id = tab.id.clone();
 
-    let (worktree_path, integration_dir) = {
+    let worktree_path = {
         let app = state.lock();
         if workspace_idx >= app.workspaces.len() {
             return Err("Workspace index out of range".to_string());
         }
-        (
-            app.workspaces[workspace_idx].info.path.clone(),
-            app.paths.shell_integration_dir(),
-        )
+        app.workspaces[workspace_idx].info.path.clone()
     };
-
-    let args: Vec<String> = Vec::new();
-    let (extra_env, extra_args, integration_on) =
-        shell_integration_setup(&AIProvider::Shell, &shell_command, &integration_dir);
 
     let mut pty = RawPtySession::spawn(
         app_handle,
@@ -359,12 +259,12 @@ pub async fn spawn_editor_tab(
         &worktree_path,
         24,
         80,
-        &shell_command,
-        &args,
-        &extra_env,
-        &extra_args,
-        integration_on,
-        None,
+        &plan.command,
+        &plan.args,
+        &plan.env,
+        &plan.extra_args,
+        plan.integration_on,
+        plan.cli_agent_sock,
     )
     .map_err(|e| format!("Failed to spawn PTY: {e}"))?;
 
@@ -410,56 +310,33 @@ pub async fn spawn_terminal_at(
         return Err(format!("Invalid path: {dir}"));
     }
 
-    let shell_command = {
-        let app = state.lock();
-        let custom_shell = app
-            .storage
-            .ui_prefs
-            .as_ref()
-            .and_then(|p| p.get_preference("settings").ok().flatten())
-            .and_then(|json| {
-                serde_json::from_str::<serde_json::Value>(&json)
-                    .ok()?
-                    .get("shell")?
-                    .as_str()
-                    .filter(|s| !s.is_empty())
-                    .map(String::from)
-            });
-        drop(app);
-        custom_shell.unwrap_or_else(|| AIProvider::Shell.resolved_command())
-    };
-
     let mut tab = DesktopTab::new(AIProvider::Shell, None);
     let tab_id = tab.id.clone();
 
-    let (worktree_path, integration_dir) = {
+    let (worktree_path, plan) = {
         let app = state.lock();
         if workspace_idx >= app.workspaces.len() {
             return Err("Workspace index out of range".to_string());
         }
         (
             app.workspaces[workspace_idx].info.path.clone(),
-            app.paths.shell_integration_dir(),
+            shell_launch_plan(&app)?,
         )
     };
 
     let cwd = worktree_path.join(rel);
-    let args: Vec<String> = Vec::new();
-    let (extra_env, extra_args, integration_on) =
-        shell_integration_setup(&AIProvider::Shell, &shell_command, &integration_dir);
-
     let pty = RawPtySession::spawn(
         app_handle,
         tab_id.clone(),
         &cwd,
         24,
         80,
-        &shell_command,
-        &args,
-        &extra_env,
-        &extra_args,
-        integration_on,
-        None,
+        &plan.command,
+        &plan.args,
+        &plan.env,
+        &plan.extra_args,
+        plan.integration_on,
+        plan.cli_agent_sock,
     )
     .map_err(|e| format!("Failed to spawn PTY: {e}"))?;
 
