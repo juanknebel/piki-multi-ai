@@ -80,6 +80,24 @@ export function setCollapsedGroups(groups: string[]): Promise<void> {
   return invoke("set_collapsed_groups", { groups });
 }
 
+/** One visual sidebar row, already grouped by the backend. */
+export type SidebarRow =
+  | { type: "prReviewHeader"; collapsed: boolean; family_key: string }
+  | {
+      type: "workspace";
+      index: number;
+      kind: "standalone" | "parent" | "child";
+      family_key: string | null;
+      collapsed: boolean | null;
+    };
+
+/** Sidebar rows in render order. The grouping rule (worktree families, the
+ *  PR-review group, collapse state) lives in `core::workspace::sidebar_rows`
+ *  so this app and the TUI can't drift apart again. */
+export function sidebarRows(): Promise<SidebarRow[]> {
+  return invoke("sidebar_rows");
+}
+
 export function switchWorkspace(index: number): Promise<WorkspaceDetail> {
   return invoke("switch_workspace", { index });
 }
