@@ -1000,6 +1000,121 @@ pub fn key_matches_platform(event: KeyEvent, binding: &str, platform: Platform) 
 mod tests {
     use super::*;
 
+    // ── Key parsing ──
+    //
+    // These used to live in `tests/keybinding_dispatch.rs`, which — because
+    // this crate has no lib target and an integration test cannot import a
+    // binary — had pasted its own copy of `parse_key_event` and asserted
+    // against that. The copy drifted: it lowercased before testing for an
+    // uppercase char, so it claimed "K" carries no SHIFT, the opposite of
+    // what the real parser below does. Keep these here, calling the real
+    // thing, so they can actually fail when the parser changes.
+
+    #[test]
+    fn parse_plain_char() {
+        let event = parse_key_event("q").unwrap();
+        assert_eq!(event.code, KeyCode::Char('q'));
+        assert_eq!(event.modifiers, KeyModifiers::empty());
+    }
+
+    #[test]
+    fn parse_uppercase_char_implies_shift() {
+        let event = parse_key_event("K").unwrap();
+        assert_eq!(event.code, KeyCode::Char('k'));
+        assert!(
+            event.modifiers.contains(KeyModifiers::SHIFT),
+            "an uppercase binding must imply SHIFT"
+        );
+        // Spelling it out is equivalent.
+        let explicit = parse_key_event("shift-k").unwrap();
+        assert_eq!(explicit.code, KeyCode::Char('k'));
+        assert!(explicit.modifiers.contains(KeyModifiers::SHIFT));
+    }
+
+    #[test]
+    fn parse_modifiers() {
+        let ctrl = parse_key_event("ctrl-g").unwrap();
+        assert_eq!(ctrl.code, KeyCode::Char('g'));
+        assert!(ctrl.modifiers.contains(KeyModifiers::CONTROL));
+
+        let alt = parse_key_event("alt-m").unwrap();
+        assert!(alt.modifiers.contains(KeyModifiers::ALT));
+
+        let both = parse_key_event("ctrl-shift-c").unwrap();
+        assert!(both.modifiers.contains(KeyModifiers::CONTROL));
+        assert!(both.modifiers.contains(KeyModifiers::SHIFT));
+
+        for cmd in ["super-p", "cmd-p"] {
+            let ev = parse_key_event(cmd).unwrap();
+            assert!(ev.modifiers.contains(KeyModifiers::SUPER), "{cmd}");
+        }
+    }
+
+    #[test]
+    fn parse_named_keys() {
+        assert_eq!(parse_key_event("enter").unwrap().code, KeyCode::Enter);
+        assert_eq!(parse_key_event("esc").unwrap().code, KeyCode::Esc);
+        assert_eq!(parse_key_event("tab").unwrap().code, KeyCode::Tab);
+        assert_eq!(parse_key_event("pageup").unwrap().code, KeyCode::PageUp);
+        assert_eq!(parse_key_event("pagedown").unwrap().code, KeyCode::PageDown);
+        assert_eq!(parse_key_event("f1").unwrap().code, KeyCode::F(1));
+        assert_eq!(parse_key_event("f12").unwrap().code, KeyCode::F(12));
+    }
+
+    // The three cases the pasted copy never knew about.
+
+    #[test]
+    fn parse_backtab_is_its_own_code() {
+        // Crossterm reports Shift+Tab as BackTab, not Tab+SHIFT.
+        assert_eq!(parse_key_event("backtab").unwrap().code, KeyCode::BackTab);
+    }
+
+    #[test]
+    fn parse_space_and_literal_dash() {
+        assert_eq!(parse_key_event("space").unwrap().code, KeyCode::Char(' '));
+        // "-" is the separator, so the literal key needs its own path.
+        let dash = parse_key_event("-").unwrap();
+        assert_eq!(dash.code, KeyCode::Char('-'));
+        assert_eq!(dash.modifiers, KeyModifiers::empty());
+    }
+
+    #[test]
+    fn parse_multibyte_char_binding() {
+        // Counted in chars, not bytes — 'ñ' is one key, two bytes.
+        let ev = parse_key_event("ñ").unwrap();
+        assert_eq!(ev.code, KeyCode::Char('ñ'));
+    }
+
+    #[test]
+    fn parse_rejects_garbage() {
+        assert!(parse_key_event("invalid-modifier-x").is_none());
+        assert!(parse_key_event("notakey").is_none());
+    }
+
+    #[test]
+    fn key_matches_respects_code_and_modifiers() {
+        let q = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::empty());
+        assert!(key_matches(q, "q"));
+        assert!(!key_matches(q, "w"));
+
+        let ctrl_g = KeyEvent::new(KeyCode::Char('g'), KeyModifiers::CONTROL);
+        assert!(key_matches(ctrl_g, "ctrl-g"));
+        assert!(!key_matches(ctrl_g, "g"));
+        assert!(!key_matches(ctrl_g, "alt-g"));
+    }
+
+    #[test]
+    fn backtab_matches_whether_or_not_the_terminal_sets_shift() {
+        // Terminals disagree; both reports must match a "backtab" binding.
+        for mods in [KeyModifiers::empty(), KeyModifiers::SHIFT] {
+            let ev = KeyEvent::new(KeyCode::BackTab, mods);
+            assert!(
+                key_matches_platform(ev, "backtab", Platform::Linux),
+                "modifiers={mods:?}"
+            );
+        }
+    }
+
     #[test]
     fn test_default_config_has_valid_bindings() {
         let cfg = Config::default();

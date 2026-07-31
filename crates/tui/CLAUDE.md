@@ -67,12 +67,13 @@ Input-handler tests live in `input/dialog_tests.rs`. They use the shared test in
 - `test_terminal(w, h)` — `ratatui` `Terminal<TestBackend>` for rendering snapshots.
 - `buffer_to_snapshot(buf)` — buffer → trimmed string for `insta::assert_snapshot!`.
 - `key(KeyCode)` / `key_with_mods(KeyCode, KeyModifiers)` — `KeyEvent` helpers.
+- `add_test_workspace(app)` / `add_terminal_tab(app, ws)` / `add_agent_tab(app, ws, name)` / `test_ws_info(name, order)` — workspace and tab fixtures.
 
 Conventions:
 - Per dialog, write an `open_<name>(app, ...)` helper that sets both `app.mode` and `app.active_dialog`.
 - Per dialog, write small accessor helpers (`current_<thing>(app)`) that pattern-match the dialog state and panic if absent — keeps assertions terse.
 - Cover: each key path (navigation, action, submit, cancel), edge cases (empty list, no-dialog-active returns None), and any sub-mode transitions.
-- For state requiring app population: `app.agent_profiles` is a plain Vec — push mocks directly. `app.log_buffer.lock().push_back(LogEntry { ... })` for log entries. Don't try to populate `app.workspaces` — `Workspace` requires PTY/git setup and isn't unit-testable.
+- For state requiring app population: `app.agent_profiles` is a plain Vec — push mocks directly. `app.log_buffer.lock().push_back(LogEntry { ... })` for log entries. **`app.workspaces` is populated with `add_test_workspace()`** — `Workspace::from_info` is a plain synchronous constructor and every PTY/git field defaults to empty, so no session, watcher or git call is involved. Add a terminal with `add_terminal_tab()` (a bare `vt100::Parser`, no PTY) and agent tabs with `add_agent_tab()`. (This section used to claim `Workspace` "isn't unit-testable", which was never true and kept whole areas untested.)
 - Use `matches!(action, Some(Action::Variant(_)))` to assert on actions. `Action` derives `Debug`, so `assert_eq!(format!("{action:?}"), ...)` works too when you need to compare payloads.
 - Snapshot tests for rendering live in `ui/mod.rs` (`insta::assert_snapshot!` with `TestBackend`); they assert on the rendered buffer, not handler state.
 

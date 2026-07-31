@@ -362,3 +362,105 @@ pub(crate) fn subtab_index_at(app: &App, col: u16, area: Rect) -> Option<SubtabH
     }
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::{add_test_workspace, test_app};
+
+    fn bogus_provider(name: &str, command: &str) -> piki_core::providers::ProviderConfig {
+        piki_core::providers::ProviderConfig {
+            name: name.to_string(),
+            description: String::new(),
+            command: command.to_string(),
+            default_args: Vec::new(),
+            prompt_format: piki_core::providers::PromptFormat::Positional,
+            dispatchable: false,
+            agent_dir: None,
+            idle_threshold_secs: None,
+            idle_notify: false,
+            icon: None,
+        }
+    }
+
+    /// A tab whose provider isn't configured must say so, not sit there blank.
+    #[tokio::test]
+    async fn spawn_tab_reports_an_unknown_provider() {
+        let mut app = test_app();
+        let ws_idx = add_test_workspace(&mut app);
+        let paths = piki_core::paths::DataPaths::default_paths();
+        let signal = piki_core::pty::PtyOutputSignal::new();
+
+        let (idx, err) = spawn_tab(
+            &mut app.workspaces[ws_idx],
+            &AIProvider::Custom("does-not-exist".into()),
+            24,
+            80,
+            None,
+            None,
+            &paths,
+            signal,
+        )
+        .await;
+
+        assert_eq!(idx, 0, "the tab is still created so the user can close it");
+        let err = err.expect("an unconfigured provider must report why");
+        assert!(err.contains("does-not-exist"), "{err}");
+    }
+
+    /// The headline case: a provider whose binary doesn't exist used to leave
+    /// a blank, dead tab with no message at all.
+    #[tokio::test]
+    async fn spawn_tab_reports_a_missing_binary() {
+        let mut app = test_app();
+        let ws_idx = add_test_workspace(&mut app);
+        app.provider_manager.upsert(bogus_provider(
+            "ghost",
+            "/nonexistent/definitely-not-a-real-binary",
+        ));
+        let paths = piki_core::paths::DataPaths::default_paths();
+        let signal = piki_core::pty::PtyOutputSignal::new();
+
+        let (_idx, err) = spawn_tab(
+            &mut app.workspaces[ws_idx],
+            &AIProvider::Custom("ghost".into()),
+            24,
+            80,
+            None,
+            Some(&app.provider_manager),
+            &paths,
+            signal,
+        )
+        .await;
+
+        let err = err.expect("a missing binary must report why");
+        assert!(
+            err.contains("definitely-not-a-real-binary"),
+            "the message must name the command: {err}"
+        );
+    }
+
+    /// Kanban/CodeReview/Api tabs render from app state and never spawn a
+    /// PTY — they must not be reported as failures.
+    #[tokio::test]
+    async fn spawn_tab_succeeds_for_ptyless_providers() {
+        let mut app = test_app();
+        let ws_idx = add_test_workspace(&mut app);
+        let paths = piki_core::paths::DataPaths::default_paths();
+
+        for provider in [AIProvider::Kanban, AIProvider::CodeReview, AIProvider::Api] {
+            let (_idx, err) = spawn_tab(
+                &mut app.workspaces[ws_idx],
+                &provider,
+                24,
+                80,
+                None,
+                None,
+                &paths,
+                piki_core::pty::PtyOutputSignal::new(),
+            )
+            .await;
+            assert!(err.is_none(), "{provider:?} should not report an error");
+        }
+    }
+}

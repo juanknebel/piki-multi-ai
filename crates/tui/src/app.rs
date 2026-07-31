@@ -1697,6 +1697,7 @@ impl App {
 mod tests {
     use super::*;
     use crate::dialog_state::DialogState;
+    use crate::test_support::{add_agent_tab, add_terminal_tab, add_test_workspace};
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
     fn test_storage() -> std::sync::Arc<piki_core::storage::AppStorage> {
@@ -2092,45 +2093,8 @@ mod tests {
         assert_eq!(app.mode, AppMode::Normal); // No workspace → no commit dialog
     }
 
-    // ── Helper: add a minimal test workspace ──
-
-    fn add_test_workspace(app: &mut App) -> usize {
-        let idx = app.workspaces.len();
-        // Each test workspace gets its own source_repo by default, so it's
-        // standalone (no worktree family) unless a test deliberately shares
-        // one across workspaces to exercise the family/collapse behavior.
-        let info = piki_core::WorkspaceInfo {
-            name: format!("test-ws-{}", idx),
-            path: std::path::PathBuf::from("/tmp/test"),
-            workspace_type: piki_core::WorkspaceType::Simple,
-            description: String::new(),
-            prompt: String::new(),
-            kanban_path: None,
-            order: idx as u32,
-            source_repo: std::path::PathBuf::from(format!("/tmp/test-{idx}")),
-            source_repo_display: String::new(),
-            dispatch_card_id: None,
-            dispatch_source_kanban: None,
-            dispatch_agent_name: None,
-            origin: piki_core::WorkspaceOrigin::default(),
-            is_git_repo: true,
-            ephemeral: false,
-            pr_repo_nwo: None,
-            pr_number: None,
-        };
-        let ws = Workspace::from_info(info);
-        app.workspaces.push(ws);
-        app.workspaces.len() - 1
-    }
-
-    /// Give the active tab of `ws_idx` a live in-memory terminal (a bare vt100
-    /// parser, no real PTY) so terminal-search gating sees a searchable pane.
-    fn add_terminal_tab(app: &mut App, ws_idx: usize) {
-        let ws = &mut app.workspaces[ws_idx];
-        let idx = ws.add_tab(AIProvider::Shell, true, None);
-        ws.tabs[idx].pty_parser = Some(Arc::new(Mutex::new(vt100::Parser::new(24, 80, 0))));
-        ws.active_tab = idx;
-    }
+    // Workspace/tab fixtures live in `crate::test_support` so every test
+    // module can build workspaces, not just this one.
 
     // ── Fuzzy overlay tests ──
 
@@ -2381,10 +2345,6 @@ mod tests {
     }
 
     // ── Agents pane ──
-
-    fn add_agent_tab(app: &mut App, ws_idx: usize, name: &str) {
-        app.workspaces[ws_idx].add_tab(AIProvider::Custom(name.to_string()), true, None);
-    }
 
     #[test]
     fn test_agent_rows_spans_all_workspaces() {
