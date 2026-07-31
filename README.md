@@ -998,6 +998,7 @@ A few things worth knowing:
 - **Snapshot tests** — UI rendering is covered by `insta` snapshots. After an intentional UI change, review the diffs with `just snapshots` (`cargo install cargo-insta`) and commit the updated `.snap` files.
 - **Blame** — the repo was reformatted once, in a single commit listed in `.git-blame-ignore-revs`. Run `git config blame.ignoreRevsFile .git-blame-ignore-revs` so local `git blame` skips it.
 - **Security advisories** — `cargo audit` runs weekly and on dependency changes. Advisories that can't be acted on are listed in `.cargo/audit.toml` with the reason and what would clear them.
+- **`rusqlite` pinned at 0.39** — not the latest 0.40.x. `libsqlite3-sys` 0.38.1 (pulled in by rusqlite ≥0.40.0) calls the still-unstable `cfg_select!` macro in its build script and fails to compile on stable rustc. Bump `crates/core/Cargo.toml` once `libsqlite3-sys` ships a working patch release. Separately, rusqlite ≥0.36 dropped `ToSql`/`FromSql` for `u64`, so `pr_number` is cast to/from `i64` at the SQLite boundary in `crates/core/src/storage/sqlite.rs`.
 
 ## License
 
