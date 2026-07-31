@@ -478,11 +478,20 @@ impl Config {
     fn load_from_path(path: &std::path::Path) -> Self {
         if !path.exists() {
             let default_config = Self::default();
-            if let Some(parent) = path.parent() {
-                let _ = std::fs::create_dir_all(parent);
-            }
-            if let Ok(toml) = toml::to_string_pretty(&default_config) {
-                let _ = std::fs::write(path, toml);
+            // Seeding the config file is best-effort (a read-only config dir
+            // is survivable — defaults still apply), but stay loud about it:
+            // silently not creating the file leaves the user editing a path
+            // that never existed and wondering why nothing takes effect.
+            let seeded = path
+                .parent()
+                .map_or(Ok(()), std::fs::create_dir_all)
+                .and_then(|()| {
+                    let toml = toml::to_string_pretty(&default_config)
+                        .map_err(std::io::Error::other)?;
+                    std::fs::write(path, toml)
+                });
+            if let Err(e) = seeded {
+                tracing::warn!(?path, %e, "could not write the default config file");
             }
             return default_config;
         }

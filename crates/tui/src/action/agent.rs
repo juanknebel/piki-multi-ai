@@ -1,4 +1,3 @@
-use std::sync::Arc;
 
 use ratatui::DefaultTerminal;
 
@@ -92,15 +91,18 @@ pub(super) async fn handle(
 
                 // Spawn tab in current workspace
                 let ws = &mut app.workspaces[source_ws];
-                let idx =
+                let (idx, spawn_error) =
                     spawn_tab(ws, &provider, app.pty_rows, app.pty_cols, Some(&task_prompt), Some(&app.provider_manager), &app.paths, app.pty_output.clone()).await;
                 ws.active_tab = idx;
                 app.active_pane = crate::app::ActivePane::MainPanel;
 
-                app.set_toast(
-                    format!("Task started: {} via {}", card_title, provider.label()),
-                    ToastLevel::Success,
-                );
+                match spawn_error {
+                    Some(err) => app.set_toast(err, ToastLevel::Error),
+                    None => app.set_toast(
+                        format!("Task started: {} via {}", card_title, provider.label()),
+                        ToastLevel::Success,
+                    ),
+                }
             } else {
                 // Create new worktree workspace (original flow)
                 // Build branch name: <type>/<sanitized_card_id>
@@ -188,7 +190,7 @@ pub(super) async fn handle(
 
                         // Spawn AI provider tab with task prompt
                         let ws = &mut app.workspaces[new_idx];
-                        let idx = spawn_tab(
+                        let (idx, spawn_error) = spawn_tab(
                             ws,
                             &provider,
                             app.pty_rows,
@@ -204,21 +206,20 @@ pub(super) async fn handle(
                         // Persist config async
                         {
                             let source = app.workspaces[new_idx].source_repo.clone();
-                            let infos = app.persistable_workspaces();
-                            let storage = Arc::clone(&app.storage);
-                            tokio::spawn(async move {
-                                let _ = storage.workspaces.save_workspaces(&source, &infos);
-                            });
+                            crate::helpers::persist_workspaces(app, source);
                         }
 
-                        app.set_toast(
-                            format!(
-                                "Agent dispatched: {} via {}",
-                                card_title,
-                                provider.label()
+                        match spawn_error {
+                            Some(err) => app.set_toast(err, ToastLevel::Error),
+                            None => app.set_toast(
+                                format!(
+                                    "Agent dispatched: {} via {}",
+                                    card_title,
+                                    provider.label()
+                                ),
+                                ToastLevel::Success,
                             ),
-                            ToastLevel::Success,
-                        );
+                        }
                     }
                     Err(e) => {
                         app.status_message = Some(format!("Dispatch failed: {}", e));

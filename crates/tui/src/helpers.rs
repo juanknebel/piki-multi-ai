@@ -50,8 +50,36 @@ pub(crate) fn missing_bridge_prereqs(
     ))
 }
 
+/// Fire-and-forget save of the current workspace list under `source`'s key.
+/// `save_workspaces` only touches rows whose `source_repo` matches, so callers
+/// must pass the repo of the workspace that changed.
+///
+/// The save is detached, so there is no `&mut App` left to toast with — but a
+/// failure here means the user's workspaces silently vanish on the next start,
+/// which is far too quiet a way to lose data. `error!` at least surfaces it in
+/// the Logs pane and the log file.
+pub(crate) fn persist_workspaces(app: &app::App, source: std::path::PathBuf) {
+    let infos = app.persistable_workspaces();
+    let storage = Arc::clone(&app.storage);
+    tokio::spawn(async move {
+        if let Err(e) = storage.workspaces.save_workspaces(&source, &infos) {
+            tracing::error!(
+                source = %source.display(),
+                error = %e,
+                "failed to persist workspaces — changes will be lost on restart"
+            );
+        }
+    });
+}
+
 /// Spawn a new tab with the given provider in a workspace.
 /// For Custom providers, `provider_manager` is used to resolve the command and prompt args.
+///
+/// Returns the new tab's index plus, when the PTY failed to start, a message
+/// describing why. The tab is kept either way so the user has something to
+/// close; callers MUST surface the message — a blank dead tab with no
+/// explanation is the single most confusing failure this app can produce
+/// (a missing or non-executable provider binary looks identical to a hang).
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn spawn_tab(
     ws: &mut app::Workspace,
@@ -62,7 +90,7 @@ pub(crate) async fn spawn_tab(
     provider_manager: Option<&piki_core::providers::ProviderManager>,
     paths: &piki_core::paths::DataPaths,
     output_signal: piki_core::pty::PtyOutputSignal,
-) -> usize {
+) -> (usize, Option<String>) {
     // Resolve the provider's `providers.toml` entry up front so its
     // per-provider idle knobs drive the tab's IdleWatcher (re-used below for
     // command/arg resolution).
@@ -72,12 +100,13 @@ pub(crate) async fn spawn_tab(
         None
     };
     let idx = ws.add_tab(provider.clone(), true, provider_cfg);
+    // Kanban / CodeReview / Api render from app state, not a PTY.
     if *provider == AIProvider::Kanban || *provider == AIProvider::CodeReview {
-        return idx;
+        return (idx, None);
     }
     if *provider == AIProvider::Api {
         ws.tabs[idx].api_state = Some(app::ApiTabState::new());
-        return idx;
+        return (idx, None);
     }
 
     // Resolve command and args: use ProviderManager for Custom providers, built-in methods otherwise
@@ -92,7 +121,10 @@ pub(crate) async fn spawn_tab(
             all_args.extend(prompt_args);
             (config.command.clone(), all_args)
         } else {
-            return idx;
+            return (
+                idx,
+                Some(format!("No provider configured named '{name}'")),
+            );
         }
     } else {
         let cmd = provider.resolved_command();
@@ -179,7 +211,7 @@ pub(crate) async fn spawn_tab(
             (Vec::new(), Vec::new(), false, None)
         };
 
-    if let Ok(session) = PtySession::spawn(
+    let spawn_error = match PtySession::spawn(
         &ws.path,
         rows,
         cols,
@@ -193,17 +225,26 @@ pub(crate) async fn spawn_tab(
     )
     .await
     {
-        ws.tabs[idx].pty_parser = Some(Arc::clone(session.parser()));
-        ws.tabs[idx].pty_session = Some(session);
-        ws.status = app::WorkspaceStatus::Busy;
-    }
+        Ok(session) => {
+            ws.tabs[idx].pty_parser = Some(Arc::clone(session.parser()));
+            ws.tabs[idx].pty_session = Some(session);
+            ws.status = app::WorkspaceStatus::Busy;
+            None
+        }
+        Err(e) => {
+            // Usually a missing or non-executable provider binary. Without
+            // this the tab just sits there blank forever.
+            tracing::warn!(%cmd, error = %e, "failed to spawn PTY for tab");
+            Some(format!("Could not start '{cmd}': {e}"))
+        }
+    };
     // A tool (shell/agent/git) just activated for this workspace — that's
     // the trigger for inferring its branch (never persisted, see
     // `ws.branch`), so kick the background refresh loop immediately instead
     // of waiting for its next periodic tick.
     ws.dirty = true;
     ws.last_refresh = None;
-    idx
+    (idx, spawn_error)
 }
 
 /// Probe the actual scrollback buffer size by setting a large offset and reading back.

@@ -99,10 +99,15 @@ pub(super) async fn handle(
                     return Ok(());
                 }
 
-                let idx = spawn_tab(ws, &provider, app.pty_rows, app.pty_cols, None, Some(&app.provider_manager), &app.paths, app.pty_output.clone()).await;
+                let (idx, spawn_error) = spawn_tab(ws, &provider, app.pty_rows, app.pty_cols, None, Some(&app.provider_manager), &app.paths, app.pty_output.clone()).await;
                 ws.active_tab = idx;
                 app.active_pane = crate::app::ActivePane::MainPanel;
-                app.status_message = Some(format!("Opened {} tab", provider.label()));
+                match spawn_error {
+                    Some(err) => app.set_toast(err, crate::app::ToastLevel::Error),
+                    None => {
+                        app.status_message = Some(format!("Opened {} tab", provider.label()))
+                    }
+                }
             }
 
             // The tab is up either way; warn that its status will be guessed

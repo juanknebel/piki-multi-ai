@@ -7,7 +7,7 @@ use ratatui::layout::Rect;
 
 use crate::action::execute_action;
 use crate::app::{self, App};
-use crate::helpers::shutdown;
+use crate::helpers::{persist_workspaces, shutdown};
 use crate::input;
 use crate::{theme, ui};
 use piki_core::notifications;
@@ -641,18 +641,6 @@ pub(crate) async fn run(
 /// Redraw check for the active tab's PTY output: one atomic load comparing
 /// the byte counter against the last render. Called from the output-signal
 /// wakeup (immediate) and from [`poll_workspaces`] (tick fallback).
-/// Fire-and-forget save of the current workspace list under `source`'s key,
-/// mirroring the save sites in `action::workspace`. `save_workspaces` only
-/// touches rows whose `source_repo` matches, so callers must pass the repo
-/// of the workspace that changed.
-fn persist_workspaces(app: &App, source: std::path::PathBuf) {
-    let infos = app.persistable_workspaces();
-    let storage = std::sync::Arc::clone(&app.storage);
-    tokio::spawn(async move {
-        let _ = storage.workspaces.save_workspaces(&source, &infos);
-    });
-}
-
 fn check_active_tab_output(app: &mut App) {
     let idx = app.active_workspace;
     if let Some(ws) = app.workspaces.get_mut(idx)

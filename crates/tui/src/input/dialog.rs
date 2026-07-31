@@ -1614,11 +1614,22 @@ pub(super) fn handle_manage_providers_input(app: &mut App, key: KeyEvent) -> Opt
             if let Some(config) = app.provider_manager.all().get(*selected) {
                 let name = config.name.clone();
                 app.provider_manager.remove(&name);
-                let _ = app.provider_manager.save(&app.paths.providers_path());
+                let save_result = app.provider_manager.save(&app.paths.providers_path());
                 if *selected > 0 && *selected >= app.provider_manager.all().len() {
                     *selected = selected.saturating_sub(1);
                 }
-                app.set_toast(format!("Provider deleted: {}", name), crate::app::ToastLevel::Success);
+                // Report the write, not just the in-memory removal: a failed
+                // save means the provider is back after a restart.
+                match save_result {
+                    Ok(()) => app.set_toast(
+                        format!("Provider deleted: {name}"),
+                        crate::app::ToastLevel::Success,
+                    ),
+                    Err(e) => app.set_toast(
+                        format!("Could not save providers: {e}"),
+                        crate::app::ToastLevel::Error,
+                    ),
+                }
             }
             None
         }
@@ -1695,8 +1706,18 @@ pub(super) fn handle_edit_provider_input(app: &mut App, key: KeyEvent) -> Option
                 app.provider_manager.remove(old);
             }
             app.provider_manager.upsert(config);
-            let _ = app.provider_manager.save(&app.paths.providers_path());
-            app.set_toast(format!("Provider saved: {saved_name}"), crate::app::ToastLevel::Success);
+            // Don't claim "saved" when the write failed — the dialog used to
+            // close with a success toast either way.
+            match app.provider_manager.save(&app.paths.providers_path()) {
+                Ok(()) => app.set_toast(
+                    format!("Provider saved: {saved_name}"),
+                    crate::app::ToastLevel::Success,
+                ),
+                Err(e) => app.set_toast(
+                    format!("Could not save provider: {e}"),
+                    crate::app::ToastLevel::Error,
+                ),
+            }
             app.active_dialog = Some(DialogState::ManageProviders { selected: 0 });
             app.mode = AppMode::ManageProviders;
         }
