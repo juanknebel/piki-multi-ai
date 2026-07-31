@@ -4,8 +4,8 @@ use tauri::State;
 
 use piki_core::github::{self, ExistingComment, InlineComment, PrFile, PrInfo, ReviewVerdict};
 
-use super::diff::SideBySideDiff;
 use crate::state::DesktopApp;
+use piki_core::diff::SideBySideDiff;
 
 #[derive(Serialize, Clone)]
 pub struct PrDetail {
@@ -179,7 +179,7 @@ pub async fn get_pr_file_side_by_side_diff(
 
     let stdout = String::from_utf8_lossy(&output.stdout);
 
-    Ok(super::diff::parse_side_by_side(
+    Ok(piki_core::diff::parse_side_by_side(
         &stdout, &base_ref, "HEAD", &file,
     ))
 }
