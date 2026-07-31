@@ -69,63 +69,18 @@ pub async fn chat_send_message(
         "Sending chat message"
     );
 
-    // Build role/content pairs with system prompt
-    let mut role_contents: Vec<(&str, String)> = Vec::new();
-    if let Some(ref sys) = config.system_prompt
-        && !sys.is_empty()
-    {
-        role_contents.push(("system", sys.clone()));
-    }
-    for msg in &messages {
-        let role = match msg.role {
-            ChatRole::System => "system",
-            ChatRole::User => "user",
-            ChatRole::Assistant => "assistant",
-            ChatRole::Tool => "tool",
-        };
-        role_contents.push((role, msg.content.clone()));
-    }
-
+    let msgs = piki_agent::wire_conversation(&config, &messages);
     let model = config.model.clone();
-    let base_url = config.base_url.clone();
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
 
-    // Spawn the streaming request based on server type
-    match config.server_type {
-        piki_core::chat::ChatServerType::Ollama => {
-            let msgs: Vec<piki_api_client::OllamaMessage> = role_contents
-                .into_iter()
-                .map(|(r, c)| piki_api_client::OllamaMessage {
-                    role: r.to_string(),
-                    content: c,
-                    tool_calls: None,
-                })
-                .collect();
-            let client = piki_api_client::OllamaClient::new(&base_url);
-            tokio::spawn(async move {
-                if let Err(e) = client.chat_stream(&model, &msgs, tx).await {
-                    tracing::error!(error = %e, "Ollama chat_stream failed");
-                }
-            });
+    // `ChatClient` hides each backend's message format, so this no longer
+    // has to know one from the other (see piki_agent::chat_bridge).
+    let client = piki_agent::chat_client_for(config.server_type, &config.base_url);
+    tokio::spawn(async move {
+        if let Err(e) = client.chat_stream(&model, &msgs, None, tx).await {
+            tracing::error!(error = %e, "chat_stream failed");
         }
-        piki_core::chat::ChatServerType::LlamaCpp => {
-            let msgs: Vec<piki_api_client::LlamaCppMessage> = role_contents
-                .into_iter()
-                .map(|(r, c)| piki_api_client::LlamaCppMessage {
-                    role: r.to_string(),
-                    content: c,
-                    tool_calls: None,
-                    tool_call_id: None,
-                })
-                .collect();
-            let client = piki_api_client::LlamaCppClient::new(&base_url);
-            tokio::spawn(async move {
-                if let Err(e) = client.chat_stream(&model, &msgs, tx).await {
-                    tracing::error!(error = %e, "llama.cpp chat_stream failed");
-                }
-            });
-        }
-    }
+    });
 
     // Spawn the event forwarder — uses app_handle to access managed state
     // (State<'_> can't escape the function, but AppHandle is 'static)

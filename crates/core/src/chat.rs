@@ -8,6 +8,19 @@ pub enum ChatRole {
     Tool,
 }
 
+impl ChatRole {
+    /// The role string every OpenAI-shaped chat API expects. Was written out
+    /// by hand at three call sites before this existed.
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::System => "system",
+            Self::User => "user",
+            Self::Assistant => "assistant",
+            Self::Tool => "tool",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
     pub role: ChatRole,

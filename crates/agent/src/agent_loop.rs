@@ -1,7 +1,7 @@
 use tokio::sync::mpsc;
 
 use piki_api_client::{ChatClient, ChatStreamEvent, ChatWireMessage, RawToolCall};
-use piki_core::chat::{ChatMessage, ChatRole, ToolCall};
+use piki_core::chat::{ChatMessage, ToolCall};
 
 use crate::context::ToolContext;
 use crate::events::AgentEvent;
@@ -273,29 +273,7 @@ impl AgentLoop {
             });
         }
 
-        for msg in messages {
-            let role = match msg.role {
-                ChatRole::System => "system",
-                ChatRole::User => "user",
-                ChatRole::Assistant => "assistant",
-                ChatRole::Tool => "tool",
-            };
-            let tool_calls = msg.tool_calls.as_ref().map(|tcs| {
-                tcs.iter()
-                    .map(|tc| RawToolCall {
-                        id: tc.id.clone(),
-                        name: tc.name.clone(),
-                        arguments: serde_json::to_string(&tc.arguments).unwrap_or_default(),
-                    })
-                    .collect()
-            });
-            wire.push(ChatWireMessage {
-                role: role.to_string(),
-                content: msg.content.clone(),
-                tool_calls,
-                tool_call_id: msg.tool_call_id.clone(),
-            });
-        }
+        wire.extend(messages.iter().map(crate::chat_bridge::to_wire));
 
         wire
     }
