@@ -88,7 +88,7 @@ const MENUS: MenuDefinition[] = [
   {
     label: "File",
     items: () => [
-      { label: "New Workspace", shortcut: "Ctrl+N", action: () => showWorkspaceDialog({ mode: "create" }) },
+      { label: "New Workspace", shortcut: getShortcutKey("new-workspace"), action: () => showWorkspaceDialog({ mode: "create" }) },
       {
         label: "New Tab",
         disabled: noWs,
@@ -102,7 +102,7 @@ const MENUS: MenuDefinition[] = [
       SEP,
       {
         label: "New Blank Tab",
-        shortcut: "Ctrl+T",
+        shortcut: getShortcutKey("new-tab"),
         action: () => appState.newBlankTab(),
       },
       {
@@ -116,19 +116,19 @@ const MENUS: MenuDefinition[] = [
       SEP,
       {
         label: "Split Pane Right",
-        shortcut: "Ctrl+\\",
+        shortcut: getShortcutKey("split-right"),
         disabled: noWs,
         action: () => { appState.splitActivePane("right"); },
       },
       {
         label: "Split Pane Down",
-        shortcut: "Ctrl+Shift+\\",
+        shortcut: getShortcutKey("split-down"),
         disabled: noWs,
         action: () => { appState.splitActivePane("down"); },
       },
       {
         label: "Close Active Pane",
-        shortcut: "Ctrl+Shift+Q",
+        shortcut: getShortcutKey("close-pane"),
         disabled: noWs,
         action: () => {
           const id = appState.activePaneId;
@@ -144,7 +144,7 @@ const MENUS: MenuDefinition[] = [
     items: () => [
       {
         label: "Undo Stage / Unstage",
-        shortcut: "Ctrl+Z",
+        shortcut: getShortcutKey("undo"),
         disabled: noWs,
         action: async () => {
           const entry = appState.popUndo();
@@ -164,14 +164,14 @@ const MENUS: MenuDefinition[] = [
         },
       },
       SEP,
-      { label: "Find File", shortcut: "Ctrl+F", action: () => openFuzzySearch() },
-      { label: "Search in Project", shortcut: "Ctrl+Shift+F", action: () => openProjectSearch() },
-      { label: "Search in Terminal", shortcut: "Ctrl+Shift+B", action: () => openTerminalSearch() },
+      { label: "Find File", shortcut: getShortcutKey("fuzzy-search"), action: () => openFuzzySearch() },
+      { label: "Search in Project", shortcut: getShortcutKey("project-search"), action: () => openProjectSearch() },
+      { label: "Search in Terminal", shortcut: getShortcutKey("terminal-search"), action: () => openTerminalSearch() },
       { label: "API jq Filter", shortcut: getShortcutKey("api-jq-filter"), action: () => document.dispatchEvent(new CustomEvent("toggle-jq")) },
       SEP,
-      { label: "Theme Settings", shortcut: "Alt+T", action: () => showThemeDialog() },
-      { label: "Providers", shortcut: "Alt+P", action: () => showProvidersDialog() },
-      { label: "Settings", shortcut: "Alt+S", action: () => showSettingsDialog() },
+      { label: "Theme Settings", shortcut: getShortcutKey("theme"), action: () => showThemeDialog() },
+      { label: "Providers", shortcut: getShortcutKey("manage-providers"), action: () => showProvidersDialog() },
+      { label: "Settings", shortcut: getShortcutKey("settings"), action: () => showSettingsDialog() },
     ],
   },
   {
@@ -199,17 +199,17 @@ const MENUS: MenuDefinition[] = [
       },
       { label: "Auto-reveal Active File", action: () => toggleFileTreeAutoReveal() },
       { label: "Source Control", action: () => appState.setActiveView("git") },
-      { label: "Agents", shortcut: "Ctrl+Shift+A", action: () => showAgentManager() },
-      { label: "Kanban Board", shortcut: "Alt+K", action: () => appState.setActiveView("kanban") },
+      { label: "Agents", shortcut: getShortcutKey("agent-manager"), action: () => showAgentManager() },
+      { label: "Kanban Board", shortcut: getShortcutKey("kanban"), action: () => appState.setActiveView("kanban") },
       SEP,
-      { label: "Command Palette", shortcut: "Ctrl+P", action: () => openCommandPalette() },
-      { label: "Workspace Switcher", shortcut: "Ctrl+Space", action: () => openWorkspaceSwitcher() },
-      { label: "Dashboard", shortcut: "Alt+D", action: () => showDashboard() },
-      { label: "System Info", shortcut: "Alt+I", action: () => showSysinfoDialog() },
-      { label: "Application Logs", shortcut: "Alt+Shift+L", action: () => showLogsDialog() },
+      { label: "Command Palette", shortcut: getShortcutKey("command-palette"), action: () => openCommandPalette() },
+      { label: "Workspace Switcher", shortcut: getShortcutKey("workspace-switcher"), action: () => openWorkspaceSwitcher() },
+      { label: "Dashboard", shortcut: getShortcutKey("dashboard"), action: () => showDashboard() },
+      { label: "System Info", shortcut: getShortcutKey("system-info"), action: () => showSysinfoDialog() },
+      { label: "Application Logs", shortcut: getShortcutKey("logs"), action: () => showLogsDialog() },
       SEP,
-      { label: "Next Tab", shortcut: "Ctrl+Tab", action: () => cycleTab(1) },
-      { label: "Previous Tab", shortcut: "Ctrl+Shift+Tab", action: () => cycleTab(-1) },
+      { label: "Next Tab", shortcut: formatShortcut("Ctrl+Tab"), action: () => cycleTab(1) },
+      { label: "Previous Tab", shortcut: formatShortcut("Ctrl+Shift+Tab"), action: () => cycleTab(-1) },
     ],
   },
   {
@@ -269,24 +269,24 @@ const MENUS: MenuDefinition[] = [
         },
       },
       SEP,
-      { label: "Merge / Rebase", shortcut: "Ctrl+M", disabled: noWs, action: () => showMergeDialog() },
-      { label: "Git Log", shortcut: "Alt+L", disabled: noWs, action: () => showGitLog() },
-      { label: "Git Stash", shortcut: "Ctrl+Shift+S", disabled: noWs, action: () => showStashDialog() },
+      { label: "Merge / Rebase", shortcut: getShortcutKey("merge-rebase"), disabled: noWs, action: () => showMergeDialog() },
+      { label: "Git Log", shortcut: getShortcutKey("git-log"), disabled: noWs, action: () => showGitLog() },
+      { label: "Git Stash", shortcut: getShortcutKey("git-stash"), disabled: noWs, action: () => showStashDialog() },
       SEP,
-      { label: "Code Review (PR)", shortcut: "Ctrl+Shift+R", disabled: noWs, action: () => showCodeReview() },
+      { label: "Code Review (PR)", shortcut: getShortcutKey("code-review"), disabled: noWs, action: () => showCodeReview() },
     ],
   },
   {
     label: "Agents",
     items: () => [
-      { label: "Manage Agents", shortcut: "Ctrl+Shift+A", action: () => showAgentManager() },
-      { label: "Dispatch Agent", shortcut: "Ctrl+Shift+D", disabled: noWs, action: () => showDispatchDialog() },
+      { label: "Manage Agents", shortcut: getShortcutKey("agent-manager"), action: () => showAgentManager() },
+      { label: "Dispatch Agent", shortcut: getShortcutKey("dispatch-agent"), disabled: noWs, action: () => showDispatchDialog() },
     ],
   },
   {
     label: "Help",
     items: () => [
-      { label: "Keyboard Shortcuts", shortcut: "?", action: () => showHelpDialog() },
+      { label: "Keyboard Shortcuts", shortcut: getShortcutKey("help"), action: () => showHelpDialog() },
       SEP,
       { label: "About Piki Desktop", action: () => showAboutDialog() },
     ],

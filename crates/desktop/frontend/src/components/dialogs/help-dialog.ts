@@ -1,73 +1,7 @@
-import { formatShortcut } from "../../shortcuts";
-
-const SHORTCUTS: { category: string; items: [string, string][] }[] = [
-  {
-    category: "General",
-    items: [
-      ["Ctrl+P", "Command Palette"],
-      ["Ctrl+N", "New Workspace"],
-      ["Ctrl+Space", "Workspace Switcher"],
-      ["Alt+D", "Dashboard"],
-      ["Ctrl+Tab", "Next Tab"],
-      ["Ctrl+Shift+Tab", "Previous Tab"],
-      ["?", "Keyboard Shortcuts"],
-      ["Esc", "Close Dialog / Overlay"],
-    ],
-  },
-  {
-    category: "Git",
-    items: [
-      ["Ctrl+F", "Find File"],
-      ["Ctrl+M", "Merge / Rebase"],
-      ["Alt+L", "Git Log"],
-      ["Ctrl+Shift+S", "Git Stash"],
-      ["Ctrl+Shift+F", "Search in Project"],
-      ["Ctrl+Shift+B", "Search in Terminal"],
-      ["Ctrl+J", "API jq Filter"],
-      ["Ctrl+Z", "Undo Stage / Unstage"],
-    ],
-  },
-  {
-    category: "Review & Agents",
-    items: [
-      ["Ctrl+Shift+R", "Code Review (PR)"],
-      ["Ctrl+Shift+A", "Manage Agents"],
-      ["Ctrl+Shift+D", "Dispatch Agent"],
-      ["Alt+K", "Kanban Board"],
-      ["Alt+Shift+W", "Open Web Preview"],
-      ["Alt+T", "Theme Settings"],
-      ["Alt+S", "Settings"],
-      ["Alt+Shift+L", "Application Logs"],
-      ["Alt+I", "System Info"],
-    ],
-  },
-  {
-    category: "Code Editor",
-    items: [
-      ["Ctrl+I", "Quick Edit (in file viewer)"],
-      ["Ctrl+S", "Save file (in editor)"],
-      ["Ctrl+F", "Find in file (CodeMirror)"],
-    ],
-  },
-  {
-    category: "Terminal",
-    items: [
-      ["Ctrl+C / ⌘C", "Copy Selection"],
-      ["Ctrl+V / ⌘V", "Paste from Clipboard"],
-      ["Select text", "Auto-copy to Clipboard"],
-    ],
-  },
-  {
-    category: "Pane Layout",
-    items: [
-      ["Ctrl+\\", "Split Active Pane Right"],
-      ["Ctrl+Shift+\\", "Split Active Pane Down"],
-      ["Ctrl+Shift+Q", "Close Active Pane"],
-      ["▾ on tab / Right-click", "Tab options menu"],
-      ["Drag divider", "Resize split"],
-    ],
-  },
-];
+// Sections derive from the shortcut registry (`shortcuts.ts`) — the single
+// source for every key. A rebind in Settings shows up here automatically;
+// never hand-maintain a key list in this file.
+import { helpSections } from "../../shortcuts";
 
 export function showHelpDialog() {
   document.querySelector(".dialog-backdrop")?.remove();
@@ -88,14 +22,14 @@ export function showHelpDialog() {
     <div class="dialog-body" style="overflow-y:auto">
   `;
 
-  for (const group of SHORTCUTS) {
+  for (const group of helpSections()) {
     html += `<div class="shortcut-group">
       <div class="shortcut-group-title">${group.category}</div>`;
     for (const [key, desc] of group.items) {
       html += `
         <div class="shortcut-row">
           <span class="shortcut-row-label">${desc}</span>
-          <kbd class="shortcut-row-key">${formatShortcut(key)}</kbd>
+          <kbd class="shortcut-row-key">${key}</kbd>
         </div>`;
     }
     html += `</div>`;
