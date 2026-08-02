@@ -252,6 +252,11 @@ pub(crate) fn handle_mouse_event(
                     state.selected = state.selected.saturating_sub(1);
                 }
             }
+            AppMode::ProjectSearch => {
+                if let Some(ref mut state) = app.project_search {
+                    state.selected = state.selected.saturating_sub(1);
+                }
+            }
             AppMode::Normal | AppMode::InlineEdit => {
                 let api_resp_area = app.api_response_inner_area;
                 if rect_contains(app.ws_list_area, col, row) {
@@ -306,6 +311,14 @@ pub(crate) fn handle_mouse_event(
             AppMode::FuzzySearch => {
                 if let Some(ref mut state) = app.fuzzy {
                     let count = state.nucleo.snapshot().matched_item_count() as usize;
+                    if count > 0 {
+                        state.selected = (state.selected + 1).min(count - 1);
+                    }
+                }
+            }
+            AppMode::ProjectSearch => {
+                if let Some(ref mut state) = app.project_search {
+                    let count = state.shared.lock().hits.len();
                     if count > 0 {
                         state.selected = (state.selected + 1).min(count - 1);
                     }

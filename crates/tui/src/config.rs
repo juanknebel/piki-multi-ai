@@ -306,6 +306,8 @@ fn default_app() -> HashMap<String, BindingValue> {
     m.insert("dashboard".to_string(), BindingValue::one("prefix-b"));
     m.insert("command_palette".to_string(), BindingValue::one("prefix-:"));
     m.insert("fuzzy_search".to_string(), BindingValue::one("prefix-/"));
+    // `t` for "text" — content search across the worktree (ripgrep).
+    m.insert("project_search".to_string(), BindingValue::one("prefix-t"));
     m.insert("chat_panel".to_string(), BindingValue::one("prefix-y"));
     m.insert("quit".to_string(), BindingValue::one("prefix-q"));
     m.insert("manage_agents".to_string(), BindingValue::one("prefix-m"));

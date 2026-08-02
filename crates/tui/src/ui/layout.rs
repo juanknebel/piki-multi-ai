@@ -256,6 +256,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         AppMode::Help => super::dialogs::render_help_overlay(frame, area, app),
         AppMode::ConfirmDelete => super::dialogs::render_confirm_delete_dialog(frame, area, app),
         AppMode::FuzzySearch => super::fuzzy::render(frame, area, app),
+        AppMode::ProjectSearch => super::project_search::render(frame, area, app),
         AppMode::NewTab => super::dialogs::render_new_tab_dialog(frame, area, app),
         AppMode::About => super::dialogs::render_about_overlay(frame, area, app),
         AppMode::MissingPrereqs => super::dialogs::render_missing_prereqs_overlay(frame, area, app),

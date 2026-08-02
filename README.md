@@ -60,6 +60,7 @@ Built with Rust and [ratatui](https://ratatui.rs/).
 - **Workspace switcher** — Press `Ctrl+G w` for a tree-style navigator: every workspace with its tabs nested underneath, each tab showing its provider and live status (e.g. `claude · idle`) in a right-aligned column, the active workspace/tab marked, and a full-width selection bar. `j`/`k` move across all rows, `Enter` jumps to the workspace (or straight to a specific tab), and typing filters by workspace or tab name
 - **tmux-style prefix keybindings** — keys always go to the focused pane (full passthrough to the embedded terminal); app actions live behind a one-shot `Ctrl+G` prefix (`Ctrl+G h/j/k/l` moves focus, `Ctrl+G c/x/n/p/1..9` manages tabs, `Ctrl+G Ctrl+G` sends a literal Ctrl+G); Enter on a workspace switches and auto-focuses the main panel
 - **Fuzzy file search** — Search all files in the active worktree with fuzzy matching powered by [nucleo](https://github.com/helix-editor/nucleo) (same engine as Helix editor), respects `.gitignore`
+- **Search in project** — `Ctrl+G t` opens a content-search overlay: literal (fixed-string) search across the worktree via ripgrep (`grep` fallback), debounced as you type, results as `path:line` + matched text with the query highlighted; Enter opens `$EDITOR` at the matched line (`+N`), `Ctrl+E` opens without closing the overlay, `Ctrl+V` opens the inline editor; same engine as the desktop's Search-in-Project (`piki-core::search`)
 - **$EDITOR integration** — Open any file in your preferred editor (`$EDITOR` or `vi`); TUI suspends and resumes automatically
 - **Inline editor** — Edit files directly inside the TUI with a built-in text editor (cursor movement, line numbers, scroll); syntax-highlighted via `syntect`
 - **Syntax highlighting** — Language-aware syntax coloring powered by [syntect](https://github.com/trishume/syntect) across three surfaces: code review diffs (per-line highlighting merged with add/delete coloring), inline editor (with cursor overlay), and markdown fenced code blocks (with language hints like ` ```rust `); configurable theme via `syntax_theme` in `config.toml` (default: `base16-ocean.dark`)
@@ -341,6 +342,7 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 | `g` | Git: open-or-focus the lazygit tab for the current workspace (respawns if the process exited) |
 | `:` | Command palette (fuzzy-searchable list of all commands) |
 | `/` | Fuzzy file search |
+| `t` | Search in project (ripgrep content search; Enter opens `$EDITOR` at the matched line) |
 | `f` | Search within the active terminal's output |
 | `[` | Terminal scroll mode (see below) |
 | `y` | AI Chat panel |

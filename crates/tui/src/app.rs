@@ -84,6 +84,8 @@ pub enum AppMode {
     Help,
     /// Fuzzy file search overlay
     FuzzySearch,
+    /// Project-wide content search overlay (ripgrep)
+    ProjectSearch,
     /// Inline file editor
     InlineEdit,
     /// New tab provider selection dialog
@@ -519,6 +521,80 @@ impl FuzzyState {
     }
 }
 
+/// State for the project-wide content search overlay (ripgrep via
+/// `piki_core::search`, shared with the desktop's Search-in-Project).
+///
+/// Results arrive asynchronously: each query edit bumps `generation` and
+/// spawns a debounced search task; the task publishes into `shared` only if
+/// its generation is still current, so stale results can never clobber a
+/// newer query. The render loop's tick picks the results up.
+pub struct ProjectSearchState {
+    pub query: String,
+    pub selected: usize,
+    /// Worktree root captured at open time.
+    pub root: std::path::PathBuf,
+    pub generation: Arc<std::sync::atomic::AtomicU64>,
+    pub shared: Arc<parking_lot::Mutex<ProjectSearchShared>>,
+}
+
+#[derive(Default)]
+pub struct ProjectSearchShared {
+    pub hits: Vec<piki_core::search::SearchMatch>,
+    /// Generation of the query that produced `hits`.
+    pub done_generation: u64,
+}
+
+impl ProjectSearchState {
+    /// Debounce before spawning rg — batches a fast typist's keystrokes.
+    const DEBOUNCE: std::time::Duration = std::time::Duration::from_millis(180);
+    const MAX_HITS: usize = 200;
+
+    /// True while a newer query's results haven't landed yet.
+    pub fn searching(&self) -> bool {
+        !self.query.is_empty()
+            && self.shared.lock().done_generation
+                < self.generation.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// The hit under the cursor (clamped), as (relative path, line).
+    pub fn selected_hit(&self) -> Option<(String, u32)> {
+        let shared = self.shared.lock();
+        let idx = self.selected.min(shared.hits.len().saturating_sub(1));
+        shared.hits.get(idx).map(|h| (h.path.clone(), h.line_num))
+    }
+
+    /// Re-run the search for the current query (debounced, generation-gated).
+    pub fn query_changed(&mut self) {
+        use std::sync::atomic::Ordering;
+        self.selected = 0;
+        let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
+        if self.query.is_empty() {
+            let mut shared = self.shared.lock();
+            shared.hits.clear();
+            shared.done_generation = generation;
+            return;
+        }
+        let query = self.query.clone();
+        let root = self.root.clone();
+        let gen_handle = Arc::clone(&self.generation);
+        let shared = Arc::clone(&self.shared);
+        tokio::spawn(async move {
+            tokio::time::sleep(Self::DEBOUNCE).await;
+            if gen_handle.load(Ordering::SeqCst) != generation {
+                return; // superseded while debouncing
+            }
+            let hits = piki_core::search::project_search(&root, &query, Self::MAX_HITS)
+                .await
+                .unwrap_or_default();
+            if gen_handle.load(Ordering::SeqCst) == generation {
+                let mut s = shared.lock();
+                s.hits = hits;
+                s.done_generation = generation;
+            }
+        });
+    }
+}
+
 /// State for the inline file editor
 pub struct EditorState {
     pub lines: Vec<String>,
@@ -796,6 +872,9 @@ pub struct App {
     pub toast: Option<Toast>,
     /// Fuzzy file search state
     pub fuzzy: Option<FuzzyState>,
+
+    /// Project-wide content search overlay state
+    pub project_search: Option<ProjectSearchState>,
     /// Command palette state
     pub command_palette: Option<crate::command_palette::CommandPaletteState>,
     /// Workspace switcher state (fuzzy search over workspaces)
@@ -996,6 +1075,7 @@ impl App {
             status_message: None,
             toast: None,
             fuzzy: None,
+            project_search: None,
             command_palette: None,
             workspace_switcher: None,
             previous_workspace: None,
@@ -1582,6 +1662,25 @@ impl App {
                 }
             }
         });
+    }
+
+    /// Open the project-wide content search overlay (ripgrep-backed).
+    pub fn open_project_search(&mut self) {
+        let root = match self.current_workspace() {
+            Some(ws) => ws.info.path.clone(),
+            None => {
+                self.status_message = Some("No active workspace".into());
+                return;
+            }
+        };
+        self.project_search = Some(ProjectSearchState {
+            query: String::new(),
+            selected: 0,
+            root,
+            generation: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            shared: Arc::new(parking_lot::Mutex::new(ProjectSearchShared::default())),
+        });
+        self.mode = AppMode::ProjectSearch;
     }
 
     /// Open the command palette overlay.

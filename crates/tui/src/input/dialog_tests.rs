@@ -3820,3 +3820,119 @@ fn paste_into_edit_provider_command_inserts_text() {
     };
     assert_eq!(command, "/usr/local/bin/my-agent");
 }
+
+// ── Project content search overlay ─────────────────────────────────────────
+
+mod project_search_tests {
+    use super::*;
+    use crate::input::fuzzy_input::handle_project_search_input;
+    use crate::test_support::add_test_workspace;
+
+    /// Open the overlay on an app with one workspace, panicking if it didn't.
+    fn open_project_search(app: &mut App) {
+        add_test_workspace(app);
+        app.open_project_search();
+        assert_eq!(app.mode, AppMode::ProjectSearch);
+        assert!(app.project_search.is_some());
+    }
+
+    /// Seed a finished search result so selection/Enter paths have a hit.
+    fn seed_hit(app: &mut App, path: &str, line: u32) {
+        let state = app.project_search.as_ref().unwrap();
+        let mut shared = state.shared.lock();
+        shared.hits.push(piki_core::search::SearchMatch {
+            path: path.to_string(),
+            line_num: line,
+            text: "let x = 1;".to_string(),
+        });
+        shared.done_generation = state.generation.load(std::sync::atomic::Ordering::SeqCst);
+    }
+
+    #[test]
+    fn open_without_workspace_stays_in_normal_mode() {
+        let mut app = test_app();
+        app.open_project_search();
+        assert_eq!(app.mode, AppMode::Normal);
+        assert!(app.project_search.is_none());
+    }
+
+    #[tokio::test]
+    async fn typing_edits_the_query() {
+        let mut app = test_app();
+        open_project_search(&mut app);
+        assert!(handle_project_search_input(&mut app, key(KeyCode::Char('f'))).is_none());
+        assert!(handle_project_search_input(&mut app, key(KeyCode::Char('n'))).is_none());
+        assert_eq!(app.project_search.as_ref().unwrap().query, "fn");
+        assert!(handle_project_search_input(&mut app, key(KeyCode::Backspace)).is_none());
+        assert_eq!(app.project_search.as_ref().unwrap().query, "f");
+    }
+
+    #[test]
+    fn esc_dismisses_the_overlay() {
+        let mut app = test_app();
+        open_project_search(&mut app);
+        let action = handle_project_search_input(&mut app, key(KeyCode::Esc));
+        assert!(action.is_none());
+        assert_eq!(app.mode, AppMode::Normal);
+        assert!(app.project_search.is_none());
+    }
+
+    #[test]
+    fn enter_with_no_hits_does_nothing() {
+        let mut app = test_app();
+        open_project_search(&mut app);
+        let action = handle_project_search_input(&mut app, key(KeyCode::Enter));
+        assert!(action.is_none());
+        assert_eq!(app.mode, AppMode::ProjectSearch);
+    }
+
+    #[test]
+    fn enter_opens_the_selected_hit_at_its_line_and_closes() {
+        let mut app = test_app();
+        open_project_search(&mut app);
+        seed_hit(&mut app, "src/lib.rs", 42);
+        let root = app.project_search.as_ref().unwrap().root.clone();
+
+        let action = handle_project_search_input(&mut app, key(KeyCode::Enter));
+        match action {
+            Some(Action::OpenEditorAt(path, line)) => {
+                assert_eq!(path, root.join("src/lib.rs"));
+                assert_eq!(line, 42);
+            }
+            other => panic!("expected OpenEditorAt, got {other:?}"),
+        }
+        assert_eq!(app.mode, AppMode::Normal);
+        assert!(app.project_search.is_none());
+    }
+
+    #[test]
+    fn ctrl_e_opens_editor_without_closing() {
+        let mut app = test_app();
+        open_project_search(&mut app);
+        seed_hit(&mut app, "a.rs", 7);
+        let action = handle_project_search_input(
+            &mut app,
+            key_with_mods(KeyCode::Char('e'), KeyModifiers::CONTROL),
+        );
+        assert!(matches!(action, Some(Action::OpenEditorAt(_, 7))));
+        // Overlay stays open — same contract as the fuzzy overlay's binding.
+        assert_eq!(app.mode, AppMode::ProjectSearch);
+        assert!(app.project_search.is_some());
+    }
+
+    #[test]
+    fn navigation_moves_and_clamps_the_selection() {
+        let mut app = test_app();
+        open_project_search(&mut app);
+        seed_hit(&mut app, "a.rs", 1);
+        seed_hit(&mut app, "b.rs", 2);
+
+        handle_project_search_input(&mut app, key(KeyCode::Down));
+        assert_eq!(app.project_search.as_ref().unwrap().selected, 1);
+        // Clamped at the last hit.
+        handle_project_search_input(&mut app, key(KeyCode::Down));
+        assert_eq!(app.project_search.as_ref().unwrap().selected, 1);
+        handle_project_search_input(&mut app, key(KeyCode::Up));
+        assert_eq!(app.project_search.as_ref().unwrap().selected, 0);
+    }
+}
