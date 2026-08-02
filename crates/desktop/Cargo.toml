@@ -32,4 +32,4 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 flow-core = { git = "https://github.com/juanknebel/flow", tag = "0.6.0" }
 tokio-tungstenite = "0.30"
 futures-util = { version = "0.3", default-features = false, features = ["sink"] }
-toml = "0.8"
+toml = "1.1"
