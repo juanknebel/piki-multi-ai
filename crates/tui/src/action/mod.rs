@@ -53,6 +53,8 @@ pub(crate) enum Action {
     RemoveFromList(usize),
     /// Open $EDITOR for a file path
     OpenEditor(PathBuf),
+    /// Open $EDITOR for a file path, positioned at a 1-based line (`+N`)
+    OpenEditorAt(PathBuf, u32),
     /// Spawn a new tab with the given provider
     SpawnTab(AIProvider),
     /// Open a markdown file in a new tab
@@ -134,7 +136,9 @@ pub(crate) async fn execute_action(
         | Action::ImportExistingWorktree { .. } => {
             workspace::handle(app, manager, action, terminal).await?
         }
-        Action::OpenEditor(..) => files::handle(app, manager, action, terminal).await?,
+        Action::OpenEditor(..) | Action::OpenEditorAt(..) => {
+            files::handle(app, manager, action, terminal).await?
+        }
         Action::LoadPrReview
         | Action::LoadPrFileDiff(..)
         | Action::SubmitPrReview

@@ -8,6 +8,7 @@ pub mod fuzzy;
 pub mod layout;
 pub mod markdown;
 mod panels;
+pub mod project_search;
 pub(crate) mod scrollbar;
 mod sidebar;
 pub(crate) mod statusbar;

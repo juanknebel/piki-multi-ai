@@ -105,3 +105,88 @@ pub(super) fn handle_fuzzy_search_input(app: &mut App, key: KeyEvent) -> Option<
     }
     None
 }
+
+/// The hit currently selected in the project-search overlay, resolved to a
+/// (full path, 1-based line) pair.
+fn selected_hit_full(app: &App) -> Option<(std::path::PathBuf, u32)> {
+    let state = app.project_search.as_ref()?;
+    let (rel, line) = state.selected_hit()?;
+    Some((state.root.join(rel), line))
+}
+
+/// Project-wide content search overlay. Shares the `[keybindings.fuzzy]`
+/// navigation vocabulary with the other fuzzy overlays; any other typed key
+/// edits the query, which re-runs the debounced ripgrep search.
+pub(super) fn handle_project_search_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    use crossterm::event::KeyCode;
+
+    let cfg = &app.config;
+
+    // Open in $EDITOR at the hit's line without closing the overlay.
+    if cfg.matches_fuzzy(key, "editor") {
+        return selected_hit_full(app).map(|(path, line)| Action::OpenEditorAt(path, line));
+    }
+
+    // Open the inline editor (closes the overlay; it has no line jump).
+    if cfg.matches_fuzzy(key, "inline_edit") {
+        if let Some((path, _line)) = selected_hit_full(app) {
+            app.project_search = None;
+            app.open_inline_editor(path);
+        }
+        return None;
+    }
+
+    if cfg.matches_fuzzy(key, "exit") {
+        app.project_search = None;
+        app.mode = AppMode::Normal;
+        return None;
+    }
+
+    if cfg.matches_fuzzy(key, "open") {
+        if let Some((path, line)) = selected_hit_full(app) {
+            app.project_search = None;
+            app.mode = AppMode::Normal;
+            return Some(Action::OpenEditorAt(path, line));
+        }
+        return None;
+    }
+
+    // Navigation before the Char fallback, same rule as the fuzzy overlays.
+    let hit_count = {
+        let state = app.project_search.as_ref()?;
+        state.shared.lock().hits.len()
+    };
+    if cfg.matches_fuzzy(key, "up") {
+        let state = app.project_search.as_mut()?;
+        if state.selected > 0 {
+            state.selected -= 1;
+        }
+        app.needs_redraw = true;
+        return None;
+    }
+    if cfg.matches_fuzzy(key, "down") {
+        let state = app.project_search.as_mut()?;
+        if hit_count > 0 && state.selected + 1 < hit_count {
+            state.selected += 1;
+        }
+        app.needs_redraw = true;
+        return None;
+    }
+
+    match key.code {
+        KeyCode::Backspace => {
+            let state = app.project_search.as_mut()?;
+            state.query.pop();
+            state.query_changed();
+            app.needs_redraw = true;
+        }
+        KeyCode::Char(c) => {
+            let state = app.project_search.as_mut()?;
+            state.query.push(c);
+            state.query_changed();
+            app.needs_redraw = true;
+        }
+        _ => {}
+    }
+    None
+}

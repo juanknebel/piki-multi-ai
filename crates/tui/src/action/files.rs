@@ -11,7 +11,12 @@ pub(super) async fn handle(
     terminal: &mut DefaultTerminal,
 ) -> anyhow::Result<()> {
     match action {
-        Action::OpenEditor(path) => {
+        Action::OpenEditor(..) | Action::OpenEditorAt(..) => {
+            let (path, line) = match action {
+                Action::OpenEditor(path) => (path, None),
+                Action::OpenEditorAt(path, line) => (path, Some(line)),
+                _ => unreachable!(),
+            };
             // Suspend TUI, open $EDITOR, restore TUI
             crossterm::execute!(
                 std::io::stderr(),
@@ -21,7 +26,14 @@ pub(super) async fn handle(
             )?;
             ratatui::restore();
             let editor_cmd = std::env::var("EDITOR").unwrap_or_else(|_| "vi".to_string());
-            let status = std::process::Command::new(&editor_cmd).arg(&path).status();
+            let mut cmd = std::process::Command::new(&editor_cmd);
+            // `+N` positions the cursor — the vi/vim/nano/emacs/micro
+            // convention; editors that don't understand it open the file
+            // anyway and treat it as an extra argument at worst.
+            if let Some(line) = line {
+                cmd.arg(format!("+{line}"));
+            }
+            let status = cmd.arg(&path).status();
             *terminal = ratatui::init();
             crossterm::execute!(
                 std::io::stderr(),

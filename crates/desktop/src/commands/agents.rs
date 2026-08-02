@@ -475,3 +475,72 @@ pub async fn dispatch_agent(
 
     Ok(tab_id)
 }
+
+// ── Live agent rows (Agents sidebar panel) ─────────────
+
+/// One row in the desktop's Agents panel: a (workspace, tab) pair running an
+/// AI agent, across ALL workspaces. Mirrors the TUI's `App::agent_rows()`
+/// filter: Custom-provider tabs always list; a built-in tab lists only when
+/// its cli-agent channel reported (a `claude` run manually inside it).
+#[derive(Serialize, Clone)]
+pub struct AgentRow {
+    pub workspace_idx: usize,
+    pub workspace_name: String,
+    /// Index into the workspace's tab list — feed to `setActiveTab` to jump.
+    pub tab_idx: usize,
+    pub tab_id: String,
+    /// Display label: the provider name, or "Claude (<tab label>)" for a
+    /// non-Custom tab that only lists because its cli-agent channel reported.
+    pub label: String,
+    pub alive: bool,
+    /// Structured cli-agent status, when the channel has reported.
+    pub status: Option<piki_core::cli_agent::CliAgentStatus>,
+    /// Unseen news (permission / idle / done the user hasn't looked at).
+    pub attention: bool,
+    pub summary: Option<String>,
+}
+
+#[tauri::command]
+pub fn list_agent_rows(state: State<'_, Mutex<DesktopApp>>) -> Vec<AgentRow> {
+    let app = state.lock();
+    let mut rows = Vec::new();
+    for (wi, ws) in app.workspaces.iter().enumerate() {
+        for (ti, tab) in ws.tabs.iter().enumerate() {
+            let snapshot = tab.pty.as_ref().and_then(|p| p.shell()).and_then(|s| {
+                let guard = s.lock();
+                guard.state.cli_agent.as_ref().map(|a| {
+                    (
+                        a.status,
+                        a.last_attention_at.is_some(),
+                        a.last_summary.clone(),
+                    )
+                })
+            });
+            let is_custom = matches!(tab.provider, piki_core::AIProvider::Custom(_));
+            if !is_custom && snapshot.is_none() {
+                continue;
+            }
+            let label = if is_custom {
+                tab.provider.label().to_string()
+            } else {
+                format!("Claude ({})", tab.provider.label())
+            };
+            let (status, attention, summary) = match snapshot {
+                Some((s, a, sum)) => (Some(s), a, sum),
+                None => (None, false, None),
+            };
+            rows.push(AgentRow {
+                workspace_idx: wi,
+                workspace_name: ws.info.name.clone(),
+                tab_idx: ti,
+                tab_id: tab.id.clone(),
+                label,
+                alive: tab.alive,
+                status,
+                attention,
+                summary,
+            });
+        }
+    }
+    rows
+}

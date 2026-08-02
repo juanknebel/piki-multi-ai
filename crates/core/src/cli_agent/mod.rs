@@ -23,7 +23,7 @@
 use std::path::PathBuf;
 use std::time::Instant;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 pub mod install;
 pub mod install_antigravity;
@@ -163,7 +163,12 @@ impl CliAgentEvent {
 
 /// Coarse per-tab agent status derived from the event stream. UIs render a
 /// per-tab glyph / attention badge from this.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+///
+/// Serializes kebab-case (`waiting-permission`) — the vocabulary the desktop
+/// frontend's `CliAgentStatus` TS type already speaks on the
+/// `pty-agent-event` rail.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum CliAgentStatus {
     /// Working (prompt submitted, tool running, just started).
     #[default]
@@ -174,6 +179,20 @@ pub enum CliAgentStatus {
     Idle,
     /// Finished its turn.
     Done,
+}
+
+/// Precedence for an agent (status, attention) pair, worst first: needs-
+/// permission > unseen news > running > everything else. Shared by both
+/// frontends' per-workspace rollups and their collapsed worktree-family
+/// aggregation, so the two UIs never rank the same agent differently.
+pub fn status_severity(status: CliAgentStatus, attention: bool) -> u8 {
+    use CliAgentStatus as S;
+    match (status, attention) {
+        (S::WaitingPermission, _) => 4,
+        (S::Idle | S::Done, true) => 3,
+        (S::Running, _) => 2,
+        _ => 0,
+    }
 }
 
 /// Per-tab state derived from the [`CliAgentEvent`] stream. Mirrors the role

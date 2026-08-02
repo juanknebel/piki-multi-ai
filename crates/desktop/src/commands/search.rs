@@ -108,23 +108,14 @@ pub async fn write_file_content(
         .map_err(|e| format!("Failed to write file: {e}"))
 }
 
-#[derive(Serialize, Clone)]
-pub struct SearchMatch {
-    pub path: String,
-    pub line_num: u32,
-    pub text: String,
-}
-
+// Content search lives in `piki_core::search` (rg with grep fallback),
+// shared with the TUI's project-search overlay.
 #[tauri::command]
 pub async fn project_search(
     state: State<'_, Mutex<DesktopApp>>,
     workspace_idx: usize,
     query: String,
-) -> Result<Vec<SearchMatch>, String> {
-    if query.is_empty() {
-        return Ok(Vec::new());
-    }
-
+) -> Result<Vec<piki_core::search::SearchMatch>, String> {
     let ws_path = {
         let app = state.lock();
         if workspace_idx >= app.workspaces.len() {
@@ -133,44 +124,7 @@ pub async fn project_search(
         app.workspaces[workspace_idx].info.path.clone()
     };
 
-    // Try ripgrep first (fast, respects .gitignore), fall back to grep
-    let output = match tokio::process::Command::new("rg")
-        .args(["--no-heading", "--line-number", "--color=never", &query])
-        .current_dir(&ws_path)
-        .output()
+    piki_core::search::project_search(&ws_path, &query, 100)
         .await
-    {
-        Ok(out) => out,
-        Err(_) => {
-            // Fallback to grep -rn
-            tokio::process::Command::new("grep")
-                .args(["-rn", "--color=never", "-I", &query, "."])
-                .current_dir(&ws_path)
-                .output()
-                .await
-                .map_err(|e| format!("grep failed: {e}"))?
-        }
-    };
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let results: Vec<SearchMatch> = stdout
-        .lines()
-        .filter(|l| !l.is_empty())
-        .take(100)
-        .filter_map(|line| {
-            // Format: file:line_num:text
-            let mut parts = line.splitn(3, ':');
-            let raw_path = parts.next()?;
-            let path = raw_path.strip_prefix("./").unwrap_or(raw_path);
-            let line_num: u32 = parts.next()?.parse().ok()?;
-            let text = parts.next().unwrap_or("").to_string();
-            Some(SearchMatch {
-                path: path.to_string(),
-                line_num,
-                text,
-            })
-        })
-        .collect();
-
-    Ok(results)
+        .map_err(|e| e.to_string())
 }

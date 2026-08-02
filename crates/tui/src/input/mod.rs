@@ -116,6 +116,13 @@ pub(crate) fn handle_paste(app: &mut App, text: &str) {
             }
             return;
         }
+        AppMode::ProjectSearch => {
+            if let Some(ref mut state) = app.project_search {
+                state.query.push_str(text);
+                state.query_changed();
+            }
+            return;
+        }
         _ => {}
     }
 
@@ -138,6 +145,7 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         AppMode::MissingPrereqs => return handle_missing_prereqs_input(app, key),
         AppMode::Help => return handle_help_input(app, key),
         AppMode::FuzzySearch => return handle_fuzzy_search_input(app, key),
+        AppMode::ProjectSearch => return fuzzy_input::handle_project_search_input(app, key),
         AppMode::InlineEdit => return handle_inline_edit_input(app, key),
         AppMode::NewWorkspace => return handle_new_workspace_input(app, key),
         AppMode::EditWorkspace => return handle_edit_workspace_input(app, key),
@@ -246,6 +254,7 @@ const APP_ACTIONS: &[&str] = &[
     "dashboard",
     "command_palette",
     "fuzzy_search",
+    "project_search",
     "chat_panel",
     "quit",
     "manage_agents",
@@ -301,6 +310,10 @@ fn dispatch_app_action(app: &mut App, action: &str) -> Option<Action> {
         }
         "fuzzy_search" => {
             app.open_fuzzy_search();
+            None
+        }
+        "project_search" => {
+            app.open_project_search();
             None
         }
         "chat_panel" => app_actions::open_chat_panel(app),

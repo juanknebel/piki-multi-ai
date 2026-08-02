@@ -569,6 +569,11 @@ export function listAgents(workspaceIdx: number): Promise<AgentInfo[]> {
   return invoke("list_agents", { workspaceIdx });
 }
 
+/** Live agent tabs across ALL workspaces (Agents sidebar panel). */
+export function listAgentRows(): Promise<import("./types").AgentRow[]> {
+  return invoke("list_agent_rows");
+}
+
 export function saveAgent(
   workspaceIdx: number,
   name: string,

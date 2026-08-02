@@ -25,6 +25,8 @@ export function formatShortcut(combo: string): string {
 export interface ShortcutDef {
   id: string;
   label: string;
+  /** Help-dialog section this shortcut is listed under. */
+  category: string;
   defaultKey: string;
   key: string;
   action: () => void;
@@ -32,38 +34,100 @@ export interface ShortcutDef {
   outsideOnly?: boolean;
 }
 
+/** A key the user cannot rebind — hardcoded in a handler, a widget's own
+ *  binding (xterm.js, CodeMirror), or not a single keystroke at all
+ *  ("Drag divider"). Listed in the help dialog alongside the rebindable
+ *  shortcuts, but invisible to the settings dialog and the key dispatcher. */
+export interface FixedShortcut {
+  category: string;
+  key: string;
+  label: string;
+}
+
+/** Section order for the help dialog. Every `category` string in the two
+ *  lists below must appear here — `helpSections()` asserts it. */
+export const CATEGORY_ORDER = [
+  "General",
+  "View & Panels",
+  "Search",
+  "Git",
+  "Agents",
+  "Panes & Tabs",
+  "Terminal",
+  "Code Editor",
+] as const;
+
 // Actions are bound later by main.ts via bindAction()
 const shortcuts: ShortcutDef[] = [
-  { id: "command-palette", label: "Command Palette", defaultKey: "Ctrl+P", key: "Ctrl+P", action: () => {} },
-  { id: "new-workspace", label: "New Workspace", defaultKey: "Ctrl+N", key: "Ctrl+N", action: () => {} },
-  { id: "merge-rebase", label: "Merge / Rebase", defaultKey: "Ctrl+M", key: "Ctrl+M", action: () => {} },
-  { id: "workspace-switcher", label: "Workspace Switcher", defaultKey: "Ctrl+Space", key: "Ctrl+Space", action: () => {} },
-  { id: "fuzzy-search", label: "Find File", defaultKey: "Ctrl+F", key: "Ctrl+F", action: () => {} },
-  { id: "project-search", label: "Search in Project", defaultKey: "Ctrl+Shift+F", key: "Ctrl+Shift+F", action: () => {} },
-  { id: "terminal-search", label: "Search in Terminal", defaultKey: "Ctrl+Shift+B", key: "Ctrl+Shift+B", action: () => {} },
-  { id: "git-log", label: "Git Log", defaultKey: "Alt+L", key: "Alt+L", action: () => {} },
-  { id: "dashboard", label: "Dashboard", defaultKey: "Alt+D", key: "Alt+D", action: () => {} },
-  { id: "git-stash", label: "Git Stash", defaultKey: "Ctrl+Shift+S", key: "Ctrl+Shift+S", action: () => {} },
-  { id: "code-review", label: "Code Review", defaultKey: "Ctrl+Shift+R", key: "Ctrl+Shift+R", action: () => {} },
-  { id: "agent-manager", label: "Manage Agents", defaultKey: "Ctrl+Shift+A", key: "Ctrl+Shift+A", action: () => {} },
-  { id: "dispatch-agent", label: "Dispatch Agent", defaultKey: "Ctrl+Shift+D", key: "Ctrl+Shift+D", action: () => {} },
-  { id: "kanban", label: "Kanban Board", defaultKey: "Alt+K", key: "Alt+K", action: () => {} },
-  { id: "web-preview", label: "Open Web Preview", defaultKey: "Alt+Shift+W", key: "Alt+Shift+W", action: () => {} },
-  { id: "theme", label: "Theme Settings", defaultKey: "Alt+T", key: "Alt+T", action: () => {} },
-  { id: "settings", label: "Settings", defaultKey: "Alt+S", key: "Alt+S", action: () => {} },
-  { id: "manage-providers", label: "Manage Providers", defaultKey: "Alt+P", key: "Alt+P", action: () => {} },
-  { id: "logs", label: "Application Logs", defaultKey: "Alt+Shift+L", key: "Alt+Shift+L", action: () => {} },
-  { id: "system-info", label: "System Info", defaultKey: "Alt+I", key: "Alt+I", action: () => {} },
-  { id: "undo", label: "Undo Stage/Unstage", defaultKey: "Ctrl+Z", key: "Ctrl+Z", action: () => {}, outsideOnly: true },
-  { id: "api-jq-filter", label: "API jq Filter", defaultKey: "Ctrl+J", key: "Ctrl+J", action: () => {}, outsideOnly: true },
-  { id: "toggle-sidebar", label: "Toggle Sidebar", defaultKey: "Ctrl+B", key: "Ctrl+B", action: () => {} },
-  { id: "toggle-chat", label: "Toggle AI Chat", defaultKey: "Ctrl+Shift+L", key: "Ctrl+Shift+L", action: () => {} },
-  { id: "help", label: "Keyboard Shortcuts", defaultKey: "?", key: "?", action: () => {}, outsideOnly: true },
-  { id: "split-right", label: "Split Pane Right", defaultKey: "Ctrl+\\", key: "Ctrl+\\", action: () => {}, outsideOnly: true },
-  { id: "split-down", label: "Split Pane Down", defaultKey: "Ctrl+Shift+\\", key: "Ctrl+Shift+\\", action: () => {}, outsideOnly: true },
-  { id: "close-pane", label: "Close Active Pane", defaultKey: "Ctrl+Shift+Q", key: "Ctrl+Shift+Q", action: () => {}, outsideOnly: true },
-  { id: "new-tab", label: "New Tab", defaultKey: "Ctrl+T", key: "Ctrl+T", action: () => {}, outsideOnly: true },
+  { id: "command-palette", label: "Command Palette", category: "General", defaultKey: "Ctrl+P", key: "Ctrl+P", action: () => {} },
+  { id: "new-workspace", label: "New Workspace", category: "General", defaultKey: "Ctrl+N", key: "Ctrl+N", action: () => {} },
+  { id: "workspace-switcher", label: "Workspace Switcher", category: "General", defaultKey: "Ctrl+Space", key: "Ctrl+Space", action: () => {} },
+  { id: "dashboard", label: "Dashboard", category: "General", defaultKey: "Alt+D", key: "Alt+D", action: () => {} },
+  { id: "help", label: "Keyboard Shortcuts", category: "General", defaultKey: "?", key: "?", action: () => {}, outsideOnly: true },
+  { id: "toggle-sidebar", label: "Toggle Sidebar", category: "View & Panels", defaultKey: "Ctrl+B", key: "Ctrl+B", action: () => {} },
+  { id: "toggle-chat", label: "Toggle AI Chat", category: "View & Panels", defaultKey: "Ctrl+Shift+L", key: "Ctrl+Shift+L", action: () => {} },
+  { id: "kanban", label: "Kanban Board", category: "View & Panels", defaultKey: "Alt+K", key: "Alt+K", action: () => {} },
+  { id: "web-preview", label: "Open Web Preview", category: "View & Panels", defaultKey: "Alt+Shift+W", key: "Alt+Shift+W", action: () => {} },
+  { id: "theme", label: "Theme Settings", category: "View & Panels", defaultKey: "Alt+T", key: "Alt+T", action: () => {} },
+  { id: "settings", label: "Settings", category: "View & Panels", defaultKey: "Alt+S", key: "Alt+S", action: () => {} },
+  { id: "manage-providers", label: "Manage Providers", category: "View & Panels", defaultKey: "Alt+P", key: "Alt+P", action: () => {} },
+  { id: "logs", label: "Application Logs", category: "View & Panels", defaultKey: "Alt+Shift+L", key: "Alt+Shift+L", action: () => {} },
+  { id: "system-info", label: "System Info", category: "View & Panels", defaultKey: "Alt+I", key: "Alt+I", action: () => {} },
+  { id: "fuzzy-search", label: "Find File", category: "Search", defaultKey: "Ctrl+F", key: "Ctrl+F", action: () => {} },
+  { id: "project-search", label: "Search in Project", category: "Search", defaultKey: "Ctrl+Shift+F", key: "Ctrl+Shift+F", action: () => {} },
+  { id: "terminal-search", label: "Search in Terminal", category: "Search", defaultKey: "Ctrl+Shift+B", key: "Ctrl+Shift+B", action: () => {} },
+  { id: "api-jq-filter", label: "API jq Filter", category: "Search", defaultKey: "Ctrl+J", key: "Ctrl+J", action: () => {}, outsideOnly: true },
+  { id: "merge-rebase", label: "Merge / Rebase", category: "Git", defaultKey: "Ctrl+M", key: "Ctrl+M", action: () => {} },
+  { id: "git-log", label: "Git Log", category: "Git", defaultKey: "Alt+L", key: "Alt+L", action: () => {} },
+  { id: "git-stash", label: "Git Stash", category: "Git", defaultKey: "Ctrl+Shift+S", key: "Ctrl+Shift+S", action: () => {} },
+  { id: "undo", label: "Undo Stage/Unstage", category: "Git", defaultKey: "Ctrl+Z", key: "Ctrl+Z", action: () => {}, outsideOnly: true },
+  { id: "code-review", label: "Code Review (PR)", category: "Git", defaultKey: "Ctrl+Shift+R", key: "Ctrl+Shift+R", action: () => {} },
+  { id: "agent-manager", label: "Manage Agents", category: "Agents", defaultKey: "Ctrl+Shift+A", key: "Ctrl+Shift+A", action: () => {} },
+  { id: "dispatch-agent", label: "Dispatch Agent", category: "Agents", defaultKey: "Ctrl+Shift+D", key: "Ctrl+Shift+D", action: () => {} },
+  { id: "new-tab", label: "New Blank Tab", category: "Panes & Tabs", defaultKey: "Ctrl+T", key: "Ctrl+T", action: () => {}, outsideOnly: true },
+  { id: "split-right", label: "Split Pane Right", category: "Panes & Tabs", defaultKey: "Ctrl+\\", key: "Ctrl+\\", action: () => {}, outsideOnly: true },
+  { id: "split-down", label: "Split Pane Down", category: "Panes & Tabs", defaultKey: "Ctrl+Shift+\\", key: "Ctrl+Shift+\\", action: () => {}, outsideOnly: true },
+  { id: "close-pane", label: "Close Active Pane", category: "Panes & Tabs", defaultKey: "Ctrl+Shift+Q", key: "Ctrl+Shift+Q", action: () => {}, outsideOnly: true },
 ];
+
+/** Non-rebindable keys, in help-dialog display order within their section. */
+const fixedShortcuts: FixedShortcut[] = [
+  { category: "General", key: "Esc", label: "Close Dialog / Overlay" },
+  { category: "Panes & Tabs", key: "Ctrl+Tab", label: "Next Tab" },
+  { category: "Panes & Tabs", key: "Ctrl+Shift+Tab", label: "Previous Tab" },
+  { category: "Panes & Tabs", key: "▾ on tab / Right-click", label: "Tab options menu" },
+  { category: "Panes & Tabs", key: "Drag divider", label: "Resize split" },
+  { category: "Terminal", key: "Ctrl+C", label: "Copy Selection" },
+  { category: "Terminal", key: "Ctrl+V", label: "Paste from Clipboard" },
+  { category: "Terminal", key: "Select text", label: "Auto-copy to Clipboard" },
+  { category: "Code Editor", key: "Ctrl+I", label: "Quick Edit (in file viewer)" },
+  { category: "Code Editor", key: "Ctrl+S", label: "Save file (in editor)" },
+  { category: "Code Editor", key: "Ctrl+F", label: "Find in file (CodeMirror)" },
+];
+
+/** Help-dialog sections: every shortcut — rebindable ones showing their
+ *  *current* key (so a rebind never lies) — merged with the fixed keys,
+ *  grouped by category in `CATEGORY_ORDER`. */
+export function helpSections(): { category: string; items: [string, string][] }[] {
+  const known = new Set<string>(CATEGORY_ORDER);
+  for (const def of shortcuts) {
+    if (!known.has(def.category)) throw new Error(`Shortcut '${def.id}' has unknown category '${def.category}'`);
+  }
+  for (const f of fixedShortcuts) {
+    if (!known.has(f.category)) throw new Error(`Fixed shortcut '${f.label}' has unknown category '${f.category}'`);
+  }
+  return CATEGORY_ORDER.map((category) => ({
+    category,
+    items: [
+      ...shortcuts
+        .filter((s) => s.category === category)
+        .map((s): [string, string] => [formatShortcut(s.key), s.label]),
+      ...fixedShortcuts
+        .filter((f) => f.category === category)
+        .map((f): [string, string] => [formatShortcut(f.key), f.label]),
+    ],
+  })).filter((g) => g.items.length > 0);
+}
 
 export function getShortcuts(): ShortcutDef[] {
   return shortcuts;

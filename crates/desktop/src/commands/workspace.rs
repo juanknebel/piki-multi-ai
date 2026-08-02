@@ -57,6 +57,15 @@ pub async fn switch_workspace(
     if index < app.workspaces.len() {
         app.workspaces[index].changed_files = files;
         app.workspaces[index].ahead_behind = ahead_behind;
+        // The switch makes this workspace's active tab visible — acknowledge
+        // its agent's "unseen news" marker, mirroring the TUI's event loop.
+        let ws = &app.workspaces[index];
+        if let Some(tab) = ws.tabs.get(ws.active_tab)
+            && let Some(shell) = tab.pty.as_ref().and_then(|p| p.shell())
+            && let Some(agent) = shell.lock().state.cli_agent.as_mut()
+        {
+            agent.acknowledge();
+        }
         Ok(app.workspaces[index].to_detail())
     } else {
         Err("Workspace removed during switch".to_string())

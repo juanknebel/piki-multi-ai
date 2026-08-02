@@ -1,5 +1,6 @@
 ---
 source: crates/tui/src/ui/mod.rs
+assertion_line: 764
 expression: body
 ---
 
@@ -25,6 +26,7 @@ expression: body
       C-g p         Previous Tab
     Search
       C-g /         Fuzzy File Search
+      C-g t         Search in Project (content)
       C-g f         Search in Terminal
     View
       C-g :         Command Palette
@@ -96,6 +98,15 @@ expression: body
     C-v           Open in the inline editor
     C-o           Open a markdown file in a new tab
     M-m           Open a markdown file in mdr (external)
+    Esc           Close
+
+  Project content search (C-g t)
+    Type          Edit the search text
+    ↓             Select the next match
+    ↑             Select the previous match
+    Enter         Open in $EDITOR at that line
+    C-e           Open in $EDITOR (without closing)
+    C-v           Open in the inline editor
     Esc           Close
 
   Command palette (C-g :)

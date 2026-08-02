@@ -266,6 +266,7 @@ fn main() {
             commands::agents::scan_repo_agents,
             commands::agents::import_agents,
             commands::agents::dispatch_agent,
+            commands::agents::list_agent_rows,
             commands::providers::list_providers,
             commands::providers::save_provider,
             commands::providers::delete_provider,

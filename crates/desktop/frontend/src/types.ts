@@ -137,8 +137,10 @@ export interface PtyAgentEvent {
 }
 
 /** Glyph / label / theme color for a Claude agent status. Shared by the
- *  status bar (full) and the workspace tab bar (dot only). */
-export function cliAgentStatusView(status: CliAgentStatus): {
+ *  status bar (full), the workspace tab bar (dot only) and the Agents panel.
+ *  `attention` gates the shouting: an idle agent only reads "needs you" when
+ *  it has news the user hasn't looked at (same rule as the TUI). */
+export function cliAgentStatusView(status: CliAgentStatus, attention = false): {
   glyph: string;
   label: string;
   color: string;
@@ -147,13 +149,55 @@ export function cliAgentStatusView(status: CliAgentStatus): {
     case "waiting-permission":
       return { glyph: "⚠", label: "needs permission", color: "var(--accent-warm)" };
     case "idle":
-      return { glyph: "⏳", label: "waiting for input", color: "var(--accent-primary)" };
+      return attention
+        ? { glyph: "●", label: "needs you", color: "var(--accent-warm)" }
+        : { glyph: "⏳", label: "waiting for input", color: "var(--accent-primary)" };
     case "done":
       return { glyph: "✓", label: "done", color: "var(--git-added)" };
     case "running":
     default:
       return { glyph: "▷", label: "running", color: "var(--text-muted)" };
   }
+}
+
+/** Mirror of `piki_core::cli_agent::status_severity` — precedence for an
+ *  agent (status, attention) pair, worst first: needs-permission > unseen
+ *  news > running > everything else. Keep in sync with core. */
+export function agentStatusSeverity(status: CliAgentStatus, attention: boolean): number {
+  if (status === "waiting-permission") return 4;
+  if ((status === "idle" || status === "done") && attention) return 3;
+  if (status === "running") return 2;
+  return 0;
+}
+
+/** Status glyph for ambient chrome (workspace list rollup). Only actionable
+ *  states surface here — running/done stay in the Agents panel. Mirrors the
+ *  TUI's `actionable_status_view`. */
+export function actionableStatusView(
+  status: CliAgentStatus,
+  attention: boolean,
+): { glyph: string; label: string; color: string } | null {
+  if (status === "waiting-permission")
+    return { glyph: "⚠", label: "needs permission", color: "var(--accent-warm)" };
+  // "Has news you haven't seen" propagates; quiet idle/done doesn't.
+  if ((status === "idle" || status === "done") && attention)
+    return { glyph: "●", label: "needs you", color: "var(--accent-warm)" };
+  return null;
+}
+
+/** One row in the Agents sidebar panel — a (workspace, tab) running an AI
+ *  agent, across ALL workspaces. Mirrors `commands::agents::AgentRow`. */
+export interface AgentRow {
+  workspace_idx: number;
+  workspace_name: string;
+  /** Index into that workspace's tab list — feed to `setActiveTab` to jump. */
+  tab_idx: number;
+  tab_id: string;
+  label: string;
+  alive: boolean;
+  status: CliAgentStatus | null;
+  attention: boolean;
+  summary: string | null;
 }
 
 /** Workspace-level "needs attention" signal. Sources: `provider-idle` (a

@@ -362,11 +362,20 @@ pub async fn set_active_tab(
     if workspace_idx >= app.workspaces.len() {
         return Err("Workspace index out of range".to_string());
     }
+    let is_visible = app.active_workspace == workspace_idx;
     let ws = &mut app.workspaces[workspace_idx];
     if tab_idx >= ws.tabs.len() {
         return Err("Tab index out of range".to_string());
     }
     ws.active_tab = tab_idx;
+    // Looking at a tab acknowledges its "unseen news" marker, so the agent
+    // attention badge clears the same way it does in the TUI's event loop.
+    if is_visible
+        && let Some(shell) = ws.tabs[tab_idx].pty.as_ref().and_then(|p| p.shell())
+        && let Some(agent) = shell.lock().state.cli_agent.as_mut()
+    {
+        agent.acknowledge();
+    }
     Ok(())
 }
 
