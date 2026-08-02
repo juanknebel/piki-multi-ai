@@ -1587,7 +1587,7 @@ impl App {
                 {
                     let path = rel.to_string_lossy().to_string();
                     let col: nucleo::Utf32String = path.as_str().into();
-                    injector.push(path, |cols| {
+                    injector.push(path, |_path, cols| {
                         cols[0] = col;
                     });
                 }

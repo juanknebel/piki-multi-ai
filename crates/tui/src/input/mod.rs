@@ -85,10 +85,13 @@ pub(crate) fn handle_paste(app: &mut App, text: &str) {
             if let Some(ref mut state) = app.fuzzy {
                 state.query.push_str(text);
                 let q = state.query.clone();
-                state
-                    .nucleo
-                    .pattern
-                    .reparse(0, &q, nucleo::pattern::CaseMatching::Smart, true);
+                state.nucleo.pattern.reparse(
+                    0,
+                    &q,
+                    nucleo::pattern::CaseMatching::Smart,
+                    nucleo::pattern::Normalization::Smart,
+                    true,
+                );
             }
             return;
         }
@@ -96,10 +99,13 @@ pub(crate) fn handle_paste(app: &mut App, text: &str) {
             if let Some(ref mut state) = app.command_palette {
                 state.query.push_str(text);
                 let q = state.query.clone();
-                state
-                    .nucleo
-                    .pattern
-                    .reparse(0, &q, nucleo::pattern::CaseMatching::Smart, true);
+                state.nucleo.pattern.reparse(
+                    0,
+                    &q,
+                    nucleo::pattern::CaseMatching::Smart,
+                    nucleo::pattern::Normalization::Smart,
+                    true,
+                );
             }
             return;
         }
