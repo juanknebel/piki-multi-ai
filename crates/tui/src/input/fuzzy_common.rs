@@ -63,7 +63,13 @@ pub(crate) fn handle_fuzzy_input(
                 *selected = 0;
             }
             let q = query.clone();
-            pattern.reparse(0, &q, nucleo::pattern::CaseMatching::Smart, false);
+            pattern.reparse(
+                0,
+                &q,
+                nucleo::pattern::CaseMatching::Smart,
+                nucleo::pattern::Normalization::Smart,
+                false,
+            );
             FuzzyAction::Handled
         }
         KeyCode::Char(c) => {
@@ -72,7 +78,13 @@ pub(crate) fn handle_fuzzy_input(
                 *selected = 0;
             }
             let q = query.clone();
-            pattern.reparse(0, &q, nucleo::pattern::CaseMatching::Smart, true);
+            pattern.reparse(
+                0,
+                &q,
+                nucleo::pattern::CaseMatching::Smart,
+                nucleo::pattern::Normalization::Smart,
+                true,
+            );
             FuzzyAction::Handled
         }
         _ => FuzzyAction::NotHandled,
