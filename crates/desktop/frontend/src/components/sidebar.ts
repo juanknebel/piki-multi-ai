@@ -7,14 +7,29 @@ import { renderAgentsPanel } from "./agents-panel";
 import { showAgentManager } from "./dialogs/agent-dialog";
 import { openWebPreviewTab } from "./web-preview-panel";
 
+/** Set an explicit Agents-panel height (px), replacing the default 40% cap.
+ *  Clamped so neither the panel nor the workspace list can be squeezed out. */
+function applyAgentsPanelHeight(px: number) {
+  const view = document.getElementById("agents-view");
+  const explorer = document.getElementById("explorer-view");
+  if (!view || !explorer) return;
+  const max = Math.max(64, (explorer.clientHeight || window.innerHeight) * 0.75);
+  const clamped = Math.max(32, Math.min(max, px));
+  view.style.height = `${clamped}px`;
+  view.style.maxHeight = "none";
+}
+
 export async function initSidebar() {
-  // Restore persisted sidebar width
+  // Restore persisted sidebar width + Agents panel height
   try {
     const raw = await ipc.getSettings();
     if (raw) {
       const settings = JSON.parse(raw);
       if (settings.sidebarWidth) {
         document.documentElement.style.setProperty("--sidebar-width", `${settings.sidebarWidth}px`);
+      }
+      if (settings.agentsPanelHeight) {
+        applyAgentsPanelHeight(settings.agentsPanelHeight);
       }
     }
   } catch { /* ignore */ }
@@ -130,6 +145,45 @@ export async function initSidebar() {
       ipc.getSettings().then((raw) => {
         const settings = raw ? JSON.parse(raw) : {};
         settings.sidebarWidth = width;
+        ipc.setSettings(JSON.stringify(settings)).catch(() => {});
+      }).catch(() => {});
+    }
+  });
+
+  // Horizontal resize of the docked Agents panel (drag the divider above it).
+  const agentsHandle = document.getElementById("agents-resize-h")!;
+  let hDragging = false;
+  let startY = 0;
+  let startHeight = 0;
+
+  agentsHandle.addEventListener("mousedown", (e) => {
+    hDragging = true;
+    startY = e.clientY;
+    startHeight = agentsView.offsetHeight;
+    agentsHandle.classList.add("dragging");
+    document.body.style.cursor = "ns-resize";
+    document.body.style.userSelect = "none";
+    e.preventDefault();
+  });
+
+  document.addEventListener("mousemove", (e) => {
+    if (!hDragging) return;
+    // The handle sits above the panel: dragging up grows it.
+    applyAgentsPanelHeight(startHeight + (startY - e.clientY));
+  });
+
+  document.addEventListener("mouseup", () => {
+    if (!hDragging) return;
+    hDragging = false;
+    agentsHandle.classList.remove("dragging");
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+
+    const height = agentsView.offsetHeight;
+    if (height) {
+      ipc.getSettings().then((raw) => {
+        const settings = raw ? JSON.parse(raw) : {};
+        settings.agentsPanelHeight = height;
         ipc.setSettings(JSON.stringify(settings)).catch(() => {});
       }).catch(() => {});
     }

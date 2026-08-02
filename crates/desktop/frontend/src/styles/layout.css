@@ -71,14 +71,45 @@
 }
 
 /* Agents panel docked below the workspace list (TUI bottom-left pane).
-   Caps at 40% of the sidebar so a long agent list can't crowd out the
-   workspaces; its own list scrolls. */
+   Defaults to at most 40% of the sidebar; the drag handle above it sets an
+   explicit height (persisted), which replaces the cap. Its own list scrolls. */
 #agents-view {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
   max-height: 40%;
-  border-top: 1px solid var(--border-subtle);
+  overflow: hidden;
+}
+
+/* Horizontal drag handle between the workspace list and the Agents panel —
+   same visual language as the vertical sidebar handle. */
+#agents-resize-h {
+  flex-shrink: 0;
+  height: 4px;
+  cursor: ns-resize;
+  background: transparent;
+  position: relative;
+  transition: background var(--transition-normal);
+}
+
+#agents-resize-h::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 1px;
+  height: 1px;
+  width: 100%;
+  background: var(--border-subtle);
+  transition: all var(--transition-normal);
+}
+
+#agents-resize-h:hover::after,
+#agents-resize-h.dragging::after {
+  top: 0;
+  height: 3px;
+  background: var(--accent-primary);
+  box-shadow: var(--accent-glow);
+  border-radius: 2px;
 }
 
 #sidebar-resize-v {
