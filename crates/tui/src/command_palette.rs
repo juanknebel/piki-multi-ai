@@ -58,7 +58,7 @@ pub fn create_state(workspaces: &[Workspace]) -> CommandPaletteState {
 
     for cmd in all_commands() {
         let search_text: nucleo::Utf32String = format!("{}: {}", cmd.category, cmd.label).into();
-        injector.push(cmd, |cols| {
+        injector.push(cmd, |_cmd, cols| {
             cols[0] = search_text;
         });
     }
@@ -74,7 +74,7 @@ pub fn create_state(workspaces: &[Workspace]) -> CommandPaletteState {
             switch_workspace_idx: Some(i),
         };
         let search_text: nucleo::Utf32String = format!("Switch: {}", ws.name).into();
-        injector.push(cmd, |cols| {
+        injector.push(cmd, |_cmd, cols| {
             cols[0] = search_text;
         });
     }

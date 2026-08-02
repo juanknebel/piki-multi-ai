@@ -27,14 +27,14 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       # Plain `cargo audit` rather than rustsec/audit-check: that action
       # publishes results through the checks API, which needs `checks: write`
       # and is unavailable to the read-only token a fork's pull request gets —
       # it fails the job even when the audit itself is clean. Running the tool
       # directly needs no API access and behaves the same everywhere.
-      - uses: taiki-e/install-action@v2
+      - uses: taiki-e/install-action@v2.85.4
         with:
           tool: cargo-audit
 

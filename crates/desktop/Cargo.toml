@@ -24,12 +24,12 @@ tokio = { version = "1", features = ["full"] }
 portable-pty = "0.9"
 parking_lot = "0.12"
 uuid = { version = "1", features = ["v4"] }
-base64 = "0.22"
+base64 = "0.23"
 chrono = "0.4"
 anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 flow-core = { git = "https://github.com/juanknebel/flow", tag = "0.6.0" }
-tokio-tungstenite = "0.26"
+tokio-tungstenite = "0.30"
 futures-util = { version = "0.3", default-features = false, features = ["sink"] }
-toml = "0.8"
+toml = "1.1"
