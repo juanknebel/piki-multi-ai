@@ -8,7 +8,12 @@ import {
   showWorkspaceInfo,
 } from "./dialogs/workspace-dialog";
 import { showAgentManager } from "./dialogs/agent-dialog";
-import type { WorkspaceInfo } from "../types";
+import {
+  actionableStatusView,
+  agentStatusSeverity,
+  type AgentRow,
+  type WorkspaceInfo,
+} from "../types";
 
 /** Label for a row. Structure (families, the PR-review group, collapse
  *  state) is decided by the backend; only the text is decided here.
@@ -45,6 +50,41 @@ export function renderWorkspaceList(container: HTMLElement) {
       rows = [];
     }
     render();
+  }
+
+  // Live agent tabs across all workspaces, for the per-row status rollup.
+  // Same source as the Agents panel; refreshed (debounced) on agent events.
+  let agentRows: AgentRow[] = [];
+  let agentRefreshQueued = false;
+
+  function scheduleAgentRefresh() {
+    if (agentRefreshQueued) return;
+    agentRefreshQueued = true;
+    setTimeout(async () => {
+      agentRefreshQueued = false;
+      try {
+        agentRows = await ipc.listAgentRows();
+      } catch {
+        agentRows = [];
+      }
+      render();
+    }, 100);
+  }
+
+  /** Worst (status, attention) among the agents of `indices`, or null when
+   *  none reports. Severity order shared with core / the TUI. */
+  function agentRollup(indices: (idx: number) => boolean) {
+    let best: { status: import("../types").CliAgentStatus; attention: boolean } | null = null;
+    let bestSev = 0;
+    for (const row of agentRows) {
+      if (!row.status || !indices(row.workspace_idx)) continue;
+      const sev = agentStatusSeverity(row.status, row.attention);
+      if (best === null || sev > bestSev) {
+        best = { status: row.status, attention: row.attention };
+        bestSev = sev;
+      }
+    }
+    return best;
   }
 
   function persistCollapsed() {
@@ -113,6 +153,21 @@ export function renderWorkspaceList(container: HTMLElement) {
       const ws = workspaces[idx];
       const statusClass = getStatusClass(ws.status);
 
+      // Agent-status rollup: a collapsed parent aggregates its hidden family
+      // (rows sharing its family key = source_repo) so a needs-permission
+      // agent can't hide behind a folded worktree group; a visible row only
+      // reports its own agents. Only actionable states surface (TUI rule).
+      const familyKey = row.kind === "parent" && row.collapsed ? row.family_key : null;
+      const rollup = agentRollup((wi) =>
+        familyKey !== null
+          ? workspaces[wi]?.info.source_repo === familyKey
+          : wi === idx,
+      );
+      const rollupView = rollup && actionableStatusView(rollup.status, rollup.attention);
+      const agentGlyph = rollupView
+        ? `<span class="workspace-agent-glyph" style="color:${rollupView.color}" title="Agent ${rollupView.label}">${rollupView.glyph}</span>`
+        : "";
+
       const attentionDot = ws.needsAttention
         ? '<span class="workspace-attention" title="Needs attention">●</span>'
         : "";
@@ -127,6 +182,7 @@ export function renderWorkspaceList(container: HTMLElement) {
         ${chevron}
         ${idx === activeIdx ? '<span class="workspace-active-marker"></span>' : ""}
         <span class="workspace-name">${escapeHtml(rowLabel(info, ws.branch))}</span>
+        ${agentGlyph}
         ${attentionDot}
         <span class="workspace-actions">
           <button class="ws-action-btn" data-action="agents" title="Manage Agents">⚙</button>
@@ -190,6 +246,13 @@ export function renderWorkspaceList(container: HTMLElement) {
   appState.on("workspaces-changed", () => void refreshRows());
   appState.on("active-workspace-changed", render);
   appState.on("workspace-attention-changed", render);
+  // Agent lifecycle events land in per-tab shell state; tab churn and tab
+  // switches (which acknowledge attention backend-side) also move the rollup.
+  appState.on("tab-shell-state-changed", scheduleAgentRefresh);
+  appState.on("tabs-changed", scheduleAgentRefresh);
+  appState.on("active-tab-changed", scheduleAgentRefresh);
+  appState.on("active-workspace-changed", scheduleAgentRefresh);
+  scheduleAgentRefresh();
   render();
 }
 

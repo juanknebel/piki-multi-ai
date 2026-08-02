@@ -199,7 +199,7 @@ const MENUS: MenuDefinition[] = [
       },
       { label: "Auto-reveal Active File", action: () => toggleFileTreeAutoReveal() },
       { label: "Source Control", action: () => appState.setActiveView("git") },
-      { label: "Agents", shortcut: getShortcutKey("agent-manager"), action: () => showAgentManager() },
+      { label: "Agents", action: () => appState.setActiveView("agents") },
       { label: "Kanban Board", shortcut: getShortcutKey("kanban"), action: () => appState.setActiveView("kanban") },
       SEP,
       { label: "Command Palette", shortcut: getShortcutKey("command-palette"), action: () => openCommandPalette() },

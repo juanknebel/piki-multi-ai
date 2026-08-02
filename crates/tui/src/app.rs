@@ -359,22 +359,11 @@ impl std::ops::DerefMut for Workspace {
     }
 }
 
-/// Precedence for an agent (status, attention) pair, worst first: needs-
-/// permission > unseen news > running > everything else. Shared by
-/// `Workspace::agent_status_rollup()` (per-workspace) and the sidebar's
-/// worktree-family aggregation (across a collapsed family's members).
-pub(crate) fn agent_status_severity(
-    status: piki_core::cli_agent::CliAgentStatus,
-    attention: bool,
-) -> u8 {
-    use piki_core::cli_agent::CliAgentStatus as S;
-    match (status, attention) {
-        (S::WaitingPermission, _) => 4,
-        (S::Idle | S::Done, true) => 3,
-        (S::Running, _) => 2,
-        _ => 0,
-    }
-}
+/// Precedence for an agent (status, attention) pair — lives in core
+/// ([`piki_core::cli_agent::status_severity`]) so the desktop frontend ranks
+/// agents identically. Used by `Workspace::agent_status_rollup()`
+/// (per-workspace) and the sidebar's worktree-family aggregation.
+pub(crate) use piki_core::cli_agent::status_severity as agent_status_severity;
 
 impl Workspace {
     /// Create from a WorkspaceInfo (e.g. returned by WorkspaceManager::create)

@@ -512,8 +512,15 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
   });
   cmds.push({
     id: "view-agents",
+    label: "Show Agents",
+    category: "View",
+    action: () => appState.setActiveView("agents"),
+  });
+  cmds.push({
+    id: "manage-agents",
     label: "Manage Agents",
     category: "View",
+    keybinding: "Ctrl+Shift+A",
     action: () => showAgentManager(),
   });
   cmds.push({
