@@ -511,12 +511,6 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
     action: () => appState.setActiveView("git"),
   });
   cmds.push({
-    id: "view-agents",
-    label: "Show Agents",
-    category: "View",
-    action: () => appState.setActiveView("agents"),
-  });
-  cmds.push({
     id: "manage-agents",
     label: "Manage Agents",
     category: "View",

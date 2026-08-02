@@ -4,11 +4,12 @@ import { cliAgentStatusView, type AgentRow } from "../types";
 import { showAgentManager } from "./dialogs/agent-dialog";
 import { showDispatchDialog } from "./dialogs/dispatch-dialog";
 
-/** Sidebar view listing the live AI agent tabs of ALL workspaces (the
- *  desktop counterpart of the TUI's bottom-left Agents pane). Rows come from
- *  the backend (`list_agent_rows`) because the frontend only hydrates a
- *  workspace's tab list on first visit — agents dispatched into never-visited
- *  workspaces must still show. Click jumps to that workspace + tab. */
+/** Always-visible panel docked below the workspace list, listing the live AI
+ *  agent tabs of ALL workspaces (the desktop counterpart of the TUI's
+ *  bottom-left Agents pane). Rows come from the backend (`list_agent_rows`)
+ *  because the frontend only hydrates a workspace's tab list on first visit —
+ *  agents dispatched into never-visited workspaces must still show. Click
+ *  jumps to that workspace + tab. */
 export function renderAgentsPanel(container: HTMLElement) {
   container.innerHTML = `
     <div class="sidebar-header">
@@ -28,8 +29,6 @@ export function renderAgentsPanel(container: HTMLElement) {
   let refreshQueued = false;
 
   async function refresh() {
-    // Skip work while hidden; the view-change hook refreshes on show.
-    if (container.style.display === "none") return;
     let rows: AgentRow[];
     try {
       rows = await ipc.listAgentRows();

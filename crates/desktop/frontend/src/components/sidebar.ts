@@ -4,6 +4,7 @@ import { renderWorkspaceList } from "./workspace-list";
 import { renderFileTree } from "./file-tree";
 import { renderSourceControl } from "./source-control";
 import { renderAgentsPanel } from "./agents-panel";
+import { showAgentManager } from "./dialogs/agent-dialog";
 import { openWebPreviewTab } from "./web-preview-panel";
 
 export async function initSidebar() {
@@ -27,10 +28,12 @@ export async function initSidebar() {
   renderWorkspaceList(workspaceList);
   renderFileTree(filesView);
   renderSourceControl(scView);
+  // Always-visible Agents panel docked below the workspace list (same
+  // layout as the TUI's bottom-left pane) — not a switchable view.
   renderAgentsPanel(agentsView);
 
   // Track last sidebar view so we can restore when a non-sidebar action triggers
-  let lastSidebarView: "explorer" | "files" | "git" | "agents" = "explorer";
+  let lastSidebarView: "explorer" | "files" | "git" = "explorer";
 
   function updateView() {
     const view = appState.activeView;
@@ -53,11 +56,18 @@ export async function initSidebar() {
       return;
     }
 
+    if (view === "agents") {
+      // The live panel lives in Explorer; the activity icon opens the
+      // profile manager dialog, like before.
+      showAgentManager();
+      appState.setActiveView(lastSidebarView);
+      return;
+    }
+
     lastSidebarView = view;
     explorerView.style.display = view === "explorer" ? "flex" : "none";
     filesView.style.display = view === "files" ? "flex" : "none";
     scView.style.display = view === "git" ? "flex" : "none";
-    agentsView.style.display = view === "agents" ? "flex" : "none";
   }
 
   async function spawnKanbanTab() {
