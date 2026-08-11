@@ -206,19 +206,31 @@ pub(crate) fn render_missing_prereqs_overlay(frame: &mut Frame, area: Rect, app:
 
 pub(crate) fn render_confirm_close_tab_dialog(frame: &mut Frame, area: Rect, app: &App) {
     let theme = &app.theme.dialog;
-    let tab_name = match app.active_dialog {
-        Some(DialogState::ConfirmCloseTab { target }) => app
-            .current_workspace()
-            .and_then(|ws| ws.tabs.get(target))
-            .map(|t| format!("{:?}", t.provider))
-            .unwrap_or_default(),
-        _ => String::new(),
+    let tab = match app.active_dialog {
+        Some(DialogState::ConfirmCloseTab { target }) => {
+            app.current_workspace().and_then(|ws| ws.tabs.get(target))
+        }
+        _ => None,
+    };
+    let tab_name = tab.map(|t| format!("{:?}", t.provider)).unwrap_or_default();
+    // Say what actually gets killed: a live agent (by its reported status) or
+    // a plain running session — not just the provider name.
+    let live_hint = match tab {
+        Some(t) => match t.cli_agent_snapshot() {
+            Some((status, attention, _)) => {
+                let (_, label, _) = crate::ui::cli_agent_status_view(app, status, attention);
+                format!(" The agent is {label} and will be killed.")
+            }
+            None if t.pty_session.is_some() => " Its running session will be killed.".to_string(),
+            None => String::new(),
+        },
+        None => String::new(),
     };
     super::render_yn_dialog(
         frame,
         area,
         "Close Tab",
-        &format!("Close tab \"{}\"?", tab_name),
+        &format!("Close tab \"{}\"?{}", tab_name, live_hint),
         theme.delete_border,
         theme.delete_cancel,
     );

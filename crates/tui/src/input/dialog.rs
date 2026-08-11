@@ -370,9 +370,12 @@ fn handle_create_worktree_create_new(app: &mut App, key: KeyEvent) -> Option<Act
             ));
         }
         _ if is_cancel(key, &app.config) => {
-            app.active_dialog = None;
-            app.mode = AppMode::Normal;
-            app.active_pane = ActivePane::WorkspaceList;
+            // Back one step to ChooseSource (like the dispatch dialogs), not a
+            // full teardown — the user typed into Name/Prompt/Kanban to get
+            // here and can still cancel from the chooser.
+            if let Some(DialogState::CreateWorktree { ref mut mode, .. }) = app.active_dialog {
+                *mode = CreateWorktreeMode::ChooseSource;
+            }
             return None;
         }
         _ => {}
@@ -433,7 +436,10 @@ fn handle_create_worktree_load_existing(app: &mut App, key: KeyEvent) -> Option<
             });
         }
         _ if is_cancel(key, &app.config) => {
-            dismiss_dialog_to_pane(app, ActivePane::WorkspaceList);
+            // Back one step to ChooseSource, mirroring the CreateNew step.
+            if let Some(DialogState::CreateWorktree { ref mut mode, .. }) = app.active_dialog {
+                *mode = CreateWorktreeMode::ChooseSource;
+            }
         }
         _ => {}
     }

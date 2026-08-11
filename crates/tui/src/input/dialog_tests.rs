@@ -3275,7 +3275,7 @@ fn create_worktree_enter_dispatches_create_workspace_with_worktree_type() {
 }
 
 #[test]
-fn create_worktree_esc_dismisses() {
+fn create_worktree_esc_steps_back_to_choose_source() {
     let mut app = test_app();
     let idx = push_test_ws(
         &mut app,
@@ -3300,8 +3300,19 @@ fn create_worktree_esc_dismisses() {
     });
     app.mode = AppMode::CreateWorktree;
 
+    // Esc in the form goes back one step (the typed fields survive)…
     let action = handle_create_worktree_input(&mut app, key(KeyCode::Esc));
+    assert!(action.is_none());
+    assert!(matches!(
+        app.active_dialog,
+        Some(DialogState::CreateWorktree {
+            mode: CreateWorktreeMode::ChooseSource,
+            ..
+        })
+    ));
 
+    // …and Esc from the chooser dismisses the dialog.
+    let action = handle_create_worktree_input(&mut app, key(KeyCode::Esc));
     assert!(action.is_none());
     assert!(app.active_dialog.is_none());
     assert_eq!(app.mode, AppMode::Normal);
@@ -3486,7 +3497,7 @@ fn load_existing_enter_on_empty_list_does_nothing() {
 }
 
 #[test]
-fn load_existing_esc_dismisses() {
+fn load_existing_esc_steps_back_to_choose_source() {
     let mut app = test_app();
     let idx = push_test_ws(
         &mut app,
@@ -3500,8 +3511,13 @@ fn load_existing_esc_dismisses() {
     let action = handle_create_worktree_input(&mut app, key(KeyCode::Esc));
 
     assert!(action.is_none());
-    assert!(app.active_dialog.is_none());
-    assert_eq!(app.mode, AppMode::Normal);
+    assert!(matches!(
+        app.active_dialog,
+        Some(DialogState::CreateWorktree {
+            mode: CreateWorktreeMode::ChooseSource,
+            ..
+        })
+    ));
 }
 
 // ── Resize repeat mode (P2) ──────────────────────────────────────────────────
