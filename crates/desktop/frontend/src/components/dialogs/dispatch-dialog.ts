@@ -16,7 +16,7 @@ export interface CardContext {
 }
 
 export async function showDispatchDialog(cardContext?: CardContext) {
-  document.querySelector(".dialog-backdrop")?.remove();
+  document.querySelector(".dispatch-backdrop")?.remove();
 
   const wsIdx = appState.activeWorkspace;
   let agents: AgentInfo[];
@@ -55,7 +55,7 @@ export async function showDispatchDialog(cardContext?: CardContext) {
   const providerDropdown = createDropdown(providerOptions, providerOptions[0].value);
 
   const backdrop = document.createElement("div");
-  backdrop.className = "dialog-backdrop";
+  backdrop.className = "dialog-backdrop dispatch-backdrop";
   backdrop.innerHTML = `
     <div class="dialog" style="max-width:520px">
       <div class="dialog-header">

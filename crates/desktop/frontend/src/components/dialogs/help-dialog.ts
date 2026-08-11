@@ -4,10 +4,10 @@
 import { helpSections } from "../../shortcuts";
 
 export function showHelpDialog() {
-  document.querySelector(".dialog-backdrop")?.remove();
+  document.querySelector(".help-backdrop")?.remove();
 
   const backdrop = document.createElement("div");
-  backdrop.className = "dialog-backdrop";
+  backdrop.className = "dialog-backdrop help-backdrop";
 
   const dialog = document.createElement("div");
   dialog.className = "dialog";

@@ -3,10 +3,10 @@ import * as ipc from "../../ipc";
 import { getProviderLabel } from "../../types";
 
 export function showDashboard() {
-  document.querySelector(".dialog-backdrop")?.remove();
+  document.querySelector(".dashboard-backdrop")?.remove();
 
   const backdrop = document.createElement("div");
-  backdrop.className = "dialog-backdrop";
+  backdrop.className = "dialog-backdrop dashboard-backdrop";
   backdrop.style.paddingTop = "5vh";
 
   const dialog = document.createElement("div");

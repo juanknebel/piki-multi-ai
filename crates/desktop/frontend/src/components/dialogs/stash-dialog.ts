@@ -3,7 +3,7 @@ import * as ipc from "../../ipc";
 import { toast } from "../toast";
 
 export async function showStashDialog() {
-  document.querySelector(".dialog-backdrop")?.remove();
+  document.querySelector(".stash-backdrop")?.remove();
 
   const wsIdx = appState.activeWorkspace;
   let entries: ipc.StashEntry[];
@@ -15,7 +15,7 @@ export async function showStashDialog() {
   }
 
   const backdrop = document.createElement("div");
-  backdrop.className = "dialog-backdrop";
+  backdrop.className = "dialog-backdrop stash-backdrop";
 
   function render() {
     const existing = backdrop.querySelector(".dialog");

@@ -3,7 +3,7 @@ import * as ipc from "../../ipc";
 import { showCommitDiff } from "../diff-viewer";
 
 export async function showGitLog() {
-  document.querySelector(".dialog-backdrop")?.remove();
+  document.querySelector(".gitlog-backdrop")?.remove();
 
   const wsIdx = appState.activeWorkspace;
   let entries: ipc.GitLogEntry[];
@@ -15,7 +15,7 @@ export async function showGitLog() {
   }
 
   const backdrop = document.createElement("div");
-  backdrop.className = "dialog-backdrop";
+  backdrop.className = "dialog-backdrop gitlog-backdrop";
   backdrop.style.paddingTop = "5vh";
 
   let selectedIdx = 0;

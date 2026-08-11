@@ -4,14 +4,14 @@ import type { SysInfoSnapshot } from "../../ipc";
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
 export function showSysinfoDialog() {
-  document.querySelector(".dialog-backdrop")?.remove();
+  document.querySelector(".sysinfo-backdrop")?.remove();
   if (refreshTimer) {
     clearInterval(refreshTimer);
     refreshTimer = null;
   }
 
   const backdrop = document.createElement("div");
-  backdrop.className = "dialog-backdrop";
+  backdrop.className = "dialog-backdrop sysinfo-backdrop";
 
   const dialog = document.createElement("div");
   dialog.className = "dialog";

@@ -14,7 +14,7 @@ async function loadProviderNames(): Promise<string[]> {
 }
 
 export async function showAgentManager() {
-  document.querySelector(".dialog-backdrop")?.remove();
+  document.querySelector(".agent-manager-backdrop")?.remove();
 
   const wsIdx = appState.activeWorkspace;
   let agents: AgentInfo[];
@@ -26,7 +26,7 @@ export async function showAgentManager() {
   }
 
   const backdrop = document.createElement("div");
-  backdrop.className = "dialog-backdrop";
+  backdrop.className = "dialog-backdrop agent-manager-backdrop";
 
   function render() {
     backdrop.querySelector(".dialog")?.remove();
