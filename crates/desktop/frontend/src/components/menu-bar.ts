@@ -16,7 +16,7 @@ import { openCommandPalette } from "./command-palette";
 import { showAgentManager } from "./dialogs/agent-dialog";
 import { showDispatchDialog } from "./dialogs/dispatch-dialog";
 import { showHelpDialog } from "./dialogs/help-dialog";
-import { closeActiveWsTab } from "./tab-bar";
+import { closeActiveWsTab, tearDownAndClosePane } from "./tab-bar";
 import { showDashboard } from "./dialogs/dashboard-dialog";
 import { showSysinfoDialog } from "./dialogs/sysinfo-dialog";
 import { showThemeDialog } from "./dialogs/theme-dialog";
@@ -132,7 +132,7 @@ const MENUS: MenuDefinition[] = [
         disabled: noWs,
         action: () => {
           const id = appState.activePaneId;
-          if (id) appState.closePane(id);
+          if (id) tearDownAndClosePane(id);
         },
       },
       SEP,

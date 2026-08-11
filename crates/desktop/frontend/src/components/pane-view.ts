@@ -15,6 +15,7 @@ import {
   renderWorkspaceTabBar,
   getPaneProviderChoices,
   spawnIntoPane,
+  tearDownAndClosePane,
 } from "./tab-bar";
 import { formatShortcut } from "../shortcuts";
 
@@ -118,7 +119,7 @@ function renderLeaf(leaf: LeafNode): HTMLElement {
   });
   head.querySelector('[data-act="close"]')!.addEventListener("click", (e) => {
     e.stopPropagation();
-    appState.closePane(leaf.id);
+    tearDownAndClosePane(leaf.id);
   });
   el.appendChild(head);
 

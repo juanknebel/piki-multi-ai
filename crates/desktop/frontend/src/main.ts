@@ -10,6 +10,7 @@ import { initApiPanel } from "./components/api-panel";
 import { initMarkdownEditorPanel } from "./components/markdown-editor-panel";
 import { initCodeEditorPanel } from "./components/code-editor-panel";
 import { initWebPreviewPanel, openWebPreviewTab } from "./components/web-preview-panel";
+import { tearDownAndClosePane } from "./components/tab-bar";
 import { initPaneView } from "./components/pane-view";
 import { bindAction, handleGlobalKeydown, loadShortcuts } from "./shortcuts";
 import { showSettingsDialog } from "./components/dialogs/settings-dialog";
@@ -167,7 +168,7 @@ async function init() {
   bindAction("split-down", () => appState.splitActivePane("down"));
   bindAction("close-pane", () => {
     const id = appState.activePaneId;
-    if (id) appState.closePane(id);
+    if (id) tearDownAndClosePane(id);
   });
 
   // Load user shortcut overrides from storage
