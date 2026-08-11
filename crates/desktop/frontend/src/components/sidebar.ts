@@ -1,4 +1,5 @@
 import { appState } from "../state";
+import { reportError } from "./toast";
 import * as ipc from "../ipc";
 import { renderWorkspaceList } from "./workspace-list";
 import { renderFileTree } from "./file-tree";
@@ -91,7 +92,7 @@ export async function initSidebar() {
       const tabId = await ipc.spawnTab(appState.activeWorkspace, "Kanban");
       appState.addTabToRoot(appState.activeWorkspace, { id: tabId, provider: "Kanban", alive: true });
     } catch (err) {
-      console.error("Failed to open Kanban tab:", err);
+      reportError("Failed to open Kanban tab", err);
     }
   }
 
@@ -101,7 +102,7 @@ export async function initSidebar() {
       const tabId = await ipc.spawnTab(appState.activeWorkspace, "Api");
       appState.addTabToRoot(appState.activeWorkspace, { id: tabId, provider: "Api", alive: true });
     } catch (err) {
-      console.error("Failed to open API Explorer tab:", err);
+      reportError("Failed to open API Explorer tab", err);
     }
   }
 

@@ -4,7 +4,7 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { SearchAddon } from "@xterm/addon-search";
 import { appState } from "../state";
 import * as ipc from "../ipc";
-import { toast } from "./toast";
+import { toast, reportError } from "./toast";
 import { themeEngine } from "../theme";
 import { isMac, modCtrl } from "../shortcuts";
 
@@ -87,7 +87,7 @@ export function createTerminal(tabId: string): TerminalInstance {
     const sel = terminal.getSelection();
     if (sel) {
       ipc.clipboardCopy(sel).catch((e) => {
-        console.error("clipboard copy failed:", e);
+        reportError("Clipboard copy failed", e);
         toast(`Copy failed: ${e}`, "error");
       });
     }
@@ -104,7 +104,7 @@ export function createTerminal(tabId: string): TerminalInstance {
       const sel = terminal.getSelection();
       if (sel) {
         ipc.clipboardCopy(sel).catch((err) => {
-          console.error("clipboard copy failed:", err);
+          reportError("Clipboard copy failed", err);
           toast(`Copy failed: ${err}`, "error");
         });
       }
@@ -114,7 +114,7 @@ export function createTerminal(tabId: string): TerminalInstance {
       ipc.clipboardPaste().then((text) => {
         if (text) terminal.paste(text);
       }).catch((err) => {
-        console.error("clipboard paste failed:", err);
+        reportError("Clipboard paste failed", err);
         toast(`Paste failed: ${err}`, "error");
       });
       return false;

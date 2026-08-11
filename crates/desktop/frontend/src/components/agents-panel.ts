@@ -1,4 +1,5 @@
 import { appState } from "../state";
+import { reportError } from "./toast";
 import * as ipc from "../ipc";
 import { cliAgentStatusView, type AgentRow } from "../types";
 import { showAgentManager } from "./dialogs/agent-dialog";
@@ -100,7 +101,7 @@ export function renderAgentsPanel(container: HTMLElement) {
       }
       appState.setActiveTab(row.tab_idx);
     } catch (err) {
-      console.error("Jump to agent failed:", err);
+      reportError("Jump to agent failed", err);
     }
   }
 

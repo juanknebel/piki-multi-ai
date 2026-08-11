@@ -2,7 +2,7 @@ import { appState } from "../state";
 import * as ipc from "../ipc";
 import { showFileViewer } from "./file-viewer";
 import { showMarkdown } from "./markdown-viewer";
-import { toast } from "./toast";
+import { toast, reportError } from "./toast";
 import { modCtrl } from "../shortcuts";
 import { fileGlyph } from "./file-icons";
 
@@ -19,7 +19,7 @@ export async function openFuzzySearch() {
   try {
     allFiles = await ipc.fuzzyFileList(wsIdx);
   } catch (err) {
-    console.error("Failed to list files:", err);
+    reportError("Failed to list files", err);
     return;
   }
 

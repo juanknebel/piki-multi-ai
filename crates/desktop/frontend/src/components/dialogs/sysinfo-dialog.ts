@@ -1,4 +1,5 @@
 import * as ipc from "../../ipc";
+import { reportError } from "../toast";
 import type { SysInfoSnapshot } from "../../ipc";
 
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
@@ -56,7 +57,7 @@ async function loadSysinfo(container: HTMLElement) {
     renderSysinfo(container, snap);
   } catch (err) {
     container.innerHTML = `<div class="sysinfo-error">Failed to load system info</div>`;
-    console.error("sysinfo error:", err);
+    reportError("Failed to load system info", err);
   }
 }
 

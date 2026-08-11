@@ -1,7 +1,7 @@
 import "@xterm/xterm/css/xterm.css";
 import { appState } from "./state";
 import * as ipc from "./ipc";
-import { toast } from "./components/toast";
+import { toast, reportError } from "./components/toast";
 import { showConfirm } from "./components/confirm";
 import { renderActivityBar } from "./components/activity-bar";
 import { initSidebar } from "./components/sidebar";
@@ -70,7 +70,7 @@ async function init() {
       appState.setActiveWorkspace(0, detail);
     }
   } catch (err) {
-    console.error("Failed to load workspaces:", err);
+    reportError("Failed to load workspaces", err);
   }
 
   // Notify LSP backend when workspace focus changes

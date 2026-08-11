@@ -1,6 +1,6 @@
 import { appState } from "../state";
 import * as ipc from "../ipc";
-import { toast } from "./toast";
+import { toast, reportError } from "./toast";
 import { showConfirm } from "./confirm";
 import { createDropdown } from "./dropdown";
 import {
@@ -217,7 +217,7 @@ export function renderWorkspaceList(container: HTMLElement) {
           const detail = await ipc.switchWorkspace(idx);
           appState.setActiveWorkspace(idx, detail);
         } catch (err) {
-          console.error("Failed to switch workspace:", err);
+          reportError("Failed to switch workspace", err);
         }
       });
 

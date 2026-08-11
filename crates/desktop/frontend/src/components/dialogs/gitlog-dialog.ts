@@ -1,4 +1,5 @@
 import { appState } from "../../state";
+import { reportError } from "../toast";
 import * as ipc from "../../ipc";
 import { showCommitDiff } from "../diff-viewer";
 
@@ -10,7 +11,7 @@ export async function showGitLog() {
   try {
     entries = await ipc.getGitLog(wsIdx);
   } catch (err) {
-    console.error("Failed to load git log:", err);
+    reportError("Failed to load git log", err);
     return;
   }
 

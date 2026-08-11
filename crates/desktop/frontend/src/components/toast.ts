@@ -9,6 +9,14 @@ export function initToasts() {
   });
 }
 
+/** Surface a failed user action: error toast for the user, console.error
+ *  (with the raw error object) for diagnostics. `context` is the user-facing
+ *  description, e.g. "Commit failed". */
+export function reportError(context: string, err: unknown) {
+  console.error(context, err);
+  toast(`${context}: ${err}`, "error");
+}
+
 export function toast(
   message: string,
   level: "info" | "success" | "error" = "info",

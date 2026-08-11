@@ -4,7 +4,7 @@ import hljs from "highlight.js/lib/common";
 import "highlight.js/styles/atom-one-dark.css";
 import * as ipc from "../ipc";
 import { appState } from "../state";
-import { toast } from "./toast";
+import { toast, reportError } from "./toast";
 import { registerMarkdownFile } from "./markdown-editor-panel";
 import { modCtrl, formatShortcut } from "../shortcuts";
 
@@ -32,7 +32,7 @@ export async function showMarkdown(filePath: string) {
   try {
     content = await ipc.readMarkdownFile(wsIdx, filePath);
   } catch (err) {
-    console.error("Failed to read markdown:", err);
+    reportError("Failed to read markdown", err);
     return;
   }
 

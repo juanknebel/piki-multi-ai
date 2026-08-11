@@ -1,4 +1,5 @@
 import * as ipc from "../ipc";
+import { reportError } from "./toast";
 import { DiffPanel } from "./diff-panel";
 
 let overlayEl: HTMLElement | null = null;
@@ -11,7 +12,7 @@ export function showFileDiff(workspaceIdx: number, filePath: string, staged: boo
       panel.renderSideBySide(diff);
     });
   }).catch((err) => {
-    console.error("Failed to load diff:", err);
+    reportError("Failed to load diff", err);
   });
 }
 
@@ -24,7 +25,7 @@ export function showCommitDiff(workspaceIdx: number, sha: string) {
       panel.renderMultiFile(diffs);
     });
   }).catch((err) => {
-    console.error("Failed to load commit diff:", err);
+    reportError("Failed to load commit diff", err);
   });
 }
 
@@ -49,7 +50,7 @@ export function showConflictDiff(
       panel.renderConflict(conflict);
     });
   }).catch((err) => {
-    console.error("Failed to load conflict diff:", err);
+    reportError("Failed to load conflict diff", err);
   });
 }
 
