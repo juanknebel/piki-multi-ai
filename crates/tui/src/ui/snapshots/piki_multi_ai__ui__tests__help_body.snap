@@ -148,7 +148,8 @@ expression: body
     Tab           Select the model
     C-o           Settings (server, URL, system prompt)
     C-a           Toggle agent mode (tool use)
-    C-l           Clear the conversation
+    C-c           Stop the streaming response
+    C-l           Clear the conversation (press twice)
     Esc           Hide (keeps state)
 
   Kanban board

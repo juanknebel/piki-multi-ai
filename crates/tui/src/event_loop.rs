@@ -29,6 +29,10 @@ const MIN_RENDER_INTERVAL: Duration = Duration::from_millis(33);
 /// UI redraw, so this — not `TICK_RATE` — bounds the steady-state frame rate
 /// while any agent is running.
 const SPINNER_INTERVAL: Duration = Duration::from_millis(150);
+
+/// No chat-stream event for this long while `streaming` → assume the stream
+/// died and unlock the overlay (checked on the fallback tick).
+const CHAT_STREAM_TIMEOUT: Duration = Duration::from_secs(60);
 /// Cadence of passive (screen-scrape) agent-state detection. Status changes
 /// on a hookless agent are human-scale events; scraping faster than this just
 /// burns locks against the PTY reader thread.
@@ -383,6 +387,7 @@ pub(crate) async fn run(
 
             chat_event = app.chat_token_rx.recv() => {
                 if let Some(event) = chat_event {
+                    app.chat_panel.last_stream_activity = Some(std::time::Instant::now());
                     match event {
                         piki_api_client::ChatStreamEvent::Token(token) => {
                             app.chat_panel.current_response.push_str(&token);
@@ -437,6 +442,7 @@ pub(crate) async fn run(
 
             agent_event = app.agent_event_rx.recv() => {
                 if let Some(event) = agent_event {
+                    app.chat_panel.last_stream_activity = Some(std::time::Instant::now());
                     match event {
                         piki_agent::AgentEvent::Token(token) => {
                             app.chat_panel.current_response.push_str(&token);
@@ -556,6 +562,20 @@ pub(crate) async fn run(
 
         // Expire toasts
         if app.expire_toast() {
+            app.needs_redraw = true;
+        }
+
+        // Chat stream watchdog: a stream that has gone quiet without a
+        // terminal event is dead — unlock the panel instead of leaving the
+        // input disabled until the HTTP timeout (or forever on a panic).
+        if app.chat_panel.streaming
+            && app
+                .chat_panel
+                .last_stream_activity
+                .is_some_and(|t| t.elapsed() >= CHAT_STREAM_TIMEOUT)
+        {
+            app.chat_stop_stream();
+            app.set_toast("Chat stream timed out", app::ToastLevel::Error);
             app.needs_redraw = true;
         }
 

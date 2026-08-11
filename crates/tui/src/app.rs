@@ -1038,6 +1038,15 @@ pub struct ChatPanelState {
     pub agent_tool_status: Option<String>,
     /// Pending write-tool approval request from the agent loop
     pub pending_approval: Option<piki_agent::ApprovalRequest>,
+    /// Abort handle for the in-flight stream/agent task (Ctrl+C stop,
+    /// watchdog timeout).
+    pub stream_abort: Option<tokio::task::AbortHandle>,
+    /// Last stream event time — the tick watchdog unlocks the panel when a
+    /// stream goes quiet without a terminal event.
+    pub last_stream_activity: Option<std::time::Instant>,
+    /// One-shot confirm: first Ctrl+L arms, the second clears. Any other key
+    /// disarms.
+    pub pending_clear: bool,
 }
 
 impl App {
@@ -1173,6 +1182,27 @@ impl App {
         self.toast = Some(Toast::new(message.into(), level));
         // Also keep status_message in sync for backward compatibility
         self.status_message = self.toast.as_ref().map(|t| t.message.clone());
+    }
+
+    /// Stop the in-flight chat stream (if any): abort the task, keep the
+    /// partial response as an assistant message, and unlock the input. Safe
+    /// to call when nothing is streaming.
+    pub fn chat_stop_stream(&mut self) {
+        if let Some(handle) = self.chat_panel.stream_abort.take() {
+            handle.abort();
+        }
+        if !self.chat_panel.current_response.is_empty() {
+            let partial = std::mem::take(&mut self.chat_panel.current_response);
+            self.chat_panel.messages.push(piki_core::chat::ChatMessage {
+                role: piki_core::chat::ChatRole::Assistant,
+                content: partial,
+                tool_calls: None,
+                tool_call_id: None,
+            });
+        }
+        self.chat_panel.streaming = false;
+        self.chat_panel.agent_tool_status = None;
+        self.chat_panel.last_stream_activity = None;
     }
 
     /// Expire the toast if its duration has passed. Returns true if expired.

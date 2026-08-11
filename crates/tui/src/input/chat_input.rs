@@ -37,6 +37,13 @@ pub(super) fn handle_chat_panel_input(app: &mut App, key: KeyEvent) -> Option<Ac
         ChatSubMode::Chat => {}
     }
 
+    // Any key other than a repeated Ctrl+L disarms the pending clear.
+    if app.chat_panel.pending_clear
+        && !(key.code == KeyCode::Char('l') && key.modifiers.contains(KeyModifiers::CONTROL))
+    {
+        app.chat_panel.pending_clear = false;
+    }
+
     match key.code {
         KeyCode::Esc => {
             // Hide overlay — state is preserved
@@ -87,10 +94,32 @@ pub(super) fn handle_chat_panel_input(app: &mut App, key: KeyEvent) -> Option<Ac
         KeyCode::Down => {
             app.chat_panel.scroll = app.chat_panel.scroll.saturating_sub(1);
         }
+        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            // Stop the streaming response; the partial text is kept.
+            if app.chat_panel.streaming {
+                app.chat_stop_stream();
+                app.set_toast("Stopped streaming response", crate::app::ToastLevel::Info);
+            }
+        }
         KeyCode::Char('l') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            app.chat_panel.messages.clear();
-            app.chat_panel.current_response.clear();
-            app.chat_panel.scroll = 0;
+            // Two-step clear: first press arms (footer shows the prompt),
+            // second press wipes the conversation and any in-flight stream.
+            if app.chat_panel.messages.is_empty() && app.chat_panel.current_response.is_empty() {
+                app.chat_panel.pending_clear = false;
+            } else if app.chat_panel.pending_clear {
+                app.chat_panel.pending_clear = false;
+                if let Some(handle) = app.chat_panel.stream_abort.take() {
+                    handle.abort();
+                }
+                app.chat_panel.streaming = false;
+                app.chat_panel.agent_tool_status = None;
+                app.chat_panel.last_stream_activity = None;
+                app.chat_panel.messages.clear();
+                app.chat_panel.current_response.clear();
+                app.chat_panel.scroll = 0;
+            } else {
+                app.chat_panel.pending_clear = true;
+            }
         }
         KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             app.chat_panel.agent_mode = !app.chat_panel.agent_mode;
