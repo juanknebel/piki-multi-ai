@@ -1,4 +1,5 @@
 import { appState } from "../state";
+import { makeInteractive } from "./a11y";
 import { reportError } from "./toast";
 import * as ipc from "../ipc";
 import { cliAgentStatusView, type AgentRow } from "../types";
@@ -89,6 +90,7 @@ export function renderAgentsPanel(container: HTMLElement) {
       `;
       el.title = row.summary ?? "";
       el.addEventListener("click", () => jumpTo(row));
+      makeInteractive(el);
       list.appendChild(el);
     }
   }

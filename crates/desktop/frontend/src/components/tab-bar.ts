@@ -2,6 +2,7 @@
 // layout (see pane-view.ts); a pane holds at most one content item.
 
 import { appState } from "../state";
+import { makeInteractive } from "./a11y";
 import * as ipc from "../ipc";
 import { toast } from "./toast";
 import { getProviderLabel, cliAgentStatusView } from "../types";
@@ -93,6 +94,8 @@ export function renderWorkspaceTabBar(container: HTMLElement) {
       e.stopPropagation();
       void tearDownAndCloseWsTab(appState.activeWorkspace, i);
     });
+    makeInteractive(el, "tab");
+    el.setAttribute("aria-selected", String(isActive));
     container.appendChild(el);
   });
 

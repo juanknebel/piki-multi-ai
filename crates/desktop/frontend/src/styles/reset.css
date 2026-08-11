@@ -77,6 +77,13 @@ ol {
   list-style: none;
 }
 
+/* Keyboard focus indicator — applies app-wide. Mouse clicks don't trigger
+   :focus-visible, so pointer users never see it. */
+:focus-visible {
+  outline: 2px solid var(--accent-focus);
+  outline-offset: -2px;
+}
+
 /* ── Scrollbars ─────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 7px;

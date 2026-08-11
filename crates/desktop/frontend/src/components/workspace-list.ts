@@ -1,4 +1,5 @@
 import { appState } from "../state";
+import { makeInteractive } from "./a11y";
 import * as ipc from "../ipc";
 import { toast, reportError } from "./toast";
 import { showConfirm } from "./confirm";
@@ -138,6 +139,7 @@ export function renderWorkspaceList(container: HTMLElement) {
           else collapsedGroups.add(key);
           persistCollapsed();
         });
+        makeInteractive(header);
         container.appendChild(header);
         continue;
       }
@@ -240,6 +242,7 @@ export function renderWorkspaceList(container: HTMLElement) {
         });
       });
 
+      makeInteractive(item);
       container.appendChild(item);
     }
   }
