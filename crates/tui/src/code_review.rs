@@ -42,6 +42,11 @@ pub struct EditingComment {
     pub body: String,
     pub body_cursor: usize,
     pub target: CommentTarget,
+    /// Body as of open — Esc on a modified body arms a one-shot confirm.
+    pub baseline: String,
+    /// Set when Esc was pressed with unsaved edits; the next Esc discards,
+    /// any other key disarms.
+    pub pending_discard: bool,
 }
 
 /// Persistent draft — survives overlay open/close, only cleared on submit or discard
@@ -121,6 +126,9 @@ pub struct CodeReviewState {
     /// Error message to display inside the submit overlay
     pub submit_error: Option<String>,
     pub loading: bool,
+    /// One-shot confirm for Ctrl+D in the submit overlay: first press arms,
+    /// the second discards the draft. Any other key disarms.
+    pub pending_discard_draft: bool,
 }
 
 impl CodeReviewState {
@@ -150,6 +158,7 @@ impl CodeReviewState {
             show_submit: false,
             submit_error: None,
             loading: false,
+            pending_discard_draft: false,
         }
     }
 
