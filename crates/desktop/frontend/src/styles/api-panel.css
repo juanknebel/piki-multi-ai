@@ -51,10 +51,10 @@
 }
 
 .api-status-loading { color: var(--text-muted); }
-.api-status-2xx { color: #3fb950; }
-.api-status-4xx { color: #e6a730; }
-.api-status-5xx { color: #f85149; }
-.api-status-error { color: #f85149; }
+.api-status-2xx { color: var(--success-color); }
+.api-status-4xx { color: var(--warning-color); }
+.api-status-5xx { color: var(--error-color); }
+.api-status-error { color: var(--error-color); }
 
 /* ── Split layout ───────────────────────────���─── */
 
@@ -229,7 +229,7 @@
 
 .api-search-current {
   background: rgba(230, 167, 48, 0.7);
-  outline: 1px solid #e6a730;
+  outline: 1px solid var(--warning-color);
 }
 
 /* ── Response ─────────────────────────────────── */
@@ -250,7 +250,7 @@
 }
 
 .api-response-error {
-  color: #f85149;
+  color: var(--error-color);
 }
 
 .api-response-section {
@@ -279,10 +279,10 @@
   background: var(--bg-tertiary);
 }
 
-.api-response-badge.api-status-2xx { color: #3fb950; }
-.api-response-badge.api-status-4xx { color: #e6a730; }
-.api-response-badge.api-status-5xx { color: #f85149; }
-.api-response-badge.api-status-error { color: #f85149; }
+.api-response-badge.api-status-2xx { color: var(--success-color); }
+.api-response-badge.api-status-4xx { color: var(--warning-color); }
+.api-response-badge.api-status-5xx { color: var(--error-color); }
+.api-response-badge.api-status-error { color: var(--error-color); }
 
 .api-response-method {
   font-weight: 600;
@@ -343,8 +343,8 @@
 /* ── JSON syntax ────────────────────────────── */
 
 .json-key { color: #39bae6; }
-.json-string { color: #3fb950; }
-.json-number { color: #e6a730; }
+.json-string { color: var(--success-color); }
+.json-number { color: var(--warning-color); }
 .json-bool { color: #d2a8ff; }
 .json-null { color: var(--text-muted); }
 

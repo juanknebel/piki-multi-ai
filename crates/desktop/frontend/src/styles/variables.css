@@ -72,6 +72,12 @@
 
   /* ── Git status ────────────────────────────────── */
   --git-modified: #d4a12e;
+  /* Semantic aliases — use these instead of raw hex in feature CSS */
+  --success-color: var(--git-added);
+  --error-color: var(--git-deleted);
+  --warning-color: var(--accent-warm);
+  /* Text painted on top of an accent-primary background */
+  --on-accent: #000;
   --git-added: #3fb950;
   --git-deleted: #f85149;
   --git-renamed: #3fb950;

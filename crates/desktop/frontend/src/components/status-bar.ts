@@ -12,10 +12,8 @@ export function renderStatusBar(container: HTMLElement) {
 
     // App name (clickable → About)
     const appName = document.createElement("div");
-    appName.className = "status-item clickable";
+    appName.className = "status-item clickable status-app-name";
     appName.textContent = "Piki Desktop";
-    appName.style.fontWeight = "600";
-    appName.style.color = "var(--accent-primary)";
     appName.addEventListener("click", showAboutDialog);
     container.appendChild(appName);
 

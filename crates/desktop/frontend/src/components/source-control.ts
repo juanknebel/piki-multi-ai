@@ -237,7 +237,7 @@ function renderLocalOriginPlaceholder(container: HTMLElement) {
   const empty = document.createElement("div");
   empty.className = "empty-message";
   empty.style.padding = "16px 20px";
-  empty.style.color = "var(--color-text-muted)";
+  empty.style.color = "var(--text-muted)";
   empty.style.lineHeight = "1.5";
   empty.textContent =
     "Source control is unavailable for local-folder workspaces. Recreate the workspace from a GitHub URL to enable git operations.";

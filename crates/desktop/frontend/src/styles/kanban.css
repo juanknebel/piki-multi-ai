@@ -280,7 +280,7 @@
 
 .priority-bug {
   background: rgba(248, 81, 73, 0.15);
-  color: #f85149;
+  color: var(--error-color);
 }
 
 .priority-high {
@@ -336,13 +336,13 @@
 
 .kanban-confirm-text {
   font-size: 10px;
-  color: #f85149;
+  color: var(--error-color);
   font-weight: 600;
 }
 
 .kanban-confirm-yes {
-  color: #f85149 !important;
-  border-color: #f85149 !important;
+  color: var(--error-color) !important;
+  border-color: var(--error-color) !important;
 }
 
 /* ── Empty state ─────────────────────────────── */

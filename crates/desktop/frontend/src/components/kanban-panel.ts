@@ -481,10 +481,10 @@ function showEditModal(inst: KanbanInstance, card: KanbanCard) {
       <label class="kanban-edit-label">ID</label>
       <input class="kanban-edit-input" type="text" value="${escAttr(card.id)}" readonly style="opacity:0.6;cursor:default" />
 
-      <label class="kanban-edit-label">Title <span style="color:var(--error-color,#e06c75)">(required)</span></label>
+      <label class="kanban-edit-label">Title <span style="color:var(--error-color)">(required)</span></label>
       <input class="kanban-edit-input" id="ke-title" type="text" value="${escAttr(card.title)}" />
 
-      <label class="kanban-edit-label">Project <span style="color:var(--error-color,#e06c75)">(required)</span></label>
+      <label class="kanban-edit-label">Project <span style="color:var(--error-color)">(required)</span></label>
       <input class="kanban-edit-input" id="ke-project" type="text" value="${escAttr(card.project)}" />
 
       <label class="kanban-edit-label">Priority</label>
@@ -572,10 +572,10 @@ function showNewCardModal(inst: KanbanInstance, columnId: string) {
       <button class="kanban-edit-close">&times;</button>
     </div>
     <div class="kanban-edit-body">
-      <label class="kanban-edit-label">Project <span style="color:var(--error-color,#e06c75)">(required)</span></label>
+      <label class="kanban-edit-label">Project <span style="color:var(--error-color)">(required)</span></label>
       <input class="kanban-edit-input" id="ke-project" type="text" value="" placeholder="e.g. HUMAN, INFRA, API" />
 
-      <label class="kanban-edit-label">Title <span style="color:var(--error-color,#e06c75)">(required)</span></label>
+      <label class="kanban-edit-label">Title <span style="color:var(--error-color)">(required)</span></label>
       <input class="kanban-edit-input" id="ke-title" type="text" value="New card" />
 
       <label class="kanban-edit-label">Priority</label>
