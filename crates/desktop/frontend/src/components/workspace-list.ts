@@ -1,6 +1,7 @@
 import { appState } from "../state";
 import * as ipc from "../ipc";
 import { toast } from "./toast";
+import { showConfirm } from "./confirm";
 import { createDropdown } from "./dropdown";
 import {
   showCreateWorktreeDialog,
@@ -286,58 +287,47 @@ async function showDeleteConfirm(idx: number, name: string) {
     }
   }
 
-  const overlay = document.createElement("div");
-  overlay.className = "ws-delete-confirm";
-  overlay.innerHTML = `
-    <div class="ws-delete-dialog">
+  const { overlay } = showConfirm({
+    bodyHtml: `
       <p>Delete <strong>${escapeHtml(name)}</strong>?</p>
       <p class="ws-delete-hint">This will remove the worktree and branch.</p>
       ${colDropdown ? '<div class="ws-delete-card-move"><label class="dialog-label">Move task card to:</label><span id="ws-delete-col-slot"></span></div>' : ""}
-      <div class="ws-delete-buttons">
-        <button class="dialog-btn dialog-btn-danger ws-confirm-yes">Delete</button>
-        <button class="dialog-btn dialog-btn-secondary ws-confirm-no">Cancel</button>
-      </div>
-    </div>
-  `;
+    `,
+    actions: [
+      {
+        label: "Delete",
+        kind: "danger",
+        isDefault: true,
+        onSelect: async () => {
+          // Move kanban card if user selected a column
+          if (cardId && boardPath && colDropdown) {
+            const targetCol = colDropdown.value;
+            if (targetCol) {
+              try {
+                await ipc.kanbanMoveCardByPath(boardPath, cardId, targetCol);
+              } catch {
+                // Non-critical
+              }
+            }
+          }
+          try {
+            await ipc.deleteWorkspace(idx);
+            appState.removeWorkspace(idx);
+            toast(`Deleted "${name}"`, "info");
+          } catch (err) {
+            toast(`Failed to delete: ${err}`, "error");
+          }
+        },
+      },
+      { label: "Cancel", kind: "secondary" },
+    ],
+  });
 
   // Mount dropdown if present
   if (colDropdown) {
     const slot = overlay.querySelector("#ws-delete-col-slot");
     if (slot) slot.replaceWith(colDropdown.container);
   }
-
-  overlay.querySelector(".ws-confirm-yes")!.addEventListener("click", async () => {
-    // Move kanban card if user selected a column
-    if (cardId && boardPath && colDropdown) {
-      const targetCol = colDropdown.value;
-      if (targetCol) {
-        try {
-          await ipc.kanbanMoveCardByPath(boardPath, cardId, targetCol);
-        } catch {
-          // Non-critical
-        }
-      }
-    }
-
-    overlay.remove();
-    try {
-      await ipc.deleteWorkspace(idx);
-      appState.removeWorkspace(idx);
-      toast(`Deleted "${name}"`, "info");
-    } catch (err) {
-      toast(`Failed to delete: ${err}`, "error");
-    }
-  });
-
-  overlay.querySelector(".ws-confirm-no")!.addEventListener("click", () => {
-    overlay.remove();
-  });
-
-  overlay.addEventListener("click", (e) => {
-    if (e.target === overlay) overlay.remove();
-  });
-
-  document.body.appendChild(overlay);
 }
 
 function getStatusClass(status: import("../types").WorkspaceStatus): string {

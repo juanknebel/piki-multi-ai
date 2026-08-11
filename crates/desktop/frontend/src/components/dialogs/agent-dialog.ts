@@ -1,6 +1,7 @@
 import { appState } from "../../state";
 import * as ipc from "../../ipc";
 import { toast } from "../toast";
+import { showConfirm } from "../confirm";
 import { createDropdown } from "../dropdown";
 import type { AgentInfo } from "../../ipc";
 
@@ -338,23 +339,16 @@ async function showImportDialog(onImported: () => void) {
 }
 
 function showDeleteConfirm(name: string, onConfirm: () => void) {
-  document.querySelector(".ws-delete-confirm")?.remove();
-  const overlay = document.createElement("div");
-  overlay.className = "ws-delete-confirm";
-  overlay.innerHTML = `
-    <div class="ws-delete-dialog">
+  showConfirm({
+    bodyHtml: `
       <p>Delete <strong>${esc(name)}</strong>?</p>
       <p class="ws-delete-hint">This cannot be undone.</p>
-      <div class="ws-delete-buttons">
-        <button class="dialog-btn dialog-btn-danger ws-confirm-yes">Delete</button>
-        <button class="dialog-btn dialog-btn-secondary ws-confirm-no">Cancel</button>
-      </div>
-    </div>
-  `;
-  overlay.querySelector(".ws-confirm-yes")!.addEventListener("click", () => { overlay.remove(); onConfirm(); });
-  overlay.querySelector(".ws-confirm-no")!.addEventListener("click", () => overlay.remove());
-  overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
-  document.body.appendChild(overlay);
+    `,
+    actions: [
+      { label: "Delete", kind: "danger", isDefault: true, onSelect: () => onConfirm() },
+      { label: "Cancel", kind: "secondary" },
+    ],
+  });
 }
 
 function esc(t: string): string {

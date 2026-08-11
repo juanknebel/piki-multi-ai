@@ -2,6 +2,7 @@ import "@xterm/xterm/css/xterm.css";
 import { appState } from "./state";
 import * as ipc from "./ipc";
 import { toast } from "./components/toast";
+import { showConfirm } from "./components/confirm";
 import { renderActivityBar } from "./components/activity-bar";
 import { initSidebar } from "./components/sidebar";
 import { initTerminalPanel, openTerminalSearch } from "./components/terminal-panel";
@@ -210,40 +211,18 @@ async function handleUndo() {
 }
 
 function showCloseConfirm(activeCount: number, onConfirm: () => void, onCancel: () => void) {
-  document.querySelector(".ws-delete-confirm")?.remove();
-
-  const overlay = document.createElement("div");
-  overlay.className = "ws-delete-confirm";
   const label = activeCount === 1 ? "1 terminal session is" : `${activeCount} terminal sessions are`;
-  overlay.innerHTML = `
-    <div class="ws-delete-dialog">
+  showConfirm({
+    bodyHtml: `
       <p>${label} still running.</p>
       <p class="ws-delete-hint">Close anyway?</p>
-      <div class="ws-delete-buttons">
-        <button class="dialog-btn dialog-btn-danger ws-confirm-yes">Close</button>
-        <button class="dialog-btn dialog-btn-secondary ws-confirm-no">Cancel</button>
-      </div>
-    </div>
-  `;
-
-  overlay.querySelector(".ws-confirm-yes")!.addEventListener("click", () => {
-    overlay.remove();
-    onConfirm();
+    `,
+    actions: [
+      { label: "Close", kind: "danger", isDefault: true, onSelect: () => onConfirm() },
+      { label: "Cancel", kind: "secondary", onSelect: () => onCancel() },
+    ],
+    onDismiss: onCancel,
   });
-
-  overlay.querySelector(".ws-confirm-no")!.addEventListener("click", () => {
-    overlay.remove();
-    onCancel();
-  });
-
-  overlay.addEventListener("click", (e) => {
-    if (e.target === overlay) {
-      overlay.remove();
-      onCancel();
-    }
-  });
-
-  document.body.appendChild(overlay);
 }
 
 // Disable browser context menu so the app feels native
