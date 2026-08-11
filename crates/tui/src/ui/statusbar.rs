@@ -37,17 +37,35 @@ pub(crate) fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
                 " SEARCH  [Enter] editor  [Esc] close".to_string(),
                 quiet,
             )],
-            AppMode::InlineEdit => vec![Span::styled(
-                format!(
-                    " EDIT: {}  [{}] save  [Esc] close",
-                    app.editing_file
-                        .as_ref()
-                        .map(|p| p.to_string_lossy().to_string())
-                        .unwrap_or_else(|| "?".to_string()),
-                    app.config.format_binding("ctrl-s"),
-                ),
-                quiet,
-            )],
+            AppMode::InlineEdit => {
+                if app.editor.as_ref().is_some_and(|e| e.pending_discard) {
+                    vec![Span::styled(
+                        format!(
+                            " Unsaved changes — [Esc] discard  [{}] save",
+                            app.config.format_binding("ctrl-s"),
+                        ),
+                        Style::default().fg(theme.error_fg).bg(theme.error_bg),
+                    )]
+                } else {
+                    let dirty = if app.editor.as_ref().is_some_and(|e| e.is_dirty()) {
+                        " ●"
+                    } else {
+                        ""
+                    };
+                    vec![Span::styled(
+                        format!(
+                            " EDIT: {}{}  [{}] save  [Esc] close",
+                            app.editing_file
+                                .as_ref()
+                                .map(|p| p.to_string_lossy().to_string())
+                                .unwrap_or_else(|| "?".to_string()),
+                            dirty,
+                            app.config.format_binding("ctrl-s"),
+                        ),
+                        quiet,
+                    )]
+                }
+            }
             _ => {
                 render_normal_status(frame, area, app);
                 return;

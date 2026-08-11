@@ -601,21 +601,40 @@ pub struct EditorState {
     pub cursor_row: usize,
     pub cursor_col: usize,
     pub scroll_offset: usize,
+    /// Buffer contents as of open/last save — `is_dirty` compares against it.
+    baseline: Vec<String>,
+    /// One-shot confirm: set when exit was pressed on a dirty buffer; the
+    /// next exit discards, any other key disarms.
+    pub pending_discard: bool,
 }
 
 impl EditorState {
     pub fn new(content: &str) -> Self {
         let lines: Vec<String> = content.lines().map(String::from).collect();
+        let lines = if lines.is_empty() {
+            vec![String::new()]
+        } else {
+            lines
+        };
         Self {
-            lines: if lines.is_empty() {
-                vec![String::new()]
-            } else {
-                lines
-            },
+            baseline: lines.clone(),
+            lines,
             cursor_row: 0,
             cursor_col: 0,
             scroll_offset: 0,
+            pending_discard: false,
         }
+    }
+
+    /// True when the buffer differs from the last opened/saved contents.
+    pub fn is_dirty(&self) -> bool {
+        self.lines != self.baseline
+    }
+
+    /// Re-baseline after a successful save.
+    pub fn mark_saved(&mut self) {
+        self.baseline = self.lines.clone();
+        self.pending_discard = false;
     }
 
     pub fn contents(&self) -> String {
