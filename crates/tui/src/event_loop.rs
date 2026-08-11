@@ -55,7 +55,10 @@ fn process_watcher_result(app: &mut App, result: app::WatcherResult) {
         match result.watcher {
             Ok(watcher) => ws.watcher = Some(watcher),
             Err(e) => {
-                app.status_message = Some(format!("Watcher error: {}", e));
+                app.set_toast(
+                    format!("Watcher error: {}", e),
+                    crate::app::ToastLevel::Error,
+                );
             }
         }
     }
@@ -112,7 +115,7 @@ pub(crate) async fn run(
 
     // Show preflight warnings in status bar
     if !preflight_warnings.is_empty() {
-        app.status_message = Some(preflight_warnings.join(" | "));
+        app.set_toast(preflight_warnings.join(" | "), crate::app::ToastLevel::Info);
     }
 
     // Compute real terminal dimensions for PTY spawning

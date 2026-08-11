@@ -1679,7 +1679,7 @@ impl App {
         let worktree_path = match self.current_workspace() {
             Some(ws) => ws.info.path.clone(),
             None => {
-                self.status_message = Some("No active workspace".into());
+                self.set_toast("No active workspace", ToastLevel::Info);
                 return;
             }
         };
@@ -1718,7 +1718,7 @@ impl App {
         let root = match self.current_workspace() {
             Some(ws) => ws.info.path.clone(),
             None => {
-                self.status_message = Some("No active workspace".into());
+                self.set_toast("No active workspace", ToastLevel::Info);
                 return;
             }
         };
@@ -1765,7 +1765,7 @@ impl App {
                 self.mode = AppMode::InlineEdit;
             }
             Err(e) => {
-                self.status_message = Some(format!("Cannot read file: {}", e));
+                self.set_toast(format!("Cannot read file: {}", e), ToastLevel::Error);
             }
         }
     }

@@ -121,10 +121,13 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
             let source_val = *source;
 
             if dir_raw.is_empty() {
-                app.status_message = Some(match source_val {
-                    NewWorkspaceSource::Local => "Folder is required".into(),
-                    NewWorkspaceSource::GitHub => "GitHub URL is required".into(),
-                });
+                app.set_toast(
+                    match source_val {
+                        NewWorkspaceSource::Local => "Folder is required",
+                        NewWorkspaceSource::GitHub => "GitHub URL is required",
+                    },
+                    crate::app::ToastLevel::Error,
+                );
                 return None;
             }
 
@@ -141,7 +144,10 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
                     };
                     let dir_path = PathBuf::from(&dir_str);
                     if !dir_path.exists() {
-                        app.status_message = Some(format!("Folder does not exist: {}", dir_str));
+                        app.set_toast(
+                            format!("Folder does not exist: {}", dir_str),
+                            crate::app::ToastLevel::Error,
+                        );
                         return None;
                     }
                     let ws_name = dir_path
@@ -149,8 +155,10 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
                         .map(|n| n.to_string_lossy().to_string())
                         .unwrap_or_default();
                     if ws_name.is_empty() {
-                        app.status_message =
-                            Some("Could not derive workspace name from folder".into());
+                        app.set_toast(
+                            "Could not derive workspace name from folder",
+                            crate::app::ToastLevel::Error,
+                        );
                         return None;
                     }
                     app.active_dialog = None;
@@ -169,7 +177,10 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
                     let url = dir_raw;
                     let dest_raw = destination.trim().to_string();
                     if dest_raw.is_empty() {
-                        app.status_message = Some("Destination folder is required".into());
+                        app.set_toast(
+                            "Destination folder is required",
+                            crate::app::ToastLevel::Error,
+                        );
                         return None;
                     }
                     let dest_expanded = if dest_raw.starts_with('~') {
@@ -184,7 +195,10 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
                     let dest_path = PathBuf::from(&dest_expanded);
                     let ws_name = parse_github_repo_name(&url).unwrap_or_default();
                     if ws_name.is_empty() {
-                        app.status_message = Some("Could not parse repo name from URL".into());
+                        app.set_toast(
+                            "Could not parse repo name from URL",
+                            crate::app::ToastLevel::Error,
+                        );
                         return None;
                     }
                     app.active_dialog = None;
@@ -327,13 +341,16 @@ fn handle_create_worktree_create_new(app: &mut App, key: KeyEvent) -> Option<Act
         KeyCode::Enter => {
             let branch = name.trim().to_string();
             if branch.is_empty() {
-                app.status_message = Some("Worktree name is required".into());
+                app.set_toast("Worktree name is required", crate::app::ToastLevel::Error);
                 return None;
             }
             let prompt_val = prompt.clone();
             let kanban_opt = opt_trimmed(kanban);
             let Some(parent) = app.workspaces.get(parent_idx) else {
-                app.status_message = Some("Parent workspace no longer exists".into());
+                app.set_toast(
+                    "Parent workspace no longer exists",
+                    crate::app::ToastLevel::Error,
+                );
                 app.active_dialog = None;
                 app.mode = AppMode::Normal;
                 app.active_pane = ActivePane::WorkspaceList;
@@ -1001,8 +1018,8 @@ pub(super) fn handle_logs_input(app: &mut App, key: KeyEvent) -> Option<Action> 
             );
             drop(buf);
             match crate::clipboard::copy_to_clipboard(&text) {
-                Ok(()) => app.status_message = Some("Log line copied".into()),
-                Err(e) => app.status_message = Some(format!("Copy failed: {e}")),
+                Ok(()) => app.set_toast("Log line copied", crate::app::ToastLevel::Success),
+                Err(e) => app.set_toast(format!("Copy failed: {e}"), crate::app::ToastLevel::Error),
             }
         }
     } else if key.code == KeyCode::Char('/') {

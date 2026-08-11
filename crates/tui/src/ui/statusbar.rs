@@ -27,10 +27,10 @@ pub(crate) fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
             )],
         }
     } else if let Some(msg) = &app.status_message {
-        vec![Span::styled(
-            format!(" ✗ {} ", msg),
-            Style::default().bg(theme.error_bg).fg(theme.error_fg),
-        )]
+        // Safety net: every message now goes through set_toast (which mirrors
+        // into status_message), so this renders neutrally — red stays
+        // reserved for actual errors.
+        vec![Span::styled(format!(" {} ", msg), quiet)]
     } else {
         match app.mode {
             AppMode::FuzzySearch => vec![Span::styled(

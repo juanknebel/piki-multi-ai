@@ -31,13 +31,16 @@ pub(super) fn handle_inline_edit_input(app: &mut App, key: KeyEvent) -> Option<s
             match std::fs::write(path, &content) {
                 Ok(()) => {
                     editor.mark_saved();
-                    app.status_message = Some(format!("Saved: {}", path.display()));
+                    app.set_toast(
+                        format!("Saved: {}", path.display()),
+                        crate::app::ToastLevel::Success,
+                    );
                     if let Some(ws) = app.current_workspace_mut() {
                         ws.dirty = true;
                     }
                 }
                 Err(e) => {
-                    app.status_message = Some(format!("Save error: {}", e));
+                    app.set_toast(format!("Save error: {}", e), crate::app::ToastLevel::Error);
                 }
             }
         }

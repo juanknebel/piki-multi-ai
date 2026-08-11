@@ -31,7 +31,7 @@ pub(super) async fn handle(
             let source_dir = match app.workspaces.get(source_ws) {
                 Some(ws) => ws.source_repo.clone(),
                 None => {
-                    app.status_message = Some("Source workspace not found".into());
+                    app.set_toast("Source workspace not found", crate::app::ToastLevel::Info);
                     return Ok(());
                 }
             };
@@ -219,7 +219,10 @@ pub(super) async fn handle(
                         match FileWatcher::new(ws.path.clone(), ws.name.clone()) {
                             Ok(watcher) => ws.watcher = Some(watcher),
                             Err(e) => {
-                                app.status_message = Some(format!("Watcher error: {}", e));
+                                app.set_toast(
+                                    format!("Watcher error: {}", e),
+                                    crate::app::ToastLevel::Error,
+                                );
                             }
                         }
 
@@ -257,7 +260,10 @@ pub(super) async fn handle(
                         }
                     }
                     Err(e) => {
-                        app.status_message = Some(format!("Dispatch failed: {}", e));
+                        app.set_toast(
+                            format!("Dispatch failed: {}", e),
+                            crate::app::ToastLevel::Error,
+                        );
                     }
                 }
             }
@@ -268,7 +274,10 @@ pub(super) async fn handle(
         } => {
             if let Some(ref storage) = app.storage.agent_profiles {
                 if let Err(e) = storage.save_agent(&profile) {
-                    app.status_message = Some(format!("Save agent failed: {}", e));
+                    app.set_toast(
+                        format!("Save agent failed: {}", e),
+                        crate::app::ToastLevel::Error,
+                    );
                 } else {
                     // Reload agents for this project
                     if let Ok(agents) = storage.load_agents(&source_repo) {
@@ -285,7 +294,10 @@ pub(super) async fn handle(
             let repo = app.current_workspace().map(|ws| ws.source_repo.clone());
             if let Some(ref storage) = app.storage.agent_profiles {
                 if let Err(e) = storage.delete_agent(id) {
-                    app.status_message = Some(format!("Delete agent failed: {}", e));
+                    app.set_toast(
+                        format!("Delete agent failed: {}", e),
+                        crate::app::ToastLevel::Error,
+                    );
                 } else {
                     if let Some(ref repo) = repo
                         && let Ok(agents) = storage.load_agents(repo)
@@ -327,7 +339,7 @@ pub(super) async fn handle(
                         app.set_toast(format!("Agent synced: {}", name), ToastLevel::Success);
                     }
                     Err(e) => {
-                        app.status_message = Some(format!("Sync failed: {}", e));
+                        app.set_toast(format!("Sync failed: {}", e), crate::app::ToastLevel::Error);
                     }
                 }
             }

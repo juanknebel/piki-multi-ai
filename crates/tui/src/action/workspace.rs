@@ -27,7 +27,10 @@ fn finish_workspace_creation(app: &mut App, mut info: piki_core::WorkspaceInfo) 
             ws.watcher = Some(watcher);
         }
         Err(e) => {
-            app.status_message = Some(format!("Watcher error: {}", e));
+            app.set_toast(
+                format!("Watcher error: {}", e),
+                crate::app::ToastLevel::Error,
+            );
         }
     }
 
@@ -63,7 +66,7 @@ pub(super) async fn handle(
             match result {
                 Ok(info) => finish_workspace_creation(app, info),
                 Err(e) => {
-                    app.status_message = Some(format!("Error: {}", e));
+                    app.set_toast(format!("Error: {}", e), crate::app::ToastLevel::Error);
                 }
             }
         }
@@ -88,7 +91,7 @@ pub(super) async fn handle(
             match result {
                 Ok(info) => finish_workspace_creation(app, info),
                 Err(e) => {
-                    app.status_message = Some(format!("Error: {}", e));
+                    app.set_toast(format!("Error: {}", e), crate::app::ToastLevel::Error);
                 }
             }
         }
@@ -104,7 +107,7 @@ pub(super) async fn handle(
                     .filter(|w| !app.workspaces.iter().any(|ws| ws.info.path == w.path))
                     .collect(),
                 Err(e) => {
-                    app.status_message = Some(format!("Error: {}", e));
+                    app.set_toast(format!("Error: {}", e), crate::app::ToastLevel::Error);
                     Vec::new()
                 }
             };
@@ -128,7 +131,10 @@ pub(super) async fn handle(
             branch,
         } => {
             let Some(parent) = app.workspaces.get(parent_idx) else {
-                app.status_message = Some("Parent workspace no longer exists".into());
+                app.set_toast(
+                    "Parent workspace no longer exists",
+                    crate::app::ToastLevel::Error,
+                );
                 return Ok(());
             };
             let source_repo = parent.info.source_repo.clone();
@@ -139,7 +145,7 @@ pub(super) async fn handle(
             match result {
                 Ok(info) => finish_workspace_creation(app, info),
                 Err(e) => {
-                    app.status_message = Some(format!("Error: {}", e));
+                    app.set_toast(format!("Error: {}", e), crate::app::ToastLevel::Error);
                 }
             }
         }
@@ -250,7 +256,7 @@ pub(super) async fn handle(
                             true
                         }
                         Err(e) => {
-                            app.status_message = Some(format!("Error: {}", e));
+                            app.set_toast(format!("Error: {}", e), crate::app::ToastLevel::Error);
                             false
                         }
                     }

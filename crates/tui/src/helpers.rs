@@ -181,10 +181,10 @@ pub(crate) fn copy_visible_terminal(app: &mut App) {
         drop(guard);
         match clipboard::copy_to_clipboard(&text) {
             Ok(()) => {
-                app.status_message = Some("Terminal content copied".into());
+                app.set_toast("Terminal content copied", crate::app::ToastLevel::Success);
             }
             Err(e) => {
-                app.status_message = Some(format!("Copy failed: {}", e));
+                app.set_toast(format!("Copy failed: {}", e), crate::app::ToastLevel::Error);
             }
         }
     }

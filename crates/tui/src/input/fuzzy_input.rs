@@ -28,7 +28,7 @@ pub(super) fn handle_fuzzy_search_input(app: &mut App, key: KeyEvent) -> Option<
     if cfg.matches_fuzzy(key, "markdown") {
         let path = selected_full_path(app)?;
         if !is_markdown(&path) {
-            app.status_message = Some("Not a markdown file".to_string());
+            app.set_toast("Not a markdown file", crate::app::ToastLevel::Error);
             return None;
         }
         app.fuzzy = None;
@@ -40,7 +40,7 @@ pub(super) fn handle_fuzzy_search_input(app: &mut App, key: KeyEvent) -> Option<
     if cfg.matches_fuzzy(key, "mdr") {
         let path = selected_full_path(app)?;
         if !is_markdown(&path) {
-            app.status_message = Some("Not a markdown file".to_string());
+            app.set_toast("Not a markdown file", crate::app::ToastLevel::Error);
             return None;
         }
         return Some(Action::OpenMdr(path));

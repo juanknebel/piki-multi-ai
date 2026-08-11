@@ -90,6 +90,9 @@ fn execute_palette_command(app: &mut App, id: &str, switch_idx: Option<usize>) -
     if super::APP_ACTIONS.contains(&id) {
         return super::dispatch_app_action(app, id);
     }
-    app.status_message = Some(format!("Unknown command: {}", id));
+    app.set_toast(
+        format!("Unknown command: {}", id),
+        crate::app::ToastLevel::Error,
+    );
     None
 }

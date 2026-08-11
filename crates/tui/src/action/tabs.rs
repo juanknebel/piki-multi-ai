@@ -114,7 +114,10 @@ pub(super) async fn handle(
                 app.active_pane = crate::app::ActivePane::MainPanel;
                 match spawn_error {
                     Some(err) => app.set_toast(err, crate::app::ToastLevel::Error),
-                    None => app.status_message = Some(format!("Opened {} tab", provider.label())),
+                    None => app.set_toast(
+                        format!("Opened {} tab", provider.label()),
+                        crate::app::ToastLevel::Success,
+                    ),
                 }
             }
 
@@ -140,11 +143,14 @@ pub(super) async fn handle(
                 if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
                     ws.add_markdown_tab(label.clone(), content, Some(&app.syntax));
                     app.active_pane = crate::app::ActivePane::MainPanel;
-                    app.status_message = Some(format!("Opened {}", label));
+                    app.set_toast(format!("Opened {}", label), crate::app::ToastLevel::Success);
                 }
             }
             Err(e) => {
-                app.status_message = Some(format!("Failed to read file: {}", e));
+                app.set_toast(
+                    format!("Failed to read file: {}", e),
+                    crate::app::ToastLevel::Error,
+                );
             }
         },
         Action::OpenMdr(path) => {
@@ -167,10 +173,16 @@ pub(super) async fn handle(
             )?;
             match status {
                 Ok(s) if s.success() => {
-                    app.status_message = Some(format!("mdr: {}", path.display()));
+                    app.set_toast(
+                        format!("mdr: {}", path.display()),
+                        crate::app::ToastLevel::Info,
+                    );
                 }
                 Ok(s) => {
-                    app.status_message = Some(format!("mdr exited with: {}", s));
+                    app.set_toast(
+                        format!("mdr exited with: {}", s),
+                        crate::app::ToastLevel::Info,
+                    );
                 }
                 Err(_) => {
                     app.status_message =
