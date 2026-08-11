@@ -36,13 +36,16 @@
       <nav id="menu-bar"></nav>
       <aside id="activity-bar"></aside>
       <div id="sidebar">
-        <div id="explorer-view" style="display:flex;flex-direction:column;height:100%">
-          <section id="workspace-list"></section>
-          <div id="agents-resize-h"></div>
-          <div id="agents-view"></div>
+        <div id="sidebar-views">
+          <div id="explorer-view" style="display:flex;flex-direction:column;height:100%">
+            <section id="workspace-list"></section>
+          </div>
+          <div id="files-view" style="display:none;flex-direction:column;height:100%"></div>
+          <div id="source-control-view" style="display:none"></div>
         </div>
-        <div id="files-view" style="display:none;flex-direction:column;height:100%"></div>
-        <div id="source-control-view" style="display:none"></div>
+        <!-- Agents panel: docked below whichever view is active, ALWAYS visible -->
+        <div id="agents-resize-h"></div>
+        <div id="agents-view"></div>
       </div>
       <div id="sidebar-resize-v"></div>
       <div id="editor-area">

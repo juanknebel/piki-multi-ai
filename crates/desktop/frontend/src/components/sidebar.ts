@@ -9,12 +9,12 @@ import { showAgentManager } from "./dialogs/agent-dialog";
 import { openWebPreviewTab } from "./web-preview-panel";
 
 /** Set an explicit Agents-panel height (px), replacing the default 40% cap.
- *  Clamped so neither the panel nor the workspace list can be squeezed out. */
+ *  Clamped so neither the panel nor the active view can be squeezed out. */
 function applyAgentsPanelHeight(px: number) {
   const view = document.getElementById("agents-view");
-  const explorer = document.getElementById("explorer-view");
-  if (!view || !explorer) return;
-  const max = Math.max(64, (explorer.clientHeight || window.innerHeight) * 0.75);
+  const sidebar = document.getElementById("sidebar");
+  if (!view || !sidebar) return;
+  const max = Math.max(64, (sidebar.clientHeight || window.innerHeight) * 0.75);
   const clamped = Math.max(32, Math.min(max, px));
   view.style.height = `${clamped}px`;
   view.style.maxHeight = "none";
@@ -44,8 +44,9 @@ export async function initSidebar() {
   renderWorkspaceList(workspaceList);
   renderFileTree(filesView);
   renderSourceControl(scView);
-  // Always-visible Agents panel docked below the workspace list (same
-  // layout as the TUI's bottom-left pane) — not a switchable view.
+  // Agents panel docked at the bottom of the sidebar, below whichever view
+  // is active (same layout as the TUI's bottom-left pane) — ALWAYS visible,
+  // never a switchable view.
   renderAgentsPanel(agentsView);
 
   // Track last sidebar view so we can restore when a non-sidebar action triggers

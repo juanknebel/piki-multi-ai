@@ -59,6 +59,16 @@
   background: var(--sidebar-bg);
 }
 
+/* Switchable views (Explorer / Files / Source Control) share the space
+   above the always-visible Agents panel. */
+#sidebar-views {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 #explorer-view {
   display: flex;
   flex-direction: column;
@@ -70,9 +80,10 @@
   overflow-y: auto;
 }
 
-/* Agents panel docked below the workspace list (TUI bottom-left pane).
-   Defaults to at most 40% of the sidebar; the drag handle above it sets an
-   explicit height (persisted), which replaces the cap. Its own list scrolls. */
+/* Agents panel docked at the bottom of the sidebar, below whichever view is
+   active (TUI bottom-left pane) — ALWAYS visible. Defaults to at most 40% of
+   the sidebar; the drag handle above it sets an explicit height (persisted),
+   which replaces the cap. Its own list scrolls. */
 #agents-view {
   display: flex;
   flex-direction: column;
