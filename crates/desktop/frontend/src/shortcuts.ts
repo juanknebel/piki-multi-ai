@@ -224,7 +224,10 @@ function parseCombo(combo: string): { ctrl: boolean; shift: boolean; alt: boolea
 
 function matchesEvent(e: KeyboardEvent, combo: string): boolean {
   const c = parseCombo(combo);
-  if (e.shiftKey !== c.shift) return false;
+  // Printable non-alphanumeric keys (?, {, }, …) may need Shift to produce
+  // on some layouts — match on the produced character, not the modifier.
+  const shiftAgnostic = c.key.length === 1 && !/[a-z0-9]/i.test(c.key);
+  if (!shiftAgnostic && e.shiftKey !== c.shift) return false;
 
   if (isMac) {
     // On macOS, both Ctrl and Alt bindings map to Cmd (Meta).
