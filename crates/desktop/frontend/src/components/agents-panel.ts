@@ -52,6 +52,8 @@ export function renderAgentsPanel(container: HTMLElement) {
   }
 
   function render(rows: AgentRow[]) {
+    // Agent events rebuild the list continuously; keep the scroll position.
+    const prevScroll = list.scrollTop;
     list.innerHTML = "";
     if (rows.length === 0) {
       const empty = document.createElement("div");
@@ -93,6 +95,7 @@ export function renderAgentsPanel(container: HTMLElement) {
       makeInteractive(el);
       list.appendChild(el);
     }
+    list.scrollTop = prevScroll;
   }
 
   async function jumpTo(row: AgentRow) {

@@ -63,10 +63,14 @@ export function renderSourceControl(container: HTMLElement) {
     const staged = files.filter((f) => STAGED_STATUSES.includes(f.status));
     const unstaged = files.filter((f) => UNSTAGED_STATUSES.includes(f.status));
 
-    // Preserve commit message before clearing the DOM
+    // Preserve commit message (and its caret) before clearing the DOM
     const existingTextarea = container.querySelector<HTMLTextAreaElement>(".sc-commit-input");
+    let savedSelection: [number, number] | null = null;
+    let hadTextareaFocus = false;
     if (existingTextarea) {
       savedCommitMessage = existingTextarea.value;
+      savedSelection = [existingTextarea.selectionStart, existingTextarea.selectionEnd];
+      hadTextareaFocus = document.activeElement === existingTextarea;
     }
 
     container.innerHTML = "";
@@ -117,9 +121,11 @@ export function renderSourceControl(container: HTMLElement) {
     const textarea = commitArea.querySelector<HTMLTextAreaElement>(".sc-commit-input")!;
     const commitBtn = commitArea.querySelector<HTMLButtonElement>(".sc-commit-btn")!;
 
-    // Restore saved commit message
+    // Restore saved commit message, caret, and focus
     if (savedCommitMessage) {
       textarea.value = savedCommitMessage;
+      if (savedSelection) textarea.setSelectionRange(savedSelection[0], savedSelection[1]);
+      if (hadTextareaFocus) textarea.focus();
     }
 
     textarea.addEventListener("input", () => {

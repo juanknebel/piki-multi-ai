@@ -100,6 +100,8 @@ export function renderWorkspaceList(container: HTMLElement) {
     const workspaces = appState.workspaces;
     const activeIdx = appState.activeWorkspace;
 
+    // Frequent agent events rebuild the list; keep the scroll position.
+    const prevScroll = container.scrollTop;
     container.innerHTML = "";
 
     // Header with create button
@@ -245,6 +247,7 @@ export function renderWorkspaceList(container: HTMLElement) {
       makeInteractive(item);
       container.appendChild(item);
     }
+    container.scrollTop = prevScroll;
   }
 
   appState.on("workspaces-changed", () => void refreshRows());

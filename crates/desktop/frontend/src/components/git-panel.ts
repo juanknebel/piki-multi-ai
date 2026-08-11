@@ -65,7 +65,12 @@ export function renderGitPanel(container: HTMLElement) {
 
       item.addEventListener("click", () => {
         selectedIdx = idx;
-        render();
+        // Move the highlight in place — a full re-render would drop scroll
+        // position and hover state just to switch a class.
+        container.querySelectorAll(".file-item.selected").forEach((el) =>
+          el.classList.remove("selected"),
+        );
+        item.classList.add("selected");
       });
 
       // Wire up action buttons
