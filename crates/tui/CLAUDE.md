@@ -92,6 +92,11 @@ Conventions:
 
 ## Conventions
 
+- **Messages always go through `app.set_toast(msg, ToastLevel::…)`** — never assign `app.status_message` directly. A bare `status_message` has no expiry timer and renders as an unstyled fallback; `set_toast` carries severity (Error persists 5s, Info/Success 3s) and the status bar styles by level. Toasts deliberately SURVIVE keystrokes (they expire on their timer) — do not reintroduce clear-on-any-key. Detached tasks with no `&mut App` route errors through `app.status_tx` (the event loop toasts them; see `persist_workspaces`).
+- **Destructive discards use the one-shot confirm idiom**, not a modal: a `pending_*` flag on the owning state, armed on the first press *only when there is something to lose*, the footer/status bar prompts, the same key confirms, any other key disarms. Existing examples: chat clear (`ChatPanelState.pending_clear`), inline-editor exit (`EditorState.pending_discard`), code-review draft discard (`CodeReviewState.pending_discard_draft`) and comment editing (`EditingComment.pending_discard`, with a `baseline` to detect dirty). Reuse the pattern for new destructive keys.
+- **Tab bar geometry lives in `ui/subtabs.rs::layout()`** — it computes the visible window around the active tab (with `‹N`/`N›` overflow indicators) and is the single source for both rendering and `helpers::subtab_index_at` mouse hit-testing. Never duplicate per-tab width math.
+- **Chat stream lifecycle**: the spawn's `AbortHandle` is stored in `ChatPanelState.stream_abort` and every stream/agent event stamps `last_stream_activity`; the event-loop tick enforces `CHAT_STREAM_TIMEOUT` (60s no-event → `chat_stop_stream()` + error toast). New stream-producing spawns must store their handle the same way or Ctrl+C/watchdog can't reach them.
+- The command palette persists a recently-used list (`palette_mru` in ui_prefs, `command_palette.rs::{load_mru, bump_mru}`); MRU order only biases the empty-query view — typed queries rank purely by nucleo score.
 - Render functions are pure: `fn(frame, area, &App)` — no side effects.
 - Use `StatefulWidget` when a widget needs scroll state or selection.
 - Prefer `Line::from(vec![spans...])` for styled text.

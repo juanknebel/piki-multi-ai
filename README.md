@@ -526,7 +526,7 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 | Key | Action |
 |-----|--------|
 | `Ctrl+s` | Save file |
-| `Esc` | Close editor (discard unsaved changes) |
+| `Esc` | Close editor (with unsaved changes, a second `Esc` confirms the discard) |
 | Arrow keys | Move cursor |
 | `Tab` | Insert 4 spaces |
 
