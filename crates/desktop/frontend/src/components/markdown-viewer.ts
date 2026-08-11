@@ -181,8 +181,9 @@ export async function showMarkdown(filePath: string) {
   backdrop.focus();
 }
 
-/** Render markdown source to HTML via marked (GFM) + highlight.js fences. */
-function renderMarkdown(src: string): string {
+/** Render markdown source to HTML via marked (GFM) + highlight.js fences.
+ *  Shared with the chat panel so assistant replies render identically. */
+export function renderMarkdown(src: string): string {
   // `marked.parse` is synchronous when no async extensions are registered;
   // the Marked typings still surface a Promise type, so we coerce. The cast
   // is safe because we only configure synchronous extensions above.

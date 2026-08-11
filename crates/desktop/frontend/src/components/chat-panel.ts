@@ -1,6 +1,7 @@
 import * as ipc from "../ipc";
 import { showConfirm } from "./confirm";
 import { toast } from "./toast";
+import { renderMarkdown } from "./markdown-viewer";
 import { createDropdown, type DropdownHandle } from "./dropdown";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 
@@ -111,7 +112,15 @@ export async function initChatPanel(el: HTMLElement) {
   sendBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
     <path d="M2 8l10-5-3 5 3 5z" fill="currentColor"/>
   </svg>`;
-  sendBtn.addEventListener("click", sendMessage);
+  sendBtn.addEventListener("click", () => {
+    if (streaming) {
+      // The button doubles as Stop while a reply streams.
+      ipc.chatStop().catch(() => {});
+      onStreamEnd();
+    } else {
+      void sendMessage();
+    }
+  });
   inputArea.appendChild(sendBtn);
 
   container.appendChild(inputArea);
@@ -226,9 +235,12 @@ async function sendMessage() {
   autoResize();
   renderMessages();
 
-  // Start streaming
+  // Start streaming — the send button becomes a Stop button.
   streaming = true;
-  sendBtn.disabled = true;
+  sendBtn.title = "Stop";
+  sendBtn.classList.add("streaming");
+  sendBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8" fill="currentColor"/></svg>`;
+  armWatchdog();
 
   // Create streaming placeholder
   streamingEl = document.createElement("div");
@@ -265,9 +277,12 @@ function onToken(event: { content: string; done: boolean }) {
       messages.push({ role: "assistant", content: text });
     }
     onStreamEnd();
+    // Re-render so the finished reply gets its markdown formatting.
+    renderMessages();
     return;
   }
 
+  armWatchdog();
   if (streamingEl) {
     const contentEl = streamingEl.querySelector(".chat-msg-content")!;
     // Insert text before the cursor
@@ -282,9 +297,31 @@ function onToken(event: { content: string; done: boolean }) {
   }
 }
 
+/** No tokens for this long while streaming → assume the stream died. */
+const STREAM_TIMEOUT_MS = 60_000;
+let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
+
+function armWatchdog() {
+  if (watchdogTimer) clearTimeout(watchdogTimer);
+  watchdogTimer = setTimeout(() => {
+    if (!streaming) return;
+    onStreamEnd();
+    toast("Chat stream timed out", "error");
+  }, STREAM_TIMEOUT_MS);
+}
+
 function onStreamEnd() {
   streaming = false;
+  if (watchdogTimer) {
+    clearTimeout(watchdogTimer);
+    watchdogTimer = null;
+  }
   sendBtn.disabled = false;
+  sendBtn.title = "Send (Enter)";
+  sendBtn.classList.remove("streaming");
+  sendBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <path d="M2 8l10-5-3 5 3 5z" fill="currentColor"/>
+  </svg>`;
   streamingEl = null;
   inputEl.focus();
 }
@@ -326,13 +363,34 @@ function renderMessages() {
   for (const msg of messages) {
     const el = document.createElement("div");
     el.className = `chat-msg ${msg.role}`;
+    const body =
+      msg.role === "assistant" ? renderMarkdown(msg.content) : escapeHtml(msg.content);
     el.innerHTML = `
       <span class="chat-msg-role">${msg.role}</span>
-      <div class="chat-msg-content">${escapeHtml(msg.content)}</div>
+      <div class="chat-msg-content">${body}</div>
     `;
+    if (msg.role === "assistant") addCopyButtons(el);
     messagesEl.appendChild(el);
   }
   scrollToBottom();
+}
+
+/** Hover copy button on each fenced code block of an assistant message. */
+function addCopyButtons(el: HTMLElement) {
+  el.querySelectorAll("pre").forEach((pre) => {
+    const btn = document.createElement("button");
+    btn.className = "chat-code-copy";
+    btn.title = "Copy code";
+    btn.textContent = "Copy";
+    btn.addEventListener("click", () => {
+      const code = pre.querySelector("code")?.textContent ?? pre.textContent ?? "";
+      ipc
+        .clipboardCopy(code)
+        .then(() => toast("Copied to clipboard", "success"))
+        .catch(() => {});
+    });
+    pre.appendChild(btn);
+  });
 }
 
 function renderEmpty() {
