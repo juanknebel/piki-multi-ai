@@ -56,6 +56,9 @@ fn execute_palette_command(app: &mut App, id: &str, switch_idx: Option<usize>) -
         return None;
     }
 
+    // Remember the use so the empty-query palette lists recent commands first.
+    crate::command_palette::bump_mru(&app.storage, id);
+
     // Commands with hardcoded keys (not in config)
     match id {
         "manage_agents" => {

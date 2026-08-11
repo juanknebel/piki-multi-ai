@@ -51,12 +51,45 @@ fn all_commands() -> Vec<PaletteCommand> {
         .collect()
 }
 
-/// Create a new CommandPaletteState with all commands and workspace switch entries.
-pub fn create_state(workspaces: &[Workspace]) -> CommandPaletteState {
+/// Cap on the persisted recently-used command list.
+const MRU_CAP: usize = 20;
+
+/// Recently-used command ids, most recent first (persisted via ui_prefs).
+pub fn load_mru(storage: &piki_core::storage::AppStorage) -> Vec<String> {
+    storage
+        .ui_prefs
+        .as_ref()
+        .and_then(|p| p.get_preference("palette_mru").ok().flatten())
+        .and_then(|json| serde_json::from_str::<Vec<String>>(&json).ok())
+        .unwrap_or_default()
+}
+
+/// Record a command execution: move `id` to the front of the persisted list.
+pub fn bump_mru(storage: &piki_core::storage::AppStorage, id: &str) {
+    let Some(prefs) = storage.ui_prefs.as_ref() else {
+        return;
+    };
+    let mut mru = load_mru(storage);
+    mru.retain(|k| k != id);
+    mru.insert(0, id.to_string());
+    mru.truncate(MRU_CAP);
+    if let Ok(json) = serde_json::to_string(&mru) {
+        let _ = prefs.set_preference("palette_mru", &json);
+    }
+}
+
+/// Create a new CommandPaletteState with all commands and workspace switch
+/// entries. `mru` biases the empty-query order: recently used commands are
+/// injected (and therefore listed) first.
+pub fn create_state(workspaces: &[Workspace], mru: &[String]) -> CommandPaletteState {
     let nucleo = nucleo::Nucleo::new(nucleo::Config::DEFAULT, Arc::new(|| {}), Some(1), 1);
     let injector = nucleo.injector();
 
-    for cmd in all_commands() {
+    let rank = |id: &str| -> usize { mru.iter().position(|k| k == id).unwrap_or(usize::MAX) };
+    let mut commands = all_commands();
+    commands.sort_by_key(|c| rank(c.id));
+
+    for cmd in commands {
         let search_text: nucleo::Utf32String = format!("{}: {}", cmd.category, cmd.label).into();
         injector.push(cmd, |_cmd, cols| {
             cols[0] = search_text;

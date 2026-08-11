@@ -1734,7 +1734,8 @@ impl App {
 
     /// Open the command palette overlay.
     pub fn open_command_palette(&mut self) {
-        self.command_palette = Some(crate::command_palette::create_state(&self.workspaces));
+        let mru = crate::command_palette::load_mru(&self.storage);
+        self.command_palette = Some(crate::command_palette::create_state(&self.workspaces, &mru));
         self.mode = AppMode::CommandPalette;
     }
 
