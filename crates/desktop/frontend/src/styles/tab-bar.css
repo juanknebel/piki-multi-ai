@@ -14,8 +14,14 @@
   min-height: var(--tab-height);
 }
 
+/* Thin but visible, so overflow is discoverable with many tabs. */
 .ws-tab-bar::-webkit-scrollbar {
-  height: 0;
+  height: 3px;
+}
+
+.ws-tab-bar::-webkit-scrollbar-thumb {
+  background: var(--border-primary);
+  border-radius: 2px;
 }
 
 .ws-tab {

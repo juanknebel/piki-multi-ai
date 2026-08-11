@@ -105,6 +105,12 @@ export function renderWorkspaceTabBar(container: HTMLElement) {
   addBtn.textContent = "+";
   addBtn.addEventListener("click", () => appState.newBlankTab());
   container.appendChild(addBtn);
+
+  // With many tabs the bar scrolls; keep the active tab visible after
+  // switching via shortcut/palette.
+  container
+    .querySelector<HTMLElement>(".ws-tab.active")
+    ?.scrollIntoView({ inline: "nearest", block: "nearest" });
 }
 
 /** Close the active top-level tab (used by the menu bar / shortcut). */

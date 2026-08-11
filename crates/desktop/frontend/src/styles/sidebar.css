@@ -423,3 +423,13 @@
   margin-left: 6px;
   font-size: 10px;
 }
+
+/* Empty-state call to action (workspace list / agents panel) */
+.empty-message p,
+.agents-empty p {
+  margin: 0 0 8px;
+}
+
+.empty-cta {
+  font-size: 11px;
+}

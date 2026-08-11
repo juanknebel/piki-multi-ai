@@ -44,12 +44,16 @@ export function renderWorkspaceList(container: HTMLElement) {
     })
     .catch(() => {});
 
+  let rowsError = false;
+
   async function refreshRows() {
     try {
       rows = await ipc.sidebarRows();
+      rowsError = false;
     } catch (err) {
       console.error("Failed to load sidebar rows:", err);
       rows = [];
+      rowsError = true;
     }
     render();
   }
@@ -120,8 +124,28 @@ export function renderWorkspaceList(container: HTMLElement) {
     if (workspaces.length === 0) {
       const empty = document.createElement("div");
       empty.className = "empty-message";
-      empty.textContent = "No workspaces yet";
+      empty.innerHTML = `
+        <p>No workspaces yet</p>
+        <button class="dialog-btn dialog-btn-primary empty-cta">Create Workspace</button>
+      `;
+      empty.querySelector(".empty-cta")!.addEventListener("click", () => {
+        showWorkspaceDialog({ mode: "create" });
+      });
       container.appendChild(empty);
+      return;
+    }
+
+    // Workspaces exist but the grouped rows failed to load — say so instead
+    // of presenting an inexplicably empty sidebar.
+    if (rows.length === 0 && rowsError) {
+      const error = document.createElement("div");
+      error.className = "empty-message";
+      error.innerHTML = `
+        <p>Couldn't load workspaces</p>
+        <button class="dialog-btn dialog-btn-secondary empty-cta">Retry</button>
+      `;
+      error.querySelector(".empty-cta")!.addEventListener("click", () => void refreshRows());
+      container.appendChild(error);
       return;
     }
 

@@ -58,7 +58,11 @@ export function renderAgentsPanel(container: HTMLElement) {
     if (rows.length === 0) {
       const empty = document.createElement("div");
       empty.className = "agents-empty";
-      empty.textContent = "No agents running";
+      empty.innerHTML = `
+        <p>No agents running</p>
+        <button class="dialog-btn dialog-btn-secondary empty-cta">Dispatch Agent</button>
+      `;
+      empty.querySelector(".empty-cta")!.addEventListener("click", () => showDispatchDialog());
       list.appendChild(empty);
       return;
     }
