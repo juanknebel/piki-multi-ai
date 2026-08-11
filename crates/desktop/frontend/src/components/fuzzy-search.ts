@@ -1,4 +1,5 @@
 import { appState } from "../state";
+import { fuzzyScorePath, mruBump, mruRank } from "./fuzzy";
 import * as ipc from "../ipc";
 import { showFileViewer } from "./file-viewer";
 import { showMarkdown } from "./markdown-viewer";
@@ -40,7 +41,8 @@ export async function openFuzzySearch() {
   const input = palette.querySelector<HTMLInputElement>(".palette-input")!;
   const results = palette.querySelector<HTMLElement>(".palette-results")!;
   let selectedIdx = 0;
-  let filtered: string[] = allFiles.slice(0, 50);
+  const byRecency = (a: string, b: string) => mruRank("files", a) - mruRank("files", b);
+  let filtered: string[] = [...allFiles].sort(byRecency);
 
   function renderResults() {
     results.innerHTML = "";
@@ -89,17 +91,22 @@ export async function openFuzzySearch() {
   }
 
   function filter() {
-    const q = input.value.toLowerCase();
+    const q = input.value.trim();
     if (!q) {
-      filtered = allFiles.slice(0, 200);
+      filtered = [...allFiles].sort(byRecency);
     } else {
-      filtered = allFiles.filter((f) => f.toLowerCase().includes(q));
+      filtered = allFiles
+        .map((f) => ({ f, score: fuzzyScorePath(q, f) }))
+        .filter((e): e is { f: string; score: number } => e.score !== null)
+        .sort((a, b) => b.score - a.score || byRecency(a.f, b.f))
+        .map((e) => e.f);
     }
     selectedIdx = 0;
     renderResults();
   }
 
   function selectFile(file: string) {
+    mruBump("files", file);
     closeFuzzySearch();
     if (file.endsWith(".md") || file.endsWith(".markdown")) {
       showMarkdown(file);
@@ -109,6 +116,7 @@ export async function openFuzzySearch() {
   }
 
   async function editFile(file: string) {
+    mruBump("files", file);
     closeFuzzySearch();
     try {
       const tabId = await ipc.spawnEditorTab(wsIdx, file);
