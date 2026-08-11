@@ -672,6 +672,9 @@
   border: 1px solid rgba(255, 255, 255, 0.06);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
+  /* Multi-line error messages keep their line breaks */
+  white-space: pre-line;
+  cursor: pointer;
 }
 
 .toast.info {
