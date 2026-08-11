@@ -16,7 +16,7 @@ export function showMergeDialog() {
     <div class="dialog" style="max-width:480px">
       <div class="dialog-header">
         <span class="dialog-title">Merge / Rebase</span>
-        <button class="dialog-close">×</button>
+        <button class="dialog-close" title="Close" aria-label="Close">×</button>
       </div>
       <div class="dialog-body">
         <p style="font-size:13px;color:var(--text-primary);margin-bottom:8px">
@@ -104,7 +104,7 @@ function showConflictResolution(conflicts: string[]) {
     el.innerHTML = `
       <div class="dialog-header">
         <span class="dialog-title" style="color:var(--git-conflicted)">Conflict Resolution</span>
-        <button class="dialog-close">×</button>
+        <button class="dialog-close" title="Close" aria-label="Close">×</button>
       </div>
       <div class="dialog-body">
         <p style="font-size:13px;color:var(--text-primary);margin-bottom:12px">

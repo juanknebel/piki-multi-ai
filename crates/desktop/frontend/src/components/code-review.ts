@@ -91,7 +91,7 @@ export async function showCodeReview() {
     <span style="display:flex;gap:8px;align-items:center">
       <span id="cr-verdict-slot"></span>
       <button class="dialog-btn dialog-btn-primary dialog-btn-sm" id="cr-submit" title="Submit (${modCtrlLabel()}+Enter)">Submit</button>
-      <button class="dialog-close">×</button>
+      <button class="dialog-close" title="Close" aria-label="Close">×</button>
     </span>
   `;
   panel.appendChild(header);

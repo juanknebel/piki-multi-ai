@@ -49,7 +49,7 @@ export async function showLogsDialog() {
         <span id="log-level-slot"></span>
         <button class="dialog-btn dialog-btn-secondary dialog-btn-sm" id="log-refresh" title="Refresh">Refresh</button>
         <button class="dialog-btn dialog-btn-secondary dialog-btn-sm" id="log-clear" title="Clear">Clear</button>
-        <button class="dialog-close">×</button>
+        <button class="dialog-close" title="Close" aria-label="Close">×</button>
       </span>
     </div>
     <div id="log-entries" style="flex:1;overflow-y:auto;padding:0;font-size:11px;line-height:1.6;max-height:70vh"></div>

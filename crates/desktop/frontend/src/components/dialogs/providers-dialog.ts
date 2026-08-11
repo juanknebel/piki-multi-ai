@@ -17,7 +17,7 @@ export async function showProvidersDialog() {
   header.className = "dialog-header";
   header.innerHTML = `
     <span class="dialog-title">Manage Providers</span>
-    <button class="dialog-close">&times;</button>
+    <button class="dialog-close" title="Close" aria-label="Close">&times;</button>
   `;
 
   const body = document.createElement("div");

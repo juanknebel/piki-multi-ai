@@ -40,7 +40,7 @@ export async function showFileViewer(workspaceIdx: number, path: string) {
         <button class="file-viewer-btn file-viewer-inline-edit" title="Quick Edit (${formatShortcut("Ctrl+I")})">Quick Edit</button>
         <button class="file-viewer-btn file-viewer-edit" title="Open in $EDITOR (${formatShortcut("Ctrl+E")})">Edit</button>
         <button class="file-viewer-btn file-viewer-copy" title="Copy to clipboard">Copy</button>
-        <button class="file-viewer-btn file-viewer-close">&times;</button>
+        <button class="file-viewer-btn file-viewer-close" title="Close" aria-label="Close">&times;</button>
       </div>
     </div>
     <div class="file-viewer-body"></div>
@@ -173,7 +173,7 @@ export async function showFileViewer(workspaceIdx: number, path: string) {
       <button class="file-viewer-btn file-viewer-inline-edit" title="Quick Edit (${formatShortcut("Ctrl+I")})">Quick Edit</button>
       <button class="file-viewer-btn file-viewer-edit" title="Open in $EDITOR (${formatShortcut("Ctrl+E")})">Edit</button>
       <button class="file-viewer-btn file-viewer-copy" title="Copy to clipboard">Copy</button>
-      <button class="file-viewer-btn file-viewer-close">&times;</button>
+      <button class="file-viewer-btn file-viewer-close" title="Close" aria-label="Close">&times;</button>
     `;
 
     actionsDiv.querySelector(".file-viewer-open-editor")!.addEventListener("click", openInEditorTab);

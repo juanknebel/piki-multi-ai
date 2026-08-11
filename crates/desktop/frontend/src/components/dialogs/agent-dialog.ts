@@ -42,7 +42,7 @@ export async function showAgentManager() {
         <span style="display:flex;gap:6px;align-items:center">
           <button class="dialog-btn dialog-btn-secondary dialog-btn-sm" id="ag-import">Import from repo</button>
           <button class="dialog-btn dialog-btn-primary dialog-btn-sm" id="ag-new">+ New Agent</button>
-          <button class="dialog-close">×</button>
+          <button class="dialog-close" title="Close" aria-label="Close">×</button>
         </span>
       </div>
       <div class="dialog-body" style="max-height:60vh;overflow-y:auto">
@@ -156,7 +156,7 @@ async function showAgentForm(existing: AgentInfo | null, onSaved: () => void) {
     <div class="dialog" style="max-width:560px">
       <div class="dialog-header">
         <span class="dialog-title">${isEdit ? "Edit Agent" : "New Agent"}</span>
-        <button class="dialog-close">×</button>
+        <button class="dialog-close" title="Close" aria-label="Close">×</button>
       </div>
       <div class="dialog-body">
         <div class="dialog-field">
@@ -245,7 +245,7 @@ async function showImportDialog(onImported: () => void) {
   dialog.innerHTML = `
     <div class="dialog-header">
       <span class="dialog-title">Import Agents from Repo</span>
-      <button class="dialog-close">×</button>
+      <button class="dialog-close" title="Close" aria-label="Close">×</button>
     </div>
     <div class="dialog-toolbar import-toolbar">
       <input type="text" class="dialog-input import-filter" placeholder="Filter agents..." />

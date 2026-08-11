@@ -60,7 +60,7 @@ export async function showMarkdown(filePath: string) {
         <button class="file-viewer-btn md-quick-edit" title="Quick Edit (${formatShortcut("Ctrl+I")})">Quick Edit</button>
         <button class="file-viewer-btn md-edit" title="Open in $EDITOR (${formatShortcut("Ctrl+E")})">Edit</button>
         <button class="file-viewer-btn md-copy" title="Copy to clipboard">Copy</button>
-        <button class="dialog-close">×</button>
+        <button class="dialog-close" title="Close" aria-label="Close">×</button>
       </div>
     `;
 

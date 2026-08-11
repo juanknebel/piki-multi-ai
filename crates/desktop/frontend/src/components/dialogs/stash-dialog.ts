@@ -27,7 +27,7 @@ export async function showStashDialog() {
     dialog.innerHTML = `
       <div class="dialog-header">
         <span class="dialog-title">Git Stash</span>
-        <button class="dialog-close">×</button>
+        <button class="dialog-close" title="Close" aria-label="Close">×</button>
       </div>
       <div class="dialog-body">
         <div class="dialog-field">

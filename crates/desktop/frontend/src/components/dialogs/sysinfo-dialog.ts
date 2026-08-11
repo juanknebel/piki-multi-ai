@@ -22,7 +22,7 @@ export function showSysinfoDialog() {
   dialog.innerHTML = `
     <div class="dialog-header">
       <span class="dialog-title">System Info</span>
-      <button class="dialog-close">&times;</button>
+      <button class="dialog-close" title="Close" aria-label="Close">&times;</button>
     </div>
     <div class="sysinfo-body">
       <div class="sysinfo-loading">Loading system info&hellip;</div>

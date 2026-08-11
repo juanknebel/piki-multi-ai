@@ -60,7 +60,7 @@ export async function showDispatchDialog(cardContext?: CardContext) {
     <div class="dialog" style="max-width:520px">
       <div class="dialog-header">
         <span class="dialog-title">Dispatch Agent${cardContext ? ` — ${esc(cardContext.title)}` : ""}</span>
-        <button class="dialog-close">×</button>
+        <button class="dialog-close" title="Close" aria-label="Close">×</button>
       </div>
       <div class="dialog-body">
         <div class="dialog-field">

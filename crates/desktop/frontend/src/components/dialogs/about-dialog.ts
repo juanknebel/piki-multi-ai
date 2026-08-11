@@ -15,7 +15,7 @@ export async function showAboutDialog() {
   dialog.innerHTML = `
     <div class="dialog-header">
       <span class="dialog-title">About</span>
-      <button class="dialog-close">×</button>
+      <button class="dialog-close" title="Close" aria-label="Close">×</button>
     </div>
     <div class="dialog-body" style="align-items:center;padding:24px 20px">
       <div style="width:96px;height:96px;margin-bottom:12px">${LOGO_SVG}</div>

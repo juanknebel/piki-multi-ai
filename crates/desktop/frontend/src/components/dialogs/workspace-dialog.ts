@@ -49,7 +49,7 @@ export function showWorkspaceDialog(opts: DialogOptions) {
     <div class="dialog">
       <div class="dialog-header">
         <span class="dialog-title">${title}</span>
-        <button class="dialog-close">×</button>
+        <button class="dialog-close" title="Close" aria-label="Close">×</button>
       </div>
       <div class="dialog-body">
         ${
@@ -326,7 +326,7 @@ export function showWorkspaceInfo(index: number) {
     <div class="dialog" style="max-width:500px">
       <div class="dialog-header">
         <span class="dialog-title">Workspace Info</span>
-        <button class="dialog-close">×</button>
+        <button class="dialog-close" title="Close" aria-label="Close">×</button>
       </div>
       <div class="dialog-body">
         ${infoRow("Name", info.name)}
@@ -395,7 +395,7 @@ export function showCreateWorktreeDialog(parent: WorkspaceInfo) {
     <div class="dialog">
       <div class="dialog-header">
         <span class="dialog-title">Create Worktree</span>
-        <button class="dialog-close">×</button>
+        <button class="dialog-close" title="Close" aria-label="Close">×</button>
       </div>
       <div class="dialog-body">
         <div class="dialog-field">

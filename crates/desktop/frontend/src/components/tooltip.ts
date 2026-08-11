@@ -48,10 +48,25 @@ function show(target: HTMLElement, text: string) {
   });
 }
 
+/** While visible, watch for the target being detached by a re-render so the
+ *  tooltip doesn't get stranded on screen. */
+let connectedWatch: ReturnType<typeof setInterval> | null = null;
+
+function watchConnected() {
+  if (connectedWatch) return;
+  connectedWatch = setInterval(() => {
+    if (currentTarget && !currentTarget.isConnected) hide();
+  }, 300);
+}
+
 function hide() {
   if (showTimer) {
     clearTimeout(showTimer);
     showTimer = null;
+  }
+  if (connectedWatch) {
+    clearInterval(connectedWatch);
+    connectedWatch = null;
   }
   if (tooltipEl) tooltipEl.style.display = "none";
   if (currentTarget) {
@@ -64,26 +79,55 @@ function hide() {
   }
 }
 
+function beginShow(target: HTMLElement, delay: number) {
+  const text = target.getAttribute("title");
+  if (!text) return;
+
+  // Steal the native title to prevent browser tooltip; keep the text
+  // reachable for assistive tech.
+  target.dataset.title = text;
+  target.removeAttribute("title");
+  if (!target.hasAttribute("aria-label") && !target.textContent?.trim()) {
+    target.setAttribute("aria-label", text);
+  }
+
+  hide();
+  currentTarget = target;
+  watchConnected();
+  showTimer = setTimeout(() => show(target, text), delay);
+}
+
 export function initTooltips() {
   document.addEventListener("mouseover", (e) => {
     const target = (e.target as HTMLElement).closest<HTMLElement>("[title]");
-    if (!target) return;
-
-    const text = target.getAttribute("title");
-    if (!text) return;
-
-    // Steal the native title to prevent browser tooltip
-    target.dataset.title = text;
-    target.removeAttribute("title");
-
-    hide();
-    currentTarget = target;
-    showTimer = setTimeout(() => show(target, text), DELAY);
+    if (target) beginShow(target, DELAY);
   });
 
   document.addEventListener("mouseout", (e) => {
     const target = (e.target as HTMLElement).closest<HTMLElement>("[data-title]");
     if (target) hide();
+  });
+
+  // Keyboard parity: focused controls show their tooltip immediately, but
+  // only for keyboard-driven focus (mouse clicks also focus, and already
+  // have hover).
+  document.addEventListener("focusin", (e) => {
+    const target = e.target as HTMLElement;
+    if (!target.matches?.(":focus-visible")) return;
+    const withTitle = target.closest<HTMLElement>("[title], [data-title]");
+    if (!withTitle) return;
+    if (withTitle.dataset.title) {
+      currentTarget = withTitle;
+      watchConnected();
+      show(withTitle, withTitle.dataset.title);
+    } else {
+      beginShow(withTitle, 0);
+    }
+  });
+
+  document.addEventListener("focusout", (e) => {
+    const target = (e.target as HTMLElement).closest?.<HTMLElement>("[data-title]");
+    if (target && target === currentTarget) hide();
   });
 
   document.addEventListener("mousedown", hide);
