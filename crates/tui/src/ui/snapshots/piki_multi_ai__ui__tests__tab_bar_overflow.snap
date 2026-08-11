@@ -1,0 +1,7 @@
+---
+source: crates/tui/src/ui/mod.rs
+assertion_line: 695
+expression: content
+---
+‹3  4 ▸ Shell ×   5 ▸ Shell ×  3›  +
+────────────────────────────────────────

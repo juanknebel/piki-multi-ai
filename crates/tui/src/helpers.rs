@@ -229,45 +229,41 @@ pub(crate) enum SubtabHit {
     NewTab,
 }
 
-/// Calculate what was clicked in the tab bar
+/// Calculate what was clicked in the tab bar. Geometry comes from
+/// `ui::subtabs::layout`, the same function the renderer uses, so the hit
+/// regions can't drift from the pixels (including the overflow window and
+/// its `‹N`/`N›` indicators, which activate the nearest hidden tab).
 pub(crate) fn subtab_index_at(app: &App, col: u16, area: Rect) -> Option<SubtabHit> {
     let ws = app.current_workspace()?;
-    let mut x = area.x;
-    for (i, tab) in ws.tabs.iter().enumerate() {
-        let label = tab
-            .markdown_label
-            .as_deref()
-            .unwrap_or(tab.provider.label());
-        // Matches subtabs.rs: " N" (2, if i < 9) + " icon " (3) + label
-        // + " g" (2, if agent glyph) + " ×" (2, if closable) + " " (1);
-        // blocks separated by a 1-col gap
-        let mut tab_display_width = label.len() as u16 + 4;
-        if i < 9 {
-            tab_display_width += 2;
-        }
-        // The glyph is only rendered when the status is *actionable*, not for
-        // every tab that has a cli-agent snapshot — mirror subtabs.rs exactly
-        // or the close-button hit region drifts right of the visible `×`.
-        if let Some((status, attention, _)) = tab.cli_agent_snapshot()
-            && crate::ui::actionable_status_view(&app.theme, status, attention).is_some()
-        {
-            tab_display_width += 2;
-        }
-        if tab.closable {
-            tab_display_width += 2;
-        }
-        if col >= x && col < x + tab_display_width {
+    let lay = ui::subtabs::layout(ws, &app.theme, area.width);
+    let rel = col.checked_sub(area.x)?;
+
+    if let Some((x, w)) = lay.left
+        && rel >= x
+        && rel < x + w
+    {
+        // Step to the nearest clipped tab on the left.
+        return Some(SubtabHit::Tab(lay.hidden_left - 1, false));
+    }
+    for &(i, x, w) in &lay.blocks {
+        if rel >= x && rel < x + w {
+            let tab = &ws.tabs[i];
             // The block ends with " ×" (2 cols) then a trailing space (1 col).
             // The close target is just those two `" ×"` columns; excluding the
             // trailing space keeps a click in the padding from closing the tab.
-            let on_close =
-                tab.closable && col >= x + tab_display_width - 3 && col < x + tab_display_width - 1;
+            let on_close = tab.closable && rel >= x + w - 3 && rel < x + w - 1;
             return Some(SubtabHit::Tab(i, on_close));
         }
-        x += tab_display_width + 1; // +1 for the gap between blocks
     }
-    // Trailing " + " button right after the last tab's gap
-    if col >= x && col < x + 3 {
+    if let Some((x, w)) = lay.right
+        && rel >= x
+        && rel < x + w
+    {
+        // Step to the nearest clipped tab on the right.
+        let last_visible = lay.blocks.last().map(|&(i, _, _)| i)?;
+        return Some(SubtabHit::Tab(last_visible + 1, false));
+    }
+    if rel >= lay.plus_x && rel < lay.plus_x + 3 {
         return Some(SubtabHit::NewTab);
     }
     None
