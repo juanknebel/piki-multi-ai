@@ -771,6 +771,9 @@ export function renderFileTree(container: HTMLElement) {
     schedulePersist();
     const listPrev = container.querySelector<HTMLElement>(".ft-list");
     const prevScroll = listPrev?.scrollTop ?? 0;
+    // Rebuilding the list destroys the focused node; remember so keyboard
+    // navigation survives the re-render each keypress triggers.
+    const hadFocus = document.activeElement === listPrev;
     container.innerHTML = "";
 
     const folderName = rootPath
@@ -920,6 +923,7 @@ export function renderFileTree(container: HTMLElement) {
 
     container.appendChild(listEl);
     listEl.scrollTop = prevScroll;
+    if (hadFocus) listEl.focus();
   }
 
   resetToActiveWorkspace();
