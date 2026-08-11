@@ -1,4 +1,5 @@
 import { appState } from "../state";
+import { showConfirm } from "./confirm";
 import * as ipc from "../ipc";
 import { toast } from "./toast";
 import { createDropdown } from "./dropdown";
@@ -545,11 +546,29 @@ export async function showCodeReview() {
   });
 
   const close = () => { overlayEl?.remove(); overlayEl = null; };
-  panel.querySelector(".dialog-close")!.addEventListener("click", close);
-  backdrop.addEventListener("click", (e) => { if (e.target === backdrop) close(); });
+  /** Close, confirming first when drafted comments/replies would be lost. */
+  const requestClose = () => {
+    const drafts = comments.size + replies.size;
+    if (drafts === 0) {
+      close();
+      return;
+    }
+    showConfirm({
+      bodyHtml: `
+        <p>Discard ${drafts} drafted comment${drafts === 1 ? "" : "s"}?</p>
+        <p class="ws-delete-hint">They have not been submitted.</p>
+      `,
+      actions: [
+        { label: "Discard", kind: "danger", onSelect: close },
+        { label: "Keep reviewing", kind: "secondary", isDefault: true },
+      ],
+    });
+  };
+  panel.querySelector(".dialog-close")!.addEventListener("click", requestClose);
+  backdrop.addEventListener("click", (e) => { if (e.target === backdrop) requestClose(); });
   backdrop.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
-      close();
+      requestClose();
       return;
     }
     if (e.key === "Enter" && modCtrl(e)) {

@@ -1,4 +1,5 @@
 import { Marked } from "marked";
+import { showConfirm } from "./confirm";
 import { markedHighlight } from "marked-highlight";
 import hljs from "highlight.js/lib/common";
 import "highlight.js/styles/atom-one-dark.css";
@@ -116,8 +117,30 @@ export async function showMarkdown(filePath: string) {
       }
     });
     header.querySelector(".md-cancel")!.addEventListener("click", () => {
+      requestExitEditMode();
+    });
+  }
+
+  /** Leave edit mode, confirming first when the textarea has unsaved edits. */
+  function requestExitEditMode() {
+    const ta = viewer.querySelector<HTMLTextAreaElement>(".file-viewer-textarea");
+    const exit = () => {
       editing = false;
       renderViewMode();
+    };
+    if (!ta || ta.value === content) {
+      exit();
+      return;
+    }
+    showConfirm({
+      bodyHtml: `
+        <p>Discard changes?</p>
+        <p class="ws-delete-hint">Your unsaved edits will be lost.</p>
+      `,
+      actions: [
+        { label: "Discard", kind: "danger", onSelect: exit },
+        { label: "Keep editing", kind: "secondary", isDefault: true },
+      ],
     });
   }
 
@@ -141,7 +164,7 @@ export async function showMarkdown(filePath: string) {
         e.preventDefault();
         (header.querySelector(".md-save") as HTMLButtonElement)?.click();
       }
-      if (e.key === "Escape") { e.preventDefault(); editing = false; renderViewMode(); }
+      if (e.key === "Escape") { e.preventDefault(); requestExitEditMode(); }
       return;
     }
     if (e.key === "Escape") close();

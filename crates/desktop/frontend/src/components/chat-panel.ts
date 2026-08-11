@@ -1,4 +1,5 @@
 import * as ipc from "../ipc";
+import { showConfirm } from "./confirm";
 import { toast } from "./toast";
 import { createDropdown, type DropdownHandle } from "./dropdown";
 import type { UnlistenFn } from "@tauri-apps/api/event";
@@ -288,14 +289,32 @@ function onStreamEnd() {
   inputEl.focus();
 }
 
-async function clearChat() {
-  messages = [];
-  renderEmpty();
-  try {
-    await ipc.chatClear();
-  } catch {
-    // ignore
-  }
+function clearChat() {
+  if (messages.length === 0) return;
+  const n = messages.length;
+  showConfirm({
+    bodyHtml: `
+      <p>Clear conversation?</p>
+      <p class="ws-delete-hint">This permanently removes ${n} message${n === 1 ? "" : "s"}.</p>
+    `,
+    actions: [
+      {
+        label: "Clear",
+        kind: "danger",
+        isDefault: true,
+        onSelect: async () => {
+          messages = [];
+          renderEmpty();
+          try {
+            await ipc.chatClear();
+          } catch {
+            // ignore
+          }
+        },
+      },
+      { label: "Cancel", kind: "secondary" },
+    ],
+  });
 }
 
 function renderMessages() {
