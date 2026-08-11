@@ -173,25 +173,30 @@ pub(super) async fn handle(
                         w.kanban_path.as_deref() == Some(kanban_path.as_str())
                             && w.kanban_provider.is_some()
                     });
+                    let mut kanban_err: Option<String> = None;
                     if let Some(src_idx) = source_ws_idx {
                         let src_ws = &mut app.workspaces[src_idx];
                         if let Some(ref mut kp) = src_ws.kanban_provider {
                             if let Ok(board) = kp.load_board() {
                                 for col in &board.columns {
                                     if let Some(card) = col.cards.iter().find(|c| c.id == card_id) {
-                                        let _ = kp.update_card(
+                                        if let Err(e) = kp.update_card(
                                             &card_id,
                                             &card.title,
                                             &card.description,
                                             card.priority,
                                             "",
                                             &card.project,
-                                        );
+                                        ) {
+                                            kanban_err = Some(e.to_string());
+                                        }
                                         break;
                                     }
                                 }
                             }
-                            let _ = kp.move_card(&card_id, &target_col);
+                            if let Err(e) = kp.move_card(&card_id, &target_col) {
+                                kanban_err = Some(e.to_string());
+                            }
                             if let Ok(board) = kp.load_board()
                                 && let Some(ref mut ka) = src_ws.kanban_app
                             {
@@ -199,6 +204,12 @@ pub(super) async fn handle(
                                 ka.clamp();
                             }
                         }
+                    }
+                    if let Some(e) = kanban_err {
+                        app.set_toast(
+                            format!("Kanban card move failed: {e}"),
+                            crate::app::ToastLevel::Error,
+                        );
                     }
                 }
 

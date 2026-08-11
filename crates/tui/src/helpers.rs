@@ -51,13 +51,14 @@ pub(crate) fn missing_bridge_prereqs(
 /// `save_workspaces` only touches rows whose `source_repo` matches, so callers
 /// must pass the repo of the workspace that changed.
 ///
-/// The save is detached, so there is no `&mut App` left to toast with — but a
-/// failure here means the user's workspaces silently vanish on the next start,
-/// which is far too quiet a way to lose data. `error!` at least surfaces it in
-/// the Logs pane and the log file.
+/// The save is detached, so there is no `&mut App` left to toast with — a
+/// failure is routed back through `status_tx` (the event loop toasts it),
+/// because a silent failure here means the user's workspaces vanish on the
+/// next start.
 pub(crate) fn persist_workspaces(app: &app::App, source: std::path::PathBuf) {
     let infos = app.persistable_workspaces();
     let storage = Arc::clone(&app.storage);
+    let status_tx = app.status_tx.clone();
     tokio::spawn(async move {
         if let Err(e) = storage.workspaces.save_workspaces(&source, &infos) {
             tracing::error!(
@@ -65,6 +66,9 @@ pub(crate) fn persist_workspaces(app: &app::App, source: std::path::PathBuf) {
                 error = %e,
                 "failed to persist workspaces — changes will be lost on restart"
             );
+            let _ = status_tx.send(format!(
+                "Failed to save workspace list — changes may be lost on restart: {e}"
+            ));
         }
     });
 }

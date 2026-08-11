@@ -359,11 +359,21 @@ fn active_field_mut(app: &mut App) -> (&mut String, &mut usize) {
     (field, unsafe { &mut *cursor })
 }
 
-fn save_chat_config(app: &App) {
-    if let Some(ref ui_prefs) = app.storage.ui_prefs
-        && let Ok(json) = serde_json::to_string(&app.chat_panel.config)
-    {
-        let _ = ui_prefs.set_preference("chat_config", &json);
+fn save_chat_config(app: &mut App) {
+    let result = match serde_json::to_string(&app.chat_panel.config) {
+        Ok(json) => match app.storage.ui_prefs {
+            Some(ref ui_prefs) => ui_prefs
+                .set_preference("chat_config", &json)
+                .map_err(|e| e.to_string()),
+            None => Ok(()),
+        },
+        Err(e) => Err(e.to_string()),
+    };
+    if let Err(e) = result {
+        app.set_toast(
+            format!("Failed to save chat settings: {e}"),
+            crate::app::ToastLevel::Error,
+        );
     }
 }
 

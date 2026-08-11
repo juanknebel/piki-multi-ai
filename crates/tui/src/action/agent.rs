@@ -68,24 +68,35 @@ pub(super) async fn handle(
                 // Use current workspace — just spawn a new tab, no worktree
                 // Update kanban card
                 let assignee_label = agent_name.as_deref().unwrap_or(provider.label());
+                let mut kanban_err: Option<String> = None;
                 if let Some(src_ws) = app.workspaces.get_mut(source_ws)
                     && let Some(ref mut kp) = src_ws.kanban_provider
                 {
-                    let _ = kp.update_card(
+                    if let Err(e) = kp.update_card(
                         &card_id,
                         &card_title,
                         &card_description,
                         card_priority,
                         assignee_label,
                         &card_project,
-                    );
-                    let _ = kp.move_card(&card_id, "in_progress");
+                    ) {
+                        kanban_err = Some(e.to_string());
+                    }
+                    if let Err(e) = kp.move_card(&card_id, "in_progress") {
+                        kanban_err = Some(e.to_string());
+                    }
                     if let Some(ref mut ka) = src_ws.kanban_app
                         && let Ok(board) = kp.load_board()
                     {
                         ka.board = board;
                         ka.clamp();
                     }
+                }
+                if let Some(e) = kanban_err {
+                    app.set_toast(
+                        format!("Kanban card sync failed: {e}"),
+                        crate::app::ToastLevel::Error,
+                    );
                 }
 
                 // Spawn tab in current workspace
@@ -167,24 +178,35 @@ pub(super) async fn handle(
 
                         // Update kanban card: set assignee and move to IN PROGRESS
                         let assignee_label = agent_name.as_deref().unwrap_or(provider.label());
+                        let mut kanban_err: Option<String> = None;
                         if let Some(src_ws) = app.workspaces.get_mut(source_ws)
                             && let Some(ref mut kp) = src_ws.kanban_provider
                         {
-                            let _ = kp.update_card(
+                            if let Err(e) = kp.update_card(
                                 &card_id,
                                 &card_title,
                                 &card_description,
                                 card_priority,
                                 assignee_label,
                                 &card_project,
-                            );
-                            let _ = kp.move_card(&card_id, "in_progress");
+                            ) {
+                                kanban_err = Some(e.to_string());
+                            }
+                            if let Err(e) = kp.move_card(&card_id, "in_progress") {
+                                kanban_err = Some(e.to_string());
+                            }
                             if let Some(ref mut ka) = src_ws.kanban_app
                                 && let Ok(board) = kp.load_board()
                             {
                                 ka.board = board;
                                 ka.clamp();
                             }
+                        }
+                        if let Some(e) = kanban_err {
+                            app.set_toast(
+                                format!("Kanban card sync failed: {e}"),
+                                crate::app::ToastLevel::Error,
+                            );
                         }
 
                         // Create workspace and switch to it
