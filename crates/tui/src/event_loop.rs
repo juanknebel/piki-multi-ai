@@ -270,7 +270,7 @@ pub(crate) async fn run(
                     app.active_pane,
                 );
                 if last_layout_key.is_some_and(|k| k != layout_key) {
-                    terminal.clear()?;
+                    force_full_redraw(&mut terminal)?;
                 }
                 last_layout_key = Some(layout_key);
                 terminal.draw(|frame| {
@@ -658,6 +658,25 @@ pub(crate) async fn run(
         }
     }
 
+    Ok(())
+}
+
+/// Full clear + repaint-everything, without querying the terminal.
+///
+/// `Terminal::clear()` reads the cursor position (CSI 6n) and waits for the
+/// reply — but our async `EventStream` owns the input reader, so the reply
+/// races against it and `cursor::position()` can time out after 2s, killing
+/// the app with "The cursor position could not be read within a normal
+/// duration" (and on the way out the terminal may be left with mouse
+/// reporting enabled). Fullscreen never needs the cursor position: clear the
+/// screen (a pure write) and reset both diff buffers so the next draw
+/// rewrites every cell.
+fn force_full_redraw(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
+    use ratatui::backend::{Backend, ClearType};
+    terminal.backend_mut().clear_region(ClearType::All)?;
+    // Two swaps reset both buffers in place and leave `current` where it was.
+    terminal.swap_buffers();
+    terminal.swap_buffers();
     Ok(())
 }
 
