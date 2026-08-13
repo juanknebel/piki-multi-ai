@@ -27,7 +27,7 @@ export async function showSettingsDialog() {
   header.className = "dialog-header";
   header.innerHTML = `
     <span class="dialog-title">Settings</span>
-    <button class="dialog-close">&times;</button>
+    <button class="dialog-close" title="Close" aria-label="Close">&times;</button>
   `;
 
   // Body

@@ -56,6 +56,9 @@ fn execute_palette_command(app: &mut App, id: &str, switch_idx: Option<usize>) -
         return None;
     }
 
+    // Remember the use so the empty-query palette lists recent commands first.
+    crate::command_palette::bump_mru(&app.storage, id);
+
     // Commands with hardcoded keys (not in config)
     match id {
         "manage_agents" => {
@@ -90,6 +93,9 @@ fn execute_palette_command(app: &mut App, id: &str, switch_idx: Option<usize>) -
     if super::APP_ACTIONS.contains(&id) {
         return super::dispatch_app_action(app, id);
     }
-    app.status_message = Some(format!("Unknown command: {}", id));
+    app.set_toast(
+        format!("Unknown command: {}", id),
+        crate::app::ToastLevel::Error,
+    );
     None
 }

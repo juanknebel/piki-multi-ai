@@ -1,4 +1,5 @@
 import { appState } from "../state";
+import { reportError } from "./toast";
 import * as ipc from "../ipc";
 import { FILE_STATUS_LABELS, FILE_STATUS_CSS } from "../types";
 import type { ChangedFile } from "../types";
@@ -64,7 +65,12 @@ export function renderGitPanel(container: HTMLElement) {
 
       item.addEventListener("click", () => {
         selectedIdx = idx;
-        render();
+        // Move the highlight in place — a full re-render would drop scroll
+        // position and hover state just to switch a class.
+        container.querySelectorAll(".file-item.selected").forEach((el) =>
+          el.classList.remove("selected"),
+        );
+        item.classList.add("selected");
       });
 
       // Wire up action buttons
@@ -82,7 +88,7 @@ export function renderGitPanel(container: HTMLElement) {
             const files = await ipc.getChangedFiles(wsIdx);
             appState.updateFiles(wsIdx, files, appState.activeWs?.aheadBehind ?? null);
           } catch (err) {
-            console.error(`Failed to ${action}:`, err);
+            reportError(`Failed to ${action}`, err);
           }
         });
       });

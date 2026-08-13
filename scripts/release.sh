@@ -102,14 +102,16 @@ release_from_nightly() {
         info "Watching release CI..."
         local head_sha run_id
         head_sha="$(git -C "$MAIN_DIR" rev-parse HEAD)"
-        for attempt in 1 2 3 4 5; do
+        # Match by headSha only — the run is triggered by the tag push, so its
+        # headBranch is the tag name (e.g. "v2.7.0"), never $MAIN_BRANCH.
+        for attempt in $(seq 1 10); do
             run_id="$(gh run list -R "$(git -C "$MAIN_DIR" remote get-url origin)" \
-                --workflow release.yml --branch "$MAIN_BRANCH" --limit 5 \
+                --workflow release.yml --limit 10 \
                 --json databaseId,headSha \
                 -q ".[] | select(.headSha==\"$head_sha\") | .databaseId" \
                 2>/dev/null | head -1 || true)"
             [[ -n "$run_id" ]] && break
-            info "Run not found yet (attempt $attempt/5), waiting..."
+            info "Run not found yet (attempt $attempt/10), waiting..."
             sleep 3
         done
         if [[ -n "$run_id" ]]; then

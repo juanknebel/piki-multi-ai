@@ -12,10 +12,8 @@ export function renderStatusBar(container: HTMLElement) {
 
     // App name (clickable → About)
     const appName = document.createElement("div");
-    appName.className = "status-item clickable";
+    appName.className = "status-item clickable status-app-name";
     appName.textContent = "Piki Desktop";
-    appName.style.fontWeight = "600";
-    appName.style.color = "var(--accent-primary)";
     appName.addEventListener("click", showAboutDialog);
     container.appendChild(appName);
 
@@ -81,12 +79,14 @@ export function renderStatusBar(container: HTMLElement) {
       }
     }
 
-    // LSP status
+    // LSP status — rendered from the cache so frequent re-renders (agent
+    // events fire per tool call) don't issue an IPC round-trip each and
+    // flicker while the async answer lands.
     const lspItem = document.createElement("div");
     lspItem.className = "status-item status-lsp";
-    lspItem.textContent = "";
+    lspItem.textContent = lspCache.text;
+    if (lspCache.color) lspItem.style.color = lspCache.color;
     container.appendChild(lspItem);
-    refreshLspStatus(lspItem);
 
     const wsName = ws?.info.name ?? "No workspace";
     addItem(container, wsName);
@@ -104,6 +104,18 @@ export function renderStatusBar(container: HTMLElement) {
   appState.on("sysinfo-changed", render);
   appState.on("tab-shell-state-changed", render);
   render();
+
+  // Poll LSP status on its own cadence, patching the live element in place.
+  const refreshLsp = () =>
+    void refreshLspCache().then(() => {
+      const el = container.querySelector<HTMLElement>(".status-lsp");
+      if (el) {
+        el.textContent = lspCache.text;
+        if (lspCache.color) el.style.color = lspCache.color;
+      }
+    });
+  refreshLsp();
+  setInterval(refreshLsp, 5000);
 }
 
 /** Replace a leading `$HOME` segment with `~` so the bar stays compact. */
@@ -127,10 +139,14 @@ function addItem(container: HTMLElement, text: string, ...classes: string[]) {
   container.appendChild(item);
 }
 
-function refreshLspStatus(el: HTMLElement) {
-  ipc.lspServerStatus().then((servers) => {
+const lspCache = { text: "", color: "" };
+
+async function refreshLspCache(): Promise<void> {
+  try {
+    const servers = await ipc.lspServerStatus();
     if (servers.length === 0) {
-      el.textContent = "";
+      lspCache.text = "";
+      lspCache.color = "";
       return;
     }
     const active = servers.filter((s) => s.status === "active");
@@ -142,9 +158,10 @@ function refreshLspStatus(el: HTMLElement) {
     if (idle.length > 0) {
       parts.push(`${idle.length} idle`);
     }
-    el.textContent = `LSP: ${parts.join(" · ")}`;
-    el.style.color = active.length > 0 ? "var(--git-added)" : "var(--text-muted)";
-  }).catch(() => {
-    el.textContent = "";
-  });
+    lspCache.text = `LSP: ${parts.join(" · ")}`;
+    lspCache.color = active.length > 0 ? "var(--git-added)" : "var(--text-muted)";
+  } catch {
+    lspCache.text = "";
+    lspCache.color = "";
+  }
 }

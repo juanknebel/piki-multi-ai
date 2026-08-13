@@ -1,4 +1,6 @@
 import { appState } from "../state";
+import { makeInteractive } from "./a11y";
+import { reportError } from "./toast";
 import * as ipc from "../ipc";
 import { cliAgentStatusView, type AgentRow } from "../types";
 import { showAgentManager } from "./dialogs/agent-dialog";
@@ -50,11 +52,17 @@ export function renderAgentsPanel(container: HTMLElement) {
   }
 
   function render(rows: AgentRow[]) {
+    // Agent events rebuild the list continuously; keep the scroll position.
+    const prevScroll = list.scrollTop;
     list.innerHTML = "";
     if (rows.length === 0) {
       const empty = document.createElement("div");
       empty.className = "agents-empty";
-      empty.textContent = "No agents running";
+      empty.innerHTML = `
+        <p>No agents running</p>
+        <button class="dialog-btn dialog-btn-secondary empty-cta">Dispatch Agent</button>
+      `;
+      empty.querySelector(".empty-cta")!.addEventListener("click", () => showDispatchDialog());
       list.appendChild(empty);
       return;
     }
@@ -88,8 +96,10 @@ export function renderAgentsPanel(container: HTMLElement) {
       `;
       el.title = row.summary ?? "";
       el.addEventListener("click", () => jumpTo(row));
+      makeInteractive(el);
       list.appendChild(el);
     }
+    list.scrollTop = prevScroll;
   }
 
   async function jumpTo(row: AgentRow) {
@@ -100,7 +110,7 @@ export function renderAgentsPanel(container: HTMLElement) {
       }
       appState.setActiveTab(row.tab_idx);
     } catch (err) {
-      console.error("Jump to agent failed:", err);
+      reportError("Jump to agent failed", err);
     }
   }
 

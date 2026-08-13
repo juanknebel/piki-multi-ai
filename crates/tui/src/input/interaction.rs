@@ -565,7 +565,10 @@ pub(super) fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Optio
                 }
             }
             Err(e) => {
-                app.status_message = Some(format!("Paste failed: {}", e));
+                app.set_toast(
+                    format!("Paste failed: {}", e),
+                    crate::app::ToastLevel::Error,
+                );
             }
         }
         return None;

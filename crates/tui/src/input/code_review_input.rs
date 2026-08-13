@@ -98,6 +98,13 @@ pub(super) fn handle_submit_review_input(app: &mut App, key: KeyEvent) -> Option
     // Clear any previous submit error on interaction
     cr.submit_error = None;
 
+    // Any key other than a repeated Ctrl+D disarms the pending discard.
+    if cr.pending_discard_draft
+        && !(key.code == KeyCode::Char('d') && has_ctrl(key.modifiers, app.config.platform))
+    {
+        cr.pending_discard_draft = false;
+    }
+
     match key.code {
         KeyCode::Tab => {
             cr.draft.verdict = cr.draft.verdict.next();
@@ -111,7 +118,15 @@ pub(super) fn handle_submit_review_input(app: &mut App, key: KeyEvent) -> Option
             None
         }
         KeyCode::Char('d') if has_ctrl(key.modifiers, app.config.platform) => {
-            // Discard draft (including comments)
+            // Discard draft (including comments) — armed on first press when
+            // there is anything to lose, so a stray Ctrl+D can't wipe a
+            // review with drafted inline comments.
+            let has_content = !cr.draft.body.is_empty() || !cr.draft.comments.is_empty();
+            if has_content && !cr.pending_discard_draft {
+                cr.pending_discard_draft = true;
+                return None;
+            }
+            cr.pending_discard_draft = false;
             cr.draft.verdict = ReviewVerdict::Comment;
             cr.draft.body.clear();
             cr.draft.body_cursor = 0;
@@ -165,6 +180,11 @@ fn handle_comment_editing_input(app: &mut App, key: KeyEvent) -> Option<Action> 
     let cr = ws.code_review.as_mut()?;
     let ec = cr.editing_comment.as_mut()?;
 
+    // Any key other than a repeated Esc disarms the pending discard.
+    if ec.pending_discard && key.code != KeyCode::Esc {
+        ec.pending_discard = false;
+    }
+
     match key.code {
         KeyCode::Enter => {
             match ec.target {
@@ -195,7 +215,13 @@ fn handle_comment_editing_input(app: &mut App, key: KeyEvent) -> Option<Action> 
             None
         }
         KeyCode::Esc => {
-            cr.editing_comment = None;
+            // Unsaved edits: first Esc arms a confirm (footer prompts), the
+            // second discards them.
+            if ec.body != ec.baseline && !ec.pending_discard {
+                ec.pending_discard = true;
+            } else {
+                cr.editing_comment = None;
+            }
             None
         }
         KeyCode::Char(c) => {
@@ -350,6 +376,8 @@ fn handle_diff_view_keys(
                                 file_path,
                                 line: ln,
                                 side: "RIGHT".to_string(),
+                                baseline: existing_body.clone(),
+                                pending_discard: false,
                                 body: existing_body,
                                 body_cursor: cursor,
                                 target: CommentTarget::NewInline,
@@ -369,6 +397,8 @@ fn handle_diff_view_keys(
                                 file_path,
                                 line: ln,
                                 side: "LEFT".to_string(),
+                                baseline: existing_body.clone(),
+                                pending_discard: false,
                                 body: existing_body,
                                 body_cursor: cursor,
                                 target: CommentTarget::NewInline,
@@ -409,6 +439,8 @@ fn handle_diff_view_keys(
                         file_path,
                         line: ln,
                         side: side.to_string(),
+                        baseline: existing_body.clone(),
+                        pending_discard: false,
                         body: existing_body,
                         body_cursor: cursor,
                         target: CommentTarget::Reply { comment_id },

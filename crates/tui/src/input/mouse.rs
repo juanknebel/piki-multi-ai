@@ -660,9 +660,12 @@ pub(crate) fn handle_mouse_event(
 
                     if let Some(text) = copied {
                         if let Err(e) = clipboard::copy_to_clipboard(&text) {
-                            app.status_message = Some(format!("Copy failed: {}", e));
+                            app.set_toast(
+                                format!("Copy failed: {}", e),
+                                crate::app::ToastLevel::Error,
+                            );
                         } else {
-                            app.status_message = Some("Selection copied".into());
+                            app.set_toast("Selection copied", crate::app::ToastLevel::Success);
                         }
                     }
                 }

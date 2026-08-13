@@ -1,17 +1,18 @@
 import * as ipc from "../../ipc";
+import { reportError } from "../toast";
 import type { SysInfoSnapshot } from "../../ipc";
 
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
 export function showSysinfoDialog() {
-  document.querySelector(".dialog-backdrop")?.remove();
+  document.querySelector(".sysinfo-backdrop")?.remove();
   if (refreshTimer) {
     clearInterval(refreshTimer);
     refreshTimer = null;
   }
 
   const backdrop = document.createElement("div");
-  backdrop.className = "dialog-backdrop";
+  backdrop.className = "dialog-backdrop sysinfo-backdrop";
 
   const dialog = document.createElement("div");
   dialog.className = "dialog";
@@ -21,7 +22,7 @@ export function showSysinfoDialog() {
   dialog.innerHTML = `
     <div class="dialog-header">
       <span class="dialog-title">System Info</span>
-      <button class="dialog-close">&times;</button>
+      <button class="dialog-close" title="Close" aria-label="Close">&times;</button>
     </div>
     <div class="sysinfo-body">
       <div class="sysinfo-loading">Loading system info&hellip;</div>
@@ -56,7 +57,7 @@ async function loadSysinfo(container: HTMLElement) {
     renderSysinfo(container, snap);
   } catch (err) {
     container.innerHTML = `<div class="sysinfo-error">Failed to load system info</div>`;
-    console.error("sysinfo error:", err);
+    reportError("Failed to load system info", err);
   }
 }
 

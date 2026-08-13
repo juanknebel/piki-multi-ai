@@ -51,13 +51,14 @@ pub(crate) fn missing_bridge_prereqs(
 /// `save_workspaces` only touches rows whose `source_repo` matches, so callers
 /// must pass the repo of the workspace that changed.
 ///
-/// The save is detached, so there is no `&mut App` left to toast with — but a
-/// failure here means the user's workspaces silently vanish on the next start,
-/// which is far too quiet a way to lose data. `error!` at least surfaces it in
-/// the Logs pane and the log file.
+/// The save is detached, so there is no `&mut App` left to toast with — a
+/// failure is routed back through `status_tx` (the event loop toasts it),
+/// because a silent failure here means the user's workspaces vanish on the
+/// next start.
 pub(crate) fn persist_workspaces(app: &app::App, source: std::path::PathBuf) {
     let infos = app.persistable_workspaces();
     let storage = Arc::clone(&app.storage);
+    let status_tx = app.status_tx.clone();
     tokio::spawn(async move {
         if let Err(e) = storage.workspaces.save_workspaces(&source, &infos) {
             tracing::error!(
@@ -65,6 +66,9 @@ pub(crate) fn persist_workspaces(app: &app::App, source: std::path::PathBuf) {
                 error = %e,
                 "failed to persist workspaces — changes will be lost on restart"
             );
+            let _ = status_tx.send(format!(
+                "Failed to save workspace list — changes may be lost on restart: {e}"
+            ));
         }
     });
 }
@@ -177,10 +181,10 @@ pub(crate) fn copy_visible_terminal(app: &mut App) {
         drop(guard);
         match clipboard::copy_to_clipboard(&text) {
             Ok(()) => {
-                app.status_message = Some("Terminal content copied".into());
+                app.set_toast("Terminal content copied", crate::app::ToastLevel::Success);
             }
             Err(e) => {
-                app.status_message = Some(format!("Copy failed: {}", e));
+                app.set_toast(format!("Copy failed: {}", e), crate::app::ToastLevel::Error);
             }
         }
     }
@@ -225,45 +229,41 @@ pub(crate) enum SubtabHit {
     NewTab,
 }
 
-/// Calculate what was clicked in the tab bar
+/// Calculate what was clicked in the tab bar. Geometry comes from
+/// `ui::subtabs::layout`, the same function the renderer uses, so the hit
+/// regions can't drift from the pixels (including the overflow window and
+/// its `‹N`/`N›` indicators, which activate the nearest hidden tab).
 pub(crate) fn subtab_index_at(app: &App, col: u16, area: Rect) -> Option<SubtabHit> {
     let ws = app.current_workspace()?;
-    let mut x = area.x;
-    for (i, tab) in ws.tabs.iter().enumerate() {
-        let label = tab
-            .markdown_label
-            .as_deref()
-            .unwrap_or(tab.provider.label());
-        // Matches subtabs.rs: " N" (2, if i < 9) + " icon " (3) + label
-        // + " g" (2, if agent glyph) + " ×" (2, if closable) + " " (1);
-        // blocks separated by a 1-col gap
-        let mut tab_display_width = label.len() as u16 + 4;
-        if i < 9 {
-            tab_display_width += 2;
-        }
-        // The glyph is only rendered when the status is *actionable*, not for
-        // every tab that has a cli-agent snapshot — mirror subtabs.rs exactly
-        // or the close-button hit region drifts right of the visible `×`.
-        if let Some((status, attention, _)) = tab.cli_agent_snapshot()
-            && crate::ui::actionable_status_view(&app.theme, status, attention).is_some()
-        {
-            tab_display_width += 2;
-        }
-        if tab.closable {
-            tab_display_width += 2;
-        }
-        if col >= x && col < x + tab_display_width {
+    let lay = ui::subtabs::layout(ws, &app.theme, area.width);
+    let rel = col.checked_sub(area.x)?;
+
+    if let Some((x, w)) = lay.left
+        && rel >= x
+        && rel < x + w
+    {
+        // Step to the nearest clipped tab on the left.
+        return Some(SubtabHit::Tab(lay.hidden_left - 1, false));
+    }
+    for &(i, x, w) in &lay.blocks {
+        if rel >= x && rel < x + w {
+            let tab = &ws.tabs[i];
             // The block ends with " ×" (2 cols) then a trailing space (1 col).
             // The close target is just those two `" ×"` columns; excluding the
             // trailing space keeps a click in the padding from closing the tab.
-            let on_close =
-                tab.closable && col >= x + tab_display_width - 3 && col < x + tab_display_width - 1;
+            let on_close = tab.closable && rel >= x + w - 3 && rel < x + w - 1;
             return Some(SubtabHit::Tab(i, on_close));
         }
-        x += tab_display_width + 1; // +1 for the gap between blocks
     }
-    // Trailing " + " button right after the last tab's gap
-    if col >= x && col < x + 3 {
+    if let Some((x, w)) = lay.right
+        && rel >= x
+        && rel < x + w
+    {
+        // Step to the nearest clipped tab on the right.
+        let last_visible = lay.blocks.last().map(|&(i, _, _)| i)?;
+        return Some(SubtabHit::Tab(last_visible + 1, false));
+    }
+    if rel >= lay.plus_x && rel < lay.plus_x + 3 {
         return Some(SubtabHit::NewTab);
     }
     None

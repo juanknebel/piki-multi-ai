@@ -498,7 +498,12 @@ static CATALOG: &[ActionMeta] = {
             "Settings (server, URL, system prompt)",
         ),
         local(C::Chat, Raw("ctrl-a"), "Toggle agent mode (tool use)"),
-        local(C::Chat, Raw("ctrl-l"), "Clear the conversation"),
+        local(C::Chat, Raw("ctrl-c"), "Stop the streaming response"),
+        local(
+            C::Chat,
+            Raw("ctrl-l"),
+            "Clear the conversation (press twice)",
+        ),
         local(C::Chat, Fixed("Esc"), "Hide (keeps state)"),
         // ── Kanban board ──────────────────────────────────────────────────
         local(C::Kanban, Fixed("h/l/j/k"), "Navigate columns and cards"),

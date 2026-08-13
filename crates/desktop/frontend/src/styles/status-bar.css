@@ -71,3 +71,8 @@
   font-style: italic;
   font-size: 11px;
 }
+
+.status-app-name {
+  font-weight: 600;
+  color: var(--accent-primary);
+}

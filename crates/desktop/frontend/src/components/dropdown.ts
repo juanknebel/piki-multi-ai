@@ -164,6 +164,9 @@ export function createDropdown(
         case " ":
         case "Tab": {
           e.preventDefault();
+          // Selecting from the open list must not reach the enclosing
+          // dialog (Enter would submit it).
+          e.stopPropagation();
           const idx = openState.highlight;
           closeList();
           applyIndex(idx, true);
@@ -171,6 +174,8 @@ export function createDropdown(
         }
         case "Escape":
           e.preventDefault();
+          // Dismissing the open list must not close the enclosing dialog.
+          e.stopPropagation();
           closeList();
           return;
       }

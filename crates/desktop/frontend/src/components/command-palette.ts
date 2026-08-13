@@ -1,6 +1,8 @@
 import { appState } from "../state";
+import { fuzzyScore, mruBump, mruRank } from "./fuzzy";
 import * as ipc from "../ipc";
 import { toast } from "./toast";
+import { showConfirm } from "./confirm";
 import {
   showCreateWorktreeDialog,
   showWorkspaceDialog,
@@ -69,7 +71,9 @@ export async function openCommandPalette() {
   const input = palette.querySelector<HTMLInputElement>(".palette-input")!;
   const results = palette.querySelector<HTMLElement>(".palette-results")!;
   let selectedIdx = 0;
-  let filtered = commands;
+  let filtered = [...commands].sort(
+    (a, b) => mruRank("commands", a.id) - mruRank("commands", b.id),
+  );
 
   function renderResults() {
     results.innerHTML = "";
@@ -82,6 +86,7 @@ export async function openCommandPalette() {
         ${cmd.keybinding ? `<span class="palette-key">${formatShortcut(cmd.keybinding)}</span>` : ""}
       `;
       item.addEventListener("click", () => {
+        mruBump("commands", cmd.id);
         closeCommandPalette();
         cmd.action();
       });
@@ -105,15 +110,27 @@ export async function openCommandPalette() {
   }
 
   function filter() {
-    const query = input.value.toLowerCase();
+    const query = input.value.trim();
     if (!query) {
-      filtered = commands;
-    } else {
-      filtered = commands.filter(
-        (cmd) =>
-          cmd.label.toLowerCase().includes(query) ||
-          cmd.category.toLowerCase().includes(query),
+      // Recently used commands first, then registration order.
+      filtered = [...commands].sort(
+        (a, b) => mruRank("commands", a.id) - mruRank("commands", b.id),
       );
+    } else {
+      filtered = commands
+        .map((cmd) => {
+          const label = fuzzyScore(query, cmd.label);
+          const combo = fuzzyScore(query, `${cmd.category} ${cmd.label}`);
+          const score = Math.max(label !== null ? label + 2 : -Infinity, combo ?? -Infinity);
+          return { cmd, score };
+        })
+        .filter((e) => e.score !== -Infinity)
+        .sort(
+          (a, b) =>
+            b.score - a.score ||
+            mruRank("commands", a.cmd.id) - mruRank("commands", b.cmd.id),
+        )
+        .map((e) => e.cmd);
     }
     selectedIdx = 0;
     renderResults();
@@ -135,8 +152,10 @@ export async function openCommandPalette() {
     } else if (e.key === "Enter") {
       e.preventDefault();
       if (filtered[selectedIdx]) {
+        const cmd = filtered[selectedIdx];
+        mruBump("commands", cmd.id);
         closeCommandPalette();
-        filtered[selectedIdx].action();
+        cmd.action();
       }
     } else if (e.key === "Escape") {
       closeCommandPalette();
@@ -177,7 +196,7 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
     id: "ws-create",
     label: "Create Workspace",
     category: "Workspace",
-    keybinding: "Ctrl+N",
+    keybinding: getShortcutKey("new-workspace"),
     action: () => showWorkspaceDialog({ mode: "create" }),
   });
 
@@ -344,7 +363,7 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
       id: "git-merge",
       label: "Merge / Rebase into Main",
       category: "Git",
-      keybinding: "Ctrl+M",
+      keybinding: getShortcutKey("merge-rebase"),
       action: () => showMergeDialog(),
     });
     cmds.push({
@@ -366,14 +385,14 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
       id: "git-log",
       label: "Git Log",
       category: "Git",
-      keybinding: "Alt+L",
+      keybinding: getShortcutKey("git-log"),
       action: () => showGitLog(),
     });
     cmds.push({
       id: "git-stash",
       label: "Git Stash",
       category: "Git",
-      keybinding: "Ctrl+Shift+S",
+      keybinding: getShortcutKey("git-stash"),
       action: () => showStashDialog(),
     });
   }
@@ -384,7 +403,7 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
       id: "code-review",
       label: "Code Review (PR)",
       category: "Review",
-      keybinding: "Ctrl+Shift+R",
+      keybinding: getShortcutKey("code-review"),
       action: () => showCodeReview(),
     });
   }
@@ -394,14 +413,14 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
     id: "agent-manage",
     label: "Manage Agents",
     category: "Agents",
-    keybinding: "Ctrl+Shift+A",
+    keybinding: getShortcutKey("agent-manager"),
     action: () => showAgentManager(),
   });
   cmds.push({
     id: "manage-providers",
     label: "Manage Providers",
     category: "Settings",
-    keybinding: "Alt+P",
+    keybinding: getShortcutKey("manage-providers"),
     action: () => showProvidersDialog(),
   });
   if (ws) {
@@ -409,7 +428,7 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
       id: "agent-dispatch",
       label: "Dispatch Agent",
       category: "Agents",
-      keybinding: "Ctrl+Shift+D",
+      keybinding: getShortcutKey("dispatch-agent"),
       action: () => showDispatchDialog(),
     });
   }
@@ -420,7 +439,7 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
       id: "git-undo",
       label: "Undo Stage / Unstage",
       category: "Git",
-      keybinding: "Ctrl+Z",
+      keybinding: getShortcutKey("undo"),
       action: async () => {
         const entry = appState.popUndo();
         if (!entry) { toast("Nothing to undo", "info"); return; }
@@ -447,21 +466,21 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
     id: "search-files",
     label: "Find File",
     category: "Search",
-    keybinding: "Ctrl+F",
+    keybinding: getShortcutKey("fuzzy-search"),
     action: () => openFuzzySearch(),
   });
   cmds.push({
     id: "search-project",
     label: "Search in Project",
     category: "Search",
-    keybinding: "Ctrl+Shift+F",
+    keybinding: getShortcutKey("project-search"),
     action: () => openProjectSearch(),
   });
   cmds.push({
     id: "search-workspace",
     label: "Switch Workspace",
     category: "Search",
-    keybinding: "Ctrl+Space",
+    keybinding: getShortcutKey("workspace-switcher"),
     action: () => openWorkspaceSwitcher(),
   });
 
@@ -511,52 +530,45 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
     action: () => appState.setActiveView("git"),
   });
   cmds.push({
-    id: "manage-agents",
-    label: "Manage Agents",
-    category: "View",
-    keybinding: "Ctrl+Shift+A",
-    action: () => showAgentManager(),
-  });
-  cmds.push({
     id: "view-kanban",
     label: "Show Kanban Board",
     category: "View",
-    keybinding: "Alt+K",
+    keybinding: getShortcutKey("kanban"),
     action: () => appState.setActiveView("kanban"),
   });
   cmds.push({
     id: "view-dashboard",
     label: "Dashboard",
     category: "View",
-    keybinding: "Alt+D",
+    keybinding: getShortcutKey("dashboard"),
     action: () => showDashboard(),
   });
   cmds.push({
     id: "view-sysinfo",
     label: "System Info",
     category: "View",
-    keybinding: "Alt+I",
+    keybinding: getShortcutKey("system-info"),
     action: () => showSysinfoDialog(),
   });
   cmds.push({
     id: "view-help",
     label: "Keyboard Shortcuts",
     category: "Help",
-    keybinding: "?",
+    keybinding: getShortcutKey("help"),
     action: () => showHelpDialog(),
   });
   cmds.push({
     id: "settings",
     label: "Settings",
     category: "Edit",
-    keybinding: "Alt+S",
+    keybinding: getShortcutKey("settings"),
     action: () => showSettingsDialog(),
   });
   cmds.push({
     id: "terminal-search",
     label: "Search in Terminal",
     category: "Search",
-    keybinding: "Ctrl+Shift+B",
+    keybinding: getShortcutKey("terminal-search"),
     action: () => openTerminalSearch(),
   });
   cmds.push({
@@ -580,7 +592,7 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
     id: "app-logs",
     label: "Application Logs",
     category: "View",
-    keybinding: "Alt+Shift+L",
+    keybinding: getShortcutKey("logs"),
     action: () => showLogsDialog(),
   });
 
@@ -627,7 +639,7 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
     id: "theme-settings",
     label: "Theme Settings",
     category: "Theme",
-    keybinding: "Alt+T",
+    keybinding: getShortcutKey("theme"),
     action: () => showThemeDialog(),
   });
   for (const preset of themeEngine.getPresets()) {
@@ -671,23 +683,16 @@ function scrollToSelected(container: HTMLElement) {
 }
 
 function showConfirmDialog(message: string, hint: string, onConfirm: () => void) {
-  document.querySelector(".ws-delete-confirm")?.remove();
-  const overlay = document.createElement("div");
-  overlay.className = "ws-delete-confirm";
-  overlay.innerHTML = `
-    <div class="ws-delete-dialog">
+  showConfirm({
+    bodyHtml: `
       <p>${escapeHtml(message)}</p>
       <p class="ws-delete-hint">${escapeHtml(hint)}</p>
-      <div class="ws-delete-buttons">
-        <button class="dialog-btn dialog-btn-danger ws-confirm-yes">Delete</button>
-        <button class="dialog-btn dialog-btn-secondary ws-confirm-no">Cancel</button>
-      </div>
-    </div>
-  `;
-  overlay.querySelector(".ws-confirm-yes")!.addEventListener("click", () => { overlay.remove(); onConfirm(); });
-  overlay.querySelector(".ws-confirm-no")!.addEventListener("click", () => overlay.remove());
-  overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
-  document.body.appendChild(overlay);
+    `,
+    actions: [
+      { label: "Delete", kind: "danger", isDefault: true, onSelect: () => onConfirm() },
+      { label: "Cancel", kind: "secondary" },
+    ],
+  });
 }
 
 function escapeHtml(text: string): string {

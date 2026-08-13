@@ -24,7 +24,7 @@ export function showThemeDialog() {
   header.className = "dialog-header";
   header.innerHTML = `
     <span class="dialog-title">Theme Settings</span>
-    <button class="dialog-close">×</button>
+    <button class="dialog-close" title="Close" aria-label="Close">×</button>
   `;
 
   // Build body

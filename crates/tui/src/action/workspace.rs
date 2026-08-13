@@ -27,7 +27,10 @@ fn finish_workspace_creation(app: &mut App, mut info: piki_core::WorkspaceInfo) 
             ws.watcher = Some(watcher);
         }
         Err(e) => {
-            app.status_message = Some(format!("Watcher error: {}", e));
+            app.set_toast(
+                format!("Watcher error: {}", e),
+                crate::app::ToastLevel::Error,
+            );
         }
     }
 
@@ -63,7 +66,7 @@ pub(super) async fn handle(
             match result {
                 Ok(info) => finish_workspace_creation(app, info),
                 Err(e) => {
-                    app.status_message = Some(format!("Error: {}", e));
+                    app.set_toast(format!("Error: {}", e), crate::app::ToastLevel::Error);
                 }
             }
         }
@@ -88,7 +91,7 @@ pub(super) async fn handle(
             match result {
                 Ok(info) => finish_workspace_creation(app, info),
                 Err(e) => {
-                    app.status_message = Some(format!("Error: {}", e));
+                    app.set_toast(format!("Error: {}", e), crate::app::ToastLevel::Error);
                 }
             }
         }
@@ -104,7 +107,7 @@ pub(super) async fn handle(
                     .filter(|w| !app.workspaces.iter().any(|ws| ws.info.path == w.path))
                     .collect(),
                 Err(e) => {
-                    app.status_message = Some(format!("Error: {}", e));
+                    app.set_toast(format!("Error: {}", e), crate::app::ToastLevel::Error);
                     Vec::new()
                 }
             };
@@ -128,7 +131,10 @@ pub(super) async fn handle(
             branch,
         } => {
             let Some(parent) = app.workspaces.get(parent_idx) else {
-                app.status_message = Some("Parent workspace no longer exists".into());
+                app.set_toast(
+                    "Parent workspace no longer exists",
+                    crate::app::ToastLevel::Error,
+                );
                 return Ok(());
             };
             let source_repo = parent.info.source_repo.clone();
@@ -139,7 +145,7 @@ pub(super) async fn handle(
             match result {
                 Ok(info) => finish_workspace_creation(app, info),
                 Err(e) => {
-                    app.status_message = Some(format!("Error: {}", e));
+                    app.set_toast(format!("Error: {}", e), crate::app::ToastLevel::Error);
                 }
             }
         }
@@ -173,25 +179,30 @@ pub(super) async fn handle(
                         w.kanban_path.as_deref() == Some(kanban_path.as_str())
                             && w.kanban_provider.is_some()
                     });
+                    let mut kanban_err: Option<String> = None;
                     if let Some(src_idx) = source_ws_idx {
                         let src_ws = &mut app.workspaces[src_idx];
                         if let Some(ref mut kp) = src_ws.kanban_provider {
                             if let Ok(board) = kp.load_board() {
                                 for col in &board.columns {
                                     if let Some(card) = col.cards.iter().find(|c| c.id == card_id) {
-                                        let _ = kp.update_card(
+                                        if let Err(e) = kp.update_card(
                                             &card_id,
                                             &card.title,
                                             &card.description,
                                             card.priority,
                                             "",
                                             &card.project,
-                                        );
+                                        ) {
+                                            kanban_err = Some(e.to_string());
+                                        }
                                         break;
                                     }
                                 }
                             }
-                            let _ = kp.move_card(&card_id, &target_col);
+                            if let Err(e) = kp.move_card(&card_id, &target_col) {
+                                kanban_err = Some(e.to_string());
+                            }
                             if let Ok(board) = kp.load_board()
                                 && let Some(ref mut ka) = src_ws.kanban_app
                             {
@@ -199,6 +210,12 @@ pub(super) async fn handle(
                                 ka.clamp();
                             }
                         }
+                    }
+                    if let Some(e) = kanban_err {
+                        app.set_toast(
+                            format!("Kanban card move failed: {e}"),
+                            crate::app::ToastLevel::Error,
+                        );
                     }
                 }
 
@@ -239,7 +256,7 @@ pub(super) async fn handle(
                             true
                         }
                         Err(e) => {
-                            app.status_message = Some(format!("Error: {}", e));
+                            app.set_toast(format!("Error: {}", e), crate::app::ToastLevel::Error);
                             false
                         }
                     }

@@ -601,21 +601,40 @@ pub struct EditorState {
     pub cursor_row: usize,
     pub cursor_col: usize,
     pub scroll_offset: usize,
+    /// Buffer contents as of open/last save — `is_dirty` compares against it.
+    baseline: Vec<String>,
+    /// One-shot confirm: set when exit was pressed on a dirty buffer; the
+    /// next exit discards, any other key disarms.
+    pub pending_discard: bool,
 }
 
 impl EditorState {
     pub fn new(content: &str) -> Self {
         let lines: Vec<String> = content.lines().map(String::from).collect();
+        let lines = if lines.is_empty() {
+            vec![String::new()]
+        } else {
+            lines
+        };
         Self {
-            lines: if lines.is_empty() {
-                vec![String::new()]
-            } else {
-                lines
-            },
+            baseline: lines.clone(),
+            lines,
             cursor_row: 0,
             cursor_col: 0,
             scroll_offset: 0,
+            pending_discard: false,
         }
+    }
+
+    /// True when the buffer differs from the last opened/saved contents.
+    pub fn is_dirty(&self) -> bool {
+        self.lines != self.baseline
+    }
+
+    /// Re-baseline after a successful save.
+    pub fn mark_saved(&mut self) {
+        self.baseline = self.lines.clone();
+        self.pending_discard = false;
     }
 
     pub fn contents(&self) -> String {
@@ -1038,6 +1057,15 @@ pub struct ChatPanelState {
     pub agent_tool_status: Option<String>,
     /// Pending write-tool approval request from the agent loop
     pub pending_approval: Option<piki_agent::ApprovalRequest>,
+    /// Abort handle for the in-flight stream/agent task (Ctrl+C stop,
+    /// watchdog timeout).
+    pub stream_abort: Option<tokio::task::AbortHandle>,
+    /// Last stream event time — the tick watchdog unlocks the panel when a
+    /// stream goes quiet without a terminal event.
+    pub last_stream_activity: Option<std::time::Instant>,
+    /// One-shot confirm: first Ctrl+L arms, the second clears. Any other key
+    /// disarms.
+    pub pending_clear: bool,
 }
 
 impl App {
@@ -1173,6 +1201,27 @@ impl App {
         self.toast = Some(Toast::new(message.into(), level));
         // Also keep status_message in sync for backward compatibility
         self.status_message = self.toast.as_ref().map(|t| t.message.clone());
+    }
+
+    /// Stop the in-flight chat stream (if any): abort the task, keep the
+    /// partial response as an assistant message, and unlock the input. Safe
+    /// to call when nothing is streaming.
+    pub fn chat_stop_stream(&mut self) {
+        if let Some(handle) = self.chat_panel.stream_abort.take() {
+            handle.abort();
+        }
+        if !self.chat_panel.current_response.is_empty() {
+            let partial = std::mem::take(&mut self.chat_panel.current_response);
+            self.chat_panel.messages.push(piki_core::chat::ChatMessage {
+                role: piki_core::chat::ChatRole::Assistant,
+                content: partial,
+                tool_calls: None,
+                tool_call_id: None,
+            });
+        }
+        self.chat_panel.streaming = false;
+        self.chat_panel.agent_tool_status = None;
+        self.chat_panel.last_stream_activity = None;
     }
 
     /// Expire the toast if its duration has passed. Returns true if expired.
@@ -1630,7 +1679,7 @@ impl App {
         let worktree_path = match self.current_workspace() {
             Some(ws) => ws.info.path.clone(),
             None => {
-                self.status_message = Some("No active workspace".into());
+                self.set_toast("No active workspace", ToastLevel::Info);
                 return;
             }
         };
@@ -1669,7 +1718,7 @@ impl App {
         let root = match self.current_workspace() {
             Some(ws) => ws.info.path.clone(),
             None => {
-                self.status_message = Some("No active workspace".into());
+                self.set_toast("No active workspace", ToastLevel::Info);
                 return;
             }
         };
@@ -1685,7 +1734,8 @@ impl App {
 
     /// Open the command palette overlay.
     pub fn open_command_palette(&mut self) {
-        self.command_palette = Some(crate::command_palette::create_state(&self.workspaces));
+        let mru = crate::command_palette::load_mru(&self.storage);
+        self.command_palette = Some(crate::command_palette::create_state(&self.workspaces, &mru));
         self.mode = AppMode::CommandPalette;
     }
 
@@ -1716,7 +1766,7 @@ impl App {
                 self.mode = AppMode::InlineEdit;
             }
             Err(e) => {
-                self.status_message = Some(format!("Cannot read file: {}", e));
+                self.set_toast(format!("Cannot read file: {}", e), ToastLevel::Error);
             }
         }
     }

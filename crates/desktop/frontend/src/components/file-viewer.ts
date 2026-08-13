@@ -1,4 +1,5 @@
 import { EditorView, basicSetup } from "codemirror";
+import { showConfirm } from "./confirm";
 import { EditorState, Compartment, Extension } from "@codemirror/state";
 import { vim } from "@replit/codemirror-vim";
 import * as ipc from "../ipc";
@@ -39,7 +40,7 @@ export async function showFileViewer(workspaceIdx: number, path: string) {
         <button class="file-viewer-btn file-viewer-inline-edit" title="Quick Edit (${formatShortcut("Ctrl+I")})">Quick Edit</button>
         <button class="file-viewer-btn file-viewer-edit" title="Open in $EDITOR (${formatShortcut("Ctrl+E")})">Edit</button>
         <button class="file-viewer-btn file-viewer-copy" title="Copy to clipboard">Copy</button>
-        <button class="file-viewer-btn file-viewer-close">&times;</button>
+        <button class="file-viewer-btn file-viewer-close" title="Close" aria-label="Close">&times;</button>
       </div>
     </div>
     <div class="file-viewer-body"></div>
@@ -136,7 +137,25 @@ export async function showFileViewer(workspaceIdx: number, path: string) {
     });
 
     actionsDiv.querySelector(".file-viewer-cancel")!.addEventListener("click", () => {
+      requestExitEditMode();
+    });
+  }
+
+  /** Leave edit mode, confirming first when the buffer has unsaved edits. */
+  function requestExitEditMode() {
+    if (editorView.state.doc.toString() === content) {
       exitEditMode();
+      return;
+    }
+    showConfirm({
+      bodyHtml: `
+        <p>Discard changes?</p>
+        <p class="ws-delete-hint">Your unsaved edits will be lost.</p>
+      `,
+      actions: [
+        { label: "Discard", kind: "danger", onSelect: () => exitEditMode() },
+        { label: "Keep editing", kind: "secondary", isDefault: true },
+      ],
     });
   }
 
@@ -154,7 +173,7 @@ export async function showFileViewer(workspaceIdx: number, path: string) {
       <button class="file-viewer-btn file-viewer-inline-edit" title="Quick Edit (${formatShortcut("Ctrl+I")})">Quick Edit</button>
       <button class="file-viewer-btn file-viewer-edit" title="Open in $EDITOR (${formatShortcut("Ctrl+E")})">Edit</button>
       <button class="file-viewer-btn file-viewer-copy" title="Copy to clipboard">Copy</button>
-      <button class="file-viewer-btn file-viewer-close">&times;</button>
+      <button class="file-viewer-btn file-viewer-close" title="Close" aria-label="Close">&times;</button>
     `;
 
     actionsDiv.querySelector(".file-viewer-open-editor")!.addEventListener("click", openInEditorTab);
@@ -192,7 +211,7 @@ export async function showFileViewer(workspaceIdx: number, path: string) {
       }
       if (e.key === "Escape") {
         e.preventDefault();
-        exitEditMode();
+        requestExitEditMode();
       }
       return;
     }

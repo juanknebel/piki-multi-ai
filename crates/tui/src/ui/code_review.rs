@@ -852,8 +852,19 @@ fn render_footer(
     config: &Config,
     theme: &Theme,
 ) {
-    let keys = if state.editing_comment.is_some() {
+    let keys = if state
+        .editing_comment
+        .as_ref()
+        .is_some_and(|ec| ec.pending_discard)
+    {
+        "Unsaved comment — [Esc] discard  [Enter] save".to_string()
+    } else if state.editing_comment.is_some() {
         "[Enter] save comment  [Esc] cancel".to_string()
+    } else if state.show_submit && state.pending_discard_draft {
+        format!(
+            "Discard draft and comments? [{}] confirm  (any other key cancels)",
+            config.format_binding("ctrl-d"),
+        )
     } else if state.show_submit {
         format!(
             "[Tab] cycle verdict  [Enter] submit  [Esc] close  [{}] discard",

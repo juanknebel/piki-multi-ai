@@ -31,7 +31,7 @@ pub(super) async fn handle(
             let source_dir = match app.workspaces.get(source_ws) {
                 Some(ws) => ws.source_repo.clone(),
                 None => {
-                    app.status_message = Some("Source workspace not found".into());
+                    app.set_toast("Source workspace not found", crate::app::ToastLevel::Info);
                     return Ok(());
                 }
             };
@@ -68,24 +68,35 @@ pub(super) async fn handle(
                 // Use current workspace — just spawn a new tab, no worktree
                 // Update kanban card
                 let assignee_label = agent_name.as_deref().unwrap_or(provider.label());
+                let mut kanban_err: Option<String> = None;
                 if let Some(src_ws) = app.workspaces.get_mut(source_ws)
                     && let Some(ref mut kp) = src_ws.kanban_provider
                 {
-                    let _ = kp.update_card(
+                    if let Err(e) = kp.update_card(
                         &card_id,
                         &card_title,
                         &card_description,
                         card_priority,
                         assignee_label,
                         &card_project,
-                    );
-                    let _ = kp.move_card(&card_id, "in_progress");
+                    ) {
+                        kanban_err = Some(e.to_string());
+                    }
+                    if let Err(e) = kp.move_card(&card_id, "in_progress") {
+                        kanban_err = Some(e.to_string());
+                    }
                     if let Some(ref mut ka) = src_ws.kanban_app
                         && let Ok(board) = kp.load_board()
                     {
                         ka.board = board;
                         ka.clamp();
                     }
+                }
+                if let Some(e) = kanban_err {
+                    app.set_toast(
+                        format!("Kanban card sync failed: {e}"),
+                        crate::app::ToastLevel::Error,
+                    );
                 }
 
                 // Spawn tab in current workspace
@@ -167,24 +178,35 @@ pub(super) async fn handle(
 
                         // Update kanban card: set assignee and move to IN PROGRESS
                         let assignee_label = agent_name.as_deref().unwrap_or(provider.label());
+                        let mut kanban_err: Option<String> = None;
                         if let Some(src_ws) = app.workspaces.get_mut(source_ws)
                             && let Some(ref mut kp) = src_ws.kanban_provider
                         {
-                            let _ = kp.update_card(
+                            if let Err(e) = kp.update_card(
                                 &card_id,
                                 &card_title,
                                 &card_description,
                                 card_priority,
                                 assignee_label,
                                 &card_project,
-                            );
-                            let _ = kp.move_card(&card_id, "in_progress");
+                            ) {
+                                kanban_err = Some(e.to_string());
+                            }
+                            if let Err(e) = kp.move_card(&card_id, "in_progress") {
+                                kanban_err = Some(e.to_string());
+                            }
                             if let Some(ref mut ka) = src_ws.kanban_app
                                 && let Ok(board) = kp.load_board()
                             {
                                 ka.board = board;
                                 ka.clamp();
                             }
+                        }
+                        if let Some(e) = kanban_err {
+                            app.set_toast(
+                                format!("Kanban card sync failed: {e}"),
+                                crate::app::ToastLevel::Error,
+                            );
                         }
 
                         // Create workspace and switch to it
@@ -197,7 +219,10 @@ pub(super) async fn handle(
                         match FileWatcher::new(ws.path.clone(), ws.name.clone()) {
                             Ok(watcher) => ws.watcher = Some(watcher),
                             Err(e) => {
-                                app.status_message = Some(format!("Watcher error: {}", e));
+                                app.set_toast(
+                                    format!("Watcher error: {}", e),
+                                    crate::app::ToastLevel::Error,
+                                );
                             }
                         }
 
@@ -235,7 +260,10 @@ pub(super) async fn handle(
                         }
                     }
                     Err(e) => {
-                        app.status_message = Some(format!("Dispatch failed: {}", e));
+                        app.set_toast(
+                            format!("Dispatch failed: {}", e),
+                            crate::app::ToastLevel::Error,
+                        );
                     }
                 }
             }
@@ -246,7 +274,10 @@ pub(super) async fn handle(
         } => {
             if let Some(ref storage) = app.storage.agent_profiles {
                 if let Err(e) = storage.save_agent(&profile) {
-                    app.status_message = Some(format!("Save agent failed: {}", e));
+                    app.set_toast(
+                        format!("Save agent failed: {}", e),
+                        crate::app::ToastLevel::Error,
+                    );
                 } else {
                     // Reload agents for this project
                     if let Ok(agents) = storage.load_agents(&source_repo) {
@@ -263,7 +294,10 @@ pub(super) async fn handle(
             let repo = app.current_workspace().map(|ws| ws.source_repo.clone());
             if let Some(ref storage) = app.storage.agent_profiles {
                 if let Err(e) = storage.delete_agent(id) {
-                    app.status_message = Some(format!("Delete agent failed: {}", e));
+                    app.set_toast(
+                        format!("Delete agent failed: {}", e),
+                        crate::app::ToastLevel::Error,
+                    );
                 } else {
                     if let Some(ref repo) = repo
                         && let Ok(agents) = storage.load_agents(repo)
@@ -305,7 +339,7 @@ pub(super) async fn handle(
                         app.set_toast(format!("Agent synced: {}", name), ToastLevel::Success);
                     }
                     Err(e) => {
-                        app.status_message = Some(format!("Sync failed: {}", e));
+                        app.set_toast(format!("Sync failed: {}", e), crate::app::ToastLevel::Error);
                     }
                 }
             }

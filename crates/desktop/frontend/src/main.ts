@@ -1,7 +1,8 @@
 import "@xterm/xterm/css/xterm.css";
 import { appState } from "./state";
 import * as ipc from "./ipc";
-import { toast } from "./components/toast";
+import { toast, reportError } from "./components/toast";
+import { showConfirm } from "./components/confirm";
 import { renderActivityBar } from "./components/activity-bar";
 import { initSidebar } from "./components/sidebar";
 import { initTerminalPanel, openTerminalSearch } from "./components/terminal-panel";
@@ -10,6 +11,7 @@ import { initApiPanel } from "./components/api-panel";
 import { initMarkdownEditorPanel } from "./components/markdown-editor-panel";
 import { initCodeEditorPanel } from "./components/code-editor-panel";
 import { initWebPreviewPanel, openWebPreviewTab } from "./components/web-preview-panel";
+import { tearDownAndClosePane } from "./components/tab-bar";
 import { initPaneView } from "./components/pane-view";
 import { bindAction, handleGlobalKeydown, loadShortcuts } from "./shortcuts";
 import { showSettingsDialog } from "./components/dialogs/settings-dialog";
@@ -68,7 +70,7 @@ async function init() {
       appState.setActiveWorkspace(0, detail);
     }
   } catch (err) {
-    console.error("Failed to load workspaces:", err);
+    reportError("Failed to load workspaces", err);
   }
 
   // Notify LSP backend when workspace focus changes
@@ -167,7 +169,7 @@ async function init() {
   bindAction("split-down", () => appState.splitActivePane("down"));
   bindAction("close-pane", () => {
     const id = appState.activePaneId;
-    if (id) appState.closePane(id);
+    if (id) tearDownAndClosePane(id);
   });
 
   // Load user shortcut overrides from storage
@@ -209,40 +211,18 @@ async function handleUndo() {
 }
 
 function showCloseConfirm(activeCount: number, onConfirm: () => void, onCancel: () => void) {
-  document.querySelector(".ws-delete-confirm")?.remove();
-
-  const overlay = document.createElement("div");
-  overlay.className = "ws-delete-confirm";
   const label = activeCount === 1 ? "1 terminal session is" : `${activeCount} terminal sessions are`;
-  overlay.innerHTML = `
-    <div class="ws-delete-dialog">
+  showConfirm({
+    bodyHtml: `
       <p>${label} still running.</p>
       <p class="ws-delete-hint">Close anyway?</p>
-      <div class="ws-delete-buttons">
-        <button class="dialog-btn dialog-btn-danger ws-confirm-yes">Close</button>
-        <button class="dialog-btn dialog-btn-secondary ws-confirm-no">Cancel</button>
-      </div>
-    </div>
-  `;
-
-  overlay.querySelector(".ws-confirm-yes")!.addEventListener("click", () => {
-    overlay.remove();
-    onConfirm();
+    `,
+    actions: [
+      { label: "Close", kind: "danger", isDefault: true, onSelect: () => onConfirm() },
+      { label: "Cancel", kind: "secondary", onSelect: () => onCancel() },
+    ],
+    onDismiss: onCancel,
   });
-
-  overlay.querySelector(".ws-confirm-no")!.addEventListener("click", () => {
-    overlay.remove();
-    onCancel();
-  });
-
-  overlay.addEventListener("click", (e) => {
-    if (e.target === overlay) {
-      overlay.remove();
-      onCancel();
-    }
-  });
-
-  document.body.appendChild(overlay);
 }
 
 // Disable browser context menu so the app feels native

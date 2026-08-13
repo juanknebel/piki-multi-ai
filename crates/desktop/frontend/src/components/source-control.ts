@@ -1,4 +1,5 @@
 import { appState } from "../state";
+import { reportError } from "./toast";
 import * as ipc from "../ipc";
 import { showFileDiff } from "./diff-viewer";
 import { showMarkdown } from "./markdown-viewer";
@@ -62,10 +63,14 @@ export function renderSourceControl(container: HTMLElement) {
     const staged = files.filter((f) => STAGED_STATUSES.includes(f.status));
     const unstaged = files.filter((f) => UNSTAGED_STATUSES.includes(f.status));
 
-    // Preserve commit message before clearing the DOM
+    // Preserve commit message (and its caret) before clearing the DOM
     const existingTextarea = container.querySelector<HTMLTextAreaElement>(".sc-commit-input");
+    let savedSelection: [number, number] | null = null;
+    let hadTextareaFocus = false;
     if (existingTextarea) {
       savedCommitMessage = existingTextarea.value;
+      savedSelection = [existingTextarea.selectionStart, existingTextarea.selectionEnd];
+      hadTextareaFocus = document.activeElement === existingTextarea;
     }
 
     container.innerHTML = "";
@@ -97,7 +102,7 @@ export function renderSourceControl(container: HTMLElement) {
             appState.updateFiles(wsIdx, status.files, status.ahead_behind);
           }
         } catch (err) {
-          console.error(`Source control ${action} error:`, err);
+          reportError(`Source control ${action} failed`, err);
         }
       });
     });
@@ -116,9 +121,11 @@ export function renderSourceControl(container: HTMLElement) {
     const textarea = commitArea.querySelector<HTMLTextAreaElement>(".sc-commit-input")!;
     const commitBtn = commitArea.querySelector<HTMLButtonElement>(".sc-commit-btn")!;
 
-    // Restore saved commit message
+    // Restore saved commit message, caret, and focus
     if (savedCommitMessage) {
       textarea.value = savedCommitMessage;
+      if (savedSelection) textarea.setSelectionRange(savedSelection[0], savedSelection[1]);
+      if (hadTextareaFocus) textarea.focus();
     }
 
     textarea.addEventListener("input", () => {
@@ -147,7 +154,7 @@ export function renderSourceControl(container: HTMLElement) {
         const status = await ipc.getWorkspaceGitStatus(wsIdx);
         appState.updateFiles(wsIdx, status.files, status.ahead_behind);
       } catch (err) {
-        console.error("Commit error:", err);
+        reportError("Commit failed", err);
         commitBtn.textContent = "✓ Commit";
         commitBtn.disabled = false;
       }
@@ -230,7 +237,7 @@ function renderLocalOriginPlaceholder(container: HTMLElement) {
   const empty = document.createElement("div");
   empty.className = "empty-message";
   empty.style.padding = "16px 20px";
-  empty.style.color = "var(--color-text-muted)";
+  empty.style.color = "var(--text-muted)";
   empty.style.lineHeight = "1.5";
   empty.textContent =
     "Source control is unavailable for local-folder workspaces. Recreate the workspace from a GitHub URL to enable git operations.";
@@ -397,7 +404,7 @@ function renderSection(
     try {
       await onBulkAction();
     } catch (err) {
-      console.error(`Bulk ${action} error:`, err);
+      reportError(`Bulk ${action} failed`, err);
     }
   });
 
@@ -427,7 +434,7 @@ function renderSection(
       appState.pushUndo({ action, files: paths });
       await refreshFiles();
     } catch (err) {
-      console.error(`Bulk selected ${action} error:`, err);
+      reportError(`Bulk ${action} failed`, err);
     }
   });
 
@@ -591,7 +598,7 @@ function renderSection(
             }
             await refreshFiles();
           } catch (err) {
-            console.error(`${action} error:`, err);
+            reportError(`${action} failed`, err);
           }
         },
       );
@@ -611,7 +618,7 @@ async function refreshFiles() {
     const files = await ipc.getChangedFiles(wsIdx);
     appState.updateFiles(wsIdx, files, appState.activeWs?.aheadBehind ?? null);
   } catch (err) {
-    console.error("Failed to refresh files:", err);
+    reportError("Failed to refresh files", err);
   }
 }
 

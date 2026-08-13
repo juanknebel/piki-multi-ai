@@ -1,10 +1,11 @@
 import { Marked } from "marked";
+import { showConfirm } from "./confirm";
 import { markedHighlight } from "marked-highlight";
 import hljs from "highlight.js/lib/common";
 import "highlight.js/styles/atom-one-dark.css";
 import * as ipc from "../ipc";
 import { appState } from "../state";
-import { toast } from "./toast";
+import { toast, reportError } from "./toast";
 import { registerMarkdownFile } from "./markdown-editor-panel";
 import { modCtrl, formatShortcut } from "../shortcuts";
 
@@ -32,7 +33,7 @@ export async function showMarkdown(filePath: string) {
   try {
     content = await ipc.readMarkdownFile(wsIdx, filePath);
   } catch (err) {
-    console.error("Failed to read markdown:", err);
+    reportError("Failed to read markdown", err);
     return;
   }
 
@@ -59,7 +60,7 @@ export async function showMarkdown(filePath: string) {
         <button class="file-viewer-btn md-quick-edit" title="Quick Edit (${formatShortcut("Ctrl+I")})">Quick Edit</button>
         <button class="file-viewer-btn md-edit" title="Open in $EDITOR (${formatShortcut("Ctrl+E")})">Edit</button>
         <button class="file-viewer-btn md-copy" title="Copy to clipboard">Copy</button>
-        <button class="dialog-close">×</button>
+        <button class="dialog-close" title="Close" aria-label="Close">×</button>
       </div>
     `;
 
@@ -116,8 +117,30 @@ export async function showMarkdown(filePath: string) {
       }
     });
     header.querySelector(".md-cancel")!.addEventListener("click", () => {
+      requestExitEditMode();
+    });
+  }
+
+  /** Leave edit mode, confirming first when the textarea has unsaved edits. */
+  function requestExitEditMode() {
+    const ta = viewer.querySelector<HTMLTextAreaElement>(".file-viewer-textarea");
+    const exit = () => {
       editing = false;
       renderViewMode();
+    };
+    if (!ta || ta.value === content) {
+      exit();
+      return;
+    }
+    showConfirm({
+      bodyHtml: `
+        <p>Discard changes?</p>
+        <p class="ws-delete-hint">Your unsaved edits will be lost.</p>
+      `,
+      actions: [
+        { label: "Discard", kind: "danger", onSelect: exit },
+        { label: "Keep editing", kind: "secondary", isDefault: true },
+      ],
     });
   }
 
@@ -141,7 +164,7 @@ export async function showMarkdown(filePath: string) {
         e.preventDefault();
         (header.querySelector(".md-save") as HTMLButtonElement)?.click();
       }
-      if (e.key === "Escape") { e.preventDefault(); editing = false; renderViewMode(); }
+      if (e.key === "Escape") { e.preventDefault(); requestExitEditMode(); }
       return;
     }
     if (e.key === "Escape") close();
@@ -158,8 +181,9 @@ export async function showMarkdown(filePath: string) {
   backdrop.focus();
 }
 
-/** Render markdown source to HTML via marked (GFM) + highlight.js fences. */
-function renderMarkdown(src: string): string {
+/** Render markdown source to HTML via marked (GFM) + highlight.js fences.
+ *  Shared with the chat panel so assistant replies render identically. */
+export function renderMarkdown(src: string): string {
   // `marked.parse` is synchronous when no async extensions are registered;
   // the Marked typings still surface a Promise type, so we coerce. The cast
   // is safe because we only configure synchronous extensions above.

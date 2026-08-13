@@ -29,6 +29,10 @@ const MIN_RENDER_INTERVAL: Duration = Duration::from_millis(33);
 /// UI redraw, so this — not `TICK_RATE` — bounds the steady-state frame rate
 /// while any agent is running.
 const SPINNER_INTERVAL: Duration = Duration::from_millis(150);
+
+/// No chat-stream event for this long while `streaming` → assume the stream
+/// died and unlock the overlay (checked on the fallback tick).
+const CHAT_STREAM_TIMEOUT: Duration = Duration::from_secs(60);
 /// Cadence of passive (screen-scrape) agent-state detection. Status changes
 /// on a hookless agent are human-scale events; scraping faster than this just
 /// burns locks against the PTY reader thread.
@@ -51,7 +55,10 @@ fn process_watcher_result(app: &mut App, result: app::WatcherResult) {
         match result.watcher {
             Ok(watcher) => ws.watcher = Some(watcher),
             Err(e) => {
-                app.status_message = Some(format!("Watcher error: {}", e));
+                app.set_toast(
+                    format!("Watcher error: {}", e),
+                    crate::app::ToastLevel::Error,
+                );
             }
         }
     }
@@ -108,7 +115,7 @@ pub(crate) async fn run(
 
     // Show preflight warnings in status bar
     if !preflight_warnings.is_empty() {
-        app.status_message = Some(preflight_warnings.join(" | "));
+        app.set_toast(preflight_warnings.join(" | "), crate::app::ToastLevel::Info);
     }
 
     // Compute real terminal dimensions for PTY spawning
@@ -263,7 +270,7 @@ pub(crate) async fn run(
                     app.active_pane,
                 );
                 if last_layout_key.is_some_and(|k| k != layout_key) {
-                    terminal.clear()?;
+                    force_full_redraw(&mut terminal)?;
                 }
                 last_layout_key = Some(layout_key);
                 terminal.draw(|frame| {
@@ -383,6 +390,7 @@ pub(crate) async fn run(
 
             chat_event = app.chat_token_rx.recv() => {
                 if let Some(event) = chat_event {
+                    app.chat_panel.last_stream_activity = Some(std::time::Instant::now());
                     match event {
                         piki_api_client::ChatStreamEvent::Token(token) => {
                             app.chat_panel.current_response.push_str(&token);
@@ -437,6 +445,7 @@ pub(crate) async fn run(
 
             agent_event = app.agent_event_rx.recv() => {
                 if let Some(event) = agent_event {
+                    app.chat_panel.last_stream_activity = Some(std::time::Instant::now());
                     match event {
                         piki_agent::AgentEvent::Token(token) => {
                             app.chat_panel.current_response.push_str(&token);
@@ -559,6 +568,20 @@ pub(crate) async fn run(
             app.needs_redraw = true;
         }
 
+        // Chat stream watchdog: a stream that has gone quiet without a
+        // terminal event is dead — unlock the panel instead of leaving the
+        // input disabled until the HTTP timeout (or forever on a panic).
+        if app.chat_panel.streaming
+            && app
+                .chat_panel
+                .last_stream_activity
+                .is_some_and(|t| t.elapsed() >= CHAT_STREAM_TIMEOUT)
+        {
+            app.chat_stop_stream();
+            app.set_toast("Chat stream timed out", app::ToastLevel::Error);
+            app.needs_redraw = true;
+        }
+
         // Phase 4: Tick-gated periodic work
         if is_tick {
             // Advance the Agents-pane activity spinner while any agent runs.
@@ -635,6 +658,25 @@ pub(crate) async fn run(
         }
     }
 
+    Ok(())
+}
+
+/// Full clear + repaint-everything, without querying the terminal.
+///
+/// `Terminal::clear()` reads the cursor position (CSI 6n) and waits for the
+/// reply — but our async `EventStream` owns the input reader, so the reply
+/// races against it and `cursor::position()` can time out after 2s, killing
+/// the app with "The cursor position could not be read within a normal
+/// duration" (and on the way out the terminal may be left with mouse
+/// reporting enabled). Fullscreen never needs the cursor position: clear the
+/// screen (a pure write) and reset both diff buffers so the next draw
+/// rewrites every cell.
+fn force_full_redraw(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
+    use ratatui::backend::{Backend, ClearType};
+    terminal.backend_mut().clear_region(ClearType::All)?;
+    // Two swaps reset both buffers in place and leave `current` where it was.
+    terminal.swap_buffers();
+    terminal.swap_buffers();
     Ok(())
 }
 

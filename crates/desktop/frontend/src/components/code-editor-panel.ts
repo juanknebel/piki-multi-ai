@@ -5,6 +5,7 @@ import { languageServer } from "codemirror-languageserver";
 import * as ipc from "../ipc";
 import { appState } from "../state";
 import { toast } from "./toast";
+import { showConfirm } from "./confirm";
 import { modCtrl, formatShortcut } from "../shortcuts";
 import { buildCmTheme } from "../cm-theme";
 import { themeEngine } from "../theme";
@@ -438,44 +439,39 @@ function showReloadConflictPrompt(inst: CodeEditorInstance, onDisk: string): voi
   if (inst.element.querySelector(".code-editor-reload-prompt")) return;
 
   const fileName = shortName(inst.filePath);
-  const overlay = document.createElement("div");
-  overlay.className = "ws-delete-confirm code-editor-reload-prompt";
-  overlay.innerHTML = `
-    <div class="ws-delete-dialog">
+  showConfirm({
+    className: "code-editor-reload-prompt",
+    bodyHtml: `
       <p><strong>${esc(fileName)}</strong> changed on disk</p>
       <p class="ws-delete-hint">You have unsaved local changes. What would you like to do?</p>
-      <div class="ws-delete-buttons">
-        <button class="dialog-btn dialog-btn-secondary keep-yours">Keep yours</button>
-        <button class="dialog-btn dialog-btn-danger reload-disk">Reload from disk</button>
-      </div>
-    </div>
-  `;
-
-  overlay.querySelector(".reload-disk")!.addEventListener("click", () => {
-    if (inst.editorView) {
-      inst.editorView.dispatch({
-        changes: { from: 0, to: inst.editorView.state.doc.length, insert: onDisk },
-      });
-    }
-    inst.originalContent = onDisk;
-    inst.element.querySelector<HTMLElement>(".code-editor-dirty")!.style.display = "none";
-    overlay.remove();
-    toast(`Reloaded ${fileName} from disk`, "info");
+    `,
+    actions: [
+      {
+        label: "Keep yours",
+        kind: "secondary",
+        onSelect: () => {
+          // Rebase the dirty baseline so the indicator contrasts with the new
+          // disk content. On next save, the user's buffer wins.
+          inst.originalContent = onDisk;
+          // Dirty indicator was already showing; keep it on since editor still differs.
+        },
+      },
+      {
+        label: "Reload from disk",
+        kind: "danger",
+        onSelect: () => {
+          if (inst.editorView) {
+            inst.editorView.dispatch({
+              changes: { from: 0, to: inst.editorView.state.doc.length, insert: onDisk },
+            });
+          }
+          inst.originalContent = onDisk;
+          inst.element.querySelector<HTMLElement>(".code-editor-dirty")!.style.display = "none";
+          toast(`Reloaded ${fileName} from disk`, "info");
+        },
+      },
+    ],
   });
-
-  overlay.querySelector(".keep-yours")!.addEventListener("click", () => {
-    // Rebase the dirty baseline so the indicator contrasts with the new disk content.
-    // On next save, the user's buffer wins (last-write-wins semantics).
-    inst.originalContent = onDisk;
-    // Dirty indicator was already showing; keep it on since editor still differs.
-    overlay.remove();
-  });
-
-  overlay.addEventListener("click", (e) => {
-    if (e.target === overlay) overlay.remove();
-  });
-
-  document.body.appendChild(overlay);
 }
 
 export function showUnsavedChangesPrompt(
@@ -489,49 +485,35 @@ export function showUnsavedChangesPrompt(
   }
   const fileName = shortName(inst.filePath);
 
-  const overlay = document.createElement("div");
-  overlay.className = "ws-delete-confirm code-editor-unsaved-prompt";
-  overlay.innerHTML = `
-    <div class="ws-delete-dialog">
+  showConfirm({
+    className: "code-editor-unsaved-prompt",
+    bodyHtml: `
       <p>Unsaved changes in <strong>${esc(fileName)}</strong></p>
       <p class="ws-delete-hint">What would you like to do?</p>
-      <div class="ws-delete-buttons">
-        <button class="dialog-btn dialog-btn-primary action-save">Save</button>
-        <button class="dialog-btn dialog-btn-danger action-discard">Discard</button>
-        <button class="dialog-btn dialog-btn-secondary action-cancel">Cancel</button>
-      </div>
-    </div>
-  `;
-
-  overlay.querySelector(".action-save")!.addEventListener("click", async () => {
-    try {
-      await saveInstance(inst);
-      toast("File saved", "success");
-      overlay.remove();
-      onResolve("save");
-    } catch (err) {
-      toast(`Save failed: ${err}`, "error");
-    }
+    `,
+    actions: [
+      {
+        label: "Save",
+        kind: "primary",
+        isDefault: true,
+        autofocus: true,
+        keepOpen: true,
+        onSelect: async ({ close }) => {
+          try {
+            await saveInstance(inst);
+            toast("File saved", "success");
+            close();
+            onResolve("save");
+          } catch (err) {
+            toast(`Save failed: ${err}`, "error");
+          }
+        },
+      },
+      { label: "Discard", kind: "danger", onSelect: () => onResolve("discard") },
+      { label: "Cancel", kind: "secondary", onSelect: () => onResolve("cancel") },
+    ],
+    onDismiss: () => onResolve("cancel"),
   });
-
-  overlay.querySelector(".action-discard")!.addEventListener("click", () => {
-    overlay.remove();
-    onResolve("discard");
-  });
-
-  overlay.querySelector(".action-cancel")!.addEventListener("click", () => {
-    overlay.remove();
-    onResolve("cancel");
-  });
-
-  overlay.addEventListener("click", (e) => {
-    if (e.target === overlay) {
-      overlay.remove();
-      onResolve("cancel");
-    }
-  });
-
-  document.body.appendChild(overlay);
 }
 
 function shortName(filePath: string): string {

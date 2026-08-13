@@ -551,6 +551,8 @@ class AppState extends EventTarget {
     const ws = this.activeWs;
     const wt = ws ? this._curWsTab(ws) : undefined;
     if (!ws || !wt) return;
+    const pane = findPane(wt.paneTree, paneId);
+    const contentId = pane && pane.kind === "leaf" ? pane.contentId : null;
     const result = closePaneTree(wt.paneTree, paneId);
     if (result.root === null) {
       // Closing the only pane closes the whole top-level tab.
@@ -559,12 +561,14 @@ class AppState extends EventTarget {
     }
     if (result.root === wt.paneTree) return;
     wt.paneTree = result.root;
+    if (contentId) ws.tabs = ws.tabs.filter((t) => t.id !== contentId);
     if (result.promotedPaneId && findPane(result.root, result.promotedPaneId)) {
       wt.activePaneId = result.promotedPaneId;
     } else {
       wt.activePaneId = allLeaves(result.root)[0]?.id ?? result.root.id;
     }
     this._syncActiveContent(ws);
+    if (contentId) this.emit("tabs-changed");
     this.emit("pane-tree-changed");
     this.emit("active-pane-changed");
     this.emit("active-tab-changed");

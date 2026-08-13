@@ -130,8 +130,17 @@ pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &App) {
                 Span::raw(" allow all"),
             ]
         }
+        crate::app::ChatSubMode::Chat if app.chat_panel.pending_clear => {
+            vec![
+                Span::styled(
+                    "Press ctrl-l again to clear the conversation ",
+                    Style::default().fg(theme.palette.warn),
+                ),
+                Span::raw("(any other key cancels)"),
+            ]
+        }
         crate::app::ChatSubMode::Chat if app.chat_panel.streaming => {
-            if let Some(ref tool_name) = app.chat_panel.agent_tool_status {
+            let mut spans = if let Some(ref tool_name) = app.chat_panel.agent_tool_status {
                 vec![
                     Span::styled("running ", Style::default().fg(h)),
                     Span::raw(tool_name.clone()),
@@ -142,7 +151,11 @@ pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &App) {
                     Span::styled("streaming", Style::default().fg(h)),
                     Span::raw("..."),
                 ]
-            }
+            };
+            spans.push(Span::raw("  "));
+            spans.push(Span::styled("[ctrl-c]", Style::default().fg(h)));
+            spans.push(Span::raw(" stop"));
+            spans
         }
         crate::app::ChatSubMode::Chat => {
             let agent_hint = if app.chat_panel.agent_mode {

@@ -1,6 +1,8 @@
 import { appState } from "../state";
+import { makeInteractive } from "./a11y";
 import * as ipc from "../ipc";
-import { toast } from "./toast";
+import { toast, reportError } from "./toast";
+import { showConfirm } from "./confirm";
 import { createDropdown } from "./dropdown";
 import {
   showCreateWorktreeDialog,
@@ -42,12 +44,16 @@ export function renderWorkspaceList(container: HTMLElement) {
     })
     .catch(() => {});
 
+  let rowsError = false;
+
   async function refreshRows() {
     try {
       rows = await ipc.sidebarRows();
+      rowsError = false;
     } catch (err) {
       console.error("Failed to load sidebar rows:", err);
       rows = [];
+      rowsError = true;
     }
     render();
   }
@@ -98,6 +104,8 @@ export function renderWorkspaceList(container: HTMLElement) {
     const workspaces = appState.workspaces;
     const activeIdx = appState.activeWorkspace;
 
+    // Frequent agent events rebuild the list; keep the scroll position.
+    const prevScroll = container.scrollTop;
     container.innerHTML = "";
 
     // Header with create button
@@ -116,8 +124,28 @@ export function renderWorkspaceList(container: HTMLElement) {
     if (workspaces.length === 0) {
       const empty = document.createElement("div");
       empty.className = "empty-message";
-      empty.textContent = "No workspaces yet";
+      empty.innerHTML = `
+        <p>No workspaces yet</p>
+        <button class="dialog-btn dialog-btn-primary empty-cta">Create Workspace</button>
+      `;
+      empty.querySelector(".empty-cta")!.addEventListener("click", () => {
+        showWorkspaceDialog({ mode: "create" });
+      });
       container.appendChild(empty);
+      return;
+    }
+
+    // Workspaces exist but the grouped rows failed to load — say so instead
+    // of presenting an inexplicably empty sidebar.
+    if (rows.length === 0 && rowsError) {
+      const error = document.createElement("div");
+      error.className = "empty-message";
+      error.innerHTML = `
+        <p>Couldn't load workspaces</p>
+        <button class="dialog-btn dialog-btn-secondary empty-cta">Retry</button>
+      `;
+      error.querySelector(".empty-cta")!.addEventListener("click", () => void refreshRows());
+      container.appendChild(error);
       return;
     }
 
@@ -137,6 +165,7 @@ export function renderWorkspaceList(container: HTMLElement) {
           else collapsedGroups.add(key);
           persistCollapsed();
         });
+        makeInteractive(header);
         container.appendChild(header);
         continue;
       }
@@ -216,7 +245,7 @@ export function renderWorkspaceList(container: HTMLElement) {
           const detail = await ipc.switchWorkspace(idx);
           appState.setActiveWorkspace(idx, detail);
         } catch (err) {
-          console.error("Failed to switch workspace:", err);
+          reportError("Failed to switch workspace", err);
         }
       });
 
@@ -239,8 +268,10 @@ export function renderWorkspaceList(container: HTMLElement) {
         });
       });
 
+      makeInteractive(item);
       container.appendChild(item);
     }
+    container.scrollTop = prevScroll;
   }
 
   appState.on("workspaces-changed", () => void refreshRows());
@@ -286,58 +317,47 @@ async function showDeleteConfirm(idx: number, name: string) {
     }
   }
 
-  const overlay = document.createElement("div");
-  overlay.className = "ws-delete-confirm";
-  overlay.innerHTML = `
-    <div class="ws-delete-dialog">
+  const { overlay } = showConfirm({
+    bodyHtml: `
       <p>Delete <strong>${escapeHtml(name)}</strong>?</p>
       <p class="ws-delete-hint">This will remove the worktree and branch.</p>
       ${colDropdown ? '<div class="ws-delete-card-move"><label class="dialog-label">Move task card to:</label><span id="ws-delete-col-slot"></span></div>' : ""}
-      <div class="ws-delete-buttons">
-        <button class="dialog-btn dialog-btn-danger ws-confirm-yes">Delete</button>
-        <button class="dialog-btn dialog-btn-secondary ws-confirm-no">Cancel</button>
-      </div>
-    </div>
-  `;
+    `,
+    actions: [
+      {
+        label: "Delete",
+        kind: "danger",
+        isDefault: true,
+        onSelect: async () => {
+          // Move kanban card if user selected a column
+          if (cardId && boardPath && colDropdown) {
+            const targetCol = colDropdown.value;
+            if (targetCol) {
+              try {
+                await ipc.kanbanMoveCardByPath(boardPath, cardId, targetCol);
+              } catch {
+                // Non-critical
+              }
+            }
+          }
+          try {
+            await ipc.deleteWorkspace(idx);
+            appState.removeWorkspace(idx);
+            toast(`Deleted "${name}"`, "info");
+          } catch (err) {
+            toast(`Failed to delete: ${err}`, "error");
+          }
+        },
+      },
+      { label: "Cancel", kind: "secondary" },
+    ],
+  });
 
   // Mount dropdown if present
   if (colDropdown) {
     const slot = overlay.querySelector("#ws-delete-col-slot");
     if (slot) slot.replaceWith(colDropdown.container);
   }
-
-  overlay.querySelector(".ws-confirm-yes")!.addEventListener("click", async () => {
-    // Move kanban card if user selected a column
-    if (cardId && boardPath && colDropdown) {
-      const targetCol = colDropdown.value;
-      if (targetCol) {
-        try {
-          await ipc.kanbanMoveCardByPath(boardPath, cardId, targetCol);
-        } catch {
-          // Non-critical
-        }
-      }
-    }
-
-    overlay.remove();
-    try {
-      await ipc.deleteWorkspace(idx);
-      appState.removeWorkspace(idx);
-      toast(`Deleted "${name}"`, "info");
-    } catch (err) {
-      toast(`Failed to delete: ${err}`, "error");
-    }
-  });
-
-  overlay.querySelector(".ws-confirm-no")!.addEventListener("click", () => {
-    overlay.remove();
-  });
-
-  overlay.addEventListener("click", (e) => {
-    if (e.target === overlay) overlay.remove();
-  });
-
-  document.body.appendChild(overlay);
 }
 
 function getStatusClass(status: import("../types").WorkspaceStatus): string {

@@ -20,7 +20,7 @@ use crate::helpers::{resize_all_ptys, scrollback_max};
 fn focus(app: &mut App, edge: &str, target: Option<ActivePane>) -> Option<Action> {
     match target {
         Some(pane) => app.active_pane = pane,
-        None => app.status_message = Some(format!("No pane {edge}")),
+        None => app.set_toast(format!("No pane {edge}"), crate::app::ToastLevel::Info),
     }
     None
 }
@@ -271,7 +271,10 @@ pub(crate) fn request_close_tab(app: &mut App) -> Option<Action> {
             });
             app.mode = AppMode::ConfirmCloseTab;
         } else {
-            app.status_message = Some("Cannot close the initial shell tab".into());
+            app.set_toast(
+                "Cannot close the initial shell tab",
+                crate::app::ToastLevel::Error,
+            );
         }
     }
     None

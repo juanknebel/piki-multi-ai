@@ -48,13 +48,22 @@ pub(super) async fn handle(
                     if let Some(ws) = app.current_workspace_mut() {
                         ws.dirty = true;
                     }
-                    app.status_message = Some(format!("Edited: {}", path.display()));
+                    app.set_toast(
+                        format!("Edited: {}", path.display()),
+                        crate::app::ToastLevel::Info,
+                    );
                 }
                 Ok(s) => {
-                    app.status_message = Some(format!("Editor exited with: {}", s));
+                    app.set_toast(
+                        format!("Editor exited with: {}", s),
+                        crate::app::ToastLevel::Info,
+                    );
                 }
                 Err(e) => {
-                    app.status_message = Some(format!("Failed to run {}: {}", editor_cmd, e));
+                    app.set_toast(
+                        format!("Failed to run {}: {}", editor_cmd, e),
+                        crate::app::ToastLevel::Error,
+                    );
                 }
             }
             // Close fuzzy search if it was open

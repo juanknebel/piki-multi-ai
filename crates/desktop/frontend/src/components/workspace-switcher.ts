@@ -1,4 +1,5 @@
 import { appState } from "../state";
+import { reportError } from "./toast";
 import * as ipc from "../ipc";
 
 let switcherEl: HTMLElement | null = null;
@@ -152,7 +153,7 @@ export function openWorkspaceSwitcher() {
       const detail = await ipc.switchWorkspace(idx);
       appState.setActiveWorkspace(idx, detail);
     } catch (err) {
-      console.error("Switch failed:", err);
+      reportError("Workspace switch failed", err);
     }
   }
 

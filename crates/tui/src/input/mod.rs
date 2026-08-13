@@ -133,8 +133,6 @@ pub(crate) fn handle_paste(app: &mut App, text: &str) {
 pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
     // Code review is a locked mode — ALL keys route here, nothing leaks
     if code_review_input::is_code_review_locked(app) {
-        app.status_message = None;
-        app.toast = None;
         return code_review_input::handle_code_review_key(app, key);
     }
 
@@ -175,9 +173,10 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         AppMode::Normal => {}
     }
 
-    // Clear status message, toast, and selection on any key
-    app.status_message = None;
-    app.toast = None;
+    // Clear the mouse selection on any key. Toasts deliberately survive
+    // typing — they expire on their severity timer (Error 5s, Info 3s);
+    // clearing them here meant an error vanished on the first keystroke
+    // into the terminal, defeating the timed durations entirely.
     app.selection = None;
 
     // The terminal search overlay captures everything, including the prefix key

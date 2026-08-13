@@ -672,6 +672,29 @@ mod tests {
         insta::assert_snapshot!("tab_bar_solid_blocks", content);
     }
 
+    /// With more tabs than fit, the bar windows around the ACTIVE tab and
+    /// shows `‹N`/`N›` clipped-count indicators on the overflow sides.
+    #[test]
+    fn test_snapshot_tab_bar_overflow_windows_around_active() {
+        let mut terminal = test_terminal(40, 2);
+        let app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
+        let mut ws = crate::app::Workspace::from_info(test_ws_info("demo", 0));
+        for _ in 0..8 {
+            ws.add_tab(piki_core::AIProvider::Shell, true, None);
+        }
+        ws.active_tab = 4;
+        terminal
+            .draw(|frame| {
+                super::subtabs::render(frame, frame.area(), &ws, &app.theme);
+            })
+            .unwrap();
+        let content = buffer_to_snapshot(terminal.backend().buffer());
+        insta::assert_snapshot!("tab_bar_overflow", content);
+    }
+
     #[test]
     fn test_snapshot_workspace_switcher_tree() {
         let mut terminal = test_terminal(70, 16);

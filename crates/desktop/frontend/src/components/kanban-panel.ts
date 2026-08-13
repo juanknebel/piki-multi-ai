@@ -124,8 +124,11 @@ async function loadAndRender(inst: KanbanInstance) {
         <span class="kanban-empty-icon">B</span>
         <p>Could not load kanban board</p>
         <p class="kanban-empty-detail">${esc(String(err))}</p>
-        <button class="kanban-btn" onclick="this.closest('.kanban-board').querySelector('.kanban-refresh')?.click()">Retry</button>
+        <button class="kanban-btn kanban-retry">Retry</button>
       </div>`;
+    inst.element
+      .querySelector(".kanban-retry")!
+      .addEventListener("click", () => void loadAndRender(inst));
     return;
   }
   renderBoard(inst);
@@ -193,11 +196,12 @@ function renderBoard(inst: KanbanInstance) {
     </div>
   `;
 
-  // Search
+  // Search — only the columns re-render, so the input (and its caret)
+  // survive every keystroke.
   const searchInput = toolbar.querySelector(".kanban-search-input") as HTMLInputElement;
   searchInput.addEventListener("input", () => {
     inst.searchQuery = searchInput.value;
-    renderBoard(inst);
+    renderColumns(inst);
   });
 
   // Sort toggle — reload from backend with sort applied by flow-core
@@ -237,16 +241,15 @@ function renderBoard(inst: KanbanInstance) {
   toolbar.querySelector(".kanban-refresh")!.addEventListener("click", () => loadAndRender(inst));
   el.appendChild(toolbar);
 
-  // Re-focus search input and restore cursor
-  if (inst.searchQuery) {
-    requestAnimationFrame(() => {
-      const input = el.querySelector(".kanban-search-input") as HTMLInputElement | null;
-      if (input) {
-        input.focus();
-        input.setSelectionRange(input.value.length, input.value.length);
-      }
-    });
-  }
+  renderColumns(inst);
+}
+
+/** (Re)build only the columns area, leaving the toolbar DOM untouched. */
+function renderColumns(inst: KanbanInstance) {
+  const board = inst.board;
+  if (!board) return;
+  const wsIdx = appState.activeWorkspace;
+  const el = inst.element;
 
   // Apply filters/sort to a view copy (don't mutate inst.board)
   const viewBoard = applySearch(board, inst.searchQuery);
@@ -335,6 +338,7 @@ function renderBoard(inst: KanbanInstance) {
     colsContainer.appendChild(colEl);
   });
 
+  el.querySelector(".kanban-columns")?.remove();
   el.appendChild(colsContainer);
 }
 
@@ -477,10 +481,10 @@ function showEditModal(inst: KanbanInstance, card: KanbanCard) {
       <label class="kanban-edit-label">ID</label>
       <input class="kanban-edit-input" type="text" value="${escAttr(card.id)}" readonly style="opacity:0.6;cursor:default" />
 
-      <label class="kanban-edit-label">Title <span style="color:var(--error-color,#e06c75)">(required)</span></label>
+      <label class="kanban-edit-label">Title <span style="color:var(--error-color)">(required)</span></label>
       <input class="kanban-edit-input" id="ke-title" type="text" value="${escAttr(card.title)}" />
 
-      <label class="kanban-edit-label">Project <span style="color:var(--error-color,#e06c75)">(required)</span></label>
+      <label class="kanban-edit-label">Project <span style="color:var(--error-color)">(required)</span></label>
       <input class="kanban-edit-input" id="ke-project" type="text" value="${escAttr(card.project)}" />
 
       <label class="kanban-edit-label">Priority</label>
@@ -568,10 +572,10 @@ function showNewCardModal(inst: KanbanInstance, columnId: string) {
       <button class="kanban-edit-close">&times;</button>
     </div>
     <div class="kanban-edit-body">
-      <label class="kanban-edit-label">Project <span style="color:var(--error-color,#e06c75)">(required)</span></label>
+      <label class="kanban-edit-label">Project <span style="color:var(--error-color)">(required)</span></label>
       <input class="kanban-edit-input" id="ke-project" type="text" value="" placeholder="e.g. HUMAN, INFRA, API" />
 
-      <label class="kanban-edit-label">Title <span style="color:var(--error-color,#e06c75)">(required)</span></label>
+      <label class="kanban-edit-label">Title <span style="color:var(--error-color)">(required)</span></label>
       <input class="kanban-edit-input" id="ke-title" type="text" value="New card" />
 
       <label class="kanban-edit-label">Priority</label>

@@ -72,13 +72,15 @@ pub(super) async fn handle(
                     source_repo,
                 };
 
-                tokio::spawn(async move {
+                let task = tokio::spawn(async move {
                     let mut agent = piki_agent::AgentLoop::new(client, model, registry, context);
                     if let Err(e) = agent.run(messages, system_prompt, event_tx.clone()).await {
                         tracing::error!(error = %e, "Agent loop error");
                         let _ = event_tx.send(piki_agent::AgentEvent::Error(e.to_string()));
                     }
                 });
+                app.chat_panel.stream_abort = Some(task.abort_handle());
+                app.chat_panel.last_stream_activity = Some(std::time::Instant::now());
             } else {
                 // ── Plain chat mode ──
                 let tx = app.chat_token_tx.clone();
@@ -96,11 +98,13 @@ pub(super) async fn handle(
                 // `ChatClient` hides each backend's message format, so this
                 // no longer has to know one from the other.
                 let client = piki_agent::chat_client_for(server_type, &base_url);
-                tokio::spawn(async move {
+                let task = tokio::spawn(async move {
                     if let Err(e) = client.chat_stream(&model, &msgs, None, tx).await {
                         tracing::error!(error = %e, "chat_stream error");
                     }
                 });
+                app.chat_panel.stream_abort = Some(task.abort_handle());
+                app.chat_panel.last_stream_activity = Some(std::time::Instant::now());
             }
         }
         Action::ChatLoadModels => {

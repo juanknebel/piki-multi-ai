@@ -4,10 +4,10 @@
 import { helpSections } from "../../shortcuts";
 
 export function showHelpDialog() {
-  document.querySelector(".dialog-backdrop")?.remove();
+  document.querySelector(".help-backdrop")?.remove();
 
   const backdrop = document.createElement("div");
-  backdrop.className = "dialog-backdrop";
+  backdrop.className = "dialog-backdrop help-backdrop";
 
   const dialog = document.createElement("div");
   dialog.className = "dialog";
@@ -17,7 +17,7 @@ export function showHelpDialog() {
   let html = `
     <div class="dialog-header">
       <span class="dialog-title">Keyboard Shortcuts</span>
-      <button class="dialog-close">×</button>
+      <button class="dialog-close" title="Close" aria-label="Close">×</button>
     </div>
     <div class="dialog-body" style="overflow-y:auto">
   `;

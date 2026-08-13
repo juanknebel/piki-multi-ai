@@ -339,3 +339,31 @@
   font-size: 12px;
   flex-shrink: 0;
 }
+
+/* Hover copy button on assistant code blocks */
+.chat-msg-content pre {
+  position: relative;
+}
+
+.chat-code-copy {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  padding: 2px 6px;
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.chat-msg-content pre:hover .chat-code-copy,
+.chat-code-copy:focus-visible {
+  opacity: 1;
+}
+
+.chat-code-copy:hover {
+  color: var(--text-primary);
+}

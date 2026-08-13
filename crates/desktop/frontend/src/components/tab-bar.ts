@@ -2,12 +2,13 @@
 // layout (see pane-view.ts); a pane holds at most one content item.
 
 import { appState } from "../state";
+import { makeInteractive } from "./a11y";
 import * as ipc from "../ipc";
 import { toast } from "./toast";
 import { getProviderLabel, cliAgentStatusView } from "../types";
 import type { AIProvider, TabInfo, CliAgentStatus } from "../types";
 import type { PaneId, PaneNode } from "../pane-tree";
-import { allLeaves } from "../pane-tree";
+import { allLeaves, findPane } from "../pane-tree";
 import {
   destroyMarkdownEditorPanel,
   getMarkdownEditorFileName,
@@ -93,6 +94,8 @@ export function renderWorkspaceTabBar(container: HTMLElement) {
       e.stopPropagation();
       void tearDownAndCloseWsTab(appState.activeWorkspace, i);
     });
+    makeInteractive(el, "tab");
+    el.setAttribute("aria-selected", String(isActive));
     container.appendChild(el);
   });
 
@@ -102,6 +105,12 @@ export function renderWorkspaceTabBar(container: HTMLElement) {
   addBtn.textContent = "+";
   addBtn.addEventListener("click", () => appState.newBlankTab());
   container.appendChild(addBtn);
+
+  // With many tabs the bar scrolls; keep the active tab visible after
+  // switching via shortcut/palette.
+  container
+    .querySelector<HTMLElement>(".ws-tab.active")
+    ?.scrollIntoView({ inline: "nearest", block: "nearest" });
 }
 
 /** Close the active top-level tab (used by the menu bar / shortcut). */
@@ -146,6 +155,43 @@ export async function tearDownAndCloseWsTab(wsIdx: number, wsTabIdx: number) {
 
   if (dirtyEditor) {
     showUnsavedChangesPrompt(dirtyEditor.id, (action) => {
+      if (action === "cancel") return;
+      finish();
+    });
+    return;
+  }
+  finish();
+}
+
+/** Tear down a single pane's content (dirty prompt + PTY/panel teardown),
+ *  then remove the pane from the tree. Mirrors `tearDownAndCloseWsTab` so a
+ *  pane close never orphans a running session or drops unsaved edits. */
+export function tearDownAndClosePane(paneId: PaneId) {
+  const wsIdx = appState.activeWorkspace;
+  const ws = appState.activeWs;
+  if (!ws) return;
+  const wt = ws.wsTabs[ws.activeWsTab];
+  if (!wt) return;
+  const pane = findPane(wt.paneTree, paneId);
+  const contentId = pane && pane.kind === "leaf" ? pane.contentId : null;
+  const content = contentId ? ws.tabs.find((t) => t.id === contentId) : undefined;
+
+  const finish = () => {
+    if (content) {
+      if (isFrontendOnly(content.provider)) {
+        if (content.provider === "Markdown") destroyMarkdownEditorPanel(content.id);
+        else if (content.provider === "CodeEditor") destroyCodeEditorPanel(content.id);
+        else if (content.provider === "WebPreview") destroyWebPreviewPanel(content.id);
+      } else {
+        const idx = ws.tabs.findIndex((t) => t.id === content.id);
+        if (idx >= 0) ipc.closeTab(wsIdx, idx).catch(() => {});
+      }
+    }
+    appState.closePane(paneId);
+  };
+
+  if (content?.provider === "CodeEditor" && isCodeEditorDirty(content.id)) {
+    showUnsavedChangesPrompt(content.id, (action) => {
       if (action === "cancel") return;
       finish();
     });

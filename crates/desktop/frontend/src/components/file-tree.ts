@@ -6,6 +6,7 @@ import { registerCodeFile, getCodeEditorFilePath } from "./code-editor-panel";
 import { registerMarkdownFile, getMarkdownEditorFilePath } from "./markdown-editor-panel";
 import { showMarkdown } from "./markdown-viewer";
 import { toast } from "./toast";
+import { showConfirm } from "./confirm";
 import { fileGlyph, folderGlyph, type FileIcon } from "./file-icons";
 
 type NodeState =
@@ -452,36 +453,31 @@ export function renderFileTree(container: HTMLElement) {
   }
 
   function confirmDelete(rel: string) {
-    document.querySelector(".ws-delete-confirm")?.remove();
-    const overlay = document.createElement("div");
-    overlay.className = "ws-delete-confirm";
-    overlay.innerHTML = `
-      <div class="ws-delete-dialog">
+    showConfirm({
+      bodyHtml: `
         <p>Delete <strong>${esc(baseName(rel))}</strong>?</p>
         <p class="ws-delete-hint">This permanently removes it from disk.</p>
-        <div class="ws-delete-buttons">
-          <button class="dialog-btn dialog-btn-danger ws-confirm-yes">Delete</button>
-          <button class="dialog-btn dialog-btn-secondary ws-confirm-no">Cancel</button>
-        </div>
-      </div>`;
-    const closeOverlay = () => overlay.remove();
-    overlay.querySelector(".ws-confirm-yes")!.addEventListener("click", async () => {
-      closeOverlay();
-      try {
-        await ipc.fsDelete(wsIdx, rel);
-        forgetSubtree(rel);
-        if (selected === rel) selected = null;
-        allFiles = null;
-        await fetchChildren(parentRel(rel));
-      } catch (e) {
-        toast(`Delete failed: ${e}`, "error");
-      }
+      `,
+      actions: [
+        {
+          label: "Delete",
+          kind: "danger",
+          isDefault: true,
+          onSelect: async () => {
+            try {
+              await ipc.fsDelete(wsIdx, rel);
+              forgetSubtree(rel);
+              if (selected === rel) selected = null;
+              allFiles = null;
+              await fetchChildren(parentRel(rel));
+            } catch (e) {
+              toast(`Delete failed: ${e}`, "error");
+            }
+          },
+        },
+        { label: "Cancel", kind: "secondary" },
+      ],
     });
-    overlay.querySelector(".ws-confirm-no")!.addEventListener("click", closeOverlay);
-    overlay.addEventListener("click", (e) => {
-      if (e.target === overlay) closeOverlay();
-    });
-    document.body.appendChild(overlay);
   }
 
   function copyAbs(rel: string) {
@@ -775,6 +771,9 @@ export function renderFileTree(container: HTMLElement) {
     schedulePersist();
     const listPrev = container.querySelector<HTMLElement>(".ft-list");
     const prevScroll = listPrev?.scrollTop ?? 0;
+    // Rebuilding the list destroys the focused node; remember so keyboard
+    // navigation survives the re-render each keypress triggers.
+    const hadFocus = document.activeElement === listPrev;
     container.innerHTML = "";
 
     const folderName = rootPath
@@ -924,6 +923,7 @@ export function renderFileTree(container: HTMLElement) {
 
     container.appendChild(listEl);
     listEl.scrollTop = prevScroll;
+    if (hadFocus) listEl.focus();
   }
 
   resetToActiveWorkspace();

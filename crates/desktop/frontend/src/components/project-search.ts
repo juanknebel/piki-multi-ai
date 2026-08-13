@@ -36,9 +36,18 @@ export function openProjectSearch() {
   const results = palette.querySelector<HTMLElement>(".palette-results")!;
   let selectedIdx = 0;
   let matches: SearchMatch[] = [];
+  let searchError: string | null = null;
 
   function renderResults() {
     results.innerHTML = "";
+
+    if (searchError && input.value.trim()) {
+      const el = document.createElement("div");
+      el.className = "palette-empty";
+      el.textContent = `Search failed: ${searchError}`;
+      results.appendChild(el);
+      return;
+    }
 
     if (matches.length === 0 && input.value.trim()) {
       results.innerHTML = '<div class="palette-empty">No matches found</div>';
@@ -102,8 +111,10 @@ export function openProjectSearch() {
 
     try {
       matches = await ipc.projectSearch(wsIdx, q);
-    } catch {
+      searchError = null;
+    } catch (err) {
       matches = [];
+      searchError = String(err);
     }
     selectedIdx = 0;
     renderResults();

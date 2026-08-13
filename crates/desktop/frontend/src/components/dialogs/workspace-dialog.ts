@@ -23,7 +23,7 @@ interface DialogOptions {
 }
 
 export function showWorkspaceDialog(opts: DialogOptions) {
-  document.querySelector(".dialog-backdrop")?.remove();
+  document.querySelector(".workspace-backdrop")?.remove();
 
   const { mode, editIndex, cloneFrom, prefill: createPrefill } = opts;
   const editWs =
@@ -40,7 +40,7 @@ export function showWorkspaceDialog(opts: DialogOptions) {
         : "Clone Workspace";
 
   const backdrop = document.createElement("div");
-  backdrop.className = "dialog-backdrop";
+  backdrop.className = "dialog-backdrop workspace-backdrop";
 
   const showSourceAndDir = mode !== "edit";
   const showName = mode !== "edit";
@@ -49,7 +49,7 @@ export function showWorkspaceDialog(opts: DialogOptions) {
     <div class="dialog">
       <div class="dialog-header">
         <span class="dialog-title">${title}</span>
-        <button class="dialog-close">×</button>
+        <button class="dialog-close" title="Close" aria-label="Close">×</button>
       </div>
       <div class="dialog-body">
         ${
@@ -314,19 +314,19 @@ async function submitEdit(backdrop: HTMLElement, index: number) {
 }
 
 export function showWorkspaceInfo(index: number) {
-  document.querySelector(".dialog-backdrop")?.remove();
+  document.querySelector(".workspace-backdrop")?.remove();
 
   const ws = appState.workspaces[index];
   if (!ws) return;
   const info = ws.info;
 
   const backdrop = document.createElement("div");
-  backdrop.className = "dialog-backdrop";
+  backdrop.className = "dialog-backdrop workspace-backdrop";
   backdrop.innerHTML = `
     <div class="dialog" style="max-width:500px">
       <div class="dialog-header">
         <span class="dialog-title">Workspace Info</span>
-        <button class="dialog-close">×</button>
+        <button class="dialog-close" title="Close" aria-label="Close">×</button>
       </div>
       <div class="dialog-body">
         ${infoRow("Name", info.name)}
@@ -382,7 +382,7 @@ function escapeAttr(text: string): string {
  *  workspace anchored at the parent's source_repo. Only the branch name is
  *  required; prompt/kanban default to the parent's values. */
 export function showCreateWorktreeDialog(parent: WorkspaceInfo) {
-  document.querySelector(".dialog-backdrop")?.remove();
+  document.querySelector(".workspace-backdrop")?.remove();
 
   if (parent.origin?.kind !== "GitHub") {
     toast("Create Worktree is available only for GitHub workspaces", "error");
@@ -390,12 +390,12 @@ export function showCreateWorktreeDialog(parent: WorkspaceInfo) {
   }
 
   const backdrop = document.createElement("div");
-  backdrop.className = "dialog-backdrop";
+  backdrop.className = "dialog-backdrop workspace-backdrop";
   backdrop.innerHTML = `
     <div class="dialog">
       <div class="dialog-header">
         <span class="dialog-title">Create Worktree</span>
-        <button class="dialog-close">×</button>
+        <button class="dialog-close" title="Close" aria-label="Close">×</button>
       </div>
       <div class="dialog-body">
         <div class="dialog-field">

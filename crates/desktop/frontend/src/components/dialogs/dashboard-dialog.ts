@@ -1,12 +1,13 @@
 import { appState } from "../../state";
+import { reportError } from "../toast";
 import * as ipc from "../../ipc";
 import { getProviderLabel } from "../../types";
 
 export function showDashboard() {
-  document.querySelector(".dialog-backdrop")?.remove();
+  document.querySelector(".dashboard-backdrop")?.remove();
 
   const backdrop = document.createElement("div");
-  backdrop.className = "dialog-backdrop";
+  backdrop.className = "dialog-backdrop dashboard-backdrop";
   backdrop.style.paddingTop = "5vh";
 
   const dialog = document.createElement("div");
@@ -92,7 +93,7 @@ export function showDashboard() {
   dialog.innerHTML = `
     <div class="dialog-header">
       <span class="dialog-title">Dashboard — ${workspaces.length} workspace${workspaces.length !== 1 ? "s" : ""}</span>
-      <button class="dialog-close">×</button>
+      <button class="dialog-close" title="Close" aria-label="Close">×</button>
     </div>
     <div class="dash-grid">${cardsHtml || '<div class="empty-message">No workspaces</div>'}</div>
   `;
@@ -109,7 +110,7 @@ export function showDashboard() {
         const detail = await ipc.switchWorkspace(idx);
         appState.setActiveWorkspace(idx, detail);
       } catch (err) {
-        console.error("Switch failed:", err);
+        reportError("Workspace switch failed", err);
       }
     });
   });

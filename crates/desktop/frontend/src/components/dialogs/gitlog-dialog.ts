@@ -1,21 +1,22 @@
 import { appState } from "../../state";
+import { reportError } from "../toast";
 import * as ipc from "../../ipc";
 import { showCommitDiff } from "../diff-viewer";
 
 export async function showGitLog() {
-  document.querySelector(".dialog-backdrop")?.remove();
+  document.querySelector(".gitlog-backdrop")?.remove();
 
   const wsIdx = appState.activeWorkspace;
   let entries: ipc.GitLogEntry[];
   try {
     entries = await ipc.getGitLog(wsIdx);
   } catch (err) {
-    console.error("Failed to load git log:", err);
+    reportError("Failed to load git log", err);
     return;
   }
 
   const backdrop = document.createElement("div");
-  backdrop.className = "dialog-backdrop";
+  backdrop.className = "dialog-backdrop gitlog-backdrop";
   backdrop.style.paddingTop = "5vh";
 
   let selectedIdx = 0;
@@ -31,7 +32,7 @@ export async function showGitLog() {
     dialog.innerHTML = `
       <div class="dialog-header">
         <span class="dialog-title">Git Log</span>
-        <button class="dialog-close">×</button>
+        <button class="dialog-close" title="Close" aria-label="Close">×</button>
       </div>
       <div class="gitlog-content"></div>
     `;

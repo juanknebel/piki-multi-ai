@@ -207,17 +207,21 @@ async fn main() -> anyhow::Result<()> {
         "startup: pre-event-loop setup done, entering event_loop::run"
     );
     let result = event_loop::run(terminal, preflight.warnings, log_buffer, paths).await;
+    // Best-effort cleanup: an early `?` here used to skip DisableMouseCapture,
+    // leaving the shell spammed with mouse-report escape sequences after an
+    // error exit.
     if kitty_keyboard {
-        crossterm::execute!(
+        let _ = crossterm::execute!(
             std::io::stderr(),
             crossterm::event::PopKeyboardEnhancementFlags
-        )?;
+        );
     }
-    crossterm::execute!(
+    let _ = crossterm::execute!(
         std::io::stderr(),
         crossterm::event::DisableMouseCapture,
+        crossterm::event::DisableBracketedPaste,
         crossterm::event::DisableFocusChange,
-    )?;
+    );
     ratatui::restore();
     tracing::info!("piki-multi-ai shutdown");
     result

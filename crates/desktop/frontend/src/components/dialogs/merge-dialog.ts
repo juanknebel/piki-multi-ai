@@ -5,18 +5,18 @@ import { createDropdown } from "../dropdown";
 import { showConflictDiff } from "../diff-viewer";
 
 export function showMergeDialog() {
-  document.querySelector(".dialog-backdrop")?.remove();
+  document.querySelector(".merge-backdrop")?.remove();
 
   const ws = appState.activeWs;
   if (!ws) return;
 
   const backdrop = document.createElement("div");
-  backdrop.className = "dialog-backdrop";
+  backdrop.className = "dialog-backdrop merge-backdrop";
   backdrop.innerHTML = `
     <div class="dialog" style="max-width:480px">
       <div class="dialog-header">
         <span class="dialog-title">Merge / Rebase</span>
-        <button class="dialog-close">×</button>
+        <button class="dialog-close" title="Close" aria-label="Close">×</button>
       </div>
       <div class="dialog-body">
         <p style="font-size:13px;color:var(--text-primary);margin-bottom:8px">
@@ -89,10 +89,10 @@ export function showMergeDialog() {
 }
 
 function showConflictResolution(conflicts: string[]) {
-  document.querySelector(".dialog-backdrop")?.remove();
+  document.querySelector(".merge-backdrop")?.remove();
 
   const backdrop = document.createElement("div");
-  backdrop.className = "dialog-backdrop";
+  backdrop.className = "dialog-backdrop merge-backdrop";
 
   function render() {
     const dialog = backdrop.querySelector(".dialog");
@@ -104,7 +104,7 @@ function showConflictResolution(conflicts: string[]) {
     el.innerHTML = `
       <div class="dialog-header">
         <span class="dialog-title" style="color:var(--git-conflicted)">Conflict Resolution</span>
-        <button class="dialog-close">×</button>
+        <button class="dialog-close" title="Close" aria-label="Close">×</button>
       </div>
       <div class="dialog-body">
         <p style="font-size:13px;color:var(--text-primary);margin-bottom:12px">
