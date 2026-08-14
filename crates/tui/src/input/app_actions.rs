@@ -434,6 +434,25 @@ pub(crate) fn open_git_tab(app: &mut App) -> Option<Action> {
 
 // ── Layout ──
 
+pub(crate) fn open_rename_tab(app: &mut App) -> Option<Action> {
+    let Some(ws) = app.workspaces.get(app.active_workspace) else {
+        app.set_toast("No active workspace", crate::app::ToastLevel::Info);
+        return None;
+    };
+    let Some(tab) = ws.current_tab() else {
+        app.set_toast("No active tab", crate::app::ToastLevel::Info);
+        return None;
+    };
+    let initial = tab.display_label().to_string();
+    let cursor = initial.chars().count();
+    app.active_dialog = Some(DialogState::RenameTab {
+        input: initial,
+        cursor,
+    });
+    app.mode = AppMode::RenameTab;
+    None
+}
+
 pub(crate) fn sidebar_shrink(app: &mut App) -> Option<Action> {
     app.sidebar_pct = app.sidebar_pct.saturating_sub(5).max(10);
     resize_all_ptys(app);

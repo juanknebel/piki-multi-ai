@@ -139,7 +139,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                     parser,
                     border_style,
                     title_style,
-                    provider.label(),
+                    tab.display_label(),
                     tab.term_scroll,
                     selection.as_ref(),
                     selection_style,
@@ -150,7 +150,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
             } else {
                 // Provider CLI not found — show fun ASCII art
                 let block = Block::default()
-                    .title(format!(" {} ", provider.label()))
+                    .title(format!(" {} ", tab.display_label()))
                     .title_style(title_style)
                     .borders(Borders::ALL)
                     .border_type(ratatui::widgets::BorderType::Rounded)

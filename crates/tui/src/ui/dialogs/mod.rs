@@ -1,6 +1,7 @@
 mod agents;
 mod dashboard;
 mod providers;
+mod rename;
 mod system;
 mod workspace;
 
@@ -22,6 +23,7 @@ pub(crate) use self::workspace::{
     render_confirm_delete_dialog, render_create_worktree_dialog, render_edit_workspace_dialog,
     render_new_workspace_dialog, render_pr_picker_dialog, render_workspace_info_overlay,
 };
+pub(crate) use self::rename::render_rename_tab_dialog;
 
 use ratatui::Frame;
 use ratatui::layout::Rect;

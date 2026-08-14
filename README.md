@@ -41,7 +41,7 @@ Built with Rust and [ratatui](https://ratatui.rs/).
 ## Features
 
 - **Parallel workspaces** — Run multiple AI coding sessions simultaneously, each in an isolated git worktree, pointing directly to an existing directory (Simple mode), or managing a multi-service project root (Project mode)
-- **Dynamic tabs** — Workspaces start empty; create tabs on demand (`Ctrl+G c`) organized in categories: Shell (direct), AI Agents (Claude Code, Gemini, OpenCode, Kilo, Codex), and Tools (Kanban Board, Code Review — opens a PR picker rather than a tab directly, see below, API Explorer, Git); close tabs with `Ctrl+G x`; cycle with `Ctrl+G n`/`Ctrl+G p`; Kanban Board, API Explorer and Git are singletons — re-opening one focuses the existing tab instead of creating a duplicate
+- **Dynamic tabs** — Workspaces start empty; create tabs on demand (`Ctrl+G c`) organized in categories: Shell (direct), AI Agents (Claude Code, Gemini, OpenCode, Kilo, Codex), and Tools (Kanban Board, Code Review — opens a PR picker rather than a tab directly, see below, API Explorer, Git); close tabs with `Ctrl+G x`; cycle with `Ctrl+G n`/`Ctrl+G p`; Kanban Board, API Explorer and Git are singletons — re-opening one focuses the existing tab instead of creating a duplicate; rename any tab with `Ctrl+G R` (custom title shown in the tab bar and the Agents pane, empty to clear)
 - **Workspace dashboard** — Press `Ctrl+G D` for a bird's-eye overview of all workspaces with their tabs, status (idle/busy/done), changed files, and ahead/behind; `j`/`k` to navigate, `Enter` to switch, `Esc` to close
 - **Git via lazygit** — All git handling (status, stage, commit, push, pull, branches, log, stash, rebase, conflicts) is delegated to [lazygit](https://github.com/jesseduffield/lazygit) running in a PTY tab per workspace; open-or-focus it with `Ctrl+G g` (respawns automatically if you quit lazygit), or from New Tab → Tools → Git
 - **Agents pane** — The bottom-left pane lists every running AI agent across ALL workspaces with its live status from the structured OSC 777 channel (running / needs permission / waiting / done) plus idle badges; `j`/`k` to select, `Enter` or click to jump straight to that workspace and tab
@@ -351,6 +351,7 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 | `o` | Log viewer overlay (last 500 log entries, color-coded, filterable by level) |
 | `m` | Manage agent profiles (create/edit/delete agents for this project) |
 | `v` | Manage providers (add/edit/delete custom AI providers) |
+| `R` | Rename current tab (custom title, empty to clear; reflected in Agents pane) |
 | `<` / `>` (or `,` / `.`) | Resize sidebar width (±5%) |
 | `+` / `-` (or `=`) | Resize workspace/file split (±10%) |
 | `a` | About overlay |

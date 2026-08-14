@@ -5,7 +5,7 @@ import { appState } from "../state";
 import { makeInteractive } from "./a11y";
 import * as ipc from "../ipc";
 import { toast } from "./toast";
-import { getProviderLabel, cliAgentStatusView } from "../types";
+import { getProviderLabel, getTabLabel, cliAgentStatusView } from "../types";
 import type { AIProvider, TabInfo, CliAgentStatus } from "../types";
 import type { PaneId, PaneNode } from "../pane-tree";
 import { allLeaves, findPane } from "../pane-tree";
@@ -39,7 +39,7 @@ function wsTabTitle(tree: PaneNode, activePaneId: PaneId): string {
   if (content.provider === "CodeEditor") return getCodeEditorFileName(cid) ?? "Editor";
   if (content.provider === "Markdown") return getMarkdownEditorFileName(cid) ?? "Markdown";
   const others = allLeaves(tree).filter((l) => l.contentId).length;
-  const base = getProviderLabel(content.provider);
+  const base = getTabLabel(content);
   return others > 1 ? `${base} +${others - 1}` : base;
 }
 
@@ -94,6 +94,16 @@ export function renderWorkspaceTabBar(container: HTMLElement) {
       e.stopPropagation();
       void tearDownAndCloseWsTab(appState.activeWorkspace, i);
     });
+    // Rename on double-click or right-click
+    const doRename = () => triggerRename(wsTabTitle(wt.paneTree, wt.activePaneId), wt);
+    el.querySelector<HTMLElement>(".ws-tab-label")!.addEventListener("dblclick", (e) => {
+      e.stopPropagation();
+      doRename();
+    });
+    el.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      doRename();
+    });
     makeInteractive(el, "tab");
     el.setAttribute("aria-selected", String(isActive));
     container.appendChild(el);
@@ -111,6 +121,23 @@ export function renderWorkspaceTabBar(container: HTMLElement) {
   container
     .querySelector<HTMLElement>(".ws-tab.active")
     ?.scrollIntoView({ inline: "nearest", block: "nearest" });
+}
+
+function triggerRename(currentLabel: string, wt: import("../state").WorkspaceTab) {
+  const ws = appState.activeWs;
+  if (!ws) return;
+  const leaves = allLeaves(wt.paneTree);
+  const contentId = leaves.find((l) => l.contentId)?.contentId ?? null;
+  if (!contentId) return;
+  const current = ws.tabs.find((t) => t.id === contentId);
+  const initial = current ? (current.custom_title ?? currentLabel) : currentLabel;
+  const title = prompt("Rename tab (empty to clear):", initial);
+  if (title === null) return;
+  const trimmed = title.trim().slice(0, 40);
+  const finalTitle = trimmed.length > 0 ? trimmed : null;
+  const wsIdx = appState.activeWorkspace;
+  appState.renameTab(wsIdx, contentId, finalTitle);
+  ipc.renameTab(wsIdx, contentId, finalTitle).catch(() => {});
 }
 
 /** Close the active top-level tab (used by the menu bar / shortcut). */

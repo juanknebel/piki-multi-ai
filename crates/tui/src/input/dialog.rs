@@ -1961,3 +1961,44 @@ pub(super) fn handle_pr_picker_input(app: &mut App, key: KeyEvent) -> Option<Act
         _ => None,
     }
 }
+
+pub(super) fn handle_rename_tab_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::RenameTab {
+        ref mut input,
+        ref mut cursor,
+    }) = app.active_dialog
+    else {
+        return None;
+    };
+
+    match key.code {
+        KeyCode::Esc => {
+            crate::input::confirm_common::dismiss_dialog(app);
+            None
+        }
+        KeyCode::Enter => {
+            let trimmed = input.trim().to_string();
+            // Cap length to 40 chars to avoid blowing up tab bar layout
+            let capped: String = trimmed.chars().take(40).collect();
+            let ws_idx = app.active_workspace;
+            if let Some(ws) = app.workspaces.get_mut(ws_idx)
+                && let Some(tab) = ws.tabs.get_mut(ws.active_tab)
+            {
+                if capped.is_empty() {
+                    tab.custom_title = None;
+                    app.set_toast("Cleared custom title", crate::app::ToastLevel::Info);
+                } else {
+                    let label = capped.clone();
+                    tab.custom_title = Some(capped);
+                    app.set_toast(format!("Renamed to \"{}\"", label), crate::app::ToastLevel::Success);
+                }
+            }
+            crate::input::confirm_common::dismiss_dialog(app);
+            None
+        }
+        _ => {
+            handle_text_input(input, cursor, key, |c| !c.is_control() && c != '\t');
+            None
+        }
+    }
+}

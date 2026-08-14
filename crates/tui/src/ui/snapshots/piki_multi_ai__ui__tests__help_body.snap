@@ -1,6 +1,6 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 764
+assertion_line: 787
 expression: body
 ---
 
@@ -24,6 +24,7 @@ expression: body
       C-g x         Close Tab
       C-g n         Next Tab
       C-g p         Previous Tab
+      C-g R         Rename Tab
     Search
       C-g /         Fuzzy File Search
       C-g t         Search in Project (content)

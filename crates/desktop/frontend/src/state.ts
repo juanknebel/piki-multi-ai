@@ -445,6 +445,19 @@ class AppState extends EventTarget {
     }
   }
 
+  renameTab(workspaceIdx: number, tabId: string, title: string | null) {
+    const ws = this._workspaces[workspaceIdx];
+    if (!ws) return;
+    const tab = ws.tabs.find((t) => t.id === tabId);
+    if (!tab) return;
+    const trimmed = title?.trim() ?? "";
+    tab.custom_title = trimmed.length > 0 ? trimmed.slice(0, 40) : null;
+    if (workspaceIdx === this._activeWorkspace) {
+      this.emit("tabs-changed");
+      this.emit("pane-tree-changed");
+    }
+  }
+
   markTabDead(tabId: string) {
     for (const ws of this._workspaces) {
       const tab = ws.tabs.find((t) => t.id === tabId);

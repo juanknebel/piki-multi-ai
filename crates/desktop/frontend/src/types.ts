@@ -66,6 +66,7 @@ export interface TabInfo {
   id: string;
   provider: AIProvider;
   alive: boolean;
+  custom_title?: string | null;
 }
 
 export interface WorkspaceDetail {
@@ -237,6 +238,12 @@ export function getProviderLabel(provider: AIProvider): string {
     return BUILTIN_PROVIDER_LABELS[provider] ?? provider;
   }
   return provider.Custom;
+}
+
+/** Display label for a tab: custom_title > provider label. */
+export function getTabLabel(tab: TabInfo): string {
+  if (tab.custom_title && tab.custom_title.trim().length > 0) return tab.custom_title;
+  return getProviderLabel(tab.provider);
 }
 
 /** Get the icon character for any provider (built-in or custom). */
