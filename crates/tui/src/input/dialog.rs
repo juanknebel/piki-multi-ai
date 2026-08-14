@@ -1990,7 +1990,10 @@ pub(super) fn handle_rename_tab_input(app: &mut App, key: KeyEvent) -> Option<Ac
                 } else {
                     let label = capped.clone();
                     tab.custom_title = Some(capped);
-                    app.set_toast(format!("Renamed to \"{}\"", label), crate::app::ToastLevel::Success);
+                    app.set_toast(
+                        format!("Renamed to \"{}\"", label),
+                        crate::app::ToastLevel::Success,
+                    );
                 }
             }
             crate::input::confirm_common::dismiss_dialog(app);

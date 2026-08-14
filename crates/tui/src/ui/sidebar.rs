@@ -523,7 +523,11 @@ pub(super) fn render_agents_pane(frame: &mut Frame, area: Rect, app: &App) {
             // reported — a `claude` run manually inside that tab.
             // Custom title takes precedence; otherwise show provider label
             // (with Claude prefix for non-Custom shell tabs).
-            let label = if tab.custom_title.as_deref().is_some_and(|s| !s.trim().is_empty()) {
+            let label = if tab
+                .custom_title
+                .as_deref()
+                .is_some_and(|s| !s.trim().is_empty())
+            {
                 tab.display_label().to_string()
             } else if matches!(tab.provider, piki_core::AIProvider::Custom(_)) {
                 tab.provider.label().to_string()
