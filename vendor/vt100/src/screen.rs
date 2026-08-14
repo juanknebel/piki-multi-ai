@@ -62,6 +62,8 @@ pub struct Screen {
     modes: u8,
     mouse_protocol_mode: MouseProtocolMode,
     mouse_protocol_encoding: MouseProtocolEncoding,
+
+    answerback: Vec<u8>,
 }
 
 impl Screen {
@@ -81,7 +83,23 @@ impl Screen {
             modes: 0,
             mouse_protocol_mode: MouseProtocolMode::default(),
             mouse_protocol_encoding: MouseProtocolEncoding::default(),
+
+            answerback: Vec::new(),
         }
+    }
+
+    /// Queue bytes that the terminal should send back to the application in
+    /// response to a query sequence (DSR, DA, ...).
+    pub(crate) fn push_answerback(&mut self, bytes: &[u8]) {
+        self.answerback.extend_from_slice(bytes);
+    }
+
+    /// Take any pending query responses queued during `process()`. The host
+    /// is expected to write these bytes to the PTY after each parse pass;
+    /// applications like vim or agent CLIs probe the terminal at startup and
+    /// may hang or exit if nothing ever answers.
+    pub fn take_answerback(&mut self) -> Vec<u8> {
+        std::mem::take(&mut self.answerback)
     }
 
     /// Resizes the terminal.

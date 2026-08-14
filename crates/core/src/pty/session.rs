@@ -65,7 +65,7 @@ impl PtyOutputSignal {
 /// Manages an AI assistant process running in a pseudo-terminal
 pub struct PtySession {
     child: Box<dyn portable_pty::Child + Send>,
-    writer: Box<dyn Write + Send>,
+    writer: Arc<Mutex<Box<dyn Write + Send>>>,
     pub parser: Arc<Mutex<vt100::Parser>>,
     reader_handle: tokio::task::JoinHandle<()>,
     master: Box<dyn portable_pty::MasterPty + Send>,
@@ -139,7 +139,8 @@ impl PtySession {
         drop(pair.slave);
 
         let mut reader = pair.master.try_clone_reader()?;
-        let writer = pair.master.take_writer()?;
+        let writer = Arc::new(Mutex::new(pair.master.take_writer()?));
+        let writer_for_reader = Arc::clone(&writer);
 
         let parser = Arc::new(Mutex::new(vt100::Parser::new(rows, cols, 1000)));
         let parser_clone = Arc::clone(&parser);
@@ -184,11 +185,21 @@ impl PtySession {
                         bytes_clone.fetch_add(n as u64, Ordering::Relaxed);
                         // Flush when batch is full or PTY buffer is likely drained
                         if batch.len() >= 65536 || n < buf.len() {
-                            {
+                            let answerback = {
                                 let mut p = parser_clone.lock();
                                 p.process(&batch);
-                            }
+                                p.screen_mut().take_answerback()
+                            };
                             batch.clear();
+                            // Reply to terminal queries (DSR, DA) outside the
+                            // parser lock. Apps like vim or agent CLIs probe
+                            // the terminal at startup and may hang or exit if
+                            // nothing answers.
+                            if !answerback.is_empty() {
+                                let mut w = writer_for_reader.lock();
+                                let _ = w.write_all(&answerback);
+                                let _ = w.flush();
+                            }
                             // Raise after releasing the parser lock so a woken
                             // renderer never contends with this thread.
                             if let Some(ref sig) = output_signal {
@@ -254,8 +265,9 @@ impl PtySession {
 
     /// Send input bytes to the PTY (user keystrokes)
     pub fn write(&mut self, data: &[u8]) -> anyhow::Result<()> {
-        self.writer.write_all(data)?;
-        self.writer.flush()?;
+        let mut w = self.writer.lock();
+        w.write_all(data)?;
+        w.flush()?;
         Ok(())
     }
 
