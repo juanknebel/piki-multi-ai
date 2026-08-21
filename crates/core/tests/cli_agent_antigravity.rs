@@ -117,7 +117,7 @@ fn has_stop(shell: &Arc<Mutex<ShellSession>>) -> bool {
 }
 
 fn drain(shell: &Arc<Mutex<ShellSession>>) -> Vec<piki_core::shell_integration::ShellEvent> {
-    shell.lock().pending_events.drain(..).collect()
+    std::mem::take(&mut shell.lock().pending_events)
 }
 
 fn which(bin: &str) -> Option<std::path::PathBuf> {
