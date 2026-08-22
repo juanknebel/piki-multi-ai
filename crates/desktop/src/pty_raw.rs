@@ -14,6 +14,8 @@ use tauri::{Emitter, Manager};
 use piki_core::cli_agent::CliAgentEvent;
 use piki_core::notifications;
 use piki_core::pty::ShellSession;
+use piki_core::session::client::{Attachment, AttachmentSender};
+use piki_core::session::protocol::{Frame, read_frame};
 use piki_core::shell_integration::ShellEvent;
 use piki_core::shell_integration::parser::OscParser;
 
@@ -61,7 +63,7 @@ struct PtyAgentEventPayload {
     summary: Option<String>,
 }
 
-pub struct RawPtySession {
+pub struct RawLocalPty {
     child: Box<dyn portable_pty::Child + Send>,
     writer: Box<dyn Write + Send>,
     reader_handle: tokio::task::JoinHandle<()>,
@@ -75,7 +77,7 @@ pub struct RawPtySession {
     _cli_agent_sock: Option<piki_core::cli_agent::sock::SockReader>,
 }
 
-impl RawPtySession {
+impl RawLocalPty {
     /// Spawn a PTY child. `extra_env` is merged into the inherited login env
     /// (so callers can override defaults — e.g. `PIKI_SHELL_INTEGRATION=1`).
     /// `extra_args` is **prepended** to the command's normal args (needed for
@@ -321,10 +323,300 @@ impl RawPtySession {
     }
 }
 
-impl Drop for RawPtySession {
+impl Drop for RawLocalPty {
     fn drop(&mut self) {
         let _ = self.child.kill();
         self.reader_handle.abort();
+    }
+}
+
+/// Emit the right Tauri events for one shell-integration event — the same
+/// mapping the local reader does inline, factored out so the remote reader
+/// stays in lock-step: `CliAgent` drives the agent-status rail, `CommandEnd`
+/// the attention/notification rail, everything else a plain `pty-shell-event`.
+fn dispatch_shell_event(app_handle: &AppHandle, tab_id: &str, ev: ShellEvent) {
+    if let ShellEvent::CliAgent(a) = &ev {
+        handle_cli_agent(app_handle, tab_id, a);
+        return;
+    }
+    if let ShellEvent::CommandEnd { exit_code, command } = &ev {
+        handle_shell_command_end(app_handle, tab_id, *exit_code, command.clone());
+    }
+    let _ = app_handle.emit("pty-shell-event", shell_event_payload(tab_id, ev));
+}
+
+/// A tab backed by the session daemon (persists across app restarts). Its
+/// reader thread turns daemon frames into the same Tauri events the local
+/// reader emits, so the frontend and xterm.js can't tell the difference.
+/// Dropping it DETACHES (the session survives); `kill` kills the child.
+pub struct RawRemotePty {
+    sender: AttachmentSender,
+    bytes_processed: Arc<AtomicU64>,
+    alive: Arc<std::sync::atomic::AtomicBool>,
+    shell: Option<Arc<Mutex<ShellSession>>>,
+    reader_handle: Option<std::thread::JoinHandle<()>>,
+}
+
+impl RawRemotePty {
+    /// Wrap a daemon [`Attachment`] as a tab, streaming its output to the
+    /// frontend as `pty-output` events (the restore buffer included, so the
+    /// terminal repaints on attach). `integration_on` mirrors the session's
+    /// flag: when set, a client-side [`ShellSession`] is kept in sync from the
+    /// daemon's `ShellEvent` frames so the idle watcher / attention rail work.
+    pub fn start(
+        app_handle: AppHandle,
+        tab_id: String,
+        att: Attachment,
+        integration_on: bool,
+    ) -> Self {
+        use std::sync::atomic::AtomicBool;
+
+        let bytes_processed = Arc::new(AtomicU64::new(0));
+        let alive = Arc::new(AtomicBool::new(att.info.state.is_live()));
+        let shell = integration_on.then(|| {
+            Arc::new(Mutex::new(ShellSession {
+                state: piki_core::shell_integration::ShellTabState::from_snapshot(&att.shell),
+                pending_events: Vec::new(),
+            }))
+        });
+        let sender = att.sender();
+
+        let (mut read, _sender) = att.into_read_half();
+        let reader_handle = {
+            let bytes = Arc::clone(&bytes_processed);
+            let alive = Arc::clone(&alive);
+            let shell = shell.clone();
+            std::thread::Builder::new()
+                .name("raw-remote-pty-reader".into())
+                .spawn(move || {
+                    loop {
+                        match read_frame(&mut read) {
+                            Ok(Frame::Restore(b)) | Ok(Frame::Output(b)) => {
+                                bytes.fetch_add(b.len() as u64, Ordering::Relaxed);
+                                let _ = app_handle.emit(
+                                    "pty-output",
+                                    PtyOutputPayload {
+                                        tab_id: tab_id.clone(),
+                                        data: BASE64.encode(&b),
+                                    },
+                                );
+                            }
+                            Ok(Frame::ShellEvent { event, .. }) => {
+                                if let Some(ref shell) = shell {
+                                    let mut s = shell.lock();
+                                    s.state.apply(&event);
+                                    s.pending_events.push(event.clone());
+                                }
+                                dispatch_shell_event(&app_handle, &tab_id, event);
+                            }
+                            Ok(Frame::Exited { code }) => {
+                                alive.store(false, Ordering::Relaxed);
+                                let _ = app_handle.emit(
+                                    "pty-exit",
+                                    PtyExitPayload {
+                                        tab_id: tab_id.clone(),
+                                        exit_code: code,
+                                    },
+                                );
+                            }
+                            Ok(Frame::Detached { .. }) => {
+                                alive.store(false, Ordering::Relaxed);
+                                let _ = app_handle.emit(
+                                    "pty-exit",
+                                    PtyExitPayload {
+                                        tab_id: tab_id.clone(),
+                                        exit_code: None,
+                                    },
+                                );
+                                break;
+                            }
+                            Ok(_) => {} // heartbeat / unexpected
+                            Err(_) => {
+                                alive.store(false, Ordering::Relaxed);
+                                let _ = app_handle.emit(
+                                    "pty-exit",
+                                    PtyExitPayload {
+                                        tab_id: tab_id.clone(),
+                                        exit_code: None,
+                                    },
+                                );
+                                break;
+                            }
+                        }
+                    }
+                })
+                .ok()
+        };
+
+        RawRemotePty {
+            sender,
+            bytes_processed,
+            alive,
+            shell,
+            reader_handle,
+        }
+    }
+
+    fn write(&mut self, data: &[u8]) -> anyhow::Result<()> {
+        self.sender.input(data)?;
+        Ok(())
+    }
+
+    fn resize(&self, rows: u16, cols: u16) -> anyhow::Result<()> {
+        self.sender.resize(rows, cols)?;
+        Ok(())
+    }
+
+    fn kill(&mut self) -> anyhow::Result<()> {
+        self.sender.kill()?;
+        Ok(())
+    }
+
+    fn is_alive(&mut self) -> bool {
+        self.alive.load(Ordering::Relaxed)
+    }
+
+    fn peek_alive(&self) -> bool {
+        self.alive.load(Ordering::Relaxed)
+    }
+
+    fn bytes_processed(&self) -> u64 {
+        self.bytes_processed.load(Ordering::Relaxed)
+    }
+
+    fn shell(&self) -> Option<&Arc<Mutex<ShellSession>>> {
+        self.shell.as_ref()
+    }
+
+    fn resync(&self) -> anyhow::Result<()> {
+        self.sender.resync()?;
+        Ok(())
+    }
+}
+
+impl Drop for RawRemotePty {
+    fn drop(&mut self) {
+        // Detach, never kill — the session must survive us.
+        let _ = self.sender.detach();
+        if let Some(h) = self.reader_handle.take() {
+            drop(h); // exits on socket close; don't block
+        }
+    }
+}
+
+/// A desktop PTY tab, either owned in-process ([`Local`](Self::Local)) or
+/// living in the session daemon ([`Remote`](Self::Remote)). Same public
+/// surface either way; the app picks `Remote` when the daemon is reachable.
+pub enum RawPtySession {
+    Local(RawLocalPty),
+    Remote(RawRemotePty),
+}
+
+impl RawPtySession {
+    /// Spawn an in-process PTY (the fallback path). Signature unchanged from
+    /// the original struct.
+    #[allow(clippy::too_many_arguments)]
+    pub fn spawn(
+        app_handle: AppHandle,
+        tab_id: String,
+        worktree_path: &Path,
+        rows: u16,
+        cols: u16,
+        command: &str,
+        args: &[String],
+        extra_env: &[(String, String)],
+        extra_args: &[String],
+        enable_shell_integration: bool,
+        cli_agent_sock: Option<std::path::PathBuf>,
+    ) -> anyhow::Result<Self> {
+        Ok(RawPtySession::Local(RawLocalPty::spawn(
+            app_handle,
+            tab_id,
+            worktree_path,
+            rows,
+            cols,
+            command,
+            args,
+            extra_env,
+            extra_args,
+            enable_shell_integration,
+            cli_agent_sock,
+        )?))
+    }
+
+    /// Wrap a daemon attachment as a remote-backed tab.
+    pub fn from_attachment(
+        app_handle: AppHandle,
+        tab_id: String,
+        att: Attachment,
+        integration_on: bool,
+    ) -> Self {
+        RawPtySession::Remote(RawRemotePty::start(app_handle, tab_id, att, integration_on))
+    }
+
+    pub fn is_remote(&self) -> bool {
+        matches!(self, RawPtySession::Remote(_))
+    }
+
+    pub fn write(&mut self, data: &[u8]) -> anyhow::Result<()> {
+        match self {
+            RawPtySession::Local(l) => l.write(data),
+            RawPtySession::Remote(r) => r.write(data),
+        }
+    }
+
+    pub fn resize(&self, rows: u16, cols: u16) -> anyhow::Result<()> {
+        match self {
+            RawPtySession::Local(l) => l.resize(rows, cols),
+            RawPtySession::Remote(r) => r.resize(rows, cols),
+        }
+    }
+
+    pub fn kill(&mut self) -> anyhow::Result<()> {
+        match self {
+            RawPtySession::Local(l) => l.kill(),
+            RawPtySession::Remote(r) => r.kill(),
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn is_alive(&mut self) -> bool {
+        match self {
+            RawPtySession::Local(l) => l.is_alive(),
+            RawPtySession::Remote(r) => r.is_alive(),
+        }
+    }
+
+    pub fn peek_alive(&self) -> bool {
+        match self {
+            RawPtySession::Local(l) => l.peek_alive(),
+            RawPtySession::Remote(r) => r.peek_alive(),
+        }
+    }
+
+    pub fn bytes_processed(&self) -> u64 {
+        match self {
+            RawPtySession::Local(l) => l.bytes_processed(),
+            RawPtySession::Remote(r) => r.bytes_processed(),
+        }
+    }
+
+    pub fn shell(&self) -> Option<&Arc<Mutex<ShellSession>>> {
+        match self {
+            RawPtySession::Local(l) => l.shell(),
+            RawPtySession::Remote(r) => r.shell(),
+        }
+    }
+
+    /// Ask the daemon to re-send the restore buffer (a no-op for a local
+    /// session). The frontend calls this when a terminal mounts so a
+    /// re-attached tab repaints even though its restore arrived before the
+    /// xterm existed.
+    pub fn resync(&self) -> anyhow::Result<()> {
+        match self {
+            RawPtySession::Local(_) => Ok(()),
+            RawPtySession::Remote(r) => r.resync(),
+        }
     }
 }
 

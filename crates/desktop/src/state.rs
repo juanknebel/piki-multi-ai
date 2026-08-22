@@ -21,6 +21,9 @@ pub struct DesktopApp {
     pub manager: WorkspaceManager,
     pub sysinfo: Arc<PlMutex<String>>,
     pub provider_manager: piki_core::providers::ProviderManager,
+    /// Handle to the persistent-session daemon, when reachable. `None` means
+    /// sessions are disabled/unavailable — tabs then run in-process (Local).
+    pub session_daemon: Option<piki_core::session::client::Daemon>,
     /// Global AI chat messages (not tied to any workspace).
     pub chat_messages: Vec<piki_core::chat::ChatMessage>,
     /// Global AI chat configuration (provider, model, base URL).

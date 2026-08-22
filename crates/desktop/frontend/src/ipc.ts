@@ -140,6 +140,13 @@ export function resizePty(
   return invoke("resize_pty", { tabId, rows, cols });
 }
 
+/** Ask the backend to re-send a persistent tab's restore buffer (no-op for a
+ *  local tab). Called when a terminal mounts so a re-attached session
+ *  repaints — its restore was emitted before this xterm.js instance existed. */
+export function resyncPty(tabId: string): Promise<void> {
+  return invoke("resync_pty", { tabId });
+}
+
 export function closeTab(
   workspaceIdx: number,
   tabIdx: number,

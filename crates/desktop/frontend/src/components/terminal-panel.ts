@@ -223,6 +223,10 @@ export function mountTerminalInto(tabId: string, host: HTMLElement) {
   requestAnimationFrame(() => {
     fitTerminal(inst);
     inst.terminal.focus();
+    // Re-fetch the restore buffer for a persistent (daemon-backed) tab now
+    // that the xterm instance exists and is sized — its restore may have been
+    // emitted before this terminal was created (a no-op for local tabs).
+    ipc.resyncPty(inst.tabId).catch(() => {});
   });
 }
 

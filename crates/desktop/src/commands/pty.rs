@@ -71,32 +71,37 @@ pub async fn spawn_tab(
         None
     };
 
+    // Create the tab first so its id names the daemon session + cli-agent FIFO.
+    let mut tab = DesktopTab::new(ai_provider.clone(), provider_cfg.as_ref());
+    let tab_id = tab.id.clone();
+
+    let (worktree_path, daemon, order) = {
+        let app = state.lock();
+        if workspace_idx >= app.workspaces.len() {
+            return Err("Workspace index out of range".to_string());
+        }
+        (
+            app.workspaces[workspace_idx].info.path.clone(),
+            app.session_daemon.clone(),
+            app.workspaces[workspace_idx].tabs.len() as u32,
+        )
+    };
+
     // Command, args, env, shell integration and the cli-agent channel all come
-    // from core, so this app and the TUI make the identical decisions. This
-    // used to be resolved here separately and had drifted: passive agent-state
-    // detection (Codex) was missing entirely, and shell tabs never got the
-    // cli-agent FIFO, so a manually-typed `claude` never showed up as an agent.
+    // from core, so this app and the TUI make the identical decisions. With a
+    // daemon present the FIFO is named after the session (stable across a
+    // restart).
     let plan = {
         let app = state.lock();
-        piki_core::pty::launch_plan(
+        piki_core::pty::launch_plan_for_session(
             &ai_provider,
             None,
             Some(&app.provider_manager),
             &app.paths,
             configured_shell(&app).as_deref(),
+            daemon.as_ref().map(|_| tab_id.as_str()),
         )
         .map_err(|e| e.to_string())?
-    };
-
-    let mut tab = DesktopTab::new(ai_provider.clone(), provider_cfg.as_ref());
-    let tab_id = tab.id.clone();
-
-    let worktree_path = {
-        let app = state.lock();
-        if workspace_idx >= app.workspaces.len() {
-            return Err("Workspace index out of range".to_string());
-        }
-        app.workspaces[workspace_idx].info.path.clone()
     };
 
     // The bridge exists for this agent but couldn't be installed (its hook
@@ -120,20 +125,41 @@ pub async fn spawn_tab(
         );
     }
 
-    let pty = RawPtySession::spawn(
-        app_handle,
-        tab_id.clone(),
-        &worktree_path,
-        24,
-        80,
-        &plan.command,
-        &plan.args,
-        &plan.env,
-        &plan.extra_args,
-        plan.integration_on,
-        plan.cli_agent_sock,
-    )
-    .map_err(|e| format!("Failed to spawn PTY: {e}"))?;
+    // Preferred: spawn in the session daemon so the tab persists. Any failure
+    // degrades to an in-process PTY.
+    let remote = daemon.as_ref().and_then(|d| {
+        crate::session::spawn_remote_tab(
+            &app_handle,
+            d,
+            &tab_id,
+            &ai_provider,
+            &plan.command,
+            &plan.args,
+            &plan.env,
+            &plan.extra_args,
+            &worktree_path,
+            plan.integration_on,
+            plan.cli_agent_sock.clone(),
+            order,
+        )
+    });
+    let pty = match remote {
+        Some(p) => p,
+        None => RawPtySession::spawn(
+            app_handle,
+            tab_id.clone(),
+            &worktree_path,
+            24,
+            80,
+            &plan.command,
+            &plan.args,
+            &plan.env,
+            &plan.extra_args,
+            plan.integration_on,
+            plan.cli_agent_sock,
+        )
+        .map_err(|e| format!("Failed to spawn PTY: {e}"))?,
+    };
 
     tab.pty = Some(pty);
     tab.alive = true;
@@ -215,6 +241,7 @@ pub async fn close_tab(
 
     // Kill PTY if present (Drop will handle cleanup)
     let mut tab = ws.tabs.remove(tab_idx);
+    let was_remote = tab.pty.as_ref().is_some_and(|p| p.is_remote());
     if let Some(ref mut pty) = tab.pty {
         let _ = pty.kill();
     }
@@ -223,6 +250,31 @@ pub async fn close_tab(
         ws.active_tab = ws.tabs.len() - 1;
     }
 
+    // An explicitly closed tab must not linger as a daemon orphan: remove its
+    // session (its id doubles as the session id). Drop above already detached.
+    if was_remote && let Some(daemon) = app.session_daemon.clone() {
+        crate::session::remove_session(&daemon, &tab.id);
+    }
+
+    Ok(())
+}
+
+/// Ask the daemon to re-send the restore buffer for a tab (no-op for a local
+/// tab). Called by the frontend when a terminal mounts so a re-attached tab
+/// repaints — its restore was emitted before the xterm.js instance existed.
+#[tauri::command]
+pub async fn resync_pty(state: State<'_, Mutex<DesktopApp>>, tab_id: String) -> Result<(), String> {
+    let app = state.lock();
+    for ws in &app.workspaces {
+        for tab in &ws.tabs {
+            if tab.id == tab_id {
+                if let Some(ref pty) = tab.pty {
+                    return pty.resync().map_err(|e| e.to_string());
+                }
+                return Ok(());
+            }
+        }
+    }
     Ok(())
 }
 

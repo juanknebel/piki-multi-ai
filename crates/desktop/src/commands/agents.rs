@@ -449,20 +449,51 @@ pub async fn dispatch_agent(
         None => (Vec::new(), Vec::new(), false, None),
     };
 
-    let pty = crate::pty_raw::RawPtySession::spawn(
-        app_handle,
-        tab_id.clone(),
-        &worktree_path,
-        24,
-        80,
-        &command,
-        &args,
-        &extra_env,
-        &extra_args,
-        integration_on,
-        cli_agent_sock,
-    )
-    .map_err(|e| format!("Failed to spawn PTY: {e}"))?;
+    // Prefer the session daemon so a dispatched agent survives an app restart;
+    // fall back to an in-process PTY.
+    let (daemon, order) = {
+        let app = state.lock();
+        (
+            app.session_daemon.clone(),
+            app.workspaces
+                .get(target_ws_idx)
+                .map(|w| w.tabs.len() as u32)
+                .unwrap_or(0),
+        )
+    };
+    let remote = daemon.as_ref().and_then(|d| {
+        crate::session::spawn_remote_tab(
+            &app_handle,
+            d,
+            &tab_id,
+            &tab.provider,
+            &command,
+            &args,
+            &extra_env,
+            &extra_args,
+            &worktree_path,
+            integration_on,
+            cli_agent_sock.clone(),
+            order,
+        )
+    });
+    let pty = match remote {
+        Some(p) => p,
+        None => crate::pty_raw::RawPtySession::spawn(
+            app_handle,
+            tab_id.clone(),
+            &worktree_path,
+            24,
+            80,
+            &command,
+            &args,
+            &extra_env,
+            &extra_args,
+            integration_on,
+            cli_agent_sock,
+        )
+        .map_err(|e| format!("Failed to spawn PTY: {e}"))?,
+    };
 
     tab.pty = Some(pty);
     tab.alive = true;

@@ -8,6 +8,7 @@ mod events;
 mod log_buffer;
 mod lsp;
 mod pty_raw;
+mod session;
 mod state;
 
 use std::sync::Arc;
@@ -30,6 +31,17 @@ fn main() {
     // std::env::vars() as JSON and exit immediately — no Tauri init.
     if std::env::args().any(|a| a == "--printenv") {
         piki_core::shell_env::print_env_and_exit();
+    }
+
+    // Run the persistent-session daemon. MUST happen before Tauri or any
+    // threads exist (daemonizing forks, which is only safe single-threaded).
+    if std::env::args().any(|a| a == "--serve-sessions") {
+        let paths = match parse_data_dir() {
+            Some(dir) => DataPaths::new(dir.into()),
+            None => DataPaths::default_paths(),
+        };
+        let _ = piki_core::session::daemon::run(&paths, false);
+        std::process::exit(0);
     }
 
     piki_core::notifications::set_appname("piki-desktop");
@@ -70,7 +82,7 @@ fn main() {
 
             // Load existing workspaces from storage
             let entries = storage.workspaces.load_all_workspaces();
-            let workspaces: Vec<DesktopWorkspace> = entries
+            let mut workspaces: Vec<DesktopWorkspace> = entries
                 .into_iter()
                 .map(|entry| {
                     let info = entry.into_info();
@@ -135,6 +147,15 @@ fn main() {
                 .and_then(|json| serde_json::from_str::<piki_core::chat::ChatConfig>(&json).ok())
                 .unwrap_or_default();
 
+            // Connect to (or launch) the session daemon and re-attach any
+            // sessions that survived a previous run into the loaded
+            // workspaces, before the frontend hydrates their tabs. Falls back
+            // silently to in-process PTYs when the daemon is unavailable.
+            let session_daemon = session::connect_session_daemon(&paths);
+            if let Some(ref daemon) = session_daemon {
+                session::reattach_sessions(&app_handle, daemon, &mut workspaces, &provider_manager);
+            }
+
             // Create app state
             let desktop_app = DesktopApp {
                 workspaces,
@@ -144,6 +165,7 @@ fn main() {
                 manager,
                 sysinfo,
                 provider_manager,
+                session_daemon,
                 chat_messages: Vec::new(),
                 chat_config,
                 chat_streaming: false,
@@ -226,6 +248,7 @@ fn main() {
             commands::pty::rename_tab,
             commands::pty::spawn_editor_tab,
             commands::pty::spawn_terminal_at,
+            commands::pty::resync_pty,
             commands::git::get_changed_files,
             commands::git::get_workspace_git_status,
             commands::git::git_stage,
