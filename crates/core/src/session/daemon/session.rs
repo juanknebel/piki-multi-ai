@@ -312,6 +312,7 @@ impl Session {
             command: self.command.clone(),
             args: self.args.clone(),
             state,
+            integration_on: self.shell.is_some(),
             attached: self.attached_count(),
             rows,
             cols,

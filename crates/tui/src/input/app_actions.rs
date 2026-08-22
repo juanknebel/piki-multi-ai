@@ -407,26 +407,34 @@ pub(crate) fn open_terminal_search(app: &mut App) -> Option<Action> {
 }
 
 pub(crate) fn open_git_tab(app: &mut App) -> Option<Action> {
-    let Some(ws) = app.workspaces.get_mut(app.active_workspace) else {
-        app.set_toast("No active workspace", crate::app::ToastLevel::Info);
-        return None;
-    };
-    if let Some(idx) = ws
-        .tabs
-        .iter()
-        .position(|t| t.provider == piki_core::AIProvider::Git)
+    // Closed dead-Git-tab's daemon session, to remove after the borrow ends.
+    let mut dead_session_id: Option<String> = None;
     {
-        let alive = ws.tabs[idx]
-            .pty_session
-            .as_ref()
-            .is_some_and(|p| p.peek_alive());
-        if alive {
-            ws.active_tab = idx;
-            ws.tabs[idx].term_scroll = 0;
-            app.active_pane = ActivePane::MainPanel;
+        let Some(ws) = app.workspaces.get_mut(app.active_workspace) else {
+            app.set_toast("No active workspace", crate::app::ToastLevel::Info);
             return None;
+        };
+        if let Some(idx) = ws
+            .tabs
+            .iter()
+            .position(|t| t.provider == piki_core::AIProvider::Git)
+        {
+            let alive = ws.tabs[idx]
+                .pty_session
+                .as_ref()
+                .is_some_and(|p| p.peek_alive());
+            if alive {
+                ws.active_tab = idx;
+                ws.tabs[idx].term_scroll = 0;
+                app.active_pane = ActivePane::MainPanel;
+                return None;
+            }
+            dead_session_id = ws.tabs[idx].session_id.clone();
+            ws.close_tab(idx);
         }
-        ws.close_tab(idx);
+    }
+    if let Some(sid) = dead_session_id {
+        crate::helpers::remove_session(app, &sid);
     }
     app.active_pane = ActivePane::MainPanel;
     Some(Action::SpawnTab(piki_core::AIProvider::Git))

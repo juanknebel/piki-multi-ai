@@ -149,6 +149,20 @@ pub(crate) async fn run(
         "startup: workspaces restored (watchers still pending)"
     );
 
+    // Connect to the session daemon (launching it if needed) and re-attach any
+    // sessions that survived a previous run — each becomes its tab again with
+    // screen + scrollback restored. Falls back silently to in-process PTYs if
+    // the daemon is unavailable. Runs before the refresh loop below so a
+    // re-attached tab counts toward `has_tab` (branch inference).
+    let session_t0 = Instant::now();
+    app.session_daemon = crate::helpers::connect_session_daemon(&paths);
+    crate::helpers::reattach_sessions(&mut app);
+    tracing::info!(
+        elapsed_ms = session_t0.elapsed().as_millis(),
+        daemon = app.session_daemon.is_some(),
+        "startup: session daemon connected + sessions re-attached"
+    );
+
     // FileWatcher setup runs in the BACKGROUND: `FileWatcher::new` walks the
     // whole worktree tree synchronously to register the recursive inotify
     // watch, so doing it inline for every workspace before the first frame

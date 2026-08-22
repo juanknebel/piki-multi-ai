@@ -453,8 +453,18 @@ pub(super) fn handle_confirm_close_tab_input(app: &mut App, key: KeyEvent) -> Op
 
     match handle_yn_input(key) {
         ConfirmResult::Yes => {
+            // Capture the daemon session id before closing so we can remove it
+            // (a closed tab must not linger as a daemon orphan).
+            let session_id = app
+                .workspaces
+                .get(app.active_workspace)
+                .and_then(|ws| ws.tabs.get(target))
+                .and_then(|t| t.session_id.clone());
             if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
                 ws.close_tab(target);
+            }
+            if let Some(sid) = session_id {
+                crate::helpers::remove_session(app, &sid);
             }
             dismiss_dialog(app);
         }

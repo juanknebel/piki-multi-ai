@@ -8,18 +8,150 @@ use crate::ui;
 use piki_core::AIProvider;
 use piki_core::cli_agent::bridge_for_command;
 use piki_core::pty::PtySession;
+use piki_core::session::client::Daemon;
+use piki_core::session::protocol::{SessionMeta, SpawnRequest};
 
-/// Kill all PTY sessions and drop watchers for a clean exit.
+/// Tear down on quit. Dropping each tab's [`PtySession`] does the right thing
+/// per backend: a **Remote** (daemon) session DETACHES and keeps running so it
+/// can be re-attached next launch; a **Local** (in-process) session is killed.
+/// We therefore must NOT call `kill()` here — persistence is the whole point —
+/// just drop the tabs and let their `Drop` decide.
 pub(crate) fn shutdown(app: &mut App) {
     for ws in &mut app.workspaces {
-        for tab in &mut ws.tabs {
-            if let Some(ref mut pty) = tab.pty_session {
-                let _ = pty.kill();
-            }
-        }
         ws.tabs.clear();
         ws.watcher = None;
     }
+}
+
+/// Connect to — or launch — the session daemon for `paths`. Returns `None`
+/// when sessions are unavailable or the daemon speaks another protocol; the
+/// caller then runs every tab in-process (Local), exactly as before this
+/// feature existed.
+pub(crate) fn connect_session_daemon(paths: &piki_core::paths::DataPaths) -> Option<Daemon> {
+    use piki_core::session::client::{ClientError, ensure_daemon};
+    use std::process::Stdio;
+
+    let socket = paths.session_socket();
+    let base = paths.base().to_path_buf();
+    // The daemon is this same binary re-invoked with `serve`, pinned to the
+    // same data dir so it computes the same socket path.
+    let launch = move || -> std::io::Result<()> {
+        let exe = std::env::current_exe()?;
+        std::process::Command::new(exe)
+            .arg("--data-dir")
+            .arg(&base)
+            .arg("serve")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()?;
+        Ok(())
+    };
+
+    match ensure_daemon(&socket, launch) {
+        Ok(daemon) => {
+            tracing::info!("session daemon ready; tabs will persist");
+            Some(daemon)
+        }
+        Err(ClientError::Incompatible { daemon_protocol }) => {
+            tracing::warn!(
+                daemon_protocol,
+                "session daemon protocol mismatch; running tabs in-process"
+            );
+            None
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "session daemon unavailable; running tabs in-process");
+            None
+        }
+    }
+}
+
+/// Re-attach the daemon's persisted sessions to their workspaces on startup.
+/// Each session whose `workspace_path` matches a loaded workspace becomes a
+/// tab again (ordered by its stored `order`), with its screen + scrollback
+/// restored. Sessions with no matching workspace are left running (visible via
+/// `sessions list` / the sessions dialog), never killed.
+pub(crate) fn reattach_sessions(app: &mut App) {
+    let Some(daemon) = app.session_daemon.clone() else {
+        return;
+    };
+    let mut sessions = match daemon.list() {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::warn!(error = %e, "could not list sessions to re-attach");
+            return;
+        }
+    };
+    // Attach in stored tab order so the subtab bar comes back as it was.
+    sessions.sort_by_key(|s| (s.meta.workspace_path.clone(), s.meta.order));
+
+    let (rows, cols) = (app.pty_rows, app.pty_cols);
+    let mut reattached = 0usize;
+    for info in sessions {
+        let Some(ws_idx) = app
+            .workspaces
+            .iter()
+            .position(|w| w.info.path == info.meta.workspace_path)
+        else {
+            continue; // orphan: keep it running, don't adopt it here
+        };
+        // Already have this session as a tab? (defensive — startup runs once)
+        if app.workspaces[ws_idx]
+            .tabs
+            .iter()
+            .any(|t| t.session_id.as_deref() == Some(info.id.as_str()))
+        {
+            continue;
+        }
+
+        let provider = AIProvider::from_label(&info.meta.provider);
+        let provider_cfg = if let AIProvider::Custom(name) = &provider {
+            app.provider_manager.get(name)
+        } else {
+            None
+        };
+
+        let att = match daemon.attach(&info.id, rows, cols) {
+            Ok(a) => a,
+            Err(e) => {
+                tracing::warn!(session = %info.id, error = %e, "re-attach failed");
+                continue;
+            }
+        };
+        let pty =
+            PtySession::from_attachment(att, info.integration_on, Some(app.pty_output.clone()));
+        let ws = &mut app.workspaces[ws_idx];
+        let idx = ws.add_tab(provider, info.meta.closable, provider_cfg);
+        ws.tabs[idx].pty_parser = Some(Arc::clone(pty.parser()));
+        ws.tabs[idx].pty_session = Some(pty);
+        ws.tabs[idx].session_id = Some(info.id.clone());
+        if let Some(title) = info.meta.title.clone() {
+            ws.tabs[idx].custom_title = Some(title);
+        }
+        ws.status = app::WorkspaceStatus::Busy;
+        ws.dirty = true;
+        ws.last_refresh = None;
+        reattached += 1;
+    }
+    if reattached > 0 {
+        tracing::info!(count = reattached, "re-attached persisted sessions");
+    }
+}
+
+/// Remove a session from the daemon (its child is killed and the record
+/// dropped). Fire-and-forget on a blocking task; errors are logged only. Use
+/// when a tab is explicitly closed or its workspace deleted.
+pub(crate) fn remove_session(app: &App, session_id: &str) {
+    let Some(daemon) = app.session_daemon.clone() else {
+        return;
+    };
+    let id = session_id.to_string();
+    tokio::task::spawn_blocking(move || {
+        if let Err(e) = daemon.remove(&id) {
+            tracing::warn!(session = %id, error = %e, "failed to remove session");
+        }
+    });
 }
 
 /// Tools a provider's hook bridge needs but that aren't on PATH, with the
@@ -90,6 +222,7 @@ pub(crate) async fn spawn_tab(
     prompt: Option<&str>,
     provider_manager: Option<&piki_core::providers::ProviderManager>,
     paths: &piki_core::paths::DataPaths,
+    daemon: Option<Daemon>,
     output_signal: piki_core::pty::PtyOutputSignal,
 ) -> (usize, Option<String>) {
     // Resolve the provider's `providers.toml` entry up front so its
@@ -116,10 +249,57 @@ pub(crate) async fn spawn_tab(
     // `shell_override` is None: the TUI has no shell setting yet (the desktop
     // reads one from its UI prefs). Adding one is now just a config key — the
     // launch side already honours it.
-    let plan = match piki_core::pty::launch_plan(provider, prompt, provider_manager, paths, None) {
+    //
+    // When a session daemon is available the tab gets a persistent id up
+    // front so its cli-agent FIFO is named after the session (stable across a
+    // frontend restart); otherwise a process-unique FIFO is fine.
+    let session_id = piki_core::session::new_session_id();
+    let plan = match piki_core::pty::launch_plan_for_session(
+        provider,
+        prompt,
+        provider_manager,
+        paths,
+        None,
+        daemon.as_ref().map(|_| session_id.as_str()),
+    ) {
         Ok(plan) => plan,
         Err(e) => return (idx, Some(e.to_string())),
     };
+
+    // Preferred path: spawn the tab in the session daemon so it survives us.
+    // Any failure degrades to an in-process PTY with a log line (never a
+    // hard error — the tab must still come up).
+    if let Some(daemon) = daemon {
+        match spawn_remote(
+            daemon,
+            &session_id,
+            provider,
+            &plan,
+            &ws.path,
+            rows,
+            cols,
+            idx,
+            output_signal.clone(),
+        )
+        .await
+        {
+            Ok(session) => {
+                ws.tabs[idx].pty_parser = Some(Arc::clone(session.parser()));
+                ws.tabs[idx].pty_session = Some(session);
+                ws.tabs[idx].session_id = Some(session_id);
+                ws.status = app::WorkspaceStatus::Busy;
+                ws.dirty = true;
+                ws.last_refresh = None;
+                return (idx, None);
+            }
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "session daemon spawn failed; falling back to an in-process PTY"
+                );
+            }
+        }
+    }
 
     let cmd = plan.command;
     let spawn_error = match PtySession::spawn(
@@ -156,6 +336,66 @@ pub(crate) async fn spawn_tab(
     ws.dirty = true;
     ws.last_refresh = None;
     (idx, spawn_error)
+}
+
+/// Spawn a tab in the session daemon and wrap the attachment as a `Remote`
+/// [`PtySession`]. Blocking daemon calls run on a blocking task so the async
+/// event loop is never stalled.
+#[allow(clippy::too_many_arguments)]
+async fn spawn_remote(
+    daemon: Daemon,
+    session_id: &str,
+    provider: &AIProvider,
+    plan: &piki_core::pty::LaunchPlan,
+    cwd: &std::path::Path,
+    rows: u16,
+    cols: u16,
+    order: usize,
+    output_signal: piki_core::pty::PtyOutputSignal,
+) -> Result<PtySession, piki_core::session::client::ClientError> {
+    // The daemon env_clears, so send the full child environment: our process
+    // env (PATH/HOME/…) with the launch plan's overrides applied last.
+    let mut env: Vec<(String, String)> = std::env::vars().collect();
+    env.push(("TERM".to_string(), "xterm-256color".to_string()));
+    env.extend(plan.env.iter().cloned());
+    // Shell-integration / hook-bridge args are prepended before the
+    // provider's own args (matching the local spawn's ordering).
+    let mut args = plan.extra_args.clone();
+    args.extend(plan.args.iter().cloned());
+
+    let req = SpawnRequest {
+        id: session_id.to_string(),
+        // Resolve to an absolute path: the daemon env_cleared, so relying on
+        // its PATH to find a bare command is fragile.
+        command: piki_core::shell_env::resolve_command(&plan.command),
+        args,
+        cwd: cwd.to_path_buf(),
+        env,
+        rows,
+        cols,
+        integration_on: plan.integration_on,
+        cli_agent_sock: plan.cli_agent_sock.clone(),
+        meta: SessionMeta {
+            workspace_path: cwd.to_path_buf(),
+            provider: provider.label().to_string(),
+            title: None,
+            order: order as u32,
+            closable: true,
+        },
+        attach: true,
+    };
+
+    let integration_on = plan.integration_on;
+    let att = tokio::task::spawn_blocking(move || daemon.spawn_attach(req))
+        .await
+        .map_err(|e| {
+            piki_core::session::client::ClientError::Io(std::io::Error::other(e.to_string()))
+        })??;
+    Ok(PtySession::from_attachment(
+        att,
+        integration_on,
+        Some(output_signal),
+    ))
 }
 
 /// Probe the actual scrollback buffer size by setting a large offset and reading back.
@@ -289,6 +529,167 @@ mod tests {
         }
     }
 
+    /// A Custom provider that just runs `cat` — no bridge, no shell
+    /// integration, so it touches no disk; perfect for exercising the
+    /// daemon/remote path with a deterministic echo.
+    fn cat_provider(name: &str) -> piki_core::providers::ProviderConfig {
+        bogus_provider(name, "cat")
+    }
+
+    fn ws_info_at(name: &str, path: &std::path::Path) -> piki_core::WorkspaceInfo {
+        let mut info = crate::test_support::test_ws_info(name, 0);
+        info.path = path.to_path_buf();
+        info.source_repo = path.to_path_buf();
+        info
+    }
+
+    /// The headline feature: a daemon-backed tab survives the frontend and is
+    /// re-attached (with its screen restored) on the next launch.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn remote_tab_persists_across_a_restart() {
+        use std::os::unix::net::{UnixListener, UnixStream};
+        use std::time::{Duration, Instant};
+
+        // An in-process session daemon on a temp socket (no fork).
+        let dir = tempfile::tempdir().unwrap();
+        let socket = dir.path().join("d.sock");
+        let listener = UnixListener::bind(&socket).unwrap();
+        let server = piki_core::session::daemon::Server::new();
+        let serve = server.clone();
+        let daemon_thread = std::thread::spawn(move || {
+            let _ = serve.serve(listener);
+        });
+        for _ in 0..200 {
+            if UnixStream::connect(&socket).is_ok() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let daemon = piki_core::session::client::Daemon::new(socket);
+
+        let ws_path = dir.path().join("ws");
+        std::fs::create_dir_all(&ws_path).unwrap();
+
+        let contents = |app: &App, wi: usize, ti: usize| -> String {
+            app.workspaces[wi].tabs[ti]
+                .pty_session
+                .as_ref()
+                .unwrap()
+                .parser()
+                .lock()
+                .screen()
+                .contents()
+        };
+        let wait_for = |app: &App, wi: usize, ti: usize, needle: &str| -> bool {
+            let deadline = Instant::now() + Duration::from_secs(10);
+            while Instant::now() < deadline {
+                if contents(app, wi, ti).contains(needle) {
+                    return true;
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            false
+        };
+
+        // ── Session 1: spawn a remote tab and type into it. ──
+        let (mut app, _tmp) = crate::test_support::test_app_isolated();
+        app.session_daemon = Some(daemon.clone());
+        app.provider_manager.upsert(cat_provider("kitty"));
+        app.workspaces
+            .push(crate::app::Workspace::from_info(ws_info_at(
+                "proj", &ws_path,
+            )));
+        app.pty_rows = 24;
+        app.pty_cols = 80;
+
+        let (idx, err) = spawn_tab(
+            &mut app.workspaces[0],
+            &AIProvider::Custom("kitty".into()),
+            24,
+            80,
+            None,
+            Some(&app.provider_manager),
+            &app.paths,
+            app.session_daemon.clone(),
+            app.pty_output.clone(),
+        )
+        .await;
+        assert!(err.is_none(), "remote spawn should succeed: {err:?}");
+        let sid = app.workspaces[0].tabs[idx]
+            .session_id
+            .clone()
+            .expect("a remote tab carries a daemon session id");
+        assert!(
+            app.workspaces[0].tabs[idx]
+                .pty_session
+                .as_ref()
+                .unwrap()
+                .is_remote(),
+            "the tab is daemon-backed"
+        );
+
+        app.workspaces[0].tabs[idx]
+            .pty_session
+            .as_mut()
+            .unwrap()
+            .write(b"persisted-line\n")
+            .unwrap();
+        assert!(
+            wait_for(&app, 0, idx, "persisted-line"),
+            "the write should echo into the tab's parser"
+        );
+
+        // ── Restart: dropping the app DETACHES its remote tabs (they survive). ──
+        drop(app);
+        std::thread::sleep(Duration::from_millis(150));
+        assert!(
+            daemon
+                .list()
+                .unwrap()
+                .iter()
+                .any(|s| s.id == sid && s.state.is_live() && s.attached == 0),
+            "the session must survive the frontend, detached"
+        );
+
+        // ── Session 2: startup re-attach rebuilds the tab with its screen. ──
+        let (mut app2, _tmp2) = crate::test_support::test_app_isolated();
+        app2.session_daemon = Some(daemon.clone());
+        app2.provider_manager.upsert(cat_provider("kitty"));
+        app2.workspaces
+            .push(crate::app::Workspace::from_info(ws_info_at(
+                "proj", &ws_path,
+            )));
+        app2.pty_rows = 24;
+        app2.pty_cols = 80;
+
+        reattach_sessions(&mut app2);
+        assert_eq!(
+            app2.workspaces[0].tabs.len(),
+            1,
+            "the persisted session came back as a tab"
+        );
+        assert_eq!(
+            app2.workspaces[0].tabs[0].session_id.as_deref(),
+            Some(sid.as_str())
+        );
+        assert!(
+            app2.workspaces[0].tabs[0]
+                .pty_session
+                .as_ref()
+                .unwrap()
+                .is_remote()
+        );
+        assert!(
+            wait_for(&app2, 0, 0, "persisted-line"),
+            "the re-attached tab restores the earlier screen"
+        );
+
+        // Cleanup.
+        let _ = daemon.remove(&sid);
+        server.request_shutdown();
+        let _ = daemon_thread.join();
+    }
+
     /// A tab whose provider isn't configured must say so, not sit there blank.
     #[tokio::test]
     async fn spawn_tab_reports_an_unknown_provider() {
@@ -305,6 +706,7 @@ mod tests {
             None,
             None,
             &paths,
+            None,
             signal,
         )
         .await;
@@ -335,6 +737,7 @@ mod tests {
             None,
             Some(&app.provider_manager),
             &paths,
+            None,
             signal,
         )
         .await;
@@ -363,6 +766,7 @@ mod tests {
                 None,
                 None,
                 &paths,
+                None,
                 piki_core::pty::PtyOutputSignal::new(),
             )
             .await;

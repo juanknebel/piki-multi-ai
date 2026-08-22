@@ -107,6 +107,7 @@ pub(super) async fn handle(
                     None,
                     Some(&app.provider_manager),
                     &app.paths,
+                    app.session_daemon.clone(),
                     app.pty_output.clone(),
                 )
                 .await;

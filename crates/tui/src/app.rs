@@ -288,6 +288,10 @@ pub struct Tab {
     /// Custom title set by the user via rename (takes precedence over
     /// `markdown_label` and `provider.label()`).
     pub custom_title: Option<String>,
+    /// Daemon session id for a persistent (Remote) PTY tab; `None` for
+    /// in-process (Local) tabs, non-PTY tabs, and markdown tabs. Used to
+    /// re-attach on restart and to remove the session on close.
+    pub session_id: Option<String>,
 }
 
 impl Tab {
@@ -448,6 +452,7 @@ impl Workspace {
             markdown_rendered: None,
             api_state: None,
             custom_title: None,
+            session_id: None,
         };
         self.next_tab_id += 1;
         self.tabs.push(tab);
@@ -493,6 +498,7 @@ impl Workspace {
             markdown_rendered: Some(rendered),
             api_state: None,
             custom_title: None,
+            session_id: None,
         };
         self.next_tab_id += 1;
         self.tabs.push(tab);
@@ -1013,6 +1019,10 @@ pub struct App {
     pub provider_manager: piki_core::providers::ProviderManager,
     /// Data paths for saving config files
     pub paths: piki_core::paths::DataPaths,
+    /// Handle to the persistent-session daemon, when one is reachable. `None`
+    /// means sessions are disabled or the daemon is unavailable — every tab
+    /// then falls back to an in-process (Local) PTY.
+    pub session_daemon: Option<piki_core::session::client::Daemon>,
     /// Global AI chat panel state (persists when overlay is hidden)
     pub chat_panel: ChatPanelState,
     /// Channel for receiving streaming chat tokens from Ollama
@@ -1178,6 +1188,7 @@ impl App {
                 &paths.providers_path(),
             ),
             paths: paths.clone(),
+            session_daemon: None,
             chat_panel: ChatPanelState::default(),
             chat_token_tx,
             chat_token_rx,

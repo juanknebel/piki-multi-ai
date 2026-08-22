@@ -239,6 +239,11 @@ pub struct SessionInfo {
     pub args: Vec<String>,
     #[serde(default)]
     pub state: SessionState,
+    /// Whether the session runs the OSC parser (shell/agent status). A
+    /// re-attaching client needs it to decide whether to keep a client-side
+    /// shell state for the Agents pane.
+    #[serde(default)]
+    pub integration_on: bool,
     /// Number of clients currently attached.
     #[serde(default)]
     pub attached: usize,
