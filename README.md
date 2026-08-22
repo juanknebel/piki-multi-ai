@@ -254,6 +254,17 @@ Migrates workspace configurations from legacy JSON files to the SQLite database.
 piki-multi-ai migrate
 ```
 
+#### `serve` / `sessions`
+
+Manage the **persistent-session daemon** (see [Persistent sessions](#persistent-sessions)). You normally never run `serve` yourself — the app starts the daemon automatically — but the commands exist for scripting and debugging:
+
+```bash
+piki-multi-ai serve [--foreground]     # run the session daemon (logs to <data-dir>/logs/sessions.log)
+piki-multi-ai sessions list            # list live + exited sessions the daemon holds
+piki-multi-ai sessions kill <id>       # kill one session's process (kept, as exited)
+piki-multi-ai sessions stop            # stop the daemon (kills every session)
+```
+
 ### Creating Workspaces
 
 Press `n` to open the New Workspace dialog. Provide:
@@ -288,6 +299,18 @@ Workspace configurations are saved automatically and restored on startup using a
 - Robust de-duplication ensures each workspace is loaded only once.
 - Simple and Project workspaces reference the original directory and are never cleaned up as stale.
 - The **last focused workspace** is remembered across restarts: switching workspaces persists the active path in `ui_preferences`, and on startup the app re-focuses that workspace (falling back to the first one if the saved path no longer exists).
+
+### Persistent sessions
+
+Every terminal tab — shells, AI agents, dispatched agents, and the lazygit tab — runs inside a lightweight background **session daemon** (a "tmux without the UI", designed after [shpool](https://github.com/shell-pool/shpool)), so it **survives quitting or crashing the app, closing the terminal, or an ssh drop**. On the next launch each session re-attaches to its workspace with the **screen and scrollback restored**. The TUI and desktop app share the same daemon, so a tab opened in one is visible in the other.
+
+- **Automatic** — the daemon starts on demand (`<data-dir>/sessions/daemon.sock`, one per data dir) and stops itself after 60s with no sessions. No setup, no external dependency (no tmux).
+- **Quitting detaches** — sessions keep running in the background. The quit prompt says how many are running; press `k` there to quit **and** kill them all. Closing a tab, or deleting its workspace, removes its session.
+- **Graceful fallback** — if the daemon can't start or speaks an incompatible protocol, tabs run in-process exactly as before, with a log line. Nothing breaks.
+- **Manage from the CLI** — `piki-multi-ai sessions list|kill|stop` (see [Commands](#serve--sessions)).
+- **Disable** — set `enabled = false` under `[sessions]` in `config.toml` to run every tab in-process.
+
+Killing the app hard (SIGKILL) still leaves sessions running, because the daemon is a separate process that owns the PTYs. The one thing that takes sessions down with it is the daemon itself dying — kept deliberately tiny for that reason. Design and internals: [`docs/persistent-sessions.md`](docs/persistent-sessions.md).
 
 ### Layout
 
@@ -783,7 +806,12 @@ crates/
       sysinfo.rs         # System info poller (CPU, RAM, battery via systemstat + chrono) + structured SysInfoSnapshot for dashboard (disk, uptime, load avg, hostname)
       preflight.rs       # Pre-flight dependency checks (git version, optional tools)
       pty/
-        session.rs       # PTY management (portable-pty + vt100 parser)
+        session.rs       # PtySession facade: Local (portable-pty + vt100) | Remote (daemon-backed); launch.rs resolves command/args/env/integration
+      session/           # Persistent-session daemon (docs/persistent-sessions.md)
+        protocol.rs      # Framed daemon⇄client wire protocol (JSON control + raw byte frames)
+        restore.rs       # Restore buffer from a vt100 parser (screen + scrollback + modes)
+        daemon/          # The headless daemon: owns PTYs, fans out to N clients, retains exited sessions
+        client.rs        # Daemon handle + Attachment stream + ensure_daemon (autostart)
       workspace/
         manager.rs       # Git worktree CRUD
         config.rs        # Workspace config persistence
@@ -949,7 +977,7 @@ sequenceDiagram
             User->>Main: KeyEvent('y') or Enter
             Main->>Main: shutdown()
             loop Each workspace
-                Main->>PTY: kill()
+                Main->>PTY: drop (Remote detaches + survives / Local is killed)
                 Main->>App: pty=None, watcher=None
             end
             Main->>UI: restore terminal

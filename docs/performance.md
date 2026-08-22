@@ -137,13 +137,19 @@ permanent fork maintenance. The emulator is load-bearing for rendering,
 scrollback, selection, terminal search, passive-detection scrapes and
 snapshot tests; all paths are invasive.
 
-### 4. Headless client/server architecture (rewrite-scale; a feature, not perf)
+### 4. Headless client/server architecture — IMPLEMENTED (a feature, not perf)
 
 In herdr a headless server owns all PTYs and VT state; the attached TUI
 client is a thin dumb terminal receiving pre-diffed frames, and sessions
-survive detach (tmux-style). This is what makes their retained-frame path
-natural. For piki it would be a structural rewrite whose real value is the
-detach/attach feature — pursue it only if that feature is wanted.
+survive detach (tmux-style). We wanted the detach/attach feature, so this is
+now **shipped** — not for perf, but so PTY tabs survive quitting/crashing the
+app and re-attach on the next launch. Unlike herdr's pre-diffed frames, our
+daemon fans out **raw PTY bytes** (+ a restore buffer generated from a
+daemon-side `vt100` parser) and each client keeps its own emulator, so the
+render/scrollback/selection paths above were untouched. See
+`docs/persistent-sessions.md` and `crates/core/src/session/`. The daemon is
+opt-out via `[sessions] enabled = false`; with it off, tabs run in-process
+exactly as this document's other sections describe.
 
 ### 5. Fully deadline-based loop, no tick (small effort, marginal gain)
 
