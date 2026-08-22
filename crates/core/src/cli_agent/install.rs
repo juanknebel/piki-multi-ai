@@ -54,13 +54,23 @@ pub struct ClaudeHookSetup {
 /// "spawn bare" (no hooks); the heuristic idle watcher then stays as the
 /// graceful fallback (see the idle-loop guard in TUI/desktop).
 pub fn setup_for_claude(base_dir: &Path) -> io::Result<ClaudeHookSetup> {
+    setup_for_claude_with_sock(base_dir, None)
+}
+
+/// [`setup_for_claude`] with a caller-chosen FIFO file name (the session
+/// daemon derives it from the session id so the path outlives the frontend
+/// that spawned the tab). `None` picks a process-unique name.
+pub fn setup_for_claude_with_sock(
+    base_dir: &Path,
+    sock_name: Option<&str>,
+) -> io::Result<ClaudeHookSetup> {
     if !jq_available() {
         return Err(io::Error::new(
             io::ErrorKind::NotFound,
             "`jq` not found on PATH — required for the structured Claude integration",
         ));
     }
-    materialize(base_dir)
+    materialize(base_dir, sock_name)
 }
 
 /// `true` when a working `jq` is reachable. Resolves via the user's *login*
@@ -79,7 +89,7 @@ pub fn jq_available() -> bool {
 
 /// Write the scripts + settings and build the env/args. Split out so tests
 /// can exercise materialization without depending on `jq` being installed.
-fn materialize(base_dir: &Path) -> io::Result<ClaudeHookSetup> {
+fn materialize(base_dir: &Path, sock_name: Option<&str>) -> io::Result<ClaudeHookSetup> {
     let scripts_dir = base_dir.join("scripts");
     std::fs::create_dir_all(&scripts_dir)?;
 
@@ -108,7 +118,7 @@ fn materialize(base_dir: &Path) -> io::Result<ClaudeHookSetup> {
     // via env so it propagates to the `claude` child and onward to its hooks.
     let sock_dir = base_dir.join("sock");
     std::fs::create_dir_all(&sock_dir)?;
-    let sock_path = sock_dir.join(unique_sock_name());
+    let sock_path = sock_dir.join(sock_name.map_or_else(unique_sock_name, str::to_string));
 
     let mut env = HashMap::new();
     env.insert("PIKI_CLI_AGENT".to_string(), "1".to_string());
@@ -211,7 +221,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         // Exercise materialization directly so the test doesn't depend on
         // `jq` being installed on the runner.
-        let setup = materialize(dir.path()).unwrap();
+        let setup = materialize(dir.path(), None).unwrap();
 
         let scripts = dir.path().join("scripts");
         for name in [
@@ -263,17 +273,32 @@ mod tests {
     }
 
     #[test]
+    fn caller_chosen_sock_name_is_honoured() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = materialize(dir.path(), Some("cli-agent-sess.sock"))
+            .unwrap()
+            .sock_path
+            .unwrap();
+        assert_eq!(a, dir.path().join("sock").join("cli-agent-sess.sock"));
+        let b = materialize(dir.path(), Some("cli-agent-sess.sock"))
+            .unwrap()
+            .sock_path
+            .unwrap();
+        assert_eq!(a, b, "a pinned name is stable across calls");
+    }
+
+    #[test]
     fn sock_path_is_unique_across_materialize_calls() {
         let dir = tempfile::tempdir().unwrap();
-        let a = materialize(dir.path()).unwrap().sock_path.unwrap();
-        let b = materialize(dir.path()).unwrap().sock_path.unwrap();
+        let a = materialize(dir.path(), None).unwrap().sock_path.unwrap();
+        let b = materialize(dir.path(), None).unwrap().sock_path.unwrap();
         assert_ne!(a, b, "each spawn must get a distinct FIFO path");
     }
 
     #[test]
     fn settings_json_is_valid_and_registers_six_hooks() {
         let dir = tempfile::tempdir().unwrap();
-        materialize(dir.path()).unwrap();
+        materialize(dir.path(), None).unwrap();
         let raw = std::fs::read_to_string(dir.path().join("settings.json")).unwrap();
         let v: serde_json::Value = serde_json::from_str(&raw).expect("valid JSON");
         let hooks = v.get("hooks").and_then(|h| h.as_object()).expect("hooks");
@@ -296,10 +321,10 @@ mod tests {
     #[test]
     fn materialize_is_idempotent() {
         let dir = tempfile::tempdir().unwrap();
-        materialize(dir.path()).unwrap();
+        materialize(dir.path(), None).unwrap();
         let stop = dir.path().join("scripts/on-stop.sh");
         std::fs::write(&stop, b"corrupted").unwrap();
-        materialize(dir.path()).unwrap();
+        materialize(dir.path(), None).unwrap();
         let contents = std::fs::read_to_string(&stop).unwrap();
         assert!(contents.contains("piki cli-agent `stop` event"));
     }

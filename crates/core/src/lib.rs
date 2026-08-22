@@ -13,6 +13,7 @@ pub mod preflight;
 pub mod providers;
 pub mod pty;
 pub mod search;
+pub mod session;
 pub mod shell_env;
 pub mod shell_integration;
 pub mod sound;

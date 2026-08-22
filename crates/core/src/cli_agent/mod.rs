@@ -91,7 +91,10 @@ pub const CLI_AGENT_PROTOCOL_VERSION: u32 = 1;
 
 /// A single structured lifecycle event decoded from a `piki://cli-agent`
 /// OSC 777 payload.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Serializable because the session daemon forwards it to attached clients
+/// (`session::protocol::Frame::ShellEvent`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CliAgentEvent {
     /// Session started (Claude Code launched / resumed).
     SessionStart {
@@ -167,7 +170,7 @@ impl CliAgentEvent {
 /// Serializes kebab-case (`waiting-permission`) — the vocabulary the desktop
 /// frontend's `CliAgentStatus` TS type already speaks on the
 /// `pty-agent-event` rail.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum CliAgentStatus {
     /// Working (prompt submitted, tool running, just started).

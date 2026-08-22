@@ -17,13 +17,19 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
+use serde::{Deserialize, Serialize};
+
 use crate::cli_agent::CliAgentState;
+use crate::session::protocol::{CliAgentSnapshot, CommandSnapshot, ShellStateSnapshot};
 
 pub mod install;
 pub mod parser;
 
 /// Structured event extracted from the PTY stream by [`parser::OscParser`].
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Serializable because the session daemon forwards these to attached
+/// clients over the wire (`session::protocol::Frame::ShellEvent`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ShellEvent {
     /// `\x1b]133;A\x07` — prompt is about to be drawn.
     PromptStart,
@@ -139,11 +145,74 @@ impl ShellTabState {
             agent.acknowledge();
         }
     }
+
+    /// Wire form for the session daemon → client handoff. `Instant`s become
+    /// durations relative to now; [`from_snapshot`](Self::from_snapshot)
+    /// turns them back.
+    pub fn snapshot(&self) -> ShellStateSnapshot {
+        let now = Instant::now();
+        ShellStateSnapshot {
+            cwd: self.cwd.clone(),
+            last_command: self.last_command.as_ref().map(|c| CommandSnapshot {
+                exit_code: c.exit_code,
+                duration_ms: c.duration.as_millis() as u64,
+                finished_ago_ms: now
+                    .saturating_duration_since(c.started_at + c.duration)
+                    .as_millis() as u64,
+            }),
+            attention_pending: self.last_attention_at.is_some(),
+            in_flight_for_ms: self
+                .in_flight_started_at
+                .map(|t| now.saturating_duration_since(t).as_millis() as u64),
+            cli_agent: self.cli_agent.as_ref().map(|a| CliAgentSnapshot {
+                session_id: a.session_id.clone(),
+                status: a.status,
+                last_summary: a.last_summary.clone(),
+                attention_pending: a.last_attention_at.is_some(),
+            }),
+            window_title: self.window_title.clone(),
+        }
+    }
+
+    /// Rebuild the state a daemon-side tab had at snapshot time. Attention
+    /// markers that were pending are re-armed as of now, which is what the
+    /// UIs need (they only test `is_some()`).
+    pub fn from_snapshot(s: &ShellStateSnapshot) -> Self {
+        let now = Instant::now();
+        let last_command = s.last_command.as_ref().map(|c| {
+            let duration = Duration::from_millis(c.duration_ms);
+            let finished_at = now
+                .checked_sub(Duration::from_millis(c.finished_ago_ms))
+                .unwrap_or(now);
+            CommandRecord {
+                started_at: finished_at.checked_sub(duration).unwrap_or(finished_at),
+                duration,
+                exit_code: c.exit_code,
+            }
+        });
+        let cli_agent = s.cli_agent.as_ref().map(|a| CliAgentState {
+            session_id: a.session_id.clone(),
+            status: a.status,
+            last_summary: a.last_summary.clone(),
+            last_attention_at: a.attention_pending.then_some(now),
+        });
+        Self {
+            cwd: s.cwd.clone(),
+            last_command,
+            last_attention_at: s.attention_pending.then_some(now),
+            in_flight_started_at: s
+                .in_flight_for_ms
+                .map(|ms| now.checked_sub(Duration::from_millis(ms)).unwrap_or(now)),
+            cli_agent,
+            window_title: s.window_title.clone(),
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cli_agent::CliAgentStatus;
 
     #[test]
     fn apply_command_lifecycle_records_exit_code_and_duration() {
@@ -190,6 +259,72 @@ mod tests {
         let cmd = s.last_command.expect("command recorded");
         assert_eq!(cmd.exit_code, Some(2));
         assert_eq!(cmd.duration, Duration::ZERO);
+    }
+
+    #[test]
+    fn snapshot_round_trips_everything_the_ui_reads() {
+        let mut s = ShellTabState::new();
+        s.apply(&ShellEvent::CwdChanged(PathBuf::from("/work/here")));
+        s.apply(&ShellEvent::WindowTitle("codex ⠋".to_string()));
+        s.apply(&ShellEvent::CommandOutputStart);
+        std::thread::sleep(Duration::from_millis(5));
+        s.apply(&ShellEvent::CommandEnd {
+            exit_code: Some(7),
+            command: Some("make".to_string()),
+        });
+        s.apply(&ShellEvent::CliAgent(
+            crate::cli_agent::CliAgentEvent::PermissionRequest {
+                session_id: "s9".to_string(),
+                tool_name: "Bash".to_string(),
+                summary: "Wants to run Bash: ls".to_string(),
+            },
+        ));
+
+        let snap = s.snapshot();
+        assert_eq!(snap.cwd, Some(PathBuf::from("/work/here")));
+        assert_eq!(snap.window_title.as_deref(), Some("codex ⠋"));
+        let cmd = snap.last_command.as_ref().unwrap();
+        assert_eq!(cmd.exit_code, Some(7));
+        assert!(cmd.duration_ms >= 5);
+        assert!(snap.attention_pending);
+        assert!(snap.in_flight_for_ms.is_none());
+        let agent = snap.cli_agent.as_ref().unwrap();
+        assert_eq!(agent.status, CliAgentStatus::WaitingPermission);
+        assert!(agent.attention_pending);
+        assert_eq!(agent.session_id.as_deref(), Some("s9"));
+
+        let back = ShellTabState::from_snapshot(&snap);
+        assert_eq!(back.cwd, s.cwd);
+        assert_eq!(back.window_title, s.window_title);
+        let rec = back.last_command.unwrap();
+        assert_eq!(rec.exit_code, Some(7));
+        assert_eq!(rec.duration.as_millis() as u64, cmd.duration_ms);
+        assert!(back.last_attention_at.is_some());
+        let agent = back.cli_agent.unwrap();
+        assert_eq!(agent.status, CliAgentStatus::WaitingPermission);
+        assert_eq!(agent.last_summary.as_deref(), Some("Wants to run Bash: ls"));
+        assert!(agent.last_attention_at.is_some());
+
+        // And a quiet tab stays quiet.
+        let quiet = ShellTabState::from_snapshot(&ShellTabState::new().snapshot());
+        assert!(quiet.last_attention_at.is_none());
+        assert!(quiet.cli_agent.is_none());
+        assert!(quiet.last_command.is_none());
+    }
+
+    #[test]
+    fn in_flight_command_survives_the_snapshot() {
+        let mut s = ShellTabState::new();
+        s.apply(&ShellEvent::CommandOutputStart);
+        std::thread::sleep(Duration::from_millis(5));
+        let snap = s.snapshot();
+        assert!(snap.in_flight_for_ms.unwrap() >= 5);
+        let mut back = ShellTabState::from_snapshot(&snap);
+        back.apply(&ShellEvent::CommandEnd {
+            exit_code: Some(0),
+            command: None,
+        });
+        assert!(back.last_command.unwrap().duration >= Duration::from_millis(5));
     }
 
     #[test]

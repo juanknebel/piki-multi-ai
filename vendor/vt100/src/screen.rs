@@ -276,6 +276,37 @@ impl Screen {
         self.attrs.write_escape_code_diff(contents, &prev_attrs);
     }
 
+    /// Return escape codes sufficient to reproduce this terminal — the
+    /// scrollback history, the primary screen, the alternate screen when it
+    /// is active, the cursor, the current attributes and the input modes —
+    /// in a *fresh* terminal of the same size.
+    ///
+    /// Unlike [`state_formatted`](Self::state_formatted) this also carries
+    /// the scrollback and the alternate-screen switch, which is what a
+    /// session daemon needs to hand a re-attaching client an identical
+    /// terminal. The receiver must start from a reset state (a new parser,
+    /// or one that was just reset); the scrollback offset of this screen is
+    /// assumed to be 0.
+    #[must_use]
+    pub fn restore_formatted(&self) -> Vec<u8> {
+        let mut contents = vec![];
+        self.grid.write_scrollback_formatted(&mut contents);
+        let prev_attrs = self.grid.write_contents_formatted(&mut contents);
+        let prev_attrs = if self.alternate_screen() {
+            // DECSET 1049: save the cursor and switch to a cleared alternate
+            // screen — the same sequence the application sent.
+            contents.extend_from_slice(b"\x1b[?1049h");
+            self.alternate_grid.write_contents_formatted(&mut contents)
+        } else {
+            prev_attrs
+        };
+        self.attrs.write_escape_code_diff(&mut contents, &prev_attrs);
+        crate::term::HideCursor::new(self.hide_cursor())
+            .write_buf(&mut contents);
+        self.write_input_mode_formatted(&mut contents);
+        contents
+    }
+
     /// Returns the formatted visible contents of the terminal by row,
     /// restricted to the given subset of columns.
     ///

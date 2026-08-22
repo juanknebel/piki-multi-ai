@@ -100,6 +100,53 @@ impl DataPaths {
         self.base.join("antigravity-hooks")
     }
 
+    /// Persistent-session daemon state: `<base>/sessions` (socket, lock, pid
+    /// file). Lives under the data dir so `--data-dir` instances get their
+    /// own daemon.
+    pub fn sessions_dir(&self) -> PathBuf {
+        self.base.join("sessions")
+    }
+
+    /// Unix socket the session daemon listens on: `<base>/sessions/daemon.sock`.
+    ///
+    /// A `sockaddr_un` path is limited to 108 bytes on Linux and 104 on
+    /// macOS. When the data dir is deep enough to blow that, the socket moves
+    /// to a short per-user location (`$XDG_RUNTIME_DIR` or `/tmp`) named by a
+    /// hash of the data dir, so distinct data dirs still get distinct
+    /// daemons. Deterministic: every client of the same data dir computes
+    /// the same path.
+    pub fn session_socket(&self) -> PathBuf {
+        let primary = self.sessions_dir().join("daemon.sock");
+        if primary.as_os_str().len() <= SUN_PATH_BUDGET {
+            return primary;
+        }
+        let runtime = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .filter(|p| p.is_absolute())
+            .unwrap_or_else(|| PathBuf::from("/tmp"));
+        runtime
+            .join(format!("piki-multi-{}", current_uid()))
+            .join(format!(
+                "{:016x}.sock",
+                fnv1a64(self.base.as_os_str().as_encoded_bytes())
+            ))
+    }
+
+    /// Exclusive-lock file the daemon holds while running: `<base>/sessions/daemon.lock`.
+    pub fn session_lock(&self) -> PathBuf {
+        self.sessions_dir().join("daemon.lock")
+    }
+
+    /// Pid of the running daemon, for `sessions stop`: `<base>/sessions/daemon.pid`.
+    pub fn session_pid_file(&self) -> PathBuf {
+        self.sessions_dir().join("daemon.pid")
+    }
+
+    /// Daemon log file: `<base>/logs/sessions.log`.
+    pub fn session_log_path(&self) -> PathBuf {
+        self.log_dir().join("sessions.log")
+    }
+
     /// Ad-hoc PR checkouts for code review: `<base>/review-checkouts`. Each
     /// repo gets one base clone (`<owner>__<repo>`) with one `git worktree`
     /// per PR (`<owner>__<repo>--pr-<N>`), managed by
@@ -108,5 +155,78 @@ impl DataPaths {
     /// directory is fully owned by piki and safe to prune/overwrite.
     pub fn review_checkouts_dir(&self) -> PathBuf {
         self.base.join("review-checkouts")
+    }
+}
+
+/// Conservative `sun_path` budget (Linux allows 108 bytes, macOS 104, both
+/// including the trailing NUL); anything above this falls back to the short
+/// per-user socket location.
+const SUN_PATH_BUDGET: usize = 100;
+
+fn fnv1a64(bytes: &[u8]) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in bytes {
+        hash ^= u64::from(*b);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    hash
+}
+
+#[cfg(unix)]
+fn current_uid() -> u32 {
+    // SAFETY: getuid has no preconditions and cannot fail.
+    unsafe { libc::getuid() }
+}
+
+#[cfg(not(unix))]
+fn current_uid() -> u32 {
+    0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn session_paths_live_under_the_data_dir() {
+        let paths = DataPaths::new(PathBuf::from("/tmp/piki-test-data"));
+        assert_eq!(
+            paths.session_socket(),
+            PathBuf::from("/tmp/piki-test-data/sessions/daemon.sock")
+        );
+        assert_eq!(
+            paths.session_lock(),
+            PathBuf::from("/tmp/piki-test-data/sessions/daemon.lock")
+        );
+        assert_eq!(
+            paths.session_pid_file(),
+            PathBuf::from("/tmp/piki-test-data/sessions/daemon.pid")
+        );
+        assert_eq!(
+            paths.session_log_path(),
+            PathBuf::from("/tmp/piki-test-data/logs/sessions.log")
+        );
+    }
+
+    #[test]
+    fn deep_data_dir_falls_back_to_a_short_deterministic_socket() {
+        let deep = PathBuf::from(format!("/tmp/{}", "d".repeat(150)));
+        let a = DataPaths::new(deep.clone()).session_socket();
+        let b = DataPaths::new(deep).session_socket();
+        assert_eq!(a, b, "same data dir → same socket");
+        assert!(a.as_os_str().len() <= SUN_PATH_BUDGET, "{a:?}");
+        assert!(
+            !a.starts_with("/tmp/dddd"),
+            "must not live under the deep dir"
+        );
+        let other =
+            DataPaths::new(PathBuf::from(format!("/tmp/{}", "e".repeat(150)))).session_socket();
+        assert_ne!(a, other, "different data dirs → different sockets");
+    }
+
+    #[test]
+    fn fnv1a64_matches_reference_vectors() {
+        assert_eq!(fnv1a64(b""), 0xcbf2_9ce4_8422_2325);
+        assert_eq!(fnv1a64(b"a"), 0xaf63_dc4c_8601_ec8c);
     }
 }

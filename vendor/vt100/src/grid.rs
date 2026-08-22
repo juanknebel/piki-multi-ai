@@ -214,6 +214,39 @@ impl Grid {
         }
     }
 
+    /// Emits the scrollback rows (oldest first) as plain lines so that a
+    /// fresh terminal of this grid's size ends up with the same history:
+    /// every row is written at the cursor with only SGR escapes, rows that
+    /// wrapped are left unterminated so the receiver re-wraps them, and
+    /// enough line feeds follow to push every history row off the visible
+    /// screen. Feed the result *before* `write_contents_formatted`, which
+    /// clears the visible screen but never the scrollback.
+    pub fn write_scrollback_formatted(&self, contents: &mut Vec<u8>) {
+        if self.scrollback.is_empty() {
+            return;
+        }
+        crate::term::ClearAttrs.write_buf(contents);
+        let mut prev_attrs = crate::attrs::Attrs::default();
+        let mut wrapped = false;
+        for row in &self.scrollback {
+            prev_attrs = row.write_history_formatted(contents, prev_attrs);
+            wrapped = row.wrapped();
+        }
+        crate::attrs::Attrs::default()
+            .write_escape_code_diff(contents, &prev_attrs);
+        // A trailing wrapped row leaves the cursor in the pending-wrap
+        // column; terminate it so the line feeds below start from column 0.
+        if wrapped {
+            crate::term::Crlf.write_buf(contents);
+        }
+        // The cursor now sits on row min(len, rows - 1); rows - 1 more line
+        // feeds reach the bottom and then scroll every remaining history row
+        // off the top, leaving an empty screen above an intact scrollback.
+        for _ in 1..self.size.rows {
+            crate::term::Crlf.write_buf(contents);
+        }
+    }
+
     pub fn write_contents_formatted(
         &self,
         contents: &mut Vec<u8>,

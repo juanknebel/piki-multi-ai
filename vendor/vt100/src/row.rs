@@ -134,6 +134,50 @@ impl Row {
         }
     }
 
+    /// Writes this row as a plain line for history replay: the cells in
+    /// order with only SGR escapes between them (no cursor movement),
+    /// trailing default cells trimmed unless the row wrapped (a wrapped row
+    /// must stay full-width so the receiver wraps it again), and a CRLF
+    /// terminator unless the row wrapped. Returns the attributes in effect
+    /// afterwards so the caller can chain rows without redundant escapes.
+    ///
+    /// Used by `Screen::restore_formatted` to carry the scrollback to a
+    /// freshly attached terminal.
+    pub fn write_history_formatted(
+        &self,
+        contents: &mut Vec<u8>,
+        mut prev_attrs: crate::attrs::Attrs,
+    ) -> crate::attrs::Attrs {
+        let default_cell = crate::Cell::new();
+        let end = if self.wrapped {
+            self.cells.len()
+        } else {
+            self.cells
+                .iter()
+                .rposition(|c| c != &default_cell)
+                .map_or(0, |i| i + 1)
+        };
+        for cell in &self.cells[..end] {
+            if cell.is_wide_continuation() {
+                continue;
+            }
+            let attrs = cell.attrs();
+            if &prev_attrs != attrs {
+                attrs.write_escape_code_diff(contents, &prev_attrs);
+                prev_attrs = *attrs;
+            }
+            if cell.has_contents() {
+                contents.extend(cell.contents().as_bytes());
+            } else {
+                contents.push(b' ');
+            }
+        }
+        if !self.wrapped {
+            crate::term::Crlf.write_buf(contents);
+        }
+        prev_attrs
+    }
+
     pub fn write_contents_formatted(
         &self,
         contents: &mut Vec<u8>,

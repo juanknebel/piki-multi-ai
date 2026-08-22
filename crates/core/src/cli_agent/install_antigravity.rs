@@ -81,18 +81,33 @@ pub fn setup_for_antigravity(
     sock_base: &Path,
     plugins_root: &Path,
 ) -> io::Result<AntigravityHookSetup> {
+    setup_for_antigravity_with_sock(sock_base, plugins_root, None)
+}
+
+/// [`setup_for_antigravity`] with a caller-chosen FIFO file name (the
+/// session daemon derives it from the session id). `None` picks a
+/// process-unique name.
+pub fn setup_for_antigravity_with_sock(
+    sock_base: &Path,
+    plugins_root: &Path,
+    sock_name: Option<&str>,
+) -> io::Result<AntigravityHookSetup> {
     if !jq_available() {
         return Err(io::Error::new(
             io::ErrorKind::NotFound,
             "`jq` not found on PATH — required for the structured Antigravity integration",
         ));
     }
-    materialize(sock_base, plugins_root)
+    materialize(sock_base, plugins_root, sock_name)
 }
 
 /// Write the plugin + decide the FIFO path. Split out so tests can exercise
 /// materialization without depending on `jq`.
-fn materialize(sock_base: &Path, plugins_root: &Path) -> io::Result<AntigravityHookSetup> {
+fn materialize(
+    sock_base: &Path,
+    plugins_root: &Path,
+    sock_name: Option<&str>,
+) -> io::Result<AntigravityHookSetup> {
     let plugin_dir = plugins_root.join(PLUGIN_NAME);
     std::fs::create_dir_all(&plugin_dir)?;
 
@@ -116,7 +131,7 @@ fn materialize(sock_base: &Path, plugins_root: &Path) -> io::Result<AntigravityH
 
     let sock_dir = sock_base.join("sock");
     std::fs::create_dir_all(&sock_dir)?;
-    let sock_path = sock_dir.join(unique_sock_name());
+    let sock_path = sock_dir.join(sock_name.map_or_else(unique_sock_name, str::to_string));
 
     let mut env = HashMap::new();
     env.insert("PIKI_CLI_AGENT".to_string(), "1".to_string());
@@ -192,7 +207,7 @@ mod tests {
     fn materialized() -> (tempfile::TempDir, tempfile::TempDir, AntigravityHookSetup) {
         let sock_base = tempfile::tempdir().unwrap();
         let plugins = tempfile::tempdir().unwrap();
-        let setup = materialize(sock_base.path(), plugins.path()).unwrap();
+        let setup = materialize(sock_base.path(), plugins.path(), None).unwrap();
         (sock_base, plugins, setup)
     }
 
@@ -270,11 +285,11 @@ mod tests {
     fn sock_path_is_unique_across_spawns() {
         let sock_base = tempfile::tempdir().unwrap();
         let plugins = tempfile::tempdir().unwrap();
-        let a = materialize(sock_base.path(), plugins.path())
+        let a = materialize(sock_base.path(), plugins.path(), None)
             .unwrap()
             .sock_path
             .unwrap();
-        let b = materialize(sock_base.path(), plugins.path())
+        let b = materialize(sock_base.path(), plugins.path(), None)
             .unwrap()
             .sock_path
             .unwrap();
@@ -285,10 +300,10 @@ mod tests {
     fn materialize_is_idempotent_and_repairs_the_scripts() {
         let sock_base = tempfile::tempdir().unwrap();
         let plugins = tempfile::tempdir().unwrap();
-        materialize(sock_base.path(), plugins.path()).unwrap();
+        materialize(sock_base.path(), plugins.path(), None).unwrap();
         let stop = plugins.path().join(PLUGIN_NAME).join("agy-on-stop.sh");
         std::fs::write(&stop, b"corrupted").unwrap();
-        materialize(sock_base.path(), plugins.path()).unwrap();
+        materialize(sock_base.path(), plugins.path(), None).unwrap();
         let contents = std::fs::read_to_string(&stop).unwrap();
         assert!(contents.contains("piki cli-agent `stop` event"));
     }
