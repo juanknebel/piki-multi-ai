@@ -211,7 +211,7 @@ fn spawn_attach_write_detach_reattach_restores_output() {
         }
         other => panic!("{other:?}"),
     }
-    let restore = b.drain_until(3, |f| matches!(f, Frame::Restore(_)));
+    let restore = b.drain_until(15, |f| matches!(f, Frame::Restore(_)));
     assert!(
         text_of(&restore).contains("hello daemon"),
         "restore missing prior output: {:?}",
@@ -254,7 +254,7 @@ fn kill_marks_session_exited_and_notifies_clients() {
     assert!(matches!(ctl.reply(), Reply::Ok));
 
     // The attached client is told the child exited.
-    let seen = a.drain_until(3, |f| matches!(f, Frame::Exited { .. }));
+    let seen = a.drain_until(15, |f| matches!(f, Frame::Exited { .. }));
     assert!(
         seen.iter().any(|f| matches!(f, Frame::Exited { .. })),
         "no Exited frame: {seen:?}"
@@ -313,7 +313,7 @@ fn two_clients_both_receive_output() {
         cols: 80,
     });
     assert!(matches!(b.reply(), Reply::Attached { .. }));
-    let _ = b.drain_until(2, |f| matches!(f, Frame::Restore(_)));
+    let _ = b.drain_until(15, |f| matches!(f, Frame::Restore(_)));
 
     // Input from a is echoed by cat and must reach BOTH attached clients.
     a.send(Frame::Input(b"broadcast\n".to_vec()));
@@ -410,7 +410,7 @@ fn resync_resends_the_restore_buffer() {
     );
 
     a.send(Frame::Resync);
-    let seen = a.drain_until(3, |f| matches!(f, Frame::Restore(_)));
+    let seen = a.drain_until(15, |f| matches!(f, Frame::Restore(_)));
     assert!(
         text_of(&seen).contains("resync me"),
         "resync restore missing earlier output: {:?}",

@@ -6,6 +6,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 
+use crate::session::client::{Attachment, AttachmentSender};
+use crate::session::protocol::{Frame, read_frame};
 use crate::shell_integration::parser::OscParser;
 use crate::shell_integration::{ShellEvent, ShellTabState};
 
@@ -62,8 +64,9 @@ impl PtyOutputSignal {
     }
 }
 
-/// Manages an AI assistant process running in a pseudo-terminal
-pub struct PtySession {
+/// A PTY session owned in this process (the classic path). Backs
+/// [`PtySession::Local`].
+pub struct LocalPty {
     child: Box<dyn portable_pty::Child + Send>,
     /// Outbound bytes for the child. A dedicated writer thread drains this
     /// queue, so neither the UI thread nor the reader thread ever blocks on
@@ -105,7 +108,7 @@ fn spawn_writer_thread(
     Ok(tx)
 }
 
-impl PtySession {
+impl LocalPty {
     /// Spawn an AI assistant in a PTY inside the given worktree directory.
     ///
     /// `extra_env` is merged into the child environment after the inherited
@@ -354,9 +357,354 @@ impl PtySession {
     }
 }
 
-impl Drop for PtySession {
+impl Drop for LocalPty {
     fn drop(&mut self) {
         let _ = self.child.kill();
         self.reader_handle.abort();
+    }
+}
+
+/// Scrollback the client-side restore parser keeps (mirrors the daemon's).
+const REMOTE_SCROLLBACK: usize = 5000;
+
+/// A PTY session that lives in the [session daemon](crate::session::daemon):
+/// this end holds a `vt100` parser fed by the daemon's restore + output
+/// frames, mirrors the shell/agent state, and sends input/resize/detach over
+/// the socket. Backs [`PtySession::Remote`].
+///
+/// Killing it kills the child in the daemon (the session is retained as
+/// exited); dropping it *detaches* — the whole point is that the session
+/// survives this process.
+pub struct RemotePty {
+    parser: Arc<Mutex<vt100::Parser>>,
+    shell: Option<Arc<Mutex<ShellSession>>>,
+    bytes: Arc<AtomicU64>,
+    alive: Arc<AtomicBool>,
+    size: Arc<Mutex<(u16, u16)>>,
+    sender: AttachmentSender,
+    reader_handle: Option<std::thread::JoinHandle<()>>,
+}
+
+impl RemotePty {
+    /// Build a remote-backed session from a fresh [`Attachment`]. Spawns a
+    /// reader thread that keeps the local parser + shell state in sync and
+    /// raises `output_signal` (if given) so an event loop wakes on output.
+    ///
+    /// `integration_on` mirrors the flag the session was spawned with: when
+    /// set, a client-side [`ShellSession`] is kept so the Agents pane can read
+    /// live status; the daemon only sends shell/agent frames for such
+    /// sessions.
+    pub fn start(
+        att: Attachment,
+        integration_on: bool,
+        output_signal: Option<PtyOutputSignal>,
+    ) -> Self {
+        let (rows, cols) = (att.rows, att.cols);
+        let parser = Arc::new(Mutex::new(vt100::Parser::new(
+            rows,
+            cols,
+            REMOTE_SCROLLBACK,
+        )));
+        let shell = integration_on.then(|| {
+            Arc::new(Mutex::new(ShellSession {
+                state: ShellTabState::from_snapshot(&att.shell),
+                pending_events: Vec::new(),
+            }))
+        });
+        let bytes = Arc::new(AtomicU64::new(0));
+        let alive = Arc::new(AtomicBool::new(att.info.state.is_live()));
+        let size = Arc::new(Mutex::new((rows, cols)));
+        let sender = att.sender();
+
+        let (read, _sender) = att.into_read_half();
+        let reader_handle = {
+            let parser = Arc::clone(&parser);
+            let shell = shell.clone();
+            let bytes = Arc::clone(&bytes);
+            let alive = Arc::clone(&alive);
+            let size = Arc::clone(&size);
+            std::thread::Builder::new()
+                .name("remote-pty-reader".into())
+                .spawn(move || {
+                    remote_reader_loop(
+                        read,
+                        &parser,
+                        shell.as_ref(),
+                        &bytes,
+                        &alive,
+                        &size,
+                        output_signal.as_ref(),
+                    );
+                })
+                .ok()
+        };
+
+        RemotePty {
+            parser,
+            shell,
+            bytes,
+            alive,
+            size,
+            sender,
+            reader_handle,
+        }
+    }
+
+    fn write(&mut self, data: &[u8]) -> anyhow::Result<()> {
+        self.sender.input(data)?;
+        Ok(())
+    }
+
+    fn parser(&self) -> &Arc<Mutex<vt100::Parser>> {
+        &self.parser
+    }
+
+    fn bytes_processed(&self) -> u64 {
+        self.bytes.load(Ordering::Relaxed)
+    }
+
+    fn resize(&self, rows: u16, cols: u16) -> anyhow::Result<()> {
+        *self.size.lock() = (rows, cols);
+        self.sender.resize(rows, cols)?;
+        self.parser.lock().screen_mut().set_size(rows, cols);
+        Ok(())
+    }
+
+    /// Kill the child in the daemon. The session stays (as exited) until the
+    /// frontend removes it, so a killed tab can still show its final screen.
+    fn kill(&mut self) -> anyhow::Result<()> {
+        self.sender.kill()?;
+        Ok(())
+    }
+
+    fn is_alive(&mut self) -> bool {
+        self.alive.load(Ordering::Relaxed)
+    }
+
+    fn peek_alive(&self) -> bool {
+        self.alive.load(Ordering::Relaxed)
+    }
+
+    fn shell(&self) -> Option<&Arc<Mutex<ShellSession>>> {
+        self.shell.as_ref()
+    }
+
+    /// Detach from the daemon (leaving the session running) and let the reader
+    /// thread wind down.
+    fn abort_reader(&self) {
+        let _ = self.sender.detach();
+    }
+}
+
+impl Drop for RemotePty {
+    fn drop(&mut self) {
+        // Detach, never kill: the session must survive us.
+        let _ = self.sender.detach();
+        if let Some(h) = self.reader_handle.take() {
+            // The reader exits on the resulting socket close; don't block.
+            drop(h);
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn remote_reader_loop(
+    mut read: std::os::unix::net::UnixStream,
+    parser: &Arc<Mutex<vt100::Parser>>,
+    shell: Option<&Arc<Mutex<ShellSession>>>,
+    bytes: &Arc<AtomicU64>,
+    alive: &Arc<AtomicBool>,
+    size: &Arc<Mutex<(u16, u16)>>,
+    output_signal: Option<&PtyOutputSignal>,
+) {
+    loop {
+        match read_frame(&mut read) {
+            Ok(Frame::Restore(b)) => {
+                // A restore rebuilds the whole terminal, so start from a fresh
+                // parser of the current size before replaying it.
+                let (rows, cols) = *size.lock();
+                {
+                    let mut p = parser.lock();
+                    *p = vt100::Parser::new(rows, cols, REMOTE_SCROLLBACK);
+                    p.process(&b);
+                }
+                bytes.fetch_add(b.len() as u64, Ordering::Relaxed);
+                if let Some(sig) = output_signal {
+                    sig.raise();
+                }
+            }
+            Ok(Frame::Output(b)) => {
+                parser.lock().process(&b);
+                bytes.fetch_add(b.len() as u64, Ordering::Relaxed);
+                if let Some(sig) = output_signal {
+                    sig.raise();
+                }
+            }
+            Ok(Frame::ShellState(snap)) => {
+                if let Some(shell) = shell {
+                    shell.lock().state = ShellTabState::from_snapshot(&snap);
+                    if let Some(sig) = output_signal {
+                        sig.raise();
+                    }
+                }
+            }
+            Ok(Frame::ShellEvent { event, .. }) => {
+                if let Some(shell) = shell {
+                    // Apply to state AND push to pending_events so the existing
+                    // frontend drain (notifications, badges) treats a remote
+                    // tab exactly like a local one.
+                    let mut s = shell.lock();
+                    s.state.apply(&event);
+                    s.pending_events.push(event);
+                }
+                if let Some(sig) = output_signal {
+                    sig.raise();
+                }
+            }
+            Ok(Frame::Exited { .. }) => {
+                alive.store(false, Ordering::Relaxed);
+                if let Some(sig) = output_signal {
+                    sig.raise();
+                }
+            }
+            Ok(Frame::Detached { .. }) => {
+                alive.store(false, Ordering::Relaxed);
+                if let Some(sig) = output_signal {
+                    sig.raise();
+                }
+                break;
+            }
+            Ok(_) => {} // heartbeat and unexpected frames
+            Err(_) => {
+                // Daemon gone or connection dropped → the tab is dead.
+                alive.store(false, Ordering::Relaxed);
+                if let Some(sig) = output_signal {
+                    sig.raise();
+                }
+                break;
+            }
+        }
+    }
+}
+
+/// A PTY session, either owned in this process ([`Local`](Self::Local)) or
+/// living in the [session daemon](crate::session::daemon)
+/// ([`Remote`](Self::Remote)). The public surface is identical so callers
+/// (the TUI's `Tab`, the desktop's tab) don't care which backing they got —
+/// the frontend picks `Remote` when the daemon is reachable and falls back to
+/// `Local` otherwise.
+pub enum PtySession {
+    Local(LocalPty),
+    Remote(RemotePty),
+}
+
+impl PtySession {
+    /// Spawn a session owned by this process (the fallback path, and what the
+    /// tests use). Signature unchanged from the original struct.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn spawn(
+        worktree_path: &Path,
+        rows: u16,
+        cols: u16,
+        command: &str,
+        args: &[String],
+        extra_env: &[(String, String)],
+        extra_args: &[String],
+        enable_shell_integration: bool,
+        cli_agent_sock: Option<std::path::PathBuf>,
+        output_signal: Option<PtyOutputSignal>,
+    ) -> anyhow::Result<Self> {
+        let local = LocalPty::spawn(
+            worktree_path,
+            rows,
+            cols,
+            command,
+            args,
+            extra_env,
+            extra_args,
+            enable_shell_integration,
+            cli_agent_sock,
+            output_signal,
+        )
+        .await?;
+        Ok(PtySession::Local(local))
+    }
+
+    /// Wrap a daemon [`Attachment`] as a remote-backed session.
+    pub fn from_attachment(
+        att: Attachment,
+        integration_on: bool,
+        output_signal: Option<PtyOutputSignal>,
+    ) -> Self {
+        PtySession::Remote(RemotePty::start(att, integration_on, output_signal))
+    }
+
+    /// True for a daemon-backed session (dropping it detaches rather than
+    /// kills). Frontends use this to decide quit/close semantics.
+    pub fn is_remote(&self) -> bool {
+        matches!(self, PtySession::Remote(_))
+    }
+
+    pub fn shell(&self) -> Option<&Arc<Mutex<ShellSession>>> {
+        match self {
+            PtySession::Local(l) => l.shell(),
+            PtySession::Remote(r) => r.shell(),
+        }
+    }
+
+    pub fn write(&mut self, data: &[u8]) -> anyhow::Result<()> {
+        match self {
+            PtySession::Local(l) => l.write(data),
+            PtySession::Remote(r) => r.write(data),
+        }
+    }
+
+    pub fn parser(&self) -> &Arc<Mutex<vt100::Parser>> {
+        match self {
+            PtySession::Local(l) => l.parser(),
+            PtySession::Remote(r) => r.parser(),
+        }
+    }
+
+    pub fn bytes_processed(&self) -> u64 {
+        match self {
+            PtySession::Local(l) => l.bytes_processed(),
+            PtySession::Remote(r) => r.bytes_processed(),
+        }
+    }
+
+    pub fn resize(&self, rows: u16, cols: u16) -> anyhow::Result<()> {
+        match self {
+            PtySession::Local(l) => l.resize(rows, cols),
+            PtySession::Remote(r) => r.resize(rows, cols),
+        }
+    }
+
+    pub fn kill(&mut self) -> anyhow::Result<()> {
+        match self {
+            PtySession::Local(l) => l.kill(),
+            PtySession::Remote(r) => r.kill(),
+        }
+    }
+
+    pub fn is_alive(&mut self) -> bool {
+        match self {
+            PtySession::Local(l) => l.is_alive(),
+            PtySession::Remote(r) => r.is_alive(),
+        }
+    }
+
+    pub fn peek_alive(&self) -> bool {
+        match self {
+            PtySession::Local(l) => l.peek_alive(),
+            PtySession::Remote(r) => r.peek_alive(),
+        }
+    }
+
+    pub fn abort_reader(&self) {
+        match self {
+            PtySession::Local(l) => l.abort_reader(),
+            PtySession::Remote(r) => r.abort_reader(),
+        }
     }
 }
