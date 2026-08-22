@@ -38,6 +38,17 @@ theme = "default"
 # sound_done_path = "~/sounds/done.wav"
 # sound_attention_path = "~/sounds/attention.wav"
 
+# ── Persistent sessions ───────────────────────────────────────────────────
+# When enabled (the default), PTY tabs (shells, agents, lazygit) run inside a
+# background daemon so they survive quitting or crashing the app and are
+# re-attached — screen and scrollback intact — on the next launch. Quitting
+# detaches (sessions keep running); press `k` at the quit prompt to stop the
+# daemon and kill them all. Set enabled = false to run every tab in-process,
+# exactly as before this feature existed.
+
+# [sessions]
+# enabled = true
+
 # ── Kanban board ──────────────────────────────────────────────────────────
 # Backing store for the task board.
 

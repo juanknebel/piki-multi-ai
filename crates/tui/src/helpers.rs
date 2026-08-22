@@ -9,7 +9,7 @@ use piki_core::AIProvider;
 use piki_core::cli_agent::bridge_for_command;
 use piki_core::pty::PtySession;
 use piki_core::session::client::Daemon;
-use piki_core::session::protocol::{SessionMeta, SpawnRequest};
+use piki_core::session::protocol::{SessionMeta, SetMetaRequest, SpawnRequest};
 
 /// Tear down on quit. Dropping each tab's [`PtySession`] does the right thing
 /// per backend: a **Remote** (daemon) session DETACHES and keeps running so it
@@ -150,6 +150,25 @@ pub(crate) fn remove_session(app: &App, session_id: &str) {
     tokio::task::spawn_blocking(move || {
         if let Err(e) = daemon.remove(&id) {
             tracing::warn!(session = %id, error = %e, "failed to remove session");
+        }
+    });
+}
+
+/// Push a renamed tab's title to its daemon session so the rename survives a
+/// restart. Fire-and-forget; no-op without a daemon or session id.
+pub(crate) fn rename_session(app: &App, session_id: &str, title: Option<String>) {
+    let Some(daemon) = app.session_daemon.clone() else {
+        return;
+    };
+    let req = SetMetaRequest {
+        id: session_id.to_string(),
+        set_title: true,
+        title,
+        ..Default::default()
+    };
+    tokio::task::spawn_blocking(move || {
+        if let Err(e) = daemon.set_meta(req) {
+            tracing::debug!(error = %e, "failed to sync tab title to session");
         }
     });
 }

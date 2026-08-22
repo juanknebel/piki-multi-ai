@@ -115,6 +115,8 @@ pub struct Config {
     pub kanban: KanbanConfig,
     #[serde(default)]
     pub notifications: NotificationsConfig,
+    #[serde(default)]
+    pub sessions: SessionsConfig,
     /// Runtime-detected platform (not serialized).
     #[serde(skip)]
     pub platform: Platform,
@@ -138,8 +140,27 @@ impl Default for Config {
             keybindings: Keybindings::default(),
             kanban: KanbanConfig::default(),
             notifications: NotificationsConfig::default(),
+            sessions: SessionsConfig::default(),
             platform: Platform::detect(),
         }
+    }
+}
+
+/// `[sessions]` — the persistent-session daemon (docs/persistent-sessions.md).
+///
+/// When `enabled`, PTY tabs (shells, agents, lazygit) are spawned in a
+/// background daemon so they survive quitting/crashing the app and are
+/// re-attached on the next launch. Disable it to run every tab in-process
+/// exactly as before this feature existed.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SessionsConfig {
+    pub enabled: bool,
+}
+
+impl Default for SessionsConfig {
+    fn default() -> Self {
+        Self { enabled: true }
     }
 }
 

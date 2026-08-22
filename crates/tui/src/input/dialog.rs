@@ -477,7 +477,20 @@ pub(super) fn handle_confirm_close_tab_input(app: &mut App, key: KeyEvent) -> Op
 }
 
 pub(super) fn handle_confirm_quit_input(app: &mut App, key: KeyEvent) -> Option<Action> {
-    // Quit also accepts Enter as confirmation
+    // `k` — quit AND kill every persistent session (stop the daemon). The
+    // default (Enter/y) merely detaches, leaving sessions running.
+    if matches!(key.code, KeyCode::Char('k') | KeyCode::Char('K')) {
+        if let Some(daemon) = app.session_daemon.clone() {
+            // A quick, synchronous round-trip is fine — we're quitting anyway.
+            if let Err(e) = daemon.shutdown(true) {
+                tracing::warn!(error = %e, "failed to stop session daemon on quit");
+            }
+        }
+        app.should_quit = true;
+        dismiss_dialog(app);
+        return None;
+    }
+    // Quit also accepts Enter as confirmation (sessions keep running).
     if key.code == KeyCode::Enter {
         app.should_quit = true;
         dismiss_dialog(app);
@@ -1991,20 +2004,33 @@ pub(super) fn handle_rename_tab_input(app: &mut App, key: KeyEvent) -> Option<Ac
             // Cap length to 40 chars to avoid blowing up tab bar layout
             let capped: String = trimmed.chars().take(40).collect();
             let ws_idx = app.active_workspace;
+            // The daemon session (if any) to push the new title to, captured
+            // while we hold the tab borrow and applied after it ends.
+            let mut meta_update: Option<(String, Option<String>)> = None;
             if let Some(ws) = app.workspaces.get_mut(ws_idx)
                 && let Some(tab) = ws.tabs.get_mut(ws.active_tab)
             {
-                if capped.is_empty() {
-                    tab.custom_title = None;
-                    app.set_toast("Cleared custom title", crate::app::ToastLevel::Info);
+                let title = if capped.is_empty() {
+                    None
                 } else {
-                    let label = capped.clone();
-                    tab.custom_title = Some(capped);
-                    app.set_toast(
-                        format!("Renamed to \"{}\"", label),
-                        crate::app::ToastLevel::Success,
-                    );
+                    Some(capped.clone())
+                };
+                tab.custom_title = title.clone();
+                if let Some(sid) = tab.session_id.clone() {
+                    meta_update = Some((sid, title));
                 }
+            }
+            if capped.is_empty() {
+                app.set_toast("Cleared custom title", crate::app::ToastLevel::Info);
+            } else {
+                app.set_toast(
+                    format!("Renamed to \"{}\"", capped),
+                    crate::app::ToastLevel::Success,
+                );
+            }
+            // Persist the rename on the daemon so it survives a restart.
+            if let Some((sid, title)) = meta_update {
+                crate::helpers::rename_session(app, &sid, title);
             }
             crate::input::confirm_common::dismiss_dialog(app);
             None
