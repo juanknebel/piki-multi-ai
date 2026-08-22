@@ -29,6 +29,11 @@ pub fn run(paths: &DataPaths, foreground: bool) -> anyhow::Result<()> {
         unsafe { daemonize() }.context("daemonizing")?;
     }
 
+    // Only now (post-fork) set up logging: to a file when daemonized (stdio is
+    // /dev/null), to stderr when foreground. `try_init` so an embedding caller
+    // that already has a subscriber (tests) isn't clobbered.
+    init_logging(paths, foreground);
+
     // Single-instance lock. Held for the life of the process; a second daemon
     // for the same data dir fails to acquire it and exits quietly.
     let _lock = match acquire_lock(&paths.session_lock()) {
@@ -60,6 +65,43 @@ pub fn run(paths: &DataPaths, foreground: bool) -> anyhow::Result<()> {
     let _ = fs::remove_file(&socket);
     let _ = fs::remove_file(paths.session_pid_file());
     result.context("serving")
+}
+
+/// Install the daemon's own tracing subscriber. Uses a plain file writer (no
+/// background thread — this runs right after a fork) when daemonized; stderr
+/// when foreground. `PIKI_SESSION_LOG` overrides the default `info` level.
+fn init_logging(paths: &DataPaths, foreground: bool) {
+    use tracing::level_filters::LevelFilter;
+    let level = match std::env::var("PIKI_SESSION_LOG")
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "trace" => LevelFilter::TRACE,
+        "debug" => LevelFilter::DEBUG,
+        "warn" => LevelFilter::WARN,
+        "error" => LevelFilter::ERROR,
+        "off" => LevelFilter::OFF,
+        _ => LevelFilter::INFO,
+    };
+    if foreground {
+        let _ = tracing_subscriber::fmt()
+            .with_ansi(false)
+            .with_max_level(level)
+            .try_init();
+        return;
+    }
+    if let Ok(file) = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(paths.session_log_path())
+    {
+        let _ = tracing_subscriber::fmt()
+            .with_ansi(false)
+            .with_writer(std::sync::Mutex::new(file))
+            .with_max_level(level)
+            .try_init();
+    }
 }
 
 /// A held exclusive lock; releasing (drop) unlocks the file.

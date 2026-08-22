@@ -12,3 +12,21 @@ pub mod client;
 pub mod daemon;
 pub mod protocol;
 pub mod restore;
+
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+/// A process-unique session id (doubles as the daemon-side tab id): pid + a
+/// process-global counter + wall-clock nanos. Collision-free across
+/// concurrent spawns in one process (counter) and across separate processes
+/// (pid + nanos). Same shape as the cli-agent FIFO naming.
+pub fn new_session_id() -> String {
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let pid = std::process::id();
+    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    format!("{pid}-{n}-{nanos}")
+}
