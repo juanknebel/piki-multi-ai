@@ -8,5 +8,6 @@
 //! - [`restore`] — turning a daemon-side `vt100` parser into the byte stream
 //!   a freshly attached client replays.
 
+pub mod daemon;
 pub mod protocol;
 pub mod restore;
