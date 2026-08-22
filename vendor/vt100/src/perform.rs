@@ -123,8 +123,31 @@ impl<CB: crate::callbacks::Callbacks> vte::Perform for WrappedScreen<CB> {
                 'S' => self.screen.su(canonicalize_params_1(params, 1)),
                 'T' => self.screen.sd(canonicalize_params_1(params, 1)),
                 'X' => self.screen.ech(canonicalize_params_1(params, 1)),
+                'c' => {
+                    // DA1 — identify as a VT102-class terminal.
+                    self.screen.push_answerback(b"\x1b[?6c");
+                }
                 'd' => self.screen.vpa(canonicalize_params_1(params, 1)),
                 'm' => self.screen.sgr(params, unhandled),
+                'n' => match canonicalize_params_1(params, 0) {
+                    5 => self.screen.push_answerback(b"\x1b[0n"),
+                    6 => {
+                        let (row, col) = self.screen.cursor_position();
+                        self.screen.push_answerback(
+                            format!("\x1b[{};{}R", row + 1, col + 1)
+                                .as_bytes(),
+                        );
+                    }
+                    _ => {
+                        self.callbacks.unhandled_csi(
+                            &mut self.screen,
+                            None,
+                            None,
+                            &params.iter().collect::<Vec<_>>(),
+                            c,
+                        );
+                    }
+                },
                 'r' => self.screen.decstbm(canonicalize_params_decstbm(
                     params,
                     self.screen.grid().size(),

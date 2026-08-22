@@ -154,6 +154,14 @@ export function setActiveTab(
   return invoke("set_active_tab", { workspaceIdx, tabIdx });
 }
 
+export function renameTab(
+  workspaceIdx: number,
+  tabId: string,
+  title: string | null,
+): Promise<void> {
+  return invoke("rename_tab", { workspaceIdx, tabId, title });
+}
+
 // Git commands
 export function getChangedFiles(
   workspaceIdx: number,

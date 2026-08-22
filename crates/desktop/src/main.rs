@@ -223,6 +223,7 @@ fn main() {
             commands::pty::resize_pty,
             commands::pty::close_tab,
             commands::pty::set_active_tab,
+            commands::pty::rename_tab,
             commands::pty::spawn_editor_tab,
             commands::pty::spawn_terminal_at,
             commands::git::get_changed_files,

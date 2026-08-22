@@ -1,5 +1,5 @@
 import { appState } from "../state";
-import { getProviderLabel, cliAgentStatusView, type FileStatus } from "../types";
+import { getProviderLabel, getTabLabel, cliAgentStatusView, type FileStatus } from "../types";
 import { showAboutDialog } from "./dialogs/about-dialog";
 import * as ipc from "../ipc";
 
@@ -73,7 +73,7 @@ export function renderStatusBar(container: HTMLElement) {
           item.title = agentState.agentSummary ?? v.label;
           container.appendChild(item);
         }
-        const label = getProviderLabel(tab.provider);
+        const label = getTabLabel(tab);
         const alive = tab.alive ? "" : " (exited)";
         addItem(container, `${label}${alive}`);
       }

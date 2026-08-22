@@ -279,6 +279,10 @@ pub enum DialogState {
         agent_dir_cursor: usize,
         active_field: EditProviderField,
     },
+    RenameTab {
+        input: String,
+        cursor: usize,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

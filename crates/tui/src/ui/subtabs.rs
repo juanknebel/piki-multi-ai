@@ -10,10 +10,7 @@ use crate::theme::Theme;
 /// Column width of one tab block (excluding the 1-col gap that follows it).
 /// Must stay the single source for both rendering and mouse hit-testing.
 fn block_width(tab: &Tab, i: usize, theme: &Theme) -> u16 {
-    let label = tab
-        .markdown_label
-        .as_deref()
-        .unwrap_or(tab.provider.label());
+    let label = tab.display_label();
     // " icon " (3) + label + trailing " " (1)
     let mut w = label.len() as u16 + 4;
     // " N" index hint (2, first nine tabs)
@@ -157,10 +154,7 @@ pub fn render(frame: &mut Frame, area: Rect, ws: &Workspace, theme: &Theme) {
 
     for &(i, _, _) in &lay.blocks {
         let tab = &ws.tabs[i];
-        let label = tab
-            .markdown_label
-            .as_deref()
-            .unwrap_or(tab.provider.label());
+        let label = tab.display_label();
         let icon = if tab.markdown_content.is_some() {
             "◆"
         } else {

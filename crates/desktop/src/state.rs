@@ -50,6 +50,8 @@ pub struct DesktopTab {
     pub provider: AIProvider,
     pub pty: Option<RawPtySession>,
     pub alive: bool,
+    /// Custom title set by user (takes precedence over provider label).
+    pub custom_title: Option<String>,
     /// Idle watcher for provider tabs (`AIProvider::Custom(_)`). Polled by
     /// the background tick loop in `main.rs`. `None` for Shell, Kanban, etc.
     pub idle_watcher: Option<piki_core::idle_watcher::IdleWatcher>,
@@ -70,8 +72,18 @@ impl DesktopTab {
             provider,
             pty: None,
             alive: false,
+            custom_title: None,
             idle_watcher,
         }
+    }
+
+    pub fn display_label(&self) -> String {
+        if let Some(custom) = self.custom_title.as_deref()
+            && !custom.trim().is_empty()
+        {
+            return custom.to_string();
+        }
+        self.provider.label().to_string()
     }
 }
 
@@ -80,6 +92,7 @@ pub struct TabInfo {
     pub id: String,
     pub provider: AIProvider,
     pub alive: bool,
+    pub custom_title: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -108,6 +121,7 @@ impl DesktopWorkspace {
                     id: t.id.clone(),
                     provider: t.provider.clone(),
                     alive: t.alive,
+                    custom_title: t.custom_title.clone(),
                 })
                 .collect(),
             active_tab: self.active_tab,

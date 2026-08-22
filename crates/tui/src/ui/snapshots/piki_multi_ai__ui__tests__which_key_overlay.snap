@@ -17,7 +17,7 @@ expression: content
 │Workspace  s new  r worktree  e edit  d delete  b dashboard  i info  w switch │
 │           } next  { prev  ` last                                             │
 │Git        g lazygit                                                          │
-│Tabs       c new  x close  n next  p prev                                     │
+│Tabs       c new  x close  n next  p prev  R rename                           │
 │Search     / find file  t grep  f search                                      │
 │View       : palette  ? all keys  a about  o logs  [ scroll  y chat           │
 │Focus      h left  j down  k up  l right                                      │

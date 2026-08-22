@@ -520,7 +520,13 @@ pub fn list_agent_rows(state: State<'_, Mutex<DesktopApp>>) -> Vec<AgentRow> {
             if !is_custom && snapshot.is_none() {
                 continue;
             }
-            let label = if is_custom {
+            let has_custom = tab
+                .custom_title
+                .as_deref()
+                .is_some_and(|s| !s.trim().is_empty());
+            let label = if has_custom {
+                tab.display_label()
+            } else if is_custom {
                 tab.provider.label().to_string()
             } else {
                 format!("Claude ({})", tab.provider.label())

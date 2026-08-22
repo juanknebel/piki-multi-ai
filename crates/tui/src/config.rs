@@ -317,6 +317,7 @@ fn default_app() -> HashMap<String, BindingValue> {
     );
     m.insert("logs".to_string(), BindingValue::one("prefix-o"));
     m.insert("scroll_mode".to_string(), BindingValue::one("prefix-["));
+    m.insert("rename_tab".to_string(), BindingValue::one("prefix-R"));
 
     // Layout
     m.insert(

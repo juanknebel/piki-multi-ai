@@ -9,7 +9,7 @@ import { appState } from "../state";
 import type { PaneNode, LeafNode, SplitNode, PaneId } from "../pane-tree";
 import { allLeaves } from "../pane-tree";
 import type { TabInfo, AIProvider } from "../types";
-import { getProviderLabel } from "../types";
+import { getProviderLabel, getTabLabel } from "../types";
 import { mountTab, unmountTab } from "../tab-mount";
 import {
   renderWorkspaceTabBar,
@@ -133,7 +133,7 @@ function paneTitle(leaf: LeafNode): string {
   const ws = appState.activeWs;
   if (!leaf.contentId || !ws) return "Empty";
   const c = ws.tabs.find((t) => t.id === leaf.contentId);
-  return c ? getProviderLabel(c.provider) : "Empty";
+  return c ? getTabLabel(c) : "Empty";
 }
 
 function renderSplit(split: SplitNode): HTMLElement {

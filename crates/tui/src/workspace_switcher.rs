@@ -66,11 +66,7 @@ pub fn create_state(workspaces: &[Workspace]) -> WorkspaceSwitcherState {
                 .enumerate()
                 .map(|(tab_idx, tab)| TabNode {
                     tab_idx,
-                    label: tab
-                        .markdown_label
-                        .as_deref()
-                        .unwrap_or(tab.provider.label())
-                        .to_string(),
+                    label: tab.display_label().to_string(),
                 })
                 .collect(),
         })

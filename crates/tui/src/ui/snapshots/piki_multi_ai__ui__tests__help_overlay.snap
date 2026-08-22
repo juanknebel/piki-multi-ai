@@ -1,6 +1,6 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 749
+assertion_line: 772
 expression: content
 ---
             ╭ Help ───────────────────────────────────────────────╮
@@ -27,6 +27,7 @@ expression: content
             │      C-g x         Close Tab                        │
             │      C-g n         Next Tab                         │
             │      C-g p         Previous Tab                     │
+            │      C-g R         Rename Tab                       │
             │    Search                                           │
             │      C-g /         Fuzzy File Search                │
             │      C-g t         Search in Project (content)      │
@@ -41,5 +42,4 @@ expression: content
             │    Focus                                            │
             │      C-g h         Focus Pane Left                  │
             │      C-g j         Focus Pane Down                  │
-            │      C-g k         Focus Pane Up                    │
-            ╰───────────────────────────────────────── [1/188 ↑↓] ╯
+            ╰───────────────────────────────────────── [1/189 ↑↓] ╯

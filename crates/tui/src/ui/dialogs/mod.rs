@@ -1,6 +1,7 @@
 mod agents;
 mod dashboard;
 mod providers;
+mod rename;
 mod system;
 mod workspace;
 
@@ -11,6 +12,7 @@ pub(crate) use self::agents::{
 };
 pub(crate) use self::dashboard::render_dashboard_overlay;
 pub(crate) use self::providers::{render_edit_provider_dialog, render_manage_providers_dialog};
+pub(crate) use self::rename::render_rename_tab_dialog;
 #[cfg(test)]
 pub(crate) use self::system::help_lines;
 pub(crate) use self::system::{

@@ -111,10 +111,7 @@ pub(crate) fn render_dashboard_overlay(frame: &mut Frame, area: Rect, app: &App)
             )));
         } else {
             for (ti, tab) in ws.tabs.iter().enumerate() {
-                let label = tab
-                    .markdown_label
-                    .as_deref()
-                    .unwrap_or(tab.provider.label());
+                let label = tab.display_label();
 
                 let (indicator, ind_color) = if tab.markdown_content.is_some() {
                     ("md", theme.palette.info)

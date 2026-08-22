@@ -379,6 +379,30 @@ pub async fn set_active_tab(
     Ok(())
 }
 
+#[tauri::command]
+pub async fn rename_tab(
+    state: State<'_, Mutex<DesktopApp>>,
+    workspace_idx: usize,
+    tab_id: String,
+    title: Option<String>,
+) -> Result<(), String> {
+    let mut app = state.lock();
+    if workspace_idx >= app.workspaces.len() {
+        return Err("Workspace index out of range".to_string());
+    }
+    let ws = &mut app.workspaces[workspace_idx];
+    let Some(tab) = ws.tabs.iter_mut().find(|t| t.id == tab_id) else {
+        return Err("Tab not found".to_string());
+    };
+    let trimmed = title
+        .as_deref()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.chars().take(40).collect::<String>());
+    tab.custom_title = trimmed;
+    Ok(())
+}
+
 fn parse_provider(s: &str) -> Result<AIProvider, String> {
     match s {
         "Shell" => Ok(AIProvider::Shell),

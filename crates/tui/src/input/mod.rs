@@ -28,7 +28,8 @@ use self::dialog::{
     handle_edit_agent_role_input, handle_edit_provider_input, handle_edit_workspace_input,
     handle_help_input, handle_import_agents_input, handle_logs_input, handle_manage_agents_input,
     handle_manage_providers_input, handle_missing_prereqs_input, handle_new_tab_input,
-    handle_new_workspace_input, handle_pr_picker_input, handle_workspace_info_input,
+    handle_new_workspace_input, handle_pr_picker_input, handle_rename_tab_input,
+    handle_workspace_info_input,
 };
 use self::editor_input::handle_inline_edit_input;
 use self::fuzzy_input::handle_fuzzy_search_input;
@@ -154,6 +155,7 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         AppMode::Dashboard => return handle_dashboard_input(app, key),
         AppMode::Logs => return handle_logs_input(app, key),
         AppMode::CommandPalette => return handle_command_palette_input(app, key),
+        AppMode::RenameTab => return handle_rename_tab_input(app, key),
         AppMode::WorkspaceSwitcher => {
             return workspace_switcher_input::handle_workspace_switcher_input(app, key);
         }
@@ -264,6 +266,7 @@ const APP_ACTIONS: &[&str] = &[
     "sidebar_grow",
     "split_up",
     "split_down",
+    "rename_tab",
 ];
 
 /// Execute an `[keybindings.app]` action by name.
@@ -325,6 +328,7 @@ fn dispatch_app_action(app: &mut App, action: &str) -> Option<Action> {
         "sidebar_grow" => app_actions::sidebar_grow(app),
         "split_up" => app_actions::split_up(app),
         "split_down" => app_actions::split_down(app),
+        "rename_tab" => app_actions::open_rename_tab(app),
         _ => None,
     }
 }

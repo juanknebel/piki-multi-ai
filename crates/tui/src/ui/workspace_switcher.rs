@@ -155,10 +155,7 @@ fn row_line<'a>(
                 }
                 None => crate::ui::agent_tab_indicator(app, tab),
             };
-            let label = tab
-                .markdown_label
-                .as_deref()
-                .unwrap_or(tab.provider.label());
+            let label = tab.display_label();
             let arrow = if is_active_tab { "→ " } else { "  " };
             let left = format!("    ├─ {arrow}{glyph} {label}");
 
@@ -167,11 +164,11 @@ fn row_line<'a>(
                 || tab.cli_agent_snapshot().is_some()
             {
                 (
-                    format!("{} · {}", tab.provider.label().to_lowercase(), status_label),
+                    format!("{} · {}", tab.display_label().to_lowercase(), status_label),
                     color,
                 )
             } else {
-                (tab.provider.label().to_lowercase(), app.theme.palette.fg3)
+                (tab.display_label().to_lowercase(), app.theme.palette.fg3)
             };
             (left, right, right_color)
         }
@@ -227,10 +224,7 @@ fn breadcrumb_text(app: &App, row: SwitcherRow) -> String {
             let Some(tab) = ws.tabs.get(tab_idx) else {
                 return ws.name.clone();
             };
-            let label = tab
-                .markdown_label
-                .as_deref()
-                .unwrap_or(tab.provider.label());
+            let label = tab.display_label();
             let status = tab
                 .cli_agent_snapshot()
                 .map(|(s, att, _)| crate::ui::cli_agent_status_view(app, s, att).1)

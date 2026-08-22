@@ -131,6 +131,8 @@ pub enum AppMode {
     EditProvider,
     /// Global AI chat overlay (persists state when hidden)
     ChatPanel,
+    /// Rename current tab
+    RenameTab,
 }
 
 /// Which pane is currently selected / focused
@@ -283,9 +285,25 @@ pub struct Tab {
     pub markdown_rendered: Option<Text<'static>>,
     /// API Explorer state (when this tab is an API Explorer)
     pub api_state: Option<ApiTabState>,
+    /// Custom title set by the user via rename (takes precedence over
+    /// `markdown_label` and `provider.label()`).
+    pub custom_title: Option<String>,
 }
 
 impl Tab {
+    /// Display label: custom title > markdown label > provider label.
+    pub fn display_label(&self) -> &str {
+        if let Some(custom) = self.custom_title.as_deref()
+            && !custom.trim().is_empty()
+        {
+            return custom;
+        }
+        if let Some(md) = self.markdown_label.as_deref() {
+            return md;
+        }
+        self.provider.label()
+    }
+
     /// Snapshot of the structured Claude agent state for this tab, if the
     /// cli-agent OSC 777 channel has produced at least one event. `None`
     /// for non-Claude tabs (or before the first event). Locks the shell
@@ -429,6 +447,7 @@ impl Workspace {
             markdown_scroll: 0,
             markdown_rendered: None,
             api_state: None,
+            custom_title: None,
         };
         self.next_tab_id += 1;
         self.tabs.push(tab);
@@ -473,6 +492,7 @@ impl Workspace {
             markdown_scroll: 0,
             markdown_rendered: Some(rendered),
             api_state: None,
+            custom_title: None,
         };
         self.next_tab_id += 1;
         self.tabs.push(tab);

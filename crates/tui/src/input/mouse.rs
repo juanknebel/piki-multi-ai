@@ -14,6 +14,8 @@ enum PtyScrollRoute {
     MouseReport,
     ArrowKeys,
     LocalScrollback,
+    /// Consume the wheel event without touching the PTY or local scrollback.
+    Swallow,
 }
 
 /// Encode a mouse scroll event as terminal escape bytes based on the protocol encoding.
@@ -52,12 +54,21 @@ fn encode_mouse_scroll(
     }
 }
 
-fn pty_scroll_route(alt_screen: bool, mouse_tracking: bool) -> PtyScrollRoute {
+/// `agent_tab` is true for `AIProvider::Custom` tabs (muse, Claude, Codex…).
+fn pty_scroll_route(alt_screen: bool, mouse_tracking: bool, agent_tab: bool) -> PtyScrollRoute {
     if alt_screen && mouse_tracking {
         return PtyScrollRoute::MouseReport;
     }
 
     if alt_screen {
+        if agent_tab {
+            // An alt-screen agent that does NOT track the mouse (muse) gives
+            // us nowhere useful to put the wheel: the alternate grid has no
+            // scrollback, and synthesized arrow keys would sit unread in the
+            // PTY input buffer while the agent works, then all replay at
+            // once on its next read — the "scrolls by itself" bug. Drop it.
+            return PtyScrollRoute::Swallow;
+        }
         // Alt-screen app that doesn't track the mouse (a pager, `git diff`):
         // vt100 gives the alternate grid zero scrollback capacity, so local
         // scrollback is a structural dead end. Mirror what xterm does and
@@ -106,8 +117,9 @@ fn try_forward_scroll_to_pty(app: &mut App, col: u16, row: u16, button: u8) -> b
     drop(guard);
 
     let mouse_tracking = !matches!(mouse_mode, vt100::MouseProtocolMode::None);
+    let agent_tab = matches!(tab.provider, piki_core::AIProvider::Custom(_));
 
-    match pty_scroll_route(alt, mouse_tracking) {
+    match pty_scroll_route(alt, mouse_tracking, agent_tab) {
         PtyScrollRoute::MouseReport => {
             // Translate from outer terminal coords to 1-based PTY coords.
             let pty_col = col.saturating_sub(inner.x) + 1;
@@ -131,6 +143,7 @@ fn try_forward_scroll_to_pty(app: &mut App, col: u16, row: u16, button: u8) -> b
             }
             true
         }
+        PtyScrollRoute::Swallow => true,
         PtyScrollRoute::LocalScrollback => false,
     }
 }
@@ -750,18 +763,36 @@ mod tests {
 
     #[test]
     fn alt_screen_with_mouse_tracking_forwards_mouse_reports() {
-        assert_eq!(pty_scroll_route(true, true), PtyScrollRoute::MouseReport);
+        assert_eq!(
+            pty_scroll_route(true, true, false),
+            PtyScrollRoute::MouseReport
+        );
+        // An agent that asked for mouse reports handles the wheel itself.
+        assert_eq!(
+            pty_scroll_route(true, true, true),
+            PtyScrollRoute::MouseReport
+        );
     }
 
     #[test]
     fn alt_screen_without_mouse_tracking_uses_arrow_keys() {
-        assert_eq!(pty_scroll_route(true, false), PtyScrollRoute::ArrowKeys);
+        assert_eq!(
+            pty_scroll_route(true, false, false),
+            PtyScrollRoute::ArrowKeys
+        );
+    }
+
+    #[test]
+    fn alt_screen_agent_without_mouse_tracking_swallows_wheel() {
+        // muse: synthesized arrows would queue in the PTY while the agent is
+        // busy and replay all at once on its next stdin read.
+        assert_eq!(pty_scroll_route(true, false, true), PtyScrollRoute::Swallow);
     }
 
     #[test]
     fn primary_screen_mouse_tracking_keeps_local_scrollback() {
         assert_eq!(
-            pty_scroll_route(false, true),
+            pty_scroll_route(false, true, false),
             PtyScrollRoute::LocalScrollback
         );
     }
@@ -772,7 +803,11 @@ mod tests {
         // transcripts into local scrollback, and arrow keys on the primary
         // screen would recall history instead of scrolling.
         assert_eq!(
-            pty_scroll_route(false, false),
+            pty_scroll_route(false, false, false),
+            PtyScrollRoute::LocalScrollback
+        );
+        assert_eq!(
+            pty_scroll_route(false, false, true),
             PtyScrollRoute::LocalScrollback
         );
     }
