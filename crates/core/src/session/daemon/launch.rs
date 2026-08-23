@@ -7,7 +7,6 @@
 
 use std::fs;
 use std::io::Write;
-use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -51,7 +50,7 @@ pub fn run(paths: &DataPaths, foreground: bool) -> anyhow::Result<()> {
         fs::create_dir_all(parent).ok();
     }
     remove_stale_socket(&socket);
-    let listener = UnixListener::bind(&socket)
+    let listener = crate::session::uds::bind_listener(&socket)
         .with_context(|| format!("binding session socket at {}", socket.display()))?;
     restrict_permissions(&socket);
 
@@ -150,7 +149,7 @@ fn remove_stale_socket(socket: &Path) {
     if !socket.exists() {
         return;
     }
-    match UnixStream::connect(socket) {
+    match crate::session::uds::connect_stream(socket) {
         Ok(_) => {} // a live daemon owns it; our bind will fail and that's right
         Err(_) => {
             let _ = fs::remove_file(socket);
@@ -223,6 +222,7 @@ unsafe fn daemonize() -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::net::UnixListener;
 
     #[test]
     fn second_lock_on_the_same_path_is_busy() {

@@ -109,27 +109,14 @@ impl DataPaths {
 
     /// Unix socket the session daemon listens on: `<base>/sessions/daemon.sock`.
     ///
-    /// A `sockaddr_un` path is limited to 108 bytes on Linux and 104 on
-    /// macOS. When the data dir is deep enough to blow that, the socket moves
-    /// to a short per-user location (`$XDG_RUNTIME_DIR` or `/tmp`) named by a
-    /// hash of the data dir, so distinct data dirs still get distinct
-    /// daemons. Deterministic: every client of the same data dir computes
-    /// the same path.
+    /// The socket always lives here, alongside the lock/pid, regardless of how
+    /// deep the data dir is. A `sockaddr_un` address is capped at 108 bytes
+    /// (Linux) / 104 (macOS), but that cap applies only to the string handed to
+    /// `bind()`/`connect()`, never to the file itself — so an overflowing path
+    /// is addressed through a short proxy at the syscall boundary (see
+    /// [`crate::session`]'s `uds` helpers), not by relocating the socket.
     pub fn session_socket(&self) -> PathBuf {
-        let primary = self.sessions_dir().join("daemon.sock");
-        if primary.as_os_str().len() <= SUN_PATH_BUDGET {
-            return primary;
-        }
-        let runtime = std::env::var_os("XDG_RUNTIME_DIR")
-            .map(PathBuf::from)
-            .filter(|p| p.is_absolute())
-            .unwrap_or_else(|| PathBuf::from("/tmp"));
-        runtime
-            .join(format!("piki-multi-{}", current_uid()))
-            .join(format!(
-                "{:016x}.sock",
-                fnv1a64(self.base.as_os_str().as_encoded_bytes())
-            ))
+        self.sessions_dir().join("daemon.sock")
     }
 
     /// Exclusive-lock file the daemon holds while running: `<base>/sessions/daemon.lock`.
@@ -158,31 +145,6 @@ impl DataPaths {
     }
 }
 
-/// Conservative `sun_path` budget (Linux allows 108 bytes, macOS 104, both
-/// including the trailing NUL); anything above this falls back to the short
-/// per-user socket location.
-const SUN_PATH_BUDGET: usize = 100;
-
-fn fnv1a64(bytes: &[u8]) -> u64 {
-    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for b in bytes {
-        hash ^= u64::from(*b);
-        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
-    }
-    hash
-}
-
-#[cfg(unix)]
-fn current_uid() -> u32 {
-    // SAFETY: getuid has no preconditions and cannot fail.
-    unsafe { libc::getuid() }
-}
-
-#[cfg(not(unix))]
-fn current_uid() -> u32 {
-    0
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -209,24 +171,12 @@ mod tests {
     }
 
     #[test]
-    fn deep_data_dir_falls_back_to_a_short_deterministic_socket() {
+    fn socket_always_lives_under_the_data_dir() {
+        // Even a pathologically deep data dir keeps the socket in place; the
+        // sun_path limit is handled at the bind/connect syscall, not by moving
+        // the file (see `session::uds`).
         let deep = PathBuf::from(format!("/tmp/{}", "d".repeat(150)));
-        let a = DataPaths::new(deep.clone()).session_socket();
-        let b = DataPaths::new(deep).session_socket();
-        assert_eq!(a, b, "same data dir → same socket");
-        assert!(a.as_os_str().len() <= SUN_PATH_BUDGET, "{a:?}");
-        assert!(
-            !a.starts_with("/tmp/dddd"),
-            "must not live under the deep dir"
-        );
-        let other =
-            DataPaths::new(PathBuf::from(format!("/tmp/{}", "e".repeat(150)))).session_socket();
-        assert_ne!(a, other, "different data dirs → different sockets");
-    }
-
-    #[test]
-    fn fnv1a64_matches_reference_vectors() {
-        assert_eq!(fnv1a64(b""), 0xcbf2_9ce4_8422_2325);
-        assert_eq!(fnv1a64(b"a"), 0xaf63_dc4c_8601_ec8c);
+        let sock = DataPaths::new(deep.clone()).session_socket();
+        assert_eq!(sock, deep.join("sessions/daemon.sock"));
     }
 }

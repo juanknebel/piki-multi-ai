@@ -7,11 +7,14 @@
 //! - [`protocol`] — wire types + framing shared by daemon and clients.
 //! - [`restore`] — turning a daemon-side `vt100` parser into the byte stream
 //!   a freshly attached client replays.
+//! - `uds` — AF_UNIX bind/connect that keep the socket in the data dir even
+//!   when the path overflows `sun_path` (internal).
 
 pub mod client;
 pub mod daemon;
 pub mod protocol;
 pub mod restore;
+mod uds;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};

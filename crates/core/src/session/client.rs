@@ -82,7 +82,7 @@ fn handshake(stream: &mut UnixStream) -> Result<Hello> {
 
 /// Open a fresh connection, complete the handshake, and send `req`.
 fn dial(socket: &Path, req: Request) -> Result<UnixStream> {
-    let mut stream = UnixStream::connect(socket)?;
+    let mut stream = crate::session::uds::connect_stream(socket)?;
     stream.set_read_timeout(Some(Duration::from_secs(10)))?;
     handshake(&mut stream)?;
     write_frame(&mut stream, &Frame::Request(req))?;
