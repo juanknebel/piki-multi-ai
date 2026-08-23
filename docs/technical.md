@@ -11,6 +11,7 @@ Companion documents: [persistent sessions design](persistent-sessions.md) ·
 ## Table of contents
 
 - [Command-line interface](#command-line-interface)
+- [On-disk layout](#on-disk-layout)
 - [TUI layout](#tui-layout)
 - [TUI keybindings](#tui-keybindings)
 - [Code Review](#code-review)
@@ -21,6 +22,7 @@ Companion documents: [persistent sessions design](persistent-sessions.md) ·
 - [Notifications](#notifications)
 - [Architecture](#architecture)
 - [Performance](#performance)
+- [Testing](#testing)
 - [Development](#development)
 
 ## Command-line interface
@@ -72,6 +74,60 @@ piki-multi-ai sessions list            # list live + exited sessions the daemon 
 piki-multi-ai sessions kill <id>       # kill one session's process (kept, as exited)
 piki-multi-ai sessions stop            # stop the daemon (kills every session)
 ```
+
+The desktop binary exposes the same daemon entry point as `piki-desktop --serve-sessions` (parsed before Tauri starts). Both frontends launch it automatically; which binary happens to serve is irrelevant — they speak the same protocol against the same socket.
+
+## On-disk layout
+
+All paths are centralized in `piki-core::paths::DataPaths`. Two roots exist: the **data dir** (`$XDG_DATA_HOME/piki-multi`, i.e. `~/.local/share/piki-multi`) and the **config dir** (`~/.config/piki-multi`). With `--data-dir <PATH>`, *both* resolve under that path, giving a fully isolated instance (own database, own worktrees, own config, own session daemon).
+
+**Data dir** (`~/.local/share/piki-multi/`):
+
+| Path | Contents |
+|------|----------|
+| `piki.db` | The SQLite database (WAL mode) — workspaces, agent profiles, API history, UI preferences |
+| `worktrees/<project>/<name>/` | Managed git worktrees, one per worktree workspace |
+| `repos/` | Default clone destination for GitHub-origin workspaces |
+| `review-checkouts/` | App-managed PR checkouts for Code Review (one base clone per repo + one `git worktree` per PR); safe to prune |
+| `logs/piki-multi.log.*` | Application log, daily rotation via `tracing-appender` |
+| `logs/sessions.log` | Session daemon log (append; level via `PIKI_SESSION_LOG`) |
+| `sessions/daemon.{sock,lock,pid}` | Session daemon socket, single-instance flock, and pid file |
+| `shell-integration/` | Materialized OSC 133/7 init scripts + bridge files for zsh/bash/fish |
+| `claude-hooks/` | Materialized Claude Code hook scripts + generated `--settings` file |
+| `workspaces/` | Legacy JSON workspace configs (migration source for `migrate`; no longer written) |
+
+**Config dir** (`~/.config/piki-multi/`):
+
+| Path | Contents |
+|------|----------|
+| `config.toml` | Main configuration: theme, keybindings, notifications, sessions |
+| `providers.toml` | Custom AI provider definitions |
+| `themes/<name>.toml` | TUI theme files |
+| `desktop-themes/<name>.json` | Custom desktop theme presets |
+| `lsp.toml` | Desktop LSP server registry (see [Desktop internals](#desktop-internals)) |
+
+One deliberate exception outside both roots: the Antigravity hook bridge is a plugin inside agy's own config root (`~/.gemini/config/plugins/piki-multi-bridge/`), because that is the only place agy discovers hooks from.
+
+### Environment variables
+
+User-facing:
+
+| Variable | Effect |
+|----------|--------|
+| `PIKI_DISABLE_SOUND=1` | Hard-mute notification chimes regardless of config |
+| `PIKI_FORCE_LOGIN_ENV=1` | Force the interactive login-shell environment capture even when stdin is a TTY (normally skipped — it costs ~0.5–1s sourcing your dotfiles) |
+| `PIKI_SESSION_LOG=<level>` | Session daemon log level (`trace`/`debug`/`info`/`warn`/`error`/`off`; default `info`) |
+
+Internal — set by piki for its child processes; documented so they can be recognized, not set by hand:
+
+| Variable | Effect |
+|----------|--------|
+| `PIKI_CLI_AGENT` | Arms the structured cli-agent hook channel; hooks no-op without it |
+| `PIKI_CLI_AGENT_SOCK` | Per-tab FIFO path the hook scripts write events to |
+| `PIKI_CLI_AGENT_V` / `PIKI_CLI_AGENT_SCRIPT_V` | Protocol / script version negotiation |
+| `PIKI_CLI_AGENT_TARGET` | Which bridge (claude / antigravity) the hook payload is for |
+| `PIKI_CLAUDE_HOOK_SETTINGS` | Path to the generated `claude --settings` file; the shell bridge uses it to wrap a manually-typed `claude` |
+| `PIKI_SHELL_INTEGRATION` | Marks a shell spawned with piki's OSC 133/7 integration |
 
 ## TUI layout
 
@@ -483,6 +539,14 @@ Claude Code agent tabs get a precise lifecycle channel instead of guessing from 
 
 Antigravity (`agy`) tabs get the same lifecycle channel, so the Agents pane shows running / done instead of a bare "alive". agy has no `--settings` equivalent — its hooks are only discovered from a **plugin** — so piki materializes one shared, self-contained plugin at `~/.gemini/config/plugins/piki-multi-bridge/` (`plugin.json` + `hooks.json` + scripts; no `agy plugin install` needed, the directory alone is enough) and maps `PreInvocation` → `prompt_submit`, `PostToolUse` → `tool_complete`, `Stop` → `stop` (with query/response previews read from agy's transcript). The per-tab FIFO path rides the environment (`PIKI_CLI_AGENT_SOCK`), which agy passes down to its hook children, so one static plugin serves every tab and nothing per-spawn is written into your agy config. Like the Claude bridge it is self-disabling — the handlers no-op (printing `{}`) unless `PIKI_CLI_AGENT` is set, so a plain `agy` run outside piki is unaffected. `PreToolUse` is deliberately not registered: agy fires it before every tool step whether or not you'll be asked to approve it, so Antigravity tabs have no `waiting-permission` state; everything else is at parity. Lives in `crates/core/src/cli_agent/install_antigravity.rs`; requires `jq`.
 
+### Passive status detection (Codex, Muse)
+
+Providers with no hook bridge can still get better-than-"alive" status. `crates/core/src/agent_state_detect.rs` classifies a tab passively by matching the provider's OSC window-title spinner glyphs and known blocking-prompt text against a static `StateManifest` — no in-band protocol, just reading what the agent already draws. Manifests exist for `codex` and `muse` (matched by command basename, so `/usr/local/bin/codex` works). Blocked needles outrank the spinner, because Muse keeps its title spinner running behind approval dialogs. Results are written into the same `ShellTabState.cli_agent` field the hook bridges populate, so the Agents pane needs zero provider-specific rendering logic. Adding a provider = adding a manifest.
+
+### Idle watcher
+
+The generic fallback for every provider without structured or passive status: `crates/core/src/idle_watcher.rs` (shared by TUI and desktop) watches the tab's PTY byte counter and fires an idle notification once output has been silent past the provider's threshold (`ProviderConfig.idle_threshold_secs`, default 3s). After firing it re-arms only once at least `DEFAULT_IDLE_REARM_BYTES` (256) of *new* output arrive — cursor blinks, spinner frames and status redraws at the agent's prompt don't re-fire it. The watcher steps aside automatically for tabs whose cli-agent channel has reported, so a bridged agent never double-notifies.
+
 ### Agent profiles
 
 Configure named agents per project (`A` key, Simple workspaces only) with a two-step wizard: step 1 selects name + provider, step 2 opens a large floating editor for the agent's role/instructions; agents are stored in SQLite per `source_repo` with version tracking; press `p` to sync agent config to the repo as provider-native subagent files (e.g., `.claude/agents/<name>.md`); press `i` to import agents from repo files (reverse sync) — scans all provider directories for `.md` files, shows a checklist with `(new)`/`(exists)` status, and imports selected agents marked as synced; version indicator shows sync status (`v3 ✓` synced, `v2 ✗` pending); editing an agent increments its version and resets sync status; falls back to raw provider selector when no agents are configured.
@@ -625,6 +689,18 @@ crates/
         workspace_switcher.rs # Workspace switcher overlay renderer
 ```
 
+### Crate dependency rules
+
+```
+piki-api-client        (independent — no piki deps)
+piki-core              (independent — UI-agnostic; must NOT depend on tui/api-client)
+piki-agent             → piki-core + piki-api-client   (must NOT depend on tui/desktop)
+agent-multi (TUI)      → piki-core + piki-api-client + piki-agent
+piki-desktop           → piki-core + piki-api-client + piki-agent
+```
+
+Anything shared by both frontends belongs in `piki-core` (or `piki-agent`/`piki-api-client` for chat/HTTP); public types that cross crate boundaries live in `core/src/domain.rs`. The two frontends never depend on each other — parity is achieved by pushing logic down, not sideways. Examples of the rule in action: `status_severity()` (agent rollup ranking), the `IdleWatcher`, the notification mailbox, and the whole `session/` module all live in core precisely so TUI and desktop can't drift.
+
 ### Sequence diagram
 
 ```mermaid
@@ -710,6 +786,46 @@ sequenceDiagram
 - Event-driven architecture: `crossterm::EventStream` + `tokio::select!` in `event_loop.rs` for truly async event loop; key handlers return `Option<Action>`, `action.rs` executes actions asynchronously
 - **Structured logging** to file via `tracing` (not to terminal) — TUI output is unaffected; logs rotate daily in `~/.local/share/piki-multi/logs/`
 
+### Input pipeline (TUI)
+
+Every user interaction follows one path: **key event → AppMode/DialogState → Action → state mutation → render**. `input/mod.rs` routes keys — modal `AppMode`s first, then the tmux-style prefix state machine (`InputState { Normal, PrefixPending, TermScroll, Resize }`), then the focused pane. Handlers return `Option<Action>`; `action/mod.rs::execute_action()` routes each `Action` to its domain module's `handle()`, which does the async work and mutates `App`. `ui/layout.rs` routes `AppMode` to the right render function. Render functions are pure (`fn(frame, area, &App)`).
+
+`crates/tui/src/action_catalog.rs` is the **single source of truth for every user-facing key**: the command palette, the which-key overlay, the `prefix-?` help browser, and this document's prefix table all derive from it (the latter enforced by the `docs_parity` tests).
+
+### Storage layer
+
+Trait-based, SQLite-only backend (`crates/core/src/storage/`). Traits `WorkspaceStorage`, `ApiHistoryStorage`, `UiPrefsStorage`, `AgentProfileStorage` are held as boxed objects in `AppStorage`, built by `storage::create_storage()`. One database (`piki.db`, WAL mode) guarded by `parking_lot::Mutex<Connection>`.
+
+Tables: `workspaces`, `agent_profiles`, `api_history` (+ `api_history_fts`, an FTS5 virtual table kept in sync by triggers), `collapsed_groups`, `ui_preferences`, and `schema_version`. API history has a unique natural key on `(source_repo, method, url, request_text)` — re-sending the same request upserts, keeping only the latest response — and every query is scoped by `source_repo`, so each repository sees only its own entries. Schema changes add a migration in `sqlite.rs` and bump the version constant. `rusqlite` ≥0.36 dropped `u64` support, so `pr_number` is cast to/from `i64` at the SQLite boundary.
+
+### Terminal emulation & the vendored vt100
+
+The `vt100` crate is vendored (`vendor/vt100`, wired via `[patch.crates-io]`) with two behavioral patches plus one addition:
+
+1. **Scroll-region scrollback** — lines scrolled off a scroll region anchored at row 0 are pushed into scrollback, matching real terminals. Codex-style inline TUIs (ratatui `insert_before`) publish their transcript exactly that way; stock vt100 discards it, leaving mouse-wheel scrollback empty over those tabs.
+2. **`Screen::restore_formatted()`** — serializes scrollback + primary screen + alternate screen + cursor/attrs/input modes to escape codes, so the session daemon can rebuild a terminal on a re-attaching client. Round-trip tests live in `crates/core/src/session/restore.rs`.
+3. **Answerback queue** — responses to terminal query sequences (DSR `CSI 6n`/`CSI 5n`, DA1) are queued in `Screen::take_answerback()`; the PTY reader drains that after each parse pass and writes it back to the PTY. Apps that probe the terminal at startup (muse, vim) hang or silently exit without it.
+
+On the wheel: on the primary screen the wheel scrolls piki's local scrollback and is **never** synthesized into arrow keys (that would recall shell history); alt-screen apps get real mouse events or arrow-key translation depending on whether they track the mouse, and agent tabs drop untracked wheel events entirely so they can't queue up as phantom input.
+
+### Shell environment capture
+
+GUI launches (`.desktop` / `.app`) inherit a stripped environment, so `shell_env::user_login_env()` (cached) captures the user's real shell env by running an interactive login shell. **Fast path:** when stdin is a TTY — the normal terminal-launched TUI case — it returns `std::env::vars()` directly, because the login-shell round-trip costs ~0.5–1s sourcing the user's dotfiles at startup. `PIKI_FORCE_LOGIN_ENV=1` forces the round-trip.
+
+### AI Chat engine
+
+Three crates cooperate:
+
+- **`piki-api-client`** — transport. `ChatClient` trait unifies two local-LLM backends: `OllamaClient` (`GET /api/tags`, streaming `POST /api/chat`) and `LlamaCppClient` (OpenAI-compatible `GET /v1/models`, SSE `POST /v1/chat/completions`). Streaming is delivered token-by-token over `mpsc` channels as `ChatStreamEvent` (`Token` / `Done` / `ToolCalls` / `Error`). The same crate holds the Hurl-like parser and `HttpClient` used by the API Explorer.
+- **`piki-core::chat`** — domain types shared by both frontends (`ChatMessage`, `ChatRole` incl. `Tool`, `ChatConfig`, `ChatServerType`, tool-use types).
+- **`piki-agent`** — the agentic loop. `AgentLoop` sends messages with tool definitions, executes requested tools, feeds results back, and repeats until the LLM answers with text only (max 20 iterations). Built-in read-only tools: `git_status`, `read_file` (path-sandboxed), `list_files`, `search_code`. Progress reaches the UI as `AgentEvent`s. A 60s no-token watchdog in both frontends unlocks the panel if a stream dies.
+
+### Desktop internals
+
+The desktop backend wraps `piki-core` behind Tauri IPC commands; the frontend is vanilla TypeScript. Terminals use `RawPtySession` — raw PTY bytes streamed to xterm.js as base64 Tauri events, no server-side `vt100` (xterm.js *is* the emulator; the persistent-session daemon still keeps a vt100 mirror server-side for restores).
+
+**LSP**: a WebSocket proxy (`src/lsp/`) spawns language servers as child processes and bridges JSON-RPC to CodeMirror 6 (`codemirror-languageserver`). The registry is `~/.config/piki-multi/lsp.toml` — per-server `id`, `command`, `args`, `extensions`, optional `init_options` — seeded with rust-analyzer, typescript-language-server, and pyright. `idle_ttl_secs` (default 300) shuts idle servers down after a workspace switch; `max_concurrent` (default 3) caps how many run at once.
+
 ## Performance
 
 The event-loop performance model and its invariants are documented in [performance.md](performance.md) — read it before changing event-loop timing or adding per-wakeup work. Highlights:
@@ -726,6 +842,16 @@ The event-loop performance model and its invariants are documented in [performan
 - **Zero-allocation footer** — Footer key descriptions use `&'static str` instead of per-frame `String` allocations, and width calculations use arithmetic instead of `format!()`
 - **Minimal tokio features** — Only compiles required tokio features (`rt-multi-thread`, `macros`, `process`, `time`, `sync`, `fs`) instead of `"full"`, reducing compile time and binary size
 - **Event-driven loop** — Uses `crossterm::EventStream` + `tokio::select!` instead of blocking `event::poll`, so async results (git refresh, fuzzy scan, PTY output) apply the moment they arrive
+
+## Testing
+
+`just test` runs the whole suite (workspace minus `piki-desktop`; its Rust is tested by `just lint-desktop` after the frontend build). The layers:
+
+- **UI snapshot tests** (`crates/tui/src/ui/mod.rs`) — dialogs, overlays and the full layout rendered to a `TestBackend` buffer and pinned with `insta` snapshots (`ui/snapshots/`). After an intentional UI change, review with `just snapshots` and commit the updated `.snap` files.
+- **Input-handler tests** (`crates/tui/src/input/dialog_tests.rs`) — every dialog's key paths against a real `App` built by the `test_support` fixtures (`test_app()`, `add_test_workspace()`, `add_terminal_tab()`, …). Handlers that write to disk use `test_app_isolated()` so tests never touch the real user config.
+- **Documentation parity tests** — `docs_parity` (in `action_catalog.rs`) fails the build if this document's prefix table drifts from `default_app()`; `every_bind_resolves_to_a_real_binding` fails it if a catalog entry points at a binding that doesn't exist. `config.example.toml` is mirrored by hand.
+- **Session tests** — protocol round-trips and vt100 restore round-trips as unit tests; `crates/core/tests/session_daemon.rs` and `session_facade.rs` drive a full in-process daemon (spawn/attach/detach/kill/restore, multi-client fan-out); `crates/tui/src/helpers.rs` has an end-to-end persistence test (spawn → write → drop/detach → re-attach → screen restored).
+- **Ignored E2E tests** — drive real external binaries, so they're `#[ignore]` by default and run explicitly with `cargo test -- --ignored`: `crates/core/tests/pty_terminal_queries.rs` (real `muse` against the vt100 answerback path) and `crates/core/tests/cli_agent_antigravity.rs` (real `agy` against the hook bridge).
 
 ## Development
 
@@ -744,9 +870,24 @@ just run       # run the TUI
 
 A few things worth knowing:
 
-- **Branches** — work lands on `nightly`; `main` only receives release merges via `scripts/release.sh`.
 - **`piki-desktop` is excluded from `just test`** because `tauri-build` needs `crates/desktop/frontend/dist` to exist. Use `just lint-desktop`, which builds the frontend first.
-- **Snapshot tests** — UI rendering is covered by `insta` snapshots. After an intentional UI change, review the diffs with `just snapshots` (`cargo install cargo-insta`) and commit the updated `.snap` files.
 - **Blame** — the repo was reformatted once, in a single commit listed in `.git-blame-ignore-revs`. Run `git config blame.ignoreRevsFile .git-blame-ignore-revs` so local `git blame` skips it.
-- **Security advisories** — `cargo audit` runs weekly and on dependency changes. Advisories that can't be acted on are listed in `.cargo/audit.toml` with the reason and what would clear them.
-- **`rusqlite`'s `u64` support** — `rusqlite` ≥0.36 dropped `ToSql`/`FromSql` for `u64`, so `pr_number` is cast to/from `i64` at the SQLite boundary in `crates/core/src/storage/sqlite.rs`. Keep that in mind if a future schema change adds another `u64` column.
+- **Security advisories** — `cargo audit` runs weekly and on dependency changes (`.github/workflows/audit.yml`). Advisories that can't be acted on are listed in `.cargo/audit.toml` with the reason and what would clear them — add entries there, never by silencing the job.
+
+### CI pipeline
+
+`.github/workflows/nightly.yml` runs on every push to `nightly` and on every PR:
+
+- **`test`** (ubuntu + macos) — `cargo fmt --check` (ubuntu leg), `cargo clippy --workspace --exclude piki-desktop --all-targets -- -D warnings`, `cargo test --workspace --exclude piki-desktop`. This is the only job PRs run.
+- **`build`** and **`build-desktop`** (push only, `needs: test`) — build the TUI release artifacts and the desktop bundle; `build-desktop` builds the frontend (`tsc && vite build`) first, then lints and builds the desktop crate — this is where the desktop's Rust and the frontend's TypeScript are actually checked.
+- **`release`** (push only) — publishes the nightly artifacts.
+
+A failing `test` blocks the artifact jobs. `just ci` reproduces the whole gate locally.
+
+### Branches & releases
+
+Work lands on `nightly`; `main` only receives release merges. `scripts/release.sh <version>` runs the release flow from `nightly` (version bumps, build, `--no-ff` merge into `main`, tag, push); `--hotfix` cuts a patch release from `main`; `--dry-run` simulates. It deliberately does **not** sync back to nightly — run `scripts/post-release.sh` after CI is green to advance the nightly version. The `Clean Main` ruleset on `main` blocks branch deletion and non-fast-forward pushes; the release flow's merge commits are allowed.
+
+### Logging
+
+The app logs to file only (the terminal belongs to the TUI): `tracing` with daily rotation via `tracing-appender` into `<data-dir>/logs/`, level set by `--log-level`. The in-app log viewer (`prefix o` in the TUI, `Alt+Shift+L` in the desktop) shows the last 500 entries from an in-memory ring buffer. The session daemon logs separately to `<data-dir>/logs/sessions.log` (level via `PIKI_SESSION_LOG`; stderr when run with `serve --foreground`).
