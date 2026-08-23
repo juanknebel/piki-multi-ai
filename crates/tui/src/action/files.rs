@@ -18,6 +18,7 @@ pub(super) async fn handle(
                 _ => unreachable!(),
             };
             // Suspend TUI, open $EDITOR, restore TUI
+            let _watchdog = crate::watchdog::suspend();
             crossterm::execute!(
                 std::io::stderr(),
                 crossterm::event::PopKeyboardEnhancementFlags,

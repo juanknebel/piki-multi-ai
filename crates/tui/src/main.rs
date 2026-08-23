@@ -12,11 +12,13 @@ mod input;
 mod log_buffer;
 mod pty;
 mod syntax;
+mod term_guard;
 #[cfg(test)]
 mod test_support;
 mod text;
 mod theme;
 mod ui;
+mod watchdog;
 mod workspace_switcher;
 
 use std::path::PathBuf;
@@ -187,6 +189,9 @@ async fn main() -> anyhow::Result<()> {
         original_hook(panic_info);
     }));
 
+    // Must run before `ratatui::init` flips raw mode: it snapshots the cooked
+    // termios that a SIGTERM/SIGHUP handler will put back.
+    term_guard::install();
     let terminal = ratatui::init();
     crossterm::execute!(
         std::io::stderr(),
@@ -206,6 +211,7 @@ async fn main() -> anyhow::Result<()> {
         elapsed_ms = startup_t0.elapsed().as_millis(),
         "startup: pre-event-loop setup done, entering event_loop::run"
     );
+    watchdog::start();
     let result = event_loop::run(terminal, preflight.warnings, log_buffer, paths).await;
     // Best-effort cleanup: an early `?` here used to skip DisableMouseCapture,
     // leaving the shell spammed with mouse-report escape sequences after an

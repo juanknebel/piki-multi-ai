@@ -154,6 +154,7 @@ pub(super) async fn handle(
             }
         },
         Action::OpenMdr(path) => {
+            let _watchdog = crate::watchdog::suspend();
             crossterm::execute!(
                 std::io::stderr(),
                 crossterm::event::PopKeyboardEnhancementFlags,

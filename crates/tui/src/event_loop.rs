@@ -251,6 +251,7 @@ pub(crate) async fn run(
     let pty_output = app.pty_output.clone();
 
     loop {
+        crate::watchdog::beat();
         // Phase 0: Keep the Agents highlight on the tab the user is standing on
         app.sync_agent_selection();
         // ...and drop any text selection left behind by a tab switch — its

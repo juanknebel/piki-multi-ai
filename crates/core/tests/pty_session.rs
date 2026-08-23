@@ -126,3 +126,43 @@ async fn test_output_signal_raised_on_pty_output() {
 
     pty.kill().ok();
 }
+
+/// Regression: a child that never reads stdin must not stall the caller.
+/// `write()` used to do a blocking `write(2)` on the master from the UI
+/// thread; once the kernel's ~4 KiB PTY input queue filled, the whole app
+/// froze with the terminal still in raw/alt-screen mode.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_write_never_blocks_when_child_ignores_stdin() {
+    let (_dir, repo_path) = common::setup_test_repo();
+
+    let args = vec!["30".to_string()];
+    let mut pty = PtySession::spawn(
+        &repo_path,
+        24,
+        80,
+        "sleep",
+        &args,
+        &[],
+        &[],
+        false,
+        None,
+        None,
+    )
+    .await
+    .expect("spawn sleep should succeed");
+    assert!(pty.is_alive(), "sleep should be running");
+
+    // 256 KiB — two orders of magnitude past the kernel's PTY input queue.
+    let chunk = vec![b'x'; 16 * 1024];
+    let t0 = std::time::Instant::now();
+    for _ in 0..16 {
+        pty.write(&chunk).expect("write should queue, not fail");
+    }
+    assert!(
+        t0.elapsed() < Duration::from_secs(2),
+        "write() blocked for {:?} on a child that never reads stdin",
+        t0.elapsed()
+    );
+
+    pty.kill().ok();
+}

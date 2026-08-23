@@ -65,7 +65,10 @@ impl PtyOutputSignal {
 /// Manages an AI assistant process running in a pseudo-terminal
 pub struct PtySession {
     child: Box<dyn portable_pty::Child + Send>,
-    writer: Arc<Mutex<Box<dyn Write + Send>>>,
+    /// Outbound bytes for the child. A dedicated writer thread drains this
+    /// queue, so neither the UI thread nor the reader thread ever blocks on
+    /// a full PTY input queue (see [`Self::write`]).
+    writer_tx: std::sync::mpsc::Sender<Vec<u8>>,
     pub parser: Arc<Mutex<vt100::Parser>>,
     reader_handle: tokio::task::JoinHandle<()>,
     master: Box<dyn portable_pty::MasterPty + Send>,
@@ -79,6 +82,27 @@ pub struct PtySession {
     /// stops the reader and unlinks the FIFO.
     #[cfg(unix)]
     _cli_agent_sock: Option<crate::cli_agent::sock::SockReader>,
+}
+
+/// Start the per-session writer thread and return its input queue.
+///
+/// The thread exits when every sender is dropped (session + reader thread
+/// gone) or on the first write error (child closed the slave side).
+fn spawn_writer_thread(
+    mut writer: Box<dyn Write + Send>,
+) -> anyhow::Result<std::sync::mpsc::Sender<Vec<u8>>> {
+    let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
+    std::thread::Builder::new()
+        .name("pty-writer".to_string())
+        .spawn(move || {
+            for chunk in rx {
+                if let Err(e) = writer.write_all(&chunk).and_then(|_| writer.flush()) {
+                    tracing::debug!(error = %e, "PTY writer: write failed, stopping");
+                    break;
+                }
+            }
+        })?;
+    Ok(tx)
 }
 
 impl PtySession {
@@ -139,8 +163,8 @@ impl PtySession {
         drop(pair.slave);
 
         let mut reader = pair.master.try_clone_reader()?;
-        let writer = Arc::new(Mutex::new(pair.master.take_writer()?));
-        let writer_for_reader = Arc::clone(&writer);
+        let writer_tx = spawn_writer_thread(pair.master.take_writer()?)?;
+        let writer_for_reader = writer_tx.clone();
 
         let parser = Arc::new(Mutex::new(vt100::Parser::new(rows, cols, 1000)));
         let parser_clone = Arc::clone(&parser);
@@ -194,11 +218,11 @@ impl PtySession {
                             // Reply to terminal queries (DSR, DA) outside the
                             // parser lock. Apps like vim or agent CLIs probe
                             // the terminal at startup and may hang or exit if
-                            // nothing answers.
+                            // nothing answers. Queued, not written inline:
+                            // this thread must keep draining the master or
+                            // the child stalls on its own output.
                             if !answerback.is_empty() {
-                                let mut w = writer_for_reader.lock();
-                                let _ = w.write_all(&answerback);
-                                let _ = w.flush();
+                                let _ = writer_for_reader.send(answerback);
                             }
                             // Raise after releasing the parser lock so a woken
                             // renderer never contends with this thread.
@@ -245,7 +269,7 @@ impl PtySession {
 
         Ok(Self {
             child,
-            writer,
+            writer_tx,
             parser,
             reader_handle,
             master: pair.master,
@@ -263,12 +287,24 @@ impl PtySession {
         self.shell.as_ref()
     }
 
-    /// Send input bytes to the PTY (user keystrokes)
+    /// Send input bytes to the PTY (user keystrokes, pastes, mouse reports).
+    ///
+    /// Never blocks: bytes are queued for the session's writer thread. A
+    /// direct `write(2)` on the master would block once the kernel's PTY
+    /// input queue (~4 KiB) fills — i.e. whenever the child stops reading
+    /// stdin for a moment — and the UI thread has no business waiting on a
+    /// child's scheduling. Worse, the reader thread also writes here
+    /// (terminal-query answerbacks); if it blocked it would stop draining
+    /// the child's output, the child would stall on its write, never read
+    /// its input, and the whole app would deadlock with the terminal still
+    /// in raw/alt-screen mode.
+    ///
+    /// Errors only if the writer thread has already exited, which happens
+    /// after the first failed write (the child closed its side).
     pub fn write(&mut self, data: &[u8]) -> anyhow::Result<()> {
-        let mut w = self.writer.lock();
-        w.write_all(data)?;
-        w.flush()?;
-        Ok(())
+        self.writer_tx
+            .send(data.to_vec())
+            .map_err(|_| anyhow::anyhow!("PTY writer thread has exited"))
     }
 
     /// Get a reference to the vt100 parser for rendering
