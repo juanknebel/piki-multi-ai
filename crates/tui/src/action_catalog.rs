@@ -737,15 +737,16 @@ mod tests {
     }
 }
 
-/// Keeps the README's prefix table honest.
+/// Keeps the prefix table in `docs/technical.md` honest.
 ///
-/// Nothing used to enforce this, and it drifted: the README advertised `N`, `D`,
+/// Nothing used to enforce this, and it drifted: the docs advertised `N`, `D`,
 /// `A`, `V` and `)`/`(` long after they were renamed to `s`, `b`, `m`, `v` and
-/// `}`/`{`, so a new user following it could not drive the app.
+/// `}`/`{`, so a new user following them could not drive the app. (The table
+/// lived in README.md until 2026-08; the check moved with it.)
 ///
 /// It checks the *keys*, not the prose — the descriptions stay hand-written.
 #[cfg(test)]
-mod readme_parity {
+mod docs_parity {
     use super::*;
     use std::collections::HashSet;
 
@@ -756,22 +757,22 @@ mod readme_parity {
     /// hardcoded tab jumps and the two prefix-state escapes.
     const META_KEYS: &[&str] = &["1", "9", "C-g", "Ctrl+G", "Esc"];
 
-    fn readme() -> String {
+    fn keys_doc() -> String {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../README.md")
+            .join("../../docs/technical.md")
             .canonicalize()
-            .expect("README.md not found");
-        std::fs::read_to_string(path).expect("failed to read README.md")
+            .expect("docs/technical.md not found");
+        std::fs::read_to_string(path).expect("failed to read docs/technical.md")
     }
 
     /// The rows between the markers, as their first (key) column.
-    fn key_column_rows(readme: &str) -> Vec<String> {
-        let body = readme
+    fn key_column_rows(doc: &str) -> Vec<String> {
+        let body = doc
             .split_once(BEGIN)
-            .unwrap_or_else(|| panic!("README.md is missing the `{BEGIN}` marker"))
+            .unwrap_or_else(|| panic!("docs/technical.md is missing the `{BEGIN}` marker"))
             .1
             .split_once(END)
-            .unwrap_or_else(|| panic!("README.md is missing the `{END}` marker"))
+            .unwrap_or_else(|| panic!("docs/technical.md is missing the `{END}` marker"))
             .0;
 
         body.lines()
@@ -820,10 +821,10 @@ mod readme_parity {
     }
 
     #[test]
-    fn readme_prefix_table_lists_every_action_key() {
+    fn docs_prefix_table_lists_every_action_key() {
         let cfg = crate::config::Config::default();
-        let readme = readme();
-        let documented: HashSet<String> = key_column_rows(&readme)
+        let doc = keys_doc();
+        let documented: HashSet<String> = key_column_rows(&doc)
             .iter()
             .flat_map(|col| code_spans(col))
             .collect();
@@ -834,27 +835,27 @@ mod readme_parity {
             };
             assert!(
                 documented.contains(&chord),
-                "README prefix table is missing `{chord}` ({}). Add a row for it \
-                 between the {BEGIN} markers.",
+                "docs/technical.md prefix table is missing `{chord}` ({}). Add a \
+                 row for it between the {BEGIN} markers.",
                 a.label,
             );
         }
     }
 
     #[test]
-    fn readme_prefix_table_invents_no_keys() {
+    fn docs_prefix_table_invents_no_keys() {
         let cfg = crate::config::Config::default();
-        let readme = readme();
+        let doc = keys_doc();
 
         let mut bound: HashSet<String> = cfg.all_prefix_chords().into_iter().collect();
         bound.extend(META_KEYS.iter().map(|s| s.to_string()));
 
-        for col in key_column_rows(&readme) {
+        for col in key_column_rows(&doc) {
             for key in code_spans(&col) {
                 assert!(
                     bound.contains(&key),
-                    "README prefix table documents `{key}`, which no action binds. \
-                     It was probably renamed — check `default_app()`.",
+                    "docs/technical.md prefix table documents `{key}`, which no \
+                     action binds. It was probably renamed — check `default_app()`.",
                 );
             }
         }
