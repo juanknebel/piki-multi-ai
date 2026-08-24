@@ -1,7 +1,7 @@
 //! Single source of truth for every user-facing key in the TUI.
 //!
 //! All four discoverability surfaces — the command palette, the which-key
-//! overlay, the `prefix-?` help browser and the README's prefix table — derive
+//! overlay, the `prefix-?` help browser and the `docs/technical.md` prefix table — derive
 //! from [`catalog`], so adding or renaming a key touches one place instead of
 //! the parallel hand-maintained lists it used to.
 //!
@@ -18,7 +18,7 @@
 //!   ("Type", "Mouse drag", "0-5").
 //!
 //! The parity tests below fail the build if a `Bind` points at a binding that
-//! doesn't exist, or if the README's table drifts from the catalog.
+//! doesn't exist, or if the `docs/technical.md` prefix table drifts from the catalog.
 
 /// Where a key is live.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -859,7 +859,12 @@ mod docs_parity {
 
     #[test]
     fn docs_prefix_table_lists_every_action_key() {
-        let cfg = crate::config::Config::default();
+        // Platform::Linux so the chords compare against the canonical
+        // format the doc table is written in (`C-s`, not macOS `Cmd-s`).
+        let cfg = crate::config::Config {
+            platform: crate::config::Platform::Linux,
+            ..crate::config::Config::default()
+        };
         let doc = keys_doc();
         let documented: HashSet<String> = key_column_rows(&doc)
             .iter()
@@ -881,7 +886,12 @@ mod docs_parity {
 
     #[test]
     fn docs_prefix_table_invents_no_keys() {
-        let cfg = crate::config::Config::default();
+        // Platform::Linux so the chords compare against the canonical
+        // format the doc table is written in (`C-s`, not macOS `Cmd-s`).
+        let cfg = crate::config::Config {
+            platform: crate::config::Platform::Linux,
+            ..crate::config::Config::default()
+        };
         let doc = keys_doc();
 
         let mut bound: HashSet<String> = cfg.all_prefix_chords().into_iter().collect();
