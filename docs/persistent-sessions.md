@@ -340,4 +340,5 @@ Status: all six phases shipped. The TUI sessions overlay (`prefix ctrl-s`)
 landed after the initial cut, and `[sessions] enabled` is honored by both
 frontends (desktop via `session::sessions_enabled()`). Still open from the
 phase-6 list: replayed-event badges (the `replayed` flag exists on the wire,
-unused), and a desktop counterpart of the sessions overlay.
+unused). The desktop Sessions dialog (Alt+Shift+S) shipped after; adopting an
+orphan session as a new tab is still TUI-only there.

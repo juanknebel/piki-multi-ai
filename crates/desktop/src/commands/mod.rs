@@ -14,6 +14,7 @@ pub mod providers;
 pub mod pty;
 pub mod review;
 pub mod search;
+pub mod session;
 pub mod settings;
 pub mod stash;
 pub mod system;

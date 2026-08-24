@@ -25,6 +25,7 @@ import { showSysinfoDialog } from "./dialogs/sysinfo-dialog";
 import { openTerminalSearch } from "./terminal-panel";
 import { showThemeDialog } from "./dialogs/theme-dialog";
 import { showLogsDialog } from "./dialogs/logs-dialog";
+import { showSessionsDialog } from "./dialogs/sessions-dialog";
 import { showAboutDialog } from "./dialogs/about-dialog";
 import { getProviderLabel, getProviderKey, type AIProvider } from "../types";
 import { openWebPreviewTab } from "./web-preview-panel";
@@ -594,6 +595,13 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
     category: "View",
     keybinding: getShortcutKey("logs"),
     action: () => showLogsDialog(),
+  });
+  cmds.push({
+    id: "view-sessions",
+    label: "Sessions (persistent)",
+    category: "View",
+    keybinding: getShortcutKey("sessions"),
+    action: () => showSessionsDialog(),
   });
 
   // LSP commands

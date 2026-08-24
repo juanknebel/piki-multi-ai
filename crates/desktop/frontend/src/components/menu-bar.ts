@@ -21,6 +21,7 @@ import { showDashboard } from "./dialogs/dashboard-dialog";
 import { showSysinfoDialog } from "./dialogs/sysinfo-dialog";
 import { showThemeDialog } from "./dialogs/theme-dialog";
 import { showLogsDialog } from "./dialogs/logs-dialog";
+import { showSessionsDialog } from "./dialogs/sessions-dialog";
 import { showAboutDialog } from "./dialogs/about-dialog";
 import { toggleChatPanel } from "./chat-panel";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -206,6 +207,7 @@ const MENUS: MenuDefinition[] = [
       { label: "Dashboard", shortcut: getShortcutKey("dashboard"), action: () => showDashboard() },
       { label: "System Info", shortcut: getShortcutKey("system-info"), action: () => showSysinfoDialog() },
       { label: "Application Logs", shortcut: getShortcutKey("logs"), action: () => showLogsDialog() },
+      { label: "Sessions", shortcut: getShortcutKey("sessions"), action: () => showSessionsDialog() },
       SEP,
       { label: "Next Tab", shortcut: formatShortcut("Ctrl+Tab"), action: () => cycleTab(1) },
       { label: "Previous Tab", shortcut: formatShortcut("Ctrl+Shift+Tab"), action: () => cycleTab(-1) },

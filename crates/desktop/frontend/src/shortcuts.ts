@@ -72,6 +72,7 @@ const shortcuts: ShortcutDef[] = [
   { id: "settings", label: "Settings", category: "View & Panels", defaultKey: "Alt+S", key: "Alt+S", action: () => {} },
   { id: "manage-providers", label: "Manage Providers", category: "View & Panels", defaultKey: "Alt+P", key: "Alt+P", action: () => {} },
   { id: "logs", label: "Application Logs", category: "View & Panels", defaultKey: "Alt+Shift+L", key: "Alt+Shift+L", action: () => {} },
+  { id: "sessions", label: "Sessions (persistent)", category: "View & Panels", defaultKey: "Alt+Shift+S", key: "Alt+Shift+S", action: () => {} },
   { id: "system-info", label: "System Info", category: "View & Panels", defaultKey: "Alt+I", key: "Alt+I", action: () => {} },
   { id: "fuzzy-search", label: "Find File", category: "Search", defaultKey: "Ctrl+F", key: "Ctrl+F", action: () => {} },
   { id: "project-search", label: "Search in Project", category: "Search", defaultKey: "Ctrl+Shift+F", key: "Ctrl+Shift+F", action: () => {} },

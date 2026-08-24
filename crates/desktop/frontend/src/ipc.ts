@@ -589,6 +589,17 @@ export function listAgentRows(): Promise<import("./types").AgentRow[]> {
   return invoke("list_agent_rows");
 }
 
+/** Every session the persistent-session daemon holds (Sessions dialog). */
+export function listSessions(): Promise<import("./types").SessionsSnapshot> {
+  return invoke("list_sessions");
+}
+export function killSession(sessionId: string): Promise<import("./types").SessionsSnapshot> {
+  return invoke("kill_session", { sessionId });
+}
+export function removeSession(sessionId: string): Promise<import("./types").SessionsSnapshot> {
+  return invoke("remove_session", { sessionId });
+}
+
 export function saveAgent(
   workspaceIdx: number,
   name: string,

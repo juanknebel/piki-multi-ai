@@ -201,6 +201,25 @@ export interface AgentRow {
   summary: string | null;
 }
 
+/** One row of the Sessions dialog. Mirrors `SessionRow` in commands/session.rs. */
+export interface SessionRow {
+  id: string;
+  name: string;
+  workspace: string;
+  state: "attached" | "detached" | "exited";
+  attached: number;
+  exit_code: number | null;
+  local_workspace_idx: number | null;
+  local_tab_idx: number | null;
+}
+
+export interface SessionsSnapshot {
+  connected: boolean;
+  daemon_pid: number | null;
+  sessions: SessionRow[];
+  error: string | null;
+}
+
 /** Workspace-level "needs attention" signal. Sources: `provider-idle` (a
  *  provider tab fell silent), `shell-command-end` (a shell tab finished a
  *  command — emitted by the frontend when it observes a `pty-shell-event` of

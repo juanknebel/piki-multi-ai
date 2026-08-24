@@ -34,6 +34,7 @@ import { showDashboard } from "./components/dialogs/dashboard-dialog";
 import { showSysinfoDialog } from "./components/dialogs/sysinfo-dialog";
 import { showThemeDialog } from "./components/dialogs/theme-dialog";
 import { showLogsDialog } from "./components/dialogs/logs-dialog";
+import { showSessionsDialog } from "./components/dialogs/sessions-dialog";
 import { initMenuBar, toggleSidebar } from "./components/menu-bar";
 import { initChatPanel, initChatResize, toggleChatPanel } from "./components/chat-panel";
 import { initTooltips } from "./components/tooltip";
@@ -158,6 +159,7 @@ async function init() {
   bindAction("settings", () => showSettingsDialog());
   bindAction("manage-providers", () => showProvidersDialog());
   bindAction("logs", () => showLogsDialog());
+  bindAction("sessions", () => showSessionsDialog());
   bindAction("system-info", () => showSysinfoDialog());
   bindAction("api-jq-filter", () => document.dispatchEvent(new CustomEvent("toggle-jq")));
   bindAction("undo", () => handleUndo());
