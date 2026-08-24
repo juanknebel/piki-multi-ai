@@ -53,10 +53,14 @@ cd "$DESKTOP_DIR"
 echo "Building $BINARY_NAME in release mode..."
 cargo tauri build --no-bundle
 
-# Step 3: Install binary
+# Step 3: Install binary (atomic replace — the session daemon may still be
+# running this file as `--serve-sessions`, so an in-place `cp` would fail with
+# ETXTBSY. Rename swaps in a fresh inode without disturbing the running daemon.)
 mkdir -p "$DEST_DIR"
-cp "$PROJECT_ROOT/target/release/$BINARY_NAME" "$DEST_DIR/$BINARY_NAME"
-chmod +x "$DEST_DIR/$BINARY_NAME"
+TMP_BIN="$DEST_DIR/.$BINARY_NAME.new.$$"
+cp "$PROJECT_ROOT/target/release/$BINARY_NAME" "$TMP_BIN"
+chmod +x "$TMP_BIN"
+mv -f "$TMP_BIN" "$DEST_DIR/$BINARY_NAME"
 echo "Installed binary to $DEST_DIR/$BINARY_NAME"
 
 # Check if destination is in PATH
