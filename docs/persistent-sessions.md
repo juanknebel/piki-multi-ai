@@ -335,3 +335,9 @@ Each phase ends green on `just ci` and is committed on `persistence-sessions`.
 6. **Polish** — sessions dialog (TUI) + `sessions` CLI, replayed-event
    badges, docs (README Persistence/Architecture, AGENTS.md,
    performance.md §4 closure), final QA pass.
+
+Status: all six phases shipped. The TUI sessions overlay (`prefix ctrl-s`)
+landed after the initial cut, and `[sessions] enabled` is honored by both
+frontends (desktop via `session::sessions_enabled()`). Still open from the
+phase-6 list: replayed-event badges (the `replayed` flag exists on the wire,
+unused), and a desktop counterpart of the sessions overlay.

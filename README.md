@@ -54,7 +54,7 @@ Built with Rust and [ratatui](https://ratatui.rs/).
 
 ### Sessions & terminal
 
-- **Persistent sessions** — every terminal tab runs inside a lightweight background daemon ("tmux without the UI", designed after [shpool](https://github.com/shell-pool/shpool)): tabs survive quitting or crashing the app and re-attach on the next launch with screen and scrollback restored; shared between TUI and desktop; zero setup, no external dependency
+- **Persistent sessions** — every terminal tab runs inside a lightweight background daemon ("tmux without the UI", designed after [shpool](https://github.com/shell-pool/shpool)): tabs survive quitting or crashing the app and re-attach on the next launch with screen and scrollback restored; shared between TUI and desktop; zero setup, no external dependency; managed in-app via the sessions overlay (`Ctrl+G Ctrl+S`) or the `sessions` CLI
 - **Live terminal rendering** — full ANSI terminal emulation via `vt100` + `tui-term`, with real-time output from every agent
 - **tmux-style prefix keybindings** — keys always go to the focused pane; app actions live behind a one-shot `Ctrl+G` prefix; fully rebindable
 - **Terminal search & scrollback** — search output, scroll mode, mouse-wheel scrollback that also captures inline-TUI transcripts
@@ -155,7 +155,7 @@ piki-multi-ai generate-config > ~/.config/piki-multi/config.toml
 
 The `prefix_key` setting (default `"ctrl-g"`) defines the tmux-style prefix. The `[keybindings.app]` table holds all global actions; each value is either a single binding string or an array of alternatives. Strings starting with `prefix-` fire after the prefix key (e.g. `"prefix-c"` = `Ctrl+G c`); anything else is a **direct chord** that fires without the prefix (e.g. `"alt-n"`) — handy for promoting frequent actions, at the cost of shadowing that chord in the embedded terminal. Bindings that collide with each other or with the prefix key are ignored with a warning in the logs.
 
-The remaining tables are per-surface local keys (`scroll`, `agents`, `markdown`, `workspace_list`, `fuzzy`, `editor`, `new_workspace`, `new_tab`, `dashboard`, `logs`, `help`, `about`, `workspace_info`).
+The remaining tables are per-surface local keys (`scroll`, `agents`, `markdown`, `workspace_list`, `fuzzy`, `editor`, `new_workspace`, `new_tab`, `dashboard`, `sessions`, `logs`, `help`, `about`, `workspace_info`).
 
 ```toml
 theme = "nord"
