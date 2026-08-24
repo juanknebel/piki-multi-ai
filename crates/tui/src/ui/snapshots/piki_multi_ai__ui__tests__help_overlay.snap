@@ -37,9 +37,9 @@ expression: content
             │      C-g ?         Help                             │
             │      C-g a         About                            │
             │      C-g o         Logs                             │
+            │      C-g C-s       Sessions (persistent)            │
             │      C-g [         Terminal Scroll Mode             │
             │      C-g y         AI Chat                          │
             │    Focus                                            │
             │      C-g h         Focus Pane Left                  │
-            │      C-g j         Focus Pane Down                  │
-            ╰───────────────────────────────────────── [1/189 ↑↓] ╯
+            ╰───────────────────────────────────────── [1/199 ↑↓] ╯

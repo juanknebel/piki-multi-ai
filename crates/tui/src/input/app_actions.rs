@@ -92,6 +92,23 @@ pub(crate) fn open_dashboard(app: &mut App) -> Option<Action> {
     None
 }
 
+pub(crate) fn open_sessions(app: &mut App) -> Option<Action> {
+    // Daemon pid is read here, at open time — renders must stay pure.
+    let daemon_pid = std::fs::read_to_string(app.paths.session_pid_file())
+        .ok()
+        .and_then(|s| s.trim().parse::<u32>().ok());
+    app.active_dialog = Some(DialogState::Sessions {
+        loading: app.session_daemon.is_some(),
+        error: None,
+        sessions: Vec::new(),
+        selected: 0,
+        scroll_offset: 0,
+        daemon_pid,
+    });
+    app.mode = AppMode::Sessions;
+    Some(Action::LoadSessions)
+}
+
 pub(crate) fn open_logs(app: &mut App) -> Option<Action> {
     app.active_dialog = Some(DialogState::Logs {
         scroll: u16::MAX,

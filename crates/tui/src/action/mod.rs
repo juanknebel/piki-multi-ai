@@ -11,6 +11,7 @@ mod api;
 mod chat;
 mod files;
 mod review;
+mod sessions;
 mod tabs;
 mod workspace;
 
@@ -118,6 +119,16 @@ pub(crate) enum Action {
     ChatSendMessage,
     /// Load available Ollama models into chat_panel.models
     ChatLoadModels,
+    /// List the session daemon's sessions for the sessions overlay. Runs in
+    /// the background; result lands in `App::pending_sessions_list`.
+    LoadSessions,
+    /// Kill one daemon session's process (kept as exited), then reload.
+    SessionKill(String),
+    /// Remove one daemon session (kills + drops the record), then reload.
+    SessionRemove(String),
+    /// Adopt an orphan session as a tab (its recorded workspace if loaded,
+    /// else the active one) and jump to it.
+    SessionAttach(String),
 }
 
 pub(crate) async fn execute_action(
@@ -159,6 +170,10 @@ pub(crate) async fn execute_action(
         Action::ChatSendMessage | Action::ChatLoadModels => {
             chat::handle(app, manager, action, terminal).await?
         }
+        Action::LoadSessions
+        | Action::SessionKill(..)
+        | Action::SessionRemove(..)
+        | Action::SessionAttach(..) => sessions::handle(app, manager, action, terminal).await?,
     }
     Ok(())
 }

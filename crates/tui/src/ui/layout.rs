@@ -266,6 +266,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         }
         AppMode::ConfirmQuit => super::dialogs::render_confirm_quit_dialog(frame, area, app),
         AppMode::Dashboard => super::dialogs::render_dashboard_overlay(frame, area, app),
+        AppMode::Sessions => super::dialogs::render_sessions_overlay(frame, area, app),
         AppMode::Logs => super::dialogs::render_logs_overlay(frame, area, app),
         AppMode::CommandPalette => super::command_palette::render(frame, area, app),
         AppMode::WorkspaceSwitcher => super::workspace_switcher::render(frame, area, app),

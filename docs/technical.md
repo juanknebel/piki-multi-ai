@@ -188,6 +188,7 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 | `[` | Terminal scroll mode (see below) |
 | `y` | AI Chat panel |
 | `b` | Workspace dashboard overlay (bird's-eye view of all workspaces and tabs) |
+| `C-s` | Sessions overlay (persistent-session daemon state and management, see below) |
 | `o` | Log viewer overlay (last 500 log entries, color-coded, filterable by level) |
 | `m` | Manage agent profiles (create/edit/delete agents for this project) |
 | `v` | Manage providers (add/edit/delete custom AI providers) |
@@ -280,6 +281,17 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 | `Ctrl+D` | Clear all text |
 | `Ctrl+S` | Save agent and close |
 | `Esc` | Back to step 1 without saving |
+
+**In sessions overlay** (`Ctrl+G Ctrl+S`) — every session the persistent-session daemon holds, whether or not it's open as a tab here (see [Persistent sessions](#persistent-sessions)). The title shows the daemon's pid; each row shows the session (custom title > provider > command), its workspace, and its state — `▷ attached` (open as a tab here), `⚠ detached` (running with no local tab: left over from a previous run, or attached only in the other frontend), `○ exited`:
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Navigate sessions |
+| `Enter` | Attached session: jump to its workspace/tab. Detached: adopt it as a tab (its recorded workspace if loaded, else the active one) and jump to it |
+| `x` | Kill the session's process (kept in the list as exited) |
+| `d` | Remove the session from the daemon entirely |
+| `r` | Reload the list from the daemon |
+| `Esc` or `Ctrl+S` | Close |
 
 **In log viewer** (`Ctrl+G o`):
 
@@ -520,6 +532,7 @@ Every terminal tab — shells, AI agents, dispatched agents, and the lazygit tab
 - **Automatic** — the daemon starts on demand (`<data-dir>/sessions/daemon.sock`, one per data dir) and stops itself after 60s with no sessions. No setup, no external dependency (no tmux).
 - **Quitting detaches** — sessions keep running in the background. The quit prompt says how many are running; press `k` there to quit **and** kill them all. Closing a tab, or deleting its workspace, removes its session.
 - **Graceful fallback** — if the daemon can't start or speaks an incompatible protocol, tabs run in-process exactly as before, with a log line. Nothing breaks.
+- **Manage in-app** — the TUI's sessions overlay (`prefix ctrl-s`) lists everything the daemon holds — including sessions no tab is showing — with jump/adopt (`Enter`), kill (`x`), and remove (`d`).
 - **Manage from the CLI** — `piki-multi-ai sessions list|kill|stop` (see [Commands](#serve--sessions)).
 - **Disable** — set `enabled = false` under `[sessions]` in `config.toml` to run every tab in-process. Both frontends honor it: the TUI through its full config parse, the desktop through `piki_core::session::sessions_enabled()` (the desktop keeps its other settings in SQLite and reads `config.toml` only for this).
 

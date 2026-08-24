@@ -816,6 +816,97 @@ pub(super) fn handle_dashboard_input(app: &mut App, key: KeyEvent) -> Option<Act
     None
 }
 
+/// Sessions overlay (`prefix ctrl-s`): j/k navigate, Enter jumps to an
+/// attached session's tab (or adopts an orphan as one), x kills, d removes,
+/// r reloads, Esc closes. Rows are daemon [`SessionInfo`]s loaded
+/// asynchronously; `selected` is clamped against the current list.
+pub(super) fn handle_sessions_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    use crate::input::list_nav::move_selection;
+
+    // Jumping needs `&mut App` beyond the dialog borrow — compute after.
+    enum Step {
+        Stay,
+        Close,
+        Jump(String),
+        Act(Action),
+    }
+
+    let step = {
+        let Some(DialogState::Sessions {
+            ref mut selected,
+            ref mut scroll_offset,
+            ref sessions,
+            ref loading,
+            ..
+        }) = app.active_dialog
+        else {
+            return None;
+        };
+        let count = sessions.len();
+        let visible = 12usize;
+
+        if app.config.matches_sessions(key, "down") || app.config.matches_sessions(key, "down_alt")
+        {
+            move_selection(selected, count, 1, false);
+            if *selected >= *scroll_offset + visible {
+                *scroll_offset = selected.saturating_sub(visible - 1);
+            }
+            Step::Stay
+        } else if app.config.matches_sessions(key, "up")
+            || app.config.matches_sessions(key, "up_alt")
+        {
+            move_selection(selected, count, -1, false);
+            if *selected < *scroll_offset {
+                *scroll_offset = *selected;
+            }
+            Step::Stay
+        } else if app.config.matches_sessions(key, "refresh") {
+            Step::Act(Action::LoadSessions)
+        } else if app.config.matches_sessions(key, "exit")
+            || app.config.matches_sessions(key, "exit_alt")
+        {
+            Step::Close
+        } else if *loading || count == 0 {
+            Step::Stay // row-scoped keys need a row
+        } else if app.config.matches_sessions(key, "select") {
+            Step::Jump(sessions[*selected].id.clone())
+        } else if app.config.matches_sessions(key, "kill") {
+            Step::Act(Action::SessionKill(sessions[*selected].id.clone()))
+        } else if app.config.matches_sessions(key, "remove") {
+            Step::Act(Action::SessionRemove(sessions[*selected].id.clone()))
+        } else {
+            Step::Stay
+        }
+    };
+
+    match step {
+        Step::Stay => None,
+        Step::Close => {
+            dismiss_dialog(app);
+            None
+        }
+        Step::Act(action) => Some(action),
+        Step::Jump(id) => {
+            // Already a tab here? Jump straight to it. Otherwise adopt it.
+            let target = app.workspaces.iter().enumerate().find_map(|(w, ws)| {
+                ws.tabs
+                    .iter()
+                    .position(|t| t.session_id.as_deref() == Some(id.as_str()))
+                    .map(|t| (w, t))
+            });
+            match target {
+                Some((ws_idx, tab_idx)) => {
+                    dismiss_dialog(app);
+                    app.switch_workspace_and_focus(ws_idx);
+                    app.workspaces[ws_idx].active_tab = tab_idx;
+                    None
+                }
+                None => Some(Action::SessionAttach(id)),
+            }
+        }
+    }
+}
+
 pub(super) fn handle_help_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     // The help browser is a live search box: printable keys edit the filter,
     // so navigation is on the non-textual keys only (arrows / PgUp-PgDn /

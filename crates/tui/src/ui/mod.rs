@@ -825,6 +825,47 @@ mod tests {
     }
 
     #[test]
+    fn test_snapshot_sessions_overlay() {
+        use piki_core::session::protocol::{SessionInfo, SessionState};
+        let mut terminal = test_terminal(80, 24);
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
+        let live = SessionInfo {
+            id: "s-live".to_string(),
+            command: "zsh".to_string(),
+            ..Default::default()
+        };
+        let exited = SessionInfo {
+            id: "s-done".to_string(),
+            command: "lazygit".to_string(),
+            state: SessionState::Exited { code: Some(0) },
+            ..Default::default()
+        };
+        // A connected daemon handle (never dialed by the pure render) so the
+        // title takes the "daemon ● pid N" path.
+        app.session_daemon = Some(piki_core::session::client::Daemon::new(
+            std::path::PathBuf::from("/tmp/never-dialed.sock"),
+        ));
+        app.active_dialog = Some(crate::dialog_state::DialogState::Sessions {
+            loading: false,
+            error: None,
+            sessions: vec![live, exited],
+            selected: 0,
+            scroll_offset: 0,
+            daemon_pid: Some(4242),
+        });
+        terminal
+            .draw(|frame| {
+                super::dialogs::render_sessions_overlay(frame, frame.area(), &app);
+            })
+            .unwrap();
+        let content = buffer_to_snapshot(terminal.backend().buffer());
+        insta::assert_snapshot!("sessions_overlay", content);
+    }
+
+    #[test]
     fn test_snapshot_new_tab_dialog_agents_menu() {
         let mut terminal = test_terminal(80, 24);
         // Use an isolated `DataPaths` so the snapshot doesn't depend on the

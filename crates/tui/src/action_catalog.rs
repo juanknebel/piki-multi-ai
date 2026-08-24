@@ -45,6 +45,7 @@ pub enum Context {
     InlineEditor,
     CodeReview,
     Dashboard,
+    Sessions,
     Logs,
 }
 
@@ -72,6 +73,7 @@ impl Context {
             Context::InlineEditor => "Inline editor",
             Context::CodeReview => "Code Review (requires gh CLI, locked mode)",
             Context::Dashboard => "Dashboard",
+            Context::Sessions => "Sessions overlay (persistent sessions)",
             Context::Logs => "Logs",
         }
     }
@@ -89,6 +91,7 @@ impl Context {
             Context::ManageProviders => Some("manage_providers"),
             Context::ManageAgents => Some("manage_agents"),
             Context::Dashboard => Some("dashboard"),
+            Context::Sessions => Some("sessions"),
             Context::Logs => Some("logs"),
             _ => None,
         }
@@ -107,6 +110,7 @@ pub const HELP_ORDER: &[Context] = &[
     Context::Palette,
     Context::WorkspaceSwitcher,
     Context::Dashboard,
+    Context::Sessions,
     Context::Logs,
     Context::Chat,
     Context::Kanban,
@@ -264,6 +268,7 @@ static CATALOG: &[ActionMeta] = {
         app("help", "View", "Help", "all keys"),
         app("about", "View", "About", "about"),
         app("logs", "View", "Logs", "logs"),
+        app("sessions", "View", "Sessions (persistent)", "sessions"),
         app("scroll_mode", "View", "Terminal Scroll Mode", "scroll"),
         app("chat_panel", "View", "AI Chat", "chat"),
         app("focus_left", "Focus", "Focus Pane Left", "left"),
@@ -478,6 +483,38 @@ static CATALOG: &[ActionMeta] = {
             "Switch to it and focus the main panel",
         ),
         local(C::Dashboard, Bind("dashboard", "exit"), "Close"),
+        // ── Sessions overlay ──────────────────────────────────────────────
+        local(
+            C::Sessions,
+            Bind("sessions", "down"),
+            "Select the next session",
+        ),
+        local(
+            C::Sessions,
+            Bind("sessions", "up"),
+            "Select the previous session",
+        ),
+        local(
+            C::Sessions,
+            Bind("sessions", "select"),
+            "Jump to its tab (attached) or adopt it as one (orphan)",
+        ),
+        local(
+            C::Sessions,
+            Bind("sessions", "kill"),
+            "Kill the session's process (kept, as exited)",
+        ),
+        local(
+            C::Sessions,
+            Bind("sessions", "remove"),
+            "Remove the session from the daemon",
+        ),
+        local(
+            C::Sessions,
+            Bind("sessions", "refresh"),
+            "Reload the list from the daemon",
+        ),
+        local(C::Sessions, Bind("sessions", "exit"), "Close"),
         // ── Logs ──────────────────────────────────────────────────────────
         local(C::Logs, Bind("logs", "down"), "Select the next entry"),
         local(C::Logs, Bind("logs", "up"), "Select the previous entry"),

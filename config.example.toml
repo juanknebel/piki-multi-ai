@@ -103,6 +103,7 @@ theme = "default"
 # help             = "prefix-?"
 # about            = "prefix-a"
 # dashboard        = "prefix-b"
+# sessions         = "prefix-ctrl-s"
 # command_palette  = "prefix-:"
 # fuzzy_search     = "prefix-/"
 # project_search   = "prefix-t"
@@ -224,6 +225,18 @@ theme = "default"
 # select = "enter"
 # exit = "esc"
 # exit_alt = "b"             # toggle-close (Dashboard opens with prefix-b)
+
+# [keybindings.sessions]
+# down = "j"
+# up = "k"
+# down_alt = "down"
+# up_alt = "up"
+# select = "enter"           # jump to the session's tab, or adopt an orphan
+# kill = "x"                 # kill the process (kept, as exited)
+# remove = "d"               # remove the session from the daemon
+# refresh = "r"
+# exit = "esc"
+# exit_alt = "ctrl-s"        # toggle-close (Sessions opens with prefix-ctrl-s)
 
 # [keybindings.logs]
 # down = "j"

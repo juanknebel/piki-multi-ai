@@ -102,6 +102,8 @@ pub enum AppMode {
     ConfirmQuit,
     /// Workspace dashboard overview
     Dashboard,
+    /// Session-daemon overlay (persistent sessions management)
+    Sessions,
     /// Internal log viewer
     Logs,
     /// Command palette overlay
@@ -881,6 +883,9 @@ pub type FooterCache = (
 
 /// Background result slot for `Action::LoadPrList`.
 pub type PendingPrList = Arc<Mutex<Option<Result<Vec<piki_core::github::PrListItem>, String>>>>;
+/// Background result slot for `Action::LoadSessions` (sessions overlay).
+pub type PendingSessionsList =
+    Arc<Mutex<Option<Result<Vec<piki_core::session::protocol::SessionInfo>, String>>>>;
 /// Background result slot for `Action::OpenPrReview`.
 pub type PendingPrCheckout =
     Arc<Mutex<Option<Result<crate::code_review::ReviewSessionData, String>>>>;
@@ -1005,6 +1010,8 @@ pub struct App {
     /// Background result slot for `Action::LoadPrList`, polled in
     /// `event_loop.rs`'s tick. `Some` once the spawned task finishes.
     pub pending_pr_list: PendingPrList,
+    /// Background result slot for `Action::LoadSessions` (sessions overlay).
+    pub pending_sessions_list: PendingSessionsList,
     /// Background result slot for `Action::OpenPrReview`.
     pub pending_pr_checkout: PendingPrCheckout,
     /// Background result slot for `Action::LoadRepoPrs`.
@@ -1179,6 +1186,7 @@ impl App {
             last_inactive_pty_check: Instant::now(),
             gh_available: None,
             pending_pr_list: Arc::new(Mutex::new(None)),
+            pending_sessions_list: Arc::new(Mutex::new(None)),
             pending_pr_checkout: Arc::new(Mutex::new(None)),
             pending_repo_prs: Arc::new(Mutex::new(None)),
             pending_review_retry: Arc::new(Mutex::new(None)),

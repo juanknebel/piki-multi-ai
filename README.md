@@ -285,7 +285,7 @@ Persistent sessions are on by default and need no setup. To run every tab in-pro
 enabled = false
 ```
 
-The daemon can be managed from the CLI (`piki-multi-ai sessions list|kill|stop`); see [docs/technical.md](docs/technical.md#persistent-sessions) for the full behavior and [docs/persistent-sessions.md](docs/persistent-sessions.md) for the design.
+The daemon can be managed in-app (the TUI's sessions overlay, `Ctrl+G Ctrl+S`) or from the CLI (`piki-multi-ai sessions list|kill|stop`); see [docs/technical.md](docs/technical.md#persistent-sessions) for the full behavior and [docs/persistent-sessions.md](docs/persistent-sessions.md) for the design.
 
 ## Documentation
 

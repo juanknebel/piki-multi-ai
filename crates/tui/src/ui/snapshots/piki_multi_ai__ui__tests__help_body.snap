@@ -34,6 +34,7 @@ expression: body
       C-g ?         Help
       C-g a         About
       C-g o         Logs
+      C-g C-s       Sessions (persistent)
       C-g [         Terminal Scroll Mode
       C-g y         AI Chat
     Focus
@@ -129,6 +130,15 @@ expression: body
     j             Select the next workspace
     k             Select the previous workspace
     Enter         Switch to it and focus the main panel
+    Esc           Close
+
+  Sessions overlay (persistent sessions) (C-g C-s)
+    j             Select the next session
+    k             Select the previous session
+    Enter         Jump to its tab (attached) or adopt it as one (orphan)
+    x             Kill the session's process (kept, as exited)
+    d             Remove the session from the daemon
+    r             Reload the list from the daemon
     Esc           Close
 
   Logs (C-g o)

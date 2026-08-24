@@ -1044,6 +1044,37 @@ fn poll_workspaces(app: &mut App, now: Instant) {
         }
     }
 
+    // Poll sessions-overlay list load
+    {
+        let result = { app.pending_sessions_list.lock().take() };
+        if let Some(result) = result {
+            if let Some(crate::dialog_state::DialogState::Sessions {
+                loading,
+                sessions,
+                error,
+                selected,
+                ..
+            }) = &mut app.active_dialog
+            {
+                *loading = false;
+                match result {
+                    Ok(mut list) => {
+                        // Stable, readable order: by workspace, then tab order.
+                        list.sort_by(|a, b| {
+                            (&a.meta.workspace_path, a.meta.order)
+                                .cmp(&(&b.meta.workspace_path, b.meta.order))
+                        });
+                        *selected = (*selected).min(list.len().saturating_sub(1));
+                        *sessions = list;
+                        *error = None;
+                    }
+                    Err(e) => *error = Some(e),
+                }
+            }
+            app.needs_redraw = true;
+        }
+    }
+
     // Poll "browse a repo" PR list load
     {
         let result = { app.pending_repo_prs.lock().take() };

@@ -15,7 +15,8 @@ use super::dialog::{
     handle_edit_provider_input, handle_edit_workspace_input, handle_help_input,
     handle_import_agents_input, handle_logs_input, handle_manage_agents_input,
     handle_manage_providers_input, handle_missing_prereqs_input, handle_new_tab_input,
-    handle_new_workspace_input, handle_pr_picker_input, handle_workspace_info_input,
+    handle_new_workspace_input, handle_pr_picker_input, handle_sessions_input,
+    handle_workspace_info_input,
 };
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField};
@@ -23,7 +24,9 @@ use crate::dialog_state::{
     DialogState, EditAgentField, EditProviderField, EditWorkspaceField, NewTabMenu,
 };
 use crate::log_buffer::LogEntry;
-use crate::test_support::{key, key_with_mods, test_app, test_app_isolated};
+use crate::test_support::{
+    add_terminal_tab, add_test_workspace, key, key_with_mods, test_app, test_app_isolated,
+};
 use piki_core::AIProvider;
 use piki_core::WorkspaceType;
 
@@ -1001,6 +1004,128 @@ fn dashboard_returns_none_when_dialog_not_active() {
     let mut app = test_app();
     let action = handle_dashboard_input(&mut app, key(KeyCode::Char('j')));
     assert!(action.is_none());
+}
+
+// ── Sessions overlay ───────────────────────────────────────────────────
+
+fn session_info(id: &str) -> piki_core::session::protocol::SessionInfo {
+    piki_core::session::protocol::SessionInfo {
+        id: id.to_string(),
+        command: "zsh".to_string(),
+        ..Default::default()
+    }
+}
+
+fn open_sessions_dialog(app: &mut App, sessions: Vec<piki_core::session::protocol::SessionInfo>) {
+    app.mode = AppMode::Sessions;
+    app.active_dialog = Some(DialogState::Sessions {
+        loading: false,
+        error: None,
+        sessions,
+        selected: 0,
+        scroll_offset: 0,
+        daemon_pid: None,
+    });
+}
+
+fn sessions_selected(app: &App) -> usize {
+    match &app.active_dialog {
+        Some(DialogState::Sessions { selected, .. }) => *selected,
+        _ => panic!("not in Sessions dialog"),
+    }
+}
+
+#[test]
+fn sessions_esc_dismisses() {
+    let mut app = test_app();
+    open_sessions_dialog(&mut app, vec![session_info("s1")]);
+
+    let action = handle_sessions_input(&mut app, key(KeyCode::Esc));
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+#[test]
+fn sessions_nav_moves_and_clamps() {
+    let mut app = test_app();
+    open_sessions_dialog(&mut app, vec![session_info("s1"), session_info("s2")]);
+
+    handle_sessions_input(&mut app, key(KeyCode::Char('j')));
+    assert_eq!(sessions_selected(&app), 1);
+    handle_sessions_input(&mut app, key(KeyCode::Char('j')));
+    assert_eq!(sessions_selected(&app), 1, "clamps at the last row");
+    handle_sessions_input(&mut app, key(KeyCode::Char('k')));
+    assert_eq!(sessions_selected(&app), 0);
+    handle_sessions_input(&mut app, key(KeyCode::Char('k')));
+    assert_eq!(sessions_selected(&app), 0, "clamps at the first row");
+}
+
+#[test]
+fn sessions_kill_remove_refresh_return_their_actions() {
+    let mut app = test_app();
+    open_sessions_dialog(&mut app, vec![session_info("s1")]);
+
+    let kill = handle_sessions_input(&mut app, key(KeyCode::Char('x')));
+    assert!(matches!(kill, Some(Action::SessionKill(id)) if id == "s1"));
+
+    let remove = handle_sessions_input(&mut app, key(KeyCode::Char('d')));
+    assert!(matches!(remove, Some(Action::SessionRemove(id)) if id == "s1"));
+
+    let refresh = handle_sessions_input(&mut app, key(KeyCode::Char('r')));
+    assert!(matches!(refresh, Some(Action::LoadSessions)));
+}
+
+#[test]
+fn sessions_row_keys_are_inert_while_loading_or_empty() {
+    let mut app = test_app();
+    open_sessions_dialog(&mut app, Vec::new());
+
+    assert!(handle_sessions_input(&mut app, key(KeyCode::Char('x'))).is_none());
+    assert!(handle_sessions_input(&mut app, key(KeyCode::Enter)).is_none());
+
+    open_sessions_dialog(&mut app, vec![session_info("s1")]);
+    if let Some(DialogState::Sessions { loading, .. }) = &mut app.active_dialog {
+        *loading = true;
+    }
+    assert!(
+        handle_sessions_input(&mut app, key(KeyCode::Char('x'))).is_none(),
+        "row-scoped keys wait for the load"
+    );
+}
+
+#[test]
+fn sessions_enter_jumps_to_a_local_tab() {
+    let mut app = test_app();
+    let ws = add_test_workspace(&mut app);
+    let tab = add_terminal_tab(&mut app, ws);
+    app.workspaces[ws].tabs[tab].session_id = Some("s1".to_string());
+    open_sessions_dialog(&mut app, vec![session_info("s1")]);
+
+    let action = handle_sessions_input(&mut app, key(KeyCode::Enter));
+
+    assert!(action.is_none(), "local tab: jump, no action");
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.active_workspace, ws);
+    assert_eq!(app.workspaces[ws].active_tab, tab);
+}
+
+#[test]
+fn sessions_enter_on_a_detached_session_asks_to_attach() {
+    let mut app = test_app();
+    add_test_workspace(&mut app);
+    open_sessions_dialog(&mut app, vec![session_info("stray")]);
+
+    let action = handle_sessions_input(&mut app, key(KeyCode::Enter));
+
+    assert!(matches!(action, Some(Action::SessionAttach(id)) if id == "stray"));
+}
+
+#[test]
+fn sessions_returns_none_when_dialog_not_active() {
+    let mut app = test_app();
+    assert!(handle_sessions_input(&mut app, key(KeyCode::Esc)).is_none());
 }
 
 // ── Logs ───────────────────────────────────────────────────────────────

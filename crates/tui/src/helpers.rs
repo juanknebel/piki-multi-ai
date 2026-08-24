@@ -86,7 +86,6 @@ pub(crate) fn reattach_sessions(app: &mut App) {
     // Attach in stored tab order so the subtab bar comes back as it was.
     sessions.sort_by_key(|s| (s.meta.workspace_path.clone(), s.meta.order));
 
-    let (rows, cols) = (app.pty_rows, app.pty_cols);
     let mut reattached = 0usize;
     for info in sessions {
         let Some(ws_idx) = app
@@ -96,47 +95,61 @@ pub(crate) fn reattach_sessions(app: &mut App) {
         else {
             continue; // orphan: keep it running, don't adopt it here
         };
-        // Already have this session as a tab? (defensive — startup runs once)
-        if app.workspaces[ws_idx]
-            .tabs
-            .iter()
-            .any(|t| t.session_id.as_deref() == Some(info.id.as_str()))
-        {
-            continue;
+        if attach_session_as_tab(app, &daemon, &info, ws_idx).is_some() {
+            reattached += 1;
         }
-
-        let provider = AIProvider::from_label(&info.meta.provider);
-        let provider_cfg = if let AIProvider::Custom(name) = &provider {
-            app.provider_manager.get(name)
-        } else {
-            None
-        };
-
-        let att = match daemon.attach(&info.id, rows, cols) {
-            Ok(a) => a,
-            Err(e) => {
-                tracing::warn!(session = %info.id, error = %e, "re-attach failed");
-                continue;
-            }
-        };
-        let pty =
-            PtySession::from_attachment(att, info.integration_on, Some(app.pty_output.clone()));
-        let ws = &mut app.workspaces[ws_idx];
-        let idx = ws.add_tab(provider, info.meta.closable, provider_cfg);
-        ws.tabs[idx].pty_parser = Some(Arc::clone(pty.parser()));
-        ws.tabs[idx].pty_session = Some(pty);
-        ws.tabs[idx].session_id = Some(info.id.clone());
-        if let Some(title) = info.meta.title.clone() {
-            ws.tabs[idx].custom_title = Some(title);
-        }
-        ws.status = app::WorkspaceStatus::Busy;
-        ws.dirty = true;
-        ws.last_refresh = None;
-        reattached += 1;
     }
     if reattached > 0 {
         tracing::info!(count = reattached, "re-attached persisted sessions");
     }
+}
+
+/// Attach one daemon session as a tab of `ws_idx`. Returns the new tab's
+/// index, or `None` when the session is already a tab there or the attach
+/// failed (logged). Shared by the startup re-attach and the sessions
+/// overlay's adopt-an-orphan action.
+pub(crate) fn attach_session_as_tab(
+    app: &mut App,
+    daemon: &Daemon,
+    info: &piki_core::session::protocol::SessionInfo,
+    ws_idx: usize,
+) -> Option<usize> {
+    // Already have this session as a tab? (defensive)
+    if app.workspaces[ws_idx]
+        .tabs
+        .iter()
+        .any(|t| t.session_id.as_deref() == Some(info.id.as_str()))
+    {
+        return None;
+    }
+
+    let provider = AIProvider::from_label(&info.meta.provider);
+    let provider_cfg = if let AIProvider::Custom(name) = &provider {
+        app.provider_manager.get(name)
+    } else {
+        None
+    };
+
+    let att = match daemon.attach(&info.id, app.pty_rows, app.pty_cols) {
+        Ok(a) => a,
+        Err(e) => {
+            tracing::warn!(session = %info.id, error = %e, "re-attach failed");
+            return None;
+        }
+    };
+    let pty = PtySession::from_attachment(att, info.integration_on, Some(app.pty_output.clone()));
+    let ws = &mut app.workspaces[ws_idx];
+    let idx = ws.add_tab(provider, info.meta.closable, provider_cfg);
+    ws.tabs[idx].pty_parser = Some(Arc::clone(pty.parser()));
+    ws.tabs[idx].pty_session = Some(pty);
+    ws.tabs[idx].session_id = Some(info.id.clone());
+    if let Some(title) = info.meta.title.clone() {
+        ws.tabs[idx].custom_title = Some(title);
+    }
+    ws.status = app::WorkspaceStatus::Busy;
+    ws.dirty = true;
+    ws.last_refresh = None;
+    Some(idx)
 }
 
 /// Remove a session from the daemon (its child is killed and the record
