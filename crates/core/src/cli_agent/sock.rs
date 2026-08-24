@@ -30,9 +30,9 @@ use crate::shell_integration::ShellEvent;
 pub type CliAgentCallback = Box<dyn Fn(&crate::cli_agent::CliAgentEvent) + Send>;
 
 /// RAII guard for a running FIFO reader. Dropping it stops the reader thread,
-/// aborts the blocking task, and unlinks the FIFO.
+/// joins the reader thread, and unlinks the FIFO.
 pub struct SockReader {
-    handle: tokio::task::JoinHandle<()>,
+    handle: Option<std::thread::JoinHandle<()>>,
     stop: Arc<AtomicBool>,
     path: PathBuf,
 }
@@ -40,13 +40,17 @@ pub struct SockReader {
 impl Drop for SockReader {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::SeqCst);
-        self.handle.abort();
+        // The reader polls `stop` at least every 50ms, then unlinks the FIFO
+        // itself; join so no detached thread outlives us.
+        if let Some(h) = self.handle.take() {
+            let _ = h.join();
+        }
         let _ = unlink(&self.path);
     }
 }
 
-/// Spawn the FIFO reader on a blocking task (mirrors the PTY reader pattern in
-/// [`crate::pty::PtySession`]).
+/// Spawn the FIFO reader on a dedicated OS thread (works whether or not a
+/// tokio runtime is present — the session daemon has none).
 ///
 /// `mkfifo`s `path` mode `0o600` (unlinking + recreating if it already exists),
 /// opens it `O_RDWR | O_NONBLOCK | O_CLOEXEC`, and loops reading
@@ -84,11 +88,19 @@ pub fn spawn_reader(
     let stop_for_task = Arc::clone(&stop);
     let path_for_task = path.clone();
 
-    let handle = tokio::task::spawn_blocking(move || {
-        run(path_for_task, shell, callback, stop_for_task);
-    });
+    // A plain OS thread, NOT `tokio::task::spawn_blocking`: the session
+    // daemon owns these readers and runs synchronously with no tokio runtime
+    // (it daemonizes by forking before any runtime is built), where
+    // `spawn_blocking` panics. An OS thread works with or without a runtime.
+    let handle = std::thread::Builder::new()
+        .name("cli-agent-sock".into())
+        .spawn(move || run(path_for_task, shell, callback, stop_for_task))?;
 
-    Ok(SockReader { handle, stop, path })
+    Ok(SockReader {
+        handle: Some(handle),
+        stop,
+        path,
+    })
 }
 
 fn run(
@@ -221,6 +233,24 @@ fn unlink(path: &Path) -> std::io::Result<()> {
 mod tests {
     use super::*;
     use std::io::Write;
+
+    /// Regression: the FIFO reader must spawn with NO tokio runtime present.
+    /// The session daemon runs synchronously (it forks before building a
+    /// runtime), so a `tokio::task::spawn_blocking` here panicked on the
+    /// daemon's connection thread and closed the socket mid-reply — every
+    /// tab with a cli-agent FIFO (Claude tabs, and shell tabs) failed to
+    /// spawn through the daemon with "failed to fill whole buffer".
+    #[test]
+    fn spawn_reader_works_without_a_tokio_runtime() {
+        let dir = tempfile::tempdir().unwrap();
+        let sock = dir.path().join("no-rt.sock");
+        let shell = std::sync::Arc::new(parking_lot::Mutex::new(ShellSession::default()));
+        // Would panic ("no reactor running") before the std::thread fix.
+        let reader = spawn_reader(sock.clone(), shell, None).expect("spawn without runtime");
+        assert!(sock.exists(), "FIFO created");
+        drop(reader);
+        assert!(!sock.exists(), "FIFO unlinked on drop");
+    }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn round_trip_two_payloads_reach_pending_and_state() {
