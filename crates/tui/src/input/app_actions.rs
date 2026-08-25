@@ -82,13 +82,21 @@ pub(crate) fn open_about(app: &mut App) -> Option<Action> {
 }
 
 pub(crate) fn open_dashboard(app: &mut App) -> Option<Action> {
-    if !app.workspaces.is_empty() {
-        app.active_dialog = Some(DialogState::Dashboard {
-            selected: app.active_workspace,
-            scroll_offset: 0,
-        });
-        app.mode = AppMode::Dashboard;
+    let indices = app.dashboard_indices();
+    if indices.is_empty() {
+        return None;
     }
+    // Select the position of the active workspace within the filtered dashboard,
+    // or 0 if the active workspace has no tabs (filtered out).
+    let selected = indices
+        .iter()
+        .position(|&idx| idx == app.active_workspace)
+        .unwrap_or(0);
+    app.active_dialog = Some(DialogState::Dashboard {
+        selected,
+        scroll_offset: 0,
+    });
+    app.mode = AppMode::Dashboard;
     None
 }
 

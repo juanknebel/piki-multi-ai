@@ -42,7 +42,7 @@ Built with Rust and [ratatui](https://ratatui.rs/).
 
 - **Parallel workspaces** — Run multiple AI coding sessions simultaneously, each in an isolated git worktree, pointing directly to an existing directory (Simple mode), or managing a multi-service project root (Project mode)
 - **Dynamic tabs** — Workspaces start empty; create tabs on demand (`Ctrl+G c`) organized in categories: Shell (direct), AI Agents (Claude Code, Gemini, OpenCode, Kilo, Codex), and Tools (Kanban Board, Code Review — opens a PR picker rather than a tab directly, see below, API Explorer, Git); close tabs with `Ctrl+G x`; cycle with `Ctrl+G n`/`Ctrl+G p`; Kanban Board, API Explorer and Git are singletons — re-opening one focuses the existing tab instead of creating a duplicate; rename any tab with `Ctrl+G R` (custom title shown in the tab bar and the Agents pane, empty to clear)
-- **Workspace dashboard** — Press `Ctrl+G D` for a bird's-eye overview of all workspaces with their tabs, status (idle/busy/done), changed files, and ahead/behind; `j`/`k` to navigate, `Enter` to switch, `Esc` to close
+- **Workspace dashboard** — Press `Ctrl+G b` (`Ctrl+G D` alias) for a bird's-eye overview of workspaces with open tabs (empty workspaces are hidden), grouped by worktree family with the parent first and its worktree children below; shows status (idle/busy/done), changed files, and ahead/behind; `j`/`k` to navigate, `Enter` to switch, `Esc` to close
 - **Git via lazygit** — All git handling (status, stage, commit, push, pull, branches, log, stash, rebase, conflicts) is delegated to [lazygit](https://github.com/jesseduffield/lazygit) running in a PTY tab per workspace; open-or-focus it with `Ctrl+G g` (respawns automatically if you quit lazygit), or from New Tab → Tools → Git
 - **Agents pane** — The bottom-left pane lists every running AI agent across ALL workspaces with its live status from the structured OSC 777 channel (running / needs permission / waiting / done) plus idle badges; `j`/`k` to select, `Enter` or click to jump straight to that workspace and tab
 - **Live terminal rendering** — See AI assistant output in real-time with full ANSI color support via `tui-term`
@@ -116,7 +116,7 @@ A modern desktop GUI is available via `piki-desktop`, built with [Tauri v2](http
 - **Code review** — PR info, per-file diffs, inline comments, submit reviews via `gh` CLI
 - **Agent management** — Create/edit/delete agent profiles, import from repo, dispatch agents to workspaces
 - **Command palette** — `Ctrl+P` for fuzzy search across all commands, workspaces, and theme presets; subsequence matching with word-boundary/camelCase bonuses (`spr` finds "Split Pane Right"), recently used commands surface first (persisted MRU, shared with the `Ctrl+F` file search where the basename counts double), and every keybinding hint is read live from the shortcut registry so rebinds never show a stale key
-- **Dashboard** — `Alt+D` for bird's-eye view of all workspaces with status, tabs, and file counts
+- **Dashboard** — `Alt+D` for bird's-eye view of workspaces with open tabs (empty workspaces hidden), grouped parent-first by worktree family, with status, tabs, and file counts
 - **System info** — `Alt+I` for live system monitoring: CPU, RAM, disk usage gauges with color thresholds (green/amber/red), battery status, load average, uptime, hostname; auto-refreshes every 3 seconds
 - **Application log viewer** — `Alt+Shift+L` for in-memory ring buffer (500 entries), filterable by level
 - **About dialog** — Click "Piki Desktop" in status bar or via command palette
@@ -347,7 +347,7 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 | `f` | Search within the active terminal's output |
 | `[` | Terminal scroll mode (see below) |
 | `y` | AI Chat panel |
-| `b` | Workspace dashboard overlay (bird's-eye view of all workspaces and tabs) |
+| `b` | Workspace dashboard overlay (only workspaces with open tabs, parent worktree first, children below) |
 | `o` | Log viewer overlay (last 500 log entries, color-coded, filterable by level) |
 | `m` | Manage agent profiles (create/edit/delete agents for this project) |
 | `v` | Manage providers (add/edit/delete custom AI providers) |

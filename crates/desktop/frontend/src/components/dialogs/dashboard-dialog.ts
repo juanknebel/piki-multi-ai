@@ -18,52 +18,65 @@ export function showDashboard() {
   const workspaces = appState.workspaces;
   const activeIdx = appState.activeWorkspace;
 
-  // Group workspaces by worktree family (workspaces sharing `source_repo`),
-  // mirroring the sidebar. The section header is the repo folder name, only
-  // shown when more than one loaded workspace shares that source_repo.
-  type WsEntry = { idx: number; sourceRepo: string; order: number };
-  const entries: WsEntry[] = workspaces.map((ws, i) => ({
-    idx: i,
-    sourceRepo: ws.info.source_repo,
-    order: ws.info.order,
-  }));
+  // Only workspaces with something open (tabs), ordered parent -> children
+  // per worktree family (same rule as TUI `dashboard_indices` and sidebar).
+  const filteredIdx = workspaces
+    .map((_, i) => i)
+    .filter((i) => workspaces[i].tabs.length > 0);
 
+  // Group filtered workspaces by source_repo to enforce parent-first order.
+  const bySourceRepo = new Map<string, number[]>();
+  for (const idx of filteredIdx) {
+    const repo = workspaces[idx].info.source_repo;
+    if (!bySourceRepo.has(repo)) bySourceRepo.set(repo, []);
+    bySourceRepo.get(repo)!.push(idx);
+  }
+
+  // Build ordered list: families in order of first appearance, parent first.
+  const orderedIdx: number[] = [];
+  const seenRepo = new Set<string>();
+  for (const idx of filteredIdx) {
+    const repo = workspaces[idx].info.source_repo;
+    if (seenRepo.has(repo)) continue;
+    seenRepo.add(repo);
+    const members = bySourceRepo.get(repo)!;
+    if (members.length <= 1) {
+      orderedIdx.push(members[0]);
+    } else {
+      const parent = members.find((m) => workspaces[m].info.workspace_type !== "Worktree");
+      if (parent !== undefined) {
+        orderedIdx.push(parent);
+        const children = members
+          .filter((m) => m !== parent)
+          .sort((a, b) => workspaces[a].info.order - workspaces[b].info.order);
+        orderedIdx.push(...children);
+      } else {
+        members.sort((a, b) => workspaces[a].info.order - workspaces[b].info.order);
+        orderedIdx.push(...members);
+      }
+    }
+  }
+
+  // Optional: group header by folder name for families with >1 member,
+  // mirroring previous grouping but now on the ordered filtered set.
   function folderName(sourceRepo: string): string {
     return sourceRepo.replace(/\/+$/, "").split("/").pop() || sourceRepo;
   }
 
-  const bySourceRepo = new Map<string, WsEntry[]>();
-  for (const entry of entries) {
-    if (!bySourceRepo.has(entry.sourceRepo)) bySourceRepo.set(entry.sourceRepo, []);
-    bySourceRepo.get(entry.sourceRepo)!.push(entry);
-  }
-  const groups = new Map<string, WsEntry[]>();
-  for (const [sourceRepo, members] of bySourceRepo) {
-    const label = members.length > 1 ? folderName(sourceRepo) : "";
-    if (!groups.has(label)) groups.set(label, []);
-    groups.get(label)!.push(...members);
-  }
-  const sortedGroups = [...groups.entries()]
-    .sort(([a], [b]) => {
-      if (a === "" && b !== "") return -1;
-      if (a !== "" && b === "") return 1;
-      return a.localeCompare(b);
-    })
-    .map(([group, items]) => ({
-      group,
-      items: items.sort((a, b) => a.order - b.order),
-    }));
-
   let cardsHtml = "";
-  for (const section of sortedGroups) {
-    const showHeader = section.group && section.items.length > 1;
-    if (showHeader) {
-      cardsHtml += `<div class="dash-group-header">${esc(section.group)}</div>`;
+  let lastRepo: string | null = null;
+  for (const idx of orderedIdx) {
+    const ws = workspaces[idx];
+    const repo = ws.info.source_repo;
+    const familySize = bySourceRepo.get(repo)!.length;
+    // Show a group header when entering a new family with >1 member
+    if (familySize > 1 && repo !== lastRepo) {
+      cardsHtml += `<div class="dash-group-header">${esc(folderName(repo))}</div>`;
     }
-    for (const entry of section.items) {
-      const ws = workspaces[entry.idx];
+    lastRepo = repo;
+    {
       const info = ws.info;
-      const isActive = entry.idx === activeIdx;
+      const isActive = idx === activeIdx;
       const statusLabel = typeof ws.status === "string" ? ws.status : "Error";
       const statusClass = statusLabel.toLowerCase();
       const fileCount = ws.changedFiles.length;
@@ -74,7 +87,7 @@ export function showDashboard() {
       const branch = ws.branch;
 
       cardsHtml += `
-        <div class="dash-card${isActive ? " dash-active" : ""}" data-idx="${entry.idx}">
+        <div class="dash-card${isActive ? " dash-active" : ""}" data-idx="${idx}">
           <div class="dash-card-header">
             <span class="dash-card-name">${esc(info.name)}</span>
             <span class="dash-card-status ${statusClass}">${statusLabel}</span>
@@ -90,12 +103,13 @@ export function showDashboard() {
     }
   }
 
+  const totalShown = orderedIdx.length;
   dialog.innerHTML = `
     <div class="dialog-header">
-      <span class="dialog-title">Dashboard — ${workspaces.length} workspace${workspaces.length !== 1 ? "s" : ""}</span>
+      <span class="dialog-title">Dashboard — ${totalShown} workspace${totalShown !== 1 ? "s" : ""}</span>
       <button class="dialog-close" title="Close" aria-label="Close">×</button>
     </div>
-    <div class="dash-grid">${cardsHtml || '<div class="empty-message">No workspaces</div>'}</div>
+    <div class="dash-grid">${cardsHtml || '<div class="empty-message">No open workspaces</div>'}</div>
   `;
 
   backdrop.appendChild(dialog);

@@ -1526,6 +1526,25 @@ impl App {
             .collect()
     }
 
+    /// Indices of workspaces that have at least one open tab, ordered with
+    /// worktree families grouped: parent (workspace_type != Worktree) first,
+    /// then its Worktree children below. Uses the same grouping rule as the
+    /// sidebar (`piki_core::workspace::sidebar_rows`) but ignores collapsed
+    /// state so the dashboard always shows the full expanded view. Only
+    /// workspaces with `!tabs.is_empty()` are returned.
+    pub fn dashboard_indices(&self) -> Vec<usize> {
+        let infos: Vec<piki_core::WorkspaceInfo> =
+            self.workspaces.iter().map(|w| w.info.clone()).collect();
+        piki_core::workspace::sidebar_rows(&infos, &std::collections::HashSet::new())
+            .into_iter()
+            .filter_map(|row| match row {
+                piki_core::workspace::SidebarRow::Workspace { index, .. } => Some(index),
+                piki_core::workspace::SidebarRow::PrReviewHeader { .. } => None,
+            })
+            .filter(|&idx| !self.workspaces[idx].tabs.is_empty())
+            .collect()
+    }
+
     /// Visual rows for the workspace sidebar, in render order: `Some(row)`
     /// indexes into `sidebar_items()`, `None` is a blank separator line
     /// inserted on BOTH sides of a block — a worktree family (before its

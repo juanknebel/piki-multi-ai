@@ -27,14 +27,17 @@ pub(crate) fn render_dashboard_overlay(frame: &mut Frame, area: Rect, app: &App)
     // Footer hint = 1 line
     let visible_rows = inner_height.saturating_sub(1) as usize;
 
+    // Only workspaces with something open (tabs), ordered parent -> children
+    let indices = app.dashboard_indices();
+    let total = indices.len();
+
     // Build all visual lines, then slice by scroll_offset
     let mut body_lines: Vec<Line<'_>> = Vec::new();
 
-    let total = app.workspaces.len();
-    for i in 0..total {
-        let ws = &app.workspaces[i];
-        let is_active = i == app.active_workspace;
-        let is_selected = i == selected;
+    for (pos, &idx) in indices.iter().enumerate() {
+        let ws = &app.workspaces[idx];
+        let is_active = idx == app.active_workspace;
+        let is_selected = pos == selected;
 
         // Marker
         let marker = if is_active { "▸ " } else { "  " };
@@ -104,47 +107,40 @@ pub(crate) fn render_dashboard_overlay(frame: &mut Frame, area: Rect, app: &App)
         }
 
         // Tab lines (indented under workspace)
-        if ws.tabs.is_empty() {
-            body_lines.push(Line::from(Span::styled(
-                "     (no tabs)",
-                Style::default().fg(theme.palette.fg3),
-            )));
-        } else {
-            for (ti, tab) in ws.tabs.iter().enumerate() {
-                let label = tab.display_label();
+        for (ti, tab) in ws.tabs.iter().enumerate() {
+            let label = tab.display_label();
 
-                let (indicator, ind_color) = if tab.markdown_content.is_some() {
-                    ("md", theme.palette.info)
-                } else {
-                    let (glyph, _, color) = crate::ui::agent_tab_indicator(app, tab);
-                    (glyph, color)
-                };
+            let (indicator, ind_color) = if tab.markdown_content.is_some() {
+                ("md", theme.palette.info)
+            } else {
+                let (glyph, _, color) = crate::ui::agent_tab_indicator(app, tab);
+                (glyph, color)
+            };
 
-                let is_active_tab = ti == ws.active_tab;
-                let tab_fg = if is_active_tab {
-                    theme.palette.fg0
-                } else {
-                    theme.palette.fg2
-                };
-                let arrow = if is_active_tab { "→ " } else { "  " };
+            let is_active_tab = ti == ws.active_tab;
+            let tab_fg = if is_active_tab {
+                theme.palette.fg0
+            } else {
+                theme.palette.fg2
+            };
+            let arrow = if is_active_tab { "→ " } else { "  " };
 
-                let mut tab_spans = vec![
-                    Span::styled("     ", Style::default()),
-                    Span::styled(arrow, Style::default().fg(tab_fg)),
-                    Span::styled(label, Style::default().fg(tab_fg)),
-                    Span::raw(" "),
-                    Span::styled(indicator, Style::default().fg(ind_color)),
-                ];
-                if let Some((status, attention, _)) = tab.cli_agent_snapshot() {
-                    let (glyph, slabel, color) =
-                        crate::ui::cli_agent_status_view(app, status, attention);
-                    tab_spans.push(Span::styled(
-                        format!("  {} {}", glyph, slabel),
-                        Style::default().fg(color),
-                    ));
-                }
-                body_lines.push(Line::from(tab_spans));
+            let mut tab_spans = vec![
+                Span::styled("     ", Style::default()),
+                Span::styled(arrow, Style::default().fg(tab_fg)),
+                Span::styled(label, Style::default().fg(tab_fg)),
+                Span::raw(" "),
+                Span::styled(indicator, Style::default().fg(ind_color)),
+            ];
+            if let Some((status, attention, _)) = tab.cli_agent_snapshot() {
+                let (glyph, slabel, color) =
+                    crate::ui::cli_agent_status_view(app, status, attention);
+                tab_spans.push(Span::styled(
+                    format!("  {} {}", glyph, slabel),
+                    Style::default().fg(color),
+                ));
             }
+            body_lines.push(Line::from(tab_spans));
         }
     }
 
