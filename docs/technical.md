@@ -483,6 +483,7 @@ The terminal owns every key it can use. An app shortcut fires while a terminal, 
 | `Ctrl+H` | Request history (in API Explorer) |
 | **Git** | |
 | `Ctrl+M` ° | Merge / Rebase |
+| `Alt+B` | Switch branch (also by clicking `⎇ branch` in the status bar) |
 | `Alt+L` | Git log |
 | `Ctrl+Shift+S` | Git stash |
 | `Ctrl+Z` ° | Undo stage/unstage |
@@ -524,6 +525,16 @@ The terminal owns every key it can use. An app shortcut fires while a terminal, 
 - **Branch labels** share one rule everywhere (workspace list, status bar, switcher, dashboard, empty state): middle-truncated at 28 characters, the full name in the tooltip. Collapsible groups share one chevron pair: `▸` collapsed, `▾` expanded.
 - **Empty state**: a workspace with no tabs — or a blank pane — shows `<workspace> · ⎇ <branch>` and buttons for Shell, every configured provider and *Open file…* (the fuzzy file finder); the app-wide welcome only appears when there is no workspace at all.
 - **Agents panel** height is clamped so the workspace list above it always keeps its header plus at least four rows (it scrolls beyond that); the clamp is re-applied when the window shrinks.
+
+### Desktop Source Control panel
+
+The common git loop runs from the panel, the Git menu or the palette without a shell:
+
+- **Pull / push**: the header shows `↓N` when the branch is behind its upstream and `↑N` when ahead (the same counts as the status bar). While an operation runs the button is disabled and reads `↓…` / `↑…`; a second click, palette entry or menu item for the same workspace is a no-op ("Push already in progress") — one intent, one process. Success is a toast (`Pulled 3 commits`, `Already up to date`, `Pushed successfully`); failures show git's own message. A pull that git cannot reconcile (diverged branches without a `pull.rebase` / `pull.ff` policy) is reported, not forced; a pull that stops on conflicts is aborted so the worktree is left as it was, and the error names the conflicting files (resolve with Merge / Rebase or a shell).
+- **Commit / Amend**: *Amend last commit* under the Commit button prefills the message box with the last commit message (unless you had already typed one) and turns the button into *Amend*; it is live with staged changes or a new message — an empty message keeps the current one (`git commit --amend --no-edit`). Unticking restores what you had typed. `Ctrl+Enter` commits or amends.
+- **Discard**: every row in *Changes* has a `⟲` action that throws away the working-tree changes of that file (`git restore --worktree`, the index is untouched) behind a confirm; for an untracked file the action reads *Delete file* and really deletes it (`git clean -fd`). Both are irreversible and say so.
+- **Switch branch** (`Alt+B`, click `⎇ branch` in the status bar, Git ▸ Switch Branch…, palette): a fuzzy-filterable list of local branches plus remote-tracking branches that have no local counterpart (`remote` tag; picking one creates a tracking branch), the current one marked with `●` and its `↑ ↓` counts. Checkout never forces: when uncommitted changes would be overwritten, or the branch is checked out in another worktree, git's refusal is the error toast and nothing changes.
+- **Code Review** opens its overlay immediately with a *Loading PR…* skeleton (closable) while `gh` runs, then *Loading review comments…*; if `gh` is missing or fails, the overlay shows the error with *Retry* / *Close* instead of a silent toast.
 
 ## Workspaces
 
@@ -664,7 +675,7 @@ crates/
       commands/
         workspace.rs     # Workspace CRUD IPC commands
         pty.rs           # PTY spawn/write/resize/close
-        git.rs           # Git stage/unstage/commit/push/merge/resolve
+        git.rs           # Git stage/unstage/commit/amend/push/pull/discard/branches/checkout/merge/resolve
         diff.rs          # Side-by-side diff generation
         gitlog.rs        # Git log history
         stash.rs         # Git stash operations
@@ -916,7 +927,7 @@ The event-loop performance model and its invariants are documented in [performan
 - **Input-handler tests** (`crates/tui/src/input/dialog_tests.rs`) — every dialog's key paths against a real `App` built by the `test_support` fixtures (`test_app()`, `add_test_workspace()`, `add_terminal_tab()`, …). Handlers that write to disk use `test_app_isolated()` so tests never touch the real user config.
 - **Documentation parity tests** — `docs_parity` (in `action_catalog.rs`) fails the build if this document's prefix table drifts from `default_app()`; `every_bind_resolves_to_a_real_binding` fails it if a catalog entry points at a binding that doesn't exist. `config.example.toml` is mirrored by hand.
 - **Session tests** — protocol round-trips and vt100 restore round-trips as unit tests; `crates/core/tests/session_daemon.rs` and `session_facade.rs` drive a full in-process daemon (spawn/attach/detach/kill/restore, multi-client fan-out); `crates/tui/src/helpers.rs` has an end-to-end persistence test (spawn → write → drop/detach → re-attach → screen restored).
-- **Desktop frontend unit tests** (`crates/desktop/frontend/src/**/*.test.ts`, vitest, `npm test` / `just frontend-test`) — pure-logic modules with no DOM: the shortcut registry (`parseCombo`, the terminal-safe rule, help-section invariants), `fuzzy.ts` scoring/MRU, and `settings-store.ts` (coalesced writes, mid-write patches, failed-write recovery). Run by `just frontend` and by `nightly.yml::build-desktop` before the build.
+- **Desktop frontend unit tests** (`crates/desktop/frontend/src/**/*.test.ts`, vitest, `npm test` / `just frontend-test`) — pure-logic modules with no DOM: the shortcut registry (`parseCombo`, the terminal-safe rule, help-section invariants), `fuzzy.ts` scoring/MRU, `settings-store.ts` (coalesced writes, mid-write patches, failed-write recovery) and `in-flight.ts` (the one-op-at-a-time guard behind push/pull/checkout: a double click is one push, a rejection releases the key). Run by `just frontend` and by `nightly.yml::build-desktop` before the build.
 - **Ignored E2E tests** — drive real external binaries, so they're `#[ignore]` by default and run explicitly with `cargo test -- --ignored`: `crates/core/tests/pty_terminal_queries.rs` (real `muse` against the vt100 answerback path) and `crates/core/tests/cli_agent_antigravity.rs` (real `agy` against the hook bridge).
 
 ## Development

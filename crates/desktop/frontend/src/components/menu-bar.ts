@@ -6,6 +6,9 @@ import { showMergeDialog } from "./dialogs/merge-dialog";
 import { showGitLog } from "./dialogs/gitlog-dialog";
 import { showStashDialog } from "./dialogs/stash-dialog";
 import { showCodeReview } from "./code-review";
+import { focusCommitBox } from "./source-control";
+import { pullWorkspace, pushWorkspace } from "./git-actions";
+import { openBranchPicker } from "./dialogs/branch-picker";
 import { openFuzzySearch } from "./fuzzy-search";
 import { openWorkspaceSwitcher } from "./workspace-switcher";
 import { openTerminalSearch } from "./terminal-panel";
@@ -221,26 +224,10 @@ const MENUS: MenuDefinition[] = [
   {
     label: "Git",
     items: () => [
-      {
-        label: "Commit",
-        disabled: noWs,
-        action: () => {
-          appState.setActiveView("git");
-          setTimeout(() => document.querySelector<HTMLTextAreaElement>(".sc-commit-input")?.focus(), 50);
-        },
-      },
-      {
-        label: "Push",
-        disabled: noWs,
-        action: async () => {
-          try {
-            await ipc.gitPush(appState.activeWorkspace);
-            toast("Pushed successfully", "success");
-          } catch (err) {
-            toast(`Push failed: ${err}`, "error");
-          }
-        },
-      },
+      { label: "Commit", disabled: noWs, action: () => focusCommitBox() },
+      { label: "Amend Last Commit", disabled: noWs, action: () => focusCommitBox({ amend: true }) },
+      { label: "Pull", disabled: noWs, action: () => pullWorkspace() },
+      { label: "Push", disabled: noWs, action: () => pushWorkspace() },
       SEP,
       {
         label: "Stage All",
@@ -275,6 +262,7 @@ const MENUS: MenuDefinition[] = [
         },
       },
       SEP,
+      { label: "Switch Branch…", shortcut: getShortcutKey("switch-branch"), disabled: noWs, action: () => openBranchPicker() },
       { label: "Merge / Rebase", shortcut: getShortcutKey("merge-rebase"), disabled: noWs, action: () => showMergeDialog() },
       { label: "Git Log", shortcut: getShortcutKey("git-log"), disabled: noWs, action: () => showGitLog() },
       { label: "Git Stash", shortcut: getShortcutKey("git-stash"), disabled: noWs, action: () => showStashDialog() },

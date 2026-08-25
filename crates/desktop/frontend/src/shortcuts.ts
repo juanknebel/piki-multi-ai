@@ -108,6 +108,7 @@ const shortcuts: ShortcutDef[] = [
   { id: "terminal-search", label: "Search in Terminal", category: "Search", defaultKey: "Ctrl+Shift+B", key: "Ctrl+Shift+B", action: () => {}, terminalCapture: true },
   { id: "api-jq-filter", label: "API jq Filter", category: "Search", defaultKey: "Ctrl+J", key: "Ctrl+J", action: () => {} },
   { id: "merge-rebase", label: "Merge / Rebase", category: "Git", defaultKey: "Ctrl+M", key: "Ctrl+M", action: () => {} },
+  { id: "switch-branch", label: "Switch Branch", category: "Git", defaultKey: "Alt+B", key: "Alt+B", action: () => {}, terminalCapture: true },
   { id: "git-log", label: "Git Log", category: "Git", defaultKey: "Alt+L", key: "Alt+L", action: () => {}, terminalCapture: true },
   { id: "git-stash", label: "Git Stash", category: "Git", defaultKey: "Ctrl+Shift+S", key: "Ctrl+Shift+S", action: () => {}, terminalCapture: true },
   { id: "undo", label: "Undo Stage/Unstage", category: "Git", defaultKey: "Ctrl+Z", key: "Ctrl+Z", action: () => {} },

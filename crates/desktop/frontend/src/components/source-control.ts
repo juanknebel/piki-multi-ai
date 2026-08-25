@@ -10,6 +10,8 @@ import { revealInFileTree } from "./file-tree";
 import { fileGlyph } from "./file-icons";
 import { FILE_STATUS_LABELS, FILE_STATUS_CSS } from "../types";
 import { modCtrl } from "../shortcuts";
+import { isInFlight, onInFlightChange } from "../in-flight";
+import { confirmDiscardFile, pullKey, pullWorkspace, pushKey, pushWorkspace } from "./git-actions";
 import type { ChangedFile, FileStatus } from "../types";
 
 const STAGED_STATUSES: FileStatus[] = [
@@ -29,6 +31,31 @@ let stagedCollapsed = false;
 let changesCollapsed = false;
 let savedCommitMessage = "";
 let scStagedHeightRestored = false;
+/** "Amend last commit" is checked — survives the panel's full re-renders. */
+let amendMode = false;
+/** What the user had typed before Amend prefilled the box, restored on uncheck. */
+let messageBeforeAmend = "";
+let inFlightUnsub: (() => void) | null = null;
+
+/** Show the Source Control view with the commit box focused; `amend` also
+ *  ticks "Amend last commit" (Git menu / palette entry points). */
+export function focusCommitBox(opts: { amend?: boolean } = {}) {
+  appState.setActiveView("git");
+  setTimeout(() => {
+    if (opts.amend && !amendMode) {
+      // Toggle through the rendered checkbox so the prefill runs (its
+      // change handler also focuses the box).
+      const check = document.querySelector<HTMLInputElement>(".sc-amend-check");
+      if (check) {
+        check.checked = true;
+        check.dispatchEvent(new Event("change"));
+        return;
+      }
+      amendMode = true;
+    }
+    document.querySelector<HTMLTextAreaElement>(".sc-commit-input")?.focus();
+  }, 50);
+}
 
 async function restoreScStagedHeight() {
   if (scStagedHeightRestored) return;
@@ -54,6 +81,7 @@ export function renderSourceControl(container: HTMLElement) {
     }
     const files = ws?.changedFiles ?? [];
     const aheadBehind = ws?.aheadBehind;
+    const wsIdx = appState.activeWorkspace;
 
     const staged = files.filter((f) => STAGED_STATUSES.includes(f.status));
     const unstaged = files.filter((f) => UNSTAGED_STATUSES.includes(f.status));
@@ -76,28 +104,30 @@ export function renderSourceControl(container: HTMLElement) {
     header.innerHTML = `
       <span>SOURCE CONTROL</span>
       <span class="sc-header-actions">
-        ${aheadBehind && aheadBehind[0] > 0 ? `<button class="sc-header-btn" data-action="push" title="Push (↑${aheadBehind[0]})">↑${aheadBehind[0]}</button>` : ""}
+        ${syncButton("pull", "↓", aheadBehind?.[1] ?? 0, isInFlight(pullKey(wsIdx)))}
+        ${syncButton("push", "↑", aheadBehind?.[0] ?? 0, isInFlight(pushKey(wsIdx)))}
         <button class="sc-header-btn" data-action="refresh" title="Refresh">↻</button>
       </span>
     `;
     container.appendChild(header);
 
-    // Wire header actions
+    // Wire header actions. Push/pull go through the shared guarded actions
+    // (a second click while one runs is a no-op); the button is disabled
+    // and reads `…` until the op settles (re-rendered by onInFlightChange).
     header.querySelectorAll<HTMLButtonElement>(".sc-header-btn").forEach((btn) => {
       btn.addEventListener("click", async () => {
         const action = btn.dataset.action;
-        const wsIdx = appState.activeWorkspace;
-        try {
-          if (action === "push") {
-            await ipc.gitPush(wsIdx);
+        if (action === "push") {
+          await pushWorkspace(wsIdx);
+        } else if (action === "pull") {
+          await pullWorkspace(wsIdx);
+        } else if (action === "refresh") {
+          try {
             const status = await ipc.getWorkspaceGitStatus(wsIdx);
             appState.updateFiles(wsIdx, status.files, status.ahead_behind);
-          } else if (action === "refresh") {
-            const status = await ipc.getWorkspaceGitStatus(wsIdx);
-            appState.updateFiles(wsIdx, status.files, status.ahead_behind);
+          } catch (err) {
+            reportError("Source control refresh failed", err);
           }
-        } catch (err) {
-          reportError(`Source control ${action} failed`, err);
         }
       });
     });
@@ -106,15 +136,20 @@ export function renderSourceControl(container: HTMLElement) {
     const commitArea = document.createElement("div");
     commitArea.className = "sc-commit-area";
     commitArea.innerHTML = `
-      <textarea class="sc-commit-input" placeholder="Message (press Ctrl+Enter to commit)" rows="3"></textarea>
+      <textarea class="sc-commit-input" rows="3"></textarea>
       <button class="sc-commit-btn" disabled>
-        <span class="sc-commit-icon">✓</span> Commit
+        <span class="sc-commit-icon">✓</span> <span class="sc-commit-label">Commit</span>
       </button>
+      <label class="sc-amend" title="Replace the last commit with the staged changes and this message (git commit --amend)">
+        <input type="checkbox" class="sc-amend-check" /> Amend last commit
+      </label>
     `;
     container.appendChild(commitArea);
 
     const textarea = commitArea.querySelector<HTMLTextAreaElement>(".sc-commit-input")!;
     const commitBtn = commitArea.querySelector<HTMLButtonElement>(".sc-commit-btn")!;
+    const commitLabel = commitArea.querySelector<HTMLSpanElement>(".sc-commit-label")!;
+    const amendCheck = commitArea.querySelector<HTMLInputElement>(".sc-amend-check")!;
 
     // Restore saved commit message, caret, and focus
     if (savedCommitMessage) {
@@ -123,9 +158,20 @@ export function renderSourceControl(container: HTMLElement) {
       if (hadTextareaFocus) textarea.focus();
     }
 
-    textarea.addEventListener("input", () => {
-      commitBtn.disabled = textarea.value.trim().length === 0 || staged.length === 0;
-    });
+    // Amend: the button is live with staged changes OR a message (an empty
+    // message keeps the current one); a plain commit needs both.
+    function syncCommitButton() {
+      const hasMsg = textarea.value.trim().length > 0;
+      commitBtn.disabled = amendMode ? !hasMsg && staged.length === 0 : !hasMsg || staged.length === 0;
+      commitLabel.textContent = amendMode ? "Amend" : "Commit";
+      textarea.placeholder = amendMode
+        ? "Message (empty keeps the current one, Ctrl+Enter to amend)"
+        : "Message (press Ctrl+Enter to commit)";
+      amendCheck.checked = amendMode;
+    }
+    syncCommitButton();
+
+    textarea.addEventListener("input", syncCommitButton);
 
     textarea.addEventListener("keydown", (e) => {
       if (modCtrl(e) && e.key === "Enter") {
@@ -134,24 +180,50 @@ export function renderSourceControl(container: HTMLElement) {
       }
     });
 
-    commitBtn.disabled = textarea.value.trim().length === 0 || staged.length === 0;
+    amendCheck.addEventListener("change", async () => {
+      amendMode = amendCheck.checked;
+      if (amendMode) {
+        messageBeforeAmend = textarea.value;
+        syncCommitButton();
+        try {
+          const last = await ipc.gitLastCommitMessage(wsIdx);
+          // Only prefill when the box holds nothing the user typed; the panel
+          // may have re-rendered meanwhile, so target the live box.
+          const box = document.querySelector<HTMLTextAreaElement>(".sc-commit-input") ?? textarea;
+          if (amendMode && box.value.trim().length === 0) {
+            box.value = last;
+            savedCommitMessage = last;
+          }
+        } catch (err) {
+          reportError("Could not read the last commit message", err);
+        }
+      } else {
+        textarea.value = messageBeforeAmend;
+        savedCommitMessage = messageBeforeAmend;
+      }
+      syncCommitButton();
+      textarea.focus();
+    });
 
     commitBtn.addEventListener("click", async () => {
       const msg = textarea.value.trim();
-      if (!msg || staged.length === 0) return;
+      const amending = amendMode;
+      if (amending ? !msg && staged.length === 0 : !msg || staged.length === 0) return;
       commitBtn.disabled = true;
-      commitBtn.textContent = "Committing...";
+      commitLabel.textContent = amending ? "Amending…" : "Committing…";
       try {
-        const wsIdx = appState.activeWorkspace;
-        await ipc.gitCommit(wsIdx, msg);
+        if (amending) await ipc.gitAmend(wsIdx, msg || null);
+        else await ipc.gitCommit(wsIdx, msg);
         textarea.value = "";
         savedCommitMessage = "";
+        messageBeforeAmend = "";
+        amendMode = false;
+        syncCommitButton();
         const status = await ipc.getWorkspaceGitStatus(wsIdx);
         appState.updateFiles(wsIdx, status.files, status.ahead_behind);
       } catch (err) {
-        reportError("Commit failed", err);
-        commitBtn.textContent = "✓ Commit";
-        commitBtn.disabled = false;
+        reportError(amending ? "Amend failed" : "Commit failed", err);
+        syncCommitButton();
       }
     });
 
@@ -217,7 +289,21 @@ export function renderSourceControl(container: HTMLElement) {
 
   appState.on("files-changed", render);
   appState.on("active-workspace-changed", render);
+  // Push/pull started anywhere (menu, palette, header) flip the header
+  // buttons to their busy state here.
+  inFlightUnsub?.();
+  inFlightUnsub = onInFlightChange((key) => {
+    if (key.startsWith("git-push:") || key.startsWith("git-pull:")) render();
+  });
   render();
+}
+
+/** `↑N` / `↓N` header button; hidden at 0, disabled + `…` while running. */
+function syncButton(action: "push" | "pull", glyph: string, count: number, busy: boolean): string {
+  if (count === 0 && !busy) return "";
+  const verb = action === "push" ? "Push" : "Pull";
+  const title = busy ? `${verb} in progress…` : `${verb} (${glyph}${count})`;
+  return `<button class="sc-header-btn" data-action="${action}" title="${title}"${busy ? " disabled" : ""}>${busy ? `${glyph}…` : `${glyph}${count}`}</button>`;
 }
 
 const projectSubdirCache = new Map<number, string[]>();
@@ -479,6 +565,11 @@ function renderSection(
       const editBtn = isDeleted
         ? ""
         : `<button class="file-action-btn" data-action="edit" title="Edit in inline editor">✏️</button>`;
+      // Working-tree changes can be thrown away (confirmed, irreversible);
+      // for an untracked file that means deleting it.
+      const discardBtn = action === "stage"
+        ? `<button class="file-action-btn file-action-danger" data-action="discard" title="${file.status === "Untracked" ? "Delete file" : "Discard changes"}">⟲</button>`
+        : "";
 
       const itemIdx = fileIdx;
       const fi = fileGlyph(fileName);
@@ -493,6 +584,7 @@ function renderSection(
           ${previewBtn}
           ${revealBtn}
           ${editBtn}
+          ${discardBtn}
           <button class="file-action-btn" data-action="${action}" title="${action === "stage" ? "Stage" : "Unstage"}">
             ${action === "stage" ? "+" : "−"}
           </button>
@@ -531,6 +623,14 @@ function renderSection(
             appState.addTab(wsIdx, { id: tabId, provider: "CodeEditor", alive: true });
           });
       }
+
+      // Wire discard button (Changes section only)
+      item
+        .querySelector<HTMLButtonElement>('.file-action-btn[data-action="discard"]')
+        ?.addEventListener("click", (e) => {
+          e.stopPropagation();
+          confirmDiscardFile(appState.activeWorkspace, file, refreshFiles);
+        });
 
       // Checkbox toggle (supports shift+click for range select)
       const checkbox = item.querySelector<HTMLInputElement>(".file-check")!;

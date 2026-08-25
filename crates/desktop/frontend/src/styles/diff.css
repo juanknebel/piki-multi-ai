@@ -304,6 +304,56 @@
   line-height: var(--leading-normal);
 }
 
+/* Code review: honest states before the PR (and its comments) arrive */
+.cr-loading,
+.cr-error {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-4);
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.cr-loading-text {
+  color: var(--text-muted);
+  font-size: var(--fs-lg);
+  animation: pulse var(--dur-pulse) ease-in-out infinite;
+}
+
+.cr-loading-skeleton {
+  width: min(480px, 80%);
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--text-muted) 25%, transparent);
+  animation: pulse var(--dur-pulse) ease-in-out infinite;
+}
+
+.cr-loading-skeleton.short {
+  width: min(320px, 60%);
+}
+
+.cr-error-title {
+  color: var(--error-color);
+  font-weight: 600;
+  font-size: var(--fs-lg);
+}
+
+.cr-error-detail {
+  color: var(--text-secondary);
+  font-size: var(--fs-md);
+  max-width: 560px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.cr-error-actions {
+  display: flex;
+  gap: var(--sp-4);
+}
+
 .cr-file-list {
   width: 220px;
   flex-shrink: 0;

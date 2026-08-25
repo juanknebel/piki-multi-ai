@@ -6,6 +6,7 @@ import { jumpToAttention } from "./agents-panel";
 import { attentionRows } from "../agent-attention";
 import { getShortcutKey } from "../shortcuts";
 import { branchLabel } from "../labels";
+import { openBranchPicker } from "./dialogs/branch-picker";
 import * as ipc from "../ipc";
 
 const STAGED_STATUSES: FileStatus[] = ["Staged", "Added", "Renamed", "StagedModified"];
@@ -23,8 +24,12 @@ export function renderStatusBar(container: HTMLElement) {
     container.appendChild(appName);
 
     // Left side — the branch, shortened by the shared rule (full in the tooltip).
+    // Click (or the `switch-branch` key) opens the branch switcher.
     const branchItem = addItem(container, `⎇ ${branchLabel(ws?.branch)}`, "clickable");
-    branchItem.title = ws?.branch ?? "No git branch";
+    branchItem.title = ws?.branch
+      ? `${ws.branch}\nClick or ${getShortcutKey("switch-branch")} to switch branch`
+      : "No git branch";
+    branchItem.addEventListener("click", () => openBranchPicker());
 
     if (ws?.aheadBehind) {
       const [ahead, behind] = ws.aheadBehind;

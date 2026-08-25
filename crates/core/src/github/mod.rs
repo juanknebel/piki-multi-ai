@@ -258,6 +258,18 @@ pub fn parse_unified_diff(raw: &str) -> ParsedDiff {
 
 // ── Async commands ──────────────────────────────────────────────────────────
 
+/// Map a failure to *spawn* `gh` (as opposed to `gh` exiting non-zero) into a
+/// message the UI can show verbatim — a missing binary is the common case.
+fn gh_spawn_error(e: std::io::Error) -> anyhow::Error {
+    if e.kind() == std::io::ErrorKind::NotFound {
+        anyhow::anyhow!(
+            "GitHub CLI (gh) is not installed or not on PATH — install it and run `gh auth login`"
+        )
+    } else {
+        anyhow::anyhow!("Failed to run gh: {e}")
+    }
+}
+
 /// Fetch PR info for the current branch. Returns `None` if no open PR exists.
 pub async fn get_pr_for_branch(worktree_path: &Path) -> anyhow::Result<Option<PrInfo>> {
     tracing::info!(path = %worktree_path.display(), "gh: fetching PR info for branch");
@@ -270,7 +282,8 @@ pub async fn get_pr_for_branch(worktree_path: &Path) -> anyhow::Result<Option<Pr
         ])
         .current_dir(worktree_path)
         .output()
-        .await?;
+        .await
+        .map_err(gh_spawn_error)?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -307,7 +320,8 @@ pub async fn get_pr_view(repo_nwo: &str, number: u64) -> anyhow::Result<PrInfo> 
             "number,title,body,state,reviewDecision,url,headRefName,baseRefName,additions,deletions,reviewRequests,latestReviews,headRefOid",
         ])
         .output()
-        .await?;
+        .await
+        .map_err(gh_spawn_error)?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -329,7 +343,8 @@ pub async fn get_pr_files(worktree_path: &Path) -> anyhow::Result<Vec<PrFile>> {
         .args(["pr", "view", "--json", "files"])
         .current_dir(worktree_path)
         .output()
-        .await?;
+        .await
+        .map_err(gh_spawn_error)?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -354,7 +369,8 @@ pub async fn get_pr_files_by_number(
         .args(["pr", "view", &number.to_string(), "--json", "files"])
         .current_dir(worktree_path)
         .output()
-        .await?;
+        .await
+        .map_err(gh_spawn_error)?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -408,7 +424,8 @@ pub async fn get_repo_nwo(worktree_path: &Path) -> anyhow::Result<String> {
         ])
         .current_dir(worktree_path)
         .output()
-        .await?;
+        .await
+        .map_err(gh_spawn_error)?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -549,7 +566,8 @@ pub async fn get_pr_review_comments(
         .args(["api", "--paginate", &endpoint])
         .current_dir(worktree_path)
         .output()
-        .await?;
+        .await
+        .map_err(gh_spawn_error)?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -652,7 +670,8 @@ pub async fn submit_review(
         .args(&args)
         .current_dir(worktree_path)
         .output()
-        .await?;
+        .await
+        .map_err(gh_spawn_error)?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -691,7 +710,8 @@ pub async fn submit_review_by_number(
         .args(&args)
         .current_dir(worktree_path)
         .output()
-        .await?;
+        .await
+        .map_err(gh_spawn_error)?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);

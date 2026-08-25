@@ -12,6 +12,9 @@ import { showMergeDialog } from "./dialogs/merge-dialog";
 import { showGitLog } from "./dialogs/gitlog-dialog";
 import { showStashDialog } from "./dialogs/stash-dialog";
 import { showCodeReview } from "./code-review";
+import { focusCommitBox } from "./source-control";
+import { pullWorkspace, pushWorkspace } from "./git-actions";
+import { openBranchPicker } from "./dialogs/branch-picker";
 import { openFuzzySearch } from "./fuzzy-search";
 import { openProjectSearch } from "./project-search";
 import { showSettingsDialog } from "./dialogs/settings-dialog";
@@ -330,25 +333,32 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
       id: "git-commit",
       label: "Commit",
       category: "Git",
-      action: () => {
-        appState.setActiveView("git");
-        setTimeout(() => {
-          document.querySelector<HTMLTextAreaElement>(".sc-commit-input")?.focus();
-        }, 50);
-      },
+      action: () => focusCommitBox(),
+    });
+    cmds.push({
+      id: "git-amend",
+      label: "Amend Last Commit",
+      category: "Git",
+      action: () => focusCommitBox({ amend: true }),
     });
     cmds.push({
       id: "git-push",
       label: "Push",
       category: "Git",
-      action: async () => {
-        try {
-          await ipc.gitPush(wsIdx);
-          toast("Pushed successfully", "success");
-        } catch (err) {
-          toast(`Push failed: ${err}`, "error");
-        }
-      },
+      action: () => pushWorkspace(wsIdx),
+    });
+    cmds.push({
+      id: "git-pull",
+      label: "Pull",
+      category: "Git",
+      action: () => pullWorkspace(wsIdx),
+    });
+    cmds.push({
+      id: "git-switch-branch",
+      label: "Switch Branch…",
+      category: "Git",
+      keybinding: getShortcutKey("switch-branch"),
+      action: () => openBranchPicker(),
     });
     cmds.push({
       id: "git-stage-all",

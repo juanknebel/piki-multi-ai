@@ -26,6 +26,7 @@ import { openCommandPalette } from "./components/command-palette";
 import { showWorkspaceDialog } from "./components/dialogs/workspace-dialog";
 import { openWorkspaceSwitcher } from "./components/workspace-switcher";
 import { showMergeDialog } from "./components/dialogs/merge-dialog";
+import { openBranchPicker } from "./components/dialogs/branch-picker";
 import { openFuzzySearch } from "./components/fuzzy-search";
 import { openProjectSearch } from "./components/project-search";
 import { showGitLog } from "./components/dialogs/gitlog-dialog";
@@ -179,6 +180,7 @@ async function init() {
   bindAction("command-palette", () => openCommandPalette());
   bindAction("new-workspace", () => showWorkspaceDialog({ mode: "create" }));
   bindAction("merge-rebase", () => showMergeDialog());
+  bindAction("switch-branch", () => openBranchPicker());
   bindAction("workspace-switcher", () => openWorkspaceSwitcher());
   bindAction("fuzzy-search", () => openFuzzySearch());
   bindAction("project-search", () => openProjectSearch());

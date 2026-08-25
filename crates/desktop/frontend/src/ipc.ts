@@ -265,6 +265,81 @@ export function gitUnstageAll(workspaceIdx: number): Promise<void> {
   return invoke("git_unstage_all", { workspaceIdx });
 }
 
+export interface PullResult {
+  /** `[ahead, behind]` before the pull; `null` without an upstream. */
+  before: [number, number] | null;
+  after: [number, number] | null;
+  /** One line for the toast: "Pulled 3 commits" / "Already up to date". */
+  summary: string;
+}
+
+/** `git pull`. Rejects with git's own message on a diverged branch; a pull
+ *  that hits conflicts is aborted server-side and rejects naming the files. */
+export function gitPull(workspaceIdx: number): Promise<PullResult> {
+  return invoke("git_pull", { workspaceIdx });
+}
+
+/** `git commit --amend`; `message = null` keeps the current message. */
+export function gitAmend(
+  workspaceIdx: number,
+  message: string | null,
+): Promise<void> {
+  return invoke("git_amend", { workspaceIdx, message });
+}
+
+export function gitLastCommitMessage(workspaceIdx: number): Promise<string> {
+  return invoke("git_last_commit_message", { workspaceIdx });
+}
+
+/** Discard a file's working-tree changes (`git restore --worktree`), or —
+ *  with `untracked = true`, only for a file the status lists as untracked —
+ *  delete it (`git clean -fd`). Irreversible: confirm first. */
+export function gitDiscardFile(
+  workspaceIdx: number,
+  filePath: string,
+  untracked: boolean,
+): Promise<void> {
+  return invoke("git_discard_file", { workspaceIdx, filePath, untracked });
+}
+
+export interface BranchInfo {
+  /** `main`, or `origin/main` for a remote-tracking branch. */
+  name: string;
+  current: boolean;
+  /** Remote-tracking branch without a local counterpart. */
+  remote: boolean;
+  upstream: string | null;
+}
+
+export interface BranchList {
+  current: string | null;
+  ahead_behind: [number, number] | null;
+  branches: BranchInfo[];
+}
+
+export function gitListBranches(
+  workspaceIdx: number,
+  includeRemotes: boolean,
+): Promise<BranchList> {
+  return invoke("git_list_branches", { workspaceIdx, includeRemotes });
+}
+
+export interface BranchSwitch {
+  branch: string | null;
+  files: ChangedFile[];
+  ahead_behind: [number, number] | null;
+}
+
+/** `git checkout <branch>` (`--track` when `remote`). Never forces — a dirty
+ *  worktree that would be clobbered rejects with git's message. */
+export function gitCheckoutBranch(
+  workspaceIdx: number,
+  branch: string,
+  remote: boolean,
+): Promise<BranchSwitch> {
+  return invoke("git_checkout_branch", { workspaceIdx, branch, remote });
+}
+
 // Diff commands
 export interface DiffLine {
   content: string;

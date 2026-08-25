@@ -27,9 +27,16 @@
   transition: background var(--transition-fast), color var(--transition-fast);
 }
 
-.sc-header-btn:hover {
+.sc-header-btn:hover:not(:disabled) {
   background: var(--bg-active);
   color: var(--text-bright);
+}
+
+/* Push / pull in flight: the count becomes `…` and the button waits. */
+.sc-header-btn:disabled {
+  opacity: 0.55;
+  cursor: progress;
+  animation: pulse var(--dur-pulse) ease-in-out infinite;
 }
 
 /* ── Commit area ─────────────────────────────────── */
@@ -99,6 +106,30 @@
 
 .sc-commit-icon {
   font-size: var(--fs-lg);
+}
+
+/* "Amend last commit" toggle under the Commit button */
+.sc-amend {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  transition: color var(--transition-fast);
+}
+
+.sc-amend:hover {
+  color: var(--text-primary);
+}
+
+.sc-amend-check {
+  width: 12px;
+  height: 12px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--accent-primary);
 }
 
 /* ── Sections ────────────────────────────────────── */
@@ -269,4 +300,10 @@
   flex-shrink: 0;
   cursor: pointer;
   accent-color: var(--accent-primary);
+}
+
+/* Discard / delete: reads as destructive on hover, quiet otherwise. */
+.file-action-btn.file-action-danger:hover {
+  color: var(--error-color);
+  background: color-mix(in srgb, var(--error-color) 15%, transparent);
 }
