@@ -1,9 +1,16 @@
-import { defineConfig } from "vite";
+// `vitest/config` re-exports Vite's defineConfig plus the `test` field.
+import { defineConfig } from "vitest/config";
 
 const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig({
   clearScreen: false,
+  test: {
+    // Pure-logic unit tests (node, no DOM). Anything that needs a document
+    // stays in the Rust/E2E layers for now.
+    include: ["src/**/*.test.ts"],
+    environment: "node",
+  },
   server: {
     port: 1420,
     strictPort: true,

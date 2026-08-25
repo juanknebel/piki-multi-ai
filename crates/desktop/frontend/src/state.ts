@@ -9,6 +9,7 @@ import type {
   PtyAgentEvent,
 } from "./types";
 import * as ipc from "./ipc";
+import { settingsStore } from "./settings";
 import {
   type PaneNode,
   type PaneId,
@@ -602,14 +603,10 @@ class AppState extends EventTarget {
   // ── Persistence ────────────────────────────────────
 
   async loadPaneTrees(): Promise<void> {
-    try {
-      const raw = await ipc.getSettings();
-      const all = raw ? JSON.parse(raw) : {};
-      const saved = all && typeof all === "object" ? all[WS_TABS_SETTINGS_KEY] : null;
-      this._savedLayouts = saved && typeof saved === "object" ? saved : {};
-    } catch {
-      this._savedLayouts = {};
-    }
+    await settingsStore.load();
+    const saved = settingsStore.get(WS_TABS_SETTINGS_KEY);
+    this._savedLayouts =
+      saved && typeof saved === "object" ? (saved as Record<string, SavedWsLayout>) : {};
     this._layoutLoaded = true;
     for (const ws of this._workspaces) {
       if (ws.tabs.length === 0 && ws.wsTabs.length === 0) continue;
@@ -686,14 +683,7 @@ class AppState extends EventTarget {
       };
     }
     this._savedLayouts = snapshot;
-    try {
-      const raw = await ipc.getSettings();
-      const all = raw ? JSON.parse(raw) : {};
-      all[WS_TABS_SETTINGS_KEY] = snapshot;
-      await ipc.setSettings(JSON.stringify(all));
-    } catch {
-      // Best-effort; failure to persist is non-fatal.
-    }
+    settingsStore.patch(WS_TABS_SETTINGS_KEY, snapshot);
   }
 
   on(event: StateEvent, callback: () => void): () => void {

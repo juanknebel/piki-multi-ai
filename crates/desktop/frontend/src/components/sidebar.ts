@@ -1,6 +1,7 @@
 import { appState } from "../state";
 import { reportError } from "./toast";
 import * as ipc from "../ipc";
+import { settingsStore } from "../settings";
 import { renderWorkspaceList } from "./workspace-list";
 import { renderFileTree } from "./file-tree";
 import { renderSourceControl } from "./source-control";
@@ -27,18 +28,13 @@ function applyAgentsPanelHeight(px: number) {
 
 export async function initSidebar() {
   // Restore persisted sidebar width + Agents panel height
-  try {
-    const raw = await ipc.getSettings();
-    if (raw) {
-      const settings = JSON.parse(raw);
-      if (settings.sidebarWidth) {
-        document.documentElement.style.setProperty("--sidebar-width", `${settings.sidebarWidth}px`);
-      }
-      if (settings.agentsPanelHeight) {
-        applyAgentsPanelHeight(settings.agentsPanelHeight);
-      }
-    }
-  } catch { /* ignore */ }
+  await settingsStore.load();
+  const sidebarWidth = settingsStore.get<number>("sidebarWidth");
+  if (sidebarWidth) {
+    document.documentElement.style.setProperty("--sidebar-width", `${sidebarWidth}px`);
+  }
+  const agentsPanelHeight = settingsStore.get<number>("agentsPanelHeight");
+  if (agentsPanelHeight) applyAgentsPanelHeight(agentsPanelHeight);
 
   const explorerView = document.getElementById("explorer-view")!;
   const workspaceList = document.getElementById("workspace-list")!;
@@ -141,13 +137,7 @@ export async function initSidebar() {
 
   function persistSidebarWidth() {
     const width = parseInt(getComputedStyle(root).getPropertyValue("--sidebar-width"));
-    if (width) {
-      ipc.getSettings().then((raw) => {
-        const settings = raw ? JSON.parse(raw) : {};
-        settings.sidebarWidth = width;
-        ipc.setSettings(JSON.stringify(settings)).catch(() => {});
-      }).catch(() => {});
-    }
+    if (width) settingsStore.patch("sidebarWidth", width);
   }
 
   document.addEventListener("mouseup", () => {
@@ -200,13 +190,7 @@ export async function initSidebar() {
 
   function persistAgentsHeight() {
     const height = agentsView.offsetHeight;
-    if (height) {
-      ipc.getSettings().then((raw) => {
-        const settings = raw ? JSON.parse(raw) : {};
-        settings.agentsPanelHeight = height;
-        ipc.setSettings(JSON.stringify(settings)).catch(() => {});
-      }).catch(() => {});
-    }
+    if (height) settingsStore.patch("agentsPanelHeight", height);
   }
 
   document.addEventListener("mouseup", () => {

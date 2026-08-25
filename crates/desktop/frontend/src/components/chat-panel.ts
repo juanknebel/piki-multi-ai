@@ -1,4 +1,5 @@
 import * as ipc from "../ipc";
+import { settingsStore } from "../settings";
 import { showConfirm } from "./confirm";
 import { toast } from "./toast";
 import { renderMarkdown } from "./markdown-viewer";
@@ -22,6 +23,7 @@ let agentToggleBtn: HTMLButtonElement;
 let messages: ChatMsg[] = [];
 let streaming = false;
 let agentMode = false;
+let modelsRequested = false;
 let currentConfig: ipc.ChatConfig = {
   provider: "ollama",
   server_type: "Ollama",
@@ -148,8 +150,10 @@ export async function initChatPanel(el: HTMLElement) {
     // No messages
   }
 
-  // Load models in the background — don't block app init
-  loadModels().catch(() => {});
+  // Models are fetched lazily on the first open of the panel (see
+  // `toggleChatPanel`): probing Ollama/llama.cpp at startup logged a
+  // "Failed to list models" error on every launch for users without a
+  // local LLM server, for a panel they had not opened.
 
   // Load agent mode state in the background
   ipc.chatGetAgentMode().then((enabled) => {
@@ -162,6 +166,7 @@ export async function initChatPanel(el: HTMLElement) {
 }
 
 async function loadModels() {
+  modelsRequested = true;
   // Remove old dropdown, show placeholder
   replaceDropdown([{ value: "", label: "Loading\u2026" }], "");
 
@@ -587,6 +592,7 @@ export function toggleChatPanel() {
   const app = document.getElementById("app")!;
   app.classList.toggle("chat-visible");
   if (app.classList.contains("chat-visible")) {
+    if (!modelsRequested) loadModels().catch(() => {});
     inputEl?.focus();
   }
 }
@@ -601,6 +607,9 @@ export function initChatResize() {
   let startX = 0;
   let startWidth = 0;
   const root = document.documentElement;
+
+  const savedWidth = settingsStore.get<number>("chatPanelWidth");
+  if (savedWidth) root.style.setProperty("--chat-panel-width", `${savedWidth}px`);
 
   handle.addEventListener("mousedown", (e: MouseEvent) => {
     dragging = true;
@@ -624,12 +633,6 @@ export function initChatResize() {
     handle.classList.remove("dragging");
     // Persist width
     const width = parseInt(getComputedStyle(root).getPropertyValue("--chat-panel-width"));
-    if (width) {
-      ipc.getSettings().then((raw: string | null) => {
-        const settings = raw ? JSON.parse(raw) : {};
-        settings.chatPanelWidth = width;
-        ipc.setSettings(JSON.stringify(settings)).catch(() => {});
-      }).catch(() => {});
-    }
+    if (width) settingsStore.patch("chatPanelWidth", width);
   });
 }

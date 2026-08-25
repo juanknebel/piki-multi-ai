@@ -1,0 +1,37 @@
+/* Single entry point for the app's stylesheets, imported from main.ts.
+ * The order is the cascade — later files override earlier ones — and it is
+ * the historical <link> order from index.html, so keep appending features
+ * at the end. Foundation first (reset, tokens, keyframes), then the shell,
+ * then feature panels. Add a new stylesheet here, never in index.html. */
+
+/* Foundation */
+@import "./reset.css";
+@import "./variables.css";
+@import "./motion.css";
+
+/* Shell + panels, in cascade order */
+@import "./layout.css";
+@import "./activity-bar.css";
+@import "./sidebar.css";
+@import "./file-tree.css";
+@import "./context-menu.css";
+@import "./file-icons.css";
+@import "./tab-bar.css";
+@import "./pane.css";
+@import "./terminal.css";
+@import "./status-bar.css";
+@import "./dialog.css";
+@import "./markdown.css";
+@import "./source-control.css";
+@import "./command-palette.css";
+@import "./diff.css";
+@import "./dashboard.css";
+@import "./sysinfo.css";
+@import "./theme-dialog.css";
+@import "./menu-bar.css";
+@import "./kanban.css";
+@import "./api-panel.css";
+@import "./tooltip.css";
+@import "./chat-panel.css";
+@import "./code-editor.css";
+@import "./web-preview.css";

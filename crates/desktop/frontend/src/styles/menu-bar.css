@@ -52,17 +52,6 @@
   animation: menu-enter 0.1s var(--ease-out);
 }
 
-@keyframes menu-enter {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 /* ── Menu item ───────────────────────────────── */
 .menu-item {
   display: flex;

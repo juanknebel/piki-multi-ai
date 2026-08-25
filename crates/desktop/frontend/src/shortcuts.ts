@@ -1,4 +1,4 @@
-import * as ipc from "./ipc";
+import { settingsStore } from "./settings";
 
 /** True when running on macOS — Cmd (Meta) replaces Ctrl/Alt. */
 export const isMac: boolean =
@@ -200,14 +200,14 @@ export function getShortcutKey(id: string): string {
 export function updateShortcut(id: string, newKey: string) {
   const def = shortcuts.find((s) => s.id === id);
   if (def) def.key = newKey;
-  schedulePersist();
+  persistOverrides();
 }
 
 export function resetAllShortcuts() {
   for (const def of shortcuts) {
     def.key = def.defaultKey;
   }
-  schedulePersist();
+  persistOverrides();
 }
 
 /** The shortcut or reserved widget key already bound to `key`, if any. */
@@ -237,51 +237,32 @@ function capturesInTerminal(def: ShortcutDef): boolean {
 
 // ── Persistence ────────────────────────────────
 
-let persistTimer: ReturnType<typeof setTimeout> | null = null;
+const SHORTCUTS_KEY = "shortcuts";
+const SHELL_KEY = "shell";
 
-function schedulePersist() {
-  if (persistTimer) clearTimeout(persistTimer);
-  persistTimer = setTimeout(async () => {
-    const settings = await loadSettingsJson();
-    const overrides: Record<string, string> = {};
-    for (const def of shortcuts) {
-      if (def.key !== def.defaultKey) {
-        overrides[def.id] = def.key;
-      }
-    }
-    settings.shortcuts = overrides;
-    await ipc.setSettings(JSON.stringify(settings)).catch(() => {});
-  }, 300);
+function persistOverrides() {
+  const overrides: Record<string, string> = {};
+  for (const def of shortcuts) {
+    if (def.key !== def.defaultKey) overrides[def.id] = def.key;
+  }
+  settingsStore.patch(SHORTCUTS_KEY, overrides);
 }
 
-async function loadSettingsJson(): Promise<Record<string, unknown>> {
-  try {
-    const raw = await ipc.getSettings();
-    if (raw) return JSON.parse(raw);
-  } catch { /* ignore */ }
-  return {};
-}
-
-export async function loadShortcuts() {
-  const settings = await loadSettingsJson();
-  const overrides = settings.shortcuts as Record<string, string> | undefined;
-  if (overrides) {
-    for (const def of shortcuts) {
-      if (overrides[def.id]) {
-        def.key = overrides[def.id];
-      }
-    }
+/** Apply the user's rebinds from the (already loaded) settings store. */
+export function loadShortcuts() {
+  const overrides = settingsStore.get<Record<string, string>>(SHORTCUTS_KEY);
+  if (!overrides || typeof overrides !== "object") return;
+  for (const def of shortcuts) {
+    if (overrides[def.id]) def.key = overrides[def.id];
   }
 }
 
-export function getShellSetting(): Promise<string> {
-  return loadSettingsJson().then((s) => (s.shell as string) || "");
+export function getShellSetting(): string {
+  return settingsStore.get<string>(SHELL_KEY) || "";
 }
 
-export async function setShellSetting(shell: string) {
-  const settings = await loadSettingsJson();
-  settings.shell = shell;
-  await ipc.setSettings(JSON.stringify(settings)).catch(() => {});
+export function setShellSetting(shell: string) {
+  settingsStore.patch(SHELL_KEY, shell || undefined);
 }
 
 // ── Key matching ────────────────────────────────

@@ -8,6 +8,8 @@ import { showMarkdown } from "./markdown-viewer";
 import { toast } from "./toast";
 import { showConfirm } from "./confirm";
 import { fileGlyph, folderGlyph, type FileIcon } from "./file-icons";
+import { openContextMenu, type CtxItem } from "./context-menu";
+import { settingsStore } from "../settings";
 
 type NodeState =
   | { status: "idle" }
@@ -48,57 +50,6 @@ function baseName(rel: string): string {
 const CHEVRON_SVG = `<svg class="ft-chevron" viewBox="0 0 16 16"><path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`;
 const SEARCH_SVG = `<svg viewBox="0 0 16 16" width="13" height="13"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
 
-interface CtxItem {
-  label?: string;
-  action?: () => void;
-  danger?: boolean;
-  separator?: boolean;
-}
-
-function openContextMenu(x: number, y: number, items: CtxItem[]) {
-  document.querySelector(".ft-ctx")?.remove();
-  const menu = document.createElement("div");
-  menu.className = "ft-ctx";
-  for (const it of items) {
-    if (it.separator) {
-      const s = document.createElement("div");
-      s.className = "ft-ctx-sep";
-      menu.appendChild(s);
-      continue;
-    }
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = `ft-ctx-item${it.danger ? " danger" : ""}`;
-    b.textContent = it.label ?? "";
-    b.addEventListener("click", () => {
-      close();
-      it.action?.();
-    });
-    menu.appendChild(b);
-  }
-  const close = () => {
-    menu.remove();
-    document.removeEventListener("mousedown", onDown, true);
-    document.removeEventListener("keydown", onKey, true);
-    window.removeEventListener("blur", close);
-  };
-  const onDown = (e: MouseEvent) => {
-    if (!menu.contains(e.target as Node)) close();
-  };
-  const onKey = (e: KeyboardEvent) => {
-    if (e.key === "Escape") close();
-  };
-  document.body.appendChild(menu);
-  const r = menu.getBoundingClientRect();
-  const left = Math.min(x, window.innerWidth - r.width - 4);
-  const top = Math.min(y, window.innerHeight - r.height - 4);
-  menu.style.left = `${Math.max(4, left)}px`;
-  menu.style.top = `${Math.max(4, top)}px`;
-  document.addEventListener("mousedown", onDown, true);
-  document.addEventListener("keydown", onKey, true);
-  window.addEventListener("blur", close);
-}
-
 let revealImpl: ((rel: string) => void) | null = null;
 let autoRevealToggleImpl: (() => void) | null = null;
 
@@ -123,25 +74,13 @@ interface FtPersist {
 }
 
 async function loadFtSettings(): Promise<FtPersist> {
-  try {
-    const raw = await ipc.getSettings();
-    const all = raw ? JSON.parse(raw) : {};
-    const v = all && typeof all === "object" ? all[FT_SETTINGS_KEY] : null;
-    return v && typeof v === "object" ? (v as FtPersist) : {};
-  } catch {
-    return {};
-  }
+  await settingsStore.load();
+  const v = settingsStore.get(FT_SETTINGS_KEY);
+  return v && typeof v === "object" ? (v as FtPersist) : {};
 }
 
-async function saveFtSettings(next: FtPersist): Promise<void> {
-  try {
-    const raw = await ipc.getSettings();
-    const all = raw ? JSON.parse(raw) : {};
-    all[FT_SETTINGS_KEY] = next;
-    await ipc.setSettings(JSON.stringify(all));
-  } catch {
-    // Best-effort; failure to persist is non-fatal.
-  }
+function saveFtSettings(next: FtPersist): void {
+  settingsStore.patch(FT_SETTINGS_KEY, next);
 }
 
 export function renderFileTree(container: HTMLElement) {
@@ -175,7 +114,7 @@ export function renderFileTree(container: HTMLElement) {
   function flushPersist() {
     if (!persistLoaded) return;
     snapshotPersist();
-    void saveFtSettings(ftPersist);
+    saveFtSettings(ftPersist);
   }
 
   function setAutoReveal(v: boolean) {

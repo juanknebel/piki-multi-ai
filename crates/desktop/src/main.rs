@@ -67,6 +67,19 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
+        // Remember window size/position/maximized/fullscreen across launches
+        // (saved on close, restored before the first frame). Not VISIBLE /
+        // DECORATIONS: the window is always shown undecorated by config.
+        .plugin(
+            tauri_plugin_window_state::Builder::new()
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::SIZE
+                        | tauri_plugin_window_state::StateFlags::POSITION
+                        | tauri_plugin_window_state::StateFlags::MAXIMIZED
+                        | tauri_plugin_window_state::StateFlags::FULLSCREEN,
+                )
+                .build(),
+        )
         .manage(log_buf)
         .setup(move |app| {
             let app_handle = app.handle().clone();

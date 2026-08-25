@@ -27,9 +27,13 @@ lint:
 test:
     cargo test --workspace --exclude piki-desktop
 
-# Typecheck + build the desktop frontend (tsc && vite build)
+# Frontend unit tests (vitest) + typecheck + build (tsc && vite build)
 frontend:
-    cd crates/desktop/frontend && npm run build
+    cd crates/desktop/frontend && npm test && npm run build
+
+# Frontend unit tests only
+frontend-test:
+    cd crates/desktop/frontend && npm test
 
 # Desktop Rust: needs `just frontend` first (tauri-build reads frontend/dist)
 lint-desktop: frontend

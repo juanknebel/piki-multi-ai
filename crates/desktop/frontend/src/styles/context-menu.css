@@ -1,0 +1,56 @@
+/* Shared context menu (components/context-menu.ts). */
+
+.ctx-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 180px;
+  padding: 4px;
+  background: var(--bg-dropdown);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  animation: menu-enter 0.1s var(--ease-out);
+}
+
+.ctx-menu-item {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  padding: 4px 10px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.ctx-menu-item:hover,
+.ctx-menu-item:focus-visible {
+  background: var(--bg-active);
+  color: var(--text-bright);
+  outline: none;
+}
+
+.ctx-menu-item:disabled {
+  color: var(--text-muted);
+  cursor: default;
+  background: none;
+}
+
+.ctx-menu-item.danger {
+  color: var(--error-color);
+}
+
+.ctx-menu-item.danger:hover,
+.ctx-menu-item.danger:focus-visible {
+  background: color-mix(in srgb, var(--error-color) 15%, transparent);
+  color: var(--error-color);
+}
+
+.ctx-menu-sep {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border-primary);
+}

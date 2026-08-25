@@ -22,7 +22,7 @@ cargo clippy --all-targets    # Must produce 0 warnings
 If changes touch the desktop frontend (`crates/desktop/frontend/`), also run:
 
 ```bash
-cd crates/desktop/frontend && npx tsc --noEmit    # Must produce 0 errors
+cd crates/desktop/frontend && npm test && npx tsc --noEmit    # vitest green, 0 type errors
 ```
 
 Do **not** commit code that introduces new warnings or type errors. Fix all warnings before committing.
@@ -40,6 +40,7 @@ cargo test               # Run all tests
 cargo test <test_name>   # Run a single test (e.g. cargo test test_parse_name_status_basic)
 cargo clippy             # Lint
 cargo fmt --check        # Check formatting
+cd crates/desktop/frontend && npm test   # Desktop frontend unit tests (vitest, src/**/*.test.ts)
 ```
 
 **TUI Snapshot tests** (`crates/tui/src/ui/mod.rs`): Use `insta` crate for visual snapshot testing of rendered UI. Snapshots live in `crates/tui/src/ui/snapshots/`. When adding new UI tests, render to a `TestBackend` buffer and call `insta::assert_snapshot!`. After first run, accept new snapshots with `cargo insta review` or rename `.snap.new` files to `.snap`.

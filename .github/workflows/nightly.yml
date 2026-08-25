@@ -131,7 +131,7 @@ jobs:
       # `npm ci` (not `install`): reproducible from the lockfile, and it fails
       # loudly when package.json and the lockfile disagree.
       - name: Build frontend
-        run: cd crates/desktop/frontend && npm ci && npm run build
+        run: cd crates/desktop/frontend && npm ci && npm test && npm run build
 
       - name: Generate platform icons
         run: npx @tauri-apps/cli icon crates/desktop/icons/icon.png --output crates/desktop/icons

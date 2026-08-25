@@ -1,3 +1,6 @@
+// Stylesheet order lives in styles/index.css; xterm.css stays last so its
+// base rules are what terminal.css was written against.
+import "./styles/index.css";
 import "@xterm/xterm/css/xterm.css";
 import { appState } from "./state";
 import * as ipc from "./ipc";
@@ -14,6 +17,7 @@ import { initWebPreviewPanel, openWebPreviewTab } from "./components/web-preview
 import { tearDownAndClosePane } from "./components/tab-bar";
 import { initPaneView } from "./components/pane-view";
 import { bindAction, handleGlobalKeydown, loadShortcuts } from "./shortcuts";
+import { settingsStore } from "./settings";
 import { showSettingsDialog } from "./components/dialogs/settings-dialog";
 import { showProvidersDialog } from "./components/dialogs/providers-dialog";
 import { renderStatusBar } from "./components/status-bar";
@@ -42,6 +46,9 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { themeEngine } from "./theme";
 
 async function init() {
+  // The settings document backs every persisted UI preference (sidebar
+  // width, shortcuts, pane layouts, …); load it once before anything reads.
+  await settingsStore.load();
   // Load theme before rendering to avoid flash
   await themeEngine.loadFromStorage();
 
@@ -174,8 +181,8 @@ async function init() {
     if (id) tearDownAndClosePane(id);
   });
 
-  // Load user shortcut overrides from storage
-  await loadShortcuts();
+  // Apply user shortcut overrides (from the settings store)
+  loadShortcuts();
 
   // Tab switching via custom event from shortcut system
   document.addEventListener("switch-tab", ((e: CustomEvent) => {

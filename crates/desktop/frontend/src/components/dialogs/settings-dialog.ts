@@ -41,7 +41,7 @@ export async function showSettingsDialog() {
   const shellSection = document.createElement("div");
   shellSection.className = "settings-section";
 
-  const currentShell = await getShellSetting();
+  const currentShell = getShellSetting();
   const envShell = "$SHELL";
 
   shellSection.innerHTML = `

@@ -1,6 +1,7 @@
 import { appState } from "../state";
 import { reportError } from "./toast";
 import * as ipc from "../ipc";
+import { settingsStore } from "../settings";
 import { showFileDiff } from "./diff-viewer";
 import { showMarkdown } from "./markdown-viewer";
 import { showWorkspaceDialog } from "./dialogs/workspace-dialog";
@@ -32,16 +33,10 @@ let scStagedHeightRestored = false;
 async function restoreScStagedHeight() {
   if (scStagedHeightRestored) return;
   scStagedHeightRestored = true;
-  try {
-    const raw = await ipc.getSettings();
-    if (raw) {
-      const settings = JSON.parse(raw);
-      if (typeof settings.scStagedHeightPct === "number") {
-        document.documentElement.style.setProperty("--sc-staged-height", `${settings.scStagedHeightPct}%`);
-      }
-    }
-  } catch {
-    /* ignore */
+  await settingsStore.load();
+  const pct = settingsStore.get("scStagedHeightPct");
+  if (typeof pct === "number") {
+    document.documentElement.style.setProperty("--sc-staged-height", `${pct}%`);
   }
 }
 
@@ -652,13 +647,7 @@ function wireSectionSplitter(
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
       const pct = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sc-staged-height"));
-      if (!isNaN(pct)) {
-        ipc.getSettings().then((raw) => {
-          const settings = raw ? JSON.parse(raw) : {};
-          settings.scStagedHeightPct = pct;
-          ipc.setSettings(JSON.stringify(settings)).catch(() => {});
-        }).catch(() => {});
-      }
+      if (!isNaN(pct)) settingsStore.patch("scStagedHeightPct", pct);
     }
 
     document.addEventListener("mousemove", onMove);

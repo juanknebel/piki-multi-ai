@@ -29,7 +29,7 @@
 .web-preview-status-dot[data-status="checking"] {
   background: var(--accent-warm);
   box-shadow: var(--accent-warm-glow);
-  animation: web-preview-pulse 1s ease-in-out infinite;
+  animation: pulse 1s ease-in-out infinite;
 }
 .web-preview-status-dot[data-status="ok"] {
   background: #4caf50;
@@ -38,10 +38,6 @@
 .web-preview-status-dot[data-status="fail"] {
   background: #e57373;
   box-shadow: 0 0 8px rgba(229, 115, 115, 0.5);
-}
-@keyframes web-preview-pulse {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: 0.5; }
 }
 
 .web-preview-url-input {

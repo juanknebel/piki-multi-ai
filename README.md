@@ -95,7 +95,7 @@ Highlights on top of the shared feature set:
 - **Split panes** — recursive horizontal/vertical splits, each pane with its own tab bar; layout persists per workspace
 - **Extras** — file explorer with git decorations, web preview tab for local dev servers, kanban board, API explorer with history, AI chat panel, system info dashboard
 
-Desktop keyboard shortcuts are listed in [docs/technical.md](docs/technical.md#desktop-keyboard-shortcuts); all of them are editable at runtime (`Alt+S`).
+Desktop keyboard shortcuts are listed in [docs/technical.md](docs/technical.md#desktop-keyboard-shortcuts); all of them are editable at runtime (`Alt+S`). The window reopens with the size, position and maximized state it was closed with.
 
 ## Installation
 

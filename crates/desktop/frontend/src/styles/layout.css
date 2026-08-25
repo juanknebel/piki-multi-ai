@@ -226,11 +226,6 @@
   animation: overlay-in 0.2s var(--ease-out);
 }
 
-@keyframes overlay-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
 /* ── Toasts ──────────────────────────────────────── */
 #toast-container {
   position: fixed;
