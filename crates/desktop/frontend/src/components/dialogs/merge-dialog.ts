@@ -13,10 +13,10 @@ export function showMergeDialog() {
   const backdrop = document.createElement("div");
   backdrop.className = "dialog-backdrop merge-backdrop";
   backdrop.innerHTML = `
-    <div class="dialog" style="max-width:480px">
-      <div class="dialog-header">
-        <span class="dialog-title">Merge / Rebase</span>
-        <button class="dialog-close" title="Close" aria-label="Close">×</button>
+    <div class="dialog ui-surface" style="max-width:480px">
+      <div class="ui-header">
+        <span class="ui-header-title">Merge / Rebase</span>
+        <button data-variant="ghost" data-icon class="dialog-close ui-btn" title="Close" aria-label="Close">×</button>
       </div>
       <div class="dialog-body">
         <p style="font-size:13px;color:var(--text-primary);margin-bottom:8px">
@@ -28,8 +28,8 @@ export function showMergeDialog() {
         </div>
       </div>
       <div class="dialog-footer">
-        <button class="dialog-btn dialog-btn-secondary" id="merge-cancel">Cancel</button>
-        <button class="dialog-btn dialog-btn-primary" id="merge-submit">Merge</button>
+        <button data-variant="secondary" class="ui-btn" id="merge-cancel">Cancel</button>
+        <button data-variant="primary" class="ui-btn" id="merge-submit">Merge</button>
       </div>
     </div>
   `;
@@ -99,12 +99,12 @@ function showConflictResolution(conflicts: string[]) {
     if (dialog) dialog.remove();
 
     const el = document.createElement("div");
-    el.className = "dialog";
+    el.className = "dialog ui-surface";
     el.style.maxWidth = "560px";
     el.innerHTML = `
-      <div class="dialog-header">
-        <span class="dialog-title" style="color:var(--git-conflicted)">Conflict Resolution</span>
-        <button class="dialog-close" title="Close" aria-label="Close">×</button>
+      <div class="ui-header">
+        <span class="ui-header-title" style="color:var(--git-conflicted)">Conflict Resolution</span>
+        <button data-variant="ghost" data-icon class="dialog-close ui-btn" title="Close" aria-label="Close">×</button>
       </div>
       <div class="dialog-body">
         <p style="font-size:13px;color:var(--text-primary);margin-bottom:12px">
@@ -118,11 +118,11 @@ function showConflictResolution(conflicts: string[]) {
               <span class="file-status conflicted" style="color:var(--git-conflicted)">C</span>
               <span class="conflict-file-path">${escapeHtml(f)}</span>
               <span class="conflict-actions">
-                <button class="dialog-btn dialog-btn-secondary conflict-btn conflict-view" title="View 3-way diff">View</button>
-                <button class="dialog-btn dialog-btn-secondary conflict-btn" data-resolution="ours" title="Keep our version">Ours</button>
-                <button class="dialog-btn dialog-btn-secondary conflict-btn" data-resolution="theirs" title="Keep their version">Theirs</button>
-                <button class="dialog-btn dialog-btn-secondary conflict-btn" data-resolution="staged" title="Mark as resolved (keep current content)">Resolved</button>
-                <button class="dialog-btn dialog-btn-secondary conflict-btn conflict-edit" title="Edit in external editor">Edit</button>
+                <button data-variant="secondary" data-size="sm" class="ui-btn conflict-btn conflict-view" title="View 3-way diff">View</button>
+                <button data-variant="secondary" data-size="sm" class="ui-btn conflict-btn" data-resolution="ours" title="Keep our version">Ours</button>
+                <button data-variant="secondary" data-size="sm" class="ui-btn conflict-btn" data-resolution="theirs" title="Keep their version">Theirs</button>
+                <button data-variant="secondary" data-size="sm" class="ui-btn conflict-btn" data-resolution="staged" title="Mark as resolved (keep current content)">Resolved</button>
+                <button data-variant="secondary" data-size="sm" class="ui-btn conflict-btn conflict-edit" title="Edit in external editor">Edit</button>
               </span>
             </div>
           `,
@@ -131,9 +131,9 @@ function showConflictResolution(conflicts: string[]) {
         </div>
       </div>
       <div class="dialog-footer">
-        <button class="dialog-btn dialog-btn-danger" id="conflict-abort">Abort</button>
+        <button data-variant="danger" class="ui-btn" id="conflict-abort">Abort</button>
         <span style="flex:1"></span>
-        <button class="dialog-btn dialog-btn-primary" id="conflict-continue" ${conflicts.length > 0 ? "disabled" : ""}>
+        <button data-variant="primary" class="ui-btn" id="conflict-continue" ${conflicts.length > 0 ? "disabled" : ""}>
           Continue (${conflicts.length} remaining)
         </button>
       </div>

@@ -36,20 +36,20 @@ export async function showLogsDialog() {
   backdrop.className = "dialog-backdrop logs-dialog-backdrop";
 
   const dialog = document.createElement("div");
-  dialog.className = "dialog";
+  dialog.className = "dialog ui-surface";
   dialog.style.maxWidth = "800px";
   dialog.style.maxHeight = "85vh";
   dialog.style.width = "90vw";
 
   dialog.innerHTML = `
-    <div class="dialog-header">
-      <span class="dialog-title">Application Logs</span>
+    <div class="ui-header">
+      <span class="ui-header-title">Application Logs</span>
       <span style="display:flex;gap:6px;align-items:center">
-        <input type="text" class="dialog-input log-search" placeholder="Filter target or message..." />
+        <input type="text" data-size="sm" class="ui-input log-search" placeholder="Filter target or message..." />
         <span id="log-level-slot"></span>
-        <button class="dialog-btn dialog-btn-secondary dialog-btn-sm" id="log-refresh" title="Refresh">Refresh</button>
-        <button class="dialog-btn dialog-btn-secondary dialog-btn-sm" id="log-clear" title="Clear">Clear</button>
-        <button class="dialog-close" title="Close" aria-label="Close">×</button>
+        <button data-variant="secondary" data-size="sm" class="ui-btn" id="log-refresh" title="Refresh">Refresh</button>
+        <button data-variant="secondary" data-size="sm" class="ui-btn" id="log-clear" title="Clear">Clear</button>
+        <button data-variant="ghost" data-icon class="dialog-close ui-btn" title="Close" aria-label="Close">×</button>
       </span>
     </div>
     <div id="log-entries" style="flex:1;overflow-y:auto;padding:0;font-size:11px;line-height:1.6;max-height:70vh"></div>
@@ -84,8 +84,8 @@ export async function showLogsDialog() {
     if (visible.length === 0) {
       entriesContainer.innerHTML =
         lastEntries.length === 0
-          ? '<div class="empty-message">No log entries</div>'
-          : '<div class="empty-message">No logs match the filter</div>';
+          ? '<div class="ui-empty">No log entries</div>'
+          : '<div class="ui-empty">No logs match the filter</div>';
       return;
     }
 
@@ -155,7 +155,7 @@ export async function showLogsDialog() {
       }
       renderEntries();
     } catch (err) {
-      entriesContainer.innerHTML = `<div class="empty-message">Failed to load logs: ${err}</div>`;
+      entriesContainer.innerHTML = `<div class="ui-empty">Failed to load logs: ${err}</div>`;
     }
   }
 

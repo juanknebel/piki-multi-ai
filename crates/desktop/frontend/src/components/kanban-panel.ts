@@ -119,11 +119,11 @@ async function loadAndRender(inst: KanbanInstance) {
     inst.board = (sort || pf) ? await ipc.kanbanLoadBoard(wsIdx, sort, pf) : fullBoard;
   } catch (err) {
     inst.element.innerHTML = `
-      <div class="kanban-empty">
-        <span class="kanban-empty-icon">B</span>
-        <p>Could not load kanban board</p>
-        <p class="kanban-empty-detail">${esc(String(err))}</p>
-        <button class="kanban-btn kanban-retry">Retry</button>
+      <div class="ui-empty" data-fill data-tone="error">
+        <span class="ui-empty-icon">B</span>
+        <p class="ui-empty-title">Could not load kanban board</p>
+        <p class="ui-empty-hint">${esc(String(err))}</p>
+        <button data-variant="secondary" data-size="sm" class="ui-btn kanban-retry">Retry</button>
       </div>`;
     inst.element
       .querySelector(".kanban-retry")!
@@ -178,20 +178,20 @@ function renderBoard(inst: KanbanInstance) {
   toolbar.innerHTML = `
     <span class="kanban-toolbar-title">Kanban Board</span>
     <div class="kanban-toolbar-controls">
-      <input class="kanban-search-input" type="text" placeholder="Search..." value="${escAttr(inst.searchQuery)}" />
-      <button class="kanban-btn kanban-sort-btn${inst.sortOrder !== "none" ? " active" : ""}" title="Sort by priority">${sortLabel}</button>
+      <input data-size="sm" class="kanban-search-input ui-input" type="text" placeholder="Search..." value="${escAttr(inst.searchQuery)}" />
+      <button data-variant="secondary" data-size="sm" class="ui-btn kanban-sort-btn${inst.sortOrder !== "none" ? " active" : ""}" title="Sort by priority">${sortLabel}</button>
       <div class="kanban-filter-wrapper">
-        <button class="kanban-btn kanban-filter-btn${filterActive ? " active" : ""}" title="Filter by project">Project${filterActive ? ` (${inst.projectFilter.length})` : ""}</button>
+        <button data-variant="secondary" data-size="sm" class="ui-btn kanban-filter-btn${filterActive ? " active" : ""}" title="Filter by project">Project${filterActive ? ` (${inst.projectFilter.length})` : ""}</button>
         <div class="kanban-filter-dropdown hidden">
           ${projects.map((p) => `<label class="kanban-filter-option"><input type="checkbox" value="${escAttr(p)}" ${inst.projectFilter.length === 0 || inst.projectFilter.includes(p) ? "checked" : ""} /> ${esc(p)}</label>`).join("")}
           <div class="kanban-filter-actions">
-            <button class="kanban-btn kanban-filter-all">All</button>
-            <button class="kanban-btn kanban-filter-none">None</button>
-            <button class="kanban-btn kanban-btn-primary kanban-filter-apply">Apply</button>
+            <button data-variant="secondary" data-size="sm" class="ui-btn kanban-filter-all">All</button>
+            <button data-variant="secondary" data-size="sm" class="ui-btn kanban-filter-none">None</button>
+            <button data-variant="primary" data-size="sm" class="ui-btn kanban-filter-apply">Apply</button>
           </div>
         </div>
       </div>
-      <button class="kanban-btn kanban-refresh" title="Refresh">Refresh</button>
+      <button data-variant="secondary" data-size="sm" class="ui-btn kanban-refresh" title="Refresh">Refresh</button>
     </div>
   `;
 
@@ -283,7 +283,7 @@ function renderColumns(inst: KanbanInstance) {
         <span class="kanban-column-title">${esc(COLUMN_LABELS[col.id] ?? col.id)}</span>
         <span class="kanban-column-count">${col.cards.length}</span>
       </span>
-      <button class="kanban-column-add" title="Add card">+</button>
+      <button data-variant="secondary" data-icon class="kanban-column-add ui-btn" title="Add card">+</button>
     `;
 
     // Right-click header to pick column color
@@ -376,11 +376,11 @@ function renderCard(
     ${card.assignee ? `<div class="kanban-card-assignee">${esc(card.assignee)}</div>` : ""}
     <div class="kanban-card-id">${esc(shortId)}</div>
     <div class="kanban-card-actions">
-      ${colIdx > 0 ? `<button class="kanban-card-btn kanban-move-left" title="Move left">&larr;</button>` : ""}
-      <button class="kanban-card-btn kanban-edit" title="Edit">Edit</button>
-      <button class="kanban-card-btn kanban-dispatch" title="Dispatch agent">Dispatch</button>
-      <button class="kanban-card-btn kanban-delete" title="Delete">Del</button>
-      ${colIdx < board.columns.length - 1 ? `<button class="kanban-card-btn kanban-move-right" title="Move right">&rarr;</button>` : ""}
+      ${colIdx > 0 ? `<button data-variant="secondary" data-size="sm" class="ui-btn kanban-move-left" title="Move left">&larr;</button>` : ""}
+      <button data-variant="secondary" data-size="sm" class="ui-btn kanban-edit" title="Edit">Edit</button>
+      <button data-variant="secondary" data-size="sm" class="ui-btn kanban-dispatch" title="Dispatch agent">Dispatch</button>
+      <button data-variant="secondary" data-size="sm" class="ui-btn kanban-delete" title="Delete">Del</button>
+      ${colIdx < board.columns.length - 1 ? `<button data-variant="secondary" data-size="sm" class="ui-btn kanban-move-right" title="Move right">&rarr;</button>` : ""}
     </div>
   `;
 
@@ -441,8 +441,8 @@ function showDeleteConfirm(cardEl: HTMLDivElement, inst: KanbanInstance, card: K
 
   actions.innerHTML = `
     <span class="kanban-confirm-text">Delete?</span>
-    <button class="kanban-card-btn kanban-confirm-yes">Yes</button>
-    <button class="kanban-card-btn kanban-confirm-no">No</button>
+    <button data-variant="danger" data-size="sm" class="kanban-confirm-yes ui-btn">Yes</button>
+    <button data-variant="secondary" data-size="sm" class="ui-btn kanban-confirm-no">No</button>
   `;
 
   actions.querySelector(".kanban-confirm-yes")!.addEventListener("click", async (e) => {
@@ -470,34 +470,34 @@ function showEditModal(inst: KanbanInstance, card: KanbanCard) {
   backdrop.className = "kanban-edit-backdrop";
 
   const modal = document.createElement("div");
-  modal.className = "kanban-edit-modal";
+  modal.className = "kanban-edit-modal ui-surface";
   modal.innerHTML = `
-    <div class="kanban-edit-header">
-      <span>Edit Card</span>
-      <button class="kanban-edit-close">&times;</button>
+    <div class="ui-header">
+      <span class="ui-header-title">Edit Card</span>
+      <button data-variant="ghost" data-icon class="kanban-edit-close ui-btn" title="Close" aria-label="Close">&times;</button>
     </div>
     <div class="kanban-edit-body">
       <label class="kanban-edit-label">ID</label>
-      <input class="kanban-edit-input" type="text" value="${escAttr(card.id)}" readonly style="opacity:0.6;cursor:default" />
+      <input class="ui-input" type="text" value="${escAttr(card.id)}" readonly />
 
       <label class="kanban-edit-label">Title <span style="color:var(--error-color)">(required)</span></label>
-      <input class="kanban-edit-input" id="ke-title" type="text" value="${escAttr(card.title)}" />
+      <input class="ui-input" id="ke-title" type="text" value="${escAttr(card.title)}" />
 
       <label class="kanban-edit-label">Project <span style="color:var(--error-color)">(required)</span></label>
-      <input class="kanban-edit-input" id="ke-project" type="text" value="${escAttr(card.project)}" />
+      <input class="ui-input" id="ke-project" type="text" value="${escAttr(card.project)}" />
 
       <label class="kanban-edit-label">Priority</label>
       <div id="ke-priority-slot"></div>
 
       <label class="kanban-edit-label">Assignee</label>
-      <input class="kanban-edit-input" id="ke-assignee" type="text" value="${escAttr(card.assignee)}" />
+      <input class="ui-input" id="ke-assignee" type="text" value="${escAttr(card.assignee)}" />
 
       <label class="kanban-edit-label">Description</label>
-      <textarea class="kanban-edit-textarea" id="ke-desc" rows="6">${esc(card.description)}</textarea>
+      <textarea class="ui-input" id="ke-desc" rows="6">${esc(card.description)}</textarea>
     </div>
     <div class="kanban-edit-footer">
-      <button class="kanban-btn kanban-edit-cancel">Cancel</button>
-      <button class="kanban-btn kanban-btn-primary kanban-edit-save">Save</button>
+      <button data-variant="secondary" data-size="sm" class="ui-btn kanban-edit-cancel">Cancel</button>
+      <button data-variant="primary" data-size="sm" class="ui-btn kanban-edit-save">Save</button>
     </div>
   `;
 
@@ -564,31 +564,31 @@ function showNewCardModal(inst: KanbanInstance, columnId: string) {
   backdrop.className = "kanban-edit-backdrop";
 
   const modal = document.createElement("div");
-  modal.className = "kanban-edit-modal";
+  modal.className = "kanban-edit-modal ui-surface";
   modal.innerHTML = `
-    <div class="kanban-edit-header">
-      <span>New Card</span>
-      <button class="kanban-edit-close">&times;</button>
+    <div class="ui-header">
+      <span class="ui-header-title">New Card</span>
+      <button data-variant="ghost" data-icon class="kanban-edit-close ui-btn" title="Close" aria-label="Close">&times;</button>
     </div>
     <div class="kanban-edit-body">
       <label class="kanban-edit-label">Project <span style="color:var(--error-color)">(required)</span></label>
-      <input class="kanban-edit-input" id="ke-project" type="text" value="" placeholder="e.g. HUMAN, INFRA, API" />
+      <input class="ui-input" id="ke-project" type="text" value="" placeholder="e.g. HUMAN, INFRA, API" />
 
       <label class="kanban-edit-label">Title <span style="color:var(--error-color)">(required)</span></label>
-      <input class="kanban-edit-input" id="ke-title" type="text" value="New card" />
+      <input class="ui-input" id="ke-title" type="text" value="New card" />
 
       <label class="kanban-edit-label">Priority</label>
       <div id="ke-priority-slot"></div>
 
       <label class="kanban-edit-label">Assignee</label>
-      <input class="kanban-edit-input" id="ke-assignee" type="text" value="" />
+      <input class="ui-input" id="ke-assignee" type="text" value="" />
 
       <label class="kanban-edit-label">Description</label>
-      <textarea class="kanban-edit-textarea" id="ke-desc" rows="6"></textarea>
+      <textarea class="ui-input" id="ke-desc" rows="6"></textarea>
     </div>
     <div class="kanban-edit-footer">
-      <button class="kanban-btn kanban-edit-cancel">Cancel</button>
-      <button class="kanban-btn kanban-btn-primary kanban-edit-save">Create</button>
+      <button data-variant="secondary" data-size="sm" class="ui-btn kanban-edit-cancel">Cancel</button>
+      <button data-variant="primary" data-size="sm" class="ui-btn kanban-edit-save">Create</button>
     </div>
   `;
 
@@ -678,7 +678,9 @@ function showColorPicker(
   }
 
   const resetBtn = document.createElement("button");
-  resetBtn.className = "kanban-color-reset";
+  resetBtn.className = "kanban-color-reset ui-btn";
+  resetBtn.dataset.variant = "secondary";
+  resetBtn.dataset.size = "sm";
   resetBtn.textContent = "Reset to default";
   resetBtn.addEventListener("click", () => {
     const colors = loadColumnColors();

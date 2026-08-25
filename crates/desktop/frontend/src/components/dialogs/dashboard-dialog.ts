@@ -12,7 +12,7 @@ export function showDashboard() {
   backdrop.style.paddingTop = "5vh";
 
   const dialog = document.createElement("div");
-  dialog.className = "dialog";
+  dialog.className = "dialog ui-surface";
   dialog.style.maxWidth = "800px";
   dialog.style.maxHeight = "80vh";
 
@@ -92,11 +92,11 @@ export function showDashboard() {
   }
 
   dialog.innerHTML = `
-    <div class="dialog-header">
-      <span class="dialog-title">Dashboard — ${workspaces.length} workspace${workspaces.length !== 1 ? "s" : ""}</span>
-      <button class="dialog-close" title="Close" aria-label="Close">×</button>
+    <div class="ui-header">
+      <span class="ui-header-title">Dashboard — ${workspaces.length} workspace${workspaces.length !== 1 ? "s" : ""}</span>
+      <button data-variant="ghost" data-icon class="dialog-close ui-btn" title="Close" aria-label="Close">×</button>
     </div>
-    <div class="dash-grid">${cardsHtml || '<div class="empty-message">No workspaces</div>'}</div>
+    <div class="dash-grid">${cardsHtml || '<div class="ui-empty">No workspaces</div>'}</div>
   `;
 
   backdrop.appendChild(dialog);

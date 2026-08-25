@@ -148,7 +148,7 @@ function createPanel(tabId: string, filePath: string): MdEditorInstance {
     <div class="md-editor-toolbar">
       <span class="md-editor-path" title="${esc(filePath)}">${esc(filePath)}</span>
       <div class="mk-toolbar"></div>
-      <button class="api-btn md-editor-save" title="Save (${formatShortcut("Ctrl+S")})">Save</button>
+      <button data-variant="primary" data-size="sm" class="md-editor-save ui-btn" title="Save (${formatShortcut("Ctrl+S")})">Save</button>
     </div>
     <div class="md-editor-body"></div>
   `;

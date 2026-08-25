@@ -106,7 +106,7 @@ export function renderSourceControl(container: HTMLElement) {
       <span class="sc-header-actions">
         ${syncButton("pull", "↓", aheadBehind?.[1] ?? 0, isInFlight(pullKey(wsIdx)))}
         ${syncButton("push", "↑", aheadBehind?.[0] ?? 0, isInFlight(pushKey(wsIdx)))}
-        <button class="sc-header-btn" data-action="refresh" title="Refresh">↻</button>
+        <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn" data-action="refresh" title="Refresh">↻</button>
       </span>
     `;
     container.appendChild(header);
@@ -136,8 +136,8 @@ export function renderSourceControl(container: HTMLElement) {
     const commitArea = document.createElement("div");
     commitArea.className = "sc-commit-area";
     commitArea.innerHTML = `
-      <textarea class="sc-commit-input" rows="3"></textarea>
-      <button class="sc-commit-btn" disabled>
+      <textarea class="sc-commit-input ui-input" rows="3"></textarea>
+      <button data-variant="primary" class="sc-commit-btn ui-btn" disabled>
         <span class="sc-commit-icon">✓</span> <span class="sc-commit-label">Commit</span>
       </button>
       <label class="sc-amend" title="Replace the last commit with the staged changes and this message (git commit --amend)">
@@ -268,7 +268,7 @@ export function renderSourceControl(container: HTMLElement) {
     // Empty state
     if (files.length === 0) {
       const empty = document.createElement("div");
-      empty.className = "empty-message";
+      empty.className = "ui-empty";
       empty.style.padding = "16px 20px";
       empty.textContent = "No changes in this workspace.";
       container.appendChild(empty);
@@ -303,7 +303,7 @@ function syncButton(action: "push" | "pull", glyph: string, count: number, busy:
   if (count === 0 && !busy) return "";
   const verb = action === "push" ? "Push" : "Pull";
   const title = busy ? `${verb} in progress…` : `${verb} (${glyph}${count})`;
-  return `<button class="sc-header-btn" data-action="${action}" title="${title}"${busy ? " disabled" : ""}>${busy ? `${glyph}…` : `${glyph}${count}`}</button>`;
+  return `<button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn" data-action="${action}" title="${title}"${busy ? " disabled" : ""}>${busy ? `${glyph}…` : `${glyph}${count}`}</button>`;
 }
 
 const projectSubdirCache = new Map<number, string[]>();
@@ -316,7 +316,7 @@ function renderLocalOriginPlaceholder(container: HTMLElement) {
   container.appendChild(header);
 
   const empty = document.createElement("div");
-  empty.className = "empty-message";
+  empty.className = "ui-empty";
   empty.style.padding = "16px 20px";
   empty.style.color = "var(--text-muted)";
   empty.style.lineHeight = "1.5";
@@ -335,7 +335,7 @@ function renderProjectView(container: HTMLElement, projectPath: string) {
   header.innerHTML = `
     <span>PROJECT</span>
     <span class="sc-header-actions">
-      <button class="sc-header-btn" data-action="refresh" title="Refresh">↻</button>
+      <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn" data-action="refresh" title="Refresh">↻</button>
     </span>
   `;
   container.appendChild(header);
@@ -349,7 +349,7 @@ function renderProjectView(container: HTMLElement, projectPath: string) {
     listWrap.innerHTML = "";
     if (subdirs.length === 0) {
       const empty = document.createElement("div");
-      empty.className = "empty-message";
+      empty.className = "ui-empty";
       empty.style.padding = "16px 20px";
       empty.textContent = "No sub-directories found.";
       listWrap.appendChild(empty);
@@ -377,13 +377,13 @@ function renderProjectView(container: HTMLElement, projectPath: string) {
   }
 
   async function load() {
-    listWrap.innerHTML = '<div class="empty-message" style="padding:16px 20px">Loading...</div>';
+    listWrap.innerHTML = '<div class="ui-empty" data-tone="loading">Loading...</div>';
     try {
       const subdirs = await ipc.listProjectSubdirs(wsIdx);
       projectSubdirCache.set(wsIdx, subdirs);
       paint(subdirs);
     } catch (err) {
-      listWrap.innerHTML = `<div class="empty-message" style="padding:16px 20px;color:var(--git-deleted)">Failed to load: ${String(err)}</div>`;
+      listWrap.innerHTML = `<div class="ui-empty" data-tone="error">Failed to load: ${String(err)}</div>`;
     }
   }
 
@@ -430,10 +430,10 @@ function renderSection(
       <span class="sc-section-title">${escapeHtml(title)} (${files.length})</span>
     </span>
     <span class="sc-section-actions">
-      <button class="sc-section-action sc-selected-action" style="display:none" title="${action === "stage" ? "Stage Selected" : "Unstage Selected"}">
+      <button data-variant="ghost" data-icon class="sc-section-action ui-btn sc-selected-action" style="display:none" title="${action === "stage" ? "Stage Selected" : "Unstage Selected"}">
         ${action === "stage" ? "+" : "−"}<span class="sc-selected-count"></span>
       </button>
-      <button class="sc-section-action" title="${action === "stage" ? "Stage All" : "Unstage All"}">
+      <button data-variant="ghost" data-icon class="sc-section-action ui-btn" title="${action === "stage" ? "Stage All" : "Unstage All"}">
         ${action === "stage" ? "++" : "−−"}
       </button>
     </span>
@@ -556,19 +556,19 @@ function renderSection(
 
       const isMarkdown = /\.(md|markdown)$/i.test(file.path);
       const previewBtn = isMarkdown
-        ? `<button class="file-action-btn" data-action="preview" title="Preview rendered markdown">👁</button>`
+        ? `<button data-variant="ghost" data-icon class="file-action-btn ui-btn" data-action="preview" title="Preview rendered markdown">👁</button>`
         : "";
       const isDeleted = file.status === "Deleted";
       const revealBtn = isDeleted
         ? ""
-        : `<button class="file-action-btn" data-action="reveal" title="Reveal in Files">⌖</button>`;
+        : `<button data-variant="ghost" data-icon class="file-action-btn ui-btn" data-action="reveal" title="Reveal in Files">⌖</button>`;
       const editBtn = isDeleted
         ? ""
-        : `<button class="file-action-btn" data-action="edit" title="Edit in inline editor">✏️</button>`;
+        : `<button data-variant="ghost" data-icon class="file-action-btn ui-btn" data-action="edit" title="Edit in inline editor">✏️</button>`;
       // Working-tree changes can be thrown away (confirmed, irreversible);
       // for an untracked file that means deleting it.
       const discardBtn = action === "stage"
-        ? `<button class="file-action-btn file-action-danger" data-action="discard" title="${file.status === "Untracked" ? "Delete file" : "Discard changes"}">⟲</button>`
+        ? `<button data-variant="ghost" data-icon class="file-action-btn ui-btn file-action-danger" data-action="discard" title="${file.status === "Untracked" ? "Delete file" : "Discard changes"}">⟲</button>`
         : "";
 
       const itemIdx = fileIdx;
@@ -585,7 +585,7 @@ function renderSection(
           ${revealBtn}
           ${editBtn}
           ${discardBtn}
-          <button class="file-action-btn" data-action="${action}" title="${action === "stage" ? "Stage" : "Unstage"}">
+          <button data-variant="ghost" data-icon class="file-action-btn ui-btn" data-action="${action}" title="${action === "stage" ? "Stage" : "Unstage"}">
             ${action === "stage" ? "+" : "−"}
           </button>
         </span>

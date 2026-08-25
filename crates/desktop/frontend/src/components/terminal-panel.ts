@@ -508,13 +508,13 @@ export function openTerminalSearch(tabId?: string) {
   bar.className = "term-search-bar";
   bar.setAttribute("role", "search");
   bar.innerHTML = `
-    <input class="term-search-input" type="text" placeholder="Search…" aria-label="Search in terminal" />
+    <input data-size="sm" class="term-search-input ui-input" type="text" placeholder="Search…" aria-label="Search in terminal" />
     <span class="term-search-count" aria-live="polite"></span>
-    <button type="button" class="term-search-toggle" data-opt="caseSensitive" aria-pressed="${search.caseSensitive}" title="Match case">Aa</button>
-    <button type="button" class="term-search-toggle" data-opt="regex" aria-pressed="${search.regex}" title="Regular expression">.*</button>
-    <button type="button" class="term-search-btn" data-act="prev" title="Previous match (Shift+Enter)">↑</button>
-    <button type="button" class="term-search-btn" data-act="next" title="Next match (Enter)">↓</button>
-    <button type="button" class="term-search-btn" data-act="close" title="Close (Esc)">×</button>
+    <button type="button" data-variant="ghost" data-size="sm" class="term-search-toggle ui-btn" data-opt="caseSensitive" aria-pressed="${search.caseSensitive}" title="Match case">Aa</button>
+    <button type="button" data-variant="ghost" data-size="sm" class="term-search-toggle ui-btn" data-opt="regex" aria-pressed="${search.regex}" title="Regular expression">.*</button>
+    <button type="button" data-variant="ghost" data-icon class="term-search-btn ui-btn" data-act="prev" title="Previous match (Shift+Enter)">↑</button>
+    <button type="button" data-variant="ghost" data-icon class="term-search-btn ui-btn" data-act="next" title="Next match (Enter)">↓</button>
+    <button type="button" data-variant="ghost" data-icon class="term-search-btn ui-btn" data-act="close" title="Close (Esc)">×</button>
   `;
   // Anchored to the terminal container (position: absolute, top-right) — it
   // floats over the first row and never moves with the viewport.

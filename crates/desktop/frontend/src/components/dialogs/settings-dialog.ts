@@ -20,16 +20,16 @@ export async function showSettingsDialog() {
   backdrop.className = "dialog-backdrop settings-backdrop";
 
   const dialog = document.createElement("div");
-  dialog.className = "dialog";
+  dialog.className = "dialog ui-surface";
   dialog.style.maxWidth = "640px";
   dialog.style.maxHeight = "80vh";
 
   // Header
   const header = document.createElement("div");
-  header.className = "dialog-header";
+  header.className = "ui-header";
   header.innerHTML = `
-    <span class="dialog-title">Settings</span>
-    <button class="dialog-close" title="Close" aria-label="Close">&times;</button>
+    <span class="ui-header-title">Settings</span>
+    <button data-variant="ghost" data-icon class="dialog-close ui-btn" title="Close" aria-label="Close">&times;</button>
   `;
 
   // Body
@@ -49,7 +49,7 @@ export async function showSettingsDialog() {
     <div class="settings-section-title">Shell</div>
     <div class="settings-shell-row">
       <label class="settings-label">Terminal shell command</label>
-      <input class="settings-shell-input" type="text" value="${escAttr(currentShell)}" placeholder="Default: ${envShell}" />
+      <input class="settings-shell-input ui-input" type="text" value="${escAttr(currentShell)}" placeholder="Default: ${envShell}" />
     </div>
     <div class="settings-hint">Leave empty to use system default ($SHELL). Changes apply to new Shell tabs.</div>
   `;
@@ -105,7 +105,9 @@ export async function showSettingsDialog() {
     const currentCol = document.createElement("span");
     currentCol.className = "settings-col-current";
     const keyBtn = document.createElement("button");
-    keyBtn.className = "settings-key-btn";
+    keyBtn.className = "settings-key-btn ui-btn";
+    keyBtn.dataset.variant = "secondary";
+    keyBtn.dataset.size = "sm";
     keyBtn.textContent = formatShortcut(def.key);
     if (def.key !== def.defaultKey) keyBtn.classList.add("modified");
 
@@ -161,8 +163,8 @@ export async function showSettingsDialog() {
   const footer = document.createElement("div");
   footer.className = "dialog-footer";
   footer.innerHTML = `
-    <button class="dialog-btn dialog-btn-danger" id="settings-reset">Restore Defaults</button>
-    <button class="dialog-btn dialog-btn-secondary" id="settings-close">Close</button>
+    <button data-variant="danger" class="ui-btn" id="settings-reset">Restore Defaults</button>
+    <button data-variant="secondary" class="ui-btn" id="settings-close">Close</button>
   `;
 
   dialog.appendChild(header);

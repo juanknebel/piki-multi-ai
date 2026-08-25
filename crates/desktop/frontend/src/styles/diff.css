@@ -1,32 +1,10 @@
 /* ── Diff overlay container ──────────────────────── */
+/* `.diff-viewer ui-surface` (header = .ui-header): the diff sits on the
+   canvas colour, not the dialog surface, so code rows read like an editor. */
 .diff-viewer {
   width: 90vw;
   height: 88vh;
   background: var(--bg-primary);
-  border: 1px solid var(--dialog-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  animation: dialog-enter var(--dur-base) var(--ease-out);
-}
-
-.diff-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 18px;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-primary);
-  flex-shrink: 0;
-}
-
-.diff-title {
-  font-size: var(--fs-md);
-  font-weight: 600;
-  color: var(--text-bright);
-  letter-spacing: 0.02em;
 }
 
 .diff-content {
@@ -189,12 +167,6 @@
 
 .dp-file-path { flex: 1; }
 
-.dp-empty {
-  padding: 28px;
-  text-align: center;
-  color: var(--text-muted);
-}
-
 /* ── 3-way merge ────────────────────────────────── */
 .dp-3way-row {
   display: grid;
@@ -244,27 +216,7 @@
   display: none;
 }
 
-.dp-accept-btn {
-  padding: 4px 12px;
-  border-radius: var(--radius-sm);
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  cursor: pointer;
-  border: 1px solid var(--border-primary);
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-  letter-spacing: 0.02em;
-  transition:
-    background var(--transition-fast),
-    color var(--transition-fast),
-    border-color var(--transition-fast);
-}
-
-.dp-accept-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text-bright);
-}
-
+/* Secondary sm .ui-btn per side; the hover hue says which side wins. */
 .dp-accept-ours:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
 .dp-accept-theirs:hover { border-color: var(--git-added); color: var(--git-added); }
 .dp-accept-both:hover { border-color: var(--accent-warm); color: var(--accent-warm); }
@@ -304,19 +256,8 @@
   line-height: var(--leading-normal);
 }
 
-/* Code review: honest states before the PR (and its comments) arrive */
-.cr-loading,
-.cr-error {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--sp-4);
-  padding: 32px 24px;
-  text-align: center;
-}
-
+/* Code review: honest states before the PR (and its comments) arrive —
+   `.ui-empty[data-fill]` blocks; the error one is [data-tone="error"]. */
 .cr-loading-text {
   color: var(--text-muted);
   font-size: var(--fs-lg);
@@ -333,12 +274,6 @@
 
 .cr-loading-skeleton.short {
   width: min(320px, 60%);
-}
-
-.cr-error-title {
-  color: var(--error-color);
-  font-weight: 600;
-  font-size: var(--fs-lg);
 }
 
 .cr-error-detail {
@@ -410,22 +345,13 @@
   border-left: 3px solid var(--accent-primary);
 }
 
+/* `.cr-comment-textarea ui-input`: compact mono box inside a diff row */
 .cr-comment-textarea {
-  width: 100%;
-  box-sizing: border-box;
+  min-height: 0;
   padding: 6px 8px;
   font-size: var(--fs-md);
   font-family: var(--font-mono);
-  color: var(--text-bright);
-  background: var(--bg-input);
-  border: 1px solid var(--border-primary);
   border-radius: var(--radius-sm);
-  resize: vertical;
-  outline: none;
-}
-
-.cr-comment-textarea:focus {
-  border-color: var(--accent-primary);
 }
 
 .cr-comment-form-actions {
@@ -487,14 +413,6 @@
   justify-content: space-between;
   gap: var(--sp-4);
   margin-bottom: 2px;
-}
-
-.cr-reply-btn,
-.cr-reply-edit,
-.cr-reply-delete {
-  font-size: var(--fs-xs);
-  padding: 1px 6px;
-  height: auto;
 }
 
 .cr-reply-form {

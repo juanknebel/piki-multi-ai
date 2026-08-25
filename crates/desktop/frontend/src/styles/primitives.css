@@ -1,0 +1,306 @@
+/* UI primitives — the shared building blocks every dialog and panel is made
+ * of. Feature CSS adds the primitive class in the markup (next to its own
+ * hook class) and only keeps the modifiers that are really feature-specific.
+ * Everything here is built on the token layer (variables.css); nothing below
+ * repeats a literal colour, size, stacking level or duration. Modifier attributes
+ * are wrapped in :where() so they add no specificity: a feature rule like
+ * `.dp-accept-ours:hover` (0,2,0) still beats the primitive's hover.
+ *
+ *   .ui-surface            dialog / overlay shell (bg, border, radius, shadow)
+ *   .ui-header             title row (+ .ui-header-title, .ui-header-actions)
+ *   .ui-btn                [data-variant=primary|secondary|ghost|danger]
+ *                          [data-size=sm|md] [data-icon] :disabled [aria-busy]
+ *   .ui-input              text inputs + textareas (+ [data-size=sm], invalid)
+ *   .ui-empty              empty state (+ -icon, -title, -hint, -cta, [data-fill])
+ *
+ * Usage examples live in crates/desktop/CLAUDE.md ("UI primitives"). */
+
+/* ── Surface ─────────────────────────────────────── */
+/* A floating panel: dialogs, the palette, the diff viewer, confirms. Width
+   and max-height are the caller's (`.dialog`, `.palette`, …). */
+.ui-surface {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--dialog-bg);
+  border: 1px solid var(--dialog-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg), 0 0 1px var(--border-subtle);
+  animation: dialog-enter var(--dur-base) var(--ease-out);
+}
+
+/* ── Header ──────────────────────────────────────── */
+.ui-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  min-height: var(--header-height);
+  padding: var(--sp-3) var(--sp-6);
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+}
+
+.ui-header-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-bright);
+}
+
+/* Optional actions slot: pushed to the right, never shrinks. */
+.ui-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* ── Button ──────────────────────────────────────── */
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  height: var(--control-height);
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: var(--leading-none);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast),
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    opacity var(--transition-fast);
+}
+
+.ui-btn:where([data-size="sm"]) {
+  height: var(--control-height-sm);
+  padding: 0 var(--sp-4);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-sm);
+}
+
+/* Square glyph-only button (×, ↻, +, …): sm by default, md with data-size. */
+.ui-btn:where([data-icon]) {
+  width: var(--control-height-sm);
+  height: var(--control-height-sm);
+  padding: 0;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-lg);
+  font-weight: 400;
+  flex-shrink: 0;
+}
+
+.ui-btn:where([data-icon][data-size="md"]) {
+  width: var(--control-height);
+  height: var(--control-height);
+  border-radius: var(--radius-md);
+}
+
+/* Variants */
+.ui-btn:where([data-variant="primary"]) {
+  background: var(--accent-primary);
+  color: var(--on-accent);
+}
+
+.ui-btn:where([data-variant="primary"]):hover:where(:not(:disabled)) {
+  background: var(--accent-hover);
+  box-shadow: var(--accent-glow);
+}
+
+.ui-btn:where([data-variant="secondary"]) {
+  border-color: var(--border-primary);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.ui-btn:where([data-variant="secondary"]):hover:where(:not(:disabled)) {
+  background: var(--bg-hover);
+  border-color: var(--border-active);
+  color: var(--text-bright);
+}
+
+.ui-btn:where([data-variant="ghost"]) {
+  color: var(--text-secondary);
+}
+
+.ui-btn:where([data-variant="ghost"]):hover:where(:not(:disabled)) {
+  background: var(--bg-active);
+  color: var(--text-bright);
+}
+
+.ui-btn:where([data-variant="danger"]) {
+  background: var(--error-color);
+  color: var(--on-error);
+}
+
+.ui-btn:where([data-variant="danger"]):hover:where(:not(:disabled)) {
+  opacity: 0.9;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--error-color) 25%, transparent);
+}
+
+/* A toggle that is currently on: a secondary button fills with the accent
+   (kanban sort / filter), a ghost one just turns accent (file-tree header). */
+.ui-btn:where([data-variant="secondary"]).active {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: var(--on-accent);
+}
+
+.ui-btn:where([data-variant="ghost"]).active {
+  color: var(--accent-primary);
+}
+
+/* States */
+.ui-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.ui-btn:where([aria-busy="true"]) {
+  cursor: progress;
+  animation: pulse var(--dur-pulse) ease-in-out infinite;
+}
+
+/* Keyboard focus: the ring sits outside the button so it reads on every
+   variant (an inset ring vanishes on a primary/danger fill). */
+.ui-btn:focus-visible {
+  outline: var(--focus-ring-width) solid var(--accent-focus);
+  outline-offset: 1px;
+}
+
+/* ── Input ───────────────────────────────────────── */
+/* <input> and <textarea>. Same height as .ui-btn so a row of controls
+   lines up; a textarea grows from that height and resizes vertically. */
+.ui-input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: var(--control-height);
+  padding: 0 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--fs-base);
+  line-height: var(--leading-normal);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.ui-input::placeholder {
+  color: var(--text-muted);
+}
+
+.ui-input:where(textarea) {
+  height: auto;
+  min-height: calc(var(--control-height) * 2);
+  padding: var(--sp-4) 10px;
+  resize: vertical;
+}
+
+.ui-input:where([data-size="sm"]) {
+  height: var(--control-height-sm);
+  padding: 0 var(--sp-4);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-sm);
+}
+
+/* Text fields show focus as an accent border + halo instead of the global
+   outline — the only sanctioned place for `outline: none`. */
+.ui-input:focus-visible {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: var(--focus-ring);
+}
+
+.ui-input[aria-invalid="true"] {
+  border-color: var(--error-color);
+}
+
+.ui-input[aria-invalid="true"]:focus-visible {
+  box-shadow: var(--focus-ring-error);
+}
+
+.ui-input:disabled,
+.ui-input[readonly] {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* ── Empty state ─────────────────────────────────── */
+/* Centered muted block: optional icon, title, hint, CTA. Add [data-fill] to
+   take the whole pane (kanban, chat, web preview). */
+.ui-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  padding: 20px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--fs-md);
+  line-height: var(--leading-relaxed);
+}
+
+.ui-empty:where([data-fill]) {
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  padding: 24px;
+}
+
+.ui-empty-icon {
+  font-size: var(--fs-display);
+  line-height: var(--leading-none);
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+.ui-empty-title {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.ui-empty-hint {
+  max-width: 420px;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.ui-empty-cta {
+  margin-top: var(--sp-2);
+}
+
+.ui-empty:where([data-tone="error"]) {
+  color: var(--error-color);
+}
+
+.ui-empty:where([data-tone="error"]) .ui-empty-title {
+  color: var(--error-color);
+}
+
+/* A tick-over state (Loading…, Indexing…) pulses instead of sitting still. */
+.ui-empty:where([data-tone="loading"]) {
+  animation: pulse var(--dur-pulse) ease-in-out infinite;
+}

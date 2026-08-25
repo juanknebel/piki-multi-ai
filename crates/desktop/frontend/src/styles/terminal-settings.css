@@ -27,21 +27,9 @@
   min-width: 140px;
 }
 
+/* `.term-set-input` rows are `.ui-input` (primitives.css); only widths live here. */
 .term-set-input {
-  height: 28px;
-  padding: 0 10px;
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-sm);
-  background: var(--bg-input);
-  color: var(--text-bright);
-  font-size: var(--fs-md);
   font-family: var(--font-mono);
-  outline: none;
-  transition: border-color var(--transition-fast);
-}
-
-.term-set-input:focus {
-  border-color: var(--accent-primary);
 }
 
 .term-set-input--font {

@@ -41,20 +41,20 @@ export async function showAgentManager(workspaceIdx?: number) {
     backdrop.querySelector(".dialog")?.remove();
 
     const dialog = document.createElement("div");
-    dialog.className = "dialog";
+    dialog.className = "dialog ui-surface";
     dialog.style.maxWidth = "600px";
     dialog.style.maxHeight = "80vh";
     dialog.innerHTML = `
-      <div class="dialog-header">
-        <span class="dialog-title">Agent Profiles${wsName ? ` · ${esc(wsName)}` : ""}</span>
+      <div class="ui-header">
+        <span class="ui-header-title">Agent Profiles${wsName ? ` · ${esc(wsName)}` : ""}</span>
         <span style="display:flex;gap:6px;align-items:center">
-          <button class="dialog-btn dialog-btn-secondary dialog-btn-sm" id="ag-import">Import from repo</button>
-          <button class="dialog-btn dialog-btn-primary dialog-btn-sm" id="ag-new">+ New Agent</button>
-          <button class="dialog-close" title="Close" aria-label="Close">×</button>
+          <button data-variant="secondary" data-size="sm" class="ui-btn" id="ag-import">Import from repo</button>
+          <button data-variant="primary" data-size="sm" class="ui-btn" id="ag-new">+ New Agent</button>
+          <button data-variant="ghost" data-icon class="dialog-close ui-btn" title="Close" aria-label="Close">×</button>
         </span>
       </div>
       <div class="dialog-body" style="max-height:60vh;overflow-y:auto">
-        ${agents.length === 0 ? '<div class="empty-message">No agent profiles configured for this project.</div>' : ""}
+        ${agents.length === 0 ? '<div class="ui-empty">No agent profiles configured for this project.</div>' : ""}
         ${agents.map((a) => `
           <div class="agent-manager-item" data-id="${a.id}">
             <div class="agent-manager-item-header">
@@ -64,9 +64,9 @@ export async function showAgentManager(workspaceIdx?: number) {
             </div>
             <div class="agent-manager-item-role">${esc(a.role.slice(0, 200))}${a.role.length > 200 ? "..." : ""}</div>
             <div class="agent-manager-item-actions">
-              <button class="dialog-btn dialog-btn-secondary dialog-btn-sm ag-edit" data-id="${a.id}">Edit</button>
-              <button class="dialog-btn dialog-btn-secondary dialog-btn-sm ag-sync" data-id="${a.id}">Sync</button>
-              <button class="dialog-btn dialog-btn-danger dialog-btn-sm ag-delete" data-id="${a.id}">Delete</button>
+              <button data-variant="secondary" data-size="sm" class="ui-btn ag-edit" data-id="${a.id}">Edit</button>
+              <button data-variant="secondary" data-size="sm" class="ui-btn ag-sync" data-id="${a.id}">Sync</button>
+              <button data-variant="danger" data-size="sm" class="ui-btn ag-delete" data-id="${a.id}">Delete</button>
             </div>
           </div>
         `).join("")}
@@ -161,15 +161,15 @@ async function showAgentForm(existing: AgentInfo | null, onSaved: () => void) {
 
   const isEdit = existing !== null;
   backdrop.innerHTML = `
-    <div class="dialog" style="max-width:560px">
-      <div class="dialog-header">
-        <span class="dialog-title">${isEdit ? "Edit Agent" : "New Agent"}</span>
-        <button class="dialog-close" title="Close" aria-label="Close">×</button>
+    <div class="dialog ui-surface" style="max-width:560px">
+      <div class="ui-header">
+        <span class="ui-header-title">${isEdit ? "Edit Agent" : "New Agent"}</span>
+        <button data-variant="ghost" data-icon class="dialog-close ui-btn" title="Close" aria-label="Close">×</button>
       </div>
       <div class="dialog-body">
         <div class="dialog-field">
           <label class="dialog-label">Name</label>
-          <input class="dialog-input" id="af-name" value="${esc(existing?.name ?? "")}" ${isEdit ? "readonly style='opacity:0.6'" : ""} />
+          <input class="ui-input" id="af-name" value="${esc(existing?.name ?? "")}" ${isEdit ? "readonly" : ""} />
         </div>
         <div class="dialog-field">
           <label class="dialog-label">Provider</label>
@@ -177,12 +177,12 @@ async function showAgentForm(existing: AgentInfo | null, onSaved: () => void) {
         </div>
         <div class="dialog-field">
           <label class="dialog-label">Role / Instructions</label>
-          <textarea class="dialog-textarea" id="af-role" rows="12" style="min-height:200px;font-family:var(--font-mono);font-size:12px">${esc(existing?.role ?? "")}</textarea>
+          <textarea class="ui-input" id="af-role" rows="12" style="min-height:200px;font-family:var(--font-mono);font-size:12px">${esc(existing?.role ?? "")}</textarea>
         </div>
       </div>
       <div class="dialog-footer">
-        <button class="dialog-btn dialog-btn-secondary" id="af-cancel">Cancel</button>
-        <button class="dialog-btn dialog-btn-primary" id="af-save">${isEdit ? "Save" : "Create"}</button>
+        <button data-variant="secondary" class="ui-btn" id="af-cancel">Cancel</button>
+        <button data-variant="primary" class="ui-btn" id="af-save">${isEdit ? "Save" : "Create"}</button>
       </div>
     </div>
   `;
@@ -247,23 +247,23 @@ async function showImportDialog(wsIdx: number, onImported: () => void) {
   backdrop.addEventListener("click", (e) => { if (e.target === backdrop) close(); });
 
   const dialog = document.createElement("div");
-  dialog.className = "dialog";
+  dialog.className = "dialog ui-surface";
   dialog.style.maxWidth = "500px";
   dialog.innerHTML = `
-    <div class="dialog-header">
-      <span class="dialog-title">Import Agents from Repo</span>
-      <button class="dialog-close" title="Close" aria-label="Close">×</button>
+    <div class="ui-header">
+      <span class="ui-header-title">Import Agents from Repo</span>
+      <button data-variant="ghost" data-icon class="dialog-close ui-btn" title="Close" aria-label="Close">×</button>
     </div>
     <div class="dialog-toolbar import-toolbar">
-      <input type="text" class="dialog-input import-filter" placeholder="Filter agents..." />
-      <button class="dialog-btn dialog-btn-secondary dialog-btn-sm" id="ai-select-all">Select all</button>
-      <button class="dialog-btn dialog-btn-secondary dialog-btn-sm" id="ai-select-none">Select none</button>
+      <input type="text" class="ui-input import-filter" placeholder="Filter agents..." />
+      <button data-variant="secondary" data-size="sm" class="ui-btn" id="ai-select-all">Select all</button>
+      <button data-variant="secondary" data-size="sm" class="ui-btn" id="ai-select-none">Select none</button>
       <span class="import-count"></span>
     </div>
     <div class="dialog-body" id="ai-list"></div>
     <div class="dialog-footer">
-      <button class="dialog-btn dialog-btn-secondary" id="ai-cancel">Cancel</button>
-      <button class="dialog-btn dialog-btn-primary" id="ai-import">Import (${selected.size})</button>
+      <button data-variant="secondary" class="ui-btn" id="ai-cancel">Cancel</button>
+      <button data-variant="primary" class="ui-btn" id="ai-import">Import (${selected.size})</button>
     </div>
   `;
   backdrop.appendChild(dialog);
@@ -284,7 +284,7 @@ async function showImportDialog(wsIdx: number, onImported: () => void) {
   function renderList() {
     const vis = visibleIndices();
     listEl.innerHTML = vis.length === 0
-      ? '<div class="empty-message">No agents match the filter.</div>'
+      ? '<div class="ui-empty">No agents match the filter.</div>'
       : vis.map((i) => {
           const a = scanned[i];
           return `

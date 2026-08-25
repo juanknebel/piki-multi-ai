@@ -45,37 +45,9 @@
   animation: search-slide var(--dur-fast) var(--ease-out);
 }
 
+/* `.term-search-input ui-input` (sm); prev/next/close are ghost icon .ui-btns */
 .term-search-input {
-  padding: 4px 10px;
-  background: var(--bg-input);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-size: var(--fs-md);
   width: 200px;
-  transition: border-color var(--transition-fast);
-}
-
-.term-search-input:focus {
-  border-color: var(--accent-primary);
-  box-shadow: 0 0 0 1px var(--accent-muted);
-}
-
-.term-search-btn {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  font-size: var(--fs-lg);
-  color: var(--text-secondary);
-  transition: background var(--transition-fast), color var(--transition-fast);
-}
-
-.term-search-btn:hover {
-  background: var(--bg-active);
-  color: var(--text-bright);
 }
 
 /* "3/12" (or "No results") — tabular so the digits don't wobble while typing. */
@@ -92,13 +64,9 @@
   color: var(--error-color);
 }
 
-/* Match-case / regex toggles: same box as the arrows, accent when pressed. */
+/* Match-case / regex toggles: ghost sm .ui-btn, accent when pressed. */
 .term-search-toggle {
-  height: 24px;
-  padding: 0 6px;
-  display: flex;
-  align-items: center;
-  border-radius: var(--radius-sm);
+  padding: 0 var(--sp-3);
   border: 1px solid transparent;
   font-size: var(--fs-xs);
   font-weight: 600;

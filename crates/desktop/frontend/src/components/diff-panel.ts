@@ -65,7 +65,7 @@ export class DiffPanel {
     }
 
     if (diff.hunks.length === 0) {
-      table.innerHTML = '<div class="dp-empty">No changes</div>';
+      table.innerHTML = '<div class="ui-empty">No changes</div>';
     }
 
     scroll.appendChild(table);
@@ -152,9 +152,9 @@ export class DiffPanel {
         const actions = document.createElement("div");
         actions.className = "dp-conflict-actions";
         actions.innerHTML = `
-          <button class="dp-accept-btn dp-accept-ours" data-idx="${regionIdx}">Accept Ours ►</button>
-          <button class="dp-accept-btn dp-accept-both" data-idx="${regionIdx}">Accept Both</button>
-          <button class="dp-accept-btn dp-accept-theirs" data-idx="${regionIdx}">◄ Accept Theirs</button>
+          <button data-variant="secondary" data-size="sm" class="ui-btn dp-accept-ours" data-idx="${regionIdx}">Accept Ours ►</button>
+          <button data-variant="secondary" data-size="sm" class="ui-btn dp-accept-both" data-idx="${regionIdx}">Accept Both</button>
+          <button data-variant="secondary" data-size="sm" class="ui-btn dp-accept-theirs" data-idx="${regionIdx}">◄ Accept Theirs</button>
         `;
         block.appendChild(actions);
 

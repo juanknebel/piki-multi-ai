@@ -40,41 +40,11 @@
   box-shadow: 0 0 8px color-mix(in srgb, var(--error-color) 50%, transparent);
 }
 
+/* `.web-preview-url-input ui-input`; Go / ↻ are secondary .ui-btns */
 .web-preview-url-input {
   flex: 1 1 auto;
+  width: auto;
   min-width: 120px;
-  padding: 5px 9px;
-  font-size: var(--fs-md);
-  font-family: inherit;
-  color: var(--text-primary);
-  background: var(--bg-input);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-md);
-  outline: none;
-}
-.web-preview-url-input:focus {
-  border-color: var(--accent-primary);
-  box-shadow: 0 0 0 2px var(--accent-muted);
-}
-
-.web-preview-toolbar button {
-  padding: 5px 11px;
-  font-size: var(--fs-md);
-  color: var(--text-primary);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: background var(--transition-fast), color var(--transition-fast);
-  flex: 0 0 auto;
-}
-.web-preview-toolbar button:hover {
-  background: var(--bg-active);
-  color: var(--text-bright);
-}
-.web-preview-reload {
-  font-size: var(--fs-xl);
-  line-height: var(--leading-none);
 }
 
 .web-preview-preset-wrap {

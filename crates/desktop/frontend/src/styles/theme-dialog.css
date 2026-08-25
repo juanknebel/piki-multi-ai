@@ -100,44 +100,19 @@
   border-radius: var(--radius-xs);
 }
 
+/* `.theme-color-hex ui-input` (sm) */
 .theme-color-hex {
   width: 72px;
-  padding: 3px 6px;
-  background: var(--bg-input);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-size: var(--fs-sm);
-  font-family: inherit;
   text-transform: uppercase;
 }
 
-.theme-color-hex:focus {
-  border-color: var(--accent-primary);
-  outline: none;
-}
-
+/* `.theme-color-reset ui-btn` (ghost icon), shown once a colour is overridden */
 .theme-color-reset {
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  font-size: var(--fs-md);
-  color: var(--text-muted);
   visibility: hidden;
-  flex-shrink: 0;
-  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .theme-color-row.overridden .theme-color-reset {
   visibility: visible;
-}
-
-.theme-color-reset:hover {
-  background: var(--bg-active);
-  color: var(--text-bright);
 }
 
 /* ── Footer actions ──────────────────────────────── */

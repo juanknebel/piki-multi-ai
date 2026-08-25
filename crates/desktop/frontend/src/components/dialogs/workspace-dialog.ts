@@ -46,10 +46,10 @@ export function showWorkspaceDialog(opts: DialogOptions) {
   const showName = mode !== "edit";
 
   backdrop.innerHTML = `
-    <div class="dialog">
-      <div class="dialog-header">
-        <span class="dialog-title">${title}</span>
-        <button class="dialog-close" title="Close" aria-label="Close">×</button>
+    <div class="dialog ui-surface">
+      <div class="ui-header">
+        <span class="ui-header-title">${title}</span>
+        <button data-variant="ghost" data-icon class="dialog-close ui-btn" title="Close" aria-label="Close">×</button>
       </div>
       <div class="dialog-body">
         ${
@@ -61,15 +61,15 @@ export function showWorkspaceDialog(opts: DialogOptions) {
         </div>
         <div class="dialog-field" id="ws-folder-field">
           <label class="dialog-label">Folder</label>
-          <input class="dialog-input" id="ws-dir" placeholder="/path/to/folder" value="${escapeAttr(createPrefill?.dir ?? prefill?.source_repo ?? prefill?.path ?? "")}" />
+          <input class="ui-input" id="ws-dir" placeholder="/path/to/folder" value="${escapeAttr(createPrefill?.dir ?? prefill?.source_repo ?? prefill?.path ?? "")}" />
         </div>
         <div class="dialog-field" id="ws-url-field" style="display:none">
           <label class="dialog-label">GitHub URL</label>
-          <input class="dialog-input" id="ws-url" placeholder="https://github.com/owner/repo[.git]" value="" />
+          <input class="ui-input" id="ws-url" placeholder="https://github.com/owner/repo[.git]" value="" />
         </div>
         <div class="dialog-field" id="ws-clone-dest-field" style="display:none">
           <label class="dialog-label">Clone into</label>
-          <input class="dialog-input" id="ws-clone-dest" placeholder="/parent/directory" value="" />
+          <input class="ui-input" id="ws-clone-dest" placeholder="/parent/directory" value="" />
         </div>
         `
             : ""
@@ -79,27 +79,27 @@ export function showWorkspaceDialog(opts: DialogOptions) {
             ? `
         <div class="dialog-field" id="ws-name-field">
           <label class="dialog-label">Name <span style="opacity:0.6;font-weight:normal">(optional)</span></label>
-          <input class="dialog-input" id="ws-name" placeholder="auto-derived if empty" value="${escapeAttr(mode === "clone" ? "" : prefill?.name ?? "")}" />
+          <input class="ui-input" id="ws-name" placeholder="auto-derived if empty" value="${escapeAttr(mode === "clone" ? "" : prefill?.name ?? "")}" />
         </div>
         `
             : ""
         }
         <div class="dialog-field">
           <label class="dialog-label">Description</label>
-          <input class="dialog-input" id="ws-desc" placeholder="Brief description" value="${escapeAttr(prefill?.description ?? "")}" />
+          <input class="ui-input" id="ws-desc" placeholder="Brief description" value="${escapeAttr(prefill?.description ?? "")}" />
         </div>
         <div class="dialog-field">
           <label class="dialog-label">Kanban Path</label>
-          <input class="dialog-input" id="ws-kanban" placeholder="Path to .board directory (optional)" value="${escapeAttr(prefill?.kanban_path ?? "")}" />
+          <input class="ui-input" id="ws-kanban" placeholder="Path to .board directory (optional)" value="${escapeAttr(prefill?.kanban_path ?? "")}" />
         </div>
         <div class="dialog-field">
           <label class="dialog-label">Prompt</label>
-          <textarea class="dialog-textarea" id="ws-prompt" placeholder="Initial prompt for AI tabs" rows="3">${escapeHtml(prefill?.prompt ?? "")}</textarea>
+          <textarea class="ui-input" id="ws-prompt" placeholder="Initial prompt for AI tabs" rows="3">${escapeHtml(prefill?.prompt ?? "")}</textarea>
         </div>
       </div>
       <div class="dialog-footer">
-        <button class="dialog-btn dialog-btn-secondary" id="ws-cancel">Cancel</button>
-        <button class="dialog-btn dialog-btn-primary" id="ws-submit">${mode === "edit" ? "Save" : "Create"}</button>
+        <button data-variant="secondary" class="ui-btn" id="ws-cancel">Cancel</button>
+        <button data-variant="primary" class="ui-btn" id="ws-submit">${mode === "edit" ? "Save" : "Create"}</button>
       </div>
     </div>
   `;
@@ -323,10 +323,10 @@ export function showWorkspaceInfo(index: number) {
   const backdrop = document.createElement("div");
   backdrop.className = "dialog-backdrop workspace-backdrop";
   backdrop.innerHTML = `
-    <div class="dialog" style="max-width:500px">
-      <div class="dialog-header">
-        <span class="dialog-title">Workspace Info</span>
-        <button class="dialog-close" title="Close" aria-label="Close">×</button>
+    <div class="dialog ui-surface" style="max-width:500px">
+      <div class="ui-header">
+        <span class="ui-header-title">Workspace Info</span>
+        <button data-variant="ghost" data-icon class="dialog-close ui-btn" title="Close" aria-label="Close">×</button>
       </div>
       <div class="dialog-body">
         ${infoRow("Name", info.name)}
@@ -339,7 +339,7 @@ export function showWorkspaceInfo(index: number) {
         ${infoRow("Prompt", info.prompt || "—")}
       </div>
       <div class="dialog-footer">
-        <button class="dialog-btn dialog-btn-secondary" id="ws-info-close">Close</button>
+        <button data-variant="secondary" class="ui-btn" id="ws-info-close">Close</button>
       </div>
     </div>
   `;
@@ -392,32 +392,32 @@ export function showCreateWorktreeDialog(parent: WorkspaceInfo) {
   const backdrop = document.createElement("div");
   backdrop.className = "dialog-backdrop workspace-backdrop";
   backdrop.innerHTML = `
-    <div class="dialog">
-      <div class="dialog-header">
-        <span class="dialog-title">Create Worktree</span>
-        <button class="dialog-close" title="Close" aria-label="Close">×</button>
+    <div class="dialog ui-surface">
+      <div class="ui-header">
+        <span class="ui-header-title">Create Worktree</span>
+        <button data-variant="ghost" data-icon class="dialog-close ui-btn" title="Close" aria-label="Close">×</button>
       </div>
       <div class="dialog-body">
         <div class="dialog-field">
           <label class="dialog-label">Parent</label>
-          <input class="dialog-input" value="${escapeAttr(parent.source_repo_display || parent.name)}" disabled />
+          <input class="ui-input" value="${escapeAttr(parent.source_repo_display || parent.name)}" disabled />
         </div>
         <div class="dialog-field">
           <label class="dialog-label">Branch name</label>
-          <input class="dialog-input" id="wt-name" placeholder="feature/my-branch" />
+          <input class="ui-input" id="wt-name" placeholder="feature/my-branch" />
         </div>
         <div class="dialog-field">
           <label class="dialog-label">Prompt</label>
-          <textarea class="dialog-textarea" id="wt-prompt" placeholder="Initial prompt for AI tabs" rows="3">${escapeHtml(parent.prompt ?? "")}</textarea>
+          <textarea class="ui-input" id="wt-prompt" placeholder="Initial prompt for AI tabs" rows="3">${escapeHtml(parent.prompt ?? "")}</textarea>
         </div>
         <div class="dialog-field">
           <label class="dialog-label">Kanban Path</label>
-          <input class="dialog-input" id="wt-kanban" placeholder="Path to .board directory (optional)" value="${escapeAttr(parent.kanban_path ?? "")}" />
+          <input class="ui-input" id="wt-kanban" placeholder="Path to .board directory (optional)" value="${escapeAttr(parent.kanban_path ?? "")}" />
         </div>
       </div>
       <div class="dialog-footer">
-        <button class="dialog-btn dialog-btn-secondary" id="wt-cancel">Cancel</button>
-        <button class="dialog-btn dialog-btn-primary" id="wt-submit">Create</button>
+        <button data-variant="secondary" class="ui-btn" id="wt-cancel">Cancel</button>
+        <button data-variant="primary" class="ui-btn" id="wt-submit">Create</button>
       </div>
     </div>
   `;

@@ -22,7 +22,7 @@ export function openProjectSearch() {
   backdrop.className = "palette-backdrop";
 
   const palette = document.createElement("div");
-  palette.className = "palette";
+  palette.className = "palette ui-surface";
   palette.innerHTML = `
     <input class="palette-input" type="text" placeholder="Search in project (grep)..." autofocus />
     <div class="palette-results"></div>
@@ -43,19 +43,19 @@ export function openProjectSearch() {
 
     if (searchError && input.value.trim()) {
       const el = document.createElement("div");
-      el.className = "palette-empty";
+      el.className = "ui-empty";
       el.textContent = `Search failed: ${searchError}`;
       results.appendChild(el);
       return;
     }
 
     if (matches.length === 0 && input.value.trim()) {
-      results.innerHTML = '<div class="palette-empty">No matches found</div>';
+      results.innerHTML = '<div class="ui-empty">No matches found</div>';
       return;
     }
 
     if (!input.value.trim()) {
-      results.innerHTML = '<div class="palette-empty">Type to search file contents...</div>';
+      results.innerHTML = '<div class="ui-empty">Type to search file contents...</div>';
       return;
     }
 
@@ -88,7 +88,7 @@ export function openProjectSearch() {
 
     if (matches.length === 100) {
       const more = document.createElement("div");
-      more.className = "palette-empty";
+      more.className = "ui-empty";
       more.textContent = "Showing first 100 results...";
       results.appendChild(more);
     }

@@ -1,0 +1,64 @@
+/* Providers dialog (dialogs/providers-dialog.ts). */
+.providers-dialog {
+  width: 720px;
+}
+
+.providers-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-md);
+}
+
+.providers-table thead th {
+  text-align: left;
+  padding: 8px 12px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.providers-table tbody tr {
+  transition: background var(--transition-fast);
+}
+
+.providers-table tbody tr:hover {
+  background: var(--bg-hover);
+}
+
+.providers-table tbody td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-primary);
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+
+.providers-table .col-muted {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.providers-table .col-actions {
+  text-align: right;
+  white-space: nowrap;
+  width: 1%;
+}
+
+.providers-table .col-actions .ui-btn {
+  margin-left: 6px;
+}
+
+.providers-confirm {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-6);
+  padding: 8px 4px;
+}
+
+.providers-confirm-text {
+  font-size: var(--fs-lg);
+  color: var(--text-primary);
+}

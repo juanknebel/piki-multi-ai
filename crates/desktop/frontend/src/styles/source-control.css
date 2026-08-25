@@ -19,17 +19,11 @@
   gap: 1px;
 }
 
+/* `.sc-header-btn ui-btn` (ghost, sm): glyph + count, so not a fixed square */
 .sc-header-btn {
-  padding: 3px 7px;
-  border-radius: var(--radius-sm);
+  padding: 0 var(--sp-3);
   font-size: var(--fs-md);
-  color: var(--text-secondary);
-  transition: background var(--transition-fast), color var(--transition-fast);
-}
-
-.sc-header-btn:hover:not(:disabled) {
-  background: var(--bg-active);
-  color: var(--text-bright);
+  font-weight: 400;
 }
 
 /* Push / pull in flight: the count becomes `…` and the button waits. */
@@ -49,59 +43,18 @@
   border-bottom: 1px solid var(--border-primary);
 }
 
+/* `.sc-commit-input ui-input`: short message box that grows with the text */
 .sc-commit-input {
-  width: 100%;
-  padding: 7px 10px;
-  background: var(--bg-input);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  font-family: inherit;
-  font-size: var(--fs-md);
-  resize: vertical;
   min-height: 42px;
   max-height: 120px;
-  line-height: var(--leading-normal);
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
-}
-
-.sc-commit-input:focus {
-  border-color: var(--accent-primary);
-  box-shadow: 0 0 0 2px var(--accent-muted);
-  outline: none;
-}
-
-.sc-commit-input::placeholder {
-  color: var(--text-muted);
-}
-
-.sc-commit-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--sp-3);
-  padding: 6px 14px;
-  background: var(--accent-primary);
-  color: var(--on-accent);
-  border-radius: var(--radius-md);
+  padding: 7px 10px;
   font-size: var(--fs-md);
-  font-weight: 600;
+}
+
+/* `.sc-commit-btn ui-btn` (primary) spans the commit area */
+.sc-commit-btn {
   width: 100%;
-  letter-spacing: 0.02em;
-  transition:
-    background var(--transition-fast),
-    box-shadow var(--transition-fast),
-    opacity var(--transition-fast);
-}
-
-.sc-commit-btn:hover:not(:disabled) {
-  background: var(--accent-hover);
-  box-shadow: var(--accent-glow);
-}
-
-.sc-commit-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
+  gap: var(--sp-3);
 }
 
 .sc-commit-icon {
@@ -215,23 +168,10 @@
   align-items: center;
 }
 
+/* `.sc-section-action ui-btn` (ghost icon): bold +/− glyphs */
 .sc-section-action {
-  width: 22px;
-  height: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
   font-size: var(--fs-xl);
   font-weight: 700;
-  color: var(--text-secondary);
-  flex-shrink: 0;
-  transition: background var(--transition-fast), color var(--transition-fast);
-}
-
-.sc-section-action:hover {
-  background: var(--bg-active);
-  color: var(--text-bright);
 }
 
 .sc-selected-action {

@@ -35,10 +35,10 @@ export function openBranchPicker() {
   const backdrop = document.createElement("div");
   backdrop.className = "palette-backdrop";
   const palette = document.createElement("div");
-  palette.className = "palette";
+  palette.className = "palette ui-surface";
   palette.innerHTML = `
     <input class="palette-input" type="text" placeholder="Switch branch…" autofocus />
-    <div class="palette-results"><div class="palette-empty">Loading branches…</div></div>
+    <div class="palette-results"><div class="ui-empty">Loading branches…</div></div>
   `;
   backdrop.appendChild(palette);
   document.body.appendChild(backdrop);
@@ -92,7 +92,7 @@ export function openBranchPicker() {
       results.appendChild(el);
     });
     if (shown.length === 0) {
-      results.innerHTML = '<div class="palette-empty">No matching branches</div>';
+      results.innerHTML = '<div class="ui-empty">No matching branches</div>';
     }
   }
 

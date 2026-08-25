@@ -18,17 +18,17 @@ export async function showSessionsDialog() {
   backdrop.className = "dialog-backdrop sessions-dialog-backdrop";
 
   const dialog = document.createElement("div");
-  dialog.className = "dialog";
+  dialog.className = "dialog ui-surface";
   dialog.style.maxWidth = "720px";
   dialog.style.maxHeight = "80vh";
   dialog.style.width = "88vw";
 
   dialog.innerHTML = `
-    <div class="dialog-header">
-      <span class="dialog-title" id="sessions-title">Sessions</span>
+    <div class="ui-header">
+      <span class="ui-header-title" id="sessions-title">Sessions</span>
       <span style="display:flex;gap:6px;align-items:center">
-        <button class="dialog-btn dialog-btn-secondary dialog-btn-sm" id="sessions-refresh" title="Refresh">Refresh</button>
-        <button class="dialog-close" title="Close" aria-label="Close">×</button>
+        <button data-variant="secondary" data-size="sm" class="ui-btn" id="sessions-refresh" title="Refresh">Refresh</button>
+        <button data-variant="ghost" data-icon class="dialog-close ui-btn" title="Close" aria-label="Close">×</button>
       </span>
     </div>
     <div id="sessions-body" style="flex:1;overflow-y:auto;padding:4px 0;font-size:12px"></div>
@@ -132,7 +132,7 @@ export async function showSessionsDialog() {
       if (row.state === "exited") killBtn.disabled = true;
       if (row.state === "detached") {
         const adoptBtn = actionBtn("Adopt", "Open this session as a tab here");
-        adoptBtn.classList.replace("dialog-btn-secondary", "dialog-btn-primary");
+        adoptBtn.dataset.variant = "primary";
         adoptBtn.addEventListener("click", () => void adopt(row));
         actions.append(adoptBtn);
       }
@@ -279,7 +279,9 @@ export async function showSessionsDialog() {
 
 function actionBtn(label: string, title: string): HTMLButtonElement {
   const b = document.createElement("button");
-  b.className = "dialog-btn dialog-btn-secondary dialog-btn-sm";
+  b.className = "ui-btn";
+  b.dataset.variant = "secondary";
+  b.dataset.size = "sm";
   b.textContent = label;
   b.title = title;
   return b;

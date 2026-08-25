@@ -65,7 +65,7 @@ export function buildTerminalSettingsSection(): TerminalSettingsSection {
   // Font family — free text (a CSS font-family list); empty = theme mono.
   const fontInput = document.createElement("input");
   fontInput.type = "text";
-  fontInput.className = "term-set-input term-set-input--font";
+  fontInput.className = "term-set-input term-set-input--font ui-input";
   fontInput.placeholder = "Theme font (--font-mono)";
   fontInput.value = current.fontFamily;
   fontInput.setAttribute("aria-label", "Terminal font family");
@@ -79,7 +79,7 @@ export function buildTerminalSettingsSection(): TerminalSettingsSection {
   // Font size — base px at zoom 1 with the effective size next to it.
   const sizeInput = document.createElement("input");
   sizeInput.type = "number";
-  sizeInput.className = "term-set-input term-set-input--num";
+  sizeInput.className = "term-set-input term-set-input--num ui-input";
   sizeInput.min = String(FONT_SIZE_MIN);
   sizeInput.max = String(FONT_SIZE_MAX);
   sizeInput.step = "1";

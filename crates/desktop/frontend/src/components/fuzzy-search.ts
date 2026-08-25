@@ -44,7 +44,7 @@ export function openFuzzySearch() {
   backdrop.className = "palette-backdrop";
 
   const palette = document.createElement("div");
-  palette.className = "palette";
+  palette.className = "palette ui-surface";
   palette.innerHTML = `
     <input class="palette-input" type="text" placeholder="Search files…" autofocus />
     <div class="palette-results"></div>
@@ -108,13 +108,13 @@ export function openFuzzySearch() {
 
     if (filtered.length > SHOWN_LIMIT) {
       const more = document.createElement("div");
-      more.className = "palette-empty";
+      more.className = "ui-empty";
       more.textContent = `${filtered.length - SHOWN_LIMIT} more files…`;
       results.appendChild(more);
     }
 
     if (filtered.length === 0) {
-      results.innerHTML = `<div class="palette-empty">${indexing && !allFiles.length ? "Indexing…" : "No matching files"}</div>`;
+      results.innerHTML = `<div class="ui-empty">${indexing && !allFiles.length ? "Indexing…" : "No matching files"}</div>`;
     }
   }
 
@@ -236,7 +236,7 @@ export function openFuzzySearch() {
       indexing = false;
       status.classList.remove("indexing");
       status.textContent = "Could not index files";
-      if (!allFiles.length) results.innerHTML = '<div class="palette-empty">Could not index files</div>';
+      if (!allFiles.length) results.innerHTML = '<div class="ui-empty">Could not index files</div>';
       reportError("Failed to list files", err);
     });
 }

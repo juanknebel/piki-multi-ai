@@ -14,18 +14,13 @@
   animation: overlay-in var(--dur-fast) var(--ease-out);
 }
 
+/* `.palette ui-surface` — the surface paints it; this is the size budget.
+   Palettes open on a keystroke, so they enter at the fast duration. */
 .palette {
   width: 540px;
   max-width: 90vw;
   max-height: 55vh;
-  background: var(--dialog-bg);
-  border: 1px solid var(--dialog-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg), 0 0 1px var(--border-subtle);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  animation: dialog-enter var(--dur-fast) var(--ease-out);
+  animation-duration: var(--dur-fast);
 }
 
 .palette-input {
@@ -35,8 +30,14 @@
   border-bottom: 1px solid var(--border-primary);
   color: var(--text-bright);
   font-size: var(--fs-lg);
-  outline: none;
   letter-spacing: 0.02em;
+}
+
+/* The palette's only field: focus shows on its bottom rule, not as a box. */
+.palette-input:focus-visible {
+  outline: none;
+  border-bottom-color: var(--accent-primary);
+  box-shadow: 0 1px 0 var(--accent-primary);
 }
 
 .palette-input::placeholder {
@@ -100,13 +101,6 @@
   border-radius: var(--radius-sm);
   flex-shrink: 0;
   letter-spacing: 0.02em;
-}
-
-.palette-empty {
-  padding: 20px 16px;
-  color: var(--text-muted);
-  text-align: center;
-  font-size: var(--fs-md);
 }
 
 /* File finder footer: key hints on the left, index status on the right. */

@@ -6,17 +6,7 @@
   max-height: 68vh;
 }
 
-.sysinfo-loading,
-.sysinfo-error {
-  padding: 16px 0;
-  text-align: center;
-  color: var(--text-muted);
-  font-size: var(--fs-md);
-}
-
-.sysinfo-error {
-  color: var(--git-deleted);
-}
+/* Loading / error states are `.ui-empty` blocks ([data-tone]). */
 
 .sysinfo-header {
   display: flex;

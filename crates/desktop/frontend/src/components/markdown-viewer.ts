@@ -43,11 +43,11 @@ export async function showMarkdown(filePath: string) {
   backdrop.style.paddingTop = "3vh";
 
   const viewer = document.createElement("div");
-  viewer.className = "diff-viewer";
+  viewer.className = "diff-viewer ui-surface";
   viewer.style.maxWidth = "800px";
 
   const header = document.createElement("div");
-  header.className = "diff-header";
+  header.className = "ui-header";
 
   const fileName = filePath.split("/").pop() || filePath;
 
@@ -56,12 +56,12 @@ export async function showMarkdown(filePath: string) {
 
   function renderViewMode() {
     header.innerHTML = `
-      <span class="diff-title">${esc(fileName)}<span style="color:var(--text-muted);font-weight:400;margin-left:8px;font-size:11px">${esc(filePath)}</span></span>
+      <span class="ui-header-title">${esc(fileName)}<span style="color:var(--text-muted);font-weight:400;margin-left:8px;font-size:11px">${esc(filePath)}</span></span>
       <div style="display:flex;gap:4px;align-items:center">
-        <button class="file-viewer-btn md-quick-edit" title="Quick Edit (${formatShortcut("Ctrl+I")})">Quick Edit</button>
-        <button class="file-viewer-btn md-edit" title="Open in $EDITOR (${formatShortcut("Ctrl+E")})">Edit</button>
-        <button class="file-viewer-btn md-copy" title="Copy to clipboard">Copy</button>
-        <button class="dialog-close" title="Close" aria-label="Close">×</button>
+        <button data-variant="secondary" data-size="sm" class="ui-btn md-quick-edit" title="Quick Edit (${formatShortcut("Ctrl+I")})">Quick Edit</button>
+        <button data-variant="secondary" data-size="sm" class="ui-btn md-edit" title="Open in $EDITOR (${formatShortcut("Ctrl+E")})">Edit</button>
+        <button data-variant="secondary" data-size="sm" class="ui-btn md-copy" title="Copy to clipboard">Copy</button>
+        <button data-variant="ghost" data-icon class="dialog-close ui-btn" title="Close" aria-label="Close">×</button>
       </div>
     `;
 
@@ -90,10 +90,10 @@ export async function showMarkdown(filePath: string) {
     editing = true;
 
     header.innerHTML = `
-      <span class="diff-title">${esc(fileName)} <span style="color:var(--text-muted);font-weight:400;font-size:11px">(editing)</span></span>
+      <span class="ui-header-title">${esc(fileName)} <span style="color:var(--text-muted);font-weight:400;font-size:11px">(editing)</span></span>
       <div style="display:flex;gap:4px;align-items:center">
-        <button class="file-viewer-btn md-save">Save</button>
-        <button class="file-viewer-btn md-cancel">Cancel</button>
+        <button data-variant="primary" data-size="sm" class="md-save ui-btn">Save</button>
+        <button data-variant="secondary" data-size="sm" class="ui-btn md-cancel">Cancel</button>
       </div>
     `;
 

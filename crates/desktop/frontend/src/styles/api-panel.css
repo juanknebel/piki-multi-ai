@@ -17,33 +17,6 @@
   flex-shrink: 0;
 }
 
-.api-btn {
-  font-size: var(--fs-sm);
-  padding: 4px 12px;
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-  cursor: pointer;
-  transition: background var(--transition-fast), border-color var(--transition-fast);
-}
-
-.api-btn:hover {
-  background: var(--bg-hover);
-  border-color: var(--border-active);
-}
-
-.api-send-btn {
-  background: var(--accent-primary);
-  color: var(--bg-primary);
-  border-color: var(--accent-primary);
-  font-weight: 600;
-}
-
-.api-send-btn:hover {
-  opacity: 0.9;
-}
-
 .api-status {
   font-size: var(--fs-sm);
   margin-left: auto;
@@ -107,10 +80,15 @@
   color: var(--text-bright);
   background: var(--bg-primary);
   border: none;
-  outline: none;
   resize: none;
   white-space: pre;
   overflow: auto;
+}
+
+/* Full-pane editor: inset hairline instead of the outset outline. */
+.api-editor:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring-inset);
 }
 
 .api-editor::placeholder {
@@ -125,22 +103,12 @@
   gap: var(--sp-2);
 }
 
+/* Response actions are ghost sm .ui-btns inside an uppercase pane header;
+   they keep normal case. */
 .api-resp-btn {
-  font-size: var(--fs-xs);
-  padding: 1px 6px;
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
-  color: var(--text-muted);
-  cursor: pointer;
   text-transform: none;
-  font-weight: 400;
   letter-spacing: 0;
-}
-
-.api-resp-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
+  font-weight: 400;
 }
 
 /* ── Search bar ────────────────────────────────── */
@@ -156,22 +124,11 @@
   flex-shrink: 0;
 }
 
+/* `.api-search-input ui-input` / `.api-jq-input ui-input` (sm, mono) */
 .api-search-input,
 .api-jq-input {
   flex: 1;
-  padding: 3px 8px;
-  font-size: var(--fs-sm);
   font-family: var(--font-mono);
-  color: var(--text-bright);
-  background: var(--bg-input);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-sm);
-  outline: none;
-}
-
-.api-search-input:focus,
-.api-jq-input:focus {
-  border-color: var(--accent-primary);
 }
 
 .api-search-count {
@@ -179,37 +136,6 @@
   color: var(--text-muted);
   min-width: 60px;
   text-align: center;
-}
-
-.api-search-prev,
-.api-search-next,
-.api-search-close,
-.api-jq-close {
-  font-size: var(--fs-md);
-  padding: 1px 5px;
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
-  color: var(--text-muted);
-  cursor: pointer;
-}
-
-.api-search-prev:hover,
-.api-search-next:hover,
-.api-search-close:hover,
-.api-jq-close:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.api-jq-run {
-  font-size: var(--fs-xs);
-  padding: 2px 10px;
-}
-
-.api-jq-run:disabled {
-  opacity: 0.5;
-  cursor: default;
 }
 
 .api-jq-badge {
@@ -240,18 +166,7 @@
   padding: 0;
 }
 
-.api-response-empty,
-.api-response-loading,
-.api-response-error {
-  padding: 24px;
-  text-align: center;
-  font-size: var(--fs-md);
-  color: var(--text-muted);
-}
-
-.api-response-error {
-  color: var(--error-color);
-}
+/* Empty / loading / error states are `.ui-empty` blocks ([data-tone]). */
 
 .api-response-section {
   border-bottom: 1px solid var(--border-primary);
@@ -362,76 +277,24 @@
   animation: overlay-in var(--dur-fast) var(--ease-out);
 }
 
+/* `.api-history-dialog ui-surface` (header = .ui-header) */
 .api-history-dialog {
-  background: var(--dialog-bg);
-  border: 1px solid var(--dialog-border);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 20px 60px var(--dialog-shadow);
   width: 80%;
   max-width: 800px;
   max-height: 70%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  animation: dialog-enter var(--dur-fast) var(--ease-out);
 }
 
-.api-history-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border-primary);
-  background: var(--bg-surface);
-}
-
-.api-history-title {
-  font-size: var(--fs-lg);
-  font-weight: 600;
-  color: var(--text-bright);
-}
-
-.api-history-close {
-  font-size: var(--fs-2xl);
-  padding: 2px 8px;
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-  cursor: pointer;
-}
-
-.api-history-close:hover {
-  background: var(--bg-hover);
-}
-
+/* `.api-history-search ui-input`, inset from the dialog edges */
 .api-history-search {
+  width: auto;
   margin: 8px 12px;
-  padding: 6px 10px;
-  font-size: var(--fs-md);
   font-family: var(--font-mono);
-  color: var(--text-bright);
-  background: var(--bg-input);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-sm);
-  outline: none;
-}
-
-.api-history-search:focus {
-  border-color: var(--accent-primary);
 }
 
 .api-history-list {
   flex: 1;
   overflow-y: auto;
   padding: 4px 0;
-}
-
-.api-history-empty {
-  padding: 24px;
-  text-align: center;
-  font-size: var(--fs-md);
-  color: var(--text-muted);
 }
 
 .api-history-entry {

@@ -1,0 +1,116 @@
+/* Settings dialog (dialogs/settings-dialog.ts): sections, shell row and
+ * the shortcut rebinding table. Inputs are `.ui-input`, buttons `.ui-btn`. */
+
+.settings-section {
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.settings-section:last-child {
+  border-bottom: none;
+}
+
+.settings-section-title {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.settings-shell-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+}
+
+.settings-label {
+  font-size: var(--fs-md);
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+/* `.settings-shell-input ui-input` — a mono path field that fills the row. */
+.settings-shell-input {
+  flex: 1;
+  font-family: var(--font-mono);
+}
+
+.settings-hint {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+.settings-shortcuts-table {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-shortcut-row {
+  display: flex;
+  align-items: center;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.settings-shortcut-row:last-child {
+  border-bottom: none;
+}
+
+.settings-shortcut-header {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-primary);
+  padding-bottom: 6px;
+  margin-bottom: 2px;
+}
+
+.settings-col-action {
+  flex: 1;
+  font-size: var(--fs-md);
+  color: var(--text-primary);
+}
+
+.settings-col-default {
+  width: 130px;
+  text-align: center;
+}
+
+.settings-col-default kbd {
+  font-size: var(--fs-xs);
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  color: var(--text-secondary);
+  font-family: inherit;
+}
+
+.settings-col-current {
+  width: 130px;
+  text-align: center;
+}
+
+/* `.settings-key-btn ui-btn` (secondary, sm): the current binding; turns
+   amber while recording a new chord, accent once it differs from default. */
+.settings-key-btn {
+  min-width: 80px;
+  font-weight: 500;
+  color: var(--text-bright);
+}
+
+.settings-key-btn.recording {
+  border-color: var(--accent-warm);
+  color: var(--accent-warm);
+  animation: pulse var(--dur-pulse) ease-in-out infinite;
+}
+
+.settings-key-btn.modified {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
