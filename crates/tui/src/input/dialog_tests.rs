@@ -970,18 +970,19 @@ fn dispatch_card_move_returns_none_when_dialog_not_active() {
 // ── Dashboard ──────────────────────────────────────────────────────────
 
 #[test]
-fn dashboard_with_empty_workspaces_auto_dismisses() {
-    // Per handler: any keypress with `workspaces.is_empty()` clears the
-    // dialog and returns to Normal. Verifying it doesn't panic and exits.
+fn dashboard_with_empty_workspaces_stays_open() {
+    // Dashboard always opens: workspaces part may be empty, external section
+    // still renders. j with no workspaces does not dismiss.
     let mut app = test_app();
     assert!(app.workspaces.is_empty());
     open_dashboard(&mut app);
+    assert!(matches!(app.active_dialog, Some(DialogState::Dashboard { .. })));
 
     let action = handle_dashboard_input(&mut app, key(KeyCode::Char('j')));
 
     assert!(action.is_none());
-    assert!(app.active_dialog.is_none());
-    assert_eq!(app.mode, AppMode::Normal);
+    assert!(matches!(app.active_dialog, Some(DialogState::Dashboard { .. })));
+    assert_eq!(app.mode, AppMode::Dashboard);
 }
 
 #[test]

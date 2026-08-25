@@ -83,11 +83,8 @@ pub(crate) fn open_about(app: &mut App) -> Option<Action> {
 
 pub(crate) fn open_dashboard(app: &mut App) -> Option<Action> {
     let indices = app.dashboard_indices();
-    if indices.is_empty() {
-        return None;
-    }
-    // Select the position of the active workspace within the filtered dashboard,
-    // or 0 if the active workspace has no tabs (filtered out).
+    // Always open: workspaces part may be empty (shows nothing), external
+    // agents section below always renders (either rows or “— No external … —”).
     let selected = indices
         .iter()
         .position(|&idx| idx == app.active_workspace)

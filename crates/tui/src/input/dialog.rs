@@ -743,11 +743,6 @@ pub(super) fn handle_dashboard_input(app: &mut App, key: KeyEvent) -> Option<Act
     }
     let indices = app.dashboard_indices();
     let count = indices.len();
-    if count == 0 {
-        app.active_dialog = None;
-        app.mode = AppMode::Normal;
-        return None;
-    }
     let tab_lens: Vec<usize> = indices
         .iter()
         .map(|&idx| app.workspaces[idx].tabs.len())
@@ -764,6 +759,9 @@ pub(super) fn handle_dashboard_input(app: &mut App, key: KeyEvent) -> Option<Act
     };
 
     if app.config.matches_dashboard(key, "down") || app.config.matches_dashboard(key, "down_alt") {
+        if count == 0 {
+            return None;
+        }
         if *selected + 1 < count {
             *selected += 1;
         }
@@ -775,12 +773,18 @@ pub(super) fn handle_dashboard_input(app: &mut App, key: KeyEvent) -> Option<Act
         }
     } else if app.config.matches_dashboard(key, "up") || app.config.matches_dashboard(key, "up_alt")
     {
+        if count == 0 {
+            return None;
+        }
         *selected = selected.saturating_sub(1);
         let ws_start = ws_first_line(*selected);
         if ws_start < *scroll_offset {
             *scroll_offset = ws_start;
         }
     } else if app.config.matches_dashboard(key, "select") {
+        if count == 0 {
+            return None;
+        }
         let ws_idx = indices[*selected];
         app.active_dialog = None;
         app.switch_workspace_and_focus(ws_idx);
