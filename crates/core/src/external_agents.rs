@@ -59,38 +59,70 @@ fn read_cmd(pid: u32) -> String {
 }
 
 fn detect_provider(pid: u32) -> Option<String> {
-    let candidates = [
+    // Exact binaries + substring fallback (muse-spark wrappers often run as `node` with muse in args)
+    let exact = [
         ("claude", "Claude"),
         ("codex", "Codex"),
         ("muse", "Muse Spark"),
         ("muse-spark", "Muse Spark"),
+        ("spark", "Muse Spark"),
         ("agy", "Antigravity"),
         ("antigravity", "Antigravity"),
         ("gemini", "Gemini"),
     ];
-    let check = |base: &str| {
-        for (bin, label) in candidates {
-            if base == bin {
+    let check_exact = |base: &str| {
+        let lower = base.to_ascii_lowercase();
+        for (bin, label) in exact {
+            if lower == bin {
                 return Some(label.to_string());
             }
         }
         None
     };
-    if let Some(comm) = read_comm(pid)
-        && let Some(label) = check(&comm) {
+    let check_substr = |s: &str| {
+        let lower = s.to_ascii_lowercase();
+        if lower.contains("muse") || lower.contains("spark") {
+            return Some("Muse Spark".to_string());
+        }
+        if lower.contains("antigravity") || lower == "agy" {
+            return Some("Antigravity".to_string());
+        }
+        if lower.contains("claude") {
+            return Some("Claude".to_string());
+        }
+        if lower.contains("codex") {
+            return Some("Codex".to_string());
+        }
+        if lower.contains("gemini") {
+            return Some("Gemini".to_string());
+        }
+        None
+    };
+    if let Some(comm) = read_comm(pid) {
+        if let Some(label) = check_exact(&comm) {
             return Some(label);
         }
-    if let Ok(bytes) = std::fs::read(format!("/proc/{}/cmdline", pid))
-        && let Some(first) = bytes.split(|b| *b == 0).next() {
+        // comm is truncated to 15 chars, so also try substring
+        if let Some(label) = check_substr(&comm) {
+            return Some(label);
+        }
+    }
+    if let Ok(bytes) = std::fs::read(format!("/proc/{}/cmdline", pid)) {
+        let full = String::from_utf8_lossy(&bytes).to_string();
+        if let Some(label) = check_substr(&full) {
+            return Some(label);
+        }
+        if let Some(first) = bytes.split(|b| *b == 0).next() {
             let s = String::from_utf8_lossy(first);
             let base = Path::new(s.trim())
                 .file_name()
                 .and_then(|x| x.to_str())
                 .unwrap_or("");
-            if let Some(label) = check(base) {
+            if let Some(label) = check_exact(base) {
                 return Some(label);
             }
         }
+    }
     None
 }
 
