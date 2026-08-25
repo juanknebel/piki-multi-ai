@@ -421,6 +421,30 @@
   font-size: 11px;
 }
 
+/* Elapsed run time (`3m 12s`), ticking in place. */
+.agent-row-elapsed {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+/* Count of agents needing you, next to the panel title. */
+.agents-attention-count {
+  display: inline-block;
+  min-width: 16px;
+  padding: 0 4px;
+  margin-left: 4px;
+  border-radius: 8px;
+  background: var(--warning-color);
+  color: var(--on-accent);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  vertical-align: middle;
+}
+
 /* Agent-status rollup glyph on a workspace row (⚠ permission / ● needs you).
    Steady — the pulsing dot next door already carries "new since you looked". */
 .workspace-agent-glyph {

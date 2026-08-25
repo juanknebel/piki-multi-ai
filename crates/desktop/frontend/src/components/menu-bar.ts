@@ -15,6 +15,7 @@ import { showProvidersDialog } from "./dialogs/providers-dialog";
 import { openCommandPalette } from "./command-palette";
 import { showAgentManager } from "./dialogs/agent-dialog";
 import { showDispatchDialog } from "./dialogs/dispatch-dialog";
+import { jumpToAttention } from "./agents-panel";
 import { showHelpDialog } from "./dialogs/help-dialog";
 import { closeActiveWsTab, tearDownAndClosePane } from "./tab-bar";
 import { showDashboard } from "./dialogs/dashboard-dialog";
@@ -65,15 +66,34 @@ function spawnTab(provider: AIProvider) {
 
 const SEP: MenuItem = { label: "", separator: true };
 
-// Cached provider list from providers.toml (loaded lazily, refreshed on providers dialog open)
+// Cached provider list from providers.toml — warmed at startup so the first
+// hover of File ▸ New Tab already lists them, re-warmed when the providers
+// dialog saves/deletes.
 let _cachedProviderTabs: AIProvider[] | null = null;
+let _providerLoad: Promise<void> | null = null;
+
+export function preloadProviderTabs(): Promise<void> {
+  if (_cachedProviderTabs) return Promise.resolve();
+  if (!_providerLoad) {
+    _providerLoad = ipc.listProviders()
+      .then((list) => {
+        _cachedProviderTabs = list.map((p): AIProvider => ({ Custom: p.name }));
+      })
+      .catch((err) => {
+        // Background warm-up: the submenu simply lists the built-ins until
+        // the next hover retries.
+        console.error("Failed to load providers for the New Tab menu:", err);
+      })
+      .finally(() => {
+        _providerLoad = null;
+      });
+  }
+  return _providerLoad;
+}
 
 function getProviderTabs(): AIProvider[] {
   if (!_cachedProviderTabs) {
-    // Trigger async load; return empty list for first render
-    ipc.listProviders().then((list) => {
-      _cachedProviderTabs = list.map((p): AIProvider => ({ Custom: p.name }));
-    }).catch(() => {});
+    void preloadProviderTabs();
     return [];
   }
   return _cachedProviderTabs;
@@ -82,6 +102,7 @@ function getProviderTabs(): AIProvider[] {
 /** Call after saving/deleting providers to refresh the cached list */
 export function invalidateProviderCache() {
   _cachedProviderTabs = null;
+  void preloadProviderTabs();
 }
 
 // ── Menu definitions ────────────────────────────
@@ -286,6 +307,7 @@ const MENUS: MenuDefinition[] = [
     items: () => [
       { label: "Manage Agents", shortcut: getShortcutKey("agent-manager"), action: () => showAgentManager() },
       { label: "Dispatch Agent", shortcut: getShortcutKey("dispatch-agent"), disabled: noWs, action: () => showDispatchDialog() },
+      { label: "Jump to Agent Needing Attention", shortcut: getShortcutKey("jump-attention"), action: () => jumpToAttention() },
     ],
   },
   {
@@ -316,6 +338,7 @@ let topButtons: HTMLButtonElement[] = [];
 // ── Init ────────────────────────────────────────
 
 export function initMenuBar(container: HTMLElement) {
+  void preloadProviderTabs();
   // Menu items (left side)
   MENUS.forEach((menu, idx) => {
     const btn = document.createElement("button");

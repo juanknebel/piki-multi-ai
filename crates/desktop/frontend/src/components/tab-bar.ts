@@ -7,7 +7,7 @@ import * as ipc from "../ipc";
 import { toast, reportError } from "./toast";
 import { showConfirm, escapeHtml as escapeConfirmHtml } from "./confirm";
 import { destroyTerminal } from "./terminal-panel";
-import { getProviderLabel, getTabLabel, cliAgentStatusView } from "../types";
+import { getProviderLabel, getTabLabel, cliAgentStatusView, agentStatusSeverity } from "../types";
 import type { AIProvider, TabInfo, CliAgentStatus } from "../types";
 import type { PaneId, PaneNode } from "../pane-tree";
 import { allLeaves, findPane } from "../pane-tree";
@@ -63,23 +63,31 @@ function wsTabTitle(tree: PaneNode, activePaneId: PaneId): string {
   return others > 1 ? `${base} +${others - 1}` : base;
 }
 
-/** Highest-priority agent status across all content panes in a ws-tab, or
- *  undefined if none of them are Claude agent tabs. Priority favors states
- *  that need the user: permission > idle > done > running. */
-function wsTabAgentStatus(tree: PaneNode): CliAgentStatus | undefined {
+/** Worst agent (status, attention) across all content panes in a ws-tab, or
+ *  undefined if none of them are Claude agent tabs. Severity is the shared
+ *  `agentStatusSeverity` (permission > unseen news > running); quiet states
+ *  tie-break idle > done so a waiting prompt still wins over a finished one. */
+function wsTabAgentStatus(tree: PaneNode): { status: CliAgentStatus; attention: boolean } | undefined {
   const ws = appState.activeWs;
   if (!ws) return undefined;
-  const rank: Record<CliAgentStatus, number> = {
+  const quiet: Record<CliAgentStatus, number> = {
     "waiting-permission": 3,
     idle: 2,
     done: 1,
     running: 0,
   };
-  let best: CliAgentStatus | undefined;
+  let best: { status: CliAgentStatus; attention: boolean } | undefined;
+  let bestKey = -1;
   for (const leaf of allLeaves(tree)) {
     if (!leaf.contentId) continue;
-    const st = appState.getTabShellState(leaf.contentId)?.agentStatus;
-    if (st && (best === undefined || rank[st] > rank[best])) best = st;
+    const st = appState.getTabShellState(leaf.contentId);
+    if (!st?.agentStatus) continue;
+    const attention = st.attention ?? false;
+    const key = agentStatusSeverity(st.agentStatus, attention) * 10 + quiet[st.agentStatus];
+    if (key > bestKey) {
+      bestKey = key;
+      best = { status: st.agentStatus, attention };
+    }
   }
   return best;
 }
@@ -105,7 +113,7 @@ export function renderWorkspaceTabBar(container: HTMLElement) {
     const agent = wsTabAgentStatus(wt.paneTree);
     const dot = agent
       ? (() => {
-          const v = cliAgentStatusView(agent);
+          const v = cliAgentStatusView(agent.status, agent.attention);
           return `<span class="ws-tab-agent" style="color:${v.color}" title="${escapeHtml(v.label)}">●</span>`;
         })()
       : "";
@@ -211,10 +219,11 @@ type CloseMode = "kill" | "detach";
 /** Human line for one live process, e.g. "claude — needs permission". */
 function liveProcessLine(c: TabInfo): string {
   const label = getTabLabel(c);
-  const st = appState.getTabShellState(c.id)?.agentStatus;
+  const state = appState.getTabShellState(c.id);
+  const st = state?.agentStatus;
   if (!st) return label;
-  const v = cliAgentStatusView(st);
-  const sum = appState.getTabShellState(c.id)?.agentSummary;
+  const v = cliAgentStatusView(st, state?.attention ?? false);
+  const sum = state?.agentSummary;
   return `${label} — ${v.label}${sum ? `: ${sum.slice(0, 80)}` : ""}`;
 }
 

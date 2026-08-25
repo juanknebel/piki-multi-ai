@@ -169,6 +169,7 @@ impl ShellTabState {
                 status: a.status,
                 last_summary: a.last_summary.clone(),
                 attention_pending: a.last_attention_at.is_some(),
+                run_for_ms: a.elapsed().map(|d| d.as_millis() as u64),
             }),
             window_title: self.window_title.clone(),
         }
@@ -195,6 +196,9 @@ impl ShellTabState {
             status: a.status,
             last_summary: a.last_summary.clone(),
             last_attention_at: a.attention_pending.then_some(now),
+            run_started_at: a
+                .run_for_ms
+                .map(|ms| now.checked_sub(Duration::from_millis(ms)).unwrap_or(now)),
         });
         Self {
             cwd: s.cwd.clone(),

@@ -301,6 +301,10 @@ pub struct CliAgentSnapshot {
     pub last_summary: Option<String>,
     #[serde(default)]
     pub attention_pending: bool,
+    /// How long the current run has been going, if one is in flight
+    /// (`CliAgentState::run_started_at`).
+    #[serde(default)]
+    pub run_for_ms: Option<u64>,
 }
 
 // ── Frames ───────────────────────────────────────────────────────────────
@@ -647,6 +651,7 @@ mod tests {
                     status: CliAgentStatus::WaitingPermission,
                     last_summary: Some("Wants to run Bash".into()),
                     attention_pending: true,
+                    run_for_ms: Some(1500),
                 }),
                 window_title: Some("codex".into()),
             },

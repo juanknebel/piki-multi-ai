@@ -89,6 +89,11 @@ fn main() {
                 Some(ref dir) => DataPaths::new(dir.into()),
                 None => DataPaths::default_paths(),
             };
+            // Honour `[notifications]` in config.toml — `delivery = "off"`
+            // silences the desktop, `sound = true` enables the chimes — the
+            // same way the TUI's `App::new` does.
+            piki_core::notifications::NotificationsConfig::from_config_file(&paths.config_path())
+                .apply();
             let storage = create_storage(&paths).expect("Failed to initialize storage");
             let storage = Arc::new(storage);
             let manager = WorkspaceManager::with_paths(paths.clone());

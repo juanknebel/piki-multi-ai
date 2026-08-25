@@ -4,6 +4,7 @@ import { toast } from "../toast";
 import { showConfirm } from "../confirm";
 import { createDropdown } from "../dropdown";
 import type { AgentInfo } from "../../ipc";
+import { showNeedsWorkspace } from "./needs-workspace";
 
 async function loadProviderNames(): Promise<string[]> {
   try {
@@ -14,10 +15,17 @@ async function loadProviderNames(): Promise<string[]> {
   }
 }
 
-export async function showAgentManager() {
+/** Agent profiles of one workspace's repo — the active one, or
+ *  `workspaceIdx` when opened from that workspace's row (⚙). */
+export async function showAgentManager(workspaceIdx?: number) {
   document.querySelector(".agent-manager-backdrop")?.remove();
 
-  const wsIdx = appState.activeWorkspace;
+  if (appState.workspaces.length === 0) {
+    showNeedsWorkspace("Agent profiles are stored in a workspace's repository — create one to manage them.");
+    return;
+  }
+  const wsIdx = workspaceIdx ?? appState.activeWorkspace;
+  const wsName = appState.workspaces[wsIdx]?.info.name ?? "";
   let agents: AgentInfo[];
   try {
     agents = await ipc.listAgents(wsIdx);
@@ -38,7 +46,7 @@ export async function showAgentManager() {
     dialog.style.maxHeight = "80vh";
     dialog.innerHTML = `
       <div class="dialog-header">
-        <span class="dialog-title">Agent Profiles</span>
+        <span class="dialog-title">Agent Profiles${wsName ? ` · ${esc(wsName)}` : ""}</span>
         <span style="display:flex;gap:6px;align-items:center">
           <button class="dialog-btn dialog-btn-secondary dialog-btn-sm" id="ag-import">Import from repo</button>
           <button class="dialog-btn dialog-btn-primary dialog-btn-sm" id="ag-new">+ New Agent</button>
@@ -72,7 +80,7 @@ export async function showAgentManager() {
 
     // Import
     dialog.querySelector("#ag-import")!.addEventListener("click", () => {
-      showImportDialog(() => reload());
+      showImportDialog(wsIdx, () => reload());
     });
 
     // Edit buttons
@@ -212,8 +220,7 @@ async function showAgentForm(existing: AgentInfo | null, onSaved: () => void) {
   (backdrop.querySelector(isEdit ? "#af-role" : "#af-name") as HTMLElement).focus();
 }
 
-async function showImportDialog(onImported: () => void) {
-  const wsIdx = appState.activeWorkspace;
+async function showImportDialog(wsIdx: number, onImported: () => void) {
   let scanned: ipc.ScannedAgent[];
   try {
     scanned = await ipc.scanRepoAgents(wsIdx);

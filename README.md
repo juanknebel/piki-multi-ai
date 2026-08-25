@@ -65,9 +65,9 @@ Built with Rust and [ratatui](https://ratatui.rs/).
 
 - **Multi-provider tabs** — Claude Code, Gemini, OpenCode, Kilo, Codex out of the box; add your own binaries via `providers.toml`
 - **Structured agent lifecycle** — Claude Code and Antigravity tabs report precise running / needs-permission / idle / done states through hook-driven in-band events (no PTY-silence guessing), with graceful fallback to an idle heuristic
-- **Agents pane** — one pane listing every running agent across all workspaces with live status; jump straight to any of them
+- **Agents pane** — one pane listing every running agent across all workspaces with live status and elapsed run time (`3m 12s`); jump straight to any of them. In the desktop, an agent that needs you is amber in the tab bar, status bar, Agents panel, workspace list and activity bar at once, and `Alt+A` lands on it from any workspace (permission requests first, then unseen news — press again to walk through them)
 - **Agent profiles & dispatch** — define named agents per project, sync them to provider-native subagent files, and dispatch them from a kanban card into an auto-created worktree with a composed prompt
-- **OS notifications** — agent-finished / needs-attention / command-finished toasts (or OSC 9 for tmux/ssh), with optional chimes and smart suppression when you're already looking at the tab
+- **OS notifications** — agent-finished / needs-attention / command-finished toasts (or OSC 9 for tmux/ssh), with optional chimes and smart suppression when you're already looking at the tab; one `[notifications]` config serves the TUI and the desktop
 - **AI Chat** — global chat panel backed by local LLMs (Ollama or llama.cpp), with an agentic tool-use mode that can inspect the active workspace
 
 ### Built-in tools
@@ -259,7 +259,7 @@ Custom providers appear alongside built-in providers in the New Tab menu and in 
 
 ### Notifications (`[notifications]`)
 
-How background agent events reach you:
+How background agent events reach you — the TUI and the desktop app both read this table:
 
 ```toml
 [notifications]

@@ -850,6 +850,14 @@ export function onPtyAgentEvent(
   );
 }
 
+export function onPtyAgentAck(
+  callback: (event: import("./types").PtyAgentAckEvent) => void,
+): Promise<UnlistenFn> {
+  return listen<import("./types").PtyAgentAckEvent>("pty-agent-ack", (e) =>
+    callback(e.payload),
+  );
+}
+
 export function onPtyAttention(
   callback: (event: import("./types").PtyAttentionEvent) => void,
 ): Promise<UnlistenFn> {

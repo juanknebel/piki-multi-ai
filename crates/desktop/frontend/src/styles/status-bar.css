@@ -58,6 +58,12 @@
   cursor: pointer;
 }
 
+/* Agents needing you (all workspaces) — click jumps like Alt+A. */
+.status-attention {
+  color: var(--warning-color);
+  font-weight: 600;
+}
+
 .status-sessions[data-state="on"] {
   color: var(--git-added);
 }

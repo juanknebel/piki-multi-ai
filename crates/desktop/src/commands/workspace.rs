@@ -1,5 +1,5 @@
 use parking_lot::Mutex;
-use tauri::State;
+use tauri::{AppHandle, State};
 
 use piki_core::workspace::watcher::FileWatcher;
 use piki_core::{WorkspaceInfo, WorkspaceStatus};
@@ -27,6 +27,7 @@ pub async fn default_clone_destination(
 
 #[tauri::command]
 pub async fn switch_workspace(
+    app_handle: AppHandle,
     state: State<'_, Mutex<DesktopApp>>,
     index: usize,
 ) -> Result<WorkspaceDetail, String> {
@@ -58,15 +59,20 @@ pub async fn switch_workspace(
         app.workspaces[index].changed_files = files;
         app.workspaces[index].ahead_behind = ahead_behind;
         // The switch makes this workspace's active tab visible — acknowledge
-        // its agent's "unseen news" marker, mirroring the TUI's event loop.
+        // its agent's "unseen news" marker, mirroring the TUI's event loop,
+        // and tell the frontend once the lock is gone.
         let ws = &app.workspaces[index];
-        if let Some(tab) = ws.tabs.get(ws.active_tab)
-            && let Some(shell) = tab.pty.as_ref().and_then(|p| p.shell())
-            && let Some(agent) = shell.lock().state.cli_agent.as_mut()
-        {
-            agent.acknowledge();
+        let acked = ws
+            .tabs
+            .get(ws.active_tab)
+            .filter(|tab| crate::events::acknowledge_agent_attention(tab))
+            .map(|tab| tab.id.clone());
+        let detail = ws.to_detail();
+        drop(app);
+        if let Some(tab_id) = acked {
+            crate::events::emit_agent_ack(&app_handle, &tab_id);
         }
-        Ok(app.workspaces[index].to_detail())
+        Ok(detail)
     } else {
         Err("Workspace removed during switch".to_string())
     }

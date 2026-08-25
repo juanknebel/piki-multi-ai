@@ -23,6 +23,7 @@ use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
+use serde::{Deserialize, Serialize};
 
 /// How notifications reach the user when they aren't looking at the event's
 /// tab (herdr-style selector). The in-process mailbox always records
@@ -39,6 +40,102 @@ pub enum NotificationDelivery {
     /// tmux/ssh where a desktop toast can't reach the user; the sequence is
     /// tmux-passthrough-wrapped when `$TMUX` is set.
     Terminal,
+}
+
+/// `[notifications]` in `config.toml` — how background agent events reach
+/// the user. Shared by the TUI (as part of its `Config`) and the desktop
+/// (read on its own via [`from_config_file`](Self::from_config_file)).
+/// `delivery`: `"system"` (OS desktop toast, default), `"terminal"` (OSC 9
+/// escape so the host terminal emulator notifies — works inside tmux/ssh),
+/// or `"off"`. `sound` toggles the built-in chimes (done/attention),
+/// independent of `delivery`; the `sound_*_path` overrides point at custom
+/// audio files (any format your system player decodes).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NotificationsConfig {
+    pub delivery: String,
+    pub sound: bool,
+    pub sound_path: Option<String>,
+    pub sound_done_path: Option<String>,
+    pub sound_attention_path: Option<String>,
+}
+
+impl Default for NotificationsConfig {
+    fn default() -> Self {
+        Self {
+            delivery: "system".to_string(),
+            sound: false,
+            sound_path: None,
+            sound_done_path: None,
+            sound_attention_path: None,
+        }
+    }
+}
+
+impl NotificationsConfig {
+    /// Read just the `[notifications]` table out of a `config.toml`. A
+    /// missing file, unreadable file or malformed table yields the defaults
+    /// (a warning is logged for the malformed case) — the desktop must never
+    /// refuse to start over a notification preference.
+    pub fn from_config_file(path: &std::path::Path) -> Self {
+        let Ok(text) = std::fs::read_to_string(path) else {
+            return Self::default();
+        };
+        let table = match text.parse::<toml::Table>() {
+            Ok(t) => t,
+            Err(e) => {
+                tracing::warn!(?path, %e, "config.toml did not parse; using default notifications");
+                return Self::default();
+            }
+        };
+        match table.get("notifications") {
+            None => Self::default(),
+            Some(v) => v.clone().try_into().unwrap_or_else(|e| {
+                tracing::warn!(?path, %e, "bad [notifications] table; using defaults");
+                Self::default()
+            }),
+        }
+    }
+
+    /// Parse `delivery` into the core enum, warning (once, at call time) on
+    /// unknown values and falling back to the default.
+    pub fn parsed_delivery(&self) -> NotificationDelivery {
+        use NotificationDelivery as D;
+        match self.delivery.as_str() {
+            "off" => D::Off,
+            "system" => D::System,
+            "terminal" => D::Terminal,
+            other => {
+                tracing::warn!(
+                    "unknown notifications.delivery '{other}' (expected off|system|terminal); using 'system'"
+                );
+                D::System
+            }
+        }
+    }
+
+    pub fn sound_settings(&self) -> crate::sound::SoundSettings {
+        // Expand a leading `~/` so config paths like "~/sounds/ding.wav" work.
+        let p = |s: &Option<String>| {
+            s.as_ref().map(|s| match s.strip_prefix("~/") {
+                Some(rest) => crate::xdg::home_dir().join(rest),
+                None => std::path::PathBuf::from(s),
+            })
+        };
+        crate::sound::SoundSettings {
+            enabled: self.sound,
+            path: p(&self.sound_path),
+            done_path: p(&self.sound_done_path),
+            attention_path: p(&self.sound_attention_path),
+        }
+    }
+
+    /// Push these preferences into the process-global delivery + sound
+    /// layers. Both binaries call this once at startup.
+    pub fn apply(&self) {
+        set_delivery(self.parsed_delivery());
+        crate::sound::set_settings(self.sound_settings());
+    }
 }
 
 static DELIVERY: AtomicU8 = AtomicU8::new(1); // System
@@ -407,6 +504,37 @@ fn spawn_toast(summary: String, body: String) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn notifications_config_reads_only_its_table_and_defaults_otherwise() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+
+        // No file at all → defaults.
+        let cfg = NotificationsConfig::from_config_file(&path);
+        assert_eq!(cfg.parsed_delivery(), NotificationDelivery::System);
+        assert!(!cfg.sound);
+
+        std::fs::write(
+            &path,
+            "[sessions]\nenabled = false\n[notifications]\ndelivery = \"off\"\nsound = true\nsound_done_path = \"~/d.wav\"\n",
+        )
+        .unwrap();
+        let cfg = NotificationsConfig::from_config_file(&path);
+        assert_eq!(cfg.parsed_delivery(), NotificationDelivery::Off);
+        let s = cfg.sound_settings();
+        assert!(s.enabled);
+        assert!(s.done_path.unwrap().ends_with("d.wav"));
+
+        // Unknown delivery value falls back to system; malformed TOML → defaults.
+        std::fs::write(&path, "[notifications]\ndelivery = \"banana\"\n").unwrap();
+        assert_eq!(
+            NotificationsConfig::from_config_file(&path).parsed_delivery(),
+            NotificationDelivery::System
+        );
+        std::fs::write(&path, "this is = not toml [").unwrap();
+        assert!(!NotificationsConfig::from_config_file(&path).sound);
+    }
 
     fn fresh_item(origin: &str, title: &str) -> NotificationItem {
         NotificationItem {

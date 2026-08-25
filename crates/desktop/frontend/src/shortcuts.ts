@@ -105,6 +105,7 @@ const shortcuts: ShortcutDef[] = [
   { id: "code-review", label: "Code Review (PR)", category: "Git", defaultKey: "Ctrl+Shift+R", key: "Ctrl+Shift+R", action: () => {}, terminalCapture: true },
   { id: "agent-manager", label: "Manage Agents", category: "Agents", defaultKey: "Ctrl+Shift+A", key: "Ctrl+Shift+A", action: () => {}, terminalCapture: true },
   { id: "dispatch-agent", label: "Dispatch Agent", category: "Agents", defaultKey: "Ctrl+Shift+D", key: "Ctrl+Shift+D", action: () => {}, terminalCapture: true },
+  { id: "jump-attention", label: "Jump to Agent Needing Attention", category: "Agents", defaultKey: "Alt+A", key: "Alt+A", action: () => {}, terminalCapture: true },
   { id: "new-tab", label: "New Blank Tab", category: "Panes & Tabs", defaultKey: "Ctrl+T", key: "Ctrl+T", action: () => {} },
   { id: "split-right", label: "Split Pane Right", category: "Panes & Tabs", defaultKey: "Ctrl+\\", key: "Ctrl+\\", action: () => {} },
   { id: "split-down", label: "Split Pane Down", category: "Panes & Tabs", defaultKey: "Ctrl+Shift+\\", key: "Ctrl+Shift+\\", action: () => {} },

@@ -8,7 +8,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use piki_core::ChangedFile;
 use piki_core::notifications;
 
-use crate::state::DesktopApp;
+use crate::state::{DesktopApp, DesktopTab};
 
 #[derive(Serialize, Clone)]
 pub struct GitRefreshPayload {
@@ -40,6 +40,42 @@ pub struct PtyAttentionPayload {
     pub workspace_idx: usize,
     pub tab_id: String,
     pub source: &'static str,
+}
+
+/// Tauri event payload emitted when a tab's agent attention marker is
+/// cleared backend-side because the user is (now) looking at that tab. The
+/// frontend drops its amber "needs you" for `tab_id` everywhere at once.
+#[derive(Serialize, Clone)]
+pub struct PtyAgentAckPayload {
+    pub tab_id: String,
+}
+
+/// Acknowledge `tab`'s agent "unseen news" marker — the user is looking at
+/// it. Returns true only when a pending marker was actually cleared, so the
+/// caller can emit [`emit_agent_ack`] once it has dropped the `DesktopApp`
+/// lock (never emit under it). Mirrors the TUI event loop, which acks the
+/// active tab on every iteration.
+pub fn acknowledge_agent_attention(tab: &DesktopTab) -> bool {
+    let Some(shell) = tab.pty.as_ref().and_then(|p| p.shell()) else {
+        return false;
+    };
+    let mut guard = shell.lock();
+    match guard.state.cli_agent.as_mut() {
+        Some(agent) if agent.last_attention_at.is_some() => {
+            agent.acknowledge();
+            true
+        }
+        _ => false,
+    }
+}
+
+pub fn emit_agent_ack(app_handle: &AppHandle, tab_id: &str) {
+    let _ = app_handle.emit(
+        "pty-agent-ack",
+        PtyAgentAckPayload {
+            tab_id: tab_id.to_string(),
+        },
+    );
 }
 
 #[allow(dead_code)]

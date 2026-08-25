@@ -529,6 +529,10 @@ pub struct AgentRow {
     /// Unseen news (permission / idle / done the user hasn't looked at).
     pub attention: bool,
     pub summary: Option<String>,
+    /// Seconds since the current run began (session start / last prompt),
+    /// `None` once it stopped. The panel formats it (`3m 12s`) and ticks it
+    /// locally between refreshes.
+    pub elapsed_secs: Option<u64>,
 }
 
 #[tauri::command]
@@ -544,6 +548,7 @@ pub fn list_agent_rows(state: State<'_, Mutex<DesktopApp>>) -> Vec<AgentRow> {
                         a.status,
                         a.last_attention_at.is_some(),
                         a.last_summary.clone(),
+                        a.elapsed().map(|d| d.as_secs()),
                     )
                 })
             });
@@ -562,9 +567,9 @@ pub fn list_agent_rows(state: State<'_, Mutex<DesktopApp>>) -> Vec<AgentRow> {
             } else {
                 format!("Claude ({})", tab.provider.label())
             };
-            let (status, attention, summary) = match snapshot {
-                Some((s, a, sum)) => (Some(s), a, sum),
-                None => (None, false, None),
+            let (status, attention, summary, elapsed_secs) = match snapshot {
+                Some((s, a, sum, e)) => (Some(s), a, sum, e),
+                None => (None, false, None, None),
             };
             rows.push(AgentRow {
                 workspace_idx: wi,
@@ -576,6 +581,7 @@ pub fn list_agent_rows(state: State<'_, Mutex<DesktopApp>>) -> Vec<AgentRow> {
                 status,
                 attention,
                 summary,
+                elapsed_secs,
             });
         }
     }

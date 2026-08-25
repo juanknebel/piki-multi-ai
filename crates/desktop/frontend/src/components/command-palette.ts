@@ -26,6 +26,7 @@ import { openTerminalSearch } from "./terminal-panel";
 import { showThemeDialog } from "./dialogs/theme-dialog";
 import { showLogsDialog } from "./dialogs/logs-dialog";
 import { showSessionsDialog } from "./dialogs/sessions-dialog";
+import { jumpToAttention } from "./agents-panel";
 import { showAboutDialog } from "./dialogs/about-dialog";
 import { getProviderLabel, getProviderKey, type AIProvider } from "../types";
 import { openWebPreviewTab } from "./web-preview-panel";
@@ -442,6 +443,13 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
       action: () => showDispatchDialog(),
     });
   }
+  cmds.push({
+    id: "agent-jump-attention",
+    label: "Jump to Agent Needing Attention",
+    category: "Agents",
+    keybinding: getShortcutKey("jump-attention"),
+    action: () => jumpToAttention(),
+  });
 
   // Undo
   if (ws) {

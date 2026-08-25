@@ -7,6 +7,7 @@ import type {
   WorkspaceStatus,
   CliAgentStatus,
   PtyAgentEvent,
+  AgentRow,
 } from "./types";
 import * as ipc from "./ipc";
 import { settingsStore } from "./settings";
@@ -52,7 +53,8 @@ export type StateEvent =
   | "pane-tree-changed"
   | "active-pane-changed"
   | "tab-shell-state-changed"
-  | "workspace-attention-changed";
+  | "workspace-attention-changed"
+  | "agent-rows-changed";
 
 /** A top-level workspace tab. Each one owns its own pane tree; every pane
  *  (leaf) holds at most one content item from `WorkspaceState.tabs`. */
@@ -96,6 +98,9 @@ export interface TabShellState {
   /** Structured Claude Code agent status (Claude tabs only). `undefined`
    *  until the first cli-agent event arrives. */
   agentStatus?: CliAgentStatus;
+  /** Unseen agent news (permission / idle / done the user hasn't looked
+   *  at). Set by `pty-agent-event`, cleared by `pty-agent-ack`. */
+  attention?: boolean;
   /** Last human-relevant agent text: permission preview, or the agent's
    *  final response preview on `done`. */
   agentSummary?: string;
@@ -544,12 +549,54 @@ class AppState extends EventTarget {
 
   applyAgentEvent(event: PtyAgentEvent) {
     const existing = this._tabShellStates.get(event.tab_id) ?? {};
-    const next: TabShellState = { ...existing, agentStatus: event.status };
+    const next: TabShellState = { ...existing, agentStatus: event.status, attention: event.attention };
     // Keep the last meaningful summary; transient events (running) carry
     // none and shouldn't wipe a permission/done message already shown.
     if (event.summary) next.agentSummary = event.summary;
     this._tabShellStates.set(event.tab_id, next);
     this.emit("tab-shell-state-changed");
+  }
+
+  /** The backend cleared a tab's attention marker (the user is looking at
+   *  it) — drop the amber "needs you" for that tab everywhere. */
+  applyAgentAck(tabId: string) {
+    const existing = this._tabShellStates.get(tabId);
+    if (!existing?.attention) return;
+    this._tabShellStates.set(tabId, { ...existing, attention: false });
+    this.emit("tab-shell-state-changed");
+  }
+
+  // ── Agent rows (Agents panel / rollups / Alt+A) ───
+
+  private _agentRows: AgentRow[] = [];
+  private _agentRowsFetchedAt = 0;
+
+  /** Live agent tabs across ALL workspaces, from `list_agent_rows` — the
+   *  one source every agent signal reads (Agents panel, workspace-list
+   *  rollup, status-bar segment, activity-bar badge, `Alt+A`). Refreshed
+   *  by `startAgentRowsSync()` in agents-panel.ts. */
+  get agentRows(): AgentRow[] {
+    return this._agentRows;
+  }
+  /** `Date.now()` of the last refresh — elapsed times tick from it. */
+  get agentRowsFetchedAt(): number {
+    return this._agentRowsFetchedAt;
+  }
+  setAgentRows(rows: AgentRow[]) {
+    this._agentRows = rows;
+    this._agentRowsFetchedAt = Date.now();
+    // The rows are the backend's truth about per-tab agent state; seed the
+    // tab bar's per-tab view from them so a tab whose events fired before
+    // this window listened (daemon re-attach) still shows its dot.
+    for (const row of rows) {
+      if (!row.status) continue;
+      const existing = this._tabShellStates.get(row.tab_id) ?? {};
+      if (existing.agentStatus === row.status && (existing.attention ?? false) === row.attention) continue;
+      const next: TabShellState = { ...existing, agentStatus: row.status, attention: row.attention };
+      if (row.summary && !existing.agentSummary) next.agentSummary = row.summary;
+      this._tabShellStates.set(row.tab_id, next);
+    }
+    this.emit("agent-rows-changed");
   }
 
   /** Flag workspaces that received restored sessions at startup (except the

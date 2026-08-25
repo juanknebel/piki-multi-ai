@@ -329,6 +329,14 @@ impl Tab {
             agent.last_summary.clone(),
         ))
     }
+
+    /// How long the tab's agent run has been going (`3m 12s` in the Agents
+    /// pane), if one is in flight.
+    pub fn cli_agent_elapsed(&self) -> Option<std::time::Duration> {
+        let shell = self.pty_session.as_ref()?.shell()?;
+        let guard = shell.lock();
+        guard.state.cli_agent.as_ref()?.elapsed()
+    }
 }
 
 /// A single workspace backed by a git worktree
@@ -1120,8 +1128,7 @@ impl App {
         let config = crate::config::Config::load_from(paths);
         // Propagate notification prefs to the shared core layer (process
         // globals — the notify_* helpers read them on every event).
-        piki_core::notifications::set_delivery(config.notifications.parsed_delivery());
-        piki_core::sound::set_settings(config.notifications.sound_settings());
+        config.notifications.apply();
         let syntax = crate::syntax::SyntaxHighlighter::new(&config.syntax_theme);
         Self {
             should_quit: false,

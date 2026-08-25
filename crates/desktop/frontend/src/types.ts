@@ -135,6 +135,29 @@ export interface PtyAgentEvent {
    *  `tool_complete`, `permission_request`, `notification`, `stop`. */
   kind: string;
   summary?: string;
+  /** The tab has news the user hasn't looked at. Already false when the
+   *  event landed on the tab on screen (that counts as seen); cleared
+   *  later by a `pty-agent-ack`. */
+  attention: boolean;
+}
+
+/** The backend cleared a tab's agent attention marker — the user is looking
+ *  at it (tab switch, workspace switch, or news landing on the visible
+ *  tab). Mirrors `events::PtyAgentAckPayload`. */
+export interface PtyAgentAckEvent {
+  tab_id: string;
+}
+
+/** Compact elapsed label — mirror of `piki_core::cli_agent::format_elapsed`
+ *  (`45s`, `3m 12s`, `1h 02m`); the TUI Agents pane shows the same. */
+export function formatElapsed(secs: number): string {
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = Math.floor(secs % 60);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  if (h > 0) return `${h}h ${pad(m)}m`;
+  if (m > 0) return `${m}m ${pad(s)}s`;
+  return `${s}s`;
 }
 
 /** Glyph / label / theme color for a Claude agent status. Shared by the
@@ -199,6 +222,9 @@ export interface AgentRow {
   status: CliAgentStatus | null;
   attention: boolean;
   summary: string | null;
+  /** Seconds since the run began (session start / last prompt), `null`
+   *  once stopped. Snapshot at fetch time — see `liveElapsedSecs`. */
+  elapsed_secs: number | null;
 }
 
 /** One row of the Sessions dialog. Mirrors `SessionRow` in commands/session.rs. */

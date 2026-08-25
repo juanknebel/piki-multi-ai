@@ -4,6 +4,7 @@ import { toast } from "../toast";
 import { createDropdown, type DropdownOption } from "../dropdown";
 import type { AgentInfo } from "../../ipc";
 import type { AIProvider } from "../../types";
+import { showNeedsWorkspace } from "./needs-workspace";
 
 // All AI agent providers live in providers.toml — loaded via ipc.listProviders().
 
@@ -18,6 +19,10 @@ export interface CardContext {
 export async function showDispatchDialog(cardContext?: CardContext) {
   document.querySelector(".dispatch-backdrop")?.remove();
 
+  if (appState.workspaces.length === 0) {
+    showNeedsWorkspace("Agents are dispatched into a workspace's worktree — create one first.");
+    return;
+  }
   const wsIdx = appState.activeWorkspace;
   let agents: AgentInfo[];
   try {

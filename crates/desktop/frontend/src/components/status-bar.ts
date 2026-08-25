@@ -2,6 +2,9 @@ import { appState } from "../state";
 import { getProviderLabel, getTabLabel, cliAgentStatusView, type FileStatus } from "../types";
 import { showAboutDialog } from "./dialogs/about-dialog";
 import { showSessionsDialog } from "./dialogs/sessions-dialog";
+import { jumpToAttention } from "./agents-panel";
+import { attentionRows } from "../agent-attention";
+import { getShortcutKey } from "../shortcuts";
 import * as ipc from "../ipc";
 
 const STAGED_STATUSES: FileStatus[] = ["Staged", "Added", "Renamed", "StagedModified"];
@@ -49,7 +52,19 @@ export function renderStatusBar(container: HTMLElement) {
     spacer.className = "status-spacer";
     container.appendChild(spacer);
 
-    // Right side
+    // Right side.
+    // Agents needing you, across ALL workspaces — the signal that survives
+    // a hidden sidebar. Click = the `Alt+A` jump.
+    const needing = attentionRows(appState.agentRows);
+    if (needing.length > 0) {
+      const item = document.createElement("div");
+      item.className = "status-item clickable status-attention";
+      item.textContent = `● ${needing.length} need${needing.length === 1 ? "s" : ""} you`;
+      item.title = `${needing.map((r) => `${r.workspace_name} · ${r.label}`).join("\n")}\nClick or ${getShortcutKey("jump-attention")} to jump`;
+      item.addEventListener("click", () => jumpToAttention());
+      container.appendChild(item);
+    }
+
     if (ws && ws.tabs.length > 0) {
       const tab = ws.tabs[ws.activeTab];
       if (tab) {
@@ -63,7 +78,7 @@ export function renderStatusBar(container: HTMLElement) {
         // Claude agent tabs: structured status glyph + summary preview.
         const agentState = appState.getTabShellState(tab.id);
         if (agentState?.agentStatus) {
-          const v = cliAgentStatusView(agentState.agentStatus);
+          const v = cliAgentStatusView(agentState.agentStatus, agentState.attention ?? false);
           const sum = agentState.agentSummary
             ? `: ${truncate(agentState.agentSummary, 60)}`
             : "";
@@ -112,6 +127,7 @@ export function renderStatusBar(container: HTMLElement) {
   appState.on("active-tab-changed", render);
   appState.on("sysinfo-changed", render);
   appState.on("tab-shell-state-changed", render);
+  appState.on("agent-rows-changed", render);
   render();
 
   // Poll LSP status on its own cadence, patching the live element in place.

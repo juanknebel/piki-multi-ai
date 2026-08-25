@@ -13,7 +13,6 @@ import { showAgentManager } from "./dialogs/agent-dialog";
 import {
   actionableStatusView,
   agentStatusSeverity,
-  type AgentRow,
   type WorkspaceInfo,
 } from "../types";
 
@@ -58,31 +57,13 @@ export function renderWorkspaceList(container: HTMLElement) {
     render();
   }
 
-  // Live agent tabs across all workspaces, for the per-row status rollup.
-  // Same source as the Agents panel; refreshed (debounced) on agent events.
-  let agentRows: AgentRow[] = [];
-  let agentRefreshQueued = false;
-
-  function scheduleAgentRefresh() {
-    if (agentRefreshQueued) return;
-    agentRefreshQueued = true;
-    setTimeout(async () => {
-      agentRefreshQueued = false;
-      try {
-        agentRows = await ipc.listAgentRows();
-      } catch {
-        agentRows = [];
-      }
-      render();
-    }, 100);
-  }
-
   /** Worst (status, attention) among the agents of `indices`, or null when
-   *  none reports. Severity order shared with core / the TUI. */
+   *  none reports. Severity order shared with core / the TUI. Reads the
+   *  shared `appState.agentRows` (same source as the Agents panel). */
   function agentRollup(indices: (idx: number) => boolean) {
     let best: { status: import("../types").CliAgentStatus; attention: boolean } | null = null;
     let bestSev = 0;
-    for (const row of agentRows) {
+    for (const row of appState.agentRows) {
       if (!row.status || !indices(row.workspace_idx)) continue;
       const sev = agentStatusSeverity(row.status, row.attention);
       if (best === null || sev > bestSev) {
@@ -259,7 +240,7 @@ export function renderWorkspaceList(container: HTMLElement) {
           e.stopPropagation();
           const action = btn.dataset.action;
           if (action === "agents") {
-            showAgentManager();
+            showAgentManager(idx);
           } else if (action === "info") {
             showWorkspaceInfo(idx);
           } else if (action === "edit") {
@@ -281,13 +262,9 @@ export function renderWorkspaceList(container: HTMLElement) {
   appState.on("workspaces-changed", () => void refreshRows());
   appState.on("active-workspace-changed", render);
   appState.on("workspace-attention-changed", render);
-  // Agent lifecycle events land in per-tab shell state; tab churn and tab
-  // switches (which acknowledge attention backend-side) also move the rollup.
-  appState.on("tab-shell-state-changed", scheduleAgentRefresh);
-  appState.on("tabs-changed", scheduleAgentRefresh);
-  appState.on("active-tab-changed", scheduleAgentRefresh);
-  appState.on("active-workspace-changed", scheduleAgentRefresh);
-  scheduleAgentRefresh();
+  // Agent lifecycle events, tab churn and tab switches (which acknowledge
+  // attention backend-side) all land in `appState.agentRows`.
+  appState.on("agent-rows-changed", render);
   render();
 }
 

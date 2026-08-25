@@ -440,27 +440,30 @@ pub async fn spawn_terminal_at(
 
 #[tauri::command]
 pub async fn set_active_tab(
+    app_handle: AppHandle,
     state: State<'_, Mutex<DesktopApp>>,
     workspace_idx: usize,
     tab_idx: usize,
 ) -> Result<(), String> {
-    let mut app = state.lock();
-    if workspace_idx >= app.workspaces.len() {
-        return Err("Workspace index out of range".to_string());
-    }
-    let is_visible = app.active_workspace == workspace_idx;
-    let ws = &mut app.workspaces[workspace_idx];
-    if tab_idx >= ws.tabs.len() {
-        return Err("Tab index out of range".to_string());
-    }
-    ws.active_tab = tab_idx;
-    // Looking at a tab acknowledges its "unseen news" marker, so the agent
-    // attention badge clears the same way it does in the TUI's event loop.
-    if is_visible
-        && let Some(shell) = ws.tabs[tab_idx].pty.as_ref().and_then(|p| p.shell())
-        && let Some(agent) = shell.lock().state.cli_agent.as_mut()
-    {
-        agent.acknowledge();
+    let acked = {
+        let mut app = state.lock();
+        if workspace_idx >= app.workspaces.len() {
+            return Err("Workspace index out of range".to_string());
+        }
+        let is_visible = app.active_workspace == workspace_idx;
+        let ws = &mut app.workspaces[workspace_idx];
+        if tab_idx >= ws.tabs.len() {
+            return Err("Tab index out of range".to_string());
+        }
+        ws.active_tab = tab_idx;
+        // Looking at a tab acknowledges its "unseen news" marker, so the
+        // agent attention badge clears the same way it does in the TUI's
+        // event loop; the frontend hears about it via `pty-agent-ack`.
+        let tab = &ws.tabs[tab_idx];
+        (is_visible && crate::events::acknowledge_agent_attention(tab)).then(|| tab.id.clone())
+    };
+    if let Some(tab_id) = acked {
+        crate::events::emit_agent_ack(&app_handle, &tab_id);
     }
     Ok(())
 }

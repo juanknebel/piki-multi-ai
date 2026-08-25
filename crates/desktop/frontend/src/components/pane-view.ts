@@ -35,6 +35,7 @@ export function initPaneView(container: HTMLElement) {
   // just that strip, never the whole pane tree (avoids terminal remount).
   appState.on("tab-shell-state-changed", refreshWsTabBar);
   appState.on("workspace-attention-changed", refreshWsTabBar);
+  appState.on("agent-rows-changed", refreshWsTabBar);
 }
 
 function refreshWsTabBar() {

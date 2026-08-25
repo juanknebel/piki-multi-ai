@@ -88,3 +88,11 @@
   padding: 0 4px;
   box-shadow: var(--accent-glow);
 }
+
+/* Agents needing you — amber, on the Explorer icon so a hidden sidebar or
+   another view never hides the signal. */
+.activity-badge--attention {
+  background: var(--warning-color);
+  color: var(--on-accent);
+  box-shadow: var(--accent-warm-glow);
+}

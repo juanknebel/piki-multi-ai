@@ -39,6 +39,7 @@ import { showSysinfoDialog } from "./components/dialogs/sysinfo-dialog";
 import { showThemeDialog } from "./components/dialogs/theme-dialog";
 import { showLogsDialog } from "./components/dialogs/logs-dialog";
 import { showSessionsDialog } from "./components/dialogs/sessions-dialog";
+import { jumpToAttention, startAgentRowsSync } from "./components/agents-panel";
 import { initMenuBar } from "./components/menu-bar";
 import { initChatPanel, initChatResize, toggleChatPanel } from "./components/chat-panel";
 import { initTooltips } from "./components/tooltip";
@@ -126,6 +127,13 @@ async function init() {
   ipc.onPtyAgentEvent((event) => {
     appState.applyAgentEvent(event);
   });
+  // The backend acknowledged a tab's agent news (the user is looking at it).
+  ipc.onPtyAgentAck((event) => {
+    appState.applyAgentAck(event.tab_id);
+  });
+  // Every agent signal (Agents panel, rollups, status bar, badge, Alt+A)
+  // reads `appState.agentRows`; keep it in sync from here on.
+  startAgentRowsSync();
 
   // Provider-tab idle notifications (and any other backend "needs attention").
   ipc.onPtyAttention((event) => {
@@ -178,6 +186,7 @@ async function init() {
   bindAction("code-review", () => showCodeReview());
   bindAction("agent-manager", () => showAgentManager());
   bindAction("dispatch-agent", () => showDispatchDialog());
+  bindAction("jump-attention", () => jumpToAttention());
   bindAction("kanban", () => appState.setActiveView("kanban"));
   bindAction("web-preview", () => openWebPreviewTab());
   bindAction("theme", () => showThemeDialog());

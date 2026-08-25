@@ -61,6 +61,10 @@ struct PtyAgentEventPayload {
     kind: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     summary: Option<String>,
+    /// The tab has news the user hasn't looked at (permission / idle /
+    /// done) — already false when the event landed on the tab on screen,
+    /// which counts as seen. Cleared later by `pty-agent-ack`.
+    attention: bool,
 }
 
 pub struct RawLocalPty {
@@ -684,13 +688,57 @@ fn cli_agent_view(ev: &CliAgentEvent) -> (&'static str, &'static str, Option<Str
     }
 }
 
+/// Where a cli-agent event's tab lives, resolved under the `DesktopApp` lock.
+struct LocatedTab {
+    workspace_idx: usize,
+    workspace_name: String,
+    icon: Option<String>,
+    from_active_view: bool,
+    /// The event's attention marker was cleared on the spot because the
+    /// user is looking at this very tab (TUI semantics: seen as it lands).
+    acked: bool,
+}
+
 /// Handle a structured Claude Code lifecycle event: always push a
-/// `pty-agent-event` (per-tab status glyph), and for the attention-worthy
-/// ones (`permission_request`, `notification`, `stop`) also ride the shared
-/// attention rail — `pty-attention` for the sidebar badge plus a de-duped
-/// OS notification (regardless of which workspace is active).
+/// `pty-agent-event` (per-tab status glyph + `attention` flag), and for the
+/// attention-worthy ones (`permission_request`, `notification`, `stop`) also
+/// ride the shared attention rail — `pty-attention` for the sidebar badge
+/// plus a de-duped OS notification (regardless of which workspace is
+/// active). News landing on the tab on screen is acknowledged immediately,
+/// so the amber "needs you" only ever points somewhere the user isn't.
 fn handle_cli_agent(app_handle: &AppHandle, tab_id: &str, ev: &CliAgentEvent) {
     let (status, kind, summary, needs_attention) = cli_agent_view(ev);
+
+    // Workspace lookup walks `DesktopApp.workspaces` by `tab_id`; a tab that
+    // was closed between read and dispatch still gets its status event but
+    // skips the attention rail.
+    let located = app_handle
+        .try_state::<Mutex<DesktopApp>>()
+        .and_then(|state| {
+            let app = state.lock();
+            let (idx, ws) = app
+                .workspaces
+                .iter()
+                .enumerate()
+                .find(|(_, ws)| ws.tabs.iter().any(|t| t.id == tab_id))?;
+            let tab = ws.tabs.iter().find(|t| t.id == tab_id)?;
+            let icon = app
+                .provider_manager
+                .get(tab.provider.label())
+                .and_then(|c| c.icon.clone());
+            let from_active_view = app.active_workspace == idx
+                && ws.tabs.get(ws.active_tab).map(|t| t.id.as_str()) == Some(tab_id);
+            let acked = from_active_view
+                && needs_attention
+                && crate::events::acknowledge_agent_attention(tab);
+            Some(LocatedTab {
+                workspace_idx: idx,
+                workspace_name: ws.info.name.clone(),
+                icon,
+                from_active_view,
+                acked,
+            })
+        });
 
     let _ = app_handle.emit(
         "pty-agent-event",
@@ -699,44 +747,21 @@ fn handle_cli_agent(app_handle: &AppHandle, tab_id: &str, ev: &CliAgentEvent) {
             status,
             kind,
             summary: summary.clone(),
+            attention: needs_attention && !located.as_ref().is_some_and(|l| l.acked),
         },
     );
 
     if !needs_attention {
         return;
     }
-
-    let Some(state) = app_handle.try_state::<Mutex<DesktopApp>>() else {
+    let Some(located) = located else {
         return;
-    };
-    let (workspace_idx, workspace_name, icon, from_active_view) = {
-        let app = state.lock();
-        let Some((idx, ws)) = app
-            .workspaces
-            .iter()
-            .enumerate()
-            .find(|(_, ws)| ws.tabs.iter().any(|t| t.id == tab_id))
-        else {
-            return;
-        };
-        let label = ws
-            .tabs
-            .iter()
-            .find(|t| t.id == tab_id)
-            .map(|t| t.provider.label().to_string());
-        let icon = label
-            .as_deref()
-            .and_then(|l| app.provider_manager.get(l))
-            .and_then(|c| c.icon.clone());
-        let active_view = app.active_workspace == idx
-            && ws.tabs.get(ws.active_tab).map(|t| t.id.as_str()) == Some(tab_id);
-        (idx, ws.info.name.clone(), icon, active_view)
     };
 
     let _ = app_handle.emit(
         "pty-attention",
         PtyAttentionPayload {
-            workspace_idx,
+            workspace_idx: located.workspace_idx,
             tab_id: tab_id.to_string(),
             source: "cli-agent",
         },
@@ -744,11 +769,11 @@ fn handle_cli_agent(app_handle: &AppHandle, tab_id: &str, ev: &CliAgentEvent) {
     // `tab_id` is the desktop UUID — globally unique → perfect mailbox origin.
     notifications::notify_cli_agent(
         tab_id,
-        &workspace_name,
+        &located.workspace_name,
         kind,
         summary.as_deref(),
-        icon.as_deref(),
-        from_active_view,
+        located.icon.as_deref(),
+        located.from_active_view,
     );
 }
 

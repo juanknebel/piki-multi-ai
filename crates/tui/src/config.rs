@@ -40,68 +40,9 @@ impl Default for KanbanConfig {
     }
 }
 
-/// `[notifications]` — how background agent events reach the user.
-/// `delivery`: `"system"` (OS desktop toast, default), `"terminal"` (OSC 9
-/// escape so the host terminal emulator notifies — works inside tmux/ssh),
-/// or `"off"`. `sound` toggles the built-in chimes (done/attention),
-/// independent of `delivery`; the `sound_*_path` overrides point at custom
-/// audio files (any format your system player decodes).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct NotificationsConfig {
-    pub delivery: String,
-    pub sound: bool,
-    pub sound_path: Option<String>,
-    pub sound_done_path: Option<String>,
-    pub sound_attention_path: Option<String>,
-}
-
-impl Default for NotificationsConfig {
-    fn default() -> Self {
-        Self {
-            delivery: "system".to_string(),
-            sound: false,
-            sound_path: None,
-            sound_done_path: None,
-            sound_attention_path: None,
-        }
-    }
-}
-
-impl NotificationsConfig {
-    /// Parse `delivery` into the core enum, warning (once, at call time) on
-    /// unknown values and falling back to the default.
-    pub fn parsed_delivery(&self) -> piki_core::notifications::NotificationDelivery {
-        use piki_core::notifications::NotificationDelivery as D;
-        match self.delivery.as_str() {
-            "off" => D::Off,
-            "system" => D::System,
-            "terminal" => D::Terminal,
-            other => {
-                tracing::warn!(
-                    "unknown notifications.delivery '{other}' (expected off|system|terminal); using 'system'"
-                );
-                D::System
-            }
-        }
-    }
-
-    pub fn sound_settings(&self) -> piki_core::sound::SoundSettings {
-        // Expand a leading `~/` so config paths like "~/sounds/ding.wav" work.
-        let p = |s: &Option<String>| {
-            s.as_ref().map(|s| match s.strip_prefix("~/") {
-                Some(rest) => piki_core::xdg::home_dir().join(rest),
-                None => std::path::PathBuf::from(s),
-            })
-        };
-        piki_core::sound::SoundSettings {
-            enabled: self.sound,
-            path: p(&self.sound_path),
-            done_path: p(&self.sound_done_path),
-            attention_path: p(&self.sound_attention_path),
-        }
-    }
-}
+/// `[notifications]` — shared with the desktop, which reads the same table
+/// from `config.toml` on its own. See `piki_core::notifications`.
+pub use piki_core::notifications::NotificationsConfig;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {

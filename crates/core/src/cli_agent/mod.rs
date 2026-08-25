@@ -21,7 +21,7 @@
 //! understand are dropped (the tab falls back to the heuristic idle watcher).
 
 use std::path::PathBuf;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
@@ -210,6 +210,10 @@ pub struct CliAgentState {
     /// Set when the user should look at this tab (permission / idle / done).
     /// Cleared by [`acknowledge`](Self::acknowledge) on focus.
     pub last_attention_at: Option<Instant>,
+    /// When the current run began: the session start or the last prompt
+    /// submit, whichever is later. Cleared on `Stop` so a finished turn
+    /// stops ticking; UIs show [`elapsed`](Self::elapsed) next to the status.
+    pub run_started_at: Option<Instant>,
 }
 
 impl CliAgentState {
@@ -224,8 +228,13 @@ impl CliAgentState {
                 // A fresh session sits at the prompt waiting for input — it
                 // is not running until a prompt is submitted.
                 self.status = CliAgentStatus::Idle;
+                self.run_started_at = Some(Instant::now());
             }
-            CliAgentEvent::UserPromptSubmit { .. } | CliAgentEvent::PostToolUse { .. } => {
+            CliAgentEvent::UserPromptSubmit { .. } => {
+                self.status = CliAgentStatus::Running;
+                self.run_started_at = Some(Instant::now());
+            }
+            CliAgentEvent::PostToolUse { .. } => {
                 self.status = CliAgentStatus::Running;
             }
             CliAgentEvent::PermissionRequest { summary, .. } => {
@@ -241,6 +250,7 @@ impl CliAgentState {
                 self.status = CliAgentStatus::Done;
                 self.last_summary = response.clone();
                 self.last_attention_at = Some(Instant::now());
+                self.run_started_at = None;
             }
         }
     }
@@ -248,6 +258,25 @@ impl CliAgentState {
     /// Drop the attention marker (e.g. when the user focuses this tab).
     pub fn acknowledge(&mut self) {
         self.last_attention_at = None;
+    }
+
+    /// How long the current run has been going, if one is in flight.
+    pub fn elapsed(&self) -> Option<Duration> {
+        self.run_started_at.map(|t| t.elapsed())
+    }
+}
+
+/// Compact elapsed-time label shared by the TUI Agents pane and (mirrored
+/// in TypeScript) the desktop Agents panel: `45s`, `3m 12s`, `1h 02m`.
+pub fn format_elapsed(d: Duration) -> String {
+    let secs = d.as_secs();
+    let (h, m, s) = (secs / 3600, (secs % 3600) / 60, secs % 60);
+    if h > 0 {
+        format!("{h}h {m:02}m")
+    } else if m > 0 {
+        format!("{m}m {s:02}s")
+    } else {
+        format!("{s}s")
     }
 }
 
