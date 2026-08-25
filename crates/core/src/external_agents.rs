@@ -1,5 +1,5 @@
-//! Discover external `claude` agents via /proc (Linux).
-//! Minimal v1: only `claude` binary, tree by ppid, mapped to workspace by longest cwd prefix.
+//! Discover external agents via /proc (Linux).
+//! Supports claude, codex, muse (muse-spark), antigravity/agy. Tree by ppid, mapped to workspace by longest cwd prefix.
 
 use std::collections::{HashMap, HashSet};
 use serde::Serialize;
@@ -13,6 +13,7 @@ pub struct ExternalAgent {
     pub ppid: u32,
     pub cwd: Option<PathBuf>,
     pub cmd: String,
+    pub provider: String,
     pub workspace_idx: Option<usize>,
 }
 
@@ -57,10 +58,27 @@ fn read_cmd(pid: u32) -> String {
     read_comm(pid).unwrap_or_default()
 }
 
-fn is_claude(pid: u32) -> bool {
+fn detect_provider(pid: u32) -> Option<String> {
+    let candidates = [
+        ("claude", "Claude"),
+        ("codex", "Codex"),
+        ("muse", "Muse Spark"),
+        ("muse-spark", "Muse Spark"),
+        ("agy", "Antigravity"),
+        ("antigravity", "Antigravity"),
+        ("gemini", "Gemini"),
+    ];
+    let check = |base: &str| {
+        for (bin, label) in candidates {
+            if base == bin {
+                return Some(label.to_string());
+            }
+        }
+        None
+    };
     if let Some(comm) = read_comm(pid)
-        && comm == "claude" {
-            return true;
+        && let Some(label) = check(&comm) {
+            return Some(label);
         }
     if let Ok(bytes) = std::fs::read(format!("/proc/{}/cmdline", pid))
         && let Some(first) = bytes.split(|b| *b == 0).next() {
@@ -69,11 +87,11 @@ fn is_claude(pid: u32) -> bool {
                 .file_name()
                 .and_then(|x| x.to_str())
                 .unwrap_or("");
-            if base == "claude" {
-                return true;
+            if let Some(label) = check(base) {
+                return Some(label);
             }
         }
-    false
+    None
 }
 
 fn workspace_for_cwd(cwd: &Path, workspaces: &[WorkspaceInfo]) -> Option<usize> {
@@ -107,9 +125,9 @@ pub fn scan_external_agents(workspaces: &[WorkspaceInfo]) -> Vec<AgentTree> {
         let Ok(pid) = name.parse::<u32>() else {
             continue;
         };
-        if !is_claude(pid) {
+        let Some(provider) = detect_provider(pid) else {
             continue;
-        }
+        };
         let ppid = read_ppid(pid).unwrap_or(0);
         let cwd = read_cwd(pid);
         let cmd = read_cmd(pid);
@@ -121,6 +139,7 @@ pub fn scan_external_agents(workspaces: &[WorkspaceInfo]) -> Vec<AgentTree> {
             ppid,
             cwd,
             cmd,
+            provider,
             workspace_idx,
         });
     }

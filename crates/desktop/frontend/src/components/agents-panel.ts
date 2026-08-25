@@ -113,7 +113,7 @@ export function renderAgentsPanel(container: HTMLElement) {
     if (external.length > 0) {
       const header = document.createElement("div");
       header.className = "agents-external-header";
-      header.textContent = `External claude (${external.length})`;
+      header.textContent = `External (${external.length})`;
       list.appendChild(header);
       for (const tree of external) {
         const wsName = tree.root.workspace_name ?? "Outside";
@@ -126,7 +126,7 @@ export function renderAgentsPanel(container: HTMLElement) {
             <span class="agent-row-title">
               <span class="agent-row-ws">${escapeHtml(wsName)}</span>
               <span class="agent-row-sep">·</span>
-              <span class="agent-row-label">#${tree.root.pid}</span>
+              <span class="agent-row-label">${escapeHtml(tree.root.provider)} #${tree.root.pid}</span>
             </span>
             <span class="agent-row-summary">${escapeHtml(cwd)}${tree.children.length ? ` · ↳ ${tree.children.length} sub` : ""}</span>
           </span>
@@ -153,7 +153,7 @@ export function renderAgentsPanel(container: HTMLElement) {
           cEl.innerHTML = `
             <span class="agent-row-glyph" style="color:var(--text-muted)">└─</span>
             <span class="agent-row-main">
-              <span class="agent-row-title"><span class="agent-row-label">#${child.pid}</span></span>
+              <span class="agent-row-title"><span class="agent-row-label">${escapeHtml(child.provider)} #${child.pid}</span></span>
               <span class="agent-row-summary">${escapeHtml(child.cmd.slice(0, 50))}</span>
             </span>
           `;

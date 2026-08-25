@@ -559,6 +559,7 @@ pub struct ExternalAgentPayload {
     pub ppid: u32,
     pub cwd: Option<String>,
     pub cmd: String,
+    pub provider: String,
     pub workspace_idx: Option<usize>,
     pub workspace_name: Option<String>,
 }
@@ -587,6 +588,7 @@ pub fn list_external_agents(state: State<'_, Mutex<DesktopApp>>) -> Vec<External
                 ppid: t.root.ppid,
                 cwd: t.root.cwd.map(|p| p.to_string_lossy().to_string()),
                 cmd: t.root.cmd,
+                provider: t.root.provider,
                 workspace_idx: t.root.workspace_idx,
                 workspace_name: root_ws_name,
             };
@@ -600,6 +602,7 @@ pub fn list_external_agents(state: State<'_, Mutex<DesktopApp>>) -> Vec<External
                         ppid: c.ppid,
                         cwd: c.cwd.map(|p| p.to_string_lossy().to_string()),
                         cmd: c.cmd,
+                        provider: c.provider.clone(),
                         workspace_idx: c.workspace_idx,
                         workspace_name: ws_name,
                     }

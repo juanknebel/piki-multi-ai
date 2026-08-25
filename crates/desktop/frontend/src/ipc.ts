@@ -587,6 +587,7 @@ export interface ExternalAgentPayload {
   ppid: number;
   cwd: string | null;
   cmd: string;
+  provider: string;
   workspace_idx: number | null;
   workspace_name: string | null;
 }

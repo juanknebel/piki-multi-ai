@@ -147,12 +147,12 @@ pub(crate) fn render_dashboard_overlay(frame: &mut Frame, area: Rect, app: &App)
     // ── External agents section (minimal v1: claude pids via /proc) ──
     if app.external_agents.is_empty() {
         body_lines.push(Line::from(Span::styled(
-            "  — No external claude agents —",
+            "  — No external agents —",
             Style::default().fg(theme.palette.fg3),
         )));
     } else {
         body_lines.push(Line::from(Span::styled(
-            "  External claude agents:",
+            "  External agents:",
             Style::default().fg(theme.palette.fg1).add_modifier(Modifier::BOLD),
         )));
         for tree in &app.external_agents {
@@ -168,7 +168,7 @@ pub(crate) fn render_dashboard_overlay(frame: &mut Frame, area: Rect, app: &App)
                 .as_deref()
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_else(|| "—".to_string());
-            let cwd_short: String = cwd.chars().take(40).collect();
+            let cwd_short: String = cwd.chars().take(30).collect();
             body_lines.push(Line::from(vec![
                 Span::styled("    ", Style::default()),
                 Span::styled(
@@ -176,7 +176,7 @@ pub(crate) fn render_dashboard_overlay(frame: &mut Frame, area: Rect, app: &App)
                     Style::default().fg(theme.workspace_list.name_active),
                 ),
                 Span::styled(
-                    format!("#{}", tree.root.pid),
+                    format!("{} #{}", tree.root.provider, tree.root.pid),
                     Style::default().fg(theme.palette.fg0),
                 ),
                 Span::styled(
