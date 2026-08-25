@@ -42,6 +42,7 @@ import { showSessionsDialog } from "./components/dialogs/sessions-dialog";
 import { jumpToAttention, startAgentRowsSync } from "./components/agents-panel";
 import { initMenuBar } from "./components/menu-bar";
 import { initChatPanel, initChatResize, toggleChatPanel } from "./components/chat-panel";
+import { initUiZoom, resetZoom, zoomIn, zoomOut } from "./ui-zoom";
 import { initTooltips } from "./components/tooltip";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { themeEngine } from "./theme";
@@ -52,6 +53,8 @@ async function init() {
   await settingsStore.load();
   // Load theme before rendering to avoid flash
   await themeEngine.loadFromStorage();
+  // Persisted UI zoom (rem scale + terminal font) — before anything renders.
+  initUiZoom();
 
   initTooltips();
   initMenuBar(document.getElementById("menu-bar")!);
@@ -200,6 +203,12 @@ async function init() {
   bindAction("toggle-sidebar", () => toggleSidebar());
   bindAction("toggle-chat", () => toggleChatPanel());
   bindAction("help", () => showHelpDialog());
+  bindAction("zoom-in", zoomIn);
+  bindAction("zoom-out", zoomOut);
+  bindAction("zoom-reset", resetZoom);
+  bindAction("zoom-in-terminal", zoomIn);
+  bindAction("zoom-out-terminal", zoomOut);
+  bindAction("zoom-reset-terminal", resetZoom);
   bindAction("new-tab", () => appState.newBlankTab());
   bindAction("split-right", () => appState.splitActivePane("right"));
   bindAction("split-down", () => appState.splitActivePane("down"));

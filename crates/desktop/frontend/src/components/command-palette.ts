@@ -38,6 +38,7 @@ import { revealInFileTree, toggleFileTreeAutoReveal } from "./file-tree";
 import { getCodeEditorFilePath } from "./code-editor-panel";
 import { getMarkdownEditorFilePath } from "./markdown-editor-panel";
 import { getShortcutKey, formatShortcut } from "../shortcuts";
+import { resetZoom, zoomIn, zoomOut } from "../ui-zoom";
 
 interface Command {
   id: string;
@@ -561,6 +562,27 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
     category: "View",
     keybinding: getShortcutKey("toggle-chat"),
     action: () => toggleChatPanel(),
+  });
+  cmds.push({
+    id: "zoom-in",
+    label: "Zoom In",
+    category: "View",
+    keybinding: getShortcutKey("zoom-in"),
+    action: () => zoomIn(),
+  });
+  cmds.push({
+    id: "zoom-out",
+    label: "Zoom Out",
+    category: "View",
+    keybinding: getShortcutKey("zoom-out"),
+    action: () => zoomOut(),
+  });
+  cmds.push({
+    id: "zoom-reset",
+    label: "Reset Zoom",
+    category: "View",
+    keybinding: getShortcutKey("zoom-reset"),
+    action: () => resetZoom(),
   });
   cmds.push({
     id: "view-dashboard",

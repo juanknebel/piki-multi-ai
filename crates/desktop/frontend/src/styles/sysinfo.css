@@ -11,7 +11,7 @@
   padding: 16px 0;
   text-align: center;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--fs-md);
 }
 
 .sysinfo-error {
@@ -21,29 +21,29 @@
 .sysinfo-header {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--sp-5);
   padding: 0 2px 8px;
   flex-wrap: wrap;
 }
 
 .sysinfo-hostname {
-  font-size: 13px;
+  font-size: var(--fs-lg);
   font-weight: 700;
   color: var(--text-bright);
 }
 
 .sysinfo-os {
-  font-size: 11px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
 }
 
 .sysinfo-uptime {
-  font-size: 11px;
+  font-size: var(--fs-sm);
   color: var(--text-muted);
 }
 
 .sysinfo-time {
-  font-size: 11px;
+  font-size: var(--fs-sm);
   color: var(--text-muted);
   margin-left: auto;
 }
@@ -53,7 +53,7 @@
 .sysinfo-gauges {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 8px;
+  gap: var(--sp-4);
   padding: 4px 0;
 }
 
@@ -72,7 +72,7 @@
 }
 
 .sysinfo-gauge-label {
-  font-size: 11px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--text-secondary);
   text-transform: uppercase;
@@ -80,7 +80,7 @@
 }
 
 .sysinfo-gauge-pct {
-  font-size: 13px;
+  font-size: var(--fs-lg);
   font-weight: 700;
   color: var(--text-bright);
   font-variant-numeric: tabular-nums;
@@ -89,34 +89,34 @@
 .sysinfo-gauge-track {
   height: 6px;
   background: var(--bg-primary);
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   overflow: hidden;
 }
 
 .sysinfo-gauge-fill {
   height: 100%;
-  border-radius: 3px;
-  transition: width 0.6s var(--ease-out), background 0.3s;
+  border-radius: var(--radius-xs);
+  transition: width var(--transition-slow), background var(--transition-normal);
   min-width: 2px;
 }
 
 .sysinfo-gauge-fill.gauge-ok {
   background: var(--git-added);
-  box-shadow: 0 0 6px rgba(63, 185, 80, 0.3);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--success-color) 30%, transparent);
 }
 
 .sysinfo-gauge-fill.gauge-warn {
   background: var(--accent-warm);
-  box-shadow: 0 0 6px rgba(230, 167, 48, 0.3);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--warning-color) 30%, transparent);
 }
 
 .sysinfo-gauge-fill.gauge-critical {
   background: var(--git-deleted);
-  box-shadow: 0 0 6px rgba(248, 81, 73, 0.3);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--error-color) 30%, transparent);
 }
 
 .sysinfo-gauge-detail {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   margin-top: 4px;
   font-variant-numeric: tabular-nums;
@@ -125,7 +125,7 @@
 /* ── Per-core CPU breakdown ──────────────────── */
 
 .sysinfo-section-label {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -136,19 +136,19 @@
 .sysinfo-cores {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 4px;
+  gap: var(--sp-2);
   padding: 0 2px;
 }
 
 .sysinfo-core {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
   height: 20px;
 }
 
 .sysinfo-core-id {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text-muted);
   min-width: 18px;
@@ -160,14 +160,14 @@
   flex: 1;
   height: 4px;
   background: var(--bg-primary);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   overflow: hidden;
 }
 
 .sysinfo-core-fill {
   height: 100%;
-  border-radius: 2px;
-  transition: width 0.6s var(--ease-out), background 0.3s;
+  border-radius: var(--radius-xs);
+  transition: width var(--transition-slow), background var(--transition-normal);
   min-width: 1px;
 }
 
@@ -184,7 +184,7 @@
 }
 
 .sysinfo-core-pct {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text-secondary);
   min-width: 28px;
@@ -202,7 +202,7 @@
 }
 
 .sysinfo-load-label {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -210,7 +210,7 @@
 }
 
 .sysinfo-load-val {
-  font-size: 12px;
+  font-size: var(--fs-md);
   font-weight: 600;
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;

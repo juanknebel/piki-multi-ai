@@ -4,7 +4,7 @@
 
 .ft-header-actions {
   display: flex;
-  gap: 4px;
+  gap: var(--sp-2);
   align-items: center;
 }
 
@@ -24,9 +24,9 @@
   border: 1px solid var(--border-primary);
   color: var(--text-bright);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--fs-md);
   padding: 3px 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   outline: none;
 }
 
@@ -36,7 +36,7 @@
 
 .ft-path {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--fs-sm);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -53,13 +53,13 @@
 .ft-row {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--sp-2);
   width: 100%;
   border: 0;
   background: none;
   color: var(--text-primary);
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: var(--fs-lg);
+  line-height: var(--leading-relaxed);
   padding: 1px 8px 1px 6px;
   text-align: left;
   cursor: pointer;
@@ -88,7 +88,7 @@
 .ft-chevron {
   width: 12px;
   height: 12px;
-  transition: transform 0.12s ease;
+  transition: transform var(--transition-fast);
 }
 
 .ft-twisty.open .ft-chevron {
@@ -103,7 +103,7 @@
 }
 
 .ft-note {
-  font-size: 12px;
+  font-size: var(--fs-md);
   color: var(--text-muted);
   padding: 1px 8px;
   font-style: italic;
@@ -112,7 +112,7 @@
 .ft-dir-dot {
   width: 16px;
   text-align: center;
-  font-size: 7px;
+  font-size: var(--fs-3xs);
   flex-shrink: 0;
   color: var(--accent-primary);
 }
@@ -128,8 +128,8 @@
   border: 1px solid var(--border-active);
   color: var(--text-bright);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--fs-lg);
   padding: 0 4px;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   outline: none;
 }

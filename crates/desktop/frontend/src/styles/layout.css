@@ -1,6 +1,11 @@
 #app {
   display: grid;
-  grid-template-columns: var(--activity-bar-width) var(--sidebar-width) 4px 1fr 0px 0px;
+  /* The sidebar column is capped at half the window even if a persisted
+     width is wider; the editor column never drops below --editor-min-width
+     (layout-budget.ts keeps the sidebar/chat clamps to the same budget). */
+  grid-template-columns:
+    var(--activity-bar-width) min(var(--sidebar-width), 50vw) 4px
+    minmax(var(--editor-min-width), 1fr) 0px 0px;
   grid-template-rows: var(--menubar-height) 1fr var(--statusbar-height);
   grid-template-areas:
     "menubar  menubar  menubar menubar menubar  menubar"
@@ -13,7 +18,7 @@
 }
 
 #app.sidebar-hidden {
-  grid-template-columns: var(--activity-bar-width) 0px 0px 1fr 0px 0px;
+  grid-template-columns: var(--activity-bar-width) 0px 0px minmax(var(--editor-min-width), 1fr) 0px 0px;
 }
 
 #app.sidebar-hidden #sidebar,
@@ -23,11 +28,13 @@
 
 /* Chat panel visible */
 #app.chat-visible {
-  grid-template-columns: var(--activity-bar-width) var(--sidebar-width) 4px 1fr 4px var(--chat-panel-width);
+  grid-template-columns:
+    var(--activity-bar-width) min(var(--sidebar-width), 50vw) 4px
+    minmax(var(--editor-min-width), 1fr) 4px var(--chat-panel-width);
 }
 
 #app.sidebar-hidden.chat-visible {
-  grid-template-columns: var(--activity-bar-width) 0px 0px 1fr 4px var(--chat-panel-width);
+  grid-template-columns: var(--activity-bar-width) 0px 0px minmax(var(--editor-min-width), 1fr) 4px var(--chat-panel-width);
 }
 
 /* Hide chat elements when not visible (default state) */
@@ -111,7 +118,11 @@
   height: 1px;
   width: 100%;
   background: var(--border-subtle);
-  transition: all var(--transition-normal);
+  transition:
+    top var(--transition-normal),
+    height var(--transition-normal),
+    background var(--transition-normal),
+    box-shadow var(--transition-normal);
 }
 
 #agents-resize-h:hover::after,
@@ -120,7 +131,7 @@
   height: 3px;
   background: var(--accent-primary);
   box-shadow: var(--accent-glow);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
 }
 
 #sidebar-resize-v {
@@ -139,7 +150,11 @@
   width: 1px;
   height: 100%;
   background: var(--border-primary);
-  transition: all var(--transition-normal);
+  transition:
+    left var(--transition-normal),
+    width var(--transition-normal),
+    background var(--transition-normal),
+    box-shadow var(--transition-normal);
 }
 
 #sidebar-resize-v:hover::after,
@@ -148,7 +163,7 @@
   width: 3px;
   background: var(--accent-primary);
   box-shadow: var(--accent-glow);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
 }
 
 #chat-panel {
@@ -175,7 +190,11 @@
   width: 1px;
   height: 100%;
   background: var(--border-primary);
-  transition: all var(--transition-normal);
+  transition:
+    right var(--transition-normal),
+    width var(--transition-normal),
+    background var(--transition-normal),
+    box-shadow var(--transition-normal);
 }
 
 #chat-resize-v:hover::after,
@@ -184,7 +203,7 @@
   width: 3px;
   background: var(--accent-primary);
   box-shadow: var(--accent-glow);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
 }
 
 #editor-area {
@@ -214,16 +233,46 @@
   left: 0;
   width: 100%;
   height: 100%;
-  z-index: 100;
+  z-index: var(--z-backdrop);
   pointer-events: none;
 }
 
 #overlay-container.active {
   pointer-events: auto;
-  background: rgba(0, 0, 0, 0.55);
+  background: var(--scrim);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
-  animation: overlay-in 0.2s var(--ease-out);
+  animation: overlay-in var(--dur-base) var(--ease-out);
+}
+
+/* ── Small windows ───────────────────────────────── */
+/* At or below CHAT_OVERLAY_BREAKPOINT (layout-budget.ts — keep the two
+   numbers equal) the chat gives its column back to the editor and floats
+   over it, docked right, so sidebar + chat can never starve the editor. */
+@media (max-width: 1000px) {
+  #app.chat-visible {
+    grid-template-columns:
+      var(--activity-bar-width) min(var(--sidebar-width), 50vw) 4px
+      minmax(var(--editor-min-width), 1fr) 0px 0px;
+  }
+
+  #app.sidebar-hidden.chat-visible {
+    grid-template-columns: var(--activity-bar-width) 0px 0px minmax(var(--editor-min-width), 1fr) 0px 0px;
+  }
+
+  #app.chat-visible #chat-resize-v {
+    display: none;
+  }
+
+  #app.chat-visible #chat-panel {
+    position: fixed;
+    top: var(--menubar-height);
+    bottom: var(--statusbar-height);
+    right: 0;
+    width: min(var(--chat-panel-width), calc(100vw - var(--activity-bar-width)));
+    z-index: var(--z-sticky);
+    box-shadow: var(--shadow-lg);
+  }
 }
 
 /* ── Toasts ──────────────────────────────────────── */
@@ -231,8 +280,8 @@
   position: fixed;
   bottom: calc(var(--statusbar-height) + 12px);
   right: 16px;
-  z-index: 200;
+  z-index: var(--z-toast);
   display: flex;
   flex-direction: column-reverse;
-  gap: 8px;
+  gap: var(--sp-4);
 }

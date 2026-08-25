@@ -131,7 +131,7 @@ export async function showCodeReview() {
 
   // Diff area — side-by-side container
   const diffArea = document.createElement("div");
-  diffArea.style.cssText = "flex:1;overflow:auto;font-family:'JetBrainsMono NF Mono',monospace;font-size:12px;";
+  diffArea.style.cssText = "flex:1;overflow:auto;font-family:var(--font-mono);font-size:12px;";
 
   function renderFileList() {
     fileList.querySelectorAll(".file-item").forEach((el) => el.remove());

@@ -88,7 +88,8 @@ A desktop GUI is available via `piki-desktop`, built with [Tauri v2](https://v2.
 Highlights on top of the shared feature set:
 
 - **Native-feeling shell** — custom menu bar, activity bar + sidebar views (Explorer, Files, Source Control, Agents), resizable panes, full keyboard accessibility
-- **Theming** — 5 built-in presets (Obsidian Dark, Nord, Catppuccin Mocha, Solarized Light, Tokyo Night), a full per-variable theme editor, and drop-in custom theme files
+- **Theming** — 5 built-in presets (Obsidian Dark, Nord, Catppuccin Mocha, Solarized Light, Tokyo Night), a full per-variable theme editor, and drop-in custom theme files; light themes are first-class — every tint, scrim, shadow and the syntax colours of markdown code blocks derive from the active palette
+- **UI zoom** — `Ctrl+=` / `Ctrl+-` / `Ctrl+0` scale the whole interface and the terminal font together (persisted; `Ctrl+Shift+…` twins work with a terminal focused); the layout keeps the editor usable in small windows (chat floats over it below 1000px wide)
 - **xterm.js terminals** — WebGL rendering, native clipboard, terminal search
 - **Editors** — CodeMirror 6 code tabs with LSP support (diagnostics, completion, hover, go-to-definition), Milkdown WYSIWYG markdown tabs, file viewer with quick-edit
 - **Native git** — staging, commits, push, merge/rebase, stash, side-by-side diffs with conflict resolution, git log, live ahead/behind tracking

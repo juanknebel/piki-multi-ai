@@ -1,5 +1,6 @@
 import * as ipc from "../ipc";
 import { settingsStore } from "../settings";
+import { activityBarWidth, clampChatWidth, visibleSidebarWidth } from "../layout-budget";
 import { showConfirm } from "./confirm";
 import { toast } from "./toast";
 import { renderMarkdown } from "./markdown-viewer";
@@ -623,7 +624,7 @@ export function initChatResize() {
     if (!dragging) return;
     // Chat is on the right, so dragging left increases width
     const delta = startX - e.clientX;
-    const newWidth = Math.max(240, Math.min(800, startWidth + delta));
+    const newWidth = clampChatWidth(startWidth + delta, window.innerWidth, visibleSidebarWidth(), activityBarWidth());
     root.style.setProperty("--chat-panel-width", `${newWidth}px`);
   });
 

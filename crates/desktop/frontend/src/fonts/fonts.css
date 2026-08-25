@@ -1,0 +1,27 @@
+/* @font-face declarations for the bundled Nerd Font. The family name must be
+ * a literal here (font-face cannot read custom properties); everything else
+ * refers to it only through the `--font-mono` / `--font-ui` tokens in
+ * styles/variables.css. */
+@font-face {
+  font-family: "JetBrainsMono NF Mono";
+  src: url("./JetBrainsMonoNerdFontMono-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "JetBrainsMono NF Mono";
+  src: url("./JetBrainsMonoNerdFontMono-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "JetBrainsMono NF Mono";
+  src: url("./JetBrainsMonoNerdFontMono-Italic.ttf") format("truetype");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}

@@ -22,9 +22,9 @@
 .sc-header-btn {
   padding: 3px 7px;
   border-radius: var(--radius-sm);
-  font-size: 12px;
+  font-size: var(--fs-md);
   color: var(--text-secondary);
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .sc-header-btn:hover {
@@ -37,7 +37,7 @@
   padding: 10px 14px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--sp-4);
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-primary);
 }
@@ -50,11 +50,11 @@
   border-radius: var(--radius-md);
   color: var(--text-primary);
   font-family: inherit;
-  font-size: 12px;
+  font-size: var(--fs-md);
   resize: vertical;
   min-height: 42px;
   max-height: 120px;
-  line-height: 1.5;
+  line-height: var(--leading-normal);
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
@@ -72,16 +72,19 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: var(--sp-3);
   padding: 6px 14px;
   background: var(--accent-primary);
   color: var(--on-accent);
   border-radius: var(--radius-md);
-  font-size: 12px;
+  font-size: var(--fs-md);
   font-weight: 600;
   width: 100%;
   letter-spacing: 0.02em;
-  transition: all var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    box-shadow var(--transition-fast),
+    opacity var(--transition-fast);
 }
 
 .sc-commit-btn:hover:not(:disabled) {
@@ -95,7 +98,7 @@
 }
 
 .sc-commit-icon {
-  font-size: 13px;
+  font-size: var(--fs-lg);
 }
 
 /* ── Sections ────────────────────────────────────── */
@@ -117,7 +120,7 @@
   flex: 0 0 6px;
   cursor: ns-resize;
   position: relative;
-  z-index: 1;
+  z-index: var(--z-panel);
   background: transparent;
   transition: background var(--transition-fast);
 }
@@ -141,7 +144,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 5px 14px;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -177,7 +180,7 @@
 
 .sc-section-actions {
   display: flex;
-  gap: 2px;
+  gap: var(--sp-1);
   align-items: center;
 }
 
@@ -188,11 +191,11 @@
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-sm);
-  font-size: 15px;
+  font-size: var(--fs-xl);
   font-weight: 700;
   color: var(--text-secondary);
   flex-shrink: 0;
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .sc-section-action:hover {
@@ -203,12 +206,12 @@
 .sc-selected-action {
   width: auto;
   padding: 0 6px;
-  gap: 2px;
-  font-size: 12px;
+  gap: var(--sp-1);
+  font-size: var(--fs-md);
 }
 
 .sc-selected-count {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 400;
 }
 
@@ -225,10 +228,10 @@
 .sc-subdir-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-4);
   padding: 5px 14px;
   cursor: pointer;
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   color: var(--text-primary);
   transition: background var(--transition-fast);
 }
@@ -238,7 +241,7 @@
 }
 
 .sc-subdir-icon {
-  font-size: 13px;
+  font-size: var(--fs-lg);
   flex-shrink: 0;
 }
 

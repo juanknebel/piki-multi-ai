@@ -4,7 +4,7 @@
   flex-direction: column;
   align-items: center;
   padding-top: 6px;
-  gap: 2px;
+  gap: var(--sp-1);
   border-right: 1px solid var(--border-primary);
   position: relative;
 }
@@ -20,14 +20,14 @@
   background: linear-gradient(
     90deg,
     transparent,
-    rgba(57, 186, 230, 0.3),
+    color-mix(in srgb, var(--accent-primary) 30%, transparent),
     transparent
   );
 }
 
 .activity-item {
-  width: 44px;
-  height: 44px;
+  width: 3.52rem;  /* 44px — rem so the bar zooms with the type scale */
+  height: 3.52rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -41,7 +41,7 @@
 
 .activity-item:hover {
   color: var(--activity-bar-fg);
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--activity-bar-fg) 7%, transparent);
 }
 
 .activity-item.active {
@@ -57,13 +57,13 @@
   bottom: 8px;
   width: 2px;
   background: var(--accent-primary);
-  border-radius: 0 2px 2px 0;
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
   box-shadow: var(--accent-glow);
 }
 
 .activity-item svg {
-  width: 22px;
-  height: 22px;
+  width: 1.76rem; /* 22px */
+  height: 1.76rem;
   fill: currentColor;
   transition: transform var(--transition-fast);
 }
@@ -76,17 +76,17 @@
   position: absolute;
   top: 6px;
   right: 4px;
-  background: var(--accent-primary);
-  color: var(--on-accent);
-  font-size: 9px;
+  background: var(--activity-bar-badge);
+  color: var(--activity-bar-badge-fg);
+  font-size: var(--fs-2xs);
   font-weight: 700;
-  min-width: 16px;
-  height: 16px;
-  line-height: 16px;
+  min-width: 1.28rem; /* 16px */
+  height: 1.28rem;
+  line-height: 1.28rem;
   text-align: center;
-  border-radius: 8px;
+  border-radius: var(--radius-full);
   padding: 0 4px;
-  box-shadow: var(--accent-glow);
+  box-shadow: var(--activity-bar-badge-glow);
 }
 
 /* Agents needing you — amber, on the Explorer icon so a hidden sidebar or

@@ -2,14 +2,14 @@
 
 .ctx-menu {
   position: fixed;
-  z-index: 1000;
+  z-index: var(--z-popover);
   min-width: 180px;
   padding: 4px;
   background: var(--bg-dropdown);
   border: 1px solid var(--border-primary);
-  border-radius: 4px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
-  animation: menu-enter 0.1s var(--ease-out);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  animation: menu-enter var(--dur-fast) var(--ease-out);
 }
 
 .ctx-menu-item {
@@ -19,10 +19,10 @@
   background: none;
   color: var(--text-primary);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--fs-lg);
   text-align: left;
   padding: 4px 10px;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   cursor: pointer;
 }
 

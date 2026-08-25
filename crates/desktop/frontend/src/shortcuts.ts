@@ -94,6 +94,15 @@ const shortcuts: ShortcutDef[] = [
   { id: "logs", label: "Application Logs", category: "View & Panels", defaultKey: "Alt+Shift+L", key: "Alt+Shift+L", action: () => {}, terminalCapture: true },
   { id: "sessions", label: "Sessions (persistent)", category: "View & Panels", defaultKey: "Alt+Shift+S", key: "Alt+Shift+S", action: () => {}, terminalCapture: true },
   { id: "system-info", label: "System Info", category: "View & Panels", defaultKey: "Alt+I", key: "Alt+I", action: () => {}, terminalCapture: true },
+  // UI zoom (ui-zoom.ts). Bare Ctrl+= / Ctrl+- / Ctrl+0 are not terminal-safe
+  // (Ctrl+- is readline undo), so they stay outside-only; the Ctrl+Shift twins
+  // reach the same actions with a terminal focused.
+  { id: "zoom-in", label: "Zoom In", category: "View & Panels", defaultKey: "Ctrl+=", key: "Ctrl+=", action: () => {} },
+  { id: "zoom-out", label: "Zoom Out", category: "View & Panels", defaultKey: "Ctrl+-", key: "Ctrl+-", action: () => {} },
+  { id: "zoom-reset", label: "Reset Zoom", category: "View & Panels", defaultKey: "Ctrl+0", key: "Ctrl+0", action: () => {} },
+  { id: "zoom-in-terminal", label: "Zoom In (terminal-safe)", category: "View & Panels", defaultKey: "Ctrl+Shift+=", key: "Ctrl+Shift+=", action: () => {}, terminalCapture: true },
+  { id: "zoom-out-terminal", label: "Zoom Out (terminal-safe)", category: "View & Panels", defaultKey: "Ctrl+Shift+-", key: "Ctrl+Shift+-", action: () => {}, terminalCapture: true },
+  { id: "zoom-reset-terminal", label: "Reset Zoom (terminal-safe)", category: "View & Panels", defaultKey: "Ctrl+Shift+0", key: "Ctrl+Shift+0", action: () => {}, terminalCapture: true },
   { id: "fuzzy-search", label: "Find File", category: "Search", defaultKey: "Ctrl+F", key: "Ctrl+F", action: () => {} },
   { id: "project-search", label: "Search in Project", category: "Search", defaultKey: "Ctrl+Shift+F", key: "Ctrl+Shift+F", action: () => {}, terminalCapture: true },
   { id: "terminal-search", label: "Search in Terminal", category: "Search", defaultKey: "Ctrl+Shift+B", key: "Ctrl+Shift+B", action: () => {}, terminalCapture: true },
@@ -283,11 +292,27 @@ export function parseCombo(combo: string): { ctrl: boolean; shift: boolean; alt:
   };
 }
 
+/** Keys whose Shift variant produces a different character (Shift+= is "+",
+ *  Shift+- is "_", Shift+0 is ")"), so a `Ctrl+Shift+=` chord is matched on
+ *  the physical key (`e.code`) as well; and Shift is *not* agnostic for
+ *  them — `Ctrl+-` must never fire on `Ctrl+Shift+-` or vice versa. */
+export const KEY_CODES: Record<string, string[]> = {
+  "=": ["Equal", "NumpadAdd"],
+  "-": ["Minus", "NumpadSubtract"],
+  "0": ["Digit0", "Numpad0"],
+};
+
+/** Whether a keyboard event's key/code produced combo key `key` (case-insensitive). */
+export function keyMatches(eventKey: string, eventCode: string, key: string): boolean {
+  if (eventKey.toLowerCase() === key.toLowerCase()) return true;
+  return KEY_CODES[key]?.includes(eventCode) ?? false;
+}
+
 function matchesEvent(e: KeyboardEvent, combo: string): boolean {
   const c = parseCombo(combo);
   // Printable non-alphanumeric keys (?, {, }, …) may need Shift to produce
   // on some layouts — match on the produced character, not the modifier.
-  const shiftAgnostic = c.key.length === 1 && !/[a-z0-9]/i.test(c.key);
+  const shiftAgnostic = c.key.length === 1 && !/[a-z0-9]/i.test(c.key) && !(c.key in KEY_CODES);
   if (!shiftAgnostic && e.shiftKey !== c.shift) return false;
 
   if (isMac) {
@@ -307,8 +332,8 @@ function matchesEvent(e: KeyboardEvent, combo: string): boolean {
   if (c.key === "Tab") return e.key === "Tab";
   if (c.key === "?") return e.key === "?";
 
-  // Case-insensitive letter match
-  return e.key.toLowerCase() === c.key.toLowerCase();
+  // Case-insensitive letter match (or the physical key for = - 0)
+  return keyMatches(e.key, e.code, c.key);
 }
 
 /** Focus is somewhere that owns its own keys: a terminal (every byte is the

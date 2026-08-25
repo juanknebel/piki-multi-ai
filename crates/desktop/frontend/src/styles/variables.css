@@ -1,3 +1,8 @@
+/* Design tokens — the ONE place literal fonts, sizes, z-layers and durations
+ * live. Feature stylesheets consume these; they never repeat the literals.
+ * Colour tokens are the static defaults for the first paint; ThemeEngine
+ * (theme.ts) overwrites the base colours from the active preset and recomputes
+ * the "derived" ones (computeDerived in theme-derive.ts) on every apply. */
 :root {
   /* ── Obsidian base tones ───────────────────────── */
   --bg-primary: #0b0f14;
@@ -20,7 +25,6 @@
   /* ── Borders ───────────────────────────────────── */
   --border-primary: #1a2231;
   --border-active: #39bae6;
-  --border-inactive: #1a2231;
   --border-subtle: rgba(255, 255, 255, 0.03);
 
   /* ── Accent — Cyan ─────────────────────────────── */
@@ -29,7 +33,6 @@
   --accent-focus: #39bae6;
   --accent-muted: rgba(57, 186, 230, 0.12);
   --accent-glow: 0 0 10px rgba(57, 186, 230, 0.3);
-  --accent-glow-lg: 0 0 20px rgba(57, 186, 230, 0.2), 0 0 40px rgba(57, 186, 230, 0.06);
 
   /* ── Accent — Amber (status / warm) ────────────── */
   --accent-warm: #e6a730;
@@ -41,6 +44,9 @@
   --activity-bar-fg: #e6edf3;
   --activity-bar-inactive: #64768a;
   --activity-bar-badge: #39bae6;
+  /* derived: text + glow for the change-count badge */
+  --activity-bar-badge-fg: #000;
+  --activity-bar-badge-glow: 0 0 10px rgba(57, 186, 230, 0.3);
 
   /* ── Sidebar ───────────────────────────────────── */
   --sidebar-bg: #0d1117;
@@ -68,6 +74,7 @@
   --statusbar-bg: #080b0f;
   --statusbar-fg: #8b95a1;
   --statusbar-item-hover: rgba(57, 186, 230, 0.06);
+  /* Status bar background while no workspace is open (status-bar.css) */
   --statusbar-no-folder: #5a2d72;
 
   /* ── Git status ────────────────────────────────── */
@@ -76,8 +83,16 @@
   --success-color: var(--git-added);
   --error-color: var(--git-deleted);
   --warning-color: var(--accent-warm);
-  /* Text painted on top of an accent-primary background */
+  /* derived: text painted on top of an accent-primary background, picked by
+     luminance so a light accent gets black text and a dark one white */
   --on-accent: #000;
+  /* derived: text painted on top of an --error-color background */
+  --on-error: #fff;
+  /* derived: secondary hue (ANSI magenta) — welcome gradient end, wishlist
+     priority, JSON booleans, kanban "in review" */
+  --accent-alt: #bc8cff;
+  /* derived: ::selection background (accent at 25%) */
+  --selection-bg: rgba(57, 186, 230, 0.25);
   --git-added: #3fb950;
   --git-deleted: #f85149;
   --git-renamed: #3fb950;
@@ -86,7 +101,7 @@
   --git-staged: #3fb950;
   --git-staged-modified: #d4a12e;
 
-  /* ── File-type icons ───────────────────────────── */
+  /* ── File-type icons (derived from the ANSI + text palette) ── */
   --icon-rust: #e8623a;
   --icon-ts: #3178c6;
   --icon-js: #e8d44d;
@@ -100,6 +115,35 @@
   --icon-default: #768390;
   --icon-folder: #5d7080;
 
+  /* ── Kanban (derived from the accent + ANSI palette) ── */
+  /* Column defaults and the 16 picker swatches; kanban-panel.ts stores
+     `var(--kanban-swatch-N)` so a saved choice follows the theme. */
+  --kanban-col-todo: #39bae6;
+  --kanban-col-in-progress: #e6a730;
+  --kanban-col-in-review: #7b61ff;
+  --kanban-col-done: #3fb950;
+  --kanban-swatch-1: #39bae6;
+  --kanban-swatch-2: #e6a730;
+  --kanban-swatch-3: #7b61ff;
+  --kanban-swatch-4: #3fb950;
+  --kanban-swatch-5: #f85149;
+  --kanban-swatch-6: #f778ba;
+  --kanban-swatch-7: #d2a8ff;
+  --kanban-swatch-8: #79c0ff;
+  --kanban-swatch-9: #56d4dd;
+  --kanban-swatch-10: #a5d6ff;
+  --kanban-swatch-11: #ffa657;
+  --kanban-swatch-12: #ff7b72;
+  --kanban-swatch-13: #8b949e;
+  --kanban-swatch-14: #c9d1d9;
+  --kanban-swatch-15: #e3b341;
+  --kanban-swatch-16: #7ee787;
+
+  /* ── Web preview ───────────────────────────────── */
+  /* Canvas under the <iframe>: web content assumes a white page, whatever
+     the app theme (web-preview.css) */
+  --web-preview-canvas: #fff;
+
   /* ── Scrollbar ─────────────────────────────────── */
   --scrollbar-thumb: rgba(57, 186, 230, 0.08);
   --scrollbar-thumb-hover: rgba(57, 186, 230, 0.22);
@@ -108,6 +152,14 @@
   --dialog-bg: #111820;
   --dialog-border: #253040;
   --dialog-shadow: rgba(0, 0, 0, 0.65);
+  /* Scrims behind modals — dark tone here, lighter in the light-tone block */
+  --scrim: rgba(0, 0, 0, 0.55);        /* dialog backdrops, overlay container */
+  --scrim-strong: rgba(0, 0, 0, 0.6);  /* in-panel overlays: kanban edit, file viewer, API history */
+  --scrim-soft: rgba(0, 0, 0, 0.35);   /* command palette */
+  /* Elevation shadows — every box-shadow in styles/ is one of these */
+  --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.4);  /* tooltips, pickers, cards, terminal search */
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5);  /* menus, context menus, toasts */
+  --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.6); /* dialogs, palette, diff viewer */
 
   /* ── Toast ─────────────────────────────────────── */
   --toast-info-bg: #122a3e;
@@ -115,25 +167,105 @@
   --toast-error-bg: #2d1215;
   --toast-fg: #e6edf3;
 
+  /* ── Typography ────────────────────────────────── */
+  /* The only place the font name appears in styles/. TS reads it through
+     `cssToken("--font-mono")` (theme.ts) for xterm. */
+  --font-mono: "JetBrainsMono NF Mono", "SF Mono", "Cascadia Code", "Fira Code", monospace;
+  /* Chrome text. Mono-first by design; swap here to try a UI face. */
+  --font-ui: var(--font-mono);
+  /* UI zoom: ui-zoom.ts sets --ui-zoom on <html> (Ctrl+= / Ctrl+- / Ctrl+0,
+     persisted as settings.uiZoom). Everything below is rem, so scaling the
+     root font size scales the type scale, spacing and bar heights together;
+     the terminal font follows through applyTerminalZoom (theme.ts). */
+  --ui-zoom: 1;
+  --font-size-base: calc(12.5px * var(--ui-zoom));
+  /* Type scale — every `font-size` in styles/ is one of these. Values are
+     rem at a 12.5px root, so at zoom 1 they resolve to the px in the comments. */
+  --fs-3xs: 0.56rem;  /* 7px  glyph-only marks (dir dot) */
+  --fs-2xs: 0.72rem;  /* 9px  count badges, card ids */
+  --fs-xs: 0.8rem;    /* 10px section labels, kbd hints */
+  --fs-sm: 0.88rem;   /* 11px status bar, secondary rows */
+  --fs-md: 0.96rem;   /* 12px body text, buttons */
+  --fs-base: 1rem;    /* 12.5px inputs, workspace rows */
+  --fs-lg: 1.04rem;   /* 13px dialog titles, chat, tree rows */
+  --fs-xl: 1.12rem;   /* 14px icon glyphs, md h3 */
+  --fs-2xl: 1.28rem;  /* 16px close × */
+  --fs-3xl: 1.44rem;  /* 18px welcome h2, md h2 */
+  --fs-4xl: 1.6rem;   /* 20px md h1 */
+  --fs-display-sm: 2.24rem; /* 28px welcome logo */
+  --fs-display: 2.56rem;    /* 32px empty-state glyph */
+  --fs-display-lg: 3.84rem; /* 48px kanban empty glyph */
+  /* Line heights */
+  --leading-none: 1;
+  --leading-tight: 1.4;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.6;
+  --leading-loose: 1.75;
+
+  /* ── Spacing (rem so it follows --ui-zoom) ─────── */
+  --sp-1: 0.16rem;  /* 2px */
+  --sp-2: 0.32rem;  /* 4px */
+  --sp-3: 0.48rem;  /* 6px */
+  --sp-4: 0.64rem;  /* 8px */
+  --sp-5: 0.96rem;  /* 12px */
+  --sp-6: 1.28rem;  /* 16px */
+
   /* ── Sizing ────────────────────────────────────── */
-  --activity-bar-width: 50px;
+  /* Bar heights and the activity bar are rem (zoom with the type scale);
+     the sidebar / chat widths are px because they are user-dragged budgets
+     (sidebar.ts, chat-panel.ts, clamped by layout-budget.ts). */
+  --activity-bar-width: 4rem;      /* 50px */
   --sidebar-width: 260px;
-  --menubar-height: 30px;
-  --statusbar-height: 28px;
-  --tab-height: 38px;
-  --sidebar-header-height: 30px;
+  --menubar-height: 2.4rem;        /* 30px */
+  --statusbar-height: 2.24rem;     /* 28px */
+  --tab-height: 3.04rem;           /* 38px */
+  --sidebar-header-height: 2.4rem; /* 30px */
   --chat-panel-width: 360px;
+  /* The editor column never drops below this (layout.css minmax + the
+     sidebar/chat clamps in layout-budget.ts share the same number). */
+  --editor-min-width: 320px;
+
+  /* ── Z layers ──────────────────────────────────── */
+  /* Every stacking level in styles/ is one of these (or a `calc()` of one). */
+  --z-canvas: 0;     /* fixed decoration under every surface (noise) */
+  --z-panel: 1;      /* raised inside a panel: sticky headers, resize handles */
+  --z-sticky: 10;    /* bars floating over panel content: terminal search, kanban pickers */
+  --z-backdrop: 100; /* modal backdrops: dialogs, confirms, in-panel overlays */
+  --z-dialog: 110;   /* a modal stacked on an open dialog: palette, file viewer, nested form */
+  --z-menu: 200;     /* menu-bar dropdowns (+ click-away backdrop at --z-menu - 1) */
+  --z-popover: 300;  /* context menus, dropdown lists — may open from inside a dialog */
+  --z-toast: 400;
+  --z-tooltip: 500;
 
   /* ── Motion ────────────────────────────────────── */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-fast: 0.1s var(--ease-in-out);
-  --transition-normal: 0.2s var(--ease-out);
-  --transition-slow: 0.35s var(--ease-out);
+  --dur-fast: 0.1s;   /* hover colours, menus, palette */
+  --dur-base: 0.2s;   /* dialogs, toasts, resize handles */
+  --dur-slow: 0.35s;  /* welcome screen, gauge fills */
+  --dur-blink: 0.8s;  /* streaming cursor */
+  --dur-pulse: 1.5s;  /* looping attention pulses */
+  --transition-fast: var(--dur-fast) var(--ease-in-out);
+  --transition-normal: var(--dur-base) var(--ease-out);
+  --transition-slow: var(--dur-slow) var(--ease-out);
 
   /* ── Radius ────────────────────────────────────── */
+  --radius-xs: 2px;
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 10px;
-  --radius-xl: 14px;
+  --radius-full: 99px;
+}
+
+/* Light tone: theme.ts stamps data-theme-tone="light|dark" on <html> from the
+ * luminance of --bg-primary (themeTone in theme-derive.ts). Scrims and
+ * elevation shadows are the only tokens that flip by tone rather than by
+ * palette; the noise texture (reset.css) is also dark-only. */
+:root[data-theme-tone="light"] {
+  --scrim: rgba(0, 0, 0, 0.3);
+  --scrim-strong: rgba(0, 0, 0, 0.35);
+  --scrim-soft: rgba(0, 0, 0, 0.2);
+  --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.12);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.16);
+  --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.22);
 }

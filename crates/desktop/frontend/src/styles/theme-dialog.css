@@ -9,7 +9,7 @@
 }
 
 .theme-preset-label {
-  font-size: 11px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--text-secondary);
   text-transform: uppercase;
@@ -25,11 +25,11 @@
 .theme-group-header {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
   padding: 6px 0;
   cursor: pointer;
   user-select: none;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -46,7 +46,7 @@
   width: 12px;
   height: 12px;
   fill: currentColor;
-  transition: transform 0.15s var(--ease-out);
+  transition: transform var(--transition-fast);
   flex-shrink: 0;
   transform: rotate(90deg);
 }
@@ -67,12 +67,12 @@
 .theme-color-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-4);
   padding: 3px 0 3px 18px;
 }
 
 .theme-color-label {
-  font-size: 11px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
   min-width: 100px;
   flex-shrink: 0;
@@ -97,7 +97,7 @@
 
 .theme-color-picker::-webkit-color-swatch {
   border: none;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
 }
 
 .theme-color-hex {
@@ -107,7 +107,7 @@
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
-  font-size: 11px;
+  font-size: var(--fs-sm);
   font-family: inherit;
   text-transform: uppercase;
 }
@@ -124,11 +124,11 @@
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-sm);
-  font-size: 12px;
+  font-size: var(--fs-md);
   color: var(--text-muted);
   visibility: hidden;
   flex-shrink: 0;
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .theme-color-row.overridden .theme-color-reset {
@@ -143,6 +143,6 @@
 /* ── Footer actions ──────────────────────────────── */
 .theme-footer-left {
   display: flex;
-  gap: 6px;
+  gap: var(--sp-3);
   margin-right: auto;
 }
