@@ -582,6 +582,22 @@ export function listAgentRows(): Promise<import("./types").AgentRow[]> {
   return invoke("list_agent_rows");
 }
 
+export interface ExternalAgentPayload {
+  pid: number;
+  ppid: number;
+  cwd: string | null;
+  cmd: string;
+  workspace_idx: number | null;
+  workspace_name: string | null;
+}
+export interface ExternalTreePayload {
+  root: ExternalAgentPayload;
+  children: ExternalAgentPayload[];
+}
+export function listExternalAgents(): Promise<ExternalTreePayload[]> {
+  return invoke("list_external_agents");
+}
+
 export function saveAgent(
   workspaceIdx: number,
   name: string,

@@ -268,6 +268,7 @@ fn main() {
             commands::agents::import_agents,
             commands::agents::dispatch_agent,
             commands::agents::list_agent_rows,
+            commands::agents::list_external_agents,
             commands::providers::list_providers,
             commands::providers::save_provider,
             commands::providers::delete_provider,

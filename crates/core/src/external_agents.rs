@@ -2,11 +2,12 @@
 //! Minimal v1: only `claude` binary, tree by ppid, mapped to workspace by longest cwd prefix.
 
 use std::collections::{HashMap, HashSet};
+use serde::Serialize;
 use std::path::{Path, PathBuf};
 
 use crate::WorkspaceInfo;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ExternalAgent {
     pub pid: u32,
     pub ppid: u32,
@@ -15,7 +16,7 @@ pub struct ExternalAgent {
     pub workspace_idx: Option<usize>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct AgentTree {
     pub root: ExternalAgent,
     pub children: Vec<ExternalAgent>,
