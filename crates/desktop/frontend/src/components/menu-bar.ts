@@ -11,7 +11,7 @@ import { pullWorkspace, pushWorkspace } from "./git-actions";
 import { openBranchPicker } from "./dialogs/branch-picker";
 import { openFuzzySearch } from "./fuzzy-search";
 import { openWorkspaceSwitcher } from "./workspace-switcher";
-import { openTerminalSearch } from "./terminal-panel";
+import { clearActiveTerminal, openTerminalSearch, toggleLiteralNext } from "./terminal-panel";
 import { openProjectSearch } from "./project-search";
 import { showSettingsDialog } from "./dialogs/settings-dialog";
 import { showProvidersDialog } from "./dialogs/providers-dialog";
@@ -169,6 +169,8 @@ const MENUS: MenuDefinition[] = [
       { label: "Find File", shortcut: getShortcutKey("fuzzy-search"), action: () => openFuzzySearch() },
       { label: "Search in Project", shortcut: getShortcutKey("project-search"), action: () => openProjectSearch() },
       { label: "Search in Terminal", shortcut: getShortcutKey("terminal-search"), action: () => openTerminalSearch() },
+      { label: "Send Next Key to Terminal", shortcut: getShortcutKey("literal-next"), action: () => toggleLiteralNext() },
+      { label: "Clear Terminal", shortcut: getShortcutKey("terminal-clear"), action: () => clearActiveTerminal() },
       { label: "API jq Filter", shortcut: getShortcutKey("api-jq-filter"), action: () => document.dispatchEvent(new CustomEvent("toggle-jq")) },
       SEP,
       { label: "Theme Settings", shortcut: getShortcutKey("theme"), action: () => showThemeDialog() },

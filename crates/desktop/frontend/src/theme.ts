@@ -6,7 +6,7 @@ import { fitTerminal, terminals } from "./components/terminal-panel";
 import { reapplyEditorThemes } from "./components/code-editor-panel";
 import { computeDerived, hexToRgba, themeTone } from "./theme-derive";
 import { HLJS_STYLE_ID, buildHljsCss } from "./hljs-theme";
-import { terminalFontSizeFor } from "./zoom";
+import { getTerminalSettings, xtermOptionsFor } from "./terminal-settings";
 
 // ── Types ────────────────────────────────────────────
 
@@ -625,26 +625,60 @@ class ThemeEngine {
    * the zoom module never touches terminal-panel.ts directly.
    */
   applyTerminalZoom(zoom: number): void {
-    const fontSize = terminalFontSizeFor(zoom);
-    for (const instance of terminals.values()) {
-      if (instance.terminal.options.fontSize === fontSize) continue;
-      instance.terminal.options.fontSize = fontSize;
-      fitTerminal(instance);
-    }
+    this.updateAllTerminals(zoom);
   }
 
-  updateAllTerminals(): void {
+  /**
+   * Push the theme AND the Settings ▸ Terminal options (font family / size ×
+   * zoom / line height / scrollback / cursor) to every live xterm, refitting
+   * the ones whose cell metrics changed so the PTY gets new cols/rows. One
+   * path for theme changes, zoom steps and the settings dialog; `createTerminal`
+   * reads the same option set for a new terminal.
+   */
+  updateAllTerminals(zoom: number = Number(cssToken("--ui-zoom", "1"))): void {
     // terminal-panel <-> theme is a circular import, but neither module
     // touches the other's exports at module-init time (themeEngine is read
     // inside terminal callbacks, `terminals` is read here from a method),
     // so the static import is safe and lets Vite keep both files in the
     // same app chunk instead of warning about a contradicted dynamic import.
     const theme = this.buildXtermTheme();
+    const opts = xtermOptionsFor(getTerminalSettings(), zoom, cssToken("--font-mono", "monospace"));
     for (const instance of terminals.values()) {
+      const t = instance.terminal;
+      const metricsChanged =
+        t.options.fontFamily !== opts.fontFamily ||
+        t.options.fontSize !== opts.fontSize ||
+        t.options.lineHeight !== opts.lineHeight;
+      if (metricsChanged) {
+        t.options.fontFamily = opts.fontFamily;
+        t.options.fontSize = opts.fontSize;
+        t.options.lineHeight = opts.lineHeight;
+      }
+      if (t.options.scrollback !== opts.scrollback) t.options.scrollback = opts.scrollback;
+      if (t.options.cursorStyle !== opts.cursorStyle) t.options.cursorStyle = opts.cursorStyle;
+      if (t.options.cursorBlink !== opts.cursorBlink) t.options.cursorBlink = opts.cursorBlink;
       if (instance.opened) {
-        instance.terminal.options.theme = theme;
+        t.options.theme = theme;
+        if (metricsChanged) fitTerminal(instance);
       }
     }
+  }
+
+  /** Search-addon highlight colours from the palette (#RRGGBB as the addon
+   *  requires for backgrounds). */
+  searchDecorations(): {
+    matchBackground: string;
+    matchOverviewRuler: string;
+    activeMatchBackground: string;
+    activeMatchColorOverviewRuler: string;
+  } {
+    const c = (key: ThemeColorKey) => this.getEffectiveColor(key);
+    return {
+      matchBackground: c("accent-warm"),
+      matchOverviewRuler: c("accent-warm"),
+      activeMatchBackground: c("accent-primary"),
+      activeMatchColorOverviewRuler: c("accent-primary"),
+    };
   }
 }
 

@@ -1,4 +1,5 @@
 import { settingsStore } from "./settings";
+import { consumeLiteralNext, disarmLiteralNext, isLiteralNextArmed, literalNextVerdict } from "./literal-next";
 
 /** True when running on macOS — Cmd (Meta) replaces Ctrl/Alt. */
 export const isMac: boolean =
@@ -120,6 +121,11 @@ const shortcuts: ShortcutDef[] = [
   { id: "split-right", label: "Split Pane Right", category: "Panes & Tabs", defaultKey: "Ctrl+\\", key: "Ctrl+\\", action: () => {} },
   { id: "split-down", label: "Split Pane Down", category: "Panes & Tabs", defaultKey: "Ctrl+Shift+\\", key: "Ctrl+Shift+\\", action: () => {} },
   { id: "close-pane", label: "Close Active Pane", category: "Panes & Tabs", defaultKey: "Ctrl+Shift+Q", key: "Ctrl+Shift+Q", action: () => {} },
+  // literal-next.ts: the NEXT keydown bypasses every app shortcut and reaches
+  // the terminal as bytes (type Alt+B into readline although it is Switch
+  // Branch here). Terminal-safe by construction, it has to capture in one.
+  { id: "literal-next", label: "Send Next Key to Terminal", category: "Terminal", defaultKey: "Ctrl+Shift+E", key: "Ctrl+Shift+E", action: () => {}, terminalCapture: true },
+  { id: "terminal-clear", label: "Clear Terminal", category: "Terminal", defaultKey: "Ctrl+Shift+K", key: "Ctrl+Shift+K", action: () => {}, terminalCapture: true },
 ];
 
 /** Terminal copy/paste is a widget binding (`terminal-panel.ts`): Cmd+C/V on
@@ -145,7 +151,11 @@ const fixedShortcuts: FixedShortcut[] = [
   { category: "General", key: "Right-click workspace", label: "Workspace menu (open, agents, info, edit, merge, delete)" },
   { category: "Terminal", key: COPY_KEY, label: "Copy Selection" },
   { category: "Terminal", key: PASTE_KEY, label: "Paste from Clipboard" },
-  { category: "Terminal", key: "Select text", label: "Auto-copy to Clipboard" },
+  { category: "Terminal", key: "Select text", label: "Copy to Clipboard (Settings ▸ Terminal ▸ Copy on select)" },
+  { category: "Terminal", key: "Middle-click", label: "Paste (primary selection where the platform has one, else the clipboard)" },
+  { category: "Terminal", key: "Ctrl+click link", label: "Open link in the browser" },
+  { category: "Terminal", key: "Right-click", label: "Terminal menu (copy, paste, select all, clear, search, open link)" },
+  { category: "Terminal", key: "Enter / Shift+Enter", label: "Next / previous match (in terminal search); Esc closes" },
   { category: "Terminal", key: "Shift+PgUp / PgDn", label: "Scroll one page" },
   { category: "Terminal", key: "Shift+Home / End", label: "Scroll to top / bottom" },
   { category: "Code Editor", key: "Ctrl+I", label: "Quick Edit (in file viewer)" },
@@ -350,6 +360,33 @@ function focusOwnsKeys(): boolean {
 }
 
 export function handleGlobalKeydown(e: KeyboardEvent) {
+  // "Send next key to terminal" is armed: step aside for exactly one
+  // keydown. Modifier presses on the way to a chord keep it armed, Esc
+  // cancels, the literal-next chord itself toggles it off, and any other
+  // key is consumed — marked for the terminal's key handler and left to
+  // propagate so xterm turns it into bytes.
+  if (isLiteralNextArmed()) {
+    const literal = shortcuts.find((s) => s.id === "literal-next");
+    if (literal && matchesEvent(e, literal.key)) {
+      e.preventDefault();
+      e.stopPropagation();
+      disarmLiteralNext();
+      return;
+    }
+    switch (literalNextVerdict(e)) {
+      case "modifier":
+        return;
+      case "cancel":
+        e.preventDefault();
+        e.stopPropagation();
+        disarmLiteralNext();
+        return;
+      case "pass":
+        consumeLiteralNext(e);
+        return;
+    }
+  }
+
   const owned = focusOwnsKeys();
 
   for (const def of shortcuts) {

@@ -2,12 +2,26 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { SearchAddon } from "@xterm/addon-search";
+import { WebLinksAddon } from "@xterm/addon-web-links";
+import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { appState } from "../state";
 import * as ipc from "../ipc";
 import { toast, reportError } from "./toast";
 import { cssToken, themeEngine } from "../theme";
-import { isMac, modCtrl } from "../shortcuts";
-import { terminalFontSizeFor } from "../zoom";
+import { getShortcutKey, isMac, modCtrl } from "../shortcuts";
+import { getTerminalSettings, xtermOptionsFor } from "../terminal-settings";
+import { createSelectionCopier, type SelectionCopier } from "../copy-on-select";
+import { armLiteralNext, disarmLiteralNext, isLiteralNextArmed, isLiteralPass, literalNextTab } from "../literal-next";
+import { openContextMenu, type CtxItem } from "./context-menu";
+import { allLeaves } from "../pane-tree";
+import { flashTabChip } from "./tab-bar";
+
+/** Per-tab search bar state, remembered across open/close. */
+interface SearchState {
+  query: string;
+  regex: boolean;
+  caseSensitive: boolean;
+}
 
 export interface TerminalInstance {
   tabId: string;
@@ -17,9 +31,20 @@ export interface TerminalInstance {
   element: HTMLDivElement;
   opened: boolean;
   resizeObserver: ResizeObserver | null;
+  /** One clipboard write per selection gesture (copy-on-select.ts). */
+  copier: SelectionCopier;
+  /** Link under the pointer (web-links addon hover), for the context menu. */
+  hoveredLink: string | null;
+  search: SearchState;
 }
 
 export const terminals = new Map<string, TerminalInstance>();
+
+/** Middle-click paste: how long after `auxclick` we wait for the platform's
+ *  own primary-selection paste before falling back to the clipboard. The
+ *  native paste is dispatched synchronously with the click, so this only
+ *  has to outlast the same task. */
+const MIDDLE_PASTE_GRACE_MS = 80;
 
 /**
  * Initialize the terminal panel. Must be awaited so event listeners
@@ -48,6 +73,42 @@ export async function initTerminalPanel(_container: HTMLElement) {
   });
 }
 
+/** The terminal instance in the active pane, if the pane holds one. */
+export function activeTerminalInstance(): TerminalInstance | undefined {
+  const wt = appState.activeTabTree;
+  if (!wt) return undefined;
+  const leaf = allLeaves(wt.paneTree).find((l) => l.id === wt.activePaneId);
+  const id = leaf?.contentId;
+  return id ? terminals.get(id) : undefined;
+}
+
+// ── Clipboard helpers ──────────────────────────
+
+/** Copy the terminal's selection. `explicit` (menu / Ctrl+Shift+C) gets a
+ *  toast; copy-on-select stays silent — 40 rows of drag is not 40 toasts,
+ *  and not even one. */
+function copySelection(instance: TerminalInstance, explicit: boolean) {
+  const sel = instance.terminal.getSelection();
+  if (!sel) return;
+  ipc.clipboardCopy(sel)
+    .then(() => {
+      if (explicit) toast("Copied to clipboard", "success");
+    })
+    .catch((err) => reportError("Clipboard copy failed", err));
+}
+
+function pasteFromClipboard(terminal: Terminal) {
+  ipc.clipboardPaste()
+    .then((text) => {
+      if (text) terminal.paste(text);
+    })
+    .catch((err) => reportError("Clipboard paste failed", err));
+}
+
+function openLink(uri: string) {
+  ipc.openExternalUrl(uri).catch((err) => reportError("Open link failed", err));
+}
+
 /**
  * Pre-create a Terminal instance for a tab. The xterm.js `open()` call
  * is deferred until the element is visible (in mountTerminalInto),
@@ -62,14 +123,10 @@ export function createTerminal(tabId: string): TerminalInstance {
   element.className = "terminal-container";
   element.style.display = "none";
 
+  const settings = getTerminalSettings();
   const terminal = new Terminal({
-    fontFamily: cssToken("--font-mono", "monospace"),
-    fontSize: terminalFontSizeFor(Number(cssToken("--ui-zoom", "1"))),
-    lineHeight: 1.25,
+    ...xtermOptionsFor(settings, Number(cssToken("--ui-zoom", "1")), cssToken("--font-mono", "monospace")),
     theme: themeEngine.buildXtermTheme(),
-    cursorBlink: true,
-    cursorStyle: "block",
-    scrollback: 5000,
     allowProposedApi: true,
   });
 
@@ -79,45 +136,98 @@ export function createTerminal(tabId: string): TerminalInstance {
   const searchAddon = new SearchAddon();
   terminal.loadAddon(searchAddon);
 
+  // Unicode 11 widths: emoji and other wide glyphs take two cells, so a box
+  // drawn around them (Claude's status lines) stays aligned.
+  terminal.loadAddon(new Unicode11Addon());
+  terminal.unicode.activeVersion = "11";
+
+  const instance: TerminalInstance = {
+    tabId,
+    terminal,
+    searchAddon,
+    fitAddon,
+    element,
+    opened: false,
+    resizeObserver: null,
+    copier: createSelectionCopier(),
+    hoveredLink: null,
+    search: { query: "", regex: false, caseSensitive: false },
+  };
+
+  // URLs: Ctrl+click (Cmd on macOS) opens in the browser via the backend —
+  // never `window.open` inside the webview. Hover is tracked for the
+  // context menu's "Open link".
+  terminal.loadAddon(
+    new WebLinksAddon(
+      (event, uri) => {
+        if (isMac ? event.metaKey : event.ctrlKey) openLink(uri);
+      },
+      {
+        hover: (_event, text) => {
+          instance.hoveredLink = text;
+        },
+        leave: () => {
+          instance.hoveredLink = null;
+        },
+      },
+    ),
+  );
+
   // The element is NOT attached anywhere yet — `mountTerminalInto` attaches it
   // to the active pane's content host on demand. xterm.js's `terminal.open()`
   // is also deferred until the element is in the DOM and visible.
 
-  // Copy on selection (auto-copy like most terminal emulators)
+  // Copy on selection: xterm fires onSelectionChange per pointer move; the
+  // copier marks the gesture dirty and the mouseup flushes it ONCE, a tick
+  // later (xterm's own document-level mouseup fires after ours). The mouseup
+  // is watched on the document so a drag released outside the terminal —
+  // past its edge, over the sidebar — still ends the gesture.
   terminal.onSelectionChange(() => {
-    const sel = terminal.getSelection();
-    if (sel) {
-      ipc.clipboardCopy(sel).catch((e) => {
-        reportError("Clipboard copy failed", e);
-        toast(`Copy failed: ${e}`, "error");
-      });
-    }
+    instance.copier.selectionChanged();
   });
+  const onGestureEnd = (e: MouseEvent) => {
+    if (e.button !== 0) return;
+    if (!instance.copier.mouseUp()) return;
+    setTimeout(() => {
+      if (!terminals.has(tabId)) return;
+      const text = instance.copier.flush(terminal.getSelection());
+      if (text && getTerminalSettings().copyOnSelect) {
+        ipc.clipboardCopy(text).catch((err) => reportError("Clipboard copy failed", err));
+      }
+    }, 0);
+  };
+  element.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return;
+    document.addEventListener("mouseup", onGestureEnd, { once: true, capture: true });
+  });
+
+  // Bell → flash the tab chip. Title (OSC 0/2) → tab-label fallback that
+  // never overrides a user rename (`getTabLabel`).
+  terminal.onBell(() => flashTabChip(tabId));
+  terminal.onTitleChange((title) => appState.applyTerminalTitle(tabId, title));
 
   // Copy/paste: Cmd+C / Cmd+V on macOS, Ctrl+Shift+C / Ctrl+Shift+V on Linux.
   // macOS terminals (iTerm2, Terminal.app) use Cmd+C without Shift.
   // Ctrl+C (without Cmd) always sends SIGINT to the terminal.
   terminal.attachCustomKeyEventHandler((e) => {
+    // The one keydown "Send next key to terminal" let through: no
+    // interception at all, xterm maps it to bytes as any terminal would.
+    if (isLiteralPass(e)) return true;
+
     const key = e.key.toLowerCase();
     const isCopyPaste = isMac ? modCtrl(e) : modCtrl(e) && e.shiftKey;
 
     if (isCopyPaste && e.type === "keydown" && key === "c") {
-      const sel = terminal.getSelection();
-      if (sel) {
-        ipc.clipboardCopy(sel).catch((err) => {
-          reportError("Clipboard copy failed", err);
-          toast(`Copy failed: ${err}`, "error");
-        });
-      }
+      // preventDefault keeps WebKit from also firing its own copy/paste;
+      // the native `paste` event below is then only ever a middle-click or
+      // Shift+Insert.
+      e.preventDefault();
+      copySelection(instance, true);
       return false;
     }
     if (isCopyPaste && e.type === "keydown" && key === "v") {
-      ipc.clipboardPaste().then((text) => {
-        if (text) terminal.paste(text);
-      }).catch((err) => {
-        reportError("Clipboard paste failed", err);
-        toast(`Paste failed: ${err}`, "error");
-      });
+      e.preventDefault();
+      pasteFromClipboard(terminal);
       return false;
     }
     // Shift+PageUp/Down/Home/End for scrollback navigation
@@ -130,11 +240,46 @@ export function createTerminal(tabId: string): TerminalInstance {
     return true;
   });
 
-  // Block native paste events so xterm.js doesn't double-paste
+  // Middle-click paste. WebKitGTK pastes the X11/Wayland *primary* selection
+  // into the focused editable on a middle click — a native `paste` event whose
+  // clipboardData is the selection; xterm moves its textarea under the pointer
+  // on `auxclick` so that paste lands on the terminal. We take that event over
+  // (xterm's own paste path would double up) and, when the platform delivers
+  // none — a Wayland session without the primary-selection protocol, macOS,
+  // Windows — fall back to the clipboard via the plugin, so middle-click
+  // always pastes something. While a program tracks the mouse the click is
+  // its own (tmux, Claude's TUI) and nothing is pasted.
+  let middlePaste: { nativeSeen: boolean } | null = null;
+  element.addEventListener("mousedown", (e) => {
+    if (e.button !== 1 || terminal.modes.mouseTrackingMode !== "none") return;
+    middlePaste = { nativeSeen: false };
+  });
+  element.addEventListener("auxclick", (e) => {
+    if (e.button !== 1) return;
+    if (terminal.modes.mouseTrackingMode !== "none") return;
+    e.preventDefault();
+    const gesture = middlePaste ?? { nativeSeen: false };
+    middlePaste = gesture;
+    setTimeout(() => {
+      if (middlePaste === gesture) middlePaste = null;
+      if (!gesture.nativeSeen && terminals.has(tabId)) pasteFromClipboard(terminal);
+    }, MIDDLE_PASTE_GRACE_MS);
+  });
   element.addEventListener("paste", (e) => {
     e.preventDefault();
     e.stopPropagation();
+    const text = e.clipboardData?.getData("text/plain") ?? "";
+    if (middlePaste) middlePaste.nativeSeen = true;
+    if (text) terminal.paste(text);
   }, true);
+
+  // Right-click: the terminal's own menu (the global contextmenu blocker in
+  // main.ts only stops the webview's native one).
+  element.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openContextMenu(e.clientX, e.clientY, terminalMenuItems(instance));
+  });
 
   // Mouse-wheel scrollback fix. When a program enables mouse tracking (Claude
   // Code, tmux, etc.), xterm forwards wheel events to it as mouse reports
@@ -169,15 +314,6 @@ export function createTerminal(tabId: string): TerminalInstance {
     );
   });
 
-  const instance: TerminalInstance = {
-    tabId,
-    terminal,
-    searchAddon,
-    fitAddon,
-    element,
-    opened: false,
-    resizeObserver: null,
-  };
   terminals.set(tabId, instance);
 
   // Refit whenever the host element resizes — covers split-handle drags and
@@ -188,6 +324,51 @@ export function createTerminal(tabId: string): TerminalInstance {
   instance.resizeObserver.observe(element);
 
   return instance;
+}
+
+/** Items of the terminal's right-click menu. */
+function terminalMenuItems(instance: TerminalInstance): CtxItem[] {
+  const { terminal } = instance;
+  const link = instance.hoveredLink;
+  const items: CtxItem[] = [];
+  if (link) {
+    items.push(
+      { label: "Open Link", action: () => openLink(link) },
+      {
+        label: "Copy Link",
+        action: () => {
+          ipc.clipboardCopy(link)
+            .then(() => toast("Link copied", "success"))
+            .catch((err) => reportError("Clipboard copy failed", err));
+        },
+      },
+      { separator: true },
+    );
+  }
+  items.push(
+    { label: "Copy", disabled: !terminal.hasSelection(), action: () => copySelection(instance, true) },
+    { label: "Paste", action: () => pasteFromClipboard(terminal) },
+    {
+      label: "Select All",
+      action: () => {
+        terminal.selectAll();
+        // No mouse gesture ends a programmatic selection: honour copy-on-select here.
+        if (getTerminalSettings().copyOnSelect) copySelection(instance, false);
+      },
+    },
+    { separator: true },
+    { label: "Clear", action: () => terminal.clear() },
+    { label: "Search…", action: () => openTerminalSearch(instance.tabId) },
+    { separator: true },
+    {
+      label: `Send Next Key to Terminal (${getShortcutKey("literal-next")})`,
+      action: () => {
+        armLiteralNext(instance.tabId);
+        terminal.focus();
+      },
+    },
+  );
+  return items;
 }
 
 /**
@@ -213,6 +394,11 @@ export function mountTerminalInto(tabId: string, host: HTMLElement) {
     } catch {
       // WebGL not available, software rendering is fine
     }
+    // Losing focus while "send next key" is armed for this terminal would
+    // hand the raw key to whatever gets focus instead — disarm.
+    instance.terminal.textarea?.addEventListener("blur", () => {
+      if (literalNextTab() === tabId) disarmLiteralNext();
+    });
   }
 
   // Defer the fit until the browser has laid out the new host. Calling
@@ -265,67 +451,149 @@ export function fitTerminal(instance: TerminalInstance) {
 export function destroyTerminal(tabId: string) {
   const instance = terminals.get(tabId);
   if (!instance) return;
+  if (literalNextTab() === tabId) disarmLiteralNext();
   instance.resizeObserver?.disconnect();
   instance.terminal.dispose();
   instance.element.remove();
   terminals.delete(tabId);
 }
 
-/** Open a search bar for the active terminal */
-export function openTerminalSearch() {
-  const ws = appState.activeWs;
-  if (!ws || ws.tabs.length === 0) return;
-  const tab = ws.tabs[ws.activeTab];
-  if (!tab) return;
-  const instance = terminals.get(tab.id);
+// ── Actions (shortcuts, palette, menu bar) ─────
+
+/** Arm "send next key to terminal" for the active pane's terminal; pressing
+ *  the chord again disarms. */
+export function toggleLiteralNext() {
+  if (isLiteralNextArmed()) {
+    disarmLiteralNext();
+    return;
+  }
+  const instance = activeTerminalInstance();
+  if (!instance || !instance.opened) {
+    toast("The active pane is not a terminal", "info");
+    return;
+  }
+  armLiteralNext(instance.tabId);
+  instance.terminal.focus();
+}
+
+/** Clear the active terminal's screen and scrollback (like `clear`, but
+ *  without typing into a running program). */
+export function clearActiveTerminal() {
+  const instance = activeTerminalInstance();
+  if (!instance || !instance.opened) {
+    toast("The active pane is not a terminal", "info");
+    return;
+  }
+  instance.terminal.clear();
+}
+
+// ── Search bar ─────────────────────────────────
+
+/** Open the search bar of a terminal (the active pane's by default). */
+export function openTerminalSearch(tabId?: string) {
+  const instance = tabId ? terminals.get(tabId) : activeTerminalInstance();
   if (!instance || !instance.opened) return;
 
-  // Remove existing search bar
-  instance.element.querySelector(".term-search-bar")?.remove();
+  // Already open: just refocus the query.
+  const existing = instance.element.querySelector<HTMLInputElement>(".term-search-bar .term-search-input");
+  if (existing) {
+    existing.focus();
+    existing.select();
+    return;
+  }
+
+  const { terminal, searchAddon, search } = instance;
 
   const bar = document.createElement("div");
   bar.className = "term-search-bar";
+  bar.setAttribute("role", "search");
   bar.innerHTML = `
-    <input class="term-search-input" type="text" placeholder="Search..." autofocus />
-    <button class="term-search-btn" id="ts-prev" title="Previous">↑</button>
-    <button class="term-search-btn" id="ts-next" title="Next">↓</button>
-    <button class="term-search-btn" id="ts-close" title="Close">×</button>
+    <input class="term-search-input" type="text" placeholder="Search…" aria-label="Search in terminal" />
+    <span class="term-search-count" aria-live="polite"></span>
+    <button type="button" class="term-search-toggle" data-opt="caseSensitive" aria-pressed="${search.caseSensitive}" title="Match case">Aa</button>
+    <button type="button" class="term-search-toggle" data-opt="regex" aria-pressed="${search.regex}" title="Regular expression">.*</button>
+    <button type="button" class="term-search-btn" data-act="prev" title="Previous match (Shift+Enter)">↑</button>
+    <button type="button" class="term-search-btn" data-act="next" title="Next match (Enter)">↓</button>
+    <button type="button" class="term-search-btn" data-act="close" title="Close (Esc)">×</button>
   `;
+  // Anchored to the terminal container (position: absolute, top-right) — it
+  // floats over the first row and never moves with the viewport.
   instance.element.prepend(bar);
 
   const input = bar.querySelector<HTMLInputElement>(".term-search-input")!;
+  const count = bar.querySelector<HTMLElement>(".term-search-count")!;
+  input.value = search.query;
 
-  input.addEventListener("input", () => {
-    instance.searchAddon.findNext(input.value, { regex: false, caseSensitive: false });
+  const resultsSub = searchAddon.onDidChangeResults(({ resultIndex, resultCount }) => {
+    if (!input.value) {
+      count.textContent = "";
+      count.classList.remove("term-search-count--none");
+      return;
+    }
+    if (resultCount === 0) {
+      count.textContent = "No results";
+      count.classList.add("term-search-count--none");
+      return;
+    }
+    count.classList.remove("term-search-count--none");
+    // -1 = more matches than the addon decorates; the count is still exact.
+    count.textContent = resultIndex < 0 ? `${resultCount}+` : `${resultIndex + 1}/${resultCount}`;
   });
 
+  const options = (incremental: boolean) => ({
+    regex: search.regex,
+    caseSensitive: search.caseSensitive,
+    incremental,
+    decorations: themeEngine.searchDecorations(),
+  });
+
+  const run = (dir: "next" | "prev", incremental = false) => {
+    search.query = input.value;
+    if (!search.query) {
+      searchAddon.clearDecorations();
+      count.textContent = "";
+      count.classList.remove("term-search-count--none");
+      return;
+    }
+    if (dir === "next") searchAddon.findNext(search.query, options(incremental));
+    else searchAddon.findPrevious(search.query, options(incremental));
+  };
+
+  const close = () => {
+    resultsSub.dispose();
+    bar.remove();
+    searchAddon.clearDecorations();
+    terminal.focus();
+  };
+
+  input.addEventListener("input", () => run("next", true));
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
-      if (e.shiftKey) {
-        instance.searchAddon.findPrevious(input.value);
-      } else {
-        instance.searchAddon.findNext(input.value);
-      }
-    }
-    if (e.key === "Escape") {
-      bar.remove();
-      instance.searchAddon.clearDecorations();
-      instance.terminal.focus();
+      run(e.shiftKey ? "prev" : "next");
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      close();
     }
   });
 
-  bar.querySelector("#ts-next")!.addEventListener("click", () => {
-    instance.searchAddon.findNext(input.value);
+  bar.querySelectorAll<HTMLButtonElement>(".term-search-toggle").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const opt = btn.dataset.opt as "regex" | "caseSensitive";
+      search[opt] = !search[opt];
+      btn.setAttribute("aria-pressed", String(search[opt]));
+      run("next", true);
+      input.focus();
+    });
   });
-  bar.querySelector("#ts-prev")!.addEventListener("click", () => {
-    instance.searchAddon.findPrevious(input.value);
-  });
-  bar.querySelector("#ts-close")!.addEventListener("click", () => {
-    bar.remove();
-    instance.searchAddon.clearDecorations();
-    instance.terminal.focus();
-  });
+  bar.querySelector('[data-act="next"]')!.addEventListener("click", () => run("next"));
+  bar.querySelector('[data-act="prev"]')!.addEventListener("click", () => run("prev"));
+  bar.querySelector('[data-act="close"]')!.addEventListener("click", close);
 
   input.focus();
+  if (search.query) {
+    input.select();
+    run("next", true);
+  }
 }

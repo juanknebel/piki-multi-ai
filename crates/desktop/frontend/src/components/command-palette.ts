@@ -25,7 +25,7 @@ import { showDispatchDialog } from "./dialogs/dispatch-dialog";
 import { showHelpDialog } from "./dialogs/help-dialog";
 import { showDashboard } from "./dialogs/dashboard-dialog";
 import { showSysinfoDialog } from "./dialogs/sysinfo-dialog";
-import { openTerminalSearch } from "./terminal-panel";
+import { clearActiveTerminal, openTerminalSearch, toggleLiteralNext } from "./terminal-panel";
 import { showThemeDialog } from "./dialogs/theme-dialog";
 import { showLogsDialog } from "./dialogs/logs-dialog";
 import { showSessionsDialog } from "./dialogs/sessions-dialog";
@@ -628,6 +628,20 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
     category: "Search",
     keybinding: getShortcutKey("terminal-search"),
     action: () => openTerminalSearch(),
+  });
+  cmds.push({
+    id: "terminal-literal-next",
+    label: "Send Next Key to Terminal",
+    category: "Terminal",
+    keybinding: getShortcutKey("literal-next"),
+    action: () => toggleLiteralNext(),
+  });
+  cmds.push({
+    id: "terminal-clear",
+    label: "Clear Terminal",
+    category: "Terminal",
+    keybinding: getShortcutKey("terminal-clear"),
+    action: () => clearActiveTerminal(),
   });
   cmds.push({
     id: "api-jq-filter",

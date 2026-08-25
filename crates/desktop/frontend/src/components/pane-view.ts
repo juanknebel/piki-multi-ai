@@ -22,6 +22,7 @@ import {
 import { getShortcutKey } from "../shortcuts";
 import { branchLabel } from "../labels";
 import { openFuzzySearch } from "./fuzzy-search";
+import { literalNextTab, onLiteralNextChange } from "../literal-next";
 
 let rootEl: HTMLElement;
 
@@ -36,14 +37,52 @@ export function initPaneView(container: HTMLElement) {
   appState.on("active-tab-changed", render);
   // Agent status changes only affect the ws-tab bar's status dots — refresh
   // just that strip, never the whole pane tree (avoids terminal remount).
-  appState.on("tab-shell-state-changed", refreshWsTabBar);
+  // A terminal title (OSC 0/2) also lands here: pane titles are patched in
+  // place for the same reason.
+  appState.on("tab-shell-state-changed", () => {
+    refreshWsTabBar();
+    refreshPaneTitles();
+  });
   appState.on("workspace-attention-changed", refreshWsTabBar);
   appState.on("agent-rows-changed", refreshWsTabBar);
+  onLiteralNextChange(refreshLiteralHint);
 }
 
 function refreshWsTabBar() {
   const bar = rootEl?.querySelector<HTMLElement>(".ws-tab-bar");
   if (bar) renderWorkspaceTabBar(bar);
+}
+
+/** Patch every pane header's title text without rebuilding the tree. */
+function refreshPaneTitles() {
+  const wt = appState.activeTabTree;
+  if (!wt || !rootEl) return;
+  for (const leaf of allLeaves(wt.paneTree)) {
+    const title = rootEl.querySelector<HTMLElement>(
+      `.pane[data-pane-id="${cssEscape(leaf.id)}"] > .pane-head > .pane-title`,
+    );
+    if (title) title.innerHTML = paneTitleHtml(leaf);
+  }
+}
+
+/** Show the "next key → terminal" badge in the header of the pane whose
+ *  terminal is armed (literal-next.ts); remove it everywhere else. */
+function refreshLiteralHint() {
+  if (!rootEl) return;
+  rootEl.querySelectorAll(".pane-literal-hint").forEach((el) => el.remove());
+  const tabId = literalNextTab();
+  const wt = appState.activeTabTree;
+  if (!tabId || !wt) return;
+  const leaf = allLeaves(wt.paneTree).find((l) => l.contentId === tabId);
+  if (!leaf) return;
+  const head = rootEl.querySelector<HTMLElement>(`.pane[data-pane-id="${cssEscape(leaf.id)}"] > .pane-head`);
+  const actions = head?.querySelector(".pane-actions");
+  if (!head || !actions) return;
+  const hint = document.createElement("span");
+  hint.className = "pane-literal-hint";
+  hint.textContent = "next key → terminal · Esc cancels";
+  hint.title = `${getShortcutKey("literal-next")}: the next keystroke goes to the terminal, bypassing app shortcuts`;
+  head.insertBefore(hint, actions);
 }
 
 function render() {
@@ -78,6 +117,7 @@ function render() {
   area.appendChild(renderNode(wt.paneTree));
   syncMounts(wt.paneTree, ws.tabs);
   updateActivePaneHighlight();
+  refreshLiteralHint();
 
   // Blank panes get a content chooser.
   for (const leaf of allLeaves(wt.paneTree)) {
@@ -109,11 +149,10 @@ function renderLeaf(leaf: LeafNode): HTMLElement {
 
   const head = document.createElement("div");
   head.className = "pane-head";
-  const title = paneTitle(leaf);
   const exited = paneExited(leaf);
   if (exited) head.classList.add("pane-head--dead");
   head.innerHTML = `
-    <span class="pane-title">${escapeHtml(title)}${exited ? '<span class="pane-title-dead"> · exited</span>' : ""}</span>
+    <span class="pane-title">${paneTitleHtml(leaf)}</span>
     <span class="pane-actions">
       ${exited ? '<button class="pane-btn pane-btn-restart" data-act="restart" title="Restart here">↻ Restart</button>' : ""}
       <button class="pane-btn" data-act="right" title="Split right">⇥</button>
@@ -161,7 +200,12 @@ function paneTitle(leaf: LeafNode): string {
   const ws = appState.activeWs;
   if (!leaf.contentId || !ws) return "Empty";
   const c = ws.tabs.find((t) => t.id === leaf.contentId);
-  return c ? getTabLabel(c) : "Empty";
+  return c ? getTabLabel(c, appState.getTabShellState(c.id)?.title) : "Empty";
+}
+
+/** Inner HTML of a pane header's `.pane-title` (label + exited mark). */
+function paneTitleHtml(leaf: LeafNode): string {
+  return `${escapeHtml(paneTitle(leaf))}${paneExited(leaf) ? '<span class="pane-title-dead"> · exited</span>' : ""}`;
 }
 
 function renderSplit(split: SplitNode): HTMLElement {

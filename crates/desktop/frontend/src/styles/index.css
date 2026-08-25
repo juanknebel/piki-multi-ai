@@ -20,6 +20,7 @@
 @import "./tab-bar.css";
 @import "./pane.css";
 @import "./terminal.css";
+@import "./terminal-settings.css";
 @import "./status-bar.css";
 @import "./dialog.css";
 @import "./markdown.css";

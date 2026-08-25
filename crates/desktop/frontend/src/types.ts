@@ -306,9 +306,13 @@ export function getProviderLabel(provider: AIProvider): string {
   return provider.Custom;
 }
 
-/** Display label for a tab: custom_title > provider label. */
-export function getTabLabel(tab: TabInfo): string {
+/** Display label for a tab: custom_title > terminal title > provider label.
+ *  `termTitle` is what the program set via OSC 0/2 (`TabShellState.title`,
+ *  xterm `onTitleChange`) — a fallback only: a user rename always wins, and
+ *  an empty/whitespace title is ignored. */
+export function getTabLabel(tab: TabInfo, termTitle?: string | null): string {
   if (tab.custom_title && tab.custom_title.trim().length > 0) return tab.custom_title;
+  if (termTitle && termTitle.trim().length > 0) return termTitle.trim();
   return getProviderLabel(tab.provider);
 }
 

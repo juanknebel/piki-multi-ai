@@ -107,6 +107,9 @@ export interface TabShellState {
   /** Last human-relevant agent text: permission preview, or the agent's
    *  final response preview on `done`. */
   agentSummary?: string;
+  /** Window title the program set (OSC 0/2, xterm `onTitleChange`) — the
+   *  tab-label fallback under a user `custom_title` (`getTabLabel`). */
+  title?: string;
 }
 
 interface SavedWsTab {
@@ -585,6 +588,20 @@ class AppState extends EventTarget {
       return;
     }
     this._tabShellStates.set(event.tab_id, next);
+    this.emit("tab-shell-state-changed");
+  }
+
+  /** xterm `onTitleChange` for `tabId`: remember the program's title as the
+   *  label fallback. Never touches `custom_title`; control characters are
+   *  stripped and the text capped so a hostile OSC can't blow up the chip. */
+  applyTerminalTitle(tabId: string, title: string) {
+    const clean = title.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 80);
+    const existing = this._tabShellStates.get(tabId) ?? {};
+    if ((existing.title ?? "") === clean) return;
+    const next: TabShellState = { ...existing };
+    if (clean) next.title = clean;
+    else delete next.title;
+    this._tabShellStates.set(tabId, next);
     this.emit("tab-shell-state-changed");
   }
 

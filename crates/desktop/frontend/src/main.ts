@@ -8,7 +8,7 @@ import { toast, reportError } from "./components/toast";
 import { showConfirm } from "./components/confirm";
 import { renderActivityBar } from "./components/activity-bar";
 import { initSidebar, toggleSidebar } from "./components/sidebar";
-import { initTerminalPanel, openTerminalSearch } from "./components/terminal-panel";
+import { clearActiveTerminal, initTerminalPanel, openTerminalSearch, toggleLiteralNext } from "./components/terminal-panel";
 import { initKanbanPanel } from "./components/kanban-panel";
 import { initApiPanel } from "./components/api-panel";
 import { initMarkdownEditorPanel } from "./components/markdown-editor-panel";
@@ -185,6 +185,8 @@ async function init() {
   bindAction("fuzzy-search", () => openFuzzySearch());
   bindAction("project-search", () => openProjectSearch());
   bindAction("terminal-search", () => openTerminalSearch());
+  bindAction("literal-next", toggleLiteralNext);
+  bindAction("terminal-clear", clearActiveTerminal);
   bindAction("git-log", () => showGitLog());
   bindAction("dashboard", () => showDashboard());
   bindAction("git-stash", () => showStashDialog());
@@ -290,7 +292,9 @@ function showCloseConfirm(
   });
 }
 
-// Disable browser context menu so the app feels native
+// Disable the webview's native context menu so the app feels native. Widgets
+// that want a menu (file tree, tabs, terminal) open `openContextMenu` from
+// their own contextmenu handler, which runs before this document listener.
 document.addEventListener("contextmenu", (e) => e.preventDefault());
 
 document.addEventListener("DOMContentLoaded", init);

@@ -1,0 +1,78 @@
+/* Settings ▸ Terminal section (components/dialogs/terminal-settings-section.ts).
+ * Lives in its own sheet so the settings dialog's markup stays untouched:
+ * the section reuses `.settings-section` / `.settings-section-title` /
+ * `.settings-hint` from dialog.css and adds only its own rows. */
+
+.term-set-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  align-items: center;
+  gap: var(--sp-4) var(--sp-5);
+}
+
+.term-set-label {
+  font-size: var(--fs-md);
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.term-set-control {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+
+.term-set-control .dialog-dropdown {
+  min-width: 140px;
+}
+
+.term-set-input {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text-bright);
+  font-size: var(--fs-md);
+  font-family: var(--font-mono);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.term-set-input:focus {
+  border-color: var(--accent-primary);
+}
+
+.term-set-input--font {
+  flex: 1;
+  min-width: 0;
+}
+
+.term-set-input--num {
+  width: 64px;
+  text-align: right;
+}
+
+.term-set-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  font-size: var(--fs-md);
+  color: var(--text-primary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.term-set-check input {
+  accent-color: var(--accent-primary);
+  margin: 0;
+}
+
+/* "14px × 125% zoom = 18px" — reads the live zoom so the user sees the
+   composition instead of guessing why the terminal is bigger than the number. */
+.term-set-effective {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+}

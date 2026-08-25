@@ -78,6 +78,45 @@
   color: var(--text-bright);
 }
 
+/* "3/12" (or "No results") — tabular so the digits don't wobble while typing. */
+.term-search-count {
+  min-width: 3.5em;
+  text-align: center;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.term-search-count--none {
+  color: var(--error-color);
+}
+
+/* Match-case / regex toggles: same box as the arrows, accent when pressed. */
+.term-search-toggle {
+  height: 24px;
+  padding: 0 6px;
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.term-search-toggle:hover {
+  background: var(--bg-active);
+  color: var(--text-bright);
+}
+
+.term-search-toggle[aria-pressed="true"] {
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 15%, transparent);
+}
+
 /* ── Welcome screen ──────────────────────────────── */
 .terminal-welcome {
   display: flex;

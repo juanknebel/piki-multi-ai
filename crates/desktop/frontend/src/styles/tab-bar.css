@@ -93,6 +93,12 @@
   flex-shrink: 0;
 }
 
+/* A terminal rang its bell (BEL): brief flash, class removed on animationend
+   (tab-bar.ts `flashTabChip`). */
+.ws-tab--bell {
+  animation: bell-flash var(--dur-slow) var(--ease-out);
+}
+
 /* Inline rename input, sized like the label it replaces. */
 .ws-tab-rename {
   min-width: 80px;

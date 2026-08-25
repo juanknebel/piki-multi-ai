@@ -31,9 +31,12 @@ export function stepZoom(current: number, direction: 1 | -1): number {
   return prev ?? ZOOM_MIN;
 }
 
-/** Terminal font size for a zoom level (whole px, never below 8). */
-export function terminalFontSizeFor(zoom: number): number {
-  return Math.max(8, Math.round(TERMINAL_BASE_FONT_SIZE * clampZoom(zoom)));
+/** Terminal font size for a zoom level (whole px, never below 8). `base` is
+ *  the size at zoom 1 — the default, or the user's Settings ▸ Terminal font
+ *  size (terminal-settings.ts), so the two compose: setting × zoom. */
+export function terminalFontSizeFor(zoom: number, base: number = TERMINAL_BASE_FONT_SIZE): number {
+  const b = Number.isFinite(base) && base > 0 ? base : TERMINAL_BASE_FONT_SIZE;
+  return Math.max(8, Math.round(b * clampZoom(zoom)));
 }
 
 /** "125%" — for toasts and the View menu. */

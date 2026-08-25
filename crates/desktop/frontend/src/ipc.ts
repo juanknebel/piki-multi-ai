@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import type {
   WorkspaceInfo,
   WorkspaceDetail,
@@ -880,12 +881,33 @@ export function setSettings(value: string): Promise<void> {
 }
 
 // Clipboard commands (use system tools, not Tauri plugin — fixes non-ASCII on Wayland)
-export function clipboardCopy(text: string): Promise<void> {
-  return invoke("clipboard_copy", { text });
+/** System clipboard via `tauri-plugin-clipboard-manager` (the app's own
+ *  process owns the selection — no `wl-copy`/`xclip` child per copy). The
+ *  Rust `clipboard_copy` (system tools) is only the fallback when the plugin
+ *  errors, e.g. a Wayland session without the data-control protocol. */
+export async function clipboardCopy(text: string): Promise<void> {
+  if (!text) return;
+  try {
+    await writeText(text);
+  } catch (err) {
+    console.warn("clipboard plugin write failed, falling back to the system tool:", err);
+    await invoke("clipboard_copy", { text });
+  }
 }
 
-export function clipboardPaste(): Promise<string> {
-  return invoke("clipboard_paste");
+export async function clipboardPaste(): Promise<string> {
+  try {
+    return await readText();
+  } catch (err) {
+    console.warn("clipboard plugin read failed, falling back to the system tool:", err);
+    return invoke("clipboard_paste");
+  }
+}
+
+/** Open an http(s) URL in the default browser (terminal links). The backend
+ *  refuses any other scheme. */
+export function openExternalUrl(url: string): Promise<void> {
+  return invoke("open_url", { url });
 }
 
 // Event listeners

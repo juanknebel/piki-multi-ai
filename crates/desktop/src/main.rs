@@ -365,6 +365,7 @@ fn main() {
             commands::api::jq_filter,
             commands::clipboard::clipboard_copy,
             commands::clipboard::clipboard_paste,
+            commands::system::open_url,
             commands::chat::chat_send_message,
             commands::chat::chat_get_config,
             commands::chat::chat_set_config,

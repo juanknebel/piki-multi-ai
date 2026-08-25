@@ -11,6 +11,7 @@ import {
 } from "../../shortcuts";
 import { toast } from "../toast";
 import { attachPathPicker } from "../path-picker";
+import { buildTerminalSettingsSection } from "./terminal-settings-section";
 
 export async function showSettingsDialog() {
   document.querySelector(".settings-backdrop")?.remove();
@@ -64,6 +65,10 @@ export async function showSettingsDialog() {
   });
 
   body.appendChild(shellSection);
+
+  // ── Terminal section (terminal-settings-section.ts) ──
+  const terminalSection = buildTerminalSettingsSection();
+  body.appendChild(terminalSection.el);
 
   // ── Shortcuts section ──
   const shortcutsSection = document.createElement("div");
@@ -175,6 +180,7 @@ export async function showSettingsDialog() {
     resetAllShortcuts();
     shellInput.value = "";
     setShellSetting("");
+    terminalSection.reset();
     // Re-render shortcut keys
     const btns = table.querySelectorAll<HTMLButtonElement>(".settings-key-btn");
     shortcuts.forEach((def, i) => {

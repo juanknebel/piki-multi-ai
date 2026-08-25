@@ -43,6 +43,13 @@
   50% { opacity: 0; }
 }
 
+/* Terminal bell (BEL) on the tab chip: one amber wash that fades out
+   (tab-bar.css `.ws-tab--bell`). A tint of a token, never a raw colour. */
+@keyframes bell-flash {
+  from { box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--warning-color) 45%, transparent); }
+  to { box-shadow: inset 0 0 0 999px transparent; }
+}
+
 /* Respect the OS "reduce motion" preference: entrances become instant and
  * looping attention pulses stop. Transitions are kept short rather than
  * removed so hover/focus states still settle. */

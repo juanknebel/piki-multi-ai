@@ -95,7 +95,7 @@ export function renderStatusBar(container: HTMLElement) {
           item.title = agentState.agentSummary ?? v.label;
           container.appendChild(item);
         }
-        const label = getTabLabel(tab);
+        const label = getTabLabel(tab, appState.getTabShellState(tab.id)?.title);
         const alive = tab.alive ? "" : " (exited)";
         addItem(container, `${label}${alive}`);
       }

@@ -74,6 +74,22 @@
   flex-shrink: 0;
 }
 
+/* "Send next key to terminal" is armed for this pane (literal-next.ts):
+   sits right before the actions, pulses until the key lands or Esc cancels. */
+.pane-literal-hint {
+  margin-left: auto;
+  margin-right: var(--sp-4);
+  padding: 0 6px;
+  font-size: var(--fs-xs);
+  line-height: 16px;
+  color: var(--on-accent);
+  background: var(--accent-primary);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  flex-shrink: 0;
+  animation: pulse var(--dur-pulse) ease-in-out infinite;
+}
+
 .pane-btn {
   border: 0;
   background: none;

@@ -68,8 +68,24 @@ function wsTabTitle(tree: PaneNode, activePaneId: PaneId): string {
   if (content.provider === "CodeEditor") return getCodeEditorFileName(cid) ?? "Editor";
   if (content.provider === "Markdown") return getMarkdownEditorFileName(cid) ?? "Markdown";
   const others = allLeaves(tree).filter((l) => l.contentId).length;
-  const base = getTabLabel(content);
+  const base = getTabLabel(content, appState.getTabShellState(cid)?.title);
   return others > 1 ? `${base} +${others - 1}` : base;
+}
+
+/** The terminal behind `contentId` rang its bell: flash the chip of the
+ *  top-level tab holding it (no-op when that tab isn't on screen). The class
+ *  is removed on `animationend` so a second bell restarts the wash. */
+export function flashTabChip(contentId: string) {
+  const ws = appState.activeWs;
+  if (!ws) return;
+  const wt = ws.wsTabs.find((t) => allLeaves(t.paneTree).some((l) => l.contentId === contentId));
+  if (!wt) return;
+  const el = document.querySelector<HTMLElement>(`.ws-tab[data-ws-tab-id="${CSS.escape(wt.id)}"]`);
+  if (!el) return;
+  el.classList.remove("ws-tab--bell");
+  void el.offsetWidth; // restart the animation when a bell repeats
+  el.classList.add("ws-tab--bell");
+  el.addEventListener("animationend", () => el.classList.remove("ws-tab--bell"), { once: true });
 }
 
 /** Worst agent (status, attention) across all content panes in a ws-tab, or
@@ -131,6 +147,7 @@ export function renderWorkspaceTabBar(container: HTMLElement) {
     const isActive = i === ws.activeWsTab;
     const exited = wsTabContents(ws, wt).some((c) => isPtyContent(c) && !c.alive);
     el.className = `ws-tab${isActive ? " active" : ""}${exited ? " ws-tab--dead" : ""}`;
+    el.dataset.wsTabId = wt.id;
     el.title = wsTabTitle(wt.paneTree, wt.activePaneId) + (exited ? " — process exited" : "");
     const agent = wsTabAgentStatus(wt.paneTree);
     const dot = agent
