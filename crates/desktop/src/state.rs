@@ -48,6 +48,11 @@ pub struct DesktopWorkspace {
     pub tabs: Vec<DesktopTab>,
     pub active_tab: usize,
     pub watcher: Option<FileWatcher>,
+    /// Memoised `piki_core::search::list_files` result behind `Ctrl+F`.
+    /// Filled off-lock by `commands::search::fuzzy_file_list`; cleared by
+    /// `events::spawn_git_watcher` when the watcher reports anything other
+    /// than an edit to an already-indexed file, and by `switch_workspace`.
+    pub file_index: Option<Arc<piki_core::search::FileIndex>>,
 }
 
 pub struct DesktopTab {

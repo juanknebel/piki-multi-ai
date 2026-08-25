@@ -16,6 +16,9 @@ vt100 = "0.16"
 # File watching
 notify = "8"
 
+# Gitignore-aware directory walk (fuzzy file index; sibling of ripgrep)
+ignore = "0.4"
+
 # Serialization
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

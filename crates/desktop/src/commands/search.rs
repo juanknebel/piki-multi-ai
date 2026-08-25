@@ -1,6 +1,10 @@
+use std::sync::Arc;
+
 use parking_lot::Mutex;
 use serde::Serialize;
 use tauri::State;
+
+use piki_core::search::{FILE_INDEX_CAP, FileIndex};
 
 use crate::state::DesktopApp;
 
@@ -10,61 +14,44 @@ pub struct FileEntry {
     pub is_dir: bool,
 }
 
+/// Workspace-relative file list for the `Ctrl+F` finder (and the file tree's
+/// filter). Served from `DesktopWorkspace::file_index` when the watcher has
+/// not invalidated it; otherwise `piki_core::search::list_files` walks the
+/// tree off-lock (gitignore-aware, capped at `FILE_INDEX_CAP`) and the
+/// result is memoised for the next call.
 #[tauri::command]
 pub async fn fuzzy_file_list(
     state: State<'_, Mutex<DesktopApp>>,
     workspace_idx: usize,
-) -> Result<Vec<String>, String> {
-    let ws_path = {
+) -> Result<FileIndex, String> {
+    let (ws_path, cached) = {
         let app = state.lock();
-        if workspace_idx >= app.workspaces.len() {
+        let Some(ws) = app.workspaces.get(workspace_idx) else {
             return Err("Workspace index out of range".to_string());
-        }
-        app.workspaces[workspace_idx].info.path.clone()
+        };
+        (ws.info.path.clone(), ws.file_index.clone())
     };
+    if let Some(index) = cached {
+        return Ok((*index).clone());
+    }
 
-    // Walk the workspace directory, skipping common non-project dirs
-    let output = tokio::process::Command::new("find")
-        .args([
-            ".",
-            "-type",
-            "f",
-            "-not",
-            "-path",
-            "*/.git/*",
-            "-not",
-            "-path",
-            "*/node_modules/*",
-            "-not",
-            "-path",
-            "*/target/*",
-            "-not",
-            "-path",
-            "*/.next/*",
-            "-not",
-            "-path",
-            "*/dist/*",
-            "-not",
-            "-path",
-            "*/__pycache__/*",
-            "-not",
-            "-path",
-            "*/.venv/*",
-        ])
-        .current_dir(&ws_path)
-        .output()
-        .await
-        .map_err(|e| format!("find failed: {e}"))?;
+    let root = ws_path.clone();
+    let index =
+        tokio::task::spawn_blocking(move || piki_core::search::list_files(&root, FILE_INDEX_CAP))
+            .await
+            .map_err(|e| format!("file walk failed: {e}"))?;
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let files: Vec<String> = stdout
-        .lines()
-        .filter(|l| !l.is_empty())
-        .map(|l| l.strip_prefix("./").unwrap_or(l))
-        .map(String::from)
-        .collect();
-
-    Ok(files)
+    {
+        let mut app = state.lock();
+        // The workspace list may have shifted while we walked; only memoise
+        // onto the workspace whose tree we actually indexed.
+        if let Some(ws) = app.workspaces.get_mut(workspace_idx)
+            && ws.info.path == ws_path
+        {
+            ws.file_index = Some(Arc::new(index.clone()));
+        }
+    }
+    Ok(index)
 }
 
 #[tauri::command]

@@ -7,6 +7,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use piki_core::ChangedFile;
 use piki_core::notifications;
+use piki_core::workspace::watcher::WatchEventKind;
 
 use crate::state::{DesktopApp, DesktopTab};
 
@@ -236,6 +237,25 @@ pub fn spawn_git_watcher(app_handle: AppHandle) {
                         continue;
                     }
                     triggered.push((idx, ws.info.path.clone()));
+
+                    // Drop the Ctrl+F file index unless every event is a
+                    // content edit of a file it already lists (creates,
+                    // deletes and renames — a rename's new name is unknown
+                    // to the index — force a re-walk on the next open).
+                    if let Some(index) = ws.file_index.as_ref() {
+                        let only_known_edits = events.iter().all(|ev| {
+                            ev.kind == WatchEventKind::Modified
+                                && ev.paths.iter().all(|abs| {
+                                    abs.strip_prefix(&ws.info.path)
+                                        .ok()
+                                        .and_then(|rel| rel.to_str())
+                                        .is_some_and(|rel| index.contains(rel))
+                                })
+                        });
+                        if !only_known_edits {
+                            ws.file_index = None;
+                        }
+                    }
 
                     // Collect changed paths relative to the workspace, deduplicated.
                     use std::collections::BTreeSet;

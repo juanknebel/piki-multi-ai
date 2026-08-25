@@ -134,6 +134,7 @@ const fixedShortcuts: FixedShortcut[] = [
   { category: "General", key: "Esc", label: "Close Dialog / Overlay" },
   { category: "General", key: "Alt+1…9", label: "Switch to Workspace N" },
   { category: "Search", key: "Ctrl+H", label: "Request History (in API Explorer)" },
+  { category: "Search", key: "Alt+Enter", label: "Open in read-only viewer (in file search; Enter opens an editor tab)" },
   { category: "Git", key: "Ctrl+Enter", label: "Commit (in commit message box)" },
   { category: "Panes & Tabs", key: "Ctrl+Tab", label: "Next Tab" },
   { category: "Panes & Tabs", key: "Ctrl+Shift+Tab", label: "Previous Tab" },
