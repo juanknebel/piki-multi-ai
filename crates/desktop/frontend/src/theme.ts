@@ -1,10 +1,12 @@
 import * as ipc from "./ipc";
-import { terminals } from "./components/terminal-panel";
+import { fitTerminal, terminals } from "./components/terminal-panel";
 // Static import is safe despite the theme <-> code-editor-panel cycle:
 // `reapplyEditorThemes` is only called from a method at runtime, never at
 // module-init (same arrangement as `terminals` above).
 import { reapplyEditorThemes } from "./components/code-editor-panel";
-import { computeDerived, hexToRgba } from "./theme-derive";
+import { computeDerived, hexToRgba, themeTone } from "./theme-derive";
+import { HLJS_STYLE_ID, buildHljsCss } from "./hljs-theme";
+import { terminalFontSizeFor } from "./zoom";
 
 // ── Types ────────────────────────────────────────────
 
@@ -378,11 +380,26 @@ class ThemeEngine {
       root.style.setProperty(`--${key}`, value);
     }
 
-    // Apply derived colors (glows, on-accent, selection, file icons, …)
-    const derived = computeDerived(effective, preset.isDark);
+    // Tone from the effective background (not the preset flag, so an
+    // override to a light background gets light scrims/shadows and no noise):
+    // variables.css and reset.css key off `data-theme-tone`.
+    const tone = themeTone(effective);
+    root.dataset.themeTone = tone;
+
+    // Apply derived colors (glows, on-accent, selection, file icons, kanban, …)
+    const derived = computeDerived(effective, tone === "dark");
     for (const [key, value] of Object.entries(derived)) {
       root.style.setProperty(`--${key}`, value);
     }
+
+    // highlight.js classes (markdown fences, chat code blocks) from the palette.
+    let hljsStyle = document.getElementById(HLJS_STYLE_ID) as HTMLStyleElement | null;
+    if (!hljsStyle) {
+      hljsStyle = document.createElement("style");
+      hljsStyle.id = HLJS_STYLE_ID;
+      document.head.appendChild(hljsStyle);
+    }
+    hljsStyle.textContent = buildHljsCss((k) => this.getEffectiveColor(k));
 
     // Sync xterm terminals
     this.updateAllTerminals();
@@ -600,6 +617,20 @@ class ThemeEngine {
 
   updateAllEditors(): void {
     reapplyEditorThemes();
+  }
+
+  /**
+   * UI zoom hook (ui-zoom.ts): size every xterm font to the zoom level and
+   * refit the visible ones so the PTY gets the new cols/rows. Lives here so
+   * the zoom module never touches terminal-panel.ts directly.
+   */
+  applyTerminalZoom(zoom: number): void {
+    const fontSize = terminalFontSizeFor(zoom);
+    for (const instance of terminals.values()) {
+      if (instance.terminal.options.fontSize === fontSize) continue;
+      instance.terminal.options.fontSize = fontSize;
+      fitTerminal(instance);
+    }
   }
 
   updateAllTerminals(): void {

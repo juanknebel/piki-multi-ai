@@ -47,7 +47,7 @@
   background: var(--bg-dropdown);
   border: 1px solid var(--dialog-border);
   border-radius: var(--radius-md);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-md);
   padding: 4px 0;
   animation: menu-enter var(--dur-fast) var(--ease-out);
 }
@@ -145,6 +145,6 @@
 }
 
 .wc-close:hover {
-  background: #c42b1c;
-  color: #fff;
+  background: var(--error-color);
+  color: var(--on-error);
 }

@@ -2,6 +2,7 @@ import { appState } from "../state";
 import { reportError } from "./toast";
 import * as ipc from "../ipc";
 import { settingsStore } from "../settings";
+import { activityBarWidth, clampSidebarWidth, visibleChatWidth } from "../layout-budget";
 import { renderWorkspaceList } from "./workspace-list";
 import { renderFileTree } from "./file-tree";
 import { renderSourceControl } from "./source-control";
@@ -131,7 +132,7 @@ export async function initSidebar() {
   document.addEventListener("mousemove", (e) => {
     if (!dragging) return;
     const delta = e.clientX - startX;
-    const newWidth = Math.max(150, Math.min(window.innerWidth * 0.5, startWidth + delta));
+    const newWidth = clampSidebarWidth(startWidth + delta, window.innerWidth, visibleChatWidth(), activityBarWidth());
     root.style.setProperty("--sidebar-width", `${newWidth}px`);
   });
 
@@ -158,9 +159,11 @@ export async function initSidebar() {
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
     e.preventDefault();
     const cur = document.getElementById("sidebar")!.offsetWidth;
-    const next = Math.max(
-      150,
-      Math.min(window.innerWidth * 0.5, cur + (e.key === "ArrowRight" ? 16 : -16)),
+    const next = clampSidebarWidth(
+      cur + (e.key === "ArrowRight" ? 16 : -16),
+      window.innerWidth,
+      visibleChatWidth(),
+      activityBarWidth(),
     );
     root.style.setProperty("--sidebar-width", `${next}px`);
     persistSidebarWidth();

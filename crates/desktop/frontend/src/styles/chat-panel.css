@@ -50,9 +50,9 @@
 }
 
 .chat-agent-btn.active {
-  background: rgba(57, 186, 230, 0.15);
-  color: rgb(57, 186, 230);
-  border-color: rgba(57, 186, 230, 0.3);
+  background: color-mix(in srgb, var(--accent-primary) 15%, transparent);
+  color: var(--accent-primary);
+  border-color: color-mix(in srgb, var(--accent-primary) 30%, transparent);
 }
 
 /* ── Model selector ─────────────────────────────── */
@@ -159,7 +159,7 @@
 .chat-msg.user .chat-msg-content {
   background: var(--accent-muted);
   color: var(--text-bright);
-  border: 1px solid rgba(57, 186, 230, 0.15);
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 15%, transparent);
 }
 
 .chat-msg.assistant .chat-msg-content {
@@ -173,9 +173,9 @@
 }
 
 .chat-msg.tool .chat-msg-content {
-  background: rgba(80, 120, 60, 0.15);
+  background: color-mix(in srgb, var(--success-color) 15%, transparent);
   color: var(--text-secondary);
-  border: 1px solid rgba(80, 120, 60, 0.25);
+  border: 1px solid color-mix(in srgb, var(--success-color) 25%, transparent);
   font-family: var(--font-mono);
   font-size: var(--fs-sm);
   white-space: pre-wrap;
@@ -184,7 +184,7 @@
 }
 
 .chat-msg-content code {
-  background: rgba(0, 0, 0, 0.3);
+  background: color-mix(in srgb, var(--bg-primary) 60%, transparent);
   padding: 1px 4px;
   border-radius: var(--radius-xs);
   font-family: var(--font-mono);
@@ -192,7 +192,7 @@
 }
 
 .chat-msg-content pre {
-  background: rgba(0, 0, 0, 0.3);
+  background: color-mix(in srgb, var(--bg-primary) 60%, transparent);
   padding: 8px;
   border-radius: var(--radius-sm);
   overflow-x: auto;

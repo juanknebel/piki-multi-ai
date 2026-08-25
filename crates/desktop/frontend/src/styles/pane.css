@@ -104,8 +104,8 @@
 }
 
 .pane-btn-close:hover {
-  background: rgba(229, 83, 75, 0.18);
-  color: #e5534b;
+  background: color-mix(in srgb, var(--error-color) 18%, transparent);
+  color: var(--error-color);
 }
 
 .pane-content {

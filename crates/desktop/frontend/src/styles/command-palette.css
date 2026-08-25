@@ -8,7 +8,7 @@
   display: flex;
   justify-content: center;
   padding-top: 14vh;
-  background: rgba(0, 0, 0, 0.35);
+  background: var(--scrim-soft);
   backdrop-filter: blur(2px);
   -webkit-backdrop-filter: blur(2px);
   animation: overlay-in var(--dur-fast) var(--ease-out);
@@ -21,7 +21,7 @@
   background: var(--dialog-bg);
   border: 1px solid var(--dialog-border);
   border-radius: var(--radius-lg);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6), 0 0 1px rgba(255, 255, 255, 0.05);
+  box-shadow: var(--shadow-lg), 0 0 1px var(--border-subtle);
   display: flex;
   flex-direction: column;
   overflow: hidden;

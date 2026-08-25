@@ -8,7 +8,7 @@
   background: var(--bg-dropdown);
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-sm);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-md);
   animation: menu-enter var(--dur-fast) var(--ease-out);
 }
 

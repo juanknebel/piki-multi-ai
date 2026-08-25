@@ -28,19 +28,18 @@ interface KanbanInstance {
 
 // ── Column colors ────────────────────────────────
 
+// Both come from the theme: computeDerived (theme-derive.ts) fills
+// --kanban-col-* and --kanban-swatch-1…16 from the accent + ANSI palette on
+// every theme apply, so a saved `var(--kanban-swatch-N)` follows the preset.
+// Older saves hold a raw hex — still a valid CSS value, left as is.
 const DEFAULT_COLUMN_COLORS: Record<string, string> = {
-  todo: "#39bae6",
-  in_progress: "#e6a730",
-  in_review: "#7b61ff",
-  done: "#3fb950",
+  todo: "var(--kanban-col-todo)",
+  in_progress: "var(--kanban-col-in-progress)",
+  in_review: "var(--kanban-col-in-review)",
+  done: "var(--kanban-col-done)",
 };
 
-const COLOR_PALETTE = [
-  "#39bae6", "#e6a730", "#7b61ff", "#3fb950",
-  "#f85149", "#f778ba", "#d2a8ff", "#79c0ff",
-  "#56d4dd", "#a5d6ff", "#ffa657", "#ff7b72",
-  "#8b949e", "#c9d1d9", "#e3b341", "#7ee787",
-];
+const COLOR_PALETTE = Array.from({ length: 16 }, (_, i) => `var(--kanban-swatch-${i + 1})`);
 
 const STORAGE_KEY = "kanban-column-colors";
 

@@ -32,6 +32,12 @@ body::after {
   mix-blend-mode: overlay;
 }
 
+/* The texture is a dark-theme device — on a light tone it reads as dirt.
+   theme.ts stamps the tone from the background luminance. */
+:root[data-theme-tone="light"] body::after {
+  display: none;
+}
+
 button {
   font: inherit;
   color: inherit;

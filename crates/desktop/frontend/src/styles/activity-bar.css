@@ -20,14 +20,14 @@
   background: linear-gradient(
     90deg,
     transparent,
-    rgba(57, 186, 230, 0.3),
+    color-mix(in srgb, var(--accent-primary) 30%, transparent),
     transparent
   );
 }
 
 .activity-item {
-  width: 44px;
-  height: 44px;
+  width: 3.52rem;  /* 44px — rem so the bar zooms with the type scale */
+  height: 3.52rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -41,7 +41,7 @@
 
 .activity-item:hover {
   color: var(--activity-bar-fg);
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--activity-bar-fg) 7%, transparent);
 }
 
 .activity-item.active {
@@ -62,8 +62,8 @@
 }
 
 .activity-item svg {
-  width: 22px;
-  height: 22px;
+  width: 1.76rem; /* 22px */
+  height: 1.76rem;
   fill: currentColor;
   transition: transform var(--transition-fast);
 }
@@ -80,9 +80,9 @@
   color: var(--activity-bar-badge-fg);
   font-size: var(--fs-2xs);
   font-weight: 700;
-  min-width: 16px;
-  height: 16px;
-  line-height: 16px;
+  min-width: 1.28rem; /* 16px */
+  height: 1.28rem;
+  line-height: 1.28rem;
   text-align: center;
   border-radius: var(--radius-full);
   padding: 0 4px;

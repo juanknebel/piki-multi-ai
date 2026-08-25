@@ -2,7 +2,8 @@ import { Marked } from "marked";
 import { showConfirm } from "./confirm";
 import { markedHighlight } from "marked-highlight";
 import hljs from "highlight.js/lib/common";
-import "highlight.js/styles/atom-one-dark.css";
+// No shipped hljs stylesheet: theme.ts injects a `.hljs-*` block generated
+// from the active palette (hljs-theme.ts), so fences follow light themes too.
 import * as ipc from "../ipc";
 import { appState } from "../state";
 import { toast, reportError } from "./toast";

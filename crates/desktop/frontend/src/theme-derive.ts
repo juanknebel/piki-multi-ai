@@ -50,6 +50,58 @@ export function mixHex(a: string, b: string, t: number): string {
   return rgbToHex(ar + (br - ar) * t, ag + (bg - ag) * t, ab + (bb - ab) * t);
 }
 
+export type ThemeTone = "dark" | "light";
+
+/**
+ * Whether a palette reads as dark or light, from the luminance of its main
+ * background — the same L ≈ 0.179 threshold `onColorFor` uses, i.e. "light"
+ * means black text contrasts better on it than white. theme.ts stamps the
+ * result as `data-theme-tone` on <html>; variables.css flips scrims and
+ * shadows on it, reset.css drops the noise texture in light tone.
+ */
+export function themeTone(colors: Record<string, string>): ThemeTone {
+  return onColorFor(colors["bg-primary"] || "#0b0f14") === "#000" ? "light" : "dark";
+}
+
+/** Static Obsidian swatches — the first-paint defaults in variables.css. */
+const KANBAN_FALLBACK = [
+  "#39bae6", "#e6a730", "#7b61ff", "#3fb950",
+  "#f85149", "#f778ba", "#d2a8ff", "#79c0ff",
+  "#56d4dd", "#a5d6ff", "#ffa657", "#ff7b72",
+  "#8b949e", "#c9d1d9", "#e3b341", "#7ee787",
+];
+
+/** Palette keys that make good column colours, most distinctive first. */
+const KANBAN_CANDIDATES = [
+  "accent-primary", "accent-warm", "xterm-magenta", "git-added",
+  "git-deleted", "xterm-red", "xterm-green", "xterm-yellow",
+  "xterm-blue", "xterm-cyan", "xterm-bright-red", "xterm-bright-green",
+  "xterm-bright-yellow", "xterm-bright-blue", "xterm-bright-magenta", "xterm-bright-cyan",
+  "accent-hover", "git-untracked", "git-conflicted", "git-modified",
+  "text-secondary", "text-primary", "text-bright", "text-muted",
+];
+
+/**
+ * Sixteen distinct swatches for the kanban column picker, drawn from the
+ * accent + ANSI palette so the board follows any preset. Exact duplicates
+ * (Obsidian's blue == cyan == accent) are skipped; missing keys fall back
+ * to the Obsidian swatch in the same slot.
+ */
+export function kanbanPalette(colors: Record<string, string>): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const push = (hex: string) => {
+    const k = hex.toLowerCase();
+    if (out.length < 16 && !seen.has(k)) { seen.add(k); out.push(k); }
+  };
+  for (const key of KANBAN_CANDIDATES) {
+    const v = colors[key];
+    if (v) push(v);
+  }
+  for (const hex of KANBAN_FALLBACK) push(hex);
+  return out;
+}
+
 /**
  * Derived tokens, computed from the effective base colours (all ThemeColors
  * keys, xterm ANSI included). Keys are CSS var names without the `--`.
@@ -62,8 +114,18 @@ export function computeDerived(colors: Record<string, string>, isDark: boolean):
   const badge = c("activity-bar-badge", ap);
   const red = c("xterm-red", "#f85149");
   const yellow = c("xterm-yellow", "#d4a12e");
+  const magenta = c("xterm-magenta", "#bc8cff");
+  const swatches = kanbanPalette(colors);
+  const kanban: Record<string, string> = {
+    "kanban-col-todo": ap,
+    "kanban-col-in-progress": aw,
+    "kanban-col-in-review": magenta,
+    "kanban-col-done": c("git-added", "#3fb950"),
+  };
+  swatches.forEach((hex, i) => { kanban[`kanban-swatch-${i + 1}`] = hex; });
 
   return {
+    ...kanban,
     "accent-muted": hexToRgba(ap, 0.12),
     "accent-glow": hexToGlow(ap, 0.3),
     "accent-warm-muted": hexToRgba(aw, 0.12),
@@ -78,7 +140,10 @@ export function computeDerived(colors: Record<string, string>, isDark: boolean):
     // Text over accent / badge backgrounds, by luminance (a dark accent such
     // as Solarized's blue gets white text, a light one black).
     "on-accent": onColorFor(ap),
+    "on-error": onColorFor(c("git-deleted", "#f85149")),
     "activity-bar-badge-fg": onColorFor(badge),
+    // Secondary hue for gradients / wishlist / JSON booleans / "in review".
+    "accent-alt": magenta,
     "activity-bar-badge-glow": hexToGlow(badge, 0.3),
     "selection-bg": hexToRgba(ap, 0.25),
     // File-type icon colours from the ANSI + text palette, so the tree

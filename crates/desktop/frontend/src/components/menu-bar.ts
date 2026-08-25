@@ -32,6 +32,7 @@ import { openWebPreviewTab } from "./web-preview-panel";
 import { revealInFileTree, toggleFileTreeAutoReveal } from "./file-tree";
 import { getCodeEditorFilePath } from "./code-editor-panel";
 import { getMarkdownEditorFilePath } from "./markdown-editor-panel";
+import { resetZoom, zoomIn, zoomOut } from "../ui-zoom";
 
 // ── Types ───────────────────────────────────────
 
@@ -205,6 +206,10 @@ const MENUS: MenuDefinition[] = [
       SEP,
       { label: "Toggle Sidebar", shortcut: getShortcutKey("toggle-sidebar"), action: () => toggleSidebar() },
       { label: "Toggle AI Chat", shortcut: getShortcutKey("toggle-chat"), action: () => toggleChatPanel() },
+      SEP,
+      { label: "Zoom In", shortcut: getShortcutKey("zoom-in"), action: () => zoomIn() },
+      { label: "Zoom Out", shortcut: getShortcutKey("zoom-out"), action: () => zoomOut() },
+      { label: "Reset Zoom", shortcut: getShortcutKey("zoom-reset"), action: () => resetZoom() },
       SEP,
       { label: "Command Palette", shortcut: getShortcutKey("command-palette"), action: () => openCommandPalette() },
       { label: "Workspace Switcher", shortcut: getShortcutKey("workspace-switcher"), action: () => openWorkspaceSwitcher() },

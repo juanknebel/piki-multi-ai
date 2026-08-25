@@ -472,6 +472,8 @@ The terminal owns every key it can use. An app shortcut fires while a terminal, 
 | `Alt+Shift+L` | Application logs |
 | `Alt+Shift+S` | Sessions (persistent) dialog |
 | `Alt+I` | System Info |
+| `Ctrl+=` ° / `Ctrl+-` ° / `Ctrl+0` ° | Zoom in / out / reset — scales the whole UI and the terminal font together |
+| `Ctrl+Shift+=` / `Ctrl+Shift+-` / `Ctrl+Shift+0` | Same zoom actions, also with a terminal focused |
 | **Search** | |
 | `Ctrl+F` ° | Find file (fuzzy) |
 | `Ctrl+Shift+F` | Search in project (grep) |
@@ -663,7 +665,10 @@ crates/
         ipc.ts           # Tauri IPC command wrappers
         types.ts         # TypeScript type definitions
         theme.ts         # ThemeEngine — 5 presets, CSS variable application, xterm sync, cssToken()
-        theme-derive.ts  # Pure colour math: computeDerived() (on-accent, selection, file-icon tints, glows)
+        theme-derive.ts  # Pure colour math: computeDerived() (on-accent, selection, file-icon tints, glows, kanban palette), themeTone()
+        hljs-theme.ts    # highlight.js `.hljs-*` block generated from the palette (markdown fences follow the theme)
+        zoom.ts          # UI zoom levels + terminal font size (pure); ui-zoom.ts applies/persists (`--ui-zoom` on <html>)
+        layout-budget.ts # Shared sidebar/chat width budget so the editor column keeps ≥ 320px
         components/      # UI components (activity-bar, sidebar, tab-bar, terminal-panel, etc.)
         fonts/           # Bundled JetBrainsMono NF Mono .ttf + fonts.css (@font-face)
         styles/          # index.css entry; variables.css = design tokens (colours, --font-*, --fs-* scale,
@@ -863,7 +868,9 @@ Three crates cooperate:
 
 The desktop backend wraps `piki-core` behind Tauri IPC commands; the frontend is vanilla TypeScript. Terminals use `RawPtySession` — raw PTY bytes streamed to xterm.js as base64 Tauri events, no server-side `vt100` (xterm.js *is* the emulator; the persistent-session daemon still keeps a vt100 mirror server-side for restores).
 
-**Window state**: `tauri-plugin-window-state` saves the main window's size, position, maximized and fullscreen state on close and restores them before the first frame, so the app reopens where and how it was closed (visibility/decorations are left to `tauri.conf.json`). **Settings document**: every persisted UI preference (sidebar width, Agents-panel height, shortcuts, `shell`, pane layouts, file-tree state, chat width) lives in one JSON document (`settings` row of `UiPrefsStorage`), owned on the frontend by `settings-store.ts` — one in-memory snapshot loaded at startup, `patch()` per write, a single debounced writer that always writes the whole document (the Rust side reads `shell` from it when spawning a shell).
+**Window state**: `tauri-plugin-window-state` saves the main window's size, position, maximized and fullscreen state on close and restores them before the first frame, so the app reopens where and how it was closed (visibility/decorations are left to `tauri.conf.json`). **Settings document**: every persisted UI preference (sidebar width, Agents-panel height, shortcuts, `shell`, pane layouts, file-tree state, chat width, `uiZoom`) lives in one JSON document (`settings` row of `UiPrefsStorage`), owned on the frontend by `settings-store.ts` — one in-memory snapshot loaded at startup, `patch()` per write, a single debounced writer that always writes the whole document (the Rust side reads `shell` from it when spawning a shell).
+
+**Layout, tone & zoom**: the shell is a CSS grid (`layout.css`) — activity bar | sidebar | editor | chat. The editor column is `minmax(var(--editor-min-width), 1fr)` (320px) and the sidebar column is capped at `50vw`; the sidebar and chat drag clamps share one budget (`layout-budget.ts`) so the two panels can never squeeze the editor below 320px. At or below 1000px wide the chat leaves the grid and floats over the editor, docked right. Status-bar segments ellipsize instead of overflowing. Every theme derives its tone (`data-theme-tone="dark|light"` on `<html>`) from the luminance of `--bg-primary`: scrims, elevation shadows and the noise texture switch on it, all tints are `color-mix()` of theme tokens, and the highlight.js palette for markdown fences is generated from the theme, so light presets (Solarized Light) are readable on every screen. UI zoom (`Ctrl+=` / `Ctrl+-` / `Ctrl+0`, persisted as `uiZoom`) sets `--ui-zoom` on `<html>`; the type scale, spacing, bar heights and activity bar are rem so they scale with it, and the terminal font size follows (`14px × zoom`).
 
 **LSP**: a WebSocket proxy (`src/lsp/`) spawns language servers as child processes and bridges JSON-RPC to CodeMirror 6 (`codemirror-languageserver`). The registry is `~/.config/piki-multi/lsp.toml` — per-server `id`, `command`, `args`, `extensions`, optional `init_options` — seeded with rust-analyzer, typescript-language-server, and pyright. `idle_ttl_secs` (default 300) shuts idle servers down after a workspace switch; `max_concurrent` (default 3) caps how many run at once.
 

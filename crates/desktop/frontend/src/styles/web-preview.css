@@ -32,12 +32,12 @@
   animation: pulse var(--dur-pulse) ease-in-out infinite;
 }
 .web-preview-status-dot[data-status="ok"] {
-  background: #4caf50;
-  box-shadow: 0 0 8px rgba(76, 175, 80, 0.5);
+  background: var(--success-color);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--success-color) 50%, transparent);
 }
 .web-preview-status-dot[data-status="fail"] {
-  background: #e57373;
-  box-shadow: 0 0 8px rgba(229, 115, 115, 0.5);
+  background: var(--error-color);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--error-color) 50%, transparent);
 }
 
 .web-preview-url-input {
@@ -93,7 +93,7 @@
 .web-preview-iframe-host {
   position: relative;
   flex: 1 1 auto;
-  background: #fff;
+  background: var(--web-preview-canvas);
   overflow: hidden;
 }
 

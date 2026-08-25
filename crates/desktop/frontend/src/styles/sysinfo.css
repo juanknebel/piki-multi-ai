@@ -102,17 +102,17 @@
 
 .sysinfo-gauge-fill.gauge-ok {
   background: var(--git-added);
-  box-shadow: 0 0 6px rgba(63, 185, 80, 0.3);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--success-color) 30%, transparent);
 }
 
 .sysinfo-gauge-fill.gauge-warn {
   background: var(--accent-warm);
-  box-shadow: 0 0 6px rgba(230, 167, 48, 0.3);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--warning-color) 30%, transparent);
 }
 
 .sysinfo-gauge-fill.gauge-critical {
   background: var(--git-deleted);
-  box-shadow: 0 0 6px rgba(248, 81, 73, 0.3);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--error-color) 30%, transparent);
 }
 
 .sysinfo-gauge-detail {

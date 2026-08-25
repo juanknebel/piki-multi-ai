@@ -144,7 +144,7 @@
 
 .ws-action-delete:hover {
   color: var(--git-deleted);
-  background: rgba(248, 81, 73, 0.1);
+  background: color-mix(in srgb, var(--error-color) 10%, transparent);
 }
 
 .workspace-status {
@@ -267,7 +267,7 @@
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.55);
+  background: var(--scrim);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   display: flex;

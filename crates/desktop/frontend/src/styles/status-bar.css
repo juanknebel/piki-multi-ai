@@ -34,13 +34,18 @@
   opacity: 0.4;
 }
 
+/* Block (not flex) so text-overflow applies to the segment's own text;
+   segments never shrink by default, the long/low-priority ones below do. */
 .status-item {
-  display: flex;
-  align-items: center;
-  gap: 5px;
+  display: block;
+  flex: 0 0 auto;
+  min-width: 0;
   padding: 0 10px;
   height: 100%;
+  line-height: calc(var(--statusbar-height) - 1px);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   cursor: default;
   border-radius: var(--radius-sm);
   transition: background var(--transition-fast);
@@ -54,6 +59,16 @@
   width: 13px;
   height: 13px;
   fill: currentColor;
+  vertical-align: -2px;
+  margin-right: 5px;
+}
+
+/* Long segments give way first when the bar is narrow (ellipsized). */
+.status-item.status-cwd,
+.status-item.status-agent,
+.status-item.status-lsp {
+  flex-shrink: 1;
+  min-width: 3em;
 }
 
 .status-spacer {

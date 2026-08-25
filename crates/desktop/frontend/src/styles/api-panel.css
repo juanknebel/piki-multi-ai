@@ -217,18 +217,18 @@
   font-size: var(--fs-xs);
   font-family: var(--font-mono);
   color: var(--accent-primary);
-  background: rgba(57, 186, 230, 0.08);
+  background: color-mix(in srgb, var(--accent-primary) 8%, transparent);
   border-bottom: 1px solid var(--accent-primary);
   letter-spacing: 0.02em;
 }
 
 .api-search-match {
-  background: rgba(230, 167, 48, 0.3);
+  background: color-mix(in srgb, var(--warning-color) 30%, transparent);
   border-radius: var(--radius-xs);
 }
 
 .api-search-current {
-  background: rgba(230, 167, 48, 0.7);
+  background: color-mix(in srgb, var(--warning-color) 70%, transparent);
   outline: 1px solid var(--warning-color);
 }
 
@@ -342,10 +342,10 @@
 
 /* ── JSON syntax ────────────────────────────── */
 
-.json-key { color: #39bae6; }
+.json-key { color: var(--text-accent); }
 .json-string { color: var(--success-color); }
 .json-number { color: var(--warning-color); }
-.json-bool { color: #d2a8ff; }
+.json-bool { color: var(--accent-alt); }
 .json-null { color: var(--text-muted); }
 
 /* ── History overlay ──────────────────────────── */
@@ -353,7 +353,7 @@
 .api-history-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--scrim-strong);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;

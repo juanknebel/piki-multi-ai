@@ -4,8 +4,38 @@ import {
   getShortcuts,
   helpSections,
   isTerminalSafeCombo,
+  keyMatches,
   parseCombo,
 } from "./shortcuts";
+
+describe("zoom shortcuts", () => {
+  it("registers bare Ctrl zoom keys outside-only and Ctrl+Shift twins that capture in the terminal", () => {
+    const byId = new Map(getShortcuts().map((s) => [s.id, s]));
+    for (const id of ["zoom-in", "zoom-out", "zoom-reset"]) {
+      const def = byId.get(id);
+      expect(def, id).toBeDefined();
+      expect(def!.terminalCapture, id).not.toBe(true);
+      expect(isTerminalSafeCombo(def!.key), id).toBe(false);
+    }
+    for (const id of ["zoom-in-terminal", "zoom-out-terminal", "zoom-reset-terminal"]) {
+      const def = byId.get(id);
+      expect(def, id).toBeDefined();
+      expect(def!.terminalCapture, id).toBe(true);
+      expect(isTerminalSafeCombo(def!.key), id).toBe(true);
+    }
+  });
+
+  it("matches = - 0 on the physical key so Shift's character change does not matter", () => {
+    expect(keyMatches("+", "Equal", "=")).toBe(true); // Ctrl+Shift+= on a US layout
+    expect(keyMatches("_", "Minus", "-")).toBe(true);
+    expect(keyMatches(")", "Digit0", "0")).toBe(true);
+    expect(keyMatches("+", "NumpadAdd", "=")).toBe(true);
+    expect(keyMatches("=", "Equal", "=")).toBe(true);
+    expect(keyMatches("p", "KeyP", "P")).toBe(true);
+    expect(keyMatches("+", "Equal", "-")).toBe(false);
+    expect(keyMatches("x", "KeyX", "=")).toBe(false);
+  });
+});
 
 describe("parseCombo", () => {
   it("splits modifiers from the key", () => {

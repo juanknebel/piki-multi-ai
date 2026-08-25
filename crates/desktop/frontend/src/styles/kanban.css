@@ -66,7 +66,7 @@
   border-radius: var(--radius-md);
   padding: 8px;
   z-index: var(--z-sticky);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-sm);
 }
 .kanban-filter-dropdown.hidden {
   display: none;
@@ -110,13 +110,13 @@
 }
 
 .kanban-btn-primary {
-  background: rgba(57, 186, 230, 0.12);
+  background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
   border-color: var(--accent-primary);
   color: var(--accent-primary);
 }
 
 .kanban-btn-primary:hover {
-  background: rgba(57, 186, 230, 0.22);
+  background: color-mix(in srgb, var(--accent-primary) 22%, transparent);
 }
 
 /* ── Columns ─────────────────────────────────── */
@@ -227,7 +227,7 @@
 .kanban-column-drop-over {
   background: var(--bg-hover);
   border-color: var(--accent-primary);
-  box-shadow: inset 0 0 0 1px rgba(57, 186, 230, 0.15);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-primary) 15%, transparent);
 }
 
 .kanban-card-project {
@@ -282,28 +282,28 @@
 }
 
 .priority-bug {
-  background: rgba(248, 81, 73, 0.15);
+  background: color-mix(in srgb, var(--error-color) 15%, transparent);
   color: var(--error-color);
 }
 
 .priority-high {
-  background: rgba(230, 167, 48, 0.15);
+  background: color-mix(in srgb, var(--warning-color) 15%, transparent);
   color: var(--accent-warm);
 }
 
 .priority-medium {
-  background: rgba(173, 186, 199, 0.1);
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
   color: var(--text-primary);
 }
 
 .priority-low {
-  background: rgba(57, 186, 230, 0.1);
+  background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
   color: var(--text-accent);
 }
 
 .priority-wishlist {
-  background: rgba(123, 97, 255, 0.12);
-  color: #7b61ff;
+  background: color-mix(in srgb, var(--accent-alt) 12%, transparent);
+  color: var(--accent-alt);
 }
 
 /* ── Card actions (hover) ────────────────────── */
@@ -381,7 +381,7 @@
 .kanban-edit-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--scrim-strong);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -504,7 +504,7 @@
   background: var(--bg-elevated);
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-md);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-md);
   padding: 8px;
   display: flex;
   flex-wrap: wrap;

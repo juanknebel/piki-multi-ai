@@ -4,7 +4,7 @@
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.55);
+  background: var(--scrim);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   display: flex;
@@ -19,7 +19,7 @@
   background: var(--dialog-bg);
   border: 1px solid var(--dialog-border);
   border-radius: var(--radius-lg);
-  box-shadow: 0 20px 60px var(--dialog-shadow), 0 0 1px rgba(255, 255, 255, 0.05);
+  box-shadow: var(--shadow-lg), 0 0 1px var(--border-subtle);
   width: 560px;
   max-width: 90vw;
   max-height: 70vh;
@@ -58,7 +58,7 @@
 }
 
 .dialog-close:hover {
-  background: rgba(248, 81, 73, 0.12);
+  background: color-mix(in srgb, var(--error-color) 12%, transparent);
   color: var(--git-deleted);
 }
 
@@ -128,9 +128,13 @@
   font-size: var(--fs-base);
   appearance: none;
   -webkit-appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b949e' d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
+  /* Chevron drawn in currentColor (an SVG data-URI can't read the theme) */
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-size: 5px 5px, 5px 5px;
+  background-position: calc(100% - 15px) 50%, calc(100% - 10px) 50%;
   background-repeat: no-repeat;
-  background-position: right 10px center;
   padding-right: 28px;
   cursor: pointer;
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
@@ -316,12 +320,12 @@
 
 .dialog-btn-danger {
   background: var(--git-deleted);
-  color: #fff;
+  color: var(--on-error);
 }
 
 .dialog-btn-danger:hover {
   opacity: 0.9;
-  box-shadow: 0 0 10px rgba(248, 81, 73, 0.25);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--error-color) 25%, transparent);
 }
 
 /* ── Small button variant ────────────────────────── */
@@ -344,7 +348,7 @@
 
 .dialog-badge.success {
   color: var(--git-added);
-  background: rgba(63, 185, 80, 0.12);
+  background: color-mix(in srgb, var(--success-color) 12%, transparent);
 }
 
 .dialog-badge.muted {
@@ -536,7 +540,7 @@
 
 .import-check-badge.new {
   color: var(--git-added);
-  background: rgba(63, 185, 80, 0.1);
+  background: color-mix(in srgb, var(--success-color) 10%, transparent);
 }
 
 .import-check-badge.exists {
@@ -686,10 +690,10 @@
   border-radius: var(--radius-md);
   font-size: var(--fs-md);
   color: var(--toast-fg);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-md);
   animation: toast-in var(--dur-base) var(--ease-out);
   max-width: 420px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-subtle);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   /* Multi-line error messages keep their line breaks */
@@ -717,7 +721,7 @@
 .file-viewer-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--scrim-strong);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;

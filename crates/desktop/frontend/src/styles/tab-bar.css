@@ -124,7 +124,7 @@
 }
 
 .ws-tab-close:hover {
-  background: rgba(248, 81, 73, 0.12);
+  background: color-mix(in srgb, var(--error-color) 12%, transparent);
   color: var(--git-deleted);
 }
 

@@ -7,6 +7,7 @@ import * as ipc from "../ipc";
 import { toast, reportError } from "./toast";
 import { cssToken, themeEngine } from "../theme";
 import { isMac, modCtrl } from "../shortcuts";
+import { terminalFontSizeFor } from "../zoom";
 
 export interface TerminalInstance {
   tabId: string;
@@ -63,7 +64,7 @@ export function createTerminal(tabId: string): TerminalInstance {
 
   const terminal = new Terminal({
     fontFamily: cssToken("--font-mono", "monospace"),
-    fontSize: 14,
+    fontSize: terminalFontSizeFor(Number(cssToken("--ui-zoom", "1"))),
     lineHeight: 1.25,
     theme: themeEngine.buildXtermTheme(),
     cursorBlink: true,
@@ -238,7 +239,7 @@ export function unmountTerminal(tabId: string) {
 }
 
 
-function fitTerminal(instance: TerminalInstance) {
+export function fitTerminal(instance: TerminalInstance) {
   if (!instance.opened) return;
   // Skip when the element is hidden or detached — its clientWidth is 0 so
   // `fitAddon.fit()` would shrink the PTY to its minimum cols (~2). The

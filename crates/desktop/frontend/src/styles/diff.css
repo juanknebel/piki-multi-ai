@@ -5,7 +5,7 @@
   background: var(--bg-primary);
   border: 1px solid var(--dialog-border);
   border-radius: var(--radius-lg);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -128,30 +128,30 @@
     -45deg,
     transparent,
     transparent 4px,
-    rgba(128, 128, 128, 0.03) 4px,
-    rgba(128, 128, 128, 0.03) 8px
+    color-mix(in srgb, var(--text-primary) 3%, transparent) 4px,
+    color-mix(in srgb, var(--text-primary) 3%, transparent) 8px
   );
 }
 
 /* Color coding */
 .dp-add {
-  background: rgba(63, 185, 80, 0.08);
+  background: color-mix(in srgb, var(--success-color) 8%, transparent);
   color: var(--text-primary);
 }
 
 .dp-del {
-  background: rgba(248, 81, 73, 0.08);
+  background: color-mix(in srgb, var(--error-color) 8%, transparent);
   color: var(--text-primary);
 }
 
 /* Char-level highlights */
 .dp-char-add {
-  background: rgba(63, 185, 80, 0.3);
+  background: color-mix(in srgb, var(--success-color) 30%, transparent);
   border-radius: var(--radius-xs);
 }
 
 .dp-char-del {
-  background: rgba(248, 81, 73, 0.3);
+  background: color-mix(in srgb, var(--error-color) 30%, transparent);
   border-radius: var(--radius-xs);
 }
 
@@ -162,7 +162,7 @@
 
 .dp-hunk-header {
   padding: 5px 14px;
-  background: rgba(57, 186, 230, 0.05);
+  background: color-mix(in srgb, var(--accent-primary) 5%, transparent);
   color: var(--text-accent);
   border-top: 1px solid var(--border-primary);
   border-bottom: 1px solid var(--border-primary);
@@ -235,7 +235,7 @@
   display: flex;
   gap: var(--sp-4);
   padding: 6px 14px;
-  background: rgba(244, 112, 103, 0.06);
+  background: color-mix(in srgb, var(--git-conflicted) 6%, transparent);
   border-bottom: 1px solid var(--border-primary);
   justify-content: center;
 }
@@ -271,22 +271,22 @@
 
 /* Conflict side colors */
 .dp-ours {
-  background: rgba(57, 186, 230, 0.06);
+  background: color-mix(in srgb, var(--accent-primary) 6%, transparent);
 }
 
 .dp-theirs {
-  background: rgba(63, 185, 80, 0.06);
+  background: color-mix(in srgb, var(--success-color) 6%, transparent);
 }
 
 .dp-result {
-  background: rgba(244, 112, 103, 0.04);
+  background: color-mix(in srgb, var(--git-conflicted) 4%, transparent);
   color: var(--text-muted);
   text-align: center;
   font-style: italic;
 }
 
 .dp-resolved-content {
-  background: rgba(63, 185, 80, 0.08);
+  background: color-mix(in srgb, var(--success-color) 8%, transparent);
   color: var(--text-primary);
   text-align: left;
   font-style: normal;
@@ -386,7 +386,7 @@
 
 .cr-comment-badge {
   padding: 4px 12px 4px 52px;
-  background: rgba(57, 186, 230, 0.06);
+  background: color-mix(in srgb, var(--accent-primary) 6%, transparent);
   border-left: 3px solid var(--accent-primary);
   font-size: var(--fs-md);
   color: var(--text-primary);
@@ -396,7 +396,7 @@
 /* Side-by-side comment badge */
 .cr-comment-badge-sbs {
   padding: 4px 14px;
-  background: rgba(57, 186, 230, 0.06);
+  background: color-mix(in srgb, var(--accent-primary) 6%, transparent);
   border-left: 3px solid var(--accent-primary);
   font-size: var(--fs-md);
   color: var(--text-primary);
@@ -415,7 +415,7 @@
 
 /* Existing server-side review comments — muted styling to distinguish from drafts */
 .cr-existing-badge {
-  background: rgba(125, 133, 144, 0.08);
+  background: color-mix(in srgb, var(--text-secondary) 8%, transparent);
   border-left-color: var(--text-muted);
 }
 
@@ -426,7 +426,7 @@
 
 /* Drafted (not yet submitted) reply to an existing comment. */
 .cr-reply-draft {
-  background: rgba(57, 186, 230, 0.10);
+  background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
   border-left-color: var(--accent-primary);
   margin-left: 24px;
 }
@@ -462,5 +462,5 @@
 /* Hover effect for clickable diff rows in code review */
 .dp-row[style*="cursor: pointer"]:hover .dp-cell,
 .dp-row[style*="cursor: pointer"]:hover .dp-gutter {
-  background: rgba(57, 186, 230, 0.04);
+  background: color-mix(in srgb, var(--accent-primary) 4%, transparent);
 }
