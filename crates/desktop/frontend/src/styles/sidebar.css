@@ -167,6 +167,13 @@
   color: var(--git-deleted);
 }
 
+.workspace-restored {
+  flex-shrink: 0;
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--accent-primary);
+}
+
 .workspace-attention {
   flex-shrink: 0;
   margin-left: 6px;

@@ -200,6 +200,9 @@ export function renderWorkspaceList(container: HTMLElement) {
       const attentionDot = ws.needsAttention
         ? '<span class="workspace-attention" title="Needs attention">●</span>'
         : "";
+      const restoredMark = ws.restoredUnvisited
+        ? '<span class="workspace-restored" title="Sessions restored from the daemon — not visited yet">↺</span>'
+        : "";
 
       const chevron = row.kind === "parent"
         ? `<svg class="group-chevron${row.collapsed ? " collapsed" : ""}" viewBox="0 0 16 16">
@@ -213,6 +216,7 @@ export function renderWorkspaceList(container: HTMLElement) {
         <span class="workspace-name">${escapeHtml(rowLabel(info, ws.branch))}</span>
         ${agentGlyph}
         ${attentionDot}
+        ${restoredMark}
         <span class="workspace-actions">
           <button class="ws-action-btn" data-action="agents" title="Manage Agents">⚙</button>
           <button class="ws-action-btn" data-action="info" title="Info">i</button>

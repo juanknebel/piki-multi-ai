@@ -340,8 +340,12 @@ Status: all six phases shipped. The TUI sessions overlay (`prefix ctrl-s`)
 landed after the initial cut, and `[sessions] enabled` is honored by both
 frontends (desktop via `session::sessions_enabled()`). Still open from the
 phase-6 list: replayed-event badges (the `replayed` flag exists on the wire,
-unused). The desktop Sessions dialog (Alt+Shift+S) shipped after; adopting an
-orphan session as a new tab is still TUI-only there. Closing a running tab in
+unused). The desktop Sessions dialog (Alt+Shift+S) shipped after, and now has Adopt
+(`adopt_session`: same `tab_from_session` path as startup re-attach), a
+startup restore toast + per-workspace `↺` badge (`restore_summary`), a
+`sessions N / off / unavailable` status-bar segment (`session_status`, the
+list call as liveness probe, polled every 3s) and a quit dialog that counts
+daemon-backed vs in-process tabs (`quit_summary`). Closing a running tab in
 the desktop asks Close / Keep running / Cancel — *Keep running* is
 `detach_tab`: the window drops its attachment (Drop sends `Detach`, never
 `Kill`, and no `remove_session`), so the session lives on as detached.

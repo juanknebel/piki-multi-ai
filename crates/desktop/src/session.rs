@@ -58,43 +58,77 @@ pub fn connect_session_daemon(paths: &DataPaths) -> Option<Daemon> {
     }
 }
 
+/// What `reattach_sessions` restored on startup — surfaced to the frontend
+/// once (`restore_summary` command) for the "Restored N sessions in M
+/// workspaces" toast and the per-workspace "restored, not yet visited" badge.
+#[derive(serde::Serialize, Clone, Default)]
+pub struct RestoreSummary {
+    pub sessions: usize,
+    /// Indices (into `DesktopApp.workspaces`) that received at least one tab.
+    pub workspaces: Vec<usize>,
+}
+
+/// Build the desktop tab for a daemon session from a fresh attachment. Shared
+/// by startup re-attach and by adopting an orphan from the Sessions dialog so
+/// both produce identical tabs (same id as the session, title, liveness).
+pub fn tab_from_session(
+    app_handle: &AppHandle,
+    info: &piki_core::session::protocol::SessionInfo,
+    att: piki_core::session::client::Attachment,
+    provider_manager: &piki_core::providers::ProviderManager,
+) -> DesktopTab {
+    let provider = AIProvider::from_label(&info.meta.provider);
+    let provider_cfg = if let AIProvider::Custom(name) = &provider {
+        provider_manager.get(name)
+    } else {
+        None
+    };
+    let mut tab = DesktopTab::new(provider, provider_cfg);
+    tab.id = info.id.clone();
+    tab.custom_title = info.meta.title.clone();
+    tab.pty = Some(RawPtySession::from_attachment(
+        app_handle.clone(),
+        info.id.clone(),
+        att,
+        info.integration_on,
+    ));
+    tab.alive = info.state.is_live();
+    tab
+}
+
 /// Re-attach the daemon's persisted sessions to `workspaces` on startup. Each
 /// session whose `workspace_path` matches a workspace becomes a `DesktopTab`
 /// again (ordered by stored `order`), its reader streaming the restored screen
 /// to the frontend once the terminal mounts and requests a resync. Sessions
-/// with no matching workspace are left running.
+/// with no matching workspace are left running (orphans — adoptable from the
+/// Sessions dialog). Returns what was restored.
 pub fn reattach_sessions(
     app_handle: &AppHandle,
     daemon: &Daemon,
     workspaces: &mut [DesktopWorkspace],
     provider_manager: &piki_core::providers::ProviderManager,
-) {
+) -> RestoreSummary {
+    let mut summary = RestoreSummary::default();
     let mut sessions = match daemon.list() {
         Ok(s) => s,
         Err(e) => {
             tracing::warn!(error = %e, "could not list sessions to re-attach");
-            return;
+            return summary;
         }
     };
     sessions.sort_by_key(|s| (s.meta.workspace_path.clone(), s.meta.order));
 
-    let mut reattached = 0usize;
     for info in sessions {
-        let Some(ws) = workspaces
+        let Some((ws_idx, ws)) = workspaces
             .iter_mut()
-            .find(|w| w.info.path == info.meta.workspace_path)
+            .enumerate()
+            .find(|(_, w)| w.info.path == info.meta.workspace_path)
         else {
             continue; // orphan: keep it running
         };
         if ws.tabs.iter().any(|t| t.id == info.id) {
             continue;
         }
-        let provider = AIProvider::from_label(&info.meta.provider);
-        let provider_cfg = if let AIProvider::Custom(name) = &provider {
-            provider_manager.get(name)
-        } else {
-            None
-        };
         let att = match daemon.attach(&info.id, info.rows.max(24), info.cols.max(80)) {
             Ok(a) => a,
             Err(e) => {
@@ -102,22 +136,21 @@ pub fn reattach_sessions(
                 continue;
             }
         };
-        let mut tab = DesktopTab::new(provider, provider_cfg);
-        tab.id = info.id.clone();
-        tab.custom_title = info.meta.title.clone();
-        tab.pty = Some(RawPtySession::from_attachment(
-            app_handle.clone(),
-            info.id.clone(),
-            att,
-            info.integration_on,
-        ));
-        tab.alive = info.state.is_live();
-        ws.tabs.push(tab);
-        reattached += 1;
+        ws.tabs
+            .push(tab_from_session(app_handle, &info, att, provider_manager));
+        summary.sessions += 1;
+        if !summary.workspaces.contains(&ws_idx) {
+            summary.workspaces.push(ws_idx);
+        }
     }
-    if reattached > 0 {
-        tracing::info!(count = reattached, "re-attached persisted desktop sessions");
+    if summary.sessions > 0 {
+        tracing::info!(
+            count = summary.sessions,
+            workspaces = summary.workspaces.len(),
+            "re-attached persisted desktop sessions"
+        );
     }
+    summary
 }
 
 /// Try to spawn a tab in the daemon; returns the `Remote` session on success.

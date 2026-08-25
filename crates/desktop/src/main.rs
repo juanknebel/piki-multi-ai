@@ -165,9 +165,15 @@ fn main() {
             // workspaces, before the frontend hydrates their tabs. Falls back
             // silently to in-process PTYs when the daemon is unavailable.
             let session_daemon = session::connect_session_daemon(&paths);
-            if let Some(ref daemon) = session_daemon {
-                session::reattach_sessions(&app_handle, daemon, &mut workspaces, &provider_manager);
-            }
+            let restore_summary = match session_daemon {
+                Some(ref daemon) => session::reattach_sessions(
+                    &app_handle,
+                    daemon,
+                    &mut workspaces,
+                    &provider_manager,
+                ),
+                None => session::RestoreSummary::default(),
+            };
 
             // Create app state
             let desktop_app = DesktopApp {
@@ -179,6 +185,7 @@ fn main() {
                 sysinfo,
                 provider_manager,
                 session_daemon,
+                restore_summary,
                 chat_messages: Vec::new(),
                 chat_config,
                 chat_streaming: false,
@@ -306,6 +313,10 @@ fn main() {
             commands::agents::dispatch_agent,
             commands::agents::list_agent_rows,
             commands::session::sessions_available,
+            commands::session::session_status,
+            commands::session::restore_summary,
+            commands::session::quit_summary,
+            commands::session::adopt_session,
             commands::session::list_sessions,
             commands::session::kill_session,
             commands::session::remove_session,

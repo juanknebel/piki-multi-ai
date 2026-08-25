@@ -3,6 +3,7 @@ import { appState } from "../../state";
 import { reportError } from "../toast";
 import { showConfirm, escapeHtml as escapeConfirmHtml } from "../confirm";
 import { makeInteractive } from "../a11y";
+import { createDropdown } from "../dropdown";
 import type { SessionRow, SessionsSnapshot } from "../../types";
 
 /// Sessions dialog: every session the persistent-session daemon holds —
@@ -32,7 +33,7 @@ export async function showSessionsDialog() {
     </div>
     <div id="sessions-body" style="flex:1;overflow-y:auto;padding:4px 0;font-size:12px"></div>
     <div class="dialog-hint" style="padding:6px 12px;color:var(--text-muted);font-size:11px">
-      Click an attached session to jump to its tab · these survive quitting the app · manage from the CLI with <code>piki-multi-ai sessions</code>
+      Click an attached session to jump to its tab · Adopt opens a detached one as a tab · these survive quitting the app · manage from the CLI with <code>piki-multi-ai sessions</code>
     </div>
   `;
 
@@ -129,6 +130,12 @@ export async function showSessionsDialog() {
       const killBtn = actionBtn("Kill", "Kill the process (kept as exited)");
       const removeBtn = actionBtn("Remove", "Remove from the daemon");
       if (row.state === "exited") killBtn.disabled = true;
+      if (row.state === "detached") {
+        const adoptBtn = actionBtn("Adopt", "Open this session as a tab here");
+        adoptBtn.classList.replace("dialog-btn-secondary", "dialog-btn-primary");
+        adoptBtn.addEventListener("click", () => void adopt(row));
+        actions.append(adoptBtn);
+      }
       actions.append(killBtn, removeBtn);
       el.appendChild(actions);
 
@@ -176,6 +183,46 @@ export async function showSessionsDialog() {
         { label: opts.label, kind: "danger", isDefault: true, onSelect: opts.onConfirm },
         { label: "Cancel", kind: "secondary", autofocus: true },
       ],
+    });
+  }
+
+  /** Adopt a detached session as a tab: into the loaded workspace matching
+   *  its recorded path, else ask which one (TUI parity: `attach_orphan`). */
+  async function adopt(row: SessionRow) {
+    const workspaces = appState.workspaces;
+    if (workspaces.length === 0) {
+      reportError("Adopt session failed", "No workspace to attach the session to");
+      return;
+    }
+    let target = row.workspace_idx;
+    if (target == null) {
+      target = workspaces.length === 1 ? 0 : await pickWorkspace(row);
+      if (target == null) return;
+    }
+    try {
+      const tabIdx = await ipc.adoptSession(row.id, target);
+      close();
+      await jumpTo(target, tabIdx);
+    } catch (err) {
+      reportError("Adopt session failed", err);
+      refresh();
+    }
+  }
+
+  /** Workspace chooser for an orphan whose path matches no loaded workspace. */
+  function pickWorkspace(row: SessionRow): Promise<number | null> {
+    return new Promise((resolve) => {
+      const options = appState.workspaces.map((w, i) => ({ value: String(i), label: w.info.name }));
+      const dropdown = createDropdown(options, String(appState.activeWorkspace), "width:100%");
+      const { overlay } = showConfirm({
+        bodyHtml: `<p>Open "${escapeConfirmHtml(row.name)}" in which workspace?</p><p class="ws-delete-hint">Its own folder (${escapeConfirmHtml(row.workspace)}) is not loaded here.</p>`,
+        actions: [
+          { label: "Adopt", kind: "primary", isDefault: true, onSelect: () => resolve(Number(dropdown.value)) },
+          { label: "Cancel", kind: "secondary", autofocus: true, onSelect: () => resolve(null) },
+        ],
+        onDismiss: () => resolve(null),
+      });
+      overlay.querySelector(".ws-delete-buttons")?.before(dropdown.container);
     });
   }
 

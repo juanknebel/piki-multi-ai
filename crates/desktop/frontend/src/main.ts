@@ -83,6 +83,16 @@ async function init() {
     reportError("Failed to load workspaces", err);
   }
 
+  // Say what the session daemon brought back, and badge the workspaces the
+  // user hasn't looked at yet.
+  ipc.restoreSummary().then((rs) => {
+    if (rs.sessions === 0) return;
+    const n = rs.sessions;
+    const m = rs.workspaces.length;
+    toast(`Restored ${n} session${n === 1 ? "" : "s"} in ${m} workspace${m === 1 ? "" : "s"}`, "info");
+    appState.markRestored(rs.workspaces);
+  }).catch(() => {});
+
   // Notify LSP backend when workspace focus changes
   let lastFocusedWorkspace = -1;
   appState.on("active-workspace-changed", () => {
@@ -122,27 +132,33 @@ async function init() {
     appState.markWorkspaceAttention(event.workspace_idx);
   });
 
-  // Confirm quit when PTYs are active
+  // Confirm quit when processes are alive. The backend knows which tabs the
+  // daemon keeps and which die with the window; ask it (fast: no I/O) and
+  // word the dialog accordingly.
   let closeConfirmPending = false;
+  let quitApproved = false;
   const win = getCurrentWindow();
   try {
     await win.onCloseRequested((event) => {
-      let activeCount = 0;
-      for (const ws of appState.workspaces) {
-        for (const tab of ws.tabs) {
-          if (tab.alive) activeCount++;
+      if (quitApproved || closeConfirmPending) return;
+      // Cheap local pre-check: if nothing is alive at all, just close.
+      const anyAlive = appState.workspaces.some((ws) => ws.tabs.some((t) => t.alive));
+      if (!anyAlive) return;
+      event.preventDefault();
+      closeConfirmPending = true;
+      ipc.quitSummary().catch(() => ({ persistent: 0, local: 0 })).then((q) => {
+        if (q.persistent === 0 && q.local === 0) {
+          quitApproved = true;
+          win.destroy();
+          return;
         }
-      }
-      if (activeCount > 0 && !closeConfirmPending) {
-        event.preventDefault();
-        closeConfirmPending = true;
-        showCloseConfirm(activeCount, () => {
+        showCloseConfirm(q, () => {
+          quitApproved = true;
           win.destroy();
         }, () => {
           closeConfirmPending = false;
         });
-      }
-      // activeCount === 0: don't preventDefault, window closes normally
+      });
     });
   } catch (err) {
     console.error("Failed to register close handler:", err);
@@ -230,15 +246,24 @@ async function handleUndo() {
   }
 }
 
-function showCloseConfirm(activeCount: number, onConfirm: () => void, onCancel: () => void) {
-  const label = activeCount === 1 ? "1 terminal session is" : `${activeCount} terminal sessions are`;
+function showCloseConfirm(
+  q: { persistent: number; local: number },
+  onConfirm: () => void,
+  onCancel: () => void,
+) {
+  const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+  const lines: string[] = [];
+  if (q.persistent > 0) {
+    lines.push(`<p>${plural(q.persistent, "session")} keep${q.persistent === 1 ? "s" : ""} running in the background — the session daemon holds ${q.persistent === 1 ? "it" : "them"} and ${q.persistent === 1 ? "it" : "they"} reattach on the next launch.</p>`);
+  }
+  if (q.local > 0) {
+    lines.push(`<p>${plural(q.local, "terminal session")} run${q.local === 1 ? "s" : ""} in-process and will be <strong>terminated</strong>.</p>`);
+  }
+  const destructive = q.local > 0;
   showConfirm({
-    bodyHtml: `
-      <p>${label} still running.</p>
-      <p class="ws-delete-hint">Close anyway?</p>
-    `,
+    bodyHtml: `${lines.join("")}<p class="ws-delete-hint">${destructive ? "Quit anyway?" : "Quit?"}</p>`,
     actions: [
-      { label: "Close", kind: "danger", isDefault: true, onSelect: () => onConfirm() },
+      { label: "Quit", kind: destructive ? "danger" : "primary", isDefault: true, onSelect: () => onConfirm() },
       { label: "Cancel", kind: "secondary", onSelect: () => onCancel() },
     ],
     onDismiss: onCancel,

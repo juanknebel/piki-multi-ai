@@ -1,6 +1,7 @@
 import { appState } from "../state";
 import { getProviderLabel, getTabLabel, cliAgentStatusView, type FileStatus } from "../types";
 import { showAboutDialog } from "./dialogs/about-dialog";
+import { showSessionsDialog } from "./dialogs/sessions-dialog";
 import * as ipc from "../ipc";
 
 const STAGED_STATUSES: FileStatus[] = ["Staged", "Added", "Renamed", "StagedModified"];
@@ -91,6 +92,14 @@ export function renderStatusBar(container: HTMLElement) {
     const wsName = ws?.info.name ?? "No workspace";
     addItem(container, wsName);
 
+    // Persistent-session daemon: `sessions N` / `sessions off` /
+    // `sessions unavailable`, from the poll cache; click opens the dialog.
+    const sessionsItem = document.createElement("div");
+    sessionsItem.className = "status-item clickable status-sessions";
+    applySessionsCache(sessionsItem);
+    sessionsItem.addEventListener("click", () => void showSessionsDialog());
+    container.appendChild(sessionsItem);
+
     // Sysinfo
     if (appState.sysinfo) {
       addItem(container, appState.sysinfo);
@@ -116,6 +125,48 @@ export function renderStatusBar(container: HTMLElement) {
     });
   refreshLsp();
   setInterval(refreshLsp, 5000);
+
+  // Daemon health every 3s (the list call is the probe), patched in place.
+  const refreshSessions = () =>
+    void refreshSessionsCache().then(() => {
+      const el = container.querySelector<HTMLElement>(".status-sessions");
+      if (el) applySessionsCache(el);
+    });
+  refreshSessions();
+  setInterval(refreshSessions, 3000);
+}
+
+const sessionsCache: { text: string; state: string; title: string } = {
+  text: "sessions …",
+  state: "unknown",
+  title: "Persistent sessions",
+};
+
+function applySessionsCache(el: HTMLElement) {
+  el.textContent = sessionsCache.text;
+  el.title = sessionsCache.title;
+  el.dataset.state = sessionsCache.state;
+}
+
+async function refreshSessionsCache(): Promise<void> {
+  try {
+    const s = await ipc.sessionStatus();
+    sessionsCache.state = s.state;
+    if (s.state === "on") {
+      sessionsCache.text = `sessions ${s.live}`;
+      sessionsCache.title = `${s.live} live session${s.live === 1 ? "" : "s"} in the daemon${s.daemon_pid != null ? ` (pid ${s.daemon_pid})` : ""} — click to manage`;
+    } else if (s.state === "off") {
+      sessionsCache.text = "sessions off";
+      sessionsCache.title = "Persistent sessions disabled in config.toml ([sessions] enabled = false) — tabs run in-process";
+    } else {
+      sessionsCache.text = "sessions unavailable";
+      sessionsCache.title = "The session daemon is not answering — tabs opened now run in-process and die with the window";
+    }
+  } catch {
+    sessionsCache.state = "unavailable";
+    sessionsCache.text = "sessions unavailable";
+    sessionsCache.title = "Could not query the session daemon";
+  }
 }
 
 /** Replace a leading `$HOME` segment with `~` so the bar stays compact. */

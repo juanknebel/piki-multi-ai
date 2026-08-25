@@ -81,6 +81,9 @@ interface WorkspaceState {
   /** True when at least one tab in this workspace has fired a `pty-attention`
    *  event the user hasn't acknowledged. Cleared on `setActiveWorkspace`. */
   needsAttention: boolean;
+  /** Startup re-attach put persisted sessions here and the user hasn't
+   *  looked yet. Cleared on `setActiveWorkspace`. */
+  restoredUnvisited: boolean;
 }
 
 /** Per-tab state derived from `pty-shell-event`s / `pty-agent-event`s.
@@ -188,6 +191,7 @@ class AppState extends EventTarget {
       wsTabs: [],
       activeWsTab: 0,
       needsAttention: false,
+      restoredUnvisited: false,
     };
   }
 
@@ -223,8 +227,9 @@ class AppState extends EventTarget {
       this._hydrateLayout(ws, detail.active_tab);
     }
     const ws = this._workspaces[index];
-    if (ws?.needsAttention) {
+    if (ws?.needsAttention || ws?.restoredUnvisited) {
       ws.needsAttention = false;
+      ws.restoredUnvisited = false;
       this.emit("workspace-attention-changed");
     }
     this.emit("active-workspace-changed");
@@ -545,6 +550,19 @@ class AppState extends EventTarget {
     if (event.summary) next.agentSummary = event.summary;
     this._tabShellStates.set(event.tab_id, next);
     this.emit("tab-shell-state-changed");
+  }
+
+  /** Flag workspaces that received restored sessions at startup (except the
+   *  one being looked at). */
+  markRestored(indices: number[]) {
+    let changed = false;
+    for (const i of indices) {
+      const ws = this._workspaces[i];
+      if (!ws || i === this._activeWorkspace || ws.restoredUnvisited) continue;
+      ws.restoredUnvisited = true;
+      changed = true;
+    }
+    if (changed) this.emit("workspace-attention-changed");
   }
 
   markWorkspaceAttention(workspaceIdx: number) {

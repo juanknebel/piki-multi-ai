@@ -6,7 +6,7 @@
 
 use parking_lot::Mutex;
 use serde::Serialize;
-use tauri::State;
+use tauri::{AppHandle, State};
 
 use crate::state::DesktopApp;
 
@@ -40,6 +40,9 @@ pub struct SessionRow {
     /// frontend can jump to it. `null` for detached/exited sessions.
     pub local_workspace_idx: Option<usize>,
     pub local_tab_idx: Option<usize>,
+    /// Loaded workspace whose path is the session's recorded workspace, if
+    /// any — the default target when adopting it as a tab.
+    pub workspace_idx: Option<usize>,
 }
 
 /// Whether the daemon is reachable + its pid (for the dialog title).
@@ -56,6 +59,145 @@ fn read_daemon_pid(app: &DesktopApp) -> Option<u32> {
     std::fs::read_to_string(app.paths.session_pid_file())
         .ok()
         .and_then(|s| s.trim().parse::<u32>().ok())
+}
+
+/// Daemon health for the status bar segment. `off` = disabled in
+/// `config.toml`; `unavailable` = enabled but no daemon answers (never
+/// connected, or it died since — the list call is the liveness probe, so a
+/// manually killed daemon shows within one poll); `on` = answering, with the
+/// number of live sessions it holds (all clients, not just this window).
+#[derive(Serialize)]
+pub struct SessionStatus {
+    pub state: &'static str,
+    pub live: usize,
+    pub daemon_pid: Option<u32>,
+}
+
+#[tauri::command]
+pub async fn session_status(state: State<'_, Mutex<DesktopApp>>) -> Result<SessionStatus, String> {
+    let (enabled, daemon, daemon_pid) = {
+        let app = state.lock();
+        (
+            piki_core::session::sessions_enabled(&app.paths.config_path()),
+            app.session_daemon.clone(),
+            read_daemon_pid(&app),
+        )
+    };
+    if !enabled {
+        return Ok(SessionStatus {
+            state: "off",
+            live: 0,
+            daemon_pid: None,
+        });
+    }
+    let Some(daemon) = daemon else {
+        return Ok(SessionStatus {
+            state: "unavailable",
+            live: 0,
+            daemon_pid,
+        });
+    };
+    // Socket round-trip off the main thread; the status bar polls this.
+    let listed = tauri::async_runtime::spawn_blocking(move || daemon.list()).await;
+    Ok(match listed {
+        Ok(Ok(list)) => SessionStatus {
+            state: "on",
+            live: list.iter().filter(|s| s.state.is_live()).count(),
+            daemon_pid,
+        },
+        _ => SessionStatus {
+            state: "unavailable",
+            live: 0,
+            daemon_pid,
+        },
+    })
+}
+
+/// What startup re-attach restored (see `session::RestoreSummary`).
+#[tauri::command]
+pub fn restore_summary(state: State<'_, Mutex<DesktopApp>>) -> crate::session::RestoreSummary {
+    state.lock().restore_summary.clone()
+}
+
+/// Live tabs split by what quitting does to them: daemon-backed ones keep
+/// running, in-process ones die with the window.
+#[derive(Serialize)]
+pub struct QuitSummary {
+    pub persistent: usize,
+    pub local: usize,
+}
+
+#[tauri::command]
+pub fn quit_summary(state: State<'_, Mutex<DesktopApp>>) -> QuitSummary {
+    let app = state.lock();
+    let mut out = QuitSummary {
+        persistent: 0,
+        local: 0,
+    };
+    for tab in app.workspaces.iter().flat_map(|w| w.tabs.iter()) {
+        let Some(pty) = tab.pty.as_ref() else {
+            continue;
+        };
+        if !tab.alive {
+            continue;
+        }
+        if pty.is_remote() {
+            out.persistent += 1;
+        } else {
+            out.local += 1;
+        }
+    }
+    out
+}
+
+/// Adopt an orphan (detached) session as a tab of `workspace_idx` — TUI
+/// parity (`attach_orphan`). Attaches, builds the tab exactly like startup
+/// re-attach, appends it and returns its tab index so the frontend can jump.
+#[tauri::command]
+pub async fn adopt_session(
+    app_handle: AppHandle,
+    state: State<'_, Mutex<DesktopApp>>,
+    session_id: String,
+    workspace_idx: usize,
+) -> Result<usize, String> {
+    let daemon = daemon_of(&state)?;
+    {
+        let app = state.lock();
+        if workspace_idx >= app.workspaces.len() {
+            return Err("Workspace index out of range".to_string());
+        }
+        if app
+            .workspaces
+            .iter()
+            .any(|w| w.tabs.iter().any(|t| t.id == session_id))
+        {
+            return Err("That session is already open as a tab here".to_string());
+        }
+    }
+    let id = session_id.clone();
+    let d = daemon.clone();
+    let info = tauri::async_runtime::spawn_blocking(move || d.list())
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .find(|s| s.id == id)
+        .ok_or_else(|| "Session no longer exists".to_string())?;
+    let (rows, cols, id) = (info.rows.max(24), info.cols.max(80), info.id.clone());
+    let att = tauri::async_runtime::spawn_blocking(move || daemon.attach(&id, rows, cols))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())?;
+
+    let mut app = state.lock();
+    if workspace_idx >= app.workspaces.len() {
+        return Err("Workspace index out of range".to_string());
+    }
+    let tab = crate::session::tab_from_session(&app_handle, &info, att, &app.provider_manager);
+    let ws = &mut app.workspaces[workspace_idx];
+    ws.tabs.push(tab);
+    ws.active_tab = ws.tabs.len() - 1;
+    Ok(ws.active_tab)
 }
 
 /// Whether this instance spawns tabs in the session daemon. The frontend
@@ -135,6 +277,10 @@ pub fn list_sessions(state: State<'_, Mutex<DesktopApp>>) -> SessionsSnapshot {
                 Some((wi, ti)) => (Some(wi), Some(ti)),
                 None => (None, None),
             };
+            let workspace_idx = app
+                .workspaces
+                .iter()
+                .position(|w| w.info.path == info.meta.workspace_path);
             SessionRow {
                 id: info.id,
                 name,
@@ -144,6 +290,7 @@ pub fn list_sessions(state: State<'_, Mutex<DesktopApp>>) -> SessionsSnapshot {
                 exit_code,
                 local_workspace_idx,
                 local_tab_idx,
+                workspace_idx,
             }
         })
         .collect();

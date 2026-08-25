@@ -599,6 +599,20 @@ export function listAgentRows(): Promise<import("./types").AgentRow[]> {
 export function sessionsAvailable(): Promise<boolean> {
   return invoke("sessions_available");
 }
+export function sessionStatus(): Promise<import("./types").SessionStatus> {
+  return invoke("session_status");
+}
+export function restoreSummary(): Promise<import("./types").RestoreSummary> {
+  return invoke("restore_summary");
+}
+export function quitSummary(): Promise<import("./types").QuitSummary> {
+  return invoke("quit_summary");
+}
+/** Adopt a detached daemon session as a tab of `workspaceIdx`; resolves to
+ *  the new tab's index in that workspace. */
+export function adoptSession(sessionId: string, workspaceIdx: number): Promise<number> {
+  return invoke("adopt_session", { sessionId, workspaceIdx });
+}
 export function listSessions(): Promise<import("./types").SessionsSnapshot> {
   return invoke("list_sessions");
 }

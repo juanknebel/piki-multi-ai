@@ -58,6 +58,18 @@
   cursor: pointer;
 }
 
+.status-sessions[data-state="on"] {
+  color: var(--git-added);
+}
+
+.status-sessions[data-state="off"] {
+  color: var(--text-muted);
+}
+
+.status-sessions[data-state="unavailable"] {
+  color: var(--warning-color);
+}
+
 .status-item.warning {
   color: var(--accent-warm);
 }

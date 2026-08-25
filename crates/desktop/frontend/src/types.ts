@@ -211,6 +211,27 @@ export interface SessionRow {
   exit_code: number | null;
   local_workspace_idx: number | null;
   local_tab_idx: number | null;
+  /** Loaded workspace matching the session's recorded path — default Adopt target. */
+  workspace_idx: number | null;
+}
+
+/** Status-bar segment: daemon health + live session count (all clients). */
+export interface SessionStatus {
+  state: "on" | "off" | "unavailable";
+  live: number;
+  daemon_pid: number | null;
+}
+
+/** What startup re-attach restored. */
+export interface RestoreSummary {
+  sessions: number;
+  workspaces: number[];
+}
+
+/** Live tabs by what quitting does to them. */
+export interface QuitSummary {
+  persistent: number;
+  local: number;
 }
 
 export interface SessionsSnapshot {
