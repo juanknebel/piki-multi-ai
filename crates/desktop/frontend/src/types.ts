@@ -320,7 +320,7 @@ export interface ChatMessage {
   content: string;
 }
 
-export type ChatServerType = "Ollama" | "LlamaCpp";
+export type ChatServerType = "Ollama" | "LlamaCpp" | "OpenRouter";
 
 export interface ChatConfig {
   provider: string;
@@ -328,6 +328,7 @@ export interface ChatConfig {
   model: string;
   base_url: string;
   system_prompt: string | null;
+  api_key?: string | null;
 }
 
 export interface ChatModelInfo {

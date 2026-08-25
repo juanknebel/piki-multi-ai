@@ -360,6 +360,33 @@ fn render_settings(frame: &mut Frame, area: Rect, app: &App) {
     ));
     lines.push(Line::from(""));
 
+    // API Key field (masked)
+    let key_active = active_field == crate::app::ChatSettingsField::ApiKey;
+    let key_label_style = if key_active {
+        Style::default().fg(h)
+    } else {
+        Style::default().fg(theme.general.muted_text)
+    };
+    lines.push(Line::from(Span::styled("  API Key (OpenRouter):", key_label_style)));
+    let display_key = if key_active {
+        app.chat_panel.settings_api_key.clone()
+    } else {
+        let k = &app.chat_panel.settings_api_key;
+        if k.is_empty() {
+            "(none - uses OPENROUTER_API_KEY env)".to_string()
+        } else {
+            "•".repeat(k.len().min(20))
+        }
+    };
+    lines.push(render_text_field(
+        &display_key,
+        if key_active { Some(cursor.min(display_key.len())) } else { None },
+        max_w,
+        h,
+        theme.palette.bg0,
+    ));
+    lines.push(Line::from(""));
+
     // System prompt field
     let prompt_active = active_field == crate::app::ChatSettingsField::SystemPrompt;
     let prompt_label_style = if prompt_active {

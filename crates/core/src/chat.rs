@@ -64,6 +64,7 @@ pub enum ChatServerType {
     #[default]
     Ollama,
     LlamaCpp,
+    OpenRouter,
 }
 
 impl ChatServerType {
@@ -72,6 +73,7 @@ impl ChatServerType {
         match self {
             Self::Ollama => "http://localhost:11434",
             Self::LlamaCpp => "http://localhost:8080",
+            Self::OpenRouter => "https://openrouter.ai/api/v1",
         }
     }
 
@@ -80,6 +82,7 @@ impl ChatServerType {
         match self {
             Self::Ollama => "Ollama",
             Self::LlamaCpp => "llama.cpp",
+            Self::OpenRouter => "OpenRouter",
         }
     }
 
@@ -87,7 +90,8 @@ impl ChatServerType {
     pub fn next(self) -> Self {
         match self {
             Self::Ollama => Self::LlamaCpp,
-            Self::LlamaCpp => Self::Ollama,
+            Self::LlamaCpp => Self::OpenRouter,
+            Self::OpenRouter => Self::Ollama,
         }
     }
 }
@@ -106,6 +110,9 @@ pub struct ChatConfig {
     pub base_url: String,
     /// Optional system prompt prepended to every conversation.
     pub system_prompt: Option<String>,
+    /// API key for remote providers (OpenRouter). Not logged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<String>,
 }
 
 impl Default for ChatConfig {
@@ -116,6 +123,19 @@ impl Default for ChatConfig {
             model: String::new(),
             base_url: "http://localhost:11434".to_string(),
             system_prompt: None,
+            api_key: None,
         }
+    }
+}
+
+impl ChatConfig {
+    /// Effective API key, preferring stored key, then OPENROUTER_API_KEY env var (piki-ai parity).
+    pub fn effective_api_key(&self) -> Option<String> {
+        if let Some(k) = self.api_key.as_ref().filter(|s| !s.trim().is_empty()) {
+            return Some(k.clone());
+        }
+        std::env::var("OPENROUTER_API_KEY")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
     }
 }

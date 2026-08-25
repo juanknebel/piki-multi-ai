@@ -28,6 +28,7 @@ let currentConfig: ipc.ChatConfig = {
   model: "",
   base_url: "http://localhost:11434",
   system_prompt: null,
+  api_key: null,
 };
 
 export async function initChatPanel(el: HTMLElement) {
@@ -190,7 +191,7 @@ async function loadModels() {
 
     replaceDropdown(options, initial);
   } catch {
-    const serverLabel = currentConfig.server_type === "LlamaCpp" ? "llama.cpp" : "Ollama";
+    const serverLabel = currentConfig.server_type === "LlamaCpp" ? "llama.cpp" : currentConfig.server_type === "OpenRouter" ? "OpenRouter" : "Ollama";
     replaceDropdown([{ value: "", label: `${serverLabel} not available` }], "");
   }
 }
@@ -468,11 +469,13 @@ function showChatSettings() {
   const serverDefaults: Record<ipc.ChatServerType, string> = {
     Ollama: "http://localhost:11434",
     LlamaCpp: "http://localhost:8080",
+    OpenRouter: "https://openrouter.ai/api/v1",
   };
   const serverDropdown = createDropdown(
     [
       { value: "Ollama", label: "Ollama" },
       { value: "LlamaCpp", label: "llama.cpp" },
+      { value: "OpenRouter", label: "OpenRouter" },
     ],
     currentConfig.server_type,
   );
@@ -499,6 +502,18 @@ function showChatSettings() {
   urlInput.placeholder = serverDefaults[currentConfig.server_type];
   urlRow.appendChild(urlInput);
   body.appendChild(urlRow);
+
+  // API Key field (OpenRouter)
+  const keyRow = document.createElement("div");
+  keyRow.className = "chat-settings-row";
+  keyRow.innerHTML = `<label class="chat-settings-label">API Key (OpenRouter)</label>`;
+  const keyInput = document.createElement("input");
+  keyInput.className = "dialog-input";
+  keyInput.type = "password";
+  keyInput.value = (currentConfig as any).api_key ?? "";
+  keyInput.placeholder = "sk-or-... or leave empty for OPENROUTER_API_KEY env";
+  keyRow.appendChild(keyInput);
+  body.appendChild(keyRow);
 
   // System prompt field
   const promptRow = document.createElement("div");
@@ -537,12 +552,15 @@ function showChatSettings() {
   footer.querySelector(".chat-settings-save")!.addEventListener("click", async () => {
     const newUrl = urlInput.value.trim();
     const newPrompt = promptInput.value.trim();
+    const newKey = keyInput.value.trim();
     const newServerType = serverDropdown.value as ipc.ChatServerType;
     const serverChanged = newServerType !== currentConfig.server_type;
     const urlChanged = newUrl !== currentConfig.base_url;
+    const keyChanged = newKey !== ((currentConfig as any).api_key ?? "");
 
     currentConfig.server_type = newServerType;
     currentConfig.base_url = newUrl || serverDefaults[newServerType];
+    (currentConfig as any).api_key = newKey || null;
     currentConfig.system_prompt = newPrompt || null;
 
     if (serverChanged) {
@@ -553,8 +571,8 @@ function showChatSettings() {
     await saveConfig();
     close();
 
-    // Reload models if URL or server type changed
-    if (urlChanged || serverChanged) {
+    // Reload models if URL, server type or key changed
+    if (urlChanged || serverChanged || keyChanged) {
       await loadModels();
     }
   });

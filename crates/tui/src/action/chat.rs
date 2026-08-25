@@ -64,7 +64,8 @@ pub(super) async fn handle(
                     "TUI: sending agent message"
                 );
 
-                let client = piki_agent::chat_client_for(server_type, &base_url);
+                let api_key = app.chat_panel.config.effective_api_key();
+                let client = piki_agent::chat_client_for_with_key(server_type, &base_url, api_key);
 
                 let registry = piki_agent::ToolRegistry::default_all();
                 let context = piki_agent::ToolContext {
@@ -97,7 +98,8 @@ pub(super) async fn handle(
 
                 // `ChatClient` hides each backend's message format, so this
                 // no longer has to know one from the other.
-                let client = piki_agent::chat_client_for(server_type, &base_url);
+                let api_key = app.chat_panel.config.effective_api_key();
+                let client = piki_agent::chat_client_for_with_key(server_type, &base_url, api_key);
                 let task = tokio::spawn(async move {
                     if let Err(e) = client.chat_stream(&model, &msgs, None, tx).await {
                         tracing::error!(error = %e, "chat_stream error");
@@ -147,6 +149,24 @@ pub(super) async fn handle(
                                 let msg = format!(
                                     "{e}. Is llama-server running? (llama-server -m model.gguf)"
                                 );
+                                let _ = status_tx.send(msg);
+                            }
+                        }
+                    });
+                }
+                piki_core::chat::ChatServerType::OpenRouter => {
+                    let api_key = app.chat_panel.config.effective_api_key();
+                    tokio::spawn(async move {
+                        let client = piki_api_client::OpenRouterClient::new_with_key(&base_url, api_key);
+                        match client.list_models().await {
+                            Ok(models) => {
+                                let names: Vec<String> = models.into_iter().map(|m| m.id).collect();
+                                let payload = format!("__MODELS__{}", names.join("\n"));
+                                let _ =
+                                    chat_tx.send(piki_api_client::ChatStreamEvent::Done(payload));
+                            }
+                            Err(e) => {
+                                let msg = format!("{e}. Check OpenRouter API key and base URL.");
                                 let _ = status_tx.send(msg);
                             }
                         }

@@ -1047,6 +1047,7 @@ pub enum ChatSettingsField {
     #[default]
     ServerType,
     BaseUrl,
+    ApiKey,
     SystemPrompt,
 }
 
@@ -1067,6 +1068,8 @@ pub struct ChatPanelState {
     pub sub_mode: ChatSubMode,
     /// Settings editor: editable base URL
     pub settings_url: String,
+    /// Settings editor: editable API key (OpenRouter)
+    pub settings_api_key: String,
     /// Settings editor: editable system prompt
     pub settings_prompt: String,
     /// Settings editor: which field is focused
