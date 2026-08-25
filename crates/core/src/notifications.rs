@@ -50,7 +50,7 @@ pub enum NotificationDelivery {
 /// or `"off"`. `sound` toggles the built-in chimes (done/attention),
 /// independent of `delivery`; the `sound_*_path` overrides point at custom
 /// audio files (any format your system player decodes).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct NotificationsConfig {
     pub delivery: String,

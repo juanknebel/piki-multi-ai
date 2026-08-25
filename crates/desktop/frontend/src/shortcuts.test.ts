@@ -37,6 +37,17 @@ describe("zoom shortcuts", () => {
   });
 });
 
+describe("settings shortcut", () => {
+  it("is Ctrl+, in General, outside-only (bare Ctrl is not terminal-safe)", () => {
+    const def = getShortcuts().find((s) => s.id === "settings");
+    expect(def).toBeDefined();
+    expect(def!.defaultKey).toBe("Ctrl+,");
+    expect(def!.category).toBe("General");
+    expect(def!.terminalCapture).not.toBe(true);
+    expect(parseCombo("Ctrl+,")).toEqual({ ctrl: true, shift: false, alt: false, key: "," });
+  });
+});
+
 describe("parseCombo", () => {
   it("splits modifiers from the key", () => {
     expect(parseCombo("Ctrl+Shift+F")).toEqual({ ctrl: true, shift: true, alt: false, key: "F" });

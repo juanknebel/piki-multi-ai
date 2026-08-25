@@ -1125,7 +1125,15 @@ impl App {
             tokio::sync::mpsc::unbounded_channel::<piki_api_client::ChatStreamEvent>();
         let (agent_event_tx, agent_event_rx) =
             tokio::sync::mpsc::unbounded_channel::<piki_agent::AgentEvent>();
-        let config = crate::config::Config::load_from(paths);
+        let mut config = crate::config::Config::load_from(paths);
+        // Fold in the choices made in the desktop's Settings ▸ General tab
+        // (shared SQLite DB, `piki_core::app_settings`): DB override >
+        // config.toml > default. After this line `config.sessions.enabled`
+        // (read by `event_loop::run` before connecting the daemon) and
+        // `config.notifications` are the effective values.
+        let overrides = piki_core::app_settings::AppSettings::load(storage.ui_prefs.as_deref());
+        config.sessions.enabled = overrides.sessions_enabled(config.sessions.enabled);
+        config.notifications = overrides.notifications(config.notifications);
         // Propagate notification prefs to the shared core layer (process
         // globals — the notify_* helpers read them on every event).
         config.notifications.apply();

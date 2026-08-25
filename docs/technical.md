@@ -459,6 +459,7 @@ The terminal owns every key it can use. An app shortcut fires while a terminal, 
 | `Ctrl+Space` ° | Workspace switcher |
 | `Alt+D` | Dashboard |
 | `?` ° | Help / all shortcuts |
+| `Ctrl+,` ° | Settings |
 | `Esc` | Close dialog / overlay |
 | `Alt+1`…`Alt+9` | Switch to workspace N |
 | Right-click workspace row (or its `⋯`) | Workspace menu: Open, Agents, Info, Edit, Create Worktree (GitHub), Merge / Rebase, Delete |
@@ -468,7 +469,6 @@ The terminal owns every key it can use. An app shortcut fires while a terminal, 
 | `Alt+K` | Kanban Board |
 | `Alt+Shift+W` | Open Web Preview tab |
 | `Alt+T` | Theme settings |
-| `Alt+S` | Settings |
 | `Alt+P` | Manage providers |
 | `Alt+Shift+L` | Application logs |
 | `Alt+Shift+S` | Sessions (persistent) dialog |
@@ -522,7 +522,17 @@ The terminal owns every key it can use. An app shortcut fires while a terminal, 
 | `Ctrl+S` | Save file (in editor) |
 | `Ctrl+F` | Find in file (CodeMirror) |
 
-° = outside-only (see above). On macOS every `Ctrl`/`Alt` above is `⌘`. Rows without ° that are not in the Settings dialog (`Esc`, `Alt+1…9`, `Ctrl+Tab`, copy/paste, `Ctrl+H`, `Ctrl+Enter`, the editor keys, the mouse gestures) are fixed widget bindings; everything else is editable at runtime via the Settings dialog (`Alt+S`). The in-app help (`?`) is generated from the same registry, so it always shows your current keys.
+° = outside-only (see above). On macOS every `Ctrl`/`Alt` above is `⌘`. Rows without ° that are not in the Settings dialog (`Esc`, `Alt+1…9`, `Ctrl+Tab`, copy/paste, `Ctrl+H`, `Ctrl+Enter`, the editor keys, the mouse gestures) are fixed widget bindings; everything else is editable at runtime via the Settings dialog (`Ctrl+,`). The in-app help (`?`) is generated from the same registry, so it always shows your current keys.
+
+### Desktop Settings dialog
+
+`Ctrl+,` (outside-only — from a focused shell use Edit ▸ Settings or the palette) opens a dialog with a left tab rail; the last tab is remembered, `Esc` closes, `↑`/`↓` move along the rail, focus lands on the tab's first control.
+
+- **General** — the settings both frontends share, stored in the piki database (`piki_core::app_settings`, key `app_settings` in `ui_preferences`) with the precedence **database override > `config.toml` > default**: persistent sessions on/off, notification delivery (`system` / `terminal` / `off`), sound. Each control carries a *from config.toml* / *set here* badge and the tab says what `config.toml` currently contains; *Reset general* clears the overrides so the file applies again. Notifications apply live (`set_app_settings` re-runs `NotificationsConfig::apply`); the sessions choice is read at startup only — the tab shows *Currently on — will be off after you restart* and the status bar appends `(restart)` while the two differ. The TUI folds the same overrides into its `Config` in `App::new`, so a choice made here is honoured by `piki-multi-ai` on its next start too.
+- **Appearance** — *Open theme editor…* (the Theme dialog, `Alt+T`), density (`compact` / `normal` / `comfortable`, `data-density` on `<html>`, persisted as `appearance.density`) and UI zoom — one dropdown over the same levels `Ctrl+=` / `Ctrl+-` step through.
+- **Terminal** — the shell command (never reset) and the Settings ▸ Terminal section described below.
+- **Shortcuts** — grouped by category in the Help dialog's order, a filter box matching action, key or category, the ° outside-only marker, `⚠` when two actions (or an action and a widget key such as `Ctrl+Tab`) share a combo, `!` when a terminal-capturing action was rebound to a chord the terminal owns and therefore fires outside it only. Click the current key, press the new chord (`Esc` cancels); a key already taken is refused with a toast.
+- **Restore Defaults** (confirmed) resets shortcuts, the terminal look, zoom, density and the General overrides; it keeps the shell command and the provider binaries. *Reset <tab>* in the footer does the same for one tab.
 
 ### Desktop tabs, sidebar and switcher
 
@@ -542,7 +552,7 @@ The terminal owns every key it can use. An app shortcut fires while a terminal, 
 - **Context menu** (right-click): Copy (disabled without a selection), Paste, Select All (copies too when copy-on-select is on), Clear, Search…, Send Next Key to Terminal.
 - **Search bar** (`Ctrl+Shift+B`, menu, palette): anchored to the top-right of the terminal (it never scrolls with the viewport), a `n/m` result counter (`No results` in red, `m+` past the highlight limit), *Aa* match-case and *.\** regex toggles, `Enter` / `Shift+Enter` next / previous, `Esc` closes and focuses the terminal. The last query and toggles are remembered per tab.
 - **Send next key** (`Ctrl+Shift+E`): the next keystroke bypasses the app's shortcut dispatcher and xterm's own copy/paste interception and is turned into bytes as any terminal would (`Alt+B` → `ESC b`). Modifier presses on the way to a chord keep it armed; `Esc`, the chord again, or the terminal losing focus cancel it. The armed pane shows `next key → terminal` in its header.
-- **Settings ▸ Terminal** (`Alt+S`): font family (empty = the theme's mono font), font size, line height, scrollback (1k–100k), cursor style + blink, copy on select. Everything applies to every open terminal immediately and is persisted under the `terminal` key of the settings document (only the fields that differ from the defaults). The font size is the **base at zoom 1** — UI zoom (`Ctrl+=` / `Ctrl+-` / `Ctrl+0`) multiplies it (`14px × 125% = 18px`), and the dialog shows the effective size next to the field.
+- **Settings ▸ Terminal** (`Ctrl+,` → Terminal tab): font family (empty = the theme's mono font), font size, line height, scrollback (1k–100k), cursor style + blink, copy on select. Everything applies to every open terminal immediately and is persisted under the `terminal` key of the settings document (only the fields that differ from the defaults). The font size is the **base at zoom 1** — UI zoom (`Ctrl+=` / `Ctrl+-` / `Ctrl+0`) multiplies it (`14px × 125% = 18px`), and the dialog shows the effective size next to the field.
 
 ### Desktop Source Control panel
 
@@ -610,7 +620,7 @@ Every terminal tab — shells, AI agents, dispatched agents, and the lazygit tab
 - **Visible state (desktop)** — on launch a toast says `Restored N sessions in M workspaces` and each workspace that received restored tabs shows a `↺` badge until you visit it. The status bar's right side reads `sessions N` (live sessions in the daemon, all clients), `sessions off` (`[sessions] enabled = false`) or `sessions unavailable` (enabled but the daemon isn't answering — polled every 3s, so a killed daemon shows within one poll); clicking it opens the Sessions dialog. Quitting with live tabs says what actually happens: `N sessions keep running in the background` for daemon-backed tabs versus `N terminal sessions … will be terminated` for in-process ones (only the latter makes the Quit button red).
 - **Closing a tab that is still running** — the desktop asks first. The confirm names each live process with its agent status (e.g. `claude — needs permission`) and offers **Close** (kill), **Keep running** (only when the daemon is on: the window lets go of the session without killing it, and it reappears in Sessions as *detached*, adoptable from the TUI or the CLI) or **Cancel**. A dirty editor in the same tab is prompted for separately, first. A tab whose process exited shows a dimmed `○` chip and an **↻ Restart** button in its pane header that respawns the same provider in the same pane, keeping a custom title.
 - **Manage from the CLI** — `piki-multi-ai sessions list|kill|stop` (see [Commands](#serve--sessions)).
-- **Disable** — set `enabled = false` under `[sessions]` in `config.toml` to run every tab in-process. Both frontends honor it: the TUI through its full config parse, the desktop through `piki_core::session::sessions_enabled()` (the desktop keeps its other settings in SQLite and reads `config.toml` only for this).
+- **Disable** — untick *Persistent sessions* in the desktop's Settings ▸ General (`Ctrl+,`), or set `enabled = false` under `[sessions]` in `config.toml`, to run every tab in-process. The dialog choice is stored in the piki database and wins over the file (`piki_core::app_settings::resolve`: database > `config.toml` > default); both frontends read the same merge — the TUI in `App::new` (into `config.sessions.enabled`, checked by `event_loop::run` before connecting the daemon), the desktop in `main.rs` before `connect_session_daemon`. It takes effect on the next launch: the status bar shows `sessions N (restart)` / `sessions off (restart)` until then.
 
 Killing the app hard (SIGKILL) still leaves sessions running, because the daemon is a separate process that owns the PTYs. The one thing that takes sessions down with it is the daemon itself dying — kept deliberately tiny for that reason. Design and internals: [persistent-sessions.md](persistent-sessions.md).
 
@@ -657,7 +667,7 @@ All helpers live in `piki-core::notifications` (`notify_agent_idle`, `notify_com
 
 An OS notification is suppressed **only** when the user is already looking at that exact event's tab — i.e. it's the active tab of the active workspace **and** the piki window/terminal has OS focus. An event from a *background* tab/workspace still fires the OS notification even while piki is focused, because the user can't see a tab they aren't on (window focus alone is too coarse — the active-tab gate is what makes background agents actually notify). Focus is tracked via crossterm `FocusGained`/`FocusLost` (TUI) and Tauri `WindowEvent::Focused` (desktop); terminals that don't emit focus events (CSI ? 1004) default to unfocused, so they always notify. The mailbox always records regardless.
 
-Delivery is selectable (`[notifications]` in `config.toml`): OS toast (default), OSC 9 to the host terminal emulator (tmux/ssh-friendly), or off — plus optional built-in chimes (done/attention) played through the system audio tools, independent of the toast mode. `piki_core::notifications::NotificationsConfig` is the shared type: the TUI embeds it in its `Config`, the desktop reads just that table via `NotificationsConfig::from_config_file` in `main.rs`, and both call `apply()` once at startup — so `delivery = "off"` silences either binary. See the [README's Configuration section](../README.md#configuration--theming).
+Delivery is selectable (`[notifications]` in `config.toml`): OS toast (default), OSC 9 to the host terminal emulator (tmux/ssh-friendly), or off — plus optional built-in chimes (done/attention) played through the system audio tools, independent of the toast mode. `piki_core::notifications::NotificationsConfig` is the shared type: the TUI embeds it in its `Config`, the desktop reads just that table via `NotificationsConfig::from_config_file` in `main.rs`, and both call `apply()` once at startup — so `delivery = "off"` silences either binary. Both first fold in the database overrides from the desktop's Settings ▸ General (`piki_core::app_settings`: `delivery` and `sound` can be chosen there and win over the file; the sound paths stay file-only), and the desktop re-applies the layer live when the dialog changes it. See the [README's Configuration section](../README.md#configuration--theming).
 
 ## Architecture
 

@@ -61,24 +61,34 @@ fn read_daemon_pid(app: &DesktopApp) -> Option<u32> {
         .and_then(|s| s.trim().parse::<u32>().ok())
 }
 
-/// Daemon health for the status bar segment. `off` = disabled in
-/// `config.toml`; `unavailable` = enabled but no daemon answers (never
-/// connected, or it died since — the list call is the liveness probe, so a
-/// manually killed daemon shows within one poll); `on` = answering, with the
-/// number of live sessions it holds (all clients, not just this window).
+/// Daemon health for the status bar segment. `off` = disabled (Settings ▸
+/// General override or `config.toml`) when this process started;
+/// `unavailable` = enabled but no daemon answers (never connected, or it
+/// died since — the list call is the liveness probe, so a manually killed
+/// daemon shows within one poll); `on` = answering, with the number of live
+/// sessions it holds (all clients, not just this window). `enabled_next` is
+/// what the NEXT launch will use (DB > config.toml > default, re-read on
+/// every poll) so the bar can flag a pending change made in Settings.
 #[derive(Serialize)]
 pub struct SessionStatus {
     pub state: &'static str,
     pub live: usize,
     pub daemon_pid: Option<u32>,
+    pub enabled_next: bool,
 }
 
 #[tauri::command]
 pub async fn session_status(state: State<'_, Mutex<DesktopApp>>) -> Result<SessionStatus, String> {
-    let (enabled, daemon, daemon_pid) = {
+    let (enabled, enabled_next, daemon, daemon_pid) = {
         let app = state.lock();
+        let next = piki_core::app_settings::resolve(
+            &app.paths.config_path(),
+            app.storage.ui_prefs.as_deref(),
+        )
+        .sessions_enabled;
         (
-            piki_core::session::sessions_enabled(&app.paths.config_path()),
+            app.sessions_enabled,
+            next,
             app.session_daemon.clone(),
             read_daemon_pid(&app),
         )
@@ -88,6 +98,7 @@ pub async fn session_status(state: State<'_, Mutex<DesktopApp>>) -> Result<Sessi
             state: "off",
             live: 0,
             daemon_pid: None,
+            enabled_next,
         });
     }
     let Some(daemon) = daemon else {
@@ -95,6 +106,7 @@ pub async fn session_status(state: State<'_, Mutex<DesktopApp>>) -> Result<Sessi
             state: "unavailable",
             live: 0,
             daemon_pid,
+            enabled_next,
         });
     };
     // Socket round-trip off the main thread; the status bar polls this.
@@ -104,11 +116,13 @@ pub async fn session_status(state: State<'_, Mutex<DesktopApp>>) -> Result<Sessi
             state: "on",
             live: list.iter().filter(|s| s.state.is_live()).count(),
             daemon_pid,
+            enabled_next,
         },
         _ => SessionStatus {
             state: "unavailable",
             live: 0,
             daemon_pid,
+            enabled_next,
         },
     })
 }

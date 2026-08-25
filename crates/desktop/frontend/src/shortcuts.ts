@@ -85,12 +85,15 @@ const shortcuts: ShortcutDef[] = [
   { id: "workspace-switcher", label: "Workspace Switcher", category: "General", defaultKey: "Ctrl+Space", key: "Ctrl+Space", action: () => {} },
   { id: "dashboard", label: "Dashboard", category: "General", defaultKey: "Alt+D", key: "Alt+D", action: () => {}, terminalCapture: true },
   { id: "help", label: "Keyboard Shortcuts", category: "General", defaultKey: "?", key: "?", action: () => {} },
+  // Ctrl+, is the settings key everywhere else (VS Code, GNOME, macOS ⌘+,);
+  // bare Ctrl is not terminal-safe so it stays outside-only — the palette,
+  // and the Edit menu reach the same dialog from a focused shell.
+  { id: "settings", label: "Settings", category: "General", defaultKey: "Ctrl+,", key: "Ctrl+,", action: () => {} },
   { id: "toggle-sidebar", label: "Toggle Sidebar", category: "View & Panels", defaultKey: "Ctrl+B", key: "Ctrl+B", action: () => {} },
   { id: "toggle-chat", label: "Toggle AI Chat", category: "View & Panels", defaultKey: "Ctrl+Shift+L", key: "Ctrl+Shift+L", action: () => {}, terminalCapture: true },
   { id: "kanban", label: "Kanban Board", category: "View & Panels", defaultKey: "Alt+K", key: "Alt+K", action: () => {}, terminalCapture: true },
   { id: "web-preview", label: "Open Web Preview", category: "View & Panels", defaultKey: "Alt+Shift+W", key: "Alt+Shift+W", action: () => {}, terminalCapture: true },
   { id: "theme", label: "Theme Settings", category: "View & Panels", defaultKey: "Alt+T", key: "Alt+T", action: () => {}, terminalCapture: true },
-  { id: "settings", label: "Settings", category: "View & Panels", defaultKey: "Alt+S", key: "Alt+S", action: () => {}, terminalCapture: true },
   { id: "manage-providers", label: "Manage Providers", category: "View & Panels", defaultKey: "Alt+P", key: "Alt+P", action: () => {}, terminalCapture: true },
   { id: "logs", label: "Application Logs", category: "View & Panels", defaultKey: "Alt+Shift+L", key: "Alt+Shift+L", action: () => {}, terminalCapture: true },
   { id: "sessions", label: "Sessions (persistent)", category: "View & Panels", defaultKey: "Alt+Shift+S", key: "Alt+Shift+S", action: () => {}, terminalCapture: true },
@@ -234,6 +237,24 @@ export function resetAllShortcuts() {
     def.key = def.defaultKey;
   }
   persistOverrides();
+}
+
+/** Widget keys a rebind may not claim (read-only copy for Settings ▸ Shortcuts). */
+export function getReservedCombos(): { key: string; label: string }[] {
+  return RESERVED_COMBOS.map((r) => ({ ...r }));
+}
+
+/** True when `def` asked to capture in the terminal but its current key
+ *  is not terminal-safe: the rule demoted it to outside-only. Settings ▸
+ *  Shortcuts flags these rows. */
+export function isDemotedShortcut(def: ShortcutDef): boolean {
+  return def.terminalCapture === true && !isTerminalSafeCombo(def.key);
+}
+
+/** True when `def` only fires with focus outside a terminal/input/editor
+ *  (the ° marker in Help and Settings ▸ Shortcuts). */
+export function isOutsideOnly(def: ShortcutDef): boolean {
+  return !capturesInTerminal(def);
 }
 
 /** The shortcut or reserved widget key already bound to `key`, if any. */

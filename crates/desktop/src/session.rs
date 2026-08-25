@@ -17,12 +17,13 @@ use crate::pty_raw::RawPtySession;
 use crate::state::{DesktopTab, DesktopWorkspace};
 
 /// Connect to — or launch — the session daemon for `paths`. `None` when
-/// sessions are disabled in `config.toml` or unavailable/incompatible; the
-/// caller then runs tabs in-process (Local), exactly as before this feature
-/// existed.
-pub fn connect_session_daemon(paths: &DataPaths) -> Option<Daemon> {
-    if !piki_core::session::sessions_enabled(&paths.config_path()) {
-        tracing::info!("persistent sessions disabled in config.toml; in-process tabs");
+/// sessions are disabled (`enabled`: the effective value from
+/// `piki_core::app_settings::resolve` — Settings ▸ General override, else
+/// `config.toml`) or unavailable/incompatible; the caller then runs tabs
+/// in-process (Local), exactly as before this feature existed.
+pub fn connect_session_daemon(paths: &DataPaths, enabled: bool) -> Option<Daemon> {
+    if !enabled {
+        tracing::info!("persistent sessions disabled (settings/config.toml); in-process tabs");
         return None;
     }
     let socket = paths.session_socket();

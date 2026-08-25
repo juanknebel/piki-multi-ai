@@ -1,195 +1,197 @@
-import {
-  getShortcuts,
-  updateShortcut,
-  resetAllShortcuts,
-  findConflict,
-  isTerminalSafeCombo,
-  eventToCombo,
-  formatShortcut,
-  getShellSetting,
-  setShellSetting,
-} from "../../shortcuts";
+// Settings dialog (Ctrl+, / Edit ▸ Settings / palette): a left tab rail —
+// General / Appearance / Terminal / Shortcuts — and one panel. Each tab is a
+// `SettingsSection` (settings-controls.ts) built by its own module; this
+// file only mounts them, remembers the last tab (`settingsTab` in the
+// settings store), routes the footer's "Reset this tab" / "Restore Defaults"
+// and owns the keyboard: Esc closes (not while a key is being recorded),
+// ↑/↓/Home/End move along the rail, initial focus lands on the active
+// tab's first control, focus is restored on close.
+//
+// What "Restore Defaults" does NOT touch, on purpose: the terminal shell
+// command (a machine-specific path) and the provider binaries
+// (providers.toml, Manage Providers). The confirm says so.
+
+import { getShellSetting, setShellSetting } from "../../shortcuts";
+import { settingsStore } from "../../settings";
+import { showConfirm } from "../confirm";
 import { toast } from "../toast";
 import { attachPathPicker } from "../path-picker";
 import { buildTerminalSettingsSection } from "./terminal-settings-section";
+import { buildGeneralSettingsSection } from "./general-settings-section";
+import { buildAppearanceSettingsSection } from "./appearance-settings-section";
+import { buildShortcutsSettingsSection } from "./shortcuts-settings-section";
+import { settingsHint, settingsSection, type SettingsSection } from "./settings-controls";
 
-export async function showSettingsDialog() {
+export type SettingsTabId = "general" | "appearance" | "terminal" | "shortcuts";
+
+const TABS: { id: SettingsTabId; label: string }[] = [
+  { id: "general", label: "General" },
+  { id: "appearance", label: "Appearance" },
+  { id: "terminal", label: "Terminal" },
+  { id: "shortcuts", label: "Shortcuts" },
+];
+
+const LAST_TAB_KEY = "settingsTab";
+
+function isTabId(v: unknown): v is SettingsTabId {
+  return typeof v === "string" && TABS.some((t) => t.id === v);
+}
+
+export async function showSettingsDialog(initialTab?: SettingsTabId) {
   document.querySelector(".settings-backdrop")?.remove();
+  const prevFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
   const backdrop = document.createElement("div");
   backdrop.className = "dialog-backdrop settings-backdrop";
 
   const dialog = document.createElement("div");
-  dialog.className = "dialog ui-surface";
-  dialog.style.maxWidth = "640px";
-  dialog.style.maxHeight = "80vh";
+  dialog.className = "dialog ui-surface settings-dialog";
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-label", "Settings");
 
-  // Header
   const header = document.createElement("div");
   header.className = "ui-header";
   header.innerHTML = `
     <span class="ui-header-title">Settings</span>
-    <button data-variant="ghost" data-icon class="dialog-close ui-btn" title="Close" aria-label="Close">&times;</button>
-  `;
+    <div class="ui-header-actions">
+      <button data-variant="ghost" data-icon class="dialog-close ui-btn" title="Close" aria-label="Close">&times;</button>
+    </div>`;
 
-  // Body
+  // ── Body: rail + panel ──
   const body = document.createElement("div");
-  body.className = "dialog-body";
-  body.style.overflowY = "auto";
-  body.style.padding = "0";
+  body.className = "settings-body";
 
-  // ── Shell section ──
-  const shellSection = document.createElement("div");
-  shellSection.className = "settings-section";
+  const rail = document.createElement("nav");
+  rail.className = "settings-rail";
+  rail.setAttribute("role", "tablist");
+  rail.setAttribute("aria-label", "Settings sections");
+  rail.setAttribute("aria-orientation", "vertical");
 
-  const currentShell = getShellSetting();
-  const envShell = "$SHELL";
+  const panel = document.createElement("div");
+  panel.className = "settings-panel";
+  panel.setAttribute("role", "tabpanel");
 
-  shellSection.innerHTML = `
-    <div class="settings-section-title">Shell</div>
-    <div class="settings-shell-row">
-      <label class="settings-label">Terminal shell command</label>
-      <input class="settings-shell-input ui-input" type="text" value="${escAttr(currentShell)}" placeholder="Default: ${envShell}" />
-    </div>
-    <div class="settings-hint">Leave empty to use system default ($SHELL). Changes apply to new Shell tabs.</div>
-  `;
+  body.appendChild(rail);
+  body.appendChild(panel);
 
-  const shellInput = shellSection.querySelector<HTMLInputElement>(".settings-shell-input")!;
-  attachPathPicker(shellInput, { directory: false, title: "Select shell binary" });
-  let shellTimer: ReturnType<typeof setTimeout> | null = null;
-  shellInput.addEventListener("input", () => {
-    if (shellTimer) clearTimeout(shellTimer);
-    shellTimer = setTimeout(() => {
-      setShellSetting(shellInput.value.trim());
-    }, 500);
-  });
+  const sections: Record<SettingsTabId, SettingsSection> = {
+    general: buildGeneralSettingsSection(),
+    appearance: buildAppearanceSettingsSection(),
+    terminal: buildTerminalTab(),
+    shortcuts: buildShortcutsSettingsSection(),
+  };
 
-  body.appendChild(shellSection);
-
-  // ── Terminal section (terminal-settings-section.ts) ──
-  const terminalSection = buildTerminalSettingsSection();
-  body.appendChild(terminalSection.el);
-
-  // ── Shortcuts section ──
-  const shortcutsSection = document.createElement("div");
-  shortcutsSection.className = "settings-section";
-  shortcutsSection.innerHTML = `<div class="settings-section-title">Keyboard Shortcuts</div>`;
-
-  const table = document.createElement("div");
-  table.className = "settings-shortcuts-table";
-
-  // Header row
-  const headerRow = document.createElement("div");
-  headerRow.className = "settings-shortcut-row settings-shortcut-header";
-  headerRow.innerHTML = `
-    <span class="settings-col-action">Action</span>
-    <span class="settings-col-default">Default</span>
-    <span class="settings-col-current">Current</span>
-  `;
-  table.appendChild(headerRow);
-
-  const shortcuts = getShortcuts();
-
-  for (const def of shortcuts) {
-    const row = document.createElement("div");
-    row.className = "settings-shortcut-row";
-
-    const actionCol = document.createElement("span");
-    actionCol.className = "settings-col-action";
-    actionCol.textContent = def.label;
-
-    const defaultCol = document.createElement("span");
-    defaultCol.className = "settings-col-default";
-    defaultCol.innerHTML = `<kbd>${esc(formatShortcut(def.defaultKey))}</kbd>`;
-
-    const currentCol = document.createElement("span");
-    currentCol.className = "settings-col-current";
-    const keyBtn = document.createElement("button");
-    keyBtn.className = "settings-key-btn ui-btn";
-    keyBtn.dataset.variant = "secondary";
-    keyBtn.dataset.size = "sm";
-    keyBtn.textContent = formatShortcut(def.key);
-    if (def.key !== def.defaultKey) keyBtn.classList.add("modified");
-
-    keyBtn.addEventListener("click", () => {
-      keyBtn.textContent = "Press keys...";
-      keyBtn.classList.add("recording");
-
-      const handler = (e: KeyboardEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-
-        const combo = eventToCombo(e);
-        if (!combo) return; // modifier-only press
-
-        if (e.key === "Escape") {
-          keyBtn.textContent = formatShortcut(def.key);
-          keyBtn.classList.remove("recording");
-          document.removeEventListener("keydown", handler, true);
-          return;
-        }
-
-        const conflict = findConflict(def.id, combo);
-        if (conflict) {
-          toast(`"${combo}" already used by "${conflict.label}"`, "error");
-          return;
-        }
-
-        if (def.terminalCapture && !isTerminalSafeCombo(combo)) {
-          toast(`"${formatShortcut(combo)}" belongs to the terminal — "${def.label}" will only fire when focus is outside it`, "info");
-        }
-        updateShortcut(def.id, combo);
-        keyBtn.textContent = formatShortcut(combo);
-        keyBtn.classList.remove("recording");
-        keyBtn.classList.toggle("modified", combo !== def.defaultKey);
-        document.removeEventListener("keydown", handler, true);
-      };
-
-      document.addEventListener("keydown", handler, true);
-    });
-
-    currentCol.appendChild(keyBtn);
-
-    row.appendChild(actionCol);
-    row.appendChild(defaultCol);
-    row.appendChild(currentCol);
-    table.appendChild(row);
+  const tabButtons = new Map<SettingsTabId, HTMLButtonElement>();
+  for (const t of TABS) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "settings-rail-tab";
+    b.setAttribute("role", "tab");
+    b.id = `settings-tab-${t.id}`;
+    b.textContent = t.label;
+    b.addEventListener("click", () => select(t.id, true));
+    rail.appendChild(b);
+    tabButtons.set(t.id, b);
+    sections[t.id].el.hidden = true;
+    panel.appendChild(sections[t.id].el);
   }
 
-  shortcutsSection.appendChild(table);
-  body.appendChild(shortcutsSection);
+  let active: SettingsTabId = initialTab ?? (isTabId(settingsStore.get(LAST_TAB_KEY)) ? settingsStore.get<SettingsTabId>(LAST_TAB_KEY)! : "general");
 
-  // Footer
+  const select = (id: SettingsTabId, focusControl: boolean) => {
+    active = id;
+    for (const t of TABS) {
+      const on = t.id === id;
+      const b = tabButtons.get(t.id)!;
+      b.setAttribute("aria-selected", String(on));
+      b.tabIndex = on ? 0 : -1;
+      sections[t.id].el.hidden = !on;
+    }
+    panel.setAttribute("aria-labelledby", `settings-tab-${id}`);
+    panel.scrollTop = 0;
+    resetTabBtn.textContent = `Reset ${TABS.find((t) => t.id === id)!.label.toLowerCase()}`;
+    settingsStore.patch(LAST_TAB_KEY, id === "general" ? undefined : id);
+    if (focusControl) {
+      sections[id].focus();
+      // A tab still loading has nothing to focus: keep focus inside the
+      // dialog (Esc, Tab order) on its rail button rather than on <body>.
+      if (!dialog.contains(document.activeElement)) tabButtons.get(id)!.focus();
+    }
+  };
+
+  rail.addEventListener("keydown", (e) => {
+    const idx = TABS.findIndex((t) => t.id === active);
+    let next = -1;
+    if (e.key === "ArrowDown" || e.key === "ArrowRight") next = (idx + 1) % TABS.length;
+    else if (e.key === "ArrowUp" || e.key === "ArrowLeft") next = (idx - 1 + TABS.length) % TABS.length;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = TABS.length - 1;
+    if (next < 0) return;
+    e.preventDefault();
+    select(TABS[next].id, false);
+    tabButtons.get(TABS[next].id)!.focus();
+  });
+
+  // ── Footer ──
   const footer = document.createElement("div");
-  footer.className = "dialog-footer";
-  footer.innerHTML = `
-    <button data-variant="danger" class="ui-btn" id="settings-reset">Restore Defaults</button>
-    <button data-variant="secondary" class="ui-btn" id="settings-close">Close</button>
-  `;
+  footer.className = "dialog-footer settings-footer";
+  const resetTabBtn = document.createElement("button");
+  resetTabBtn.type = "button";
+  resetTabBtn.className = "ui-btn";
+  resetTabBtn.dataset.variant = "ghost";
+  resetTabBtn.title = "Defaults for the current tab only";
+  resetTabBtn.addEventListener("click", () => void resetTab(active));
+  const spacer = document.createElement("span");
+  spacer.className = "settings-footer-spacer";
+  const restoreBtn = document.createElement("button");
+  restoreBtn.type = "button";
+  restoreBtn.className = "ui-btn";
+  restoreBtn.dataset.variant = "danger";
+  restoreBtn.textContent = "Restore Defaults";
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.className = "ui-btn";
+  closeBtn.dataset.variant = "secondary";
+  closeBtn.textContent = "Close";
+  footer.append(resetTabBtn, spacer, restoreBtn, closeBtn);
 
-  dialog.appendChild(header);
-  dialog.appendChild(body);
-  dialog.appendChild(footer);
+  dialog.append(header, body, footer);
   backdrop.appendChild(dialog);
   document.body.appendChild(backdrop);
 
-  const close = () => backdrop.remove();
-
+  const close = () => {
+    backdrop.remove();
+    prevFocus?.focus();
+  };
   header.querySelector(".dialog-close")!.addEventListener("click", close);
-  footer.querySelector("#settings-close")!.addEventListener("click", close);
+  closeBtn.addEventListener("click", close);
 
-  footer.querySelector("#settings-reset")!.addEventListener("click", () => {
-    resetAllShortcuts();
-    shellInput.value = "";
-    setShellSetting("");
-    terminalSection.reset();
-    // Re-render shortcut keys
-    const btns = table.querySelectorAll<HTMLButtonElement>(".settings-key-btn");
-    shortcuts.forEach((def, i) => {
-      btns[i].textContent = formatShortcut(def.key);
-      btns[i].classList.remove("modified");
+  const resetTab = async (id: SettingsTabId) => {
+    await sections[id].reset();
+    if (id !== "general") toast(`${TABS.find((t) => t.id === id)!.label} settings restored to defaults`, "success");
+  };
+
+  restoreBtn.addEventListener("click", () => {
+    showConfirm({
+      bodyHtml: `
+        <p>Restore default settings?</p>
+        <p class="ws-delete-hint">Resets every keyboard shortcut, the terminal look (font, size, line height, scrollback, cursor, copy on select), UI zoom and density, and the persistent-sessions / notification choices made here — config.toml applies to those again.</p>
+        <p class="ws-delete-hint">Kept: the terminal shell command and the provider binaries (Manage Providers).</p>`,
+      actions: [
+        { label: "Cancel", kind: "secondary" },
+        {
+          label: "Restore defaults",
+          kind: "danger",
+          onSelect: () => {
+            void (async () => {
+              for (const t of TABS) await sections[t.id].reset();
+              toast("Settings restored to defaults", "success");
+              sections[active].focus();
+            })();
+          },
+        },
+      ],
     });
-    toast("Settings restored to defaults", "success");
   });
 
   backdrop.addEventListener("click", (e) => {
@@ -198,19 +200,55 @@ export async function showSettingsDialog() {
   backdrop.addEventListener("keydown", (e) => {
     // Only close on Escape if not recording a shortcut
     if (e.key === "Escape" && !document.querySelector(".settings-key-btn.recording")) {
+      e.stopPropagation();
       close();
     }
   });
-  backdrop.setAttribute("tabindex", "0");
-  backdrop.focus();
+
+  select(active, true);
 }
 
-function esc(s: string): string {
-  const d = document.createElement("div");
-  d.textContent = s;
-  return d.innerHTML;
-}
+/** Terminal tab: the shell command (kept by every reset — it is a path on
+ *  this machine, not a preference) above the Settings ▸ Terminal section
+ *  from terminal-settings-section.ts. */
+function buildTerminalTab(): SettingsSection {
+  const el = document.createElement("div");
+  el.className = "settings-tab-terminal";
 
-function escAttr(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+  const shell = settingsSection("Shell");
+  const row = document.createElement("div");
+  row.className = "settings-shell-row";
+  const label = document.createElement("label");
+  label.className = "settings-label";
+  label.htmlFor = "settings-shell";
+  label.textContent = "Terminal shell command";
+  const shellInput = document.createElement("input");
+  shellInput.id = "settings-shell";
+  shellInput.className = "settings-shell-input ui-input";
+  shellInput.type = "text";
+  shellInput.value = getShellSetting();
+  shellInput.placeholder = "Default: $SHELL";
+  row.append(label, shellInput);
+  shell.appendChild(row);
+  attachPathPicker(shellInput, { directory: false, title: "Select shell binary" });
+  let shellTimer: ReturnType<typeof setTimeout> | null = null;
+  shellInput.addEventListener("input", () => {
+    if (shellTimer) clearTimeout(shellTimer);
+    shellTimer = setTimeout(() => setShellSetting(shellInput.value.trim()), 500);
+  });
+  shell.appendChild(settingsHint("Leave empty to use the system default ($SHELL). Applies to new Shell tabs. Never reset by Restore Defaults."));
+  el.appendChild(shell);
+
+  const terminal = buildTerminalSettingsSection();
+  el.appendChild(terminal.el);
+
+  return {
+    el,
+    reset() {
+      terminal.reset();
+    },
+    focus() {
+      shellInput.focus();
+    },
+  };
 }

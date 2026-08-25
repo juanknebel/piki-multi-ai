@@ -1,5 +1,64 @@
-/* Settings dialog (dialogs/settings-dialog.ts): sections, shell row and
- * the shortcut rebinding table. Inputs are `.ui-input`, buttons `.ui-btn`. */
+/* Settings dialog (dialogs/settings-dialog.ts + the *-settings-section.ts
+ * modules): the tab rail, the panel, section blocks, the label|control grid
+ * and the shortcut table. Inputs are `.ui-input`, buttons `.ui-btn`; only
+ * layout and the feature's own states live here. */
+
+/* `.dialog.ui-surface.settings-dialog` — wider and taller than the 560px
+   default so the rail + a shortcut row fit without wrapping. */
+.settings-dialog {
+  width: 800px;
+  height: 80vh;
+  max-height: 80vh;
+}
+
+.settings-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Tab rail ── */
+
+.settings-rail {
+  flex: none;
+  width: 150px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-4);
+  border-right: 1px solid var(--border-primary);
+  background: var(--bg-surface);
+}
+
+.settings-rail-tab {
+  text-align: left;
+  padding: 0 var(--sp-4);
+  height: var(--control-height);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-md);
+  color: var(--text-secondary);
+  transition: background var(--dur-fast), color var(--dur-fast);
+}
+
+.settings-rail-tab:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.settings-rail-tab[aria-selected="true"] {
+  background: var(--accent-muted);
+  color: var(--text-bright);
+  font-weight: 600;
+  box-shadow: inset 2px 0 0 var(--accent-primary);
+}
+
+.settings-panel {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+/* ── Sections (also used by terminal-settings-section.ts) ── */
 
 .settings-section {
   padding: 16px 18px;
@@ -19,6 +78,83 @@
   margin-bottom: 12px;
 }
 
+.settings-hint {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  margin-top: 6px;
+  line-height: var(--leading-normal);
+}
+
+/* "Currently on — will be off after you restart" */
+.settings-hint[data-tone="pending"] {
+  color: var(--warning-color);
+}
+
+/* Label | control rows (General, Appearance). */
+.settings-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  align-items: center;
+  gap: var(--sp-4) var(--sp-5);
+}
+
+.settings-grid-label {
+  font-size: var(--fs-md);
+  color: var(--text-primary);
+  white-space: nowrap;
+  align-self: start;
+  padding-top: 6px;
+}
+
+.settings-grid-control {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+
+.settings-grid-control .dialog-dropdown {
+  min-width: 200px;
+}
+
+.settings-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: var(--control-height);
+  font-size: var(--fs-md);
+  color: var(--text-primary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.settings-check input {
+  accent-color: var(--accent-primary);
+  margin: 0;
+  flex: none;
+}
+
+/* "from config.toml" / "set here" — where a shared setting comes from. */
+.settings-source {
+  font-size: var(--fs-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-primary);
+  color: var(--text-muted);
+  white-space: nowrap;
+  cursor: help;
+}
+
+.settings-source[data-source="override"] {
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+/* ── Shell row (Terminal tab) ── */
+
 .settings-shell-row {
   display: flex;
   align-items: center;
@@ -37,15 +173,43 @@
   font-family: var(--font-mono);
 }
 
-.settings-hint {
-  font-size: var(--fs-xs);
-  color: var(--text-muted);
-  margin-top: 6px;
+/* ── Shortcuts tab ── */
+
+.settings-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-panel);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: 12px 18px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+/* `.settings-filter ui-input` (sm) fills the toolbar. */
+.settings-filter {
+  flex: 1;
+  min-width: 0;
 }
 
 .settings-shortcuts-table {
   display: flex;
   flex-direction: column;
+  padding: 0 18px 12px;
+}
+
+.settings-shortcut-group {
+  padding-top: 14px;
+}
+
+.settings-shortcut-group-title {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
 }
 
 .settings-shortcut-row {
@@ -72,8 +236,12 @@
 
 .settings-col-action {
   flex: 1;
+  min-width: 0;
   font-size: var(--fs-md);
   color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .settings-col-default {
@@ -96,8 +264,33 @@
   text-align: center;
 }
 
+/* ⚠ conflict (red) / ! demoted-to-outside-only (amber) after the label. */
+.settings-flag {
+  margin-left: var(--sp-3);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  cursor: help;
+}
+
+.settings-flag[data-kind="conflict"] {
+  color: var(--error-color);
+}
+
+.settings-flag[data-kind="demoted"] {
+  color: var(--warning-color);
+}
+
+.settings-legend {
+  margin: 0;
+  padding: 10px 18px 14px;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  line-height: var(--leading-normal);
+}
+
 /* `.settings-key-btn ui-btn` (secondary, sm): the current binding; turns
-   amber while recording a new chord, accent once it differs from default. */
+   amber while recording a new chord, accent once it differs from default,
+   red-bordered when it collides with another action. */
 .settings-key-btn {
   min-width: 80px;
   font-weight: 500;
@@ -113,4 +306,14 @@
 .settings-key-btn.modified {
   border-color: var(--accent-primary);
   color: var(--accent-primary);
+}
+
+.settings-key-btn[aria-invalid="true"] {
+  border-color: var(--error-color);
+}
+
+/* ── Footer: "Reset <tab>" left, Restore Defaults + Close right ── */
+
+.settings-footer-spacer {
+  flex: 1;
 }

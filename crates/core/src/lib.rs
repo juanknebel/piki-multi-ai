@@ -1,5 +1,6 @@
 pub mod agent_scan;
 pub mod agent_state_detect;
+pub mod app_settings;
 pub mod chat;
 pub mod cli_agent;
 pub mod diff;

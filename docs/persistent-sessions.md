@@ -338,7 +338,13 @@ Each phase ends green on `just ci` and is committed on `persistence-sessions`.
 
 Status: all six phases shipped. The TUI sessions overlay (`prefix ctrl-s`)
 landed after the initial cut, and `[sessions] enabled` is honored by both
-frontends (desktop via `session::sessions_enabled()`). Still open from the
+frontends (desktop via `session::sessions_enabled()`). The desktop's Settings
+▸ General (`Ctrl+,`) toggles it without the file: the choice is stored in
+`ui_preferences` (`piki_core::app_settings`, database > `config.toml` >
+default), both frontends merge it at startup (TUI `App::new`, desktop
+`main.rs` → `connect_session_daemon(paths, enabled)`), it applies on the
+next launch, and `session_status.enabled_next` lets the status bar say
+`(restart)` while the running state differs. Still open from the
 phase-6 list: replayed-event badges (the `replayed` flag exists on the wire,
 unused). The desktop Sessions dialog (Alt+Shift+S) shipped after, and now has Adopt
 (`adopt_session`: same `tab_from_session` path as startup re-attach), a

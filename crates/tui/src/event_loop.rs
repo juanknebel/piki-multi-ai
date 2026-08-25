@@ -164,7 +164,7 @@ pub(crate) async fn run(
             "startup: session daemon connected + sessions re-attached"
         );
     } else {
-        tracing::info!("persistent sessions disabled (config); tabs run in-process");
+        tracing::info!("persistent sessions disabled (settings/config); tabs run in-process");
     }
 
     // FileWatcher setup runs in the BACKGROUND: `FileWatcher::new` walks the

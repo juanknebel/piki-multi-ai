@@ -179,10 +179,15 @@ async function refreshSessionsCache(): Promise<void> {
       sessionsCache.title = `${s.live} live session${s.live === 1 ? "" : "s"} in the daemon${s.daemon_pid != null ? ` (pid ${s.daemon_pid})` : ""} — click to manage`;
     } else if (s.state === "off") {
       sessionsCache.text = "sessions off";
-      sessionsCache.title = "Persistent sessions disabled in config.toml ([sessions] enabled = false) — tabs run in-process";
+      sessionsCache.title = "Persistent sessions disabled (Settings ▸ General, or [sessions] enabled = false in config.toml) — tabs run in-process";
     } else {
       sessionsCache.text = "sessions unavailable";
       sessionsCache.title = "The session daemon is not answering — tabs opened now run in-process and die with the window";
+    }
+    // Settings ▸ General changed the choice; it only applies on the next launch.
+    if (s.enabled_next !== (s.state !== "off")) {
+      sessionsCache.text += " (restart)";
+      sessionsCache.title += ` — will be ${s.enabled_next ? "on" : "off"} after a restart (changed in Settings)`;
     }
   } catch {
     sessionsCache.state = "unavailable";

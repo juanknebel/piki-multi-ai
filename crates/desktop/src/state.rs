@@ -24,6 +24,12 @@ pub struct DesktopApp {
     /// Handle to the persistent-session daemon, when reachable. `None` means
     /// sessions are disabled/unavailable — tabs then run in-process (Local).
     pub session_daemon: Option<piki_core::session::client::Daemon>,
+    /// Effective `[sessions] enabled` this process started with (precedence:
+    /// DB override, then config.toml, then the default — see
+    /// `piki_core::app_settings`). A change made in Settings ▸ General applies
+    /// on the next launch; `session_status` reports both so the status bar
+    /// can say "restart".
+    pub sessions_enabled: bool,
     /// What startup re-attach restored; read once by the frontend.
     pub restore_summary: crate::session::RestoreSummary,
     /// Global AI chat messages (not tied to any workspace).

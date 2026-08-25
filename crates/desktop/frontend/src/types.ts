@@ -246,6 +246,39 @@ export interface SessionStatus {
   state: "on" | "off" | "unavailable";
   live: number;
   daemon_pid: number | null;
+  /** What the NEXT launch will use (Settings ▸ General > config.toml > default). */
+  enabled_next: boolean;
+}
+
+/** `piki_core::app_settings::AppSettings` — the overrides both frontends
+ *  honour; `null`/absent = "use config.toml" for that key. */
+export interface AppSettings {
+  sessions_enabled?: boolean | null;
+  notification_delivery?: NotificationDelivery | null;
+  sound?: boolean | null;
+}
+
+export type NotificationDelivery = "off" | "system" | "terminal";
+
+/** `piki_core::notifications::NotificationsConfig` as serialized. */
+export interface NotificationsConfig {
+  delivery: string;
+  sound: boolean;
+  sound_path: string | null;
+  sound_done_path: string | null;
+  sound_attention_path: string | null;
+}
+
+/** `commands/settings.rs::AppSettingsView` — the merged settings plus the
+ *  two lower layers, so the General tab can say where a value comes from. */
+export interface AppSettingsView {
+  sessions_enabled: boolean;
+  notifications: NotificationsConfig;
+  config_sessions_enabled: boolean;
+  config_notifications: NotificationsConfig;
+  overrides: AppSettings;
+  /** `[sessions] enabled` the running process started with. */
+  runtime_sessions_enabled: boolean;
 }
 
 /** What startup re-attach restored. */

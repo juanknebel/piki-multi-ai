@@ -44,6 +44,7 @@ import { jumpToAttention, startAgentRowsSync } from "./components/agents-panel";
 import { initMenuBar } from "./components/menu-bar";
 import { initChatPanel, initChatResize, toggleChatPanel } from "./components/chat-panel";
 import { initUiZoom, resetZoom, zoomIn, zoomOut } from "./ui-zoom";
+import { initDensity } from "./density";
 import { initTooltips } from "./components/tooltip";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { themeEngine } from "./theme";
@@ -56,6 +57,8 @@ async function init() {
   await themeEngine.loadFromStorage();
   // Persisted UI zoom (rem scale + terminal font) — before anything renders.
   initUiZoom();
+  // Persisted density (`data-density` on <html>; Settings ▸ Appearance).
+  initDensity();
 
   initTooltips();
   initMenuBar(document.getElementById("menu-bar")!);

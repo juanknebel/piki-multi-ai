@@ -97,7 +97,7 @@ Highlights on top of the shared feature set:
 - **Editor-grade tabs & sidebar** — middle-click closes a tab (a running process still gets its confirm), `+` and a `⋯` all-tabs list never scroll away, right-click menus on tabs (rename, split, move to another workspace with the process alive, close / keep running) and on workspace rows (open, agents, info, edit, merge, delete); the `Ctrl+Space` switcher ranks by most-recently-used and matches fuzzily (`wsauth` finds `ws-auth`) with an agent / dirty-git glyph per row; an empty workspace shows its name and branch with Shell / provider / Open file buttons; deleting a workspace says what it removes for its type, counts uncommitted changes and lists the agents it will terminate
 - **Extras** — file explorer with git decorations, web preview tab for local dev servers, kanban board, API explorer with history, AI chat panel, system info dashboard
 
-Desktop keyboard shortcuts are listed in [docs/technical.md](docs/technical.md#desktop-keyboard-shortcuts); all of them are editable at runtime (`Alt+S`). The window reopens with the size, position and maximized state it was closed with.
+Desktop keyboard shortcuts are listed in [docs/technical.md](docs/technical.md#desktop-keyboard-shortcuts); all of them are editable at runtime (`Ctrl+,` → Settings ▸ Shortcuts, grouped by category with a filter and conflict flags). The window reopens with the size, position and maximized state it was closed with.
 
 ## Installation
 
@@ -152,6 +152,17 @@ All UI aspects, including keybindings and themes, are customizable via `~/.confi
 mkdir -p ~/.config/piki-multi
 piki-multi-ai generate-config > ~/.config/piki-multi/config.toml
 ```
+
+### Settings dialog (desktop)
+
+`Ctrl+,` (or Edit ▸ Settings / the command palette) opens a tabbed Settings dialog — nothing in it needs `config.toml`:
+
+- **General** — persistent sessions on/off, notification delivery (system / host terminal / off), sound. These are the *shared* settings: they are stored in the piki database, so the TUI follows them too, and they win over `[sessions]` / `[notifications]` in `config.toml` until you reset the tab. Notifications switch live; sessions apply on the next launch (the dialog and the status bar say so).
+- **Appearance** — the theme editor, density (compact / normal / comfortable) and UI zoom.
+- **Terminal** — shell command, font, size, line height, scrollback, cursor, copy on select.
+- **Shortcuts** — every rebindable key grouped by category, with a filter, the ° outside-only marker, and a ⚠ flag when two actions share a key.
+
+*Restore Defaults* resets all of that except the shell command and the provider binaries.
 
 ### Keybindings
 
@@ -276,6 +287,7 @@ sound = true          # built-in chimes; off by default
 - `delivery = "terminal"` emits an **OSC 9** escape so your terminal emulator (kitty, ghostty, …) shows its own notification — useful inside tmux or over ssh where a desktop toast can't reach you; the sequence is tmux-passthrough-wrapped automatically.
 - **Sound is independent of `delivery`** — chimes play even with `delivery = "off"`. Ascending chime = task done; descending-then-up = agent needs input. Chimes fire only for agent events, never for plain shell commands.
 - Nothing fires for the tab you're currently looking at while the window has focus.
+- The desktop's Settings ▸ General (`Ctrl+,`) sets `delivery` and `sound` without editing this file; that choice is stored in the piki database, applies to the TUI as well, and wins over this table until you reset it there. The `sound_*_path` overrides stay file-only.
 - Playback uses `pw-play`/`paplay`/`aplay` on Linux, `afplay` on macOS — no audio stack in piki itself. Set `PIKI_DISABLE_SOUND=1` to hard-mute regardless of config.
 
 ### Persistent sessions (`[sessions]`)
@@ -286,6 +298,8 @@ Persistent sessions are on by default and need no setup. To run every tab in-pro
 [sessions]
 enabled = false
 ```
+
+Or flip it in the desktop's Settings ▸ General (`Ctrl+,`): that choice is stored in the piki database, wins over this file for both frontends, and takes effect on the next launch (the status bar reads `sessions … (restart)` until then).
 
 The daemon can be managed in-app (TUI sessions overlay `Ctrl+G Ctrl+S`, desktop Sessions dialog `Alt+Shift+S`) or from the CLI (`piki-multi-ai sessions list|kill|stop`); see [docs/technical.md](docs/technical.md#persistent-sessions) for the full behavior and [docs/persistent-sessions.md](docs/persistent-sessions.md) for the design.
 

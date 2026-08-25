@@ -880,6 +880,18 @@ export function setSettings(value: string): Promise<void> {
   return invoke("set_settings", { value });
 }
 
+/** Settings ▸ General — the cross-frontend overrides (`piki_core::app_settings`). */
+export function getAppSettings(): Promise<import("./types").AppSettingsView> {
+  return invoke("get_app_settings");
+}
+
+/** Store the whole override document; notifications apply live, sessions on restart. */
+export function setAppSettings(
+  overrides: import("./types").AppSettings,
+): Promise<import("./types").AppSettingsView> {
+  return invoke("set_app_settings", { overrides });
+}
+
 // Clipboard commands (use system tools, not Tauri plugin — fixes non-ASCII on Wayland)
 /** System clipboard via `tauri-plugin-clipboard-manager` (the app's own
  *  process owns the selection — no `wl-copy`/`xclip` child per copy). The

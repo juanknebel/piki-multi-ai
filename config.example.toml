@@ -48,6 +48,11 @@ theme = "default"
 
 # [sessions]
 # enabled = true
+#
+# The desktop's Settings ▸ General (Ctrl+,) can switch this — and the
+# [notifications] delivery / sound below — without editing this file. That
+# choice is stored in piki.db, applies to the TUI as well, and wins over this
+# file until you reset it in the dialog.
 
 # ── Kanban board ──────────────────────────────────────────────────────────
 # Backing store for the task board.

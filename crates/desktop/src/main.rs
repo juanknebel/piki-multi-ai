@@ -89,13 +89,16 @@ fn main() {
                 Some(ref dir) => DataPaths::new(dir.into()),
                 None => DataPaths::default_paths(),
             };
-            // Honour `[notifications]` in config.toml — `delivery = "off"`
-            // silences the desktop, `sound = true` enables the chimes — the
-            // same way the TUI's `App::new` does.
-            piki_core::notifications::NotificationsConfig::from_config_file(&paths.config_path())
-                .apply();
             let storage = create_storage(&paths).expect("Failed to initialize storage");
             let storage = Arc::new(storage);
+            // Settings the two frontends share: DB override (Settings ▸
+            // General) > `[sessions]` / `[notifications]` in config.toml >
+            // default — the same merge the TUI's `App::new` does. `delivery =
+            // "off"` silences the desktop, `sound = true` enables the chimes.
+            let effective =
+                piki_core::app_settings::resolve(&paths.config_path(), storage.ui_prefs.as_deref());
+            effective.notifications.apply();
+            let sessions_enabled = effective.sessions_enabled;
             let manager = WorkspaceManager::with_paths(paths.clone());
 
             // Load existing workspaces from storage
@@ -170,7 +173,7 @@ fn main() {
             // sessions that survived a previous run into the loaded
             // workspaces, before the frontend hydrates their tabs. Falls back
             // silently to in-process PTYs when the daemon is unavailable.
-            let session_daemon = session::connect_session_daemon(&paths);
+            let session_daemon = session::connect_session_daemon(&paths, sessions_enabled);
             let restore_summary = match session_daemon {
                 Some(ref daemon) => session::reattach_sessions(
                     &app_handle,
@@ -191,6 +194,7 @@ fn main() {
                 sysinfo,
                 provider_manager,
                 session_daemon,
+                sessions_enabled,
                 restore_summary,
                 chat_messages: Vec::new(),
                 chat_config,
@@ -317,6 +321,8 @@ fn main() {
             commands::search::project_search,
             commands::settings::get_settings,
             commands::settings::set_settings,
+            commands::settings::get_app_settings,
+            commands::settings::set_app_settings,
             commands::agents::list_agents,
             commands::agents::save_agent,
             commands::agents::delete_agent,
