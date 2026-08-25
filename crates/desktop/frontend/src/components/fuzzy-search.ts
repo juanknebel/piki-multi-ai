@@ -4,25 +4,41 @@ import * as ipc from "../ipc";
 import { showFileViewer } from "./file-viewer";
 import { showMarkdown } from "./markdown-viewer";
 import { toast, reportError } from "./toast";
-import { modCtrl } from "../shortcuts";
+import { modAlt, modCtrl, formatShortcut } from "../shortcuts";
 import { fileGlyph } from "./file-icons";
+import { registerCodeFile } from "./code-editor-panel";
+import { registerMarkdownFile } from "./markdown-editor-panel";
+import { isMarkdownPath, looksBinary } from "../file-kind";
+
+const SHOWN_LIMIT = 50;
 
 let searchEl: HTMLElement | null = null;
+/** Bumped on every open so a slow IPC from a previous palette is ignored. */
+let generation = 0;
+/** Last index seen per workspace path — rendered instantly on the next open
+ *  while the backend (which memoises too) confirms or refreshes it. */
+const lastIndex = new Map<string, string[]>();
 
-export async function openFuzzySearch() {
+export function openFuzzySearch() {
   if (searchEl) {
     closeFuzzySearch();
     return;
   }
 
-  const wsIdx = appState.activeWorkspace;
-  let allFiles: string[];
-  try {
-    allFiles = await ipc.fuzzyFileList(wsIdx);
-  } catch (err) {
-    reportError("Failed to list files", err);
+  const ws = appState.activeWs;
+  if (!ws) {
+    toast("Open a workspace to find files", "info");
     return;
   }
+  const wsIdx = appState.activeWorkspace;
+  const wsPath = ws.info.path;
+  const gen = ++generation;
+
+  // Render first, index second: the input must be usable immediately and
+  // whatever is typed before the list lands is applied when it does.
+  let allFiles: string[] = lastIndex.get(wsPath) ?? [];
+  let indexing = true;
+  let truncated = false;
 
   const backdrop = document.createElement("div");
   backdrop.className = "palette-backdrop";
@@ -30,8 +46,14 @@ export async function openFuzzySearch() {
   const palette = document.createElement("div");
   palette.className = "palette";
   palette.innerHTML = `
-    <input class="palette-input" type="text" placeholder="Search files... (${allFiles.length} files)" autofocus />
+    <input class="palette-input" type="text" placeholder="Search files…" autofocus />
     <div class="palette-results"></div>
+    <div class="palette-footer">
+      <span class="palette-footer-hint"><span class="palette-key">Enter</span> Edit</span>
+      <span class="palette-footer-hint"><span class="palette-key">${formatShortcut("Alt+Enter")}</span> View</span>
+      <span class="palette-footer-hint"><span class="palette-key">${formatShortcut("Ctrl+E")}</span> $EDITOR</span>
+      <span class="palette-footer-status"></span>
+    </div>
   `;
 
   backdrop.appendChild(palette);
@@ -40,13 +62,25 @@ export async function openFuzzySearch() {
 
   const input = palette.querySelector<HTMLInputElement>(".palette-input")!;
   const results = palette.querySelector<HTMLElement>(".palette-results")!;
+  const status = palette.querySelector<HTMLElement>(".palette-footer-status")!;
   let selectedIdx = 0;
   const byRecency = (a: string, b: string) => mruRank("files", a) - mruRank("files", b);
   let filtered: string[] = [...allFiles].sort(byRecency);
 
+  function renderStatus() {
+    status.classList.toggle("indexing", indexing);
+    if (indexing) {
+      status.textContent = allFiles.length ? `Indexing… (${allFiles.length} files so far)` : "Indexing…";
+      return;
+    }
+    status.textContent = truncated
+      ? `First ${allFiles.length} files only — index capped`
+      : `${allFiles.length} files`;
+  }
+
   function renderResults() {
     results.innerHTML = "";
-    const shown = filtered.slice(0, 50);
+    const shown = filtered.slice(0, SHOWN_LIMIT);
     shown.forEach((file, i) => {
       const el = document.createElement("div");
       el.className = `palette-item${i === selectedIdx ? " selected" : ""}`;
@@ -59,11 +93,11 @@ export async function openFuzzySearch() {
         <span class="${fi.cls}">${fi.glyph}</span>
         <span class="palette-label">
           ${highlightMatch(fileName, input.value)}
-          ${dirPath ? ` <span style="color:var(--text-muted);font-size:11px">${escapeHtml(dirPath)}</span>` : ""}
+          ${dirPath ? ` <span class="palette-sub">${escapeHtml(dirPath)}</span>` : ""}
         </span>
       `;
 
-      el.addEventListener("click", () => selectFile(file));
+      el.addEventListener("click", () => openInEditor(file));
       el.addEventListener("mouseenter", () => {
         if (selectedIdx === i) return;
         selectedIdx = i;
@@ -72,15 +106,15 @@ export async function openFuzzySearch() {
       results.appendChild(el);
     });
 
-    if (filtered.length > 50) {
+    if (filtered.length > SHOWN_LIMIT) {
       const more = document.createElement("div");
       more.className = "palette-empty";
-      more.textContent = `${filtered.length - 50} more files...`;
+      more.textContent = `${filtered.length - SHOWN_LIMIT} more files…`;
       results.appendChild(more);
     }
 
     if (filtered.length === 0) {
-      results.innerHTML = '<div class="palette-empty">No matching files</div>';
+      results.innerHTML = `<div class="palette-empty">${indexing && !allFiles.length ? "Indexing…" : "No matching files"}</div>`;
     }
   }
 
@@ -105,32 +139,57 @@ export async function openFuzzySearch() {
     renderResults();
   }
 
-  function selectFile(file: string) {
+  /** Enter / click: an editor tab, exactly what the file tree opens on
+   *  click. Files that are not text stay in the read-only viewer. */
+  function openInEditor(file: string) {
+    if (looksBinary(file)) {
+      openInViewer(file);
+      return;
+    }
     mruBump("files", file);
     closeFuzzySearch();
-    if (file.endsWith(".md") || file.endsWith(".markdown")) {
+    const tabId = crypto.randomUUID();
+    if (isMarkdownPath(file)) {
+      registerMarkdownFile(tabId, file);
+      appState.addTab(wsIdx, { id: tabId, provider: "Markdown", alive: true });
+    } else {
+      registerCodeFile(tabId, file, wsIdx);
+      appState.addTab(wsIdx, { id: tabId, provider: "CodeEditor", alive: true });
+    }
+  }
+
+  /** Alt+Enter: the read-only overlay (rendered markdown for .md). */
+  function openInViewer(file: string) {
+    mruBump("files", file);
+    closeFuzzySearch();
+    if (isMarkdownPath(file)) {
       showMarkdown(file);
     } else {
       showFileViewer(wsIdx, file);
     }
   }
 
-  async function editFile(file: string) {
+  /** Ctrl+E: a terminal tab running $EDITOR on the file. */
+  async function openInExternalEditor(file: string) {
     mruBump("files", file);
     closeFuzzySearch();
     try {
       const tabId = await ipc.spawnEditorTab(wsIdx, file);
       appState.addTab(wsIdx, { id: tabId, provider: "Shell", alive: true });
     } catch (err) {
-      toast(`Failed to open editor: ${err}`, "error");
+      reportError("Failed to open editor", err);
     }
+  }
+
+  function selected(): string | undefined {
+    return filtered.slice(0, SHOWN_LIMIT)[selectedIdx];
   }
 
   input.addEventListener("input", filter);
   input.addEventListener("keydown", (e) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      selectedIdx = Math.min(selectedIdx + 1, Math.min(filtered.length, 50) - 1);
+      selectedIdx = Math.min(selectedIdx + 1, Math.min(filtered.length, SHOWN_LIMIT) - 1);
       updateSelection();
       results.querySelector(".palette-item.selected")?.scrollIntoView({ block: "nearest" });
     } else if (e.key === "ArrowUp") {
@@ -140,12 +199,14 @@ export async function openFuzzySearch() {
       results.querySelector(".palette-item.selected")?.scrollIntoView({ block: "nearest" });
     } else if (e.key === "Enter") {
       e.preventDefault();
-      const shown = filtered.slice(0, 50);
-      if (shown[selectedIdx]) selectFile(shown[selectedIdx]);
+      const file = selected();
+      if (!file) return;
+      if (modAlt(e)) openInViewer(file);
+      else openInEditor(file);
     } else if (e.key === "e" && modCtrl(e)) {
       e.preventDefault();
-      const shown = filtered.slice(0, 50);
-      if (shown[selectedIdx]) editFile(shown[selectedIdx]);
+      const file = selected();
+      if (file) void openInExternalEditor(file);
     } else if (e.key === "Escape") {
       closeFuzzySearch();
     }
@@ -156,7 +217,28 @@ export async function openFuzzySearch() {
   });
 
   renderResults();
+  renderStatus();
   input.focus();
+
+  ipc
+    .fuzzyFileList(wsIdx)
+    .then((index) => {
+      lastIndex.set(wsPath, index.files);
+      if (gen !== generation || searchEl !== backdrop) return;
+      allFiles = index.files;
+      truncated = index.truncated;
+      indexing = false;
+      filter();
+      renderStatus();
+    })
+    .catch((err) => {
+      if (gen !== generation || searchEl !== backdrop) return;
+      indexing = false;
+      status.classList.remove("indexing");
+      status.textContent = "Could not index files";
+      if (!allFiles.length) results.innerHTML = '<div class="palette-empty">Could not index files</div>';
+      reportError("Failed to list files", err);
+    });
 }
 
 export function closeFuzzySearch() {

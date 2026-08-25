@@ -109,6 +109,36 @@
   font-size: var(--fs-md);
 }
 
+/* File finder footer: key hints on the left, index status on the right. */
+.palette-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  flex-shrink: 0;
+  padding: 6px 16px;
+  border-top: 1px solid var(--border-primary);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+
+.palette-footer-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  white-space: nowrap;
+}
+
+.palette-footer-status {
+  margin-left: auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.palette-footer-status.indexing {
+  animation: pulse var(--dur-pulse) ease-in-out infinite;
+}
+
 .palette-group-header {
   padding: 6px 14px 4px;
   font-size: var(--fs-xs);

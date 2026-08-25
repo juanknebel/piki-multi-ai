@@ -153,8 +153,8 @@ export function renderFileTree(container: HTMLElement) {
     loadingAll = true;
     const reqWs = wsIdx;
     try {
-      const files = await ipc.fuzzyFileList(reqWs);
-      if (reqWs === wsIdx) allFiles = files;
+      const index = await ipc.fuzzyFileList(reqWs);
+      if (reqWs === wsIdx) allFiles = index.files;
     } catch {
       if (reqWs === wsIdx) allFiles = [];
     } finally {

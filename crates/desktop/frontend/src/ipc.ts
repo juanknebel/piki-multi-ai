@@ -384,7 +384,14 @@ export function gitStashDrop(workspaceIdx: number, stashIndex: number): Promise<
 }
 
 // Search commands
-export function fuzzyFileList(workspaceIdx: number): Promise<string[]> {
+export interface FileIndex {
+  /** Workspace-relative paths, sorted; honours .gitignore, `.git` pruned. */
+  files: string[];
+  /** The backend stopped at its cap (50k paths) — the list is incomplete. */
+  truncated: boolean;
+}
+
+export function fuzzyFileList(workspaceIdx: number): Promise<FileIndex> {
   return invoke("fuzzy_file_list", { workspaceIdx });
 }
 

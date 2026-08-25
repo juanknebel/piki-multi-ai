@@ -361,6 +361,7 @@ pub async fn dispatch_agent(
             tabs: Vec::new(),
             active_tab: 0,
             watcher,
+            file_index: None,
         });
 
         let idx = app.workspaces.len() - 1;

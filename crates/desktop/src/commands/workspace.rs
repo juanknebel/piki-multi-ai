@@ -38,6 +38,9 @@ pub async fn switch_workspace(
             return Err("Workspace index out of range".to_string());
         }
         app.active_workspace = index;
+        // Re-walk on the next Ctrl+F: cheap, and it covers anything the
+        // watcher could not see while the workspace was in the background.
+        app.workspaces[index].file_index = None;
         let path = app.workspaces[index].info.path.clone();
         // Persist the active workspace so the next startup focuses it.
         if let Some(prefs) = app.storage.ui_prefs.as_ref() {
@@ -152,6 +155,7 @@ pub async fn create_workspace(
         tabs: Vec::new(),
         active_tab: 0,
         watcher,
+        file_index: None,
     });
 
     // Save to storage — use the new workspace's source_repo as the key
@@ -218,6 +222,7 @@ pub async fn create_github_workspace(
         tabs: Vec::new(),
         active_tab: 0,
         watcher,
+        file_index: None,
     });
 
     let all_infos: Vec<WorkspaceInfo> = app.workspaces.iter().map(|ws| ws.info.clone()).collect();

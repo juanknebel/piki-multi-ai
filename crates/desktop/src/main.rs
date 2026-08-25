@@ -114,6 +114,7 @@ fn main() {
                         tabs: Vec::new(),
                         active_tab: 0,
                         watcher,
+                        file_index: None,
                     }
                 })
                 .collect();

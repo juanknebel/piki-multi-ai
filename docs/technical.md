@@ -477,6 +477,7 @@ The terminal owns every key it can use. An app shortcut fires while a terminal, 
 | `Ctrl+Shift+=` / `Ctrl+Shift+-` / `Ctrl+Shift+0` | Same zoom actions, also with a terminal focused |
 | **Search** | |
 | `Ctrl+F` ° | Find file (fuzzy) |
+| `Enter` / `Alt+Enter` | In the file finder: open in an editor tab / in the read-only viewer (`Ctrl+E` for `$EDITOR`) |
 | `Ctrl+Shift+F` | Search in project (grep) |
 | `Ctrl+Shift+B` | Search in terminal |
 | `Ctrl+J` ° | API jq filter (in API Explorer) |
@@ -524,6 +525,13 @@ The terminal owns every key it can use. An app shortcut fires while a terminal, 
 - **Branch labels** share one rule everywhere (workspace list, status bar, switcher, dashboard, empty state): middle-truncated at 28 characters, the full name in the tooltip. Collapsible groups share one chevron pair: `▸` collapsed, `▾` expanded.
 - **Empty state**: a workspace with no tabs — or a blank pane — shows `<workspace> · ⎇ <branch>` and buttons for Shell, every configured provider and *Open file…* (the fuzzy file finder); the app-wide welcome only appears when there is no workspace at all.
 - **Agents panel** height is clamped so the workspace list above it always keeps its header plus at least four rows (it scrolls beyond that); the clamp is re-applied when the window shrinks.
+
+### Desktop file finder (`Ctrl+F`)
+
+- **Opens before it indexes**: the input is focused on the first frame; the list arrives when the backend answers (the footer says `Indexing…` until then, and the last list seen for that workspace is shown meanwhile). Whatever you type while it is indexing is applied the moment the list lands.
+- **`Enter` edits, `Alt+Enter` views**: `Enter` (or a click) opens the file as an editor tab — CodeMirror for code, the WYSIWYG markdown editor for `.md` — exactly what a click in the file tree does; `Alt+Enter` opens the read-only viewer (rendered markdown for `.md`); `Ctrl+E` runs `$EDITOR` in a new terminal tab. Files whose extension says they are not text (images, archives, fonts, media, compiled and database blobs) stay in the viewer whichever key you press. Opening and editing a file that is not in git status is two keys: `Ctrl+F`, `Enter`.
+- **What is listed**: the index is a gitignore-aware walk (the `ignore` crate, ripgrep's walker) — `.gitignore`, `.ignore`, `.git/info/exclude` and your global excludes all apply, also in a workspace that is not a git repo; dotfiles and dot-directories (`.github/`, `.cargo/`, `.env.example`) are included, `.git` itself is always pruned, symlinks are not followed. The walk stops at 50 000 paths and the footer then says the index is capped.
+- **Caching**: the backend memoises the list per workspace and drops it when the file watcher reports a create, delete or rename (plain edits of listed files keep it) and when you switch workspace, so the next `Ctrl+F` re-walks only when the tree may have changed.
 
 ## Workspaces
 
@@ -672,7 +680,7 @@ crates/
         review.rs        # PR info + code review via gh CLI
         theme.rs         # Theme get/set via SQLite preferences
         logs.rs          # Application log retrieval + clear
-        search.rs        # Fuzzy file list
+        search.rs        # Fuzzy file index (gitignore-aware walk, memoised per workspace), file read/write, project search
         markdown.rs      # Markdown file reading
         system.rs        # System info
     frontend/            # Vanilla TypeScript + xterm.js (Vite build)
@@ -916,7 +924,7 @@ The event-loop performance model and its invariants are documented in [performan
 - **Input-handler tests** (`crates/tui/src/input/dialog_tests.rs`) — every dialog's key paths against a real `App` built by the `test_support` fixtures (`test_app()`, `add_test_workspace()`, `add_terminal_tab()`, …). Handlers that write to disk use `test_app_isolated()` so tests never touch the real user config.
 - **Documentation parity tests** — `docs_parity` (in `action_catalog.rs`) fails the build if this document's prefix table drifts from `default_app()`; `every_bind_resolves_to_a_real_binding` fails it if a catalog entry points at a binding that doesn't exist. `config.example.toml` is mirrored by hand.
 - **Session tests** — protocol round-trips and vt100 restore round-trips as unit tests; `crates/core/tests/session_daemon.rs` and `session_facade.rs` drive a full in-process daemon (spawn/attach/detach/kill/restore, multi-client fan-out); `crates/tui/src/helpers.rs` has an end-to-end persistence test (spawn → write → drop/detach → re-attach → screen restored).
-- **Desktop frontend unit tests** (`crates/desktop/frontend/src/**/*.test.ts`, vitest, `npm test` / `just frontend-test`) — pure-logic modules with no DOM: the shortcut registry (`parseCombo`, the terminal-safe rule, help-section invariants), `fuzzy.ts` scoring/MRU, and `settings-store.ts` (coalesced writes, mid-write patches, failed-write recovery). Run by `just frontend` and by `nightly.yml::build-desktop` before the build.
+- **Desktop frontend unit tests** (`crates/desktop/frontend/src/**/*.test.ts`, vitest, `npm test` / `just frontend-test`) — pure-logic modules with no DOM: the shortcut registry (`parseCombo`, the terminal-safe rule, help-section invariants), `fuzzy.ts` scoring/MRU, `file-kind.ts` (which paths get an editor tab), and `settings-store.ts` (coalesced writes, mid-write patches, failed-write recovery). Run by `just frontend` and by `nightly.yml::build-desktop` before the build.
 - **Ignored E2E tests** — drive real external binaries, so they're `#[ignore]` by default and run explicitly with `cargo test -- --ignored`: `crates/core/tests/pty_terminal_queries.rs` (real `muse` against the vt100 answerback path) and `crates/core/tests/cli_agent_antigravity.rs` (real `agy` against the hook bridge).
 
 ## Development
