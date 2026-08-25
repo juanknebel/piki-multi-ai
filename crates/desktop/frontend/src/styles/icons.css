@@ -1,0 +1,26 @@
+/* Inline SVG icons from components/icons.ts (`icon(name)`): one em square,
+ * sitting on the text baseline like a glyph would, never shrinking in a
+ * flex row. Colour is always `currentColor` (set on the paths themselves),
+ * so colour an icon by colouring its container. A container that needs a
+ * fixed box (the 10px `.group-chevron`, the 13px status-bar icons) sets
+ * width/height on the icon class it adds. */
+.icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.15em;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+/* Inside an icon-only button the glyph is centred by the button's flex box;
+   drop the baseline nudge so it sits dead centre. */
+.ui-btn > .icon,
+.pane-btn > .icon {
+  vertical-align: middle;
+}
+
+/* Icon followed by a label inside a button (`↻ Restart`, `✓ Commit`). */
+.icon + .icon-label {
+  margin-left: var(--sp-2);
+}

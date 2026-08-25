@@ -5,6 +5,7 @@
 // a chord the terminal owns, so it only fires outside it). Rebinding is the
 // press-keys button from before, on the primitives.
 
+import { icon } from "../icons";
 import {
   CATEGORY_ORDER,
   eventToCombo,
@@ -106,7 +107,7 @@ export function buildShortcutsSettingsSection(): SettingsSection {
 
     const notes: string[] = [];
     if (anyOutside) notes.push(`° ${OUTSIDE_ONLY_NOTE} — the terminal keeps every key it can use.`);
-    if (anyConflict) notes.push("⚠ The same key is bound to another action; only the first one in this list fires.");
+    if (anyConflict) notes.push("The same key is bound to another action; only the first one in this list fires.");
     if (anyDemoted) notes.push("! Bound to a key the terminal owns (not Alt+… / Ctrl+Shift+…), so it fires outside the terminal only.");
     legend.textContent = notes.join(" ");
     legend.hidden = notes.length === 0;
@@ -123,7 +124,7 @@ export function buildShortcutsSettingsSection(): SettingsSection {
     if (flags.outside) html += `<span class="shortcut-row-note" title="${OUTSIDE_ONLY_NOTE}">°</span>`;
     if (flags.others) {
       const who = flags.others.join(", ");
-      html += `<span class="settings-flag" data-kind="conflict" role="img" aria-label="Conflict: also bound to ${escapeHtml(who)}" title="${escapeHtml(`Also bound to: ${who}`)}">⚠</span>`;
+      html += `<span class="settings-flag" data-kind="conflict" role="img" aria-label="Conflict: also bound to ${escapeHtml(who)}" title="${escapeHtml(`Also bound to: ${who}`)}">${icon("warning")}</span>`;
     }
     if (flags.demoted) {
       const msg = `"${formatShortcut(def.key)}" belongs to the terminal — "${def.label}" will only fire when focus is outside it`;

@@ -171,8 +171,11 @@
   /* The only place the font name appears in styles/. TS reads it through
      `cssToken("--font-mono")` (theme.ts) for xterm. */
   --font-mono: "JetBrainsMono NF Mono", "SF Mono", "Cascadia Code", "Fira Code", monospace;
-  /* Chrome text. Mono-first by design; swap here to try a UI face. */
-  --font-ui: var(--font-mono);
+  /* Chrome text. Mono-first by design; swap the text face here to try a
+     UI face. "piki-icons" (src/fonts/fonts.css) comes first: a PUA-only
+     subset of the Nerd Font so file-icons.ts glyphs paint from a 10 KB face
+     (unicode-range keeps it out of every other character). */
+  --font-ui: "piki-icons", var(--font-mono);
   /* UI zoom: ui-zoom.ts sets --ui-zoom on <html> (Ctrl+= / Ctrl+- / Ctrl+0,
      persisted as settings.uiZoom). Everything below is rem, so scaling the
      root font size scales the type scale, spacing and bar heights together;
@@ -210,26 +213,46 @@
   --sp-5: 0.96rem;  /* 12px */
   --sp-6: 1.28rem;  /* 16px */
 
+  /* ── Density ───────────────────────────────────── */
+  /* Vertical rhythm multiplier. The Settings density dropdown (phase 11)
+     stamps data-density="compact" | "comfortable" on <html> (absent =
+     normal, see the :root[data-density] blocks at the end of this file);
+     every bar / row / control HEIGHT token below is `calc(<rem> *
+     var(--density))`, so compact fits 25% more rows in the same sidebar.
+     Widths, the type scale and --sp-* spacing do not scale with it, and
+     the tokens stay rem so it composes with --ui-zoom. */
+  --density: 1;
+
   /* ── Sizing ────────────────────────────────────── */
   /* Bar heights and the activity bar are rem (zoom with the type scale);
      the sidebar / chat widths are px because they are user-dragged budgets
-     (sidebar.ts, chat-panel.ts, clamped by layout-budget.ts). */
+     (sidebar.ts, chat-panel.ts, clamped by layout-budget.ts). Heights carry
+     the --density factor; the px comments are density 1 / zoom 1. */
   --activity-bar-width: 4rem;      /* 50px */
   --sidebar-width: 260px;
-  --menubar-height: 2.4rem;        /* 30px */
-  --statusbar-height: 2.24rem;     /* 28px */
-  --tab-height: 3.04rem;           /* 38px */
-  --sidebar-header-height: 2.4rem; /* 30px */
+  --menubar-height: calc(2.4rem * var(--density));        /* 30px */
+  --statusbar-height: calc(2.24rem * var(--density));     /* 28px */
+  --tab-height: calc(3.04rem * var(--density));           /* 38px */
+  --sidebar-header-height: calc(2.4rem * var(--density)); /* 30px */
+  /* pane.css .pane-head (per-pane title + split/close row) */
+  --pane-header-height: calc(1.92rem * var(--density));   /* 24px */
+  /* Sidebar list rows: --row-height is the dense single-line row (file
+     tree .ft-row, git .file-item, .sc-subdir-item), --row-height-lg the
+     workspace row (.workspace-item, holds a 22px icon button), --row-pad
+     the vertical padding of a multi-line row (.agent-row). */
+  --row-height: calc(1.84rem * var(--density));           /* 23px */
+  --row-height-lg: calc(2.56rem * var(--density));        /* 32px */
+  --row-pad: calc(0.4rem * var(--density));               /* 5px */
   --chat-panel-width: 360px;
   /* The editor column never drops below this (layout.css minmax + the
      sidebar/chat clamps in layout-budget.ts share the same number). */
   --editor-min-width: 320px;
   /* Control heights (primitives.css): every .ui-btn / .ui-input / dropdown
      trigger is one of these, so a form row of mixed controls lines up. */
-  --control-height: 2.4rem;     /* 30px  md buttons, text inputs, dropdown triggers */
-  --control-height-sm: 1.76rem; /* 22px  sm buttons, icon buttons, compact inputs */
+  --control-height: calc(2.4rem * var(--density));     /* 30px  md buttons, text inputs, dropdown triggers */
+  --control-height-sm: calc(1.76rem * var(--density)); /* 22px  sm buttons, icon buttons, compact inputs */
   /* .ui-header min-height (dialog / overlay title rows) */
-  --header-height: 3.52rem;     /* 44px */
+  --header-height: calc(3.52rem * var(--density));     /* 44px */
 
   /* ── Z layers ──────────────────────────────────── */
   /* Every stacking level in styles/ is one of these (or a `calc()` of one). */
@@ -287,4 +310,16 @@
   --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.12);
   --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.16);
   --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.22);
+}
+
+/* ── Density levels ─────────────────────────────── */
+/* Stamped on <html> by the Settings density dropdown (absent = normal, 1).
+   Only the multiplier lives here — every height token above already
+   carries `* var(--density)`. Compact: 1 / 0.8 = 25% more rows per pixel. */
+:root[data-density="compact"] {
+  --density: 0.8;
+}
+
+:root[data-density="comfortable"] {
+  --density: 1.15;
 }

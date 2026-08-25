@@ -31,6 +31,7 @@ import {
   showUnsavedChangesPrompt,
 } from "./code-editor-panel";
 import { destroyWebPreviewPanel } from "./web-preview-panel";
+import { icon } from "./icons";
 
 const FRONTEND_ONLY: AIProvider[] = ["Markdown", "CodeEditor", "WebPreview"];
 
@@ -153,10 +154,10 @@ export function renderWorkspaceTabBar(container: HTMLElement) {
     const dot = agent
       ? (() => {
           const v = cliAgentStatusView(agent.status, agent.attention);
-          return `<span class="ws-tab-agent" style="color:${v.color}" title="${escapeHtml(v.label)}">●</span>`;
+          return `<span class="ws-tab-agent" style="color:${v.color}" title="${escapeHtml(v.label)}">${icon("dot")}</span>`;
         })()
       : "";
-    const deadMark = exited ? `<span class="ws-tab-dead" title="Process exited">○</span>` : "";
+    const deadMark = exited ? `<span class="ws-tab-dead" title="Process exited">${icon("circle")}</span>` : "";
     el.innerHTML = `
       ${dot}${deadMark}<span class="ws-tab-label">${escapeHtml(wsTabTitle(wt.paneTree, wt.activePaneId))}</span>
       <button class="ws-tab-close" title="Close tab (middle-click also closes)">×</button>
@@ -208,7 +209,7 @@ export function renderWorkspaceTabBar(container: HTMLElement) {
     moreBtn.className = "ws-tab-more";
     moreBtn.title = `All tabs (${ws.wsTabs.length})`;
     moreBtn.setAttribute("aria-label", "List all tabs");
-    moreBtn.textContent = "⋯";
+    moreBtn.innerHTML = icon("more");
     moreBtn.addEventListener("click", () => {
       const r = moreBtn.getBoundingClientRect();
       openContextMenu(r.left, r.bottom + 2, allTabsMenuItems());
@@ -233,9 +234,9 @@ function allTabsMenuItems(): CtxItem[] {
     const agent = wsTabAgentStatus(wt.paneTree);
     const status = agent ? ` — ${cliAgentStatusView(agent.status, agent.attention).label}` : "";
     const exited = wsTabContents(ws, wt).some((c) => isPtyContent(c) && !c.alive) ? " — exited" : "";
-    const mark = i === ws.activeWsTab ? "● " : "○ ";
+    const current = i === ws.activeWsTab ? " (current)" : "";
     return {
-      label: `${mark}${i + 1}. ${wsTabTitle(wt.paneTree, wt.activePaneId)}${status || exited}`,
+      label: `${i + 1}. ${wsTabTitle(wt.paneTree, wt.activePaneId)}${status || exited}${current}`,
       action: () => appState.setActiveWsTab(i),
     };
   });

@@ -8,6 +8,7 @@ import { showMarkdown } from "./markdown-viewer";
 import { toast } from "./toast";
 import { showConfirm } from "./confirm";
 import { fileGlyph, folderGlyph, type FileIcon } from "./file-icons";
+import { icon } from "./icons";
 import { openContextMenu, type CtxItem } from "./context-menu";
 import { settingsStore } from "../settings";
 
@@ -47,8 +48,8 @@ function baseName(rel: string): string {
   return i < 0 ? rel : rel.slice(i + 1);
 }
 
-const CHEVRON_SVG = `<svg class="ft-chevron" viewBox="0 0 16 16"><path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`;
-const SEARCH_SVG = `<svg viewBox="0 0 16 16" width="13" height="13"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
+const CHEVRON_SVG = icon("chevron-right", { class: "ft-chevron" });
+const SEARCH_SVG = icon("search", { size: "13" });
 
 let revealImpl: ((rel: string) => void) | null = null;
 let autoRevealToggleImpl: (() => void) | null = null;
@@ -728,9 +729,9 @@ export function renderFileTree(container: HTMLElement) {
       <span class="ft-header-actions">
         <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn ft-new-file" title="New File">+</button>
         <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn ft-search${filterOpen ? " active" : ""}" title="Search files">${SEARCH_SVG}</button>
-        <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn ft-autoreveal${autoReveal ? " active" : ""}" title="Auto-reveal active file">◎</button>
+        <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn ft-autoreveal${autoReveal ? " active" : ""}" title="Auto-reveal active file" aria-label="Auto-reveal active file">${icon("locate")}</button>
         <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn ft-toggle-hidden${showHidden ? " active" : ""}" title="Show hidden files">.*</button>
-        <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn ft-refresh" title="Refresh">⟳</button>
+        <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn ft-refresh" title="Refresh" aria-label="Refresh">${icon("refresh")}</button>
       </span>`;
     header.querySelector(".ft-new-file")!.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -842,7 +843,7 @@ export function renderFileTree(container: HTMLElement) {
         <span class="ft-twisty${isOpen ? " open" : ""}">${isDir ? CHEVRON_SVG : ""}</span>
         ${isDir ? iconSpan(folderGlyph(row.name, isOpen)) : iconSpan(fileGlyph(row.name))}
         <span class="ft-name">${esc(row.name)}</span>
-        ${gs ? statusSpan(gs) : dirChanged ? '<span class="ft-dir-dot" title="Contains changes">●</span>' : ""}`;
+        ${gs ? statusSpan(gs) : dirChanged ? `<span class="ft-dir-dot" title="Contains changes">${icon("dot")}</span>` : ""}`;
       btn.addEventListener("click", () => onRowActivate(row.rel, isDir));
       if (!isDir) {
         btn.addEventListener("dblclick", () => beginRename(row.rel));

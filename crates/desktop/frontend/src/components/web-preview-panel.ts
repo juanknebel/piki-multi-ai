@@ -1,5 +1,6 @@
 import { appState } from "../state";
 import { toast } from "./toast";
+import { icon } from "./icons";
 import { createDropdown, type DropdownHandle } from "./dropdown";
 import { PORT_PRESETS, normalizeUrl, isLocalUrl, probeUrl } from "./web-preview-presets";
 
@@ -139,7 +140,7 @@ function createPanel(tabId: string): WebPreviewInstance {
              placeholder="localhost:3000 or https://example.com" />
       <button data-variant="secondary" class="web-preview-go ui-btn" title="Load URL">Go</button>
       <div class="web-preview-preset-wrap"></div>
-      <button data-variant="secondary" data-icon data-size="md" class="web-preview-reload ui-btn" title="Reload">↻</button>
+      <button data-variant="secondary" data-icon data-size="md" class="web-preview-reload ui-btn" title="Reload" aria-label="Reload">${icon("refresh")}</button>
     </div>
     <div class="web-preview-warning-banner" hidden>
       Non-local URL — many sites refuse to embed (X-Frame-Options).

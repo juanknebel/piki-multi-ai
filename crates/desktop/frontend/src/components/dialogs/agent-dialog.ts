@@ -3,6 +3,7 @@ import * as ipc from "../../ipc";
 import { toast } from "../toast";
 import { showConfirm } from "../confirm";
 import { createDropdown } from "../dropdown";
+import { icon } from "../icons";
 import type { AgentInfo } from "../../ipc";
 import { showNeedsWorkspace } from "./needs-workspace";
 
@@ -60,7 +61,7 @@ export async function showAgentManager(workspaceIdx?: number) {
             <div class="agent-manager-item-header">
               <span class="agent-manager-item-name">${esc(a.name)}</span>
               <span class="agent-manager-item-provider">${esc(a.provider)}</span>
-              <span class="agent-manager-item-version">v${a.version}${a.last_synced_at ? " ✓" : ""}</span>
+              <span class="agent-manager-item-version">v${a.version}${a.last_synced_at ? ` ${icon("check", { label: "synced" })}` : ""}</span>
             </div>
             <div class="agent-manager-item-role">${esc(a.role.slice(0, 200))}${a.role.length > 200 ? "..." : ""}</div>
             <div class="agent-manager-item-actions">

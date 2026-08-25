@@ -42,8 +42,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 24px;
-  flex: 0 0 24px;
+  height: var(--pane-header-height);
+  flex: 0 0 var(--pane-header-height);
   padding: 0 6px;
   font-size: var(--fs-sm);
   color: var(--tab-inactive-fg);

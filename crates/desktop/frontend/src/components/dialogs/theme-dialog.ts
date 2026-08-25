@@ -7,6 +7,7 @@ import {
 } from "../../theme";
 import { toast } from "../toast";
 import { createDropdown } from "../dropdown";
+import { icon } from "../icons";
 
 export function showThemeDialog() {
   document.querySelector(".theme-dialog-backdrop")?.remove();
@@ -77,9 +78,7 @@ export function showThemeDialog() {
     const groupHeader = document.createElement("div");
     groupHeader.className = "theme-group-header";
     groupHeader.innerHTML = `
-      <svg class="theme-group-chevron" viewBox="0 0 16 16">
-        <path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5"/>
-      </svg>
+      ${icon("chevron-right", { class: "theme-group-chevron" })}
       ${group.label} (${group.keys.length})
     `;
 
@@ -108,7 +107,7 @@ export function showThemeDialog() {
         <span class="theme-color-label">${keyToLabel(key)}</span>
         <input type="color" class="theme-color-picker" value="${value}" />
         <input type="text" data-size="sm" class="theme-color-hex ui-input" value="${value}" maxlength="7" spellcheck="false" />
-        <button data-variant="ghost" data-icon class="theme-color-reset ui-btn" title="Reset to preset">↺</button>
+        <button data-variant="ghost" data-icon class="theme-color-reset ui-btn" title="Reset to preset" aria-label="Reset to preset">${icon("undo")}</button>
       `;
 
       const picker = row.querySelector<HTMLInputElement>(".theme-color-picker")!;

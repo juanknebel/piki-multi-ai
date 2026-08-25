@@ -41,8 +41,9 @@
   background: none;
   color: var(--text-primary);
   font-size: var(--fs-lg);
-  line-height: var(--leading-relaxed);
-  padding: 1px 8px 1px 6px;
+  line-height: var(--leading-tight);
+  min-height: var(--row-height);
+  padding: 0 8px 0 6px;
   text-align: left;
   cursor: pointer;
   white-space: nowrap;

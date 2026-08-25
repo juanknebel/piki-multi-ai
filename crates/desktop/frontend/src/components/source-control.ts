@@ -11,6 +11,7 @@ import { fileGlyph } from "./file-icons";
 import { FILE_STATUS_LABELS, FILE_STATUS_CSS } from "../types";
 import { modCtrl } from "../shortcuts";
 import { isInFlight, onInFlightChange } from "../in-flight";
+import { icon, type IconName } from "./icons";
 import { confirmDiscardFile, pullKey, pullWorkspace, pushKey, pushWorkspace } from "./git-actions";
 import type { ChangedFile, FileStatus } from "../types";
 
@@ -104,9 +105,9 @@ export function renderSourceControl(container: HTMLElement) {
     header.innerHTML = `
       <span>SOURCE CONTROL</span>
       <span class="sc-header-actions">
-        ${syncButton("pull", "↓", aheadBehind?.[1] ?? 0, isInFlight(pullKey(wsIdx)))}
-        ${syncButton("push", "↑", aheadBehind?.[0] ?? 0, isInFlight(pushKey(wsIdx)))}
-        <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn" data-action="refresh" title="Refresh">↻</button>
+        ${syncButton("pull", "arrow-down", aheadBehind?.[1] ?? 0, isInFlight(pullKey(wsIdx)))}
+        ${syncButton("push", "arrow-up", aheadBehind?.[0] ?? 0, isInFlight(pushKey(wsIdx)))}
+        <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn" data-action="refresh" title="Refresh" aria-label="Refresh">${icon("refresh")}</button>
       </span>
     `;
     container.appendChild(header);
@@ -138,7 +139,7 @@ export function renderSourceControl(container: HTMLElement) {
     commitArea.innerHTML = `
       <textarea class="sc-commit-input ui-input" rows="3"></textarea>
       <button data-variant="primary" class="sc-commit-btn ui-btn" disabled>
-        <span class="sc-commit-icon">✓</span> <span class="sc-commit-label">Commit</span>
+        <span class="sc-commit-icon">${icon("check")}</span> <span class="sc-commit-label">Commit</span>
       </button>
       <label class="sc-amend" title="Replace the last commit with the staged changes and this message (git commit --amend)">
         <input type="checkbox" class="sc-amend-check" /> Amend last commit
@@ -298,12 +299,13 @@ export function renderSourceControl(container: HTMLElement) {
   render();
 }
 
-/** `↑N` / `↓N` header button; hidden at 0, disabled + `…` while running. */
-function syncButton(action: "push" | "pull", glyph: string, count: number, busy: boolean): string {
+/** `↑N` / `↓N` header button (arrow icon + count); hidden at 0, disabled +
+ *  `…` while running. */
+function syncButton(action: "push" | "pull", arrow: IconName, count: number, busy: boolean): string {
   if (count === 0 && !busy) return "";
   const verb = action === "push" ? "Push" : "Pull";
-  const title = busy ? `${verb} in progress…` : `${verb} (${glyph}${count})`;
-  return `<button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn" data-action="${action}" title="${title}"${busy ? " disabled" : ""}>${busy ? `${glyph}…` : `${glyph}${count}`}</button>`;
+  const title = busy ? `${verb} in progress…` : `${verb} (${count})`;
+  return `<button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn" data-action="${action}" title="${title}"${busy ? " disabled" : ""}>${icon(arrow)}${busy ? "…" : count}</button>`;
 }
 
 const projectSubdirCache = new Map<number, string[]>();
@@ -335,7 +337,7 @@ function renderProjectView(container: HTMLElement, projectPath: string) {
   header.innerHTML = `
     <span>PROJECT</span>
     <span class="sc-header-actions">
-      <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn" data-action="refresh" title="Refresh">↻</button>
+      <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn" data-action="refresh" title="Refresh" aria-label="Refresh">${icon("refresh")}</button>
     </span>
   `;
   container.appendChild(header);
@@ -360,7 +362,7 @@ function renderProjectView(container: HTMLElement, projectPath: string) {
     for (const name of subdirs) {
       const item = document.createElement("div");
       item.className = "sc-subdir-item";
-      item.innerHTML = `<span class="sc-subdir-icon">📁</span><span class="sc-subdir-name"></span>`;
+      item.innerHTML = `<span class="sc-subdir-icon">${icon("folder")}</span><span class="sc-subdir-name"></span>`;
       item.querySelector(".sc-subdir-name")!.textContent = name;
       item.title = `${projectPath}/${name}`;
       item.addEventListener("click", () => {
@@ -423,9 +425,7 @@ function renderSection(
   header.className = "sc-section-header";
   header.innerHTML = `
     <span class="sc-section-toggle">
-      <svg class="group-chevron${collapsed ? " collapsed" : ""}" viewBox="0 0 16 16">
-        <path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5"/>
-      </svg>
+      ${icon("chevron-right", { class: `group-chevron${collapsed ? " collapsed" : ""}` })}
       <input type="checkbox" class="sc-section-check" title="Toggle all" />
       <span class="sc-section-title">${escapeHtml(title)} (${files.length})</span>
     </span>
@@ -556,19 +556,19 @@ function renderSection(
 
       const isMarkdown = /\.(md|markdown)$/i.test(file.path);
       const previewBtn = isMarkdown
-        ? `<button data-variant="ghost" data-icon class="file-action-btn ui-btn" data-action="preview" title="Preview rendered markdown">👁</button>`
+        ? `<button data-variant="ghost" data-icon class="file-action-btn ui-btn" data-action="preview" title="Preview rendered markdown" aria-label="Preview rendered markdown">${icon("eye")}</button>`
         : "";
       const isDeleted = file.status === "Deleted";
       const revealBtn = isDeleted
         ? ""
-        : `<button data-variant="ghost" data-icon class="file-action-btn ui-btn" data-action="reveal" title="Reveal in Files">⌖</button>`;
+        : `<button data-variant="ghost" data-icon class="file-action-btn ui-btn" data-action="reveal" title="Reveal in Files" aria-label="Reveal in Files">${icon("locate")}</button>`;
       const editBtn = isDeleted
         ? ""
-        : `<button data-variant="ghost" data-icon class="file-action-btn ui-btn" data-action="edit" title="Edit in inline editor">✏️</button>`;
+        : `<button data-variant="ghost" data-icon class="file-action-btn ui-btn" data-action="edit" title="Edit in inline editor" aria-label="Edit in inline editor">${icon("pencil")}</button>`;
       // Working-tree changes can be thrown away (confirmed, irreversible);
       // for an untracked file that means deleting it.
       const discardBtn = action === "stage"
-        ? `<button data-variant="ghost" data-icon class="file-action-btn ui-btn file-action-danger" data-action="discard" title="${file.status === "Untracked" ? "Delete file" : "Discard changes"}">⟲</button>`
+        ? `<button data-variant="ghost" data-icon class="file-action-btn ui-btn file-action-danger" data-action="discard" title="${file.status === "Untracked" ? "Delete file" : "Discard changes"}" aria-label="${file.status === "Untracked" ? "Delete file" : "Discard changes"}">${icon("undo")}</button>`
         : "";
 
       const itemIdx = fileIdx;

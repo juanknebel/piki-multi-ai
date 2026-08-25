@@ -12,6 +12,8 @@
    come before every feature sheet so a feature modifier always wins. */
 @import "./primitives.css";
 @import "./motion.css";
+/* Inline SVG icon box (components/icons.ts) */
+@import "./icons.css";
 
 /* Shell + panels, in cascade order */
 @import "./layout.css";

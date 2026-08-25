@@ -21,6 +21,7 @@ import {
 } from "./tab-bar";
 import { getShortcutKey } from "../shortcuts";
 import { branchLabel } from "../labels";
+import { icon } from "./icons";
 import { openFuzzySearch } from "./fuzzy-search";
 import { literalNextTab, onLiteralNextChange } from "../literal-next";
 
@@ -154,9 +155,9 @@ function renderLeaf(leaf: LeafNode): HTMLElement {
   head.innerHTML = `
     <span class="pane-title">${paneTitleHtml(leaf)}</span>
     <span class="pane-actions">
-      ${exited ? '<button class="pane-btn pane-btn-restart" data-act="restart" title="Restart here">↻ Restart</button>' : ""}
-      <button class="pane-btn" data-act="right" title="Split right">⇥</button>
-      <button class="pane-btn" data-act="down" title="Split down">⤓</button>
+      ${exited ? '<button class="pane-btn pane-btn-restart" data-act="restart" title="Restart here">${icon("refresh")}<span class="icon-label">Restart</span></button>' : ""}
+      <button class="pane-btn" data-act="right" title="Split right" aria-label="Split right">${icon("split-right")}</button>
+      <button class="pane-btn" data-act="down" title="Split down" aria-label="Split down">${icon("split-down")}</button>
       <button class="pane-btn pane-btn-close" data-act="close" title="Close pane">×</button>
     </span>
   `;
@@ -277,7 +278,7 @@ function renderEmptyState(
     <div class="pane-empty-ws" title="${escapeHtml(ws.info.name)}${ws.branch ? ` · ${escapeHtml(ws.branch)}` : ""}">
       <span class="pane-empty-name">${escapeHtml(ws.info.name)}</span>
       <span class="pane-empty-sep">·</span>
-      <span class="pane-empty-branch">⎇ ${escapeHtml(branchLabel(ws.branch))}</span>
+      <span class="pane-empty-branch">${icon("branch")} ${escapeHtml(branchLabel(ws.branch))}</span>
     </div>
     <div class="pane-chooser-title">${escapeHtml(title)}</div>
     <div class="pane-chooser-list"><span class="pane-chooser-loading">…</span></div>

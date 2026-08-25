@@ -6,6 +6,7 @@ import { jumpToAttention } from "./agents-panel";
 import { attentionRows } from "../agent-attention";
 import { getShortcutKey } from "../shortcuts";
 import { branchLabel } from "../labels";
+import { icon } from "./icons";
 import { openBranchPicker } from "./dialogs/branch-picker";
 import * as ipc from "../ipc";
 
@@ -25,7 +26,8 @@ export function renderStatusBar(container: HTMLElement) {
 
     // Left side — the branch, shortened by the shared rule (full in the tooltip).
     // Click (or the `switch-branch` key) opens the branch switcher.
-    const branchItem = addItem(container, `⎇ ${branchLabel(ws?.branch)}`, "clickable");
+    const branchItem = addItem(container, "", "clickable");
+    branchItem.innerHTML = `${icon("branch")}${escapeText(branchLabel(ws?.branch))}`;
     branchItem.title = ws?.branch
       ? `${ws.branch}\nClick or ${getShortcutKey("switch-branch")} to switch branch`
       : "No git branch";
@@ -65,7 +67,7 @@ export function renderStatusBar(container: HTMLElement) {
     if (needing.length > 0) {
       const item = document.createElement("div");
       item.className = "status-item clickable status-attention";
-      item.textContent = `● ${needing.length} need${needing.length === 1 ? "s" : ""} you`;
+      item.innerHTML = `${icon("dot")}${needing.length} need${needing.length === 1 ? "s" : ""} you`;
       item.title = `${needing.map((r) => `${r.workspace_name} · ${r.label}`).join("\n")}\nClick or ${getShortcutKey("jump-attention")} to jump`;
       item.addEventListener("click", () => jumpToAttention());
       container.appendChild(item);
@@ -78,7 +80,7 @@ export function renderStatusBar(container: HTMLElement) {
         if (tab.provider === "Shell") {
           const shellState = appState.getTabShellState(tab.id);
           if (shellState?.cwd) {
-            addItem(container, `📁 ${formatHomeRelative(shellState.cwd)}`, "status-cwd");
+            addItem(container, "", "status-cwd").innerHTML = `${icon("folder")}${escapeText(formatHomeRelative(shellState.cwd))}`;
           }
         }
         // Claude agent tabs: structured status glyph + summary preview.
@@ -91,7 +93,7 @@ export function renderStatusBar(container: HTMLElement) {
           const item = document.createElement("div");
           item.className = "status-item status-agent";
           item.style.color = v.color;
-          item.textContent = `${v.glyph} ${v.label}${sum}`;
+          item.innerHTML = `${icon(v.icon)}${escapeText(`${v.label}${sum}`)}`;
           item.title = agentState.agentSummary ?? v.label;
           container.appendChild(item);
         }
@@ -179,7 +181,7 @@ async function refreshSessionsCache(): Promise<void> {
       sessionsCache.title = `${s.live} live session${s.live === 1 ? "" : "s"} in the daemon${s.daemon_pid != null ? ` (pid ${s.daemon_pid})` : ""} — click to manage`;
     } else if (s.state === "off") {
       sessionsCache.text = "sessions off";
-      sessionsCache.title = "Persistent sessions disabled (Settings ▸ General, or [sessions] enabled = false in config.toml) — tabs run in-process";
+      sessionsCache.title = "Persistent sessions disabled (Settings › General, or [sessions] enabled = false in config.toml) — tabs run in-process";
     } else {
       sessionsCache.text = "sessions unavailable";
       sessionsCache.title = "The session daemon is not answering — tabs opened now run in-process and die with the window";
@@ -208,6 +210,13 @@ function formatHomeRelative(path: string): string {
 function truncate(s: string, max: number): string {
   const oneLine = s.replace(/\s+/g, " ").trim();
   return oneLine.length > max ? oneLine.slice(0, max - 1) + "…" : oneLine;
+}
+
+/** Text → HTML for the `innerHTML` segments that lead with an `icon()`. */
+function escapeText(text: string): string {
+  const el = document.createElement("span");
+  el.textContent = text;
+  return el.innerHTML;
 }
 
 function addItem(container: HTMLElement, text: string, ...classes: string[]): HTMLElement {

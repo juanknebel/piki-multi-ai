@@ -14,6 +14,7 @@ import { formatShortcut } from "../shortcuts";
 import { rankItems } from "../mru";
 import { fuzzyScore } from "./fuzzy";
 import { branchLabel } from "../labels";
+import { icon } from "./icons";
 import { agentStatusSeverity, cliAgentStatusView, type CliAgentStatus } from "../types";
 
 let switcherEl: HTMLElement | null = null;
@@ -49,11 +50,11 @@ function statusGlyph(idx: number): string {
   const agent = agentRollup(idx);
   if (agent) {
     const v = cliAgentStatusView(agent.status, agent.attention);
-    return `<span class="palette-status" style="color:${v.color}" title="Agent ${escapeHtml(v.label)}">${v.glyph}</span>`;
+    return `<span class="palette-status" style="color:${v.color}" title="Agent ${escapeHtml(v.label)}">${icon(v.icon)}</span>`;
   }
   const changes = appState.workspaces[idx]?.changedFiles.length ?? 0;
   if (changes > 0) {
-    return `<span class="palette-status dirty" title="${changes} uncommitted change${changes === 1 ? "" : "s"}">●</span>`;
+    return `<span class="palette-status dirty" title="${changes} uncommitted change${changes === 1 ? "" : "s"}">${icon("dot")}</span>`;
   }
   return `<span class="palette-status"></span>`;
 }
@@ -114,7 +115,10 @@ export function openWorkspaceSwitcher() {
       // Secondary text: the repo folder when the query hit it (or the name
       // doesn't already say it), always the branch.
       const showFolder = item.folder !== item.name && (!q || fuzzyScore(q, item.folder) !== null);
-      const sub = [showFolder ? item.folder : null, item.branch ? `⎇ ${branchLabel(item.branch)}` : null]
+      const sub = [
+        showFolder ? escapeHtml(item.folder) : null,
+        item.branch ? `${icon("branch")} ${escapeHtml(branchLabel(item.branch))}` : null,
+      ]
         .filter((s): s is string => !!s)
         .join(" · ");
 
@@ -122,10 +126,10 @@ export function openWorkspaceSwitcher() {
         <span class="palette-category">${item.idx < 9 ? formatShortcut(`Alt+${item.idx + 1}`) : ""}</span>
         ${statusGlyph(item.idx)}
         <span class="palette-label">
-          ${isCurrent ? "● " : ""}${highlightMatch(item.name, q)}${sub ? `<span class="palette-sub">${escapeHtml(sub)}</span>` : ""}
+          ${isCurrent ? `${icon("dot")} ` : ""}${highlightMatch(item.name, q)}${sub ? `<span class="palette-sub">${sub}</span>` : ""}
         </span>
       `;
-      el.title = `${item.name}${item.branch ? ` · ⎇ ${item.branch}` : ""}\n${item.key}`;
+      el.title = `${item.name}${item.branch ? ` · ${item.branch}` : ""}\n${item.key}`;
 
       el.addEventListener("click", () => switchTo(item.idx));
       el.addEventListener("mouseenter", () => {

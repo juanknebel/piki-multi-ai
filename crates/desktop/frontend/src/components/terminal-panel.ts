@@ -13,6 +13,7 @@ import { getTerminalSettings, xtermOptionsFor } from "../terminal-settings";
 import { createSelectionCopier, type SelectionCopier } from "../copy-on-select";
 import { armLiteralNext, disarmLiteralNext, isLiteralNextArmed, isLiteralPass, literalNextTab } from "../literal-next";
 import { openContextMenu, type CtxItem } from "./context-menu";
+import { icon } from "./icons";
 import { allLeaves } from "../pane-tree";
 import { flashTabChip } from "./tab-bar";
 
@@ -108,6 +109,36 @@ function pasteFromClipboard(terminal: Terminal) {
 function openLink(uri: string) {
   ipc.openExternalUrl(uri).catch((err) => reportError("Open link failed", err));
 }
+
+/** Resolves once the bundled terminal face (`--font-mono`, a ~1 MB WOFF2)
+ *  is loaded — or right away when the Font Loading API is missing, the load
+ *  fails, or it takes longer than FONT_WAIT_MS. `mountTerminalInto` waits on
+ *  it before `terminal.open()`: xterm measures its cell grid ONCE at open
+ *  (and again only on a font-option change), so opening on the fallback
+ *  mono would leave every cell the wrong width after the swap. Lazy (not at
+ *  module init) so the stylesheet that defines the token is applied. */
+const FONT_WAIT_MS = 2000;
+let fontsLoaded = false;
+let fontsReady: Promise<void> | null = null;
+function ensureFontsReady(): Promise<void> {
+  if (!fontsReady) {
+    fontsReady = (async () => {
+      try {
+        if (typeof document === "undefined" || !("fonts" in document)) return;
+        const family = cssToken("--font-mono", "monospace");
+        const load = Promise.all([document.fonts.load(`1em ${family}`), document.fonts.load(`bold 1em ${family}`)]);
+        await Promise.race([load, new Promise((resolve) => setTimeout(resolve, FONT_WAIT_MS))]);
+      } catch {
+        // A broken font must never block the terminal; xterm falls back.
+      } finally {
+        fontsLoaded = true;
+      }
+    })();
+  }
+  return fontsReady;
+}
+/** Tabs whose first open is parked on `ensureFontsReady()`. */
+const pendingOpen = new Set<string>();
 
 /**
  * Pre-create a Terminal instance for a tab. The xterm.js `open()` call
@@ -387,6 +418,21 @@ export function mountTerminalInto(tabId: string, host: HTMLElement) {
   instance.element.style.display = "block";
 
   if (!instance.opened) {
+    // First open waits for the Nerd Font (see ensureFontsReady); the mount
+    // is replayed once it lands, if the tab still wants this host.
+    if (!fontsLoaded) {
+      if (!pendingOpen.has(tabId)) {
+        pendingOpen.add(tabId);
+        void ensureFontsReady().then(() => {
+          pendingOpen.delete(tabId);
+          const still = terminals.get(tabId);
+          if (still === instance && instance.element.parentElement === host && instance.element.style.display !== "none") {
+            mountTerminalInto(tabId, host);
+          }
+        });
+      }
+      return;
+    }
     instance.terminal.open(instance.element);
     instance.opened = true;
     try {
@@ -512,8 +558,8 @@ export function openTerminalSearch(tabId?: string) {
     <span class="term-search-count" aria-live="polite"></span>
     <button type="button" data-variant="ghost" data-size="sm" class="term-search-toggle ui-btn" data-opt="caseSensitive" aria-pressed="${search.caseSensitive}" title="Match case">Aa</button>
     <button type="button" data-variant="ghost" data-size="sm" class="term-search-toggle ui-btn" data-opt="regex" aria-pressed="${search.regex}" title="Regular expression">.*</button>
-    <button type="button" data-variant="ghost" data-icon class="term-search-btn ui-btn" data-act="prev" title="Previous match (Shift+Enter)">↑</button>
-    <button type="button" data-variant="ghost" data-icon class="term-search-btn ui-btn" data-act="next" title="Next match (Enter)">↓</button>
+    <button type="button" data-variant="ghost" data-icon class="term-search-btn ui-btn" data-act="prev" title="Previous match (Shift+Enter)" aria-label="Previous match">${icon("arrow-up")}</button>
+    <button type="button" data-variant="ghost" data-icon class="term-search-btn ui-btn" data-act="next" title="Next match (Enter)" aria-label="Next match">${icon("arrow-down")}</button>
     <button type="button" data-variant="ghost" data-icon class="term-search-btn ui-btn" data-act="close" title="Close (Esc)">×</button>
   `;
   // Anchored to the terminal container (position: absolute, top-right) — it

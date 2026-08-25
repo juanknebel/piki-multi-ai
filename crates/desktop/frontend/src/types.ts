@@ -1,3 +1,5 @@
+import type { IconName } from "./components/icons";
+
 export type AIProvider =
   | "Shell"
   | "Kanban"
@@ -160,27 +162,30 @@ export function formatElapsed(secs: number): string {
   return `${s}s`;
 }
 
-/** Glyph / label / theme color for a Claude agent status. Shared by the
+/** Icon / label / theme color for a Claude agent status. Shared by the
  *  status bar (full), the workspace tab bar (dot only) and the Agents panel.
  *  `attention` gates the shouting: an idle agent only reads "needs you" when
- *  it has news the user hasn't looked at (same rule as the TUI). */
-export function cliAgentStatusView(status: CliAgentStatus, attention = false): {
-  glyph: string;
+ *  it has news the user hasn't looked at (same rule as the TUI). The view
+ *  returns the icon NAME (`components/icons.ts`); renderers call `icon()`. */
+export interface AgentStatusView {
+  icon: IconName;
   label: string;
   color: string;
-} {
+}
+
+export function cliAgentStatusView(status: CliAgentStatus, attention = false): AgentStatusView {
   switch (status) {
     case "waiting-permission":
-      return { glyph: "⚠", label: "needs permission", color: "var(--accent-warm)" };
+      return { icon: "warning", label: "needs permission", color: "var(--accent-warm)" };
     case "idle":
       return attention
-        ? { glyph: "●", label: "needs you", color: "var(--accent-warm)" }
-        : { glyph: "⏳", label: "waiting for input", color: "var(--accent-primary)" };
+        ? { icon: "dot", label: "needs you", color: "var(--accent-warm)" }
+        : { icon: "clock", label: "waiting for input", color: "var(--accent-primary)" };
     case "done":
-      return { glyph: "✓", label: "done", color: "var(--git-added)" };
+      return { icon: "check", label: "done", color: "var(--git-added)" };
     case "running":
     default:
-      return { glyph: "▷", label: "running", color: "var(--text-muted)" };
+      return { icon: "play", label: "running", color: "var(--text-muted)" };
   }
 }
 
@@ -194,18 +199,18 @@ export function agentStatusSeverity(status: CliAgentStatus, attention: boolean):
   return 0;
 }
 
-/** Status glyph for ambient chrome (workspace list rollup). Only actionable
+/** Status icon for ambient chrome (workspace list rollup). Only actionable
  *  states surface here — running/done stay in the Agents panel. Mirrors the
  *  TUI's `actionable_status_view`. */
 export function actionableStatusView(
   status: CliAgentStatus,
   attention: boolean,
-): { glyph: string; label: string; color: string } | null {
+): AgentStatusView | null {
   if (status === "waiting-permission")
-    return { glyph: "⚠", label: "needs permission", color: "var(--accent-warm)" };
+    return { icon: "warning", label: "needs permission", color: "var(--accent-warm)" };
   // "Has news you haven't seen" propagates; quiet idle/done doesn't.
   if ((status === "idle" || status === "done") && attention)
-    return { glyph: "●", label: "needs you", color: "var(--accent-warm)" };
+    return { icon: "dot", label: "needs you", color: "var(--accent-warm)" };
   return null;
 }
 
