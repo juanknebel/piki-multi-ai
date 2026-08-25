@@ -1,0 +1,31 @@
+/* Toasts (components/toast.ts); the container is #toast-container in layout.css. */
+.toast {
+  padding: 10px 18px;
+  border-radius: var(--radius-md);
+  font-size: var(--fs-md);
+  color: var(--toast-fg);
+  box-shadow: var(--shadow-md);
+  animation: toast-in var(--dur-base) var(--ease-out);
+  max-width: 420px;
+  border: 1px solid var(--border-subtle);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  /* Multi-line error messages keep their line breaks */
+  white-space: pre-line;
+  cursor: pointer;
+}
+
+.toast.info {
+  background: var(--toast-info-bg);
+  border-left: 3px solid var(--accent-primary);
+}
+
+.toast.success {
+  background: var(--toast-success-bg);
+  border-left: 3px solid var(--success-color);
+}
+
+.toast.error {
+  background: var(--toast-error-bg);
+  border-left: 3px solid var(--error-color);
+}

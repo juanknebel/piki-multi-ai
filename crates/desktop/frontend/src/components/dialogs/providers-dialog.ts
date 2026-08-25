@@ -11,13 +11,13 @@ export async function showProvidersDialog() {
   backdrop.className = "dialog-backdrop providers-backdrop";
 
   const dialog = document.createElement("div");
-  dialog.className = "dialog providers-dialog";
+  dialog.className = "dialog ui-surface providers-dialog";
 
   const header = document.createElement("div");
-  header.className = "dialog-header";
+  header.className = "ui-header";
   header.innerHTML = `
-    <span class="dialog-title">Manage Providers</span>
-    <button class="dialog-close" title="Close" aria-label="Close">&times;</button>
+    <span class="ui-header-title">Manage Providers</span>
+    <button data-variant="ghost" data-icon class="dialog-close ui-btn" title="Close" aria-label="Close">&times;</button>
   `;
 
   const body = document.createElement("div");
@@ -48,7 +48,7 @@ export async function showProvidersDialog() {
 
     if (providers.length === 0) {
       const empty = document.createElement("div");
-      empty.className = "providers-empty";
+      empty.className = "ui-empty";
       empty.textContent = "No providers configured.";
       body.appendChild(empty);
     } else {
@@ -78,8 +78,8 @@ export async function showProvidersDialog() {
             </span>
           </td>
           <td class="col-actions">
-            <button class="dialog-btn dialog-btn-secondary dialog-btn-sm btn-edit" data-name="${escAttr(p.name)}">Edit</button>
-            <button class="dialog-btn dialog-btn-danger dialog-btn-sm btn-delete" data-name="${escAttr(p.name)}">Delete</button>
+            <button data-variant="secondary" data-size="sm" class="ui-btn btn-edit" data-name="${escAttr(p.name)}">Edit</button>
+            <button data-variant="danger" data-size="sm" class="ui-btn btn-delete" data-name="${escAttr(p.name)}">Delete</button>
           </td>
         `;
         tbody.appendChild(tr);
@@ -90,7 +90,7 @@ export async function showProvidersDialog() {
 
     const footer = document.createElement("div");
     footer.className = "dialog-footer";
-    footer.innerHTML = `<button class="dialog-btn dialog-btn-primary btn-new">New Provider</button>`;
+    footer.innerHTML = `<button data-variant="primary" class="ui-btn btn-new">New Provider</button>`;
     body.appendChild(footer);
 
     body.querySelectorAll<HTMLButtonElement>(".btn-edit").forEach((btn) => {
@@ -118,8 +118,8 @@ export async function showProvidersDialog() {
       <div class="providers-confirm">
         <span class="providers-confirm-text">Delete provider <strong>${esc(name)}</strong>?</span>
         <div class="dialog-footer" style="border:none;padding:0;background:none">
-          <button class="dialog-btn dialog-btn-secondary confirm-cancel">Cancel</button>
-          <button class="dialog-btn dialog-btn-danger confirm-ok">Delete</button>
+          <button data-variant="secondary" class="ui-btn confirm-cancel">Cancel</button>
+          <button data-variant="danger" class="ui-btn confirm-ok">Delete</button>
         </div>
       </div>
     `;
@@ -146,22 +146,22 @@ export async function showProvidersDialog() {
     };
 
     body.innerHTML = `
-      <div class="dialog-title" style="margin-bottom:4px">${isEdit ? "Edit" : "New"} Provider</div>
+      <div class="ui-header-title" style="margin-bottom:4px">${isEdit ? "Edit" : "New"} Provider</div>
       <div class="dialog-field">
         <label class="dialog-label">Name</label>
-        <input class="dialog-input f-name" type="text" value="${escAttr(p.name)}" ${isEdit ? "readonly" : ""} />
+        <input class="ui-input f-name" type="text" value="${escAttr(p.name)}" ${isEdit ? "readonly" : ""} />
       </div>
       <div class="dialog-field">
         <label class="dialog-label">Description</label>
-        <input class="dialog-input f-desc" type="text" value="${escAttr(p.description)}" />
+        <input class="ui-input f-desc" type="text" value="${escAttr(p.description)}" />
       </div>
       <div class="dialog-field">
         <label class="dialog-label">Command (binary path or name)</label>
-        <input class="dialog-input f-cmd" type="text" value="${escAttr(p.command)}" />
+        <input class="ui-input f-cmd" type="text" value="${escAttr(p.command)}" />
       </div>
       <div class="dialog-field">
         <label class="dialog-label">Default Args (space-separated)</label>
-        <input class="dialog-input f-args" type="text" value="${escAttr(p.default_args.join(" "))}" />
+        <input class="ui-input f-args" type="text" value="${escAttr(p.default_args.join(" "))}" />
       </div>
       <div class="dialog-field">
         <label class="dialog-label">Prompt Format</label>
@@ -169,7 +169,7 @@ export async function showProvidersDialog() {
       </div>
       <div class="dialog-field flag-row" ${p.prompt_format !== "Flag" ? `style="display:none"` : ""}>
         <label class="dialog-label">Flag (e.g. --prompt)</label>
-        <input class="dialog-input f-flag" type="text" value="${escAttr(p.prompt_flag)}" />
+        <input class="ui-input f-flag" type="text" value="${escAttr(p.prompt_flag)}" />
       </div>
       <label class="dialog-field" style="flex-direction:row;align-items:center;gap:8px">
         <input class="f-dispatch" type="checkbox" ${p.dispatchable ? "checked" : ""} />
@@ -177,11 +177,11 @@ export async function showProvidersDialog() {
       </label>
       <div class="dialog-field">
         <label class="dialog-label">Agent Dir (e.g. .my-ai/agents)</label>
-        <input class="dialog-input f-agentdir" type="text" value="${escAttr(p.agent_dir ?? "")}" />
+        <input class="ui-input f-agentdir" type="text" value="${escAttr(p.agent_dir ?? "")}" />
       </div>
       <div class="dialog-footer" style="border:none;padding:0;background:none;margin-top:6px">
-        <button class="dialog-btn dialog-btn-secondary btn-cancel">Cancel</button>
-        <button class="dialog-btn dialog-btn-primary btn-save">Save</button>
+        <button data-variant="secondary" class="ui-btn btn-cancel">Cancel</button>
+        <button data-variant="primary" class="ui-btn btn-save">Save</button>
       </div>
     `;
 

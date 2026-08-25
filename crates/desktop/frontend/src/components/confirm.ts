@@ -1,7 +1,8 @@
 // Shared modal confirm overlay. One implementation for every destructive
 // confirmation so Escape-to-cancel, Enter-to-confirm, focus trapping and
 // focus restore behave the same everywhere. Renders the established
-// `.ws-delete-confirm` / `.ws-delete-dialog` markup (styles/dialog.css).
+// `.ws-delete-confirm` / `.ws-delete-dialog ui-surface` markup
+// (styles/dialog-core.css) with `.ui-btn` actions.
 
 export interface ConfirmAction {
   label: string;
@@ -41,7 +42,7 @@ export function showConfirm(opts: ConfirmOptions): {
   overlay.tabIndex = -1;
 
   const dialog = document.createElement("div");
-  dialog.className = "ws-delete-dialog";
+  dialog.className = "ws-delete-dialog ui-surface";
   dialog.innerHTML = opts.bodyHtml;
 
   const buttons = document.createElement("div");
@@ -65,7 +66,8 @@ export function showConfirm(opts: ConfirmOptions): {
 
   const btnEls = opts.actions.map((action) => {
     const btn = document.createElement("button");
-    btn.className = `dialog-btn dialog-btn-${action.kind}`;
+    btn.className = "ui-btn";
+    btn.dataset.variant = action.kind;
     btn.textContent = action.label;
     btn.addEventListener("click", () => run(action));
     buttons.appendChild(btn);

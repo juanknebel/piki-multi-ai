@@ -224,6 +224,12 @@
   /* The editor column never drops below this (layout.css minmax + the
      sidebar/chat clamps in layout-budget.ts share the same number). */
   --editor-min-width: 320px;
+  /* Control heights (primitives.css): every .ui-btn / .ui-input / dropdown
+     trigger is one of these, so a form row of mixed controls lines up. */
+  --control-height: 2.4rem;     /* 30px  md buttons, text inputs, dropdown triggers */
+  --control-height-sm: 1.76rem; /* 22px  sm buttons, icon buttons, compact inputs */
+  /* .ui-header min-height (dialog / overlay title rows) */
+  --header-height: 3.52rem;     /* 44px */
 
   /* ── Z layers ──────────────────────────────────── */
   /* Every stacking level in styles/ is one of these (or a `calc()` of one). */
@@ -255,6 +261,19 @@
   --radius-md: 6px;
   --radius-lg: 10px;
   --radius-full: 99px;
+
+  /* ── Focus ring ────────────────────────────────── */
+  /* Keyboard focus is visible everywhere: reset.css paints
+     `--focus-ring-width` of --accent-focus as an outline on any focused
+     element; text fields (.ui-input, .dialog-dropdown-trigger, in-panel
+     search boxes) swap the outline for an accent border + this halo. */
+  --focus-ring-width: 2px;
+  --focus-ring: 0 0 0 var(--focus-ring-width) color-mix(in srgb, var(--accent-primary) 40%, transparent);
+  /* Same halo in the error hue for an invalid field that has focus */
+  --focus-ring-error: 0 0 0 var(--focus-ring-width) color-mix(in srgb, var(--error-color) 40%, transparent);
+  /* Full-pane editors (API request, file viewer textarea, markdown editor):
+     an inset hairline so the whole pane doesn't grow a border */
+  --focus-ring-inset: inset 0 0 0 1px color-mix(in srgb, var(--accent-primary) 45%, transparent);
 }
 
 /* Light tone: theme.ts stamps data-theme-tone="light|dark" on <html> from the

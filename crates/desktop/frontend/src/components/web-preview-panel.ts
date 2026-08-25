@@ -135,17 +135,17 @@ function createPanel(tabId: string): WebPreviewInstance {
   el.innerHTML = `
     <div class="web-preview-toolbar">
       <span class="web-preview-status-dot" data-status="idle" title="Idle"></span>
-      <input class="web-preview-url-input" type="text" spellcheck="false"
+      <input class="web-preview-url-input ui-input" type="text" spellcheck="false"
              placeholder="localhost:3000 or https://example.com" />
-      <button class="web-preview-go" title="Load URL">Go</button>
+      <button data-variant="secondary" class="web-preview-go ui-btn" title="Load URL">Go</button>
       <div class="web-preview-preset-wrap"></div>
-      <button class="web-preview-reload" title="Reload">↻</button>
+      <button data-variant="secondary" data-icon data-size="md" class="web-preview-reload ui-btn" title="Reload">↻</button>
     </div>
     <div class="web-preview-warning-banner" hidden>
       Non-local URL — many sites refuse to embed (X-Frame-Options).
     </div>
     <div class="web-preview-iframe-host">
-      <div class="web-preview-empty">Pick a port from the dropdown, or type a URL and press Enter.</div>
+      <div class="web-preview-empty ui-empty">Pick a port from the dropdown, or type a URL and press Enter.</div>
     </div>
   `;
 

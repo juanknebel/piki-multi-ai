@@ -82,8 +82,8 @@ export function renderAgentsPanel(container: HTMLElement) {
     <div class="sidebar-header">
       <span>Agents <span class="agents-attention-count" hidden></span></span>
       <span class="agents-header-actions">
-        <button class="sc-header-btn" id="agents-dispatch-btn" title="Dispatch Agent">＋</button>
-        <button class="sc-header-btn" id="agents-manage-btn" title="Manage Agents">⚙</button>
+        <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn" id="agents-dispatch-btn" title="Dispatch Agent">＋</button>
+        <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn" id="agents-manage-btn" title="Manage Agents">⚙</button>
       </span>
     </div>
     <div class="agents-list" id="agents-list" role="listbox" aria-label="Agents"></div>
@@ -124,12 +124,12 @@ export function renderAgentsPanel(container: HTMLElement) {
     list.innerHTML = "";
     if (rows.length === 0) {
       const empty = document.createElement("div");
-      empty.className = "agents-empty";
+      empty.className = "ui-empty";
       empty.innerHTML = `
         <p>No agents running</p>
-        <button class="dialog-btn dialog-btn-secondary empty-cta">Dispatch Agent</button>
+        <button data-variant="secondary" data-size="sm" class="ui-btn ui-empty-cta">Dispatch Agent</button>
       `;
-      empty.querySelector(".empty-cta")!.addEventListener("click", () => showDispatchDialog());
+      empty.querySelector(".ui-empty-cta")!.addEventListener("click", () => showDispatchDialog());
       list.appendChild(empty);
       return;
     }

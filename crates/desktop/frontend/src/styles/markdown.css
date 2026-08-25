@@ -220,13 +220,18 @@
 .md-editor-body .ProseMirror {
   height: 100%;
   overflow-y: auto;
-  outline: none;
   padding: 16px 20px;
   font-family: var(--font-mono);
   font-size: var(--fs-lg);
   line-height: var(--leading-loose);
   color: var(--text-primary);
   caret-color: var(--text-bright);
+}
+
+/* Full-pane editor: inset hairline instead of the outset outline. */
+.md-editor-body .ProseMirror:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring-inset);
 }
 
 .md-editor-body .ProseMirror ::selection {

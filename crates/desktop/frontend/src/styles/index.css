@@ -8,6 +8,9 @@
 @import "../fonts/fonts.css";
 @import "./variables.css";
 @import "./reset.css";
+/* Primitives (.ui-surface / .ui-header / .ui-btn / .ui-input / .ui-empty)
+   come before every feature sheet so a feature modifier always wins. */
+@import "./primitives.css";
 @import "./motion.css";
 
 /* Shell + panels, in cascade order */
@@ -21,7 +24,17 @@
 @import "./pane.css";
 @import "./terminal.css";
 @import "./status-bar.css";
-@import "./dialog.css";
+/* The dialog family (was one dialog.css): core first, then per-feature */
+@import "./dialog-core.css";
+@import "./dialog-providers.css";
+@import "./dialog-agent.css";
+@import "./dialog-logs.css";
+@import "./dialog-help.css";
+@import "./dialog-workspace.css";
+@import "./dialog-git.css";
+@import "./toast.css";
+@import "./file-viewer.css";
+@import "./dialog-settings.css";
 @import "./markdown.css";
 @import "./source-control.css";
 @import "./command-palette.css";

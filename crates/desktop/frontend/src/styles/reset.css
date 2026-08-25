@@ -47,12 +47,12 @@ button {
   transition: color var(--transition-fast), background var(--transition-fast);
 }
 
-input {
+input,
+textarea {
   font: inherit;
   color: inherit;
   background: none;
   border: none;
-  outline: none;
 }
 
 ul,
@@ -60,10 +60,14 @@ ol {
   list-style: none;
 }
 
-/* Keyboard focus indicator — applies app-wide. Mouse clicks don't trigger
-   :focus-visible, so pointer users never see it. */
+/* Keyboard focus indicator — applies app-wide (rows, tabs, chrome buttons,
+   any element nobody styled). Mouse clicks don't trigger :focus-visible, so
+   pointer users never see it. Text fields override this with an accent
+   border + `--focus-ring` halo (primitives.css .ui-input); never write a
+   bare `outline: none` — only inside a `:focus-visible` rule that paints the
+   replacement (src/css-invariants.test.ts enforces it). */
 :focus-visible {
-  outline: 2px solid var(--accent-focus);
+  outline: var(--focus-ring-width) solid var(--accent-focus);
   outline-offset: -2px;
 }
 

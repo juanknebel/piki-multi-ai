@@ -105,7 +105,11 @@
   background: var(--bg-primary);
   border: 1px solid var(--accent-primary);
   border-radius: var(--radius-sm);
+}
+
+.ws-tab-rename:focus-visible {
   outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .ws-tab-close {

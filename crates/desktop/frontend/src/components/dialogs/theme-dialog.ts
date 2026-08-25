@@ -15,16 +15,16 @@ export function showThemeDialog() {
   backdrop.className = "dialog-backdrop theme-dialog-backdrop";
 
   const dialog = document.createElement("div");
-  dialog.className = "dialog";
+  dialog.className = "dialog ui-surface";
   dialog.style.maxWidth = "560px";
   dialog.style.maxHeight = "85vh";
 
   // Build header
   const header = document.createElement("div");
-  header.className = "dialog-header";
+  header.className = "ui-header";
   header.innerHTML = `
-    <span class="dialog-title">Theme Settings</span>
-    <button class="dialog-close" title="Close" aria-label="Close">×</button>
+    <span class="ui-header-title">Theme Settings</span>
+    <button data-variant="ghost" data-icon class="dialog-close ui-btn" title="Close" aria-label="Close">×</button>
   `;
 
   // Build body
@@ -107,8 +107,8 @@ export function showThemeDialog() {
       row.innerHTML = `
         <span class="theme-color-label">${keyToLabel(key)}</span>
         <input type="color" class="theme-color-picker" value="${value}" />
-        <input type="text" class="theme-color-hex" value="${value}" maxlength="7" spellcheck="false" />
-        <button class="theme-color-reset" title="Reset to preset">↺</button>
+        <input type="text" data-size="sm" class="theme-color-hex ui-input" value="${value}" maxlength="7" spellcheck="false" />
+        <button data-variant="ghost" data-icon class="theme-color-reset ui-btn" title="Reset to preset">↺</button>
       `;
 
       const picker = row.querySelector<HTMLInputElement>(".theme-color-picker")!;
@@ -170,11 +170,11 @@ export function showThemeDialog() {
   footer.className = "dialog-footer";
   footer.innerHTML = `
     <span class="theme-footer-left">
-      <button class="dialog-btn dialog-btn-secondary dialog-btn-sm" id="theme-import">Import</button>
-      <button class="dialog-btn dialog-btn-secondary dialog-btn-sm" id="theme-export">Export</button>
+      <button data-variant="secondary" data-size="sm" class="ui-btn" id="theme-import">Import</button>
+      <button data-variant="secondary" data-size="sm" class="ui-btn" id="theme-export">Export</button>
     </span>
-    <button class="dialog-btn dialog-btn-secondary dialog-btn-sm" id="theme-reset-all">Reset All</button>
-    <button class="dialog-btn dialog-btn-secondary" id="theme-close">Close</button>
+    <button data-variant="secondary" data-size="sm" class="ui-btn" id="theme-reset-all">Reset All</button>
+    <button data-variant="secondary" class="ui-btn" id="theme-close">Close</button>
   `;
 
   // Assemble dialog

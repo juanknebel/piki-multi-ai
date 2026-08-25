@@ -227,7 +227,8 @@ function renderEmptyState(
   title = "Open here",
 ) {
   const box = document.createElement("div");
-  box.className = "pane-chooser";
+  box.className = "pane-chooser ui-empty";
+  box.dataset.fill = "";
   box.innerHTML = `
     <div class="pane-empty-ws" title="${escapeHtml(ws.info.name)}${ws.branch ? ` · ${escapeHtml(ws.branch)}` : ""}">
       <span class="pane-empty-name">${escapeHtml(ws.info.name)}</span>
@@ -243,13 +244,15 @@ function renderEmptyState(
     list.innerHTML = "";
     for (const p of providers) {
       const btn = document.createElement("button");
-      btn.className = "pane-chooser-item";
+      btn.className = "pane-chooser-item ui-btn";
+      btn.dataset.variant = "secondary";
       btn.textContent = getProviderLabel(p);
       btn.addEventListener("click", () => open(p));
       list.appendChild(btn);
     }
     const file = document.createElement("button");
-    file.className = "pane-chooser-item";
+    file.className = "pane-chooser-item ui-btn";
+    file.dataset.variant = "secondary";
     file.textContent = "Open file…";
     file.title = `Find a file in ${ws.info.name} (${getShortcutKey("fuzzy-search")})`;
     file.addEventListener("click", () => openFuzzySearch());

@@ -15,17 +15,17 @@ export function showSysinfoDialog() {
   backdrop.className = "dialog-backdrop sysinfo-backdrop";
 
   const dialog = document.createElement("div");
-  dialog.className = "dialog";
+  dialog.className = "dialog ui-surface";
   dialog.style.maxWidth = "820px";
   dialog.style.maxHeight = "85vh";
 
   dialog.innerHTML = `
-    <div class="dialog-header">
-      <span class="dialog-title">System Info</span>
-      <button class="dialog-close" title="Close" aria-label="Close">&times;</button>
+    <div class="ui-header">
+      <span class="ui-header-title">System Info</span>
+      <button data-variant="ghost" data-icon class="dialog-close ui-btn" title="Close" aria-label="Close">&times;</button>
     </div>
     <div class="sysinfo-body">
-      <div class="sysinfo-loading">Loading system info&hellip;</div>
+      <div class="ui-empty" data-tone="loading">Loading system info&hellip;</div>
     </div>
   `;
 
@@ -56,7 +56,7 @@ async function loadSysinfo(container: HTMLElement) {
     const snap = await ipc.getSysinfoDetailed();
     renderSysinfo(container, snap);
   } catch (err) {
-    container.innerHTML = `<div class="sysinfo-error">Failed to load system info</div>`;
+    container.innerHTML = `<div class="ui-empty" data-tone="error">Failed to load system info</div>`;
     reportError("Failed to load system info", err);
   }
 }

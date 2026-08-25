@@ -59,20 +59,7 @@
   color: var(--git-deleted);
 }
 
-.code-editor-save {
-  font-size: var(--fs-sm);
-  padding: 3px 10px;
-  border: 1px solid var(--accent-primary);
-  border-radius: var(--radius-sm);
-  background: var(--accent-primary);
-  color: var(--bg-primary);
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.code-editor-save:hover {
-  opacity: 0.9;
-}
+/* Save is a primary sm .ui-btn (code-editor-panel.ts). */
 
 .code-editor-body {
   flex: 1;

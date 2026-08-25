@@ -8,31 +8,13 @@
   align-items: center;
 }
 
-.ft-toggle-hidden.active,
-.ft-search.active {
-  color: var(--accent-primary);
-}
-
+/* Header toggles are ghost .ui-btns; `.active` paints them accent. */
 .ft-filter-wrap {
   padding: 4px 6px;
   border-bottom: 1px solid var(--border-subtle);
 }
 
-.ft-filter {
-  width: 100%;
-  background: var(--bg-input);
-  border: 1px solid var(--border-primary);
-  color: var(--text-bright);
-  font: inherit;
-  font-size: var(--fs-md);
-  padding: 3px 6px;
-  border-radius: var(--radius-xs);
-  outline: none;
-}
-
-.ft-filter:focus {
-  border-color: var(--border-active);
-}
+/* `.ft-filter ui-input` (sm) */
 
 .ft-path {
   color: var(--text-muted);
@@ -43,10 +25,10 @@
   margin-left: 4px;
 }
 
+/* Focusable listbox (tabIndex 0): the global :focus-visible ring marks it. */
 .ft-list {
   flex: 1;
   overflow-y: auto;
-  outline: none;
   padding: 4px 0;
 }
 
@@ -121,15 +103,12 @@
   cursor: default;
 }
 
+/* `.ft-input ui-input` (sm): inline create/rename, sized like a tree row */
 .ft-input {
   flex: 1;
   min-width: 0;
-  background: var(--bg-input);
-  border: 1px solid var(--border-active);
-  color: var(--text-bright);
-  font: inherit;
-  font-size: var(--fs-lg);
   padding: 0 4px;
+  font-size: var(--fs-lg);
+  border-color: var(--border-active);
   border-radius: var(--radius-xs);
-  outline: none;
 }

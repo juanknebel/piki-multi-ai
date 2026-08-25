@@ -315,7 +315,7 @@ function createPanel(tabId: string, filePath: string, workspaceIdx: number): Cod
       <span class="code-editor-path" title="${esc(filePath)}">${esc(filePath)}</span>
       <span class="code-editor-dirty" style="display:none">modified</span>
       <span class="code-editor-lsp-status"></span>
-      <button class="code-editor-save" title="Save (${formatShortcut("Ctrl+S")})">Save</button>
+      <button data-variant="primary" data-size="sm" class="code-editor-save ui-btn" title="Save (${formatShortcut("Ctrl+S")})">Save</button>
     </div>
     <div class="code-editor-body"></div>
   `;

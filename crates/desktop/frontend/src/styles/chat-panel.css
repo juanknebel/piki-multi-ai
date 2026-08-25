@@ -20,33 +20,13 @@
   flex: 1;
 }
 
-.chat-header-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  transition: background var(--transition-fast), color var(--transition-fast);
-}
-
-.chat-header-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
+/* Header buttons are ghost icon .ui-btns; the Agent toggle is a ghost sm
+   .ui-btn with a hairline border and its own "on" tint. */
 .chat-agent-btn {
-  width: auto;
-  padding: 2px 8px;
   font-size: var(--fs-xs);
-  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  border: 1px solid var(--border-subtle);
+  border-color: var(--border-subtle);
 }
 
 .chat-agent-btn.active {
@@ -78,26 +58,6 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   flex-shrink: 0;
-}
-
-.chat-model-refresh {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  font-size: var(--fs-md);
-  transition: background var(--transition-fast), color var(--transition-fast);
-}
-
-.chat-model-refresh:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
 }
 
 /* ── Messages ───────────────────────────────────── */
@@ -215,24 +175,7 @@
   animation: chat-blink var(--dur-blink) step-end infinite;
 }
 
-/* Empty state */
-.chat-empty {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--sp-4);
-  color: var(--text-muted);
-  padding: 24px;
-  text-align: center;
-}
-
-.chat-empty-icon {
-  font-size: var(--fs-display);
-  opacity: 0.3;
-}
-
+/* Empty state: `.ui-empty[data-fill]`; the two-line hint reads at body size. */
 .chat-empty-text {
   font-size: var(--fs-lg);
   line-height: var(--leading-normal);
@@ -250,54 +193,18 @@
   flex-shrink: 0;
 }
 
+/* `.chat-input ui-input`: auto-growing one-liner (chat-panel.ts autoResize) */
 .chat-input {
   flex: 1;
   min-height: 32px;
   max-height: 120px;
   padding: 6px 10px;
-  background: var(--bg-input);
-  color: var(--text-primary);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-md);
-  font-family: inherit;
   font-size: var(--fs-lg);
   line-height: var(--leading-tight);
   resize: none;
-  outline: none;
-  transition: border-color var(--transition-fast);
 }
 
-.chat-input:focus {
-  border-color: var(--accent-primary);
-}
-
-.chat-input::placeholder {
-  color: var(--text-muted);
-}
-
-.chat-send-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: none;
-  background: var(--accent-primary);
-  color: var(--bg-primary);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: background var(--transition-fast), opacity var(--transition-fast);
-  flex-shrink: 0;
-}
-
-.chat-send-btn:hover {
-  background: var(--accent-hover);
-}
-
-.chat-send-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
+/* Send is a primary icon .ui-btn (md). */
 
 /* ── Settings dialog ─────────────────────────────── */
 

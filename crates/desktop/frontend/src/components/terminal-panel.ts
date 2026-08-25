@@ -286,10 +286,10 @@ export function openTerminalSearch() {
   const bar = document.createElement("div");
   bar.className = "term-search-bar";
   bar.innerHTML = `
-    <input class="term-search-input" type="text" placeholder="Search..." autofocus />
-    <button class="term-search-btn" id="ts-prev" title="Previous">↑</button>
-    <button class="term-search-btn" id="ts-next" title="Next">↓</button>
-    <button class="term-search-btn" id="ts-close" title="Close">×</button>
+    <input data-size="sm" class="term-search-input ui-input" type="text" placeholder="Search..." autofocus />
+    <button data-variant="ghost" data-icon class="term-search-btn ui-btn" id="ts-prev" title="Previous">↑</button>
+    <button data-variant="ghost" data-icon class="term-search-btn ui-btn" id="ts-next" title="Next">↓</button>
+    <button data-variant="ghost" data-icon class="term-search-btn ui-btn" id="ts-close" title="Close">×</button>
   `;
   instance.element.prepend(bar);
 

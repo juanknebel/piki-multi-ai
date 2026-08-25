@@ -41,13 +41,13 @@ export async function initChatPanel(el: HTMLElement) {
   header.className = "chat-header";
   header.innerHTML = `
     <span class="chat-header-title">AI Chat</span>
-    <button class="chat-header-btn chat-settings-btn" title="Chat settings">
+    <button data-variant="ghost" data-icon class="chat-header-btn ui-btn chat-settings-btn" title="Chat settings">
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
         <path d="M8 10a2 2 0 100-4 2 2 0 000 4z" stroke="currentColor" stroke-width="1.2"/>
         <path d="M13.5 8c0-.3-.2-.6-.4-.8l1-1.6-.8-1.4-1.8.4c-.4-.3-.8-.6-1.3-.7L9.8 2H8.2l-.4 1.9c-.5.1-.9.4-1.3.7l-1.8-.4-.8 1.4 1 1.6c-.2.2-.4.5-.4.8s.2.6.4.8l-1 1.6.8 1.4 1.8-.4c.4.3.8.6 1.3.7l.4 1.9h1.6l.4-1.9c.5-.1.9-.4 1.3-.7l1.8.4.8-1.4-1-1.6c.2-.2.4-.5.4-.8z" stroke="currentColor" stroke-width="1.2"/>
       </svg>
     </button>
-    <button class="chat-header-btn chat-clear-btn" title="Clear conversation">
+    <button data-variant="ghost" data-icon class="chat-header-btn ui-btn chat-clear-btn" title="Clear conversation">
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
         <path d="M2 4h12M5 4V3a1 1 0 011-1h4a1 1 0 011 1v1m2 0v9a1 1 0 01-1 1H4a1 1 0 01-1-1V4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
       </svg>
@@ -55,7 +55,9 @@ export async function initChatPanel(el: HTMLElement) {
   `;
   // Agent mode toggle button
   agentToggleBtn = document.createElement("button");
-  agentToggleBtn.className = "chat-header-btn chat-agent-btn";
+  agentToggleBtn.className = "chat-header-btn chat-agent-btn ui-btn";
+  agentToggleBtn.dataset.variant = "ghost";
+  agentToggleBtn.dataset.size = "sm";
   agentToggleBtn.title = "Toggle Agent mode (tool-use)";
   agentToggleBtn.textContent = "Agent";
   agentToggleBtn.addEventListener("click", toggleAgentMode);
@@ -83,7 +85,9 @@ export async function initChatPanel(el: HTMLElement) {
   modelBarEl.appendChild(modelDropdown.container);
 
   const refreshBtn = document.createElement("button");
-  refreshBtn.className = "chat-model-refresh";
+  refreshBtn.className = "chat-model-refresh ui-btn";
+  refreshBtn.dataset.variant = "ghost";
+  refreshBtn.dataset.icon = "";
   refreshBtn.title = "Refresh models";
   refreshBtn.textContent = "\u21BB";
   refreshBtn.addEventListener("click", loadModels);
@@ -102,7 +106,7 @@ export async function initChatPanel(el: HTMLElement) {
   inputArea.className = "chat-input-area";
 
   inputEl = document.createElement("textarea");
-  inputEl.className = "chat-input";
+  inputEl.className = "chat-input ui-input";
   inputEl.placeholder = "Ask a question\u2026";
   inputEl.rows = 1;
   inputEl.addEventListener("keydown", onInputKeydown);
@@ -110,7 +114,10 @@ export async function initChatPanel(el: HTMLElement) {
   inputArea.appendChild(inputEl);
 
   sendBtn = document.createElement("button");
-  sendBtn.className = "chat-send-btn";
+  sendBtn.className = "chat-send-btn ui-btn";
+  sendBtn.dataset.variant = "primary";
+  sendBtn.dataset.icon = "";
+  sendBtn.dataset.size = "md";
   sendBtn.title = "Send (Enter)";
   sendBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
     <path d="M2 8l10-5-3 5 3 5z" fill="currentColor"/>
@@ -401,8 +408,8 @@ function addCopyButtons(el: HTMLElement) {
 
 function renderEmpty() {
   messagesEl.innerHTML = `
-    <div class="chat-empty">
-      <div class="chat-empty-icon">\u{1F4AC}</div>
+    <div class="ui-empty" data-fill>
+      <div class="ui-empty-icon">\u{1F4AC}</div>
       <div class="chat-empty-text">
         Chat with a local AI model.<br>
         Select a model above and start typing.
@@ -451,15 +458,15 @@ function showChatSettings() {
   backdrop.className = "dialog-backdrop chat-settings-backdrop";
 
   const dialog = document.createElement("div");
-  dialog.className = "dialog";
+  dialog.className = "dialog ui-surface";
   dialog.style.maxWidth = "480px";
 
   // Header
   const header = document.createElement("div");
-  header.className = "dialog-header";
+  header.className = "ui-header";
   header.innerHTML = `
-    <span class="dialog-title">Chat Settings</span>
-    <button class="dialog-close" title="Close" aria-label="Close">&times;</button>
+    <span class="ui-header-title">Chat Settings</span>
+    <button data-variant="ghost" data-icon class="dialog-close ui-btn" title="Close" aria-label="Close">&times;</button>
   `;
 
   // Body
@@ -499,7 +506,7 @@ function showChatSettings() {
   urlRow.className = "chat-settings-row";
   urlRow.innerHTML = `<label class="chat-settings-label">Base URL</label>`;
   const urlInput = document.createElement("input");
-  urlInput.className = "dialog-input";
+  urlInput.className = "ui-input";
   urlInput.type = "text";
   urlInput.value = currentConfig.base_url;
   urlInput.placeholder = serverDefaults[currentConfig.server_type];
@@ -511,7 +518,7 @@ function showChatSettings() {
   promptRow.className = "chat-settings-row";
   promptRow.innerHTML = `<label class="chat-settings-label">System prompt</label>`;
   const promptInput = document.createElement("textarea");
-  promptInput.className = "dialog-input chat-settings-textarea";
+  promptInput.className = "ui-input chat-settings-textarea";
   promptInput.value = currentConfig.system_prompt ?? "";
   promptInput.placeholder = "Optional instructions prepended to every conversation";
   promptInput.rows = 4;
@@ -522,8 +529,8 @@ function showChatSettings() {
   const footer = document.createElement("div");
   footer.className = "dialog-footer";
   footer.innerHTML = `
-    <button class="dialog-btn dialog-btn-secondary chat-settings-cancel">Cancel</button>
-    <button class="dialog-btn dialog-btn-primary chat-settings-save">Save</button>
+    <button data-variant="secondary" class="ui-btn chat-settings-cancel">Cancel</button>
+    <button data-variant="primary" class="ui-btn chat-settings-save">Save</button>
   `;
 
   dialog.appendChild(header);

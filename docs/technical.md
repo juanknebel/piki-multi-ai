@@ -707,8 +707,13 @@ crates/
         layout-budget.ts # Shared sidebar/chat width budget so the editor column keeps ≥ 320px
         components/      # UI components (activity-bar, sidebar, tab-bar, terminal-panel, etc.)
         fonts/           # Bundled JetBrainsMono NF Mono .ttf + fonts.css (@font-face)
-        styles/          # index.css entry; variables.css = design tokens (colours, --font-*, --fs-* scale,
-                         # --sp-* spacing, --radius-*, --leading-*, --z-* layers, --dur-* motion); feature CSS
+        styles/          # index.css entry (import order = cascade); variables.css = design tokens (colours,
+                         # --font-*, --fs-* scale, --sp-* spacing, --radius-*, --leading-*, --z-* layers,
+                         # --dur-* motion, --control-height*, --focus-ring*); reset.css (global :focus-visible);
+                         # primitives.css (.ui-surface / .ui-header / .ui-btn / .ui-input / .ui-empty);
+                         # dialog-core.css + dialog-{providers,agent,logs,help,workspace,git,settings}.css,
+                         # toast.css, file-viewer.css; one sheet per panel (sidebar, kanban, api-panel, …);
+                         # src/css-invariants.test.ts guards the token/focus rules
   api-client/            # piki-api-client — HTTP/API client (independent, no TUI/core deps)
     src/
       lib.rs             # Public re-exports

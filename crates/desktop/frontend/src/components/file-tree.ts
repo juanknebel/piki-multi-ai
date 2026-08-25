@@ -597,7 +597,8 @@ export function renderFileTree(container: HTMLElement) {
         : iconSpan(fileGlyph(""))
     }`;
     const input = document.createElement("input");
-    input.className = "ft-input";
+    input.className = "ft-input ui-input";
+    input.dataset.size = "sm";
     input.spellcheck = false;
     input.placeholder = row.createKind === "dir" ? "folder name" : "file name";
     let done = false;
@@ -634,7 +635,8 @@ export function renderFileTree(container: HTMLElement) {
       isDir ? iconSpan(folderGlyph(row.name, false)) : iconSpan(fileGlyph(row.name))
     }`;
     const input = document.createElement("input");
-    input.className = "ft-input";
+    input.className = "ft-input ui-input";
+    input.dataset.size = "sm";
     input.spellcheck = false;
     input.value = row.name;
     let done = false;
@@ -724,11 +726,11 @@ export function renderFileTree(container: HTMLElement) {
     header.innerHTML = `
       <span title="${escAttr(rootPath ?? "")}">${esc(folderName.toUpperCase() || "FILES")}</span>
       <span class="ft-header-actions">
-        <button class="sc-header-btn ft-new-file" title="New File">+</button>
-        <button class="sc-header-btn ft-search${filterOpen ? " active" : ""}" title="Search files">${SEARCH_SVG}</button>
-        <button class="sc-header-btn ft-autoreveal${autoReveal ? " active" : ""}" title="Auto-reveal active file">◎</button>
-        <button class="sc-header-btn ft-toggle-hidden${showHidden ? " active" : ""}" title="Show hidden files">.*</button>
-        <button class="sc-header-btn ft-refresh" title="Refresh">⟳</button>
+        <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn ft-new-file" title="New File">+</button>
+        <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn ft-search${filterOpen ? " active" : ""}" title="Search files">${SEARCH_SVG}</button>
+        <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn ft-autoreveal${autoReveal ? " active" : ""}" title="Auto-reveal active file">◎</button>
+        <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn ft-toggle-hidden${showHidden ? " active" : ""}" title="Show hidden files">.*</button>
+        <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn ft-refresh" title="Refresh">⟳</button>
       </span>`;
     header.querySelector(".ft-new-file")!.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -761,7 +763,8 @@ export function renderFileTree(container: HTMLElement) {
       const fwrap = document.createElement("div");
       fwrap.className = "ft-filter-wrap";
       const fin = document.createElement("input");
-      fin.className = "ft-filter";
+      fin.className = "ft-filter ui-input";
+      fin.dataset.size = "sm";
       fin.placeholder = "Filter files…";
       fin.spellcheck = false;
       fin.value = filterQuery;
@@ -910,7 +913,7 @@ export function renderFileTree(container: HTMLElement) {
 
 function msg(text: string): HTMLElement {
   const m = document.createElement("div");
-  m.className = "empty-message";
+  m.className = "ui-empty";
   m.textContent = text;
   return m;
 }

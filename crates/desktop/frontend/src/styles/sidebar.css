@@ -129,23 +129,7 @@
   visibility: visible;
 }
 
-.ws-action-btn {
-  width: 22px;
-  height: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  font-size: var(--fs-lg);
-  color: var(--text-muted);
-  transition: background var(--transition-fast), color var(--transition-fast);
-}
-
-.ws-action-btn:hover {
-  background: var(--bg-active);
-  color: var(--text-bright);
-}
-
+/* Row actions are ghost icon .ui-btns; delete reads destructive on hover. */
 .ws-action-delete:hover {
   color: var(--git-deleted);
   background: color-mix(in srgb, var(--error-color) 10%, transparent);
@@ -247,96 +231,6 @@
   visibility: visible;
 }
 
-.file-action-btn {
-  width: 22px;
-  height: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-size: var(--fs-lg);
-  transition: background var(--transition-fast), color var(--transition-fast);
-}
-
-.file-action-btn:hover {
-  background: var(--bg-active);
-  color: var(--text-bright);
-}
-
-/* ── Delete confirmation ────────────────────────── */
-.ws-delete-confirm {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: var(--scrim);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: var(--z-backdrop);
-  animation: overlay-in var(--dur-fast) var(--ease-out);
-}
-
-.ws-delete-dialog {
-  background: var(--dialog-bg);
-  border: 1px solid var(--dialog-border);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 16px 48px var(--dialog-shadow);
-  padding: 20px 24px;
-  min-width: 300px;
-  text-align: center;
-  animation: dialog-enter var(--dur-base) var(--ease-out);
-}
-
-.ws-delete-dialog p {
-  margin-bottom: 8px;
-  color: var(--text-primary);
-  font-size: var(--fs-lg);
-}
-
-.ws-delete-list {
-  margin: 6px 0 10px;
-  padding-left: 18px;
-  color: var(--text-primary);
-  font-size: var(--fs-md);
-  text-align: left;
-}
-
-.ws-delete-hint {
-  color: var(--text-muted) !important;
-  font-size: var(--fs-sm) !important;
-}
-
-.ws-delete-card-move {
-  margin-top: 12px;
-  text-align: left;
-}
-
-.ws-delete-card-move .dialog-label {
-  display: block;
-  margin-bottom: 6px;
-}
-
-.ws-delete-buttons {
-  display: flex;
-  gap: var(--sp-4);
-  justify-content: center;
-  margin-top: 16px;
-}
-
-/* ── Empty state ────────────────────────────────── */
-.empty-message {
-  padding: 20px;
-  color: var(--text-muted);
-  font-size: var(--fs-sm);
-  text-align: center;
-  line-height: var(--leading-loose);
-}
-
 /* ── Agents panel ────────────────────────────────── */
 .agents-list {
   flex: 1;
@@ -347,12 +241,6 @@
 .agents-header-actions {
   display: flex;
   gap: var(--sp-1);
-}
-
-.agents-empty {
-  padding: 14px;
-  font-size: var(--fs-md);
-  color: var(--text-muted);
 }
 
 .agent-row {
@@ -457,18 +345,6 @@
   font-size: var(--fs-xs);
 }
 
-/* Empty-state call to action (workspace list / agents panel) */
-.empty-message p,
-.agents-empty p {
-  margin: 0 0 8px;
-}
-
-.empty-cta {
-  font-size: var(--fs-sm);
-}
-
-/* Warning lines in the delete-workspace confirm (changes / running agents). */
-.ws-delete-warn {
-  color: var(--warning-color) !important;
-  font-size: var(--fs-md) !important;
-}
+/* Empty states (workspace list / agents panel / git panel) are `.ui-empty`
+   blocks with a `.ui-empty-cta` button; the confirm overlay lives in
+   dialog-core.css. */

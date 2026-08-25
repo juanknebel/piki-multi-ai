@@ -27,7 +27,7 @@ export async function showCodeReview() {
   backdrop.style.paddingTop = "2vh";
 
   const panel = document.createElement("div");
-  panel.className = "diff-viewer";
+  panel.className = "diff-viewer ui-surface";
   panel.style.width = "95vw";
   panel.style.maxHeight = "94vh";
   backdrop.appendChild(panel);
@@ -55,12 +55,13 @@ export async function showCodeReview() {
   // The overlay is up — and closable — while `gh` runs, instead of the app
   // looking frozen until the PR arrives.
   const loading = document.createElement("div");
-  loading.className = "cr-loading";
+  loading.className = "cr-loading ui-empty";
+  loading.dataset.fill = "";
   loading.innerHTML = `
     <div class="cr-loading-text">Loading PR…</div>
     <div class="cr-loading-skeleton"></div>
     <div class="cr-loading-skeleton short"></div>
-    <button class="dialog-btn dialog-btn-secondary dialog-btn-sm cr-loading-cancel" type="button">Cancel</button>
+    <button data-variant="secondary" data-size="sm" class="ui-btn cr-loading-cancel" type="button">Cancel</button>
   `;
   loading.querySelector(".cr-loading-cancel")!.addEventListener("click", close);
   panel.appendChild(loading);
@@ -89,13 +90,15 @@ export async function showCodeReview() {
     const ghMissing = /gh\) is not installed|not on PATH/.test(msg);
     loading.remove();
     const errEl = document.createElement("div");
-    errEl.className = "cr-error";
+    errEl.className = "cr-error ui-empty";
+    errEl.dataset.fill = "";
+    errEl.dataset.tone = "error";
     errEl.innerHTML = `
-      <div class="cr-error-title">${ghMissing ? "GitHub CLI (gh) is not available" : "Could not load the pull request"}</div>
+      <div class="ui-empty-title">${ghMissing ? "GitHub CLI (gh) is not available" : "Could not load the pull request"}</div>
       <div class="cr-error-detail"></div>
       <div class="cr-error-actions">
-        <button class="dialog-btn dialog-btn-primary dialog-btn-sm cr-error-retry" type="button">Retry</button>
-        <button class="dialog-btn dialog-btn-secondary dialog-btn-sm cr-error-close" type="button">Close</button>
+        <button data-variant="primary" data-size="sm" class="ui-btn cr-error-retry" type="button">Retry</button>
+        <button data-variant="secondary" data-size="sm" class="ui-btn cr-error-close" type="button">Close</button>
       </div>
     `;
     errEl.querySelector(".cr-error-detail")!.textContent = msg;
@@ -154,9 +157,9 @@ export async function showCodeReview() {
 
   // Header
   const header = document.createElement("div");
-  header.className = "diff-header";
+  header.className = "ui-header";
   header.innerHTML = `
-    <span class="diff-title">
+    <span class="ui-header-title">
       <div>
         <span style="color:var(--text-accent)">PR #${info.number}</span>
         ${esc(info.title)}
@@ -170,8 +173,8 @@ export async function showCodeReview() {
     </span>
     <span style="display:flex;gap:8px;align-items:center">
       <span id="cr-verdict-slot"></span>
-      <button class="dialog-btn dialog-btn-primary dialog-btn-sm" id="cr-submit" title="Submit (${modCtrlLabel()}+Enter)">Submit</button>
-      <button class="dialog-close" title="Close" aria-label="Close">×</button>
+      <button data-variant="primary" data-size="sm" class="ui-btn" id="cr-submit" title="Submit (${modCtrlLabel()}+Enter)">Submit</button>
+      <button data-variant="ghost" data-icon class="dialog-close ui-btn" title="Close" aria-label="Close">×</button>
     </span>
   `;
   panel.appendChild(header);
@@ -187,7 +190,7 @@ export async function showCodeReview() {
   const reviewBodyArea = document.createElement("div");
   reviewBodyArea.style.cssText = "padding:6px 12px;border-bottom:1px solid var(--border-primary);background:var(--bg-secondary);";
   reviewBodyArea.innerHTML = `
-    <textarea class="dialog-textarea" id="cr-body" rows="2" placeholder="Review summary (optional)" style="width:100%;box-sizing:border-box;font-size:12px;resize:vertical"></textarea>
+    <textarea class="ui-input" id="cr-body" rows="2" placeholder="Review summary (optional)"></textarea>
   `;
   panel.appendChild(reviewBodyArea);
 
@@ -300,7 +303,7 @@ export async function showCodeReview() {
     }
 
     if (diff.hunks.length === 0) {
-      table.innerHTML = '<div class="dp-empty">No changes</div>';
+      table.innerHTML = '<div class="ui-empty">No changes</div>';
     }
 
     scroll.appendChild(table);
@@ -372,9 +375,9 @@ export async function showCodeReview() {
       form.innerHTML = `
         <textarea class="cr-comment-textarea" rows="2" placeholder="Add a comment on line ${commentLine}...">${existing ? esc(existing.body) : ""}</textarea>
         <div class="cr-comment-form-actions">
-          <button class="dialog-btn dialog-btn-primary dialog-btn-sm cr-comment-save">Save</button>
-          ${existing ? '<button class="dialog-btn dialog-btn-danger dialog-btn-sm cr-comment-delete">Delete</button>' : ""}
-          <button class="dialog-btn dialog-btn-secondary dialog-btn-sm cr-comment-cancel">Cancel</button>
+          <button data-variant="primary" data-size="sm" class="ui-btn cr-comment-save">Save</button>
+          ${existing ? '<button data-variant="danger" data-size="sm" class="ui-btn cr-comment-delete">Delete</button>' : ""}
+          <button data-variant="secondary" data-size="sm" class="ui-btn cr-comment-cancel">Cancel</button>
         </div>
       `;
 
@@ -423,7 +426,7 @@ export async function showCodeReview() {
         badge.innerHTML = `
           <div class="cr-comment-header">
             <span class="cr-comment-author">${esc(c.author)}</span>
-            <button class="dialog-btn dialog-btn-secondary dialog-btn-sm cr-reply-btn" type="button">Reply</button>
+            <button data-variant="secondary" data-size="sm" class="ui-btn cr-reply-btn" type="button">Reply</button>
           </div>
           <span class="cr-comment-body">${esc(c.body)}</span>
         `;
@@ -461,8 +464,8 @@ export async function showCodeReview() {
       <div class="cr-comment-header">
         <span class="cr-comment-author">You (reply, pending)</span>
         <span style="display:flex;gap:4px">
-          <button class="dialog-btn dialog-btn-secondary dialog-btn-sm cr-reply-edit" type="button">Edit</button>
-          <button class="dialog-btn dialog-btn-danger dialog-btn-sm cr-reply-delete" type="button">Delete</button>
+          <button data-variant="secondary" data-size="sm" class="ui-btn cr-reply-edit" type="button">Edit</button>
+          <button data-variant="danger" data-size="sm" class="ui-btn cr-reply-delete" type="button">Delete</button>
         </span>
       </div>
       <span class="cr-comment-body"></span>
@@ -493,8 +496,8 @@ export async function showCodeReview() {
     form.innerHTML = `
       <textarea class="cr-comment-textarea" rows="2" placeholder="Reply to this comment..."></textarea>
       <div class="cr-comment-form-actions">
-        <button class="dialog-btn dialog-btn-primary dialog-btn-sm cr-reply-save" type="button">Save</button>
-        <button class="dialog-btn dialog-btn-secondary dialog-btn-sm cr-reply-cancel" type="button">Cancel</button>
+        <button data-variant="primary" data-size="sm" class="ui-btn cr-reply-save" type="button">Save</button>
+        <button data-variant="secondary" data-size="sm" class="ui-btn cr-reply-cancel" type="button">Cancel</button>
       </div>
     `;
     (form.querySelector(".cr-comment-textarea") as HTMLTextAreaElement).value = existingBody;

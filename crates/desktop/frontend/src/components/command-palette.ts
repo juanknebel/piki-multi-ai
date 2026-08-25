@@ -66,7 +66,7 @@ export async function openCommandPalette() {
   backdrop.className = "palette-backdrop";
 
   const palette = document.createElement("div");
-  palette.className = "palette";
+  palette.className = "palette ui-surface";
 
   palette.innerHTML = `
     <input class="palette-input" type="text" placeholder="Type a command..." autofocus />
@@ -108,7 +108,7 @@ export async function openCommandPalette() {
     });
 
     if (filtered.length === 0) {
-      results.innerHTML = '<div class="palette-empty">No matching commands</div>';
+      results.innerHTML = '<div class="ui-empty">No matching commands</div>';
     }
   }
 

@@ -8,14 +8,14 @@ export async function showAboutDialog() {
   backdrop.className = "dialog-backdrop about-dialog-backdrop";
 
   const dialog = document.createElement("div");
-  dialog.className = "dialog";
+  dialog.className = "dialog ui-surface";
   dialog.style.maxWidth = "400px";
   dialog.style.textAlign = "center";
 
   dialog.innerHTML = `
-    <div class="dialog-header">
-      <span class="dialog-title">About</span>
-      <button class="dialog-close" title="Close" aria-label="Close">×</button>
+    <div class="ui-header">
+      <span class="ui-header-title">About</span>
+      <button data-variant="ghost" data-icon class="dialog-close ui-btn" title="Close" aria-label="Close">×</button>
     </div>
     <div class="dialog-body" style="align-items:center;padding:24px 20px">
       <div style="width:96px;height:96px;margin-bottom:12px">${LOGO_SVG}</div>
@@ -36,7 +36,7 @@ export async function showAboutDialog() {
       </div>
     </div>
     <div class="dialog-footer" style="justify-content:center">
-      <button class="dialog-btn dialog-btn-secondary" id="about-close">Close</button>
+      <button data-variant="secondary" class="ui-btn" id="about-close">Close</button>
     </div>
   `;
 

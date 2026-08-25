@@ -142,7 +142,7 @@ export function renderWorkspaceList(container: HTMLElement) {
     header.className = "sidebar-header";
     header.innerHTML = `
       <span>WORKSPACES</span>
-      <button class="sc-header-btn" id="ws-create-btn" title="Create Workspace">+</button>
+      <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn" id="ws-create-btn" title="Create Workspace">+</button>
     `;
     header.querySelector("#ws-create-btn")!.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -152,12 +152,12 @@ export function renderWorkspaceList(container: HTMLElement) {
 
     if (workspaces.length === 0) {
       const empty = document.createElement("div");
-      empty.className = "empty-message";
+      empty.className = "ui-empty";
       empty.innerHTML = `
         <p>No workspaces yet</p>
-        <button class="dialog-btn dialog-btn-primary empty-cta">Create Workspace</button>
+        <button data-variant="primary" data-size="sm" class="ui-btn ui-empty-cta">Create Workspace</button>
       `;
-      empty.querySelector(".empty-cta")!.addEventListener("click", () => {
+      empty.querySelector(".ui-empty-cta")!.addEventListener("click", () => {
         showWorkspaceDialog({ mode: "create" });
       });
       container.appendChild(empty);
@@ -168,12 +168,12 @@ export function renderWorkspaceList(container: HTMLElement) {
     // of presenting an inexplicably empty sidebar.
     if (rows.length === 0 && rowsError) {
       const error = document.createElement("div");
-      error.className = "empty-message";
+      error.className = "ui-empty";
       error.innerHTML = `
         <p>Couldn't load workspaces</p>
-        <button class="dialog-btn dialog-btn-secondary empty-cta">Retry</button>
+        <button data-variant="secondary" data-size="sm" class="ui-btn ui-empty-cta">Retry</button>
       `;
-      error.querySelector(".empty-cta")!.addEventListener("click", () => void refreshRows());
+      error.querySelector(".ui-empty-cta")!.addEventListener("click", () => void refreshRows());
       container.appendChild(error);
       return;
     }
@@ -247,7 +247,7 @@ export function renderWorkspaceList(container: HTMLElement) {
         ${attentionDot}
         ${restoredMark}
         <span class="workspace-actions">
-          <button class="ws-action-btn" data-action="menu" title="Workspace menu" aria-label="Workspace menu" aria-haspopup="menu">⋯</button>
+          <button data-variant="ghost" data-icon class="ws-action-btn ui-btn" data-action="menu" title="Workspace menu" aria-label="Workspace menu" aria-haspopup="menu">⋯</button>
         </span>
         <span class="workspace-status ${statusClass}">${getStatusIcon(ws.status)}</span>
       `;
