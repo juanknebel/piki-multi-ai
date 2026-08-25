@@ -31,6 +31,7 @@ import { getProviderLabel, getProviderKey, type AIProvider } from "../types";
 import { openWebPreviewTab } from "./web-preview-panel";
 import { toggleSidebar } from "./sidebar";
 import { toggleChatPanel } from "./chat-panel";
+import { closeActiveWsTab, tearDownAndClosePane } from "./tab-bar";
 import { themeEngine } from "../theme";
 import { revealInFileTree, toggleFileTreeAutoReveal } from "./file-tree";
 import { getCodeEditorFilePath } from "./code-editor-panel";
@@ -317,8 +318,14 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
     keybinding: getShortcutKey("close-pane"),
     action: () => {
       const id = appState.activePaneId;
-      if (id) appState.closePane(id);
+      if (id) void tearDownAndClosePane(id);
     },
+  });
+  cmds.push({
+    id: "close-tab",
+    label: "Close Tab",
+    category: "Tab",
+    action: () => closeActiveWsTab(),
   });
 
   // Git commands

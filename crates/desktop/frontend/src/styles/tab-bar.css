@@ -71,6 +71,33 @@
   letter-spacing: 0.02em;
 }
 
+/* A tab whose process has exited: dimmed label + hollow marker. */
+.ws-tab--dead .ws-tab-label {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.ws-tab-dead {
+  color: var(--text-muted);
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+/* Inline rename input, sized like the label it replaces. */
+.ws-tab-rename {
+  min-width: 80px;
+  max-width: 180px;
+  height: 20px;
+  padding: 0 6px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-bright);
+  background: var(--bg-primary);
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+
 .ws-tab-close {
   width: 18px;
   height: 18px;

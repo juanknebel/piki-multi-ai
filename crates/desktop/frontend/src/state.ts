@@ -459,14 +459,57 @@ class AppState extends EventTarget {
     }
   }
 
+  /** The PTY behind `tabId` exited. Flips `alive` and re-renders the chrome
+   *  that shows it (tab chip, pane head Restart button, status bar) — the
+   *  pane tree itself is unchanged, so `pane-tree-changed` only fires for
+   *  the active workspace, where the chips are on screen. */
   markTabDead(tabId: string) {
-    for (const ws of this._workspaces) {
-      const tab = ws.tabs.find((t) => t.id === tabId);
-      if (tab) {
-        tab.alive = false;
-        break;
+    for (let i = 0; i < this._workspaces.length; i++) {
+      const tab = this._workspaces[i].tabs.find((t) => t.id === tabId);
+      if (!tab) continue;
+      if (!tab.alive) return;
+      tab.alive = false;
+      if (i === this._activeWorkspace) {
+        this.emit("tabs-changed");
+        this.emit("pane-tree-changed");
       }
+      return;
     }
+  }
+
+  /** Swap the content of `paneId` in the active workspace tab: `oldContentId`
+   *  leaves `tabs` (its backend tab must already be closed) and `tab` takes
+   *  its pane — or the pane goes blank when `tab` is null. Used by Restart. */
+  replacePaneContent(paneId: PaneId, oldContentId: string, tab: TabInfo | null) {
+    const ws = this.activeWs;
+    const wt = ws ? this._curWsTab(ws) : undefined;
+    if (!ws || !wt) return;
+    ws.tabs = ws.tabs.filter((t) => t.id !== oldContentId);
+    this._tabShellStates.delete(oldContentId);
+    if (tab) {
+      ws.tabs.push(tab);
+      wt.paneTree = setContentTree(wt.paneTree, paneId, tab.id);
+    } else {
+      wt.paneTree = setContentTree(wt.paneTree, paneId, null);
+    }
+    wt.activePaneId = paneId;
+    this._syncActiveContent(ws);
+    this.emit("tabs-changed");
+    this.emit("active-tab-changed");
+    this.emit("pane-tree-changed");
+    this.emit("active-pane-changed");
+    this._scheduleSave();
+  }
+
+  /** Whether tabs spawn inside the persistent-session daemon — decides if
+   *  "Close, keep running" is offered. Set once at startup from
+   *  `sessions_available`. */
+  private _sessionsAvailable = false;
+  get sessionsAvailable(): boolean {
+    return this._sessionsAvailable;
+  }
+  setSessionsAvailable(v: boolean) {
+    this._sessionsAvailable = v;
   }
 
   setSysinfo(formatted: string) {

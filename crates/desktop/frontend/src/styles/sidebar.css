@@ -287,6 +287,14 @@
   font-size: 13px;
 }
 
+.ws-delete-list {
+  margin: 6px 0 10px;
+  padding-left: 18px;
+  color: var(--text-primary);
+  font-size: 12px;
+  text-align: left;
+}
+
 .ws-delete-hint {
   color: var(--text-muted) !important;
   font-size: 11px !important;

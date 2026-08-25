@@ -58,6 +58,14 @@ fn read_daemon_pid(app: &DesktopApp) -> Option<u32> {
         .and_then(|s| s.trim().parse::<u32>().ok())
 }
 
+/// Whether this instance spawns tabs in the session daemon. The frontend
+/// uses it to decide if "Close, keep running" is on offer at all (a local
+/// tab has nothing to keep).
+#[tauri::command]
+pub fn sessions_available(state: State<'_, Mutex<DesktopApp>>) -> bool {
+    state.lock().session_daemon.is_some()
+}
+
 #[tauri::command]
 pub fn list_sessions(state: State<'_, Mutex<DesktopApp>>) -> SessionsSnapshot {
     let app = state.lock();

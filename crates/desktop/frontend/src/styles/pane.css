@@ -90,6 +90,19 @@
   color: var(--text-bright);
 }
 
+.pane-head--dead .pane-title {
+  color: var(--text-muted);
+}
+
+.pane-title-dead {
+  font-style: italic;
+}
+
+.pane-btn-restart {
+  color: var(--accent-primary);
+  font-size: 11px;
+}
+
 .pane-btn-close:hover {
   background: rgba(229, 83, 75, 0.18);
   color: #e5534b;

@@ -147,6 +147,12 @@ export function resyncPty(tabId: string): Promise<void> {
   return invoke("resync_pty", { tabId });
 }
 
+/** Drop this window's attachment to a daemon-backed tab, leaving the process
+ *  running as a detached session. Rejects for an in-process tab. */
+export function detachTab(workspaceIdx: number, tabIdx: number): Promise<void> {
+  return invoke("detach_tab", { workspaceIdx, tabIdx });
+}
+
 export function closeTab(
   workspaceIdx: number,
   tabIdx: number,
@@ -590,6 +596,9 @@ export function listAgentRows(): Promise<import("./types").AgentRow[]> {
 }
 
 /** Every session the persistent-session daemon holds (Sessions dialog). */
+export function sessionsAvailable(): Promise<boolean> {
+  return invoke("sessions_available");
+}
 export function listSessions(): Promise<import("./types").SessionsSnapshot> {
   return invoke("list_sessions");
 }

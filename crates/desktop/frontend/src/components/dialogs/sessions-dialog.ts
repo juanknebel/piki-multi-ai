@@ -1,6 +1,7 @@
 import * as ipc from "../../ipc";
 import { appState } from "../../state";
 import { reportError } from "../toast";
+import { showConfirm, escapeHtml as escapeConfirmHtml } from "../confirm";
 import { makeInteractive } from "../a11y";
 import type { SessionRow, SessionsSnapshot } from "../../types";
 
@@ -94,48 +95,88 @@ export async function showSessionsDialog() {
       const el = document.createElement("div");
       el.className = "sessions-row";
       el.style.cssText =
-        "display:flex;align-items:center;gap:10px;padding:6px 12px;border-bottom:1px solid var(--border-subtle)";
+        "display:flex;align-items:center;gap:10px;padding:2px 12px 2px 0;border-bottom:1px solid var(--border-subtle)";
 
       const jumpable = row.local_workspace_idx != null && row.local_tab_idx != null;
-      if (jumpable) el.style.cursor = "pointer";
 
-      el.innerHTML = `
+      // The clickable part is its own element so the Kill/Remove buttons
+      // are siblings, not interactive content nested inside an interactive
+      // row (which confuses screen readers and Enter handling).
+      const main = document.createElement("div");
+      main.className = "sessions-main";
+      main.style.cssText =
+        "flex:1;display:flex;align-items:center;gap:10px;min-width:0;padding:4px 12px;border-radius:var(--radius-sm)";
+      main.innerHTML = `
         <span style="color:${badge.color};width:1em;text-align:center">${badge.glyph}</span>
         <span style="flex:1;font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(row.name)}</span>
         <span style="width:130px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(row.workspace)}</span>
         <span style="width:150px;color:${badge.color}">${badge.text}</span>
-        <span class="sessions-actions" style="display:flex;gap:4px"></span>
       `;
+      if (jumpable) {
+        main.style.cursor = "pointer";
+        main.title = "Jump to this tab";
+        makeInteractive(main);
+        main.addEventListener("click", () => {
+          close();
+          jumpTo(row.local_workspace_idx!, row.local_tab_idx!);
+        });
+      }
+      el.appendChild(main);
 
-      const actions = el.querySelector<HTMLElement>(".sessions-actions")!;
+      const actions = document.createElement("span");
+      actions.className = "sessions-actions";
+      actions.style.cssText = "display:flex;gap:4px;flex-shrink:0";
       const killBtn = actionBtn("Kill", "Kill the process (kept as exited)");
       const removeBtn = actionBtn("Remove", "Remove from the daemon");
       if (row.state === "exited") killBtn.disabled = true;
       actions.append(killBtn, removeBtn);
+      el.appendChild(actions);
 
-      killBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        act(() => ipc.killSession(row.id));
-      });
-      removeBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        act(() => ipc.removeSession(row.id));
-      });
-
-      if (jumpable) {
-        makeInteractive(el);
-        const jump = () => {
-          close();
-          jumpTo(row.local_workspace_idx!, row.local_tab_idx!);
-        };
-        el.addEventListener("click", jump);
-        el.addEventListener("keydown", (ev) => {
-          if (ev.key === "Enter") jump();
+      killBtn.addEventListener("click", () => {
+        const doKill = () => act(() => ipc.killSession(row.id));
+        if (row.state !== "attached") return doKill();
+        // Attached = a tab in this window (or another client) is using it.
+        confirmDestructive({
+          title: `Kill "${row.name}"?`,
+          hint: "The process ends now; the session stays listed as exited.",
+          label: "Kill",
+          onConfirm: doKill,
         });
-      }
+      });
+      removeBtn.addEventListener("click", () => {
+        confirmDestructive({
+          title: `Remove "${row.name}" from the daemon?`,
+          hint:
+            row.state === "exited"
+              ? "Its record and scrollback are dropped."
+              : "The process is killed and the session is forgotten.",
+          label: "Remove",
+          onConfirm: () => act(() => ipc.removeSession(row.id)),
+        });
+      });
 
       body.appendChild(el);
     }
+
+    // Initial focus: the first row (jumpable or not), else the Refresh
+    // button, so keyboard users land inside the dialog.
+    if (!dialog.contains(document.activeElement)) {
+      const first =
+        body.querySelector<HTMLElement>('.sessions-main[tabindex="0"]') ??
+        body.querySelector<HTMLElement>("button:not(:disabled)") ??
+        dialog.querySelector<HTMLElement>("#sessions-refresh");
+      first?.focus();
+    }
+  }
+
+  function confirmDestructive(opts: { title: string; hint: string; label: string; onConfirm: () => void }) {
+    showConfirm({
+      bodyHtml: `<p>${escapeConfirmHtml(opts.title)}</p><p class="ws-delete-hint">${escapeConfirmHtml(opts.hint)}</p>`,
+      actions: [
+        { label: opts.label, kind: "danger", isDefault: true, onSelect: opts.onConfirm },
+        { label: "Cancel", kind: "secondary", autofocus: true },
+      ],
+    });
   }
 
   async function jumpTo(wsIdx: number, tabIdx: number) {
@@ -167,12 +208,14 @@ export async function showSessionsDialog() {
     }
   }
 
+  const prevFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   function close() {
-    document.removeEventListener("keydown", onKey);
     backdrop.remove();
+    prevFocus?.focus();
   }
   function onKey(e: KeyboardEvent) {
-    if (e.key === "Escape") close();
+    // A confirm overlay on top owns Escape while it is open.
+    if (e.key === "Escape" && !document.querySelector(".ws-delete-confirm")) close();
   }
 
   dialog.querySelector(".dialog-close")!.addEventListener("click", close);
@@ -180,7 +223,9 @@ export async function showSessionsDialog() {
   backdrop.addEventListener("click", (e) => {
     if (e.target === backdrop) close();
   });
-  document.addEventListener("keydown", onKey);
+  backdrop.tabIndex = -1;
+  backdrop.addEventListener("keydown", onKey);
+  backdrop.focus();
 
   await refresh();
 }

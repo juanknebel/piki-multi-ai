@@ -69,6 +69,8 @@ async function init() {
   await initChatPanel(document.getElementById("chat-panel")!);
   initChatResize();
 
+  appState.setSessionsAvailable(await ipc.sessionsAvailable().catch(() => false));
+
   try {
     await appState.loadPaneTrees();
     const workspaces = await ipc.listWorkspaces();

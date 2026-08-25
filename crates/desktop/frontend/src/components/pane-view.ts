@@ -16,6 +16,7 @@ import {
   getPaneProviderChoices,
   spawnIntoPane,
   tearDownAndClosePane,
+  restartPaneContent,
 } from "./tab-bar";
 import { getShortcutKey } from "../shortcuts";
 
@@ -99,9 +100,12 @@ function renderLeaf(leaf: LeafNode): HTMLElement {
   const head = document.createElement("div");
   head.className = "pane-head";
   const title = paneTitle(leaf);
+  const exited = paneExited(leaf);
+  if (exited) head.classList.add("pane-head--dead");
   head.innerHTML = `
-    <span class="pane-title">${escapeHtml(title)}</span>
+    <span class="pane-title">${escapeHtml(title)}${exited ? '<span class="pane-title-dead"> · exited</span>' : ""}</span>
     <span class="pane-actions">
+      ${exited ? '<button class="pane-btn pane-btn-restart" data-act="restart" title="Restart here">↻ Restart</button>' : ""}
       <button class="pane-btn" data-act="right" title="Split right">⇥</button>
       <button class="pane-btn" data-act="down" title="Split down">⤓</button>
       <button class="pane-btn pane-btn-close" data-act="close" title="Close pane">×</button>
@@ -119,7 +123,12 @@ function renderLeaf(leaf: LeafNode): HTMLElement {
   });
   head.querySelector('[data-act="close"]')!.addEventListener("click", (e) => {
     e.stopPropagation();
-    tearDownAndClosePane(leaf.id);
+    void tearDownAndClosePane(leaf.id);
+  });
+  head.querySelector('[data-act="restart"]')?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    appState.setActivePane(leaf.id);
+    void restartPaneContent(leaf.id);
   });
   el.appendChild(head);
 
@@ -127,6 +136,15 @@ function renderLeaf(leaf: LeafNode): HTMLElement {
   content.className = "pane-content";
   el.appendChild(content);
   return el;
+}
+
+/** True when the pane holds a PTY-backed content whose process has exited. */
+function paneExited(leaf: LeafNode): boolean {
+  const ws = appState.activeWs;
+  if (!leaf.contentId || !ws) return false;
+  const c = ws.tabs.find((t) => t.id === leaf.contentId);
+  if (!c || c.alive) return false;
+  return c.provider === "Shell" || (typeof c.provider === "object" && "Custom" in c.provider);
 }
 
 function paneTitle(leaf: LeafNode): string {

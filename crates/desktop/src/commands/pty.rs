@@ -259,6 +259,40 @@ pub async fn close_tab(
     Ok(())
 }
 
+/// "Close, keep running": drop this window's attachment to a daemon-backed
+/// tab without killing the process or removing its session. The session
+/// stays in the daemon as *detached* — visible in the Sessions dialog, in the
+/// TUI overlay and the `sessions` CLI, and adoptable from there. Refuses for
+/// an in-process (local) tab, whose process would die with the drop.
+#[tauri::command]
+pub async fn detach_tab(
+    state: State<'_, Mutex<DesktopApp>>,
+    workspace_idx: usize,
+    tab_idx: usize,
+) -> Result<(), String> {
+    let mut app = state.lock();
+    if workspace_idx >= app.workspaces.len() {
+        return Err("Workspace index out of range".to_string());
+    }
+    let ws = &mut app.workspaces[workspace_idx];
+    if tab_idx >= ws.tabs.len() {
+        return Err("Tab index out of range".to_string());
+    }
+    if !ws.tabs[tab_idx].pty.as_ref().is_some_and(|p| p.is_remote()) {
+        return Err(
+            "This tab runs in-process (no session daemon) — closing it would end the process"
+                .to_string(),
+        );
+    }
+    // Dropping a `RawPtySession::Remote` sends `Detach`, never `Kill`.
+    let tab = ws.tabs.remove(tab_idx);
+    drop(tab);
+    if ws.active_tab >= ws.tabs.len() && !ws.tabs.is_empty() {
+        ws.active_tab = ws.tabs.len() - 1;
+    }
+    Ok(())
+}
+
 /// Ask the daemon to re-send the restore buffer for a tab (no-op for a local
 /// tab). Called by the frontend when a terminal mounts so a re-attached tab
 /// repaints — its restore was emitted before the xterm.js instance existed.
