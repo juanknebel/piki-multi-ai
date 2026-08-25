@@ -662,9 +662,12 @@ crates/
         state.ts         # AppState (EventTarget-based singleton)
         ipc.ts           # Tauri IPC command wrappers
         types.ts         # TypeScript type definitions
-        theme.ts         # ThemeEngine — 5 presets, CSS variable application, xterm sync
+        theme.ts         # ThemeEngine — 5 presets, CSS variable application, xterm sync, cssToken()
+        theme-derive.ts  # Pure colour math: computeDerived() (on-accent, selection, file-icon tints, glows)
         components/      # UI components (activity-bar, sidebar, tab-bar, terminal-panel, etc.)
-        styles/          # CSS modules (variables.css, layout.css, dialog.css, theme-dialog.css, etc.)
+        fonts/           # Bundled JetBrainsMono NF Mono .ttf + fonts.css (@font-face)
+        styles/          # index.css entry; variables.css = design tokens (colours, --font-*, --fs-* scale,
+                         # --sp-* spacing, --radius-*, --leading-*, --z-* layers, --dur-* motion); feature CSS
   api-client/            # piki-api-client — HTTP/API client (independent, no TUI/core deps)
     src/
       lib.rs             # Public re-exports

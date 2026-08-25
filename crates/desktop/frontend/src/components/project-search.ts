@@ -73,7 +73,7 @@ export function openProjectSearch() {
         <span class="palette-label" style="flex:1;overflow:hidden">
           <span style="color:var(--text-bright)">${escapeHtml(fileName)}</span>
           ${dirPath ? `<span style="color:var(--text-muted);font-size:10px;margin-left:6px">${escapeHtml(dirPath)}</span>` : ""}
-          <div style="color:var(--text-secondary);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;font-family:'JetBrainsMono NF Mono',monospace">${highlightMatch(m.text.trim(), input.value)}</div>
+          <div style="color:var(--text-secondary);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;font-family:var(--font-mono)">${highlightMatch(m.text.trim(), input.value)}</div>
         </span>
       `;
 

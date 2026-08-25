@@ -4,6 +4,7 @@ import { terminals } from "./components/terminal-panel";
 // `reapplyEditorThemes` is only called from a method at runtime, never at
 // module-init (same arrangement as `terminals` above).
 import { reapplyEditorThemes } from "./components/code-editor-panel";
+import { computeDerived, hexToRgba } from "./theme-derive";
 
 // ── Types ────────────────────────────────────────────
 
@@ -29,7 +30,6 @@ export interface ThemeColors {
 
   "border-primary": string;
   "border-active": string;
-  "border-inactive": string;
 
   "accent-primary": string;
   "accent-hover": string;
@@ -120,7 +120,7 @@ export interface ColorGroup {
 export const COLOR_GROUPS: ColorGroup[] = [
   { label: "Backgrounds", keys: ["bg-primary", "bg-secondary", "bg-tertiary", "bg-hover", "bg-active", "bg-input", "bg-dropdown", "bg-surface", "bg-elevated"] },
   { label: "Text", keys: ["text-primary", "text-secondary", "text-muted", "text-accent", "text-bright"] },
-  { label: "Borders", keys: ["border-primary", "border-active", "border-inactive"] },
+  { label: "Borders", keys: ["border-primary", "border-active"] },
   { label: "Accents", keys: ["accent-primary", "accent-hover", "accent-focus", "accent-warm"] },
   { label: "Activity Bar", keys: ["activity-bar-bg", "activity-bar-fg", "activity-bar-inactive", "activity-bar-badge"] },
   { label: "Sidebar", keys: ["sidebar-bg", "sidebar-header-bg", "sidebar-header-fg", "sidebar-item-hover", "sidebar-item-active"] },
@@ -135,18 +135,14 @@ export const COLOR_GROUPS: ColorGroup[] = [
 
 // ── Utilities ────────────────────────────────────────
 
-function hexToRgb(hex: string): [number, number, number] {
-  const h = hex.replace("#", "");
-  return [parseInt(h.substring(0, 2), 16), parseInt(h.substring(2, 4), 16), parseInt(h.substring(4, 6), 16)];
-}
-
-function hexToRgba(hex: string, alpha: number): string {
-  const [r, g, b] = hexToRgb(hex);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
-function hexToGlow(hex: string, alpha: number, radius: number = 10): string {
-  return `0 0 ${radius}px ${hexToRgba(hex, alpha)}`;
+/**
+ * Read a design token from `styles/variables.css` (e.g. `--font-mono`) for
+ * code that must hand a literal to a non-CSS consumer (xterm's fontFamily).
+ * Keeps the literal in ONE place; `fallback` covers a read before styles land.
+ */
+export function cssToken(name: string, fallback = ""): string {
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return v || fallback;
 }
 
 export function isValidHex(s: string): boolean {
@@ -163,29 +159,6 @@ export function keyToLabel(key: string): string {
   return s.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 }
 
-// ── Derived colors (computed from base, not stored) ──
-
-function computeDerived(colors: Record<string, string>, isDark: boolean): Record<string, string> {
-  const ap = colors["accent-primary"] || "#39bae6";
-  const aw = colors["accent-warm"] || "#e6a730";
-  const tc = colors["terminal-cursor"] || ap;
-
-  return {
-    "accent-muted": hexToRgba(ap, 0.12),
-    "accent-glow": hexToGlow(ap, 0.3),
-    "accent-glow-lg": `${hexToGlow(ap, 0.2, 20)}, ${hexToGlow(ap, 0.06, 40)}`,
-    "accent-warm-muted": hexToRgba(aw, 0.12),
-    "accent-warm-glow": hexToGlow(aw, 0.2),
-    "sidebar-item-focus": hexToRgba(ap, 0.08),
-    "scrollbar-thumb": hexToRgba(ap, 0.08),
-    "scrollbar-thumb-hover": hexToRgba(ap, 0.22),
-    "terminal-selection": hexToRgba(tc, 0.18),
-    "statusbar-item-hover": hexToRgba(ap, 0.06),
-    "border-subtle": isDark ? "rgba(255, 255, 255, 0.03)" : "rgba(0, 0, 0, 0.06)",
-    "dialog-shadow": isDark ? "rgba(0, 0, 0, 0.65)" : "rgba(0, 0, 0, 0.2)",
-  };
-}
-
 // ── Presets ───────────────────────────────────────────
 
 const OBSIDIAN_DARK: ThemePreset = {
@@ -196,7 +169,7 @@ const OBSIDIAN_DARK: ThemePreset = {
     "bg-dropdown": "#151c25", "bg-surface": "#0d1117", "bg-elevated": "#1a2332",
     "text-primary": "#adbac7", "text-secondary": "#8b96a3", "text-muted": "#5d7080",
     "text-accent": "#39bae6", "text-bright": "#e6edf3",
-    "border-primary": "#1a2231", "border-active": "#39bae6", "border-inactive": "#1a2231",
+    "border-primary": "#1a2231", "border-active": "#39bae6",
     "accent-primary": "#39bae6", "accent-hover": "#5cc8f0", "accent-focus": "#39bae6",
     "accent-warm": "#e6a730",
     "activity-bar-bg": "#080b0f", "activity-bar-fg": "#e6edf3",
@@ -231,7 +204,7 @@ const NORD_DARK: ThemePreset = {
     "bg-dropdown": "#3b4252", "bg-surface": "#2e3440", "bg-elevated": "#434c5e",
     "text-primary": "#d8dee9", "text-secondary": "#9ab3cc", "text-muted": "#8892a3",
     "text-accent": "#88c0d0", "text-bright": "#eceff4",
-    "border-primary": "#3b4252", "border-active": "#88c0d0", "border-inactive": "#3b4252",
+    "border-primary": "#3b4252", "border-active": "#88c0d0",
     "accent-primary": "#88c0d0", "accent-hover": "#8fbcbb", "accent-focus": "#88c0d0",
     "accent-warm": "#ebcb8b",
     "activity-bar-bg": "#2e3440", "activity-bar-fg": "#eceff4",
@@ -266,7 +239,7 @@ const CATPPUCCIN_MOCHA: ThemePreset = {
     "bg-dropdown": "#313244", "bg-surface": "#1e1e2e", "bg-elevated": "#45475a",
     "text-primary": "#cdd6f4", "text-secondary": "#a6adc8", "text-muted": "#7e819a",
     "text-accent": "#89b4fa", "text-bright": "#cdd6f4",
-    "border-primary": "#313244", "border-active": "#89b4fa", "border-inactive": "#313244",
+    "border-primary": "#313244", "border-active": "#89b4fa",
     "accent-primary": "#89b4fa", "accent-hover": "#b4d0fb", "accent-focus": "#89b4fa",
     "accent-warm": "#fab387",
     "activity-bar-bg": "#181825", "activity-bar-fg": "#cdd6f4",
@@ -301,7 +274,7 @@ const SOLARIZED_LIGHT: ThemePreset = {
     "bg-dropdown": "#eee8d5", "bg-surface": "#fdf6e3", "bg-elevated": "#eee8d5",
     "text-primary": "#3b4f56", "text-secondary": "#546b73", "text-muted": "#6e7e7e",
     "text-accent": "#1a6599", "text-bright": "#073642",
-    "border-primary": "#ddd6c1", "border-active": "#1a6599", "border-inactive": "#ddd6c1",
+    "border-primary": "#ddd6c1", "border-active": "#1a6599",
     "accent-primary": "#1a6599", "accent-hover": "#2aa198", "accent-focus": "#1a6599",
     "accent-warm": "#b58900",
     "activity-bar-bg": "#eee8d5", "activity-bar-fg": "#073642",
@@ -336,7 +309,7 @@ const TOKYO_NIGHT: ThemePreset = {
     "bg-dropdown": "#24283b", "bg-surface": "#16161e", "bg-elevated": "#292e42",
     "text-primary": "#a9b1d6", "text-secondary": "#7982b0", "text-muted": "#656d90",
     "text-accent": "#7aa2f7", "text-bright": "#c0caf5",
-    "border-primary": "#24283b", "border-active": "#7aa2f7", "border-inactive": "#24283b",
+    "border-primary": "#24283b", "border-active": "#7aa2f7",
     "accent-primary": "#7aa2f7", "accent-hover": "#89b4fa", "accent-focus": "#7aa2f7",
     "accent-warm": "#e0af68",
     "activity-bar-bg": "#16161e", "activity-bar-fg": "#c0caf5",
@@ -396,15 +369,16 @@ class ThemeEngine {
     const root = document.documentElement;
     const effective: Record<string, string> = {};
 
-    // Apply base colors
+    // Apply base colors. xterm ANSI colors don't become CSS vars (xterm gets
+    // them via buildXtermTheme) but computeDerived reads them for icon tints.
     for (const key of Object.keys(preset.colors) as ThemeColorKey[]) {
-      if (key.startsWith("xterm-")) continue; // xterm colors don't map to CSS vars
       const value = this.getEffectiveColor(key);
       effective[key] = value;
+      if (key.startsWith("xterm-")) continue;
       root.style.setProperty(`--${key}`, value);
     }
 
-    // Apply derived colors
+    // Apply derived colors (glows, on-accent, selection, file icons, …)
     const derived = computeDerived(effective, preset.isDark);
     for (const [key, value] of Object.entries(derived)) {
       root.style.setProperty(`--${key}`, value);

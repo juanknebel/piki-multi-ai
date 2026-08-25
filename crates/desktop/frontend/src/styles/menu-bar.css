@@ -26,7 +26,7 @@
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--fs-md);
   font-family: inherit;
   cursor: pointer;
   transition: background var(--transition-fast), color var(--transition-fast);
@@ -42,14 +42,14 @@
 /* ── Dropdown ────────────────────────────────── */
 .menu-dropdown {
   position: fixed;
-  z-index: 80;
+  z-index: var(--z-menu);
   min-width: 220px;
   background: var(--bg-dropdown);
   border: 1px solid var(--dialog-border);
   border-radius: var(--radius-md);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   padding: 4px 0;
-  animation: menu-enter 0.1s var(--ease-out);
+  animation: menu-enter var(--dur-fast) var(--ease-out);
 }
 
 /* ── Menu item ───────────────────────────────── */
@@ -59,7 +59,7 @@
   justify-content: space-between;
   padding: 6px 16px 6px 24px;
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: var(--fs-md);
   cursor: pointer;
   transition: background var(--transition-fast);
   white-space: nowrap;
@@ -78,14 +78,14 @@
 /* ── Shortcut badge ──────────────────────────── */
 .menu-shortcut {
   margin-left: 32px;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   color: var(--text-muted);
 }
 
 /* ── Submenu arrow ───────────────────────────── */
 .menu-submenu-arrow {
   margin-left: 32px;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
 }
 
@@ -99,7 +99,7 @@
 .menu-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 79;
+  z-index: calc(var(--z-menu) - 1);
 }
 
 /* ── Panel toggle ───────────────────────────── */
@@ -133,7 +133,7 @@
   border: none;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 14px;
+  font-size: var(--fs-xl);
   font-family: inherit;
   cursor: pointer;
   transition: background var(--transition-fast), color var(--transition-fast);

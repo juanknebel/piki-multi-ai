@@ -3,13 +3,19 @@
   align-items: center;
   background: var(--statusbar-bg);
   color: var(--statusbar-fg);
-  font-size: 11px;
+  font-size: var(--fs-sm);
   padding: 0 4px;
   gap: 0;
   overflow: hidden;
   user-select: none;
   border-top: 1px solid var(--border-primary);
   position: relative;
+}
+
+/* No workspace open (the sidebar renders no workspace rows): the bar takes
+   the "no folder" tint, like VS Code's statusBar.noFolderBackground. */
+#app:not(:has(.workspace-item)) #status-bar {
+  background: var(--statusbar-no-folder);
 }
 
 /* Accent line on top */
@@ -81,7 +87,7 @@
 .status-item.status-cwd {
   color: var(--text-muted);
   font-style: italic;
-  font-size: 11px;
+  font-size: var(--fs-sm);
 }
 
 .status-app-name {

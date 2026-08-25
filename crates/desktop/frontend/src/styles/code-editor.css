@@ -3,13 +3,13 @@
 /* File viewer modal: CodeMirror fills the body */
 .file-viewer-body .cm-editor {
   height: 100%;
-  font-family: "JetBrainsMono NF Mono", monospace;
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-md);
 }
 
 .file-viewer-body .cm-editor .cm-scroller {
-  font-family: "JetBrainsMono NF Mono", monospace;
-  line-height: 1.6;
+  font-family: var(--font-mono);
+  line-height: var(--leading-relaxed);
 }
 
 /* ── Code editor tab panel ──────────────────── */
@@ -27,11 +27,11 @@
   border-bottom: 1px solid var(--border-primary);
   background: var(--bg-surface);
   flex-shrink: 0;
-  gap: 8px;
+  gap: var(--sp-4);
 }
 
 .code-editor-path {
-  font-size: 12px;
+  font-size: var(--fs-md);
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -40,14 +40,14 @@
 }
 
 .code-editor-dirty {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--accent-warm);
   font-weight: 600;
   letter-spacing: 0.03em;
 }
 
 .code-editor-lsp-status {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
 }
 
@@ -60,7 +60,7 @@
 }
 
 .code-editor-save {
-  font-size: 11px;
+  font-size: var(--fs-sm);
   padding: 3px 10px;
   border: 1px solid var(--accent-primary);
   border-radius: var(--radius-sm);
@@ -81,18 +81,18 @@
 
 .code-editor-body .cm-editor {
   height: 100%;
-  font-family: "JetBrainsMono NF Mono", monospace;
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-md);
 }
 
 .code-editor-body .cm-editor .cm-scroller {
-  font-family: "JetBrainsMono NF Mono", monospace;
-  line-height: 1.6;
+  font-family: var(--font-mono);
+  line-height: var(--leading-relaxed);
 }
 
 /* ── Status bar LSP indicator ───────────────── */
 
 .status-lsp {
-  font-size: 11px;
-  transition: color 0.2s;
+  font-size: var(--fs-sm);
+  transition: color var(--transition-normal);
 }

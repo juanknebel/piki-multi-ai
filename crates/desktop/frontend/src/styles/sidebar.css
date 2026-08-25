@@ -9,7 +9,7 @@
   justify-content: space-between;
   height: var(--sidebar-header-height);
   padding: 0 14px;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -24,12 +24,12 @@
   align-items: center;
   padding: 2px 8px;
   margin: 6px 10px 2px;
-  font-size: 13px;
+  font-size: var(--fs-lg);
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--text-muted);
   background: var(--accent-muted);
-  border-radius: 9px;
+  border-radius: var(--radius-full);
   cursor: pointer;
   user-select: none;
   transition: background var(--transition-fast), color var(--transition-fast);
@@ -51,7 +51,7 @@
   height: 10px;
   margin-right: 4px;
   flex-shrink: 0;
-  transition: transform 0.15s var(--ease-out);
+  transition: transform var(--transition-fast);
   fill: currentColor;
   opacity: 0.6;
 }
@@ -66,7 +66,7 @@
   padding: 5px 14px 5px 18px;
   cursor: pointer;
   user-select: none;
-  gap: 8px;
+  gap: var(--sp-4);
   position: relative;
   transition: background var(--transition-fast);
   border-left: 2px solid transparent;
@@ -97,7 +97,7 @@
   background: var(--accent-primary);
   flex-shrink: 0;
   box-shadow: var(--accent-glow);
-  animation: pulse 2s ease-in-out infinite;
+  animation: pulse var(--dur-pulse) ease-in-out infinite;
 }
 
 .workspace-name {
@@ -105,7 +105,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   transition: color var(--transition-fast);
 }
 
@@ -132,9 +132,9 @@
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-sm);
-  font-size: 13px;
+  font-size: var(--fs-lg);
   color: var(--text-muted);
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .ws-action-btn:hover {
@@ -148,7 +148,7 @@
 }
 
 .workspace-status {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   flex-shrink: 0;
   transition: color var(--transition-fast);
@@ -156,7 +156,7 @@
 
 .workspace-status.busy {
   color: var(--accent-primary);
-  animation: pulse 1.5s ease-in-out infinite;
+  animation: pulse var(--dur-pulse) ease-in-out infinite;
 }
 
 .workspace-status.done {
@@ -170,17 +170,17 @@
 .workspace-restored {
   flex-shrink: 0;
   margin-left: 6px;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   color: var(--accent-primary);
 }
 
 .workspace-attention {
   flex-shrink: 0;
   margin-left: 6px;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--accent-warm);
   text-shadow: var(--accent-warm-glow);
-  animation: pulse 1.5s ease-in-out infinite;
+  animation: pulse var(--dur-pulse) ease-in-out infinite;
 }
 
 /* ── Git panel ──────────────────────────────────── */
@@ -195,8 +195,8 @@
   padding: 3px 14px 3px 20px;
   cursor: pointer;
   user-select: none;
-  gap: 8px;
-  font-size: 12px;
+  gap: var(--sp-4);
+  font-size: var(--fs-md);
   transition: background var(--transition-fast);
 }
 
@@ -212,7 +212,7 @@
   width: 16px;
   text-align: center;
   font-weight: 700;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   flex-shrink: 0;
 }
 
@@ -235,7 +235,7 @@
 
 .file-actions {
   display: flex;
-  gap: 2px;
+  gap: var(--sp-1);
   visibility: hidden;
 }
 
@@ -251,8 +251,8 @@
   justify-content: center;
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
-  font-size: 13px;
-  transition: all var(--transition-fast);
+  font-size: var(--fs-lg);
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .file-action-btn:hover {
@@ -273,8 +273,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
-  animation: overlay-in 0.15s var(--ease-out);
+  z-index: var(--z-backdrop);
+  animation: overlay-in var(--dur-fast) var(--ease-out);
 }
 
 .ws-delete-dialog {
@@ -285,26 +285,26 @@
   padding: 20px 24px;
   min-width: 300px;
   text-align: center;
-  animation: dialog-enter 0.2s var(--ease-out);
+  animation: dialog-enter var(--dur-base) var(--ease-out);
 }
 
 .ws-delete-dialog p {
   margin-bottom: 8px;
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--fs-lg);
 }
 
 .ws-delete-list {
   margin: 6px 0 10px;
   padding-left: 18px;
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: var(--fs-md);
   text-align: left;
 }
 
 .ws-delete-hint {
   color: var(--text-muted) !important;
-  font-size: 11px !important;
+  font-size: var(--fs-sm) !important;
 }
 
 .ws-delete-card-move {
@@ -319,7 +319,7 @@
 
 .ws-delete-buttons {
   display: flex;
-  gap: 8px;
+  gap: var(--sp-4);
   justify-content: center;
   margin-top: 16px;
 }
@@ -328,9 +328,9 @@
 .empty-message {
   padding: 20px;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--fs-sm);
   text-align: center;
-  line-height: 1.7;
+  line-height: var(--leading-loose);
 }
 
 /* ── Agents panel ────────────────────────────────── */
@@ -342,19 +342,19 @@
 
 .agents-header-actions {
   display: flex;
-  gap: 2px;
+  gap: var(--sp-1);
 }
 
 .agents-empty {
   padding: 14px;
-  font-size: 12px;
+  font-size: var(--fs-md);
   color: var(--text-muted);
 }
 
 .agent-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-4);
   padding: 5px 14px;
   cursor: pointer;
   transition: background var(--transition-fast);
@@ -372,7 +372,7 @@
   flex-shrink: 0;
   width: 14px;
   text-align: center;
-  font-size: 12px;
+  font-size: var(--fs-md);
 }
 
 .agent-row-main {
@@ -391,7 +391,7 @@
 }
 
 .agent-row-ws {
-  font-size: 12px;
+  font-size: var(--fs-md);
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -402,14 +402,14 @@
 }
 
 .agent-row-label {
-  font-size: 12px;
+  font-size: var(--fs-md);
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .agent-row-summary {
-  font-size: 11px;
+  font-size: var(--fs-sm);
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -418,7 +418,7 @@
 
 .agent-row-status {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: var(--fs-sm);
 }
 
 /* Agent-status rollup glyph on a workspace row (⚠ permission / ● needs you).
@@ -426,7 +426,7 @@
 .workspace-agent-glyph {
   flex-shrink: 0;
   margin-left: 6px;
-  font-size: 10px;
+  font-size: var(--fs-xs);
 }
 
 /* Empty-state call to action (workspace list / agents panel) */
@@ -436,5 +436,5 @@
 }
 
 .empty-cta {
-  font-size: 11px;
+  font-size: var(--fs-sm);
 }

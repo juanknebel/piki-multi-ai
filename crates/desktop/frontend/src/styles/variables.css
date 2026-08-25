@@ -1,3 +1,8 @@
+/* Design tokens — the ONE place literal fonts, sizes, z-layers and durations
+ * live. Feature stylesheets consume these; they never repeat the literals.
+ * Colour tokens are the static defaults for the first paint; ThemeEngine
+ * (theme.ts) overwrites the base colours from the active preset and recomputes
+ * the "derived" ones (computeDerived in theme-derive.ts) on every apply. */
 :root {
   /* ── Obsidian base tones ───────────────────────── */
   --bg-primary: #0b0f14;
@@ -20,7 +25,6 @@
   /* ── Borders ───────────────────────────────────── */
   --border-primary: #1a2231;
   --border-active: #39bae6;
-  --border-inactive: #1a2231;
   --border-subtle: rgba(255, 255, 255, 0.03);
 
   /* ── Accent — Cyan ─────────────────────────────── */
@@ -29,7 +33,6 @@
   --accent-focus: #39bae6;
   --accent-muted: rgba(57, 186, 230, 0.12);
   --accent-glow: 0 0 10px rgba(57, 186, 230, 0.3);
-  --accent-glow-lg: 0 0 20px rgba(57, 186, 230, 0.2), 0 0 40px rgba(57, 186, 230, 0.06);
 
   /* ── Accent — Amber (status / warm) ────────────── */
   --accent-warm: #e6a730;
@@ -41,6 +44,9 @@
   --activity-bar-fg: #e6edf3;
   --activity-bar-inactive: #64768a;
   --activity-bar-badge: #39bae6;
+  /* derived: text + glow for the change-count badge */
+  --activity-bar-badge-fg: #000;
+  --activity-bar-badge-glow: 0 0 10px rgba(57, 186, 230, 0.3);
 
   /* ── Sidebar ───────────────────────────────────── */
   --sidebar-bg: #0d1117;
@@ -68,6 +74,7 @@
   --statusbar-bg: #080b0f;
   --statusbar-fg: #8b95a1;
   --statusbar-item-hover: rgba(57, 186, 230, 0.06);
+  /* Status bar background while no workspace is open (status-bar.css) */
   --statusbar-no-folder: #5a2d72;
 
   /* ── Git status ────────────────────────────────── */
@@ -76,8 +83,11 @@
   --success-color: var(--git-added);
   --error-color: var(--git-deleted);
   --warning-color: var(--accent-warm);
-  /* Text painted on top of an accent-primary background */
+  /* derived: text painted on top of an accent-primary background, picked by
+     luminance so a light accent gets black text and a dark one white */
   --on-accent: #000;
+  /* derived: ::selection background (accent at 25%) */
+  --selection-bg: rgba(57, 186, 230, 0.25);
   --git-added: #3fb950;
   --git-deleted: #f85149;
   --git-renamed: #3fb950;
@@ -86,7 +96,7 @@
   --git-staged: #3fb950;
   --git-staged-modified: #d4a12e;
 
-  /* ── File-type icons ───────────────────────────── */
+  /* ── File-type icons (derived from the ANSI + text palette) ── */
   --icon-rust: #e8623a;
   --icon-ts: #3178c6;
   --icon-js: #e8d44d;
@@ -115,6 +125,43 @@
   --toast-error-bg: #2d1215;
   --toast-fg: #e6edf3;
 
+  /* ── Typography ────────────────────────────────── */
+  /* The only place the font name appears in styles/. TS reads it through
+     `cssToken("--font-mono")` (theme.ts) for xterm. */
+  --font-mono: "JetBrainsMono NF Mono", "SF Mono", "Cascadia Code", "Fira Code", monospace;
+  /* Chrome text. Mono-first by design; swap here to try a UI face. */
+  --font-ui: var(--font-mono);
+  --font-size-base: 12.5px;
+  /* Type scale — every `font-size` in styles/ is one of these */
+  --fs-3xs: 7px;   /* glyph-only marks (dir dot) */
+  --fs-2xs: 9px;   /* count badges, card ids */
+  --fs-xs: 10px;   /* section labels, kbd hints */
+  --fs-sm: 11px;   /* status bar, secondary rows */
+  --fs-md: 12px;   /* body text, buttons */
+  --fs-base: var(--font-size-base); /* inputs, workspace rows */
+  --fs-lg: 13px;   /* dialog titles, chat, tree rows */
+  --fs-xl: 14px;   /* icon glyphs, md h3 */
+  --fs-2xl: 16px;  /* close × */
+  --fs-3xl: 18px;  /* welcome h2, md h2 */
+  --fs-4xl: 20px;  /* md h1 */
+  --fs-display-sm: 28px; /* welcome logo */
+  --fs-display: 32px;    /* empty-state glyph */
+  --fs-display-lg: 48px; /* kanban empty glyph */
+  /* Line heights */
+  --leading-none: 1;
+  --leading-tight: 1.4;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.6;
+  --leading-loose: 1.75;
+
+  /* ── Spacing ───────────────────────────────────── */
+  --sp-1: 2px;
+  --sp-2: 4px;
+  --sp-3: 6px;
+  --sp-4: 8px;
+  --sp-5: 12px;
+  --sp-6: 16px;
+
   /* ── Sizing ────────────────────────────────────── */
   --activity-bar-width: 50px;
   --sidebar-width: 260px;
@@ -124,16 +171,34 @@
   --sidebar-header-height: 30px;
   --chat-panel-width: 360px;
 
+  /* ── Z layers ──────────────────────────────────── */
+  /* Every stacking level in styles/ is one of these (or a `calc()` of one). */
+  --z-canvas: 0;     /* fixed decoration under every surface (noise) */
+  --z-panel: 1;      /* raised inside a panel: sticky headers, resize handles */
+  --z-sticky: 10;    /* bars floating over panel content: terminal search, kanban pickers */
+  --z-backdrop: 100; /* modal backdrops: dialogs, confirms, in-panel overlays */
+  --z-dialog: 110;   /* a modal stacked on an open dialog: palette, file viewer, nested form */
+  --z-menu: 200;     /* menu-bar dropdowns (+ click-away backdrop at --z-menu - 1) */
+  --z-popover: 300;  /* context menus, dropdown lists — may open from inside a dialog */
+  --z-toast: 400;
+  --z-tooltip: 500;
+
   /* ── Motion ────────────────────────────────────── */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-fast: 0.1s var(--ease-in-out);
-  --transition-normal: 0.2s var(--ease-out);
-  --transition-slow: 0.35s var(--ease-out);
+  --dur-fast: 0.1s;   /* hover colours, menus, palette */
+  --dur-base: 0.2s;   /* dialogs, toasts, resize handles */
+  --dur-slow: 0.35s;  /* welcome screen, gauge fills */
+  --dur-blink: 0.8s;  /* streaming cursor */
+  --dur-pulse: 1.5s;  /* looping attention pulses */
+  --transition-fast: var(--dur-fast) var(--ease-in-out);
+  --transition-normal: var(--dur-base) var(--ease-out);
+  --transition-slow: var(--dur-slow) var(--ease-out);
 
   /* ── Radius ────────────────────────────────────── */
+  --radius-xs: 2px;
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 10px;
-  --radius-xl: 14px;
+  --radius-full: 99px;
 }

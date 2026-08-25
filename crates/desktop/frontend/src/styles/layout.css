@@ -111,7 +111,11 @@
   height: 1px;
   width: 100%;
   background: var(--border-subtle);
-  transition: all var(--transition-normal);
+  transition:
+    top var(--transition-normal),
+    height var(--transition-normal),
+    background var(--transition-normal),
+    box-shadow var(--transition-normal);
 }
 
 #agents-resize-h:hover::after,
@@ -120,7 +124,7 @@
   height: 3px;
   background: var(--accent-primary);
   box-shadow: var(--accent-glow);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
 }
 
 #sidebar-resize-v {
@@ -139,7 +143,11 @@
   width: 1px;
   height: 100%;
   background: var(--border-primary);
-  transition: all var(--transition-normal);
+  transition:
+    left var(--transition-normal),
+    width var(--transition-normal),
+    background var(--transition-normal),
+    box-shadow var(--transition-normal);
 }
 
 #sidebar-resize-v:hover::after,
@@ -148,7 +156,7 @@
   width: 3px;
   background: var(--accent-primary);
   box-shadow: var(--accent-glow);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
 }
 
 #chat-panel {
@@ -175,7 +183,11 @@
   width: 1px;
   height: 100%;
   background: var(--border-primary);
-  transition: all var(--transition-normal);
+  transition:
+    right var(--transition-normal),
+    width var(--transition-normal),
+    background var(--transition-normal),
+    box-shadow var(--transition-normal);
 }
 
 #chat-resize-v:hover::after,
@@ -184,7 +196,7 @@
   width: 3px;
   background: var(--accent-primary);
   box-shadow: var(--accent-glow);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
 }
 
 #editor-area {
@@ -214,7 +226,7 @@
   left: 0;
   width: 100%;
   height: 100%;
-  z-index: 100;
+  z-index: var(--z-backdrop);
   pointer-events: none;
 }
 
@@ -223,7 +235,7 @@
   background: rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
-  animation: overlay-in 0.2s var(--ease-out);
+  animation: overlay-in var(--dur-base) var(--ease-out);
 }
 
 /* ── Toasts ──────────────────────────────────────── */
@@ -231,8 +243,8 @@
   position: fixed;
   bottom: calc(var(--statusbar-height) + 12px);
   right: 16px;
-  z-index: 200;
+  z-index: var(--z-toast);
   display: flex;
   flex-direction: column-reverse;
-  gap: 8px;
+  gap: var(--sp-4);
 }

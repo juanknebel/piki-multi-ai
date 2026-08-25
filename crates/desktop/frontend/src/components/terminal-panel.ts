@@ -5,7 +5,7 @@ import { SearchAddon } from "@xterm/addon-search";
 import { appState } from "../state";
 import * as ipc from "../ipc";
 import { toast, reportError } from "./toast";
-import { themeEngine } from "../theme";
+import { cssToken, themeEngine } from "../theme";
 import { isMac, modCtrl } from "../shortcuts";
 
 export interface TerminalInstance {
@@ -62,7 +62,7 @@ export function createTerminal(tabId: string): TerminalInstance {
   element.style.display = "none";
 
   const terminal = new Terminal({
-    fontFamily: '"JetBrainsMono NF Mono", monospace',
+    fontFamily: cssToken("--font-mono", "monospace"),
     fontSize: 14,
     lineHeight: 1.25,
     theme: themeEngine.buildXtermTheme(),

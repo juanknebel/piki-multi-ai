@@ -1,11 +1,11 @@
 /* ── Custom tooltip ──────────────────────────────── */
 .custom-tooltip {
   position: fixed;
-  z-index: 300;
+  z-index: var(--z-tooltip);
   display: none;
   padding: 4px 8px;
-  font-size: 11px;
-  line-height: 1.4;
+  font-size: var(--fs-sm);
+  line-height: var(--leading-tight);
   color: var(--text-primary);
   background: var(--bg-elevated);
   border: 1px solid var(--border-primary);

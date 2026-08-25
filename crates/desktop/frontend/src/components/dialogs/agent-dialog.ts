@@ -149,7 +149,7 @@ async function showAgentForm(existing: AgentInfo | null, onSaved: () => void) {
 
   const backdrop = document.createElement("div");
   backdrop.className = "dialog-backdrop agent-form-backdrop";
-  backdrop.style.zIndex = "110";
+  backdrop.style.zIndex = "var(--z-dialog)";
 
   const isEdit = existing !== null;
   backdrop.innerHTML = `
@@ -169,7 +169,7 @@ async function showAgentForm(existing: AgentInfo | null, onSaved: () => void) {
         </div>
         <div class="dialog-field">
           <label class="dialog-label">Role / Instructions</label>
-          <textarea class="dialog-textarea" id="af-role" rows="12" style="min-height:200px;font-family:'JetBrainsMono NF Mono',monospace;font-size:12px">${esc(existing?.role ?? "")}</textarea>
+          <textarea class="dialog-textarea" id="af-role" rows="12" style="min-height:200px;font-family:var(--font-mono);font-size:12px">${esc(existing?.role ?? "")}</textarea>
         </div>
       </div>
       <div class="dialog-footer">
@@ -229,7 +229,7 @@ async function showImportDialog(onImported: () => void) {
 
   const backdrop = document.createElement("div");
   backdrop.className = "dialog-backdrop agent-form-backdrop";
-  backdrop.style.zIndex = "110";
+  backdrop.style.zIndex = "var(--z-dialog)";
 
   const selected = new Set(
     scanned.map((a, i) => (a.exists ? -1 : i)).filter((i) => i >= 0),

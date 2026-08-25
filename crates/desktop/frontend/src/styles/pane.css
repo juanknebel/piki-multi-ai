@@ -45,7 +45,7 @@
   height: 24px;
   flex: 0 0 24px;
   padding: 0 6px;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   color: var(--tab-inactive-fg);
   background: var(--tab-inactive-bg);
   border-bottom: 1px solid var(--border-primary);
@@ -70,7 +70,7 @@
 
 .pane-actions {
   display: flex;
-  gap: 2px;
+  gap: var(--sp-1);
   flex-shrink: 0;
 }
 
@@ -78,10 +78,10 @@
   border: 0;
   background: none;
   color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1;
+  font-size: var(--fs-md);
+  line-height: var(--leading-none);
   padding: 2px 5px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   cursor: pointer;
 }
 
@@ -100,7 +100,7 @@
 
 .pane-btn-restart {
   color: var(--accent-primary);
-  font-size: 11px;
+  font-size: var(--fs-sm);
 }
 
 .pane-btn-close:hover {
@@ -129,12 +129,12 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: var(--sp-5);
   color: var(--text-muted);
 }
 
 .pane-chooser-title {
-  font-size: 12px;
+  font-size: var(--fs-md);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -142,7 +142,7 @@
 .pane-chooser-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--sp-4);
   justify-content: center;
   max-width: 80%;
 }
@@ -152,9 +152,9 @@
   background: var(--bg-secondary);
   color: var(--text-primary);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--fs-md);
   padding: 6px 14px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 
@@ -194,7 +194,7 @@
   flex: 0 0 4px;
   position: relative;
   background: transparent;
-  z-index: 5;
+  z-index: var(--z-panel);
   transition: background var(--transition-normal);
 }
 
@@ -210,7 +210,13 @@
   content: "";
   position: absolute;
   background: var(--border-primary);
-  transition: all var(--transition-normal);
+  transition:
+    left var(--transition-normal),
+    width var(--transition-normal),
+    top var(--transition-normal),
+    height var(--transition-normal),
+    background var(--transition-normal),
+    box-shadow var(--transition-normal);
 }
 
 .pane-split.horiz > .pane-resize-handle::after {
@@ -231,7 +237,7 @@
 .pane-resize-handle.dragging::after {
   background: var(--accent-primary);
   box-shadow: var(--accent-glow);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
 }
 
 .pane-split.horiz > .pane-resize-handle:hover::after,

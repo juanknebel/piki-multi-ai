@@ -10,7 +10,7 @@
 .api-toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-4);
   padding: 6px 12px;
   border-bottom: 1px solid var(--border-primary);
   background: var(--bg-secondary);
@@ -18,14 +18,14 @@
 }
 
 .api-btn {
-  font-size: 11px;
+  font-size: var(--fs-sm);
   padding: 4px 12px;
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-sm);
   background: var(--bg-tertiary);
   color: var(--text-primary);
   cursor: pointer;
-  transition: background 0.1s, border-color 0.1s;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
 }
 
 .api-btn:hover {
@@ -45,7 +45,7 @@
 }
 
 .api-status {
-  font-size: 11px;
+  font-size: var(--fs-sm);
   margin-left: auto;
   font-weight: 600;
 }
@@ -80,7 +80,7 @@
 }
 
 .api-pane-header {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -100,9 +100,9 @@
   box-sizing: border-box;
   margin: 0;
   padding: 10px 12px;
-  font-family: "JetBrainsMono NF Mono", monospace;
-  font-size: 12px;
-  line-height: 1.6;
+  font-family: var(--font-mono);
+  font-size: var(--fs-md);
+  line-height: var(--leading-relaxed);
   tab-size: 2;
   color: var(--text-bright);
   background: var(--bg-primary);
@@ -122,11 +122,11 @@
 
 .api-response-actions {
   display: flex;
-  gap: 4px;
+  gap: var(--sp-2);
 }
 
 .api-resp-btn {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   padding: 1px 6px;
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-sm);
@@ -149,7 +149,7 @@
 .api-jq-bar {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
   padding: 4px 8px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-primary);
@@ -160,8 +160,8 @@
 .api-jq-input {
   flex: 1;
   padding: 3px 8px;
-  font-size: 11px;
-  font-family: "JetBrainsMono NF Mono", monospace;
+  font-size: var(--fs-sm);
+  font-family: var(--font-mono);
   color: var(--text-bright);
   background: var(--bg-input);
   border: 1px solid var(--border-primary);
@@ -175,7 +175,7 @@
 }
 
 .api-search-count {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   min-width: 60px;
   text-align: center;
@@ -185,7 +185,7 @@
 .api-search-next,
 .api-search-close,
 .api-jq-close {
-  font-size: 12px;
+  font-size: var(--fs-md);
   padding: 1px 5px;
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-sm);
@@ -203,7 +203,7 @@
 }
 
 .api-jq-run {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   padding: 2px 10px;
 }
 
@@ -214,8 +214,8 @@
 
 .api-jq-badge {
   padding: 3px 10px;
-  font-size: 10px;
-  font-family: "JetBrainsMono NF Mono", monospace;
+  font-size: var(--fs-xs);
+  font-family: var(--font-mono);
   color: var(--accent-primary);
   background: rgba(57, 186, 230, 0.08);
   border-bottom: 1px solid var(--accent-primary);
@@ -224,7 +224,7 @@
 
 .api-search-match {
   background: rgba(230, 167, 48, 0.3);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
 }
 
 .api-search-current {
@@ -245,7 +245,7 @@
 .api-response-error {
   padding: 24px;
   text-align: center;
-  font-size: 12px;
+  font-size: var(--fs-md);
   color: var(--text-muted);
 }
 
@@ -264,16 +264,16 @@
 .api-response-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-4);
   padding: 8px 12px;
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border-primary);
-  font-size: 11px;
+  font-size: var(--fs-sm);
 }
 
 .api-response-badge {
   font-weight: 700;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   padding: 1px 6px;
   border-radius: var(--radius-sm);
   background: var(--bg-tertiary);
@@ -304,7 +304,7 @@
 }
 
 .api-response-headers-toggle {
-  font-size: 11px;
+  font-size: var(--fs-sm);
   padding: 0 12px;
   border-bottom: 1px solid var(--border-primary);
 }
@@ -319,9 +319,9 @@
 .api-response-headers-content {
   margin: 0 0 8px;
   padding: 6px 8px;
-  font-family: "JetBrainsMono NF Mono", monospace;
-  font-size: 11px;
-  line-height: 1.5;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  line-height: var(--leading-normal);
   color: var(--text-secondary);
   background: var(--bg-tertiary);
   border-radius: var(--radius-sm);
@@ -332,9 +332,9 @@
 .api-response-content {
   margin: 0;
   padding: 10px 12px;
-  font-family: "JetBrainsMono NF Mono", monospace;
-  font-size: 12px;
-  line-height: 1.6;
+  font-family: var(--font-mono);
+  font-size: var(--fs-md);
+  line-height: var(--leading-relaxed);
   color: var(--text-primary);
   white-space: pre-wrap;
   word-break: break-all;
@@ -358,8 +358,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
-  animation: overlay-in 0.1s var(--ease-out);
+  z-index: var(--z-backdrop);
+  animation: overlay-in var(--dur-fast) var(--ease-out);
 }
 
 .api-history-dialog {
@@ -373,7 +373,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  animation: dialog-enter 0.15s var(--ease-out);
+  animation: dialog-enter var(--dur-fast) var(--ease-out);
 }
 
 .api-history-header {
@@ -386,13 +386,13 @@
 }
 
 .api-history-title {
-  font-size: 13px;
+  font-size: var(--fs-lg);
   font-weight: 600;
   color: var(--text-bright);
 }
 
 .api-history-close {
-  font-size: 16px;
+  font-size: var(--fs-2xl);
   padding: 2px 8px;
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-sm);
@@ -408,8 +408,8 @@
 .api-history-search {
   margin: 8px 12px;
   padding: 6px 10px;
-  font-size: 12px;
-  font-family: "JetBrainsMono NF Mono", monospace;
+  font-size: var(--fs-md);
+  font-family: var(--font-mono);
   color: var(--text-bright);
   background: var(--bg-input);
   border: 1px solid var(--border-primary);
@@ -430,18 +430,18 @@
 .api-history-empty {
   padding: 24px;
   text-align: center;
-  font-size: 12px;
+  font-size: var(--fs-md);
   color: var(--text-muted);
 }
 
 .api-history-entry {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-4);
   padding: 6px 12px;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   cursor: pointer;
-  transition: background 0.1s;
+  transition: background var(--transition-fast);
 }
 
 .api-history-entry:hover,
@@ -451,7 +451,7 @@
 
 .api-history-badge {
   font-weight: 700;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   padding: 1px 5px;
   border-radius: var(--radius-sm);
   background: var(--bg-tertiary);
@@ -480,13 +480,13 @@
 
 .api-history-date {
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   flex-shrink: 0;
 }
 
 .api-history-footer {
   padding: 6px 12px;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   text-align: center;
   border-top: 1px solid var(--border-primary);

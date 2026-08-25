@@ -21,20 +21,20 @@
 
 .ws-tab-bar::-webkit-scrollbar-thumb {
   background: var(--border-primary);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
 }
 
 .ws-tab {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-4);
   padding: 0 12px;
   height: var(--tab-height);
   border-right: 1px solid var(--tab-border);
   cursor: pointer;
   user-select: none;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: var(--fs-md);
   color: var(--tab-inactive-fg);
   background: var(--tab-inactive-bg);
   position: relative;
@@ -79,7 +79,7 @@
 
 .ws-tab-dead {
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   flex-shrink: 0;
 }
 
@@ -90,7 +90,7 @@
   height: 20px;
   padding: 0 6px;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--fs-md);
   color: var(--text-bright);
   background: var(--bg-primary);
   border: 1px solid var(--accent-primary);
@@ -105,14 +105,17 @@
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-sm);
-  font-size: 14px;
+  font-size: var(--fs-xl);
   color: var(--text-muted);
   opacity: 0;
   flex-shrink: 0;
   border: 0;
   background: none;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition:
+    opacity var(--transition-fast),
+    background var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .ws-tab:hover .ws-tab-close,
@@ -132,12 +135,12 @@
   width: 36px;
   height: var(--tab-height);
   color: var(--text-muted);
-  font-size: 18px;
+  font-size: var(--fs-3xl);
   flex-shrink: 0;
   border: 0;
   background: none;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .ws-tab-add:hover {
