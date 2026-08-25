@@ -11,6 +11,7 @@ import type {
 } from "./types";
 import * as ipc from "./ipc";
 import { settingsStore } from "./settings";
+import { mruBump } from "./mru";
 import {
   type PaneNode,
   type PaneId,
@@ -40,6 +41,8 @@ export interface UndoEntry {
 
 const MAX_UNDO = 20;
 const WS_TABS_SETTINGS_KEY = "wsTabsV2";
+/** Workspace paths, most recently visited first — the switcher's ranking. */
+export const WORKSPACE_MRU_KEY = "workspaceMru";
 const LAYOUT_SAVE_DEBOUNCE_MS = 200;
 
 export type StateEvent =
@@ -236,6 +239,12 @@ class AppState extends EventTarget {
       ws.needsAttention = false;
       ws.restoredUnvisited = false;
       this.emit("workspace-attention-changed");
+    }
+    // Every switch path lands here, so this is where the switcher's
+    // most-recently-used order is kept (persisted with the settings).
+    if (ws) {
+      const mru = settingsStore.get<string[]>(WORKSPACE_MRU_KEY) ?? [];
+      settingsStore.patch(WORKSPACE_MRU_KEY, mruBump(mru, String(ws.info.path)));
     }
     this.emit("active-workspace-changed");
     this.emit("files-changed");
@@ -444,6 +453,38 @@ class AppState extends EventTarget {
     }
     this._scheduleSave();
     return ids;
+  }
+
+  /** Re-home a whole top-level tab (pane tree + contents) into another
+   *  workspace. The backend must already have moved each content
+   *  (`ipc.moveTab`, which appends to the target's list — mirrored here).
+   *  The layout snapshot is flushed synchronously so a switch to the target
+   *  right after hydrates the moved tab with its split structure intact. */
+  moveWsTab(fromIdx: number, wsTabIdx: number, toIdx: number) {
+    const from = this._workspaces[fromIdx];
+    const to = this._workspaces[toIdx];
+    if (!from || !to || fromIdx === toIdx) return;
+    const wt = from.wsTabs[wsTabIdx];
+    if (!wt) return;
+    const ids = treeContentIds(wt.paneTree);
+    const moved = from.tabs.filter((t) => ids.includes(t.id));
+    from.wsTabs.splice(wsTabIdx, 1);
+    from.tabs = from.tabs.filter((t) => !ids.includes(t.id));
+    this._clampActiveWsTab(from);
+    this._syncActiveContent(from);
+    for (const t of moved) {
+      if (!to.tabs.some((x) => x.id === t.id)) to.tabs.push(t);
+    }
+    to.wsTabs.push(wt);
+    to.activeWsTab = to.wsTabs.length - 1;
+    this._syncActiveContent(to);
+    if (fromIdx === this._activeWorkspace || toIdx === this._activeWorkspace) {
+      this.emit("tabs-changed");
+      this.emit("active-tab-changed");
+      this.emit("pane-tree-changed");
+      this.emit("active-pane-changed");
+    }
+    if (this._layoutLoaded) void this._flushSave();
   }
 
   private _dropEmptyWsTabs(ws: WorkspaceState) {

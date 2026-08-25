@@ -1,9 +1,66 @@
-import { appState } from "../state";
+// Ctrl+Space workspace switcher. Ranking is the pure `rankItems` (mru.ts):
+// empty query → most recently used first (the list `appState` keeps under
+// the `workspaceMru` settings key on every switch), then sidebar order;
+// otherwise fuzzy across name / repo folder / branch ("wsauth" finds
+// "ws-auth"), recency as the tie-break. Each row carries a status glyph:
+// the worst agent state of that workspace (from `appState.agentRows`) or a
+// dirty-git marker.
+
+import { appState, WORKSPACE_MRU_KEY } from "../state";
 import { reportError } from "./toast";
 import * as ipc from "../ipc";
+import { settingsStore } from "../settings";
 import { formatShortcut } from "../shortcuts";
+import { rankItems } from "../mru";
+import { fuzzyScore } from "./fuzzy";
+import { branchLabel } from "../labels";
+import { agentStatusSeverity, cliAgentStatusView, type CliAgentStatus } from "../types";
 
 let switcherEl: HTMLElement | null = null;
+
+type WsItem = {
+  key: string;
+  idx: number;
+  name: string;
+  folder: string;
+  branch: string | null;
+  texts: string[];
+  order: number;
+};
+
+/** Worst (status, attention) among the live agents of workspace `idx`. */
+function agentRollup(idx: number): { status: CliAgentStatus; attention: boolean } | null {
+  let best: { status: CliAgentStatus; attention: boolean } | null = null;
+  let bestSev = -1;
+  for (const row of appState.agentRows) {
+    if (row.workspace_idx !== idx || !row.status) continue;
+    const sev = agentStatusSeverity(row.status, row.attention);
+    if (sev > bestSev) {
+      best = { status: row.status, attention: row.attention };
+      bestSev = sev;
+    }
+  }
+  return best;
+}
+
+/** Status column for a row: agent state first (it is what needs a human),
+ *  else uncommitted changes. */
+function statusGlyph(idx: number): string {
+  const agent = agentRollup(idx);
+  if (agent) {
+    const v = cliAgentStatusView(agent.status, agent.attention);
+    return `<span class="palette-status" style="color:${v.color}" title="Agent ${escapeHtml(v.label)}">${v.glyph}</span>`;
+  }
+  const changes = appState.workspaces[idx]?.changedFiles.length ?? 0;
+  if (changes > 0) {
+    return `<span class="palette-status dirty" title="${changes} uncommitted change${changes === 1 ? "" : "s"}">●</span>`;
+  }
+  return `<span class="palette-status"></span>`;
+}
+
+function folderName(sourceRepo: string): string {
+  return sourceRepo.replace(/\/+$/, "").split("/").pop() || sourceRepo;
+}
 
 export function openWorkspaceSwitcher() {
   if (switcherEl) {
@@ -30,98 +87,56 @@ export function openWorkspaceSwitcher() {
   const results = palette.querySelector<HTMLElement>(".palette-results")!;
   let selectedIdx = 0;
 
-  // Family = workspaces sharing `source_repo` (mirrors the sidebar's
-  // worktree-family grouping). Families with more than one loaded member get
-  // a section header showing the repo folder name; everything else is
-  // ungrouped and sorts first, same as before.
-  type WsItem = {
-    idx: number;
-    name: string;
-    sourceRepo: string;
-    branch: string;
-    order: number;
-  };
-  const allItems: WsItem[] = appState.workspaces.map((ws, i) => ({
-    idx: i,
-    name: ws.info.name,
-    sourceRepo: ws.info.source_repo,
-    branch: ws.branch ?? "",
-    order: ws.info.order,
-  }));
+  const allItems: WsItem[] = appState.workspaces.map((ws, i) => {
+    const folder = folderName(ws.info.source_repo);
+    return {
+      key: String(ws.info.path),
+      idx: i,
+      name: ws.info.name,
+      folder,
+      branch: ws.branch,
+      texts: [ws.info.name, folder, ws.branch ?? ""].filter((t) => t.length > 0),
+      order: ws.info.order,
+    };
+  });
+  const mru = settingsStore.get<string[]>(WORKSPACE_MRU_KEY) ?? [];
 
-  function folderName(sourceRepo: string): string {
-    return sourceRepo.replace(/\/+$/, "").split("/").pop() || sourceRepo;
-  }
-
-  let filtered = allItems;
-  let renderedItems: WsItem[] = [];
-
-  function groupAndSort(items: WsItem[]): { group: string; items: WsItem[] }[] {
-    const bySourceRepo = new Map<string, WsItem[]>();
-    for (const item of items) {
-      if (!bySourceRepo.has(item.sourceRepo)) bySourceRepo.set(item.sourceRepo, []);
-      bySourceRepo.get(item.sourceRepo)!.push(item);
-    }
-    // Family label is "" (ungrouped) when it's the only loaded workspace for
-    // that source_repo; otherwise the repo folder name becomes the header.
-    const groups = new Map<string, WsItem[]>();
-    for (const [sourceRepo, members] of bySourceRepo) {
-      const label = members.length > 1 ? folderName(sourceRepo) : "";
-      if (!groups.has(label)) groups.set(label, []);
-      groups.get(label)!.push(...members);
-    }
-    return [...groups.entries()]
-      .sort(([a], [b]) => {
-        if (a === "" && b !== "") return -1;
-        if (a !== "" && b === "") return 1;
-        return a.localeCompare(b);
-      })
-      .map(([group, items]) => ({
-        group,
-        items: items.sort((a, b) => a.order - b.order),
-      }));
-  }
+  let ranked: WsItem[] = rankItems(allItems, "", mru);
 
   function renderResults() {
     results.innerHTML = "";
-    renderedItems = [];
-    const grouped = groupAndSort(filtered);
-    let flatIdx = 0;
+    const q = input.value.trim();
 
-    for (const section of grouped) {
-      if (section.group) {
-        const header = document.createElement("div");
-        header.className = "palette-group-header";
-        header.textContent = section.group;
-        results.appendChild(header);
-      }
+    ranked.forEach((item, idx) => {
+      const el = document.createElement("div");
+      el.className = `palette-item${idx === selectedIdx ? " selected" : ""}`;
+      const isCurrent = item.idx === appState.activeWorkspace;
+      // Secondary text: the repo folder when the query hit it (or the name
+      // doesn't already say it), always the branch.
+      const showFolder = item.folder !== item.name && (!q || fuzzyScore(q, item.folder) !== null);
+      const sub = [showFolder ? item.folder : null, item.branch ? `⎇ ${branchLabel(item.branch)}` : null]
+        .filter((s): s is string => !!s)
+        .join(" · ");
 
-      for (const item of section.items) {
-        renderedItems.push(item);
-        const idx = flatIdx++;
-        const el = document.createElement("div");
-        el.className = `palette-item${idx === selectedIdx ? " selected" : ""}`;
-        const isCurrent = item.idx === appState.activeWorkspace;
+      el.innerHTML = `
+        <span class="palette-category">${item.idx < 9 ? formatShortcut(`Alt+${item.idx + 1}`) : ""}</span>
+        ${statusGlyph(item.idx)}
+        <span class="palette-label">
+          ${isCurrent ? "● " : ""}${highlightMatch(item.name, q)}${sub ? `<span class="palette-sub">${escapeHtml(sub)}</span>` : ""}
+        </span>
+      `;
+      el.title = `${item.name}${item.branch ? ` · ⎇ ${item.branch}` : ""}\n${item.key}`;
 
-        el.innerHTML = `
-          <span class="palette-category">${item.idx < 9 ? formatShortcut(`Alt+${item.idx + 1}`) : ""}</span>
-          <span class="palette-label">
-            ${isCurrent ? "● " : ""}${highlightMatch(item.name, input.value)}
-          </span>
-          <span class="palette-key">⎇ ${escapeHtml(item.branch)}</span>
-        `;
+      el.addEventListener("click", () => switchTo(item.idx));
+      el.addEventListener("mouseenter", () => {
+        if (selectedIdx === idx) return;
+        selectedIdx = idx;
+        updateSelection();
+      });
+      results.appendChild(el);
+    });
 
-        el.addEventListener("click", () => switchTo(item.idx));
-        el.addEventListener("mouseenter", () => {
-          if (selectedIdx === idx) return;
-          selectedIdx = idx;
-          updateSelection();
-        });
-        results.appendChild(el);
-      }
-    }
-
-    if (filtered.length === 0) {
+    if (ranked.length === 0) {
       results.innerHTML = '<div class="palette-empty">No matching workspaces</div>';
     }
   }
@@ -133,17 +148,7 @@ export function openWorkspaceSwitcher() {
   }
 
   function filter() {
-    const q = input.value.toLowerCase();
-    if (!q) {
-      filtered = allItems;
-    } else {
-      filtered = allItems.filter(
-        (item) =>
-          item.name.toLowerCase().includes(q) ||
-          folderName(item.sourceRepo).toLowerCase().includes(q) ||
-          item.branch.toLowerCase().includes(q),
-      );
-    }
+    ranked = rankItems(allItems, input.value, mru);
     selectedIdx = 0;
     renderResults();
   }
@@ -162,7 +167,7 @@ export function openWorkspaceSwitcher() {
   input.addEventListener("keydown", (e) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      selectedIdx = Math.min(selectedIdx + 1, renderedItems.length - 1);
+      selectedIdx = Math.min(selectedIdx + 1, ranked.length - 1);
       updateSelection();
       results.querySelector(".palette-item.selected")?.scrollIntoView({ block: "nearest" });
     } else if (e.key === "ArrowUp") {
@@ -172,7 +177,7 @@ export function openWorkspaceSwitcher() {
       results.querySelector(".palette-item.selected")?.scrollIntoView({ block: "nearest" });
     } else if (e.key === "Enter") {
       e.preventDefault();
-      if (renderedItems[selectedIdx]) switchTo(renderedItems[selectedIdx].idx);
+      if (ranked[selectedIdx]) switchTo(ranked[selectedIdx].idx);
     } else if (e.key === "Escape") {
       closeWorkspaceSwitcher();
     }
@@ -191,15 +196,22 @@ export function closeWorkspaceSwitcher() {
   switcherEl = null;
 }
 
+/** Bold the matched characters (fuzzy: each query char in order). */
 function highlightMatch(text: string, query: string): string {
   if (!query) return escapeHtml(text);
-  const lower = text.toLowerCase();
-  const idx = lower.indexOf(query.toLowerCase());
-  if (idx === -1) return escapeHtml(text);
-  const before = text.slice(0, idx);
-  const match = text.slice(idx, idx + query.length);
-  const after = text.slice(idx + query.length);
-  return `${escapeHtml(before)}<strong>${escapeHtml(match)}</strong>${escapeHtml(after)}`;
+  const q = query.toLowerCase();
+  const t = text.toLowerCase();
+  let out = "";
+  let qi = 0;
+  for (let i = 0; i < text.length; i++) {
+    if (qi < q.length && t[i] === q[qi]) {
+      out += `<strong>${escapeHtml(text[i])}</strong>`;
+      qi++;
+    } else {
+      out += escapeHtml(text[i]);
+    }
+  }
+  return qi === q.length ? out : escapeHtml(text);
 }
 
 function escapeHtml(text: string): string {

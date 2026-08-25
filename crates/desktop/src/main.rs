@@ -272,6 +272,7 @@ fn main() {
             commands::pty::detach_tab,
             commands::pty::set_active_tab,
             commands::pty::rename_tab,
+            commands::pty::move_tab,
             commands::pty::spawn_editor_tab,
             commands::pty::spawn_terminal_at,
             commands::pty::resync_pty,

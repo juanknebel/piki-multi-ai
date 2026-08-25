@@ -2,12 +2,12 @@ import { appState } from "../state";
 import { fuzzyScore, mruBump, mruRank } from "./fuzzy";
 import * as ipc from "../ipc";
 import { toast } from "./toast";
-import { showConfirm } from "./confirm";
 import {
   showCreateWorktreeDialog,
   showWorkspaceDialog,
   showWorkspaceInfo,
 } from "./dialogs/workspace-dialog";
+import { confirmDeleteWorkspace } from "./dialogs/delete-workspace";
 import { showMergeDialog } from "./dialogs/merge-dialog";
 import { showGitLog } from "./dialogs/gitlog-dialog";
 import { showStashDialog } from "./dialogs/stash-dialog";
@@ -32,7 +32,7 @@ import { getProviderLabel, getProviderKey, type AIProvider } from "../types";
 import { openWebPreviewTab } from "./web-preview-panel";
 import { toggleSidebar } from "./sidebar";
 import { toggleChatPanel } from "./chat-panel";
-import { closeActiveWsTab, tearDownAndClosePane } from "./tab-bar";
+import { closeActiveWsTab, moveActiveWsTabToWorkspace, tearDownAndClosePane } from "./tab-bar";
 import { themeEngine } from "../theme";
 import { revealInFileTree, toggleFileTreeAutoReveal } from "./file-tree";
 import { getCodeEditorFilePath } from "./code-editor-panel";
@@ -233,21 +233,7 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
       id: "ws-delete",
       label: `Delete "${ws.info.name}"`,
       category: "Workspace",
-      action: () => {
-        showConfirmDialog(
-          `Delete workspace "${ws.info.name}"?`,
-          "This will remove the worktree and branch.",
-          async () => {
-            try {
-              await ipc.deleteWorkspace(wsIdx);
-              appState.removeWorkspace(wsIdx);
-              toast(`Deleted "${ws.info.name}"`, "info");
-            } catch (err) {
-              toast(`Delete failed: ${err}`, "error");
-            }
-          },
-        );
-      },
+      action: () => void confirmDeleteWorkspace(wsIdx),
     });
   }
 
@@ -328,6 +314,14 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
     category: "Tab",
     action: () => closeActiveWsTab(),
   });
+  if (ws && ws.wsTabs.length > 0 && appState.workspaces.length > 1) {
+    cmds.push({
+      id: "move-tab",
+      label: "Move Tab to Workspace…",
+      category: "Tab",
+      action: () => moveActiveWsTabToWorkspace(),
+    });
+  }
 
   // Git commands
   if (ws) {
@@ -719,19 +713,6 @@ function highlightMatch(text: string, query: string): string {
 function scrollToSelected(container: HTMLElement) {
   const selected = container.querySelector(".palette-item.selected");
   selected?.scrollIntoView({ block: "nearest" });
-}
-
-function showConfirmDialog(message: string, hint: string, onConfirm: () => void) {
-  showConfirm({
-    bodyHtml: `
-      <p>${escapeHtml(message)}</p>
-      <p class="ws-delete-hint">${escapeHtml(hint)}</p>
-    `,
-    actions: [
-      { label: "Delete", kind: "danger", isDefault: true, onSelect: () => onConfirm() },
-      { label: "Cancel", kind: "secondary" },
-    ],
-  });
 }
 
 function escapeHtml(text: string): string {

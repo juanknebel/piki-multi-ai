@@ -15,10 +15,13 @@ import {
   renderWorkspaceTabBar,
   getPaneProviderChoices,
   spawnIntoPane,
+  spawnNewTab,
   tearDownAndClosePane,
   restartPaneContent,
 } from "./tab-bar";
 import { getShortcutKey } from "../shortcuts";
+import { branchLabel } from "../labels";
+import { openFuzzySearch } from "./fuzzy-search";
 
 let rootEl: HTMLElement;
 
@@ -61,8 +64,14 @@ function render() {
   area.className = "pane-area";
   rootEl.appendChild(area);
 
-  if (!ws || !wt) {
+  if (!ws) {
     renderWelcome(area);
+    return;
+  }
+  if (!wt) {
+    // A workspace with no tabs: its own empty state (name · branch + what
+    // can open here), not the app-wide welcome.
+    renderEmptyState(area, ws, (p) => void spawnNewTab(p));
     return;
   }
 
@@ -199,10 +208,35 @@ function syncMounts(tree: PaneNode, contents: TabInfo[]) {
 }
 
 function renderChooser(host: HTMLElement, paneId: PaneId) {
+  const ws = appState.activeWs;
+  if (!ws) return;
+  renderEmptyState(host, ws, (p) => {
+    appState.setActivePane(paneId);
+    void spawnIntoPane(paneId, p);
+  }, "Open in this pane");
+}
+
+/** The per-workspace empty state, shared by a workspace with no tabs and a
+ *  blank pane: "<workspace> · <branch>", then Shell / every configured
+ *  provider (the list File ▸ New Tab preloads) / "Open file…". `open` says
+ *  where a picked provider goes (new tab vs. this pane). */
+function renderEmptyState(
+  host: HTMLElement,
+  ws: NonNullable<typeof appState.activeWs>,
+  open: (p: AIProvider) => void,
+  title = "Open here",
+) {
   const box = document.createElement("div");
   box.className = "pane-chooser";
-  box.innerHTML = `<div class="pane-chooser-title">Open in this pane</div>
-    <div class="pane-chooser-list"><span class="pane-chooser-loading">…</span></div>`;
+  box.innerHTML = `
+    <div class="pane-empty-ws" title="${escapeHtml(ws.info.name)}${ws.branch ? ` · ${escapeHtml(ws.branch)}` : ""}">
+      <span class="pane-empty-name">${escapeHtml(ws.info.name)}</span>
+      <span class="pane-empty-sep">·</span>
+      <span class="pane-empty-branch">⎇ ${escapeHtml(branchLabel(ws.branch))}</span>
+    </div>
+    <div class="pane-chooser-title">${escapeHtml(title)}</div>
+    <div class="pane-chooser-list"><span class="pane-chooser-loading">…</span></div>
+    <div class="pane-empty-hint">${escapeHtml(getShortcutKey("command-palette"))} command palette · ${escapeHtml(getShortcutKey("workspace-switcher"))} switch workspace</div>`;
   host.appendChild(box);
   const list = box.querySelector<HTMLElement>(".pane-chooser-list")!;
   void getPaneProviderChoices().then((providers: AIProvider[]) => {
@@ -211,12 +245,15 @@ function renderChooser(host: HTMLElement, paneId: PaneId) {
       const btn = document.createElement("button");
       btn.className = "pane-chooser-item";
       btn.textContent = getProviderLabel(p);
-      btn.addEventListener("click", () => {
-        appState.setActivePane(paneId);
-        void spawnIntoPane(paneId, p);
-      });
+      btn.addEventListener("click", () => open(p));
       list.appendChild(btn);
     }
+    const file = document.createElement("button");
+    file.className = "pane-chooser-item";
+    file.textContent = "Open file…";
+    file.title = `Find a file in ${ws.info.name} (${getShortcutKey("fuzzy-search")})`;
+    file.addEventListener("click", () => openFuzzySearch());
+    list.appendChild(file);
   });
 }
 

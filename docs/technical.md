@@ -461,6 +461,7 @@ The terminal owns every key it can use. An app shortcut fires while a terminal, 
 | `?` ° | Help / all shortcuts |
 | `Esc` | Close dialog / overlay |
 | `Alt+1`…`Alt+9` | Switch to workspace N |
+| Right-click workspace row (or its `⋯`) | Workspace menu: Open, Agents, Info, Edit, Create Worktree (GitHub), Merge / Rebase, Delete |
 | **View & Panels** | |
 | `Ctrl+B` ° | Toggle sidebar |
 | `Ctrl+Shift+L` | Toggle AI Chat panel |
@@ -496,6 +497,10 @@ The terminal owns every key it can use. An app shortcut fires while a terminal, 
 | `Ctrl+Shift+Q` ° | Close active pane |
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous tab |
 | Drag divider | Resize split |
+| Middle-click tab | Close tab (a running process still gets the Close / Keep running / Cancel confirm) |
+| Right-click tab | Tab menu: Rename, Split right / down, Move to workspace…, Close, Close keep running (with a session daemon) |
+| `⋯` in the tab bar | List every tab of the workspace (name, agent status, current one marked) — the way to find a tab once the strip overflows |
+| Double-click tab | Rename inline |
 | **Terminal** | |
 | `Ctrl+Shift+C` / `Ctrl+Shift+V` | Copy / paste (`Cmd+C` / `Cmd+V` on macOS) |
 | Select text | Auto-copy to clipboard |
@@ -507,7 +512,16 @@ The terminal owns every key it can use. An app shortcut fires while a terminal, 
 | `Ctrl+S` | Save file (in editor) |
 | `Ctrl+F` | Find in file (CodeMirror) |
 
-° = outside-only (see above). On macOS every `Ctrl`/`Alt` above is `⌘`. Rows without ° that are not in the Settings dialog (`Esc`, `Alt+1…9`, `Ctrl+Tab`, copy/paste, `Ctrl+H`, `Ctrl+Enter`, the editor keys) are fixed widget bindings; everything else is editable at runtime via the Settings dialog (`Alt+S`). The in-app help (`?`) is generated from the same registry, so it always shows your current keys.
+° = outside-only (see above). On macOS every `Ctrl`/`Alt` above is `⌘`. Rows without ° that are not in the Settings dialog (`Esc`, `Alt+1…9`, `Ctrl+Tab`, copy/paste, `Ctrl+H`, `Ctrl+Enter`, the editor keys, the mouse gestures) are fixed widget bindings; everything else is editable at runtime via the Settings dialog (`Alt+S`). The in-app help (`?`) is generated from the same registry, so it always shows your current keys.
+
+### Desktop tabs, sidebar and switcher
+
+- **Tab bar**: the chips scroll in their own strip; `+` (new blank tab) and `⋯` (all tabs) sit outside it and stay visible with any number of tabs. The `×` is dim on inactive tabs, full on hover/active. Every close path — `×`, middle-click, the menu, `Close Tab` — goes through the same teardown, so a live process always gets the Close / Keep running / Cancel dialog. *Move to workspace…* (tab menu, File menu, palette) offers only terminal/agent tabs (editors, boards and previews are bound to their workspace's files): the backend re-parents the tab with its process untouched — a daemon session also gets its `workspace_path` re-pointed so the next launch restores it in the new workspace — and the app switches to the target with the moved tab in front.
+- **Workspace rows** carry one `⋯` (plus right-click) instead of a row of hover buttons; *Merge / Rebase* switches to that workspace first. The *Delete* confirm is one shared implementation (sidebar and palette): the hint depends on the workspace type (a worktree loses its worktree and branch; a Simple/Project workspace only leaves the list), it counts uncommitted changes, and lists the running agents — which deletion really terminates (their daemon sessions are removed, not left as orphans).
+- **Workspace switcher** (`Ctrl+Space`): with an empty query the most recently used workspace is first (the MRU list is bumped on every switch and persisted with the settings as `workspaceMru`); a query is matched fuzzily across name, repo folder and branch, best score first with recency as the tie-break. Each row shows the workspace's worst agent state (permission / needs you / running…) or an amber dot for uncommitted changes, `Alt+N` when it has one, and `folder · ⎇ branch`.
+- **Branch labels** share one rule everywhere (workspace list, status bar, switcher, dashboard, empty state): middle-truncated at 28 characters, the full name in the tooltip. Collapsible groups share one chevron pair: `▸` collapsed, `▾` expanded.
+- **Empty state**: a workspace with no tabs — or a blank pane — shows `<workspace> · ⎇ <branch>` and buttons for Shell, every configured provider and *Open file…* (the fuzzy file finder); the app-wide welcome only appears when there is no workspace at all.
+- **Agents panel** height is clamped so the workspace list above it always keeps its header plus at least four rows (it scrolls beyond that); the clamp is re-applied when the window shrinks.
 
 ## Workspaces
 

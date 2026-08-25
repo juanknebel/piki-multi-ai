@@ -1,15 +1,17 @@
 import { appState } from "../state";
 import { makeInteractive } from "./a11y";
 import * as ipc from "../ipc";
-import { toast, reportError } from "./toast";
-import { showConfirm } from "./confirm";
-import { createDropdown } from "./dropdown";
+import { reportError } from "./toast";
+import { openContextMenu, type CtxItem } from "./context-menu";
 import {
   showCreateWorktreeDialog,
   showWorkspaceDialog,
   showWorkspaceInfo,
 } from "./dialogs/workspace-dialog";
 import { showAgentManager } from "./dialogs/agent-dialog";
+import { showMergeDialog } from "./dialogs/merge-dialog";
+import { confirmDeleteWorkspace } from "./dialogs/delete-workspace";
+import { branchLabel } from "../labels";
 import {
   actionableStatusView,
   agentStatusSeverity,
@@ -20,12 +22,58 @@ import {
  *  state) is decided by the backend; only the text is decided here.
  *  Worktrees are named by their branch, a clone by its repo folder. */
 function rowLabel(info: WorkspaceInfo, branch: string | null): string {
-  if (info.workspace_type === "Worktree") return branch ?? info.name;
+  if (info.workspace_type === "Worktree") return branch ? branchLabel(branch) : info.name;
   const folder =
     info.source_repo.replace(/\/+$/, "").split("/").pop() ||
     info.source_repo_display ||
     info.name;
-  return branch ? `${folder} (${branch})` : folder;
+  return branch ? `${folder} (${branchLabel(branch)})` : folder;
+}
+
+/** Full, untruncated text for the row tooltip. */
+function rowTitle(info: WorkspaceInfo, branch: string | null): string {
+  const b = branch ? ` · ⎇ ${branch}` : "";
+  return `${info.name}${b}\n${info.path}`;
+}
+
+async function switchTo(idx: number) {
+  try {
+    const detail = await ipc.switchWorkspace(idx);
+    appState.setActiveWorkspace(idx, detail);
+  } catch (err) {
+    reportError("Failed to switch workspace", err);
+  }
+}
+
+/** The workspace row menu (right-click, or the row's `⋯`): everything the
+ *  old hover buttons did plus Open / Merge, Delete last and red. Actions
+ *  that only work on the active workspace (Merge) switch to it first. */
+function workspaceMenuItems(idx: number): CtxItem[] {
+  const ws = appState.workspaces[idx];
+  if (!ws) return [];
+  const info = ws.info;
+  const isActive = idx === appState.activeWorkspace;
+  const git = info.workspace_type !== "Simple";
+  return [
+    { label: "Open", disabled: isActive, action: () => void switchTo(idx) },
+    { separator: true },
+    { label: "Agents…", action: () => showAgentManager(idx) },
+    { label: "Info", action: () => showWorkspaceInfo(idx) },
+    { label: "Edit…", action: () => showWorkspaceDialog({ mode: "edit", editIndex: idx }) },
+    ...(info.origin?.kind === "GitHub"
+      ? [{ label: "Create Worktree…", action: () => showCreateWorktreeDialog(info) }]
+      : []),
+    {
+      label: "Merge / Rebase…",
+      disabled: !git,
+      action: async () => {
+        if (!isActive) await switchTo(idx);
+        if (appState.activeWorkspace === idx) showMergeDialog();
+      },
+    },
+    { separator: true },
+    { label: "Delete…", danger: true, action: () => void confirmDeleteWorkspace(idx) },
+  ];
 }
 
 export function renderWorkspaceList(container: HTMLElement) {
@@ -199,14 +247,11 @@ export function renderWorkspaceList(container: HTMLElement) {
         ${attentionDot}
         ${restoredMark}
         <span class="workspace-actions">
-          <button class="ws-action-btn" data-action="agents" title="Manage Agents">⚙</button>
-          <button class="ws-action-btn" data-action="info" title="Info">i</button>
-          <button class="ws-action-btn" data-action="edit" title="Edit">✎</button>
-          ${info.origin?.kind === "GitHub" ? `<button class="ws-action-btn" data-action="create-worktree" title="Create Worktree">⧉</button>` : ""}
-          <button class="ws-action-btn ws-action-delete" data-action="delete" title="Delete">×</button>
+          <button class="ws-action-btn" data-action="menu" title="Workspace menu" aria-label="Workspace menu" aria-haspopup="menu">⋯</button>
         </span>
         <span class="workspace-status ${statusClass}">${getStatusIcon(ws.status)}</span>
       `;
+      item.title = rowTitle(info, ws.branch);
 
       // Click the chevron to toggle collapse without switching workspace.
       if (row.kind === "parent" && row.family_key) {
@@ -223,34 +268,23 @@ export function renderWorkspaceList(container: HTMLElement) {
       }
 
       // Click to switch workspace
-      item.addEventListener("click", async (e) => {
+      item.addEventListener("click", (e) => {
         if ((e.target as HTMLElement).closest(".ws-action-btn")) return;
         if ((e.target as HTMLElement).closest(".group-chevron")) return;
-        try {
-          const detail = await ipc.switchWorkspace(idx);
-          appState.setActiveWorkspace(idx, detail);
-        } catch (err) {
-          reportError("Failed to switch workspace", err);
-        }
+        void switchTo(idx);
       });
 
-      // Action buttons
-      item.querySelectorAll<HTMLButtonElement>(".ws-action-btn").forEach((btn) => {
-        btn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          const action = btn.dataset.action;
-          if (action === "agents") {
-            showAgentManager(idx);
-          } else if (action === "info") {
-            showWorkspaceInfo(idx);
-          } else if (action === "edit") {
-            showWorkspaceDialog({ mode: "edit", editIndex: idx });
-          } else if (action === "create-worktree") {
-            showCreateWorktreeDialog(info);
-          } else if (action === "delete") {
-            showDeleteConfirm(idx, info.name);
-          }
-        });
+      // One menu for every row action: the `⋯` button and right-click.
+      const menuBtn = item.querySelector<HTMLButtonElement>('[data-action="menu"]')!;
+      menuBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const r = menuBtn.getBoundingClientRect();
+        openContextMenu(r.left, r.bottom + 2, workspaceMenuItems(idx));
+      });
+      item.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openContextMenu(e.clientX, e.clientY, workspaceMenuItems(idx));
       });
 
       makeInteractive(item);
@@ -266,79 +300,6 @@ export function renderWorkspaceList(container: HTMLElement) {
   // attention backend-side) all land in `appState.agentRows`.
   appState.on("agent-rows-changed", render);
   render();
-}
-
-async function showDeleteConfirm(idx: number, name: string) {
-  document.querySelector(".ws-delete-confirm")?.remove();
-
-  const ws = appState.workspaces[idx];
-  const cardId = ws?.info.dispatch_card_id;
-  const boardPath = ws?.info.dispatch_source_kanban;
-
-  // If workspace was created via dispatch, load kanban columns for card move options
-  let colDropdown: ReturnType<typeof createDropdown> | null = null;
-  if (cardId && boardPath) {
-    try {
-      const board = await ipc.kanbanLoadBoardByPath(boardPath);
-      const COL_LABELS: Record<string, string> = {
-        todo: "To Do",
-        in_progress: "In Progress",
-        in_review: "In Review",
-        done: "Done",
-      };
-      colDropdown = createDropdown(
-        [
-          { value: "", label: "(Leave where it is)" },
-          ...board.columns.map((col) => ({ value: col.id, label: COL_LABELS[col.id] ?? col.id })),
-        ],
-        "",
-      );
-    } catch {
-      // Board not available, skip card move
-    }
-  }
-
-  const { overlay } = showConfirm({
-    bodyHtml: `
-      <p>Delete <strong>${escapeHtml(name)}</strong>?</p>
-      <p class="ws-delete-hint">This will remove the worktree and branch.</p>
-      ${colDropdown ? '<div class="ws-delete-card-move"><label class="dialog-label">Move task card to:</label><span id="ws-delete-col-slot"></span></div>' : ""}
-    `,
-    actions: [
-      {
-        label: "Delete",
-        kind: "danger",
-        isDefault: true,
-        onSelect: async () => {
-          // Move kanban card if user selected a column
-          if (cardId && boardPath && colDropdown) {
-            const targetCol = colDropdown.value;
-            if (targetCol) {
-              try {
-                await ipc.kanbanMoveCardByPath(boardPath, cardId, targetCol);
-              } catch {
-                // Non-critical
-              }
-            }
-          }
-          try {
-            await ipc.deleteWorkspace(idx);
-            appState.removeWorkspace(idx);
-            toast(`Deleted "${name}"`, "info");
-          } catch (err) {
-            toast(`Failed to delete: ${err}`, "error");
-          }
-        },
-      },
-      { label: "Cancel", kind: "secondary" },
-    ],
-  });
-
-  // Mount dropdown if present
-  if (colDropdown) {
-    const slot = overlay.querySelector("#ws-delete-col-slot");
-    if (slot) slot.replaceWith(colDropdown.container);
-  }
 }
 
 function getStatusClass(status: import("../types").WorkspaceStatus): string {

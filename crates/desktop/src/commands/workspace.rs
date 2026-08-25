@@ -241,9 +241,24 @@ pub async fn delete_workspace(
             return Err("Workspace index out of range".to_string());
         }
 
-        let ws = app.workspaces.remove(index);
+        let mut ws = app.workspaces.remove(index);
         if app.active_workspace >= app.workspaces.len() && !app.workspaces.is_empty() {
             app.active_workspace = app.workspaces.len() - 1;
+        }
+
+        // End the workspace's processes explicitly (the confirm dialog says
+        // they will be terminated): its worktree is about to be removed, and
+        // a plain drop would only *detach* daemon sessions, leaving orphans
+        // whose cwd no longer exists.
+        let daemon = app.session_daemon.clone();
+        for tab in ws.tabs.iter_mut() {
+            let was_remote = tab.pty.as_ref().is_some_and(|p| p.is_remote());
+            if let Some(pty) = tab.pty.as_mut() {
+                let _ = pty.kill();
+            }
+            if was_remote && let Some(d) = daemon.as_ref() {
+                crate::session::remove_session(d, &tab.id);
+            }
         }
 
         // Save to storage — use the removed workspace's source_repo as the key

@@ -468,6 +468,73 @@ pub async fn set_active_tab(
     Ok(())
 }
 
+/// Move a tab (by id) to another workspace, keeping its process alive: the
+/// `DesktopTab` merely changes owner, so nothing is dropped — no `Detach`,
+/// no `Kill`, the xterm.js instance on the frontend stays bound to the same
+/// tab id. A daemon-backed tab also gets its session's `workspace_path`
+/// re-pointed, so the next startup re-attaches it to the new workspace.
+/// Returns the tab's new index in the target workspace.
+#[tauri::command]
+pub async fn move_tab(
+    state: State<'_, Mutex<DesktopApp>>,
+    from_workspace_idx: usize,
+    tab_id: String,
+    to_workspace_idx: usize,
+) -> Result<usize, String> {
+    let (new_idx, remote_meta) = {
+        let mut app = state.lock();
+        let count = app.workspaces.len();
+        if from_workspace_idx >= count || to_workspace_idx >= count {
+            return Err("Workspace index out of range".to_string());
+        }
+        if from_workspace_idx == to_workspace_idx {
+            return Err("The tab is already in that workspace".to_string());
+        }
+        let tab = {
+            let from = &mut app.workspaces[from_workspace_idx];
+            let Some(pos) = from.tabs.iter().position(|t| t.id == tab_id) else {
+                return Err("Tab not found".to_string());
+            };
+            let tab = from.tabs.remove(pos);
+            if from.active_tab >= from.tabs.len() && !from.tabs.is_empty() {
+                from.active_tab = from.tabs.len() - 1;
+            }
+            tab
+        };
+        let is_remote = tab.pty.as_ref().is_some_and(|p| p.is_remote());
+        let (new_idx, new_path) = {
+            let to = &mut app.workspaces[to_workspace_idx];
+            to.tabs.push(tab);
+            let new_idx = to.tabs.len() - 1;
+            to.active_tab = new_idx;
+            (new_idx, to.info.path.clone())
+        };
+        let remote_meta = if is_remote {
+            app.session_daemon.clone().map(|d| (d, new_path))
+        } else {
+            None
+        };
+        (new_idx, remote_meta)
+    };
+
+    // Off-lock: the daemon round-trip is I/O. Best-effort like the other
+    // session bookkeeping — the tab has moved either way.
+    if let Some((daemon, path)) = remote_meta {
+        let id = tab_id.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let req = piki_core::session::protocol::SetMetaRequest {
+                id: id.clone(),
+                workspace_path: Some(path),
+                ..Default::default()
+            };
+            if let Err(e) = daemon.set_meta(req) {
+                tracing::warn!(session = %id, error = %e, "failed to re-point session workspace");
+            }
+        });
+    }
+    Ok(new_idx)
+}
+
 #[tauri::command]
 pub async fn rename_tab(
     state: State<'_, Mutex<DesktopApp>>,

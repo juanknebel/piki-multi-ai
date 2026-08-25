@@ -93,6 +93,7 @@ Highlights on top of the shared feature set:
 - **Editors** — CodeMirror 6 code tabs with LSP support (diagnostics, completion, hover, go-to-definition), Milkdown WYSIWYG markdown tabs, file viewer with quick-edit
 - **Native git** — staging, commits, push, merge/rebase, stash, side-by-side diffs with conflict resolution, git log, live ahead/behind tracking
 - **Split panes** — recursive horizontal/vertical splits, each pane with its own tab bar; layout persists per workspace
+- **Editor-grade tabs & sidebar** — middle-click closes a tab (a running process still gets its confirm), `+` and a `⋯` all-tabs list never scroll away, right-click menus on tabs (rename, split, move to another workspace with the process alive, close / keep running) and on workspace rows (open, agents, info, edit, merge, delete); the `Ctrl+Space` switcher ranks by most-recently-used and matches fuzzily (`wsauth` finds `ws-auth`) with an agent / dirty-git glyph per row; an empty workspace shows its name and branch with Shell / provider / Open file buttons; deleting a workspace says what it removes for its type, counts uncommitted changes and lists the agents it will terminate
 - **Extras** — file explorer with git decorations, web preview tab for local dev servers, kanban board, API explorer with history, AI chat panel, system info dashboard
 
 Desktop keyboard shortcuts are listed in [docs/technical.md](docs/technical.md#desktop-keyboard-shortcuts); all of them are editable at runtime (`Alt+S`). The window reopens with the size, position and maximized state it was closed with.

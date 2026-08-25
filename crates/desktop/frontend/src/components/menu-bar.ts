@@ -17,7 +17,8 @@ import { showAgentManager } from "./dialogs/agent-dialog";
 import { showDispatchDialog } from "./dialogs/dispatch-dialog";
 import { jumpToAttention } from "./agents-panel";
 import { showHelpDialog } from "./dialogs/help-dialog";
-import { closeActiveWsTab, tearDownAndClosePane } from "./tab-bar";
+import { closeActiveWsTab, moveActiveWsTabToWorkspace, tearDownAndClosePane } from "./tab-bar";
+import { getCachedProviderTabs, invalidateProviderCache, preloadProviderTabs } from "./provider-cache";
 import { showDashboard } from "./dialogs/dashboard-dialog";
 import { showSysinfoDialog } from "./dialogs/sysinfo-dialog";
 import { showThemeDialog } from "./dialogs/theme-dialog";
@@ -66,44 +67,10 @@ function spawnTab(provider: AIProvider) {
 
 const SEP: MenuItem = { label: "", separator: true };
 
-// Cached provider list from providers.toml — warmed at startup so the first
-// hover of File ▸ New Tab already lists them, re-warmed when the providers
-// dialog saves/deletes.
-let _cachedProviderTabs: AIProvider[] | null = null;
-let _providerLoad: Promise<void> | null = null;
-
-export function preloadProviderTabs(): Promise<void> {
-  if (_cachedProviderTabs) return Promise.resolve();
-  if (!_providerLoad) {
-    _providerLoad = ipc.listProviders()
-      .then((list) => {
-        _cachedProviderTabs = list.map((p): AIProvider => ({ Custom: p.name }));
-      })
-      .catch((err) => {
-        // Background warm-up: the submenu simply lists the built-ins until
-        // the next hover retries.
-        console.error("Failed to load providers for the New Tab menu:", err);
-      })
-      .finally(() => {
-        _providerLoad = null;
-      });
-  }
-  return _providerLoad;
-}
-
-function getProviderTabs(): AIProvider[] {
-  if (!_cachedProviderTabs) {
-    void preloadProviderTabs();
-    return [];
-  }
-  return _cachedProviderTabs;
-}
-
-/** Call after saving/deleting providers to refresh the cached list */
-export function invalidateProviderCache() {
-  _cachedProviderTabs = null;
-  void preloadProviderTabs();
-}
+// The provider list (providers.toml) is cached in provider-cache.ts, shared
+// with the empty-workspace / blank-pane state and the palette — warmed at
+// menu init so the first hover of File ▸ New Tab already lists them.
+export { preloadProviderTabs, invalidateProviderCache };
 
 // ── Menu definitions ────────────────────────────
 
@@ -116,7 +83,7 @@ const MENUS: MenuDefinition[] = [
         label: "New Tab",
         disabled: noWs,
         submenu: [
-          ...[...getProviderTabs(), "Shell" as AIProvider, "Api" as AIProvider].map(
+          ...[...getCachedProviderTabs(), "Shell" as AIProvider, "Api" as AIProvider].map(
             (p): MenuItem => ({ label: getProviderLabel(p), action: () => spawnTab(p) }),
           ),
           { label: "Web Preview", shortcut: getShortcutKey("web-preview"), action: () => openWebPreviewTab() },
@@ -135,6 +102,14 @@ const MENUS: MenuDefinition[] = [
           return !ws || ws.wsTabs.length === 0;
         },
         action: () => closeActiveWsTab(),
+      },
+      {
+        label: "Move Tab to Workspace…",
+        disabled: () => {
+          const ws = appState.activeWs;
+          return !ws || ws.wsTabs.length === 0 || appState.workspaces.length < 2;
+        },
+        action: () => moveActiveWsTabToWorkspace(),
       },
       SEP,
       {

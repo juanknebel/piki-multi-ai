@@ -46,6 +46,8 @@
   white-space: nowrap;
 }
 
+/* One chevron pair everywhere (also file tree / theme dialog): ▸ collapsed,
+   ▾ expanded — the path draws ▸, expanded rotates it down. */
 .group-chevron {
   width: 10px;
   height: 10px;
@@ -54,10 +56,11 @@
   transition: transform 0.15s var(--ease-out);
   fill: currentColor;
   opacity: 0.6;
+  transform: rotate(90deg);
 }
 
 .group-chevron.collapsed {
-  transform: rotate(-90deg);
+  transform: rotate(0deg);
 }
 
 .workspace-item {
@@ -121,7 +124,8 @@
   visibility: hidden;
 }
 
-.workspace-item:hover .workspace-actions {
+.workspace-item:hover .workspace-actions,
+.workspace-item:focus-within .workspace-actions {
   visibility: visible;
 }
 
@@ -461,4 +465,10 @@
 
 .empty-cta {
   font-size: 11px;
+}
+
+/* Warning lines in the delete-workspace confirm (changes / running agents). */
+.ws-delete-warn {
+  color: var(--warning-color) !important;
+  font-size: 12px !important;
 }

@@ -14,13 +14,31 @@ export function toggleSidebar() {
   document.getElementById("app")!.classList.toggle("sidebar-hidden");
 }
 
+/** Room the workspace list must keep above the Agents panel: its header
+ *  plus `MIN_VISIBLE_WORKSPACE_ROWS` rows (a `.workspace-item` is ~27px:
+ *  5px padding twice + a 12.5px line). Below that the list still scrolls,
+ *  but four rows are the floor a drag cannot cross. */
+const MIN_VISIBLE_WORKSPACE_ROWS = 4;
+const WORKSPACE_ROW_PX = 27;
+const SIDEBAR_HEADER_PX = 30;
+const AGENTS_HANDLE_PX = 4;
+
+/** Largest Agents-panel height that still leaves the workspace list its
+ *  minimum rows. Exported for the (pure) clamp rule; `sidebarHeight` is the
+ *  sidebar's inner height. */
+export function maxAgentsPanelHeight(sidebarHeight: number): number {
+  const reserved = SIDEBAR_HEADER_PX + MIN_VISIBLE_WORKSPACE_ROWS * WORKSPACE_ROW_PX + AGENTS_HANDLE_PX;
+  return Math.max(64, Math.min(sidebarHeight * 0.75, sidebarHeight - reserved));
+}
+
 /** Set an explicit Agents-panel height (px), replacing the default 40% cap.
- *  Clamped so neither the panel nor the active view can be squeezed out. */
+ *  Clamped so neither the panel nor the workspace list (≥4 rows, or its own
+ *  scrollbar) can be squeezed out. */
 function applyAgentsPanelHeight(px: number) {
   const view = document.getElementById("agents-view");
   const sidebar = document.getElementById("sidebar");
   if (!view || !sidebar) return;
-  const max = Math.max(64, (sidebar.clientHeight || window.innerHeight) * 0.75);
+  const max = maxAgentsPanelHeight(sidebar.clientHeight || window.innerHeight);
   const clamped = Math.max(32, Math.min(max, px));
   view.style.height = `${clamped}px`;
   view.style.maxHeight = "none";
@@ -200,6 +218,12 @@ export async function initSidebar() {
     document.body.style.cursor = "";
     document.body.style.userSelect = "";
     persistAgentsHeight();
+  });
+
+  // A shorter window must not let a persisted height eat the workspace
+  // list: re-apply the clamp whenever the sidebar's height changes.
+  window.addEventListener("resize", () => {
+    if (agentsView.style.height) applyAgentsPanelHeight(agentsView.offsetHeight);
   });
 
   // Keyboard resizing on the divider itself (ArrowUp grows the panel).

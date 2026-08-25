@@ -5,6 +5,7 @@ import { showSessionsDialog } from "./dialogs/sessions-dialog";
 import { jumpToAttention } from "./agents-panel";
 import { attentionRows } from "../agent-attention";
 import { getShortcutKey } from "../shortcuts";
+import { branchLabel } from "../labels";
 import * as ipc from "../ipc";
 
 const STAGED_STATUSES: FileStatus[] = ["Staged", "Added", "Renamed", "StagedModified"];
@@ -21,9 +22,9 @@ export function renderStatusBar(container: HTMLElement) {
     appName.addEventListener("click", showAboutDialog);
     container.appendChild(appName);
 
-    // Left side
-    const branch = ws?.branch ?? "—";
-    addItem(container, `⎇ ${branch}`, "clickable");
+    // Left side — the branch, shortened by the shared rule (full in the tooltip).
+    const branchItem = addItem(container, `⎇ ${branchLabel(ws?.branch)}`, "clickable");
+    branchItem.title = ws?.branch ?? "No git branch";
 
     if (ws?.aheadBehind) {
       const [ahead, behind] = ws.aheadBehind;
@@ -199,11 +200,12 @@ function truncate(s: string, max: number): string {
   return oneLine.length > max ? oneLine.slice(0, max - 1) + "…" : oneLine;
 }
 
-function addItem(container: HTMLElement, text: string, ...classes: string[]) {
+function addItem(container: HTMLElement, text: string, ...classes: string[]): HTMLElement {
   const item = document.createElement("div");
   item.className = ["status-item", ...classes].join(" ");
   item.textContent = text;
   container.appendChild(item);
+  return item;
 }
 
 const lspCache = { text: "", color: "" };

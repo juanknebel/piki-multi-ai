@@ -2,6 +2,7 @@ import { appState } from "../../state";
 import { reportError } from "../toast";
 import * as ipc from "../../ipc";
 import { getTabLabel } from "../../types";
+import { branchLabel } from "../../labels";
 
 export function showDashboard() {
   document.querySelector(".dashboard-backdrop")?.remove();
@@ -79,7 +80,7 @@ export function showDashboard() {
             <span class="dash-card-name">${esc(info.name)}</span>
             <span class="dash-card-status ${statusClass}">${statusLabel}</span>
           </div>
-          ${branch || syncInfo ? `<div class="dash-card-branch">${branch ? "⎇ " + esc(branch) : ""}${syncInfo ? (branch ? " " : "") + syncInfo : ""}</div>` : ""}
+          ${branch || syncInfo ? `<div class="dash-card-branch" title="${branch ? esc(branch) : ""}">${branch ? "⎇ " + esc(branchLabel(branch)) : ""}${syncInfo ? (branch ? " " : "") + syncInfo : ""}</div>` : ""}
           <div class="dash-card-meta">
             <span>${fileCount} change${fileCount !== 1 ? "s" : ""}</span>
             <span>${tabCount} tab${tabCount !== 1 ? "s" : ""}${tabLabels ? ": " + esc(tabLabels) : ""}</span>

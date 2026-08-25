@@ -245,3 +245,36 @@
   top: 0;
   height: 3px;
 }
+
+/* ── Empty workspace / blank pane state ─────────────── */
+/* "<workspace> · <branch>" over the open-here buttons (pane-view.ts
+   renderEmptyState); reuses .pane-chooser-list / .pane-chooser-item. */
+
+.pane-empty-ws {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  max-width: 80%;
+  color: var(--text-primary);
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.pane-empty-name {
+  color: var(--text-bright);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pane-empty-sep,
+.pane-empty-branch {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.pane-empty-hint {
+  color: var(--text-muted);
+  font-size: 11px;
+}

@@ -122,3 +122,21 @@
 .palette-group-header:first-child {
   border-top: none;
 }
+
+/* Workspace switcher rows: status glyph column + "folder · branch" trailer. */
+.palette-status {
+  flex-shrink: 0;
+  width: 14px;
+  text-align: center;
+  font-size: 11px;
+}
+
+.palette-status.dirty {
+  color: var(--git-modified);
+}
+
+.palette-sub {
+  color: var(--text-muted);
+  font-size: 11px;
+  margin-left: 6px;
+}

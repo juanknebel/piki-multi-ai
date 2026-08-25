@@ -175,6 +175,16 @@ export function renameTab(
   return invoke("rename_tab", { workspaceIdx, tabId, title });
 }
 
+/** Move a content tab to another workspace, process kept alive (a daemon
+ *  session is re-pointed too). Resolves to its index in the target's list. */
+export function moveTab(
+  fromWorkspaceIdx: number,
+  tabId: string,
+  toWorkspaceIdx: number,
+): Promise<number> {
+  return invoke("move_tab", { fromWorkspaceIdx, tabId, toWorkspaceIdx });
+}
+
 // Git commands
 export function getChangedFiles(
   workspaceIdx: number,

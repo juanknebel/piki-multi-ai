@@ -48,10 +48,11 @@
   fill: currentColor;
   transition: transform 0.15s var(--ease-out);
   flex-shrink: 0;
+  transform: rotate(90deg);
 }
 
 .theme-group-chevron.collapsed {
-  transform: rotate(-90deg);
+  transform: rotate(0deg);
 }
 
 .theme-group-body {
