@@ -1,4 +1,5 @@
 import type { SideBySideDiff, DiffHunk, DiffPair, ConflictDiff } from "../ipc";
+import { icon } from "./icons";
 
 export interface DiffPanelOptions {
   mode: "side-by-side" | "three-way";
@@ -152,9 +153,9 @@ export class DiffPanel {
         const actions = document.createElement("div");
         actions.className = "dp-conflict-actions";
         actions.innerHTML = `
-          <button data-variant="secondary" data-size="sm" class="ui-btn dp-accept-ours" data-idx="${regionIdx}">Accept Ours ►</button>
+          <button data-variant="secondary" data-size="sm" class="ui-btn dp-accept-ours" data-idx="${regionIdx}">Accept Ours ${icon("arrow-right")}</button>
           <button data-variant="secondary" data-size="sm" class="ui-btn dp-accept-both" data-idx="${regionIdx}">Accept Both</button>
-          <button data-variant="secondary" data-size="sm" class="ui-btn dp-accept-theirs" data-idx="${regionIdx}">◄ Accept Theirs</button>
+          <button data-variant="secondary" data-size="sm" class="ui-btn dp-accept-theirs" data-idx="${regionIdx}">${icon("arrow-left")} Accept Theirs</button>
         `;
         block.appendChild(actions);
 

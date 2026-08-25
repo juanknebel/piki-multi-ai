@@ -1,10 +1,34 @@
-/* @font-face declarations for the bundled Nerd Font. The family name must be
- * a literal here (font-face cannot read custom properties); everything else
- * refers to it only through the `--font-mono` / `--font-ui` tokens in
- * styles/variables.css. */
+/* @font-face declarations for the bundled fonts (WOFF2). The family names
+ * must be literals here (font-face cannot read custom properties);
+ * everything else refers to them only through the `--font-mono` /
+ * `--font-ui` tokens in styles/variables.css. How to regenerate the files:
+ * crates/desktop/CLAUDE.md "Font pipeline".
+ *
+ * "JetBrainsMono NF Mono" — the FULL Nerd Font: every PUA glyph a
+ * starship / powerline prompt can print. The terminal and the code editors
+ * use it, so it is a lossless WOFF2 of the upstream TTF and must never be
+ * subset. font-display: swap — text paints in the fallback mono until the
+ * ~1 MB face is in; terminal-panel.ts waits for it before opening xterm so
+ * the cell grid is measured on the right face.
+ *
+ * "piki-icons" — a ~10 KB subset of the Regular face holding only the PUA
+ * code points file-icons.ts renders. First in the UI stack with a PUA
+ * unicode-range, so the file tree's icons paint from a face that loads in
+ * milliseconds and never wait on the big one; identical metrics (it IS the
+ * same face, cut down), so line boxes don't move. The weight range stops
+ * the browser from synthesising bold on an icon in a bold row. */
+@font-face {
+  font-family: "piki-icons";
+  src: url("./piki-icons.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: block;
+  unicode-range: U+E000-F8FF;
+}
+
 @font-face {
   font-family: "JetBrainsMono NF Mono";
-  src: url("./JetBrainsMonoNerdFontMono-Regular.ttf") format("truetype");
+  src: url("./JetBrainsMonoNerdFontMono-Regular.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -12,7 +36,7 @@
 
 @font-face {
   font-family: "JetBrainsMono NF Mono";
-  src: url("./JetBrainsMonoNerdFontMono-Bold.ttf") format("truetype");
+  src: url("./JetBrainsMonoNerdFontMono-Bold.woff2") format("woff2");
   font-weight: 700;
   font-style: normal;
   font-display: swap;
@@ -20,7 +44,7 @@
 
 @font-face {
   font-family: "JetBrainsMono NF Mono";
-  src: url("./JetBrainsMonoNerdFontMono-Italic.ttf") format("truetype");
+  src: url("./JetBrainsMonoNerdFontMono-Italic.woff2") format("woff2");
   font-weight: 400;
   font-style: italic;
   font-display: swap;

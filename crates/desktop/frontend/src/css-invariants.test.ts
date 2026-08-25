@@ -80,16 +80,41 @@ describe("styles/ invariants", () => {
     }
   });
 
+  it("scales every height token by --density and defines the density levels", () => {
+    const vars = stripComments(read("variables.css"));
+    expect(vars).toMatch(/--density:\s*1;/);
+    for (const level of ["compact", "comfortable"]) {
+      expect(vars, level).toMatch(new RegExp(`:root\\[data-density="${level}"\\]\\s*{\\s*--density:\\s*[\\d.]+;`));
+    }
+    const heightTokens = [
+      "--menubar-height", "--statusbar-height", "--tab-height", "--sidebar-header-height",
+      "--control-height", "--control-height-sm", "--header-height", "--pane-header-height",
+      "--row-height", "--row-height-lg", "--row-pad",
+    ];
+    for (const token of heightTokens) {
+      const m = vars.match(new RegExp(`${token}:\\s*([^;]+);`));
+      expect(m, token).not.toBeNull();
+      // rem (so --ui-zoom still composes) times the density multiplier
+      expect(m![1].trim(), token).toMatch(/^calc\([\d.]+rem \* var\(--density\)\)$/);
+    }
+    // The pane header is the one bar outside variables.css that had a literal
+    expect(read("pane.css")).toContain("var(--pane-header-height)");
+    for (const name of sheets) {
+      expect(stripComments(read(name)), `${name} sets --density`).not.toMatch(name === "variables.css" ? /\bnever\b/ : /--density\s*:/);
+    }
+  });
+
   it("never transitions `all`", () => {
     for (const name of sheets) {
       expect(stripComments(read(name)), name).not.toMatch(/transition\s*:\s*all\b/);
     }
   });
 
-  it("keeps the font name and the control heights in variables.css only", () => {
+  it("keeps the font names and the control heights in variables.css only", () => {
     for (const name of sheets) {
       if (name === "variables.css") continue;
       expect(read(name), name).not.toContain("JetBrainsMono");
+      expect(read(name), name).not.toContain("piki-icons");
     }
     const vars = read("variables.css");
     for (const token of ["--control-height", "--control-height-sm", "--header-height", "--focus-ring"]) {

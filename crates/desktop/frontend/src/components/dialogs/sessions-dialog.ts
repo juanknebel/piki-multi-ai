@@ -3,6 +3,7 @@ import { appState } from "../../state";
 import { reportError } from "../toast";
 import { showConfirm, escapeHtml as escapeConfirmHtml } from "../confirm";
 import { makeInteractive } from "../a11y";
+import { icon, type IconName } from "../icons";
 import { createDropdown } from "../dropdown";
 import type { SessionRow, SessionsSnapshot } from "../../types";
 
@@ -43,23 +44,23 @@ export async function showSessionsDialog() {
   const titleEl = dialog.querySelector<HTMLElement>("#sessions-title")!;
   const body = dialog.querySelector<HTMLElement>("#sessions-body")!;
 
-  function stateBadge(row: SessionRow): { glyph: string; text: string; color: string } {
+  function stateBadge(row: SessionRow): { icon: IconName; text: string; color: string } {
     switch (row.state) {
       case "attached":
         return {
-          glyph: "▷",
+          icon: "play",
           text: `attached${row.attached > 1 ? ` ×${row.attached}` : ""}`,
           color: "var(--git-added)",
         };
       case "detached":
         return {
-          glyph: "⚠",
+          icon: "warning",
           text: row.attached > 0 ? `attached ×${row.attached} (elsewhere)` : "detached",
           color: "var(--warning-color)",
         };
       case "exited":
         return {
-          glyph: "○",
+          icon: "circle",
           text: row.exit_code != null ? `exited ${row.exit_code}` : "exited",
           color: "var(--text-muted)",
         };
@@ -69,11 +70,11 @@ export async function showSessionsDialog() {
   function render(snap: SessionsSnapshot) {
     // Title: daemon state + pid.
     if (!snap.connected) {
-      titleEl.textContent = "Sessions — daemon ○ not connected";
+      titleEl.innerHTML = `Sessions — daemon ${icon("circle")} not connected`;
     } else if (snap.daemon_pid != null) {
-      titleEl.textContent = `Sessions — daemon ● pid ${snap.daemon_pid}`;
+      titleEl.innerHTML = `Sessions — daemon ${icon("dot")} pid ${Number(snap.daemon_pid)}`;
     } else {
-      titleEl.textContent = "Sessions — daemon ●";
+      titleEl.innerHTML = `Sessions — daemon ${icon("dot")}`;
     }
 
     body.innerHTML = "";
@@ -108,7 +109,7 @@ export async function showSessionsDialog() {
       main.style.cssText =
         "flex:1;display:flex;align-items:center;gap:10px;min-width:0;padding:4px 12px;border-radius:var(--radius-sm)";
       main.innerHTML = `
-        <span style="color:${badge.color};width:1em;text-align:center">${badge.glyph}</span>
+        <span style="color:${badge.color};width:1em;text-align:center">${icon(badge.icon)}</span>
         <span style="flex:1;font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(row.name)}</span>
         <span style="width:130px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(row.workspace)}</span>
         <span style="width:150px;color:${badge.color}">${badge.text}</span>

@@ -12,6 +12,7 @@ import { showAgentManager } from "./dialogs/agent-dialog";
 import { showMergeDialog } from "./dialogs/merge-dialog";
 import { confirmDeleteWorkspace } from "./dialogs/delete-workspace";
 import { branchLabel } from "../labels";
+import { icon } from "./icons";
 import {
   actionableStatusView,
   agentStatusSeverity,
@@ -32,7 +33,7 @@ function rowLabel(info: WorkspaceInfo, branch: string | null): string {
 
 /** Full, untruncated text for the row tooltip. */
 function rowTitle(info: WorkspaceInfo, branch: string | null): string {
-  const b = branch ? ` · ⎇ ${branch}` : "";
+  const b = branch ? ` · ${branch}` : "";
   return `${info.name}${b}\n${info.path}`;
 }
 
@@ -183,9 +184,7 @@ export function renderWorkspaceList(container: HTMLElement) {
         const header = document.createElement("div");
         header.className = "group-header";
         header.innerHTML = `
-          <svg class="group-chevron${row.collapsed ? " collapsed" : ""}" viewBox="0 0 16 16">
-            <path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5"/>
-          </svg>
+          ${icon("chevron-right", { class: `group-chevron${row.collapsed ? " collapsed" : ""}` })}
           <span class="group-label">PR Review</span>
         `;
         const key = row.family_key;
@@ -223,20 +222,18 @@ export function renderWorkspaceList(container: HTMLElement) {
       );
       const rollupView = rollup && actionableStatusView(rollup.status, rollup.attention);
       const agentGlyph = rollupView
-        ? `<span class="workspace-agent-glyph" style="color:${rollupView.color}" title="Agent ${rollupView.label}">${rollupView.glyph}</span>`
+        ? `<span class="workspace-agent-glyph" style="color:${rollupView.color}" title="Agent ${rollupView.label}">${icon(rollupView.icon)}</span>`
         : "";
 
       const attentionDot = ws.needsAttention
-        ? '<span class="workspace-attention" title="Needs attention">●</span>'
+        ? `<span class="workspace-attention" title="Needs attention">${icon("dot")}</span>`
         : "";
       const restoredMark = ws.restoredUnvisited
-        ? '<span class="workspace-restored" title="Sessions restored from the daemon — not visited yet">↺</span>'
+        ? `<span class="workspace-restored" title="Sessions restored from the daemon — not visited yet">${icon("history")}</span>`
         : "";
 
       const chevron = row.kind === "parent"
-        ? `<svg class="group-chevron${row.collapsed ? " collapsed" : ""}" viewBox="0 0 16 16">
-             <path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5"/>
-           </svg>`
+        ? icon("chevron-right", { class: `group-chevron${row.collapsed ? " collapsed" : ""}` })
         : "";
 
       item.innerHTML = `
@@ -247,7 +244,7 @@ export function renderWorkspaceList(container: HTMLElement) {
         ${attentionDot}
         ${restoredMark}
         <span class="workspace-actions">
-          <button data-variant="ghost" data-icon class="ws-action-btn ui-btn" data-action="menu" title="Workspace menu" aria-label="Workspace menu" aria-haspopup="menu">⋯</button>
+          <button data-variant="ghost" data-icon class="ws-action-btn ui-btn" data-action="menu" title="Workspace menu" aria-label="Workspace menu" aria-haspopup="menu">${icon("more")}</button>
         </span>
         <span class="workspace-status ${statusClass}">${getStatusIcon(ws.status)}</span>
       `;
@@ -308,9 +305,9 @@ function getStatusClass(status: import("../types").WorkspaceStatus): string {
 }
 
 function getStatusIcon(status: import("../types").WorkspaceStatus): string {
-  if (status === "Busy") return "●";
-  if (status === "Done") return "✓";
-  if (typeof status === "object" && "Error" in status) return "✕";
+  if (status === "Busy") return icon("dot");
+  if (status === "Done") return icon("check");
+  if (typeof status === "object" && "Error" in status) return icon("close");
   return "";
 }
 

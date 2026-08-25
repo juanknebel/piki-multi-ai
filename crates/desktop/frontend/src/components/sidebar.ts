@@ -16,19 +16,20 @@ export function toggleSidebar() {
 }
 
 /** Room the workspace list must keep above the Agents panel: its header
- *  plus `MIN_VISIBLE_WORKSPACE_ROWS` rows (a `.workspace-item` is ~27px:
- *  5px padding twice + a 12.5px line). Below that the list still scrolls,
- *  but four rows are the floor a drag cannot cross. */
+ *  plus `MIN_VISIBLE_WORKSPACE_ROWS` rows (a `.workspace-item` is
+ *  `--row-height-lg`, 32px at density 1 — the caller measures a live row so
+ *  density / zoom are honoured). Below that the list still scrolls, but
+ *  four rows are the floor a drag cannot cross. */
 const MIN_VISIBLE_WORKSPACE_ROWS = 4;
-const WORKSPACE_ROW_PX = 27;
+const WORKSPACE_ROW_PX = 32;
 const SIDEBAR_HEADER_PX = 30;
 const AGENTS_HANDLE_PX = 4;
 
 /** Largest Agents-panel height that still leaves the workspace list its
  *  minimum rows. Exported for the (pure) clamp rule; `sidebarHeight` is the
  *  sidebar's inner height. */
-export function maxAgentsPanelHeight(sidebarHeight: number): number {
-  const reserved = SIDEBAR_HEADER_PX + MIN_VISIBLE_WORKSPACE_ROWS * WORKSPACE_ROW_PX + AGENTS_HANDLE_PX;
+export function maxAgentsPanelHeight(sidebarHeight: number, rowPx = WORKSPACE_ROW_PX): number {
+  const reserved = SIDEBAR_HEADER_PX + MIN_VISIBLE_WORKSPACE_ROWS * rowPx + AGENTS_HANDLE_PX;
   return Math.max(64, Math.min(sidebarHeight * 0.75, sidebarHeight - reserved));
 }
 
@@ -39,7 +40,8 @@ function applyAgentsPanelHeight(px: number) {
   const view = document.getElementById("agents-view");
   const sidebar = document.getElementById("sidebar");
   if (!view || !sidebar) return;
-  const max = maxAgentsPanelHeight(sidebar.clientHeight || window.innerHeight);
+  const rowPx = document.querySelector<HTMLElement>(".workspace-item")?.offsetHeight || WORKSPACE_ROW_PX;
+  const max = maxAgentsPanelHeight(sidebar.clientHeight || window.innerHeight, rowPx);
   const clamped = Math.max(32, Math.min(max, px));
   view.style.height = `${clamped}px`;
   view.style.maxHeight = "none";

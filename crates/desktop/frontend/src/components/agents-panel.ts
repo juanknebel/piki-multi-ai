@@ -2,9 +2,10 @@ import { appState } from "../state";
 import { makeInteractive } from "./a11y";
 import { reportError, toast } from "./toast";
 import * as ipc from "../ipc";
-import { cliAgentStatusView, formatElapsed, type AgentRow } from "../types";
+import { cliAgentStatusView, formatElapsed, type AgentRow, type AgentStatusView } from "../types";
 import { attentionRows, liveElapsedSecs, pickAttentionTarget } from "../agent-attention";
 import { getShortcutKey } from "../shortcuts";
+import { icon } from "./icons";
 import { showAgentManager } from "./dialogs/agent-dialog";
 import { showDispatchDialog } from "./dialogs/dispatch-dialog";
 
@@ -82,8 +83,8 @@ export function renderAgentsPanel(container: HTMLElement) {
     <div class="sidebar-header">
       <span>Agents <span class="agents-attention-count" hidden></span></span>
       <span class="agents-header-actions">
-        <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn" id="agents-dispatch-btn" title="Dispatch Agent">＋</button>
-        <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn" id="agents-manage-btn" title="Manage Agents">⚙</button>
+        <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn" id="agents-dispatch-btn" title="Dispatch Agent" aria-label="Dispatch Agent">${icon("plus")}</button>
+        <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn" id="agents-manage-btn" title="Manage Agents" aria-label="Manage Agents">${icon("gear")}</button>
       </span>
     </div>
     <div class="agents-list" id="agents-list" role="listbox" aria-label="Agents"></div>
@@ -145,15 +146,15 @@ export function renderAgentsPanel(container: HTMLElement) {
 
       // Status vocabulary shared with the tab bar / status bar; a tab without
       // a structured channel falls back to alive/exited (same as the TUI).
-      const v = row.status
+      const v: AgentStatusView = row.status
         ? cliAgentStatusView(row.status, row.attention)
         : row.alive
-          ? { glyph: "●", label: "alive", color: "var(--text-muted)" }
-          : { glyph: "○", label: "exited", color: "var(--text-muted)" };
+          ? { icon: "dot", label: "alive", color: "var(--text-muted)" }
+          : { icon: "circle", label: "exited", color: "var(--text-muted)" };
       const elapsed = liveElapsedSecs(row, appState.agentRowsFetchedAt, now);
 
       el.innerHTML = `
-        <span class="agent-row-glyph" style="color:${v.color}">${v.glyph}</span>
+        <span class="agent-row-glyph" style="color:${v.color}">${icon(v.icon)}</span>
         <span class="agent-row-main">
           <span class="agent-row-title">
             <span class="agent-row-ws">${escapeHtml(row.workspace_name)}</span>

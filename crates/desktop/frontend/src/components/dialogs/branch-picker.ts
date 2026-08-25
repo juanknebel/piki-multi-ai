@@ -10,6 +10,7 @@ import { appState } from "../../state";
 import * as ipc from "../../ipc";
 import { reportError, toast } from "../toast";
 import { fuzzyScore } from "../fuzzy";
+import { icon } from "../icons";
 import { runExclusive } from "../../in-flight";
 
 let pickerEl: HTMLElement | null = null;
@@ -79,7 +80,7 @@ export function openBranchPicker() {
       el.innerHTML = `
         <span class="palette-category">${b.remote ? "remote" : b.current ? "current" : ""}</span>
         <span class="palette-label">
-          ${b.current ? "● " : ""}${highlightMatch(b.name, q)}${sub ? `<span class="palette-sub">${escapeHtml(sub)}</span>` : ""}
+          ${b.current ? `${icon("dot")} ` : ""}${highlightMatch(b.name, q)}${sub ? `<span class="palette-sub">${escapeHtml(sub)}</span>` : ""}
         </span>
       `;
       el.title = b.remote ? `Check out ${b.name} as a new tracking branch` : b.name;
