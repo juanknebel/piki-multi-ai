@@ -3,6 +3,7 @@ import {
   updateShortcut,
   resetAllShortcuts,
   findConflict,
+  isTerminalSafeCombo,
   eventToCombo,
   formatShortcut,
   getShellSetting,
@@ -127,6 +128,9 @@ export async function showSettingsDialog() {
           return;
         }
 
+        if (def.terminalCapture && !isTerminalSafeCombo(combo)) {
+          toast(`"${formatShortcut(combo)}" belongs to the terminal — "${def.label}" will only fire when focus is outside it`, "info");
+        }
         updateShortcut(def.id, combo);
         keyBtn.textContent = formatShortcut(combo);
         keyBtn.classList.remove("recording");

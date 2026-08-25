@@ -24,6 +24,7 @@ import { showLogsDialog } from "./dialogs/logs-dialog";
 import { showSessionsDialog } from "./dialogs/sessions-dialog";
 import { showAboutDialog } from "./dialogs/about-dialog";
 import { toggleChatPanel } from "./chat-panel";
+import { toggleSidebar } from "./sidebar";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getProviderLabel, getProviderKey, type AIProvider } from "../types";
 import { getShortcutKey, formatShortcut } from "../shortcuts";
@@ -202,6 +203,9 @@ const MENUS: MenuDefinition[] = [
       { label: "Source Control", action: () => appState.setActiveView("git") },
       { label: "Kanban Board", shortcut: getShortcutKey("kanban"), action: () => appState.setActiveView("kanban") },
       SEP,
+      { label: "Toggle Sidebar", shortcut: getShortcutKey("toggle-sidebar"), action: () => toggleSidebar() },
+      { label: "Toggle AI Chat", shortcut: getShortcutKey("toggle-chat"), action: () => toggleChatPanel() },
+      SEP,
       { label: "Command Palette", shortcut: getShortcutKey("command-palette"), action: () => openCommandPalette() },
       { label: "Workspace Switcher", shortcut: getShortcutKey("workspace-switcher"), action: () => openWorkspaceSwitcher() },
       { label: "Dashboard", shortcut: getShortcutKey("dashboard"), action: () => showDashboard() },
@@ -301,11 +305,6 @@ function cycleTab(dir: number) {
   appState.setActiveTab(next);
 }
 
-export function toggleSidebar() {
-  const app = document.getElementById("app")!;
-  app.classList.toggle("sidebar-hidden");
-}
-
 // ── State ───────────────────────────────────────
 
 let openIdx: number | null = null;
@@ -352,7 +351,7 @@ export function initMenuBar(container: HTMLElement) {
   // Panel toggle (before window controls)
   const panelToggle = document.createElement("button");
   panelToggle.className = "wc-btn panel-toggle-btn";
-  panelToggle.title = "Toggle Sidebar (Ctrl+B)";
+  panelToggle.title = `Toggle Sidebar (${getShortcutKey("toggle-sidebar")})`;
   panelToggle.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
     <rect x="1" y="2" width="14" height="12" rx="1" stroke="currentColor" stroke-width="1.2"/>
     <line x1="5.5" y1="2" x2="5.5" y2="14" stroke="currentColor" stroke-width="1.2"/>
@@ -363,7 +362,7 @@ export function initMenuBar(container: HTMLElement) {
   // Chat panel toggle
   const chatToggle = document.createElement("button");
   chatToggle.className = "wc-btn panel-toggle-btn";
-  chatToggle.title = "Toggle AI Chat (Ctrl+Shift+L)";
+  chatToggle.title = `Toggle AI Chat (${getShortcutKey("toggle-chat")})`;
   chatToggle.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
     <path d="M2 3h12a1 1 0 011 1v7a1 1 0 01-1 1H5l-3 3V4a1 1 0 011-1z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
     <circle cx="5.5" cy="7.5" r="0.8" fill="currentColor"/>

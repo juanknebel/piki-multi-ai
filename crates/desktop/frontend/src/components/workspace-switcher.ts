@@ -1,6 +1,7 @@
 import { appState } from "../state";
 import { reportError } from "./toast";
 import * as ipc from "../ipc";
+import { formatShortcut } from "../shortcuts";
 
 let switcherEl: HTMLElement | null = null;
 
@@ -103,7 +104,7 @@ export function openWorkspaceSwitcher() {
         const isCurrent = item.idx === appState.activeWorkspace;
 
         el.innerHTML = `
-          <span class="palette-category">${item.idx < 9 ? item.idx + 1 : ""}</span>
+          <span class="palette-category">${item.idx < 9 ? formatShortcut(`Alt+${item.idx + 1}`) : ""}</span>
           <span class="palette-label">
             ${isCurrent ? "● " : ""}${highlightMatch(item.name, input.value)}
           </span>

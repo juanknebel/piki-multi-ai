@@ -8,6 +8,11 @@ import { renderAgentsPanel } from "./agents-panel";
 import { showAgentManager } from "./dialogs/agent-dialog";
 import { openWebPreviewTab } from "./web-preview-panel";
 
+/** Show/hide the whole sidebar column (activity bar stays). */
+export function toggleSidebar() {
+  document.getElementById("app")!.classList.toggle("sidebar-hidden");
+}
+
 /** Set an explicit Agents-panel height (px), replacing the default 40% cap.
  *  Clamped so neither the panel nor the active view can be squeezed out. */
 function applyAgentsPanelHeight(px: number) {

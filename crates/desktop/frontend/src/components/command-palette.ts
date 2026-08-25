@@ -29,6 +29,8 @@ import { showSessionsDialog } from "./dialogs/sessions-dialog";
 import { showAboutDialog } from "./dialogs/about-dialog";
 import { getProviderLabel, getProviderKey, type AIProvider } from "../types";
 import { openWebPreviewTab } from "./web-preview-panel";
+import { toggleSidebar } from "./sidebar";
+import { toggleChatPanel } from "./chat-panel";
 import { themeEngine } from "../theme";
 import { revealInFileTree, toggleFileTreeAutoReveal } from "./file-tree";
 import { getCodeEditorFilePath } from "./code-editor-panel";
@@ -254,7 +256,7 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
       id: `ws-switch-${i}`,
       label: `Switch to "${w.info.name}"`,
       category: "Switch",
-      keybinding: i < 9 ? String(i + 1) : undefined,
+      keybinding: i < 9 ? formatShortcut(`Alt+${i + 1}`) : undefined,
       action: async () => {
         try {
           const detail = await ipc.switchWorkspace(i);
@@ -536,6 +538,20 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
     category: "View",
     keybinding: getShortcutKey("kanban"),
     action: () => appState.setActiveView("kanban"),
+  });
+  cmds.push({
+    id: "toggle-sidebar",
+    label: "Toggle Sidebar",
+    category: "View",
+    keybinding: getShortcutKey("toggle-sidebar"),
+    action: () => toggleSidebar(),
+  });
+  cmds.push({
+    id: "toggle-chat",
+    label: "Toggle AI Chat",
+    category: "View",
+    keybinding: getShortcutKey("toggle-chat"),
+    action: () => toggleChatPanel(),
   });
   cmds.push({
     id: "view-dashboard",

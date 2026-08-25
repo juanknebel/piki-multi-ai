@@ -449,44 +449,64 @@ The diff pane shows a **side-by-side split view**: the left panel displays the o
 
 ## Desktop keyboard shortcuts
 
+The terminal owns every key it can use. An app shortcut fires while a terminal, text input or editor has focus **only** if its chord is one the terminal can't receive as bytes — `Alt+…`, `Ctrl+Shift+…` or `Ctrl+Alt+…`. Plain `Ctrl+<letter>` / `Ctrl+Space` shortcuts (marked ° below) work everywhere else — sidebar, tab bar, dialogs — but with a shell focused `Ctrl+B` reaches tmux, `Ctrl+P` walks history and `Ctrl+F` in a CodeMirror editor is CodeMirror's find. Rebinding a marked-free shortcut to a plain `Ctrl+<letter>` demotes it to outside-only (the Settings dialog says so when you do it).
+
 | Shortcut | Action |
 |---|---|
-| `Ctrl+P` | Command palette |
-| `Ctrl+N` | New workspace |
-| `Ctrl+T` | New tab |
-| `Ctrl+Space` | Workspace switcher |
-| `Ctrl+B` | Toggle sidebar |
-| `Ctrl+M` | Merge / Rebase |
-| `Ctrl+F` | Find file (fuzzy) |
-| `Ctrl+Shift+F` | Search in project (grep) |
-| `Ctrl+E` | Edit file in $EDITOR (in file search / project search / file viewer) |
-| `Ctrl+I` | Quick Edit inline (in file viewer) |
-| `Ctrl+Shift+B` | Search in terminal |
-| `Ctrl+Shift+R` | Code review |
-| `Ctrl+Shift+A` | Manage agents |
-| `Ctrl+Shift+D` | Dispatch agent |
-| `Ctrl+Shift+S` | Git stash |
-| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Switch tabs |
-| `Ctrl+Z` | Undo stage/unstage |
+| **General** | |
+| `Ctrl+P` ° | Command palette |
+| `Ctrl+N` ° | New workspace |
+| `Ctrl+Space` ° | Workspace switcher |
 | `Alt+D` | Dashboard |
-| `Alt+I` | System Info |
+| `?` ° | Help / all shortcuts |
+| `Esc` | Close dialog / overlay |
+| `Alt+1`…`Alt+9` | Switch to workspace N |
+| **View & Panels** | |
+| `Ctrl+B` ° | Toggle sidebar |
+| `Ctrl+Shift+L` | Toggle AI Chat panel |
 | `Alt+K` | Kanban Board |
-| `Alt+L` | Git log |
-| `Alt+P` | Manage providers |
-| `Alt+S` | Settings |
+| `Alt+Shift+W` | Open Web Preview tab |
 | `Alt+T` | Theme settings |
-| `Alt+Shift+W` | Open Web Preview tab (Desktop) |
+| `Alt+S` | Settings |
+| `Alt+P` | Manage providers |
 | `Alt+Shift+L` | Application logs |
 | `Alt+Shift+S` | Sessions (persistent) dialog |
-| `Ctrl+Shift+C` / `Ctrl+Shift+V` | Copy / paste in terminal (Cmd+C/V on macOS) |
-| `Ctrl+Shift+L` | Toggle AI Chat panel |
-| `Ctrl+J` | API jq filter (in API Explorer) |
-| `Ctrl+\` | Split active pane right |
-| `Ctrl+Shift+\` | Split active pane down |
-| `Ctrl+Shift+Q` | Close active pane |
-| `?` | Help / all shortcuts |
+| `Alt+I` | System Info |
+| **Search** | |
+| `Ctrl+F` ° | Find file (fuzzy) |
+| `Ctrl+Shift+F` | Search in project (grep) |
+| `Ctrl+Shift+B` | Search in terminal |
+| `Ctrl+J` ° | API jq filter (in API Explorer) |
+| `Ctrl+H` | Request history (in API Explorer) |
+| **Git** | |
+| `Ctrl+M` ° | Merge / Rebase |
+| `Alt+L` | Git log |
+| `Ctrl+Shift+S` | Git stash |
+| `Ctrl+Z` ° | Undo stage/unstage |
+| `Ctrl+Shift+R` | Code review |
+| `Ctrl+Enter` | Commit (in the commit message box) |
+| **Agents** | |
+| `Ctrl+Shift+A` | Manage agents |
+| `Ctrl+Shift+D` | Dispatch agent |
+| **Panes & Tabs** | |
+| `Ctrl+T` ° | New blank tab |
+| `Ctrl+\` ° | Split active pane right |
+| `Ctrl+Shift+\` ° | Split active pane down |
+| `Ctrl+Shift+Q` ° | Close active pane |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous tab |
+| Drag divider | Resize split |
+| **Terminal** | |
+| `Ctrl+Shift+C` / `Ctrl+Shift+V` | Copy / paste (`Cmd+C` / `Cmd+V` on macOS) |
+| Select text | Auto-copy to clipboard |
+| `Shift+PgUp` / `Shift+PgDn` | Scroll one page |
+| `Shift+Home` / `Shift+End` | Scroll to top / bottom |
+| **Code Editor** | |
+| `Ctrl+I` | Quick Edit inline (in file viewer) |
+| `Ctrl+E` | Open in $EDITOR (in file viewer / file search / project search) |
+| `Ctrl+S` | Save file (in editor) |
+| `Ctrl+F` | Find in file (CodeMirror) |
 
-All shortcuts are editable at runtime via the Settings dialog (`Alt+S`).
+° = outside-only (see above). On macOS every `Ctrl`/`Alt` above is `⌘`. Rows without ° that are not in the Settings dialog (`Esc`, `Alt+1…9`, `Ctrl+Tab`, copy/paste, `Ctrl+H`, `Ctrl+Enter`, the editor keys) are fixed widget bindings; everything else is editable at runtime via the Settings dialog (`Alt+S`). The in-app help (`?`) is generated from the same registry, so it always shows your current keys.
 
 ## Workspaces
 

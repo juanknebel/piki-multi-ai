@@ -4,7 +4,7 @@ import * as ipc from "./ipc";
 import { toast, reportError } from "./components/toast";
 import { showConfirm } from "./components/confirm";
 import { renderActivityBar } from "./components/activity-bar";
-import { initSidebar } from "./components/sidebar";
+import { initSidebar, toggleSidebar } from "./components/sidebar";
 import { initTerminalPanel, openTerminalSearch } from "./components/terminal-panel";
 import { initKanbanPanel } from "./components/kanban-panel";
 import { initApiPanel } from "./components/api-panel";
@@ -35,7 +35,7 @@ import { showSysinfoDialog } from "./components/dialogs/sysinfo-dialog";
 import { showThemeDialog } from "./components/dialogs/theme-dialog";
 import { showLogsDialog } from "./components/dialogs/logs-dialog";
 import { showSessionsDialog } from "./components/dialogs/sessions-dialog";
-import { initMenuBar, toggleSidebar } from "./components/menu-bar";
+import { initMenuBar } from "./components/menu-bar";
 import { initChatPanel, initChatResize, toggleChatPanel } from "./components/chat-panel";
 import { initTooltips } from "./components/tooltip";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -183,6 +183,15 @@ async function init() {
     if (!ws || ws.tabs.length <= 1) return;
     const next = (ws.activeTab + e.detail.direction + ws.tabs.length) % ws.tabs.length;
     appState.setActiveTab(next);
+  }) as EventListener);
+
+  // Alt+1…9 from the shortcut system: jump straight to workspace N.
+  document.addEventListener("switch-workspace", ((e: CustomEvent) => {
+    const idx: number = e.detail.index;
+    if (idx === appState.activeWorkspace || idx >= appState.workspaces.length) return;
+    ipc.switchWorkspace(idx).then((detail) => {
+      appState.setActiveWorkspace(idx, detail);
+    }).catch((err) => reportError("Workspace switch failed", err));
   }) as EventListener);
 
   // Global keyboard shortcuts — capture phase so they fire before xterm.js

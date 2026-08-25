@@ -17,7 +17,7 @@ import {
   spawnIntoPane,
   tearDownAndClosePane,
 } from "./tab-bar";
-import { formatShortcut } from "../shortcuts";
+import { getShortcutKey } from "../shortcuts";
 
 let rootEl: HTMLElement;
 
@@ -244,10 +244,10 @@ function renderWelcome(container: HTMLElement) {
     <div class="welcome-subtitle">Multi-Agent Workspace</div>
     <p>Select a workspace or open a tab to begin.</p>
     <div class="welcome-shortcuts">
-      <div class="shortcut-item"><span class="shortcut-key">${formatShortcut("Ctrl+N")}</span><span class="shortcut-label">New workspace</span></div>
-      <div class="shortcut-item"><span class="shortcut-key">${formatShortcut("Ctrl+P")}</span><span class="shortcut-label">Command palette</span></div>
-      <div class="shortcut-item"><span class="shortcut-key">${formatShortcut("Ctrl+Space")}</span><span class="shortcut-label">Switch workspace</span></div>
-      <div class="shortcut-item"><span class="shortcut-key">?</span><span class="shortcut-label">All shortcuts</span></div>
+      <div class="shortcut-item"><span class="shortcut-key">${getShortcutKey("new-workspace")}</span><span class="shortcut-label">New workspace</span></div>
+      <div class="shortcut-item"><span class="shortcut-key">${getShortcutKey("command-palette")}</span><span class="shortcut-label">Command palette</span></div>
+      <div class="shortcut-item"><span class="shortcut-key">${getShortcutKey("workspace-switcher")}</span><span class="shortcut-label">Switch workspace</span></div>
+      <div class="shortcut-item"><span class="shortcut-key">${getShortcutKey("help")}</span><span class="shortcut-label">All shortcuts</span></div>
     </div>
   `;
   container.appendChild(welcome);

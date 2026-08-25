@@ -22,17 +22,23 @@ export function showHelpDialog() {
     <div class="dialog-body" style="overflow-y:auto">
   `;
 
+  let anyOutsideOnly = false;
   for (const group of helpSections()) {
     html += `<div class="shortcut-group">
       <div class="shortcut-group-title">${group.category}</div>`;
-    for (const [key, desc] of group.items) {
+    for (const { key, label, outsideOnly } of group.items) {
+      anyOutsideOnly ||= outsideOnly;
       html += `
         <div class="shortcut-row">
-          <span class="shortcut-row-label">${desc}</span>
+          <span class="shortcut-row-label">${label}${outsideOnly ? '<span class="shortcut-row-note" title="Fires only when focus is outside a terminal or editor">°</span>' : ""}</span>
           <kbd class="shortcut-row-key">${key}</kbd>
         </div>`;
     }
     html += `</div>`;
+  }
+
+  if (anyOutsideOnly) {
+    html += `<p class="shortcut-legend">° Fires only when focus is outside a terminal or editor — the terminal keeps every key it can use.</p>`;
   }
 
   html += `</div>
