@@ -1,13 +1,13 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 386
+assertion_line: 824
 expression: content
 ---
 
 
       ╭ Dashboard ───────────────────────────────────────────────────────╮
+      │  — No external claude agents —                                   │
       │ [j/k] navigate  [Enter] switch  [Esc] close                      │
-      │                                                                  │
       │                                                                  │
       │                                                                  │
       │                                                                  │

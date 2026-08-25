@@ -17,6 +17,7 @@ pub mod shell_env;
 pub mod shell_integration;
 pub mod sound;
 pub mod storage;
+pub mod external_agents;
 pub mod sysinfo;
 pub mod workspace;
 pub mod xdg;

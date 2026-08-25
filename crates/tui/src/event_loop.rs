@@ -621,6 +621,22 @@ pub(crate) async fn run(
                 }
             }
 
+            // External agents scan — throttled to 1s, coalesced
+            if now.duration_since(app.last_external_scan) >= std::time::Duration::from_secs(1) {
+                app.last_external_scan = now;
+                let infos: Vec<piki_core::WorkspaceInfo> = app.workspaces.iter().map(|w| w.info.clone()).collect();
+                let trees = piki_core::external_agents::scan_external_agents(&infos);
+                // Simple change detection by pid set
+                let old_pids: std::collections::HashSet<u32> = app.external_agents.iter().flat_map(|t| std::iter::once(t.root.pid).chain(t.children.iter().map(|c| c.pid))).collect();
+                let new_pids: std::collections::HashSet<u32> = trees.iter().flat_map(|t| std::iter::once(t.root.pid).chain(t.children.iter().map(|c| c.pid))).collect();
+                if old_pids != new_pids || app.external_agents.len() != trees.len() {
+                    app.external_agents = trees;
+                    app.needs_redraw = true;
+                } else {
+                    app.external_agents = trees;
+                }
+            }
+
             // Inactive workspaces — only check is_alive every ~1s
             if now.duration_since(app.last_inactive_pty_check) >= Duration::from_secs(1) {
                 app.last_inactive_pty_check = now;

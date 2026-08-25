@@ -144,6 +144,74 @@ pub(crate) fn render_dashboard_overlay(frame: &mut Frame, area: Rect, app: &App)
         }
     }
 
+    // ── External agents section (minimal v1: claude pids via /proc) ──
+    if app.external_agents.is_empty() {
+        body_lines.push(Line::from(Span::styled(
+            "  — No external claude agents —",
+            Style::default().fg(theme.palette.fg3),
+        )));
+    } else {
+        body_lines.push(Line::from(Span::styled(
+            "  External claude agents:",
+            Style::default().fg(theme.palette.fg1).add_modifier(Modifier::BOLD),
+        )));
+        for tree in &app.external_agents {
+            let ws_label = tree
+                .root
+                .workspace_idx
+                .and_then(|idx| app.workspaces.get(idx))
+                .map(|w| w.name.as_str())
+                .unwrap_or("Outside");
+            let cwd = tree
+                .root
+                .cwd
+                .as_deref()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|| "—".to_string());
+            let cwd_short: String = cwd.chars().take(40).collect();
+            body_lines.push(Line::from(vec![
+                Span::styled("    ", Style::default()),
+                Span::styled(
+                    format!("{} ", ws_label),
+                    Style::default().fg(theme.workspace_list.name_active),
+                ),
+                Span::styled(
+                    format!("#{}", tree.root.pid),
+                    Style::default().fg(theme.palette.fg0),
+                ),
+                Span::styled(
+                    format!("  {} ", cwd_short),
+                    Style::default().fg(theme.palette.fg2),
+                ),
+                Span::styled(
+                    if tree.children.is_empty() {
+                        String::new()
+                    } else {
+                        format!("↳ {} sub", tree.children.len())
+                    },
+                    Style::default().fg(theme.palette.fg3),
+                ),
+            ]));
+            for child in &tree.children {
+                body_lines.push(Line::from(vec![
+                    Span::styled("      ", Style::default()),
+                    Span::styled(
+                        format!("└─ #{}", child.pid),
+                        Style::default().fg(theme.palette.fg2),
+                    ),
+                    Span::styled(
+                        format!("  {}", child.cmd.chars().take(50).collect::<String>()),
+                        Style::default().fg(theme.palette.fg3),
+                    ),
+                ]));
+            }
+        }
+        body_lines.push(Line::from(Span::styled(
+            "    [o] open terminal at cwd  (next iteration)",
+            Style::default().fg(theme.palette.fg3),
+        )));
+    }
+
     let total_lines = body_lines.len();
     let scroll = scroll_offset.min(total_lines.saturating_sub(visible_rows));
     let end = total_lines.min(scroll + visible_rows);

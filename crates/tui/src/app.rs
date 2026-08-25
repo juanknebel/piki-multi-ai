@@ -966,6 +966,10 @@ pub struct App {
     /// Last time passive agent-state detection ran — throttles the
     /// screen-scrape sweep to `PASSIVE_DETECT_INTERVAL`
     pub last_passive_detect: Instant,
+    /// External claude agents discovered via /proc scan (TUI only, no desktop yet)
+    pub external_agents: Vec<piki_core::external_agents::AgentTree>,
+    /// Last time external agent scan ran (throttled to 1s)
+    pub last_external_scan: Instant,
     /// App-wide coalesced "PTY produced output" signal. Cloned into every
     /// spawned session; the event loop sleeps on it instead of polling byte
     /// counters at the tick rate.
@@ -1150,6 +1154,8 @@ impl App {
             spinner_frame: 0,
             last_spinner_at: Instant::now(),
             last_passive_detect: Instant::now(),
+            external_agents: Vec::new(),
+            last_external_scan: Instant::now() - std::time::Duration::from_secs(2),
             pty_output: piki_core::pty::PtyOutputSignal::new(),
             config,
             refresh_tx,
