@@ -71,6 +71,11 @@ impl DataPaths {
         &self.config_base
     }
 
+    /// Chat providers configuration file (LLM backends): `<config_base>/chat-providers.toml`.
+    pub fn chat_providers_path(&self) -> PathBuf {
+        self.config_base.join("chat-providers.toml")
+    }
+
     /// Providers configuration file: `<config_base>/providers.toml`.
     pub fn providers_path(&self) -> PathBuf {
         self.config_base.join("providers.toml")

@@ -126,6 +126,8 @@ fn main() {
             // Load user-configurable providers from providers.toml
             let provider_manager =
                 piki_core::providers::ProviderManager::load_or_init(&paths.providers_path());
+            let chat_provider_manager =
+                piki_core::chat_providers::ChatProviderManager::load_or_init(&paths.chat_providers_path());
 
             // Load saved chat config from preferences, or use default
             let chat_config = storage
@@ -144,6 +146,7 @@ fn main() {
                 manager,
                 sysinfo,
                 provider_manager,
+                chat_provider_manager,
                 chat_messages: Vec::new(),
                 chat_config,
                 chat_streaming: false,

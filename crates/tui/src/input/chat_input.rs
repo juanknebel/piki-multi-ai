@@ -182,6 +182,12 @@ fn handle_model_select(app: &mut App, key: KeyEvent) -> Option<Action> {
         KeyCode::Enter => {
             if let Some(name) = app.chat_panel.models.get(app.chat_panel.model_selected) {
                 app.chat_panel.config.model = name.clone();
+                // Persist model to chat-providers.toml for this provider estilo provider
+                let provider_name = app.chat_panel.config.provider.clone();
+                if let Some(entry) = app.chat_provider_manager.get_mut(&provider_name) {
+                    entry.model = name.clone();
+                    let _ = app.chat_provider_manager.save(&app.paths.chat_providers_path());
+                }
                 save_chat_config(app);
             }
             app.chat_panel.sub_mode = ChatSubMode::Chat;
@@ -202,14 +208,25 @@ fn handle_settings(app: &mut App, key: KeyEvent) -> Option<Action> {
                 return save_and_close_settings(app);
             }
             KeyCode::Enter | KeyCode::Char(' ') => {
-                // Cycle server type and update default URL if it matches the old default
+                // Cycle provider (ChatServerType) and load its saved config from chat-providers.toml
                 let old_type = app.chat_panel.settings_server_type;
                 let new_type = old_type.next();
-                let old_default = old_type.default_url();
                 app.chat_panel.settings_server_type = new_type;
-                // If URL was the old default, swap to new default
-                if app.chat_panel.settings_url == old_default {
-                    app.chat_panel.settings_url = new_type.default_url().to_string();
+                // Load provider's persisted base_url/system_prompt so switching doesn't require manual edit
+                let provider_name = match new_type {
+                    piki_core::chat::ChatServerType::Ollama => "ollama",
+                    piki_core::chat::ChatServerType::LlamaCpp => "llama.cpp",
+                    piki_core::chat::ChatServerType::OpenRouter => "openrouter",
+                };
+                if let Some(p) = app.chat_provider_manager.get(provider_name) {
+                    app.chat_panel.settings_url = p.base_url.clone();
+                    app.chat_panel.settings_prompt = p.system_prompt.clone().unwrap_or_default();
+                    // keep settings_url in sync; model is applied on save
+                } else {
+                    let old_default = old_type.default_url();
+                    if app.chat_panel.settings_url == old_default {
+                        app.chat_panel.settings_url = new_type.default_url().to_string();
+                    }
                 }
             }
             KeyCode::Tab | KeyCode::Down => {
@@ -316,21 +333,51 @@ fn save_and_close_settings(app: &mut App) -> Option<Action> {
     let url_changed = url != app.chat_panel.config.base_url;
 
     app.chat_panel.config.server_type = new_server_type;
-    app.chat_panel.config.base_url = if url.is_empty() {
+    let final_url = if url.is_empty() {
         new_server_type.default_url().to_string()
     } else {
-        url
+        url.clone()
     };
+    app.chat_panel.config.base_url = final_url.clone();
     app.chat_panel.config.system_prompt = if prompt.is_empty() {
         None
     } else {
-        Some(prompt)
+        Some(prompt.clone())
+    };
+    // Keep provider name in sync (for chat-providers.toml estilo provider)
+    app.chat_panel.config.provider = match new_server_type {
+        piki_core::chat::ChatServerType::Ollama => "ollama".to_string(),
+        piki_core::chat::ChatServerType::LlamaCpp => "llama.cpp".to_string(),
+        piki_core::chat::ChatServerType::OpenRouter => "openrouter".to_string(),
     };
 
     if server_changed {
-        // Clear model on server type change since model names differ
-        app.chat_panel.config.model.clear();
+        // Apply provider's saved model when switching provider, so no manual edit needed
+        let provider_name = app.chat_panel.config.provider.as_str();
+        if let Some(p) = app.chat_provider_manager.get(provider_name) {
+            if !p.model.is_empty() {
+                app.chat_panel.config.model = p.model.clone();
+            } else {
+                app.chat_panel.config.model.clear();
+            }
+        } else {
+            app.chat_panel.config.model.clear();
+        }
     }
+
+    // Persist provider-specific config to chat-providers.toml estilo providers.toml
+    let provider_name = app.chat_panel.config.provider.clone();
+    let provider_model = app.chat_panel.config.model.clone();
+    let provider_cfg = piki_core::chat_providers::ChatProviderConfig {
+        name: provider_name.clone(),
+        description: String::new(),
+        server_type: new_server_type,
+        base_url: final_url,
+        model: provider_model,
+        system_prompt: if prompt.is_empty() { None } else { Some(prompt) },
+    };
+    app.chat_provider_manager.upsert(provider_cfg);
+    let _ = app.chat_provider_manager.save(&app.paths.chat_providers_path());
 
     save_chat_config(app);
     app.chat_panel.sub_mode = ChatSubMode::Chat;

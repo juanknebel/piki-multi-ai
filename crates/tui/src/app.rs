@@ -1015,6 +1015,8 @@ pub struct App {
     pub agent_profiles: Vec<piki_core::storage::AgentProfile>,
     /// User-configurable providers loaded from providers.toml
     pub provider_manager: piki_core::providers::ProviderManager,
+    /// Chat LLM providers (Ollama / llama.cpp / OpenRouter) estilo providers.toml
+    pub chat_provider_manager: piki_core::chat_providers::ChatProviderManager,
     /// Data paths for saving config files
     pub paths: piki_core::paths::DataPaths,
     /// Global AI chat panel state (persists when overlay is hidden)
@@ -1182,6 +1184,9 @@ impl App {
             agent_profiles: Vec::new(),
             provider_manager: piki_core::providers::ProviderManager::load_or_init(
                 &paths.providers_path(),
+            ),
+            chat_provider_manager: piki_core::chat_providers::ChatProviderManager::load_or_init(
+                &paths.chat_providers_path(),
             ),
             paths: paths.clone(),
             chat_panel: ChatPanelState::default(),

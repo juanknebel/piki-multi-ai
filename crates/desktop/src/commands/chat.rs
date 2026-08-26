@@ -171,6 +171,21 @@ pub async fn chat_set_config(
     let mut app = state.lock();
     app.chat_config = config.clone();
 
+    // Persist provider-specific config to chat-providers.toml estilo providers.toml
+    let provider_name = config.provider.clone();
+    if !provider_name.is_empty() {
+        let cfg = piki_core::chat_providers::ChatProviderConfig {
+            name: provider_name.clone(),
+            description: String::new(),
+            server_type: config.server_type,
+            base_url: config.base_url.clone(),
+            model: config.model.clone(),
+            system_prompt: config.system_prompt.clone(),
+        };
+        app.chat_provider_manager.upsert(cfg);
+        let _ = app.chat_provider_manager.save(&app.paths.chat_providers_path());
+    }
+
     // Persist to settings
     if let Some(ref prefs) = app.storage.ui_prefs {
         let json = serde_json::to_string(&config).map_err(|e| e.to_string())?;
