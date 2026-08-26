@@ -31,6 +31,100 @@ pub(super) fn handle_chat_panel_input(app: &mut App, key: KeyEvent) -> Option<Ac
         return None;
     }
 
+    // Copy/paste via system clipboard (Ctrl+Shift+C / Ctrl+Shift+V) — same as terminal pane
+    if app.config.matches_app_direct(key, "copy") {
+        let text = match app.chat_panel.sub_mode {
+            ChatSubMode::ModelSelect => {
+                // Copy selected model name
+                let filtered = filtered_indices(app);
+                filtered
+                    .get(app.chat_panel.model_selected)
+                    .and_then(|&idx| app.chat_panel.models.get(idx).cloned())
+                    .unwrap_or_default()
+            }
+            ChatSubMode::Settings => String::new(),
+            ChatSubMode::Chat => {
+                if app.chat_panel.streaming && !app.chat_panel.current_response.is_empty() {
+                    app.chat_panel.current_response.clone()
+                } else if !app.chat_panel.input.is_empty() {
+                    app.chat_panel.input.clone()
+                } else if let Some(last) = app
+                    .chat_panel
+                    .messages
+                    .iter()
+                    .rev()
+                    .find(|m| m.role == piki_core::chat::ChatRole::Assistant)
+                {
+                    last.content.clone()
+                } else if let Some(last) = app.chat_panel.messages.last() {
+                    last.content.clone()
+                } else {
+                    String::new()
+                }
+            }
+        };
+        if text.trim().is_empty() {
+            app.set_toast("Nothing to copy", crate::app::ToastLevel::Info);
+        } else {
+            match crate::clipboard::copy_to_clipboard(&text) {
+                Ok(()) => app.set_toast("Copied to clipboard", crate::app::ToastLevel::Info),
+                Err(e) => app.set_toast(format!("Copy failed: {e}"), crate::app::ToastLevel::Error),
+            }
+        }
+        return None;
+    }
+    if app.config.matches_app_direct(key, "paste") {
+        match crate::clipboard::paste_from_clipboard() {
+            Ok(text) if !text.is_empty() => match app.chat_panel.sub_mode {
+                ChatSubMode::Chat => {
+                    let cursor = app.chat_panel.input_cursor;
+                    let byte_pos = {
+                        let mut b = 0;
+                        let mut c = 0;
+                        for (bi, _) in app.chat_panel.input.char_indices() {
+                            if c == cursor {
+                                b = bi;
+                                break;
+                            }
+                            c += 1;
+                        }
+                        if c == cursor {
+                            app.chat_panel.input.len()
+                        } else {
+                            b
+                        }
+                    };
+                    app.chat_panel.input.insert_str(byte_pos, &text);
+                    app.chat_panel.input_cursor += text.chars().count();
+                }
+                ChatSubMode::ModelSelect => {
+                    app.chat_panel.model_filter.push_str(&text);
+                    app.chat_panel.model_selected = 0;
+                }
+                ChatSubMode::Settings => {
+                    let (field, cursor) = active_field_mut(app);
+                    let byte_pos = {
+                        let mut b = 0;
+                        let mut c = 0;
+                        for (bi, _) in field.char_indices() {
+                            if c == *cursor {
+                                b = bi;
+                                break;
+                            }
+                            c += 1;
+                        }
+                        if c == *cursor { field.len() } else { b }
+                    };
+                    field.insert_str(byte_pos, &text);
+                    *cursor += text.chars().count();
+                }
+            },
+            Ok(_) => {}
+            Err(e) => app.set_toast(format!("Paste failed: {e}"), crate::app::ToastLevel::Error),
+        }
+        return None;
+    }
+
     match app.chat_panel.sub_mode {
         ChatSubMode::ModelSelect => return handle_model_select(app, key),
         ChatSubMode::Settings => return handle_settings(app, key),
@@ -493,7 +587,7 @@ fn save_and_close_settings(app: &mut App) -> Option<Action> {
 ///
 /// Only called for text-editable fields (BaseUrl, SystemPrompt).
 /// ServerType is handled separately and never reaches this path.
-fn active_field_mut(app: &mut App) -> (&mut String, &mut usize) {
+pub(crate) fn active_field_mut(app: &mut App) -> (&mut String, &mut usize) {
     let cursor = &mut app.chat_panel.settings_cursor as *mut usize;
     let field = match app.chat_panel.settings_field {
         ChatSettingsField::ServerType | ChatSettingsField::BaseUrl => {
