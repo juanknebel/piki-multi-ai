@@ -13,7 +13,8 @@ import { initKanbanPanel } from "./components/kanban-panel";
 import { initApiPanel } from "./components/api-panel";
 import { initMarkdownEditorPanel } from "./components/markdown-editor-panel";
 import { initCodeEditorPanel } from "./components/code-editor-panel";
-import { initWebPreviewPanel, openWebPreviewTab } from "./components/web-preview-panel";
+import { initWebPreviewPanel } from "./components/web-preview-panel";
+import { installContentRestorer, openProvider } from "./components/open-content";
 import { tearDownAndClosePane } from "./components/tab-bar";
 import { initPaneView } from "./components/pane-view";
 import { bindAction, handleGlobalKeydown, loadShortcuts } from "./shortcuts";
@@ -79,6 +80,9 @@ async function init() {
 
   appState.setSessionsAvailable(await ipc.sessionsAvailable().catch(() => false));
 
+  // Editors / previews / boards come back from the layout snapshot; the
+  // restorer must be in place before the first hydration.
+  installContentRestorer();
   try {
     await appState.loadPaneTrees();
     const workspaces = await ipc.listWorkspaces();
@@ -197,8 +201,8 @@ async function init() {
   bindAction("agent-manager", () => showAgentManager());
   bindAction("dispatch-agent", () => showDispatchDialog());
   bindAction("jump-attention", () => jumpToAttention());
-  bindAction("kanban", () => appState.setActiveView("kanban"));
-  bindAction("web-preview", () => openWebPreviewTab());
+  bindAction("kanban", () => void openProvider("Kanban"));
+  bindAction("web-preview", () => void openProvider("WebPreview"));
   bindAction("theme", () => showThemeDialog());
   bindAction("settings", () => showSettingsDialog());
   bindAction("manage-providers", () => showProvidersDialog());

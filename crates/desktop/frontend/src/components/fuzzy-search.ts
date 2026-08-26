@@ -1,4 +1,5 @@
 import { appState } from "../state";
+import type { PaneId } from "../pane-tree";
 import { fuzzyScorePath, mruBump, mruRank } from "./fuzzy";
 import * as ipc from "../ipc";
 import { showFileViewer } from "./file-viewer";
@@ -6,8 +7,7 @@ import { showMarkdown } from "./markdown-viewer";
 import { toast, reportError } from "./toast";
 import { modAlt, modCtrl, formatShortcut } from "../shortcuts";
 import { fileGlyph } from "./file-icons";
-import { registerCodeFile } from "./code-editor-panel";
-import { registerMarkdownFile } from "./markdown-editor-panel";
+import { openFileInEditor, openFileInExternalEditor } from "./open-content";
 import { isMarkdownPath, looksBinary } from "../file-kind";
 
 const SHOWN_LIMIT = 50;
@@ -19,7 +19,9 @@ let generation = 0;
  *  while the backend (which memoises too) confirms or refreshes it. */
 const lastIndex = new Map<string, string[]>();
 
-export function openFuzzySearch() {
+/** `paneId`: open the picked file INTO that blank pane (the blank-pane
+ *  chooser's "Open file…") instead of a new top-level tab. */
+export function openFuzzySearch(opts: { paneId?: PaneId } = {}) {
   if (searchEl) {
     closeFuzzySearch();
     return;
@@ -32,6 +34,7 @@ export function openFuzzySearch() {
   }
   const wsIdx = appState.activeWorkspace;
   const wsPath = ws.info.path;
+  const target = { paneId: opts.paneId };
   const gen = ++generation;
 
   // Render first, index second: the input must be usable immediately and
@@ -46,7 +49,7 @@ export function openFuzzySearch() {
   const palette = document.createElement("div");
   palette.className = "palette ui-surface";
   palette.innerHTML = `
-    <input class="palette-input" type="text" placeholder="Search files…" autofocus />
+    <input class="palette-input" type="text" placeholder="${opts.paneId ? "Open a file in this pane…" : "Search files…"}" autofocus />
     <div class="palette-results"></div>
     <div class="palette-footer">
       <span class="palette-footer-hint"><span class="palette-key">Enter</span> Edit</span>
@@ -148,14 +151,7 @@ export function openFuzzySearch() {
     }
     mruBump("files", file);
     closeFuzzySearch();
-    const tabId = crypto.randomUUID();
-    if (isMarkdownPath(file)) {
-      registerMarkdownFile(tabId, file);
-      appState.addTab(wsIdx, { id: tabId, provider: "Markdown", alive: true });
-    } else {
-      registerCodeFile(tabId, file, wsIdx);
-      appState.addTab(wsIdx, { id: tabId, provider: "CodeEditor", alive: true });
-    }
+    openFileInEditor(wsIdx, file, target);
   }
 
   /** Alt+Enter: the read-only overlay (rendered markdown for .md). */
@@ -173,12 +169,7 @@ export function openFuzzySearch() {
   async function openInExternalEditor(file: string) {
     mruBump("files", file);
     closeFuzzySearch();
-    try {
-      const tabId = await ipc.spawnEditorTab(wsIdx, file);
-      appState.addTab(wsIdx, { id: tabId, provider: "Shell", alive: true });
-    } catch (err) {
-      reportError("Failed to open editor", err);
-    }
+    await openFileInExternalEditor(wsIdx, file, target);
   }
 
   function selected(): string | undefined {

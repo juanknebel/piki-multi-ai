@@ -233,7 +233,7 @@ export async function showSessionsDialog() {
         const detail = await ipc.switchWorkspace(wsIdx);
         appState.setActiveWorkspace(wsIdx, detail);
       }
-      appState.setActiveTab(tabIdx);
+      appState.setActiveBackendTab(wsIdx, tabIdx);
     } catch (err) {
       reportError("Jump to session failed", err);
     }

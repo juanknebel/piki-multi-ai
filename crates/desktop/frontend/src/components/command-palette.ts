@@ -31,8 +31,8 @@ import { showLogsDialog } from "./dialogs/logs-dialog";
 import { showSessionsDialog } from "./dialogs/sessions-dialog";
 import { jumpToAttention } from "./agents-panel";
 import { showAboutDialog } from "./dialogs/about-dialog";
-import { getProviderLabel, getProviderKey, type AIProvider } from "../types";
-import { openWebPreviewTab } from "./web-preview-panel";
+import { getProviderLabel, type AIProvider } from "../types";
+import { openProvider } from "./open-content";
 import { toggleSidebar } from "./sidebar";
 import { toggleChatPanel } from "./chat-panel";
 import { closeActiveWsTab, moveActiveWsTabToWorkspace, tearDownAndClosePane } from "./tab-bar";
@@ -277,7 +277,7 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
     label: "Open Web Preview",
     category: "Tab",
     keybinding: getShortcutKey("web-preview"),
-    action: () => openWebPreviewTab(),
+    action: () => void openProvider("WebPreview"),
   });
 
   // Pane layout commands
@@ -733,16 +733,7 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
   return cmds;
 }
 
-async function spawnTabSafe(provider: AIProvider) {
-  if (appState.focusSingletonTab(provider)) return;
-  const wsIdx = appState.activeWorkspace;
-  try {
-    const tabId = await ipc.spawnTab(wsIdx, getProviderKey(provider));
-    appState.addTab(wsIdx, { id: tabId, provider, alive: true });
-  } catch (err) {
-    toast(`Failed to open ${getProviderLabel(provider)}: ${err}`, "error");
-  }
-}
+const spawnTabSafe = (provider: AIProvider) => openProvider(provider);
 
 function highlightMatch(text: string, query: string): string {
   if (!query) return escapeHtml(text);

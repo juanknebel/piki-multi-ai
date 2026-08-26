@@ -9,16 +9,14 @@ import { appState } from "../state";
 import type { PaneNode, LeafNode, SplitNode, PaneId } from "../pane-tree";
 import { allLeaves } from "../pane-tree";
 import type { TabInfo, AIProvider } from "../types";
-import { getProviderLabel, getTabLabel } from "../types";
+import { getProviderLabel } from "../types";
 import { mountTab, unmountTab } from "../tab-mount";
 import {
   renderWorkspaceTabBar,
-  getPaneProviderChoices,
-  spawnIntoPane,
-  spawnNewTab,
   tearDownAndClosePane,
   restartPaneContent,
 } from "./tab-bar";
+import { contentLabel, getPaneProviderChoices, openProvider, TOOL_CHOICES } from "./open-content";
 import { getShortcutKey } from "../shortcuts";
 import { branchLabel } from "../labels";
 import { icon } from "./icons";
@@ -111,7 +109,7 @@ function render() {
   if (!wt) {
     // A workspace with no tabs: its own empty state (name · branch + what
     // can open here), not the app-wide welcome.
-    renderEmptyState(area, ws, (p) => void spawnNewTab(p));
+    renderEmptyState(area, ws, (p) => void openProvider(p), () => openFuzzySearch());
     return;
   }
 
@@ -201,7 +199,10 @@ function paneTitle(leaf: LeafNode): string {
   const ws = appState.activeWs;
   if (!leaf.contentId || !ws) return "Empty";
   const c = ws.tabs.find((t) => t.id === leaf.contentId);
-  return c ? getTabLabel(c, appState.getTabShellState(c.id)?.title) : "Empty";
+  if (c) return contentLabel(c);
+  // Known to the layout but not (yet) to us: a Kanban / API board being
+  // re-spawned after a restart.
+  return "Restoring…";
 }
 
 /** Inner HTML of a pane header's `.pane-title` (label + exited mark). */
@@ -255,20 +256,31 @@ function syncMounts(tree: PaneNode, contents: TabInfo[]) {
 function renderChooser(host: HTMLElement, paneId: PaneId) {
   const ws = appState.activeWs;
   if (!ws) return;
-  renderEmptyState(host, ws, (p) => {
-    appState.setActivePane(paneId);
-    void spawnIntoPane(paneId, p);
-  }, "Open in this pane");
+  renderEmptyState(
+    host,
+    ws,
+    (p) => {
+      appState.setActivePane(paneId);
+      void openProvider(p, { paneId });
+    },
+    () => {
+      appState.setActivePane(paneId);
+      openFuzzySearch({ paneId });
+    },
+    "Open in this pane",
+  );
 }
 
 /** The per-workspace empty state, shared by a workspace with no tabs and a
  *  blank pane: "<workspace> · <branch>", then Shell / every configured
- *  provider (the list File ▸ New Tab preloads) / "Open file…". `open` says
- *  where a picked provider goes (new tab vs. this pane). */
+ *  provider (the list File ▸ New Tab preloads), then the tools — Web
+ *  Preview / Kanban / API — and "Open file…". `open` / `openFile` say where
+ *  a pick goes (new tab vs. this pane). */
 function renderEmptyState(
   host: HTMLElement,
   ws: NonNullable<typeof appState.activeWs>,
   open: (p: AIProvider) => void,
+  openFile: () => void,
   title = "Open here",
 ) {
   const box = document.createElement("div");
@@ -282,26 +294,25 @@ function renderEmptyState(
     </div>
     <div class="pane-chooser-title">${escapeHtml(title)}</div>
     <div class="pane-chooser-list"><span class="pane-chooser-loading">…</span></div>
+    <div class="pane-chooser-list pane-chooser-tools"></div>
     <div class="pane-empty-hint">${escapeHtml(getShortcutKey("command-palette"))} command palette · ${escapeHtml(getShortcutKey("workspace-switcher"))} switch workspace</div>`;
   host.appendChild(box);
   const list = box.querySelector<HTMLElement>(".pane-chooser-list")!;
+  const tools = box.querySelector<HTMLElement>(".pane-chooser-tools")!;
+  const item = (label: string, onClick: () => void, title?: string) => {
+    const btn = document.createElement("button");
+    btn.className = "pane-chooser-item ui-btn";
+    btn.dataset.variant = "secondary";
+    btn.textContent = label;
+    if (title) btn.title = title;
+    btn.addEventListener("click", onClick);
+    return btn;
+  };
+  for (const p of TOOL_CHOICES) tools.appendChild(item(getProviderLabel(p), () => open(p)));
+  tools.appendChild(item("Open file…", openFile, `Find a file in ${ws.info.name} (${getShortcutKey("fuzzy-search")})`));
   void getPaneProviderChoices().then((providers: AIProvider[]) => {
     list.innerHTML = "";
-    for (const p of providers) {
-      const btn = document.createElement("button");
-      btn.className = "pane-chooser-item ui-btn";
-      btn.dataset.variant = "secondary";
-      btn.textContent = getProviderLabel(p);
-      btn.addEventListener("click", () => open(p));
-      list.appendChild(btn);
-    }
-    const file = document.createElement("button");
-    file.className = "pane-chooser-item ui-btn";
-    file.dataset.variant = "secondary";
-    file.textContent = "Open file…";
-    file.title = `Find a file in ${ws.info.name} (${getShortcutKey("fuzzy-search")})`;
-    file.addEventListener("click", () => openFuzzySearch());
-    list.appendChild(file);
+    for (const p of providers) list.appendChild(item(getProviderLabel(p), () => open(p)));
   });
 }
 

@@ -6,7 +6,7 @@ import * as ipc from "../ipc";
 import { appState } from "../state";
 import { toast } from "./toast";
 import { modCtrl, formatShortcut } from "../shortcuts";
-import { registerCodeFile } from "./code-editor-panel";
+import { openFileInEditor } from "./open-content";
 import { buildCmTheme } from "../cm-theme";
 import { themeEngine } from "../theme";
 
@@ -84,9 +84,7 @@ export async function showFileViewer(workspaceIdx: number, path: string) {
   dialog.querySelector(".file-viewer-close")!.addEventListener("click", close);
 
   function openInEditorTab() {
-    const tabId = crypto.randomUUID();
-    registerCodeFile(tabId, path, workspaceIdx);
-    appState.addTab(workspaceIdx, { id: tabId, provider: "CodeEditor", alive: true });
+    openFileInEditor(workspaceIdx, path, { forceCode: true });
     close();
   }
 

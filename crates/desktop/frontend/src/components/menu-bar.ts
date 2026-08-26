@@ -31,9 +31,9 @@ import { showAboutDialog } from "./dialogs/about-dialog";
 import { toggleChatPanel } from "./chat-panel";
 import { toggleSidebar } from "./sidebar";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { getProviderLabel, getProviderKey, type AIProvider } from "../types";
+import { getProviderLabel, type AIProvider } from "../types";
 import { getShortcutKey, formatShortcut } from "../shortcuts";
-import { openWebPreviewTab } from "./web-preview-panel";
+import { openProvider } from "./open-content";
 import { revealInFileTree, toggleFileTreeAutoReveal } from "./file-tree";
 import { getCodeEditorFilePath } from "./code-editor-panel";
 import { getMarkdownEditorFilePath } from "./markdown-editor-panel";
@@ -59,15 +59,7 @@ interface MenuDefinition {
 
 const noWs = () => !appState.activeWs;
 
-function spawnTab(provider: AIProvider) {
-  if (appState.focusSingletonTab(provider)) return;
-  const wsIdx = appState.activeWorkspace;
-  ipc.spawnTab(wsIdx, getProviderKey(provider)).then((tabId) => {
-    appState.addTab(wsIdx, { id: tabId, provider, alive: true });
-  }).catch((err) => {
-    toast(`Failed to open ${getProviderLabel(provider)}: ${err}`, "error");
-  });
-}
+const spawnTab = (provider: AIProvider) => void openProvider(provider);
 
 const SEP: MenuItem = { label: "", separator: true };
 
@@ -90,7 +82,8 @@ const MENUS: MenuDefinition[] = [
           ...[...getCachedProviderTabs(), "Shell" as AIProvider, "Api" as AIProvider].map(
             (p): MenuItem => ({ label: getProviderLabel(p), action: () => spawnTab(p) }),
           ),
-          { label: "Web Preview", shortcut: getShortcutKey("web-preview"), action: () => openWebPreviewTab() },
+          { label: "Web Preview", shortcut: getShortcutKey("web-preview"), action: () => spawnTab("WebPreview") },
+          { label: "Kanban Board", shortcut: getShortcutKey("kanban"), action: () => spawnTab("Kanban") },
         ],
       },
       SEP,

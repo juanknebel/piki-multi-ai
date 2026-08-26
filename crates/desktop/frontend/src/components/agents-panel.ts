@@ -52,7 +52,7 @@ export async function jumpToAgentRow(row: AgentRow) {
       const detail = await ipc.switchWorkspace(row.workspace_idx);
       appState.setActiveWorkspace(row.workspace_idx, detail);
     }
-    appState.setActiveTab(row.tab_idx);
+    appState.setActiveBackendTab(row.workspace_idx, row.tab_idx);
   } catch (err) {
     reportError("Jump to agent failed", err);
   }

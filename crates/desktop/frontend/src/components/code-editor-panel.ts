@@ -110,6 +110,11 @@ export function registerCodeFile(tabId: string, filePath: string, workspaceIdx: 
   pendingFiles.set(tabId, { filePath, workspaceIdx });
 }
 
+/** A panel (not just a registration) exists for `tabId`. */
+export function hasCodeEditorInstance(tabId: string): boolean {
+  return instances.has(tabId);
+}
+
 export function getCodeEditorFileName(tabId: string): string | null {
   const inst = instances.get(tabId);
   if (inst) return shortName(inst.filePath);

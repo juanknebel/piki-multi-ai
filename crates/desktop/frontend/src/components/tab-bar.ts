@@ -14,39 +14,25 @@ import { showConfirm, escapeHtml as escapeConfirmHtml } from "./confirm";
 import { createDropdown } from "./dropdown";
 import { openContextMenu, type CtxItem } from "./context-menu";
 import { destroyTerminal } from "./terminal-panel";
-import { getProviderLabel, getTabLabel, cliAgentStatusView, agentStatusSeverity } from "../types";
-import type { AIProvider, TabInfo, CliAgentStatus } from "../types";
+import { getProviderLabel, getProviderKey, getTabLabel, cliAgentStatusView, agentStatusSeverity, isPtyProvider } from "../types";
+import type { TabInfo, CliAgentStatus } from "../types";
 import type { PaneId, PaneNode } from "../pane-tree";
 import { allLeaves, findPane } from "../pane-tree";
 import { branchLabel } from "../labels";
-import { getCachedProviderTabs, preloadProviderTabs } from "./provider-cache";
-import {
-  destroyMarkdownEditorPanel,
-  getMarkdownEditorFileName,
-} from "./markdown-editor-panel";
+import { destroyMarkdownEditorPanel } from "./markdown-editor-panel";
 import {
   destroyCodeEditorPanel,
-  getCodeEditorFileName,
   isCodeEditorDirty,
   showUnsavedChangesPrompt,
 } from "./code-editor-panel";
 import { destroyWebPreviewPanel } from "./web-preview-panel";
+import { destroyKanbanPanel } from "./kanban-panel";
+import { destroyApiPanel } from "./api-panel";
+import { contentLabel } from "./open-content";
 import { icon } from "./icons";
 
-const FRONTEND_ONLY: AIProvider[] = ["Markdown", "CodeEditor", "WebPreview"];
-
-function isFrontendOnly(p: AIProvider): boolean {
-  return typeof p === "string" && (FRONTEND_ONLY as string[]).includes(p);
-}
-
-/** Content backed by a PTY process (shell or AI agent) — the only kind that
- *  can be "running", exit, be restarted or be kept alive in the daemon. */
 function isPtyContent(t: TabInfo): boolean {
-  return t.provider === "Shell" || (typeof t.provider === "object" && "Custom" in t.provider);
-}
-
-function providerKey(p: AIProvider): string {
-  return typeof p === "string" ? p : p.Custom;
+  return isPtyProvider(t.provider);
 }
 
 /** Content id of a ws-tab's active pane (falling back to the first pane
@@ -66,10 +52,8 @@ function wsTabTitle(tree: PaneNode, activePaneId: PaneId): string {
   if (!cid) return "New Tab";
   const content = ws.tabs.find((t) => t.id === cid);
   if (!content) return "New Tab";
-  if (content.provider === "CodeEditor") return getCodeEditorFileName(cid) ?? "Editor";
-  if (content.provider === "Markdown") return getMarkdownEditorFileName(cid) ?? "Markdown";
   const others = allLeaves(tree).filter((l) => l.contentId).length;
-  const base = getTabLabel(content, appState.getTabShellState(cid)?.title);
+  const base = contentLabel(content);
   return others > 1 ? `${base} +${others - 1}` : base;
 }
 
@@ -469,9 +453,10 @@ async function releasePtyContents(wsIdx: number, contents: TabInfo[], mode: Clos
   const ws = appState.workspaces[wsIdx];
   const released = new Set<string>();
   if (!ws) return released;
+  // Backend indices (editors / previews don't count there), highest first.
   const ordered = contents
     .filter((c) => isPtyContent(c))
-    .map((c) => ({ c, idx: ws.tabs.findIndex((t) => t.id === c.id) }))
+    .map((c) => ({ c, idx: appState.backendTabIndex(wsIdx, c.id) }))
     .filter(({ idx }) => idx >= 0)
     .sort((a, b) => b.idx - a.idx);
   for (const { c, idx } of ordered) {
@@ -486,10 +471,32 @@ async function releasePtyContents(wsIdx: number, contents: TabInfo[], mode: Clos
   return released;
 }
 
+/** Drop the frontend panel of a non-PTY content. Kanban / API also have a
+ *  (PTY-less) backend tab, released through `releaseBackendOnly`. */
 function destroyFrontendPanel(c: TabInfo) {
   if (c.provider === "Markdown") destroyMarkdownEditorPanel(c.id);
   else if (c.provider === "CodeEditor") destroyCodeEditorPanel(c.id);
   else if (c.provider === "WebPreview") destroyWebPreviewPanel(c.id);
+  else if (c.provider === "Kanban") destroyKanbanPanel(c.id);
+  else if (c.provider === "Api") destroyApiPanel(c.id);
+}
+
+/** Close the backend tab of Kanban / API contents (no process behind them,
+ *  so no confirm) — otherwise the backend list drifts from ours and every
+ *  later index-based call is off by one. Highest index first. */
+async function releaseBackendOnly(wsIdx: number, contents: TabInfo[]) {
+  const ordered = contents
+    .filter((c) => c.provider === "Kanban" || c.provider === "Api")
+    .map((c) => ({ c, idx: appState.backendTabIndex(wsIdx, c.id) }))
+    .filter(({ idx }) => idx >= 0)
+    .sort((a, b) => b.idx - a.idx);
+  for (const { c, idx } of ordered) {
+    try {
+      await ipc.closeTab(wsIdx, idx);
+    } catch (err) {
+      reportError(`Close ${getProviderLabel(c.provider)} failed`, err);
+    }
+  }
 }
 
 /** Tear down every content in a top-level tab (PTYs + frontend panels),
@@ -523,6 +530,7 @@ export async function tearDownAndCloseWsTab(
 
   const released = await releasePtyContents(wsIdx, contents, mode);
   const kept = contents.filter((c) => isPtyContent(c) && !released.has(c.id));
+  await releaseBackendOnly(wsIdx, contents);
   for (const c of contents) destroyFrontendPanel(c);
   for (const id of released) destroyTerminal(id);
   if (kept.length === 0) {
@@ -566,6 +574,7 @@ export async function tearDownAndClosePane(paneId: PaneId) {
     if (!released.has(content.id)) return;
     destroyTerminal(content.id);
   } else if (content) {
+    await releaseBackendOnly(wsIdx, [content]);
     destroyFrontendPanel(content);
   }
   if (findPane(wt.paneTree, paneId)) appState.closePane(paneId);
@@ -584,7 +593,7 @@ export async function restartPaneContent(paneId: PaneId) {
   const content = contentId ? ws.tabs.find((t) => t.id === contentId) : undefined;
   if (!content || !isPtyContent(content) || content.alive) return;
 
-  const oldIdx = ws.tabs.findIndex((t) => t.id === content.id);
+  const oldIdx = appState.backendTabIndex(wsIdx, content.id);
   try {
     if (oldIdx >= 0) await ipc.closeTab(wsIdx, oldIdx);
   } catch (err) {
@@ -592,7 +601,7 @@ export async function restartPaneContent(paneId: PaneId) {
   }
   destroyTerminal(content.id);
   try {
-    const tabId = await ipc.spawnTab(wsIdx, providerKey(content.provider));
+    const tabId = await ipc.spawnTab(wsIdx, getProviderKey(content.provider));
     appState.replacePaneContent(paneId, content.id, {
       id: tabId,
       provider: content.provider,
@@ -605,42 +614,6 @@ export async function restartPaneContent(paneId: PaneId) {
   } catch (err) {
     reportError(`Restart ${getProviderLabel(content.provider)} failed`, err);
     appState.replacePaneContent(paneId, content.id, null);
-  }
-}
-
-/** Providers offerable in a blank pane / empty workspace: Shell first, then
- *  the configured agents (from the shared provider cache). */
-export async function getPaneProviderChoices(): Promise<AIProvider[]> {
-  await preloadProviderTabs();
-  return ["Shell", ...getCachedProviderTabs()];
-}
-
-/** Spawn `provider` and place it into the (blank) pane `paneId` of the
- *  active workspace tab. */
-export async function spawnIntoPane(paneId: PaneId, provider: AIProvider) {
-  const wsIdx = appState.activeWorkspace;
-  if (appState.isSingletonProvider(provider) && appState.focusSingletonTab(provider)) {
-    return;
-  }
-  try {
-    const key = typeof provider === "string" ? provider : provider.Custom;
-    const tabId = await ipc.spawnTab(wsIdx, key);
-    appState.setPaneContent(paneId, { id: tabId, provider, alive: true });
-  } catch (err) {
-    reportError(`Open ${getProviderLabel(provider)} failed`, err);
-  }
-}
-
-/** Spawn `provider` as a new top-level tab of the active workspace (the
- *  empty-workspace state's buttons; same semantics as File ▸ New Tab). */
-export async function spawnNewTab(provider: AIProvider) {
-  if (appState.focusSingletonTab(provider)) return;
-  const wsIdx = appState.activeWorkspace;
-  try {
-    const tabId = await ipc.spawnTab(wsIdx, providerKey(provider));
-    appState.addTab(wsIdx, { id: tabId, provider, alive: true });
-  } catch (err) {
-    reportError(`Open ${getProviderLabel(provider)} failed`, err);
   }
 }
 

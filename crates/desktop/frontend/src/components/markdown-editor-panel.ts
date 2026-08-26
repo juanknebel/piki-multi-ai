@@ -37,6 +37,11 @@ export function registerMarkdownFile(tabId: string, filePath: string) {
   pendingFiles.set(tabId, filePath);
 }
 
+/** A panel (not just a registration) exists for `tabId`. */
+export function hasMarkdownEditorInstance(tabId: string): boolean {
+  return instances.has(tabId);
+}
+
 export function getMarkdownEditorFileName(tabId: string): string | null {
   const fp = instances.get(tabId)?.filePath ?? pendingFiles.get(tabId);
   if (!fp) return null;

@@ -362,6 +362,20 @@ export function getProviderIcon(provider: AIProvider): string {
   return provider.Custom.charAt(0).toUpperCase();
 }
 
+/** Contents that exist only in the frontend (no backend `DesktopTab`): the
+ *  editors and the web preview. They are absent from the backend tab list,
+ *  so index-based IPC (`close_tab`, `set_active_tab`) must skip them — see
+ *  `appState.backendTabIndex`. */
+export function isFrontendOnlyProvider(provider: AIProvider): boolean {
+  return provider === "Markdown" || provider === "CodeEditor" || provider === "WebPreview";
+}
+
+/** Content backed by a PTY process (shell or AI agent) — the only kind that
+ *  can be "running", exit, be restarted or be kept alive in the daemon. */
+export function isPtyProvider(provider: AIProvider): boolean {
+  return provider === "Shell" || (typeof provider === "object" && "Custom" in provider);
+}
+
 /** Get the provider key for serialization (built-in name or Custom wrapper). */
 export function getProviderKey(provider: AIProvider): string {
   if (typeof provider === "string") {

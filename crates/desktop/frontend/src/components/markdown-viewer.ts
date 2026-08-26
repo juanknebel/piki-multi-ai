@@ -7,7 +7,7 @@ import hljs from "highlight.js/lib/common";
 import * as ipc from "../ipc";
 import { appState } from "../state";
 import { toast, reportError } from "./toast";
-import { registerMarkdownFile } from "./markdown-editor-panel";
+import { openFileInEditor } from "./open-content";
 import { modCtrl, formatShortcut } from "../shortcuts";
 
 // CommonMark + GFM (tables, strikethrough, task lists) with syntax-highlighted
@@ -76,9 +76,7 @@ export async function showMarkdown(filePath: string) {
     header.querySelector(".md-quick-edit")!.addEventListener("click", enterEditMode);
     header.querySelector(".md-edit")!.addEventListener("click", () => {
       close();
-      const tabId = `md-${Date.now()}`;
-      registerMarkdownFile(tabId, filePath);
-      appState.addTab(wsIdx, { id: tabId, provider: "Markdown", alive: true });
+      openFileInEditor(wsIdx, filePath);
     });
     header.querySelector(".md-copy")!.addEventListener("click", () => {
       ipc.clipboardCopy(content).then(() => toast("Copied to clipboard", "success")).catch(() => {});

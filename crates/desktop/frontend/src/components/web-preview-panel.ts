@@ -1,4 +1,5 @@
 import { appState } from "../state";
+import type { PaneId } from "../pane-tree";
 import { toast } from "./toast";
 import { icon } from "./icons";
 import { createDropdown, type DropdownHandle } from "./dropdown";
@@ -20,33 +21,52 @@ interface WebPreviewInstance {
 }
 
 const instances = new Map<string, WebPreviewInstance>();
+/** URL to load when a (restored) preview mounts for the first time. */
+const pendingUrls = new Map<string, string>();
 let mainContent: HTMLElement;
 
 export function initWebPreviewPanel(container: HTMLElement) {
   mainContent = container;
 }
 
-/** Focus the first WebPreview tab in the active workspace, or create one if
- *  none exists. Frontend-only: synthesizes the tab id and uses `appState.addTab`
- *  directly (no `ipc.spawnTab`), same pattern as the Markdown editor tab.
- *  Singleton-by-default mirrors how `Alt+K` opens Kanban. */
-export function openWebPreviewTab() {
+/** Focus the WebPreview of the active workspace, or create one: as a new
+ *  top-level tab, or into the blank pane `paneId` when given. Frontend-only:
+ *  synthesizes the tab id and uses `appState.addTab` / `setPaneContent`
+ *  directly (no `ipc.spawnTab`), same pattern as the editor tabs. It is a
+ *  singleton; an existing one elsewhere is handled by the caller
+ *  (`open-content.ts` offers Move here / Go there) — this only dedups the
+ *  tab-level path. */
+export function openWebPreviewTab(opts: { paneId?: PaneId; url?: string } = {}) {
   const ws = appState.activeWs;
   if (!ws) {
     toast("Create a workspace first", "error");
     return;
   }
   const existingIdx = ws.tabs.findIndex((t) => t.provider === "WebPreview");
-  if (existingIdx >= 0) {
+  if (existingIdx >= 0 && !opts.paneId) {
     appState.setActiveTab(existingIdx);
     return;
   }
   const tabId = `web-${Date.now()}`;
-  appState.addTabToRoot(appState.activeWorkspace, {
-    id: tabId,
-    provider: "WebPreview",
-    alive: true,
-  });
+  if (opts.url) registerWebPreview(tabId, opts.url);
+  const tab = { id: tabId, provider: "WebPreview" as const, alive: true };
+  if (opts.paneId) appState.setPaneContent(opts.paneId, tab);
+  else appState.addTabToRoot(appState.activeWorkspace, tab);
+}
+
+/** Pre-register the URL a preview should load on first mount (layout
+ *  restore); a no-op for an id whose panel already exists. */
+export function registerWebPreview(tabId: string, url: string) {
+  if (instances.has(tabId) || !url) return;
+  pendingUrls.set(tabId, url);
+}
+
+/** The URL a preview currently shows (or was registered to show), "" if
+ *  none — what the layout snapshot persists. */
+export function getWebPreviewUrl(tabId: string): string | null {
+  const inst = instances.get(tabId);
+  if (inst) return inst.currentUrl;
+  return pendingUrls.get(tabId) ?? null;
 }
 
 export function mountWebPreviewInto(tabId: string, host: HTMLElement) {
@@ -54,6 +74,9 @@ export function mountWebPreviewInto(tabId: string, host: HTMLElement) {
   if (!inst) {
     inst = createPanel(tabId);
     instances.set(tabId, inst);
+    const url = pendingUrls.get(tabId);
+    pendingUrls.delete(tabId);
+    if (url) void tryLoad(inst, url);
   }
   if (inst.element.parentElement !== host) {
     host.appendChild(inst.element);
@@ -77,6 +100,7 @@ export function destroyWebPreviewPanel(tabId: string) {
   }
   inst.element.remove();
   instances.delete(tabId);
+  pendingUrls.delete(tabId);
 }
 
 function setStatus(inst: WebPreviewInstance, status: ProbeStatus) {

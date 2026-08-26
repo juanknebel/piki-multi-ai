@@ -5,7 +5,7 @@ import { settingsStore } from "../settings";
 import { showFileDiff } from "./diff-viewer";
 import { showMarkdown } from "./markdown-viewer";
 import { showWorkspaceDialog } from "./dialogs/workspace-dialog";
-import { registerCodeFile } from "./code-editor-panel";
+import { openFileInEditor } from "./open-content";
 import { revealInFileTree } from "./file-tree";
 import { fileGlyph } from "./file-icons";
 import { FILE_STATUS_LABELS, FILE_STATUS_CSS } from "../types";
@@ -617,10 +617,7 @@ function renderSection(
           .querySelector<HTMLButtonElement>('.file-action-btn[data-action="edit"]')!
           .addEventListener("click", (e) => {
             e.stopPropagation();
-            const wsIdx = appState.activeWorkspace;
-            const tabId = crypto.randomUUID();
-            registerCodeFile(tabId, file.path, wsIdx);
-            appState.addTab(wsIdx, { id: tabId, provider: "CodeEditor", alive: true });
+            openFileInEditor(appState.activeWorkspace, file.path, { forceCode: true });
           });
       }
 

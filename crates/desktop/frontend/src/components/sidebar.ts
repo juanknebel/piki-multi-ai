@@ -1,6 +1,4 @@
 import { appState } from "../state";
-import { reportError } from "./toast";
-import * as ipc from "../ipc";
 import { settingsStore } from "../settings";
 import { activityBarWidth, clampSidebarWidth, visibleChatWidth } from "../layout-budget";
 import { renderWorkspaceList } from "./workspace-list";
@@ -8,7 +6,7 @@ import { renderFileTree } from "./file-tree";
 import { renderSourceControl } from "./source-control";
 import { renderAgentsPanel } from "./agents-panel";
 import { showAgentManager } from "./dialogs/agent-dialog";
-import { openWebPreviewTab } from "./web-preview-panel";
+import { openProvider } from "./open-content";
 
 /** Show/hide the whole sidebar column (activity bar stays). */
 export function toggleSidebar() {
@@ -78,19 +76,19 @@ export async function initSidebar() {
     const view = appState.activeView;
 
     if (view === "kanban") {
-      spawnKanbanTab();
+      void openProvider("Kanban");
       appState.setActiveView(lastSidebarView);
       return;
     }
 
     if (view === "api") {
-      spawnApiTab();
+      void openProvider("Api");
       appState.setActiveView(lastSidebarView);
       return;
     }
 
     if (view === "web-preview") {
-      openWebPreviewTab();
+      void openProvider("WebPreview");
       appState.setActiveView(lastSidebarView);
       return;
     }
@@ -107,26 +105,6 @@ export async function initSidebar() {
     explorerView.style.display = view === "explorer" ? "flex" : "none";
     filesView.style.display = view === "files" ? "flex" : "none";
     scView.style.display = view === "git" ? "flex" : "none";
-  }
-
-  async function spawnKanbanTab() {
-    if (appState.focusSingletonTab("Kanban")) return;
-    try {
-      const tabId = await ipc.spawnTab(appState.activeWorkspace, "Kanban");
-      appState.addTabToRoot(appState.activeWorkspace, { id: tabId, provider: "Kanban", alive: true });
-    } catch (err) {
-      reportError("Failed to open Kanban tab", err);
-    }
-  }
-
-  async function spawnApiTab() {
-    if (appState.focusSingletonTab("Api")) return;
-    try {
-      const tabId = await ipc.spawnTab(appState.activeWorkspace, "Api");
-      appState.addTabToRoot(appState.activeWorkspace, { id: tabId, provider: "Api", alive: true });
-    } catch (err) {
-      reportError("Failed to open API Explorer tab", err);
-    }
   }
 
   appState.on("view-changed", updateView);

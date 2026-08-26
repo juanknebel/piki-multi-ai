@@ -2,8 +2,9 @@ import { appState } from "../state";
 import * as ipc from "../ipc";
 import type { DirEntry, EntryKind, FileStatus } from "../types";
 import { FILE_STATUS_LABELS, FILE_STATUS_CSS } from "../types";
-import { registerCodeFile, getCodeEditorFilePath } from "./code-editor-panel";
-import { registerMarkdownFile, getMarkdownEditorFilePath } from "./markdown-editor-panel";
+import { getCodeEditorFilePath } from "./code-editor-panel";
+import { getMarkdownEditorFilePath } from "./markdown-editor-panel";
+import { openFileInEditor } from "./open-content";
 import { showMarkdown } from "./markdown-viewer";
 import { toast } from "./toast";
 import { showConfirm } from "./confirm";
@@ -279,14 +280,7 @@ export function renderFileTree(container: HTMLElement) {
 
   function openFile(rel: string, forceCode = false) {
     if (wsIdx < 0) return;
-    const tabId = crypto.randomUUID();
-    if (!forceCode && MD_RE.test(rel)) {
-      registerMarkdownFile(tabId, rel);
-      appState.addTab(wsIdx, { id: tabId, provider: "Markdown", alive: true });
-    } else {
-      registerCodeFile(tabId, rel, wsIdx);
-      appState.addTab(wsIdx, { id: tabId, provider: "CodeEditor", alive: true });
-    }
+    openFileInEditor(wsIdx, rel, { forceCode });
   }
 
   function toggleDir(rel: string) {
