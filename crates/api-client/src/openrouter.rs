@@ -69,12 +69,13 @@ impl OpenRouterClient {
 
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(300))
-            .tls_built_in_root_certs(false)
+            .hickory_dns(true)
             .build()
             .or_else(|e| {
-                tracing::warn!(error = %e, "reqwest builder failed without root certs, retrying with defaults");
+                tracing::warn!(error = %e, "reqwest builder failed, retrying with defaults");
                 reqwest::Client::builder()
                     .timeout(std::time::Duration::from_secs(300))
+                    .hickory_dns(true)
                     .build()
             })
             .inspect_err(|e| {
