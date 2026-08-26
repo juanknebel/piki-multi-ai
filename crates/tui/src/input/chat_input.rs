@@ -198,7 +198,7 @@ fn handle_settings(app: &mut App, key: KeyEvent) -> Option<Action> {
             KeyCode::Esc => {
                 app.chat_panel.sub_mode = ChatSubMode::Chat;
             }
-            KeyCode::Enter if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 return save_and_close_settings(app);
             }
             KeyCode::Enter | KeyCode::Char(' ') => {
@@ -262,7 +262,7 @@ fn handle_settings(app: &mut App, key: KeyEvent) -> Option<Action> {
             app.chat_panel.settings_field = new_field;
             app.chat_panel.settings_cursor = new_cursor;
         }
-        KeyCode::Enter if key.modifiers.contains(KeyModifiers::CONTROL) => {
+        KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             return save_and_close_settings(app);
         }
         KeyCode::Char(c) => {
