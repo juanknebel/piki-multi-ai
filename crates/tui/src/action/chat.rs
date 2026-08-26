@@ -97,7 +97,13 @@ pub(super) async fn handle(
                     .clone()
                     .filter(|s| !s.trim().is_empty())
                     .or_else(|| app.chat_panel.config.effective_api_key());
-                let client = piki_agent::chat_client_for_with_key(server_type, &base_url, api_key);
+                let web_search = app.chat_panel.config.web_search;
+                let client = piki_agent::chat_client_for_with_key_and_search(
+                    server_type,
+                    &base_url,
+                    api_key,
+                    web_search,
+                );
 
                 let registry = piki_agent::ToolRegistry::default_all();
                 let context = piki_agent::ToolContext {
@@ -137,7 +143,13 @@ pub(super) async fn handle(
                     .clone()
                     .filter(|s| !s.trim().is_empty())
                     .or_else(|| app.chat_panel.config.effective_api_key());
-                let client = piki_agent::chat_client_for_with_key(server_type, &base_url, api_key);
+                let web_search = app.chat_panel.config.web_search;
+                let client = piki_agent::chat_client_for_with_key_and_search(
+                    server_type,
+                    &base_url,
+                    api_key,
+                    web_search,
+                );
                 let task = tokio::spawn(async move {
                     if let Err(e) = client.chat_stream(&model, &msgs, None, tx).await {
                         tracing::error!(error = %e, "chat_stream error");

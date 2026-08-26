@@ -113,6 +113,9 @@ pub struct ChatConfig {
     /// API key for remote providers (OpenRouter). Not logged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_key: Option<String>,
+    /// Enable web search for OpenRouter (plugins: web).
+    #[serde(default)]
+    pub web_search: bool,
 }
 
 impl Default for ChatConfig {
@@ -124,6 +127,7 @@ impl Default for ChatConfig {
             base_url: "http://localhost:11434".to_string(),
             system_prompt: None,
             api_key: None,
+            web_search: false,
         }
     }
 }

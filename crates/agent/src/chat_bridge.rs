@@ -28,6 +28,16 @@ pub fn chat_client_for_with_key(
     base_url: &str,
     api_key: Option<String>,
 ) -> Box<dyn ChatClient> {
+    chat_client_for_with_key_and_search(server_type, base_url, api_key, false)
+}
+
+/// Like `chat_client_for_with_key` but with web_search toggle for OpenRouter.
+pub fn chat_client_for_with_key_and_search(
+    server_type: ChatServerType,
+    base_url: &str,
+    api_key: Option<String>,
+    web_search: bool,
+) -> Box<dyn ChatClient> {
     // Env var fallback for piki-ai parity
     let effective_key = api_key.or_else(|| {
         std::env::var("OPENROUTER_API_KEY")
@@ -37,9 +47,9 @@ pub fn chat_client_for_with_key(
     match server_type {
         ChatServerType::Ollama => Box::new(OllamaClient::new(base_url)),
         ChatServerType::LlamaCpp => Box::new(LlamaCppClient::new(base_url)),
-        ChatServerType::OpenRouter => {
-            Box::new(OpenRouterClient::new_with_key(base_url, effective_key))
-        }
+        ChatServerType::OpenRouter => Box::new(
+            OpenRouterClient::new_with_key(base_url, effective_key).with_web_search(web_search),
+        ),
     }
 }
 

@@ -55,11 +55,17 @@ pub struct OpenRouterClient {
     client: reqwest::Client,
     base_url: String,
     api_key: Option<String>,
+    pub(crate) web_search: bool,
 }
 
 impl OpenRouterClient {
     pub fn new(base_url: &str) -> Self {
         Self::new_with_key(base_url, None)
+    }
+
+    pub fn with_web_search(mut self, enabled: bool) -> Self {
+        self.web_search = enabled;
+        self
     }
 
     pub fn new_with_key(base_url: &str, api_key: Option<String>) -> Self {
@@ -87,6 +93,7 @@ impl OpenRouterClient {
             client,
             base_url: base,
             api_key,
+            web_search: false,
         }
     }
 
@@ -143,11 +150,25 @@ impl OpenRouterClient {
         tools: Option<&[serde_json::Value]>,
         tx: mpsc::UnboundedSender<ChatStreamEvent>,
     ) -> anyhow::Result<()> {
+        self.chat_stream_with_tools_and_plugins(model, messages, tools, None, tx)
+            .await
+    }
+
+    /// Like `chat_stream_with_tools` but also supports OpenRouter web-search plugins.
+    pub async fn chat_stream_with_tools_and_plugins(
+        &self,
+        model: &str,
+        messages: &[OpenRouterMessage],
+        tools: Option<&[serde_json::Value]>,
+        plugins: Option<Vec<serde_json::Value>>,
+        tx: mpsc::UnboundedSender<ChatStreamEvent>,
+    ) -> anyhow::Result<()> {
         let url = format!("{}/chat/completions", self.base_url);
         tracing::info!(
             model,
             msg_count = messages.len(),
             has_tools = tools.is_some(),
+            has_plugins = plugins.is_some(),
             "Starting OpenRouter chat stream"
         );
 
@@ -157,6 +178,7 @@ impl OpenRouterClient {
             stream: true,
             tools: tools.map(|t| t.to_vec()),
             tool_choice: tools.map(|_| "auto".to_string()),
+            plugins,
         };
 
         let mut req = self.client.post(&url).json(&payload);
@@ -324,6 +346,8 @@ struct ChatCompletionRequest {
     tools: Option<Vec<serde_json::Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    plugins: Option<Vec<serde_json::Value>>,
 }
 
 #[derive(Deserialize)]

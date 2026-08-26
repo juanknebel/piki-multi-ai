@@ -29,7 +29,15 @@ pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &App) {
     } else {
         ""
     };
-    let title = format!(" AI Chat{} [{}] ", agent_indicator, model_label);
+    let web_indicator = if app.chat_panel.config.web_search {
+        " Web"
+    } else {
+        ""
+    };
+    let title = format!(
+        " AI Chat{}{} [{}] ",
+        agent_indicator, web_indicator, model_label
+    );
 
     let block = Block::default()
         .title(title)
@@ -103,12 +111,16 @@ pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &App) {
             Span::raw(" cancel"),
         ],
         crate::app::ChatSubMode::ModelSelect => vec![
+            Span::styled("[type]", Style::default().fg(h)),
+            Span::raw(" filter  "),
             Span::styled("[j/k]", Style::default().fg(h)),
             Span::raw(" navigate  "),
             Span::styled("[Enter]", Style::default().fg(h)),
             Span::raw(" select  "),
             Span::styled("[Esc]", Style::default().fg(h)),
-            Span::raw(" cancel"),
+            Span::raw(" clear/cancel  "),
+            Span::styled("[C-u]", Style::default().fg(h)),
+            Span::raw(" clear filter"),
         ],
         _ if app.chat_panel.pending_approval.is_some() => {
             let tool_name = app
@@ -163,6 +175,11 @@ pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &App) {
             } else {
                 " [C-a] agent "
             };
+            let web_hint = if app.chat_panel.config.web_search {
+                " [C-w] web:ON "
+            } else {
+                " [C-w] web "
+            };
             vec![
                 Span::styled("[Enter]", Style::default().fg(h)),
                 Span::raw(" send  "),
@@ -173,6 +190,7 @@ pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &App) {
                 Span::styled("[C-l]", Style::default().fg(h)),
                 Span::raw(" clear"),
                 Span::styled(agent_hint, Style::default().fg(h)),
+                Span::styled(web_hint, Style::default().fg(h)),
                 Span::styled("[Esc]", Style::default().fg(h)),
                 Span::raw(" hide"),
             ]
@@ -268,37 +286,75 @@ fn render_model_selector(frame: &mut Frame, area: Rect, app: &App) {
     let theme = &app.theme;
     let models = &app.chat_panel.models;
     let selected = app.chat_panel.model_selected;
+    let filter = &app.chat_panel.model_filter;
     let visible_height = area.height as usize;
 
+    // Filtered indices (case-insensitive substring)
+    let filtered: Vec<usize> = if filter.trim().is_empty() {
+        (0..models.len()).collect()
+    } else {
+        let needle = filter.to_lowercase();
+        models
+            .iter()
+            .enumerate()
+            .filter(|(_, m)| m.to_lowercase().contains(&needle))
+            .map(|(i, _)| i)
+            .collect()
+    };
+
     let mut lines: Vec<Line<'_>> = Vec::new();
+    // Header + filter line
     lines.push(Line::from(Span::styled(
-        " Select a model:",
+        " Select a model (type to filter):",
         Style::default().fg(theme.help.border),
+    )));
+    let filter_display = if filter.is_empty() {
+        "(no filter)".to_string()
+    } else {
+        filter.clone()
+    };
+    let count = format!(
+        "  Filter: {}  [{}/{}]",
+        filter_display,
+        filtered.len(),
+        models.len()
+    );
+    lines.push(Line::from(Span::styled(
+        count,
+        Style::default().fg(theme.general.muted_text),
     )));
     lines.push(Line::from(""));
 
-    for (i, model) in models.iter().enumerate() {
-        let is_selected = i == selected;
-        let marker = if is_selected { "> " } else { "  " };
-        let is_current = *model == app.chat_panel.config.model;
-        let suffix = if is_current { " (current)" } else { "" };
-
-        let style = if is_selected {
-            Style::default()
-                .fg(theme.help.border)
-                .bg(theme.workspace_list.selected_bg)
-        } else {
-            Style::default().fg(Color::Reset)
-        };
-
+    if filtered.is_empty() {
         lines.push(Line::from(Span::styled(
-            format!("{marker}{model}{suffix}"),
-            style,
+            "  No matches",
+            Style::default().fg(theme.general.muted_text),
         )));
+    } else {
+        for (filtered_idx, &real_idx) in filtered.iter().enumerate() {
+            let model = &models[real_idx];
+            let is_selected = filtered_idx == selected;
+            let marker = if is_selected { "> " } else { "  " };
+            let is_current = *model == app.chat_panel.config.model;
+            let suffix = if is_current { " (current)" } else { "" };
+
+            let style = if is_selected {
+                Style::default()
+                    .fg(theme.help.border)
+                    .bg(theme.workspace_list.selected_bg)
+            } else {
+                Style::default().fg(Color::Reset)
+            };
+
+            lines.push(Line::from(Span::styled(
+                format!("{marker}{model}{suffix}"),
+                style,
+            )));
+        }
     }
 
-    // Scroll so selected model is always visible (header takes 2 lines)
-    let header_h = 2;
+    // Scroll so selected model is always visible (header takes 3 lines)
+    let header_h = 3;
     let start = if selected + header_h < visible_height {
         0
     } else {

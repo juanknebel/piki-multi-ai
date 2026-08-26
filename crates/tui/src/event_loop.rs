@@ -412,6 +412,7 @@ pub(crate) async fn run(
                                     app.chat_panel.config.model = first.clone();
                                 }
                                 // Keep highlight within bounds and on current model
+                                app.chat_panel.model_filter.clear();
                                 if app.chat_panel.models.is_empty() {
                                     app.chat_panel.model_selected = 0;
                                 } else if let Some(pos) = app

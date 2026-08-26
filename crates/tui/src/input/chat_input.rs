@@ -60,6 +60,7 @@ pub(super) fn handle_chat_panel_input(app: &mut App, key: KeyEvent) -> Option<Ac
             // Open model selector
             if !app.chat_panel.models.is_empty() {
                 app.chat_panel.sub_mode = ChatSubMode::ModelSelect;
+                app.chat_panel.model_filter.clear();
                 // Pre-select the current model and clamp
                 if let Some(pos) = app
                     .chat_panel
@@ -136,6 +137,25 @@ pub(super) fn handle_chat_panel_input(app: &mut App, key: KeyEvent) -> Option<Ac
             };
             app.set_toast(label, crate::app::ToastLevel::Info);
         }
+        KeyCode::Char('w') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            // Toggle web search for OpenRouter
+            app.chat_panel.config.web_search = !app.chat_panel.config.web_search;
+            // Persist to provider manager as well
+            let provider_name = app.chat_panel.config.provider.clone();
+            if let Some(entry) = app.chat_provider_manager.get_mut(&provider_name) {
+                entry.web_search = app.chat_panel.config.web_search;
+                let _ = app
+                    .chat_provider_manager
+                    .save(&app.paths.chat_providers_path());
+            }
+            save_chat_config(app);
+            let label = if app.chat_panel.config.web_search {
+                "Web search ON (OpenRouter plugins: web)"
+            } else {
+                "Web search OFF"
+            };
+            app.set_toast(label, crate::app::ToastLevel::Info);
+        }
         KeyCode::Char(c) => {
             app.chat_panel.input.insert(app.chat_panel.input_cursor, c);
             app.chat_panel.input_cursor += c.len_utf8();
@@ -173,10 +193,42 @@ pub(super) fn handle_chat_panel_input(app: &mut App, key: KeyEvent) -> Option<Ac
     None
 }
 
+fn filtered_indices(app: &App) -> Vec<usize> {
+    let filter = app.chat_panel.model_filter.trim().to_lowercase();
+    if filter.is_empty() {
+        return (0..app.chat_panel.models.len()).collect();
+    }
+    app.chat_panel
+        .models
+        .iter()
+        .enumerate()
+        .filter(|(_, m)| m.to_lowercase().contains(&filter))
+        .map(|(i, _)| i)
+        .collect()
+}
+
 fn handle_model_select(app: &mut App, key: KeyEvent) -> Option<Action> {
-    let total = app.chat_panel.models.len();
+    // Ctrl+U clears filter
+    if key.code == KeyCode::Char('u') && key.modifiers.contains(KeyModifiers::CONTROL) {
+        app.chat_panel.model_filter.clear();
+        app.chat_panel.model_selected = 0;
+        app.needs_redraw = true;
+        return None;
+    }
+    let filtered = filtered_indices(app);
+    let total = filtered.len();
     match key.code {
-        KeyCode::Esc | KeyCode::Tab => {
+        KeyCode::Esc => {
+            if !app.chat_panel.model_filter.is_empty() {
+                app.chat_panel.model_filter.clear();
+                app.chat_panel.model_selected = 0;
+                app.needs_redraw = true;
+            } else {
+                app.chat_panel.sub_mode = ChatSubMode::Chat;
+                app.needs_redraw = true;
+            }
+        }
+        KeyCode::Tab => {
             app.chat_panel.sub_mode = ChatSubMode::Chat;
             app.needs_redraw = true;
         }
@@ -188,8 +240,23 @@ fn handle_model_select(app: &mut App, key: KeyEvent) -> Option<Action> {
             app.chat_panel.model_selected += 1;
             app.needs_redraw = true;
         }
+        KeyCode::Backspace => {
+            if !app.chat_panel.model_filter.is_empty() {
+                app.chat_panel.model_filter.pop();
+                // clamp selection to new filtered size
+                let new_filtered = filtered_indices(app);
+                if new_filtered.is_empty() {
+                    app.chat_panel.model_selected = 0;
+                } else if app.chat_panel.model_selected >= new_filtered.len() {
+                    app.chat_panel.model_selected = new_filtered.len() - 1;
+                }
+                app.needs_redraw = true;
+            }
+        }
         KeyCode::Enter => {
-            if let Some(name) = app.chat_panel.models.get(app.chat_panel.model_selected) {
+            if let Some(&real_idx) = filtered.get(app.chat_panel.model_selected)
+                && let Some(name) = app.chat_panel.models.get(real_idx).cloned()
+            {
                 app.chat_panel.config.model = name.clone();
                 // Persist model to chat-providers.toml for this provider estilo provider
                 let provider_name = app.chat_panel.config.provider.clone();
@@ -201,7 +268,16 @@ fn handle_model_select(app: &mut App, key: KeyEvent) -> Option<Action> {
                 }
                 save_chat_config(app);
             }
+            app.chat_panel.model_filter.clear();
             app.chat_panel.sub_mode = ChatSubMode::Chat;
+            app.needs_redraw = true;
+        }
+        KeyCode::Char(c)
+            if !key.modifiers.contains(KeyModifiers::CONTROL)
+                && !key.modifiers.contains(KeyModifiers::ALT) =>
+        {
+            app.chat_panel.model_filter.push(c);
+            app.chat_panel.model_selected = 0;
             app.needs_redraw = true;
         }
         _ => {}
@@ -233,6 +309,7 @@ fn handle_settings(app: &mut App, key: KeyEvent) -> Option<Action> {
                 if let Some(p) = app.chat_provider_manager.get(provider_name) {
                     app.chat_panel.settings_url = p.base_url.clone();
                     app.chat_panel.settings_prompt = p.system_prompt.clone().unwrap_or_default();
+                    app.chat_panel.config.web_search = p.web_search;
                     // keep settings_url in sync; model is applied on save
                 } else {
                     let old_default = old_type.default_url();
@@ -364,7 +441,7 @@ fn save_and_close_settings(app: &mut App) -> Option<Action> {
     };
 
     if server_changed {
-        // Apply provider's saved model when switching provider, so no manual edit needed
+        // Apply provider's saved model and web_search when switching provider
         let provider_name = app.chat_panel.config.provider.as_str();
         if let Some(p) = app.chat_provider_manager.get(provider_name) {
             if !p.model.is_empty() {
@@ -372,14 +449,17 @@ fn save_and_close_settings(app: &mut App) -> Option<Action> {
             } else {
                 app.chat_panel.config.model.clear();
             }
+            app.chat_panel.config.web_search = p.web_search;
         } else {
             app.chat_panel.config.model.clear();
+            app.chat_panel.config.web_search = false;
         }
     }
 
     // Persist provider-specific config to chat-providers.toml estilo providers.toml
     let provider_name = app.chat_panel.config.provider.clone();
     let provider_model = app.chat_panel.config.model.clone();
+    let provider_web_search = app.chat_panel.config.web_search;
     let provider_cfg = piki_core::chat_providers::ChatProviderConfig {
         name: provider_name.clone(),
         description: String::new(),
@@ -391,6 +471,7 @@ fn save_and_close_settings(app: &mut App) -> Option<Action> {
         } else {
             Some(prompt)
         },
+        web_search: provider_web_search,
     };
     app.chat_provider_manager.upsert(provider_cfg);
     let _ = app

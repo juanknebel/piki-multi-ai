@@ -1065,6 +1065,8 @@ pub struct ChatPanelState {
     /// Cached model names from Ollama
     pub models: Vec<String>,
     pub model_selected: usize,
+    /// Filter typed in ModelSelect (live search)
+    pub model_filter: String,
     /// Current sub-mode within the chat overlay
     pub sub_mode: ChatSubMode,
     /// Settings editor: editable base URL

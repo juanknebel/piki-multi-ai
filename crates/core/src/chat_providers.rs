@@ -20,6 +20,9 @@ pub struct ChatProviderConfig {
     pub model: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub system_prompt: Option<String>,
+    /// Enable web search for OpenRouter
+    #[serde(default)]
+    pub web_search: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -117,6 +120,7 @@ impl ChatProviderManager {
                 base_url: ChatServerType::Ollama.default_url().to_string(),
                 model: String::new(),
                 system_prompt: None,
+                web_search: false,
             },
             ChatProviderConfig {
                 name: "llama.cpp".to_string(),
@@ -125,6 +129,7 @@ impl ChatProviderManager {
                 base_url: ChatServerType::LlamaCpp.default_url().to_string(),
                 model: String::new(),
                 system_prompt: None,
+                web_search: false,
             },
             ChatProviderConfig {
                 name: "openrouter".to_string(),
@@ -133,6 +138,7 @@ impl ChatProviderManager {
                 base_url: ChatServerType::OpenRouter.default_url().to_string(),
                 model: "openai/gpt-4o-mini".to_string(),
                 system_prompt: None,
+                web_search: false,
             },
         ]
     }

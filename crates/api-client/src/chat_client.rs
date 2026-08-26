@@ -134,6 +134,12 @@ impl ChatClient for crate::openrouter::OpenRouterClient {
                 }
             })
             .collect();
-        self.chat_stream_with_tools(model, &msgs, tools, tx).await
+        if self.web_search {
+            let plugins = vec![serde_json::json!({"id": "web"})];
+            self.chat_stream_with_tools_and_plugins(model, &msgs, tools, Some(plugins), tx)
+                .await
+        } else {
+            self.chat_stream_with_tools(model, &msgs, tools, tx).await
+        }
     }
 }
