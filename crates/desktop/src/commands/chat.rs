@@ -67,6 +67,20 @@ pub async fn chat_send_message(
         }
         return Err("No model selected. Configure a model in the chat panel settings.".to_string());
     }
+    if config.server_type == piki_core::chat::ChatServerType::OpenRouter
+        && config
+            .effective_api_key_with_paths(&paths)
+            .as_ref()
+            .map(|k| k.trim().is_empty())
+            .unwrap_or(true)
+    {
+        let mut app = state.lock();
+        app.chat_streaming = false;
+        return Err(format!(
+            "No OpenRouter API key. Set [chat] openrouter_api_key in {} or OPENROUTER_API_KEY env.",
+            paths.config_path().display()
+        ));
+    }
 
     tracing::info!(
         model = %config.model,
@@ -278,7 +292,10 @@ pub async fn chat_list_models(
                 .map(|k| k.trim().is_empty())
                 .unwrap_or(true)
             {
-                return Err("No OpenRouter API key. Set [chat] openrouter_api_key in ~/.config/piki-multi/config.toml or OPENROUTER_API_KEY env.".to_string());
+                return Err(format!(
+                    "No OpenRouter API key. Set [chat] openrouter_api_key in {} or OPENROUTER_API_KEY env.",
+                    paths.config_path().display()
+                ));
             }
             let client = piki_api_client::OpenRouterClient::new_with_key(&base_url, api_key);
             let models = client.list_models().await.map_err(|e| {
@@ -358,7 +375,10 @@ pub async fn chat_send_agent_message(
     {
         let mut app = state.lock();
         app.chat_streaming = false;
-        return Err("No OpenRouter API key. Set [chat] openrouter_api_key in ~/.config/piki-multi/config.toml or OPENROUTER_API_KEY env.".to_string());
+        return Err(format!(
+            "No OpenRouter API key. Set [chat] openrouter_api_key in {} or OPENROUTER_API_KEY env.",
+            paths.config_path().display()
+        ));
     }
 
     tracing::info!(

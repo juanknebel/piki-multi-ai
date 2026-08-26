@@ -55,7 +55,8 @@ pub(super) async fn handle(
                     app.chat_panel.current_response.clear();
                     // Remove the just-pushed user message since we won't send it
                     app.chat_panel.messages.pop();
-                    app.set_toast("No OpenRouter API key. Set [chat] openrouter_api_key in ~/.config/piki-multi/config.toml or OPENROUTER_API_KEY env.", crate::app::ToastLevel::Error);
+                    let cfg_path = app.paths.config_path();
+                    app.set_toast(format!("No OpenRouter API key. Set [chat] openrouter_api_key in {} or OPENROUTER_API_KEY env.", cfg_path.display()), crate::app::ToastLevel::Error);
                     return Ok(());
                 }
                 if model.trim().is_empty() {
@@ -204,7 +205,11 @@ pub(super) async fn handle(
                         .map(|k| k.trim().is_empty())
                         .unwrap_or(true)
                     {
-                        let msg = "No OpenRouter API key. Set [chat] openrouter_api_key in ~/.config/piki-multi/config.toml or OPENROUTER_API_KEY env, then Tab again.".to_string();
+                        let cfg_path = app.paths.config_path();
+                        let msg = format!(
+                            "No OpenRouter API key. Set [chat] openrouter_api_key in {} or OPENROUTER_API_KEY env, then Tab again.",
+                            cfg_path.display()
+                        );
                         let _ = status_tx.send(msg);
                     } else {
                         tokio::spawn(async move {
