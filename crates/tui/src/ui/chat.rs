@@ -297,7 +297,14 @@ fn render_model_selector(frame: &mut Frame, area: Rect, app: &App) {
         )));
     }
 
-    let visible: Vec<Line<'_>> = lines.into_iter().take(visible_height).collect();
+    // Scroll so selected model is always visible (header takes 2 lines)
+    let header_h = 2;
+    let start = if selected + header_h < visible_height {
+        0
+    } else {
+        (selected + header_h + 1).saturating_sub(visible_height)
+    };
+    let visible: Vec<Line<'_>> = lines.into_iter().skip(start).take(visible_height).collect();
     frame.render_widget(Paragraph::new(visible), area);
 }
 

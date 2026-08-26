@@ -411,6 +411,22 @@ pub(crate) async fn run(
                                 {
                                     app.chat_panel.config.model = first.clone();
                                 }
+                                // Keep highlight within bounds and on current model
+                                if app.chat_panel.models.is_empty() {
+                                    app.chat_panel.model_selected = 0;
+                                } else if let Some(pos) = app
+                                    .chat_panel
+                                    .models
+                                    .iter()
+                                    .position(|m| *m == app.chat_panel.config.model)
+                                {
+                                    app.chat_panel.model_selected = pos;
+                                } else {
+                                    app.chat_panel.model_selected = app
+                                        .chat_panel
+                                        .model_selected
+                                        .min(app.chat_panel.models.len() - 1);
+                                }
                                 app.needs_redraw = true;
                             } else {
                                 // Normal chat response completion

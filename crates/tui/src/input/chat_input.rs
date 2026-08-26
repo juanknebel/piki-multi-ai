@@ -60,7 +60,7 @@ pub(super) fn handle_chat_panel_input(app: &mut App, key: KeyEvent) -> Option<Ac
             // Open model selector
             if !app.chat_panel.models.is_empty() {
                 app.chat_panel.sub_mode = ChatSubMode::ModelSelect;
-                // Pre-select the current model
+                // Pre-select the current model and clamp
                 if let Some(pos) = app
                     .chat_panel
                     .models
@@ -68,7 +68,13 @@ pub(super) fn handle_chat_panel_input(app: &mut App, key: KeyEvent) -> Option<Ac
                     .position(|m| *m == app.chat_panel.config.model)
                 {
                     app.chat_panel.model_selected = pos;
+                } else {
+                    app.chat_panel.model_selected = app
+                        .chat_panel
+                        .model_selected
+                        .min(app.chat_panel.models.len() - 1);
                 }
+                app.needs_redraw = true;
             } else {
                 // Try to load models
                 return Some(Action::ChatLoadModels);
@@ -570,10 +576,10 @@ mod tests {
             .filter(|l| !l.is_empty())
             .map(|l| l.to_string())
             .collect();
-        if app2.chat_panel.config.model.is_empty() {
-            if let Some(first) = app2.chat_panel.models.first() {
-                app2.chat_panel.config.model = first.clone();
-            }
+        if app2.chat_panel.config.model.is_empty()
+            && let Some(first) = app2.chat_panel.models.first()
+        {
+            app2.chat_panel.config.model = first.clone();
         }
         app2.needs_redraw = true;
         assert_eq!(app2.chat_panel.models.len(), 3);
