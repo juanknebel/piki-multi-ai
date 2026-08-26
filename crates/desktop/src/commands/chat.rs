@@ -58,6 +58,9 @@ pub async fn chat_send_message(
         tracing::warn!("Chat send attempted with no model selected");
         let mut app = state.lock();
         app.chat_streaming = false;
+        if config.server_type == piki_core::chat::ChatServerType::OpenRouter {
+            return Err("No model selected for OpenRouter. Pick a model in chat settings (Tab to list, needs API key).".to_string());
+        }
         return Err("No model selected. Configure a model in the chat panel settings.".to_string());
     }
 
@@ -255,10 +258,13 @@ pub async fn chat_list_models(
             // Read key from config.toml (via DataPaths) or env; no stored key here since caller has no ChatConfig
             let paths = piki_core::paths::DataPaths::default_paths();
             let api_key = piki_core::chat::ChatConfig { provider: String::new(), server_type: piki_core::chat::ChatServerType::OpenRouter, model: String::new(), base_url: base_url.clone(), system_prompt: None, api_key: None }.effective_api_key_with_paths(&paths);
+            if api_key.as_ref().map(|k| k.trim().is_empty()).unwrap_or(true) {
+                return Err("No OpenRouter API key. Set [chat] openrouter_api_key in ~/.config/piki-multi/config.toml or OPENROUTER_API_KEY env.".to_string());
+            }
             let client = piki_api_client::OpenRouterClient::new_with_key(&base_url, api_key);
             let models = client.list_models().await.map_err(|e| {
                 tracing::error!(base_url = %base_url, error = %e, "Failed to list OpenRouter models");
-                format!("Failed to connect to OpenRouter: {e}")
+                format!("Failed to connect to OpenRouter: {e}. Check [chat] openrouter_api_key and base URL https://openrouter.ai/api/v1")
             })?;
             Ok(models
                 .into_iter()
@@ -314,7 +320,15 @@ pub async fn chat_send_agent_message(
     if config.model.is_empty() {
         let mut app = state.lock();
         app.chat_streaming = false;
+        if config.server_type == piki_core::chat::ChatServerType::OpenRouter {
+            return Err("No model selected for OpenRouter. Pick a model in chat settings (Tab to list, needs API key).".to_string());
+        }
         return Err("No model selected.".to_string());
+    }
+    if config.server_type == piki_core::chat::ChatServerType::OpenRouter && config.effective_api_key_with_paths(&paths).as_ref().map(|k| k.trim().is_empty()).unwrap_or(true) {
+        let mut app = state.lock();
+        app.chat_streaming = false;
+        return Err("No OpenRouter API key. Set [chat] openrouter_api_key in ~/.config/piki-multi/config.toml or OPENROUTER_API_KEY env.".to_string());
     }
 
     tracing::info!(
