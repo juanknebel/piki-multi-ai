@@ -132,15 +132,122 @@
   align-self: flex-start;
 }
 
-.chat-msg.tool .chat-msg-content {
-  background: color-mix(in srgb, var(--success-color) 15%, transparent);
+/* ── Tool cards (agent mode) ─────────────────────── */
+
+/* One `<details>` per tool call: summary = status icon + name + state +
+   duration; body = Arguments / Result <pre> blocks, Approve / Deny while
+   the agent loop waits (chat-panel.ts renderToolCard). */
+.chat-tool-card {
+  width: 95%;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
-  border: 1px solid color-mix(in srgb, var(--success-color) 25%, transparent);
+}
+
+.chat-tool-card[data-status="error"] {
+  border-color: color-mix(in srgb, var(--error-color) 40%, transparent);
+}
+
+.chat-tool-card[data-status="approval"] {
+  border-color: color-mix(in srgb, var(--warning-color) 50%, transparent);
+  background: color-mix(in srgb, var(--warning-color) 8%, var(--bg-tertiary));
+}
+
+.chat-tool-card[data-status="ok"] .chat-tool-status { color: var(--success-color); }
+.chat-tool-card[data-status="error"] .chat-tool-status,
+.chat-tool-card[data-status="denied"] .chat-tool-status { color: var(--error-color); }
+.chat-tool-card[data-status="approval"] .chat-tool-status { color: var(--warning-color); }
+.chat-tool-card[data-status="running"] .chat-tool-status { color: var(--accent-primary); animation: pulse var(--dur-pulse) ease-in-out infinite; }
+
+.chat-tool-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 4px 8px;
+  cursor: pointer;
+  list-style: none;
+  min-height: var(--control-height-sm);
+}
+
+.chat-tool-summary::-webkit-details-marker { display: none; }
+
+.chat-tool-summary::before {
+  content: "";
+  border: solid currentColor;
+  border-width: 0 1.5px 1.5px 0;
+  width: 5px;
+  height: 5px;
+  transform: rotate(-45deg);
+  transition: transform var(--transition-fast);
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.chat-tool-card[open] > .chat-tool-summary::before { transform: rotate(45deg); }
+
+.chat-tool-status { display: inline-flex; }
+
+.chat-tool-name {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.chat-tool-state {
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: var(--fs-xs);
+}
+
+.chat-tool-duration {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-tool-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: 4px 8px 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.chat-tool-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  align-items: flex-start;
+}
+
+.chat-tool-section-title {
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.chat-tool-pre {
+  align-self: stretch;
+  margin: 0;
+  padding: 6px 8px;
+  background: color-mix(in srgb, var(--bg-primary) 60%, transparent);
+  border-radius: var(--radius-sm);
   font-family: var(--font-mono);
   font-size: var(--fs-sm);
   white-space: pre-wrap;
-  max-height: 200px;
-  overflow-y: auto;
+  word-break: break-word;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.chat-tool-approval {
+  display: flex;
+  gap: var(--sp-3);
 }
 
 .chat-msg-content code {
@@ -192,6 +299,8 @@
   background: var(--bg-secondary);
   flex-shrink: 0;
 }
+
+/* `+` = ghost icon .ui-btn (md) opening the Add-context chooser. */
 
 /* `.chat-input ui-input`: auto-growing one-liner (chat-panel.ts autoResize) */
 .chat-input {

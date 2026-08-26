@@ -1086,6 +1086,24 @@ export function chatGetAgentMode(): Promise<boolean> {
   return invoke("chat_get_agent_mode");
 }
 
+export type ChatApprovalDecision = "allow" | "deny" | "allow_all";
+
+/** Answer a pending write-tool approval (from a `chat-agent-event` of kind `approval-required`). */
+export function chatApprove(toolCallId: string, decision: ChatApprovalDecision): Promise<void> {
+  return invoke("chat_approve", { toolCallId, decision });
+}
+
+/** Structured agent-loop activity for the chat panel's tool cards. */
+export type ChatAgentEvent =
+  | { kind: "tool-calls"; calls: { id: string; name: string; arguments: unknown }[] }
+  | { kind: "tool-executing"; name: string }
+  | { kind: "tool-result"; tool_call_id: string; name: string; result: string; is_error: boolean }
+  | { kind: "approval-required"; tool_call_id: string; tool_name: string; description: string };
+
+export function onChatAgentEvent(callback: (event: ChatAgentEvent) => void): Promise<UnlistenFn> {
+  return listen<ChatAgentEvent>("chat-agent-event", (e) => callback(e.payload));
+}
+
 export function onChatToken(
   callback: (event: { content: string; done: boolean }) => void,
 ): Promise<UnlistenFn> {

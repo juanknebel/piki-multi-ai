@@ -67,6 +67,7 @@ export interface FixedShortcut {
 export const CATEGORY_ORDER = [
   "General",
   "View & Panels",
+  "Chat",
   "Search",
   "Git",
   "Agents",
@@ -90,7 +91,10 @@ const shortcuts: ShortcutDef[] = [
   // and the Edit menu reach the same dialog from a focused shell.
   { id: "settings", label: "Settings", category: "General", defaultKey: "Ctrl+,", key: "Ctrl+,", action: () => {} },
   { id: "toggle-sidebar", label: "Toggle Sidebar", category: "View & Panels", defaultKey: "Ctrl+B", key: "Ctrl+B", action: () => {} },
-  { id: "toggle-chat", label: "Toggle AI Chat", category: "View & Panels", defaultKey: "Ctrl+Shift+L", key: "Ctrl+Shift+L", action: () => {}, terminalCapture: true },
+  { id: "toggle-chat", label: "Toggle AI Chat", category: "Chat", defaultKey: "Ctrl+Shift+L", key: "Ctrl+Shift+L", action: () => {}, terminalCapture: true },
+  // chat-panel.ts addContextToChat(): a terminal selection goes straight into
+  // the composer (select + this chord = two keys), otherwise a chooser opens.
+  { id: "add-chat-context", label: "Add Context to Chat", category: "Chat", defaultKey: "Ctrl+Shift+I", key: "Ctrl+Shift+I", action: () => {}, terminalCapture: true },
   { id: "kanban", label: "Kanban Board", category: "View & Panels", defaultKey: "Alt+K", key: "Alt+K", action: () => {}, terminalCapture: true },
   { id: "web-preview", label: "Open Web Preview", category: "View & Panels", defaultKey: "Alt+Shift+W", key: "Alt+Shift+W", action: () => {}, terminalCapture: true },
   { id: "theme", label: "Theme Settings", category: "View & Panels", defaultKey: "Alt+T", key: "Alt+T", action: () => {}, terminalCapture: true },

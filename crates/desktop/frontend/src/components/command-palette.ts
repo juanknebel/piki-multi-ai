@@ -34,7 +34,7 @@ import { showAboutDialog } from "./dialogs/about-dialog";
 import { getProviderLabel, type AIProvider } from "../types";
 import { openProvider } from "./open-content";
 import { toggleSidebar } from "./sidebar";
-import { toggleChatPanel } from "./chat-panel";
+import { addContextToChat, toggleChatPanel } from "./chat-panel";
 import { closeActiveWsTab, moveActiveWsTabToWorkspace, tearDownAndClosePane } from "./tab-bar";
 import { themeEngine } from "../theme";
 import { revealInFileTree, toggleFileTreeAutoReveal } from "./file-tree";
@@ -569,9 +569,16 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
   cmds.push({
     id: "toggle-chat",
     label: "Toggle AI Chat",
-    category: "View",
+    category: "Chat",
     keybinding: getShortcutKey("toggle-chat"),
     action: () => toggleChatPanel(),
+  });
+  cmds.push({
+    id: "add-chat-context",
+    label: "Add Context to Chat",
+    category: "Chat",
+    keybinding: getShortcutKey("add-chat-context"),
+    action: () => void addContextToChat(),
   });
   cmds.push({
     id: "zoom-in",

@@ -28,7 +28,7 @@ import { showThemeDialog } from "./dialogs/theme-dialog";
 import { showLogsDialog } from "./dialogs/logs-dialog";
 import { showSessionsDialog } from "./dialogs/sessions-dialog";
 import { showAboutDialog } from "./dialogs/about-dialog";
-import { toggleChatPanel } from "./chat-panel";
+import { addContextToChat, toggleChatPanel } from "./chat-panel";
 import { toggleSidebar } from "./sidebar";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getProviderLabel, type AIProvider } from "../types";
@@ -199,7 +199,6 @@ const MENUS: MenuDefinition[] = [
       { label: "Kanban Board", shortcut: getShortcutKey("kanban"), action: () => appState.setActiveView("kanban") },
       SEP,
       { label: "Toggle Sidebar", shortcut: getShortcutKey("toggle-sidebar"), action: () => toggleSidebar() },
-      { label: "Toggle AI Chat", shortcut: getShortcutKey("toggle-chat"), action: () => toggleChatPanel() },
       SEP,
       { label: "Zoom In", shortcut: getShortcutKey("zoom-in"), action: () => zoomIn() },
       { label: "Zoom Out", shortcut: getShortcutKey("zoom-out"), action: () => zoomOut() },
@@ -263,6 +262,13 @@ const MENUS: MenuDefinition[] = [
       { label: "Git Stash", shortcut: getShortcutKey("git-stash"), disabled: noWs, action: () => showStashDialog() },
       SEP,
       { label: "Code Review (PR)", shortcut: getShortcutKey("code-review"), disabled: noWs, action: () => showCodeReview() },
+    ],
+  },
+  {
+    label: "Chat",
+    items: () => [
+      { label: "Toggle AI Chat", shortcut: getShortcutKey("toggle-chat"), action: () => toggleChatPanel() },
+      { label: "Add Context to Chat", shortcut: getShortcutKey("add-chat-context"), action: () => void addContextToChat() },
     ],
   },
   {

@@ -68,7 +68,7 @@ Built with Rust and [ratatui](https://ratatui.rs/).
 - **Agents pane** — one pane listing every running agent across all workspaces with live status and elapsed run time (`3m 12s`); jump straight to any of them. In the desktop, an agent that needs you is amber in the tab bar, status bar, Agents panel, workspace list and activity bar at once, and `Alt+A` lands on it from any workspace (permission requests first, then unseen news — press again to walk through them)
 - **Agent profiles & dispatch** — define named agents per project, sync them to provider-native subagent files, and dispatch them from a kanban card into an auto-created worktree with a composed prompt
 - **OS notifications** — agent-finished / needs-attention / command-finished toasts (or OSC 9 for tmux/ssh), with optional chimes and smart suppression when you're already looking at the tab; one `[notifications]` config serves the TUI and the desktop
-- **AI Chat** — global chat panel backed by local LLMs (Ollama or llama.cpp), with an agentic tool-use mode that can inspect the active workspace
+- **AI Chat** — global chat panel backed by local LLMs (Ollama or llama.cpp), with an agentic tool-use mode that can inspect the active workspace; `Ctrl+Shift+I` (or the composer's `+`) drops what you are looking at — terminal selection, active file, its diff, editor selection — into the composer as a fenced block, and in agent mode every tool call is a collapsible card with inline Approve / Deny for write tools
 
 ### Built-in tools
 

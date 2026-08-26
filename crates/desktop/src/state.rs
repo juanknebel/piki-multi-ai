@@ -40,6 +40,14 @@ pub struct DesktopApp {
     pub chat_streaming: bool,
     /// Whether agent mode (tool-use) is enabled for chat.
     pub chat_agent_mode: bool,
+    /// Write-tool approvals the agent loop is waiting on, by tool call id.
+    /// `chat_approve` answers one; dropping a sender (new message, stop,
+    /// clear) is a Deny for the loop (`agent_loop.rs` treats a closed
+    /// channel like Deny, and times out after 300 s on its own).
+    pub chat_pending_approvals: std::collections::HashMap<
+        String,
+        tokio::sync::oneshot::Sender<piki_agent::ApprovalResponse>,
+    >,
 }
 
 #[allow(dead_code)]

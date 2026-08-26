@@ -14,6 +14,73 @@ struct ChatTokenPayload {
     done: bool,
 }
 
+/// Structured agent-loop activity for the chat panel's tool cards
+/// (`"chat-agent-event"` Tauri event). Text still streams over
+/// `"chat-token"`; this channel carries what a card needs.
+#[derive(Clone, Serialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+enum ChatAgentEventPayload {
+    /// The LLM asked for these tool calls (args are the parsed JSON).
+    ToolCalls {
+        calls: Vec<piki_core::chat::ToolCall>,
+    },
+    ToolExecuting {
+        name: String,
+    },
+    ToolResult {
+        tool_call_id: String,
+        name: String,
+        result: String,
+        is_error: bool,
+    },
+    /// A write-tool waits for the user; answer with `chat_approve`.
+    ApprovalRequired {
+        tool_call_id: String,
+        tool_name: String,
+        description: String,
+    },
+}
+
+/// A user's answer to `ApprovalRequired`, as the frontend sends it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ApprovalDecision {
+    Allow,
+    Deny,
+    AllowAll,
+}
+
+impl From<ApprovalDecision> for piki_agent::ApprovalResponse {
+    fn from(d: ApprovalDecision) -> Self {
+        match d {
+            ApprovalDecision::Allow => Self::Allow,
+            ApprovalDecision::Deny => Self::Deny,
+            ApprovalDecision::AllowAll => Self::AllowAll,
+        }
+    }
+}
+
+type PendingApprovals =
+    std::collections::HashMap<String, tokio::sync::oneshot::Sender<piki_agent::ApprovalResponse>>;
+
+/// Answer the approval `tool_call_id` is waiting on. Errors when nothing is
+/// pending under that id (already answered, or the loop timed out).
+pub(crate) fn resolve_approval(
+    pending: &mut PendingApprovals,
+    tool_call_id: &str,
+    decision: ApprovalDecision,
+) -> Result<(), String> {
+    let tx = pending
+        .remove(tool_call_id)
+        .ok_or_else(|| format!("No pending approval for tool call {tool_call_id}"))?;
+    tx.send(decision.into())
+        .map_err(|_| "The agent is no longer waiting for this approval".to_string())
+}
+
+/// Longest tool result kept in history (chars); a card shows the rest as
+/// "Show more" up to this, the LLM always got the full text.
+const TOOL_RESULT_HISTORY_CAP: usize = 4000;
+
 #[derive(Serialize, Clone)]
 pub struct ChatModelInfo {
     pub name: String,
@@ -193,6 +260,7 @@ pub async fn chat_get_messages(
 pub async fn chat_clear(state: State<'_, Mutex<DesktopApp>>) -> Result<(), String> {
     let mut app = state.lock();
     app.chat_messages.clear();
+    app.chat_pending_approvals.clear();
     Ok(())
 }
 
@@ -243,6 +311,8 @@ pub async fn chat_list_models(
 pub async fn chat_stop(state: State<'_, Mutex<DesktopApp>>) -> Result<(), String> {
     let mut app = state.lock();
     app.chat_streaming = false;
+    // Dropping the senders denies whatever the loop was waiting on.
+    app.chat_pending_approvals.clear();
     Ok(())
 }
 
@@ -267,6 +337,8 @@ pub async fn chat_send_agent_message(
             tool_call_id: None,
         });
         app.chat_streaming = true;
+        // A stale approval from a previous run is answered Deny by the drop.
+        app.chat_pending_approvals.clear();
 
         let ws_path = if !app.workspaces.is_empty() {
             app.workspaces[app.active_workspace].info.path.clone()
@@ -361,7 +433,7 @@ pub async fn chat_send_agent_message(
                         },
                     );
                 }
-                piki_agent::AgentEvent::ToolCallsStarted(_calls) => {
+                piki_agent::AgentEvent::ToolCallsStarted(calls) => {
                     full_content.clear();
                     let _ = handle_for_events.emit(
                         "chat-token",
@@ -370,36 +442,45 @@ pub async fn chat_send_agent_message(
                             done: false,
                         },
                     );
+                    let _ = handle_for_events.emit(
+                        "chat-agent-event",
+                        ChatAgentEventPayload::ToolCalls { calls },
+                    );
                 }
                 piki_agent::AgentEvent::ToolExecuting { name } => {
                     let _ = handle_for_events.emit(
-                        "chat-token",
-                        ChatTokenPayload {
-                            content: format!("\n[Running {name}...]\n"),
-                            done: false,
-                        },
+                        "chat-agent-event",
+                        ChatAgentEventPayload::ToolExecuting { name },
                     );
                 }
                 piki_agent::AgentEvent::ToolResult {
+                    tool_call_id,
                     name,
                     result,
                     is_error,
-                    ..
                 } => {
+                    let _ = handle_for_events.emit(
+                        "chat-agent-event",
+                        ChatAgentEventPayload::ToolResult {
+                            tool_call_id: tool_call_id.clone(),
+                            name: name.clone(),
+                            result: result.clone(),
+                            is_error,
+                        },
+                    );
+                    // History keeps the TUI's `[name] [Error] text` shape
+                    // (chat-context.ts `parseToolMessage` reads it back), cut
+                    // on a char boundary.
                     let prefix = if is_error { "[Error] " } else { "" };
-                    let display = format!("[{name}] {prefix}{result}");
-                    let truncated = if display.len() > 500 {
-                        format!("{}...", &display[..500])
-                    } else {
-                        display
-                    };
+                    let body: String = result.chars().take(TOOL_RESULT_HISTORY_CAP).collect();
+                    let ellipsis = if body.len() < result.len() { "..." } else { "" };
                     let managed: tauri::State<'_, Mutex<DesktopApp>> = handle_for_events.state();
                     let mut app = managed.lock();
                     app.chat_messages.push(ChatMessage {
                         role: ChatRole::Tool,
-                        content: truncated,
+                        content: format!("[{name}] {prefix}{body}{ellipsis}"),
                         tool_calls: None,
-                        tool_call_id: None,
+                        tool_call_id: Some(tool_call_id),
                     });
                 }
                 piki_agent::AgentEvent::Finished => {
@@ -428,14 +509,41 @@ pub async fn chat_send_agent_message(
                     app.chat_streaming = false;
                     return;
                 }
-                piki_agent::AgentEvent::ApprovalRequired(_) => {
-                    // Write-tool approval will be handled in F6
+                piki_agent::AgentEvent::ApprovalRequired(req) => {
+                    // Park the oneshot until `chat_approve` answers it; the
+                    // card renders Approve / Deny from this event.
+                    let managed: tauri::State<'_, Mutex<DesktopApp>> = handle_for_events.state();
+                    {
+                        let mut app = managed.lock();
+                        app.chat_pending_approvals
+                            .insert(req.tool_call_id.clone(), req.response_tx);
+                    }
+                    let _ = handle_for_events.emit(
+                        "chat-agent-event",
+                        ChatAgentEventPayload::ApprovalRequired {
+                            tool_call_id: req.tool_call_id,
+                            tool_name: req.tool_name,
+                            description: req.description,
+                        },
+                    );
                 }
             }
         }
     });
 
     Ok(())
+}
+
+/// Answer a pending write-tool approval (`ApprovalRequired` card).
+#[tauri::command]
+pub async fn chat_approve(
+    state: State<'_, Mutex<DesktopApp>>,
+    tool_call_id: String,
+    decision: ApprovalDecision,
+) -> Result<(), String> {
+    tracing::info!(tool_call_id = %tool_call_id, ?decision, "Chat tool approval answered");
+    let mut app = state.lock();
+    resolve_approval(&mut app.chat_pending_approvals, &tool_call_id, decision)
 }
 
 /// Set agent mode on/off.
@@ -454,4 +562,39 @@ pub async fn chat_set_agent_mode(
 pub async fn chat_get_agent_mode(state: State<'_, Mutex<DesktopApp>>) -> Result<bool, String> {
     let app = state.lock();
     Ok(app.chat_agent_mode)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use piki_agent::ApprovalResponse;
+
+    #[tokio::test]
+    async fn resolve_approval_answers_the_waiting_loop() {
+        let mut pending = PendingApprovals::new();
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        pending.insert("call-1".into(), tx);
+
+        resolve_approval(&mut pending, "call-1", ApprovalDecision::Allow).unwrap();
+        assert!(matches!(rx.await, Ok(ApprovalResponse::Allow)));
+        assert!(pending.is_empty(), "answered approvals leave the map");
+        // A second answer for the same id is an error, not a panic.
+        assert!(resolve_approval(&mut pending, "call-1", ApprovalDecision::Deny).is_err());
+    }
+
+    #[tokio::test]
+    async fn dropping_a_pending_approval_reads_as_deny() {
+        let mut pending = PendingApprovals::new();
+        let (tx, rx) = tokio::sync::oneshot::channel::<ApprovalResponse>();
+        pending.insert("call-2".into(), tx);
+        pending.clear();
+        // agent_loop.rs maps `Err(RecvError)` to Deny.
+        assert!(rx.await.is_err());
+    }
+
+    #[test]
+    fn approval_decision_deserializes_snake_case() {
+        let d: ApprovalDecision = serde_json::from_str("\"allow_all\"").unwrap();
+        assert_eq!(d, ApprovalDecision::AllowAll);
+    }
 }
