@@ -103,6 +103,12 @@ impl NotificationsConfig {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ChatFileConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub openrouter_api_key: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     #[serde(default)]
@@ -115,6 +121,8 @@ pub struct Config {
     pub kanban: KanbanConfig,
     #[serde(default)]
     pub notifications: NotificationsConfig,
+    #[serde(default)]
+    pub chat: ChatFileConfig,
     /// Runtime-detected platform (not serialized).
     #[serde(skip)]
     pub platform: Platform,
@@ -138,6 +146,7 @@ impl Default for Config {
             keybindings: Keybindings::default(),
             kanban: KanbanConfig::default(),
             notifications: NotificationsConfig::default(),
+            chat: ChatFileConfig::default(),
             platform: Platform::detect(),
         }
     }

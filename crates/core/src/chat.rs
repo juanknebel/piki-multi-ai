@@ -130,12 +130,39 @@ impl Default for ChatConfig {
 
 impl ChatConfig {
     /// Effective API key, preferring stored key, then OPENROUTER_API_KEY env var (piki-ai parity).
+    /// Kept for backwards compat; new code should use `effective_api_key_with_paths`.
     pub fn effective_api_key(&self) -> Option<String> {
         if let Some(k) = self.api_key.as_ref().filter(|s| !s.trim().is_empty()) {
             return Some(k.clone());
         }
+        if let Some(k) = Self::key_from_config_file(&crate::paths::DataPaths::default_paths()) {
+            return Some(k);
+        }
         std::env::var("OPENROUTER_API_KEY")
             .ok()
             .filter(|s| !s.trim().is_empty())
+    }
+
+    /// Like `effective_api_key` but reads `config.toml` from the given `DataPaths`
+    /// (so `--data-dir` isolation is honoured). Priority: stored `api_key` > `config.toml`
+    /// `[chat] openrouter_api_key` > `OPENROUTER_API_KEY` env.
+    pub fn effective_api_key_with_paths(&self, paths: &crate::paths::DataPaths) -> Option<String> {
+        if let Some(k) = self.api_key.as_ref().filter(|s| !s.trim().is_empty()) {
+            return Some(k.clone());
+        }
+        if let Some(k) = Self::key_from_config_file(paths) {
+            return Some(k);
+        }
+        std::env::var("OPENROUTER_API_KEY")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+    }
+
+    fn key_from_config_file(paths: &crate::paths::DataPaths) -> Option<String> {
+        let data = std::fs::read_to_string(paths.config_path()).ok()?;
+        let val: toml::Value = toml::from_str(&data).ok()?;
+        let key = val.get("chat")?.get("openrouter_api_key")?.as_str()?;
+        let k = key.trim();
+        if k.is_empty() { None } else { Some(k.to_string()) }
     }
 }

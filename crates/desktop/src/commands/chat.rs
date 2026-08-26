@@ -35,7 +35,7 @@ pub async fn chat_send_message(
     state: State<'_, Mutex<DesktopApp>>,
     message: String,
 ) -> Result<(), String> {
-    let (config, messages) = {
+    let (config, messages, paths) = {
         let mut app = state.lock();
 
         if app.chat_streaming {
@@ -51,7 +51,7 @@ pub async fn chat_send_message(
         });
         app.chat_streaming = true;
 
-        (app.chat_config.clone(), app.chat_messages.clone())
+        (app.chat_config.clone(), app.chat_messages.clone(), app.paths.clone())
     };
 
     if config.model.is_empty() {
@@ -75,7 +75,7 @@ pub async fn chat_send_message(
 
     // `ChatClient` hides each backend's message format, so this no longer
     // has to know one from the other (see piki_agent::chat_bridge).
-    let api_key = config.effective_api_key();
+    let api_key = config.effective_api_key_with_paths(&paths);
     let client = piki_agent::chat_client_for_with_key(config.server_type, &config.base_url, api_key);
     tokio::spawn(async move {
         if let Err(e) = client.chat_stream(&model, &msgs, None, tx).await {
@@ -237,8 +237,9 @@ pub async fn chat_list_models(
                 .collect())
         }
         piki_core::chat::ChatServerType::OpenRouter => {
-            // Try env var fallback if no key stored in config - list call needs key
-            let api_key = std::env::var("OPENROUTER_API_KEY").ok().filter(|s| !s.trim().is_empty());
+            // Read key from config.toml (via DataPaths) or env; no stored key here since caller has no ChatConfig
+            let paths = piki_core::paths::DataPaths::default_paths();
+            let api_key = piki_core::chat::ChatConfig { provider: String::new(), server_type: piki_core::chat::ChatServerType::OpenRouter, model: String::new(), base_url: base_url.clone(), system_prompt: None, api_key: None }.effective_api_key_with_paths(&paths);
             let client = piki_api_client::OpenRouterClient::new_with_key(&base_url, api_key);
             let models = client.list_models().await.map_err(|e| {
                 tracing::error!(base_url = %base_url, error = %e, "Failed to list OpenRouter models");
@@ -271,7 +272,7 @@ pub async fn chat_send_agent_message(
     state: State<'_, Mutex<DesktopApp>>,
     message: String,
 ) -> Result<(), String> {
-    let (config, messages, ws_path) = {
+    let (config, messages, ws_path, paths) = {
         let mut app = state.lock();
 
         if app.chat_streaming {
@@ -292,7 +293,7 @@ pub async fn chat_send_agent_message(
             std::env::current_dir().unwrap_or_default()
         };
 
-        (app.chat_config.clone(), app.chat_messages.clone(), ws_path)
+        (app.chat_config.clone(), app.chat_messages.clone(), ws_path, app.paths.clone())
     };
 
     if config.model.is_empty() {
@@ -309,7 +310,7 @@ pub async fn chat_send_agent_message(
         "Desktop: sending agent message"
     );
 
-    let api_key = config.effective_api_key();
+    let api_key = config.effective_api_key_with_paths(&paths);
     let client: Box<dyn piki_api_client::ChatClient> = match config.server_type {
         piki_core::chat::ChatServerType::Ollama => {
             Box::new(piki_api_client::OllamaClient::new(&config.base_url))

@@ -64,7 +64,7 @@ pub(super) async fn handle(
                     "TUI: sending agent message"
                 );
 
-                let api_key = app.chat_panel.config.effective_api_key();
+                let api_key = app.config.chat.openrouter_api_key.clone().filter(|s| !s.trim().is_empty()).or_else(|| app.chat_panel.config.effective_api_key());
                 let client = piki_agent::chat_client_for_with_key(server_type, &base_url, api_key);
 
                 let registry = piki_agent::ToolRegistry::default_all();
@@ -98,7 +98,7 @@ pub(super) async fn handle(
 
                 // `ChatClient` hides each backend's message format, so this
                 // no longer has to know one from the other.
-                let api_key = app.chat_panel.config.effective_api_key();
+                let api_key = app.config.chat.openrouter_api_key.clone().filter(|s| !s.trim().is_empty()).or_else(|| app.chat_panel.config.effective_api_key());
                 let client = piki_agent::chat_client_for_with_key(server_type, &base_url, api_key);
                 let task = tokio::spawn(async move {
                     if let Err(e) = client.chat_stream(&model, &msgs, None, tx).await {
@@ -155,7 +155,7 @@ pub(super) async fn handle(
                     });
                 }
                 piki_core::chat::ChatServerType::OpenRouter => {
-                    let api_key = app.chat_panel.config.effective_api_key();
+                    let api_key = app.config.chat.openrouter_api_key.clone().filter(|s| !s.trim().is_empty()).or_else(|| app.chat_panel.config.effective_api_key());
                     tokio::spawn(async move {
                         let client = piki_api_client::OpenRouterClient::new_with_key(&base_url, api_key);
                         match client.list_models().await {
