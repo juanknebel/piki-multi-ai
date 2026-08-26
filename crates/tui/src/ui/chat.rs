@@ -6,7 +6,7 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 
 use crate::app::App;
 
-pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &App) {
+pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &mut App) {
     let theme = &app.theme;
 
     // Centered floating panel
@@ -66,6 +66,9 @@ pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let messages_area = chunks[0];
     let input_area = chunks[1];
     let footer_area = chunks[2];
+    app.chat_messages_inner_area = Some(messages_area);
+    // Also set terminal_inner_area to messages_area for selection coords (chat uses same selection mechanism)
+    app.terminal_inner_area = Some(messages_area);
 
     // ── Sub-mode content ─────────────────────────
     match app.chat_panel.sub_mode {
@@ -506,4 +509,36 @@ fn render_text_field<'a>(
 /// previous local version sliced by bytes and panicked on any accent.
 fn wrap_text(text: &str, width: usize) -> Vec<String> {
     crate::text::wrap(text, width)
+}
+
+pub(crate) fn chat_text_lines(app: &crate::app::App, width: usize) -> Vec<String> {
+    let mut lines: Vec<String> = Vec::new();
+    if app.chat_panel.messages.is_empty() && !app.chat_panel.streaming {
+        return lines;
+    }
+    let content_width = width.saturating_sub(4).max(1);
+    for msg in &app.chat_panel.messages {
+        let role_label = match msg.role {
+            piki_core::chat::ChatRole::User => "You",
+            piki_core::chat::ChatRole::Assistant => "AI",
+            piki_core::chat::ChatRole::System => "System",
+            piki_core::chat::ChatRole::Tool => "Tool",
+        };
+        lines.push(format!("  {role_label}"));
+        for content_line in msg.content.lines() {
+            for chunk in wrap_text(content_line, content_width) {
+                lines.push(format!("    {chunk}"));
+            }
+        }
+        lines.push(String::new());
+    }
+    if app.chat_panel.streaming && !app.chat_panel.current_response.is_empty() {
+        lines.push("  AI".to_string());
+        for content_line in app.chat_panel.current_response.lines() {
+            for chunk in wrap_text(content_line, content_width) {
+                lines.push(format!("    {chunk}"));
+            }
+        }
+    }
+    lines
 }

@@ -143,7 +143,7 @@ mod tests {
                 app.chat_panel.input_cursor = cursor;
                 terminal
                     .draw(|frame| {
-                        super::chat::render_chat_overlay(frame, frame.area(), &app);
+                        super::chat::render_chat_overlay(frame, frame.area(), &mut app);
                     })
                     .expect("chat overlay must render at any width/cursor");
             }

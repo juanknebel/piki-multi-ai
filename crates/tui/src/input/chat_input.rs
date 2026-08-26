@@ -196,10 +196,40 @@ pub(super) fn handle_chat_panel_input(app: &mut App, key: KeyEvent) -> Option<Ac
             app.chat_panel.scroll = app.chat_panel.scroll.saturating_sub(1);
         }
         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            // Stop the streaming response; the partial text is kept.
+            // Stop streaming if active, otherwise copy (Ghostty swallows Ctrl+Shift+C)
             if app.chat_panel.streaming {
                 app.chat_stop_stream();
                 app.set_toast("Stopped streaming response", crate::app::ToastLevel::Info);
+            } else {
+                // Copy last assistant message / input without needing Shift (fallback for terminals that eat Ctrl+Shift+C)
+                let text = if !app.chat_panel.input.is_empty() {
+                    app.chat_panel.input.clone()
+                } else if let Some(last) = app
+                    .chat_panel
+                    .messages
+                    .iter()
+                    .rev()
+                    .find(|m| m.role == piki_core::chat::ChatRole::Assistant)
+                {
+                    last.content.clone()
+                } else if let Some(last) = app.chat_panel.messages.last() {
+                    last.content.clone()
+                } else if !app.chat_panel.current_response.is_empty() {
+                    app.chat_panel.current_response.clone()
+                } else {
+                    String::new()
+                };
+                if text.trim().is_empty() {
+                    app.set_toast("Nothing to copy", crate::app::ToastLevel::Info);
+                } else {
+                    match crate::clipboard::copy_to_clipboard(&text) {
+                        Ok(()) => {
+                            app.set_toast("Copied to clipboard", crate::app::ToastLevel::Info)
+                        }
+                        Err(e) => app
+                            .set_toast(format!("Copy failed: {e}"), crate::app::ToastLevel::Error),
+                    }
+                }
             }
         }
         KeyCode::Char('l') if key.modifiers.contains(KeyModifiers::CONTROL) => {

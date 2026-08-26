@@ -933,6 +933,8 @@ pub struct App {
     pub terminal_inner_area: Option<Rect>,
     /// Inner area of the API response panel (for mouse hit-testing)
     pub api_response_inner_area: Option<Rect>,
+    /// Inner area of the chat messages panel (for mouse hit-testing)
+    pub chat_messages_inner_area: Option<Rect>,
     /// In-memory log ring buffer for the log viewer overlay
     pub log_buffer: crate::log_buffer::LogBuffer,
     /// Pre-formatted system info string (CPU, RAM, battery, time)
@@ -1144,6 +1146,7 @@ impl App {
             selection: None,
             terminal_inner_area: None,
             api_response_inner_area: None,
+            chat_messages_inner_area: None,
             sysinfo: std::sync::Arc::new(parking_lot::Mutex::new(String::new())),
             sidebar_pct: 20,
             left_split_pct: 50,
