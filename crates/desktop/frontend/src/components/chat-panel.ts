@@ -55,6 +55,7 @@ let currentConfig: ipc.ChatConfig = {
   model: "",
   base_url: "http://localhost:11434",
   system_prompt: null,
+  web_search: false,
 };
 
 export async function initChatPanel(el: HTMLElement) {
@@ -547,14 +548,24 @@ function showChatSettings() {
     ],
     currentConfig.server_type,
   );
+  // Switching backends restores what the user last used there (model, URL,
+  // prompt, web search — from chat-providers.toml, shared with the TUI);
+  // a never-configured backend gets its defaults.
+  let providerModel = currentConfig.model;
   serverDropdown.container.addEventListener("change", () => {
     const newType = serverDropdown.value as ipc.ChatServerType;
-    const oldDefault = serverDefaults[currentConfig.server_type];
-    // If URL matches old default, update to new default
-    if (urlInput.value.trim() === oldDefault || urlInput.value.trim() === "") {
+    urlInput.placeholder = serverDefaults[newType];
+    webSearchRow.hidden = newType !== "OpenRouter";
+    void ipc.chatProviderConfig(newType).then((saved) => {
+      if ((serverDropdown.value as ipc.ChatServerType) !== newType) return;
+      urlInput.value = saved.base_url;
+      promptInput.value = saved.system_prompt ?? "";
+      webSearchInput.checked = saved.web_search;
+      providerModel = saved.model;
+    }).catch(() => {
       urlInput.value = serverDefaults[newType];
-      urlInput.placeholder = serverDefaults[newType];
-    }
+      providerModel = "";
+    });
   });
   serverRow.appendChild(serverDropdown.container);
   body.appendChild(serverRow);
@@ -582,6 +593,20 @@ function showChatSettings() {
   promptInput.rows = 4;
   promptRow.appendChild(promptInput);
   body.appendChild(promptRow);
+
+  // Web search (OpenRouter plugin) — meaningless for local backends
+  const webSearchRow = document.createElement("div");
+  webSearchRow.className = "chat-settings-row";
+  webSearchRow.hidden = currentConfig.server_type !== "OpenRouter";
+  const webSearchLabel = document.createElement("label");
+  webSearchLabel.className = "chat-settings-label chat-settings-check";
+  const webSearchInput = document.createElement("input");
+  webSearchInput.type = "checkbox";
+  webSearchInput.checked = currentConfig.web_search;
+  webSearchLabel.appendChild(webSearchInput);
+  webSearchLabel.appendChild(document.createTextNode(" Web search (OpenRouter plugin)"));
+  webSearchRow.appendChild(webSearchLabel);
+  body.appendChild(webSearchRow);
 
   // Footer buttons
   const footer = document.createElement("div");
@@ -615,10 +640,11 @@ function showChatSettings() {
     currentConfig.server_type = newServerType;
     currentConfig.base_url = newUrl || serverDefaults[newServerType];
     currentConfig.system_prompt = newPrompt || null;
+    currentConfig.web_search = newServerType === "OpenRouter" && webSearchInput.checked;
 
     if (serverChanged) {
-      // Clear model since model names differ between servers
-      currentConfig.model = "";
+      // Model names differ between backends: take the one last used there.
+      currentConfig.model = providerModel;
     }
 
     await saveConfig();

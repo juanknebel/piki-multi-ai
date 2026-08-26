@@ -385,6 +385,7 @@ fn main() {
             commands::chat::chat_send_message,
             commands::chat::chat_get_config,
             commands::chat::chat_set_config,
+            commands::chat::chat_provider_config,
             commands::chat::chat_get_messages,
             commands::chat::chat_clear,
             commands::chat::chat_list_models,

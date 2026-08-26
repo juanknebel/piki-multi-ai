@@ -378,3 +378,13 @@
 .chat-code-copy:hover {
   color: var(--text-primary);
 }
+
+.chat-settings-check {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+  cursor: pointer;
+}

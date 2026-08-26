@@ -428,11 +428,7 @@ fn handle_settings(app: &mut App, key: KeyEvent) -> Option<Action> {
                 let new_type = old_type.next();
                 app.chat_panel.settings_server_type = new_type;
                 // Load provider's persisted base_url/system_prompt so switching doesn't require manual edit
-                let provider_name = match new_type {
-                    piki_core::chat::ChatServerType::Ollama => "ollama",
-                    piki_core::chat::ChatServerType::LlamaCpp => "llama.cpp",
-                    piki_core::chat::ChatServerType::OpenRouter => "openrouter",
-                };
+                let provider_name = new_type.provider_name();
                 if let Some(p) = app.chat_provider_manager.get(provider_name) {
                     app.chat_panel.settings_url = p.base_url.clone();
                     app.chat_panel.settings_prompt = p.system_prompt.clone().unwrap_or_default();

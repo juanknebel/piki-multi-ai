@@ -451,6 +451,8 @@ export interface ChatConfig {
   base_url: string;
   system_prompt: string | null;
   api_key?: string | null;
+  /** OpenRouter web-search plugin; ignored by local backends. */
+  web_search: boolean;
 }
 
 export interface ChatModelInfo {

@@ -86,6 +86,16 @@ impl ChatServerType {
         }
     }
 
+    /// Key of this backend's entry in `chat-providers.toml` (the per-backend
+    /// model / URL / prompt / web-search memory shared by TUI and desktop).
+    pub fn provider_name(self) -> &'static str {
+        match self {
+            Self::Ollama => "ollama",
+            Self::LlamaCpp => "llama.cpp",
+            Self::OpenRouter => "openrouter",
+        }
+    }
+
     /// Cycle to the next server type.
     pub fn next(self) -> Self {
         match self {

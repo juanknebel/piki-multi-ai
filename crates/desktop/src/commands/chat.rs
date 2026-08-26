@@ -164,8 +164,12 @@ pub async fn chat_send_message(
     // `ChatClient` hides each backend's message format, so this no longer
     // has to know one from the other (see piki_agent::chat_bridge).
     let api_key = config.effective_api_key_with_paths(&paths);
-    let client =
-        piki_agent::chat_client_for_with_key(config.server_type, &config.base_url, api_key);
+    let client = piki_agent::chat_client_for_with_key_and_search(
+        config.server_type,
+        &config.base_url,
+        api_key,
+        config.web_search,
+    );
     tokio::spawn(async move {
         if let Err(e) = client.chat_stream(&model, &msgs, None, tx).await {
             tracing::error!(error = %e, "chat_stream failed");
@@ -244,15 +248,66 @@ pub async fn chat_get_config(state: State<'_, Mutex<DesktopApp>>) -> Result<Chat
     Ok(app.chat_config.clone())
 }
 
-/// Update the chat configuration and persist it.
+/// The saved per-backend settings for `server_type` from `chat-providers.toml`
+/// (model, base URL, system prompt, web search), or that backend's defaults
+/// when it was never configured. The settings dialog calls this when the
+/// server dropdown changes so switching backends restores what the user last
+/// used there — the same memory the TUI's chat settings read.
+#[tauri::command]
+pub async fn chat_provider_config(
+    state: State<'_, Mutex<DesktopApp>>,
+    server_type: piki_core::chat::ChatServerType,
+) -> Result<ChatConfig, String> {
+    let app = state.lock();
+    Ok(provider_chat_config(
+        &app.chat_provider_manager,
+        server_type,
+    ))
+}
+
+fn provider_chat_config(
+    manager: &piki_core::chat_providers::ChatProviderManager,
+    server_type: piki_core::chat::ChatServerType,
+) -> ChatConfig {
+    let provider = server_type.provider_name().to_string();
+    match manager.get(&provider) {
+        Some(p) => ChatConfig {
+            provider,
+            server_type,
+            model: p.model.clone(),
+            base_url: p.base_url.clone(),
+            system_prompt: p.system_prompt.clone(),
+            api_key: None,
+            web_search: p.web_search,
+        },
+        None => ChatConfig {
+            provider,
+            server_type,
+            model: String::new(),
+            base_url: server_type.default_url().to_string(),
+            system_prompt: None,
+            api_key: None,
+            web_search: false,
+        },
+    }
+}
+
+/// Update the chat configuration and persist it: the active config goes to
+/// the ui-prefs store, and the backend's entry in `chat-providers.toml` is
+/// updated so its model / URL / prompt / web search are remembered per
+/// backend (`provider` is always derived from `server_type`, never trusted
+/// from the frontend).
 #[tauri::command]
 pub async fn chat_set_config(
     state: State<'_, Mutex<DesktopApp>>,
-    config: ChatConfig,
+    mut config: ChatConfig,
 ) -> Result<(), String> {
+    config.provider = config.server_type.provider_name().to_string();
     tracing::info!(
+        provider = %config.provider,
         model = %config.model,
         base_url = %config.base_url,
+        web_search = config.web_search,
         has_system_prompt = config.system_prompt.is_some(),
         "Updating chat config"
     );
@@ -260,22 +315,21 @@ pub async fn chat_set_config(
     let mut app = state.lock();
     app.chat_config = config.clone();
 
-    // Persist provider-specific config to chat-providers.toml estilo providers.toml
-    let provider_name = config.provider.clone();
-    if !provider_name.is_empty() {
-        let cfg = piki_core::chat_providers::ChatProviderConfig {
-            name: provider_name.clone(),
+    app.chat_provider_manager
+        .upsert(piki_core::chat_providers::ChatProviderConfig {
+            name: config.provider.clone(),
             description: String::new(),
             server_type: config.server_type,
             base_url: config.base_url.clone(),
             model: config.model.clone(),
             system_prompt: config.system_prompt.clone(),
             web_search: config.web_search,
-        };
-        app.chat_provider_manager.upsert(cfg);
-        let _ = app
-            .chat_provider_manager
-            .save(&app.paths.chat_providers_path());
+        });
+    if let Err(e) = app
+        .chat_provider_manager
+        .save(&app.paths.chat_providers_path())
+    {
+        tracing::warn!(error = %e, "Failed to save chat-providers.toml");
     }
 
     // Persist to settings
@@ -472,7 +526,8 @@ pub async fn chat_send_agent_message(
             Box::new(piki_api_client::LlamaCppClient::new(&config.base_url))
         }
         piki_core::chat::ChatServerType::OpenRouter => Box::new(
-            piki_api_client::OpenRouterClient::new_with_key(&config.base_url, api_key),
+            piki_api_client::OpenRouterClient::new_with_key(&config.base_url, api_key)
+                .with_web_search(config.web_search),
         ),
     };
 

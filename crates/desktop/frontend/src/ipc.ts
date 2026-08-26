@@ -1072,6 +1072,8 @@ export interface ChatConfig {
   base_url: string;
   system_prompt: string | null;
   api_key?: string | null;
+  /** OpenRouter web-search plugin; ignored by local backends. */
+  web_search: boolean;
 }
 
 export interface ChatMessage {
@@ -1095,6 +1097,10 @@ export function chatGetConfig(): Promise<ChatConfig> {
 
 export function chatSetConfig(config: ChatConfig): Promise<void> {
   return invoke("chat_set_config", { config });
+}
+/** Saved per-backend settings from chat-providers.toml (or its defaults). */
+export function chatProviderConfig(serverType: ChatServerType): Promise<ChatConfig> {
+  return invoke("chat_provider_config", { serverType });
 }
 
 export function chatGetMessages(): Promise<ChatMessage[]> {

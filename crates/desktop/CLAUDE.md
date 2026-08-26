@@ -560,6 +560,13 @@ feature-specific modifiers in feature CSS; never re-declare a button/input/surfa
   (`appState.activeTabTree` + `allLeaves`), reads editor selections via `code-editor-panel.ts
   getCodeEditorSelection(tabId)`, opens the panel with `ensureChatVisible()` (the overlay-under-1000px
   rule lives in `layout.css`). Chat config persists under the `chat_config` settings key.
+- **Per-backend memory**: `commands/chat.rs::chat_set_config` derives `provider` from
+  `ChatServerType::provider_name()` (never trusts the frontend's) and upserts that backend's entry in
+  `chat-providers.toml` via `DesktopApp.chat_provider_manager`; `chat_provider_config(server_type)`
+  (`ipc.chatProviderConfig`) reads it back (defaults when absent) — the settings dialog calls it on every
+  server-dropdown change to prefill URL / prompt / web search and to carry the saved model on Save.
+  `web_search` is part of `ChatConfig` end to end (`chat_client_for_with_key_and_search` /
+  `OpenRouterClient::with_web_search`); the checkbox is only shown for OpenRouter.
 - **Approval flow**: `commands/chat.rs` forwards the agent loop as `"chat-agent-event"` (`tool-calls` /
   `tool-executing` / `tool-result` / `approval-required`, `ipc.onChatAgentEvent`) next to the
   `"chat-token"` stream; an `ApprovalRequired` parks its oneshot in `DesktopApp.chat_pending_approvals`
