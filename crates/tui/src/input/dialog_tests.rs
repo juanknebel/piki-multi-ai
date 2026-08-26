@@ -976,12 +976,18 @@ fn dashboard_with_empty_workspaces_stays_open() {
     let mut app = test_app();
     assert!(app.workspaces.is_empty());
     open_dashboard(&mut app);
-    assert!(matches!(app.active_dialog, Some(DialogState::Dashboard { .. })));
+    assert!(matches!(
+        app.active_dialog,
+        Some(DialogState::Dashboard { .. })
+    ));
 
     let action = handle_dashboard_input(&mut app, key(KeyCode::Char('j')));
 
     assert!(action.is_none());
-    assert!(matches!(app.active_dialog, Some(DialogState::Dashboard { .. })));
+    assert!(matches!(
+        app.active_dialog,
+        Some(DialogState::Dashboard { .. })
+    ));
     assert_eq!(app.mode, AppMode::Dashboard);
 }
 

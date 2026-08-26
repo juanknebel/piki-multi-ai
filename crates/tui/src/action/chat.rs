@@ -42,7 +42,13 @@ pub(super) async fn handle(
             let base_url = app.chat_panel.config.base_url.clone();
             let server_type = app.chat_panel.config.server_type;
             if server_type == piki_core::chat::ChatServerType::OpenRouter {
-                let has_key = app.config.chat.openrouter_api_key.as_ref().map(|k| !k.trim().is_empty()).unwrap_or(false)
+                let has_key = app
+                    .config
+                    .chat
+                    .openrouter_api_key
+                    .as_ref()
+                    .map(|k| !k.trim().is_empty())
+                    .unwrap_or(false)
                     || app.chat_panel.config.effective_api_key().is_some();
                 if !has_key {
                     app.chat_panel.streaming = false;
@@ -83,7 +89,13 @@ pub(super) async fn handle(
                     "TUI: sending agent message"
                 );
 
-                let api_key = app.config.chat.openrouter_api_key.clone().filter(|s| !s.trim().is_empty()).or_else(|| app.chat_panel.config.effective_api_key());
+                let api_key = app
+                    .config
+                    .chat
+                    .openrouter_api_key
+                    .clone()
+                    .filter(|s| !s.trim().is_empty())
+                    .or_else(|| app.chat_panel.config.effective_api_key());
                 let client = piki_agent::chat_client_for_with_key(server_type, &base_url, api_key);
 
                 let registry = piki_agent::ToolRegistry::default_all();
@@ -117,7 +129,13 @@ pub(super) async fn handle(
 
                 // `ChatClient` hides each backend's message format, so this
                 // no longer has to know one from the other.
-                let api_key = app.config.chat.openrouter_api_key.clone().filter(|s| !s.trim().is_empty()).or_else(|| app.chat_panel.config.effective_api_key());
+                let api_key = app
+                    .config
+                    .chat
+                    .openrouter_api_key
+                    .clone()
+                    .filter(|s| !s.trim().is_empty())
+                    .or_else(|| app.chat_panel.config.effective_api_key());
                 let client = piki_agent::chat_client_for_with_key(server_type, &base_url, api_key);
                 let task = tokio::spawn(async move {
                     if let Err(e) = client.chat_stream(&model, &msgs, None, tx).await {
@@ -174,22 +192,36 @@ pub(super) async fn handle(
                     });
                 }
                 piki_core::chat::ChatServerType::OpenRouter => {
-                    let api_key = app.config.chat.openrouter_api_key.clone().filter(|s| !s.trim().is_empty()).or_else(|| app.chat_panel.config.effective_api_key());
-                    if api_key.as_ref().map(|k| k.trim().is_empty()).unwrap_or(true) {
+                    let api_key = app
+                        .config
+                        .chat
+                        .openrouter_api_key
+                        .clone()
+                        .filter(|s| !s.trim().is_empty())
+                        .or_else(|| app.chat_panel.config.effective_api_key());
+                    if api_key
+                        .as_ref()
+                        .map(|k| k.trim().is_empty())
+                        .unwrap_or(true)
+                    {
                         let msg = "No OpenRouter API key. Set [chat] openrouter_api_key in ~/.config/piki-multi/config.toml or OPENROUTER_API_KEY env, then Tab again.".to_string();
                         let _ = status_tx.send(msg);
                     } else {
                         tokio::spawn(async move {
-                            let client = piki_api_client::OpenRouterClient::new_with_key(&base_url, api_key);
+                            let client =
+                                piki_api_client::OpenRouterClient::new_with_key(&base_url, api_key);
                             match client.list_models().await {
                                 Ok(models) => {
-                                    let names: Vec<String> = models.into_iter().map(|m| m.id).collect();
+                                    let names: Vec<String> =
+                                        models.into_iter().map(|m| m.id).collect();
                                     let payload = format!("__MODELS__{}", names.join("\n"));
-                                    let _ =
-                                        chat_tx.send(piki_api_client::ChatStreamEvent::Done(payload));
+                                    let _ = chat_tx
+                                        .send(piki_api_client::ChatStreamEvent::Done(payload));
                                 }
                                 Err(e) => {
-                                    let msg = format!("{e}. Check [chat] openrouter_api_key in config.toml / OPENROUTER_API_KEY env and base URL https://openrouter.ai/api/v1.");
+                                    let msg = format!(
+                                        "{e}. Check [chat] openrouter_api_key in config.toml / OPENROUTER_API_KEY env and base URL https://openrouter.ai/api/v1."
+                                    );
                                     let _ = status_tx.send(msg);
                                 }
                             }

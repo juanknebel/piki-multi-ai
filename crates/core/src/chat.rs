@@ -163,6 +163,10 @@ impl ChatConfig {
         let val: toml::Value = toml::from_str(&data).ok()?;
         let key = val.get("chat")?.get("openrouter_api_key")?.as_str()?;
         let k = key.trim();
-        if k.is_empty() { None } else { Some(k.to_string()) }
+        if k.is_empty() {
+            None
+        } else {
+            Some(k.to_string())
+        }
     }
 }

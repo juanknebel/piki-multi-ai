@@ -1,8 +1,8 @@
 //! Discover external agents via /proc (Linux).
 //! Supports claude, codex, muse (muse-spark), antigravity/agy. Tree by ppid, mapped to workspace by longest cwd prefix.
 
-use std::collections::{HashMap, HashSet};
 use serde::Serialize;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use crate::WorkspaceInfo;

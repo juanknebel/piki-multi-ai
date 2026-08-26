@@ -186,7 +186,9 @@ fn handle_model_select(app: &mut App, key: KeyEvent) -> Option<Action> {
                 let provider_name = app.chat_panel.config.provider.clone();
                 if let Some(entry) = app.chat_provider_manager.get_mut(&provider_name) {
                     entry.model = name.clone();
-                    let _ = app.chat_provider_manager.save(&app.paths.chat_providers_path());
+                    let _ = app
+                        .chat_provider_manager
+                        .save(&app.paths.chat_providers_path());
                 }
                 save_chat_config(app);
             }
@@ -374,10 +376,16 @@ fn save_and_close_settings(app: &mut App) -> Option<Action> {
         server_type: new_server_type,
         base_url: final_url,
         model: provider_model,
-        system_prompt: if prompt.is_empty() { None } else { Some(prompt) },
+        system_prompt: if prompt.is_empty() {
+            None
+        } else {
+            Some(prompt)
+        },
     };
     app.chat_provider_manager.upsert(provider_cfg);
-    let _ = app.chat_provider_manager.save(&app.paths.chat_providers_path());
+    let _ = app
+        .chat_provider_manager
+        .save(&app.paths.chat_providers_path());
 
     save_chat_config(app);
     app.chat_panel.sub_mode = ChatSubMode::Chat;

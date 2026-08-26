@@ -153,7 +153,9 @@ pub(crate) fn render_dashboard_overlay(frame: &mut Frame, area: Rect, app: &App)
     } else {
         body_lines.push(Line::from(Span::styled(
             "  External agents:",
-            Style::default().fg(theme.palette.fg1).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(theme.palette.fg1)
+                .add_modifier(Modifier::BOLD),
         )));
         for tree in &app.external_agents {
             let ws_label = tree

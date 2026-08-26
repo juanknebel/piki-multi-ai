@@ -35,7 +35,9 @@ pub struct ChatProviderManager {
 
 impl ChatProviderManager {
     pub fn empty() -> Self {
-        Self { providers: Vec::new() }
+        Self {
+            providers: Vec::new(),
+        }
     }
 
     pub fn load_or_init(path: &Path) -> Self {
@@ -44,20 +46,30 @@ impl ChatProviderManager {
             if !trimmed.is_empty() {
                 // Try new key chat_providers first, then fallback to [[chat_provider]] or providers
                 if let Ok(file) = toml::from_str::<ChatProvidersFile>(trimmed)
-                    && !file.chat_providers.is_empty() {
-                        return Self { providers: file.chat_providers };
-                    }
+                    && !file.chat_providers.is_empty()
+                {
+                    return Self {
+                        providers: file.chat_providers,
+                    };
+                }
                 // fallback: try providers key (old)
                 #[derive(Deserialize)]
-                struct Alt { providers: Vec<ChatProviderConfig> }
+                struct Alt {
+                    providers: Vec<ChatProviderConfig>,
+                }
                 if let Ok(alt) = toml::from_str::<Alt>(trimmed)
-                    && !alt.providers.is_empty() {
-                        return Self { providers: alt.providers };
-                    }
+                    && !alt.providers.is_empty()
+                {
+                    return Self {
+                        providers: alt.providers,
+                    };
+                }
             }
         }
         let defaults = Self::default_providers();
-        let m = Self { providers: defaults };
+        let m = Self {
+            providers: defaults,
+        };
         let _ = m.save(path);
         m
     }
@@ -66,13 +78,17 @@ impl ChatProviderManager {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        let file = ChatProvidersFile { chat_providers: self.providers.clone() };
+        let file = ChatProvidersFile {
+            chat_providers: self.providers.clone(),
+        };
         let s = toml::to_string_pretty(&file)?;
         std::fs::write(path, s)?;
         Ok(())
     }
 
-    pub fn all(&self) -> &[ChatProviderConfig] { &self.providers }
+    pub fn all(&self) -> &[ChatProviderConfig] {
+        &self.providers
+    }
     pub fn get(&self, name: &str) -> Option<&ChatProviderConfig> {
         self.providers.iter().find(|p| p.name == name)
     }

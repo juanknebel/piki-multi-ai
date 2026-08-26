@@ -11,7 +11,9 @@
 //! agent path already used it. Three copies of the client selection, two of
 //! the message conversion.
 
-use piki_api_client::{ChatClient, ChatWireMessage, LlamaCppClient, OllamaClient, OpenRouterClient, RawToolCall};
+use piki_api_client::{
+    ChatClient, ChatWireMessage, LlamaCppClient, OllamaClient, OpenRouterClient, RawToolCall,
+};
 use piki_core::chat::{ChatConfig, ChatMessage, ChatServerType};
 
 /// The chat client for `server_type`, behind the trait that hides each
@@ -28,12 +30,16 @@ pub fn chat_client_for_with_key(
 ) -> Box<dyn ChatClient> {
     // Env var fallback for piki-ai parity
     let effective_key = api_key.or_else(|| {
-        std::env::var("OPENROUTER_API_KEY").ok().filter(|s| !s.trim().is_empty())
+        std::env::var("OPENROUTER_API_KEY")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
     });
     match server_type {
         ChatServerType::Ollama => Box::new(OllamaClient::new(base_url)),
         ChatServerType::LlamaCpp => Box::new(LlamaCppClient::new(base_url)),
-        ChatServerType::OpenRouter => Box::new(OpenRouterClient::new_with_key(base_url, effective_key)),
+        ChatServerType::OpenRouter => {
+            Box::new(OpenRouterClient::new_with_key(base_url, effective_key))
+        }
     }
 }
 

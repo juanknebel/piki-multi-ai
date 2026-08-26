@@ -97,7 +97,10 @@ impl OpenRouterClient {
         let mut req = self.client.get(&url);
         if let Some(key) = self.api_key.as_ref().filter(|k| !k.trim().is_empty()) {
             req = req.header("Authorization", format!("Bearer {}", key));
-            req = req.header("HTTP-Referer", "https://github.com/juanknebel/piki-multi-ai");
+            req = req.header(
+                "HTTP-Referer",
+                "https://github.com/juanknebel/piki-multi-ai",
+            );
             req = req.header("X-Title", "piki-multi-ai");
         }
         let resp = req.send().await.map_err(|e| {
@@ -158,7 +161,10 @@ impl OpenRouterClient {
         let mut req = self.client.post(&url).json(&payload);
         if let Some(key) = self.api_key.as_ref().filter(|k| !k.trim().is_empty()) {
             req = req.header("Authorization", format!("Bearer {}", key));
-            req = req.header("HTTP-Referer", "https://github.com/juanknebel/piki-multi-ai");
+            req = req.header(
+                "HTTP-Referer",
+                "https://github.com/juanknebel/piki-multi-ai",
+            );
             req = req.header("X-Title", "piki-multi-ai");
         }
         let resp = match req.send().await {
