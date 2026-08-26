@@ -113,7 +113,7 @@ pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &App) {
         crate::app::ChatSubMode::ModelSelect => vec![
             Span::styled("[type]", Style::default().fg(h)),
             Span::raw(" filter  "),
-            Span::styled("[j/k]", Style::default().fg(h)),
+            Span::styled("[Up/Down]", Style::default().fg(h)),
             Span::raw(" navigate  "),
             Span::styled("[Enter]", Style::default().fg(h)),
             Span::raw(" select  "),

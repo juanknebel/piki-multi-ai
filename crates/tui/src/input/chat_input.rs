@@ -232,11 +232,11 @@ fn handle_model_select(app: &mut App, key: KeyEvent) -> Option<Action> {
             app.chat_panel.sub_mode = ChatSubMode::Chat;
             app.needs_redraw = true;
         }
-        KeyCode::Up | KeyCode::Char('k') if app.chat_panel.model_selected > 0 => {
+        KeyCode::Up if app.chat_panel.model_selected > 0 => {
             app.chat_panel.model_selected -= 1;
             app.needs_redraw = true;
         }
-        KeyCode::Down | KeyCode::Char('j') if app.chat_panel.model_selected + 1 < total => {
+        KeyCode::Down if app.chat_panel.model_selected + 1 < total => {
             app.chat_panel.model_selected += 1;
             app.needs_redraw = true;
         }
@@ -571,13 +571,12 @@ mod tests {
         app.chat_panel.model_selected = 0;
         app.needs_redraw = false;
 
-        // Test Down via j
-        handle_model_select(&mut app, key(KeyCode::Char('j')));
-        assert_eq!(app.chat_panel.model_selected, 1, "j Down should go 0->1");
+        // Test Down via ArrowDown (j/k now type into filter, not navigate)
+        handle_model_select(&mut app, key(KeyCode::Down));
+        assert_eq!(app.chat_panel.model_selected, 1, "Down should go 0->1");
         assert!(app.needs_redraw, "Down should set needs_redraw");
         app.needs_redraw = false;
 
-        // Test Down via ArrowDown
         handle_model_select(&mut app, key(KeyCode::Down));
         assert_eq!(
             app.chat_panel.model_selected, 2,
@@ -586,16 +585,28 @@ mod tests {
         assert!(app.needs_redraw);
         app.needs_redraw = false;
 
-        // Test Up via k
-        handle_model_select(&mut app, key(KeyCode::Char('k')));
-        assert_eq!(app.chat_panel.model_selected, 1, "k Up should go 2->1");
+        // Test Up via ArrowUp
+        handle_model_select(&mut app, key(KeyCode::Up));
+        assert_eq!(app.chat_panel.model_selected, 1, "Up should go 2->1");
         assert!(app.needs_redraw);
         app.needs_redraw = false;
 
-        // Test Up via ArrowUp
         handle_model_select(&mut app, key(KeyCode::Up));
         assert_eq!(app.chat_panel.model_selected, 0, "Up Arrow should go 1->0");
         assert!(app.needs_redraw);
+        app.needs_redraw = false;
+
+        // Test typing filters (j/k now append to filter, not navigate)
+        handle_model_select(&mut app, key(KeyCode::Char('c')));
+        assert_eq!(app.chat_panel.model_filter, "c");
+        assert_eq!(app.chat_panel.model_selected, 0);
+        handle_model_select(&mut app, key(KeyCode::Char('j')));
+        assert_eq!(app.chat_panel.model_filter, "cj");
+        // Backspace removes last char
+        handle_model_select(&mut app, key(KeyCode::Backspace));
+        assert_eq!(app.chat_panel.model_filter, "c");
+        handle_model_select(&mut app, key(KeyCode::Backspace));
+        assert_eq!(app.chat_panel.model_filter, "");
         app.needs_redraw = false;
 
         // Test Esc
@@ -684,15 +695,15 @@ mod tests {
         app3.needs_redraw = true;
         frames += 1;
         assert!(app3.needs_redraw);
-        // Frame 2: j
+        // Frame 2: Down
         app3.needs_redraw = false;
-        handle_model_select(&mut app3, key(KeyCode::Char('j')));
+        handle_model_select(&mut app3, key(KeyCode::Down));
         frames += 1;
         assert_eq!(app3.chat_panel.model_selected, 1);
         assert!(app3.needs_redraw);
-        // Frame 3: j
+        // Frame 3: Down
         app3.needs_redraw = false;
-        handle_model_select(&mut app3, key(KeyCode::Char('j')));
+        handle_model_select(&mut app3, key(KeyCode::Down));
         frames += 1;
         assert_eq!(app3.chat_panel.model_selected, 2);
         // Frame 4: Enter

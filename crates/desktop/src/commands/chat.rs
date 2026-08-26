@@ -203,6 +203,7 @@ pub async fn chat_set_config(
             base_url: config.base_url.clone(),
             model: config.model.clone(),
             system_prompt: config.system_prompt.clone(),
+            web_search: config.web_search,
         };
         app.chat_provider_manager.upsert(cfg);
         let _ = app
@@ -285,6 +286,7 @@ pub async fn chat_list_models(
                 base_url: base_url.clone(),
                 system_prompt: None,
                 api_key: None,
+                web_search: false,
             }
             .effective_api_key_with_paths(&paths);
             if api_key

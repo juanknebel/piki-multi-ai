@@ -239,3 +239,4 @@ theme = "default"
 # for it (it only lives in config).
 # [chat]
 # openrouter_api_key = "sk-or-..."
+# web_search = false  # OpenRouter plugins: web search (Ctrl+W in TUI toggles per-provider)
