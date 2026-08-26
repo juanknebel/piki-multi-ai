@@ -24,4 +24,12 @@ ignore = [
     # syntect or wl-clipboard-rs bump and drop these lines when they clear.
     "RUSTSEC-2026-0194",
     "RUSTSEC-2026-0195",
+    # hickory-proto 0.25.2 via reqwest hickory-dns: NSEC3 closest-encloser unbounded loop (0118, no fix)
+    # and NSEC3 resource exhaustion (0119, needs >=0.26.1). reqwest 0.12 pins hickory 0.25,
+    # so no upgrade available. Not reachable: hickory is used only as a client-side
+    # DNS resolver for OpenRouter (happy-eyeballs IPv4 fallback), not as a DNS
+    # server doing DNSSEC validation of hostile cross-zone responses.
+    # Re-check when reqwest bumps hickory to >=0.26.
+    "RUSTSEC-2026-0118",
+    "RUSTSEC-2026-0119",
 ]
