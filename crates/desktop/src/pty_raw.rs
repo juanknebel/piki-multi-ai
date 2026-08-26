@@ -3,8 +3,6 @@ use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use base64::Engine;
-use base64::engine::general_purpose::STANDARD as BASE64;
 use parking_lot::Mutex;
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use serde::Serialize;
@@ -20,18 +18,25 @@ use piki_core::shell_integration::ShellEvent;
 use piki_core::shell_integration::parser::OscParser;
 
 use crate::events::PtyAttentionPayload;
+use crate::pty_output::{OutMsg, output_channel, spawn_emitter};
 use crate::state::DesktopApp;
-
-#[derive(Serialize, Clone)]
-struct PtyOutputPayload {
-    tab_id: String,
-    data: String,
-}
 
 #[derive(Serialize, Clone)]
 struct PtyExitPayload {
     tab_id: String,
     exit_code: Option<i32>,
+}
+
+/// `pty-exit` goes out from the emitter thread, after the last output batch
+/// (see `pty_output.rs`) — never straight from a reader.
+fn emit_exit(app_handle: &AppHandle, tab_id: &str, exit_code: Option<i32>) {
+    let _ = app_handle.emit(
+        "pty-exit",
+        PtyExitPayload {
+            tab_id: tab_id.to_string(),
+            exit_code,
+        },
+    );
 }
 
 /// Tauri event payload for shell-integration markers (OSC 133/7) extracted
@@ -168,6 +173,11 @@ impl RawLocalPty {
         #[cfg(unix)]
         let sock_tab_id = tab_id.clone();
 
+        // Output is coalesced by an emitter thread (pty_output.rs); the
+        // reader only parses shell-integration markers and forwards bytes.
+        let (out_tx, batcher) = output_channel();
+        spawn_emitter(app_handle.clone(), tab_id.clone(), batcher, emit_exit)?;
+
         let emit_tab_id = tab_id.clone();
         let reader_handle = tokio::task::spawn_blocking(move || {
             let mut buf = [0u8; 16384];
@@ -175,13 +185,7 @@ impl RawLocalPty {
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) => {
-                        let _ = app_handle.emit(
-                            "pty-exit",
-                            PtyExitPayload {
-                                tab_id: emit_tab_id.clone(),
-                                exit_code: Some(0),
-                            },
-                        );
+                        let _ = out_tx.send(OutMsg::Exit(Some(0)));
                         break;
                     }
                     Ok(n) => {
@@ -222,23 +226,12 @@ impl RawLocalPty {
                                 }
                             }
                         }
-                        let encoded = BASE64.encode(chunk);
-                        let _ = app_handle.emit(
-                            "pty-output",
-                            PtyOutputPayload {
-                                tab_id: emit_tab_id.clone(),
-                                data: encoded,
-                            },
-                        );
+                        if out_tx.send(OutMsg::Data(chunk.to_vec())).is_err() {
+                            break; // emitter gone (app shutting down)
+                        }
                     }
                     Err(_) => {
-                        let _ = app_handle.emit(
-                            "pty-exit",
-                            PtyExitPayload {
-                                tab_id: emit_tab_id.clone(),
-                                exit_code: None,
-                            },
-                        );
+                        let _ = out_tx.send(OutMsg::Exit(None));
                         break;
                     }
                 }
@@ -386,6 +379,12 @@ impl RawRemotePty {
         let sender = att.sender();
 
         let (mut read, _sender) = att.into_read_half();
+        // Same coalescing pipeline as the local reader; a failure to start
+        // the emitter thread only means this tab never paints.
+        let (out_tx, batcher) = output_channel();
+        if let Err(e) = spawn_emitter(app_handle.clone(), tab_id.clone(), batcher, emit_exit) {
+            tracing::error!(error = %e, "pty output emitter thread failed to start");
+        }
         let reader_handle = {
             let bytes = Arc::clone(&bytes_processed);
             let alive = Arc::clone(&alive);
@@ -397,13 +396,9 @@ impl RawRemotePty {
                         match read_frame(&mut read) {
                             Ok(Frame::Restore(b)) | Ok(Frame::Output(b)) => {
                                 bytes.fetch_add(b.len() as u64, Ordering::Relaxed);
-                                let _ = app_handle.emit(
-                                    "pty-output",
-                                    PtyOutputPayload {
-                                        tab_id: tab_id.clone(),
-                                        data: BASE64.encode(&b),
-                                    },
-                                );
+                                if out_tx.send(OutMsg::Data(b)).is_err() {
+                                    break;
+                                }
                             }
                             Ok(Frame::ShellEvent { event, .. }) => {
                                 if let Some(ref shell) = shell {
@@ -415,35 +410,17 @@ impl RawRemotePty {
                             }
                             Ok(Frame::Exited { code }) => {
                                 alive.store(false, Ordering::Relaxed);
-                                let _ = app_handle.emit(
-                                    "pty-exit",
-                                    PtyExitPayload {
-                                        tab_id: tab_id.clone(),
-                                        exit_code: code,
-                                    },
-                                );
+                                let _ = out_tx.send(OutMsg::Exit(code));
                             }
                             Ok(Frame::Detached { .. }) => {
                                 alive.store(false, Ordering::Relaxed);
-                                let _ = app_handle.emit(
-                                    "pty-exit",
-                                    PtyExitPayload {
-                                        tab_id: tab_id.clone(),
-                                        exit_code: None,
-                                    },
-                                );
+                                let _ = out_tx.send(OutMsg::Exit(None));
                                 break;
                             }
                             Ok(_) => {} // heartbeat / unexpected
                             Err(_) => {
                                 alive.store(false, Ordering::Relaxed);
-                                let _ = app_handle.emit(
-                                    "pty-exit",
-                                    PtyExitPayload {
-                                        tab_id: tab_id.clone(),
-                                        exit_code: None,
-                                    },
-                                );
+                                let _ = out_tx.send(OutMsg::Exit(None));
                                 break;
                             }
                         }

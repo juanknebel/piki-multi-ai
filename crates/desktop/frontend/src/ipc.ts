@@ -1,5 +1,6 @@
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { decodePtyFrame, toBytes, type PtyFrame } from "./pty-frame";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import type {
   WorkspaceInfo,
@@ -923,10 +924,30 @@ export function openExternalUrl(url: string): Promise<void> {
 }
 
 // Event listeners
+
+/** The base64 `pty-output` event — only the FALLBACK path now (before the
+ *  raw channel is registered, or when a channel send fails). */
 export function onPtyOutput(
   callback: (event: PtyOutputEvent) => void,
 ): Promise<UnlistenFn> {
   return listen<PtyOutputEvent>("pty-output", (e) => callback(e.payload));
+}
+
+/** Register the raw PTY output channel: binary frames straight from the
+ *  backend's output coalescer (`pty_output.rs`), decoded by `pty-frame.ts`.
+ *  Resolves once the backend holds the channel; register it BEFORE any tab
+ *  spawns so nothing goes through base64. */
+export function registerPtyOutputChannel(
+  callback: (frame: PtyFrame) => void,
+): Promise<void> {
+  const channel = new Channel<unknown>();
+  channel.onmessage = (message) => {
+    const bytes = toBytes(message);
+    const frame = bytes && decodePtyFrame(bytes);
+    if (frame) callback(frame);
+    else console.error("pty channel: malformed frame", message);
+  };
+  return invoke("register_pty_output_channel", { channel });
 }
 
 export function onPtyExit(

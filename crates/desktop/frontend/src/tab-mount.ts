@@ -18,10 +18,16 @@ function isTerminalProvider(tab: TabInfo): boolean {
   return false;
 }
 
+export interface MountOptions {
+  /** This content sits in the ACTIVE pane: it may take keyboard focus.
+   *  Everything else mounts silently (`mount-policy.ts`). */
+  focus?: boolean;
+}
+
 /** Mount a tab's content into the given host element. Idempotent. */
-export function mountTab(tab: TabInfo, host: HTMLElement, wsIdx: number) {
+export function mountTab(tab: TabInfo, host: HTMLElement, wsIdx: number, opts: MountOptions = {}) {
   if (isTerminalProvider(tab)) {
-    mountTerminalInto(tab.id, host);
+    mountTerminalInto(tab.id, host, opts);
   } else if (tab.provider === "Kanban") {
     void mountKanbanInto(tab.id, host);
   } else if (tab.provider === "Api") {

@@ -714,7 +714,8 @@ crates/
     src/
       main.rs            # Tauri entry point, setup, command registration
       state.rs           # DesktopApp, DesktopWorkspace, DesktopTab state structs
-      pty_raw.rs         # RawPtySession — raw PTY bytes streamed via Tauri events (base64)
+      pty_raw.rs         # RawPtySession — local / daemon-backed PTY readers (shell-integration parsing)
+      pty_output.rs      # PTY output coalescer (≤8 ms / ≤64 KB batches) + raw IPC channel sink
       events.rs          # Tauri event emission (sysinfo, git refresh, toast)
       log_buffer.rs      # In-memory tracing ring buffer (500 entries) for log viewer
       commands/
@@ -945,7 +946,7 @@ Three crates cooperate:
 
 ### Desktop internals
 
-The desktop backend wraps `piki-core` behind Tauri IPC commands; the frontend is vanilla TypeScript. Terminals use `RawPtySession` — raw PTY bytes streamed to xterm.js as base64 Tauri events, no server-side `vt100` (xterm.js *is* the emulator; the persistent-session daemon still keeps a vt100 mirror server-side for restores).
+The desktop backend wraps `piki-core` behind Tauri IPC commands; the frontend is vanilla TypeScript. Terminals use `RawPtySession` — raw PTY bytes streamed to xterm.js, no server-side `vt100` (xterm.js *is* the emulator; the persistent-session daemon still keeps a vt100 mirror server-side for restores). **PTY event path**: each reader (local or daemon attachment) pushes its chunks to a per-tab coalescer (`pty_output.rs`) whose emitter thread ships at most one message per 8 ms / 64 KB over a raw Tauri IPC channel (`Channel<Vec<u8>>`, binary frame `len(tab_id) · tab_id · bytes`, decoded by `frontend/src/pty-frame.ts`) that the frontend registers once at startup (`register_pty_output_channel`); the base64 `pty-output` event is only the fallback while no channel is registered. `pty-exit` goes out from the same emitter, after the last batch. Structured payloads (`pty-shell-event`, `pty-agent-event`, `pty-attention`) stay on Tauri events. Frontend side: a terminal whose pane is hidden queues its output (`HiddenOutputBuffer`, 2 MB cap, then fed to xterm anyway) and replays it on the next mount; PTY resizes are coalesced to one IPC per frame per terminal and skipped when the grid is unchanged. The numbers are in [performance.md](performance.md#desktop-tauri).
 
 **Window state**: `tauri-plugin-window-state` saves the main window's size, position, maximized and fullscreen state on close and restores them before the first frame, so the app reopens where and how it was closed (visibility/decorations are left to `tauri.conf.json`). **Settings document**: every persisted UI preference (sidebar width, Agents-panel height, shortcuts, `shell`, pane layouts, file-tree state, chat width, `uiZoom`) lives in one JSON document (`settings` row of `UiPrefsStorage`), owned on the frontend by `settings-store.ts` — one in-memory snapshot loaded at startup, `patch()` per write, a single debounced writer that always writes the whole document (the Rust side reads `shell` from it when spawning a shell).
 
@@ -969,6 +970,7 @@ The event-loop performance model and its invariants are documented in [performan
 - **Zero-allocation footer** — Footer key descriptions use `&'static str` instead of per-frame `String` allocations, and width calculations use arithmetic instead of `format!()`
 - **Minimal tokio features** — Only compiles required tokio features (`rt-multi-thread`, `macros`, `process`, `time`, `sync`, `fs`) instead of `"full"`, reducing compile time and binary size
 - **Event-driven loop** — Uses `crossterm::EventStream` + `tokio::select!` instead of blocking `event::poll`, so async results (git refresh, fuzzy scan, PTY output) apply the moment they arrive
+- **Desktop PTY path** — output is coalesced into ≤8 ms / ≤64 KB batches and shipped over a raw binary IPC channel (no base64), hidden panes buffer instead of parsing, pane clicks re-render nothing, and divider drags send one resize per frame — see the desktop section of [performance.md](performance.md#desktop-tauri) for the benchmark
 
 ## Testing
 

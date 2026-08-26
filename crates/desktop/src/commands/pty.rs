@@ -1,11 +1,13 @@
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use parking_lot::Mutex;
+use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, State};
 
 use piki_core::AIProvider;
 use piki_core::cli_agent::bridge_for_command;
 
+use crate::pty_output::PtyOutputSink;
 use crate::pty_raw::RawPtySession;
 use crate::state::{DesktopApp, DesktopTab};
 
@@ -567,4 +569,17 @@ fn parse_provider(s: &str) -> Result<AIProvider, String> {
         "Api" => Ok(AIProvider::Api),
         other => Ok(AIProvider::Custom(other.to_string())),
     }
+}
+
+/// Register the frontend's raw PTY output channel (`pty-frame.ts` decodes
+/// its frames). Called once at startup, before any tab is spawned; until
+/// then — and whenever a channel send fails — output falls back to the
+/// base64 `pty-output` event. Re-registering replaces the channel.
+#[tauri::command]
+pub async fn register_pty_output_channel(
+    sink: State<'_, PtyOutputSink>,
+    channel: Channel<InvokeResponseBody>,
+) -> Result<(), String> {
+    sink.set_channel(channel);
+    Ok(())
 }

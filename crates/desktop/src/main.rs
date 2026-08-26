@@ -7,6 +7,7 @@ mod commands;
 mod events;
 mod log_buffer;
 mod lsp;
+mod pty_output;
 mod pty_raw;
 mod session;
 mod state;
@@ -255,6 +256,7 @@ fn main() {
             }
 
             app.manage(Mutex::new(desktop_app));
+            app.manage(pty_output::PtyOutputSink::default());
             app.manage(lsp_manager_arc);
 
             Ok(())
@@ -282,6 +284,7 @@ fn main() {
             commands::pty::spawn_editor_tab,
             commands::pty::spawn_terminal_at,
             commands::pty::resync_pty,
+            commands::pty::register_pty_output_channel,
             commands::git::get_changed_files,
             commands::git::get_workspace_git_status,
             commands::git::git_stage,

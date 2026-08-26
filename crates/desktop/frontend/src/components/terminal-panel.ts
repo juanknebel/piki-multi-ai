@@ -16,6 +16,10 @@ import { openContextMenu, type CtxItem } from "./context-menu";
 import { icon } from "./icons";
 import { allLeaves } from "../pane-tree";
 import { flashTabChip } from "./tab-bar";
+import { decodeBase64Bytes } from "../pty-frame";
+import { HiddenOutputBuffer, shouldResync } from "../mount-policy";
+import { perfCount } from "../perf-counters";
+import type { MountOptions } from "../tab-mount";
 
 /** Per-tab search bar state, remembered across open/close. */
 interface SearchState {
@@ -37,9 +41,44 @@ export interface TerminalInstance {
   /** Link under the pointer (web-links addon hover), for the context menu. */
   hoveredLink: string | null;
   search: SearchState;
+  /** The element is in a visible pane. While false, output is queued in
+   *  `hidden` (xterm's parser is not fed) and no fit/resize runs. */
+  visible: boolean;
+  hidden: HiddenOutputBuffer;
+  /** Last `rows×cols` sent to the PTY — identical proposals are skipped. */
+  lastSent: { rows: number; cols: number } | null;
+  /** Latest proposal waiting for the next frame's single `resizePty`. */
+  pendingResize: { rows: number; cols: number } | null;
 }
 
 export const terminals = new Map<string, TerminalInstance>();
+
+/** Contents that already mounted once — a daemon restore is fetched only
+ *  the first time (`shouldResync`). Cleared by `destroyTerminal`. */
+const mountedOnce = new Set<string>();
+
+/** One place for every byte that reaches a terminal, whichever transport
+ *  delivered it: feed xterm when the pane is on screen, queue otherwise. */
+function deliverOutput(tabId: string, bytes: Uint8Array) {
+  const instance = terminals.get(tabId);
+  if (!instance) return;
+  perfCount("pty.batch");
+  perfCount("pty.bytes", bytes.length);
+  if (instance.visible) {
+    instance.terminal.write(bytes);
+    return;
+  }
+  perfCount("pty.buffered");
+  for (const chunk of instance.hidden.push(bytes)) instance.terminal.write(chunk);
+}
+
+/** Feed xterm everything that arrived while the pane was hidden. */
+function flushHidden(instance: TerminalInstance) {
+  const queued = instance.hidden.drain();
+  if (queued.length === 0) return;
+  perfCount("pty.flushHidden");
+  for (const chunk of queued) instance.terminal.write(chunk);
+}
 
 /** Middle-click paste: how long after `auxclick` we wait for the platform's
  *  own primary-selection paste before falling back to the clipboard. The
@@ -55,13 +94,19 @@ const MIDDLE_PASTE_GRACE_MS = 80;
  * owns PTY I/O and the per-instance xterm lifecycle.
  */
 export async function initTerminalPanel(_container: HTMLElement) {
-  // Await listener registration so no PTY events are missed
+  // Await listener registration so no PTY events are missed. The raw
+  // channel is the transport (binary batches, no base64); the JSON event
+  // only carries what the backend could not put on the channel.
   await ipc.onPtyOutput((event) => {
-    const instance = terminals.get(event.tab_id);
-    if (!instance) return;
-    const bytes = Uint8Array.from(atob(event.data), (c) => c.charCodeAt(0));
-    instance.terminal.write(bytes);
+    perfCount("pty.fallbackEvent");
+    deliverOutput(event.tab_id, decodeBase64Bytes(event.data));
   });
+  try {
+    await ipc.registerPtyOutputChannel((frame) => deliverOutput(frame.tabId, frame.data));
+  } catch (err) {
+    // Older backend without the channel command: the event path still works.
+    console.error("PTY output channel unavailable, using events:", err);
+  }
 
   await ipc.onPtyExit((event) => {
     const instance = terminals.get(event.tab_id);
@@ -183,6 +228,10 @@ export function createTerminal(tabId: string): TerminalInstance {
     copier: createSelectionCopier(),
     hoveredLink: null,
     search: { query: "", regex: false, caseSensitive: false },
+    visible: false,
+    hidden: new HiddenOutputBuffer(),
+    lastSent: null,
+    pendingResize: null,
   };
 
   // URLs: Ctrl+click (Cmd on macOS) opens in the browser via the backend —
@@ -404,18 +453,23 @@ function terminalMenuItems(instance: TerminalInstance): CtxItem[] {
 
 /**
  * Mount a terminal tab into the given host element. Creates the xterm instance
- * if needed, reparents it into `host`, opens xterm on first mount, fits the PTY,
- * and focuses. Idempotent — safe to call when already mounted.
+ * if needed, reparents it into `host`, opens xterm on first mount, replays
+ * output queued while hidden, fits the PTY, focuses when `opts.focus` (the
+ * active pane) and fetches the daemon restore on the FIRST mount only.
+ * Idempotent — a re-mount into the same host is a no-op apart from the fit.
  */
-export function mountTerminalInto(tabId: string, host: HTMLElement) {
+export function mountTerminalInto(tabId: string, host: HTMLElement, opts: MountOptions = {}) {
   let instance = terminals.get(tabId);
   if (!instance) {
     instance = createTerminal(tabId);
   }
+  perfCount("terminal.mount");
   if (instance.element.parentElement !== host) {
     host.appendChild(instance.element);
   }
   instance.element.style.display = "block";
+  instance.visible = true;
+  flushHidden(instance);
 
   if (!instance.opened) {
     // First open waits for the Nerd Font (see ensureFontsReady); the mount
@@ -426,8 +480,8 @@ export function mountTerminalInto(tabId: string, host: HTMLElement) {
         void ensureFontsReady().then(() => {
           pendingOpen.delete(tabId);
           const still = terminals.get(tabId);
-          if (still === instance && instance.element.parentElement === host && instance.element.style.display !== "none") {
-            mountTerminalInto(tabId, host);
+          if (still === instance && instance.element.parentElement === host && instance.visible) {
+            mountTerminalInto(tabId, host, opts);
           }
         });
       }
@@ -453,26 +507,37 @@ export function mountTerminalInto(tabId: string, host: HTMLElement) {
   // shows up as text wrapping every word or two when the tab is shown
   // again.
   const inst = instance;
+  const focus = opts.focus === true;
+  const resync = shouldResync(tabId, mountedOnce);
+  mountedOnce.add(tabId);
   requestAnimationFrame(() => {
+    if (!inst.visible) return; // hidden again before the frame
     fitTerminal(inst);
-    inst.terminal.focus();
+    if (focus) inst.terminal.focus();
     // Re-fetch the restore buffer for a persistent (daemon-backed) tab now
     // that the xterm instance exists and is sized — its restore may have been
     // emitted before this terminal was created (a no-op for local tabs).
-    ipc.resyncPty(inst.tabId).catch(() => {});
+    // First mount only: xterm keeps its own state across re-mounts.
+    if (resync) {
+      perfCount("terminal.resync");
+      ipc.resyncPty(inst.tabId).catch((err) => console.error("PTY resync failed:", err));
+    }
   });
 }
 
-/** Hide a terminal tab without destroying its state. */
+/** Hide a terminal tab without destroying its state. Output arriving while
+ *  hidden is queued (`HiddenOutputBuffer`) and replayed on the next mount. */
 export function unmountTerminal(tabId: string) {
   const instance = terminals.get(tabId);
   if (!instance) return;
   instance.element.style.display = "none";
+  instance.visible = false;
+  instance.pendingResize = null;
 }
 
 
 export function fitTerminal(instance: TerminalInstance) {
-  if (!instance.opened) return;
+  if (!instance.opened || !instance.visible) return;
   // Skip when the element is hidden or detached — its clientWidth is 0 so
   // `fitAddon.fit()` would shrink the PTY to its minimum cols (~2). The
   // ResizeObserver fires on display:none transitions, so without this guard
@@ -484,13 +549,45 @@ export function fitTerminal(instance: TerminalInstance) {
   try {
     instance.fitAddon.fit();
     const dims = instance.fitAddon.proposeDimensions();
-    if (dims) {
-      ipc
-        .resizePty(instance.tabId, dims.rows, dims.cols)
-        .catch(() => {}); // Ignore resize errors for dead PTYs
-    }
+    if (dims) scheduleResizePty(instance, dims.rows, dims.cols);
   } catch {
     // Element might not be visible yet
+  }
+}
+
+/** Throttle of the PTY resize IPC: at most ONE `resizePty` per instance per
+ *  animation frame (the trailing proposal wins), and none at all when the
+ *  grid did not change. A divider drag fires the ResizeObserver on every
+ *  frame for every pane it touches; xterm is refitted locally each time
+ *  (cheap, keeps the text laid out) but the PTY only hears the last size. */
+let resizeFrame: number | null = null;
+function scheduleResizePty(instance: TerminalInstance, rows: number, cols: number) {
+  if (instance.lastSent && instance.lastSent.rows === rows && instance.lastSent.cols === cols) {
+    instance.pendingResize = null;
+    return;
+  }
+  instance.pendingResize = { rows, cols };
+  if (resizeFrame !== null) return;
+  resizeFrame = requestAnimationFrame(() => {
+    resizeFrame = null;
+    flushPendingResizes();
+  });
+}
+
+/** Send every queued PTY resize now — the exact final size on a divider
+ *  mouseup (`pane-view.ts`), so the drag's trailing frame is never lost. */
+export function flushPendingResizes() {
+  if (resizeFrame !== null) {
+    cancelAnimationFrame(resizeFrame);
+    resizeFrame = null;
+  }
+  for (const instance of terminals.values()) {
+    const dims = instance.pendingResize;
+    if (!dims || !instance.visible) continue;
+    instance.pendingResize = null;
+    instance.lastSent = dims;
+    perfCount("terminal.resizePty");
+    ipc.resizePty(instance.tabId, dims.rows, dims.cols).catch(() => {}); // Ignore resize errors for dead PTYs
   }
 }
 
@@ -502,6 +599,7 @@ export function destroyTerminal(tabId: string) {
   instance.terminal.dispose();
   instance.element.remove();
   terminals.delete(tabId);
+  mountedOnce.delete(tabId);
 }
 
 // ── Actions (shortcuts, palette, menu bar) ─────
