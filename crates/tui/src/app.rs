@@ -1472,6 +1472,10 @@ impl App {
     /// event-loop iteration instead of at every tab-switch site (there are
     /// many; see `sync_agent_selection` for the same reasoning).
     pub fn drop_stale_selection(&mut self) {
+        // Chat panel selection is global (overlay), not tied to a tab - don't drop it while chat is open
+        if self.mode == AppMode::ChatPanel {
+            return;
+        }
         if let Some(ref sel) = self.selection
             && Some(sel.owner) != self.selection_owner_key()
         {

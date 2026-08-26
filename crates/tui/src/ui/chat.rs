@@ -288,9 +288,40 @@ fn render_messages(frame: &mut Frame, area: Rect, app: &App) {
         0
     };
 
-    let visible_lines: Vec<Line<'_>> = lines.into_iter().skip(skip).take(visible_height).collect();
+    let mut visible_lines: Vec<Line<'_>> =
+        lines.into_iter().skip(skip).take(visible_height).collect();
+    // Highlight mouse selection over chat messages (like terminal/api)
+    if let Some(sel) = &app.selection {
+        let (sr, sc, er, ec) = sel.normalized();
+        for (idx, line) in visible_lines.iter_mut().enumerate() {
+            let row = idx as u16;
+            if row < sr || row > er {
+                continue;
+            }
+            // Determine column range for this row
+            let start_col = if row == sr { sc } else { 0 };
+            let end_col = if row == er {
+                ec
+            } else {
+                area.width.saturating_sub(1)
+            };
+            let width = line.width() as u16;
+            // Only highlight if line has content overlapping selection
+            if start_col < width || (row == sr && row == er) {
+                let sel_style = Style::default()
+                    .bg(app.theme.selection.bg)
+                    .fg(app.theme.selection.fg);
+                // Apply selection style to the whole line for simplicity (row Selection)
+                // For partial column selection, we could split spans, but row highlight is visible enough
+                *line = line.clone().style(sel_style);
+                // If you want per-cell, iterate spans; here we highlight whole row
+                let _ = (start_col, end_col);
+            }
+        }
+    }
     let para = Paragraph::new(visible_lines).wrap(Wrap { trim: false });
     frame.render_widget(para, area);
+    // Keep selection highlight visible even when not active (like terminal)
 }
 
 fn render_model_selector(frame: &mut Frame, area: Rect, app: &App) {

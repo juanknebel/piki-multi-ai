@@ -142,6 +142,7 @@ pub(super) fn handle_chat_panel_input(app: &mut App, key: KeyEvent) -> Option<Ac
         KeyCode::Esc => {
             // Hide overlay — state is preserved
             app.mode = AppMode::Normal;
+            app.selection = None;
         }
         KeyCode::Enter
             if !key.modifiers.contains(KeyModifiers::SHIFT)
@@ -349,11 +350,13 @@ fn handle_model_select(app: &mut App, key: KeyEvent) -> Option<Action> {
                 app.needs_redraw = true;
             } else {
                 app.chat_panel.sub_mode = ChatSubMode::Chat;
+                app.selection = None;
                 app.needs_redraw = true;
             }
         }
         KeyCode::Tab => {
             app.chat_panel.sub_mode = ChatSubMode::Chat;
+            app.selection = None;
             app.needs_redraw = true;
         }
         KeyCode::Up if app.chat_panel.model_selected > 0 => {
