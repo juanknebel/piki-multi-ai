@@ -42,7 +42,7 @@ import { showLogsDialog } from "./components/dialogs/logs-dialog";
 import { showSessionsDialog } from "./components/dialogs/sessions-dialog";
 import { jumpToAttention, startAgentRowsSync } from "./components/agents-panel";
 import { initMenuBar } from "./components/menu-bar";
-import { initChatPanel, initChatResize, toggleChatPanel } from "./components/chat-panel";
+import { addContextToChat, initChatPanel, initChatResize, toggleChatPanel } from "./components/chat-panel";
 import { initUiZoom, resetZoom, zoomIn, zoomOut } from "./ui-zoom";
 import { initDensity } from "./density";
 import { initTooltips } from "./components/tooltip";
@@ -209,6 +209,7 @@ async function init() {
   bindAction("undo", () => handleUndo());
   bindAction("toggle-sidebar", () => toggleSidebar());
   bindAction("toggle-chat", () => toggleChatPanel());
+  bindAction("add-chat-context", () => void addContextToChat());
   bindAction("help", () => showHelpDialog());
   bindAction("zoom-in", zoomIn);
   bindAction("zoom-out", zoomOut);

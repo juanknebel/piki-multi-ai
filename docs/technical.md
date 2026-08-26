@@ -465,7 +465,6 @@ The terminal owns every key it can use. An app shortcut fires while a terminal, 
 | Right-click workspace row (or its `⋯`) | Workspace menu: Open, Agents, Info, Edit, Create Worktree (GitHub), Merge / Rebase, Delete |
 | **View & Panels** | |
 | `Ctrl+B` ° | Toggle sidebar |
-| `Ctrl+Shift+L` | Toggle AI Chat panel |
 | `Alt+K` | Kanban Board |
 | `Alt+Shift+W` | Open Web Preview tab |
 | `Alt+T` | Theme settings |
@@ -505,6 +504,9 @@ The terminal owns every key it can use. An app shortcut fires while a terminal, 
 | Right-click tab | Tab menu: Rename, Split right / down, Move to workspace…, Close, Close keep running (with a session daemon) |
 | `⋯` in the tab bar | List every tab of the workspace (name, agent status, current one marked) — the way to find a tab once the strip overflows |
 | Double-click tab | Rename inline |
+| **Chat** | |
+| `Ctrl+Shift+L` | Toggle AI Chat panel |
+| `Ctrl+Shift+I` | Add context to chat — a terminal selection goes straight into the composer; otherwise a chooser offers the active file, its diff or the editor selection (see *Desktop AI Chat*) |
 | **Terminal** | |
 | `Ctrl+Shift+E` | Send the next key to the terminal — the following keystroke bypasses every app shortcut (type `Alt+B` into readline although it is Switch Branch); the pane header shows `next key → terminal` while armed, `Esc` or the chord again cancels |
 | `Ctrl+Shift+K` | Clear the terminal (screen + scrollback) |
@@ -553,6 +555,12 @@ The terminal owns every key it can use. An app shortcut fires while a terminal, 
 - **Search bar** (`Ctrl+Shift+B`, menu, palette): anchored to the top-right of the terminal (it never scrolls with the viewport), a `n/m` result counter (`No results` in red, `m+` past the highlight limit), *Aa* match-case and *.\** regex toggles, `Enter` / `Shift+Enter` next / previous, `Esc` closes and focuses the terminal. The last query and toggles are remembered per tab.
 - **Send next key** (`Ctrl+Shift+E`): the next keystroke bypasses the app's shortcut dispatcher and xterm's own copy/paste interception and is turned into bytes as any terminal would (`Alt+B` → `ESC b`). Modifier presses on the way to a chord keep it armed; `Esc`, the chord again, or the terminal losing focus cancel it. The armed pane shows `next key → terminal` in its header.
 - **Settings ▸ Terminal** (`Ctrl+,` → Terminal tab): font family (empty = the theme's mono font), font size, line height, scrollback (1k–100k), cursor style + blink, copy on select. Everything applies to every open terminal immediately and is persisted under the `terminal` key of the settings document (only the fields that differ from the defaults). The font size is the **base at zoom 1** — UI zoom (`Ctrl+=` / `Ctrl+-` / `Ctrl+0`) multiplies it (`14px × 125% = 18px`), and the dialog shows the effective size next to the field.
+
+### Desktop AI Chat
+
+`Ctrl+Shift+L` toggles the right-hand chat panel (it floats over the editor below 1000px wide). **Context injection** (`Ctrl+Shift+I`, the `+` in the composer, Chat ▸ Add Context to Chat, palette): the composer receives a fenced block with a header line — `Terminal selection (tab "…")`, `File: path (lines a–b)`, `Diff: path`, `Selected text in editor: path (lines a–b)` — capped at 200 lines with an `…truncated` marker. With a terminal selection the chord injects it directly (select + `Ctrl+Shift+I` = two keys, composer focused); without one a chooser opens with the rows that apply (Active file — the editor selection when there is one, else the whole file —, Diff of active file — unstaged `git diff` —, Selected text in editor; Terminal selection stays disabled while empty). The panel opens if it was hidden.
+
+**Tool cards** (agent mode): each tool call the model makes is a collapsible card — status icon, tool name, state and duration in the summary; arguments (pretty JSON) and the result as monospace blocks in the body, results longer than 12 lines folded behind *Show more*. A write tool (`edit_file`, `shell`) pauses the loop with an **Approve / Deny** card (focus lands on Approve; `Esc` on the buttons denies); the card records the decision and the buttons disappear. Stop, Clear conversation and sending a new message deny whatever is still pending; the agent loop itself denies after 300 s without an answer, so a hidden panel never leaves it hanging forever. Cards survive a reload of the conversation (history keeps `[tool] result` messages).
 
 ### Desktop Source Control panel
 

@@ -123,6 +123,23 @@ export function getCodeEditorFilePath(tabId: string): string | null {
   return instances.get(tabId)?.filePath ?? pendingFiles.get(tabId)?.filePath ?? null;
 }
 
+/** The editor's current selection as text + 1-based line range, or null
+ *  when the tab is not a live editor or nothing is selected. */
+export function getCodeEditorSelection(
+  tabId: string,
+): { text: string; fromLine: number; toLine: number } | null {
+  const view = instances.get(tabId)?.editorView;
+  if (!view) return null;
+  const sel = view.state.selection.main;
+  if (sel.empty) return null;
+  const doc = view.state.doc;
+  return {
+    text: doc.sliceString(sel.from, sel.to),
+    fromLine: doc.lineAt(sel.from).number,
+    toLine: doc.lineAt(sel.to).number,
+  };
+}
+
 export function hideCodeEditorPanels() {
   for (const inst of instances.values()) {
     inst.element.style.display = "none";

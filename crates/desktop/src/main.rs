@@ -200,6 +200,7 @@ fn main() {
                 chat_config,
                 chat_streaming: false,
                 chat_agent_mode: false,
+                chat_pending_approvals: Default::default(),
             };
 
             // Initialize LSP manager and WebSocket proxy
@@ -382,6 +383,7 @@ fn main() {
             commands::chat::chat_send_agent_message,
             commands::chat::chat_set_agent_mode,
             commands::chat::chat_get_agent_mode,
+            commands::chat::chat_approve,
             commands::lsp::lsp_ensure_server,
             commands::lsp::lsp_notify_workspace_focus,
             commands::lsp::lsp_server_status,
