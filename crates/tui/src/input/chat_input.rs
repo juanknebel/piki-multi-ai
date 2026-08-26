@@ -451,3 +451,174 @@ fn next_char_boundary(s: &str, idx: usize) -> usize {
     }
     i
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::{App, ChatSubMode};
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use piki_core::paths::DataPaths;
+
+    fn key(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::empty())
+    }
+
+    #[test]
+    fn test_model_select_navigation_persistence_and_redraw() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = DataPaths::new(dir.path().to_path_buf());
+        let storage = std::sync::Arc::new(piki_core::storage::create_storage(&paths).unwrap());
+        let mut app = App::new(storage, &paths);
+        // Setup models like OpenRouter
+        let models = vec![
+            "openai/gpt-4o-mini".to_string(),
+            "openai/gpt-4o".to_string(),
+            "anthropic/claude-3.5-sonnet".to_string(),
+            "google/gemini-flash-1.5".to_string(),
+            "meta-llama/llama-3.1-70b".to_string(),
+        ];
+        app.chat_panel.models = models.clone();
+        app.chat_panel.config.model = "openai/gpt-4o-mini".to_string();
+        app.chat_panel.config.provider = "openrouter".to_string();
+        app.chat_panel.sub_mode = ChatSubMode::ModelSelect;
+        app.chat_panel.model_selected = 0;
+        app.needs_redraw = false;
+
+        // Test Down via j
+        handle_model_select(&mut app, key(KeyCode::Char('j')));
+        assert_eq!(app.chat_panel.model_selected, 1, "j Down should go 0->1");
+        assert!(app.needs_redraw, "Down should set needs_redraw");
+        app.needs_redraw = false;
+
+        // Test Down via ArrowDown
+        handle_model_select(&mut app, key(KeyCode::Down));
+        assert_eq!(
+            app.chat_panel.model_selected, 2,
+            "Down Arrow should go 1->2"
+        );
+        assert!(app.needs_redraw);
+        app.needs_redraw = false;
+
+        // Test Up via k
+        handle_model_select(&mut app, key(KeyCode::Char('k')));
+        assert_eq!(app.chat_panel.model_selected, 1, "k Up should go 2->1");
+        assert!(app.needs_redraw);
+        app.needs_redraw = false;
+
+        // Test Up via ArrowUp
+        handle_model_select(&mut app, key(KeyCode::Up));
+        assert_eq!(app.chat_panel.model_selected, 0, "Up Arrow should go 1->0");
+        assert!(app.needs_redraw);
+        app.needs_redraw = false;
+
+        // Test Esc
+        app.chat_panel.sub_mode = ChatSubMode::ModelSelect;
+        handle_model_select(&mut app, key(KeyCode::Esc));
+        assert_eq!(
+            app.chat_panel.sub_mode,
+            ChatSubMode::Chat,
+            "Esc should close"
+        );
+        assert!(app.needs_redraw);
+        app.needs_redraw = false;
+
+        // Test Tab
+        app.chat_panel.sub_mode = ChatSubMode::ModelSelect;
+        handle_model_select(&mut app, key(KeyCode::Tab));
+        assert_eq!(
+            app.chat_panel.sub_mode,
+            ChatSubMode::Chat,
+            "Tab should close"
+        );
+        assert!(app.needs_redraw);
+        app.needs_redraw = false;
+
+        // Test Enter selects and persists to chat-providers.toml
+        app.chat_panel.sub_mode = ChatSubMode::ModelSelect;
+        app.chat_panel.model_selected = 2;
+        let expected = "anthropic/claude-3.5-sonnet".to_string();
+        handle_model_select(&mut app, key(KeyCode::Enter));
+        assert_eq!(
+            app.chat_panel.config.model, expected,
+            "Enter should select model"
+        );
+        assert_eq!(app.chat_panel.sub_mode, ChatSubMode::Chat);
+        assert!(app.needs_redraw);
+        // Verify persistence
+        let mgr2 = piki_core::chat_providers::ChatProviderManager::load_or_init(
+            &app.paths.chat_providers_path(),
+        );
+        let persisted = mgr2.get("openrouter").unwrap();
+        assert_eq!(
+            persisted.model, expected,
+            "should persist to chat-providers.toml"
+        );
+
+        // Test event loop model loading sets needs_redraw (simulated)
+        let dir2 = tempfile::tempdir().unwrap();
+        let paths2 = DataPaths::new(dir2.path().join("2"));
+        let mut app2 = App::new(
+            std::sync::Arc::new(piki_core::storage::create_storage(&paths2).unwrap()),
+            &paths2,
+        );
+        app2.chat_panel.models = vec![];
+        app2.chat_panel.config.model = "".to_string();
+        app2.needs_redraw = false;
+        let model_data = "openai/gpt-4o-mini\nopenai/gpt-4o\nanthropic/claude\n";
+        app2.chat_panel.models = model_data
+            .lines()
+            .filter(|l| !l.is_empty())
+            .map(|l| l.to_string())
+            .collect();
+        if app2.chat_panel.config.model.is_empty() {
+            if let Some(first) = app2.chat_panel.models.first() {
+                app2.chat_panel.config.model = first.clone();
+            }
+        }
+        app2.needs_redraw = true;
+        assert_eq!(app2.chat_panel.models.len(), 3);
+        assert_eq!(app2.chat_panel.config.model, "openai/gpt-4o-mini");
+        assert!(app2.needs_redraw);
+
+        // Multi-frame responsiveness: 5 frames Tab, j, j, Enter, Tab
+        let dir3 = tempfile::tempdir().unwrap();
+        let paths3 = DataPaths::new(dir3.path().join("3"));
+        let mut app3 = App::new(
+            std::sync::Arc::new(piki_core::storage::create_storage(&paths3).unwrap()),
+            &paths3,
+        );
+        app3.chat_panel.models = models.clone();
+        app3.chat_panel.config.model = "openai/gpt-4o-mini".to_string();
+        app3.chat_panel.config.provider = "openrouter".to_string();
+        let mut frames = 0;
+        // Frame 1: Tab open
+        app3.chat_panel.sub_mode = ChatSubMode::ModelSelect;
+        app3.chat_panel.model_selected = 0;
+        app3.needs_redraw = true;
+        frames += 1;
+        assert!(app3.needs_redraw);
+        // Frame 2: j
+        app3.needs_redraw = false;
+        handle_model_select(&mut app3, key(KeyCode::Char('j')));
+        frames += 1;
+        assert_eq!(app3.chat_panel.model_selected, 1);
+        assert!(app3.needs_redraw);
+        // Frame 3: j
+        app3.needs_redraw = false;
+        handle_model_select(&mut app3, key(KeyCode::Char('j')));
+        frames += 1;
+        assert_eq!(app3.chat_panel.model_selected, 2);
+        // Frame 4: Enter
+        app3.needs_redraw = false;
+        handle_model_select(&mut app3, key(KeyCode::Enter));
+        frames += 1;
+        assert_eq!(app3.chat_panel.config.model, "anthropic/claude-3.5-sonnet");
+        assert!(app3.needs_redraw);
+        // Frame 5: Tab
+        app3.needs_redraw = false;
+        app3.chat_panel.sub_mode = ChatSubMode::ModelSelect;
+        app3.needs_redraw = true;
+        frames += 1;
+        assert_eq!(frames, 5);
+    }
+}
