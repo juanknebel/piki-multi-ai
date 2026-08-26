@@ -131,7 +131,7 @@ impl ChatProviderManager {
                 description: "OpenRouter cloud".to_string(),
                 server_type: ChatServerType::OpenRouter,
                 base_url: ChatServerType::OpenRouter.default_url().to_string(),
-                model: String::new(),
+                model: "openai/gpt-4o-mini".to_string(),
                 system_prompt: None,
             },
         ]
