@@ -217,7 +217,21 @@ impl OpenRouterClient {
         let mut pending_tool_calls: Vec<PendingToolCall> = Vec::new();
         let mut buffer = String::new();
 
-        while let Some(chunk) = stream.next().await {
+        // Idle timeout prevents the `gemini-3.7-flash` hang where OpenRouter
+        // holds the SSE connection open without ever sending [DONE].
+        let idle_timeout = std::time::Duration::from_secs(30);
+        while let Some(chunk) = {
+            match tokio::time::timeout(idle_timeout, stream.next()).await {
+                Ok(v) => v,
+                Err(_) => {
+                    tracing::warn!("OpenRouter stream idle timeout (30s)");
+                    let _ = tx.send(ChatStreamEvent::Error(
+                        "OpenRouter stream timed out (no data for 30s) — try again or use a different model".to_string(),
+                    ));
+                    return Err(anyhow::anyhow!("OpenRouter stream idle timeout"));
+                }
+            }
+        } {
             let chunk = match chunk {
                 Ok(c) => c,
                 Err(e) => {

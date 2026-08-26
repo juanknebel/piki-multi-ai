@@ -222,19 +222,41 @@ pub async fn chat_send_message(
                     return;
                 }
                 piki_api_client::ChatStreamEvent::Error(e) => {
+                    // Persist error so it survives reload and is visible even if
+                    // the frontend's streamingEl was already cleared.
+                    let msg = format!("\n\n[Error: {e}]");
                     let _ = handle_for_events.emit(
                         "chat-token",
                         ChatTokenPayload {
-                            content: format!("\n\n[Error: {e}]"),
+                            content: msg.clone(),
                             done: true,
                         },
                     );
                     let managed: tauri::State<'_, Mutex<DesktopApp>> = handle_for_events.state();
                     let mut app = managed.lock();
+                    app.chat_messages.push(ChatMessage {
+                        role: ChatRole::Assistant,
+                        content: msg,
+                        tool_calls: None,
+                        tool_call_id: None,
+                    });
                     app.chat_streaming = false;
                     return;
                 }
             }
+        }
+        // Channel closed without Done/Error (e.g. task hung) — unblock UI
+        let managed: tauri::State<'_, Mutex<DesktopApp>> = handle_for_events.state();
+        let mut app = managed.lock();
+        if app.chat_streaming {
+            app.chat_streaming = false;
+            let _ = handle_for_events.emit(
+                "chat-token",
+                ChatTokenPayload {
+                    content: "\n\n[Error: Stream closed unexpectedly — try again]".to_string(),
+                    done: true,
+                },
+            );
         }
     });
 

@@ -325,19 +325,35 @@ async function sendMessage() {
 
 function onToken(event: { content: string; done: boolean }) {
   if (event.done) {
-    // Finalize the streamed message
+    // Finalize the streamed message — include any error payload in `event.content`
+    // (backend sends 404/privacy errors as `done:true` with content).
     if (streamingEl) {
       const contentEl = streamingEl.querySelector(".chat-msg-content")!;
       const cursor = contentEl.querySelector(".chat-streaming-cursor");
       if (cursor) cursor.remove();
 
+      // If backend attached an error to the done event, append it
+      if (event.content) {
+        const textNode = document.createTextNode(event.content);
+        contentEl.appendChild(textNode);
+      }
       // Add to our local messages
       const text = contentEl.textContent ?? "";
-      messages.push({ role: "assistant", content: text });
+      if (text.trim()) {
+        messages.push({ role: "assistant", content: text });
+      }
+    } else if (event.content) {
+      // No streaming element (error before any token) — still show it
+      messages.push({ role: "assistant", content: event.content });
+      toast(event.content, "error");
     }
     onStreamEnd();
     // Re-render so the finished reply gets its markdown formatting.
     renderMessages();
+    // Surface backend errors that arrived with done:true even when streamingEl existed
+    if (event.content && event.content.includes("[Error")) {
+      toast(event.content, "error");
+    }
     return;
   }
 
