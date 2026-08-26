@@ -588,3 +588,65 @@ pub fn list_agent_rows(state: State<'_, Mutex<DesktopApp>>) -> Vec<AgentRow> {
     }
     rows
 }
+
+// ── External agents (via /proc) ─────────────
+
+#[derive(Serialize, Clone)]
+pub struct ExternalAgentPayload {
+    pub pid: u32,
+    pub ppid: u32,
+    pub cwd: Option<String>,
+    pub cmd: String,
+    pub provider: String,
+    pub workspace_idx: Option<usize>,
+    pub workspace_name: Option<String>,
+}
+
+#[derive(Serialize, Clone)]
+pub struct ExternalTreePayload {
+    pub root: ExternalAgentPayload,
+    pub children: Vec<ExternalAgentPayload>,
+}
+
+#[tauri::command]
+pub fn list_external_agents(state: State<'_, Mutex<DesktopApp>>) -> Vec<ExternalTreePayload> {
+    let infos: Vec<piki_core::WorkspaceInfo> = {
+        let app = state.lock();
+        app.workspaces.iter().map(|w| w.info.clone()).collect()
+    };
+    let trees = piki_core::external_agents::scan_external_agents(&infos);
+    // Need workspace names for rendering without extra lookup
+    let names: Vec<String> = infos.iter().map(|i| i.name.clone()).collect();
+    trees
+        .into_iter()
+        .map(|t| {
+            let root_ws_name = t.root.workspace_idx.and_then(|idx| names.get(idx).cloned());
+            let root = ExternalAgentPayload {
+                pid: t.root.pid,
+                ppid: t.root.ppid,
+                cwd: t.root.cwd.map(|p| p.to_string_lossy().to_string()),
+                cmd: t.root.cmd,
+                provider: t.root.provider,
+                workspace_idx: t.root.workspace_idx,
+                workspace_name: root_ws_name,
+            };
+            let children = t
+                .children
+                .into_iter()
+                .map(|c| {
+                    let ws_name = c.workspace_idx.and_then(|idx| names.get(idx).cloned());
+                    ExternalAgentPayload {
+                        pid: c.pid,
+                        ppid: c.ppid,
+                        cwd: c.cwd.map(|p| p.to_string_lossy().to_string()),
+                        cmd: c.cmd,
+                        provider: c.provider.clone(),
+                        workspace_idx: c.workspace_idx,
+                        workspace_name: ws_name,
+                    }
+                })
+                .collect();
+            ExternalTreePayload { root, children }
+        })
+        .collect()
+}

@@ -761,6 +761,18 @@ pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Actio
 }
 
 pub(super) fn handle_dashboard_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    if !matches!(app.active_dialog, Some(DialogState::Dashboard { .. })) {
+        return None;
+    }
+    let indices = app.dashboard_indices();
+    let count = indices.len();
+    let tab_lens: Vec<usize> = indices
+        .iter()
+        .map(|&idx| app.workspaces[idx].tabs.len())
+        .collect();
+    let ws_first_line =
+        |pos: usize| -> usize { tab_lens.iter().take(pos).map(|&len| 1 + len).sum() };
+    let ws_height = |pos: usize| -> usize { 1 + tab_lens[pos] };
     let Some(DialogState::Dashboard {
         ref mut selected,
         ref mut scroll_offset,
@@ -769,24 +781,10 @@ pub(super) fn handle_dashboard_input(app: &mut App, key: KeyEvent) -> Option<Act
         return None;
     };
 
-    let count = app.workspaces.len();
-    if count == 0 {
-        app.active_dialog = None;
-        app.mode = AppMode::Normal;
-        return None;
-    }
-
-    // Compute the first visual line for each workspace (1 header + max(1, tabs) per ws)
-    let ws_first_line = |idx: usize| -> usize {
-        let mut line = 0;
-        for i in 0..idx {
-            line += 1 + app.workspaces[i].tabs.len().max(1);
-        }
-        line
-    };
-    let ws_height = |idx: usize| -> usize { 1 + app.workspaces[idx].tabs.len().max(1) };
-
     if app.config.matches_dashboard(key, "down") || app.config.matches_dashboard(key, "down_alt") {
+        if count == 0 {
+            return None;
+        }
         if *selected + 1 < count {
             *selected += 1;
         }
@@ -798,15 +796,21 @@ pub(super) fn handle_dashboard_input(app: &mut App, key: KeyEvent) -> Option<Act
         }
     } else if app.config.matches_dashboard(key, "up") || app.config.matches_dashboard(key, "up_alt")
     {
+        if count == 0 {
+            return None;
+        }
         *selected = selected.saturating_sub(1);
         let ws_start = ws_first_line(*selected);
         if ws_start < *scroll_offset {
             *scroll_offset = ws_start;
         }
     } else if app.config.matches_dashboard(key, "select") {
-        let idx = *selected;
+        if count == 0 {
+            return None;
+        }
+        let ws_idx = indices[*selected];
         app.active_dialog = None;
-        app.switch_workspace_and_focus(idx);
+        app.switch_workspace_and_focus(ws_idx);
     } else if app.config.matches_dashboard(key, "exit")
         || app.config.matches_dashboard(key, "exit_alt")
     {

@@ -264,3 +264,12 @@ theme = "default"
 # copy_alt = "y"
 # exit = "esc"
 # exit_alt = "ctrl-l"
+
+
+# ── Chat (OpenRouter) ───────────────────────────────────────────────────
+# Remote LLM via OpenRouter (https://openrouter.ai). The key is read from
+# here or from the env var OPENROUTER_API_KEY; the chat panel never prompts
+# for it (it only lives in config).
+# [chat]
+# openrouter_api_key = "sk-or-..."
+# web_search = false  # OpenRouter plugins: web search (Ctrl+W in TUI toggles per-provider)

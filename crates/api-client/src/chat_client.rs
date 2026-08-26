@@ -101,3 +101,45 @@ impl ChatClient for crate::llamacpp::LlamaCppClient {
         self.chat_stream_with_tools(model, &msgs, tools, tx).await
     }
 }
+
+#[async_trait::async_trait]
+impl ChatClient for crate::openrouter::OpenRouterClient {
+    async fn chat_stream(
+        &self,
+        model: &str,
+        messages: &[ChatWireMessage],
+        tools: Option<&[serde_json::Value]>,
+        tx: mpsc::UnboundedSender<ChatStreamEvent>,
+    ) -> anyhow::Result<()> {
+        let msgs: Vec<crate::openrouter::OpenRouterMessage> = messages
+            .iter()
+            .map(|m| {
+                let tool_calls = m.tool_calls.as_ref().map(|tcs| {
+                    tcs.iter()
+                        .map(|tc| crate::openrouter::OpenRouterToolCallRef {
+                            id: tc.id.clone(),
+                            call_type: "function".to_string(),
+                            function: crate::openrouter::OpenRouterFunctionRef {
+                                name: tc.name.clone(),
+                                arguments: tc.arguments.clone(),
+                            },
+                        })
+                        .collect()
+                });
+                crate::openrouter::OpenRouterMessage {
+                    role: m.role.clone(),
+                    content: m.content.clone(),
+                    tool_calls,
+                    tool_call_id: m.tool_call_id.clone(),
+                }
+            })
+            .collect();
+        if self.web_search {
+            let plugins = vec![serde_json::json!({"id": "web"})];
+            self.chat_stream_with_tools_and_plugins(model, &msgs, tools, Some(plugins), tx)
+                .await
+        } else {
+            self.chat_stream_with_tools(model, &msgs, tools, tx).await
+        }
+    }
+}

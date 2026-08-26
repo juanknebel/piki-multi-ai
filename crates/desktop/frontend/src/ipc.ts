@@ -717,6 +717,23 @@ export function removeSession(sessionId: string): Promise<import("./types").Sess
   return invoke("remove_session", { sessionId });
 }
 
+export interface ExternalAgentPayload {
+  pid: number;
+  ppid: number;
+  cwd: string | null;
+  cmd: string;
+  provider: string;
+  workspace_idx: number | null;
+  workspace_name: string | null;
+}
+export interface ExternalTreePayload {
+  root: ExternalAgentPayload;
+  children: ExternalAgentPayload[];
+}
+export function listExternalAgents(): Promise<ExternalTreePayload[]> {
+  return invoke("list_external_agents");
+}
+
 export function saveAgent(
   workspaceIdx: number,
   name: string,
@@ -1046,7 +1063,7 @@ export function deleteProvider(name: string): Promise<boolean> {
 
 // ── Chat commands ──────────────────────────────────
 
-export type ChatServerType = "Ollama" | "LlamaCpp";
+export type ChatServerType = "Ollama" | "LlamaCpp" | "OpenRouter";
 
 export interface ChatConfig {
   provider: string;
@@ -1054,6 +1071,7 @@ export interface ChatConfig {
   model: string;
   base_url: string;
   system_prompt: string | null;
+  api_key?: string | null;
 }
 
 export interface ChatMessage {

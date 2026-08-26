@@ -48,7 +48,7 @@ Built with Rust and [ratatui](https://ratatui.rs/).
 - **Parallel workspaces** — run multiple AI coding sessions simultaneously: isolated git worktrees, existing directories (Simple), or multi-service roots (Project)
 - **Worktree families** — workspaces from the same repo nest automatically under a collapsible parent row, derived from the git worktree structure
 - **Dynamic tabs** — workspaces start empty; open Shell, AI-agent, or Tool tabs on demand from a categorized menu; singletons focus instead of duplicating; any tab can be renamed
-- **Workspace dashboard & switcher** — bird's-eye overview of every workspace with status and git info; fuzzy tree switcher and Alt-Tab-style previous-workspace toggle
+- **Workspace dashboard & switcher** — bird's-eye overview of the workspaces with open tabs (empty ones hidden), grouped by worktree family with the parent first, with status and git info; also lists **external agents** (`claude`, `codex`, `muse`, `agy`/`antigravity`, `gemini` processes started outside piki, found via `/proc`); fuzzy tree switcher and Alt-Tab-style previous-workspace toggle
 - **Command palette** — VS Code-style fuzzy palette over every command, with recently-used ranking and live keybinding hints
 - **SQLite persistence** — workspaces, UI preferences, and API history restore automatically on startup; the last focused workspace is remembered
 
@@ -65,10 +65,10 @@ Built with Rust and [ratatui](https://ratatui.rs/).
 
 - **Multi-provider tabs** — Claude Code, Gemini, OpenCode, Kilo, Codex out of the box; add your own binaries via `providers.toml`
 - **Structured agent lifecycle** — Claude Code and Antigravity tabs report precise running / needs-permission / idle / done states through hook-driven in-band events (no PTY-silence guessing), with graceful fallback to an idle heuristic
-- **Agents pane** — one pane listing every running agent across all workspaces with live status and elapsed run time (`3m 12s`); jump straight to any of them. In the desktop, an agent that needs you is amber in the tab bar, status bar, Agents panel, workspace list and activity bar at once, and `Alt+A` lands on it from any workspace (permission requests first, then unseen news — press again to walk through them)
+- **Agents pane** — one pane listing every running agent across all workspaces with live status and elapsed run time (`3m 12s`); jump straight to any of them. In the desktop, an agent that needs you is amber in the tab bar, status bar, Agents panel, workspace list and activity bar at once, and `Alt+A` lands on it from any workspace (permission requests first, then unseen news — press again to walk through them). Agents started outside piki (plain terminals, other apps) are surfaced too: in the TUI dashboard and, in the desktop, in an `External (n)` section of the Agents panel with a one-click terminal at their cwd
 - **Agent profiles & dispatch** — define named agents per project, sync them to provider-native subagent files, and dispatch them from a kanban card into an auto-created worktree with a composed prompt
 - **OS notifications** — agent-finished / needs-attention / command-finished toasts (or OSC 9 for tmux/ssh), with optional chimes and smart suppression when you're already looking at the tab; one `[notifications]` config serves the TUI and the desktop
-- **AI Chat** — global chat panel backed by local LLMs (Ollama or llama.cpp), with an agentic tool-use mode that can inspect the active workspace; `Ctrl+Shift+I` (or the composer's `+`) drops what you are looking at — terminal selection, active file, its diff, editor selection — into the composer as a fenced block, and in agent mode every tool call is a collapsible card with inline Approve / Deny for write tools
+- **AI Chat** — global chat panel backed by local LLMs (Ollama or llama.cpp) or remote via **OpenRouter** (key only in `config.toml` `[chat] openrouter_api_key` or `OPENROUTER_API_KEY` env — never prompted in chat; optional web search plugin), with an agentic tool-use mode that can inspect the active workspace; `Ctrl+Shift+I` (or the composer's `+`) drops what you are looking at — terminal selection, active file, its diff, editor selection — into the composer as a fenced block, and in agent mode every tool call is a collapsible card with inline Approve / Deny for write tools
 
 ### Built-in tools
 
@@ -118,7 +118,7 @@ Optional, feature-gated:
 - [gh](https://cli.github.com/) — code review (`gh auth login` to authenticate)
 - [ripgrep](https://github.com/BurntSushi/ripgrep) — project search (falls back to `grep -rn`)
 - [jq](https://jqlang.github.io/jq/) — structured agent integration and API Explorer JSON filtering
-- [Ollama](https://ollama.ai/) or [llama.cpp](https://github.com/ggerganov/llama.cpp) — AI Chat panel
+- [Ollama](https://ollama.ai/), [llama.cpp](https://github.com/ggerganov/llama.cpp) or an [OpenRouter](https://openrouter.ai) key — AI Chat panel
 - [Node.js](https://nodejs.org/) >= 18 — building the desktop app
 - Tauri system libraries (desktop app on Linux): `libwebkit2gtk-4.1-dev`, `libappindicator3-dev`
 
@@ -310,6 +310,16 @@ enabled = false
 Or flip it in the desktop's Settings ▸ General (`Ctrl+,`): that choice is stored in the piki database, wins over this file for both frontends, and takes effect on the next launch (the status bar reads `sessions … (restart)` until then).
 
 The daemon can be managed in-app (TUI sessions overlay `Ctrl+G Ctrl+S`, desktop Sessions dialog `Alt+Shift+S`) or from the CLI (`piki-multi-ai sessions list|kill|stop`); see [docs/technical.md](docs/technical.md#persistent-sessions) for the full behavior and [docs/persistent-sessions.md](docs/persistent-sessions.md) for the design.
+
+### AI Chat (`[chat]`)
+
+Local backends (Ollama, llama.cpp) need no configuration beyond picking the server in the chat settings. OpenRouter needs an API key, read only from this file or the `OPENROUTER_API_KEY` environment variable — the chat UI never asks for it:
+
+```toml
+[chat]
+openrouter_api_key = "sk-or-..."
+web_search = false   # OpenRouter web-search plugin (TUI: Ctrl+W toggles it per provider)
+```
 
 ## Documentation
 

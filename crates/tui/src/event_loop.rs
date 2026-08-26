@@ -429,6 +429,24 @@ pub(crate) async fn run(
                                 {
                                     app.chat_panel.config.model = first.clone();
                                 }
+                                // Keep highlight within bounds and on current model
+                                app.chat_panel.model_filter.clear();
+                                if app.chat_panel.models.is_empty() {
+                                    app.chat_panel.model_selected = 0;
+                                } else if let Some(pos) = app
+                                    .chat_panel
+                                    .models
+                                    .iter()
+                                    .position(|m| *m == app.chat_panel.config.model)
+                                {
+                                    app.chat_panel.model_selected = pos;
+                                } else {
+                                    app.chat_panel.model_selected = app
+                                        .chat_panel
+                                        .model_selected
+                                        .min(app.chat_panel.models.len() - 1);
+                                }
+                                app.needs_redraw = true;
                             } else {
                                 // Normal chat response completion
                                 let response_text = if app.chat_panel.current_response.is_empty() {
@@ -636,6 +654,34 @@ pub(crate) async fn run(
                 {
                     agent.acknowledge();
                     app.needs_redraw = true;
+                }
+            }
+
+            // External agents scan — throttled to 1s, coalesced
+            if now.duration_since(app.last_external_scan) >= std::time::Duration::from_secs(1) {
+                app.last_external_scan = now;
+                let infos: Vec<piki_core::WorkspaceInfo> =
+                    app.workspaces.iter().map(|w| w.info.clone()).collect();
+                let trees = piki_core::external_agents::scan_external_agents(&infos);
+                // Simple change detection by pid set
+                let old_pids: std::collections::HashSet<u32> = app
+                    .external_agents
+                    .iter()
+                    .flat_map(|t| {
+                        std::iter::once(t.root.pid).chain(t.children.iter().map(|c| c.pid))
+                    })
+                    .collect();
+                let new_pids: std::collections::HashSet<u32> = trees
+                    .iter()
+                    .flat_map(|t| {
+                        std::iter::once(t.root.pid).chain(t.children.iter().map(|c| c.pid))
+                    })
+                    .collect();
+                if old_pids != new_pids || app.external_agents.len() != trees.len() {
+                    app.external_agents = trees;
+                    app.needs_redraw = true;
+                } else {
+                    app.external_agents = trees;
                 }
             }
 

@@ -32,6 +32,7 @@ pub struct DesktopApp {
     pub sessions_enabled: bool,
     /// What startup re-attach restored; read once by the frontend.
     pub restore_summary: crate::session::RestoreSummary,
+    pub chat_provider_manager: piki_core::chat_providers::ChatProviderManager,
     /// Global AI chat messages (not tied to any workspace).
     pub chat_messages: Vec<piki_core::chat::ChatMessage>,
     /// Global AI chat configuration (provider, model, base URL).

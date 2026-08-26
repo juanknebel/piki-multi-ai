@@ -6,7 +6,7 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 
 use crate::app::App;
 
-pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &App) {
+pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &mut App) {
     let theme = &app.theme;
 
     // Centered floating panel
@@ -29,7 +29,15 @@ pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &App) {
     } else {
         ""
     };
-    let title = format!(" AI Chat{} [{}] ", agent_indicator, model_label);
+    let web_indicator = if app.chat_panel.config.web_search {
+        " Web"
+    } else {
+        ""
+    };
+    let title = format!(
+        " AI Chat{}{} [{}] ",
+        agent_indicator, web_indicator, model_label
+    );
 
     let block = Block::default()
         .title(title)
@@ -58,6 +66,9 @@ pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &App) {
     let messages_area = chunks[0];
     let input_area = chunks[1];
     let footer_area = chunks[2];
+    app.chat_messages_inner_area = Some(messages_area);
+    // Also set terminal_inner_area to messages_area for selection coords (chat uses same selection mechanism)
+    app.terminal_inner_area = Some(messages_area);
 
     // ── Sub-mode content ─────────────────────────
     match app.chat_panel.sub_mode {
@@ -97,18 +108,26 @@ pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &App) {
         crate::app::ChatSubMode::Settings => vec![
             Span::styled("[Tab]", Style::default().fg(h)),
             Span::raw(" switch field  "),
-            Span::styled("[C-Enter]", Style::default().fg(h)),
+            Span::styled("[C-s]", Style::default().fg(h)),
             Span::raw(" save  "),
             Span::styled("[Esc]", Style::default().fg(h)),
             Span::raw(" cancel"),
         ],
         crate::app::ChatSubMode::ModelSelect => vec![
-            Span::styled("[j/k]", Style::default().fg(h)),
+            Span::styled("[type]", Style::default().fg(h)),
+            Span::raw(" filter  "),
+            Span::styled("[Up/Down]", Style::default().fg(h)),
             Span::raw(" navigate  "),
             Span::styled("[Enter]", Style::default().fg(h)),
             Span::raw(" select  "),
+            Span::styled("[C-S-c]", Style::default().fg(h)),
+            Span::raw(" copy  "),
+            Span::styled("[C-S-v]", Style::default().fg(h)),
+            Span::raw(" paste  "),
             Span::styled("[Esc]", Style::default().fg(h)),
-            Span::raw(" cancel"),
+            Span::raw(" clear/cancel  "),
+            Span::styled("[C-u]", Style::default().fg(h)),
+            Span::raw(" clear filter"),
         ],
         _ if app.chat_panel.pending_approval.is_some() => {
             let tool_name = app
@@ -163,6 +182,11 @@ pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &App) {
             } else {
                 " [C-a] agent "
             };
+            let web_hint = if app.chat_panel.config.web_search {
+                " [C-w] web:ON "
+            } else {
+                " [C-w] web "
+            };
             vec![
                 Span::styled("[Enter]", Style::default().fg(h)),
                 Span::raw(" send  "),
@@ -173,6 +197,11 @@ pub(crate) fn render_chat_overlay(frame: &mut Frame, area: Rect, app: &App) {
                 Span::styled("[C-l]", Style::default().fg(h)),
                 Span::raw(" clear"),
                 Span::styled(agent_hint, Style::default().fg(h)),
+                Span::styled(web_hint, Style::default().fg(h)),
+                Span::styled("[C-S-c]", Style::default().fg(h)),
+                Span::raw(" copy  "),
+                Span::styled("[C-S-v]", Style::default().fg(h)),
+                Span::raw(" paste  "),
                 Span::styled("[Esc]", Style::default().fg(h)),
                 Span::raw(" hide"),
             ]
@@ -259,45 +288,121 @@ fn render_messages(frame: &mut Frame, area: Rect, app: &App) {
         0
     };
 
-    let visible_lines: Vec<Line<'_>> = lines.into_iter().skip(skip).take(visible_height).collect();
+    let mut visible_lines: Vec<Line<'_>> =
+        lines.into_iter().skip(skip).take(visible_height).collect();
+    // Highlight mouse selection over chat messages (like terminal/api)
+    if let Some(sel) = &app.selection {
+        let (sr, sc, er, ec) = sel.normalized();
+        for (idx, line) in visible_lines.iter_mut().enumerate() {
+            let row = idx as u16;
+            if row < sr || row > er {
+                continue;
+            }
+            // Determine column range for this row
+            let start_col = if row == sr { sc } else { 0 };
+            let end_col = if row == er {
+                ec
+            } else {
+                area.width.saturating_sub(1)
+            };
+            let width = line.width() as u16;
+            // Only highlight if line has content overlapping selection
+            if start_col < width || (row == sr && row == er) {
+                let sel_style = Style::default()
+                    .bg(app.theme.selection.bg)
+                    .fg(app.theme.selection.fg);
+                // Apply selection style to the whole line for simplicity (row Selection)
+                // For partial column selection, we could split spans, but row highlight is visible enough
+                *line = line.clone().style(sel_style);
+                // If you want per-cell, iterate spans; here we highlight whole row
+                let _ = (start_col, end_col);
+            }
+        }
+    }
     let para = Paragraph::new(visible_lines).wrap(Wrap { trim: false });
     frame.render_widget(para, area);
+    // Keep selection highlight visible even when not active (like terminal)
 }
 
 fn render_model_selector(frame: &mut Frame, area: Rect, app: &App) {
     let theme = &app.theme;
     let models = &app.chat_panel.models;
     let selected = app.chat_panel.model_selected;
+    let filter = &app.chat_panel.model_filter;
     let visible_height = area.height as usize;
 
+    // Filtered indices (case-insensitive substring)
+    let filtered: Vec<usize> = if filter.trim().is_empty() {
+        (0..models.len()).collect()
+    } else {
+        let needle = filter.to_lowercase();
+        models
+            .iter()
+            .enumerate()
+            .filter(|(_, m)| m.to_lowercase().contains(&needle))
+            .map(|(i, _)| i)
+            .collect()
+    };
+
     let mut lines: Vec<Line<'_>> = Vec::new();
+    // Header + filter line
     lines.push(Line::from(Span::styled(
-        " Select a model:",
+        " Select a model (type to filter):",
         Style::default().fg(theme.help.border),
+    )));
+    let filter_display = if filter.is_empty() {
+        "(no filter)".to_string()
+    } else {
+        filter.clone()
+    };
+    let count = format!(
+        "  Filter: {}  [{}/{}]",
+        filter_display,
+        filtered.len(),
+        models.len()
+    );
+    lines.push(Line::from(Span::styled(
+        count,
+        Style::default().fg(theme.general.muted_text),
     )));
     lines.push(Line::from(""));
 
-    for (i, model) in models.iter().enumerate() {
-        let is_selected = i == selected;
-        let marker = if is_selected { "> " } else { "  " };
-        let is_current = *model == app.chat_panel.config.model;
-        let suffix = if is_current { " (current)" } else { "" };
-
-        let style = if is_selected {
-            Style::default()
-                .fg(theme.help.border)
-                .bg(theme.workspace_list.selected_bg)
-        } else {
-            Style::default().fg(Color::Reset)
-        };
-
+    if filtered.is_empty() {
         lines.push(Line::from(Span::styled(
-            format!("{marker}{model}{suffix}"),
-            style,
+            "  No matches",
+            Style::default().fg(theme.general.muted_text),
         )));
+    } else {
+        for (filtered_idx, &real_idx) in filtered.iter().enumerate() {
+            let model = &models[real_idx];
+            let is_selected = filtered_idx == selected;
+            let marker = if is_selected { "> " } else { "  " };
+            let is_current = *model == app.chat_panel.config.model;
+            let suffix = if is_current { " (current)" } else { "" };
+
+            let style = if is_selected {
+                Style::default()
+                    .fg(theme.help.border)
+                    .bg(theme.workspace_list.selected_bg)
+            } else {
+                Style::default().fg(Color::Reset)
+            };
+
+            lines.push(Line::from(Span::styled(
+                format!("{marker}{model}{suffix}"),
+                style,
+            )));
+        }
     }
 
-    let visible: Vec<Line<'_>> = lines.into_iter().take(visible_height).collect();
+    // Scroll so selected model is always visible (header takes 3 lines)
+    let header_h = 3;
+    let start = if selected + header_h < visible_height {
+        0
+    } else {
+        (selected + header_h + 1).saturating_sub(visible_height)
+    };
+    let visible: Vec<Line<'_>> = lines.into_iter().skip(start).take(visible_height).collect();
     frame.render_widget(Paragraph::new(visible), area);
 }
 
@@ -435,4 +540,36 @@ fn render_text_field<'a>(
 /// previous local version sliced by bytes and panicked on any accent.
 fn wrap_text(text: &str, width: usize) -> Vec<String> {
     crate::text::wrap(text, width)
+}
+
+pub(crate) fn chat_text_lines(app: &crate::app::App, width: usize) -> Vec<String> {
+    let mut lines: Vec<String> = Vec::new();
+    if app.chat_panel.messages.is_empty() && !app.chat_panel.streaming {
+        return lines;
+    }
+    let content_width = width.saturating_sub(4).max(1);
+    for msg in &app.chat_panel.messages {
+        let role_label = match msg.role {
+            piki_core::chat::ChatRole::User => "You",
+            piki_core::chat::ChatRole::Assistant => "AI",
+            piki_core::chat::ChatRole::System => "System",
+            piki_core::chat::ChatRole::Tool => "Tool",
+        };
+        lines.push(format!("  {role_label}"));
+        for content_line in msg.content.lines() {
+            for chunk in wrap_text(content_line, content_width) {
+                lines.push(format!("    {chunk}"));
+            }
+        }
+        lines.push(String::new());
+    }
+    if app.chat_panel.streaming && !app.chat_panel.current_response.is_empty() {
+        lines.push("  AI".to_string());
+        for content_line in app.chat_panel.current_response.lines() {
+            for chunk in wrap_text(content_line, content_width) {
+                lines.push(format!("    {chunk}"));
+            }
+        }
+    }
+    lines
 }

@@ -350,3 +350,36 @@
 /* Empty states (workspace list / agents panel / git panel) are `.ui-empty`
    blocks with a `.ui-empty-cta` button; the confirm overlay lives in
    dialog-core.css. */
+
+/* External agents (found via /proc): display only, no tab to jump to. */
+.agents-external-header {
+  padding: var(--sp-2) 14px var(--sp-1);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-top: 1px solid var(--border);
+  margin-top: var(--sp-2);
+}
+
+.agent-row.external {
+  cursor: default;
+}
+
+.agent-row.external:hover {
+  background: transparent;
+}
+
+.agent-row.external.child {
+  padding-left: 28px;
+}
+
+.agent-row.external .agent-row-action {
+  flex-shrink: 0;
+  opacity: 0;
+}
+
+.agent-row.external:hover .agent-row-action,
+.agent-row.external .agent-row-action:focus-visible {
+  opacity: 1;
+}

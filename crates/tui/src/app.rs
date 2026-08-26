@@ -952,6 +952,8 @@ pub struct App {
     pub terminal_inner_area: Option<Rect>,
     /// Inner area of the API response panel (for mouse hit-testing)
     pub api_response_inner_area: Option<Rect>,
+    /// Inner area of the chat messages panel (for mouse hit-testing)
+    pub chat_messages_inner_area: Option<Rect>,
     /// In-memory log ring buffer for the log viewer overlay
     pub log_buffer: crate::log_buffer::LogBuffer,
     /// Pre-formatted system info string (CPU, RAM, battery, time)
@@ -985,6 +987,10 @@ pub struct App {
     /// Last time passive agent-state detection ran — throttles the
     /// screen-scrape sweep to `PASSIVE_DETECT_INTERVAL`
     pub last_passive_detect: Instant,
+    /// External claude agents discovered via /proc scan (TUI only, no desktop yet)
+    pub external_agents: Vec<piki_core::external_agents::AgentTree>,
+    /// Last time external agent scan ran (throttled to 1s)
+    pub last_external_scan: Instant,
     /// App-wide coalesced "PTY produced output" signal. Cloned into every
     /// spawned session; the event loop sleeps on it instead of polling byte
     /// counters at the tick rate.
@@ -1032,6 +1038,8 @@ pub struct App {
     pub agent_profiles: Vec<piki_core::storage::AgentProfile>,
     /// User-configurable providers loaded from providers.toml
     pub provider_manager: piki_core::providers::ProviderManager,
+    /// Chat LLM providers (Ollama / llama.cpp / OpenRouter) estilo providers.toml
+    pub chat_provider_manager: piki_core::chat_providers::ChatProviderManager,
     /// Data paths for saving config files
     pub paths: piki_core::paths::DataPaths,
     /// Handle to the persistent-session daemon, when one is reachable. `None`
@@ -1084,6 +1092,8 @@ pub struct ChatPanelState {
     /// Cached model names from Ollama
     pub models: Vec<String>,
     pub model_selected: usize,
+    /// Filter typed in ModelSelect (live search)
+    pub model_filter: String,
     /// Current sub-mode within the chat overlay
     pub sub_mode: ChatSubMode,
     /// Settings editor: editable base URL
@@ -1168,6 +1178,7 @@ impl App {
             selection: None,
             terminal_inner_area: None,
             api_response_inner_area: None,
+            chat_messages_inner_area: None,
             sysinfo: std::sync::Arc::new(parking_lot::Mutex::new(String::new())),
             sidebar_pct: 20,
             left_split_pct: 50,
@@ -1182,6 +1193,8 @@ impl App {
             spinner_frame: 0,
             last_spinner_at: Instant::now(),
             last_passive_detect: Instant::now(),
+            external_agents: Vec::new(),
+            last_external_scan: Instant::now() - std::time::Duration::from_secs(2),
             pty_output: piki_core::pty::PtyOutputSignal::new(),
             config,
             refresh_tx,
@@ -1209,6 +1222,9 @@ impl App {
             agent_profiles: Vec::new(),
             provider_manager: piki_core::providers::ProviderManager::load_or_init(
                 &paths.providers_path(),
+            ),
+            chat_provider_manager: piki_core::chat_providers::ChatProviderManager::load_or_init(
+                &paths.chat_providers_path(),
             ),
             paths: paths.clone(),
             session_daemon: None,
@@ -1490,6 +1506,10 @@ impl App {
     /// event-loop iteration instead of at every tab-switch site (there are
     /// many; see `sync_agent_selection` for the same reasoning).
     pub fn drop_stale_selection(&mut self) {
+        // Chat panel selection is global (overlay), not tied to a tab - don't drop it while chat is open
+        if self.mode == AppMode::ChatPanel {
+            return;
+        }
         if let Some(ref sel) = self.selection
             && Some(sel.owner) != self.selection_owner_key()
         {
@@ -1557,6 +1577,25 @@ impl App {
                     }
                 }
             })
+            .collect()
+    }
+
+    /// Indices of workspaces that have at least one open tab, ordered with
+    /// worktree families grouped: parent (workspace_type != Worktree) first,
+    /// then its Worktree children below. Uses the same grouping rule as the
+    /// sidebar (`piki_core::workspace::sidebar_rows`) but ignores collapsed
+    /// state so the dashboard always shows the full expanded view. Only
+    /// workspaces with `!tabs.is_empty()` are returned.
+    pub fn dashboard_indices(&self) -> Vec<usize> {
+        let infos: Vec<piki_core::WorkspaceInfo> =
+            self.workspaces.iter().map(|w| w.info.clone()).collect();
+        piki_core::workspace::sidebar_rows(&infos, &std::collections::HashSet::new())
+            .into_iter()
+            .filter_map(|row| match row {
+                piki_core::workspace::SidebarRow::Workspace { index, .. } => Some(index),
+                piki_core::workspace::SidebarRow::PrReviewHeader { .. } => None,
+            })
+            .filter(|&idx| !self.workspaces[idx].tabs.is_empty())
             .collect()
     }
 

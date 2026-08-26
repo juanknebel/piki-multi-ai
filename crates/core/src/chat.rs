@@ -64,6 +64,7 @@ pub enum ChatServerType {
     #[default]
     Ollama,
     LlamaCpp,
+    OpenRouter,
 }
 
 impl ChatServerType {
@@ -72,6 +73,7 @@ impl ChatServerType {
         match self {
             Self::Ollama => "http://localhost:11434",
             Self::LlamaCpp => "http://localhost:8080",
+            Self::OpenRouter => "https://openrouter.ai/api/v1",
         }
     }
 
@@ -80,6 +82,7 @@ impl ChatServerType {
         match self {
             Self::Ollama => "Ollama",
             Self::LlamaCpp => "llama.cpp",
+            Self::OpenRouter => "OpenRouter",
         }
     }
 
@@ -87,7 +90,8 @@ impl ChatServerType {
     pub fn next(self) -> Self {
         match self {
             Self::Ollama => Self::LlamaCpp,
-            Self::LlamaCpp => Self::Ollama,
+            Self::LlamaCpp => Self::OpenRouter,
+            Self::OpenRouter => Self::Ollama,
         }
     }
 }
@@ -106,6 +110,12 @@ pub struct ChatConfig {
     pub base_url: String,
     /// Optional system prompt prepended to every conversation.
     pub system_prompt: Option<String>,
+    /// API key for remote providers (OpenRouter). Not logged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<String>,
+    /// Enable web search for OpenRouter (plugins: web).
+    #[serde(default)]
+    pub web_search: bool,
 }
 
 impl Default for ChatConfig {
@@ -116,6 +126,51 @@ impl Default for ChatConfig {
             model: String::new(),
             base_url: "http://localhost:11434".to_string(),
             system_prompt: None,
+            api_key: None,
+            web_search: false,
+        }
+    }
+}
+
+impl ChatConfig {
+    /// Effective API key, preferring stored key, then OPENROUTER_API_KEY env var (piki-ai parity).
+    /// Kept for backwards compat; new code should use `effective_api_key_with_paths`.
+    pub fn effective_api_key(&self) -> Option<String> {
+        if let Some(k) = self.api_key.as_ref().filter(|s| !s.trim().is_empty()) {
+            return Some(k.clone());
+        }
+        if let Some(k) = Self::key_from_config_file(&crate::paths::DataPaths::default_paths()) {
+            return Some(k);
+        }
+        std::env::var("OPENROUTER_API_KEY")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+    }
+
+    /// Like `effective_api_key` but reads `config.toml` from the given `DataPaths`
+    /// (so `--data-dir` isolation is honoured). Priority: stored `api_key` > `config.toml`
+    /// `[chat] openrouter_api_key` > `OPENROUTER_API_KEY` env.
+    pub fn effective_api_key_with_paths(&self, paths: &crate::paths::DataPaths) -> Option<String> {
+        if let Some(k) = self.api_key.as_ref().filter(|s| !s.trim().is_empty()) {
+            return Some(k.clone());
+        }
+        if let Some(k) = Self::key_from_config_file(paths) {
+            return Some(k);
+        }
+        std::env::var("OPENROUTER_API_KEY")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+    }
+
+    fn key_from_config_file(paths: &crate::paths::DataPaths) -> Option<String> {
+        let data = std::fs::read_to_string(paths.config_path()).ok()?;
+        let val: toml::Value = toml::from_str(&data).ok()?;
+        let key = val.get("chat")?.get("openrouter_api_key")?.as_str()?;
+        let k = key.trim();
+        if k.is_empty() {
+            None
+        } else {
+            Some(k.to_string())
         }
     }
 }

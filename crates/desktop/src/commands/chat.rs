@@ -102,7 +102,7 @@ pub async fn chat_send_message(
     state: State<'_, Mutex<DesktopApp>>,
     message: String,
 ) -> Result<(), String> {
-    let (config, messages) = {
+    let (config, messages, paths) = {
         let mut app = state.lock();
 
         if app.chat_streaming {
@@ -118,14 +118,35 @@ pub async fn chat_send_message(
         });
         app.chat_streaming = true;
 
-        (app.chat_config.clone(), app.chat_messages.clone())
+        (
+            app.chat_config.clone(),
+            app.chat_messages.clone(),
+            app.paths.clone(),
+        )
     };
 
     if config.model.is_empty() {
         tracing::warn!("Chat send attempted with no model selected");
         let mut app = state.lock();
         app.chat_streaming = false;
+        if config.server_type == piki_core::chat::ChatServerType::OpenRouter {
+            return Err("No model selected for OpenRouter. Pick a model in chat settings (Tab to list, needs API key).".to_string());
+        }
         return Err("No model selected. Configure a model in the chat panel settings.".to_string());
+    }
+    if config.server_type == piki_core::chat::ChatServerType::OpenRouter
+        && config
+            .effective_api_key_with_paths(&paths)
+            .as_ref()
+            .map(|k| k.trim().is_empty())
+            .unwrap_or(true)
+    {
+        let mut app = state.lock();
+        app.chat_streaming = false;
+        return Err(format!(
+            "No OpenRouter API key. Set [chat] openrouter_api_key in {} or OPENROUTER_API_KEY env.",
+            paths.config_path().display()
+        ));
     }
 
     tracing::info!(
@@ -142,7 +163,9 @@ pub async fn chat_send_message(
 
     // `ChatClient` hides each backend's message format, so this no longer
     // has to know one from the other (see piki_agent::chat_bridge).
-    let client = piki_agent::chat_client_for(config.server_type, &config.base_url);
+    let api_key = config.effective_api_key_with_paths(&paths);
+    let client =
+        piki_agent::chat_client_for_with_key(config.server_type, &config.base_url, api_key);
     tokio::spawn(async move {
         if let Err(e) = client.chat_stream(&model, &msgs, None, tx).await {
             tracing::error!(error = %e, "chat_stream failed");
@@ -237,6 +260,24 @@ pub async fn chat_set_config(
     let mut app = state.lock();
     app.chat_config = config.clone();
 
+    // Persist provider-specific config to chat-providers.toml estilo providers.toml
+    let provider_name = config.provider.clone();
+    if !provider_name.is_empty() {
+        let cfg = piki_core::chat_providers::ChatProviderConfig {
+            name: provider_name.clone(),
+            description: String::new(),
+            server_type: config.server_type,
+            base_url: config.base_url.clone(),
+            model: config.model.clone(),
+            system_prompt: config.system_prompt.clone(),
+            web_search: config.web_search,
+        };
+        app.chat_provider_manager.upsert(cfg);
+        let _ = app
+            .chat_provider_manager
+            .save(&app.paths.chat_providers_path());
+    }
+
     // Persist to settings
     if let Some(ref prefs) = app.storage.ui_prefs {
         let json = serde_json::to_string(&config).map_err(|e| e.to_string())?;
@@ -303,6 +344,43 @@ pub async fn chat_list_models(
                 })
                 .collect())
         }
+        piki_core::chat::ChatServerType::OpenRouter => {
+            // Read key from config.toml (via DataPaths) or env; no stored key here since caller has no ChatConfig
+            let paths = piki_core::paths::DataPaths::default_paths();
+            let api_key = piki_core::chat::ChatConfig {
+                provider: String::new(),
+                server_type: piki_core::chat::ChatServerType::OpenRouter,
+                model: String::new(),
+                base_url: base_url.clone(),
+                system_prompt: None,
+                api_key: None,
+                web_search: false,
+            }
+            .effective_api_key_with_paths(&paths);
+            if api_key
+                .as_ref()
+                .map(|k| k.trim().is_empty())
+                .unwrap_or(true)
+            {
+                return Err(format!(
+                    "No OpenRouter API key. Set [chat] openrouter_api_key in {} or OPENROUTER_API_KEY env.",
+                    paths.config_path().display()
+                ));
+            }
+            let client = piki_api_client::OpenRouterClient::new_with_key(&base_url, api_key);
+            let models = client.list_models().await.map_err(|e| {
+                tracing::error!(base_url = %base_url, error = %e, "Failed to list OpenRouter models");
+                format!("Failed to connect to OpenRouter: {e}. Check [chat] openrouter_api_key and base URL https://openrouter.ai/api/v1")
+            })?;
+            Ok(models
+                .into_iter()
+                .map(|m| ChatModelInfo {
+                    name: m.id,
+                    size: 0,
+                    modified_at: String::new(),
+                })
+                .collect())
+        }
     }
 }
 
@@ -323,7 +401,7 @@ pub async fn chat_send_agent_message(
     state: State<'_, Mutex<DesktopApp>>,
     message: String,
 ) -> Result<(), String> {
-    let (config, messages, ws_path) = {
+    let (config, messages, ws_path, paths) = {
         let mut app = state.lock();
 
         if app.chat_streaming {
@@ -346,13 +424,35 @@ pub async fn chat_send_agent_message(
             std::env::current_dir().unwrap_or_default()
         };
 
-        (app.chat_config.clone(), app.chat_messages.clone(), ws_path)
+        (
+            app.chat_config.clone(),
+            app.chat_messages.clone(),
+            ws_path,
+            app.paths.clone(),
+        )
     };
 
     if config.model.is_empty() {
         let mut app = state.lock();
         app.chat_streaming = false;
+        if config.server_type == piki_core::chat::ChatServerType::OpenRouter {
+            return Err("No model selected for OpenRouter. Pick a model in chat settings (Tab to list, needs API key).".to_string());
+        }
         return Err("No model selected.".to_string());
+    }
+    if config.server_type == piki_core::chat::ChatServerType::OpenRouter
+        && config
+            .effective_api_key_with_paths(&paths)
+            .as_ref()
+            .map(|k| k.trim().is_empty())
+            .unwrap_or(true)
+    {
+        let mut app = state.lock();
+        app.chat_streaming = false;
+        return Err(format!(
+            "No OpenRouter API key. Set [chat] openrouter_api_key in {} or OPENROUTER_API_KEY env.",
+            paths.config_path().display()
+        ));
     }
 
     tracing::info!(
@@ -363,6 +463,7 @@ pub async fn chat_send_agent_message(
         "Desktop: sending agent message"
     );
 
+    let api_key = config.effective_api_key_with_paths(&paths);
     let client: Box<dyn piki_api_client::ChatClient> = match config.server_type {
         piki_core::chat::ChatServerType::Ollama => {
             Box::new(piki_api_client::OllamaClient::new(&config.base_url))
@@ -370,6 +471,9 @@ pub async fn chat_send_agent_message(
         piki_core::chat::ChatServerType::LlamaCpp => {
             Box::new(piki_api_client::LlamaCppClient::new(&config.base_url))
         }
+        piki_core::chat::ChatServerType::OpenRouter => Box::new(
+            piki_api_client::OpenRouterClient::new_with_key(&config.base_url, api_key),
+        ),
     };
 
     let registry = piki_agent::ToolRegistry::default_all();

@@ -245,7 +245,7 @@ async function loadModels() {
 
     replaceDropdown(options, initial);
   } catch {
-    const serverLabel = currentConfig.server_type === "LlamaCpp" ? "llama.cpp" : "Ollama";
+    const serverLabel = currentConfig.server_type === "LlamaCpp" ? "llama.cpp" : currentConfig.server_type === "OpenRouter" ? "OpenRouter" : "Ollama";
     replaceDropdown([{ value: "", label: `${serverLabel} not available` }], "");
   }
 }
@@ -537,11 +537,13 @@ function showChatSettings() {
   const serverDefaults: Record<ipc.ChatServerType, string> = {
     Ollama: "http://localhost:11434",
     LlamaCpp: "http://localhost:8080",
+    OpenRouter: "https://openrouter.ai/api/v1",
   };
   const serverDropdown = createDropdown(
     [
       { value: "Ollama", label: "Ollama" },
       { value: "LlamaCpp", label: "llama.cpp" },
+      { value: "OpenRouter", label: "OpenRouter" },
     ],
     currentConfig.server_type,
   );

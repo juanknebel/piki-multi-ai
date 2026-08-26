@@ -161,6 +161,10 @@ fn main() {
             // Load user-configurable providers from providers.toml
             let provider_manager =
                 piki_core::providers::ProviderManager::load_or_init(&paths.providers_path());
+            let chat_provider_manager =
+                piki_core::chat_providers::ChatProviderManager::load_or_init(
+                    &paths.chat_providers_path(),
+                );
 
             // Load saved chat config from preferences, or use default
             let chat_config = storage
@@ -197,6 +201,7 @@ fn main() {
                 session_daemon,
                 sessions_enabled,
                 restore_summary,
+                chat_provider_manager,
                 chat_messages: Vec::new(),
                 chat_config,
                 chat_streaming: false,
@@ -343,6 +348,7 @@ fn main() {
             commands::session::list_sessions,
             commands::session::kill_session,
             commands::session::remove_session,
+            commands::agents::list_external_agents,
             commands::providers::list_providers,
             commands::providers::save_provider,
             commands::providers::delete_provider,

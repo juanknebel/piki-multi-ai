@@ -11,6 +11,8 @@ import { showDispatchDialog } from "./dialogs/dispatch-dialog";
 
 const ROWS_DEBOUNCE_MS = 100;
 const ELAPSED_TICK_MS = 1000;
+/** External agents live outside piki's PTYs (found via /proc) — poll them. */
+const EXTERNAL_POLL_MS = 2000;
 
 /** Keep `appState.agentRows` fresh: one debounced `list_agent_rows` fetch
  *  per burst of agent/tab events (they arrive per tool call), feeding every
@@ -92,13 +94,29 @@ export function renderAgentsPanel(container: HTMLElement) {
 
   const list = container.querySelector<HTMLElement>("#agents-list")!;
   const countEl = container.querySelector<HTMLElement>(".agents-attention-count")!;
+
+  // Agents started outside piki (plain terminals, other apps), grouped by
+  // process tree. Not part of `appState.agentRows`: they have no tab, no
+  // structured channel and never raise attention — display only.
+  let external: ipc.ExternalTreePayload[] = [];
+  async function pollExternal() {
+    let next: ipc.ExternalTreePayload[];
+    try {
+      next = await ipc.listExternalAgents();
+    } catch {
+      next = [];
+    }
+    if (JSON.stringify(next) === JSON.stringify(external)) return;
+    external = next;
+    render();
+  }
   container.querySelector("#agents-manage-btn")!.addEventListener("click", () => showAgentManager());
   container.querySelector("#agents-dispatch-btn")!.addEventListener("click", () => showDispatchDialog());
 
   // ↑/↓/Home/End move focus between rows; Enter/Space activate (makeInteractive).
   list.addEventListener("keydown", (e) => {
     if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
-    const rows = Array.from(list.querySelectorAll<HTMLElement>(".agent-row"));
+    const rows = Array.from(list.querySelectorAll<HTMLElement>(".agent-row:not(.external)"));
     if (rows.length === 0) return;
     const cur = rows.indexOf((e.target as HTMLElement).closest(".agent-row") as HTMLElement);
     const next =
@@ -123,7 +141,7 @@ export function renderAgentsPanel(container: HTMLElement) {
     const focusedId = (document.activeElement as HTMLElement | null)?.closest?.(".agent-row")
       ?.getAttribute("data-tab-id") ?? null;
     list.innerHTML = "";
-    if (rows.length === 0) {
+    if (rows.length === 0 && external.length === 0) {
       const empty = document.createElement("div");
       empty.className = "ui-empty";
       empty.innerHTML = `
@@ -172,8 +190,63 @@ export function renderAgentsPanel(container: HTMLElement) {
       el.setAttribute("aria-selected", String(isCurrent));
       list.appendChild(el);
     }
+    renderExternal();
     list.scrollTop = prevScroll;
     if (focusedId) list.querySelector<HTMLElement>(`.agent-row[data-tab-id="${focusedId}"]`)?.focus();
+  }
+
+  /** External agents section (via /proc): one row per process tree, its
+   *  children indented below. The only action is opening a terminal at the
+   *  agent's cwd — there is no tab to jump to. */
+  function renderExternal() {
+    if (external.length === 0) return;
+    const header = document.createElement("div");
+    header.className = "agents-external-header";
+    header.textContent = `External (${external.length})`;
+    list.appendChild(header);
+    for (const tree of external) {
+      const wsName = tree.root.workspace_name ?? "Outside";
+      const cwd = tree.root.cwd ?? "—";
+      const el = document.createElement("div");
+      el.className = "agent-row external";
+      el.innerHTML = `
+        <span class="agent-row-glyph" style="color:var(--text-muted)">${icon("dot")}</span>
+        <span class="agent-row-main">
+          <span class="agent-row-title">
+            <span class="agent-row-ws">${escapeHtml(wsName)}</span>
+            <span class="agent-row-sep">·</span>
+            <span class="agent-row-label">${escapeHtml(tree.root.provider)} #${tree.root.pid}</span>
+          </span>
+          <span class="agent-row-summary">${escapeHtml(cwd)}${tree.children.length ? ` · ${tree.children.length} sub` : ""}</span>
+        </span>
+        <button data-variant="ghost" data-size="sm" data-icon class="ui-btn agent-row-action" title="Open terminal at cwd" aria-label="Open terminal at cwd">${icon("play")}</button>
+      `;
+      el.title = tree.root.cmd;
+      el.querySelector<HTMLButtonElement>(".agent-row-action")!.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const cwdPath = tree.root.cwd;
+        if (!cwdPath) return;
+        try {
+          await ipc.spawnTerminalAt(tree.root.workspace_idx ?? appState.activeWorkspace, cwdPath);
+        } catch (err) {
+          reportError("Failed to open terminal", err);
+        }
+      });
+      list.appendChild(el);
+      for (const child of tree.children) {
+        const cEl = document.createElement("div");
+        cEl.className = "agent-row external child";
+        cEl.innerHTML = `
+          <span class="agent-row-glyph" style="color:var(--text-muted)">${icon("branch")}</span>
+          <span class="agent-row-main">
+            <span class="agent-row-title"><span class="agent-row-label">${escapeHtml(child.provider)} #${child.pid}</span></span>
+            <span class="agent-row-summary">${escapeHtml(child.cmd)}</span>
+          </span>
+        `;
+        cEl.title = child.cmd;
+        list.appendChild(cEl);
+      }
+    }
   }
 
   /** Once a second, advance the elapsed labels in place — no rebuild, no
@@ -193,6 +266,8 @@ export function renderAgentsPanel(container: HTMLElement) {
   appState.on("active-workspace-changed", render);
   appState.on("active-tab-changed", render);
   setInterval(tickElapsed, ELAPSED_TICK_MS);
+  setInterval(() => void pollExternal(), EXTERNAL_POLL_MS);
+  void pollExternal();
 
   render();
 }

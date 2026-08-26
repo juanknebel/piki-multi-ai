@@ -82,13 +82,18 @@ pub(crate) fn open_about(app: &mut App) -> Option<Action> {
 }
 
 pub(crate) fn open_dashboard(app: &mut App) -> Option<Action> {
-    if !app.workspaces.is_empty() {
-        app.active_dialog = Some(DialogState::Dashboard {
-            selected: app.active_workspace,
-            scroll_offset: 0,
-        });
-        app.mode = AppMode::Dashboard;
-    }
+    let indices = app.dashboard_indices();
+    // Always open: workspaces part may be empty (shows nothing), external
+    // agents section below always renders (either rows or “— No external … —”).
+    let selected = indices
+        .iter()
+        .position(|&idx| idx == app.active_workspace)
+        .unwrap_or(0);
+    app.active_dialog = Some(DialogState::Dashboard {
+        selected,
+        scroll_offset: 0,
+    });
+    app.mode = AppMode::Dashboard;
     None
 }
 
