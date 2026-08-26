@@ -411,6 +411,7 @@ pub(crate) async fn run(
                                 {
                                     app.chat_panel.config.model = first.clone();
                                 }
+                                app.needs_redraw = true;
                             } else {
                                 // Normal chat response completion
                                 let response_text = if app.chat_panel.current_response.is_empty() {

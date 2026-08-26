@@ -172,12 +172,15 @@ fn handle_model_select(app: &mut App, key: KeyEvent) -> Option<Action> {
     match key.code {
         KeyCode::Esc | KeyCode::Tab => {
             app.chat_panel.sub_mode = ChatSubMode::Chat;
+            app.needs_redraw = true;
         }
         KeyCode::Up | KeyCode::Char('k') if app.chat_panel.model_selected > 0 => {
             app.chat_panel.model_selected -= 1;
+            app.needs_redraw = true;
         }
         KeyCode::Down | KeyCode::Char('j') if app.chat_panel.model_selected + 1 < total => {
             app.chat_panel.model_selected += 1;
+            app.needs_redraw = true;
         }
         KeyCode::Enter => {
             if let Some(name) = app.chat_panel.models.get(app.chat_panel.model_selected) {
@@ -193,6 +196,7 @@ fn handle_model_select(app: &mut App, key: KeyEvent) -> Option<Action> {
                 save_chat_config(app);
             }
             app.chat_panel.sub_mode = ChatSubMode::Chat;
+            app.needs_redraw = true;
         }
         _ => {}
     }
