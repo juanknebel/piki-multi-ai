@@ -235,16 +235,35 @@ emits the same Tauri events as today (`pty-output`, `pty-exit`,
 ### Desktop
 
 - `main.rs`: `--serve-sessions [--data-dir X]` handled before Tauri (like
-  `--printenv`).
+  `--printenv`); `piki_core::app_settings::resolve` decides `enabled` before
+  `connect_session_daemon(paths, enabled)` (database override from Settings ▸
+  General > `[sessions]` in `config.toml` > default); the value the process
+  started with is `DesktopApp.sessions_enabled`.
 - `spawn_tab`/`spawn_editor_tab`/`spawn_terminal_at`/`dispatch_agent` →
   daemon spawn with `attach: true`.
-- Setup: list sessions and populate `DesktopWorkspace.tabs` before the
-  frontend loads; the existing `wsTabsV2` layout restore then reconciles by
-  content id (ids are stable now).
-- Frontend: on `createTerminal` send `ipc.resyncPty(tabId)` so the restore
-  lands in a mounted xterm (output for unmounted tabs is dropped today and
-  must stay cheap). `close_tab` kills; window close detaches; menu entry
-  *Quit and kill all sessions*.
+- Setup (`session.rs::reattach_sessions`): list sessions and populate
+  `DesktopWorkspace.tabs` before the frontend loads; the existing `wsTabsV2`
+  layout restore then reconciles by content id (ids are stable now). What was
+  restored is kept as `restore_summary` for the startup toast and the
+  per-workspace `↺` badge.
+- Frontend: the first mount of a terminal sends `ipc.resyncPty(tabId)` so the
+  restore lands in a mounted xterm; output for a hidden pane is buffered
+  (2 MB, never dropped) and replayed on mount.
+- Lifecycle: `close_tab` kills (+ `Remove`); `detach_tab` (*Keep running* in the
+  close confirm, *Close keep running* in the tab menu) drops the attachment so
+  Drop sends `Detach` — never `Kill`, never `remove_session` — and refuses for
+  an in-process tab; `move_tab` re-points the session's `workspace_path` via
+  `SetMeta`; `delete_workspace` kills + removes the workspace's sessions;
+  window close detaches; the quit dialog wording comes from `quit_summary`
+  (daemon-backed vs in-process tabs) and offers *Quit and kill all sessions*.
+- Sessions dialog (`Alt+Shift+S`): `list_sessions` / `kill_session` /
+  `remove_session` / `adopt_session` (attach + `tab_from_session`, the same
+  builder startup uses). Status bar: `session_status` polled every 3 s —
+  `sessions N` / `off` / `unavailable`, with `(restart)` appended while the
+  persisted Settings choice (`enabled_next`) differs from the running state.
+
+The user-facing description of all of this is in `docs/technical.md`
+§ Persistent sessions.
 
 ## Persistence model
 
@@ -338,20 +357,10 @@ Each phase ends green on `just ci` and is committed on `persistence-sessions`.
 
 Status: all six phases shipped. The TUI sessions overlay (`prefix ctrl-s`)
 landed after the initial cut, and `[sessions] enabled` is honored by both
-frontends (desktop via `session::sessions_enabled()`). The desktop's Settings
-▸ General (`Ctrl+,`) toggles it without the file: the choice is stored in
-`ui_preferences` (`piki_core::app_settings`, database > `config.toml` >
-default), both frontends merge it at startup (TUI `App::new`, desktop
-`main.rs` → `connect_session_daemon(paths, enabled)`), it applies on the
-next launch, and `session_status.enabled_next` lets the status bar say
-`(restart)` while the running state differs. Still open from the
+frontends — including the desktop's Settings ▸ General override
+(`piki_core::app_settings`, database > `config.toml` > default, applied on the
+next launch). The desktop Sessions dialog, Adopt, the restore toast, the
+status-bar segment, the quit summary and *Keep running* (`detach_tab`) are
+listed under *Frontend integration → Desktop* above. Still open from the
 phase-6 list: replayed-event badges (the `replayed` flag exists on the wire,
-unused). The desktop Sessions dialog (Alt+Shift+S) shipped after, and now has Adopt
-(`adopt_session`: same `tab_from_session` path as startup re-attach), a
-startup restore toast + per-workspace `↺` badge (`restore_summary`), a
-`sessions N / off / unavailable` status-bar segment (`session_status`, the
-list call as liveness probe, polled every 3s) and a quit dialog that counts
-daemon-backed vs in-process tabs (`quit_summary`). Closing a running tab in
-the desktop asks Close / Keep running / Cancel — *Keep running* is
-`detach_tab`: the window drops its attachment (Drop sends `Detach`, never
-`Kill`, and no `remove_session`), so the session lives on as detached.
+unused).

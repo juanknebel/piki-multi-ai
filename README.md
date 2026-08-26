@@ -83,22 +83,24 @@ The full reference — CLI commands, every keybinding, workspace lifecycle, and 
 
 ## Desktop Application
 
-A desktop GUI is available via `piki-desktop`, built with [Tauri v2](https://v2.tauri.app/). It reuses the same `piki-core` logic and SQLite database as the TUI, so workspaces created in either interface are visible in the other.
+A desktop GUI is available via `piki-desktop`, built with [Tauri v2](https://v2.tauri.app/). It reuses the same core logic and SQLite database as the TUI, so workspaces created in either interface are visible in the other — and, with persistent sessions, so are the terminal tabs.
 
 Highlights on top of the shared feature set:
 
-- **Native-feeling shell** — custom menu bar, activity bar + sidebar views (Explorer, Files, Source Control, Agents), resizable panes, full keyboard accessibility
-- **Theming** — 5 built-in presets (Obsidian Dark, Nord, Catppuccin Mocha, Solarized Light, Tokyo Night), a full per-variable theme editor, and drop-in custom theme files; light themes are first-class — every tint, scrim, shadow and the syntax colours of markdown code blocks derive from the active palette
-- **UI zoom & density** — `Ctrl+=` / `Ctrl+-` / `Ctrl+0` scale the whole interface and the terminal font together (persisted; `Ctrl+Shift+…` twins work with a terminal focused); a density setting (compact / normal / comfortable) changes row, bar and control heights independently of zoom — compact fits 25% more sidebar rows; the layout keeps the editor usable in small windows (chat floats over it below 1000px wide)
-- **Crisp chrome** — one SVG icon set drawn in the text colour (no platform-dependent emoji), a lean font bundle (WOFF2 Nerd Font for the terminal, a 10 KB icon subset for the sidebar)
-- **Modern terminal** — xterm.js with WebGL rendering; `Ctrl+click` opens links in the browser, Unicode 11 widths keep emoji and box-drawing aligned, the tab flashes on a bell and takes the shell's title (a rename always wins); copy on select (one clipboard write per selection, switchable), middle-click paste, a right-click menu (copy / paste / select all / clear / search / open link), a search bar with `n/m` counter, regex and match-case; `Ctrl+Shift+E` sends the next key straight to the terminal past every app shortcut; Settings ▸ Terminal sets font, size, line height, scrollback (up to 100k), cursor — live, composing with the UI zoom
-- **Editors** — CodeMirror 6 code tabs with LSP support (diagnostics, completion, hover, go-to-definition), Milkdown WYSIWYG markdown tabs, file viewer with quick-edit; `Ctrl+F` finds a file (opens instantly, index honours `.gitignore`) and `Enter` lands straight in an editor tab
-- **Native git** — staging, commits, amend, pull / push with honest in-flight buttons (`↓N` / `↑N`, one op at a time), per-file discard (confirmed; deletes an untracked file), a fuzzy branch switcher from the status bar, merge/rebase, stash, side-by-side diffs with conflict resolution, git log, live ahead/behind tracking
-- **Split panes** — recursive horizontal/vertical splits; every pane holds one thing — a shell, an agent, an editor, the web preview, the kanban board or the API explorer — picked from the blank pane; the layout, editors and previews included, persists per workspace across restarts
-- **Editor-grade tabs & sidebar** — middle-click closes a tab (a running process still gets its confirm), `+` and a `⋯` all-tabs list never scroll away, right-click menus on tabs (rename, split, move to another workspace with the process alive, close / keep running) and on workspace rows (open, agents, info, edit, merge, delete); the `Ctrl+Space` switcher ranks by most-recently-used and matches fuzzily (`wsauth` finds `ws-auth`) with an agent / dirty-git glyph per row; an empty workspace shows its name and branch with Shell / provider / Open file buttons; deleting a workspace says what it removes for its type, counts uncommitted changes and lists the agents it will terminate
-- **Extras** — file explorer with git decorations, web preview tab for local dev servers, kanban board, API explorer with history, AI chat panel, system info dashboard
+- **Editor-style shell** — menu bar, activity bar, sidebar views (Explorer, Files, Source Control) with the Agents panel always docked below them, a status bar with branch / changes / cwd / agent status / sessions, full keyboard accessibility with a visible focus ring everywhere
+- **Panes with anything in them** — a tab is a tree of split panes (`Ctrl+\` / `Ctrl+Shift+\`); every pane holds one thing — a shell, an agent, a code or markdown editor, the web preview, the kanban board or the API explorer — picked from the blank pane, with *Move here* for the one-per-workspace tools; the layout, editors and previews included, is restored per workspace on the next launch
+- **Tabs and sidebar** — middle-click closes a tab (a running process still gets its Close / Keep running / Cancel prompt), `+` and a `⋯` all-tabs list never scroll away, right-click menus on tabs (rename, split, move to another workspace with the process alive, close) and on workspace rows (open, agents, info, edit, create worktree, merge, delete), inline rename on double-click; deleting a workspace says what it removes, counts uncommitted changes and lists the agents it will stop
+- **Workspace switcher** (`Ctrl+Space`) ranked by most-recently-used and matched fuzzily (`wsauth` finds `ws-auth`), with an agent / dirty-git glyph per row; `Alt+1…9` jumps directly
+- **Agent signals** — an agent that needs you is amber in the tab bar, status bar, Agents panel, workspace list and activity bar at once; `Alt+A` lands on it from any workspace (permission requests first, then unseen news); elapsed run time per agent
+- **Modern terminal** — xterm.js with WebGL; `Ctrl+click` opens links in the browser, Unicode 11 widths keep emoji and box-drawing aligned, the tab flashes on a bell and takes the shell's title (a rename always wins); copy on select (one clipboard write per selection, switchable), middle-click paste, a right-click menu, a search bar with `n/m` counter, regex and match-case; `Ctrl+Shift+E` sends the next key straight to the terminal past every app shortcut
+- **Editors** — CodeMirror 6 code tabs with LSP support (diagnostics, completion, hover, go-to-definition), WYSIWYG markdown tabs, a read-only viewer with quick-edit; `Ctrl+F` finds a file (opens instantly, the index honours `.gitignore`) and `Enter` lands straight in an editor tab
+- **Native git** — staging, commits and amend, pull / push with honest in-flight buttons (`↓N` / `↑N`, one operation at a time), per-file discard (confirmed; deletes an untracked file), a fuzzy branch switcher from the status bar, merge / rebase, stash, side-by-side diffs with conflict resolution, git log, live ahead/behind tracking, PR code review
+- **Theming, zoom and density** — 5 built-in presets, a per-variable theme editor and drop-in theme files; light themes are first-class (every tint, scrim, shadow and code-block colour derives from the palette); `Ctrl+=` / `Ctrl+-` / `Ctrl+0` scale the whole interface and the terminal font together; a density setting (compact / normal / comfortable) changes row, bar and control heights independently — compact fits 25% more sidebar rows; the layout keeps the editor usable in small windows
+- **Crisp chrome** — one SVG icon set drawn in the text colour (no platform-dependent emoji) and a lean font bundle (WOFF2 Nerd Font for the terminal, a 10 KB icon subset for the sidebar)
+- **Settings dialog** (`Ctrl+,`) — General (shared with the TUI), Appearance, Terminal (font, size, line height, scrollback up to 100k, cursor, copy on select — applied live) and Shortcuts (every key rebindable, grouped by category, with a filter and conflict flags)
+- **Extras** — file explorer with git decorations, web preview tab for local dev servers, kanban board, API explorer with history, AI chat panel with context injection and tool-call cards, system info dashboard, application log viewer; the window reopens with the size, position and maximized state it was closed with
 
-Desktop keyboard shortcuts are listed in [docs/technical.md](docs/technical.md#desktop-keyboard-shortcuts); all of them are editable at runtime (`Ctrl+,` → Settings ▸ Shortcuts, grouped by category with a filter and conflict flags). The window reopens with the size, position and maximized state it was closed with.
+The desktop layout, every shortcut and each panel are documented in [docs/technical.md](docs/technical.md#desktop-application).
 
 ## Installation
 
@@ -147,7 +149,12 @@ cd crates/desktop && cargo tauri build
 
 ## Configuration & Theming
 
-All UI aspects, including keybindings and themes, are customizable via `~/.config/piki-multi/config.toml`. Generate a fully-commented starting point with:
+Configuration comes from two places:
+
+- **`~/.config/piki-multi/config.toml`** — the TUI's theme and keybindings, notifications, persistent sessions, the kanban backing store; plus `providers.toml`, `lsp.toml` and the theme directories next to it. Both frontends read it.
+- **The desktop Settings dialog** (`Ctrl+,`) — everything desktop-only (shortcuts, appearance, terminal look) and, under *General*, the two settings both frontends share: persistent sessions and notifications. Those are stored in the piki database and take precedence: **Settings dialog > `config.toml` > built-in default**, for the TUI as well, until you reset them in the dialog.
+
+Generate a fully-commented `config.toml` starting point with:
 
 ```bash
 mkdir -p ~/.config/piki-multi
@@ -239,7 +246,7 @@ The desktop app ships 5 built-in presets and also scans `~/.config/piki-multi/de
 
 - `id` must not collide with a built-in (`obsidian-dark`, `nord-dark`, `catppuccin-mocha`, `solarized-light`, `tokyo-night`); colliding files are ignored.
 - `colors` is partial-friendly: any key you omit falls back to `obsidian-dark` (when `isDark: true`) or `solarized-light` (when `isDark: false`); invalid hex values are dropped silently.
-- See `frontend/src/theme.ts` for the full list of color keys.
+- The Theme dialog's editor (`Alt+T`) lists every color key; a custom file may set any of them.
 
 ### Custom providers (`providers.toml`)
 

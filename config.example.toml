@@ -20,6 +20,10 @@ theme = "default"
 # ── Notifications ─────────────────────────────────────────────────────────
 # How background agent events reach you.
 
+# The desktop's Settings ▸ General (Ctrl+,) can set `delivery` and `sound`
+# without editing this file; that choice is stored in piki.db, applies to the
+# TUI as well, and wins over this table until you reset it in the dialog. The
+# sound_*_path entries are file-only.
 # [notifications]
 # delivery: "system"   → OS desktop toast (default)
 #           "terminal" → OSC 9 escape, so the host terminal notifies

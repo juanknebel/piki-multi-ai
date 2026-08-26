@@ -15,7 +15,7 @@ Companion documents: [persistent sessions design](persistent-sessions.md) ·
 - [TUI layout](#tui-layout)
 - [TUI keybindings](#tui-keybindings)
 - [Code Review](#code-review)
-- [Desktop keyboard shortcuts](#desktop-keyboard-shortcuts)
+- [Desktop application](#desktop-application) — [layout](#desktop-layout) · [shortcuts](#desktop-keyboard-shortcuts) · [Settings](#desktop-settings-dialog) · [tabs](#desktop-tabs-sidebar-and-switcher) · [panes](#desktop-panes-and-content) · [terminal](#desktop-terminal) · [git](#desktop-source-control-panel) · [file finder](#desktop-file-finder) · [chat](#desktop-ai-chat) · [fonts, density, zoom](#desktop-fonts-density-zoom-and-themes)
 - [Workspaces](#workspaces)
 - [Persistent sessions](#persistent-sessions)
 - [Agent integrations](#agent-integrations)
@@ -447,116 +447,186 @@ The diff pane shows a **side-by-side split view**: the left panel displays the o
 | `Esc` | Close overlay (draft preserved) |
 | `Ctrl+D` | Discard draft, comments, and close overlay |
 
-## Desktop keyboard shortcuts
+## Desktop application
 
-The terminal owns every key it can use. An app shortcut fires while a terminal, text input or editor has focus **only** if its chord is one the terminal can't receive as bytes — `Alt+…`, `Ctrl+Shift+…` or `Ctrl+Alt+…`. Plain `Ctrl+<letter>` / `Ctrl+Space` shortcuts (marked ° below) work everywhere else — sidebar, tab bar, dialogs — but with a shell focused `Ctrl+B` reaches tmux, `Ctrl+P` walks history and `Ctrl+F` in a CodeMirror editor is CodeMirror's find. Rebinding a marked-free shortcut to a plain `Ctrl+<letter>` demotes it to outside-only (the Settings dialog says so when you do it).
+`piki-desktop` is the Tauri v2 GUI over the same `piki-core` and SQLite database as the TUI. This section is the user-facing reference for it; the implementation rules live in `crates/desktop/CLAUDE.md` and the internals in [Desktop internals](#desktop-internals).
 
+### Desktop layout
+
+```
++-------------------------------------------------------------------------------+
+| File  Edit  View  Git  Agents  Chat  Tools  Help                     menu bar |
++---+----------------------+----------------------------------------+-----------+
+| E | WORKSPACES      ⋯    | [$ zsh ✓] [▸ Claude ●] [main.rs] + ⋯   |           |
+| x |  ▾ frontend (2)      |----------------------------------------|  AI Chat  |
+| p |   ⎇ ws-1  3∆ ↑1  ●   | pane: shell        | pane: Claude Code |  (toggle, |
+| l |   ⎇ ws-2             |                    |                   |   floats  |
+| F |  ▸ backend (1)       |                    |                   |   under   |
+| i |----------------------|--------------------+-------------------|   1000px) |
+| l | AGENTS               | pane: blank → Shell / providers /      |           |
+| e |  ▷ ws-1 · Claude 3m  |       Web Preview / Kanban / API /     |           |
+| s |  ✓ api · Claude      |       Open file…                       |           |
+| S |                      |                                        |           |
+| C |                      |                                        |           |
++---+----------------------+----------------------------------------+-----------+
+| ⎇ ws-1  3 files ↑1 · ~/git/frontend · Claude: running · ● 1 need you · sessions 4 · LSP |
++-------------------------------------------------------------------------------+
+```
+
+- **Menu bar** — File / Edit / View / Git / Agents / Chat / Tools / Help; every entry shows its current shortcut.
+- **Activity bar** — Explorer, Files, Source Control, Agents (opens the agent-profile manager), Settings; an amber badge on the Explorer icon means an agent needs you even when the sidebar is hidden.
+- **Sidebar** — the switchable view (workspace list with `⋯` / right-click menus, file tree with git decorations, Source Control panel) plus the **Agents panel**, always docked at the bottom whatever view is active, listing every running agent across all workspaces with status and elapsed time. Its height is draggable; the workspace list above keeps its header plus at least four rows.
+- **Tab bar** — one strip per workspace: the chips scroll, `+` (new blank tab) and `⋯` (every tab of the workspace, agent status, current one marked) stay put. Tab chips show the shell's ✓/✗ exit badge, an agent dot, a bell flash and a dim `○` when the process exited.
+- **Panes** — each top-level tab is a tree of panes; each pane holds exactly one content (shell, agent, code or markdown editor, web preview, kanban board, API explorer). A blank pane shows the chooser; the pane header shows the title, a split-right / split-down / close set and a *Restart* button once its process has exited. There are no per-pane tab bars.
+- **Status bar** — branch (click to switch), changed files and ahead/behind, the active shell's cwd, the active agent's status, `● N need you`, the `sessions N` segment (click to manage), LSP state. Segments ellipsize instead of overflowing.
+- **Chat** — the AI chat panel docks to the right; below 1000px wide it floats over the editor.
+- The **welcome screen** appears only when no workspace exists; an empty workspace shows its name and branch with Shell / provider / tool / *Open file…* buttons instead.
+
+### Desktop keyboard shortcuts
+
+The terminal owns every key it can use. An app shortcut fires while a terminal, text input or editor has focus **only** if its chord is one the terminal can't receive as bytes — `Alt+…`, `Ctrl+Shift+…` or `Ctrl+Alt+…`. Plain `Ctrl+<letter>` / `Ctrl+Space` shortcuts (marked ° below) work everywhere else — sidebar, tab bar, dialogs — but with a shell focused `Ctrl+B` reaches tmux, `Ctrl+P` walks history and `Ctrl+F` in a CodeMirror editor is CodeMirror's find. Rebinding a terminal-capturing shortcut to a plain `Ctrl+<letter>` demotes it to outside-only (Settings ▸ Shortcuts flags it with `!`).
+
+<!-- BEGIN:desktop-shortcuts -->
 | Shortcut | Action |
 |---|---|
 | **General** | |
-| `Ctrl+P` ° | Command palette |
-| `Ctrl+N` ° | New workspace |
-| `Ctrl+Space` ° | Workspace switcher |
+| `Ctrl+P` ° | Command Palette |
+| `Ctrl+N` ° | New Workspace |
+| `Ctrl+Space` ° | Workspace Switcher |
 | `Alt+D` | Dashboard |
-| `?` ° | Help / all shortcuts |
+| `?` ° | Keyboard Shortcuts (help dialog, generated from the same registry as this table) |
 | `Ctrl+,` ° | Settings |
-| `Esc` | Close dialog / overlay |
-| `Alt+1`…`Alt+9` | Switch to workspace N |
-| Right-click workspace row (or its `⋯`) | Workspace menu: Open, Agents, Info, Edit, Create Worktree (GitHub), Merge / Rebase, Delete |
+| `Esc` | Close Dialog / Overlay |
+| `Alt+1…9` | Switch to Workspace N |
+| `Right-click workspace` | Workspace menu (open, agents, info, edit, merge, delete) — also the row's `⋯` |
 | **View & Panels** | |
-| `Ctrl+B` ° | Toggle sidebar |
+| `Ctrl+B` ° | Toggle Sidebar |
 | `Alt+K` | Kanban Board |
-| `Alt+Shift+W` | Open Web Preview tab |
-| `Alt+T` | Theme settings |
-| `Alt+P` | Manage providers |
-| `Alt+Shift+L` | Application logs |
-| `Alt+Shift+S` | Sessions (persistent) dialog |
+| `Alt+Shift+W` | Open Web Preview |
+| `Alt+T` | Theme Settings |
+| `Alt+P` | Manage Providers |
+| `Alt+Shift+L` | Application Logs |
+| `Alt+Shift+S` | Sessions (persistent) |
 | `Alt+I` | System Info |
-| `Ctrl+=` ° / `Ctrl+-` ° / `Ctrl+0` ° | Zoom in / out / reset — scales the whole UI and the terminal font together |
-| `Ctrl+Shift+=` / `Ctrl+Shift+-` / `Ctrl+Shift+0` | Same zoom actions, also with a terminal focused |
+| `Ctrl+=` ° | Zoom In — the whole UI and the terminal font together |
+| `Ctrl+-` ° | Zoom Out |
+| `Ctrl+0` ° | Reset Zoom |
+| `Ctrl+Shift+=` | Zoom In (terminal-safe) |
+| `Ctrl+Shift+-` | Zoom Out (terminal-safe) |
+| `Ctrl+Shift+0` | Reset Zoom (terminal-safe) |
+| **Chat** | |
+| `Ctrl+Shift+L` | Toggle AI Chat |
+| `Ctrl+Shift+I` | Add Context to Chat — a terminal selection goes straight into the composer; otherwise a chooser offers the active file, its diff or the editor selection |
 | **Search** | |
-| `Ctrl+F` ° | Find file (fuzzy) |
-| `Enter` / `Alt+Enter` | In the file finder: open in an editor tab / in the read-only viewer (`Ctrl+E` for `$EDITOR`) |
-| `Ctrl+Shift+F` | Search in project (grep) |
-| `Ctrl+Shift+B` | Search in terminal |
-| `Ctrl+J` ° | API jq filter (in API Explorer) |
-| `Ctrl+H` | Request history (in API Explorer) |
+| `Ctrl+F` ° | Find File (fuzzy; `Enter` opens an editor tab, `Ctrl+E` runs `$EDITOR`) |
+| `Ctrl+Shift+F` | Search in Project (grep) |
+| `Ctrl+Shift+B` | Search in Terminal |
+| `Ctrl+J` ° | API jq Filter (in API Explorer) |
+| `Ctrl+H` | Request History (in API Explorer) |
+| `Alt+Enter` | Open in read-only viewer (in file search; Enter opens an editor tab) |
 | **Git** | |
 | `Ctrl+M` ° | Merge / Rebase |
-| `Alt+B` | Switch branch (also by clicking `⎇ branch` in the status bar) |
-| `Alt+L` | Git log |
-| `Ctrl+Shift+S` | Git stash |
-| `Ctrl+Z` ° | Undo stage/unstage |
-| `Ctrl+Shift+R` | Code review |
-| `Ctrl+Enter` | Commit (in the commit message box) |
+| `Alt+B` | Switch Branch (also by clicking the branch in the status bar) |
+| `Alt+L` | Git Log |
+| `Ctrl+Shift+S` | Git Stash |
+| `Ctrl+Z` ° | Undo Stage/Unstage |
+| `Ctrl+Shift+R` | Code Review (PR) |
+| `Ctrl+Enter` | Commit (in commit message box) — or amend when *Amend last commit* is ticked |
 | **Agents** | |
-| `Ctrl+Shift+A` | Manage agents |
-| `Ctrl+Shift+D` | Dispatch agent |
-| `Alt+A` | Jump to the agent needing attention (permission first, then unseen news; repeat to walk through them) |
+| `Ctrl+Shift+A` | Manage Agents |
+| `Ctrl+Shift+D` | Dispatch Agent |
+| `Alt+A` | Jump to Agent Needing Attention (permission first, then unseen news; repeat to walk through them) |
 | **Panes & Tabs** | |
-| `Ctrl+T` ° | New blank tab |
-| `Ctrl+\` ° | Split active pane right |
-| `Ctrl+Shift+\` ° | Split active pane down |
-| `Ctrl+Shift+Q` ° | Close active pane |
-| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous tab |
-| Drag divider | Resize split |
-| Middle-click tab | Close tab (a running process still gets the Close / Keep running / Cancel confirm) |
-| Right-click tab | Tab menu: Rename, Split right / down, Move to workspace…, Close, Close keep running (with a session daemon) |
-| `⋯` in the tab bar | List every tab of the workspace (name, agent status, current one marked) — the way to find a tab once the strip overflows |
-| Double-click tab | Rename inline |
-| **Chat** | |
-| `Ctrl+Shift+L` | Toggle AI Chat panel |
-| `Ctrl+Shift+I` | Add context to chat — a terminal selection goes straight into the composer; otherwise a chooser offers the active file, its diff or the editor selection (see *Desktop AI Chat*) |
+| `Ctrl+T` ° | New Blank Tab |
+| `Ctrl+\` ° | Split Pane Right |
+| `Ctrl+Shift+\` ° | Split Pane Down |
+| `Ctrl+Shift+Q` ° | Close Active Pane |
+| `Ctrl+Tab` | Next Tab |
+| `Ctrl+Shift+Tab` | Previous Tab |
+| `Drag divider` | Resize split |
+| `Middle-click tab` | Close tab (asks if a process is running) |
+| `Right-click tab` | Tab menu (rename, split, move to workspace, close) — *Close keep running* appears with a session daemon; double-click renames inline |
+| `⋯ in tab bar` | List every tab of the workspace |
 | **Terminal** | |
-| `Ctrl+Shift+E` | Send the next key to the terminal — the following keystroke bypasses every app shortcut (type `Alt+B` into readline although it is Switch Branch); the pane header shows `next key → terminal` while armed, `Esc` or the chord again cancels |
-| `Ctrl+Shift+K` | Clear the terminal (screen + scrollback) |
-| `Ctrl+Shift+C` / `Ctrl+Shift+V` | Copy / paste (`Cmd+C` / `Cmd+V` on macOS) |
-| Select text | Copy to clipboard — one write per selection gesture; Settings ▸ Terminal ▸ *Copy on select* turns it off |
-| Middle-click | Paste: the primary selection where the platform delivers one (X11, GTK on Wayland), otherwise the clipboard |
-| `Ctrl+click` link | Open the URL in the default browser (`Cmd+click` on macOS) |
-| Right-click | Terminal menu: Open / Copy link (over a URL), Copy, Paste, Select All, Clear, Search…, Send Next Key |
-| `Enter` / `Shift+Enter` | Next / previous match in the terminal search bar; `Esc` closes it and returns focus to the terminal |
-| `Shift+PgUp` / `Shift+PgDn` | Scroll one page |
-| `Shift+Home` / `Shift+End` | Scroll to top / bottom |
+| `Ctrl+Shift+E` | Send Next Key to Terminal — the next keystroke bypasses every app shortcut; the pane header shows `next key → terminal` while armed, `Esc` or the chord again cancels |
+| `Ctrl+Shift+K` | Clear Terminal (screen + scrollback) |
+| `Ctrl+Shift+C` | Copy Selection |
+| `Ctrl+Shift+V` | Paste from Clipboard |
+| `Select text` | Copy to Clipboard (Settings ▸ Terminal ▸ Copy on select) |
+| `Middle-click` | Paste (primary selection where the platform has one, else the clipboard) |
+| `Ctrl+click link` | Open link in the browser |
+| `Right-click` | Terminal menu (copy, paste, select all, clear, search, open link) |
+| `Enter / Shift+Enter` | Next / previous match (in terminal search); Esc closes |
+| `Shift+PgUp / PgDn` | Scroll one page |
+| `Shift+Home / End` | Scroll to top / bottom |
 | **Code Editor** | |
-| `Ctrl+I` | Quick Edit inline (in file viewer) |
-| `Ctrl+E` | Open in $EDITOR (in file viewer / file search / project search) |
+| `Ctrl+I` | Quick Edit (in file viewer) |
+| `Ctrl+E` | Open in $EDITOR (in file viewer / search results) |
 | `Ctrl+S` | Save file (in editor) |
 | `Ctrl+F` | Find in file (CodeMirror) |
+<!-- END:desktop-shortcuts -->
 
-° = outside-only (see above). On macOS every `Ctrl`/`Alt` above is `⌘`. Rows without ° that are not in the Settings dialog (`Esc`, `Alt+1…9`, `Ctrl+Tab`, copy/paste, `Ctrl+H`, `Ctrl+Enter`, the editor keys, the mouse gestures) are fixed widget bindings; everything else is editable at runtime via the Settings dialog (`Ctrl+,`). The in-app help (`?`) is generated from the same registry, so it always shows your current keys.
+° = outside-only (see above). On macOS every `Ctrl`/`Alt` above is `⌘`, and copy/paste are `⌘+C` / `⌘+V`. The rows from `Esc` downwards in each group that never appear in Settings ▸ Shortcuts (`Esc`, `Alt+1…9`, `Ctrl+Tab`, copy/paste, `Ctrl+H`, `Ctrl+Enter`, the editor keys, the mouse gestures) are fixed widget bindings; everything else is editable at runtime in Settings ▸ Shortcuts. This table is checked against the shortcut registry by the frontend's `docs-parity.test.ts`: every default key and action name must appear here, and no `Ctrl+…` / `Alt+…` key may be listed that nothing defines.
 
 ### Desktop Settings dialog
 
 `Ctrl+,` (outside-only — from a focused shell use Edit ▸ Settings or the palette) opens a dialog with a left tab rail; the last tab is remembered, `Esc` closes, `↑`/`↓` move along the rail, focus lands on the tab's first control.
 
-- **General** — the settings both frontends share, stored in the piki database (`piki_core::app_settings`, key `app_settings` in `ui_preferences`) with the precedence **database override > `config.toml` > default**: persistent sessions on/off, notification delivery (`system` / `terminal` / `off`), sound. Each control carries a *from config.toml* / *set here* badge and the tab says what `config.toml` currently contains; *Reset general* clears the overrides so the file applies again. Notifications apply live (`set_app_settings` re-runs `NotificationsConfig::apply`); the sessions choice is read at startup only — the tab shows *Currently on — will be off after you restart* and the status bar appends `(restart)` while the two differ. The TUI folds the same overrides into its `Config` in `App::new`, so a choice made here is honoured by `piki-multi-ai` on its next start too.
-- **Appearance** — *Open theme editor…* (the Theme dialog, `Alt+T`), density (`compact` / `normal` / `comfortable`, `data-density` on `<html>`, persisted as `appearance.density`) and UI zoom — one dropdown over the same levels `Ctrl+=` / `Ctrl+-` step through.
-- **Terminal** — the shell command (never reset) and the Settings ▸ Terminal section described below.
+- **General** — the settings both frontends share, stored in the piki database (`piki_core::app_settings`, key `app_settings` in `ui_preferences`) with the precedence **database override > `config.toml` > default**: persistent sessions on/off, notification delivery (`system` / `terminal` / `off`), sound. Each control carries a *from config.toml* / *set here* badge and the tab says what `config.toml` currently contains; *Reset general* clears the overrides so the file applies again. Notifications apply live; the sessions choice is read at startup only — the tab shows *Currently on — will be off after you restart* and the status bar appends `(restart)` while the two differ. The TUI folds the same overrides into its `Config` at startup, so a choice made here is honoured by `piki-multi-ai` on its next start too.
+- **Appearance** — *Open theme editor…* (the Theme dialog, `Alt+T`), density (`compact` / `normal` / `comfortable`) and UI zoom — one dropdown over the same levels `Ctrl+=` / `Ctrl+-` step through.
+- **Terminal** — the shell command (never reset) and the terminal look described under [Desktop terminal](#desktop-terminal).
 - **Shortcuts** — grouped by category in the Help dialog's order, a filter box matching action, key or category, the ° outside-only marker, `⚠` when two actions (or an action and a widget key such as `Ctrl+Tab`) share a combo, `!` when a terminal-capturing action was rebound to a chord the terminal owns and therefore fires outside it only. Click the current key, press the new chord (`Esc` cancels); a key already taken is refused with a toast.
 - **Restore Defaults** (confirmed) resets shortcuts, the terminal look, zoom, density and the General overrides; it keeps the shell command and the provider binaries. *Reset <tab>* in the footer does the same for one tab.
 
+Desktop-only preferences (sidebar and chat widths, Agents-panel height, shortcuts, shell, pane layouts, file-tree state, zoom, density, terminal look) live in one JSON settings document in the database; the theme preset and custom colours are stored next to it. Nothing in the dialog writes `config.toml`.
+
 ### Desktop tabs, sidebar and switcher
 
-- **Tab bar**: the chips scroll in their own strip; `+` (new blank tab) and `⋯` (all tabs) sit outside it and stay visible with any number of tabs. The `×` is dim on inactive tabs, full on hover/active. Every close path — `×`, middle-click, the menu, `Close Tab` — goes through the same teardown, so a live process always gets the Close / Keep running / Cancel dialog. *Move to workspace…* (tab menu, File menu, palette) offers only terminal/agent tabs (editors, boards and previews are bound to their workspace's files): the backend re-parents the tab with its process untouched — a daemon session also gets its `workspace_path` re-pointed so the next launch restores it in the new workspace — and the app switches to the target with the moved tab in front.
-- **Workspace rows** carry one `⋯` (plus right-click) instead of a row of hover buttons; *Merge / Rebase* switches to that workspace first. The *Delete* confirm is one shared implementation (sidebar and palette): the hint depends on the workspace type (a worktree loses its worktree and branch; a Simple/Project workspace only leaves the list), it counts uncommitted changes, and lists the running agents — which deletion really terminates (their daemon sessions are removed, not left as orphans).
-- **Workspace switcher** (`Ctrl+Space`): with an empty query the most recently used workspace is first (the MRU list is bumped on every switch and persisted with the settings as `workspaceMru`); a query is matched fuzzily across name, repo folder and branch, best score first with recency as the tie-break. Each row shows the workspace's worst agent state (permission / needs you / running…) or an amber dot for uncommitted changes, `Alt+N` when it has one, and `folder · ⎇ branch`.
+- **Tab bar**: the chips scroll in their own strip; `+` (new blank tab) and `⋯` (all tabs) sit outside it and stay visible with any number of tabs. The `×` is dim on inactive tabs, full on hover/active. Every close path — `×`, middle-click, the menu, `Close Tab` — goes through the same teardown, so a live process always gets the Close / Keep running / Cancel dialog (see [Persistent sessions](#persistent-sessions)). *Move to workspace…* (tab menu, File menu, palette) offers only terminal/agent tabs (editors, boards and previews are bound to their workspace's files): the backend re-parents the tab with its process untouched — a daemon session also gets its `workspace_path` re-pointed so the next launch restores it in the new workspace — and the app switches to the target with the moved tab in front.
+- **Renaming**: double-click a tab (or *Rename* in its menu) for an inline input — Enter commits, Esc cancels, empty clears. A rename always wins over the title a program sets (OSC 0/2), which is otherwise the fallback label; the Agents panel keeps the provider label.
+- **Workspace rows** carry one `⋯` (plus right-click): Open, Agents, Info, Edit, Create Worktree (GitHub), Merge / Rebase (switches to that workspace first), Delete. The *Delete* confirm is one shared implementation (sidebar and palette): the hint depends on the workspace type (a worktree loses its worktree and branch; a Simple/Project workspace only leaves the list), it counts uncommitted changes, and lists the running agents — which deletion really terminates (their daemon sessions are removed, not left as orphans).
+- **Workspace switcher** (`Ctrl+Space`): with an empty query the most recently used workspace is first (the MRU list is bumped on every switch and persisted with the settings); a query is matched fuzzily across name, repo folder and branch (`wsauth` finds `ws-auth`), best score first with recency as the tie-break. Each row shows the workspace's worst agent state (permission / needs you / running…) or an amber dot for uncommitted changes, `Alt+N` when it has one, and `folder · ⎇ branch`.
 - **Branch labels** share one rule everywhere (workspace list, status bar, switcher, dashboard, empty state): middle-truncated at 28 characters, the full name in the tooltip. Collapsible groups share one chevron pair: `▸` collapsed, `▾` expanded.
 - **Empty state**: a workspace with no tabs — or a blank pane — shows `<workspace> · ⎇ <branch>` and buttons for Shell, every configured provider, then *Web Preview* / *Kanban Board* / *API Explorer* and *Open file…* (the fuzzy file finder); the app-wide welcome only appears when there is no workspace at all.
-- **Any content in any pane**: a top-level tab owns a tree of panes and each pane holds exactly one content — a shell, an agent, a code / markdown editor, the web preview, the kanban board or the API explorer. Split (`Ctrl+\`, `Ctrl+Shift+\`, the header buttons) makes a blank pane whose chooser opens the pick *into that pane*; from a tab-less workspace the same chooser opens a new top-level tab, and the menu bar, palette, sidebar icons and file tree keep opening new top-level tabs. *Open file…* from a blank pane runs the fuzzy finder scoped to that pane (`Enter` editor, `Ctrl+E` `$EDITOR` shell, both land in the pane). Kanban, API Explorer and Web Preview are one-per-workspace: picking one from a blank pane while it is open elsewhere asks **Move here** (the content is re-parented; its old pane collapses into its sibling, or its old tab goes when that was the only pane) / **Go there** / Cancel; from the menu or palette the existing one is simply focused.
-- **Layout persistence**: the per-workspace snapshot (`wsTabsV2` in the settings document) stores the pane trees plus a descriptor for every non-PTY content — editor file path, web preview URL, kanban, API. On the next launch PTY panes come back through the session daemon and the rest is re-created from the snapshot: editors and previews under their old id (a file that no longer exists leaves its pane blank with a toast), Kanban / API are re-spawned backend-side and remapped. Switching workspaces re-hydrates from the same snapshot, so editors and previews survive a round-trip with their unsaved edits.
-- **Agents panel** height is clamped so the workspace list above it always keeps its header plus at least four rows (it scrolls beyond that); the clamp is re-applied when the window shrinks.
+
+### Desktop panes and content
+
+- **Any content in any pane**: a top-level tab owns a tree of panes and each pane holds exactly one content — a shell, an agent, a code / markdown editor, the web preview, the kanban board or the API explorer. Split (`Ctrl+\`, `Ctrl+Shift+\`, the header buttons) makes a blank pane whose chooser opens the pick *into that pane*; from a tab-less workspace the same chooser opens a new top-level tab, and the menu bar, palette, sidebar icons and file tree keep opening new top-level tabs. *Open file…* from a blank pane runs the fuzzy finder scoped to that pane (`Enter` editor, `Ctrl+E` `$EDITOR` shell, both land in the pane).
+- **Singletons**: Kanban, API Explorer and Web Preview are one-per-workspace. Picking one from a blank pane while it is open elsewhere asks **Move here** (the content is re-parented; its old pane collapses into its sibling, or its old tab goes when that was the only pane) / **Go there** / Cancel; from the menu or palette the existing one is simply focused.
+- **Exited processes**: a tab whose process exited shows a dimmed `○` chip and a *Restart* button in its pane header that respawns the same provider in the same pane, keeping a custom title.
+- **Layout persistence**: the per-workspace snapshot stores the pane trees plus a descriptor for every non-PTY content — editor file path, web preview URL, kanban, API. On the next launch PTY panes come back through the session daemon and the rest is re-created from the snapshot: editors and previews under their old id (a file that no longer exists leaves its pane blank with a toast), Kanban / API are re-spawned backend-side and remapped. Switching workspaces re-hydrates from the same snapshot, so editors and previews survive a round-trip with their unsaved edits.
 
 ### Desktop terminal
 
-- **Links**: URLs in the output are underlined on hover; `Ctrl+click` (`Cmd+click` on macOS) opens them through the backend's `open_url` command (http/https only — anything else a program prints is refused), never in the webview. Right-clicking a link adds *Open Link* / *Copy Link* to the menu.
-- **Unicode**: xterm runs with Unicode 11 widths, so emoji and other wide glyphs occupy two cells and box-drawing around them (Claude's status lines) stays aligned.
-- **Bell and title**: a `BEL` flashes the tab chip of the terminal that rang; a window title set by the program (OSC 0/2 — `user@host: ~/dir`, `vim file.rs`) becomes the tab label and the pane header, but only as a fallback: a name given with *Rename* always wins, and the Agents panel keeps the provider label.
-- **Clipboard**: copy-on-select writes the clipboard **once per selection gesture**, on mouse-up, however many rows the drag covered (a pure state machine, `copy-on-select.ts`); it is silent, only an explicit *Copy* toasts. The clipboard goes through `tauri-plugin-clipboard-manager` (the app owns the selection); the old `wl-copy`/`xclip`/`pbcopy` path is kept only as the fallback when the plugin errors. Middle-click pastes: WebKitGTK delivers the X11/GTK *primary* selection as a native `paste` event, which the terminal consumes; when no such event arrives within the click (Wayland without the primary-selection protocol, macOS, Windows) it pastes the clipboard instead, so the button always does something — unless a program is tracking the mouse (tmux, Claude's TUI), in which case the click is the program's. `Shift+Insert` works natively too.
+- **Rendering**: xterm.js with WebGL; Unicode 11 widths, so emoji and other wide glyphs occupy two cells and box-drawing around them (Claude's status lines) stays aligned. The bundled JetBrains Mono Nerd Font is loaded before the first terminal opens so cells are measured on the right face.
+- **Links**: URLs in the output are underlined on hover; `Ctrl+click` (`Cmd+click` on macOS) opens them in the default browser (http/https only — anything else a program prints is refused), never in the webview. Right-clicking a link adds *Open Link* / *Copy Link* to the menu.
+- **Bell and title**: a `BEL` flashes the tab chip of the terminal that rang; a window title set by the program (`user@host: ~/dir`, `vim file.rs`) becomes the tab label and the pane header, unless the tab was renamed.
+- **Clipboard**: copy-on-select writes the clipboard **once per selection gesture**, on mouse-up, however many rows the drag covered; it is silent, only an explicit *Copy* toasts. The clipboard goes through the Tauri clipboard plugin; the `wl-copy` / `xclip` / `pbcopy` path is kept only as the fallback when the plugin errors. Middle-click pastes: WebKitGTK delivers the X11/GTK *primary* selection as a native paste event, which the terminal consumes; when no such event arrives within the click (Wayland without the primary-selection protocol, macOS, Windows) it pastes the clipboard instead — unless a program is tracking the mouse (tmux, Claude's TUI), in which case the click is the program's. `Shift+Insert` works natively too.
 - **Context menu** (right-click): Copy (disabled without a selection), Paste, Select All (copies too when copy-on-select is on), Clear, Search…, Send Next Key to Terminal.
 - **Search bar** (`Ctrl+Shift+B`, menu, palette): anchored to the top-right of the terminal (it never scrolls with the viewport), a `n/m` result counter (`No results` in red, `m+` past the highlight limit), *Aa* match-case and *.\** regex toggles, `Enter` / `Shift+Enter` next / previous, `Esc` closes and focuses the terminal. The last query and toggles are remembered per tab.
 - **Send next key** (`Ctrl+Shift+E`): the next keystroke bypasses the app's shortcut dispatcher and xterm's own copy/paste interception and is turned into bytes as any terminal would (`Alt+B` → `ESC b`). Modifier presses on the way to a chord keep it armed; `Esc`, the chord again, or the terminal losing focus cancel it. The armed pane shows `next key → terminal` in its header.
-- **Settings ▸ Terminal** (`Ctrl+,` → Terminal tab): font family (empty = the theme's mono font), font size, line height, scrollback (1k–100k), cursor style + blink, copy on select. Everything applies to every open terminal immediately and is persisted under the `terminal` key of the settings document (only the fields that differ from the defaults). The font size is the **base at zoom 1** — UI zoom (`Ctrl+=` / `Ctrl+-` / `Ctrl+0`) multiplies it (`14px × 125% = 18px`), and the dialog shows the effective size next to the field.
+- **Settings ▸ Terminal**: font family (empty = the theme's mono font), font size, line height, scrollback (1k–100k), cursor style + blink, copy on select. Everything applies to every open terminal immediately (only the fields that differ from the defaults are stored). The font size is the **base at zoom 1** — UI zoom multiplies it (`14px × 125% = 18px`), and the dialog shows the effective size next to the field.
+
+### Desktop Source Control panel
+
+The common git loop runs from the panel, the Git menu or the palette without a shell:
+
+- **Pull / push**: the header shows `↓N` when the branch is behind its upstream and `↑N` when ahead (the same counts as the status bar). While an operation runs the button is disabled and reads `↓…` / `↑…`; a second click, palette entry or menu item for the same workspace is a no-op ("Push already in progress") — one intent, one process. Success is a toast (`Pulled 3 commits`, `Already up to date`, `Pushed successfully`); failures show git's own message. A pull that git cannot reconcile (diverged branches without a `pull.rebase` / `pull.ff` policy) is reported, not forced; a pull that stops on conflicts is aborted so the worktree is left as it was, and the error names the conflicting files (resolve with Merge / Rebase or a shell). Push and pull run with `GIT_TERMINAL_PROMPT=0`, so a credential prompt fails instead of hanging the button.
+- **Commit / Amend**: *Amend last commit* under the Commit button prefills the message box with the last commit message (unless you had already typed one) and turns the button into *Amend*; it is live with staged changes or a new message — an empty message keeps the current one (`git commit --amend --no-edit`). Unticking restores what you had typed. `Ctrl+Enter` commits or amends.
+- **Discard**: every row in *Changes* has a discard action that throws away the working-tree changes of that file (`git restore --worktree`, the index is untouched) behind a confirm; for an untracked file the action reads *Delete file* and really deletes it (`git clean -fd`). Both are irreversible and say so.
+- **Switch branch** (`Alt+B`, click the branch in the status bar, Git ▸ Switch Branch…, palette): a fuzzy-filterable list of local branches plus remote-tracking branches that have no local counterpart (`remote` tag; picking one creates a tracking branch), the current one marked with its `↑ ↓` counts. Checkout never forces: when uncommitted changes would be overwritten, or the branch is checked out in another worktree, git's refusal is the error toast and nothing changes.
+- **Merge / Rebase** (`Ctrl+M`), **stash** (`Ctrl+Shift+S`), **git log** (`Alt+L`), side-by-side diffs with conflict resolution, and **Code Review** (`Ctrl+Shift+R`) — the review overlay opens immediately with a *Loading PR…* skeleton (closable) while `gh` runs, then *Loading review comments…*; if `gh` is missing or fails, the overlay shows the error with *Retry* / *Close*.
+
+### Desktop file finder
+
+- **Opens before it indexes** (`Ctrl+F`): the input is focused on the first frame; the list arrives when the backend answers (the footer says `Indexing…` until then, and the last list seen for that workspace is shown meanwhile). Whatever you type while it is indexing is applied the moment the list lands.
+- **`Enter` edits, `Alt+Enter` views**: `Enter` (or a click) opens the file as an editor tab — CodeMirror for code, the WYSIWYG markdown editor for `.md` — exactly what a click in the file tree does; `Alt+Enter` opens the read-only viewer (rendered markdown for `.md`); `Ctrl+E` runs `$EDITOR` in a new terminal tab. Files whose extension says they are not text (images, archives, fonts, media, compiled and database blobs) stay in the viewer whichever key you press.
+- **What is listed**: the index is a gitignore-aware walk (the `ignore` crate, ripgrep's walker) — `.gitignore`, `.ignore`, `.git/info/exclude` and your global excludes all apply, also in a workspace that is not a git repo; dotfiles and dot-directories (`.github/`, `.cargo/`, `.env.example`) are included, `.git` itself is always pruned, symlinks are not followed. The walk stops at 50 000 paths and the footer then says the index is capped.
+- **Caching**: the backend memoises the list per workspace and drops it when the file watcher reports a create, delete or rename (plain edits of listed files keep it) and when you switch workspace, so the next `Ctrl+F` re-walks only when the tree may have changed.
+
+### Desktop sessions status
+
+The desktop's view of the persistent-session daemon — the `sessions N / off / unavailable` status-bar segment, the restore toast and `↺` badge, the Sessions dialog with Adopt / Kill / Remove, the Close / **Keep running** / Cancel confirm on a running tab and the quit dialog — is described once, in [Persistent sessions](#persistent-sessions).
 
 ### Desktop AI Chat
 
@@ -564,22 +634,14 @@ The terminal owns every key it can use. An app shortcut fires while a terminal, 
 
 **Tool cards** (agent mode): each tool call the model makes is a collapsible card — status icon, tool name, state and duration in the summary; arguments (pretty JSON) and the result as monospace blocks in the body, results longer than 12 lines folded behind *Show more*. A write tool (`edit_file`, `shell`) pauses the loop with an **Approve / Deny** card (focus lands on Approve; `Esc` on the buttons denies); the card records the decision and the buttons disappear. Stop, Clear conversation and sending a new message deny whatever is still pending; the agent loop itself denies after 300 s without an answer, so a hidden panel never leaves it hanging forever. Cards survive a reload of the conversation (history keeps `[tool] result` messages).
 
-### Desktop Source Control panel
+### Desktop fonts, density, zoom and themes
 
-The common git loop runs from the panel, the Git menu or the palette without a shell:
-
-- **Pull / push**: the header shows `↓N` when the branch is behind its upstream and `↑N` when ahead (the same counts as the status bar). While an operation runs the button is disabled and reads `↓…` / `↑…`; a second click, palette entry or menu item for the same workspace is a no-op ("Push already in progress") — one intent, one process. Success is a toast (`Pulled 3 commits`, `Already up to date`, `Pushed successfully`); failures show git's own message. A pull that git cannot reconcile (diverged branches without a `pull.rebase` / `pull.ff` policy) is reported, not forced; a pull that stops on conflicts is aborted so the worktree is left as it was, and the error names the conflicting files (resolve with Merge / Rebase or a shell).
-- **Commit / Amend**: *Amend last commit* under the Commit button prefills the message box with the last commit message (unless you had already typed one) and turns the button into *Amend*; it is live with staged changes or a new message — an empty message keeps the current one (`git commit --amend --no-edit`). Unticking restores what you had typed. `Ctrl+Enter` commits or amends.
-- **Discard**: every row in *Changes* has a `⟲` action that throws away the working-tree changes of that file (`git restore --worktree`, the index is untouched) behind a confirm; for an untracked file the action reads *Delete file* and really deletes it (`git clean -fd`). Both are irreversible and say so.
-- **Switch branch** (`Alt+B`, click `⎇ branch` in the status bar, Git ▸ Switch Branch…, palette): a fuzzy-filterable list of local branches plus remote-tracking branches that have no local counterpart (`remote` tag; picking one creates a tracking branch), the current one marked with `●` and its `↑ ↓` counts. Checkout never forces: when uncommitted changes would be overwritten, or the branch is checked out in another worktree, git's refusal is the error toast and nothing changes.
-- **Code Review** opens its overlay immediately with a *Loading PR…* skeleton (closable) while `gh` runs, then *Loading review comments…*; if `gh` is missing or fails, the overlay shows the error with *Retry* / *Close* instead of a silent toast.
-
-### Desktop file finder (`Ctrl+F`)
-
-- **Opens before it indexes**: the input is focused on the first frame; the list arrives when the backend answers (the footer says `Indexing…` until then, and the last list seen for that workspace is shown meanwhile). Whatever you type while it is indexing is applied the moment the list lands.
-- **`Enter` edits, `Alt+Enter` views**: `Enter` (or a click) opens the file as an editor tab — CodeMirror for code, the WYSIWYG markdown editor for `.md` — exactly what a click in the file tree does; `Alt+Enter` opens the read-only viewer (rendered markdown for `.md`); `Ctrl+E` runs `$EDITOR` in a new terminal tab. Files whose extension says they are not text (images, archives, fonts, media, compiled and database blobs) stay in the viewer whichever key you press. Opening and editing a file that is not in git status is two keys: `Ctrl+F`, `Enter`.
-- **What is listed**: the index is a gitignore-aware walk (the `ignore` crate, ripgrep's walker) — `.gitignore`, `.ignore`, `.git/info/exclude` and your global excludes all apply, also in a workspace that is not a git repo; dotfiles and dot-directories (`.github/`, `.cargo/`, `.env.example`) are included, `.git` itself is always pruned, symlinks are not followed. The walk stops at 50 000 paths and the footer then says the index is capped.
-- **Caching**: the backend memoises the list per workspace and drops it when the file watcher reports a create, delete or rename (plain edits of listed files keep it) and when you switch workspace, so the next `Ctrl+F` re-walks only when the tree may have changed.
+- **Fonts**: the bundled JetBrains Mono Nerd Font ships as three lossless WOFF2 files (Regular / Bold / Italic, ≈1 MB each) — the terminal and code editors use the full face so any prompt glyph renders — plus a 10 KB `piki-icons` subset holding only the file-tree glyphs, placed first in the UI font stack so the sidebar icons never wait on the big face. Every chrome glyph (status dots, chevrons, refresh/edit/discard buttons, branch, folder…) is an inline SVG drawn in the text colour — no platform-dependent emoji.
+- **UI zoom** (`Ctrl+=` / `Ctrl+-` / `Ctrl+0`, or the Settings ▸ Appearance dropdown; persisted): scales the type scale, spacing, bar heights and the activity bar together, and the terminal font follows (Settings ▸ Terminal font size × zoom, 14px by default). The `Ctrl+Shift+…` twins do the same with a terminal focused.
+- **Density** (Settings ▸ Appearance): `compact` (0.8) / `normal` / `comfortable` (1.15) scales every height — menu, status and tab bars, dialog headers, controls, the pane header and the sidebar rows — independently of zoom; compact fits 25% more rows in the same sidebar while widths, font sizes and spacing stay put.
+- **Themes and tone**: five presets plus drop-in JSON files (see the [README](../README.md#themes-desktop)); every theme derives its tone (dark / light) from the luminance of its background, so scrims, shadows, tints and the syntax colours of markdown code blocks follow the palette and light presets are readable everywhere.
+- **Responsive layout**: the editor column never drops below 320px — the sidebar (capped at half the window) and the chat share one width budget — and below 1000px wide the chat floats over the editor.
+- **Window state**: the window reopens with the size, position, maximized and fullscreen state it was closed with.
 
 ## Workspaces
 
@@ -677,7 +739,7 @@ All helpers live in `piki-core::notifications` (`notify_agent_idle`, `notify_com
 
 An OS notification is suppressed **only** when the user is already looking at that exact event's tab — i.e. it's the active tab of the active workspace **and** the piki window/terminal has OS focus. An event from a *background* tab/workspace still fires the OS notification even while piki is focused, because the user can't see a tab they aren't on (window focus alone is too coarse — the active-tab gate is what makes background agents actually notify). Focus is tracked via crossterm `FocusGained`/`FocusLost` (TUI) and Tauri `WindowEvent::Focused` (desktop); terminals that don't emit focus events (CSI ? 1004) default to unfocused, so they always notify. The mailbox always records regardless.
 
-Delivery is selectable (`[notifications]` in `config.toml`): OS toast (default), OSC 9 to the host terminal emulator (tmux/ssh-friendly), or off — plus optional built-in chimes (done/attention) played through the system audio tools, independent of the toast mode. `piki_core::notifications::NotificationsConfig` is the shared type: the TUI embeds it in its `Config`, the desktop reads just that table via `NotificationsConfig::from_config_file` in `main.rs`, and both call `apply()` once at startup — so `delivery = "off"` silences either binary. Both first fold in the database overrides from the desktop's Settings ▸ General (`piki_core::app_settings`: `delivery` and `sound` can be chosen there and win over the file; the sound paths stay file-only), and the desktop re-applies the layer live when the dialog changes it. See the [README's Configuration section](../README.md#configuration--theming).
+Delivery is selectable (`[notifications]` in `config.toml`): OS toast (default), OSC 9 to the host terminal emulator (tmux/ssh-friendly), or off — plus optional built-in chimes (done/attention) played through the system audio tools, independent of the toast mode. `piki_core::notifications::NotificationsConfig` is the shared type: `piki_core::app_settings::resolve` reads the `[notifications]` table (`NotificationsConfig::from_config_file`) and folds in the database overrides from the desktop's Settings ▸ General (`delivery` and `sound` can be chosen there and win over the file; the sound paths stay file-only); the TUI embeds the result in its `Config`, the desktop's `main.rs` keeps it, and both call `apply()` once at startup — so `delivery = "off"` silences either binary. The desktop re-applies the layer live when the dialog changes it. See the [README's Configuration section](../README.md#configuration--theming).
 
 ## Architecture
 
@@ -710,49 +772,43 @@ crates/
         mod.rs           # Storage traits (WorkspaceStorage, ApiHistoryStorage, UiPrefsStorage) + factory
         json.rs          # Legacy JSON storage backend (migration source)
         sqlite.rs        # SQLite backend (WAL mode, FTS5 for API history, upsert dedup)
-  desktop/               # piki-desktop — Tauri v2 desktop GUI (depends on piki-core)
+  desktop/               # piki-desktop — Tauri v2 desktop GUI (piki-core + piki-api-client + piki-agent)
     src/
-      main.rs            # Tauri entry point, setup, command registration
+      main.rs            # Tauri entry point, setup, command registration, --serve-sessions, shared-settings resolve
       state.rs           # DesktopApp, DesktopWorkspace, DesktopTab state structs
-      pty_raw.rs         # RawPtySession — local / daemon-backed PTY readers (shell-integration parsing)
+      pty_raw.rs         # RawPtySession — local / daemon-backed PTY readers (shell-integration + cli-agent parsing)
       pty_output.rs      # PTY output coalescer (≤8 ms / ≤64 KB batches) + raw IPC channel sink
-      events.rs          # Tauri event emission (sysinfo, git refresh, toast)
-      log_buffer.rs      # In-memory tracing ring buffer (500 entries) for log viewer
-      commands/
-        workspace.rs     # Workspace CRUD IPC commands
-        pty.rs           # PTY spawn/write/resize/close
-        git.rs           # Git stage/unstage/commit/amend/push/pull/discard/branches/checkout/merge/resolve
-        diff.rs          # Side-by-side diff generation
-        gitlog.rs        # Git log history
-        stash.rs         # Git stash operations
-        agents.rs        # Agent profiles CRUD + dispatch
-        review.rs        # PR info + code review via gh CLI
-        theme.rs         # Theme get/set via SQLite preferences
-        logs.rs          # Application log retrieval + clear
-        search.rs        # Fuzzy file index (gitignore-aware walk, memoised per workspace), file read/write, project search
-        markdown.rs      # Markdown file reading
-        system.rs        # System info
-    frontend/            # Vanilla TypeScript + xterm.js (Vite build)
+      session.rs         # Startup re-attach to the session daemon (reattach_sessions, tab_from_session)
+      events.rs          # Tauri event emission (sysinfo, git watcher, idle watcher, agent-attention acks, toast)
+      log_buffer.rs      # In-memory tracing ring buffer (500 entries) for the log viewer
+      lsp/               # LSP WebSocket proxy: registry.rs (lsp.toml), server.rs (LspManager), proxy.rs
+      commands/          # Tauri IPC commands, one module per domain:
+                         #   workspace, pty (spawn/write/resize/close/detach/move), git (stage/commit/amend/push/pull/
+                         #   discard/branches/checkout/merge/resolve), diff, gitlog, stash, agents (profiles + dispatch),
+                         #   review (gh), theme, logs, search (file index + project search), markdown, fs, kanban, api,
+                         #   providers, system (sysinfo, open_url), clipboard (fallback path), chat (+ chat_approve), lsp,
+                         #   session (list/kill/remove/adopt/status/restore_summary/quit_summary), settings (shared app settings)
+    frontend/            # Vanilla TypeScript + xterm.js + CodeMirror 6 (Vite build)
       src/
-        main.ts          # App init, global keyboard shortcuts, window close handler
-        state.ts         # AppState (EventTarget-based singleton)
+        main.ts          # App init, shortcut bindings, window close handler
+        state.ts         # AppState (EventTarget-based singleton): workspaces, tabs, pane trees, agent rows, layout snapshot
+        pane-tree.ts     # Pane tree types and operations
         ipc.ts           # Tauri IPC command wrappers
-        types.ts         # TypeScript type definitions
-        theme.ts         # ThemeEngine — 5 presets, CSS variable application, xterm sync, cssToken()
-        theme-derive.ts  # Pure colour math: computeDerived() (on-accent, selection, file-icon tints, glows, kanban palette), themeTone()
-        hljs-theme.ts    # highlight.js `.hljs-*` block generated from the palette (markdown fences follow the theme)
-        zoom.ts          # UI zoom levels + terminal font size (pure); ui-zoom.ts applies/persists (`--ui-zoom` on <html>)
-        terminal-settings.ts # Settings ▸ Terminal (pure + store glue); copy-on-select.ts, literal-next.ts (pure terminal state machines)
-        layout-budget.ts # Shared sidebar/chat width budget so the editor column keeps ≥ 320px
-        components/      # UI components (activity-bar, sidebar, tab-bar, terminal-panel, etc.); icons.ts = the SVG icon set (`icon(name)`)
-        fonts/           # Bundled JetBrainsMono NF Mono .woff2 (Regular/Bold/Italic, full Nerd Font for the terminal) + piki-icons.woff2 (PUA subset for the file tree) + fonts.css (@font-face)
-        styles/          # index.css entry (import order = cascade); variables.css = design tokens (colours,
-                         # --font-*, --fs-* scale, --sp-* spacing, --radius-*, --leading-*, --z-* layers,
-                         # --dur-* motion, --control-height*, --focus-ring*, --density + the height tokens it scales); reset.css (global :focus-visible);
-                         # primitives.css (.ui-surface / .ui-header / .ui-btn / .ui-input / .ui-empty);
-                         # dialog-core.css + dialog-{providers,agent,logs,help,workspace,git,settings}.css,
-                         # toast.css, file-viewer.css; one sheet per panel (sidebar, kanban, api-panel, …);
-                         # src/css-invariants.test.ts guards the token/focus rules
+        types.ts         # Domain types mirrored from piki-core + agent status views
+        shortcuts.ts     # The shortcut registry (rebindable defs + fixed keys); shortcut-table.ts = Settings ▸ Shortcuts logic
+        settings.ts      # Settings document store bound to Tauri (settings-store.ts = the IPC-free store)
+        theme.ts         # ThemeEngine; theme-derive.ts (derived colours, tone), hljs-theme.ts / cm-theme.ts (generated palettes)
+        zoom.ts          # UI zoom levels + terminal font size; ui-zoom.ts applies/persists; density.ts stamps data-density
+        terminal-settings.ts # Settings ▸ Terminal; copy-on-select.ts, literal-next.ts (pure terminal state machines)
+        layout-budget.ts # Sidebar/chat width budget (editor ≥ 320px); layout-snapshot.ts (saved layouts with contents)
+        mount-policy.ts  # Hidden-terminal output buffer + first-mount resync policy; pty-frame.ts (binary PTY frames)
+        agent-attention.ts # Attention ordering + Alt+A target; mru.ts, labels.ts, file-kind.ts, in-flight.ts, chat-context.ts
+        components/      # UI components (activity-bar, sidebar, tab-bar, pane-view, terminal-panel, open-content, git-actions, …);
+                         # icons.ts = the SVG icon set; dialogs/ = one file per dialog + the Settings sections
+        fonts/           # JetBrainsMonoNerdFontMono-{Regular,Bold,Italic}.woff2 + piki-icons.woff2 (PUA subset) + fonts.css
+        styles/          # index.css (import order = cascade); variables.css (tokens); reset.css; primitives.css; motion.css;
+                         # dialog-core.css + dialog-{providers,agent,logs,help,workspace,git,settings}.css; one sheet per panel
+        *.test.ts        # vitest unit tests (see Testing)
   api-client/            # piki-api-client — HTTP/API client (independent, no TUI/core deps)
     src/
       lib.rs             # Public re-exports
@@ -946,11 +1002,13 @@ Three crates cooperate:
 
 ### Desktop internals
 
-The desktop backend wraps `piki-core` behind Tauri IPC commands; the frontend is vanilla TypeScript. Terminals use `RawPtySession` — raw PTY bytes streamed to xterm.js, no server-side `vt100` (xterm.js *is* the emulator; the persistent-session daemon still keeps a vt100 mirror server-side for restores). **PTY event path**: each reader (local or daemon attachment) pushes its chunks to a per-tab coalescer (`pty_output.rs`) whose emitter thread ships at most one message per 8 ms / 64 KB over a raw Tauri IPC channel (`Channel<Vec<u8>>`, binary frame `len(tab_id) · tab_id · bytes`, decoded by `frontend/src/pty-frame.ts`) that the frontend registers once at startup (`register_pty_output_channel`); the base64 `pty-output` event is only the fallback while no channel is registered. `pty-exit` goes out from the same emitter, after the last batch. Structured payloads (`pty-shell-event`, `pty-agent-event`, `pty-attention`) stay on Tauri events. Frontend side: a terminal whose pane is hidden queues its output (`HiddenOutputBuffer`, 2 MB cap, then fed to xterm anyway) and replays it on the next mount; PTY resizes are coalesced to one IPC per frame per terminal and skipped when the grid is unchanged. The numbers are in [performance.md](performance.md#desktop-tauri).
+The desktop backend wraps `piki-core` behind Tauri IPC commands (`crates/desktop/src/commands/`, one module per domain); the frontend is vanilla TypeScript (`crates/desktop/frontend/src/`). Terminals use `RawPtySession` — raw PTY bytes streamed to xterm.js, no server-side `vt100` (xterm.js *is* the emulator; the persistent-session daemon still keeps a vt100 mirror server-side for restores). The implementation rules — one opener, one close path, one settings store, the shortcut registry, the token layer — are in `crates/desktop/CLAUDE.md`.
 
-**Window state**: `tauri-plugin-window-state` saves the main window's size, position, maximized and fullscreen state on close and restores them before the first frame, so the app reopens where and how it was closed (visibility/decorations are left to `tauri.conf.json`). **Settings document**: every persisted UI preference (sidebar width, Agents-panel height, shortcuts, `shell`, pane layouts, file-tree state, chat width, `uiZoom`) lives in one JSON document (`settings` row of `UiPrefsStorage`), owned on the frontend by `settings-store.ts` — one in-memory snapshot loaded at startup, `patch()` per write, a single debounced writer that always writes the whole document (the Rust side reads `shell` from it when spawning a shell).
+**PTY event path**: each reader (local or daemon attachment) pushes its chunks to a per-tab coalescer (`pty_output.rs`) whose emitter thread ships at most one message per 8 ms / 64 KB over a raw Tauri IPC channel (binary frame `len(tab_id) · tab_id · bytes`, decoded by `frontend/src/pty-frame.ts`) that the frontend registers once at startup; the base64 `pty-output` event is only the fallback while no channel is registered. `pty-exit` goes out from the same emitter, after the last batch. Structured payloads (`pty-shell-event`, `pty-agent-event`, `pty-attention`) stay on Tauri events. Frontend side: a terminal whose pane is hidden queues its output (2 MB cap, then fed to xterm anyway) and replays it on the next mount; PTY resizes are coalesced to one IPC per frame per terminal and skipped when the grid is unchanged; a pane click renders nothing — the pane tree is reconciled against the DOM by pane id only when it changes. Invariants and numbers: [performance.md](performance.md#desktop-tauri).
 
-**Layout, tone & zoom**: the shell is a CSS grid (`layout.css`) — activity bar | sidebar | editor | chat. The editor column is `minmax(var(--editor-min-width), 1fr)` (320px) and the sidebar column is capped at `50vw`; the sidebar and chat drag clamps share one budget (`layout-budget.ts`) so the two panels can never squeeze the editor below 320px. At or below 1000px wide the chat leaves the grid and floats over the editor, docked right. Status-bar segments ellipsize instead of overflowing. Every theme derives its tone (`data-theme-tone="dark|light"` on `<html>`) from the luminance of `--bg-primary`: scrims, elevation shadows and the noise texture switch on it, all tints are `color-mix()` of theme tokens, and the highlight.js palette for markdown fences is generated from the theme, so light presets (Solarized Light) are readable on every screen. UI zoom (`Ctrl+=` / `Ctrl+-` / `Ctrl+0`, persisted as `uiZoom`) sets `--ui-zoom` on `<html>`; the type scale, spacing, bar heights and activity bar are rem so they scale with it, and the terminal font size follows (`Settings ▸ Terminal font size × zoom`, 14px by default). **Density** is a second, independent multiplier: the Settings density dropdown stamps `data-density="compact"` (0.8) or `"comfortable"` (1.15) on `<html>` and `--density` scales every height token — menu/status/tab bars, dialog headers, controls, the pane header and the sidebar rows (`--row-height` 23px for file-tree / git rows, `--row-height-lg` 32px for workspace rows) — so compact fits 25% more rows in the same sidebar while widths, font sizes and spacing stay put. **Fonts**: the bundled JetBrainsMono Nerd Font ships as three lossless WOFF2 files (≈1 MB each, down from 2.5 MB TTFs) — the terminal and code editors use the full face so any prompt glyph renders — plus a 10 KB `piki-icons` subset holding only the file-tree PUA glyphs, first in the UI font stack behind a PUA `unicode-range` so the sidebar icons never wait on the big face; the terminal waits for the face to load before opening xterm so cells are measured on the right font. **Icons**: every chrome glyph (status dots, chevrons, refresh/edit/discard buttons, branch, folder…) is an inline `currentColor` SVG from `components/icons.ts`; a vitest bans the old emoji/dingbat characters from component code.
+**Settings**: every desktop-only preference (sidebar width, Agents-panel height, shortcuts, `shell`, pane layouts with their contents, file-tree state, chat width, zoom, density, terminal look) lives in one JSON document (`settings` row of `UiPrefsStorage`), owned on the frontend by `settings-store.ts` — one in-memory snapshot loaded at startup, `patch()` per write, a single debounced writer that always writes the whole document (the Rust side reads `shell` from it when spawning a shell). The settings both frontends share (sessions, notification delivery, sound) are a separate `app_settings` row merged by `piki_core::app_settings::resolve` — database override > `config.toml` > default — at startup in both binaries; `tauri-plugin-window-state` keeps the window geometry.
+
+**Layout and theming**: the shell is a CSS grid (`layout.css`) — activity bar | sidebar | editor | chat — built on a design-token layer (`styles/variables.css`: colours, `--font-*`, `--fs-*`, `--sp-*`, `--z-*`, `--dur-*`, and every height as `rem × --density`) with `--ui-zoom`, `data-density` and `data-theme-tone` stamped on `<html>`; all tints are `color-mix()` of theme tokens and the highlight.js / CodeMirror palettes are generated from the theme. `css-invariants.test.ts` enforces the token rules.
 
 **LSP**: a WebSocket proxy (`src/lsp/`) spawns language servers as child processes and bridges JSON-RPC to CodeMirror 6 (`codemirror-languageserver`). The registry is `~/.config/piki-multi/lsp.toml` — per-server `id`, `command`, `args`, `extensions`, optional `init_options` — seeded with rust-analyzer, typescript-language-server, and pyright. `idle_ttl_secs` (default 300) shuts idle servers down after a workspace switch; `max_concurrent` (default 3) caps how many run at once.
 
@@ -980,7 +1038,7 @@ The event-loop performance model and its invariants are documented in [performan
 - **Input-handler tests** (`crates/tui/src/input/dialog_tests.rs`) — every dialog's key paths against a real `App` built by the `test_support` fixtures (`test_app()`, `add_test_workspace()`, `add_terminal_tab()`, …). Handlers that write to disk use `test_app_isolated()` so tests never touch the real user config.
 - **Documentation parity tests** — `docs_parity` (in `action_catalog.rs`) fails the build if this document's prefix table drifts from `default_app()`; `every_bind_resolves_to_a_real_binding` fails it if a catalog entry points at a binding that doesn't exist. `config.example.toml` is mirrored by hand.
 - **Session tests** — protocol round-trips and vt100 restore round-trips as unit tests; `crates/core/tests/session_daemon.rs` and `session_facade.rs` drive a full in-process daemon (spawn/attach/detach/kill/restore, multi-client fan-out); `crates/tui/src/helpers.rs` has an end-to-end persistence test (spawn → write → drop/detach → re-attach → screen restored).
-- **Desktop frontend unit tests** (`crates/desktop/frontend/src/**/*.test.ts`, vitest, `npm test` / `just frontend-test`) — pure-logic modules with no DOM: the shortcut registry (`parseCombo`, the terminal-safe rule, help-section invariants), `fuzzy.ts` scoring/MRU, `file-kind.ts` (which paths get an editor tab), `settings-store.ts` (coalesced writes, mid-write patches, failed-write recovery), `in-flight.ts` (the one-op-at-a-time guard behind push/pull/checkout: a double click is one push, a rejection releases the key), `copy-on-select.ts` (a 40-row drag is one clipboard write), `literal-next.ts` (arm / cancel / one-key pass-through), `terminal-settings.ts` (normalisation, diff-from-defaults, font size × zoom), `components/icons.ts` (every icon well-formed + no emoji/dingbat glyph left in component code) and `css-invariants.test.ts` (token / focus / density rules over the stylesheets). Run by `just frontend` and by `nightly.yml::build-desktop` before the build.
+- **Desktop frontend unit tests** (`crates/desktop/frontend/src/**/*.test.ts`, vitest, `npm test` / `just frontend-test`; run by `just frontend` and by `nightly.yml::build-desktop` before the build) — pure-logic modules with no DOM: `shortcuts.test.ts` (parse, the terminal-safe rule, help sections), `shortcut-table.test.ts` (conflicts, filter, grouping), `docs-parity.test.ts` (the desktop shortcut table above matches the registry), `settings-store.test.ts` (coalesced writes, mid-write patches, failed-write recovery), `components/fuzzy.test.ts` and `mru.test.ts` (scoring, MRU ranking), `file-kind.test.ts`, `labels.test.ts`, `tab-label.test.ts`, `agent-attention.test.ts` (severity order, cyclic jump, elapsed time), `in-flight.test.ts` (a double click is one push), `copy-on-select.test.ts` (a 40-row drag is one clipboard write), `literal-next.test.ts`, `terminal-settings.test.ts` (normalisation, diff-from-defaults, font size × zoom), `zoom.test.ts`, `density.test.ts`, `layout-budget.test.ts`, `layout-snapshot.test.ts` (saved contents, remap, missing files), `mount-policy.test.ts` (hidden buffer cap, first-mount resync), `pty-frame.test.ts` (binary frames + base64 fallback, decode benchmark), `chat-context.test.ts`, `theme-derive.test.ts`, `hljs-theme.test.ts`, `components/icons.test.ts` (every icon well-formed + no emoji/dingbat glyph left in component code) and `css-invariants.test.ts` (token / focus / density rules over the stylesheets).
 - **Ignored E2E tests** — drive real external binaries, so they're `#[ignore]` by default and run explicitly with `cargo test -- --ignored`: `crates/core/tests/pty_terminal_queries.rs` (real `muse` against the vt100 answerback path) and `crates/core/tests/cli_agent_antigravity.rs` (real `agy` against the hook bridge).
 
 ## Development
@@ -1000,7 +1058,8 @@ just run       # run the TUI
 
 A few things worth knowing:
 
-- **`piki-desktop` is excluded from `just test`** because `tauri-build` needs `crates/desktop/frontend/dist` to exist. Use `just lint-desktop`, which builds the frontend first.
+- **`piki-desktop` is excluded from `just test`** because `tauri-build` needs `crates/desktop/frontend/dist` to exist. Use `just lint-desktop`, which runs the frontend tests and build first.
+- **Shared `target/` across worktrees** — the TUI's `docs_parity` tests locate `docs/technical.md` through `CARGO_MANIFEST_DIR`, which is baked into the test binary at compile time. With several worktrees sharing one `target/` (`CARGO_TARGET_DIR`), a binary built in another worktree checks *that* worktree's docs. Run `cargo clean -p agent-multi` before `just ci` after switching worktrees.
 - **Blame** — the repo was reformatted once, in a single commit listed in `.git-blame-ignore-revs`. Run `git config blame.ignoreRevsFile .git-blame-ignore-revs` so local `git blame` skips it.
 - **Security advisories** — `cargo audit` runs weekly and on dependency changes (`.github/workflows/audit.yml`). Advisories that can't be acted on are listed in `.cargo/audit.toml` with the reason and what would clear them — add entries there, never by silencing the job.
 

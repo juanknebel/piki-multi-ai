@@ -243,6 +243,12 @@ export function resetAllShortcuts() {
   persistOverrides();
 }
 
+/** The non-rebindable rows (read-only copy; `docs-parity.test.ts` checks them
+ *  against the desktop shortcut table in `docs/technical.md`). */
+export function getFixedShortcuts(): FixedShortcut[] {
+  return fixedShortcuts.map((f) => ({ ...f }));
+}
+
 /** Widget keys a rebind may not claim (read-only copy for Settings ▸ Shortcuts). */
 export function getReservedCombos(): { key: string; label: string }[] {
   return RESERVED_COMBOS.map((r) => ({ ...r }));

@@ -87,7 +87,7 @@ Conventions:
 - `watchdog.rs` — Heartbeat the event loop bumps each iteration + a thread that logs `event loop stalled` (error, repeated every 30 s) and `event loop recovered`. Wrap deliberate blocking (external `$EDITOR`, `mdr`) in `watchdog::suspend()` so it doesn't fire
 - `input/` — Key routing + prefix dispatch (`mod.rs`), app action bodies (`app_actions.rs`), dialog handlers (`dialog.rs`), focused-pane handlers (`interaction.rs`), mouse (`mouse.rs`), text fields (`text_field_common.rs`), confirm helpers + `with_dialog_mut!` (`confirm_common.rs`), list navigation (`list_nav.rs`), input handler tests (`dialog_tests.rs`)
 - `ui/` — Rendering: `layout.rs` (compositor), `dialogs.rs` (overlays), component sub-modules
-- `config.rs` — Keybindings and settings from `config.toml`
+- `config.rs` — Keybindings and settings from `config.toml`. `App::new` then folds in the shared overrides from the database (`piki_core::app_settings::AppSettings::load` → `sessions.enabled`, `notifications`; set from the desktop's Settings ▸ General), so `Config` holds the *effective* values — database > `config.toml` > default
 - `theme.rs` — Color theme loading
 - `syntax.rs` — `syntect` wrapper for syntax highlighting
 - `test_support.rs` — Test-only helpers (`#[cfg(test)]`) shared between rendering snapshot tests and input handler tests
