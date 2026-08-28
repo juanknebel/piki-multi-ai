@@ -42,12 +42,12 @@
     "codemirror": "^6.0.2",
     "codemirror-languageserver": "^1.22.1",
     "highlight.js": "^11.12.0",
-    "marked": "^18.0.10",
+    "marked": "^18.0.11",
     "marked-highlight": "^2.2.1"
   },
   "devDependencies": {
     "typescript": "^7.0.2",
-    "vite": "^8.2.1",
+    "vite": "^8.2.2",
     "vitest": "^4.1.11"
   }
 }
