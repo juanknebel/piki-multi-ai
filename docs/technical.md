@@ -716,7 +716,7 @@ Antigravity (`agy`) tabs get the same lifecycle channel, so the Agents pane show
 
 ### Passive status detection (Codex, Muse)
 
-Providers with no hook bridge can still get better-than-"alive" status. `crates/core/src/agent_state_detect.rs` classifies a tab passively by matching the provider's OSC window-title spinner glyphs and known blocking-prompt text against a static `StateManifest` — no in-band protocol, just reading what the agent already draws. Manifests exist for `codex` and `muse` (matched by command basename, so `/usr/local/bin/codex` works). Blocked needles outrank the spinner, because Muse keeps its title spinner running behind approval dialogs. Results are written into the same `ShellTabState.cli_agent` field the hook bridges populate, so the Agents pane needs zero provider-specific rendering logic. Adding a provider = adding a manifest.
+Providers with no hook bridge can still get better-than-"alive" status. `crates/core/src/agent_state_detect.rs` classifies a tab passively by matching the provider's OSC window-title spinner glyphs and known blocking-prompt text against a static `StateManifest` — no in-band protocol, just reading what the agent already draws. Manifests exist for `codex` and `muse` (matched by command basename, so `/usr/local/bin/codex` works). Blocked needles outrank the spinner, because Muse keeps its title spinner running behind approval dialogs. Results are written into the same `CliAgentState` the hook bridges populate (via `ShellTabState::sidecar_or_insert()` + a downcast, not a JSON event — there's no hook payload to parse), so the Agents pane needs zero provider-specific rendering logic. Adding a provider = adding a manifest.
 
 ### Idle watcher
 
