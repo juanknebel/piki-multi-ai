@@ -61,7 +61,7 @@ pub fn acknowledge_agent_attention(tab: &DesktopTab) -> bool {
         return false;
     };
     let mut guard = shell.lock();
-    match guard.state.cli_agent.as_mut() {
+    match piki_core::cli_agent::cli_agent_of_mut(&mut guard.state) {
         Some(agent) if agent.last_attention_at.is_some() => {
             agent.acknowledge();
             true
@@ -139,10 +139,9 @@ pub fn spawn_idle_watcher_loop(app_handle: AppHandle) {
                         // events (missing / version-skewed hooks) → `cli_agent`
                         // stays `None` and the watcher is the graceful
                         // fallback.
-                        if pty
-                            .shell()
-                            .is_some_and(|s| s.lock().state.cli_agent.is_some())
-                        {
+                        if pty.shell().is_some_and(|s| {
+                            piki_core::cli_agent::cli_agent_of(&s.lock().state).is_some()
+                        }) {
                             continue;
                         }
                         if let Some(sig) = watcher.poll(pty.bytes_processed()) {

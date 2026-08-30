@@ -649,7 +649,7 @@ pub(crate) async fn run(
                 && let Some(shell) = tab.pty_session.as_ref().and_then(|p| p.shell())
             {
                 let mut guard = shell.lock();
-                if let Some(agent) = guard.state.cli_agent.as_mut()
+                if let Some(agent) = piki_core::cli_agent::cli_agent_of_mut(&mut guard.state)
                     && agent.last_attention_at.is_some()
                 {
                     agent.acknowledge();
@@ -840,7 +840,7 @@ fn poll_workspaces(app: &mut App, now: Instant) {
                 // graceful fallback.
                 if pty
                     .shell()
-                    .is_some_and(|s| s.lock().state.cli_agent.is_some())
+                    .is_some_and(|s| piki_core::cli_agent::cli_agent_of(&s.lock().state).is_some())
                 {
                     continue;
                 }
@@ -944,10 +944,12 @@ fn poll_workspaces(app: &mut App, now: Instant) {
                 };
 
                 let mut guard = shell.lock();
-                let agent = guard
-                    .state
-                    .cli_agent
-                    .get_or_insert_with(piki_core::cli_agent::CliAgentState::new);
+                let Some(agent) = guard.state.sidecar_or_insert().and_then(|s| {
+                    s.as_any_mut()
+                        .downcast_mut::<piki_core::cli_agent::CliAgentState>()
+                }) else {
+                    continue;
+                };
                 if agent.status != new_status {
                     let was_running = agent.status == piki_core::cli_agent::CliAgentStatus::Running;
                     agent.status = new_status;
@@ -1002,7 +1004,12 @@ fn poll_workspaces(app: &mut App, now: Instant) {
                                 from_active_view,
                             });
                         }
-                        ShellEvent::CliAgent(a) => {
+                        ShellEvent::Sidecar(json) => {
+                            let Some(a) =
+                                piki_core::cli_agent::parse_cli_agent_payload(&json.to_string())
+                            else {
+                                continue;
+                            };
                             if let Some((kind, summary)) = a.attention() {
                                 cli_agent_events.push(CliAgentNotice {
                                     workspace_idx: ws_idx,

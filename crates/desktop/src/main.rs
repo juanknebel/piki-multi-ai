@@ -41,7 +41,11 @@ fn main() {
             Some(dir) => DataPaths::new(dir.into()),
             None => DataPaths::default_paths(),
         };
-        let _ = piki_core::session::daemon::run(&paths.daemon_paths(), false);
+        let _ = piki_core::session::daemon::run(
+            &paths.daemon_paths(),
+            false,
+            Some(piki_core::cli_agent::sidecar_config()),
+        );
         std::process::exit(0);
     }
 

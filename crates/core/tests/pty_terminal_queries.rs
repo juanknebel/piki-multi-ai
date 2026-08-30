@@ -34,10 +34,21 @@ async fn muse_survives_startup_terminal_probe() {
     }
     let dir = tempfile::tempdir().unwrap();
 
-    let mut session =
-        PtySession::spawn(dir.path(), 24, 80, "muse", &[], &[], &[], false, None, None)
-            .await
-            .unwrap();
+    let mut session = PtySession::spawn(
+        dir.path(),
+        24,
+        80,
+        "muse",
+        &[],
+        &[],
+        &[],
+        false,
+        None,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
 
     // Before the answerback fix muse gave up within ~2s of unanswered probes.
     tokio::time::sleep(Duration::from_secs(6)).await;

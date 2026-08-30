@@ -96,7 +96,7 @@ fn remote_pty_echoes_into_its_local_parser() {
     let (daemon, _g) = daemon();
     let att = daemon.spawn_attach(cat("f1")).unwrap();
     let signal = PtyOutputSignal::new();
-    let mut pty = PtySession::from_attachment(att, false, Some(signal));
+    let mut pty = PtySession::from_attachment(att, false, None, Some(signal));
     assert!(pty.is_remote());
     assert!(pty.peek_alive());
 
@@ -113,7 +113,7 @@ fn remote_pty_echoes_into_its_local_parser() {
 fn dropping_a_remote_pty_detaches_and_the_session_survives() {
     let (daemon, _g) = daemon();
     let att = daemon.spawn_attach(cat("f2")).unwrap();
-    let mut pty = PtySession::from_attachment(att, false, Some(PtyOutputSignal::new()));
+    let mut pty = PtySession::from_attachment(att, false, None, Some(PtyOutputSignal::new()));
     pty.write(b"persist me\n").unwrap();
     assert!(wait_until(15, || screen_text(&pty).contains("persist me")));
 
@@ -132,7 +132,7 @@ fn dropping_a_remote_pty_detaches_and_the_session_survives() {
 
     // Re-attach: the fresh parser is rebuilt from the restore buffer.
     let att2 = daemon.attach("f2", 24, 80).unwrap();
-    let pty2 = PtySession::from_attachment(att2, false, Some(PtyOutputSignal::new()));
+    let pty2 = PtySession::from_attachment(att2, false, None, Some(PtyOutputSignal::new()));
     assert!(
         wait_until(15, || screen_text(&pty2).contains("persist me")),
         "restore didn't rebuild the screen: {:?}",
@@ -144,7 +144,7 @@ fn dropping_a_remote_pty_detaches_and_the_session_survives() {
 fn killing_a_remote_pty_flips_liveness() {
     let (daemon, _g) = daemon();
     let att = daemon.spawn_attach(cat("f3")).unwrap();
-    let mut pty = PtySession::from_attachment(att, false, Some(PtyOutputSignal::new()));
+    let mut pty = PtySession::from_attachment(att, false, None, Some(PtyOutputSignal::new()));
     assert!(pty.peek_alive());
 
     pty.kill().unwrap();
@@ -167,7 +167,7 @@ fn killing_a_remote_pty_flips_liveness() {
 fn resize_is_reflected_in_the_local_parser() {
     let (daemon, _g) = daemon();
     let att = daemon.spawn_attach(cat("f4")).unwrap();
-    let pty = PtySession::from_attachment(att, false, Some(PtyOutputSignal::new()));
+    let pty = PtySession::from_attachment(att, false, None, Some(PtyOutputSignal::new()));
     pty.resize(40, 100).unwrap();
     assert_eq!(pty.parser().lock().screen().size(), (40, 100));
 }

@@ -16,6 +16,7 @@ use piki_core::session::client::{Attachment, AttachmentSender};
 use piki_core::session::protocol::{Frame, read_frame};
 use piki_core::shell_integration::ShellEvent;
 use piki_core::shell_integration::parser::OscParser;
+use piki_multiplex::shell_integration::ShellTabState;
 
 use crate::events::PtyAttentionPayload;
 use crate::pty_output::{OutMsg, output_channel, spawn_emitter};
@@ -83,7 +84,7 @@ pub struct RawLocalPty {
     /// only for Claude tabs spawned with a `cli_agent_sock` path. Its `Drop`
     /// stops the reader and unlinks the FIFO.
     #[cfg(unix)]
-    _cli_agent_sock: Option<piki_core::cli_agent::sock::SockReader>,
+    _cli_agent_sock: Option<piki_multiplex::sidecar::sock::SockReader>,
 }
 
 impl RawLocalPty {
@@ -160,7 +161,12 @@ impl RawLocalPty {
         let bytes_processed = Arc::new(AtomicU64::new(0));
         let bytes_clone = Arc::clone(&bytes_processed);
         let shell = if enable_shell_integration {
-            Some(Arc::new(Mutex::new(ShellSession::default())))
+            Some(Arc::new(Mutex::new(ShellSession {
+                state: ShellTabState::with_sidecar_factory(
+                    piki_core::cli_agent::cli_agent_sidecar_factory(),
+                ),
+                pending_events: Vec::new(),
+            })))
         } else {
             None
         };
@@ -181,7 +187,9 @@ impl RawLocalPty {
         let emit_tab_id = tab_id.clone();
         let reader_handle = tokio::task::spawn_blocking(move || {
             let mut buf = [0u8; 16384];
-            let mut osc_parser = OscParser::new();
+            let mut osc_parser = OscParser::with_sidecar_target(Some(
+                piki_core::cli_agent::CLI_AGENT_TARGET.to_string(),
+            ));
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) => {
@@ -210,11 +218,17 @@ impl RawLocalPty {
                                                 command.clone(),
                                             );
                                         }
-                                        ShellEvent::CliAgent(a) => {
+                                        ShellEvent::Sidecar(json) => {
                                             // Structured agent events ride their
                                             // own `pty-agent-event` channel, not
                                             // `pty-shell-event`.
-                                            handle_cli_agent(&app_handle, &emit_tab_id, a);
+                                            if let Some(a) =
+                                                piki_core::cli_agent::parse_cli_agent_payload(
+                                                    &json.to_string(),
+                                                )
+                                            {
+                                                handle_cli_agent(&app_handle, &emit_tab_id, &a);
+                                            }
                                             continue;
                                         }
                                         _ => {}
@@ -249,9 +263,15 @@ impl RawLocalPty {
             (Some(path), Some(shell)) => {
                 let cb_app = sock_app_handle;
                 let cb_tab = sock_tab_id;
-                let cb: piki_core::cli_agent::sock::CliAgentCallback =
-                    Box::new(move |ev| handle_cli_agent(&cb_app, &cb_tab, ev));
-                match piki_core::cli_agent::sock::spawn_reader(path, Arc::clone(shell), Some(cb)) {
+                let cb: piki_multiplex::sidecar::sock::SidecarCallback = Box::new(move |json| {
+                    if let Some(a) =
+                        piki_core::cli_agent::parse_cli_agent_payload(&json.to_string())
+                    {
+                        handle_cli_agent(&cb_app, &cb_tab, &a);
+                    }
+                });
+                match piki_multiplex::sidecar::sock::spawn_reader(path, Arc::clone(shell), Some(cb))
+                {
                     Ok(reader) => Some(reader),
                     Err(e) => {
                         tracing::warn!(error = %e, "cli-agent FIFO reader failed to start; OSC 777 fallback only");
@@ -332,8 +352,10 @@ impl Drop for RawLocalPty {
 /// stays in lock-step: `CliAgent` drives the agent-status rail, `CommandEnd`
 /// the attention/notification rail, everything else a plain `pty-shell-event`.
 fn dispatch_shell_event(app_handle: &AppHandle, tab_id: &str, ev: ShellEvent) {
-    if let ShellEvent::CliAgent(a) = &ev {
-        handle_cli_agent(app_handle, tab_id, a);
+    if let ShellEvent::Sidecar(json) = &ev {
+        if let Some(a) = piki_core::cli_agent::parse_cli_agent_payload(&json.to_string()) {
+            handle_cli_agent(app_handle, tab_id, &a);
+        }
         return;
     }
     if let ShellEvent::CommandEnd { exit_code, command } = &ev {
@@ -372,7 +394,10 @@ impl RawRemotePty {
         let alive = Arc::new(AtomicBool::new(att.info.state.is_live()));
         let shell = integration_on.then(|| {
             Arc::new(Mutex::new(ShellSession {
-                state: piki_core::shell_integration::ShellTabState::from_snapshot(&att.shell),
+                state: ShellTabState::from_snapshot(
+                    &att.shell,
+                    Some(&piki_core::cli_agent::cli_agent_sidecar_factory()),
+                ),
                 pending_events: Vec::new(),
             }))
         });
@@ -775,7 +800,7 @@ fn shell_event_payload(tab_id: &str, event: ShellEvent) -> PtyShellEventPayload 
         }
         // M0: the structured agent event rides the same channel but the
         // frontend doesn't consume it yet (that's M1 — per-tab status UI).
-        ShellEvent::CliAgent(_) => p.kind = "cli-agent",
+        ShellEvent::Sidecar(_) => p.kind = "cli-agent",
         // Passive agent-state detection (`agent_state_detect`) is TUI-only
         // for now; desktop has no consumer for window-title events yet.
         ShellEvent::WindowTitle(_) => p.kind = "window-title",

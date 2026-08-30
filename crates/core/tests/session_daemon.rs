@@ -431,7 +431,7 @@ fn foreground_run_serves_spawns_and_shuts_down() {
 
     let run_paths = paths.daemon_paths();
     let handle = thread::spawn(move || {
-        let _ = piki_core::session::daemon::run(&run_paths, true);
+        let _ = piki_core::session::daemon::run(&run_paths, true, None);
     });
 
     // Wait for the daemon to bind.

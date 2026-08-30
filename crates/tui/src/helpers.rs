@@ -137,7 +137,13 @@ pub(crate) fn attach_session_as_tab(
             return None;
         }
     };
-    let pty = PtySession::from_attachment(att, info.integration_on, Some(app.pty_output.clone()));
+    let pty = PtySession::from_attachment(
+        att,
+        info.integration_on,
+        info.integration_on
+            .then(piki_core::cli_agent::cli_agent_sidecar_factory),
+        Some(app.pty_output.clone()),
+    );
     let ws = &mut app.workspaces[ws_idx];
     let idx = ws.add_tab(provider, info.meta.closable, provider_cfg);
     ws.tabs[idx].pty_parser = Some(Arc::clone(pty.parser()));
@@ -334,6 +340,9 @@ pub(crate) async fn spawn_tab(
     }
 
     let cmd = plan.command;
+    let sidecar = plan
+        .integration_on
+        .then(piki_core::cli_agent::sidecar_config);
     let spawn_error = match PtySession::spawn(
         &ws.path,
         rows,
@@ -344,6 +353,7 @@ pub(crate) async fn spawn_tab(
         &plan.extra_args,
         plan.integration_on,
         plan.cli_agent_sock,
+        sidecar,
         Some(output_signal),
     )
     .await
@@ -426,6 +436,7 @@ async fn spawn_remote(
     Ok(PtySession::from_attachment(
         att,
         integration_on,
+        integration_on.then(piki_core::cli_agent::cli_agent_sidecar_factory),
         Some(output_signal),
     ))
 }

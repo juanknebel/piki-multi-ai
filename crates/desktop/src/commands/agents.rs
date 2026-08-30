@@ -544,7 +544,7 @@ pub fn list_agent_rows(state: State<'_, Mutex<DesktopApp>>) -> Vec<AgentRow> {
         for (ti, tab) in ws.tabs.iter().enumerate() {
             let snapshot = tab.pty.as_ref().and_then(|p| p.shell()).and_then(|s| {
                 let guard = s.lock();
-                guard.state.cli_agent.as_ref().map(|a| {
+                piki_core::cli_agent::cli_agent_of(&guard.state).map(|a| {
                     (
                         a.status,
                         a.last_attention_at.is_some(),

@@ -322,7 +322,7 @@ impl Tab {
     ) -> Option<(piki_core::cli_agent::CliAgentStatus, bool, Option<String>)> {
         let shell = self.pty_session.as_ref()?.shell()?;
         let guard = shell.lock();
-        let agent = guard.state.cli_agent.as_ref()?;
+        let agent = piki_core::cli_agent::cli_agent_of(&guard.state)?;
         Some((
             agent.status,
             agent.last_attention_at.is_some(),
@@ -335,7 +335,7 @@ impl Tab {
     pub fn cli_agent_elapsed(&self) -> Option<std::time::Duration> {
         let shell = self.pty_session.as_ref()?.shell()?;
         let guard = shell.lock();
-        guard.state.cli_agent.as_ref()?.elapsed()
+        piki_core::cli_agent::cli_agent_of(&guard.state)?.elapsed()
     }
 }
 
