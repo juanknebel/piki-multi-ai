@@ -139,6 +139,20 @@ impl DataPaths {
         self.log_dir().join("sessions.log")
     }
 
+    /// The session daemon's file layout, in the shape `piki-multiplex`'s
+    /// daemon expects.
+    #[cfg(unix)]
+    pub fn daemon_paths(&self) -> piki_multiplex::session::daemon::DaemonPaths {
+        piki_multiplex::session::daemon::DaemonPaths {
+            sessions_dir: self.sessions_dir(),
+            log_dir: self.log_dir(),
+            lock_path: self.session_lock(),
+            pid_path: self.session_pid_file(),
+            socket_path: self.session_socket(),
+            log_path: self.session_log_path(),
+        }
+    }
+
     /// Ad-hoc PR checkouts for code review: `<base>/review-checkouts`. Each
     /// repo gets one base clone (`<owner>__<repo>`) with one `git worktree`
     /// per PR (`<owner>__<repo>--pr-<N>`), managed by

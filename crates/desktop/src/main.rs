@@ -41,7 +41,7 @@ fn main() {
             Some(dir) => DataPaths::new(dir.into()),
             None => DataPaths::default_paths(),
         };
-        let _ = piki_core::session::daemon::run(&paths, false);
+        let _ = piki_core::session::daemon::run(&paths.daemon_paths(), false);
         std::process::exit(0);
     }
 

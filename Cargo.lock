@@ -4255,7 +4255,7 @@ dependencies = [
  "notify",
  "notify-rust",
  "parking_lot",
- "portable-pty",
+ "piki-multiplex",
  "rusqlite",
  "serde",
  "serde_json",
@@ -4265,7 +4265,6 @@ dependencies = [
  "toml 1.1.0+spec-1.1.0",
  "tracing",
  "tracing-subscriber",
- "vt100",
 ]
 
 [[package]]
@@ -4296,6 +4295,24 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+]
+
+[[package]]
+name = "piki-multiplex"
+version = "3.0.0-beta"
+dependencies = [
+ "anyhow",
+ "libc",
+ "parking_lot",
+ "portable-pty",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "toml 1.1.0+spec-1.1.0",
+ "tracing",
+ "tracing-subscriber",
+ "vt100",
 ]
 
 [[package]]

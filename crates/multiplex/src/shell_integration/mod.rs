@@ -52,7 +52,7 @@ pub enum ShellEvent {
     /// `piki://cli-agent` target; foreign OSC 777 sequences are ignored.
     CliAgent(crate::cli_agent::CliAgentEvent),
     /// `\x1b]0;`/`\x1b]1;`/`\x1b]2;<text>\x07` — window/icon title update.
-    /// Used passively by [`crate::agent_state_detect`] to read a provider's
+    /// Used passively by `piki_core::agent_state_detect` to read a provider's
     /// own spinner/title convention (e.g. Codex) when there's no hook bridge.
     WindowTitle(String),
 }

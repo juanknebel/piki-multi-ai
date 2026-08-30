@@ -429,7 +429,7 @@ fn foreground_run_serves_spawns_and_shuts_down() {
     let paths = DataPaths::new(dir.path().to_path_buf());
     let socket = paths.session_socket();
 
-    let run_paths = paths.clone();
+    let run_paths = paths.daemon_paths();
     let handle = thread::spawn(move || {
         let _ = piki_core::session::daemon::run(&run_paths, true);
     });

@@ -17,6 +17,16 @@ shpool it is called out below.
 `docs/performance.md` §4 already identified this as "headless client/server
 architecture — a feature, not perf". This document is the design.
 
+The daemon, wire protocol, PTY/vt100 layer, and shell integration described
+below live in `crates/multiplex` (`piki-multiplex`) — an independent crate
+with no dependency on `piki-core` — so the multiplexer can be reused outside
+agent-multi. `piki-core` depends on it and re-exports `piki_multiplex::session`
+as `piki_core::session` unchanged, so every `piki_core::session::*` reference
+below is accurate as written; `piki_multiplex::session::daemon::run` takes a
+`DaemonPaths` (built by `piki-core`'s `DataPaths::daemon_paths()`) rather than
+`piki-core`'s own `DataPaths`, since the daemon doesn't know about the rest of
+an app's data-dir layout.
+
 ## Goals / non-goals
 
 Goals:

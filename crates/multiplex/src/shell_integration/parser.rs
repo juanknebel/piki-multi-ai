@@ -174,7 +174,7 @@ fn parse_payload(payload: &[u8]) -> Option<ShellEvent> {
 
 /// OSC 777 is shared turf (Warp's `warp://cli-agent`, urxvt `notify`, VTE…).
 /// We only claim sequences whose target is exactly piki's
-/// [`CLI_AGENT_TARGET`](crate::cli_agent::install::CLI_AGENT_TARGET); anything
+/// [`CLI_AGENT_TARGET`](crate::cli_agent::CLI_AGENT_TARGET); anything
 /// else returns `None` and is left for the downstream emulator, exactly like
 /// any other unknown OSC.
 ///
@@ -185,7 +185,7 @@ fn parse_osc_777(rest: &str) -> Option<ShellEvent> {
     if parts.next()? != "notify" {
         return None;
     }
-    if parts.next()? != crate::cli_agent::install::CLI_AGENT_TARGET {
+    if parts.next()? != crate::cli_agent::CLI_AGENT_TARGET {
         return None;
     }
     let json = parts.next()?;

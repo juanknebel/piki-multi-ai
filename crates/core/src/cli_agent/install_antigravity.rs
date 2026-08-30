@@ -40,7 +40,8 @@ use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use super::install::{CLI_AGENT_TARGET, jq_available, set_executable, unique_sock_name};
+use super::CLI_AGENT_TARGET;
+use super::install::{jq_available, set_executable, unique_sock_name};
 
 const SCRIPT_PAYLOAD: &str = include_str!("scripts/agy-payload.sh");
 const SCRIPT_PRE_INVOCATION: &str = include_str!("scripts/agy-on-pre-invocation.sh");

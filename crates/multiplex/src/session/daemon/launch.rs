@@ -7,21 +7,32 @@
 
 use std::fs;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::Context;
 
-use crate::paths::DataPaths;
-
 use super::Server;
+
+/// The daemon's own file layout: sockets, locks, pid file, log — supplied by
+/// the embedding application (which owns the rest of its data directory
+/// layout). Build one from your app's own paths type.
+#[derive(Debug, Clone)]
+pub struct DaemonPaths {
+    pub sessions_dir: PathBuf,
+    pub log_dir: PathBuf,
+    pub lock_path: PathBuf,
+    pub pid_path: PathBuf,
+    pub socket_path: PathBuf,
+    pub log_path: PathBuf,
+}
 
 /// Run the session daemon for `paths`. Unless `foreground`, it detaches from
 /// the controlling terminal first. Returns once the daemon stops (idle-exit,
 /// a `Shutdown` request, or a termination signal).
-pub fn run(paths: &DataPaths, foreground: bool) -> anyhow::Result<()> {
-    fs::create_dir_all(paths.sessions_dir()).context("creating sessions dir")?;
-    fs::create_dir_all(paths.log_dir()).ok();
+pub fn run(paths: &DaemonPaths, foreground: bool) -> anyhow::Result<()> {
+    fs::create_dir_all(&paths.sessions_dir).context("creating sessions dir")?;
+    fs::create_dir_all(&paths.log_dir).ok();
 
     if !foreground {
         // SAFETY: called before any threads are spawned in this process.
@@ -35,7 +46,7 @@ pub fn run(paths: &DataPaths, foreground: bool) -> anyhow::Result<()> {
 
     // Single-instance lock. Held for the life of the process; a second daemon
     // for the same data dir fails to acquire it and exits quietly.
-    let _lock = match acquire_lock(&paths.session_lock()) {
+    let _lock = match acquire_lock(&paths.lock_path) {
         Ok(lock) => lock,
         Err(LockError::Busy) => {
             tracing::info!("another session daemon is already running");
@@ -43,9 +54,9 @@ pub fn run(paths: &DataPaths, foreground: bool) -> anyhow::Result<()> {
         }
         Err(LockError::Io(e)) => return Err(e).context("locking daemon"),
     };
-    write_pid(&paths.session_pid_file());
+    write_pid(&paths.pid_path);
 
-    let socket = paths.session_socket();
+    let socket = paths.socket_path.clone();
     if let Some(parent) = socket.parent() {
         fs::create_dir_all(parent).ok();
     }
@@ -62,14 +73,14 @@ pub fn run(paths: &DataPaths, foreground: bool) -> anyhow::Result<()> {
 
     server.kill_all();
     let _ = fs::remove_file(&socket);
-    let _ = fs::remove_file(paths.session_pid_file());
+    let _ = fs::remove_file(&paths.pid_path);
     result.context("serving")
 }
 
 /// Install the daemon's own tracing subscriber. Uses a plain file writer (no
 /// background thread — this runs right after a fork) when daemonized; stderr
 /// when foreground. `PIKI_SESSION_LOG` overrides the default `info` level.
-fn init_logging(paths: &DataPaths, foreground: bool) {
+fn init_logging(paths: &DaemonPaths, foreground: bool) {
     use tracing::level_filters::LevelFilter;
     let level = match std::env::var("PIKI_SESSION_LOG")
         .unwrap_or_default()
@@ -93,7 +104,7 @@ fn init_logging(paths: &DataPaths, foreground: bool) {
     if let Ok(file) = fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open(paths.session_log_path())
+        .open(&paths.log_path)
     {
         let _ = tracing_subscriber::fmt()
             .with_ansi(false)

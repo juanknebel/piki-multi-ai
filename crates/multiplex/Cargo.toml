@@ -1,21 +1,18 @@
 [package]
-name = "piki-core"
+name = "piki-multiplex"
 version.workspace = true
 edition = "2024"
+description = "Terminal multiplexer engine: PTY spawning, vt100 terminal state, OSC 133/7 shell integration, and a headless persistent-session daemon with Unix-socket reattach."
 
 [dependencies]
-# Terminal multiplexer engine: PTY, vt100 terminal state, shell integration,
-# persistent-session daemon.
-piki-multiplex = { path = "../multiplex" }
-
 # Async runtime
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "time", "sync", "fs"] }
 
-# File watching
-notify = "8"
+# PTY
+portable-pty = "0.9"
 
-# Gitignore-aware directory walk (fuzzy file index; sibling of ripgrep)
-ignore = "0.4"
+# Terminal emulation
+vt100 = "0.16"
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
@@ -32,18 +29,7 @@ anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["std", "fmt"] }
 
-# System info
-systemstat = "0.2.6"
-chrono = "0.4.44"
-
-# Desktop notifications (OS-level via libnotify / NSUserNotification / WinRT).
-# Used by `notifications` module — fire-and-forget, failures logged via tracing.
-notify-rust = "4"
-
-# SQLite storage backend
-rusqlite = { version = "0.40", features = ["bundled"] }
-
-# Unix system calls (getpwuid_r, setsid)
+# Unix system calls (mkfifo, flock, fork, setsid)
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 

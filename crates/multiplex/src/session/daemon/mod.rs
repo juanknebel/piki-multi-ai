@@ -16,4 +16,4 @@ pub use session::Session;
 #[cfg(unix)]
 mod launch;
 #[cfg(unix)]
-pub use launch::run;
+pub use launch::{DaemonPaths, run};

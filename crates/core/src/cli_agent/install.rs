@@ -21,10 +21,7 @@ const SCRIPT_PERMISSION: &str = include_str!("scripts/on-permission-request.sh")
 const SCRIPT_NOTIFICATION: &str = include_str!("scripts/on-notification.sh");
 const SCRIPT_STOP: &str = include_str!("scripts/on-stop.sh");
 
-/// In-band OSC target token. The parser only accepts OSC 777 sequences whose
-/// target equals this exact string (collision guard vs. Warp's `warp://`,
-/// urxvt notify, VTE, …). Keep in sync with the `parser` 777 arm.
-pub const CLI_AGENT_TARGET: &str = "piki://cli-agent";
+use super::CLI_AGENT_TARGET;
 
 /// Env vars + extra CLI args to merge into the `claude` child so it loads
 /// piki's hooks and the scripts know they're allowed to emit.

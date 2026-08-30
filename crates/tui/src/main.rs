@@ -105,7 +105,7 @@ fn main() -> anyhow::Result<()> {
                 // MUST run before any tokio runtime exists (it forks).
                 #[cfg(unix)]
                 {
-                    return piki_core::session::daemon::run(&paths, *foreground);
+                    return piki_core::session::daemon::run(&paths.daemon_paths(), *foreground);
                 }
                 #[cfg(not(unix))]
                 {
