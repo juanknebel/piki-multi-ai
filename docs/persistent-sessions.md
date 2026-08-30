@@ -18,14 +18,18 @@ shpool it is called out below.
 architecture — a feature, not perf". This document is the design.
 
 The daemon, wire protocol, PTY/vt100 layer, and shell integration described
-below live in `crates/multiplex` (`piki-multiplex`) — an independent crate
-with no dependency on `piki-core` — so the multiplexer can be reused outside
-agent-multi. `piki-core` depends on it and re-exports `piki_multiplex::session`
-as `piki_core::session` unchanged, so every `piki_core::session::*` reference
-below is accurate as written; `piki_multiplex::session::daemon::run` takes a
-`DaemonPaths` (built by `piki-core`'s `DataPaths::daemon_paths()`) rather than
-`piki-core`'s own `DataPaths`, since the daemon doesn't know about the rest of
-an app's data-dir layout.
+below live in [`piki-multiplex`](https://github.com/juanknebel/piki-multiplex)
+— an independent crate, in its own repo, with no dependency on `piki-core` —
+so the multiplexer can be reused outside agent-multi. This repo depends on it
+as a git dependency (`crates/core/Cargo.toml`); `piki-core` re-exports
+`piki_multiplex::session` as `piki_core::session` unchanged, so every
+`piki_core::session::*` reference below is accurate as written;
+`piki_multiplex::session::daemon::run` takes a `DaemonPaths` (built by
+`piki-core`'s `DataPaths::daemon_paths()`) rather than `piki-core`'s own
+`DataPaths`, since the daemon doesn't know about the rest of an app's
+data-dir layout. `piki-multiplex`'s own module docs
+(`piki-multiplex/README.md`) cover its internal layout; this document stays
+the source of truth for the wire protocol and restore design.
 
 ## Goals / non-goals
 

@@ -4299,7 +4299,8 @@ dependencies = [
 
 [[package]]
 name = "piki-multiplex"
-version = "3.0.0-beta"
+version = "0.1.0"
+source = "git+https://github.com/juanknebel/piki-multiplex?branch=main#d90ddf608949e9c227d98f01f5340ccb1b570f9d"
 dependencies = [
  "anyhow",
  "libc",
@@ -4307,7 +4308,6 @@ dependencies = [
  "portable-pty",
  "serde",
  "serde_json",
- "tempfile",
  "tokio",
  "toml 1.1.0+spec-1.1.0",
  "tracing",
@@ -7317,6 +7317,7 @@ dependencies = [
 [[package]]
 name = "vt100"
 version = "0.16.2"
+source = "git+https://github.com/juanknebel/piki-vt100?branch=main#99b6c0ce0e62cafb440287b6b78a62aac92985f3"
 dependencies = [
  "itoa",
  "unicode-width",

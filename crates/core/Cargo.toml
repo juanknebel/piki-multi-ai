@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 # Terminal multiplexer engine: PTY, vt100 terminal state, shell integration,
 # persistent-session daemon.
-piki-multiplex = { path = "../multiplex" }
+piki-multiplex = { git = "https://github.com/juanknebel/piki-multiplex", branch = "main" }
 
 # Async runtime
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "time", "sync", "fs"] }
