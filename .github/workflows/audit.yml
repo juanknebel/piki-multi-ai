@@ -34,7 +34,7 @@ jobs:
       # and is unavailable to the read-only token a fork's pull request gets —
       # it fails the job even when the audit itself is clean. Running the tool
       # directly needs no API access and behaves the same everywhere.
-      - uses: taiki-e/install-action@v2.85.4
+      - uses: taiki-e/install-action@v2.87.1
         with:
           tool: cargo-audit
 
