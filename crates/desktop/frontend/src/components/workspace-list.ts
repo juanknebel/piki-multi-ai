@@ -19,16 +19,22 @@ import {
   type WorkspaceInfo,
 } from "../types";
 
-/** Label for a row. Structure (families, the PR-review group, collapse
- *  state) is decided by the backend; only the text is decided here.
- *  Worktrees are named by their branch, a clone by its repo folder. */
-function rowLabel(info: WorkspaceInfo, branch: string | null): string {
-  if (info.workspace_type === "Worktree") return branch ? branchLabel(branch) : info.name;
+/** Name + muted branch for a row. Structure (families, the PR-review group,
+ *  collapse state) is decided by the backend; only the text is decided here.
+ *  Worktrees are named by their branch, a clone by its repo folder with the
+ *  branch rendered separately (dimmed) so the name stays scannable. */
+function rowParts(
+  info: WorkspaceInfo,
+  branch: string | null,
+): { name: string; branch: string | null } {
+  if (info.workspace_type === "Worktree") {
+    return { name: branch ? branchLabel(branch) : info.name, branch: null };
+  }
   const folder =
     info.source_repo.replace(/\/+$/, "").split("/").pop() ||
     info.source_repo_display ||
     info.name;
-  return branch ? `${folder} (${branchLabel(branch)})` : folder;
+  return { name: folder, branch: branch ? branchLabel(branch) : null };
 }
 
 /** Full, untruncated text for the row tooltip. */
@@ -232,14 +238,22 @@ export function renderWorkspaceList(container: HTMLElement) {
         ? `<span class="workspace-restored" title="Sessions restored from the daemon — not visited yet">${icon("history")}</span>`
         : "";
 
-      const chevron = row.kind === "parent"
+      // Fixed-width gutter on every row so labels line up whether or not a
+      // chevron exists: parents get the chevron, the active row gets its
+      // pulse dot, everything else an empty slot.
+      const gutter = row.kind === "parent"
         ? icon("chevron-right", { class: `group-chevron${row.collapsed ? " collapsed" : ""}` })
-        : "";
+        : idx === activeIdx
+          ? '<span class="workspace-active-marker"></span>'
+          : "";
 
+      const { name, branch } = rowParts(info, ws.branch);
+      const branchHtml = branch
+        ? ` <span class="workspace-branch">${escapeHtml(branch)}</span>`
+        : "";
       item.innerHTML = `
-        ${chevron}
-        ${idx === activeIdx ? '<span class="workspace-active-marker"></span>' : ""}
-        <span class="workspace-name">${escapeHtml(rowLabel(info, ws.branch))}</span>
+        <span class="workspace-gutter">${gutter}</span>
+        <span class="workspace-name">${escapeHtml(name)}${branchHtml}</span>
         ${agentGlyph}
         ${attentionDot}
         ${restoredMark}
@@ -250,10 +264,11 @@ export function renderWorkspaceList(container: HTMLElement) {
       `;
       item.title = rowTitle(info, ws.branch);
 
-      // Click the chevron to toggle collapse without switching workspace.
+      // Click the chevron gutter to toggle collapse without switching
+      // workspace (the whole 14px slot, not just the 10px glyph).
       if (row.kind === "parent" && row.family_key) {
         const key = row.family_key;
-        item.querySelector(".group-chevron")!.addEventListener("click", (e) => {
+        item.querySelector(".workspace-gutter")!.addEventListener("click", (e) => {
           e.stopPropagation();
           if (collapsedGroups.has(key)) {
             collapsedGroups.delete(key);
@@ -267,7 +282,7 @@ export function renderWorkspaceList(container: HTMLElement) {
       // Click to switch workspace
       item.addEventListener("click", (e) => {
         if ((e.target as HTMLElement).closest(".ws-action-btn")) return;
-        if ((e.target as HTMLElement).closest(".group-chevron")) return;
+        if (row.kind === "parent" && (e.target as HTMLElement).closest(".workspace-gutter")) return;
         void switchTo(idx);
       });
 

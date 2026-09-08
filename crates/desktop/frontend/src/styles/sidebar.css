@@ -75,8 +75,24 @@
   border-left: 2px solid transparent;
 }
 
+/* Children indent one step past the parent's gutter so their labels read
+   as nested under the parent's name. */
 .workspace-item.grouped {
-  padding-left: 28px;
+  padding-left: 32px;
+}
+
+/* Fixed-width leading slot on every row (chevron on parents, pulse dot on
+   the active row, empty otherwise) so labels align across the list. */
+.workspace-gutter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  flex-shrink: 0;
+}
+
+.workspace-gutter .group-chevron {
+  margin-right: 0;
 }
 
 .workspace-item:hover {
@@ -115,6 +131,13 @@
 .workspace-item.active .workspace-name {
   color: var(--text-bright);
   font-weight: 500;
+}
+
+/* Branch of a clone/checkout row — secondary to the repo name. */
+.workspace-branch {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  font-weight: 400;
 }
 
 .workspace-actions {
