@@ -43,19 +43,42 @@ fn read_cwd(pid: u32) -> Option<PathBuf> {
     std::fs::read_link(format!("/proc/{}/cwd", pid)).ok()
 }
 
+/// Full argv joined with spaces, empty when unreadable. `read_cmd` truncates
+/// this for display; the noise filter needs the whole thing.
+fn read_cmdline_joined(pid: u32) -> String {
+    std::fs::read(format!("/proc/{}/cmdline", pid))
+        .map(|bytes| {
+            bytes
+                .split(|b| *b == 0)
+                .map(|p| String::from_utf8_lossy(p).to_string())
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .unwrap_or_default()
+}
+
 fn read_cmd(pid: u32) -> String {
-    if let Ok(bytes) = std::fs::read(format!("/proc/{}/cmdline", pid)) {
-        let parts: Vec<String> = bytes
-            .split(|b| *b == 0)
-            .map(|p| String::from_utf8_lossy(p).to_string())
-            .filter(|s| !s.is_empty())
-            .collect();
-        if !parts.is_empty() {
-            let joined = parts.join(" ");
-            return joined.chars().take(100).collect();
-        }
+    let joined = read_cmdline_joined(pid);
+    if joined.is_empty() {
+        read_comm(pid).unwrap_or_default()
+    } else {
+        joined.chars().take(100).collect()
     }
-    read_comm(pid).unwrap_or_default()
+}
+
+/// True for processes that match an agent name but are not CLI agents: the
+/// Claude Desktop app (its binary path contains `claude-desktop`, main
+/// process and resources alike), any Chromium/Electron helper process
+/// (`--type=zygote|renderer|gpu-process|…`), and browser-extension
+/// native-messaging hosts (`claude --chrome-native-*`). Without this the
+/// External section lists the whole Electron process family of the desktop
+/// app as "agents" and buries the real ones.
+fn is_noise_cmdline(cmdline: &str) -> bool {
+    let lower = cmdline.to_ascii_lowercase();
+    lower.contains("claude-desktop")
+        || lower.contains("--type=")
+        || lower.contains("--chrome-native")
 }
 
 fn detect_provider(pid: u32) -> Option<String> {
@@ -160,6 +183,9 @@ pub fn scan_external_agents(workspaces: &[WorkspaceInfo]) -> Vec<AgentTree> {
         let Some(provider) = detect_provider(pid) else {
             continue;
         };
+        if is_noise_cmdline(&read_cmdline_joined(pid)) {
+            continue;
+        }
         let ppid = read_ppid(pid).unwrap_or(0);
         let cwd = read_cwd(pid);
         let cmd = read_cmd(pid);
@@ -227,6 +253,30 @@ mod tests {
     fn workspace_for_cwd_none_when_outside() {
         let workspaces = vec![ws("/tmp/a")];
         assert_eq!(workspace_for_cwd(Path::new("/other"), &workspaces), None);
+    }
+
+    #[test]
+    fn noise_cmdlines_are_filtered() {
+        assert!(is_noise_cmdline("/usr/lib/claude-desktop/claude-desktop"));
+        assert!(is_noise_cmdline(
+            "/usr/lib/claude-desktop/claude-desktop --type=renderer --enable-features=x"
+        ));
+        assert!(is_noise_cmdline(
+            "/usr/lib/claude-desktop/resources/cowork-linux-x64 --serve"
+        ));
+        assert!(is_noise_cmdline("/usr/lib/electron/electron --type=zygote"));
+        assert!(is_noise_cmdline(
+            "/home/user/.local/bin/claude --chrome-native-messaging"
+        ));
+    }
+
+    #[test]
+    fn real_agent_cmdlines_are_not_noise() {
+        assert!(!is_noise_cmdline("/home/user/.local/bin/claude"));
+        assert!(!is_noise_cmdline("claude -p fix the tests"));
+        assert!(!is_noise_cmdline("node /usr/local/bin/gemini"));
+        assert!(!is_noise_cmdline("codex --full-auto"));
+        assert!(!is_noise_cmdline(""));
     }
 
     #[test]
