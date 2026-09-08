@@ -150,6 +150,53 @@ mod tests {
         }
     }
 
+    /// Regression: with many worktrees the load-existing list rendered every
+    /// row into an unscrolled Paragraph, so moving the cursor past the popup's
+    /// bottom edge left the selection invisible — the window kept showing the
+    /// same first rows. The popup must clamp to the screen and auto-scroll to
+    /// keep the selected row in view.
+    #[test]
+    fn test_render_load_existing_worktree_scrolls_to_selection() {
+        use crate::dialog_state::{CreateWorktreeField, CreateWorktreeMode};
+
+        let mut terminal = test_terminal(80, 24);
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
+        let existing: Vec<piki_core::workspace::ExistingWorktree> = (0..25)
+            .map(|i| piki_core::workspace::ExistingWorktree {
+                path: std::path::PathBuf::from(format!("/tmp/wt-{i:02}")),
+                branch: format!("feature-{i:02}"),
+            })
+            .collect();
+        app.active_dialog = Some(DialogState::CreateWorktree {
+            parent_idx: 0,
+            mode: CreateWorktreeMode::LoadExisting,
+            name: String::new(),
+            name_cursor: 0,
+            prompt: String::new(),
+            prompt_cursor: 0,
+            kanban: String::new(),
+            kanban_cursor: 0,
+            active_field: CreateWorktreeField::Name,
+            existing,
+            existing_selected: 24,
+            existing_loading: false,
+        });
+        terminal
+            .draw(|frame| {
+                super::dialogs::render_create_worktree_dialog(frame, frame.area(), &app);
+            })
+            .unwrap();
+        let content = buffer_to_snapshot(terminal.backend().buffer());
+        assert!(
+            content.contains("> /tmp/wt-24"),
+            "selected last row must be visible:\n{content}"
+        );
+        insta::assert_snapshot!("load_existing_worktree_scrolled", content);
+    }
+
     #[test]
     fn test_render_missing_prereqs_dialog() {
         let mut terminal = test_terminal(80, 24);
