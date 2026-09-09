@@ -3,7 +3,7 @@
 // covered by agent-attention.test.ts. The wiring lives in
 // components/agents-panel.ts.
 
-import { agentStatusSeverity, type AgentRow } from "./types";
+import { agentStatusSeverity, type AgentRow, type CliAgentStatus } from "./types";
 
 /** Severity at or above which an agent "needs you": waiting for permission,
  *  or idle/done with news the user hasn't looked at. Mirrors
@@ -50,6 +50,23 @@ export function liveElapsedSecs(row: AgentRow, fetchedAtMs: number, nowMs: numbe
  *  refresh brought nothing new: each emit rebuilds the Agents panel, the
  *  workspace-list rollups and the tab strip, and during a streaming agent
  *  those rebuilds eat in-flight clicks. */
+/** True when a `pty-agent-event` would leave the tab's shell state exactly
+ *  as it already is: same status, same attention, and no new summary (a
+ *  transient event carries none and never wipes the one shown). Agents
+ *  re-report `running` on every tool call, and each emit of
+ *  `tab-shell-state-changed` re-renders the status bar and pane titles —
+ *  skipping the no-ops is what keeps the bar from flickering during a run. */
+export function agentEventIsNoop(
+  existing: { agentStatus?: CliAgentStatus; attention?: boolean; agentSummary?: string },
+  event: { status: CliAgentStatus; attention: boolean; summary?: string },
+): boolean {
+  return (
+    existing.agentStatus === event.status &&
+    (existing.attention ?? false) === event.attention &&
+    (!event.summary || existing.agentSummary === event.summary)
+  );
+}
+
 export function agentRowsEquivalent(a: AgentRow[], b: AgentRow[]): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {

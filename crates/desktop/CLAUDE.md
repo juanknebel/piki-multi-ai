@@ -164,8 +164,9 @@ just lint-desktop                           # frontend test + build, then clippy
 - `sidebar.ts maxAgentsPanelHeight()` clamps the Agents panel so ≥4 workspace rows stay visible; it
   measures a live `.workspace-item` (never assume px).
 - Full re-renders must preserve UI state: keep `scrollTop`, input caret/focus across `innerHTML` rebuilds
-  (see workspace-list, file-tree, source-control for the pattern), and prefer patching in place (status bar
-  LSP segment, kanban search, pane titles) over rebuilding.
+  (see workspace-list, file-tree, source-control for the pattern), and prefer patching in place (the status
+  bar morphs only changed segments — `status-bar.ts morphChildren`; kanban search, pane titles) over
+  rebuilding.
 
 ## Agent signals
 

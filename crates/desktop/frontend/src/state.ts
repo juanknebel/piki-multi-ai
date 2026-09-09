@@ -10,7 +10,7 @@ import type {
   AgentRow,
 } from "./types";
 import { isFrontendOnlyProvider } from "./types";
-import { agentRowsEquivalent } from "./agent-attention";
+import { agentEventIsNoop, agentRowsEquivalent } from "./agent-attention";
 import * as ipc from "./ipc";
 import { settingsStore } from "./settings";
 import { mruBump } from "./mru";
@@ -733,6 +733,7 @@ class AppState extends EventTarget {
 
   applyAgentEvent(event: PtyAgentEvent) {
     const existing = this._tabShellStates.get(event.tab_id) ?? {};
+    if (agentEventIsNoop(existing, event)) return;
     const next: TabShellState = { ...existing, agentStatus: event.status, attention: event.attention };
     // Keep the last meaningful summary; transient events (running) carry
     // none and shouldn't wipe a permission/done message already shown.

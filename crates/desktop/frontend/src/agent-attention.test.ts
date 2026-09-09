@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { agentRowsEquivalent, attentionRows, liveElapsedSecs, pickAttentionTarget } from "./agent-attention";
+import { agentEventIsNoop, agentRowsEquivalent, attentionRows, liveElapsedSecs, pickAttentionTarget } from "./agent-attention";
 import { formatElapsed, type AgentRow, type CliAgentStatus } from "./types";
 
 function row(
@@ -107,5 +107,28 @@ describe("agentRowsEquivalent", () => {
 
   it("empty lists are equivalent", () => {
     expect(agentRowsEquivalent([], [])).toBe(true);
+  });
+});
+
+describe("agentEventIsNoop", () => {
+  const running = { agentStatus: "running" as CliAgentStatus, attention: false, agentSummary: "editing foo.rs" };
+
+  it("skips a repeated running event with no summary (the per-tool-call churn)", () => {
+    expect(agentEventIsNoop(running, { status: "running", attention: false })).toBe(true);
+    expect(agentEventIsNoop(running, { status: "running", attention: false, summary: "editing foo.rs" })).toBe(true);
+  });
+
+  it("fires on a status, attention or summary change", () => {
+    expect(agentEventIsNoop(running, { status: "done", attention: false })).toBe(false);
+    expect(agentEventIsNoop(running, { status: "running", attention: true })).toBe(false);
+    expect(agentEventIsNoop(running, { status: "running", attention: false, summary: "running tests" })).toBe(false);
+  });
+
+  it("fires on the first event for a tab (empty state)", () => {
+    expect(agentEventIsNoop({}, { status: "running", attention: false })).toBe(false);
+  });
+
+  it("treats missing attention as false", () => {
+    expect(agentEventIsNoop({ agentStatus: "running" }, { status: "running", attention: false })).toBe(true);
   });
 });
