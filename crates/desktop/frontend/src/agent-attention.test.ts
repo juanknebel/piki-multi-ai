@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { attentionRows, liveElapsedSecs, pickAttentionTarget } from "./agent-attention";
+import { agentRowsEquivalent, attentionRows, liveElapsedSecs, pickAttentionTarget } from "./agent-attention";
 import { formatElapsed, type AgentRow, type CliAgentStatus } from "./types";
 
 function row(
@@ -80,5 +80,32 @@ describe("formatElapsed", () => {
     expect(formatElapsed(192)).toBe("3m 12s");
     expect(formatElapsed(600)).toBe("10m 00s");
     expect(formatElapsed(3720)).toBe("1h 02m");
+  });
+});
+
+describe("agentRowsEquivalent", () => {
+  it("treats an elapsed-only advance as equivalent (no re-render)", () => {
+    const a = [row(0, "a", "running", false, 10), row(1, "b", "idle", false, null)];
+    const b = [row(0, "a", "running", false, 42), row(1, "b", "idle", false, null)];
+    expect(agentRowsEquivalent(a, b)).toBe(true);
+  });
+
+  it("differs when a run starts or stops (elapsed null ↔ number)", () => {
+    expect(agentRowsEquivalent([row(0, "a", "idle", false, null)], [row(0, "a", "idle", false, 0)])).toBe(false);
+  });
+
+  it("differs on status, attention, summary, label, aliveness or row set", () => {
+    const base = () => row(0, "a", "running", false, 5);
+    expect(agentRowsEquivalent([base()], [{ ...base(), status: "idle" }])).toBe(false);
+    expect(agentRowsEquivalent([base()], [{ ...base(), attention: true }])).toBe(false);
+    expect(agentRowsEquivalent([base()], [{ ...base(), summary: "did a thing" }])).toBe(false);
+    expect(agentRowsEquivalent([base()], [{ ...base(), label: "Codex" }])).toBe(false);
+    expect(agentRowsEquivalent([base()], [{ ...base(), alive: false }])).toBe(false);
+    expect(agentRowsEquivalent([base()], [base(), row(1, "b", "idle")])).toBe(false);
+    expect(agentRowsEquivalent([base()], [])).toBe(false);
+  });
+
+  it("empty lists are equivalent", () => {
+    expect(agentRowsEquivalent([], [])).toBe(true);
   });
 });

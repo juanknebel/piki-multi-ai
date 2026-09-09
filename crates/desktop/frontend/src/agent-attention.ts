@@ -43,3 +43,32 @@ export function liveElapsedSecs(row: AgentRow, fetchedAtMs: number, nowMs: numbe
   if (row.elapsed_secs === null || row.elapsed_secs === undefined) return null;
   return row.elapsed_secs + Math.max(0, Math.floor((nowMs - fetchedAtMs) / 1000));
 }
+
+/** True when two agent-row snapshots agree on every UI-relevant field —
+ *  only `elapsed_secs` may differ (it advances on every fetch and the
+ *  panel ticks it in place). Used to skip `agent-rows-changed` when a
+ *  refresh brought nothing new: each emit rebuilds the Agents panel, the
+ *  workspace-list rollups and the tab strip, and during a streaming agent
+ *  those rebuilds eat in-flight clicks. */
+export function agentRowsEquivalent(a: AgentRow[], b: AgentRow[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i];
+    const y = b[i];
+    if (
+      x.workspace_idx !== y.workspace_idx ||
+      x.workspace_name !== y.workspace_name ||
+      x.tab_idx !== y.tab_idx ||
+      x.tab_id !== y.tab_id ||
+      x.label !== y.label ||
+      x.alive !== y.alive ||
+      x.status !== y.status ||
+      x.attention !== y.attention ||
+      x.summary !== y.summary ||
+      (x.elapsed_secs === null) !== (y.elapsed_secs === null)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}

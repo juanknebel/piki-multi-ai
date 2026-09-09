@@ -10,6 +10,7 @@ import type {
   AgentRow,
 } from "./types";
 import { isFrontendOnlyProvider } from "./types";
+import { agentRowsEquivalent } from "./agent-attention";
 import * as ipc from "./ipc";
 import { settingsStore } from "./settings";
 import { mruBump } from "./mru";
@@ -461,10 +462,17 @@ class AppState extends EventTarget {
     return t ? ws.tabs.findIndex((x) => x.id === t.id) : -1;
   }
 
-  /** Switch the active top-level tab by index. */
+  /** Switch the active top-level tab by index. Already active: only refocus
+   *  the pane — re-emitting the tab events would rebuild the tab strip
+   *  mid-gesture, and a double-click's first click must not destroy the
+   *  element the dblclick lands on. */
   setActiveWsTab(wsTabIdx: number) {
     const ws = this.activeWs;
     if (!ws || wsTabIdx < 0 || wsTabIdx >= ws.wsTabs.length) return;
+    if (ws.activeWsTab === wsTabIdx) {
+      this.emit("active-pane-changed");
+      return;
+    }
     ws.activeWsTab = wsTabIdx;
     this._syncActiveContent(ws);
     this.emit("active-tab-changed");
@@ -759,6 +767,7 @@ class AppState extends EventTarget {
     return this._agentRowsFetchedAt;
   }
   setAgentRows(rows: AgentRow[]) {
+    const prev = this._agentRows;
     this._agentRows = rows;
     this._agentRowsFetchedAt = Date.now();
     // The rows are the backend's truth about per-tab agent state; seed the
@@ -772,7 +781,11 @@ class AppState extends EventTarget {
       if (row.summary && !existing.agentSummary) next.agentSummary = row.summary;
       this._tabShellStates.set(row.tab_id, next);
     }
-    this.emit("agent-rows-changed");
+    // A refresh that only advanced `elapsed_secs` is not news: emitting
+    // would rebuild the Agents panel and the sidebar rollups for nothing
+    // (and eat any click in flight). The elapsed labels tick in place from
+    // the updated snapshot regardless.
+    if (!agentRowsEquivalent(prev, rows)) this.emit("agent-rows-changed");
   }
 
   /** Flag workspaces that received restored sessions at startup (except the

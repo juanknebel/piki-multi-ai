@@ -209,6 +209,73 @@ export function renderWorkspaceTabBar(container: HTMLElement) {
     ?.scrollIntoView({ inline: "nearest", block: "nearest" });
 }
 
+/** Patch the existing chips in place — label text, agent dot, dead mark,
+ *  tooltip — without rebuilding the strip. Status churn (agent events,
+ *  ticking OSC titles) arrives several times a second while an agent
+ *  streams; a full rebuild that often flickers and destroys the element a
+ *  click is mid-flight on, so the click never lands. Falls back to the
+ *  full render when the tab set itself changed. */
+export function patchWorkspaceTabBar(container: HTMLElement) {
+  const ws = appState.activeWs;
+  const strip = container.querySelector<HTMLElement>(".ws-tab-strip");
+  if (!ws || !strip) {
+    renderWorkspaceTabBar(container);
+    return;
+  }
+  const chips = Array.from(strip.querySelectorAll<HTMLElement>(".ws-tab"));
+  if (
+    chips.length !== ws.wsTabs.length ||
+    chips.some((c, i) => c.dataset.wsTabId !== ws.wsTabs[i].id)
+  ) {
+    renderWorkspaceTabBar(container);
+    return;
+  }
+
+  ws.wsTabs.forEach((wt, i) => {
+    const el = chips[i];
+    const exited = wsTabContents(ws, wt).some((c) => isPtyContent(c) && !c.alive);
+    el.classList.toggle("ws-tab--dead", exited);
+    const tooltip = wsTabTitle(wt.paneTree, wt.activePaneId) + (exited ? " — process exited" : "");
+    if (el.title !== tooltip) el.title = tooltip;
+
+    // Label text (an open rename input replaced the span — leave it alone).
+    const labelEl = el.querySelector<HTMLElement>(".ws-tab-label");
+    if (labelEl) {
+      const label = wsTabTitle(wt.paneTree, wt.activePaneId);
+      if (labelEl.textContent !== label) labelEl.textContent = label;
+    }
+
+    // Agent status dot: add / remove / restyle, never rebuild the chip.
+    const agent = wsTabAgentStatus(wt.paneTree);
+    let dotEl = el.querySelector<HTMLElement>(".ws-tab-agent");
+    if (!agent) {
+      dotEl?.remove();
+    } else {
+      const v = cliAgentStatusView(agent.status, agent.attention);
+      if (!dotEl) {
+        dotEl = document.createElement("span");
+        dotEl.className = "ws-tab-agent";
+        dotEl.innerHTML = icon("dot");
+        el.insertBefore(dotEl, el.firstChild);
+      }
+      if (dotEl.style.color !== v.color) dotEl.style.color = v.color;
+      if (dotEl.title !== v.label) dotEl.title = v.label;
+    }
+
+    // Dead mark, same treatment.
+    let deadEl = el.querySelector<HTMLElement>(".ws-tab-dead");
+    if (!exited) {
+      deadEl?.remove();
+    } else if (!deadEl) {
+      deadEl = document.createElement("span");
+      deadEl.className = "ws-tab-dead";
+      deadEl.title = "Process exited";
+      deadEl.innerHTML = icon("circle");
+      el.insertBefore(deadEl, labelEl ?? null);
+    }
+  });
+}
+
 /** One entry per top-level tab of the active workspace: title, agent
  *  status, the current one marked. Picking one switches to it. */
 function allTabsMenuItems(): CtxItem[] {
@@ -268,6 +335,17 @@ function wsTabMenuItems(wsTabIdx: number, rename: () => void): CtxItem[] {
 function beginInlineRename(tabEl: HTMLElement, wt: import("../state").WorkspaceTab) {
   const ws = appState.activeWs;
   if (!ws) return;
+  // The captured element may be stale: the strip is rebuilt on every tab
+  // switch and agent-status refresh, so a chip rendered when the gesture
+  // started (or when the context menu opened) can be detached by the time
+  // this runs — editing it would be invisible. Re-resolve the live chip.
+  if (!tabEl.isConnected) {
+    const live = document.querySelector<HTMLElement>(
+      `.ws-tab[data-ws-tab-id="${CSS.escape(wt.id)}"]`,
+    );
+    if (!live) return;
+    tabEl = live;
+  }
   if (tabEl.querySelector(".ws-tab-rename")) return;
   const contentId = activeContentId(wt);
   if (!contentId) return;

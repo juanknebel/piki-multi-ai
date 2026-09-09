@@ -13,6 +13,7 @@ import { getProviderLabel } from "../types";
 import { mountTab, unmountTab } from "../tab-mount";
 import {
   renderWorkspaceTabBar,
+  patchWorkspaceTabBar,
   tearDownAndClosePane,
   restartPaneContent,
 } from "./tab-bar";
@@ -52,16 +53,17 @@ export function initPaneView(container: HTMLElement) {
     refreshPaneTitles();
   });
   appState.on("active-tab-changed", refreshWsTabBar);
-  // Agent status changes only affect the ws-tab bar's status dots — refresh
-  // just that strip, never the whole pane tree (avoids terminal remount).
-  // A terminal title (OSC 0/2) also lands here: pane titles are patched in
-  // place for the same reason.
+  // Agent status changes only affect the ws-tab bar's status dots — and a
+  // terminal title (OSC 0/2) only its label text. These fire several times
+  // a second while an agent streams, so they PATCH the strip in place
+  // (patchWorkspaceTabBar): a full rebuild that often flickers and
+  // destroys chips mid-click. Pane titles are patched in place too.
   appState.on("tab-shell-state-changed", () => {
-    refreshWsTabBar();
+    patchWsTabBar();
     refreshPaneTitles();
   });
-  appState.on("workspace-attention-changed", refreshWsTabBar);
-  appState.on("agent-rows-changed", refreshWsTabBar);
+  appState.on("workspace-attention-changed", patchWsTabBar);
+  appState.on("agent-rows-changed", patchWsTabBar);
   onLiteralNextChange(refreshLiteralHint);
 }
 
@@ -70,7 +72,14 @@ function refreshWsTabBar() {
   if (bar) renderWorkspaceTabBar(bar);
 }
 
-/** Patch every pane header's title text without rebuilding the tree. */
+function patchWsTabBar() {
+  const bar = rootEl?.querySelector<HTMLElement>(".ws-tab-bar");
+  if (bar) patchWorkspaceTabBar(bar);
+}
+
+/** Patch every pane header's title text without rebuilding the tree. The
+ *  built HTML is remembered on the element so the churny callers (agent
+ *  events, ticking OSC titles) only touch the DOM on a real change. */
 function refreshPaneTitles() {
   const wt = appState.activeTabTree;
   if (!wt || !rootEl) return;
@@ -78,7 +87,11 @@ function refreshPaneTitles() {
     const title = rootEl.querySelector<HTMLElement>(
       `.pane[data-pane-id="${cssEscape(leaf.id)}"] > .pane-head > .pane-title`,
     );
-    if (title) title.innerHTML = paneTitleHtml(leaf);
+    if (!title) continue;
+    const html = paneTitleHtml(leaf);
+    if (title.dataset.src === html) continue;
+    title.dataset.src = html;
+    title.innerHTML = html;
   }
 }
 
