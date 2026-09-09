@@ -2,14 +2,22 @@
 //!
 //! Every PTY reader (local `RawLocalPty`, daemon-backed `RawRemotePty`) pushes
 //! its chunks into an [`OutputBatcher`] instead of emitting them one by one.
-//! A dedicated emitter thread drains the batcher — at most one frontend
-//! message per [`BATCH_WINDOW`] / [`BATCH_MAX_BYTES`] — and hands each batch
-//! to the [`PtyOutputSink`]: a raw Tauri IPC channel (`Channel<Vec<u8>>`,
-//! binary, no base64, registered once by the frontend at startup) with the
-//! JSON `pty-output` event as the fallback while no channel is registered.
+//! A dedicated emitter thread drains the batcher and hands each batch to the
+//! [`PtyOutputSink`]: a raw Tauri IPC channel (`Channel<Vec<u8>>`, binary, no
+//! base64, registered once by the frontend at startup) with the JSON
+//! `pty-output` event as the fallback while no channel is registered.
+//!
+//! Batching is adaptive because every IPC message costs main-thread time on
+//! the receiving side (Tauri delivers each channel message via a
+//! `webview.eval` on the GTK main loop), so the *message rate* — not the byte
+//! volume — is what must stay bounded. After a quiet gap the first chunk
+//! ships almost immediately ([`BATCH_LEAD_WINDOW`], keystroke echo); while
+//! output is sustained, batches coalesce to at most one message per
+//! [`BATCH_WINDOW`] (30 fps, matching the TUI's render cap).
 //!
 //! Contract (see `docs/performance.md`):
-//! - the first chunk of a batch is never delayed by more than `BATCH_WINDOW`;
+//! - the first chunk after a quiet gap ships within `BATCH_LEAD_WINDOW`;
+//! - under sustained output at most one message per `BATCH_WINDOW` is sent;
 //! - a batch never exceeds `BATCH_MAX_BYTES` unless a single read did;
 //! - `Exit` is delivered strictly after every byte read before it;
 //! - a batch always belongs to ONE tab (each PTY owns its own batcher).
@@ -24,8 +32,13 @@ use serde::Serialize;
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Emitter, Manager};
 
-/// Longest a byte waits in the batcher before it is shipped.
-pub const BATCH_WINDOW: Duration = Duration::from_millis(8);
+/// Minimum interval between batches while output is sustained (~30 fps, the
+/// TUI's render cap). Bounds the IPC message rate, not the first-byte
+/// latency — that is [`BATCH_LEAD_WINDOW`]'s job.
+pub const BATCH_WINDOW: Duration = Duration::from_millis(33);
+/// How long the first chunk after a quiet gap waits, so the chunks of one
+/// burst still coalesce without hurting keystroke echo.
+pub const BATCH_LEAD_WINDOW: Duration = Duration::from_millis(2);
 /// Ship early once this many bytes are queued.
 pub const BATCH_MAX_BYTES: usize = 64 * 1024;
 
@@ -51,25 +64,37 @@ pub enum Batch {
 pub struct OutputBatcher {
     rx: Receiver<OutMsg>,
     window: Duration,
+    lead_window: Duration,
     max_bytes: usize,
     /// An `Exit` that arrived while a batch was being filled — handed out on
     /// the next call so it stays ordered after the data.
     pending_exit: Option<Option<i32>>,
+    /// When the last `Data` batch shipped; decides hot vs cold below.
+    last_ship: Option<Instant>,
 }
 
 impl OutputBatcher {
-    pub fn new(rx: Receiver<OutMsg>, window: Duration, max_bytes: usize) -> Self {
+    pub fn new(
+        rx: Receiver<OutMsg>,
+        window: Duration,
+        lead_window: Duration,
+        max_bytes: usize,
+    ) -> Self {
         Self {
             rx,
             window,
+            lead_window,
             max_bytes,
             pending_exit: None,
+            last_ship: None,
         }
     }
 
     /// Block until something is available, then keep pulling until the
-    /// window since the FIRST chunk elapses, the byte cap is hit, an `Exit`
-    /// shows up, or the sender is gone.
+    /// deadline, the byte cap is hit, an `Exit` shows up, or the sender is
+    /// gone. The deadline is adaptive: a cold stream (nothing shipped for at
+    /// least a window) flushes after `lead_window`; a hot one coalesces until
+    /// a full `window` has passed since the previous batch shipped.
     pub fn next(&mut self) -> Batch {
         if let Some(code) = self.pending_exit.take() {
             return Batch::Exit(code);
@@ -79,7 +104,11 @@ impl OutputBatcher {
             Ok(OutMsg::Exit(code)) => return Batch::Exit(code),
             Err(_) => return Batch::Closed,
         };
-        let deadline = Instant::now() + self.window;
+        let now = Instant::now();
+        let deadline = match self.last_ship {
+            Some(t) if now.duration_since(t) < self.window => t + self.window,
+            _ => now + self.lead_window,
+        };
         while buf.len() < self.max_bytes {
             let now = Instant::now();
             if now >= deadline {
@@ -94,6 +123,7 @@ impl OutputBatcher {
                 Err(RecvTimeoutError::Timeout) | Err(RecvTimeoutError::Disconnected) => break,
             }
         }
+        self.last_ship = Some(Instant::now());
         Batch::Data(buf)
     }
 }
@@ -101,7 +131,10 @@ impl OutputBatcher {
 /// Create the reader → emitter pair with the production limits.
 pub fn output_channel() -> (Sender<OutMsg>, OutputBatcher) {
     let (tx, rx) = channel();
-    (tx, OutputBatcher::new(rx, BATCH_WINDOW, BATCH_MAX_BYTES))
+    (
+        tx,
+        OutputBatcher::new(rx, BATCH_WINDOW, BATCH_LEAD_WINDOW, BATCH_MAX_BYTES),
+    )
 }
 
 /// Wire format of one raw-channel message: `len(tab_id) as u8`, the tab id
@@ -202,7 +235,7 @@ mod tests {
     use std::thread;
 
     fn batcher(rx: Receiver<OutMsg>) -> OutputBatcher {
-        OutputBatcher::new(rx, BATCH_WINDOW, BATCH_MAX_BYTES)
+        OutputBatcher::new(rx, BATCH_WINDOW, BATCH_LEAD_WINDOW, BATCH_MAX_BYTES)
     }
 
     /// Fake reader: pushes `n` chunks of `size` bytes as fast as it can.
@@ -310,14 +343,62 @@ mod tests {
     }
 
     #[test]
-    fn first_chunk_latency_is_bounded_by_the_window() {
+    fn cold_stream_ships_almost_immediately() {
         let (tx, rx) = channel();
         let mut b = batcher(rx);
         tx.send(OutMsg::Data(b"hi".to_vec())).unwrap();
         let t = Instant::now();
         assert_eq!(b.next(), Batch::Data(b"hi".to_vec()));
-        // Generous bound: the window plus scheduler slack.
-        assert!(t.elapsed() < BATCH_WINDOW * 10, "took {:?}", t.elapsed());
+        // Must be visibly under BATCH_WINDOW to prove the leading-edge
+        // flush; the slack over BATCH_LEAD_WINDOW is scheduler noise.
+        assert!(
+            t.elapsed() < BATCH_WINDOW - Duration::from_millis(3),
+            "took {:?}",
+            t.elapsed()
+        );
+    }
+
+    #[test]
+    fn quiet_gap_resets_to_cold() {
+        let (tx, rx) = channel();
+        let mut b = batcher(rx);
+        tx.send(OutMsg::Data(b"a".to_vec())).unwrap();
+        assert_eq!(b.next(), Batch::Data(b"a".to_vec()));
+        thread::sleep(BATCH_WINDOW + Duration::from_millis(20));
+        tx.send(OutMsg::Data(b"b".to_vec())).unwrap();
+        let t = Instant::now();
+        assert_eq!(b.next(), Batch::Data(b"b".to_vec()));
+        // After a quiet gap the echo must not wait a full window again.
+        assert!(
+            t.elapsed() < BATCH_WINDOW - Duration::from_millis(3),
+            "took {:?}",
+            t.elapsed()
+        );
+    }
+
+    #[test]
+    fn hot_stream_is_rate_limited_to_the_window() {
+        // A trickle faster than the window (2 ms period, ~100 ms total)
+        // must coalesce to roughly one batch per window, never one per
+        // chunk. Bounds are generous — CI schedulers stall — but a
+        // per-chunk regression (50 batches) stays far outside them.
+        const CHUNKS: usize = 50;
+        let (tx, rx) = channel();
+        let sender = thread::spawn(move || {
+            for i in 0..CHUNKS {
+                tx.send(OutMsg::Data(vec![i as u8; 100])).unwrap();
+                thread::sleep(Duration::from_millis(2));
+            }
+        });
+        let (batches, _) = drain(batcher(rx));
+        sender.join().unwrap();
+        let total: usize = batches.iter().map(Vec::len).sum();
+        assert_eq!(total, CHUNKS * 100);
+        assert!(
+            batches.len() >= 2 && batches.len() <= CHUNKS / 2,
+            "{} batches for {CHUNKS} chunks",
+            batches.len()
+        );
     }
 
     #[test]

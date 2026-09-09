@@ -187,14 +187,21 @@ that showed up in the audit; the invariants below are enforced in code
 
 ### Invariants
 
-- **PTY output is coalesced before it crosses the IPC.** Each PTY reader
-  pushes chunks to a per-tab `OutputBatcher`; an emitter thread ships at
-  most one message per `BATCH_WINDOW` (8 ms) or `BATCH_MAX_BYTES` (64 KB),
-  whichever comes first. The first byte of a batch never waits longer than
-  the window, a batch never exceeds the cap unless a single `read()` did,
-  bytes stay in order and `pty-exit` is emitted by the same thread *after*
-  the last batch. Same philosophy as the TUI's `PtyOutputSignal`: readers
-  never talk to the UI per read.
+- **PTY output is coalesced adaptively before it crosses the IPC.** Each PTY
+  reader pushes chunks to a per-tab `OutputBatcher`; an emitter thread ships
+  batches whose *rate* — not size — is what matters, because Tauri delivers
+  every channel message via a `webview.eval` on the GTK main thread, at a
+  cost of several ms per message whatever its size. The first chunk after a
+  quiet gap ships within `BATCH_LEAD_WINDOW` (2 ms — keystroke echo);
+  sustained output coalesces to at most one message per `BATCH_WINDOW`
+  (33 ms, ~30 fps — the same steady-state rate the TUI caps renders at) or
+  `BATCH_MAX_BYTES` (64 KB), whichever comes first. A batch never exceeds
+  the cap unless a single `read()` did, bytes stay in order and `pty-exit`
+  is emitted by the same thread *after* the last batch. Same philosophy as
+  the TUI's `PtyOutputSignal`: readers never talk to the UI per read.
+  History: the window was a flat 8 ms until 2026-09-09, which let one
+  streaming agent TUI drive ~120 evals/s and pin the GTK main thread at
+  ~70% of a core (diagnosis on card `TAURI-UI-1788921176615`).
 - **Bytes travel raw.** The batches go over a Tauri `Channel<Vec<u8>>`
   (`InvokeResponseBody::Raw`; frames ≥ 1 KB ride the binary fetch path)
   framed as `len(tab_id) · tab_id · bytes`. The base64 JSON `pty-output`

@@ -294,13 +294,16 @@ just lint-desktop                           # frontend test + build, then clippy
 ## PTY output & perf invariants
 
 - `pty_output.rs`: every reader (`RawLocalPty`, `RawRemotePty`) sends `OutMsg::Data` / `Exit` to a per-tab
-  `OutputBatcher`; its emitter thread (`spawn_emitter`) ships ≤ `BATCH_WINDOW` (8 ms) / ≤
-  `BATCH_MAX_BYTES` (64 KB) batches through `PtyOutputSink` (Tauri-managed state) — a raw
-  `Channel<InvokeResponseBody>` the frontend registers once via `register_pty_output_channel`
-  (frame = `len(tab_id) as u8 · tab_id · bytes`, `encode_frame` ↔ `pty-frame.ts decodePtyFrame`) —
-  with the base64 `pty-output` event as the fallback. **Coalescing contract** (unit-tested with a fake
-  reader): first byte of a batch waits ≤ 8 ms, a batch never exceeds 64 KB unless one read did, bytes stay
-  in order, `pty-exit` is emitted by the emitter AFTER the last batch — never emit output or exit straight
+  `OutputBatcher`; its emitter thread (`spawn_emitter`) ships adaptive batches through `PtyOutputSink`
+  (Tauri-managed state) — a raw `Channel<InvokeResponseBody>` the frontend registers once via
+  `register_pty_output_channel` (frame = `len(tab_id) as u8 · tab_id · bytes`, `encode_frame` ↔
+  `pty-frame.ts decodePtyFrame`) — with the base64 `pty-output` event as the fallback. Batching bounds
+  the *message rate*, not the byte volume: Tauri delivers each channel message via a `webview.eval` on
+  the GTK main thread, so per-message cost dominates. **Coalescing contract** (unit-tested with a fake
+  reader): the first chunk after a quiet gap ships within `BATCH_LEAD_WINDOW` (2 ms — keystroke echo);
+  sustained output coalesces to ≤ one message per `BATCH_WINDOW` (33 ms, ~30 fps, TUI render-cap parity)
+  or `BATCH_MAX_BYTES` (64 KB); a batch never exceeds 64 KB unless one read did; bytes stay in order;
+  `pty-exit` is emitted by the emitter AFTER the last batch — never emit output or exit straight
   from a reader thread. Structured events (`pty-shell-event`, `pty-agent-event`) stay Tauri events.
 - Frontend: base64 (`decodeBase64Bytes`, indexed loop — never `Uint8Array.from(atob(), cb)`) is only the
   fallback. `terminal-panel.ts deliverOutput` is the ONE entry for bytes: feeds xterm when
