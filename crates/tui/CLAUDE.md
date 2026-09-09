@@ -102,7 +102,11 @@ Conventions:
 - Render functions are pure: `fn(frame, area, &App)` — no side effects.
 - Use `StatefulWidget` when a widget needs scroll state or selection.
 - Prefer `Line::from(vec![spans...])` for styled text.
-- Use `clear_popup()` + `popup_block()` for overlay dialogs.
+- Use `clear_popup()` + `popup_block()` for overlay dialogs. A dialog listing an unbounded number of
+  rows must clamp its popup to the screen height and auto-scroll the `Paragraph` so the selected row
+  stays visible (plus a `[n/total]` bottom-title indicator when it overflows) — see the PR picker and
+  the load-existing-worktree renderers in `ui/dialogs/workspace.rs` for the pattern; an unscrolled list
+  pins the view to the first rows and the cursor walks off-screen.
 - Snapshot test new UI with `insta::assert_snapshot!` using `TestBackend` (tests in `ui/mod.rs`, snapshots in `ui/snapshots/`).
 - Mouse hit-testing: store `Rect` areas on `App`, check in `mouse.rs`.
 - Footer hints: context-sensitive per `AppMode`; cache key must reflect state transitions.

@@ -120,7 +120,10 @@ just lint-desktop                           # frontend test + build, then clippy
   (`TabShellState.title`, frontend only) > `provider.label()`); dblclick or menu → `beginInlineRename()`
   turns the label into an `.ws-tab-rename` input (Enter commits, Esc cancels, blur commits, empty clears;
   targets the ACTIVE pane's content via `activeContentId(wt)`; `renderWorkspaceTabBar` skips a refresh
-  while the input exists). Commits via `appState.renameTab()` + `ipc.renameTab()`. Status bar, pane
+  while the input exists, and `beginInlineRename` re-resolves the live chip by `data-ws-tab-id` when the
+  captured element went stale — the strip re-renders continuously, so a chip captured at render time or
+  menu-open time may be detached by the time the rename runs). Commits via `appState.renameTab()` +
+  `ipc.renameTab()`. Status bar, pane
   header and dashboard also use `getTabLabel()`; the Agents panel keeps the backend label.
 - **Move**: `moveWsTabToWorkspace(wsIdx, wsTabIdx)` (and `moveActiveWsTabToWorkspace()` for menu bar +
   palette) is the ONLY move path: `createDropdown` inside `showConfirm` picks the target, `ipc.moveTab`
@@ -145,7 +148,12 @@ just lint-desktop                           # frontend test + build, then clippy
   `showAgentManager(idx)` for THAT row's workspace. Per-row agent rollup glyph (collapsed worktree
   families aggregate hidden children by `family_key` / `source_repo`) via `types.ts::agentStatusSeverity`
   / `actionableStatusView` (mirrors of `piki_core::cli_agent::status_severity` and the TUI's
-  `actionable_status_view` — change all together).
+  `actionable_status_view` — change all together). Every row starts with a fixed-width
+  `.workspace-gutter` (chevron on a worktree parent — the whole slot toggles collapse —, the pulse dot
+  on the active row, empty otherwise) so labels align whatever the row kind; a clone's branch renders as
+  a separate muted `.workspace-branch` span (`rowParts`), never glued to the name, and `.grouped`
+  children indent one step past the parent's gutter. Don't reintroduce a leading element that only some
+  rows have — it un-aligns the list.
 - `workspace-switcher.ts` ranks with the pure `mru.ts` (`mruBump` / `mruRank` / `rankItems`) over the
   `workspaceMru` settings list that `appState.setActiveWorkspace` bumps (the single choke point for
   switches); rows show `statusGlyph` (agent rollup or dirty git).
@@ -174,7 +182,9 @@ just lint-desktop                           # frontend test + build, then clippy
 - `appState.agentRows` (+ `agentRowsFetchedAt`, event `agent-rows-changed`) is the ONE store for
   `list_agent_rows`: `startAgentRowsSync()` in `agents-panel.ts` (called once from `main.ts`) does the
   debounced fetch, and `setAgentRows` seeds per-tab shell state so a daemon-restored tab shows its dot;
-  never fetch rows from a component. Consumers: Agents panel, `workspace-list.ts` rollup, `status-bar.ts`
+  never fetch rows from a component. `setAgentRows` skips the `agent-rows-changed` emit when the rows
+  are unchanged modulo `elapsed_secs` (`agent-attention.ts agentRowsEquivalent`) — elapsed advances on
+  every fetch and ticks in place, so a refresh that only moved it must not rebuild the panels. Consumers: Agents panel, `workspace-list.ts` rollup, `status-bar.ts`
   `● N need you` segment, `activity-bar.ts` amber badge on the Explorer icon, and `jumpToAttention()`
   (`Alt+A`, palette, Agents menu) built on the pure `agent-attention.ts` (`attentionRows`,
   `pickAttentionTarget` — severity order + cyclic walk —, `liveElapsedSecs`).
@@ -185,6 +195,12 @@ just lint-desktop                           # frontend test + build, then clippy
   height resizable via `#agents-resize-h` in `sidebar.ts` (32px–75% of the sidebar, persisted as
   `settings.agentsPanelHeight`); rows are a keyboard `listbox` (Tab in, ↑/↓/Home/End, Enter/click →
   `jumpToAgentRow`; focus survives re-renders by `data-tab-id`); labels are `DesktopTab::display_label()`.
+  Below the rows, an `External (N)` section lists agent processes running outside piki
+  (`piki_core::external_agents::scan_external_agents` over `/proc`, polled every 2 s: trees by ppid,
+  workspace by longest cwd prefix, `Outside` otherwise) — display-only except a ▶ that opens a terminal
+  at the process's cwd. The scanner's `is_noise_cmdline` filters matches that aren't CLI agents (the
+  Claude Desktop app, any Electron `--type=…` helper, `--chrome-native*` messaging hosts) — extend it
+  there if another app's processes ever pollute the list.
 
 ## Sessions (persistent-session daemon)
 
@@ -295,7 +311,15 @@ just lint-desktop                           # frontend test + build, then clippy
   `active-workspace-changed` and RECONCILES (`reconcileNode`: elements reused by `data-pane-id`,
   `patchLeaf` swaps content / exited header in place, retired elements go through
   `detachPanelElements` so their panels land in `#pane-holding`). `active-tab-changed` / `tabs-changed`
-  only refresh the tab strip (+ pane titles); `active-pane-changed` toggles `.active` and
+  only refresh the tab strip (+ pane titles); status churn (`tab-shell-state-changed`,
+  `agent-rows-changed`, `workspace-attention-changed`) PATCHES the strip in place instead
+  (`tab-bar.ts patchWorkspaceTabBar`: label text, agent dot, dead mark, tooltip; falls back to the full
+  render only when the tab set changed) — those events fire several times a second while an agent
+  streams, and a full rebuild that often flickers and destroys the chip a click/dblclick is mid-flight
+  on, so the event never lands. `refreshPaneTitles` skips no-op innerHTML writes for the same reason,
+  and `appState.setActiveWsTab` no-ops (re-emits only `active-pane-changed` to refocus) when the tab is
+  already active, so a double-click's first click can't rebuild the strip under the dblclick.
+  `active-pane-changed` toggles `.active` and
   `focusActivePane()`. A new emitter that changes the tree MUST emit `pane-tree-changed`; nothing else
   may trigger a render. `mountTab(tab, host, wsIdx, { focus })` — only the active pane's content gets
   `focus: true` (`shouldFocusOnMount`); `mountTerminalInto` calls `ipc.resyncPty` only on the FIRST mount

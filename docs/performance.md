@@ -216,6 +216,17 @@ that showed up in the audit; the invariants below are enforced in code
   every frame of a divider drag, but the `resizePty` IPC is skipped when the
   grid is unchanged and otherwise coalesced to one call per instance per
   animation frame; the divider's mouseup flushes the exact final size.
+- **Status churn patches, never rebuilds.** Agent events and ticking OSC
+  titles arrive several times a second while an agent streams. A full
+  `innerHTML` rebuild that often flickers and destroys the element a click
+  (or a double-click's second half) is mid-flight on, so the event never
+  lands. Hence: the tab strip is patched in place on status events
+  (`patchWorkspaceTabBar` — label text, agent dot, dead mark; full render
+  only when the tab set changed), `setAgentRows` skips its
+  `agent-rows-changed` emit when the rows are unchanged modulo
+  `elapsed_secs` (the elapsed labels tick in place), pane titles skip
+  no-op `innerHTML` writes, and `setActiveWsTab` no-ops (refocus only)
+  when the tab is already active.
 
 ### Reproducible benchmark
 
