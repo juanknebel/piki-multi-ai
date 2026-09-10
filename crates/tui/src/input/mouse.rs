@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use crossterm::event::{MouseButton, MouseEventKind};
-use ratatui::DefaultTerminal;
 
 use crate::action::Action;
 use crate::app::{self, ActivePane, ApiResponseDisplay, App, AppMode};
@@ -225,7 +224,7 @@ fn handle_code_review_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) 
 pub(crate) fn handle_mouse_event(
     app: &mut App,
     mouse: crossterm::event::MouseEvent,
-    terminal: &mut DefaultTerminal,
+    terminal: &mut ratatui::Terminal<impl ratatui::backend::Backend>,
 ) -> Option<Action> {
     // Code review locked mode — only allow scroll/click within the review
     if super::code_review_input::is_code_review_locked(app) {
@@ -844,11 +843,11 @@ mod tests {
     use crossterm::event::{KeyModifiers, MouseEvent};
     use ratatui::layout::Rect;
 
-    /// A headless terminal handle: constructing it never touches the tty,
-    /// and the wheel/click paths under test never draw or query its size.
-    fn headless_terminal() -> ratatui::DefaultTerminal {
-        ratatui::Terminal::new(ratatui::backend::CrosstermBackend::new(std::io::stdout()))
-            .expect("headless terminal")
+    /// A headless terminal handle: `TestBackend` never touches the tty
+    /// (there is none under CI), and the wheel/click paths under test never
+    /// draw or query its size.
+    fn headless_terminal() -> ratatui::Terminal<ratatui::backend::TestBackend> {
+        ratatui::Terminal::new(ratatui::backend::TestBackend::new(80, 24)).expect("test backend")
     }
 
     fn mouse(kind: super::MouseEventKind, column: u16, row: u16) -> MouseEvent {
