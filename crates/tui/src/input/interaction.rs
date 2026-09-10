@@ -1029,11 +1029,14 @@ pub(super) fn handle_agents_interaction(app: &mut App, key: KeyEvent) -> Option<
     // Clamp: tabs can close asynchronously between renders
     if app.selected_agent_row >= rows.len() {
         app.selected_agent_row = rows.len() - 1;
+        app.reveal_agent_selection();
     }
     if app.config.matches_agents(key, "down") || app.config.matches_agents(key, "down_alt") {
         crate::input::list_nav::move_selection(&mut app.selected_agent_row, rows.len(), 1, false);
+        app.reveal_agent_selection();
     } else if app.config.matches_agents(key, "up") || app.config.matches_agents(key, "up_alt") {
         crate::input::list_nav::move_selection(&mut app.selected_agent_row, rows.len(), -1, false);
+        app.reveal_agent_selection();
     } else if app.config.matches_agents(key, "select") {
         jump_to_agent(app, rows[app.selected_agent_row]);
     }

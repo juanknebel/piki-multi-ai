@@ -351,8 +351,10 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 | Click tab | Switch to that tab |
 | Click × on tab | Close that tab (with confirmation) |
 | Click + after the tabs | Open the New Tab dialog |
-| Scroll in workspace list | Navigate workspaces up/down |
-| Scroll in agents pane | Navigate agents up/down |
+| Scroll in workspace list | Scroll the list viewport (selection — and workspace — never move) |
+| Scroll in agents pane | Scroll the pane viewport (selection never moves) |
+| Click in workspace list / agents pane | Perform the row action and focus that pane |
+| Click on subtab | Switch tab and focus the main panel |
 | Scroll in main panel | Scroll terminal scrollback/markdown (includes inline-TUI transcripts like Codex); forwarded as escape sequences to alt-screen TUI apps |
 | Scroll in Help overlay | Scroll overlay content |
 | Scroll in fuzzy search | Navigate results |

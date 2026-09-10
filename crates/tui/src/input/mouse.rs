@@ -353,9 +353,15 @@ pub(crate) fn handle_mouse_event(
             AppMode::Normal | AppMode::InlineEdit => {
                 let api_resp_area = app.api_response_inner_area;
                 if rect_contains(app.ws_list_area, col, row) {
-                    app.select_prev_sidebar_row();
+                    // The wheel scrolls the viewport only — the selection
+                    // (and the workspace it points at) never moves under it.
+                    let visible = app.ws_list_area.height.saturating_sub(2) as usize;
+                    let max = app.sidebar_visual_rows().len().saturating_sub(visible);
+                    app.sidebar_scroll = app.sidebar_scroll.saturating_sub(3).min(max);
                 } else if rect_contains(app.agents_area, col, row) {
-                    app.selected_agent_row = app.selected_agent_row.saturating_sub(1);
+                    let visible = app.agents_area.height.saturating_sub(2) as usize;
+                    let max = app.agent_rows().len().saturating_sub(visible);
+                    app.agents_scroll = app.agents_scroll.saturating_sub(3).min(max);
                 } else if rect_contains(app.main_content_area, col, row)
                     && !try_forward_scroll_to_pty(app, col, row, 64)
                     && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
@@ -420,12 +426,13 @@ pub(crate) fn handle_mouse_event(
             AppMode::Normal | AppMode::InlineEdit => {
                 let api_resp_area = app.api_response_inner_area;
                 if rect_contains(app.ws_list_area, col, row) {
-                    app.select_next_sidebar_row();
+                    let visible = app.ws_list_area.height.saturating_sub(2) as usize;
+                    let max = app.sidebar_visual_rows().len().saturating_sub(visible);
+                    app.sidebar_scroll = (app.sidebar_scroll + 3).min(max);
                 } else if rect_contains(app.agents_area, col, row) {
-                    let total = app.agent_rows().len();
-                    if total > 0 && app.selected_agent_row + 1 < total {
-                        app.selected_agent_row += 1;
-                    }
+                    let visible = app.agents_area.height.saturating_sub(2) as usize;
+                    let max = app.agent_rows().len().saturating_sub(visible);
+                    app.agents_scroll = (app.agents_scroll + 3).min(max);
                 } else if rect_contains(app.main_content_area, col, row)
                     && !try_forward_scroll_to_pty(app, col, row, 65)
                     && let Some(ws) = app.workspaces.get_mut(app.active_workspace)
@@ -571,6 +578,7 @@ pub(crate) fn handle_mouse_event(
                             if let Some(ws) = app.current_workspace_mut() {
                                 ws.active_tab = idx;
                             }
+                            app.active_pane = ActivePane::MainPanel;
                         }
                         Some(SubtabHit::NewTab) => {
                             let _ = super::app_actions::open_new_tab(app);
@@ -578,10 +586,10 @@ pub(crate) fn handle_mouse_event(
                         None => {}
                     }
                 }
-                // Click on workspace list. The sidebar panes are action-only:
-                // a click performs the action (switch workspace / toggle group)
-                // and focus always lands on the main panel — never the list. An
-                // empty click just focuses the main panel and does nothing else.
+                // Click on workspace list: the click performs the action
+                // (switch workspace / toggle group) and focus lands on the
+                // list itself — click-to-focus everywhere. An empty click
+                // just focuses the list and does nothing else.
                 else if rect_contains(app.ws_list_area, col, row) {
                     let inner_y = app.ws_list_area.y + 1;
                     if row >= inner_y {
@@ -589,17 +597,8 @@ pub(crate) fn handle_mouse_event(
                         let visual_rows = app.sidebar_visual_rows();
                         // Rows are one line tall; mirror the render's derived scroll
                         // (walking visual_rows, which may include blank separators).
-                        let visible = app.ws_list_area.height.saturating_sub(2) as usize;
-                        let selected_visual = visual_rows
-                            .iter()
-                            .position(|r| *r == Some(app.selected_sidebar_row))
-                            .unwrap_or(0);
-                        let scroll_offset = if visible > 0 && selected_visual >= visible {
-                            selected_visual + 1 - visible
-                        } else {
-                            0
-                        };
-                        let clicked_visual = (row - inner_y) as usize + scroll_offset;
+                        // Rows are one line tall; mirror the render's viewport.
+                        let clicked_visual = (row - inner_y) as usize + app.sidebar_viewport();
                         if let Some(clicked) = visual_rows.get(clicked_visual).copied().flatten()
                             && let Some(item) = sidebar_items.get(clicked)
                         {
@@ -647,17 +646,17 @@ pub(crate) fn handle_mouse_event(
                             }
                         }
                     }
-                    app.active_pane = ActivePane::MainPanel;
+                    app.active_pane = ActivePane::WorkspaceList;
                 }
-                // Click on the Agents pane — jump to the agent, or just focus
-                // the main panel on an empty click. Focus never stays here.
+                // Click on the Agents pane — jump to the agent on a row, or
+                // just focus the pane on an empty click.
                 else if rect_contains(app.agents_area, col, row) {
                     if let Some(clicked) = app.agent_row_at(row) {
                         app.selected_agent_row = clicked;
                         let target = app.agent_rows()[clicked];
                         super::interaction::jump_to_agent(app, target);
                     }
-                    app.active_pane = ActivePane::MainPanel;
+                    app.active_pane = ActivePane::Agents;
                 }
                 // Click on main panel — start text selection
                 else if rect_contains(app.main_content_area, col, row) {
@@ -839,7 +838,97 @@ fn extract_text_from_lines(
 
 #[cfg(test)]
 mod tests {
-    use super::{PtyScrollRoute, pty_scroll_route};
+    use super::{ActivePane, AppMode};
+    use super::{PtyScrollRoute, handle_mouse_event, pty_scroll_route};
+    use crate::test_support::{add_test_workspace, test_app};
+    use crossterm::event::{KeyModifiers, MouseEvent};
+    use ratatui::layout::Rect;
+
+    /// A headless terminal handle: constructing it never touches the tty,
+    /// and the wheel/click paths under test never draw or query its size.
+    fn headless_terminal() -> ratatui::DefaultTerminal {
+        ratatui::Terminal::new(ratatui::backend::CrosstermBackend::new(std::io::stdout()))
+            .expect("headless terminal")
+    }
+
+    fn mouse(kind: super::MouseEventKind, column: u16, row: u16) -> MouseEvent {
+        MouseEvent {
+            kind,
+            column,
+            row,
+            modifiers: KeyModifiers::empty(),
+        }
+    }
+
+    /// The wheel scrolls the workspace-list viewport — it must not move the
+    /// selection, and above all must not switch workspaces.
+    #[test]
+    fn wheel_over_workspace_list_scrolls_viewport_not_selection() {
+        let mut app = test_app();
+        for _ in 0..5 {
+            add_test_workspace(&mut app);
+        }
+        app.mode = AppMode::Normal;
+        app.ws_list_area = Rect::new(0, 0, 30, 5);
+
+        handle_mouse_event(
+            &mut app,
+            mouse(super::MouseEventKind::ScrollDown, 5, 2),
+            &mut headless_terminal(),
+        );
+
+        assert_eq!(app.sidebar_scroll, 2);
+        assert_eq!(app.selected_sidebar_row, 0);
+        assert_eq!(app.active_workspace, 0);
+
+        handle_mouse_event(
+            &mut app,
+            mouse(super::MouseEventKind::ScrollUp, 5, 2),
+            &mut headless_terminal(),
+        );
+
+        assert_eq!(app.sidebar_scroll, 0);
+        assert_eq!(app.selected_sidebar_row, 0);
+        assert_eq!(app.active_workspace, 0);
+    }
+
+    /// Clicking a workspace row still switches, but focus lands on the list.
+    #[test]
+    fn click_workspace_row_switches_and_focuses_list() {
+        let mut app = test_app();
+        add_test_workspace(&mut app);
+        add_test_workspace(&mut app);
+        app.mode = AppMode::Normal;
+        app.active_pane = ActivePane::MainPanel;
+        app.ws_list_area = Rect::new(0, 0, 30, 10);
+
+        handle_mouse_event(
+            &mut app,
+            mouse(super::MouseEventKind::Down(super::MouseButton::Left), 5, 2),
+            &mut headless_terminal(),
+        );
+
+        assert_eq!(app.active_workspace, 1);
+        assert_eq!(app.active_pane, ActivePane::WorkspaceList);
+    }
+
+    /// Clicking the Agents pane focuses it, even on an empty click.
+    #[test]
+    fn click_agents_pane_focuses_agents() {
+        let mut app = test_app();
+        add_test_workspace(&mut app);
+        app.mode = AppMode::Normal;
+        app.active_pane = ActivePane::MainPanel;
+        app.agents_area = Rect::new(0, 10, 30, 6);
+
+        handle_mouse_event(
+            &mut app,
+            mouse(super::MouseEventKind::Down(super::MouseButton::Left), 5, 11),
+            &mut headless_terminal(),
+        );
+
+        assert_eq!(app.active_pane, ActivePane::Agents);
+    }
 
     #[test]
     fn alt_screen_with_mouse_tracking_forwards_mouse_reports() {

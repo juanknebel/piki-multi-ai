@@ -928,6 +928,12 @@ pub struct App {
     pub active_dialog: Option<DialogState>,
     pub collapsed_groups: std::collections::HashSet<String>,
     pub selected_sidebar_row: usize,
+    /// Wheel-viewport offset for the workspace list (visual rows). The wheel
+    /// scrolls this without touching the selection; selection moves pull it
+    /// along via `reveal_sidebar_selection`.
+    pub sidebar_scroll: usize,
+    /// Same for the Agents pane (agent rows); see `reveal_agent_selection`.
+    pub agents_scroll: usize,
     pub status_message: Option<String>,
     /// Toast notification (replaces status_message for timed display)
     pub toast: Option<Toast>,
@@ -1165,6 +1171,8 @@ impl App {
             active_dialog: None,
             collapsed_groups: std::collections::HashSet::new(),
             selected_sidebar_row: 0,
+            sidebar_scroll: 0,
+            agents_scroll: 0,
             status_message: None,
             toast: None,
             fuzzy: None,
@@ -1445,13 +1453,7 @@ impl App {
         if row < inner_y {
             return None;
         }
-        let visible = self.agents_area.height.saturating_sub(2) as usize;
-        let selected = self.selected_agent_row.min(rows.len() - 1);
-        let scroll_offset = if visible > 0 && selected >= visible {
-            selected + 1 - visible
-        } else {
-            0
-        };
+        let scroll_offset = self.agents_viewport();
         let idx = (row - inner_y) as usize + scroll_offset;
         (idx < rows.len()).then_some(idx)
     }
@@ -1538,6 +1540,7 @@ impl App {
         };
         if let Some(idx) = self.agent_rows().iter().position(|&row| row == target) {
             self.selected_agent_row = idx;
+            self.reveal_agent_selection();
         }
     }
 
@@ -1688,9 +1691,64 @@ impl App {
     /// flip. Every sidebar row is a workspace now, so this always switches.
     fn follow_sidebar_row(&mut self, row: usize) {
         self.selected_sidebar_row = row;
+        self.reveal_sidebar_selection();
         if let Some(idx) = self.sidebar_row_to_workspace(row) {
             self.switch_workspace(idx);
         }
+    }
+
+    /// Viewport scroll that keeps `selected` visible inside `total` rows of
+    /// which `visible` fit, starting from the current `stored` wheel offset.
+    fn reveal_scroll(total: usize, visible: usize, selected: usize, stored: usize) -> usize {
+        if visible == 0 {
+            return 0;
+        }
+        let max = total.saturating_sub(visible);
+        let cur = stored.min(max);
+        if selected < cur {
+            selected
+        } else if selected >= cur + visible {
+            (selected + 1 - visible).min(max)
+        } else {
+            cur
+        }
+    }
+
+    /// Viewport offset used by the workspace-list render and mouse
+    /// hit-testing: the wheel position clamped to content.
+    pub fn sidebar_viewport(&self) -> usize {
+        let visible = self.ws_list_area.height.saturating_sub(2) as usize;
+        let max = self.sidebar_visual_rows().len().saturating_sub(visible);
+        self.sidebar_scroll.min(max)
+    }
+
+    /// Same for the Agents pane.
+    pub fn agents_viewport(&self) -> usize {
+        let visible = self.agents_area.height.saturating_sub(2) as usize;
+        let max = self.agent_rows().len().saturating_sub(visible);
+        self.agents_scroll.min(max)
+    }
+
+    /// Pull the workspace-list viewport so the selected row is visible.
+    /// Called on selection moves (keyboard, workspace switches); the wheel
+    /// deliberately does NOT call this — it scrolls freely.
+    pub fn reveal_sidebar_selection(&mut self) {
+        let rows = self.sidebar_visual_rows();
+        let visible = self.ws_list_area.height.saturating_sub(2) as usize;
+        let selected_visual = rows
+            .iter()
+            .position(|r| *r == Some(self.selected_sidebar_row))
+            .unwrap_or(0);
+        self.sidebar_scroll =
+            Self::reveal_scroll(rows.len(), visible, selected_visual, self.sidebar_scroll);
+    }
+
+    /// Same for the Agents pane selection.
+    pub fn reveal_agent_selection(&mut self) {
+        let total = self.agent_rows().len();
+        let visible = self.agents_area.height.saturating_sub(2) as usize;
+        let selected = self.selected_agent_row.min(total.saturating_sub(1));
+        self.agents_scroll = Self::reveal_scroll(total, visible, selected, self.agents_scroll);
     }
 
     /// If the currently selected sidebar row is collapsible (a worktree-family
@@ -1764,9 +1822,10 @@ impl App {
                 && *index == ws_idx
             {
                 self.selected_sidebar_row = i;
-                return;
+                break;
             }
         }
+        self.reveal_sidebar_selection();
     }
 
     /// Open the fuzzy file search overlay by scanning all files in the active worktree.
@@ -2575,10 +2634,12 @@ mod tests {
         for n in 0..6 {
             add_agent_tab(&mut app, a, &format!("Agent{n}"));
         }
-        // visible height = 2 (height 4 minus borders); select the last row so
-        // the render scrolls it into view (scroll_offset = 4, showing 4 & 5).
+        // visible height = 2 (height 4 minus borders); select the last row and
+        // reveal it, as the keyboard/sync paths do, so the viewport shows
+        // rows 4 & 5.
         app.agents_area = ratatui::layout::Rect::new(0, 0, 20, 4);
         app.selected_agent_row = 5;
+        app.reveal_agent_selection();
         assert_eq!(
             app.agent_row_at(1),
             Some(4),
