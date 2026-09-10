@@ -304,6 +304,7 @@ fn main() {
             commands::pty::move_tab,
             commands::pty::spawn_editor_tab,
             commands::pty::spawn_terminal_at,
+            commands::pty::spawn_home_terminal,
             commands::pty::resync_pty,
             commands::pty::register_pty_output_channel,
             commands::git::get_changed_files,

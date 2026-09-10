@@ -377,42 +377,26 @@ fn shell_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
 }
 
-/// Spawns a Shell tab whose working directory is `dir` (workspace-relative).
-/// Powers the file tree's "Open in Terminal" action. Rejects paths that
-/// escape the workspace root.
-#[tauri::command]
-pub async fn spawn_terminal_at(
+/// Spawn a Shell tab in `workspace_idx` whose PTY starts in `cwd` (an
+/// absolute directory). Shared tail of `spawn_terminal_at` and
+/// `spawn_home_terminal`.
+fn spawn_shell_tab_at(
     app_handle: AppHandle,
-    state: State<'_, Mutex<DesktopApp>>,
+    state: &State<'_, Mutex<DesktopApp>>,
     workspace_idx: usize,
-    dir: String,
+    cwd: std::path::PathBuf,
 ) -> Result<String, String> {
-    use std::path::{Component, Path};
-
-    let rel = Path::new(&dir);
-    if rel.is_absolute()
-        || rel
-            .components()
-            .any(|c| matches!(c, Component::ParentDir | Component::Prefix(_)))
-    {
-        return Err(format!("Invalid path: {dir}"));
-    }
-
     let mut tab = DesktopTab::new(AIProvider::Shell, None);
     let tab_id = tab.id.clone();
 
-    let (worktree_path, plan) = {
+    let plan = {
         let app = state.lock();
         if workspace_idx >= app.workspaces.len() {
             return Err("Workspace index out of range".to_string());
         }
-        (
-            app.workspaces[workspace_idx].info.path.clone(),
-            shell_launch_plan(&app)?,
-        )
+        shell_launch_plan(&app)?
     };
 
-    let cwd = worktree_path.join(rel);
     let pty = RawPtySession::spawn(
         app_handle,
         tab_id.clone(),
@@ -438,6 +422,61 @@ pub async fn spawn_terminal_at(
     }
 
     Ok(tab_id)
+}
+
+/// Spawns a Shell tab whose working directory is `dir`: workspace-relative
+/// (the file tree's "Open in Terminal", which may not escape the workspace
+/// root) or absolute (the Agents panel's external-agent rows, whose cwd
+/// comes from `/proc` and can point anywhere).
+#[tauri::command]
+pub async fn spawn_terminal_at(
+    app_handle: AppHandle,
+    state: State<'_, Mutex<DesktopApp>>,
+    workspace_idx: usize,
+    dir: String,
+) -> Result<String, String> {
+    use std::path::{Component, Path};
+
+    let requested = Path::new(&dir);
+    let cwd = if requested.is_absolute() {
+        if !requested.is_dir() {
+            return Err(format!("Not a directory: {dir}"));
+        }
+        requested.to_path_buf()
+    } else {
+        if requested
+            .components()
+            .any(|c| matches!(c, Component::ParentDir | Component::Prefix(_)))
+        {
+            return Err(format!("Invalid path: {dir}"));
+        }
+        let worktree_path = {
+            let app = state.lock();
+            if workspace_idx >= app.workspaces.len() {
+                return Err("Workspace index out of range".to_string());
+            }
+            app.workspaces[workspace_idx].info.path.clone()
+        };
+        worktree_path.join(requested)
+    };
+
+    spawn_shell_tab_at(app_handle, &state, workspace_idx, cwd)
+}
+
+/// Spawns a Shell tab that always starts in the user's home directory,
+/// whatever workspace hosts it — the status bar's home-terminal button.
+#[tauri::command]
+pub async fn spawn_home_terminal(
+    app_handle: AppHandle,
+    state: State<'_, Mutex<DesktopApp>>,
+    workspace_idx: usize,
+) -> Result<String, String> {
+    spawn_shell_tab_at(
+        app_handle,
+        &state,
+        workspace_idx,
+        piki_core::xdg::home_dir(),
+    )
 }
 
 #[tauri::command]

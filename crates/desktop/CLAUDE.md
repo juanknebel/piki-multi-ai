@@ -571,7 +571,8 @@ feature-specific modifiers in feature CSS; never re-declare a button/input/surfa
   markup for `innerHTML` templates (`aria-hidden` unless `label` makes it `role="img"`); `iconEl()`
   returns an `SVGElement`; `IconName` is the union of `ICONS` keys. Names: `check warning folder gear eye
   close pencil undo history refresh more dot circle chevron-right chevron-down arrow-up/down/left/right
-  branch play clock plus split-right split-down locate search`. Rules: one pencil for every edit/rename,
+  branch play clock plus split-right split-down locate search workspaces projects agents kanban api
+  browser terminal`. Rules: one pencil for every edit/rename,
   `refresh` for refresh/reload/restart, `undo` for discard/reset, `history` for "restored from the
   daemon", `dot`/`circle` for alive/exited; an icon-only button keeps `title` + `aria-label`;
   `types.ts` status views (`cliAgentStatusView`, `actionableStatusView`) return an `icon: IconName` and

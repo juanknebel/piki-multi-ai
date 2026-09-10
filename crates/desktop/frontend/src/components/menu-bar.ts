@@ -33,7 +33,7 @@ import { toggleSidebar } from "./sidebar";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getProviderLabel, type AIProvider } from "../types";
 import { getShortcutKey, formatShortcut } from "../shortcuts";
-import { openProvider } from "./open-content";
+import { openHomeTerminal, openProvider } from "./open-content";
 import { revealInFileTree, toggleFileTreeAutoReveal } from "./file-tree";
 import { getCodeEditorFilePath } from "./code-editor-panel";
 import { getMarkdownEditorFilePath } from "./markdown-editor-panel";
@@ -84,6 +84,7 @@ const MENUS: MenuDefinition[] = [
           ),
           { label: "Web Preview", shortcut: getShortcutKey("web-preview"), action: () => spawnTab("WebPreview") },
           { label: "Kanban Board", shortcut: getShortcutKey("kanban"), action: () => spawnTab("Kanban") },
+          { label: "Terminal at Home (~)", action: () => void openHomeTerminal() },
         ],
       },
       SEP,

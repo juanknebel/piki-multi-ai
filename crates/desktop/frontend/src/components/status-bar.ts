@@ -8,6 +8,7 @@ import { getShortcutKey } from "../shortcuts";
 import { branchLabel } from "../labels";
 import { icon } from "./icons";
 import { openBranchPicker } from "./dialogs/branch-picker";
+import { openHomeTerminal } from "./open-content";
 import * as ipc from "../ipc";
 
 const STAGED_STATUSES: FileStatus[] = ["Staged", "Added", "Renamed", "StagedModified"];
@@ -138,6 +139,16 @@ export function renderStatusBar(container: HTMLElement) {
     if (appState.sysinfo) {
       addItem(bar, "sysinfo", appState.sysinfo);
     }
+
+    // Home terminal — opens a Shell tab that starts at ~, whatever
+    // workspace is active. The one action button; sits at the corner.
+    const homeTerm = document.createElement("div");
+    homeTerm.className = "status-item clickable status-home-term";
+    homeTerm.dataset.seg = "home-term";
+    homeTerm.innerHTML = icon("terminal", { label: "Open terminal at home" });
+    homeTerm.title = "Open a terminal at ~ (home directory)";
+    homeTerm.addEventListener("click", () => void openHomeTerminal());
+    bar.appendChild(homeTerm);
 
     morphChildren(container, bar);
   }

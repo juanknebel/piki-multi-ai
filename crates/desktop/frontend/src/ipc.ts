@@ -131,6 +131,11 @@ export function spawnTerminalAt(
   return invoke("spawn_terminal_at", { workspaceIdx, dir });
 }
 
+/** Shell tab that always starts at the user's home directory. */
+export function spawnHomeTerminal(workspaceIdx: number): Promise<string> {
+  return invoke("spawn_home_terminal", { workspaceIdx });
+}
+
 export function writePty(tabId: string, data: string): Promise<void> {
   return invoke("write_pty", { tabId, data });
 }

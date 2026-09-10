@@ -32,7 +32,7 @@ import { showSessionsDialog } from "./dialogs/sessions-dialog";
 import { jumpToAttention } from "./agents-panel";
 import { showAboutDialog } from "./dialogs/about-dialog";
 import { getProviderLabel, type AIProvider } from "../types";
-import { openProvider } from "./open-content";
+import { openHomeTerminal, openProvider } from "./open-content";
 import { toggleSidebar } from "./sidebar";
 import { addContextToChat, toggleChatPanel } from "./chat-panel";
 import { closeActiveWsTab, moveActiveWsTabToWorkspace, tearDownAndClosePane } from "./tab-bar";
@@ -278,6 +278,15 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
     category: "Tab",
     keybinding: getShortcutKey("web-preview"),
     action: () => void openProvider("WebPreview"),
+  });
+
+  // Shell that starts at ~ instead of the workspace root (also the
+  // status-bar terminal button).
+  cmds.push({
+    id: "tab-home-terminal",
+    label: "New Terminal at Home (~)",
+    category: "Tab",
+    action: () => void openHomeTerminal(),
   });
 
   // Pane layout commands
