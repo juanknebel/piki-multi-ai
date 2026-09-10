@@ -3,7 +3,7 @@ members = ["crates/core", "crates/tui", "crates/api-client", "crates/agent", "cr
 resolver = "3"
 
 [workspace.package]
-version = "3.0.0-beta"
+version = "3.0.0"
 
 # vt100 fork with two patches, now maintained at
 # https://github.com/juanknebel/piki-vt100 (extracted from vendor/vt100):
