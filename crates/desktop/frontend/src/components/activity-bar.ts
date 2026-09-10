@@ -60,17 +60,32 @@ export function renderActivityBar(container: HTMLElement) {
     container.appendChild(item);
   });
 
-  // Badge for source control (change count)
+  // Badge for source control: change count, plus ↑N when local commits
+  // haven't been pushed (aheadBehind refreshes together with changedFiles,
+  // so `files-changed` covers both).
   const gitBtn = buttons.get("git")!;
   const badge = document.createElement("span");
   badge.className = "activity-badge";
   badge.style.display = "none";
   gitBtn.appendChild(badge);
 
+  const cap = (n: number) => (n > 99 ? "99+" : String(n));
+
   function updateBadge() {
-    const count = appState.activeWs?.changedFiles.length ?? 0;
-    if (count > 0) {
-      badge.textContent = count > 99 ? "99+" : String(count);
+    const ws = appState.activeWs;
+    const count = ws?.changedFiles.length ?? 0;
+    const ahead = ws?.aheadBehind?.[0] ?? 0;
+    if (count > 0 || ahead > 0) {
+      const parts: string[] = [];
+      if (count > 0) parts.push(cap(count));
+      if (ahead > 0) parts.push(`↑${cap(ahead)}`);
+      badge.textContent = parts.join(" ");
+      badge.title = [
+        count > 0 ? `${count} change${count === 1 ? "" : "s"}` : "",
+        ahead > 0 ? `${ahead} commit${ahead === 1 ? "" : "s"} to push` : "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
       badge.style.display = "";
     } else {
       badge.style.display = "none";
