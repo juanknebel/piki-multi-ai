@@ -130,7 +130,7 @@
 }
 
 .palette-footer-status.indexing {
-  animation: pulse var(--dur-pulse) ease-in-out infinite;
+  animation: pulse var(--dur-pulse) step-end infinite;
 }
 
 .palette-group-header {

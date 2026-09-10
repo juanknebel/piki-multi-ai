@@ -48,6 +48,23 @@ export interface DirEntry {
   mtime: number;
 }
 
+/** Mirror of piki_core::projects::Project (commands/projects.rs). A project
+ *  is a cross-cutting label with a colour; members reference workspaces or
+ *  plain directories by path — which one a member is gets resolved against
+ *  the live workspace list at render time. */
+export interface Project {
+  id: number | null;
+  name: string;
+  /** Index into the 10-entry palette (var(--project-swatch-{color+1})). */
+  color: number;
+  order: number;
+  members: ProjectMember[];
+}
+
+export interface ProjectMember {
+  path: string;
+}
+
 export interface WorkspaceInfo {
   name: string;
   description: string;

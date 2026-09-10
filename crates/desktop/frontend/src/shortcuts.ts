@@ -78,19 +78,25 @@ export const CATEGORY_ORDER = [
 
 // Actions are bound later by main.ts via bindAction().
 // `terminalCapture: true` = fires even while a terminal/input/editor has
-// focus; everything else is outside-only. The pane ops stay outside-only on
-// purpose so a chord typed at a shell never rearranges the layout.
+// focus; everything else is outside-only. Almost every action carries a
+// terminal-safe chord and captures — the app is used with a shell focused
+// most of the time. Deliberately outside-only: Settings (`Ctrl+,` is the
+// universal key; the palette reaches it from a shell) and the bare-Ctrl
+// zoom trio (their Ctrl+Shift twins capture).
 const shortcuts: ShortcutDef[] = [
-  { id: "command-palette", label: "Command Palette", category: "General", defaultKey: "Ctrl+P", key: "Ctrl+P", action: () => {} },
-  { id: "new-workspace", label: "New Workspace", category: "General", defaultKey: "Ctrl+N", key: "Ctrl+N", action: () => {} },
-  { id: "workspace-switcher", label: "Workspace Switcher", category: "General", defaultKey: "Ctrl+Space", key: "Ctrl+Space", action: () => {} },
+  // Palette and switcher are the two "reach anything" entries, so they carry
+  // terminal-safe chords and capture from a focused shell (Ctrl+P/Ctrl+Space
+  // were outside-only: bare Ctrl combos are real terminal keystrokes).
+  { id: "command-palette", label: "Command Palette", category: "General", defaultKey: "Ctrl+Shift+P", key: "Ctrl+Shift+P", action: () => {}, terminalCapture: true },
+  { id: "new-workspace", label: "New Workspace", category: "General", defaultKey: "Alt+N", key: "Alt+N", action: () => {}, terminalCapture: true },
+  { id: "workspace-switcher", label: "Workspace Switcher", category: "General", defaultKey: "Alt+W", key: "Alt+W", action: () => {}, terminalCapture: true },
   { id: "dashboard", label: "Dashboard", category: "General", defaultKey: "Alt+D", key: "Alt+D", action: () => {}, terminalCapture: true },
   { id: "help", label: "Keyboard Shortcuts", category: "General", defaultKey: "?", key: "?", action: () => {} },
   // Ctrl+, is the settings key everywhere else (VS Code, GNOME, macOS ⌘+,);
   // bare Ctrl is not terminal-safe so it stays outside-only — the palette,
   // and the Edit menu reach the same dialog from a focused shell.
   { id: "settings", label: "Settings", category: "General", defaultKey: "Ctrl+,", key: "Ctrl+,", action: () => {} },
-  { id: "toggle-sidebar", label: "Toggle Sidebar", category: "View & Panels", defaultKey: "Ctrl+B", key: "Ctrl+B", action: () => {} },
+  { id: "toggle-sidebar", label: "Toggle Sidebar", category: "View & Panels", defaultKey: "Alt+S", key: "Alt+S", action: () => {}, terminalCapture: true },
   { id: "toggle-chat", label: "Toggle AI Chat", category: "Chat", defaultKey: "Ctrl+Shift+L", key: "Ctrl+Shift+L", action: () => {}, terminalCapture: true },
   // chat-panel.ts addContextToChat(): a terminal selection goes straight into
   // the composer (select + this chord = two keys), otherwise a chooser opens.
@@ -111,23 +117,26 @@ const shortcuts: ShortcutDef[] = [
   { id: "zoom-in-terminal", label: "Zoom In (terminal-safe)", category: "View & Panels", defaultKey: "Ctrl+Shift+=", key: "Ctrl+Shift+=", action: () => {}, terminalCapture: true },
   { id: "zoom-out-terminal", label: "Zoom Out (terminal-safe)", category: "View & Panels", defaultKey: "Ctrl+Shift+-", key: "Ctrl+Shift+-", action: () => {}, terminalCapture: true },
   { id: "zoom-reset-terminal", label: "Reset Zoom (terminal-safe)", category: "View & Panels", defaultKey: "Ctrl+Shift+0", key: "Ctrl+Shift+0", action: () => {}, terminalCapture: true },
-  { id: "fuzzy-search", label: "Find File", category: "Search", defaultKey: "Ctrl+F", key: "Ctrl+F", action: () => {} },
+  { id: "fuzzy-search", label: "Find File", category: "Search", defaultKey: "Alt+F", key: "Alt+F", action: () => {}, terminalCapture: true },
   { id: "project-search", label: "Search in Project", category: "Search", defaultKey: "Ctrl+Shift+F", key: "Ctrl+Shift+F", action: () => {}, terminalCapture: true },
   { id: "terminal-search", label: "Search in Terminal", category: "Search", defaultKey: "Ctrl+Shift+B", key: "Ctrl+Shift+B", action: () => {}, terminalCapture: true },
-  { id: "api-jq-filter", label: "API jq Filter", category: "Search", defaultKey: "Ctrl+J", key: "Ctrl+J", action: () => {} },
-  { id: "merge-rebase", label: "Merge / Rebase", category: "Git", defaultKey: "Ctrl+M", key: "Ctrl+M", action: () => {} },
+  { id: "api-jq-filter", label: "API jq Filter", category: "Search", defaultKey: "Alt+J", key: "Alt+J", action: () => {}, terminalCapture: true },
+  { id: "merge-rebase", label: "Merge / Rebase", category: "Git", defaultKey: "Alt+M", key: "Alt+M", action: () => {}, terminalCapture: true },
   { id: "switch-branch", label: "Switch Branch", category: "Git", defaultKey: "Alt+B", key: "Alt+B", action: () => {}, terminalCapture: true },
   { id: "git-log", label: "Git Log", category: "Git", defaultKey: "Alt+L", key: "Alt+L", action: () => {}, terminalCapture: true },
   { id: "git-stash", label: "Git Stash", category: "Git", defaultKey: "Ctrl+Shift+S", key: "Ctrl+Shift+S", action: () => {}, terminalCapture: true },
-  { id: "undo", label: "Undo Stage/Unstage", category: "Git", defaultKey: "Ctrl+Z", key: "Ctrl+Z", action: () => {} },
+  { id: "undo", label: "Undo Stage/Unstage", category: "Git", defaultKey: "Alt+Z", key: "Alt+Z", action: () => {}, terminalCapture: true },
   { id: "code-review", label: "Code Review (PR)", category: "Git", defaultKey: "Ctrl+Shift+R", key: "Ctrl+Shift+R", action: () => {}, terminalCapture: true },
   { id: "agent-manager", label: "Manage Agents", category: "Agents", defaultKey: "Ctrl+Shift+A", key: "Ctrl+Shift+A", action: () => {}, terminalCapture: true },
   { id: "dispatch-agent", label: "Dispatch Agent", category: "Agents", defaultKey: "Ctrl+Shift+D", key: "Ctrl+Shift+D", action: () => {}, terminalCapture: true },
   { id: "jump-attention", label: "Jump to Agent Needing Attention", category: "Agents", defaultKey: "Alt+A", key: "Alt+A", action: () => {}, terminalCapture: true },
-  { id: "new-tab", label: "New Blank Tab", category: "Panes & Tabs", defaultKey: "Ctrl+T", key: "Ctrl+T", action: () => {} },
-  { id: "split-right", label: "Split Pane Right", category: "Panes & Tabs", defaultKey: "Ctrl+\\", key: "Ctrl+\\", action: () => {} },
-  { id: "split-down", label: "Split Pane Down", category: "Panes & Tabs", defaultKey: "Ctrl+Shift+\\", key: "Ctrl+Shift+\\", action: () => {} },
-  { id: "close-pane", label: "Close Active Pane", category: "Panes & Tabs", defaultKey: "Ctrl+Shift+Q", key: "Ctrl+Shift+Q", action: () => {} },
+  // Pane/tab ops capture too (asked for explicitly): letter chords instead of
+  // `\`-based ones, whose Shift/AltGr behaviour varies by keyboard layout.
+  // Close still walks the teardown confirm for anything running.
+  { id: "new-tab", label: "New Blank Tab", category: "Panes & Tabs", defaultKey: "Ctrl+Shift+T", key: "Ctrl+Shift+T", action: () => {}, terminalCapture: true },
+  { id: "split-right", label: "Split Pane Right", category: "Panes & Tabs", defaultKey: "Alt+Shift+R", key: "Alt+Shift+R", action: () => {}, terminalCapture: true },
+  { id: "split-down", label: "Split Pane Down", category: "Panes & Tabs", defaultKey: "Alt+Shift+D", key: "Alt+Shift+D", action: () => {}, terminalCapture: true },
+  { id: "close-pane", label: "Close Active Pane", category: "Panes & Tabs", defaultKey: "Ctrl+Shift+Q", key: "Ctrl+Shift+Q", action: () => {}, terminalCapture: true },
   // literal-next.ts: the NEXT keydown bypasses every app shortcut and reaches
   // the terminal as bytes (type Alt+B into readline although it is Switch
   // Branch here). Terminal-safe by construction, it has to capture in one.

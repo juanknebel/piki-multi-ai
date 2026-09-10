@@ -102,7 +102,7 @@ Three panes: `WorkspaceList` (top-left), `Agents` (bottom-left — every running
 Use `flow-cli` to manage the project kanban board. Always set the env var:
 
 ```bash
-export FLOW_BOARD_PATH=/home/zero/git/agent-multi/.board
+export FLOW_BOARD_PATH=/home/zero/git/piki/piki-multi-ai/.board
 ```
 
 Common commands:

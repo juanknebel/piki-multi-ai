@@ -239,18 +239,10 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
         }
     }
 
-    // All rows are one line tall; scroll follows the selection's position in
-    // `visual_rows` (which may include blank separators sidebar_items() doesn't).
+    // All rows are one line tall; the wheel scrolls the viewport freely and
+    // selection moves pull it along (see `reveal_sidebar_selection`).
     let visible_height = area.height.saturating_sub(2) as usize;
-    let selected_visual = visual_rows
-        .iter()
-        .position(|r| *r == Some(app.selected_sidebar_row))
-        .unwrap_or(0);
-    let scroll_offset = if visible_height > 0 && selected_visual >= visible_height {
-        selected_visual + 1 - visible_height
-    } else {
-        0
-    };
+    let scroll_offset = app.sidebar_viewport();
 
     let items: Vec<ListItem> = visual_rows
         .iter()
@@ -497,11 +489,7 @@ pub(super) fn render_agents_pane(frame: &mut Frame, area: Rect, app: &App) {
 
     let selected = app.selected_agent_row.min(rows.len() - 1);
     let visible_height = area.height.saturating_sub(2) as usize;
-    let scroll_offset = if selected >= visible_height {
-        selected + 1 - visible_height
-    } else {
-        0
-    };
+    let scroll_offset = app.agents_viewport();
 
     let items: Vec<ListItem> = rows
         .iter()

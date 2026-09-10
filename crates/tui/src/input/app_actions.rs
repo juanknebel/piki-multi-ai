@@ -114,6 +114,26 @@ pub(crate) fn open_sessions(app: &mut App) -> Option<Action> {
     Some(Action::LoadSessions)
 }
 
+pub(crate) fn open_projects(app: &mut App) -> Option<Action> {
+    // Loaded from storage here, at open time — renders must stay pure. The
+    // list also reloads through this function after every save/delete and
+    // when the edit sub-dialog backs out.
+    let projects = app
+        .storage
+        .projects
+        .as_ref()
+        .map(|s| s.list_projects())
+        .unwrap_or_default();
+    app.active_dialog = Some(DialogState::Projects {
+        projects,
+        selected: 0,
+        expanded: std::collections::HashSet::new(),
+        scroll_offset: 0,
+    });
+    app.mode = AppMode::Projects;
+    None
+}
+
 pub(crate) fn open_logs(app: &mut App) -> Option<Action> {
     app.active_dialog = Some(DialogState::Logs {
         scroll: u16::MAX,

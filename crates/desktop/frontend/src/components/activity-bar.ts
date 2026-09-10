@@ -1,43 +1,22 @@
 import { appState, type SidebarView } from "../state";
 import { attentionRows } from "../agent-attention";
 import { getShortcutKey } from "../shortcuts";
+import { icon, type IconName } from "./icons";
 
-const ACTIVITIES: { id: SidebarView; label: string; icon: string }[] = [
-  {
-    id: "explorer",
-    label: "Explorer",
-    icon: `<svg viewBox="0 0 24 24"><path d="M17.5 0h-9L7 1.5V6H2.5L1 7.5v15.07L2.5 24h12.07L16 22.57V18h4.7l1.3-1.43V4.5L17.5 0zm0 2.12l2.38 2.38H17.5V2.12zm-3 20.38h-12v-15H7v9.07L8.5 18h6v4.5zm6-6h-12v-15h6V6h6v10.5z"/></svg>`,
-  },
-  {
-    id: "files",
-    label: "Files",
-    icon: `<svg viewBox="0 0 24 24"><path d="M3 4.5h6l2 2.5h10v12H3z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M7 13h8M7 16h5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`,
-  },
-  {
-    id: "git",
-    label: "Source Control",
-    icon: `<svg viewBox="0 0 24 24"><path d="M21.007 8.222A3.738 3.738 0 0 0 15.045 5.2a3.737 3.737 0 0 0 1.156 6.583 2.988 2.988 0 0 1-2.668 1.67h-2.99a4.456 4.456 0 0 0-2.989 1.165V7.559a3.738 3.738 0 1 0-1.494 0v8.883a3.737 3.737 0 1 0 1.498.058 2.992 2.992 0 0 1 2.989-2.747h2.989a4.49 4.49 0 0 0 4.223-3.03 3.74 3.74 0 0 0 3.248-4.501zM7.773 3.27a2.24 2.24 0 1 1 0 4.48 2.24 2.24 0 0 1 0-4.48zm0 17.46a2.24 2.24 0 1 1 0-4.48 2.24 2.24 0 0 1 0 4.48zm9.483-9.48a2.24 2.24 0 1 1 0-4.48 2.24 2.24 0 0 1 0 4.48z"/></svg>`,
-  },
-  {
-    id: "agents",
-    label: "Manage Agents",
-    icon: `<svg viewBox="0 0 24 24"><path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1.17A7 7 0 0 1 14 23h-4a7 7 0 0 1-6.83-4H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73A2 2 0 0 1 12 2zm-2 9a5 5 0 0 0-5 5v1h14v-1a5 5 0 0 0-5-5h-4zm1 3a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm4 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"/></svg>`,
-  },
-  {
-    id: "kanban",
-    label: "Kanban Board",
-    icon: `<svg viewBox="0 0 24 24"><path d="M3 3h6v18H3V3zm12 0h6v12h-6V3zm-6 0h6v8H9V3z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>`,
-  },
-  {
-    id: "api",
-    label: "API Explorer",
-    icon: `<svg viewBox="0 0 24 24"><path d="M6 6h12M6 12h12M6 18h8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="19" cy="18" r="2.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M2 3h20v18H2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" rx="2"/></svg>`,
-  },
-  {
-    id: "web-preview",
-    label: "Web Preview",
-    icon: `<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="3" y1="9" x2="21" y2="9" stroke="currentColor" stroke-width="1.5"/><circle cx="6" cy="6.5" r="0.8" fill="currentColor"/><circle cx="8.5" cy="6.5" r="0.8" fill="currentColor"/><circle cx="11" cy="6.5" r="0.8" fill="currentColor"/></svg>`,
-  },
+// Sidebar views first — Workspaces, then Projects (the container that
+// groups workspaces across repos) — then the workspace-scoped Files and
+// Source Control, then the global tools. Workspaces / Projects / Files /
+// git are switchable sidebar views; Agents opens the profile-manager
+// dialog; Kanban / API / Web Preview open workspace tabs.
+const ACTIVITIES: { id: SidebarView; label: string; icon: IconName }[] = [
+  { id: "workspaces", label: "Workspaces", icon: "workspaces" },
+  { id: "projects", label: "Projects", icon: "projects" },
+  { id: "files", label: "Files", icon: "folder" },
+  { id: "git", label: "Source Control", icon: "branch" },
+  { id: "agents", label: "Manage Agents", icon: "agents" },
+  { id: "kanban", label: "Kanban Board", icon: "kanban" },
+  { id: "api", label: "API Explorer", icon: "api" },
+  { id: "web-preview", label: "Web Preview", icon: "browser" },
 ];
 
 export function renderActivityBar(container: HTMLElement) {
@@ -50,7 +29,7 @@ export function renderActivityBar(container: HTMLElement) {
     item.className = `activity-item${activity.id === appState.activeView ? " active" : ""}`;
     item.title = activity.label;
     item.dataset.id = activity.id;
-    item.innerHTML = activity.icon;
+    item.innerHTML = icon(activity.icon);
     buttons.set(activity.id, item);
 
     item.addEventListener("click", () => {
@@ -60,31 +39,46 @@ export function renderActivityBar(container: HTMLElement) {
     container.appendChild(item);
   });
 
-  // Badge for source control (change count)
+  // Badge for source control: change count, plus ↑N when local commits
+  // haven't been pushed (aheadBehind refreshes together with changedFiles,
+  // so `files-changed` covers both).
   const gitBtn = buttons.get("git")!;
   const badge = document.createElement("span");
   badge.className = "activity-badge";
   badge.style.display = "none";
   gitBtn.appendChild(badge);
 
+  const cap = (n: number) => (n > 99 ? "99+" : String(n));
+
   function updateBadge() {
-    const count = appState.activeWs?.changedFiles.length ?? 0;
-    if (count > 0) {
-      badge.textContent = count > 99 ? "99+" : String(count);
+    const ws = appState.activeWs;
+    const count = ws?.changedFiles.length ?? 0;
+    const ahead = ws?.aheadBehind?.[0] ?? 0;
+    if (count > 0 || ahead > 0) {
+      const parts: string[] = [];
+      if (count > 0) parts.push(cap(count));
+      if (ahead > 0) parts.push(`↑${cap(ahead)}`);
+      badge.textContent = parts.join(" ");
+      badge.title = [
+        count > 0 ? `${count} change${count === 1 ? "" : "s"}` : "",
+        ahead > 0 ? `${ahead} commit${ahead === 1 ? "" : "s"} to push` : "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
       badge.style.display = "";
     } else {
       badge.style.display = "none";
     }
   }
 
-  // Badge for the Explorer icon: agents needing you (all workspaces) — the
+  // Badge for the Workspaces icon: agents needing you (all workspaces) — the
   // Agents panel lives in the sidebar, so this keeps the signal visible
   // while the sidebar is hidden or another view is up.
-  const explorerBtn = buttons.get("explorer")!;
+  const workspacesBtn = buttons.get("workspaces")!;
   const attentionBadge = document.createElement("span");
   attentionBadge.className = "activity-badge activity-badge--attention";
   attentionBadge.style.display = "none";
-  explorerBtn.appendChild(attentionBadge);
+  workspacesBtn.appendChild(attentionBadge);
 
   function updateAttentionBadge() {
     const n = attentionRows(appState.agentRows).length;

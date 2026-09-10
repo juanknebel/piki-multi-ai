@@ -190,6 +190,8 @@ pub struct Keybindings {
     pub dashboard: HashMap<String, String>,
     #[serde(default = "default_sessions")]
     pub sessions: HashMap<String, String>,
+    #[serde(default = "default_projects")]
+    pub projects: HashMap<String, String>,
     #[serde(default = "default_logs")]
     pub logs: HashMap<String, String>,
 }
@@ -211,6 +213,7 @@ impl Default for Keybindings {
             new_tab: default_new_tab(),
             dashboard: default_dashboard(),
             sessions: default_sessions(),
+            projects: default_projects(),
             logs: default_logs(),
         }
     }
@@ -281,6 +284,9 @@ fn default_app() -> HashMap<String, BindingValue> {
     // `ctrl-s` for "sessions" — every mnemonic lowercase letter is taken, and
     // the binding rule prefers prefix-ctrl over a Shift chord.
     m.insert("sessions".to_string(), BindingValue::one("prefix-ctrl-s"));
+    // `ctrl-p` for "projects" — `p` itself is prev_tab, and the binding rule
+    // prefers prefix-ctrl over a Shift chord (same precedent as sessions).
+    m.insert("projects".to_string(), BindingValue::one("prefix-ctrl-p"));
     m.insert("command_palette".to_string(), BindingValue::one("prefix-:"));
     m.insert("fuzzy_search".to_string(), BindingValue::one("prefix-/"));
     // `t` for "text" — content search across the worktree (ripgrep).
@@ -456,6 +462,24 @@ fn default_sessions() -> HashMap<String, String> {
     m.insert("exit".to_string(), "esc".to_string());
     // Toggle-close matches the open chord's bare key.
     m.insert("exit_alt".to_string(), "ctrl-s".to_string());
+    m
+}
+
+fn default_projects() -> HashMap<String, String> {
+    let mut m = HashMap::new();
+    m.insert("down".to_string(), "j".to_string());
+    m.insert("up".to_string(), "k".to_string());
+    m.insert("down_alt".to_string(), "down".to_string());
+    m.insert("up_alt".to_string(), "up".to_string());
+    // Expand/collapse a project row, or jump to / adopt the member under the
+    // cursor.
+    m.insert("select".to_string(), "enter".to_string());
+    m.insert("new".to_string(), "n".to_string());
+    m.insert("edit".to_string(), "e".to_string());
+    m.insert("delete".to_string(), "d".to_string());
+    m.insert("exit".to_string(), "esc".to_string());
+    // Toggle-close matches the open chord's bare key.
+    m.insert("exit_alt".to_string(), "ctrl-p".to_string());
     m
 }
 
@@ -696,6 +720,10 @@ impl Config {
         self.matches_ctx(&self.keybindings.sessions, default_sessions, event, action)
     }
 
+    pub fn matches_projects(&self, event: KeyEvent, action: &str) -> bool {
+        self.matches_ctx(&self.keybindings.projects, default_projects, event, action)
+    }
+
     pub fn matches_logs(&self, event: KeyEvent, action: &str) -> bool {
         self.matches_ctx(&self.keybindings.logs, default_logs, event, action)
     }
@@ -813,6 +841,12 @@ impl Config {
                 .get(action)
                 .cloned()
                 .or_else(|| default_sessions().get(action).cloned()),
+            "projects" => self
+                .keybindings
+                .projects
+                .get(action)
+                .cloned()
+                .or_else(|| default_projects().get(action).cloned()),
             "logs" => self
                 .keybindings
                 .logs
@@ -1197,6 +1231,7 @@ mod tests {
             ("markdown", &cfg.keybindings.markdown),
             ("dashboard", &cfg.keybindings.dashboard),
             ("sessions", &cfg.keybindings.sessions),
+            ("projects", &cfg.keybindings.projects),
             ("logs", &cfg.keybindings.logs),
         ];
         for (section, bindings) in sections {

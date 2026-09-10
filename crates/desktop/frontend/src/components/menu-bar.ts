@@ -174,7 +174,8 @@ const MENUS: MenuDefinition[] = [
   {
     label: "View",
     items: () => [
-      { label: "Explorer", action: () => appState.setActiveView("explorer") },
+      { label: "Workspaces", action: () => appState.setActiveView("workspaces") },
+      { label: "Projects", action: () => appState.setActiveView("projects") },
       { label: "Files", action: () => appState.setActiveView("files") },
       {
         label: "Reveal File in Files",

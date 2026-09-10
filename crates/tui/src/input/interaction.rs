@@ -578,6 +578,15 @@ pub(super) fn handle_terminal_interaction(app: &mut App, key: KeyEvent) -> Optio
         copy_visible_terminal(app);
         return None;
     }
+    // Any other key means the user is typing into the terminal again: snap
+    // the view back to the live bottom instead of leaving it stranded in
+    // scrollback (e.g. after a mouse-wheel scroll up). Copy above is the
+    // one exception — it reads the scrollback the user is looking at.
+    if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+        && let Some(tab) = ws.current_tab_mut()
+    {
+        tab.term_scroll = 0;
+    }
     // Forward all other keys to the active tab's PTY
     if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
         && let Some(tab) = ws.current_tab_mut()
@@ -1020,11 +1029,14 @@ pub(super) fn handle_agents_interaction(app: &mut App, key: KeyEvent) -> Option<
     // Clamp: tabs can close asynchronously between renders
     if app.selected_agent_row >= rows.len() {
         app.selected_agent_row = rows.len() - 1;
+        app.reveal_agent_selection();
     }
     if app.config.matches_agents(key, "down") || app.config.matches_agents(key, "down_alt") {
         crate::input::list_nav::move_selection(&mut app.selected_agent_row, rows.len(), 1, false);
+        app.reveal_agent_selection();
     } else if app.config.matches_agents(key, "up") || app.config.matches_agents(key, "up_alt") {
         crate::input::list_nav::move_selection(&mut app.selected_agent_row, rows.len(), -1, false);
+        app.reveal_agent_selection();
     } else if app.config.matches_agents(key, "select") {
         jump_to_agent(app, rows[app.selected_agent_row]);
     }
@@ -1095,5 +1107,39 @@ pub(super) fn jump_to_agent(app: &mut App, (ws_idx, tab_idx): (usize, usize)) {
     {
         ws.active_tab = tab_idx;
         ws.tabs[tab_idx].term_scroll = 0;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::{add_terminal_tab, add_test_workspace, test_app};
+
+    /// Typing into the terminal snaps a wheel-scrolled view back to live:
+    /// the keystroke reaches the shell, so the stranded scrollback offset
+    /// must go instead of staying pinned up top.
+    #[test]
+    fn terminal_keypress_snaps_scrollback_to_live() {
+        let mut app = test_app();
+        let ws = add_test_workspace(&mut app);
+        app.active_workspace = ws;
+        add_terminal_tab(&mut app, ws);
+        app.workspaces[ws]
+            .current_tab_mut()
+            .expect("terminal tab")
+            .term_scroll = 25;
+
+        handle_terminal_interaction(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('x'), KeyModifiers::empty()),
+        );
+
+        assert_eq!(
+            app.workspaces[ws]
+                .current_tab()
+                .expect("terminal tab")
+                .term_scroll,
+            0
+        );
     }
 }

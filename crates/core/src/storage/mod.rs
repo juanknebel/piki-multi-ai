@@ -72,11 +72,22 @@ pub trait UiPrefsStorage: Send + Sync {
     fn set_preference(&self, key: &str, value: &str) -> anyhow::Result<()>;
 }
 
+pub trait ProjectStorage: Send + Sync {
+    /// All projects ordered by display order, members in position order.
+    /// Errors are swallowed (empty vec), like `load_all_workspaces`.
+    fn list_projects(&self) -> Vec<crate::projects::Project>;
+    /// Insert (id: None) or update (id: Some) a project and replace its
+    /// member list, in one transaction. Returns the project's row id.
+    fn save_project(&self, project: &crate::projects::Project) -> anyhow::Result<i64>;
+    fn delete_project(&self, id: i64) -> anyhow::Result<()>;
+}
+
 pub struct AppStorage {
     pub workspaces: Box<dyn WorkspaceStorage>,
     pub api_history: Option<Box<dyn ApiHistoryStorage>>,
     pub ui_prefs: Option<Box<dyn UiPrefsStorage>>,
     pub agent_profiles: Option<Box<dyn AgentProfileStorage>>,
+    pub projects: Option<Box<dyn ProjectStorage>>,
 }
 
 pub fn create_storage(paths: &crate::paths::DataPaths) -> anyhow::Result<AppStorage> {
@@ -87,6 +98,7 @@ pub fn create_storage(paths: &crate::paths::DataPaths) -> anyhow::Result<AppStor
         workspaces: Box::new(std::sync::Arc::clone(&store)),
         api_history: Some(Box::new(std::sync::Arc::clone(&store))),
         ui_prefs: Some(Box::new(std::sync::Arc::clone(&store))),
-        agent_profiles: Some(Box::new(store)),
+        agent_profiles: Some(Box::new(std::sync::Arc::clone(&store))),
+        projects: Some(Box::new(store)),
     })
 }

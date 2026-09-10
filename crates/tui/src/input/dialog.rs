@@ -911,6 +911,299 @@ pub(super) fn handle_sessions_input(app: &mut App, key: KeyEvent) -> Option<Acti
     }
 }
 
+/// Projects overlay (`prefix ctrl-p`). `AppMode::Projects` covers both the
+/// list and its edit sub-dialog — route on the active `DialogState` variant.
+pub(super) fn handle_projects_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    match app.active_dialog {
+        Some(DialogState::Projects { .. }) => handle_projects_list_input(app, key),
+        Some(DialogState::ProjectEdit { .. }) => handle_project_edit_input(app, key),
+        _ => None,
+    }
+}
+
+/// The list: j/k navigate the flattened rows, Enter expands/collapses a
+/// project or jumps to (or adopts) a member, n/e/d manage projects, Esc
+/// closes. `d` is the sessions-style immediate one-key delete — the overlay
+/// house pattern, no confirm step.
+fn handle_projects_list_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    // Jumping/adopting needs `&mut App` beyond the dialog borrow — defer.
+    enum Step {
+        Stay,
+        Close,
+        OpenEditor(Option<usize>),
+        Jump(PathBuf),
+        Act(Action),
+    }
+
+    let step = {
+        let Some(DialogState::Projects {
+            ref projects,
+            ref mut selected,
+            ref mut expanded,
+            ref mut scroll_offset,
+        }) = app.active_dialog
+        else {
+            return None;
+        };
+        let rows = crate::dialog_state::project_rows(projects, expanded);
+        let count = rows.len();
+        let visible = 12usize;
+
+        // The project a row belongs to: a member row acts on its parent.
+        let row_project = |row: &crate::dialog_state::ProjectRow| match *row {
+            crate::dialog_state::ProjectRow::Project(pi)
+            | crate::dialog_state::ProjectRow::Member(pi, _) => pi,
+        };
+
+        if app.config.matches_projects(key, "down") || app.config.matches_projects(key, "down_alt")
+        {
+            move_selection(selected, count, 1, false);
+            if *selected >= *scroll_offset + visible {
+                *scroll_offset = selected.saturating_sub(visible - 1);
+            }
+            Step::Stay
+        } else if app.config.matches_projects(key, "up")
+            || app.config.matches_projects(key, "up_alt")
+        {
+            move_selection(selected, count, -1, false);
+            if *selected < *scroll_offset {
+                *scroll_offset = *selected;
+            }
+            Step::Stay
+        } else if app.config.matches_projects(key, "new") {
+            Step::OpenEditor(None)
+        } else if app.config.matches_projects(key, "exit")
+            || app.config.matches_projects(key, "exit_alt")
+            || is_cancel(key, &app.config)
+        {
+            Step::Close
+        } else if count == 0 {
+            Step::Stay // row-scoped keys need a row
+        } else if app.config.matches_projects(key, "select") {
+            match rows[*selected] {
+                crate::dialog_state::ProjectRow::Project(pi) => {
+                    // Toggle expand/collapse (id is always Some once stored).
+                    if let Some(id) = projects[pi].id
+                        && !expanded.remove(&id)
+                    {
+                        expanded.insert(id);
+                    }
+                    Step::Stay
+                }
+                crate::dialog_state::ProjectRow::Member(pi, mi) => {
+                    Step::Jump(projects[pi].members[mi].path.clone())
+                }
+            }
+        } else if app.config.matches_projects(key, "edit") {
+            Step::OpenEditor(Some(row_project(&rows[*selected])))
+        } else if app.config.matches_projects(key, "delete") {
+            match projects[row_project(&rows[*selected])].id {
+                Some(id) => Step::Act(Action::DeleteProject(id)),
+                None => Step::Stay,
+            }
+        } else {
+            Step::Stay
+        }
+    };
+
+    match step {
+        Step::Stay => None,
+        Step::Close => {
+            dismiss_dialog(app);
+            None
+        }
+        Step::Act(action) => Some(action),
+        Step::OpenEditor(project_idx) => {
+            open_project_editor(app, project_idx);
+            None
+        }
+        Step::Jump(path) => {
+            // Members resolve dynamically: a registered workspace by that
+            // path → jump to it; otherwise it's a plain directory → adopt it
+            // as a Simple workspace. Either way the overlay closes.
+            let ws_idx = app.workspaces.iter().position(|w| w.info.path == path);
+            dismiss_dialog(app);
+            match ws_idx {
+                Some(idx) => {
+                    app.switch_workspace_and_focus(idx);
+                    None
+                }
+                None => Some(Action::ProjectAdoptDirectory { path }),
+            }
+        }
+    }
+}
+
+/// Swap the Projects list for its edit sub-dialog. `project_idx` indexes the
+/// list's projects vec (None = create new). The member checklist is built
+/// here, at open time: saved members first (in saved order), then every
+/// registered workspace that isn't a member yet — see [`ProjectMemberRow`]
+/// for the ordering contract. There is deliberately no "add directory" input
+/// in the TUI editor (v1): directories get added from the desktop side, or
+/// arrive by adopting one from the list.
+fn open_project_editor(app: &mut App, project_idx: Option<usize>) {
+    let project = match (&app.active_dialog, project_idx) {
+        (Some(DialogState::Projects { projects, .. }), Some(pi)) => projects.get(pi).cloned(),
+        _ => None,
+    };
+
+    let mut members: Vec<crate::dialog_state::ProjectMemberRow> = Vec::new();
+    if let Some(ref p) = project {
+        for m in &p.members {
+            let ws = app.workspaces.iter().find(|w| w.info.path == m.path);
+            members.push(crate::dialog_state::ProjectMemberRow {
+                label: ws
+                    .map(|w| w.info.name.clone())
+                    .unwrap_or_else(|| m.path.to_string_lossy().into_owned()),
+                is_workspace: ws.is_some(),
+                checked: true,
+                path: m.path.clone(),
+            });
+        }
+    }
+    for w in &app.workspaces {
+        if members.iter().any(|r| r.path == w.info.path) {
+            continue;
+        }
+        members.push(crate::dialog_state::ProjectMemberRow {
+            path: w.info.path.clone(),
+            label: w.info.name.clone(),
+            is_workspace: true,
+            checked: false,
+        });
+    }
+
+    let name = project.as_ref().map(|p| p.name.clone()).unwrap_or_default();
+    app.active_dialog = Some(DialogState::ProjectEdit {
+        editing_id: project.as_ref().and_then(|p| p.id),
+        name_cursor: name.chars().count(),
+        name,
+        color: project.as_ref().map(|p| p.clamped_color()).unwrap_or(0),
+        order: project.as_ref().map(|p| p.order).unwrap_or(0),
+        members,
+        member_cursor: 0,
+        active_field: crate::dialog_state::ProjectEditField::Name,
+    });
+    // app.mode stays AppMode::Projects — same modal, second variant.
+}
+
+/// The edit sub-dialog: Tab/BackTab cycle Name → Color → Members, ←/→ pick
+/// one of the ten palette dots, j/k + Space drive the member checklist,
+/// Enter saves, Esc backs out to the list without saving. The dialog-local
+/// keys (Tab/Enter/Esc) are checked BEFORE the text buffer sees the key.
+fn handle_project_edit_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    enum Step {
+        Stay,
+        Back,
+        EmptyName,
+        Save(Box<piki_core::projects::Project>),
+    }
+
+    let step = {
+        let Some(DialogState::ProjectEdit {
+            ref editing_id,
+            ref mut name,
+            ref mut name_cursor,
+            ref mut color,
+            ref order,
+            ref mut members,
+            ref mut member_cursor,
+            ref mut active_field,
+        }) = app.active_dialog
+        else {
+            return None;
+        };
+        use crate::dialog_state::ProjectEditField;
+
+        match key.code {
+            KeyCode::Tab => {
+                *active_field = active_field.next();
+                Step::Stay
+            }
+            KeyCode::BackTab => {
+                *active_field = active_field.prev();
+                Step::Stay
+            }
+            KeyCode::Enter => {
+                let trimmed = name.trim();
+                if trimmed.is_empty() {
+                    Step::EmptyName
+                } else {
+                    Step::Save(Box::new(piki_core::projects::Project {
+                        id: *editing_id,
+                        name: trimmed.to_string(),
+                        color: *color,
+                        order: *order,
+                        // Checked rows in display order: still-checked saved
+                        // members keep their saved order, newly checked
+                        // workspaces append at the end.
+                        members: members
+                            .iter()
+                            .filter(|r| r.checked)
+                            .map(|r| piki_core::projects::ProjectMember {
+                                path: r.path.clone(),
+                            })
+                            .collect(),
+                    }))
+                }
+            }
+            _ if is_cancel(key, &app.config) => Step::Back,
+            _ => {
+                match *active_field {
+                    ProjectEditField::Name => {
+                        handle_text_input(name, name_cursor, key, |c| !c.is_control());
+                    }
+                    ProjectEditField::Color => match key.code {
+                        KeyCode::Left => {
+                            *color = color
+                                .checked_sub(1)
+                                .unwrap_or(piki_core::projects::PROJECT_PALETTE_LEN - 1);
+                        }
+                        KeyCode::Right => {
+                            *color = (*color + 1) % piki_core::projects::PROJECT_PALETTE_LEN;
+                        }
+                        _ => {}
+                    },
+                    ProjectEditField::Members => match key.code {
+                        KeyCode::Char('j') | KeyCode::Down => {
+                            move_selection(member_cursor, members.len(), 1, false);
+                        }
+                        KeyCode::Char('k') | KeyCode::Up => {
+                            move_selection(member_cursor, members.len(), -1, false);
+                        }
+                        KeyCode::Char(' ') => {
+                            if let Some(row) = members.get_mut(*member_cursor) {
+                                row.checked = !row.checked;
+                            }
+                        }
+                        _ => {}
+                    },
+                }
+                Step::Stay
+            }
+        }
+    };
+
+    match step {
+        Step::Stay => None,
+        Step::EmptyName => {
+            app.set_toast("Project name is empty", crate::app::ToastLevel::Error);
+            None
+        }
+        Step::Back => {
+            // Back to the list without saving (reloads from storage).
+            super::app_actions::open_projects(app);
+            None
+        }
+        Step::Save(project) => {
+            // Swap back to the list now; the action persists and then
+            // reloads it from storage so it reflects what was saved.
+            super::app_actions::open_projects(app);
+            Some(Action::SaveProject(*project))
+        }
+    }
+}
+
 pub(super) fn handle_help_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     // The help browser is a live search box: printable keys edit the filter,
     // so navigation is on the non-textual keys only (arrows / PgUp-PgDn /

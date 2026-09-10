@@ -26,7 +26,9 @@ just lint-desktop                           # frontend test + build, then clippy
 ## Rust backend (`src/`)
 
 - `main.rs` — Tauri entry point, setup, command registration; `--serve-sessions` is parsed before Tauri
-  (session daemon entry). Resolves the shared settings at startup —
+  (session daemon entry). Debug builds evaluate the `PIKI_DIAG_EVAL` env var as JS on every page load —
+  scripted perf experiments against an isolated instance (see `docs/performance.md` § Idle-compositing);
+  never compiled into release. Resolves the shared settings at startup —
   `piki_core::app_settings::resolve(config_path, storage.ui_prefs)` (Settings ▸ General override in the
   DB > `[sessions]`/`[notifications]` in `config.toml` > default) — then `effective.notifications.apply()`
   and `connect_session_daemon(&paths, effective.sessions_enabled)`; the value it started with is
@@ -149,11 +151,20 @@ just lint-desktop                           # frontend test + build, then clippy
   families aggregate hidden children by `family_key` / `source_repo`) via `types.ts::agentStatusSeverity`
   / `actionableStatusView` (mirrors of `piki_core::cli_agent::status_severity` and the TUI's
   `actionable_status_view` — change all together). Every row starts with a fixed-width
-  `.workspace-gutter` (chevron on a worktree parent — the whole slot toggles collapse —, the pulse dot
-  on the active row, empty otherwise) so labels align whatever the row kind; a clone's branch renders as
+  `.workspace-gutter` (chevron on a worktree parent — the whole slot toggles collapse —, the static
+  accent dot on the active row, empty otherwise) so labels align whatever the row kind; a clone's branch renders as
   a separate muted `.workspace-branch` span (`rowParts`), never glued to the name, and `.grouped`
   children indent one step past the parent's gutter. Don't reintroduce a leading element that only some
   rows have — it un-aligns the list.
+- **Projects view** (`projects-panel.ts`, activity-bar id `"projects"`, host `#projects-view`): cross-cutting
+  groups from `piki_core::projects` via `ipc.listProjects/saveProject/deleteProject` (`commands/projects.rs`).
+  Listbox pattern like the Agents panel; project rows carry a dot painted `var(--project-swatch-{color+1})`
+  (10 static tokens in `variables.css` — deliberately NOT theme-derived so a project keeps one colour in both
+  frontends), member rows a `--project-stripe` bar. A member path is resolved against `appState.workspaces`
+  at render time: match → workspace row (click switches), no match → directory row (click adopts it as a
+  `Simple` workspace via `ipc.createWorkspace`, then switches). Collapse persisted as `projectsCollapsed`
+  (settings). Create/edit in `dialogs/project-dialog.ts` (10-swatch radio, workspace checkboxes, directory
+  rows through `attachPathPicker`); sheets `projects.css` + `dialog-projects.css`.
 - `workspace-switcher.ts` ranks with the pure `mru.ts` (`mruBump` / `mruRank` / `rankItems`) over the
   `workspaceMru` settings list that `appState.setActiveWorkspace` bumps (the single choke point for
   switches); rows show `statusGlyph` (agent rollup or dirty git).
@@ -419,7 +430,9 @@ just lint-desktop                           # frontend test + build, then clippy
   `dialog-<feature>.css` imported in that group.
 - All `@keyframes` live in `motion.css` (also the global `prefers-reduced-motion` block); feature CSS only
   references animation names (`overlay-in`, `dialog-enter`, `menu-enter`, `toast-in`, `pulse`,
-  `bell-flash`, …).
+  `bell-flash`, …). An `infinite` animation must use stepped timing (`step-end`) — WebKitGTK
+  composites every vblank while a value interpolates, which burns most of a core on the GTK main
+  thread (`css-invariants.test.ts` enforces it; measurements in `docs/performance.md`).
 - `css-invariants.test.ts` (reads the sheets with `node:fs`, typed by `test-node-shim.d.ts`) fails on:
   `outline: none` outside a `:focus-visible` rule that paints a replacement; a `z-index` that is not a
   `--z-*` token; a colour literal outside `variables.css`; `transition: all`; a sheet missing from

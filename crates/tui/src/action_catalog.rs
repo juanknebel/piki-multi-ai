@@ -46,6 +46,7 @@ pub enum Context {
     CodeReview,
     Dashboard,
     Sessions,
+    Projects,
     Logs,
 }
 
@@ -74,6 +75,7 @@ impl Context {
             Context::CodeReview => "Code Review (requires gh CLI, locked mode)",
             Context::Dashboard => "Dashboard",
             Context::Sessions => "Sessions overlay (persistent sessions)",
+            Context::Projects => "Projects overlay",
             Context::Logs => "Logs",
         }
     }
@@ -92,6 +94,7 @@ impl Context {
             Context::ManageAgents => Some("manage_agents"),
             Context::Dashboard => Some("dashboard"),
             Context::Sessions => Some("sessions"),
+            Context::Projects => Some("projects"),
             Context::Logs => Some("logs"),
             _ => None,
         }
@@ -111,6 +114,7 @@ pub const HELP_ORDER: &[Context] = &[
     Context::WorkspaceSwitcher,
     Context::Dashboard,
     Context::Sessions,
+    Context::Projects,
     Context::Logs,
     Context::Chat,
     Context::Kanban,
@@ -269,6 +273,7 @@ static CATALOG: &[ActionMeta] = {
         app("about", "View", "About", "about"),
         app("logs", "View", "Logs", "logs"),
         app("sessions", "View", "Sessions (persistent)", "sessions"),
+        app("projects", "View", "Projects", "projects"),
         app("scroll_mode", "View", "Terminal Scroll Mode", "scroll"),
         app("chat_panel", "View", "AI Chat", "chat"),
         app("focus_left", "Focus", "Focus Pane Left", "left"),
@@ -515,6 +520,43 @@ static CATALOG: &[ActionMeta] = {
             "Reload the list from the daemon",
         ),
         local(C::Sessions, Bind("sessions", "exit"), "Close"),
+        // ── Projects overlay ──────────────────────────────────────────────
+        local(C::Projects, Bind("projects", "down"), "Select the next row"),
+        local(
+            C::Projects,
+            Bind("projects", "up"),
+            "Select the previous row",
+        ),
+        local(
+            C::Projects,
+            Bind("projects", "select"),
+            "Expand/collapse a project; jump to a member (adopts a directory)",
+        ),
+        local(C::Projects, Bind("projects", "new"), "New project"),
+        local(
+            C::Projects,
+            Bind("projects", "edit"),
+            "Edit the selected project",
+        ),
+        local(
+            C::Projects,
+            Bind("projects", "delete"),
+            "Delete the selected project",
+        ),
+        local(C::Projects, Bind("projects", "exit"), "Close"),
+        local(C::Projects, Fixed("Tab"), "Cycle fields (in the editor)"),
+        local(C::Projects, Fixed("←/→"), "Pick the colour (in the editor)"),
+        local(
+            C::Projects,
+            Fixed("Space"),
+            "Toggle a member (in the editor)",
+        ),
+        local(C::Projects, Fixed("Enter"), "Save (in the editor)"),
+        local(
+            C::Projects,
+            Fixed("Esc"),
+            "Back to the list (in the editor)",
+        ),
         // ── Logs ──────────────────────────────────────────────────────────
         local(C::Logs, Bind("logs", "down"), "Select the next entry"),
         local(C::Logs, Bind("logs", "up"), "Select the previous entry"),

@@ -3,6 +3,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { decodePtyFrame, toBytes, type PtyFrame } from "./pty-frame";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import type {
+  Project,
   WorkspaceInfo,
   WorkspaceDetail,
   ChangedFile,
@@ -1186,4 +1187,18 @@ export function lspServerStatus(): Promise<LspServerStatusInfo[]> {
 
 export function lspStopServer(serverId: string, rootPath: string): Promise<void> {
   return invoke("lsp_stop_server", { serverId, rootPath });
+}
+
+// ── Projects ───────────────────────────────────────────
+
+export function listProjects(): Promise<Project[]> {
+  return invoke("list_projects");
+}
+
+export function saveProject(project: Project): Promise<number> {
+  return invoke("save_project", { project });
+}
+
+export function deleteProject(id: number): Promise<void> {
+  return invoke("delete_project", { id });
 }

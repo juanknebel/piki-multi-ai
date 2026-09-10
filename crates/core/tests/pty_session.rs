@@ -161,9 +161,21 @@ async fn test_output_signal_raised_on_pty_output() {
         .await
         .expect("output signal should fire within 2s");
     assert!(signal.take(), "dirty bit should be set after output");
-    assert!(!signal.take(), "take() must clear the dirty bit");
 
     pty.kill().ok();
+}
+
+/// `take()` clears the dirty bit and re-arms `raise`. Checked in isolation:
+/// asserting the cleared bit right after a live PTY read races with the next
+/// chunk re-raising it (cat's tty echo and its stdout can land as two
+/// separate reads — that exact race flaked the test above in CI).
+#[test]
+fn test_output_signal_take_clears_dirty_bit() {
+    let signal = piki_core::pty::PtyOutputSignal::new();
+    assert!(!signal.take(), "fresh signal starts clean");
+    signal.raise();
+    assert!(signal.take(), "raise sets the dirty bit");
+    assert!(!signal.take(), "take() clears the dirty bit");
 }
 
 /// Regression: a child that never reads stdin must not stall the caller.

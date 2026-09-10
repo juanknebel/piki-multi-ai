@@ -30,7 +30,7 @@
 .sc-header-btn:disabled {
   opacity: 0.55;
   cursor: progress;
-  animation: pulse var(--dur-pulse) ease-in-out infinite;
+  animation: pulse var(--dur-pulse) step-end infinite;
 }
 
 /* ── Commit area ─────────────────────────────────── */

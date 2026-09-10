@@ -159,7 +159,7 @@
 .chat-tool-card[data-status="error"] .chat-tool-status,
 .chat-tool-card[data-status="denied"] .chat-tool-status { color: var(--error-color); }
 .chat-tool-card[data-status="approval"] .chat-tool-status { color: var(--warning-color); }
-.chat-tool-card[data-status="running"] .chat-tool-status { color: var(--accent-primary); animation: pulse var(--dur-pulse) ease-in-out infinite; }
+.chat-tool-card[data-status="running"] .chat-tool-status { color: var(--accent-primary); animation: pulse var(--dur-pulse) step-end infinite; }
 
 .chat-tool-summary {
   display: flex;

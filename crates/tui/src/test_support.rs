@@ -17,6 +17,7 @@ pub(crate) fn test_storage() -> std::sync::Arc<piki_core::storage::AppStorage> {
         api_history: None,
         ui_prefs: None,
         agent_profiles: None,
+        projects: None,
     })
 }
 

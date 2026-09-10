@@ -87,7 +87,7 @@
   border-radius: var(--radius-sm);
   white-space: nowrap;
   flex-shrink: 0;
-  animation: pulse var(--dur-pulse) ease-in-out infinite;
+  animation: pulse var(--dur-pulse) step-end infinite;
 }
 
 .pane-btn {
