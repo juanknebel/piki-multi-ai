@@ -36,7 +36,7 @@ export async function showLogsDialog() {
   backdrop.className = "dialog-backdrop logs-dialog-backdrop";
 
   const dialog = document.createElement("div");
-  dialog.className = "dialog ui-surface";
+  dialog.className = "dialog ui-surface dialog-lg";
   dialog.style.maxWidth = "800px";
   dialog.style.maxHeight = "85vh";
   dialog.style.width = "90vw";

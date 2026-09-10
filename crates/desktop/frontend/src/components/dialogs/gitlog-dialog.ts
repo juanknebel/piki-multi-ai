@@ -26,7 +26,7 @@ export async function showGitLog() {
     if (existing) existing.remove();
 
     const dialog = document.createElement("div");
-    dialog.className = "dialog ui-surface";
+    dialog.className = "dialog ui-surface dialog-lg";
     dialog.style.maxWidth = "700px";
     dialog.style.maxHeight = "80vh";
     dialog.innerHTML = `

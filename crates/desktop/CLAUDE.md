@@ -550,8 +550,9 @@ feature-specific modifiers in feature CSS; never re-declare a button/input/surfa
     `<select>`): `.dialog-dropdown-trigger` sized like `.ui-input`, list at `--z-popover`.
 - **How to add a dialog**: `backdrop.className = "dialog-backdrop <family>-backdrop"` (open() removes only
   `.<family>-backdrop` — removing bare `.dialog-backdrop` destroys unrelated open dialogs);
-  `dialog.className = "dialog ui-surface"` (+ a `.<family>-dialog` width class in `dialog-<family>.css`
-  if 560px is wrong); `.ui-header` with `.ui-header-title` + `.dialog-close ui-btn` (ghost, `data-icon`);
+  `dialog.className = "dialog ui-surface"` (add `dialog-lg` when the content is long text — paths,
+  commands, tables, log lines: the shared dense budget in `dialog-core.css`, `min(920px, 92vw)` ×
+  `86vh`; a `.<family>-dialog` width class in `dialog-<family>.css` only when neither budget fits); `.ui-header` with `.ui-header-title` + `.dialog-close ui-btn` (ghost, `data-icon`);
   `.dialog-body` of `.dialog-field` (`.dialog-label` + `.ui-input` / `createDropdown()` /
   `attachPathPicker`); `.dialog-footer` with secondary Cancel first, primary action last; destructive
   flows go through `showConfirm` instead. Escape/Enter and the close button wire up as in

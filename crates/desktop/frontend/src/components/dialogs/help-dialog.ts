@@ -10,7 +10,7 @@ export function showHelpDialog() {
   backdrop.className = "dialog-backdrop help-backdrop";
 
   const dialog = document.createElement("div");
-  dialog.className = "dialog ui-surface";
+  dialog.className = "dialog ui-surface dialog-lg";
   dialog.style.maxWidth = "480px";
   dialog.style.maxHeight = "80vh";
 

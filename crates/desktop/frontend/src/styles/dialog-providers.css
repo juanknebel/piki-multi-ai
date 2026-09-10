@@ -1,7 +1,5 @@
-/* Providers dialog (dialogs/providers-dialog.ts). */
-.providers-dialog {
-  width: 720px;
-}
+/* Providers dialog (dialogs/providers-dialog.ts). Size comes from the
+   shared `.dialog-lg` budget (commands and args are long). */
 
 .providers-table {
   width: 100%;

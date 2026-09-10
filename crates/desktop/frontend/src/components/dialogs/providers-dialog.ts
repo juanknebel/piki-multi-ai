@@ -11,7 +11,7 @@ export async function showProvidersDialog() {
   backdrop.className = "dialog-backdrop providers-backdrop";
 
   const dialog = document.createElement("div");
-  dialog.className = "dialog ui-surface providers-dialog";
+  dialog.className = "dialog ui-surface providers-dialog dialog-lg";
 
   const header = document.createElement("div");
   header.className = "ui-header";
