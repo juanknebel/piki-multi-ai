@@ -201,6 +201,32 @@ impl SqliteStorage {
             tx.commit()?;
         }
 
+        // Projects: user-defined cross-cutting groups (crate::projects).
+        // Members reference workspaces or plain directories by path only —
+        // no FK to workspaces.id (those ids are not stable across saves) and
+        // no CASCADE (foreign_keys pragma is not enabled; delete_project
+        // clears members explicitly).
+        if version < 11 {
+            let tx = conn.transaction()?;
+            tx.execute_batch(
+                "CREATE TABLE projects (
+                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                     name TEXT NOT NULL UNIQUE,
+                     color INTEGER NOT NULL DEFAULT 0,
+                     display_order INTEGER NOT NULL DEFAULT 0
+                 );
+                 CREATE TABLE project_members (
+                     project_id INTEGER NOT NULL,
+                     path TEXT NOT NULL,
+                     position INTEGER NOT NULL DEFAULT 0,
+                     UNIQUE(project_id, path)
+                 );
+                 CREATE INDEX idx_project_members_project ON project_members(project_id);",
+            )?;
+            tx.execute("INSERT INTO schema_version (version) VALUES (11)", [])?;
+            tx.commit()?;
+        }
+
         Ok(())
     }
 
@@ -648,6 +674,209 @@ impl super::AgentProfileStorage for Arc<SqliteStorage> {
             [id],
         )?;
         Ok(())
+    }
+}
+
+impl super::ProjectStorage for Arc<SqliteStorage> {
+    fn list_projects(&self) -> Vec<crate::projects::Project> {
+        let conn = self.conn.lock();
+        let load = || -> anyhow::Result<Vec<crate::projects::Project>> {
+            let mut stmt = conn.prepare(
+                "SELECT id, name, color, display_order FROM projects ORDER BY display_order",
+            )?;
+            let mut projects: Vec<crate::projects::Project> = stmt
+                .query_map([], |row| {
+                    Ok(crate::projects::Project {
+                        id: Some(row.get(0)?),
+                        name: row.get(1)?,
+                        color: row.get::<_, i64>(2)?.clamp(0, u8::MAX as i64) as u8,
+                        order: row.get::<_, i64>(3)?.max(0) as u32,
+                        members: Vec::new(),
+                    })
+                })?
+                .filter_map(|r| r.ok())
+                .collect();
+            let mut member_stmt = conn.prepare(
+                "SELECT path FROM project_members WHERE project_id = ?1 ORDER BY position",
+            )?;
+            for project in &mut projects {
+                project.color = project.clamped_color();
+                project.members = member_stmt
+                    .query_map([project.id.unwrap_or_default()], |row| {
+                        Ok(crate::projects::ProjectMember {
+                            path: PathBuf::from(row.get::<_, String>(0)?),
+                        })
+                    })?
+                    .filter_map(|r| r.ok())
+                    .collect();
+            }
+            Ok(projects)
+        };
+        load().unwrap_or_default()
+    }
+
+    fn save_project(&self, project: &crate::projects::Project) -> anyhow::Result<i64> {
+        let mut conn = self.conn.lock();
+        let tx = conn.transaction()?;
+        let id = match project.id {
+            Some(id) => {
+                tx.execute(
+                    "UPDATE projects SET name = ?1, color = ?2, display_order = ?3 WHERE id = ?4",
+                    rusqlite::params![project.name, project.clamped_color(), project.order, id],
+                )?;
+                id
+            }
+            None => {
+                tx.execute(
+                    "INSERT INTO projects (name, color, display_order) VALUES (?1, ?2, ?3)",
+                    rusqlite::params![project.name, project.clamped_color(), project.order],
+                )?;
+                tx.last_insert_rowid()
+            }
+        };
+        // Members are replaced wholesale, like save_workspaces; OR IGNORE
+        // dedupes a path listed twice in the same save (UNIQUE(project_id, path)).
+        tx.execute("DELETE FROM project_members WHERE project_id = ?1", [id])?;
+        for (position, member) in project.members.iter().enumerate() {
+            tx.execute(
+                "INSERT OR IGNORE INTO project_members (project_id, path, position)
+                 VALUES (?1, ?2, ?3)",
+                rusqlite::params![id, member.path.to_string_lossy(), position as i64],
+            )?;
+        }
+        tx.commit()?;
+        Ok(id)
+    }
+
+    fn delete_project(&self, id: i64) -> anyhow::Result<()> {
+        let mut conn = self.conn.lock();
+        let tx = conn.transaction()?;
+        tx.execute("DELETE FROM project_members WHERE project_id = ?1", [id])?;
+        tx.execute("DELETE FROM projects WHERE id = ?1", [id])?;
+        tx.commit()?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod project_storage_tests {
+    use super::*;
+    use crate::projects::{PROJECT_PALETTE_LEN, Project, ProjectMember};
+    use crate::storage::ProjectStorage;
+
+    fn project(name: &str, color: u8, order: u32, paths: &[&str]) -> Project {
+        Project {
+            id: None,
+            name: name.to_string(),
+            color,
+            order,
+            members: paths
+                .iter()
+                .map(|p| ProjectMember {
+                    path: PathBuf::from(p),
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn save_list_roundtrip_keeps_order_and_members() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Arc::new(SqliteStorage::open(&dir.path().join("db.sqlite")).unwrap());
+
+        storage
+            .save_project(&project("beta", 3, 1, &["/tmp/b1", "/tmp/b2"]))
+            .unwrap();
+        storage
+            .save_project(&project("alpha", 7, 0, &["/tmp/a1"]))
+            .unwrap();
+
+        let all = storage.list_projects();
+        assert_eq!(all.len(), 2);
+        // display_order wins over insertion/name order
+        assert_eq!(all[0].name, "alpha");
+        assert_eq!(all[0].color, 7);
+        assert_eq!(all[0].members.len(), 1);
+        assert_eq!(all[1].name, "beta");
+        assert_eq!(
+            all[1].members.iter().map(|m| &m.path).collect::<Vec<_>>(),
+            vec![&PathBuf::from("/tmp/b1"), &PathBuf::from("/tmp/b2")]
+        );
+        assert!(all.iter().all(|p| p.id.is_some()));
+    }
+
+    #[test]
+    fn save_with_id_updates_and_replaces_members() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Arc::new(SqliteStorage::open(&dir.path().join("db.sqlite")).unwrap());
+
+        let id = storage
+            .save_project(&project("old", 1, 0, &["/tmp/x", "/tmp/y"]))
+            .unwrap();
+        let mut updated = project("renamed", 5, 2, &["/tmp/z"]);
+        updated.id = Some(id);
+        assert_eq!(storage.save_project(&updated).unwrap(), id);
+
+        let all = storage.list_projects();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].name, "renamed");
+        assert_eq!(all[0].color, 5);
+        assert_eq!(all[0].order, 2);
+        assert_eq!(all[0].members, vec![ProjectMember {
+            path: PathBuf::from("/tmp/z")
+        }]);
+    }
+
+    #[test]
+    fn delete_removes_project_and_its_members() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Arc::new(SqliteStorage::open(&dir.path().join("db.sqlite")).unwrap());
+
+        let id = storage
+            .save_project(&project("gone", 0, 0, &["/tmp/m"]))
+            .unwrap();
+        storage.save_project(&project("stays", 2, 1, &[])).unwrap();
+        storage.delete_project(id).unwrap();
+
+        let all = storage.list_projects();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].name, "stays");
+        let orphans: i64 = storage
+            .conn
+            .lock()
+            .query_row(
+                "SELECT COUNT(*) FROM project_members WHERE project_id = ?1",
+                [id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(orphans, 0, "delete must clear members explicitly");
+    }
+
+    #[test]
+    fn out_of_range_color_is_clamped_on_load() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Arc::new(SqliteStorage::open(&dir.path().join("db.sqlite")).unwrap());
+        storage
+            .conn
+            .lock()
+            .execute(
+                "INSERT INTO projects (name, color, display_order) VALUES ('raw', 99, 0)",
+                [],
+            )
+            .unwrap();
+        assert_eq!(storage.list_projects()[0].color, PROJECT_PALETTE_LEN - 1);
+    }
+
+    #[test]
+    fn duplicate_member_paths_are_deduped() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Arc::new(SqliteStorage::open(&dir.path().join("db.sqlite")).unwrap());
+        storage
+            .save_project(&project("dup", 0, 0, &["/tmp/a", "/tmp/a", "/tmp/b"]))
+            .unwrap();
+        let all = storage.list_projects();
+        assert_eq!(all[0].members.len(), 2);
     }
 }
 

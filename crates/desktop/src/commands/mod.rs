@@ -10,6 +10,7 @@ pub mod kanban;
 pub mod logs;
 pub mod lsp;
 pub mod markdown;
+pub mod projects;
 pub mod providers;
 pub mod pty;
 pub mod review;

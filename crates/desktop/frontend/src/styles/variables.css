@@ -139,6 +139,22 @@
   --kanban-swatch-15: #e3b341;
   --kanban-swatch-16: #7ee787;
 
+  /* ── Projects (projects-panel.ts / project-dialog.ts) ── */
+  /* The 10 fixed project swatches. Projects store the palette INDEX, and
+     these hexes are deliberately static (not theme-derived) and shared with
+     the TUI's theme defaults, so the same project shows the same colour in
+     both frontends whatever preset is active. */
+  --project-swatch-1: #4a88e8;
+  --project-swatch-2: #3bb8c4;
+  --project-swatch-3: #52b788;
+  --project-swatch-4: #9bc53d;
+  --project-swatch-5: #e8b23a;
+  --project-swatch-6: #e8823a;
+  --project-swatch-7: #e85a5a;
+  --project-swatch-8: #e060a8;
+  --project-swatch-9: #9a6ae8;
+  --project-swatch-10: #8a93a6;
+
   /* ── Web preview ───────────────────────────────── */
   /* Canvas under the <iframe>: web content assumes a white page, whatever
      the app theme (web-preview.css) */

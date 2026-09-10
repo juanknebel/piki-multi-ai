@@ -13,6 +13,7 @@ pub mod idle_watcher;
 pub mod notifications;
 pub mod paths;
 pub mod preflight;
+pub mod projects;
 pub mod providers;
 pub mod pty;
 pub mod search;

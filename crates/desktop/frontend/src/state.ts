@@ -42,9 +42,17 @@ import {
   snapshotContents,
 } from "./layout-snapshot";
 
-export type SidebarView = "explorer" | "files" | "git" | "agents" | "kanban" | "api" | "web-preview";
-// Note: "explorer"/"files"/"git" are real sidebar views; "agents" opens the
-// modal dialog, "kanban"/"api"/"web-preview" open tabs
+export type SidebarView =
+  | "explorer"
+  | "files"
+  | "git"
+  | "projects"
+  | "agents"
+  | "kanban"
+  | "api"
+  | "web-preview";
+// Note: "explorer"/"files"/"git"/"projects" are real sidebar views; "agents"
+// opens the modal dialog, "kanban"/"api"/"web-preview" open tabs
 
 export interface UndoEntry {
   action: "stage" | "unstage";

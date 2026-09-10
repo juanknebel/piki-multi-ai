@@ -1,0 +1,80 @@
+/* Project create/edit dialog (dialogs/project-dialog.ts): the 10-swatch
+   colour radio and the member picker (workspace checkboxes + directory
+   rows added through the path picker). */
+
+.project-dialog {
+  max-width: 480px;
+}
+
+.project-swatch-row {
+  display: flex;
+  gap: var(--sp-4);
+  padding: 2px 0;
+}
+
+.project-swatch-btn {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.project-swatch-btn.active {
+  outline: var(--focus-ring-width) solid var(--accent-focus);
+  outline-offset: 2px;
+}
+
+.project-member-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 180px;
+  overflow-y: auto;
+  padding: 6px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.project-member-check {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-height: var(--row-height);
+  cursor: pointer;
+}
+
+.project-member-check-name {
+  color: var(--text-primary);
+}
+
+.project-member-check-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.project-picker-hint {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.project-dir-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: var(--row-height);
+}
+
+.project-dir-path {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  font-size: var(--fs-md);
+}

@@ -35,6 +35,7 @@
 @import "./dialog-help.css";
 @import "./dialog-workspace.css";
 @import "./dialog-git.css";
+@import "./dialog-projects.css";
 @import "./toast.css";
 @import "./file-viewer.css";
 @import "./dialog-settings.css";
@@ -52,3 +53,4 @@
 @import "./chat-panel.css";
 @import "./code-editor.css";
 @import "./web-preview.css";
+@import "./projects.css";
