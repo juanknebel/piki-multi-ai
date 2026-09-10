@@ -85,6 +85,7 @@ expression: body
     h             Collapse a worktree family
     l             Expand a worktree family
     Enter         Switch to it / toggle collapse
+    Tab           Toggle the Workspaces ⇄ Projects tab
 
   Agents pane
     j             Select the next agent

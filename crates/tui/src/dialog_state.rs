@@ -211,8 +211,13 @@ pub enum DialogState {
         scroll_offset: usize,
     },
     /// Edit/create a project — the Projects overlay's sub-dialog (same
-    /// `AppMode::Projects`; Esc goes back to the list).
+    /// `AppMode::Projects`; Esc goes back to the list). Also opened by the
+    /// sidebar's Projects tab, in which case Esc/save return to Normal.
     ProjectEdit {
+        /// Where Esc/save land: back to the Projects overlay list (opened
+        /// from the overlay) or straight to Normal (opened from the
+        /// sidebar's Projects tab, which is not a dialog).
+        return_to_list: bool,
         /// None = creating new, Some(id) = editing existing.
         editing_id: Option<i64>,
         name: String,

@@ -176,6 +176,7 @@ theme = "default"
 # expand = "l"                # expand a collapsed worktree family
 # expand_alt = "right"
 # select = "enter"
+# view = "tab"                # flip the pane between its Workspaces and Projects tabs
 
 # [keybindings.markdown]      # markdown reader
 # down = "j"

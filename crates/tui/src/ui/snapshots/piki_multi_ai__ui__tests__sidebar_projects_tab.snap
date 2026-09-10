@@ -1,0 +1,17 @@
+---
+source: crates/tui/src/ui/mod.rs
+assertion_line: 1052
+expression: content
+---
+╭ WORKSPACES │ PROJECTS ─────╮
+│ ▾ ● frontend 2             │
+│▎   nightly                 │
+│    /home/user/notes        │
+│ ▸ ● backend 1              │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+╰────────────────────────────╯

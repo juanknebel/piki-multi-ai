@@ -286,7 +286,7 @@ fn render_project_edit(frame: &mut Frame, area: Rect, app: &App) {
 
 /// `s` capped to `max` columns (char-count approximation, as elsewhere in
 /// the dialogs) with a trailing ellipsis — for names, whose head matters.
-fn ellipsize_end(s: &str, max: usize) -> String {
+pub(crate) fn ellipsize_end(s: &str, max: usize) -> String {
     if s.chars().count() <= max {
         return s.to_string();
     }
@@ -296,7 +296,7 @@ fn ellipsize_end(s: &str, max: usize) -> String {
 
 /// Same cap but keeping the tail — for paths, whose last segments are the
 /// distinctive part.
-fn ellipsize_start(s: &str, max: usize) -> String {
+pub(crate) fn ellipsize_start(s: &str, max: usize) -> String {
     let count = s.chars().count();
     if count <= max {
         return s.to_string();

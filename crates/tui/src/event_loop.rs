@@ -98,6 +98,13 @@ pub(crate) async fn run(
         {
             app.code_review_split_pct = pct.clamp(10, 90);
         }
+        // Which tab the top-left pane opens on (Workspaces | Projects).
+        if let Ok(Some(val)) = ui_prefs.get_preference("sidebar_view") {
+            app.sidebar_view = crate::app::SidebarView::from_str(&val);
+            if app.sidebar_view == crate::app::SidebarView::Projects {
+                app.reload_sidebar_projects();
+            }
+        }
     }
 
     // Load chat config from storage (shared with desktop)

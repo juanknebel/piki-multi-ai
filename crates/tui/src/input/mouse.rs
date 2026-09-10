@@ -355,8 +355,13 @@ pub(crate) fn handle_mouse_event(
                     // The wheel scrolls the viewport only — the selection
                     // (and the workspace it points at) never moves under it.
                     let visible = app.ws_list_area.height.saturating_sub(2) as usize;
-                    let max = app.sidebar_visual_rows().len().saturating_sub(visible);
-                    app.sidebar_scroll = app.sidebar_scroll.saturating_sub(3).min(max);
+                    if app.sidebar_view == crate::app::SidebarView::Projects {
+                        let max = app.projects_pane_rows().len().saturating_sub(visible);
+                        app.projects_scroll = app.projects_scroll.saturating_sub(3).min(max);
+                    } else {
+                        let max = app.sidebar_visual_rows().len().saturating_sub(visible);
+                        app.sidebar_scroll = app.sidebar_scroll.saturating_sub(3).min(max);
+                    }
                 } else if rect_contains(app.agents_area, col, row) {
                     let visible = app.agents_area.height.saturating_sub(2) as usize;
                     let max = app.agent_rows().len().saturating_sub(visible);
@@ -426,8 +431,13 @@ pub(crate) fn handle_mouse_event(
                 let api_resp_area = app.api_response_inner_area;
                 if rect_contains(app.ws_list_area, col, row) {
                     let visible = app.ws_list_area.height.saturating_sub(2) as usize;
-                    let max = app.sidebar_visual_rows().len().saturating_sub(visible);
-                    app.sidebar_scroll = (app.sidebar_scroll + 3).min(max);
+                    if app.sidebar_view == crate::app::SidebarView::Projects {
+                        let max = app.projects_pane_rows().len().saturating_sub(visible);
+                        app.projects_scroll = (app.projects_scroll + 3).min(max);
+                    } else {
+                        let max = app.sidebar_visual_rows().len().saturating_sub(visible);
+                        app.sidebar_scroll = (app.sidebar_scroll + 3).min(max);
+                    }
                 } else if rect_contains(app.agents_area, col, row) {
                     let visible = app.agents_area.height.saturating_sub(2) as usize;
                     let max = app.agent_rows().len().saturating_sub(visible);
@@ -590,6 +600,28 @@ pub(crate) fn handle_mouse_event(
                 // list itself — click-to-focus everywhere. An empty click
                 // just focuses the list and does nothing else.
                 else if rect_contains(app.ws_list_area, col, row) {
+                    // Tab bar in the top border: Workspaces │ Projects.
+                    if let Some(view) = crate::ui::sidebar::sidebar_tab_hit(app, col, row) {
+                        app.set_sidebar_view(view);
+                        app.active_pane = ActivePane::WorkspaceList;
+                        return None;
+                    }
+                    // Projects tab: a click selects the row and performs its
+                    // Enter action (expand project / jump / adopt member).
+                    if app.sidebar_view == crate::app::SidebarView::Projects {
+                        let inner_y = app.ws_list_area.y + 1;
+                        if row >= inner_y {
+                            let rows = app.projects_pane_rows();
+                            let clicked = (row - inner_y) as usize + app.projects_viewport();
+                            if let Some(target) = rows.get(clicked).copied() {
+                                app.selected_project_row = clicked;
+                                app.active_pane = ActivePane::WorkspaceList;
+                                return super::interaction::activate_project_row(app, target);
+                            }
+                        }
+                        app.active_pane = ActivePane::WorkspaceList;
+                        return None;
+                    }
                     let inner_y = app.ws_list_area.y + 1;
                     if row >= inner_y {
                         let sidebar_items = app.sidebar_items();

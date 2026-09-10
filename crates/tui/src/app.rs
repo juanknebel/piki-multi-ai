@@ -148,6 +148,33 @@ pub enum ActivePane {
     MainPanel,
 }
 
+/// Which view the top-left sidebar pane shows. Workspaces and Projects live
+/// in the same pane as tabs (`workspaces.view` binding, default Tab, or a
+/// click on the tab title); the choice persists across restarts via the
+/// `sidebar_view` ui-pref so the pane always opens on the view you prefer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SidebarView {
+    #[default]
+    Workspaces,
+    Projects,
+}
+
+impl SidebarView {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            SidebarView::Workspaces => "workspaces",
+            SidebarView::Projects => "projects",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            "projects" => SidebarView::Projects,
+            _ => SidebarView::Workspaces,
+        }
+    }
+}
+
 /// Which field is active in the New Workspace dialog
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DialogField {
@@ -878,9 +905,10 @@ pub enum InputState {
     Resize,
 }
 
-/// Cached footer keys: (mode, input_state, active_pane, has_markdown, has_kanban, api_footer_state, new_tab_menu, keys)
+/// Cached footer keys: (mode, input_state, active_pane, has_markdown, has_kanban, api_footer_state, new_tab_menu, sidebar_view, keys)
 /// api_footer_state: 0 = no API tab, 1 = API tab, 2 = API tab with search open
 /// new_tab_menu: 0 = N/A, 1 = Main, 2 = Agents, 3 = Tools
+/// sidebar_view: the focused top-left pane shows different hints per tab
 pub type FooterCache = (
     AppMode,
     InputState,
@@ -889,6 +917,7 @@ pub type FooterCache = (
     bool,
     u8,
     u8,
+    SidebarView,
     Vec<(String, &'static str)>,
 );
 
@@ -934,6 +963,19 @@ pub struct App {
     pub sidebar_scroll: usize,
     /// Same for the Agents pane (agent rows); see `reveal_agent_selection`.
     pub agents_scroll: usize,
+    /// Which tab of the top-left pane is showing (Workspaces | Projects).
+    pub sidebar_view: SidebarView,
+    /// Projects shown by the sidebar's Projects tab. Loaded from storage on
+    /// tab switch / startup and reloaded after every project mutation —
+    /// renders stay pure. Members resolve against `workspaces` at render
+    /// time, exactly like the Projects overlay.
+    pub sidebar_projects: Vec<piki_core::projects::Project>,
+    /// Expanded project ids in the sidebar's Projects tab (session-only).
+    pub projects_expanded: std::collections::HashSet<i64>,
+    /// Cursor over the flattened project rows (projects + expanded members).
+    pub selected_project_row: usize,
+    /// Wheel-viewport offset for the Projects tab; see `reveal_projects_selection`.
+    pub projects_scroll: usize,
     pub status_message: Option<String>,
     /// Toast notification (replaces status_message for timed display)
     pub toast: Option<Toast>,
@@ -1173,6 +1215,11 @@ impl App {
             selected_sidebar_row: 0,
             sidebar_scroll: 0,
             agents_scroll: 0,
+            sidebar_view: SidebarView::default(),
+            sidebar_projects: Vec::new(),
+            projects_expanded: std::collections::HashSet::new(),
+            selected_project_row: 0,
+            projects_scroll: 0,
             status_message: None,
             toast: None,
             fuzzy: None,
@@ -1749,6 +1796,66 @@ impl App {
         let visible = self.agents_area.height.saturating_sub(2) as usize;
         let selected = self.selected_agent_row.min(total.saturating_sub(1));
         self.agents_scroll = Self::reveal_scroll(total, visible, selected, self.agents_scroll);
+    }
+
+    /// Flattened rows of the sidebar's Projects tab — same shape the
+    /// Projects overlay navigates (projects + their expanded members).
+    pub fn projects_pane_rows(&self) -> Vec<crate::dialog_state::ProjectRow> {
+        crate::dialog_state::project_rows(&self.sidebar_projects, &self.projects_expanded)
+    }
+
+    /// Viewport offset for the Projects tab (shares the top-left pane rect).
+    pub fn projects_viewport(&self) -> usize {
+        let visible = self.ws_list_area.height.saturating_sub(2) as usize;
+        let max = self.projects_pane_rows().len().saturating_sub(visible);
+        self.projects_scroll.min(max)
+    }
+
+    /// Pull the Projects-tab viewport so the selected row is visible.
+    pub fn reveal_projects_selection(&mut self) {
+        let total = self.projects_pane_rows().len();
+        let visible = self.ws_list_area.height.saturating_sub(2) as usize;
+        let selected = self.selected_project_row.min(total.saturating_sub(1));
+        self.projects_scroll = Self::reveal_scroll(total, visible, selected, self.projects_scroll);
+    }
+
+    /// (Re)load the sidebar's Projects tab from storage: prunes expansion
+    /// state of deleted projects and clamps the cursor. Called on tab
+    /// switch, at startup when the pref restores the Projects tab, and after
+    /// every project save/delete.
+    pub fn reload_sidebar_projects(&mut self) {
+        self.sidebar_projects = self
+            .storage
+            .projects
+            .as_ref()
+            .map(|s| s.list_projects())
+            .unwrap_or_default();
+        self.projects_expanded
+            .retain(|id| self.sidebar_projects.iter().any(|p| p.id == Some(*id)));
+        let rows = self.projects_pane_rows().len();
+        self.selected_project_row = self.selected_project_row.min(rows.saturating_sub(1));
+    }
+
+    /// Switch the top-left pane to `view`, loading the project list when the
+    /// Projects tab comes up, and persist the choice (`sidebar_view` pref).
+    pub fn set_sidebar_view(&mut self, view: SidebarView) {
+        if view == SidebarView::Projects {
+            self.reload_sidebar_projects();
+        }
+        if self.sidebar_view != view {
+            self.sidebar_view = view;
+            if let Some(ref ui_prefs) = self.storage.ui_prefs {
+                let _ = ui_prefs.set_preference("sidebar_view", view.as_str());
+            }
+        }
+    }
+
+    pub fn toggle_sidebar_view(&mut self) {
+        let next = match self.sidebar_view {
+            SidebarView::Workspaces => SidebarView::Projects,
+            SidebarView::Projects => SidebarView::Workspaces,
+        };
+        self.set_sidebar_view(next);
     }
 
     /// If the currently selected sidebar row is collapsible (a worktree-family

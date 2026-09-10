@@ -363,6 +363,11 @@ static CATALOG: &[ActionMeta] = {
             Bind("workspaces", "select"),
             "Switch to it / toggle collapse",
         ),
+        local(
+            C::WorkspacePane,
+            Bind("workspaces", "view"),
+            "Toggle the Workspaces ⇄ Projects tab",
+        ),
         // ── Agents pane ───────────────────────────────────────────────────
         local(
             C::AgentsPane,

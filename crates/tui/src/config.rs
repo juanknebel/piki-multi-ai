@@ -371,6 +371,9 @@ fn default_workspaces() -> HashMap<String, String> {
     // Switch to the selected workspace; also toggles collapse when it's a
     // worktree-family parent row.
     m.insert("select".to_string(), "enter".to_string());
+    // Flip the pane between its Workspaces and Projects tabs (both views
+    // check this same binding, so it toggles from either side).
+    m.insert("view".to_string(), "tab".to_string());
     m
 }
 

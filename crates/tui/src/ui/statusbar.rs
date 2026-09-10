@@ -521,13 +521,25 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             ),
         ],
         _ => {
-            if app.active_pane == ActivePane::WorkspaceList {
+            if app.active_pane == ActivePane::WorkspaceList
+                && app.sidebar_view == crate::app::SidebarView::Projects
+            {
+                // The pane's Projects tab: overlay keys, in place.
+                vec![
+                    (cfg.get_binding("projects", "select"), "expand/open"),
+                    (cfg.get_binding("projects", "new"), "new"),
+                    (cfg.get_binding("projects", "edit"), "edit"),
+                    (cfg.get_binding("projects", "delete"), "delete"),
+                    (cfg.get_binding("workspaces", "view"), "workspaces"),
+                ]
+            } else if app.active_pane == ActivePane::WorkspaceList {
                 // Display-only pane: everything goes through the prefix.
                 vec![
                     (cfg.get_binding("app", "workspace_switcher"), "workspaces"),
                     (cfg.get_binding("app", "new_workspace"), "new ws"),
                     (cfg.get_binding("app", "edit_workspace"), "edit ws"),
                     (cfg.get_binding("app", "delete_workspace"), "delete ws"),
+                    (cfg.get_binding("workspaces", "view"), "projects"),
                 ]
             } else if app.active_pane == ActivePane::Agents {
                 vec![

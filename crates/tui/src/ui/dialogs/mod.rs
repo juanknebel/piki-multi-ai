@@ -1,6 +1,6 @@
 mod agents;
 mod dashboard;
-mod projects;
+pub(crate) mod projects;
 mod providers;
 mod rename;
 mod sessions;
