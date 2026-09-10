@@ -486,7 +486,7 @@ The diff pane shows a **side-by-side split view**: the left panel displays the o
 - **Tab bar** — one strip per workspace: the chips scroll, `+` (new blank tab) and `⋯` (every tab of the workspace, agent status, current one marked) stay put. Tab chips show the shell's ✓/✗ exit badge, an agent dot, a bell flash and a dim `○` when the process exited.
 - **Panes** — each top-level tab is a tree of panes; each pane holds exactly one content (shell, agent, code or markdown editor, web preview, kanban board, API explorer). A blank pane shows the chooser; the pane header shows the title, a split-right / split-down / close set and a *Restart* button once its process has exited. There are no per-pane tab bars.
 - **Status bar** — branch (click to switch), changed files and ahead/behind, the active shell's cwd, the active agent's status, `● N need you`, the `sessions N` segment (click to manage), LSP state, and a terminal button at the right corner that toggles the drop-down terminal (see below). Segments ellipsize instead of overflowing.
-- **Drop-down terminal** — `Ctrl+Alt+T`, the status-bar terminal button, View ▸ Toggle Terminal or the palette open a single Quake-style shell that slides up over the editor from just above the status bar. It is rooted at `~` and belongs to no workspace — the same instance whatever workspace is active — and runs in-process (it does not persist across an app restart). Drag its top edge to resize (height persisted); `Ctrl+Alt+T` again or the close button hides it without killing the shell; typing `exit` drops it and the next toggle starts a fresh one.
+- **Drop-down terminal** — ``Ctrl+Shift+` ``, the status-bar terminal button, View ▸ Toggle Terminal or the palette open a single Quake-style shell that slides up over the editor from just above the status bar. It is rooted at `~` and belongs to no workspace — the same instance whatever workspace is active — and runs in-process (it does not persist across an app restart). Drag its top edge to resize (height persisted); the same key again or the close button hides it without killing the shell; typing `exit` drops it and the next toggle starts a fresh one.
 - **Chat** — the AI chat panel docks to the right; below 1000px wide it floats over the editor.
 - The **welcome screen** appears only when no workspace exists; an empty workspace shows its name and branch with Shell / provider / tool / *Open file…* buttons instead.
 
@@ -509,7 +509,7 @@ The terminal owns every key it can use. An app shortcut fires while a terminal, 
 | `Right-click workspace` | Workspace menu (open, agents, info, edit, merge, delete) — also the row's `⋯` |
 | **View & Panels** | |
 | `Alt+S` | Toggle Sidebar |
-| `Ctrl+Alt+T` | Toggle Drop-down Terminal — a single shell rooted at `~`, independent of any workspace, sliding up over the editor; the same key closes it while it has focus |
+| ``Ctrl+Shift+` `` | Toggle Drop-down Terminal — a single shell rooted at `~`, independent of any workspace, sliding up over the editor; the same key closes it while it has focus |
 | `Alt+K` | Kanban Board |
 | `Alt+Shift+W` | Open Web Preview |
 | `Alt+T` | Theme Settings |

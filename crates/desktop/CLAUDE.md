@@ -306,7 +306,7 @@ just lint-desktop                           # frontend test + build, then clippy
   Quake-style shell rooted at `~`, owned by no workspace. `initDropdownTerminal()` (from `main.ts`, after
   `initPaneView`) builds `#dropdown-terminal` inside `#editor-area` and wires the top resize grip
   (height persisted as the `dropdownTerminalHeight` settings key). `toggleDropdownTerminal()` is the ONE
-  entry (status-bar button, `toggle-terminal` shortcut `Ctrl+Alt+T`, View menu, palette): it calls
+  entry (status-bar button, `toggle-terminal` shortcut ``Ctrl+Shift+` ``, View menu, palette): it calls
   `ipc.scratchTerminalToggle` (backend `DesktopApp.scratch_terminal`, in-process, spawned lazily on the
   first show — `commands/pty.rs`) and mounts/unmounts the xterm via the normal `terminal-panel.ts` API
   keyed by the id the command returns. `write_pty` / `resize_pty` accept that id too. A `pty-exit` on it

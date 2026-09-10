@@ -97,7 +97,7 @@ const shortcuts: ShortcutDef[] = [
   // and the Edit menu reach the same dialog from a focused shell.
   { id: "settings", label: "Settings", category: "General", defaultKey: "Ctrl+,", key: "Ctrl+,", action: () => {} },
   { id: "toggle-sidebar", label: "Toggle Sidebar", category: "View & Panels", defaultKey: "Alt+S", key: "Alt+S", action: () => {}, terminalCapture: true },
-  { id: "toggle-terminal", label: "Toggle Drop-down Terminal", category: "View & Panels", defaultKey: "Ctrl+Alt+T", key: "Ctrl+Alt+T", action: () => {}, terminalCapture: true },
+  { id: "toggle-terminal", label: "Toggle Drop-down Terminal", category: "View & Panels", defaultKey: "Ctrl+Shift+`", key: "Ctrl+Shift+`", action: () => {}, terminalCapture: true },
   { id: "toggle-chat", label: "Toggle AI Chat", category: "Chat", defaultKey: "Ctrl+Shift+L", key: "Ctrl+Shift+L", action: () => {}, terminalCapture: true },
   // chat-panel.ts addContextToChat(): a terminal selection goes straight into
   // the composer (select + this chord = two keys), otherwise a chooser opens.
@@ -353,6 +353,9 @@ export const KEY_CODES: Record<string, string[]> = {
   "=": ["Equal", "NumpadAdd"],
   "-": ["Minus", "NumpadSubtract"],
   "0": ["Digit0", "Numpad0"],
+  // Shift+backtick is "~"; match the drop-down terminal toggle on the
+  // physical key so `Ctrl+Shift+`` fires whatever character it produces.
+  "`": ["Backquote"],
 };
 
 /** Whether a keyboard event's key/code produced combo key `key` (case-insensitive). */
