@@ -275,6 +275,20 @@ pub(crate) fn open_chat_panel(app: &mut App) -> Option<Action> {
     None
 }
 
+/// Toggle the global scratch-terminal overlay. Hiding it (from
+/// `AppMode::ScratchTerminal`) just flips the flag and drops back to Normal —
+/// the shell keeps running. Showing it needs the async spawn on first use,
+/// so that path returns `Action::ShowScratchTerminal`.
+pub(crate) fn toggle_scratch_terminal(app: &mut App) -> Option<Action> {
+    if app.mode == AppMode::ScratchTerminal {
+        app.scratch.visible = false;
+        app.scratch.prefix_pending = false;
+        app.mode = AppMode::Normal;
+        return None;
+    }
+    Some(Action::ShowScratchTerminal)
+}
+
 // ── Workspaces & tabs ──
 
 pub(crate) fn cycle_next_tab(app: &mut App) -> Option<Action> {

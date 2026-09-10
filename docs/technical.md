@@ -190,6 +190,7 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 | `f` | Search within the active terminal's output |
 | `[` | Terminal scroll mode (see below) |
 | `y` | AI Chat panel |
+| `C-t` | Scratch terminal — a single shell rooted at `~`, tied to no workspace, shown centered on top of everything; press `Ctrl+G C-t` again (or from inside it) to hide, and the shell keeps running |
 | `b` | Workspace dashboard overlay (bird's-eye view of all workspaces and tabs) |
 | `C-s` | Sessions overlay (persistent-session daemon state and management, see below) |
 | `C-p` | Projects overlay (cross-repo groups with a colour; Enter expands or jumps, n/e/d manage) |

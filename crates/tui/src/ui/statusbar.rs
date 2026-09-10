@@ -432,6 +432,18 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             (cfg.format_binding("ctrl-a"), "agent"),
             ("Esc".to_string(), "hide"),
         ],
+        AppMode::ScratchTerminal => vec![
+            (
+                format!(
+                    "{} {}",
+                    cfg.prefix_display(),
+                    cfg.prefix_chord("scratch_terminal").unwrap_or_default()
+                ),
+                "hide",
+            ),
+            (cfg.format_binding("ctrl-shift-v"), "paste"),
+            (cfg.format_binding("ctrl-shift-c"), "copy"),
+        ],
         // The help browser is a live search box: printable keys filter,
         // arrows / PgUp-PgDn scroll, Esc clears the filter then closes.
         AppMode::Help => vec![

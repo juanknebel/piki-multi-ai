@@ -138,6 +138,10 @@ pub enum AppMode {
     ChatPanel,
     /// Rename current tab
     RenameTab,
+    /// Global "scratch" terminal overlay: a single shell rooted at `$HOME`,
+    /// tied to no workspace, drawn centered on top of everything. Persists
+    /// its PTY when hidden (see [`ScratchTerminal`]).
+    ScratchTerminal,
 }
 
 /// Which pane is currently selected / focused
@@ -367,6 +371,24 @@ impl Tab {
         let guard = shell.lock();
         piki_core::cli_agent::cli_agent_of(&guard.state)?.elapsed()
     }
+}
+
+/// The global "scratch" terminal — a single shell rooted at `$HOME`, owned
+/// by no workspace, shown as a centered overlay on top of everything and
+/// toggled by `prefix C-t` from anywhere. Its PTY is in-process (dies with
+/// the app) and keeps running while the overlay is hidden, so re-opening is
+/// instant. Lives as a top-level `App` field, like [`ChatPanelState`].
+#[derive(Default)]
+pub struct ScratchTerminal {
+    pub pty_session: Option<PtySession>,
+    pub pty_parser: Option<Arc<Mutex<vt100::Parser>>>,
+    /// Whether the overlay is currently shown (the PTY outlives this).
+    pub visible: bool,
+    /// A `prefix` chord was pressed while the overlay had focus — the next
+    /// key is dispatched as a mini prefix (so `prefix C-t` hides it).
+    pub prefix_pending: bool,
+    /// PTY byte counter as of the last render, for the redraw check.
+    pub last_bytes_processed: u64,
 }
 
 /// A single workspace backed by a git worktree
@@ -1099,6 +1121,8 @@ pub struct App {
     pub session_daemon: Option<piki_core::session::client::Daemon>,
     /// Global AI chat panel state (persists when overlay is hidden)
     pub chat_panel: ChatPanelState,
+    /// Global scratch-terminal overlay state (persists when hidden)
+    pub scratch: ScratchTerminal,
     /// Channel for receiving streaming chat tokens from Ollama
     pub chat_token_tx: tokio::sync::mpsc::UnboundedSender<piki_api_client::ChatStreamEvent>,
     pub chat_token_rx: tokio::sync::mpsc::UnboundedReceiver<piki_api_client::ChatStreamEvent>,
@@ -1287,6 +1311,7 @@ impl App {
             paths: paths.clone(),
             session_daemon: None,
             chat_panel: ChatPanelState::default(),
+            scratch: ScratchTerminal::default(),
             chat_token_tx,
             chat_token_rx,
             agent_event_tx,

@@ -292,6 +292,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         AppMode::SubmitReview => {} // handled by full-screen code review bypass above
         AppMode::ChatPanel => super::chat::render_chat_overlay(frame, area, app),
         AppMode::RenameTab => super::dialogs::render_rename_tab_dialog(frame, area, app),
+        AppMode::ScratchTerminal => super::scratch_terminal::render(frame, area, app),
     }
 
     // Which-key: transient prefix menu while a prefix chord is pending. Only

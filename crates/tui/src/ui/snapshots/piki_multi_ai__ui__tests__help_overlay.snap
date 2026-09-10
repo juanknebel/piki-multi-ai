@@ -1,6 +1,6 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 819
+assertion_line: 820
 expression: content
 ---
             ╭ Help ───────────────────────────────────────────────╮
@@ -41,5 +41,5 @@ expression: content
             │      C-g C-p       Projects                         │
             │      C-g [         Terminal Scroll Mode             │
             │      C-g y         AI Chat                          │
-            │    Focus                                            │
-            ╰───────────────────────────────────────── [1/215 ↑↓] ╯
+            │      C-g C-t       Scratch Terminal (home)          │
+            ╰───────────────────────────────────────── [1/216 ↑↓] ╯

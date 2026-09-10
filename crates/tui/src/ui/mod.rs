@@ -9,6 +9,7 @@ pub mod layout;
 pub mod markdown;
 mod panels;
 pub mod project_search;
+pub(crate) mod scratch_terminal;
 pub(crate) mod scrollbar;
 pub(crate) mod sidebar;
 pub(crate) mod statusbar;

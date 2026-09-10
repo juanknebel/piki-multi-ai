@@ -276,6 +276,12 @@ static CATALOG: &[ActionMeta] = {
         app("projects", "View", "Projects", "projects"),
         app("scroll_mode", "View", "Terminal Scroll Mode", "scroll"),
         app("chat_panel", "View", "AI Chat", "chat"),
+        app(
+            "scratch_terminal",
+            "View",
+            "Scratch Terminal (home)",
+            "terminal",
+        ),
         app("focus_left", "Focus", "Focus Pane Left", "left"),
         app("focus_down", "Focus", "Focus Pane Down", "down"),
         app("focus_up", "Focus", "Focus Pane Up", "up"),

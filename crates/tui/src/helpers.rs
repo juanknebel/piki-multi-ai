@@ -21,6 +21,59 @@ pub(crate) fn shutdown(app: &mut App) {
         ws.tabs.clear();
         ws.watcher = None;
     }
+    // The scratch terminal is always an in-process (Local) PTY — drop it so
+    // its shell is killed with us.
+    app.scratch.pty_session = None;
+    app.scratch.pty_parser = None;
+}
+
+/// Spawn the global scratch terminal's shell: a plain `$SHELL` rooted at the
+/// user's home directory, in-process (never daemon-backed — it is a
+/// throwaway, and there is no workspace to re-attach it to). Populates
+/// `app.scratch` on success; on failure toasts and leaves it empty.
+pub(crate) async fn spawn_scratch_terminal(app: &mut App, rows: u16, cols: u16) {
+    let home = piki_core::xdg::home_dir();
+    let plan = match piki_core::pty::launch_plan(&AIProvider::Shell, None, None, &app.paths, None) {
+        Ok(plan) => plan,
+        Err(e) => {
+            app.set_toast(
+                format!("Scratch terminal: {e}"),
+                crate::app::ToastLevel::Error,
+            );
+            return;
+        }
+    };
+    let sidecar = plan
+        .integration_on
+        .then(piki_core::cli_agent::sidecar_config);
+    match PtySession::spawn(
+        &home,
+        rows.max(1),
+        cols.max(1),
+        &plan.command,
+        &plan.args,
+        &plan.env,
+        &plan.extra_args,
+        plan.integration_on,
+        plan.cli_agent_sock,
+        sidecar,
+        Some(app.pty_output.clone()),
+    )
+    .await
+    {
+        Ok(session) => {
+            app.scratch.pty_parser = Some(Arc::clone(session.parser()));
+            app.scratch.pty_session = Some(session);
+            app.scratch.last_bytes_processed = 0;
+        }
+        Err(e) => {
+            tracing::warn!(command = %plan.command, error = %e, "failed to spawn scratch terminal");
+            app.set_toast(
+                format!("Could not start '{}': {e}", plan.command),
+                crate::app::ToastLevel::Error,
+            );
+        }
+    }
 }
 
 /// Connect to — or launch — the session daemon for `paths`. Returns `None`
