@@ -151,7 +151,8 @@ just lint-desktop                           # frontend test + build, then clippy
   families aggregate hidden children by `family_key` / `source_repo`) via `types.ts::agentStatusSeverity`
   / `actionableStatusView` (mirrors of `piki_core::cli_agent::status_severity` and the TUI's
   `actionable_status_view` — change all together). Every row starts with a fixed-width
-  `.workspace-gutter` (chevron on a worktree parent — the whole slot toggles collapse —, the static
+  `.workspace-gutter` (chevron on a worktree parent — the whole slot toggles collapse without
+  switching, while a click anywhere else on a parent row toggles AND switches —, the static
   accent dot on the active row, empty otherwise) so labels align whatever the row kind; a clone's branch renders as
   a separate muted `.workspace-branch` span (`rowParts`), never glued to the name, and `.grouped`
   children indent one step past the parent's gutter. Don't reintroduce a leading element that only some

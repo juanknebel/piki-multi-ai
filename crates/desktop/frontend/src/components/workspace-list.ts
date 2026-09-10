@@ -129,11 +129,22 @@ export function renderWorkspaceList(container: HTMLElement) {
     return best;
   }
 
-  function persistCollapsed() {
-    ipc.setCollapsedGroups([...collapsedGroups]).catch(() => {});
-    // The backend resolves collapse state, so re-fetch rather than
-    // recompute here.
+  async function persistCollapsed() {
+    // Await the write: the backend resolves collapse state from storage, so
+    // re-fetching before the save lands renders the OLD state and the click
+    // appears to do nothing.
+    try {
+      await ipc.setCollapsedGroups([...collapsedGroups]);
+    } catch (err) {
+      console.error("Failed to save collapsed groups:", err);
+    }
     void refreshRows();
+  }
+
+  function toggleGroup(key: string) {
+    if (collapsedGroups.has(key)) collapsedGroups.delete(key);
+    else collapsedGroups.add(key);
+    void persistCollapsed();
   }
 
   function render() {
@@ -194,11 +205,7 @@ export function renderWorkspaceList(container: HTMLElement) {
           <span class="group-label">PR Review</span>
         `;
         const key = row.family_key;
-        header.addEventListener("click", () => {
-          if (collapsedGroups.has(key)) collapsedGroups.delete(key);
-          else collapsedGroups.add(key);
-          persistCollapsed();
-        });
+        header.addEventListener("click", () => toggleGroup(key));
         makeInteractive(header);
         container.appendChild(header);
         continue;
@@ -270,19 +277,17 @@ export function renderWorkspaceList(container: HTMLElement) {
         const key = row.family_key;
         item.querySelector(".workspace-gutter")!.addEventListener("click", (e) => {
           e.stopPropagation();
-          if (collapsedGroups.has(key)) {
-            collapsedGroups.delete(key);
-          } else {
-            collapsedGroups.add(key);
-          }
-          persistCollapsed();
+          toggleGroup(key);
         });
       }
 
-      // Click to switch workspace
+      // Click to switch workspace. On a family parent the row click ALSO
+      // toggles the group (TUI Enter parity): the parent itself stays
+      // visible, so nothing you clicked on disappears.
       item.addEventListener("click", (e) => {
         if ((e.target as HTMLElement).closest(".ws-action-btn")) return;
         if (row.kind === "parent" && (e.target as HTMLElement).closest(".workspace-gutter")) return;
+        if (row.kind === "parent" && row.family_key) toggleGroup(row.family_key);
         void switchTo(idx);
       });
 
