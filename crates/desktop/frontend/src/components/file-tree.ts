@@ -2,12 +2,16 @@ import { appState } from "../state";
 import * as ipc from "../ipc";
 import type { DirEntry, EntryKind, FileStatus } from "../types";
 import { FILE_STATUS_LABELS, FILE_STATUS_CSS } from "../types";
-import { registerCodeFile, getCodeEditorFilePath } from "./code-editor-panel";
-import { registerMarkdownFile, getMarkdownEditorFilePath } from "./markdown-editor-panel";
+import { getCodeEditorFilePath } from "./code-editor-panel";
+import { getMarkdownEditorFilePath } from "./markdown-editor-panel";
+import { openFileInEditor } from "./open-content";
 import { showMarkdown } from "./markdown-viewer";
 import { toast } from "./toast";
 import { showConfirm } from "./confirm";
 import { fileGlyph, folderGlyph, type FileIcon } from "./file-icons";
+import { icon } from "./icons";
+import { openContextMenu, type CtxItem } from "./context-menu";
+import { settingsStore } from "../settings";
 
 type NodeState =
   | { status: "idle" }
@@ -45,59 +49,8 @@ function baseName(rel: string): string {
   return i < 0 ? rel : rel.slice(i + 1);
 }
 
-const CHEVRON_SVG = `<svg class="ft-chevron" viewBox="0 0 16 16"><path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`;
-const SEARCH_SVG = `<svg viewBox="0 0 16 16" width="13" height="13"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
-
-interface CtxItem {
-  label?: string;
-  action?: () => void;
-  danger?: boolean;
-  separator?: boolean;
-}
-
-function openContextMenu(x: number, y: number, items: CtxItem[]) {
-  document.querySelector(".ft-ctx")?.remove();
-  const menu = document.createElement("div");
-  menu.className = "ft-ctx";
-  for (const it of items) {
-    if (it.separator) {
-      const s = document.createElement("div");
-      s.className = "ft-ctx-sep";
-      menu.appendChild(s);
-      continue;
-    }
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = `ft-ctx-item${it.danger ? " danger" : ""}`;
-    b.textContent = it.label ?? "";
-    b.addEventListener("click", () => {
-      close();
-      it.action?.();
-    });
-    menu.appendChild(b);
-  }
-  const close = () => {
-    menu.remove();
-    document.removeEventListener("mousedown", onDown, true);
-    document.removeEventListener("keydown", onKey, true);
-    window.removeEventListener("blur", close);
-  };
-  const onDown = (e: MouseEvent) => {
-    if (!menu.contains(e.target as Node)) close();
-  };
-  const onKey = (e: KeyboardEvent) => {
-    if (e.key === "Escape") close();
-  };
-  document.body.appendChild(menu);
-  const r = menu.getBoundingClientRect();
-  const left = Math.min(x, window.innerWidth - r.width - 4);
-  const top = Math.min(y, window.innerHeight - r.height - 4);
-  menu.style.left = `${Math.max(4, left)}px`;
-  menu.style.top = `${Math.max(4, top)}px`;
-  document.addEventListener("mousedown", onDown, true);
-  document.addEventListener("keydown", onKey, true);
-  window.addEventListener("blur", close);
-}
+const CHEVRON_SVG = icon("chevron-right", { class: "ft-chevron" });
+const SEARCH_SVG = icon("search", { size: "13" });
 
 let revealImpl: ((rel: string) => void) | null = null;
 let autoRevealToggleImpl: (() => void) | null = null;
@@ -123,25 +76,13 @@ interface FtPersist {
 }
 
 async function loadFtSettings(): Promise<FtPersist> {
-  try {
-    const raw = await ipc.getSettings();
-    const all = raw ? JSON.parse(raw) : {};
-    const v = all && typeof all === "object" ? all[FT_SETTINGS_KEY] : null;
-    return v && typeof v === "object" ? (v as FtPersist) : {};
-  } catch {
-    return {};
-  }
+  await settingsStore.load();
+  const v = settingsStore.get(FT_SETTINGS_KEY);
+  return v && typeof v === "object" ? (v as FtPersist) : {};
 }
 
-async function saveFtSettings(next: FtPersist): Promise<void> {
-  try {
-    const raw = await ipc.getSettings();
-    const all = raw ? JSON.parse(raw) : {};
-    all[FT_SETTINGS_KEY] = next;
-    await ipc.setSettings(JSON.stringify(all));
-  } catch {
-    // Best-effort; failure to persist is non-fatal.
-  }
+function saveFtSettings(next: FtPersist): void {
+  settingsStore.patch(FT_SETTINGS_KEY, next);
 }
 
 export function renderFileTree(container: HTMLElement) {
@@ -175,7 +116,7 @@ export function renderFileTree(container: HTMLElement) {
   function flushPersist() {
     if (!persistLoaded) return;
     snapshotPersist();
-    void saveFtSettings(ftPersist);
+    saveFtSettings(ftPersist);
   }
 
   function setAutoReveal(v: boolean) {
@@ -214,8 +155,8 @@ export function renderFileTree(container: HTMLElement) {
     loadingAll = true;
     const reqWs = wsIdx;
     try {
-      const files = await ipc.fuzzyFileList(reqWs);
-      if (reqWs === wsIdx) allFiles = files;
+      const index = await ipc.fuzzyFileList(reqWs);
+      if (reqWs === wsIdx) allFiles = index.files;
     } catch {
       if (reqWs === wsIdx) allFiles = [];
     } finally {
@@ -339,14 +280,7 @@ export function renderFileTree(container: HTMLElement) {
 
   function openFile(rel: string, forceCode = false) {
     if (wsIdx < 0) return;
-    const tabId = crypto.randomUUID();
-    if (!forceCode && MD_RE.test(rel)) {
-      registerMarkdownFile(tabId, rel);
-      appState.addTab(wsIdx, { id: tabId, provider: "Markdown", alive: true });
-    } else {
-      registerCodeFile(tabId, rel, wsIdx);
-      appState.addTab(wsIdx, { id: tabId, provider: "CodeEditor", alive: true });
-    }
+    openFileInEditor(wsIdx, rel, { forceCode });
   }
 
   function toggleDir(rel: string) {
@@ -658,7 +592,8 @@ export function renderFileTree(container: HTMLElement) {
         : iconSpan(fileGlyph(""))
     }`;
     const input = document.createElement("input");
-    input.className = "ft-input";
+    input.className = "ft-input ui-input";
+    input.dataset.size = "sm";
     input.spellcheck = false;
     input.placeholder = row.createKind === "dir" ? "folder name" : "file name";
     let done = false;
@@ -695,7 +630,8 @@ export function renderFileTree(container: HTMLElement) {
       isDir ? iconSpan(folderGlyph(row.name, false)) : iconSpan(fileGlyph(row.name))
     }`;
     const input = document.createElement("input");
-    input.className = "ft-input";
+    input.className = "ft-input ui-input";
+    input.dataset.size = "sm";
     input.spellcheck = false;
     input.value = row.name;
     let done = false;
@@ -785,11 +721,11 @@ export function renderFileTree(container: HTMLElement) {
     header.innerHTML = `
       <span title="${escAttr(rootPath ?? "")}">${esc(folderName.toUpperCase() || "FILES")}</span>
       <span class="ft-header-actions">
-        <button class="sc-header-btn ft-new-file" title="New File">+</button>
-        <button class="sc-header-btn ft-search${filterOpen ? " active" : ""}" title="Search files">${SEARCH_SVG}</button>
-        <button class="sc-header-btn ft-autoreveal${autoReveal ? " active" : ""}" title="Auto-reveal active file">◎</button>
-        <button class="sc-header-btn ft-toggle-hidden${showHidden ? " active" : ""}" title="Show hidden files">.*</button>
-        <button class="sc-header-btn ft-refresh" title="Refresh">⟳</button>
+        <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn ft-new-file" title="New File">+</button>
+        <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn ft-search${filterOpen ? " active" : ""}" title="Search files">${SEARCH_SVG}</button>
+        <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn ft-autoreveal${autoReveal ? " active" : ""}" title="Auto-reveal active file" aria-label="Auto-reveal active file">${icon("locate")}</button>
+        <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn ft-toggle-hidden${showHidden ? " active" : ""}" title="Show hidden files">.*</button>
+        <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn ft-refresh" title="Refresh" aria-label="Refresh">${icon("refresh")}</button>
       </span>`;
     header.querySelector(".ft-new-file")!.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -822,7 +758,8 @@ export function renderFileTree(container: HTMLElement) {
       const fwrap = document.createElement("div");
       fwrap.className = "ft-filter-wrap";
       const fin = document.createElement("input");
-      fin.className = "ft-filter";
+      fin.className = "ft-filter ui-input";
+      fin.dataset.size = "sm";
       fin.placeholder = "Filter files…";
       fin.spellcheck = false;
       fin.value = filterQuery;
@@ -900,7 +837,7 @@ export function renderFileTree(container: HTMLElement) {
         <span class="ft-twisty${isOpen ? " open" : ""}">${isDir ? CHEVRON_SVG : ""}</span>
         ${isDir ? iconSpan(folderGlyph(row.name, isOpen)) : iconSpan(fileGlyph(row.name))}
         <span class="ft-name">${esc(row.name)}</span>
-        ${gs ? statusSpan(gs) : dirChanged ? '<span class="ft-dir-dot" title="Contains changes">●</span>' : ""}`;
+        ${gs ? statusSpan(gs) : dirChanged ? `<span class="ft-dir-dot" title="Contains changes">${icon("dot")}</span>` : ""}`;
       btn.addEventListener("click", () => onRowActivate(row.rel, isDir));
       if (!isDir) {
         btn.addEventListener("dblclick", () => beginRename(row.rel));
@@ -971,7 +908,7 @@ export function renderFileTree(container: HTMLElement) {
 
 function msg(text: string): HTMLElement {
   const m = document.createElement("div");
-  m.className = "empty-message";
+  m.className = "ui-empty";
   m.textContent = text;
   return m;
 }

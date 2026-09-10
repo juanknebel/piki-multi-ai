@@ -6,8 +6,8 @@
   justify-content: center;
   width: 15px;
   flex-shrink: 0;
-  font-size: 14px;
-  line-height: 1;
+  font-size: var(--fs-xl);
+  line-height: var(--leading-none);
   color: var(--icon-default);
 }
 

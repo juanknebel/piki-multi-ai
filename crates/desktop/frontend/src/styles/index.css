@@ -1,0 +1,54 @@
+/* Single entry point for the app's stylesheets, imported from main.ts.
+ * The order is the cascade — later files override earlier ones — and it is
+ * the historical <link> order from index.html, so keep appending features
+ * at the end. Foundation first (fonts, tokens, reset, keyframes), then the
+ * shell, then feature panels. Add a new stylesheet here, never in index.html. */
+
+/* Foundation */
+@import "../fonts/fonts.css";
+@import "./variables.css";
+@import "./reset.css";
+/* Primitives (.ui-surface / .ui-header / .ui-btn / .ui-input / .ui-empty)
+   come before every feature sheet so a feature modifier always wins. */
+@import "./primitives.css";
+@import "./motion.css";
+/* Inline SVG icon box (components/icons.ts) */
+@import "./icons.css";
+
+/* Shell + panels, in cascade order */
+@import "./layout.css";
+@import "./activity-bar.css";
+@import "./sidebar.css";
+@import "./file-tree.css";
+@import "./context-menu.css";
+@import "./file-icons.css";
+@import "./tab-bar.css";
+@import "./pane.css";
+@import "./terminal.css";
+@import "./terminal-settings.css";
+@import "./status-bar.css";
+/* The dialog family (was one dialog.css): core first, then per-feature */
+@import "./dialog-core.css";
+@import "./dialog-providers.css";
+@import "./dialog-agent.css";
+@import "./dialog-logs.css";
+@import "./dialog-help.css";
+@import "./dialog-workspace.css";
+@import "./dialog-git.css";
+@import "./toast.css";
+@import "./file-viewer.css";
+@import "./dialog-settings.css";
+@import "./markdown.css";
+@import "./source-control.css";
+@import "./command-palette.css";
+@import "./diff.css";
+@import "./dashboard.css";
+@import "./sysinfo.css";
+@import "./theme-dialog.css";
+@import "./menu-bar.css";
+@import "./kanban.css";
+@import "./api-panel.css";
+@import "./tooltip.css";
+@import "./chat-panel.css";
+@import "./code-editor.css";
+@import "./web-preview.css";

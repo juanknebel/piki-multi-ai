@@ -7,8 +7,9 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use piki_core::ChangedFile;
 use piki_core::notifications;
+use piki_core::workspace::watcher::WatchEventKind;
 
-use crate::state::DesktopApp;
+use crate::state::{DesktopApp, DesktopTab};
 
 #[derive(Serialize, Clone)]
 pub struct GitRefreshPayload {
@@ -40,6 +41,42 @@ pub struct PtyAttentionPayload {
     pub workspace_idx: usize,
     pub tab_id: String,
     pub source: &'static str,
+}
+
+/// Tauri event payload emitted when a tab's agent attention marker is
+/// cleared backend-side because the user is (now) looking at that tab. The
+/// frontend drops its amber "needs you" for `tab_id` everywhere at once.
+#[derive(Serialize, Clone)]
+pub struct PtyAgentAckPayload {
+    pub tab_id: String,
+}
+
+/// Acknowledge `tab`'s agent "unseen news" marker — the user is looking at
+/// it. Returns true only when a pending marker was actually cleared, so the
+/// caller can emit [`emit_agent_ack`] once it has dropped the `DesktopApp`
+/// lock (never emit under it). Mirrors the TUI event loop, which acks the
+/// active tab on every iteration.
+pub fn acknowledge_agent_attention(tab: &DesktopTab) -> bool {
+    let Some(shell) = tab.pty.as_ref().and_then(|p| p.shell()) else {
+        return false;
+    };
+    let mut guard = shell.lock();
+    match piki_core::cli_agent::cli_agent_of_mut(&mut guard.state) {
+        Some(agent) if agent.last_attention_at.is_some() => {
+            agent.acknowledge();
+            true
+        }
+        _ => false,
+    }
+}
+
+pub fn emit_agent_ack(app_handle: &AppHandle, tab_id: &str) {
+    let _ = app_handle.emit(
+        "pty-agent-ack",
+        PtyAgentAckPayload {
+            tab_id: tab_id.to_string(),
+        },
+    );
 }
 
 #[allow(dead_code)]
@@ -102,10 +139,9 @@ pub fn spawn_idle_watcher_loop(app_handle: AppHandle) {
                         // events (missing / version-skewed hooks) → `cli_agent`
                         // stays `None` and the watcher is the graceful
                         // fallback.
-                        if pty
-                            .shell()
-                            .is_some_and(|s| s.lock().state.cli_agent.is_some())
-                        {
+                        if pty.shell().is_some_and(|s| {
+                            piki_core::cli_agent::cli_agent_of(&s.lock().state).is_some()
+                        }) {
                             continue;
                         }
                         if let Some(sig) = watcher.poll(pty.bytes_processed()) {
@@ -200,6 +236,25 @@ pub fn spawn_git_watcher(app_handle: AppHandle) {
                         continue;
                     }
                     triggered.push((idx, ws.info.path.clone()));
+
+                    // Drop the Ctrl+F file index unless every event is a
+                    // content edit of a file it already lists (creates,
+                    // deletes and renames — a rename's new name is unknown
+                    // to the index — force a re-walk on the next open).
+                    if let Some(index) = ws.file_index.as_ref() {
+                        let only_known_edits = events.iter().all(|ev| {
+                            ev.kind == WatchEventKind::Modified
+                                && ev.paths.iter().all(|abs| {
+                                    abs.strip_prefix(&ws.info.path)
+                                        .ok()
+                                        .and_then(|rel| rel.to_str())
+                                        .is_some_and(|rel| index.contains(rel))
+                                })
+                        });
+                        if !only_known_edits {
+                            ws.file_index = None;
+                        }
+                    }
 
                     // Collect changed paths relative to the workspace, deduplicated.
                     use std::collections::BTreeSet;

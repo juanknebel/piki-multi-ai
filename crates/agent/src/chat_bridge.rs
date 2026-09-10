@@ -11,15 +11,45 @@
 //! agent path already used it. Three copies of the client selection, two of
 //! the message conversion.
 
-use piki_api_client::{ChatClient, ChatWireMessage, LlamaCppClient, OllamaClient, RawToolCall};
+use piki_api_client::{
+    ChatClient, ChatWireMessage, LlamaCppClient, OllamaClient, OpenRouterClient, RawToolCall,
+};
 use piki_core::chat::{ChatConfig, ChatMessage, ChatServerType};
 
 /// The chat client for `server_type`, behind the trait that hides each
 /// backend's message format.
 pub fn chat_client_for(server_type: ChatServerType, base_url: &str) -> Box<dyn ChatClient> {
+    chat_client_for_with_key(server_type, base_url, None)
+}
+
+/// Like `chat_client_for` but with an optional API key (for OpenRouter).
+pub fn chat_client_for_with_key(
+    server_type: ChatServerType,
+    base_url: &str,
+    api_key: Option<String>,
+) -> Box<dyn ChatClient> {
+    chat_client_for_with_key_and_search(server_type, base_url, api_key, false)
+}
+
+/// Like `chat_client_for_with_key` but with web_search toggle for OpenRouter.
+pub fn chat_client_for_with_key_and_search(
+    server_type: ChatServerType,
+    base_url: &str,
+    api_key: Option<String>,
+    web_search: bool,
+) -> Box<dyn ChatClient> {
+    // Env var fallback for piki-ai parity
+    let effective_key = api_key.or_else(|| {
+        std::env::var("OPENROUTER_API_KEY")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+    });
     match server_type {
         ChatServerType::Ollama => Box::new(OllamaClient::new(base_url)),
         ChatServerType::LlamaCpp => Box::new(LlamaCppClient::new(base_url)),
+        ChatServerType::OpenRouter => Box::new(
+            OpenRouterClient::new_with_key(base_url, effective_key).with_web_search(web_search),
+        ),
     }
 }
 

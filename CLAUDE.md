@@ -28,12 +28,12 @@ cargo clippy --workspace --exclude piki-desktop --all-targets -- -D warnings
 cargo test --workspace --exclude piki-desktop
 
 # nightly.yml::build-desktop — push to nightly only; builds the desktop bundle
-cd crates/desktop/frontend && npm run build   # = tsc && vite build
+cd crates/desktop/frontend && npm test && npm run build   # vitest, then tsc && vite build
 ```
 
 Notes:
 - The `test` job excludes `piki-desktop` because `tauri-build` needs `frontend/dist` to exist. Its Rust *is* linted and tested, in `build-desktop`, after the frontend build (`just lint-desktop` locally).
-- The frontend's TypeScript is only typechecked via `npm run build` in `nightly.yml::build-desktop`; the `test` job does not touch it.
+- The frontend's TypeScript is only typechecked via `npm run build`, and its vitest suite only runs via `npm test`, in `nightly.yml::build-desktop`; the `test` job does not touch it.
 - Everything must be clean before pushing to `nightly`. PRs run the `test` job too; `build`/`build-desktop`/`release` are gated on `github.event_name == 'push'` so a PR never publishes artifacts.
 - The `build` and `build-desktop` jobs have `needs: test`, so a failing test blocks the nightly artifacts from publishing.
 - `.github/workflows/audit.yml` runs `cargo audit` weekly and on any dependency change. Advisories we cannot act on are ignored in `.cargo/audit.toml`, each with a reason and the condition that clears it — add entries there, never by silencing the job.

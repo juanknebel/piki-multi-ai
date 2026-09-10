@@ -1,20 +1,45 @@
 import { appState } from "../state";
-import { reportError } from "./toast";
-import * as ipc from "../ipc";
+import { settingsStore } from "../settings";
+import { activityBarWidth, clampSidebarWidth, visibleChatWidth } from "../layout-budget";
 import { renderWorkspaceList } from "./workspace-list";
 import { renderFileTree } from "./file-tree";
 import { renderSourceControl } from "./source-control";
 import { renderAgentsPanel } from "./agents-panel";
 import { showAgentManager } from "./dialogs/agent-dialog";
-import { openWebPreviewTab } from "./web-preview-panel";
+import { openProvider } from "./open-content";
+
+/** Show/hide the whole sidebar column (activity bar stays). */
+export function toggleSidebar() {
+  document.getElementById("app")!.classList.toggle("sidebar-hidden");
+}
+
+/** Room the workspace list must keep above the Agents panel: its header
+ *  plus `MIN_VISIBLE_WORKSPACE_ROWS` rows (a `.workspace-item` is
+ *  `--row-height-lg`, 32px at density 1 — the caller measures a live row so
+ *  density / zoom are honoured). Below that the list still scrolls, but
+ *  four rows are the floor a drag cannot cross. */
+const MIN_VISIBLE_WORKSPACE_ROWS = 4;
+const WORKSPACE_ROW_PX = 32;
+const SIDEBAR_HEADER_PX = 30;
+const AGENTS_HANDLE_PX = 4;
+
+/** Largest Agents-panel height that still leaves the workspace list its
+ *  minimum rows. Exported for the (pure) clamp rule; `sidebarHeight` is the
+ *  sidebar's inner height. */
+export function maxAgentsPanelHeight(sidebarHeight: number, rowPx = WORKSPACE_ROW_PX): number {
+  const reserved = SIDEBAR_HEADER_PX + MIN_VISIBLE_WORKSPACE_ROWS * rowPx + AGENTS_HANDLE_PX;
+  return Math.max(64, Math.min(sidebarHeight * 0.75, sidebarHeight - reserved));
+}
 
 /** Set an explicit Agents-panel height (px), replacing the default 40% cap.
- *  Clamped so neither the panel nor the active view can be squeezed out. */
+ *  Clamped so neither the panel nor the workspace list (≥4 rows, or its own
+ *  scrollbar) can be squeezed out. */
 function applyAgentsPanelHeight(px: number) {
   const view = document.getElementById("agents-view");
   const sidebar = document.getElementById("sidebar");
   if (!view || !sidebar) return;
-  const max = Math.max(64, (sidebar.clientHeight || window.innerHeight) * 0.75);
+  const rowPx = document.querySelector<HTMLElement>(".workspace-item")?.offsetHeight || WORKSPACE_ROW_PX;
+  const max = maxAgentsPanelHeight(sidebar.clientHeight || window.innerHeight, rowPx);
   const clamped = Math.max(32, Math.min(max, px));
   view.style.height = `${clamped}px`;
   view.style.maxHeight = "none";
@@ -22,18 +47,13 @@ function applyAgentsPanelHeight(px: number) {
 
 export async function initSidebar() {
   // Restore persisted sidebar width + Agents panel height
-  try {
-    const raw = await ipc.getSettings();
-    if (raw) {
-      const settings = JSON.parse(raw);
-      if (settings.sidebarWidth) {
-        document.documentElement.style.setProperty("--sidebar-width", `${settings.sidebarWidth}px`);
-      }
-      if (settings.agentsPanelHeight) {
-        applyAgentsPanelHeight(settings.agentsPanelHeight);
-      }
-    }
-  } catch { /* ignore */ }
+  await settingsStore.load();
+  const sidebarWidth = settingsStore.get<number>("sidebarWidth");
+  if (sidebarWidth) {
+    document.documentElement.style.setProperty("--sidebar-width", `${sidebarWidth}px`);
+  }
+  const agentsPanelHeight = settingsStore.get<number>("agentsPanelHeight");
+  if (agentsPanelHeight) applyAgentsPanelHeight(agentsPanelHeight);
 
   const explorerView = document.getElementById("explorer-view")!;
   const workspaceList = document.getElementById("workspace-list")!;
@@ -56,19 +76,19 @@ export async function initSidebar() {
     const view = appState.activeView;
 
     if (view === "kanban") {
-      spawnKanbanTab();
+      void openProvider("Kanban");
       appState.setActiveView(lastSidebarView);
       return;
     }
 
     if (view === "api") {
-      spawnApiTab();
+      void openProvider("Api");
       appState.setActiveView(lastSidebarView);
       return;
     }
 
     if (view === "web-preview") {
-      openWebPreviewTab();
+      void openProvider("WebPreview");
       appState.setActiveView(lastSidebarView);
       return;
     }
@@ -85,26 +105,6 @@ export async function initSidebar() {
     explorerView.style.display = view === "explorer" ? "flex" : "none";
     filesView.style.display = view === "files" ? "flex" : "none";
     scView.style.display = view === "git" ? "flex" : "none";
-  }
-
-  async function spawnKanbanTab() {
-    if (appState.focusSingletonTab("Kanban")) return;
-    try {
-      const tabId = await ipc.spawnTab(appState.activeWorkspace, "Kanban");
-      appState.addTabToRoot(appState.activeWorkspace, { id: tabId, provider: "Kanban", alive: true });
-    } catch (err) {
-      reportError("Failed to open Kanban tab", err);
-    }
-  }
-
-  async function spawnApiTab() {
-    if (appState.focusSingletonTab("Api")) return;
-    try {
-      const tabId = await ipc.spawnTab(appState.activeWorkspace, "Api");
-      appState.addTabToRoot(appState.activeWorkspace, { id: tabId, provider: "Api", alive: true });
-    } catch (err) {
-      reportError("Failed to open API Explorer tab", err);
-    }
   }
 
   appState.on("view-changed", updateView);
@@ -130,19 +130,13 @@ export async function initSidebar() {
   document.addEventListener("mousemove", (e) => {
     if (!dragging) return;
     const delta = e.clientX - startX;
-    const newWidth = Math.max(150, Math.min(window.innerWidth * 0.5, startWidth + delta));
+    const newWidth = clampSidebarWidth(startWidth + delta, window.innerWidth, visibleChatWidth(), activityBarWidth());
     root.style.setProperty("--sidebar-width", `${newWidth}px`);
   });
 
   function persistSidebarWidth() {
     const width = parseInt(getComputedStyle(root).getPropertyValue("--sidebar-width"));
-    if (width) {
-      ipc.getSettings().then((raw) => {
-        const settings = raw ? JSON.parse(raw) : {};
-        settings.sidebarWidth = width;
-        ipc.setSettings(JSON.stringify(settings)).catch(() => {});
-      }).catch(() => {});
-    }
+    if (width) settingsStore.patch("sidebarWidth", width);
   }
 
   document.addEventListener("mouseup", () => {
@@ -163,9 +157,11 @@ export async function initSidebar() {
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
     e.preventDefault();
     const cur = document.getElementById("sidebar")!.offsetWidth;
-    const next = Math.max(
-      150,
-      Math.min(window.innerWidth * 0.5, cur + (e.key === "ArrowRight" ? 16 : -16)),
+    const next = clampSidebarWidth(
+      cur + (e.key === "ArrowRight" ? 16 : -16),
+      window.innerWidth,
+      visibleChatWidth(),
+      activityBarWidth(),
     );
     root.style.setProperty("--sidebar-width", `${next}px`);
     persistSidebarWidth();
@@ -195,13 +191,7 @@ export async function initSidebar() {
 
   function persistAgentsHeight() {
     const height = agentsView.offsetHeight;
-    if (height) {
-      ipc.getSettings().then((raw) => {
-        const settings = raw ? JSON.parse(raw) : {};
-        settings.agentsPanelHeight = height;
-        ipc.setSettings(JSON.stringify(settings)).catch(() => {});
-      }).catch(() => {});
-    }
+    if (height) settingsStore.patch("agentsPanelHeight", height);
   }
 
   document.addEventListener("mouseup", () => {
@@ -211,6 +201,12 @@ export async function initSidebar() {
     document.body.style.cursor = "";
     document.body.style.userSelect = "";
     persistAgentsHeight();
+  });
+
+  // A shorter window must not let a persisted height eat the workspace
+  // list: re-apply the clamp whenever the sidebar's height changes.
+  window.addEventListener("resize", () => {
+    if (agentsView.style.height) applyAgentsPanelHeight(agentsView.offsetHeight);
   });
 
   // Keyboard resizing on the divider itself (ArrowUp grows the panel).

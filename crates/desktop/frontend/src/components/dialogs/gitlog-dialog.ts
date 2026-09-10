@@ -26,19 +26,19 @@ export async function showGitLog() {
     if (existing) existing.remove();
 
     const dialog = document.createElement("div");
-    dialog.className = "dialog";
+    dialog.className = "dialog ui-surface";
     dialog.style.maxWidth = "700px";
     dialog.style.maxHeight = "80vh";
     dialog.innerHTML = `
-      <div class="dialog-header">
-        <span class="dialog-title">Git Log</span>
-        <button class="dialog-close" title="Close" aria-label="Close">×</button>
+      <div class="ui-header">
+        <span class="ui-header-title">Git Log</span>
+        <button data-variant="ghost" data-icon class="dialog-close ui-btn" title="Close" aria-label="Close">×</button>
       </div>
       <div class="gitlog-content"></div>
     `;
 
     const content = dialog.querySelector<HTMLElement>(".gitlog-content")!;
-    content.style.cssText = "overflow-y:auto;flex:1;font-family:'JetBrainsMono NF Mono',monospace;font-size:12px;";
+    content.style.cssText = "overflow-y:auto;flex:1;font-family:var(--font-mono);font-size:12px;";
 
     entries.forEach((entry, i) => {
       const el = document.createElement("div");

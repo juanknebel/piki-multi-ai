@@ -9,7 +9,7 @@
 }
 
 .theme-preset-label {
-  font-size: 11px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--text-secondary);
   text-transform: uppercase;
@@ -25,11 +25,11 @@
 .theme-group-header {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
   padding: 6px 0;
   cursor: pointer;
   user-select: none;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -45,13 +45,13 @@
 .theme-group-chevron {
   width: 12px;
   height: 12px;
-  fill: currentColor;
-  transition: transform 0.15s var(--ease-out);
+  transition: transform var(--transition-fast);
   flex-shrink: 0;
+  transform: rotate(90deg);
 }
 
 .theme-group-chevron.collapsed {
-  transform: rotate(-90deg);
+  transform: rotate(0deg);
 }
 
 .theme-group-body {
@@ -66,12 +66,12 @@
 .theme-color-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-4);
   padding: 3px 0 3px 18px;
 }
 
 .theme-color-label {
-  font-size: 11px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
   min-width: 100px;
   flex-shrink: 0;
@@ -96,52 +96,27 @@
 
 .theme-color-picker::-webkit-color-swatch {
   border: none;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
 }
 
+/* `.theme-color-hex ui-input` (sm) */
 .theme-color-hex {
   width: 72px;
-  padding: 3px 6px;
-  background: var(--bg-input);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-size: 11px;
-  font-family: inherit;
   text-transform: uppercase;
 }
 
-.theme-color-hex:focus {
-  border-color: var(--accent-primary);
-  outline: none;
-}
-
+/* `.theme-color-reset ui-btn` (ghost icon), shown once a colour is overridden */
 .theme-color-reset {
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  font-size: 12px;
-  color: var(--text-muted);
   visibility: hidden;
-  flex-shrink: 0;
-  transition: all var(--transition-fast);
 }
 
 .theme-color-row.overridden .theme-color-reset {
   visibility: visible;
 }
 
-.theme-color-reset:hover {
-  background: var(--bg-active);
-  color: var(--text-bright);
-}
-
 /* ── Footer actions ──────────────────────────────── */
 .theme-footer-left {
   display: flex;
-  gap: 6px;
+  gap: var(--sp-3);
   margin-right: auto;
 }

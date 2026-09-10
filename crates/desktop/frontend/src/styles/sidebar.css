@@ -9,7 +9,7 @@
   justify-content: space-between;
   height: var(--sidebar-header-height);
   padding: 0 14px;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -24,12 +24,12 @@
   align-items: center;
   padding: 2px 8px;
   margin: 6px 10px 2px;
-  font-size: 13px;
+  font-size: var(--fs-lg);
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--text-muted);
   background: var(--accent-muted);
-  border-radius: 9px;
+  border-radius: var(--radius-full);
   cursor: pointer;
   user-select: none;
   transition: background var(--transition-fast), color var(--transition-fast);
@@ -46,34 +46,53 @@
   white-space: nowrap;
 }
 
+/* One chevron everywhere (also file tree / theme dialog): icon("chevron-right")
+   from icons.ts — collapsed points right, expanded rotates it down. */
 .group-chevron {
   width: 10px;
   height: 10px;
   margin-right: 4px;
   flex-shrink: 0;
-  transition: transform 0.15s var(--ease-out);
-  fill: currentColor;
+  transition: transform var(--transition-fast);
   opacity: 0.6;
+  transform: rotate(90deg);
 }
 
 .group-chevron.collapsed {
-  transform: rotate(-90deg);
+  transform: rotate(0deg);
 }
 
 .workspace-item {
   display: flex;
   align-items: center;
-  padding: 5px 14px 5px 18px;
+  min-height: var(--row-height-lg);
+  padding: 0 14px 0 18px;
   cursor: pointer;
   user-select: none;
-  gap: 8px;
+  gap: var(--sp-4);
   position: relative;
   transition: background var(--transition-fast);
   border-left: 2px solid transparent;
 }
 
+/* Children indent one step past the parent's gutter so their labels read
+   as nested under the parent's name. */
 .workspace-item.grouped {
-  padding-left: 28px;
+  padding-left: 32px;
+}
+
+/* Fixed-width leading slot on every row (chevron on parents, pulse dot on
+   the active row, empty otherwise) so labels align across the list. */
+.workspace-gutter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  flex-shrink: 0;
+}
+
+.workspace-gutter .group-chevron {
+  margin-right: 0;
 }
 
 .workspace-item:hover {
@@ -97,12 +116,7 @@
   background: var(--accent-primary);
   flex-shrink: 0;
   box-shadow: var(--accent-glow);
-  animation: pulse-dot 2s ease-in-out infinite;
-}
-
-@keyframes pulse-dot {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  animation: pulse var(--dur-pulse) ease-in-out infinite;
 }
 
 .workspace-name {
@@ -110,13 +124,20 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12.5px;
+  font-size: var(--fs-base);
   transition: color var(--transition-fast);
 }
 
 .workspace-item.active .workspace-name {
   color: var(--text-bright);
   font-weight: 500;
+}
+
+/* Branch of a clone/checkout row — secondary to the repo name. */
+.workspace-branch {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  font-weight: 400;
 }
 
 .workspace-actions {
@@ -126,34 +147,19 @@
   visibility: hidden;
 }
 
-.workspace-item:hover .workspace-actions {
+.workspace-item:hover .workspace-actions,
+.workspace-item:focus-within .workspace-actions {
   visibility: visible;
 }
 
-.ws-action-btn {
-  width: 22px;
-  height: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-  color: var(--text-muted);
-  transition: all var(--transition-fast);
-}
-
-.ws-action-btn:hover {
-  background: var(--bg-active);
-  color: var(--text-bright);
-}
-
+/* Row actions are ghost icon .ui-btns; delete reads destructive on hover. */
 .ws-action-delete:hover {
   color: var(--git-deleted);
-  background: rgba(248, 81, 73, 0.1);
+  background: color-mix(in srgb, var(--error-color) 10%, transparent);
 }
 
 .workspace-status {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   flex-shrink: 0;
   transition: color var(--transition-fast);
@@ -161,7 +167,7 @@
 
 .workspace-status.busy {
   color: var(--accent-primary);
-  animation: pulse-dot 1.5s ease-in-out infinite;
+  animation: pulse var(--dur-pulse) ease-in-out infinite;
 }
 
 .workspace-status.done {
@@ -172,13 +178,20 @@
   color: var(--git-deleted);
 }
 
+.workspace-restored {
+  flex-shrink: 0;
+  margin-left: 6px;
+  font-size: var(--fs-sm);
+  color: var(--accent-primary);
+}
+
 .workspace-attention {
   flex-shrink: 0;
   margin-left: 6px;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--accent-warm);
   text-shadow: var(--accent-warm-glow);
-  animation: pulse-dot 1.5s ease-in-out infinite;
+  animation: pulse var(--dur-pulse) ease-in-out infinite;
 }
 
 /* ── Git panel ──────────────────────────────────── */
@@ -190,11 +203,12 @@
 .file-item {
   display: flex;
   align-items: center;
-  padding: 3px 14px 3px 20px;
+  min-height: var(--row-height);
+  padding: 0 14px 0 20px;
   cursor: pointer;
   user-select: none;
-  gap: 8px;
-  font-size: 12px;
+  gap: var(--sp-4);
+  font-size: var(--fs-md);
   transition: background var(--transition-fast);
 }
 
@@ -210,7 +224,7 @@
   width: 16px;
   text-align: center;
   font-weight: 700;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   flex-shrink: 0;
 }
 
@@ -233,99 +247,12 @@
 
 .file-actions {
   display: flex;
-  gap: 2px;
+  gap: var(--sp-1);
   visibility: hidden;
 }
 
 .file-item:hover .file-actions {
   visibility: visible;
-}
-
-.file-action-btn {
-  width: 22px;
-  height: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-size: 13px;
-  transition: all var(--transition-fast);
-}
-
-.file-action-btn:hover {
-  background: var(--bg-active);
-  color: var(--text-bright);
-}
-
-/* ── Delete confirmation ────────────────────────── */
-.ws-delete-confirm {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-  animation: overlay-in 0.15s var(--ease-out);
-}
-
-.ws-delete-dialog {
-  background: var(--dialog-bg);
-  border: 1px solid var(--dialog-border);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 16px 48px var(--dialog-shadow);
-  padding: 20px 24px;
-  min-width: 300px;
-  text-align: center;
-  animation: dialog-enter 0.2s var(--ease-out);
-}
-
-@keyframes dialog-enter {
-  from { opacity: 0; transform: scale(0.96) translateY(-8px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
-}
-
-.ws-delete-dialog p {
-  margin-bottom: 8px;
-  color: var(--text-primary);
-  font-size: 13px;
-}
-
-.ws-delete-hint {
-  color: var(--text-muted) !important;
-  font-size: 11px !important;
-}
-
-.ws-delete-card-move {
-  margin-top: 12px;
-  text-align: left;
-}
-
-.ws-delete-card-move .dialog-label {
-  display: block;
-  margin-bottom: 6px;
-}
-
-.ws-delete-buttons {
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-  margin-top: 16px;
-}
-
-/* ── Empty state ────────────────────────────────── */
-.empty-message {
-  padding: 20px;
-  color: var(--text-muted);
-  font-size: 11px;
-  text-align: center;
-  line-height: 1.7;
 }
 
 /* ── Agents panel ────────────────────────────────── */
@@ -337,20 +264,15 @@
 
 .agents-header-actions {
   display: flex;
-  gap: 2px;
-}
-
-.agents-empty {
-  padding: 14px;
-  font-size: 12px;
-  color: var(--text-muted);
+  gap: var(--sp-1);
 }
 
 .agent-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px 14px;
+  gap: var(--sp-4);
+  min-height: var(--row-height);
+  padding: var(--row-pad) 14px;
   cursor: pointer;
   transition: background var(--transition-fast);
 }
@@ -367,7 +289,7 @@
   flex-shrink: 0;
   width: 14px;
   text-align: center;
-  font-size: 12px;
+  font-size: var(--fs-md);
 }
 
 .agent-row-main {
@@ -386,7 +308,7 @@
 }
 
 .agent-row-ws {
-  font-size: 12px;
+  font-size: var(--fs-md);
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -397,14 +319,14 @@
 }
 
 .agent-row-label {
-  font-size: 12px;
+  font-size: var(--fs-md);
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .agent-row-summary {
-  font-size: 11px;
+  font-size: var(--fs-sm);
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -413,23 +335,74 @@
 
 .agent-row-status {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: var(--fs-sm);
 }
 
-/* Agent-status rollup glyph on a workspace row (⚠ permission / ● needs you).
+/* Elapsed run time (`3m 12s`), ticking in place. */
+.agent-row-elapsed {
+  flex-shrink: 0;
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+/* Count of agents needing you, next to the panel title. */
+.agents-attention-count {
+  display: inline-block;
+  min-width: 16px;
+  padding: 0 4px;
+  margin-left: 4px;
+  border-radius: var(--radius-full);
+  background: var(--warning-color);
+  color: var(--on-accent);
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+/* Agent-status rollup icon on a workspace row (warning = permission, dot = needs you).
    Steady — the pulsing dot next door already carries "new since you looked". */
 .workspace-agent-glyph {
   flex-shrink: 0;
   margin-left: 6px;
-  font-size: 10px;
+  font-size: var(--fs-xs);
 }
 
-/* Empty-state call to action (workspace list / agents panel) */
-.empty-message p,
-.agents-empty p {
-  margin: 0 0 8px;
+/* Empty states (workspace list / agents panel / git panel) are `.ui-empty`
+   blocks with a `.ui-empty-cta` button; the confirm overlay lives in
+   dialog-core.css. */
+
+/* External agents (found via /proc): display only, no tab to jump to. */
+.agents-external-header {
+  padding: var(--sp-2) 14px var(--sp-1);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-top: 1px solid var(--border);
+  margin-top: var(--sp-2);
 }
 
-.empty-cta {
-  font-size: 11px;
+.agent-row.external {
+  cursor: default;
+}
+
+.agent-row.external:hover {
+  background: transparent;
+}
+
+.agent-row.external.child {
+  padding-left: 28px;
+}
+
+.agent-row.external .agent-row-action {
+  flex-shrink: 0;
+  opacity: 0;
+}
+
+.agent-row.external:hover .agent-row-action,
+.agent-row.external .agent-row-action:focus-visible {
+  opacity: 1;
 }

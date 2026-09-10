@@ -110,6 +110,11 @@ export function registerCodeFile(tabId: string, filePath: string, workspaceIdx: 
   pendingFiles.set(tabId, { filePath, workspaceIdx });
 }
 
+/** A panel (not just a registration) exists for `tabId`. */
+export function hasCodeEditorInstance(tabId: string): boolean {
+  return instances.has(tabId);
+}
+
 export function getCodeEditorFileName(tabId: string): string | null {
   const inst = instances.get(tabId);
   if (inst) return shortName(inst.filePath);
@@ -121,6 +126,23 @@ export function getCodeEditorFileName(tabId: string): string | null {
 /** Workspace-relative path of a CodeEditor tab's file, or null. */
 export function getCodeEditorFilePath(tabId: string): string | null {
   return instances.get(tabId)?.filePath ?? pendingFiles.get(tabId)?.filePath ?? null;
+}
+
+/** The editor's current selection as text + 1-based line range, or null
+ *  when the tab is not a live editor or nothing is selected. */
+export function getCodeEditorSelection(
+  tabId: string,
+): { text: string; fromLine: number; toLine: number } | null {
+  const view = instances.get(tabId)?.editorView;
+  if (!view) return null;
+  const sel = view.state.selection.main;
+  if (sel.empty) return null;
+  const doc = view.state.doc;
+  return {
+    text: doc.sliceString(sel.from, sel.to),
+    fromLine: doc.lineAt(sel.from).number,
+    toLine: doc.lineAt(sel.to).number,
+  };
 }
 
 export function hideCodeEditorPanels() {
@@ -315,7 +337,7 @@ function createPanel(tabId: string, filePath: string, workspaceIdx: number): Cod
       <span class="code-editor-path" title="${esc(filePath)}">${esc(filePath)}</span>
       <span class="code-editor-dirty" style="display:none">modified</span>
       <span class="code-editor-lsp-status"></span>
-      <button class="code-editor-save" title="Save (${formatShortcut("Ctrl+S")})">Save</button>
+      <button data-variant="primary" data-size="sm" class="code-editor-save ui-btn" title="Save (${formatShortcut("Ctrl+S")})">Save</button>
     </div>
     <div class="code-editor-body"></div>
   `;

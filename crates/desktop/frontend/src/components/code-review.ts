@@ -1,7 +1,7 @@
 import { appState } from "../state";
 import { showConfirm } from "./confirm";
 import * as ipc from "../ipc";
-import { toast } from "./toast";
+import { reportError, toast } from "./toast";
 import { createDropdown } from "./dropdown";
 import { modCtrl } from "../shortcuts";
 
@@ -18,26 +18,116 @@ export async function showCodeReview() {
   if (overlayEl) { overlayEl.remove(); overlayEl = null; }
 
   const wsIdx = appState.activeWorkspace;
+  const comments = new Map<string, DraftComment>();
+  /** Drafted replies, keyed by the existing comment ID being replied to */
+  const replies = new Map<number, string>();
+
+  const backdrop = document.createElement("div");
+  backdrop.className = "dialog-backdrop";
+  backdrop.style.paddingTop = "2vh";
+
+  const panel = document.createElement("div");
+  panel.className = "diff-viewer ui-surface";
+  panel.style.width = "95vw";
+  panel.style.maxHeight = "94vh";
+  backdrop.appendChild(panel);
+
+  const close = () => { overlayEl?.remove(); overlayEl = null; };
+  /** Close, confirming first when drafted comments/replies would be lost. */
+  const requestClose = () => {
+    const drafts = comments.size + replies.size;
+    if (drafts === 0) {
+      close();
+      return;
+    }
+    showConfirm({
+      bodyHtml: `
+        <p>Discard ${drafts} drafted comment${drafts === 1 ? "" : "s"}?</p>
+        <p class="ws-delete-hint">They have not been submitted.</p>
+      `,
+      actions: [
+        { label: "Discard", kind: "danger", onSelect: close },
+        { label: "Keep reviewing", kind: "secondary", isDefault: true },
+      ],
+    });
+  };
+
+  // The overlay is up — and closable — while `gh` runs, instead of the app
+  // looking frozen until the PR arrives.
+  const loading = document.createElement("div");
+  loading.className = "cr-loading ui-empty";
+  loading.dataset.fill = "";
+  loading.innerHTML = `
+    <div class="cr-loading-text">Loading PR…</div>
+    <div class="cr-loading-skeleton"></div>
+    <div class="cr-loading-skeleton short"></div>
+    <button data-variant="secondary" data-size="sm" class="ui-btn cr-loading-cancel" type="button">Cancel</button>
+  `;
+  loading.querySelector(".cr-loading-cancel")!.addEventListener("click", close);
+  panel.appendChild(loading);
+
+  backdrop.addEventListener("click", (e) => { if (e.target === backdrop) requestClose(); });
+  backdrop.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      requestClose();
+      return;
+    }
+    if (e.key === "Enter" && modCtrl(e)) {
+      e.preventDefault();
+      panel.querySelector<HTMLButtonElement>("#cr-submit")?.click();
+    }
+  });
+  backdrop.setAttribute("tabindex", "0");
+  document.body.appendChild(backdrop);
+  overlayEl = backdrop;
+  backdrop.focus();
+
+  /** True once this overlay was closed or replaced by a newer open. */
+  const stale = () => overlayEl !== backdrop;
+
+  const showLoadError = (err: unknown) => {
+    const msg = String(err);
+    const ghMissing = /gh\) is not installed|not on PATH/.test(msg);
+    loading.remove();
+    const errEl = document.createElement("div");
+    errEl.className = "cr-error ui-empty";
+    errEl.dataset.fill = "";
+    errEl.dataset.tone = "error";
+    errEl.innerHTML = `
+      <div class="ui-empty-title">${ghMissing ? "GitHub CLI (gh) is not available" : "Could not load the pull request"}</div>
+      <div class="cr-error-detail"></div>
+      <div class="cr-error-actions">
+        <button data-variant="primary" data-size="sm" class="ui-btn cr-error-retry" type="button">Retry</button>
+        <button data-variant="secondary" data-size="sm" class="ui-btn cr-error-close" type="button">Close</button>
+      </div>
+    `;
+    errEl.querySelector(".cr-error-detail")!.textContent = msg;
+    errEl.querySelector(".cr-error-retry")!.addEventListener("click", () => void showCodeReview());
+    errEl.querySelector(".cr-error-close")!.addEventListener("click", close);
+    panel.appendChild(errEl);
+    console.error("Code review: failed to load PR", err);
+  };
+
   let prDetail: ipc.PrDetail | null;
   try {
     prDetail = await ipc.getPrInfo(wsIdx);
   } catch (err) {
-    toast(`Failed to load PR: ${err}`, "error");
+    if (!stale()) showLoadError(err);
     return;
   }
+  if (stale()) return;
 
   if (!prDetail) {
+    close();
     toast("No open PR found for this branch", "info");
     return;
   }
 
   const { info, files } = prDetail;
-  const comments = new Map<string, DraftComment>();
-  /** Drafted replies, keyed by the existing comment ID being replied to */
-  const replies = new Map<number, string>();
   let currentFilePath = files.length > 0 ? files[0].path : "";
 
   // Load existing PR review comments (best-effort — modal still opens if this fails)
+  loading.querySelector(".cr-loading-text")!.textContent = `Loading review comments for PR #${info.number}…`;
   const existingByLine = new Map<string, ipc.ExistingComment[]>();
   try {
     const existing = await ipc.getPrReviewComments(wsIdx, info.number);
@@ -48,8 +138,10 @@ export async function showCodeReview() {
       existingByLine.get(key)!.push(c);
     }
   } catch (err) {
-    console.warn("Failed to load existing review comments:", err);
+    reportError("Existing review comments could not be loaded", err);
   }
+  if (stale()) return;
+  loading.remove();
 
   function commentKey(path: string, line: number, side: string): string {
     return `${path}:${line}:${side}`;
@@ -63,20 +155,11 @@ export async function showCodeReview() {
     return count;
   }
 
-  const backdrop = document.createElement("div");
-  backdrop.className = "dialog-backdrop";
-  backdrop.style.paddingTop = "2vh";
-
-  const panel = document.createElement("div");
-  panel.className = "diff-viewer";
-  panel.style.width = "95vw";
-  panel.style.maxHeight = "94vh";
-
   // Header
   const header = document.createElement("div");
-  header.className = "diff-header";
+  header.className = "ui-header";
   header.innerHTML = `
-    <span class="diff-title">
+    <span class="ui-header-title">
       <div>
         <span style="color:var(--text-accent)">PR #${info.number}</span>
         ${esc(info.title)}
@@ -90,8 +173,8 @@ export async function showCodeReview() {
     </span>
     <span style="display:flex;gap:8px;align-items:center">
       <span id="cr-verdict-slot"></span>
-      <button class="dialog-btn dialog-btn-primary dialog-btn-sm" id="cr-submit" title="Submit (${modCtrlLabel()}+Enter)">Submit</button>
-      <button class="dialog-close" title="Close" aria-label="Close">×</button>
+      <button data-variant="primary" data-size="sm" class="ui-btn" id="cr-submit" title="Submit (${modCtrlLabel()}+Enter)">Submit</button>
+      <button data-variant="ghost" data-icon class="dialog-close ui-btn" title="Close" aria-label="Close">×</button>
     </span>
   `;
   panel.appendChild(header);
@@ -107,7 +190,7 @@ export async function showCodeReview() {
   const reviewBodyArea = document.createElement("div");
   reviewBodyArea.style.cssText = "padding:6px 12px;border-bottom:1px solid var(--border-primary);background:var(--bg-secondary);";
   reviewBodyArea.innerHTML = `
-    <textarea class="dialog-textarea" id="cr-body" rows="2" placeholder="Review summary (optional)" style="width:100%;box-sizing:border-box;font-size:12px;resize:vertical"></textarea>
+    <textarea class="ui-input" id="cr-body" rows="2" placeholder="Review summary (optional)"></textarea>
   `;
   panel.appendChild(reviewBodyArea);
 
@@ -131,7 +214,7 @@ export async function showCodeReview() {
 
   // Diff area — side-by-side container
   const diffArea = document.createElement("div");
-  diffArea.style.cssText = "flex:1;overflow:auto;font-family:'JetBrainsMono NF Mono',monospace;font-size:12px;";
+  diffArea.style.cssText = "flex:1;overflow:auto;font-family:var(--font-mono);font-size:12px;";
 
   function renderFileList() {
     fileList.querySelectorAll(".file-item").forEach((el) => el.remove());
@@ -220,7 +303,7 @@ export async function showCodeReview() {
     }
 
     if (diff.hunks.length === 0) {
-      table.innerHTML = '<div class="dp-empty">No changes</div>';
+      table.innerHTML = '<div class="ui-empty">No changes</div>';
     }
 
     scroll.appendChild(table);
@@ -292,9 +375,9 @@ export async function showCodeReview() {
       form.innerHTML = `
         <textarea class="cr-comment-textarea" rows="2" placeholder="Add a comment on line ${commentLine}...">${existing ? esc(existing.body) : ""}</textarea>
         <div class="cr-comment-form-actions">
-          <button class="dialog-btn dialog-btn-primary dialog-btn-sm cr-comment-save">Save</button>
-          ${existing ? '<button class="dialog-btn dialog-btn-danger dialog-btn-sm cr-comment-delete">Delete</button>' : ""}
-          <button class="dialog-btn dialog-btn-secondary dialog-btn-sm cr-comment-cancel">Cancel</button>
+          <button data-variant="primary" data-size="sm" class="ui-btn cr-comment-save">Save</button>
+          ${existing ? '<button data-variant="danger" data-size="sm" class="ui-btn cr-comment-delete">Delete</button>' : ""}
+          <button data-variant="secondary" data-size="sm" class="ui-btn cr-comment-cancel">Cancel</button>
         </div>
       `;
 
@@ -343,7 +426,7 @@ export async function showCodeReview() {
         badge.innerHTML = `
           <div class="cr-comment-header">
             <span class="cr-comment-author">${esc(c.author)}</span>
-            <button class="dialog-btn dialog-btn-secondary dialog-btn-sm cr-reply-btn" type="button">Reply</button>
+            <button data-variant="secondary" data-size="sm" class="ui-btn cr-reply-btn" type="button">Reply</button>
           </div>
           <span class="cr-comment-body">${esc(c.body)}</span>
         `;
@@ -381,8 +464,8 @@ export async function showCodeReview() {
       <div class="cr-comment-header">
         <span class="cr-comment-author">You (reply, pending)</span>
         <span style="display:flex;gap:4px">
-          <button class="dialog-btn dialog-btn-secondary dialog-btn-sm cr-reply-edit" type="button">Edit</button>
-          <button class="dialog-btn dialog-btn-danger dialog-btn-sm cr-reply-delete" type="button">Delete</button>
+          <button data-variant="secondary" data-size="sm" class="ui-btn cr-reply-edit" type="button">Edit</button>
+          <button data-variant="danger" data-size="sm" class="ui-btn cr-reply-delete" type="button">Delete</button>
         </span>
       </div>
       <span class="cr-comment-body"></span>
@@ -413,8 +496,8 @@ export async function showCodeReview() {
     form.innerHTML = `
       <textarea class="cr-comment-textarea" rows="2" placeholder="Reply to this comment..."></textarea>
       <div class="cr-comment-form-actions">
-        <button class="dialog-btn dialog-btn-primary dialog-btn-sm cr-reply-save" type="button">Save</button>
-        <button class="dialog-btn dialog-btn-secondary dialog-btn-sm cr-reply-cancel" type="button">Cancel</button>
+        <button data-variant="primary" data-size="sm" class="ui-btn cr-reply-save" type="button">Save</button>
+        <button data-variant="secondary" data-size="sm" class="ui-btn cr-reply-cancel" type="button">Cancel</button>
       </div>
     `;
     (form.querySelector(".cr-comment-textarea") as HTMLTextAreaElement).value = existingBody;
@@ -455,10 +538,6 @@ export async function showCodeReview() {
   body.appendChild(resizeHandle);
   body.appendChild(diffArea);
   panel.appendChild(body);
-
-  backdrop.appendChild(panel);
-  document.body.appendChild(backdrop);
-  overlayEl = backdrop;
 
   // Drag-to-resize: clamp width between 150px and half the dialog width.
   {
@@ -545,38 +624,7 @@ export async function showCodeReview() {
     }
   });
 
-  const close = () => { overlayEl?.remove(); overlayEl = null; };
-  /** Close, confirming first when drafted comments/replies would be lost. */
-  const requestClose = () => {
-    const drafts = comments.size + replies.size;
-    if (drafts === 0) {
-      close();
-      return;
-    }
-    showConfirm({
-      bodyHtml: `
-        <p>Discard ${drafts} drafted comment${drafts === 1 ? "" : "s"}?</p>
-        <p class="ws-delete-hint">They have not been submitted.</p>
-      `,
-      actions: [
-        { label: "Discard", kind: "danger", onSelect: close },
-        { label: "Keep reviewing", kind: "secondary", isDefault: true },
-      ],
-    });
-  };
   panel.querySelector(".dialog-close")!.addEventListener("click", requestClose);
-  backdrop.addEventListener("click", (e) => { if (e.target === backdrop) requestClose(); });
-  backdrop.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      requestClose();
-      return;
-    }
-    if (e.key === "Enter" && modCtrl(e)) {
-      e.preventDefault();
-      panel.querySelector<HTMLButtonElement>("#cr-submit")?.click();
-    }
-  });
-  backdrop.setAttribute("tabindex", "0");
   backdrop.focus();
 }
 

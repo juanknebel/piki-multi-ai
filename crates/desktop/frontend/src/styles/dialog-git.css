@@ -1,0 +1,31 @@
+/* Merge / rebase conflict list (dialogs/merge-dialog.ts). */
+.conflict-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.conflict-file-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-md);
+}
+
+.conflict-file-path {
+  flex: 1;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conflict-actions {
+  display: flex;
+  gap: var(--sp-2);
+  flex-shrink: 0;
+}

@@ -10,42 +10,15 @@
 .api-toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-4);
   padding: 6px 12px;
   border-bottom: 1px solid var(--border-primary);
   background: var(--bg-secondary);
   flex-shrink: 0;
 }
 
-.api-btn {
-  font-size: 11px;
-  padding: 4px 12px;
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-  cursor: pointer;
-  transition: background 0.1s, border-color 0.1s;
-}
-
-.api-btn:hover {
-  background: var(--bg-hover);
-  border-color: var(--border-active);
-}
-
-.api-send-btn {
-  background: var(--accent-primary);
-  color: var(--bg-primary);
-  border-color: var(--accent-primary);
-  font-weight: 600;
-}
-
-.api-send-btn:hover {
-  opacity: 0.9;
-}
-
 .api-status {
-  font-size: 11px;
+  font-size: var(--fs-sm);
   margin-left: auto;
   font-weight: 600;
 }
@@ -80,7 +53,7 @@
 }
 
 .api-pane-header {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -100,17 +73,22 @@
   box-sizing: border-box;
   margin: 0;
   padding: 10px 12px;
-  font-family: "JetBrainsMono NF Mono", monospace;
-  font-size: 12px;
-  line-height: 1.6;
+  font-family: var(--font-mono);
+  font-size: var(--fs-md);
+  line-height: var(--leading-relaxed);
   tab-size: 2;
   color: var(--text-bright);
   background: var(--bg-primary);
   border: none;
-  outline: none;
   resize: none;
   white-space: pre;
   overflow: auto;
+}
+
+/* Full-pane editor: inset hairline instead of the outset outline. */
+.api-editor:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring-inset);
 }
 
 .api-editor::placeholder {
@@ -122,25 +100,15 @@
 
 .api-response-actions {
   display: flex;
-  gap: 4px;
+  gap: var(--sp-2);
 }
 
+/* Response actions are ghost sm .ui-btns inside an uppercase pane header;
+   they keep normal case. */
 .api-resp-btn {
-  font-size: 10px;
-  padding: 1px 6px;
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
-  color: var(--text-muted);
-  cursor: pointer;
   text-transform: none;
-  font-weight: 400;
   letter-spacing: 0;
-}
-
-.api-resp-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
+  font-weight: 400;
 }
 
 /* ── Search bar ────────────────────────────────── */
@@ -149,86 +117,44 @@
 .api-jq-bar {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-3);
   padding: 4px 8px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-primary);
   flex-shrink: 0;
 }
 
+/* `.api-search-input ui-input` / `.api-jq-input ui-input` (sm, mono) */
 .api-search-input,
 .api-jq-input {
   flex: 1;
-  padding: 3px 8px;
-  font-size: 11px;
-  font-family: "JetBrainsMono NF Mono", monospace;
-  color: var(--text-bright);
-  background: var(--bg-input);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-sm);
-  outline: none;
-}
-
-.api-search-input:focus,
-.api-jq-input:focus {
-  border-color: var(--accent-primary);
+  font-family: var(--font-mono);
 }
 
 .api-search-count {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   min-width: 60px;
   text-align: center;
 }
 
-.api-search-prev,
-.api-search-next,
-.api-search-close,
-.api-jq-close {
-  font-size: 12px;
-  padding: 1px 5px;
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
-  color: var(--text-muted);
-  cursor: pointer;
-}
-
-.api-search-prev:hover,
-.api-search-next:hover,
-.api-search-close:hover,
-.api-jq-close:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.api-jq-run {
-  font-size: 10px;
-  padding: 2px 10px;
-}
-
-.api-jq-run:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
 .api-jq-badge {
   padding: 3px 10px;
-  font-size: 10px;
-  font-family: "JetBrainsMono NF Mono", monospace;
+  font-size: var(--fs-xs);
+  font-family: var(--font-mono);
   color: var(--accent-primary);
-  background: rgba(57, 186, 230, 0.08);
+  background: color-mix(in srgb, var(--accent-primary) 8%, transparent);
   border-bottom: 1px solid var(--accent-primary);
   letter-spacing: 0.02em;
 }
 
 .api-search-match {
-  background: rgba(230, 167, 48, 0.3);
-  border-radius: 2px;
+  background: color-mix(in srgb, var(--warning-color) 30%, transparent);
+  border-radius: var(--radius-xs);
 }
 
 .api-search-current {
-  background: rgba(230, 167, 48, 0.7);
+  background: color-mix(in srgb, var(--warning-color) 70%, transparent);
   outline: 1px solid var(--warning-color);
 }
 
@@ -240,18 +166,7 @@
   padding: 0;
 }
 
-.api-response-empty,
-.api-response-loading,
-.api-response-error {
-  padding: 24px;
-  text-align: center;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.api-response-error {
-  color: var(--error-color);
-}
+/* Empty / loading / error states are `.ui-empty` blocks ([data-tone]). */
 
 .api-response-section {
   border-bottom: 1px solid var(--border-primary);
@@ -264,16 +179,16 @@
 .api-response-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-4);
   padding: 8px 12px;
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border-primary);
-  font-size: 11px;
+  font-size: var(--fs-sm);
 }
 
 .api-response-badge {
   font-weight: 700;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   padding: 1px 6px;
   border-radius: var(--radius-sm);
   background: var(--bg-tertiary);
@@ -304,7 +219,7 @@
 }
 
 .api-response-headers-toggle {
-  font-size: 11px;
+  font-size: var(--fs-sm);
   padding: 0 12px;
   border-bottom: 1px solid var(--border-primary);
 }
@@ -319,9 +234,9 @@
 .api-response-headers-content {
   margin: 0 0 8px;
   padding: 6px 8px;
-  font-family: "JetBrainsMono NF Mono", monospace;
-  font-size: 11px;
-  line-height: 1.5;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  line-height: var(--leading-normal);
   color: var(--text-secondary);
   background: var(--bg-tertiary);
   border-radius: var(--radius-sm);
@@ -332,9 +247,9 @@
 .api-response-content {
   margin: 0;
   padding: 10px 12px;
-  font-family: "JetBrainsMono NF Mono", monospace;
-  font-size: 12px;
-  line-height: 1.6;
+  font-family: var(--font-mono);
+  font-size: var(--fs-md);
+  line-height: var(--leading-relaxed);
   color: var(--text-primary);
   white-space: pre-wrap;
   word-break: break-all;
@@ -342,10 +257,10 @@
 
 /* ── JSON syntax ────────────────────────────── */
 
-.json-key { color: #39bae6; }
+.json-key { color: var(--text-accent); }
 .json-string { color: var(--success-color); }
 .json-number { color: var(--warning-color); }
-.json-bool { color: #d2a8ff; }
+.json-bool { color: var(--accent-alt); }
 .json-null { color: var(--text-muted); }
 
 /* ── History overlay ──────────────────────────── */
@@ -353,72 +268,27 @@
 .api-history-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--scrim-strong);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
-  animation: overlay-in 0.1s var(--ease-out);
+  z-index: var(--z-backdrop);
+  animation: overlay-in var(--dur-fast) var(--ease-out);
 }
 
+/* `.api-history-dialog ui-surface` (header = .ui-header) */
 .api-history-dialog {
-  background: var(--dialog-bg);
-  border: 1px solid var(--dialog-border);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 20px 60px var(--dialog-shadow);
   width: 80%;
   max-width: 800px;
   max-height: 70%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  animation: dialog-enter 0.15s var(--ease-out);
 }
 
-.api-history-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border-primary);
-  background: var(--bg-surface);
-}
-
-.api-history-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-bright);
-}
-
-.api-history-close {
-  font-size: 16px;
-  padding: 2px 8px;
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-  cursor: pointer;
-}
-
-.api-history-close:hover {
-  background: var(--bg-hover);
-}
-
+/* `.api-history-search ui-input`, inset from the dialog edges */
 .api-history-search {
+  width: auto;
   margin: 8px 12px;
-  padding: 6px 10px;
-  font-size: 12px;
-  font-family: "JetBrainsMono NF Mono", monospace;
-  color: var(--text-bright);
-  background: var(--bg-input);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-sm);
-  outline: none;
-}
-
-.api-history-search:focus {
-  border-color: var(--accent-primary);
+  font-family: var(--font-mono);
 }
 
 .api-history-list {
@@ -427,21 +297,14 @@
   padding: 4px 0;
 }
 
-.api-history-empty {
-  padding: 24px;
-  text-align: center;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
 .api-history-entry {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-4);
   padding: 6px 12px;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   cursor: pointer;
-  transition: background 0.1s;
+  transition: background var(--transition-fast);
 }
 
 .api-history-entry:hover,
@@ -451,7 +314,7 @@
 
 .api-history-badge {
   font-weight: 700;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   padding: 1px 5px;
   border-radius: var(--radius-sm);
   background: var(--bg-tertiary);
@@ -480,13 +343,13 @@
 
 .api-history-date {
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   flex-shrink: 0;
 }
 
 .api-history-footer {
   padding: 6px 12px;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
   text-align: center;
   border-top: 1px solid var(--border-primary);

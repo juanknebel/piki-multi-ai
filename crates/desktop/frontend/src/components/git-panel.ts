@@ -33,7 +33,7 @@ export function renderGitPanel(container: HTMLElement) {
 
     if (files.length === 0) {
       const empty = document.createElement("div");
-      empty.className = "empty-message";
+      empty.className = "ui-empty";
       empty.textContent = "No changes";
       container.appendChild(empty);
       return;
@@ -107,10 +107,10 @@ function createActionButton(file: ChangedFile, action: string): string {
     file.status === "Staged" || file.status === "StagedModified" || file.status === "Added";
 
   if (action === "stage" && !isStaged) {
-    return `<button class="file-action-btn" data-action="stage" title="Stage">+</button>`;
+    return `<button data-variant="ghost" data-icon class="file-action-btn ui-btn" data-action="stage" title="Stage">+</button>`;
   }
   if (action === "unstage" && isStaged) {
-    return `<button class="file-action-btn" data-action="unstage" title="Unstage">−</button>`;
+    return `<button data-variant="ghost" data-icon class="file-action-btn ui-btn" data-action="unstage" title="Unstage">−</button>`;
   }
   return "";
 }

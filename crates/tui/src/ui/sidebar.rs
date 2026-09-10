@@ -553,6 +553,14 @@ pub(super) fn render_agents_pane(frame: &mut Frame, area: Rect, app: &App) {
                 Span::styled(label, row_bg.fg(theme.file_path)),
                 Span::styled(format!(" {status_label}"), row_bg.fg(status_color)),
             ];
+            // Elapsed run time (since session start / last prompt; gone on
+            // Stop) — same label the desktop Agents panel shows.
+            if let Some(elapsed) = tab.cli_agent_elapsed() {
+                spans.push(Span::styled(
+                    format!(" {}", piki_core::cli_agent::format_elapsed(elapsed)),
+                    row_bg.fg(theme.empty_text),
+                ));
+            }
             if ws.has_idle_notification {
                 spans.push(Span::styled(" ●", row_bg.fg(app.theme.status.needs_you)));
             }

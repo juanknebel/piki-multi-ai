@@ -19,8 +19,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
-use piki_core::cli_agent::{CliAgentEvent, install_antigravity as agy};
+use piki_core::cli_agent::{CliAgentEvent, install_antigravity as agy, parse_cli_agent_payload};
 use piki_core::pty::ShellSession;
+use piki_multiplex::shell_integration::ShellTabState;
 
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "drives the real `agy` binary: needs login + model quota"]
@@ -39,8 +40,13 @@ async fn agy_lifecycle_events_reach_the_fifo() {
 
     // Stand up the reader exactly like the PTY layer does, then let the hooks
     // write into it.
-    let shell = Arc::new(Mutex::new(ShellSession::default()));
-    let _reader = piki_core::cli_agent::sock::spawn_reader(sock_path, Arc::clone(&shell), None)
+    let shell = Arc::new(Mutex::new(ShellSession {
+        state: ShellTabState::with_sidecar_factory(
+            piki_core::cli_agent::cli_agent_sidecar_factory(),
+        ),
+        pending_events: Vec::new(),
+    }));
+    let _reader = piki_multiplex::sidecar::sock::spawn_reader(sock_path, Arc::clone(&shell), None)
         .expect("fifo reader");
 
     let mut cmd = std::process::Command::new("agy");
@@ -64,10 +70,12 @@ async fn agy_lifecycle_events_reach_the_fifo() {
     }
     let events = drain(&shell);
 
-    let cli_agent: Vec<&CliAgentEvent> = events
+    let cli_agent: Vec<CliAgentEvent> = events
         .iter()
         .filter_map(|e| match e {
-            piki_core::shell_integration::ShellEvent::CliAgent(ev) => Some(ev),
+            piki_core::shell_integration::ShellEvent::Sidecar(json) => {
+                parse_cli_agent_payload(&json.to_string())
+            }
             _ => None,
         })
         .collect();
@@ -111,7 +119,11 @@ fn has_stop(shell: &Arc<Mutex<ShellSession>>) -> bool {
     shell.lock().pending_events.iter().any(|e| {
         matches!(
             e,
-            piki_core::shell_integration::ShellEvent::CliAgent(CliAgentEvent::Stop { .. })
+            piki_core::shell_integration::ShellEvent::Sidecar(json)
+                if matches!(
+                    parse_cli_agent_payload(&json.to_string()),
+                    Some(CliAgentEvent::Stop { .. })
+                )
         )
     })
 }

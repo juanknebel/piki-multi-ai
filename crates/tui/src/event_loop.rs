@@ -149,6 +149,24 @@ pub(crate) async fn run(
         "startup: workspaces restored (watchers still pending)"
     );
 
+    // Connect to the session daemon (launching it if needed) and re-attach any
+    // sessions that survived a previous run — each becomes its tab again with
+    // screen + scrollback restored. Falls back silently to in-process PTYs if
+    // the daemon is unavailable. Runs before the refresh loop below so a
+    // re-attached tab counts toward `has_tab` (branch inference).
+    if app.config.sessions.enabled {
+        let session_t0 = Instant::now();
+        app.session_daemon = crate::helpers::connect_session_daemon(&paths);
+        crate::helpers::reattach_sessions(&mut app);
+        tracing::info!(
+            elapsed_ms = session_t0.elapsed().as_millis(),
+            daemon = app.session_daemon.is_some(),
+            "startup: session daemon connected + sessions re-attached"
+        );
+    } else {
+        tracing::info!("persistent sessions disabled (settings/config); tabs run in-process");
+    }
+
     // FileWatcher setup runs in the BACKGROUND: `FileWatcher::new` walks the
     // whole worktree tree synchronously to register the recursive inotify
     // watch, so doing it inline for every workspace before the first frame
@@ -251,6 +269,7 @@ pub(crate) async fn run(
     let pty_output = app.pty_output.clone();
 
     loop {
+        crate::watchdog::beat();
         // Phase 0: Keep the Agents highlight on the tab the user is standing on
         app.sync_agent_selection();
         // ...and drop any text selection left behind by a tab switch — its
@@ -410,6 +429,24 @@ pub(crate) async fn run(
                                 {
                                     app.chat_panel.config.model = first.clone();
                                 }
+                                // Keep highlight within bounds and on current model
+                                app.chat_panel.model_filter.clear();
+                                if app.chat_panel.models.is_empty() {
+                                    app.chat_panel.model_selected = 0;
+                                } else if let Some(pos) = app
+                                    .chat_panel
+                                    .models
+                                    .iter()
+                                    .position(|m| *m == app.chat_panel.config.model)
+                                {
+                                    app.chat_panel.model_selected = pos;
+                                } else {
+                                    app.chat_panel.model_selected = app
+                                        .chat_panel
+                                        .model_selected
+                                        .min(app.chat_panel.models.len() - 1);
+                                }
+                                app.needs_redraw = true;
                             } else {
                                 // Normal chat response completion
                                 let response_text = if app.chat_panel.current_response.is_empty() {
@@ -612,11 +649,39 @@ pub(crate) async fn run(
                 && let Some(shell) = tab.pty_session.as_ref().and_then(|p| p.shell())
             {
                 let mut guard = shell.lock();
-                if let Some(agent) = guard.state.cli_agent.as_mut()
+                if let Some(agent) = piki_core::cli_agent::cli_agent_of_mut(&mut guard.state)
                     && agent.last_attention_at.is_some()
                 {
                     agent.acknowledge();
                     app.needs_redraw = true;
+                }
+            }
+
+            // External agents scan — throttled to 1s, coalesced
+            if now.duration_since(app.last_external_scan) >= std::time::Duration::from_secs(1) {
+                app.last_external_scan = now;
+                let infos: Vec<piki_core::WorkspaceInfo> =
+                    app.workspaces.iter().map(|w| w.info.clone()).collect();
+                let trees = piki_core::external_agents::scan_external_agents(&infos);
+                // Simple change detection by pid set
+                let old_pids: std::collections::HashSet<u32> = app
+                    .external_agents
+                    .iter()
+                    .flat_map(|t| {
+                        std::iter::once(t.root.pid).chain(t.children.iter().map(|c| c.pid))
+                    })
+                    .collect();
+                let new_pids: std::collections::HashSet<u32> = trees
+                    .iter()
+                    .flat_map(|t| {
+                        std::iter::once(t.root.pid).chain(t.children.iter().map(|c| c.pid))
+                    })
+                    .collect();
+                if old_pids != new_pids || app.external_agents.len() != trees.len() {
+                    app.external_agents = trees;
+                    app.needs_redraw = true;
+                } else {
+                    app.external_agents = trees;
                 }
             }
 
@@ -775,7 +840,7 @@ fn poll_workspaces(app: &mut App, now: Instant) {
                 // graceful fallback.
                 if pty
                     .shell()
-                    .is_some_and(|s| s.lock().state.cli_agent.is_some())
+                    .is_some_and(|s| piki_core::cli_agent::cli_agent_of(&s.lock().state).is_some())
                 {
                     continue;
                 }
@@ -879,10 +944,12 @@ fn poll_workspaces(app: &mut App, now: Instant) {
                 };
 
                 let mut guard = shell.lock();
-                let agent = guard
-                    .state
-                    .cli_agent
-                    .get_or_insert_with(piki_core::cli_agent::CliAgentState::new);
+                let Some(agent) = guard.state.sidecar_or_insert().and_then(|s| {
+                    s.as_any_mut()
+                        .downcast_mut::<piki_core::cli_agent::CliAgentState>()
+                }) else {
+                    continue;
+                };
                 if agent.status != new_status {
                     let was_running = agent.status == piki_core::cli_agent::CliAgentStatus::Running;
                     agent.status = new_status;
@@ -937,7 +1004,12 @@ fn poll_workspaces(app: &mut App, now: Instant) {
                                 from_active_view,
                             });
                         }
-                        ShellEvent::CliAgent(a) => {
+                        ShellEvent::Sidecar(json) => {
+                            let Some(a) =
+                                piki_core::cli_agent::parse_cli_agent_payload(&json.to_string())
+                            else {
+                                continue;
+                            };
                             if let Some((kind, summary)) = a.attention() {
                                 cli_agent_events.push(CliAgentNotice {
                                     workspace_idx: ws_idx,
@@ -1016,6 +1088,37 @@ fn poll_workspaces(app: &mut App, now: Instant) {
                     Ok(list) => {
                         *items = list;
                         *selected = 0;
+                        *error = None;
+                    }
+                    Err(e) => *error = Some(e),
+                }
+            }
+            app.needs_redraw = true;
+        }
+    }
+
+    // Poll sessions-overlay list load
+    {
+        let result = { app.pending_sessions_list.lock().take() };
+        if let Some(result) = result {
+            if let Some(crate::dialog_state::DialogState::Sessions {
+                loading,
+                sessions,
+                error,
+                selected,
+                ..
+            }) = &mut app.active_dialog
+            {
+                *loading = false;
+                match result {
+                    Ok(mut list) => {
+                        // Stable, readable order: by workspace, then tab order.
+                        list.sort_by(|a, b| {
+                            (&a.meta.workspace_path, a.meta.order)
+                                .cmp(&(&b.meta.workspace_path, b.meta.order))
+                        });
+                        *selected = (*selected).min(list.len().saturating_sub(1));
+                        *sessions = list;
                         *error = None;
                     }
                     Err(e) => *error = Some(e),

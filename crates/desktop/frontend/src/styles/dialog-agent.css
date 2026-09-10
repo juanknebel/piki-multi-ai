@@ -1,0 +1,121 @@
+/* Agent profiles: manager list, agent form and import-from-repo
+ * (dialogs/agent-dialog.ts). */
+
+/* ── Agent manager items ─────────────────────────── */
+.agent-manager-item {
+  padding: 10px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.agent-manager-item:hover {
+  border-color: var(--border-primary);
+  background: var(--bg-hover);
+}
+
+.agent-manager-item-header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  margin-bottom: 4px;
+}
+
+.agent-manager-item-name {
+  font-weight: 600;
+  color: var(--text-bright);
+  font-size: var(--fs-base);
+}
+
+.agent-manager-item-provider {
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  padding: 1px 6px;
+  background: var(--bg-active);
+  border-radius: var(--radius-sm);
+}
+
+.agent-manager-item-version {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.agent-manager-item-role {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  max-height: 54px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre-wrap;
+  line-height: var(--leading-normal);
+}
+
+.agent-manager-item-actions {
+  display: flex;
+  gap: var(--sp-3);
+  margin-top: 8px;
+}
+
+/* ── Import dialog toolbar ───────────────────────── */
+.import-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: 6px 12px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.import-toolbar .import-filter {
+  flex: 1;
+  min-width: 0;
+}
+
+.import-toolbar .import-count {
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+
+/* ── Import check items ──────────────────────────── */
+.import-check-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
+}
+
+.import-check-item:hover {
+  background: var(--bg-hover);
+}
+
+.import-check-name {
+  color: var(--text-bright);
+  font-weight: 500;
+  font-size: var(--fs-base);
+}
+
+.import-check-provider {
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+}
+
+.import-check-badge {
+  font-size: var(--fs-xs);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.import-check-badge.new {
+  color: var(--success-color);
+  background: color-mix(in srgb, var(--success-color) 10%, transparent);
+}
+
+.import-check-badge.exists {
+  color: var(--git-modified);
+  background: var(--accent-warm-muted);
+}

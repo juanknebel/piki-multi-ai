@@ -361,6 +361,7 @@ pub async fn dispatch_agent(
             tabs: Vec::new(),
             active_tab: 0,
             watcher,
+            file_index: None,
         });
 
         let idx = app.workspaces.len() - 1;
@@ -449,20 +450,51 @@ pub async fn dispatch_agent(
         None => (Vec::new(), Vec::new(), false, None),
     };
 
-    let pty = crate::pty_raw::RawPtySession::spawn(
-        app_handle,
-        tab_id.clone(),
-        &worktree_path,
-        24,
-        80,
-        &command,
-        &args,
-        &extra_env,
-        &extra_args,
-        integration_on,
-        cli_agent_sock,
-    )
-    .map_err(|e| format!("Failed to spawn PTY: {e}"))?;
+    // Prefer the session daemon so a dispatched agent survives an app restart;
+    // fall back to an in-process PTY.
+    let (daemon, order) = {
+        let app = state.lock();
+        (
+            app.session_daemon.clone(),
+            app.workspaces
+                .get(target_ws_idx)
+                .map(|w| w.tabs.len() as u32)
+                .unwrap_or(0),
+        )
+    };
+    let remote = daemon.as_ref().and_then(|d| {
+        crate::session::spawn_remote_tab(
+            &app_handle,
+            d,
+            &tab_id,
+            &tab.provider,
+            &command,
+            &args,
+            &extra_env,
+            &extra_args,
+            &worktree_path,
+            integration_on,
+            cli_agent_sock.clone(),
+            order,
+        )
+    });
+    let pty = match remote {
+        Some(p) => p,
+        None => crate::pty_raw::RawPtySession::spawn(
+            app_handle,
+            tab_id.clone(),
+            &worktree_path,
+            24,
+            80,
+            &command,
+            &args,
+            &extra_env,
+            &extra_args,
+            integration_on,
+            cli_agent_sock,
+        )
+        .map_err(|e| format!("Failed to spawn PTY: {e}"))?,
+    };
 
     tab.pty = Some(pty);
     tab.alive = true;
@@ -498,6 +530,10 @@ pub struct AgentRow {
     /// Unseen news (permission / idle / done the user hasn't looked at).
     pub attention: bool,
     pub summary: Option<String>,
+    /// Seconds since the current run began (session start / last prompt),
+    /// `None` once it stopped. The panel formats it (`3m 12s`) and ticks it
+    /// locally between refreshes.
+    pub elapsed_secs: Option<u64>,
 }
 
 #[tauri::command]
@@ -508,11 +544,12 @@ pub fn list_agent_rows(state: State<'_, Mutex<DesktopApp>>) -> Vec<AgentRow> {
         for (ti, tab) in ws.tabs.iter().enumerate() {
             let snapshot = tab.pty.as_ref().and_then(|p| p.shell()).and_then(|s| {
                 let guard = s.lock();
-                guard.state.cli_agent.as_ref().map(|a| {
+                piki_core::cli_agent::cli_agent_of(&guard.state).map(|a| {
                     (
                         a.status,
                         a.last_attention_at.is_some(),
                         a.last_summary.clone(),
+                        a.elapsed().map(|d| d.as_secs()),
                     )
                 })
             });
@@ -531,9 +568,9 @@ pub fn list_agent_rows(state: State<'_, Mutex<DesktopApp>>) -> Vec<AgentRow> {
             } else {
                 format!("Claude ({})", tab.provider.label())
             };
-            let (status, attention, summary) = match snapshot {
-                Some((s, a, sum)) => (Some(s), a, sum),
-                None => (None, false, None),
+            let (status, attention, summary, elapsed_secs) = match snapshot {
+                Some((s, a, sum, e)) => (Some(s), a, sum, e),
+                None => (None, false, None, None),
             };
             rows.push(AgentRow {
                 workspace_idx: wi,
@@ -545,8 +582,71 @@ pub fn list_agent_rows(state: State<'_, Mutex<DesktopApp>>) -> Vec<AgentRow> {
                 status,
                 attention,
                 summary,
+                elapsed_secs,
             });
         }
     }
     rows
+}
+
+// ── External agents (via /proc) ─────────────
+
+#[derive(Serialize, Clone)]
+pub struct ExternalAgentPayload {
+    pub pid: u32,
+    pub ppid: u32,
+    pub cwd: Option<String>,
+    pub cmd: String,
+    pub provider: String,
+    pub workspace_idx: Option<usize>,
+    pub workspace_name: Option<String>,
+}
+
+#[derive(Serialize, Clone)]
+pub struct ExternalTreePayload {
+    pub root: ExternalAgentPayload,
+    pub children: Vec<ExternalAgentPayload>,
+}
+
+#[tauri::command]
+pub fn list_external_agents(state: State<'_, Mutex<DesktopApp>>) -> Vec<ExternalTreePayload> {
+    let infos: Vec<piki_core::WorkspaceInfo> = {
+        let app = state.lock();
+        app.workspaces.iter().map(|w| w.info.clone()).collect()
+    };
+    let trees = piki_core::external_agents::scan_external_agents(&infos);
+    // Need workspace names for rendering without extra lookup
+    let names: Vec<String> = infos.iter().map(|i| i.name.clone()).collect();
+    trees
+        .into_iter()
+        .map(|t| {
+            let root_ws_name = t.root.workspace_idx.and_then(|idx| names.get(idx).cloned());
+            let root = ExternalAgentPayload {
+                pid: t.root.pid,
+                ppid: t.root.ppid,
+                cwd: t.root.cwd.map(|p| p.to_string_lossy().to_string()),
+                cmd: t.root.cmd,
+                provider: t.root.provider,
+                workspace_idx: t.root.workspace_idx,
+                workspace_name: root_ws_name,
+            };
+            let children = t
+                .children
+                .into_iter()
+                .map(|c| {
+                    let ws_name = c.workspace_idx.and_then(|idx| names.get(idx).cloned());
+                    ExternalAgentPayload {
+                        pid: c.pid,
+                        ppid: c.ppid,
+                        cwd: c.cwd.map(|p| p.to_string_lossy().to_string()),
+                        cmd: c.cmd,
+                        provider: c.provider.clone(),
+                        workspace_idx: c.workspace_idx,
+                        workspace_name: ws_name,
+                    }
+                })
+                .collect();
+            ExternalTreePayload { root, children }
+        })
+        .collect()
 }

@@ -4,6 +4,7 @@ import { toast } from "../toast";
 import { createDropdown, type DropdownOption } from "../dropdown";
 import type { AgentInfo } from "../../ipc";
 import type { AIProvider } from "../../types";
+import { showNeedsWorkspace } from "./needs-workspace";
 
 // All AI agent providers live in providers.toml — loaded via ipc.listProviders().
 
@@ -18,6 +19,10 @@ export interface CardContext {
 export async function showDispatchDialog(cardContext?: CardContext) {
   document.querySelector(".dispatch-backdrop")?.remove();
 
+  if (appState.workspaces.length === 0) {
+    showNeedsWorkspace("Agents are dispatched into a workspace's worktree — create one first.");
+    return;
+  }
   const wsIdx = appState.activeWorkspace;
   let agents: AgentInfo[];
   try {
@@ -57,10 +62,10 @@ export async function showDispatchDialog(cardContext?: CardContext) {
   const backdrop = document.createElement("div");
   backdrop.className = "dialog-backdrop dispatch-backdrop";
   backdrop.innerHTML = `
-    <div class="dialog" style="max-width:520px">
-      <div class="dialog-header">
-        <span class="dialog-title">Dispatch Agent${cardContext ? ` — ${esc(cardContext.title)}` : ""}</span>
-        <button class="dialog-close" title="Close" aria-label="Close">×</button>
+    <div class="dialog ui-surface" style="max-width:520px">
+      <div class="ui-header">
+        <span class="ui-header-title">Dispatch Agent${cardContext ? ` — ${esc(cardContext.title)}` : ""}</span>
+        <button data-variant="ghost" data-icon class="dialog-close ui-btn" title="Close" aria-label="Close">×</button>
       </div>
       <div class="dialog-body">
         <div class="dialog-field">
@@ -73,7 +78,7 @@ export async function showDispatchDialog(cardContext?: CardContext) {
         </div>
         <div class="dialog-field">
           <label class="dialog-label">Additional prompt</label>
-          <textarea class="dialog-textarea" id="dp-prompt" rows="4" placeholder="Optional: additional instructions">${cardContext ? esc(`Task: ${cardContext.title}\n\n${cardContext.description}`) : ""}</textarea>
+          <textarea class="ui-input" id="dp-prompt" rows="4" placeholder="Optional: additional instructions">${cardContext ? esc(`Task: ${cardContext.title}\n\n${cardContext.description}`) : ""}</textarea>
         </div>
         <div class="dialog-field">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
@@ -83,12 +88,12 @@ export async function showDispatchDialog(cardContext?: CardContext) {
         </div>
         <div class="dialog-field" id="dp-name-field" style="display:none">
           <label class="dialog-label">Workspace name</label>
-          <input class="dialog-input" id="dp-ws-name" placeholder="feature/agent-task" />
+          <input class="ui-input" id="dp-ws-name" placeholder="feature/agent-task" />
         </div>
       </div>
       <div class="dialog-footer">
-        <button class="dialog-btn dialog-btn-secondary" id="dp-cancel">Cancel</button>
-        <button class="dialog-btn dialog-btn-primary" id="dp-dispatch">Dispatch</button>
+        <button data-variant="secondary" class="ui-btn" id="dp-cancel">Cancel</button>
+        <button data-variant="primary" class="ui-btn" id="dp-dispatch">Dispatch</button>
       </div>
     </div>
   `;

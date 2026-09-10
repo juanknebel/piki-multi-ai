@@ -235,6 +235,86 @@ pub(crate) fn handle_mouse_event(
     let col = mouse.column;
     let row = mouse.row;
 
+    // Chat panel overlay — handle before other modes so its inner area gets mouse
+    if app.mode == AppMode::ChatPanel
+        && let Some(inner) = app.chat_messages_inner_area
+    {
+        match mouse.kind {
+            MouseEventKind::ScrollUp => {
+                if rect_contains(inner, col, row) {
+                    app.chat_panel.scroll = app.chat_panel.scroll.saturating_add(3);
+                }
+                return None;
+            }
+            MouseEventKind::ScrollDown => {
+                if rect_contains(inner, col, row) {
+                    app.chat_panel.scroll = app.chat_panel.scroll.saturating_sub(3);
+                }
+                return None;
+            }
+            MouseEventKind::Down(MouseButton::Left) => {
+                if rect_contains(inner, col, row) {
+                    if let Some(owner) = app.selection_owner_key() {
+                        let cell_row = row - inner.y;
+                        let cell_col = col - inner.x;
+                        app.selection = Some(app::Selection::new(cell_row, cell_col, owner));
+                    } else {
+                        // Fallback owner for global chat (not tied to tab)
+                        app.selection = Some(app::Selection::new(
+                            row - inner.y,
+                            col - inner.x,
+                            (usize::MAX, usize::MAX),
+                        ));
+                    }
+                }
+                return None;
+            }
+            MouseEventKind::Drag(MouseButton::Left) => {
+                if let Some(ref mut sel) = app.selection
+                    && sel.active
+                    && let Some(inner) = app.chat_messages_inner_area
+                {
+                    let cell_row = row
+                        .saturating_sub(inner.y)
+                        .min(inner.height.saturating_sub(1));
+                    let cell_col = col
+                        .saturating_sub(inner.x)
+                        .min(inner.width.saturating_sub(1));
+                    sel.end_row = cell_row;
+                    sel.end_col = cell_col;
+                }
+                return None;
+            }
+            MouseEventKind::Up(MouseButton::Left) => {
+                if let Some(ref mut sel) = app.selection
+                    && sel.active
+                {
+                    sel.active = false;
+                    let (sr, sc, er, ec) = sel.normalized();
+                    if sr != er || sc != ec {
+                        // Build chat lines at current width
+                        let width = inner.width as usize;
+                        let lines = crate::ui::chat::chat_text_lines(app, width);
+                        let scroll = app.chat_panel.scroll;
+                        let text = extract_text_from_lines(&lines, sr, sc, er, ec, scroll);
+                        if !text.trim().is_empty() {
+                            if let Err(e) = crate::clipboard::copy_to_clipboard(&text) {
+                                app.set_toast(
+                                    format!("Copy failed: {}", e),
+                                    crate::app::ToastLevel::Error,
+                                );
+                            } else {
+                                app.set_toast("Selection copied", crate::app::ToastLevel::Success);
+                            }
+                        }
+                    }
+                }
+                return None;
+            }
+            _ => return None,
+        }
+    }
+
     match mouse.kind {
         MouseEventKind::ScrollUp => match app.mode {
             AppMode::EditAgentRole => {

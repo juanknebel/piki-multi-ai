@@ -151,8 +151,11 @@ pub async fn git_push(
 ) -> Result<(), String> {
     let ws_path = get_ws_path(&state, workspace_idx)?;
 
+    // No TTY behind a Tauri command: a credential prompt would hang the
+    // button forever — fail with git's "terminal prompts disabled" instead.
     let output = piki_core::shell_env::command("git")
         .args(["push"])
+        .env("GIT_TERMINAL_PROMPT", "0")
         .current_dir(&ws_path)
         .output()
         .await
@@ -569,6 +572,248 @@ pub async fn git_unstage_all(
     }
 
     Ok(())
+}
+
+#[derive(Serialize, Clone)]
+pub struct PullResult {
+    /// `(ahead, behind)` before the pull, `None` without an upstream.
+    pub before: Option<(usize, usize)>,
+    pub after: Option<(usize, usize)>,
+    /// One line for the toast: "Pulled 3 commits" / "Already up to date".
+    pub summary: String,
+}
+
+/// `git pull` with the user's configured strategy. A pull that stops on
+/// conflicts is aborted (merge or rebase) so the worktree is left exactly as
+/// it was, and the error names the files; a diverged branch that git refuses
+/// to reconcile is passed through as an error too.
+#[tauri::command]
+pub async fn git_pull(
+    state: State<'_, Mutex<DesktopApp>>,
+    workspace_idx: usize,
+) -> Result<PullResult, String> {
+    let ws_path = get_ws_path(&state, workspace_idx)?;
+    let before = piki_core::git::get_ahead_behind(&ws_path).await;
+
+    let output = piki_core::shell_env::command("git")
+        .args(["pull"])
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .current_dir(&ws_path)
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run git pull: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let conflicts = detect_conflict_files(&ws_path).await;
+        if !conflicts.is_empty() {
+            let _ = piki_core::shell_env::command("git")
+                .args(["merge", "--abort"])
+                .current_dir(&ws_path)
+                .output()
+                .await;
+            let _ = piki_core::shell_env::command("git")
+                .args(["rebase", "--abort"])
+                .current_dir(&ws_path)
+                .output()
+                .await;
+            return Err(format!(
+                "Pull stopped on conflicts in {} file{}: {} — aborted, the worktree is unchanged. Resolve with Merge / Rebase or in a shell.",
+                conflicts.len(),
+                if conflicts.len() == 1 { "" } else { "s" },
+                conflicts.join(", ")
+            ));
+        }
+        if stderr.contains("divergent") || stderr.contains("Not possible to fast-forward") {
+            return Err(format!(
+                "Local and remote have diverged; git needs a merge or rebase strategy (set pull.rebase in git config, or use Merge / Rebase). {stderr}"
+            ));
+        }
+        return Err(format!("git pull failed: {stderr}"));
+    }
+
+    let after = piki_core::git::get_ahead_behind(&ws_path).await;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(PullResult {
+        before,
+        after,
+        summary: piki_core::git::pull_summary(before, after, &stdout),
+    })
+}
+
+/// `git commit --amend`; `message = None` keeps the current message.
+#[tauri::command]
+pub async fn git_amend(
+    state: State<'_, Mutex<DesktopApp>>,
+    workspace_idx: usize,
+    message: Option<String>,
+) -> Result<(), String> {
+    let ws_path = get_ws_path(&state, workspace_idx)?;
+
+    let mut args = vec!["commit", "--amend"];
+    match message.as_deref().map(str::trim) {
+        Some(msg) if !msg.is_empty() => {
+            args.push("-m");
+            args.push(msg);
+        }
+        _ => args.push("--no-edit"),
+    }
+
+    let output = piki_core::shell_env::command("git")
+        .args(&args)
+        .current_dir(&ws_path)
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run git commit --amend: {e}"))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "git commit --amend failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+
+    Ok(())
+}
+
+/// Message of the commit at HEAD (prefill for Amend).
+#[tauri::command]
+pub async fn git_last_commit_message(
+    state: State<'_, Mutex<DesktopApp>>,
+    workspace_idx: usize,
+) -> Result<String, String> {
+    let ws_path = get_ws_path(&state, workspace_idx)?;
+    piki_core::git::last_commit_message(&ws_path)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Throw away working-tree changes of one file. Tracked: `git restore
+/// --worktree` (the index is untouched). `untracked = true` deletes the file
+/// with `git clean -fd` — only ever pass it for a file the status listed as
+/// untracked, and only after the user confirmed a *deletion*.
+#[tauri::command]
+pub async fn git_discard_file(
+    state: State<'_, Mutex<DesktopApp>>,
+    workspace_idx: usize,
+    file_path: String,
+    untracked: bool,
+) -> Result<(), String> {
+    let ws_path = get_ws_path(&state, workspace_idx)?;
+
+    let args: Vec<&str> = if untracked {
+        vec!["clean", "-fd", "--", &file_path]
+    } else {
+        vec!["restore", "--worktree", "--", &file_path]
+    };
+    let verb = if untracked {
+        "git clean"
+    } else {
+        "git restore"
+    };
+
+    let output = piki_core::shell_env::command("git")
+        .args(&args)
+        .current_dir(&ws_path)
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run {verb}: {e}"))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "{verb} failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+
+    Ok(())
+}
+
+#[derive(Serialize, Clone)]
+pub struct BranchList {
+    pub current: Option<String>,
+    pub ahead_behind: Option<(usize, usize)>,
+    pub branches: Vec<piki_core::git::BranchInfo>,
+}
+
+#[tauri::command]
+pub async fn git_list_branches(
+    state: State<'_, Mutex<DesktopApp>>,
+    workspace_idx: usize,
+    include_remotes: bool,
+) -> Result<BranchList, String> {
+    let ws_path = get_ws_path(&state, workspace_idx)?;
+    let branches = piki_core::git::list_branches(&ws_path, include_remotes)
+        .await
+        .map_err(|e| e.to_string())?;
+    let current = piki_core::git::get_current_branch(&ws_path).await;
+    let ahead_behind = piki_core::git::get_ahead_behind(&ws_path).await;
+    Ok(BranchList {
+        current,
+        ahead_behind,
+        branches,
+    })
+}
+
+#[derive(Serialize, Clone)]
+pub struct BranchSwitch {
+    pub branch: Option<String>,
+    pub files: Vec<ChangedFile>,
+    pub ahead_behind: Option<(usize, usize)>,
+}
+
+/// `git checkout <branch>` (`--track` for a remote-tracking name). Never
+/// forces: when local changes would be overwritten, or the branch is checked
+/// out in another worktree, git's own refusal is returned verbatim.
+#[tauri::command]
+pub async fn git_checkout_branch(
+    state: State<'_, Mutex<DesktopApp>>,
+    workspace_idx: usize,
+    branch: String,
+    remote: bool,
+) -> Result<BranchSwitch, String> {
+    let ws_path = get_ws_path(&state, workspace_idx)?;
+
+    let args: Vec<&str> = if remote {
+        vec!["checkout", "--track", &branch]
+    } else {
+        vec!["checkout", &branch]
+    };
+    let output = piki_core::shell_env::command("git")
+        .args(&args)
+        .current_dir(&ws_path)
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run git checkout: {e}"))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "git checkout failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+
+    let branch = piki_core::git::get_current_branch(&ws_path).await;
+    let files = piki_core::git::get_changed_files(&ws_path)
+        .await
+        .map_err(|e| e.to_string())?;
+    let ahead_behind = piki_core::git::get_ahead_behind(&ws_path).await;
+
+    {
+        let mut app = state.lock();
+        if workspace_idx < app.workspaces.len() {
+            let ws = &mut app.workspaces[workspace_idx];
+            ws.branch = branch.clone();
+            ws.changed_files = files.clone();
+            ws.ahead_behind = ahead_behind;
+        }
+    }
+
+    Ok(BranchSwitch {
+        branch,
+        files,
+        ahead_behind,
+    })
 }
 
 fn get_ws_path(

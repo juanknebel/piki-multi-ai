@@ -31,7 +31,10 @@ export function attachPathPicker(
 
   const btn = document.createElement("button");
   btn.type = "button";
-  btn.className = "path-picker-btn";
+  btn.className = "path-picker-btn ui-btn";
+  btn.dataset.variant = "secondary";
+  btn.dataset.icon = "";
+  btn.dataset.size = "md";
   btn.title = opts.directory === false ? "Choose file" : "Choose folder";
   btn.setAttribute("aria-label", btn.title);
   btn.innerHTML = FOLDER_ICON;

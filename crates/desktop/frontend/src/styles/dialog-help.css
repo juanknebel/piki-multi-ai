@@ -1,0 +1,50 @@
+/* Help / keyboard shortcuts dialog (dialogs/help-dialog.ts). */
+.shortcut-group {
+  margin-bottom: 14px;
+}
+
+.shortcut-group-title {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0;
+}
+
+.shortcut-row-label {
+  color: var(--text-primary);
+  font-size: var(--fs-md);
+}
+
+.shortcut-row-note {
+  margin-left: 4px;
+  color: var(--text-muted);
+  cursor: help;
+}
+
+.shortcut-legend {
+  margin: 10px 0 0;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.shortcut-row-key {
+  padding: 2px 8px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}

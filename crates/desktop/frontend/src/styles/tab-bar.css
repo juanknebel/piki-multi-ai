@@ -8,33 +8,43 @@
      paint their own bg, so this only affects the empty gap + `+`. */
   background: var(--bg-primary);
   border-bottom: 1px solid var(--border-primary);
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: hidden;
   flex: 0 0 var(--tab-height);
   min-height: var(--tab-height);
 }
 
+/* The chips scroll inside this strip; `+` and `⋯` sit after it in the bar,
+   so they stay visible however many tabs there are. */
+.ws-tab-strip {
+  display: flex;
+  align-items: stretch;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
 /* Thin but visible, so overflow is discoverable with many tabs. */
-.ws-tab-bar::-webkit-scrollbar {
+.ws-tab-strip::-webkit-scrollbar {
   height: 3px;
 }
 
-.ws-tab-bar::-webkit-scrollbar-thumb {
+.ws-tab-strip::-webkit-scrollbar-thumb {
   background: var(--border-primary);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
 }
 
 .ws-tab {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-4);
   padding: 0 12px;
   height: var(--tab-height);
   border-right: 1px solid var(--tab-border);
   cursor: pointer;
   user-select: none;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: var(--fs-md);
   color: var(--tab-inactive-fg);
   background: var(--tab-inactive-bg);
   position: relative;
@@ -71,6 +81,43 @@
   letter-spacing: 0.02em;
 }
 
+/* A tab whose process has exited: dimmed label + hollow marker. */
+.ws-tab--dead .ws-tab-label {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.ws-tab-dead {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  flex-shrink: 0;
+}
+
+/* A terminal rang its bell (BEL): brief flash, class removed on animationend
+   (tab-bar.ts `flashTabChip`). */
+.ws-tab--bell {
+  animation: bell-flash var(--dur-slow) var(--ease-out);
+}
+
+/* Inline rename input, sized like the label it replaces. */
+.ws-tab-rename {
+  min-width: 80px;
+  max-width: 180px;
+  height: 20px;
+  padding: 0 6px;
+  font: inherit;
+  font-size: var(--fs-md);
+  color: var(--text-bright);
+  background: var(--bg-primary);
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--radius-sm);
+}
+
+.ws-tab-rename:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
 .ws-tab-close {
   width: 18px;
   height: 18px;
@@ -78,14 +125,18 @@
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-sm);
-  font-size: 14px;
+  font-size: var(--fs-xl);
   color: var(--text-muted);
-  opacity: 0;
+  /* Dim but present on inactive tabs — closing shouldn't need a hover hunt. */
+  opacity: 0.35;
   flex-shrink: 0;
   border: 0;
   background: none;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition:
+    opacity var(--transition-fast),
+    background var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .ws-tab:hover .ws-tab-close,
@@ -94,7 +145,7 @@
 }
 
 .ws-tab-close:hover {
-  background: rgba(248, 81, 73, 0.12);
+  background: color-mix(in srgb, var(--error-color) 12%, transparent);
   color: var(--git-deleted);
 }
 
@@ -105,15 +156,37 @@
   width: 36px;
   height: var(--tab-height);
   color: var(--text-muted);
-  font-size: 18px;
+  font-size: var(--fs-3xl);
   flex-shrink: 0;
   border: 0;
   background: none;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .ws-tab-add:hover {
+  background: var(--bg-hover);
+  color: var(--accent-primary);
+}
+
+/* "All tabs" list button, next to `+`, outside the scrolling strip. */
+.ws-tab-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: var(--tab-height);
+  color: var(--text-muted);
+  font-size: var(--fs-2xl);
+  flex-shrink: 0;
+  border: 0;
+  border-left: 1px solid var(--tab-border);
+  background: none;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.ws-tab-more:hover {
   background: var(--bg-hover);
   color: var(--accent-primary);
 }

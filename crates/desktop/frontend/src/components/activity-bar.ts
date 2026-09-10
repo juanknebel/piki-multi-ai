@@ -1,4 +1,6 @@
 import { appState, type SidebarView } from "../state";
+import { attentionRows } from "../agent-attention";
+import { getShortcutKey } from "../shortcuts";
 
 const ACTIVITIES: { id: SidebarView; label: string; icon: string }[] = [
   {
@@ -75,6 +77,26 @@ export function renderActivityBar(container: HTMLElement) {
     }
   }
 
+  // Badge for the Explorer icon: agents needing you (all workspaces) — the
+  // Agents panel lives in the sidebar, so this keeps the signal visible
+  // while the sidebar is hidden or another view is up.
+  const explorerBtn = buttons.get("explorer")!;
+  const attentionBadge = document.createElement("span");
+  attentionBadge.className = "activity-badge activity-badge--attention";
+  attentionBadge.style.display = "none";
+  explorerBtn.appendChild(attentionBadge);
+
+  function updateAttentionBadge() {
+    const n = attentionRows(appState.agentRows).length;
+    if (n > 0) {
+      attentionBadge.textContent = n > 99 ? "99+" : String(n);
+      attentionBadge.title = `${n} agent${n === 1 ? "" : "s"} need${n === 1 ? "s" : ""} you — ${getShortcutKey("jump-attention")} jumps there`;
+      attentionBadge.style.display = "";
+    } else {
+      attentionBadge.style.display = "none";
+    }
+  }
+
   function updateActive() {
     for (const [id, btn] of buttons) {
       btn.classList.toggle("active", id === appState.activeView);
@@ -84,5 +106,7 @@ export function renderActivityBar(container: HTMLElement) {
   appState.on("view-changed", updateActive);
   appState.on("files-changed", updateBadge);
   appState.on("active-workspace-changed", updateBadge);
+  appState.on("agent-rows-changed", updateAttentionBadge);
   updateBadge();
+  updateAttentionBadge();
 }

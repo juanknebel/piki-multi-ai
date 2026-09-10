@@ -1,0 +1,22 @@
+/* Workspace info dialog rows (dialogs/workspace-dialog.ts showWorkspaceInfo). */
+.info-row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.info-row-label {
+  min-width: 90px;
+  flex-shrink: 0;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.info-row-value {
+  color: var(--text-primary);
+  word-break: break-all;
+  font-size: var(--fs-md);
+}

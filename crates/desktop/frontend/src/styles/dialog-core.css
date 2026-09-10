@@ -1,0 +1,277 @@
+/* Generic dialog family: backdrop, shell, body, footer, form rows, the
+ * custom dropdown, badges and the shared confirm overlay. The shell, header
+ * and buttons are the primitives (primitives.css: .ui-surface, .ui-header,
+ * .ui-btn, .ui-input) — this file only holds what is dialog-specific.
+ * Per-feature dialog styles live next door (dialog-*.css). */
+
+.dialog-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--scrim);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 14vh;
+  z-index: var(--z-backdrop);
+  animation: overlay-in var(--dur-fast) var(--ease-out);
+}
+
+/* `.dialog ui-surface` — the surface paints it; this is the size budget. */
+.dialog {
+  width: 560px;
+  max-width: 90vw;
+  max-height: 70vh;
+}
+
+/* × in a header: a ghost icon .ui-btn that turns red on hover. */
+.dialog-close {
+  font-size: var(--fs-2xl);
+}
+
+.dialog-close:hover {
+  background: color-mix(in srgb, var(--error-color) 12%, transparent);
+  color: var(--error-color);
+}
+
+.dialog-body {
+  padding: var(--sp-6);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.dialog-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.dialog-label {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* ── Path picker (input + folder button, components/path-picker.ts) ── */
+.path-picker-row {
+  display: flex;
+  align-items: stretch;
+  gap: var(--sp-3);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.path-picker-row > .ui-input,
+.path-picker-row > input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Secondary icon .ui-btn; the folder glyph stays quiet until hovered. */
+.path-picker-btn {
+  color: var(--text-muted);
+}
+
+/* ── Custom dropdown (replaces native select, components/dropdown.ts) ── */
+.dialog-dropdown {
+  position: relative;
+}
+
+/* Same height as .ui-input so a form row of inputs + dropdowns lines up. */
+.dialog-dropdown-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: var(--control-height);
+  padding: 0 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--fs-base);
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.dialog-dropdown-trigger:hover {
+  border-color: var(--accent-primary);
+}
+
+.dialog-dropdown-trigger:focus-visible {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: var(--focus-ring);
+}
+
+.dialog-dropdown-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dialog-dropdown-arrow {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.dialog-dropdown-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--bg-dropdown);
+  border: 1px solid var(--dialog-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 4px 0;
+  z-index: var(--z-popover);
+  max-height: 200px;
+  overflow-y: auto;
+  animation: dialog-enter var(--dur-fast) var(--ease-out);
+}
+
+.dialog-dropdown-item {
+  display: block;
+  width: 100%;
+  padding: 7px 14px;
+  font-size: var(--fs-base);
+  color: var(--text-primary);
+  text-align: left;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+/* Keyboard navigation moves `.highlight` (focus stays on the trigger);
+   :focus-visible covers a list item reached by Tab. */
+.dialog-dropdown-item:hover,
+.dialog-dropdown-item.highlight,
+.dialog-dropdown-item:focus-visible {
+  background: var(--bg-active);
+  color: var(--text-bright);
+  outline: none;
+}
+
+.dialog-dropdown-item.active {
+  background: var(--accent-primary);
+  color: var(--on-accent);
+}
+
+.dialog-dropdown-item.active.highlight,
+.dialog-dropdown-item.active:focus-visible {
+  background: var(--accent-primary);
+  color: var(--on-accent);
+  box-shadow: inset 2px 0 0 var(--text-bright);
+}
+
+.dialog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-4);
+  padding: var(--sp-5) var(--sp-6);
+  border-top: 1px solid var(--border-primary);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+}
+
+/* ── Reusable yes/no & status badge ──────────────── */
+.dialog-badge {
+  display: inline-block;
+  font-size: var(--fs-xs);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dialog-badge.success {
+  color: var(--success-color);
+  background: color-mix(in srgb, var(--success-color) 12%, transparent);
+}
+
+.dialog-badge.muted {
+  color: var(--text-muted);
+  background: var(--bg-hover);
+}
+
+/* ── Confirm overlay (components/confirm.ts showConfirm) ─────────────── */
+.ws-delete-confirm {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--scrim);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-backdrop);
+  animation: overlay-in var(--dur-fast) var(--ease-out);
+}
+
+/* `.ws-delete-dialog ui-surface` — overflow stays visible: a createDropdown
+   list inside the confirm (move tab / card column) must escape the box. */
+.ws-delete-dialog {
+  padding: 20px 24px;
+  min-width: 300px;
+  max-width: 90vw;
+  overflow: visible;
+  text-align: center;
+}
+
+.ws-delete-dialog p {
+  margin-bottom: 8px;
+  color: var(--text-primary);
+  font-size: var(--fs-lg);
+}
+
+.ws-delete-list {
+  margin: 6px 0 10px;
+  padding-left: 18px;
+  color: var(--text-primary);
+  font-size: var(--fs-md);
+  text-align: left;
+}
+
+.ws-delete-hint {
+  color: var(--text-muted) !important;
+  font-size: var(--fs-sm) !important;
+}
+
+/* Warning lines in the delete-workspace confirm (changes / running agents). */
+.ws-delete-warn {
+  color: var(--warning-color) !important;
+  font-size: var(--fs-md) !important;
+}
+
+.ws-delete-card-move {
+  margin-top: 12px;
+  text-align: left;
+}
+
+.ws-delete-card-move .dialog-label {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.ws-delete-buttons {
+  display: flex;
+  gap: var(--sp-4);
+  justify-content: center;
+  margin-top: 16px;
+}

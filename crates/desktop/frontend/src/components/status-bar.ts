@@ -1,6 +1,13 @@
 import { appState } from "../state";
 import { getProviderLabel, getTabLabel, cliAgentStatusView, type FileStatus } from "../types";
 import { showAboutDialog } from "./dialogs/about-dialog";
+import { showSessionsDialog } from "./dialogs/sessions-dialog";
+import { jumpToAttention } from "./agents-panel";
+import { attentionRows } from "../agent-attention";
+import { getShortcutKey } from "../shortcuts";
+import { branchLabel } from "../labels";
+import { icon } from "./icons";
+import { openBranchPicker } from "./dialogs/branch-picker";
 import * as ipc from "../ipc";
 
 const STAGED_STATUSES: FileStatus[] = ["Staged", "Added", "Renamed", "StagedModified"];
@@ -8,24 +15,34 @@ const STAGED_STATUSES: FileStatus[] = ["Staged", "Added", "Renamed", "StagedModi
 export function renderStatusBar(container: HTMLElement) {
   function render() {
     const ws = appState.activeWs;
-    container.innerHTML = "";
+    // Build into a detached element and morph: `tab-shell-state-changed` /
+    // `agent-rows-changed` fire several times a second while an agent runs,
+    // and a full innerHTML rebuild that often flickers the whole bar (same
+    // disease `patchWorkspaceTabBar` cures for the tab strip). Only the
+    // segments that actually changed get swapped in.
+    const bar = document.createElement("div");
 
     // App name (clickable → About)
     const appName = document.createElement("div");
     appName.className = "status-item clickable status-app-name";
     appName.textContent = "Piki Desktop";
     appName.addEventListener("click", showAboutDialog);
-    container.appendChild(appName);
+    bar.appendChild(appName);
 
-    // Left side
-    const branch = ws?.branch ?? "—";
-    addItem(container, `⎇ ${branch}`, "clickable");
+    // Left side — the branch, shortened by the shared rule (full in the tooltip).
+    // Click (or the `switch-branch` key) opens the branch switcher.
+    const branchItem = addItem(bar, "", "clickable");
+    branchItem.innerHTML = `${icon("branch")}${escapeText(branchLabel(ws?.branch))}`;
+    branchItem.title = ws?.branch
+      ? `${ws.branch}\nClick or ${getShortcutKey("switch-branch")} to switch branch`
+      : "No git branch";
+    branchItem.addEventListener("click", () => openBranchPicker());
 
     if (ws?.aheadBehind) {
       const [ahead, behind] = ws.aheadBehind;
       if (ahead > 0 || behind > 0) {
         const sync = `${ahead > 0 ? "↑" + ahead : ""}${behind > 0 ? " ↓" + behind : ""}`.trim();
-        addItem(container, sync);
+        addItem(bar, sync);
       }
     }
 
@@ -40,15 +57,27 @@ export function renderStatusBar(container: HTMLElement) {
       if (stagedCount > 0) {
         parts.push(`${stagedCount} staged`);
       }
-      addItem(container, parts.join(" · "));
+      addItem(bar, parts.join(" · "));
     }
 
     // Spacer
     const spacer = document.createElement("div");
     spacer.className = "status-spacer";
-    container.appendChild(spacer);
+    bar.appendChild(spacer);
 
-    // Right side
+    // Right side.
+    // Agents needing you, across ALL workspaces — the signal that survives
+    // a hidden sidebar. Click = the `Alt+A` jump.
+    const needing = attentionRows(appState.agentRows);
+    if (needing.length > 0) {
+      const item = document.createElement("div");
+      item.className = "status-item clickable status-attention";
+      item.innerHTML = `${icon("dot")}${needing.length} need${needing.length === 1 ? "s" : ""} you`;
+      item.title = `${needing.map((r) => `${r.workspace_name} · ${r.label}`).join("\n")}\nClick or ${getShortcutKey("jump-attention")} to jump`;
+      item.addEventListener("click", () => jumpToAttention());
+      bar.appendChild(item);
+    }
+
     if (ws && ws.tabs.length > 0) {
       const tab = ws.tabs[ws.activeTab];
       if (tab) {
@@ -56,26 +85,26 @@ export function renderStatusBar(container: HTMLElement) {
         if (tab.provider === "Shell") {
           const shellState = appState.getTabShellState(tab.id);
           if (shellState?.cwd) {
-            addItem(container, `📁 ${formatHomeRelative(shellState.cwd)}`, "status-cwd");
+            addItem(bar, "", "status-cwd").innerHTML = `${icon("folder")}${escapeText(formatHomeRelative(shellState.cwd))}`;
           }
         }
         // Claude agent tabs: structured status glyph + summary preview.
         const agentState = appState.getTabShellState(tab.id);
         if (agentState?.agentStatus) {
-          const v = cliAgentStatusView(agentState.agentStatus);
+          const v = cliAgentStatusView(agentState.agentStatus, agentState.attention ?? false);
           const sum = agentState.agentSummary
             ? `: ${truncate(agentState.agentSummary, 60)}`
             : "";
           const item = document.createElement("div");
           item.className = "status-item status-agent";
           item.style.color = v.color;
-          item.textContent = `${v.glyph} ${v.label}${sum}`;
+          item.innerHTML = `${icon(v.icon)}${escapeText(`${v.label}${sum}`)}`;
           item.title = agentState.agentSummary ?? v.label;
-          container.appendChild(item);
+          bar.appendChild(item);
         }
-        const label = getTabLabel(tab);
+        const label = getTabLabel(tab, appState.getTabShellState(tab.id)?.title);
         const alive = tab.alive ? "" : " (exited)";
-        addItem(container, `${label}${alive}`);
+        addItem(bar, `${label}${alive}`);
       }
     }
 
@@ -86,15 +115,25 @@ export function renderStatusBar(container: HTMLElement) {
     lspItem.className = "status-item status-lsp";
     lspItem.textContent = lspCache.text;
     if (lspCache.color) lspItem.style.color = lspCache.color;
-    container.appendChild(lspItem);
+    bar.appendChild(lspItem);
 
     const wsName = ws?.info.name ?? "No workspace";
-    addItem(container, wsName);
+    addItem(bar, wsName);
+
+    // Persistent-session daemon: `sessions N` / `sessions off` /
+    // `sessions unavailable`, from the poll cache; click opens the dialog.
+    const sessionsItem = document.createElement("div");
+    sessionsItem.className = "status-item clickable status-sessions";
+    applySessionsCache(sessionsItem);
+    sessionsItem.addEventListener("click", () => void showSessionsDialog());
+    bar.appendChild(sessionsItem);
 
     // Sysinfo
     if (appState.sysinfo) {
-      addItem(container, appState.sysinfo);
+      addItem(bar, appState.sysinfo);
     }
+
+    morphChildren(container, bar);
   }
 
   appState.on("active-workspace-changed", render);
@@ -103,6 +142,7 @@ export function renderStatusBar(container: HTMLElement) {
   appState.on("active-tab-changed", render);
   appState.on("sysinfo-changed", render);
   appState.on("tab-shell-state-changed", render);
+  appState.on("agent-rows-changed", render);
   render();
 
   // Poll LSP status on its own cadence, patching the live element in place.
@@ -116,6 +156,70 @@ export function renderStatusBar(container: HTMLElement) {
     });
   refreshLsp();
   setInterval(refreshLsp, 5000);
+
+  // Daemon health every 3s (the list call is the probe), patched in place.
+  const refreshSessions = () =>
+    void refreshSessionsCache().then(() => {
+      const el = container.querySelector<HTMLElement>(".status-sessions");
+      if (el) applySessionsCache(el);
+    });
+  refreshSessions();
+  setInterval(refreshSessions, 3000);
+}
+
+/** Replace only the children of `live` that differ from `next`'s (by
+ *  rendered markup); identical segments are left untouched, listeners and
+ *  all — a kept element's listeners behave the same as the fresh one's,
+ *  every render wires the same handlers. A structural change (segment
+ *  count) falls back to the full swap. */
+function morphChildren(live: HTMLElement, next: HTMLElement) {
+  const oldKids = Array.from(live.children);
+  const newKids = Array.from(next.children);
+  if (oldKids.length !== newKids.length) {
+    live.replaceChildren(...newKids);
+    return;
+  }
+  for (let i = 0; i < newKids.length; i++) {
+    if (oldKids[i].outerHTML !== newKids[i].outerHTML) oldKids[i].replaceWith(newKids[i]);
+  }
+}
+
+const sessionsCache: { text: string; state: string; title: string } = {
+  text: "sessions …",
+  state: "unknown",
+  title: "Persistent sessions",
+};
+
+function applySessionsCache(el: HTMLElement) {
+  el.textContent = sessionsCache.text;
+  el.title = sessionsCache.title;
+  el.dataset.state = sessionsCache.state;
+}
+
+async function refreshSessionsCache(): Promise<void> {
+  try {
+    const s = await ipc.sessionStatus();
+    sessionsCache.state = s.state;
+    if (s.state === "on") {
+      sessionsCache.text = `sessions ${s.live}`;
+      sessionsCache.title = `${s.live} live session${s.live === 1 ? "" : "s"} in the daemon${s.daemon_pid != null ? ` (pid ${s.daemon_pid})` : ""} — click to manage`;
+    } else if (s.state === "off") {
+      sessionsCache.text = "sessions off";
+      sessionsCache.title = "Persistent sessions disabled (Settings › General, or [sessions] enabled = false in config.toml) — tabs run in-process";
+    } else {
+      sessionsCache.text = "sessions unavailable";
+      sessionsCache.title = "The session daemon is not answering — tabs opened now run in-process and die with the window";
+    }
+    // Settings ▸ General changed the choice; it only applies on the next launch.
+    if (s.enabled_next !== (s.state !== "off")) {
+      sessionsCache.text += " (restart)";
+      sessionsCache.title += ` — will be ${s.enabled_next ? "on" : "off"} after a restart (changed in Settings)`;
+    }
+  } catch {
+    sessionsCache.state = "unavailable";
+    sessionsCache.text = "sessions unavailable";
+    sessionsCache.title = "Could not query the session daemon";
+  }
 }
 
 /** Replace a leading `$HOME` segment with `~` so the bar stays compact. */
@@ -132,11 +236,19 @@ function truncate(s: string, max: number): string {
   return oneLine.length > max ? oneLine.slice(0, max - 1) + "…" : oneLine;
 }
 
-function addItem(container: HTMLElement, text: string, ...classes: string[]) {
+/** Text → HTML for the `innerHTML` segments that lead with an `icon()`. */
+function escapeText(text: string): string {
+  const el = document.createElement("span");
+  el.textContent = text;
+  return el.innerHTML;
+}
+
+function addItem(container: HTMLElement, text: string, ...classes: string[]): HTMLElement {
   const item = document.createElement("div");
   item.className = ["status-item", ...classes].join(" ");
   item.textContent = text;
   container.appendChild(item);
+  return item;
 }
 
 const lspCache = { text: "", color: "" };

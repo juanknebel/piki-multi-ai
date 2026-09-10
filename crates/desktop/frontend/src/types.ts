@@ -1,3 +1,5 @@
+import type { IconName } from "./components/icons";
+
 export type AIProvider =
   | "Shell"
   | "Kanban"
@@ -135,29 +137,55 @@ export interface PtyAgentEvent {
    *  `tool_complete`, `permission_request`, `notification`, `stop`. */
   kind: string;
   summary?: string;
+  /** The tab has news the user hasn't looked at. Already false when the
+   *  event landed on the tab on screen (that counts as seen); cleared
+   *  later by a `pty-agent-ack`. */
+  attention: boolean;
 }
 
-/** Glyph / label / theme color for a Claude agent status. Shared by the
+/** The backend cleared a tab's agent attention marker — the user is looking
+ *  at it (tab switch, workspace switch, or news landing on the visible
+ *  tab). Mirrors `events::PtyAgentAckPayload`. */
+export interface PtyAgentAckEvent {
+  tab_id: string;
+}
+
+/** Compact elapsed label — mirror of `piki_core::cli_agent::format_elapsed`
+ *  (`45s`, `3m 12s`, `1h 02m`); the TUI Agents pane shows the same. */
+export function formatElapsed(secs: number): string {
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = Math.floor(secs % 60);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  if (h > 0) return `${h}h ${pad(m)}m`;
+  if (m > 0) return `${m}m ${pad(s)}s`;
+  return `${s}s`;
+}
+
+/** Icon / label / theme color for a Claude agent status. Shared by the
  *  status bar (full), the workspace tab bar (dot only) and the Agents panel.
  *  `attention` gates the shouting: an idle agent only reads "needs you" when
- *  it has news the user hasn't looked at (same rule as the TUI). */
-export function cliAgentStatusView(status: CliAgentStatus, attention = false): {
-  glyph: string;
+ *  it has news the user hasn't looked at (same rule as the TUI). The view
+ *  returns the icon NAME (`components/icons.ts`); renderers call `icon()`. */
+export interface AgentStatusView {
+  icon: IconName;
   label: string;
   color: string;
-} {
+}
+
+export function cliAgentStatusView(status: CliAgentStatus, attention = false): AgentStatusView {
   switch (status) {
     case "waiting-permission":
-      return { glyph: "⚠", label: "needs permission", color: "var(--accent-warm)" };
+      return { icon: "warning", label: "needs permission", color: "var(--accent-warm)" };
     case "idle":
       return attention
-        ? { glyph: "●", label: "needs you", color: "var(--accent-warm)" }
-        : { glyph: "⏳", label: "waiting for input", color: "var(--accent-primary)" };
+        ? { icon: "dot", label: "needs you", color: "var(--accent-warm)" }
+        : { icon: "clock", label: "waiting for input", color: "var(--accent-primary)" };
     case "done":
-      return { glyph: "✓", label: "done", color: "var(--git-added)" };
+      return { icon: "check", label: "done", color: "var(--git-added)" };
     case "running":
     default:
-      return { glyph: "▷", label: "running", color: "var(--text-muted)" };
+      return { icon: "play", label: "running", color: "var(--text-muted)" };
   }
 }
 
@@ -171,18 +199,18 @@ export function agentStatusSeverity(status: CliAgentStatus, attention: boolean):
   return 0;
 }
 
-/** Status glyph for ambient chrome (workspace list rollup). Only actionable
+/** Status icon for ambient chrome (workspace list rollup). Only actionable
  *  states surface here — running/done stay in the Agents panel. Mirrors the
  *  TUI's `actionable_status_view`. */
 export function actionableStatusView(
   status: CliAgentStatus,
   attention: boolean,
-): { glyph: string; label: string; color: string } | null {
+): AgentStatusView | null {
   if (status === "waiting-permission")
-    return { glyph: "⚠", label: "needs permission", color: "var(--accent-warm)" };
+    return { icon: "warning", label: "needs permission", color: "var(--accent-warm)" };
   // "Has news you haven't seen" propagates; quiet idle/done doesn't.
   if ((status === "idle" || status === "done") && attention)
-    return { glyph: "●", label: "needs you", color: "var(--accent-warm)" };
+    return { icon: "dot", label: "needs you", color: "var(--accent-warm)" };
   return null;
 }
 
@@ -199,6 +227,82 @@ export interface AgentRow {
   status: CliAgentStatus | null;
   attention: boolean;
   summary: string | null;
+  /** Seconds since the run began (session start / last prompt), `null`
+   *  once stopped. Snapshot at fetch time — see `liveElapsedSecs`. */
+  elapsed_secs: number | null;
+}
+
+/** One row of the Sessions dialog. Mirrors `SessionRow` in commands/session.rs. */
+export interface SessionRow {
+  id: string;
+  name: string;
+  workspace: string;
+  state: "attached" | "detached" | "exited";
+  attached: number;
+  exit_code: number | null;
+  local_workspace_idx: number | null;
+  local_tab_idx: number | null;
+  /** Loaded workspace matching the session's recorded path — default Adopt target. */
+  workspace_idx: number | null;
+}
+
+/** Status-bar segment: daemon health + live session count (all clients). */
+export interface SessionStatus {
+  state: "on" | "off" | "unavailable";
+  live: number;
+  daemon_pid: number | null;
+  /** What the NEXT launch will use (Settings ▸ General > config.toml > default). */
+  enabled_next: boolean;
+}
+
+/** `piki_core::app_settings::AppSettings` — the overrides both frontends
+ *  honour; `null`/absent = "use config.toml" for that key. */
+export interface AppSettings {
+  sessions_enabled?: boolean | null;
+  notification_delivery?: NotificationDelivery | null;
+  sound?: boolean | null;
+}
+
+export type NotificationDelivery = "off" | "system" | "terminal";
+
+/** `piki_core::notifications::NotificationsConfig` as serialized. */
+export interface NotificationsConfig {
+  delivery: string;
+  sound: boolean;
+  sound_path: string | null;
+  sound_done_path: string | null;
+  sound_attention_path: string | null;
+}
+
+/** `commands/settings.rs::AppSettingsView` — the merged settings plus the
+ *  two lower layers, so the General tab can say where a value comes from. */
+export interface AppSettingsView {
+  sessions_enabled: boolean;
+  notifications: NotificationsConfig;
+  config_sessions_enabled: boolean;
+  config_notifications: NotificationsConfig;
+  overrides: AppSettings;
+  /** `[sessions] enabled` the running process started with. */
+  runtime_sessions_enabled: boolean;
+}
+
+/** What startup re-attach restored. */
+export interface RestoreSummary {
+  sessions: number;
+  workspaces: number[];
+}
+
+/** Live tabs by what quitting does to them. */
+export interface QuitSummary {
+  persistent: number;
+  local: number;
+}
+
+export interface SessionsSnapshot {
+  connected: boolean;
+  daemon_pid: number | null;
+  sessions: SessionRow[];
+  error: string | null;
 }
 
 /** Workspace-level "needs attention" signal. Sources: `provider-idle` (a
@@ -240,9 +344,13 @@ export function getProviderLabel(provider: AIProvider): string {
   return provider.Custom;
 }
 
-/** Display label for a tab: custom_title > provider label. */
-export function getTabLabel(tab: TabInfo): string {
+/** Display label for a tab: custom_title > terminal title > provider label.
+ *  `termTitle` is what the program set via OSC 0/2 (`TabShellState.title`,
+ *  xterm `onTitleChange`) — a fallback only: a user rename always wins, and
+ *  an empty/whitespace title is ignored. */
+export function getTabLabel(tab: TabInfo, termTitle?: string | null): string {
   if (tab.custom_title && tab.custom_title.trim().length > 0) return tab.custom_title;
+  if (termTitle && termTitle.trim().length > 0) return termTitle.trim();
   return getProviderLabel(tab.provider);
 }
 
@@ -252,6 +360,20 @@ export function getProviderIcon(provider: AIProvider): string {
     return BUILTIN_PROVIDER_ICONS[provider] ?? provider.charAt(0).toUpperCase();
   }
   return provider.Custom.charAt(0).toUpperCase();
+}
+
+/** Contents that exist only in the frontend (no backend `DesktopTab`): the
+ *  editors and the web preview. They are absent from the backend tab list,
+ *  so index-based IPC (`close_tab`, `set_active_tab`) must skip them — see
+ *  `appState.backendTabIndex`. */
+export function isFrontendOnlyProvider(provider: AIProvider): boolean {
+  return provider === "Markdown" || provider === "CodeEditor" || provider === "WebPreview";
+}
+
+/** Content backed by a PTY process (shell or AI agent) — the only kind that
+ *  can be "running", exit, be restarted or be kept alive in the daemon. */
+export function isPtyProvider(provider: AIProvider): boolean {
+  return provider === "Shell" || (typeof provider === "object" && "Custom" in provider);
 }
 
 /** Get the provider key for serialization (built-in name or Custom wrapper). */
@@ -320,7 +442,7 @@ export interface ChatMessage {
   content: string;
 }
 
-export type ChatServerType = "Ollama" | "LlamaCpp";
+export type ChatServerType = "Ollama" | "LlamaCpp" | "OpenRouter";
 
 export interface ChatConfig {
   provider: string;
@@ -328,6 +450,9 @@ export interface ChatConfig {
   model: string;
   base_url: string;
   system_prompt: string | null;
+  api_key?: string | null;
+  /** OpenRouter web-search plugin; ignored by local backends. */
+  web_search: boolean;
 }
 
 export interface ChatModelInfo {

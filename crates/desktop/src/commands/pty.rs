@@ -1,11 +1,13 @@
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use parking_lot::Mutex;
+use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, State};
 
 use piki_core::AIProvider;
 use piki_core::cli_agent::bridge_for_command;
 
+use crate::pty_output::PtyOutputSink;
 use crate::pty_raw::RawPtySession;
 use crate::state::{DesktopApp, DesktopTab};
 
@@ -71,32 +73,37 @@ pub async fn spawn_tab(
         None
     };
 
+    // Create the tab first so its id names the daemon session + cli-agent FIFO.
+    let mut tab = DesktopTab::new(ai_provider.clone(), provider_cfg.as_ref());
+    let tab_id = tab.id.clone();
+
+    let (worktree_path, daemon, order) = {
+        let app = state.lock();
+        if workspace_idx >= app.workspaces.len() {
+            return Err("Workspace index out of range".to_string());
+        }
+        (
+            app.workspaces[workspace_idx].info.path.clone(),
+            app.session_daemon.clone(),
+            app.workspaces[workspace_idx].tabs.len() as u32,
+        )
+    };
+
     // Command, args, env, shell integration and the cli-agent channel all come
-    // from core, so this app and the TUI make the identical decisions. This
-    // used to be resolved here separately and had drifted: passive agent-state
-    // detection (Codex) was missing entirely, and shell tabs never got the
-    // cli-agent FIFO, so a manually-typed `claude` never showed up as an agent.
+    // from core, so this app and the TUI make the identical decisions. With a
+    // daemon present the FIFO is named after the session (stable across a
+    // restart).
     let plan = {
         let app = state.lock();
-        piki_core::pty::launch_plan(
+        piki_core::pty::launch_plan_for_session(
             &ai_provider,
             None,
             Some(&app.provider_manager),
             &app.paths,
             configured_shell(&app).as_deref(),
+            daemon.as_ref().map(|_| tab_id.as_str()),
         )
         .map_err(|e| e.to_string())?
-    };
-
-    let mut tab = DesktopTab::new(ai_provider.clone(), provider_cfg.as_ref());
-    let tab_id = tab.id.clone();
-
-    let worktree_path = {
-        let app = state.lock();
-        if workspace_idx >= app.workspaces.len() {
-            return Err("Workspace index out of range".to_string());
-        }
-        app.workspaces[workspace_idx].info.path.clone()
     };
 
     // The bridge exists for this agent but couldn't be installed (its hook
@@ -120,20 +127,41 @@ pub async fn spawn_tab(
         );
     }
 
-    let pty = RawPtySession::spawn(
-        app_handle,
-        tab_id.clone(),
-        &worktree_path,
-        24,
-        80,
-        &plan.command,
-        &plan.args,
-        &plan.env,
-        &plan.extra_args,
-        plan.integration_on,
-        plan.cli_agent_sock,
-    )
-    .map_err(|e| format!("Failed to spawn PTY: {e}"))?;
+    // Preferred: spawn in the session daemon so the tab persists. Any failure
+    // degrades to an in-process PTY.
+    let remote = daemon.as_ref().and_then(|d| {
+        crate::session::spawn_remote_tab(
+            &app_handle,
+            d,
+            &tab_id,
+            &ai_provider,
+            &plan.command,
+            &plan.args,
+            &plan.env,
+            &plan.extra_args,
+            &worktree_path,
+            plan.integration_on,
+            plan.cli_agent_sock.clone(),
+            order,
+        )
+    });
+    let pty = match remote {
+        Some(p) => p,
+        None => RawPtySession::spawn(
+            app_handle,
+            tab_id.clone(),
+            &worktree_path,
+            24,
+            80,
+            &plan.command,
+            &plan.args,
+            &plan.env,
+            &plan.extra_args,
+            plan.integration_on,
+            plan.cli_agent_sock,
+        )
+        .map_err(|e| format!("Failed to spawn PTY: {e}"))?,
+    };
 
     tab.pty = Some(pty);
     tab.alive = true;
@@ -215,6 +243,7 @@ pub async fn close_tab(
 
     // Kill PTY if present (Drop will handle cleanup)
     let mut tab = ws.tabs.remove(tab_idx);
+    let was_remote = tab.pty.as_ref().is_some_and(|p| p.is_remote());
     if let Some(ref mut pty) = tab.pty {
         let _ = pty.kill();
     }
@@ -223,6 +252,65 @@ pub async fn close_tab(
         ws.active_tab = ws.tabs.len() - 1;
     }
 
+    // An explicitly closed tab must not linger as a daemon orphan: remove its
+    // session (its id doubles as the session id). Drop above already detached.
+    if was_remote && let Some(daemon) = app.session_daemon.clone() {
+        crate::session::remove_session(&daemon, &tab.id);
+    }
+
+    Ok(())
+}
+
+/// "Close, keep running": drop this window's attachment to a daemon-backed
+/// tab without killing the process or removing its session. The session
+/// stays in the daemon as *detached* — visible in the Sessions dialog, in the
+/// TUI overlay and the `sessions` CLI, and adoptable from there. Refuses for
+/// an in-process (local) tab, whose process would die with the drop.
+#[tauri::command]
+pub async fn detach_tab(
+    state: State<'_, Mutex<DesktopApp>>,
+    workspace_idx: usize,
+    tab_idx: usize,
+) -> Result<(), String> {
+    let mut app = state.lock();
+    if workspace_idx >= app.workspaces.len() {
+        return Err("Workspace index out of range".to_string());
+    }
+    let ws = &mut app.workspaces[workspace_idx];
+    if tab_idx >= ws.tabs.len() {
+        return Err("Tab index out of range".to_string());
+    }
+    if !ws.tabs[tab_idx].pty.as_ref().is_some_and(|p| p.is_remote()) {
+        return Err(
+            "This tab runs in-process (no session daemon) — closing it would end the process"
+                .to_string(),
+        );
+    }
+    // Dropping a `RawPtySession::Remote` sends `Detach`, never `Kill`.
+    let tab = ws.tabs.remove(tab_idx);
+    drop(tab);
+    if ws.active_tab >= ws.tabs.len() && !ws.tabs.is_empty() {
+        ws.active_tab = ws.tabs.len() - 1;
+    }
+    Ok(())
+}
+
+/// Ask the daemon to re-send the restore buffer for a tab (no-op for a local
+/// tab). Called by the frontend when a terminal mounts so a re-attached tab
+/// repaints — its restore was emitted before the xterm.js instance existed.
+#[tauri::command]
+pub async fn resync_pty(state: State<'_, Mutex<DesktopApp>>, tab_id: String) -> Result<(), String> {
+    let app = state.lock();
+    for ws in &app.workspaces {
+        for tab in &ws.tabs {
+            if tab.id == tab_id {
+                if let Some(ref pty) = tab.pty {
+                    return pty.resync().map_err(|e| e.to_string());
+                }
+                return Ok(());
+            }
+        }
+    }
     Ok(())
 }
 
@@ -354,29 +442,99 @@ pub async fn spawn_terminal_at(
 
 #[tauri::command]
 pub async fn set_active_tab(
+    app_handle: AppHandle,
     state: State<'_, Mutex<DesktopApp>>,
     workspace_idx: usize,
     tab_idx: usize,
 ) -> Result<(), String> {
-    let mut app = state.lock();
-    if workspace_idx >= app.workspaces.len() {
-        return Err("Workspace index out of range".to_string());
-    }
-    let is_visible = app.active_workspace == workspace_idx;
-    let ws = &mut app.workspaces[workspace_idx];
-    if tab_idx >= ws.tabs.len() {
-        return Err("Tab index out of range".to_string());
-    }
-    ws.active_tab = tab_idx;
-    // Looking at a tab acknowledges its "unseen news" marker, so the agent
-    // attention badge clears the same way it does in the TUI's event loop.
-    if is_visible
-        && let Some(shell) = ws.tabs[tab_idx].pty.as_ref().and_then(|p| p.shell())
-        && let Some(agent) = shell.lock().state.cli_agent.as_mut()
-    {
-        agent.acknowledge();
+    let acked = {
+        let mut app = state.lock();
+        if workspace_idx >= app.workspaces.len() {
+            return Err("Workspace index out of range".to_string());
+        }
+        let is_visible = app.active_workspace == workspace_idx;
+        let ws = &mut app.workspaces[workspace_idx];
+        if tab_idx >= ws.tabs.len() {
+            return Err("Tab index out of range".to_string());
+        }
+        ws.active_tab = tab_idx;
+        // Looking at a tab acknowledges its "unseen news" marker, so the
+        // agent attention badge clears the same way it does in the TUI's
+        // event loop; the frontend hears about it via `pty-agent-ack`.
+        let tab = &ws.tabs[tab_idx];
+        (is_visible && crate::events::acknowledge_agent_attention(tab)).then(|| tab.id.clone())
+    };
+    if let Some(tab_id) = acked {
+        crate::events::emit_agent_ack(&app_handle, &tab_id);
     }
     Ok(())
+}
+
+/// Move a tab (by id) to another workspace, keeping its process alive: the
+/// `DesktopTab` merely changes owner, so nothing is dropped — no `Detach`,
+/// no `Kill`, the xterm.js instance on the frontend stays bound to the same
+/// tab id. A daemon-backed tab also gets its session's `workspace_path`
+/// re-pointed, so the next startup re-attaches it to the new workspace.
+/// Returns the tab's new index in the target workspace.
+#[tauri::command]
+pub async fn move_tab(
+    state: State<'_, Mutex<DesktopApp>>,
+    from_workspace_idx: usize,
+    tab_id: String,
+    to_workspace_idx: usize,
+) -> Result<usize, String> {
+    let (new_idx, remote_meta) = {
+        let mut app = state.lock();
+        let count = app.workspaces.len();
+        if from_workspace_idx >= count || to_workspace_idx >= count {
+            return Err("Workspace index out of range".to_string());
+        }
+        if from_workspace_idx == to_workspace_idx {
+            return Err("The tab is already in that workspace".to_string());
+        }
+        let tab = {
+            let from = &mut app.workspaces[from_workspace_idx];
+            let Some(pos) = from.tabs.iter().position(|t| t.id == tab_id) else {
+                return Err("Tab not found".to_string());
+            };
+            let tab = from.tabs.remove(pos);
+            if from.active_tab >= from.tabs.len() && !from.tabs.is_empty() {
+                from.active_tab = from.tabs.len() - 1;
+            }
+            tab
+        };
+        let is_remote = tab.pty.as_ref().is_some_and(|p| p.is_remote());
+        let (new_idx, new_path) = {
+            let to = &mut app.workspaces[to_workspace_idx];
+            to.tabs.push(tab);
+            let new_idx = to.tabs.len() - 1;
+            to.active_tab = new_idx;
+            (new_idx, to.info.path.clone())
+        };
+        let remote_meta = if is_remote {
+            app.session_daemon.clone().map(|d| (d, new_path))
+        } else {
+            None
+        };
+        (new_idx, remote_meta)
+    };
+
+    // Off-lock: the daemon round-trip is I/O. Best-effort like the other
+    // session bookkeeping — the tab has moved either way.
+    if let Some((daemon, path)) = remote_meta {
+        let id = tab_id.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let req = piki_core::session::protocol::SetMetaRequest {
+                id: id.clone(),
+                workspace_path: Some(path),
+                ..Default::default()
+            };
+            if let Err(e) = daemon.set_meta(req) {
+                tracing::warn!(session = %id, error = %e, "failed to re-point session workspace");
+            }
+        });
+    }
+    Ok(new_idx)
 }
 
 #[tauri::command]
@@ -411,4 +569,17 @@ fn parse_provider(s: &str) -> Result<AIProvider, String> {
         "Api" => Ok(AIProvider::Api),
         other => Ok(AIProvider::Custom(other.to_string())),
     }
+}
+
+/// Register the frontend's raw PTY output channel (`pty-frame.ts` decodes
+/// its frames). Called once at startup, before any tab is spawned; until
+/// then — and whenever a channel send fails — output falls back to the
+/// base64 `pty-output` event. Re-registering replaces the channel.
+#[tauri::command]
+pub async fn register_pty_output_channel(
+    sink: State<'_, PtyOutputSink>,
+    channel: Channel<InvokeResponseBody>,
+) -> Result<(), String> {
+    sink.set_channel(channel);
+    Ok(())
 }

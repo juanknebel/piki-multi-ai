@@ -223,11 +223,20 @@ pub(super) async fn handle(
                     app.workspaces[idx].info.workspace_type == WorkspaceType::Worktree;
                 let is_ephemeral = app.workspaces[idx].info.ephemeral;
 
-                // Kill all PTY sessions before removing
+                // A workspace's sessions must not outlive it: remove any
+                // daemon sessions and kill any in-process PTYs.
+                let session_ids: Vec<String> = app.workspaces[idx]
+                    .tabs
+                    .iter()
+                    .filter_map(|t| t.session_id.clone())
+                    .collect();
                 for tab in &mut app.workspaces[idx].tabs {
                     if let Some(ref mut pty) = tab.pty_session {
                         let _ = pty.kill();
                     }
+                }
+                for sid in &session_ids {
+                    crate::helpers::remove_session(app, sid);
                 }
                 // Drop watcher (stops watching)
                 app.workspaces[idx].watcher = None;
@@ -283,11 +292,20 @@ pub(super) async fn handle(
         }
         Action::RemoveFromList(idx) => {
             if idx < app.workspaces.len() {
-                // Kill all PTY sessions
+                // Remove any daemon sessions (they must not outlive their
+                // workspace) and kill any in-process PTYs.
+                let session_ids: Vec<String> = app.workspaces[idx]
+                    .tabs
+                    .iter()
+                    .filter_map(|t| t.session_id.clone())
+                    .collect();
                 for tab in &mut app.workspaces[idx].tabs {
                     if let Some(ref mut pty) = tab.pty_session {
                         let _ = pty.kill();
                     }
+                }
+                for sid in &session_ids {
+                    crate::helpers::remove_session(app, sid);
                 }
                 app.workspaces[idx].watcher = None;
 

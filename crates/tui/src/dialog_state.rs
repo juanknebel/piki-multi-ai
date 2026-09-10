@@ -186,6 +186,19 @@ pub enum DialogState {
         selected: usize,
         scroll_offset: usize,
     },
+    /// Session-daemon overlay: every session the daemon holds, with
+    /// kill/remove/attach management. Data loads asynchronously
+    /// (`Action::LoadSessions` → `App::pending_sessions_list`).
+    Sessions {
+        loading: bool,
+        /// Daemon unreachable / list failed; shown instead of rows.
+        error: Option<String>,
+        sessions: Vec<piki_core::session::protocol::SessionInfo>,
+        selected: usize,
+        scroll_offset: usize,
+        /// Daemon pid read from its pid file at open time (renders are pure).
+        daemon_pid: Option<u32>,
+    },
     Logs {
         scroll: u16,
         level_filter: u8,

@@ -1,0 +1,25 @@
+---
+source: crates/tui/src/ui/mod.rs
+assertion_line: 865
+expression: content
+---
+
+
+
+
+        ╭ Sessions — daemon ● pid 4242 ────────────────────────────────╮
+        │ [Enter] jump [x] kill [d] remove [r] refresh [Esc] close     │
+        │                                                              │
+        │ ⚠ zsh                    —                  detached         │
+        │ ○ lazygit                —                  exited 0         │
+        │                                                              │
+        │                                                              │
+        │                                                              │
+        │                                                              │
+        │                                                              │
+        │                                                              │
+        │                                                              │
+        │                                                              │
+        │                                                              │
+        │                                                              │
+        ╰────────────────── 2 session(s) · 1 live · 1 unattached [1/2] ╯

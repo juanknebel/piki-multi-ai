@@ -41,6 +41,32 @@ pub(super) async fn handle(
             let model = app.chat_panel.config.model.clone();
             let base_url = app.chat_panel.config.base_url.clone();
             let server_type = app.chat_panel.config.server_type;
+            if server_type == piki_core::chat::ChatServerType::OpenRouter {
+                let has_key = app
+                    .config
+                    .chat
+                    .openrouter_api_key
+                    .as_ref()
+                    .map(|k| !k.trim().is_empty())
+                    .unwrap_or(false)
+                    || app.chat_panel.config.effective_api_key().is_some();
+                if !has_key {
+                    app.chat_panel.streaming = false;
+                    app.chat_panel.current_response.clear();
+                    // Remove the just-pushed user message since we won't send it
+                    app.chat_panel.messages.pop();
+                    let cfg_path = app.paths.config_path();
+                    app.set_toast(format!("No OpenRouter API key. Set [chat] openrouter_api_key in {} or OPENROUTER_API_KEY env.", cfg_path.display()), crate::app::ToastLevel::Error);
+                    return Ok(());
+                }
+                if model.trim().is_empty() {
+                    app.chat_panel.streaming = false;
+                    app.chat_panel.current_response.clear();
+                    app.chat_panel.messages.pop();
+                    app.set_toast("No model selected for OpenRouter. Press Tab to list models (needs API key) and pick one.", crate::app::ToastLevel::Error);
+                    return Ok(());
+                }
+            }
 
             if app.chat_panel.agent_mode {
                 // ── Agent mode: use AgentLoop with tools ──
@@ -64,7 +90,20 @@ pub(super) async fn handle(
                     "TUI: sending agent message"
                 );
 
-                let client = piki_agent::chat_client_for(server_type, &base_url);
+                let api_key = app
+                    .config
+                    .chat
+                    .openrouter_api_key
+                    .clone()
+                    .filter(|s| !s.trim().is_empty())
+                    .or_else(|| app.chat_panel.config.effective_api_key());
+                let web_search = app.chat_panel.config.web_search;
+                let client = piki_agent::chat_client_for_with_key_and_search(
+                    server_type,
+                    &base_url,
+                    api_key,
+                    web_search,
+                );
 
                 let registry = piki_agent::ToolRegistry::default_all();
                 let context = piki_agent::ToolContext {
@@ -97,7 +136,20 @@ pub(super) async fn handle(
 
                 // `ChatClient` hides each backend's message format, so this
                 // no longer has to know one from the other.
-                let client = piki_agent::chat_client_for(server_type, &base_url);
+                let api_key = app
+                    .config
+                    .chat
+                    .openrouter_api_key
+                    .clone()
+                    .filter(|s| !s.trim().is_empty())
+                    .or_else(|| app.chat_panel.config.effective_api_key());
+                let web_search = app.chat_panel.config.web_search;
+                let client = piki_agent::chat_client_for_with_key_and_search(
+                    server_type,
+                    &base_url,
+                    api_key,
+                    web_search,
+                );
                 let task = tokio::spawn(async move {
                     if let Err(e) = client.chat_stream(&model, &msgs, None, tx).await {
                         tracing::error!(error = %e, "chat_stream error");
@@ -151,6 +203,47 @@ pub(super) async fn handle(
                             }
                         }
                     });
+                }
+                piki_core::chat::ChatServerType::OpenRouter => {
+                    let api_key = app
+                        .config
+                        .chat
+                        .openrouter_api_key
+                        .clone()
+                        .filter(|s| !s.trim().is_empty())
+                        .or_else(|| app.chat_panel.config.effective_api_key());
+                    if api_key
+                        .as_ref()
+                        .map(|k| k.trim().is_empty())
+                        .unwrap_or(true)
+                    {
+                        let cfg_path = app.paths.config_path();
+                        let msg = format!(
+                            "No OpenRouter API key. Set [chat] openrouter_api_key in {} or OPENROUTER_API_KEY env, then Tab again.",
+                            cfg_path.display()
+                        );
+                        let _ = status_tx.send(msg);
+                    } else {
+                        tokio::spawn(async move {
+                            let client =
+                                piki_api_client::OpenRouterClient::new_with_key(&base_url, api_key);
+                            match client.list_models().await {
+                                Ok(models) => {
+                                    let names: Vec<String> =
+                                        models.into_iter().map(|m| m.id).collect();
+                                    let payload = format!("__MODELS__{}", names.join("\n"));
+                                    let _ = chat_tx
+                                        .send(piki_api_client::ChatStreamEvent::Done(payload));
+                                }
+                                Err(e) => {
+                                    let msg = format!(
+                                        "{e}. Check [chat] openrouter_api_key in config.toml / OPENROUTER_API_KEY env and base URL https://openrouter.ai/api/v1."
+                                    );
+                                    let _ = status_tx.send(msg);
+                                }
+                            }
+                        });
+                    }
                 }
             }
         }

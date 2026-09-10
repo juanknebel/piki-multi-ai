@@ -40,67 +40,14 @@ impl Default for KanbanConfig {
     }
 }
 
-/// `[notifications]` — how background agent events reach the user.
-/// `delivery`: `"system"` (OS desktop toast, default), `"terminal"` (OSC 9
-/// escape so the host terminal emulator notifies — works inside tmux/ssh),
-/// or `"off"`. `sound` toggles the built-in chimes (done/attention),
-/// independent of `delivery`; the `sound_*_path` overrides point at custom
-/// audio files (any format your system player decodes).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct NotificationsConfig {
-    pub delivery: String,
-    pub sound: bool,
-    pub sound_path: Option<String>,
-    pub sound_done_path: Option<String>,
-    pub sound_attention_path: Option<String>,
-}
+/// `[notifications]` — shared with the desktop, which reads the same table
+/// from `config.toml` on its own. See `piki_core::notifications`.
+pub use piki_core::notifications::NotificationsConfig;
 
-impl Default for NotificationsConfig {
-    fn default() -> Self {
-        Self {
-            delivery: "system".to_string(),
-            sound: false,
-            sound_path: None,
-            sound_done_path: None,
-            sound_attention_path: None,
-        }
-    }
-}
-
-impl NotificationsConfig {
-    /// Parse `delivery` into the core enum, warning (once, at call time) on
-    /// unknown values and falling back to the default.
-    pub fn parsed_delivery(&self) -> piki_core::notifications::NotificationDelivery {
-        use piki_core::notifications::NotificationDelivery as D;
-        match self.delivery.as_str() {
-            "off" => D::Off,
-            "system" => D::System,
-            "terminal" => D::Terminal,
-            other => {
-                tracing::warn!(
-                    "unknown notifications.delivery '{other}' (expected off|system|terminal); using 'system'"
-                );
-                D::System
-            }
-        }
-    }
-
-    pub fn sound_settings(&self) -> piki_core::sound::SoundSettings {
-        // Expand a leading `~/` so config paths like "~/sounds/ding.wav" work.
-        let p = |s: &Option<String>| {
-            s.as_ref().map(|s| match s.strip_prefix("~/") {
-                Some(rest) => piki_core::xdg::home_dir().join(rest),
-                None => std::path::PathBuf::from(s),
-            })
-        };
-        piki_core::sound::SoundSettings {
-            enabled: self.sound,
-            path: p(&self.sound_path),
-            done_path: p(&self.sound_done_path),
-            attention_path: p(&self.sound_attention_path),
-        }
-    }
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ChatFileConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub openrouter_api_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -115,6 +62,10 @@ pub struct Config {
     pub kanban: KanbanConfig,
     #[serde(default)]
     pub notifications: NotificationsConfig,
+    #[serde(default)]
+    pub sessions: SessionsConfig,
+    #[serde(default)]
+    pub chat: ChatFileConfig,
     /// Runtime-detected platform (not serialized).
     #[serde(skip)]
     pub platform: Platform,
@@ -138,8 +89,28 @@ impl Default for Config {
             keybindings: Keybindings::default(),
             kanban: KanbanConfig::default(),
             notifications: NotificationsConfig::default(),
+            sessions: SessionsConfig::default(),
+            chat: ChatFileConfig::default(),
             platform: Platform::detect(),
         }
+    }
+}
+
+/// `[sessions]` — the persistent-session daemon (docs/persistent-sessions.md).
+///
+/// When `enabled`, PTY tabs (shells, agents, lazygit) are spawned in a
+/// background daemon so they survive quitting/crashing the app and are
+/// re-attached on the next launch. Disable it to run every tab in-process
+/// exactly as before this feature existed.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SessionsConfig {
+    pub enabled: bool,
+}
+
+impl Default for SessionsConfig {
+    fn default() -> Self {
+        Self { enabled: true }
     }
 }
 
@@ -217,6 +188,8 @@ pub struct Keybindings {
     pub new_tab: HashMap<String, String>,
     #[serde(default = "default_dashboard")]
     pub dashboard: HashMap<String, String>,
+    #[serde(default = "default_sessions")]
+    pub sessions: HashMap<String, String>,
     #[serde(default = "default_logs")]
     pub logs: HashMap<String, String>,
 }
@@ -237,6 +210,7 @@ impl Default for Keybindings {
             new_workspace: default_new_workspace(),
             new_tab: default_new_tab(),
             dashboard: default_dashboard(),
+            sessions: default_sessions(),
             logs: default_logs(),
         }
     }
@@ -304,6 +278,9 @@ fn default_app() -> HashMap<String, BindingValue> {
     m.insert("help".to_string(), BindingValue::one("prefix-?"));
     m.insert("about".to_string(), BindingValue::one("prefix-a"));
     m.insert("dashboard".to_string(), BindingValue::one("prefix-b"));
+    // `ctrl-s` for "sessions" — every mnemonic lowercase letter is taken, and
+    // the binding rule prefers prefix-ctrl over a Shift chord.
+    m.insert("sessions".to_string(), BindingValue::one("prefix-ctrl-s"));
     m.insert("command_palette".to_string(), BindingValue::one("prefix-:"));
     m.insert("fuzzy_search".to_string(), BindingValue::one("prefix-/"));
     // `t` for "text" — content search across the worktree (ripgrep).
@@ -463,6 +440,22 @@ fn default_dashboard() -> HashMap<String, String> {
     m.insert("exit".to_string(), "esc".to_string());
     // Toggle-close matches the (now lowercase) dashboard open key.
     m.insert("exit_alt".to_string(), "b".to_string());
+    m
+}
+
+fn default_sessions() -> HashMap<String, String> {
+    let mut m = HashMap::new();
+    m.insert("down".to_string(), "j".to_string());
+    m.insert("up".to_string(), "k".to_string());
+    m.insert("down_alt".to_string(), "down".to_string());
+    m.insert("up_alt".to_string(), "up".to_string());
+    m.insert("select".to_string(), "enter".to_string());
+    m.insert("kill".to_string(), "x".to_string());
+    m.insert("remove".to_string(), "d".to_string());
+    m.insert("refresh".to_string(), "r".to_string());
+    m.insert("exit".to_string(), "esc".to_string());
+    // Toggle-close matches the open chord's bare key.
+    m.insert("exit_alt".to_string(), "ctrl-s".to_string());
     m
 }
 
@@ -699,6 +692,10 @@ impl Config {
         )
     }
 
+    pub fn matches_sessions(&self, event: KeyEvent, action: &str) -> bool {
+        self.matches_ctx(&self.keybindings.sessions, default_sessions, event, action)
+    }
+
     pub fn matches_logs(&self, event: KeyEvent, action: &str) -> bool {
         self.matches_ctx(&self.keybindings.logs, default_logs, event, action)
     }
@@ -810,6 +807,12 @@ impl Config {
                 .get(action)
                 .cloned()
                 .or_else(|| default_dashboard().get(action).cloned()),
+            "sessions" => self
+                .keybindings
+                .sessions
+                .get(action)
+                .cloned()
+                .or_else(|| default_sessions().get(action).cloned()),
             "logs" => self
                 .keybindings
                 .logs
@@ -1193,6 +1196,7 @@ mod tests {
             ("workspace_info", &cfg.keybindings.workspace_info),
             ("markdown", &cfg.keybindings.markdown),
             ("dashboard", &cfg.keybindings.dashboard),
+            ("sessions", &cfg.keybindings.sessions),
             ("logs", &cfg.keybindings.logs),
         ];
         for (section, bindings) in sections {

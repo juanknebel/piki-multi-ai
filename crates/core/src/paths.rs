@@ -71,6 +71,11 @@ impl DataPaths {
         &self.config_base
     }
 
+    /// Chat providers configuration file (LLM backends): `<config_base>/chat-providers.toml`.
+    pub fn chat_providers_path(&self) -> PathBuf {
+        self.config_base.join("chat-providers.toml")
+    }
+
     /// Providers configuration file: `<config_base>/providers.toml`.
     pub fn providers_path(&self) -> PathBuf {
         self.config_base.join("providers.toml")
@@ -100,6 +105,54 @@ impl DataPaths {
         self.base.join("antigravity-hooks")
     }
 
+    /// Persistent-session daemon state: `<base>/sessions` (socket, lock, pid
+    /// file). Lives under the data dir so `--data-dir` instances get their
+    /// own daemon.
+    pub fn sessions_dir(&self) -> PathBuf {
+        self.base.join("sessions")
+    }
+
+    /// Unix socket the session daemon listens on: `<base>/sessions/daemon.sock`.
+    ///
+    /// The socket always lives here, alongside the lock/pid, regardless of how
+    /// deep the data dir is. A `sockaddr_un` address is capped at 108 bytes
+    /// (Linux) / 104 (macOS), but that cap applies only to the string handed to
+    /// `bind()`/`connect()`, never to the file itself — so an overflowing path
+    /// is addressed through a short proxy at the syscall boundary (see
+    /// [`crate::session`]'s `uds` helpers), not by relocating the socket.
+    pub fn session_socket(&self) -> PathBuf {
+        self.sessions_dir().join("daemon.sock")
+    }
+
+    /// Exclusive-lock file the daemon holds while running: `<base>/sessions/daemon.lock`.
+    pub fn session_lock(&self) -> PathBuf {
+        self.sessions_dir().join("daemon.lock")
+    }
+
+    /// Pid of the running daemon, for `sessions stop`: `<base>/sessions/daemon.pid`.
+    pub fn session_pid_file(&self) -> PathBuf {
+        self.sessions_dir().join("daemon.pid")
+    }
+
+    /// Daemon log file: `<base>/logs/sessions.log`.
+    pub fn session_log_path(&self) -> PathBuf {
+        self.log_dir().join("sessions.log")
+    }
+
+    /// The session daemon's file layout, in the shape `piki-multiplex`'s
+    /// daemon expects.
+    #[cfg(unix)]
+    pub fn daemon_paths(&self) -> piki_multiplex::session::daemon::DaemonPaths {
+        piki_multiplex::session::daemon::DaemonPaths {
+            sessions_dir: self.sessions_dir(),
+            log_dir: self.log_dir(),
+            lock_path: self.session_lock(),
+            pid_path: self.session_pid_file(),
+            socket_path: self.session_socket(),
+            log_path: self.session_log_path(),
+        }
+    }
+
     /// Ad-hoc PR checkouts for code review: `<base>/review-checkouts`. Each
     /// repo gets one base clone (`<owner>__<repo>`) with one `git worktree`
     /// per PR (`<owner>__<repo>--pr-<N>`), managed by
@@ -108,5 +161,41 @@ impl DataPaths {
     /// directory is fully owned by piki and safe to prune/overwrite.
     pub fn review_checkouts_dir(&self) -> PathBuf {
         self.base.join("review-checkouts")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn session_paths_live_under_the_data_dir() {
+        let paths = DataPaths::new(PathBuf::from("/tmp/piki-test-data"));
+        assert_eq!(
+            paths.session_socket(),
+            PathBuf::from("/tmp/piki-test-data/sessions/daemon.sock")
+        );
+        assert_eq!(
+            paths.session_lock(),
+            PathBuf::from("/tmp/piki-test-data/sessions/daemon.lock")
+        );
+        assert_eq!(
+            paths.session_pid_file(),
+            PathBuf::from("/tmp/piki-test-data/sessions/daemon.pid")
+        );
+        assert_eq!(
+            paths.session_log_path(),
+            PathBuf::from("/tmp/piki-test-data/logs/sessions.log")
+        );
+    }
+
+    #[test]
+    fn socket_always_lives_under_the_data_dir() {
+        // Even a pathologically deep data dir keeps the socket in place; the
+        // sun_path limit is handled at the bind/connect syscall, not by moving
+        // the file (see `session::uds`).
+        let deep = PathBuf::from(format!("/tmp/{}", "d".repeat(150)));
+        let sock = DataPaths::new(deep.clone()).session_socket();
+        assert_eq!(sock, deep.join("sessions/daemon.sock"));
     }
 }

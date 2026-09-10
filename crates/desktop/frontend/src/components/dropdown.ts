@@ -3,6 +3,7 @@
  * Native <select> option elements ignore CSS styling in WebKit/Tauri,
  * causing unreadable text (dark on dark) in dark themes.
  */
+import { icon } from "./icons";
 
 export interface DropdownOption {
   value: string;
@@ -52,7 +53,7 @@ export function createDropdown(
   let currentData = activeOpt?.data ?? {};
   let currentLabel = activeOpt?.label ?? "";
 
-  trigger.innerHTML = `<span class="dialog-dropdown-text">${esc(currentLabel)}</span><span class="dialog-dropdown-arrow">▾</span>`;
+  trigger.innerHTML = `<span class="dialog-dropdown-text">${esc(currentLabel)}</span><span class="dialog-dropdown-arrow">${icon("chevron-down")}</span>`;
   container.appendChild(trigger);
 
   function applyIndex(idx: number, fireChange: boolean) {

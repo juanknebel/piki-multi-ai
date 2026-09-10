@@ -29,7 +29,7 @@ use self::dialog::{
     handle_help_input, handle_import_agents_input, handle_logs_input, handle_manage_agents_input,
     handle_manage_providers_input, handle_missing_prereqs_input, handle_new_tab_input,
     handle_new_workspace_input, handle_pr_picker_input, handle_rename_tab_input,
-    handle_workspace_info_input,
+    handle_sessions_input, handle_workspace_info_input,
 };
 use self::editor_input::handle_inline_edit_input;
 use self::fuzzy_input::handle_fuzzy_search_input;
@@ -78,6 +78,74 @@ pub(crate) fn handle_paste(app: &mut App, text: &str) {
             editor.insert_text(text);
         }
         return;
+    }
+
+    // Chat panel: paste into active field
+    if app.mode == AppMode::ChatPanel {
+        match app.chat_panel.sub_mode {
+            crate::app::ChatSubMode::Chat => {
+                let cursor = app.chat_panel.input_cursor;
+                let byte_idx = if app.chat_panel.input.is_empty() {
+                    0
+                } else {
+                    let mut idx = cursor;
+                    while idx > 0 && !app.chat_panel.input.is_char_boundary(idx) {
+                        idx -= 1;
+                    }
+                    idx.min(app.chat_panel.input.len())
+                };
+                // Insert at cursor, handling char boundaries
+                let mut byte_pos = 0;
+                let mut char_count = 0;
+                for (b, _) in app.chat_panel.input.char_indices() {
+                    if char_count == cursor {
+                        byte_pos = b;
+                        break;
+                    }
+                    char_count += 1;
+                }
+                if char_count == cursor {
+                    byte_pos = app.chat_panel.input.len();
+                }
+                // fallback to byte_idx if char counting diverges
+                let insert_at = if byte_pos <= app.chat_panel.input.len()
+                    && app.chat_panel.input.is_char_boundary(byte_pos)
+                {
+                    byte_pos
+                } else {
+                    byte_idx
+                };
+                app.chat_panel.input.insert_str(insert_at, text);
+                // advance cursor by pasted char count
+                let pasted_chars = text.chars().count();
+                app.chat_panel.input_cursor += pasted_chars;
+                return;
+            }
+            crate::app::ChatSubMode::ModelSelect => {
+                app.chat_panel.model_filter.push_str(text);
+                app.chat_panel.model_selected = 0;
+                return;
+            }
+            crate::app::ChatSubMode::Settings => {
+                // delegate to settings bulk insert
+                let (field, cursor) = crate::input::chat_input::active_field_mut(app);
+                let byte_idx = {
+                    let mut b = 0;
+                    let mut c = 0;
+                    for (bi, _) in field.char_indices() {
+                        if c == *cursor {
+                            b = bi;
+                            break;
+                        }
+                        c += 1;
+                    }
+                    if c == *cursor { field.len() } else { b }
+                };
+                field.insert_str(byte_idx, text);
+                *cursor += text.chars().count();
+                return;
+            }
+        }
     }
 
     // Fuzzy overlays: insert into query
@@ -153,6 +221,7 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         AppMode::ConfirmCloseTab => return handle_confirm_close_tab_input(app, key),
         AppMode::ConfirmQuit => return handle_confirm_quit_input(app, key),
         AppMode::Dashboard => return handle_dashboard_input(app, key),
+        AppMode::Sessions => return handle_sessions_input(app, key),
         AppMode::Logs => return handle_logs_input(app, key),
         AppMode::CommandPalette => return handle_command_palette_input(app, key),
         AppMode::RenameTab => return handle_rename_tab_input(app, key),
@@ -253,6 +322,7 @@ const APP_ACTIONS: &[&str] = &[
     "help",
     "about",
     "dashboard",
+    "sessions",
     "command_palette",
     "fuzzy_search",
     "project_search",
@@ -306,6 +376,7 @@ fn dispatch_app_action(app: &mut App, action: &str) -> Option<Action> {
         "help" => app_actions::open_help(app),
         "about" => app_actions::open_about(app),
         "dashboard" => app_actions::open_dashboard(app),
+        "sessions" => app_actions::open_sessions(app),
         "command_palette" => {
             app.open_command_palette();
             None

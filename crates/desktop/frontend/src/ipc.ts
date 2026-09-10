@@ -1,5 +1,7 @@
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { decodePtyFrame, toBytes, type PtyFrame } from "./pty-frame";
+import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import type {
   WorkspaceInfo,
   WorkspaceDetail,
@@ -140,6 +142,19 @@ export function resizePty(
   return invoke("resize_pty", { tabId, rows, cols });
 }
 
+/** Ask the backend to re-send a persistent tab's restore buffer (no-op for a
+ *  local tab). Called when a terminal mounts so a re-attached session
+ *  repaints — its restore was emitted before this xterm.js instance existed. */
+export function resyncPty(tabId: string): Promise<void> {
+  return invoke("resync_pty", { tabId });
+}
+
+/** Drop this window's attachment to a daemon-backed tab, leaving the process
+ *  running as a detached session. Rejects for an in-process tab. */
+export function detachTab(workspaceIdx: number, tabIdx: number): Promise<void> {
+  return invoke("detach_tab", { workspaceIdx, tabIdx });
+}
+
 export function closeTab(
   workspaceIdx: number,
   tabIdx: number,
@@ -160,6 +175,16 @@ export function renameTab(
   title: string | null,
 ): Promise<void> {
   return invoke("rename_tab", { workspaceIdx, tabId, title });
+}
+
+/** Move a content tab to another workspace, process kept alive (a daemon
+ *  session is re-pointed too). Resolves to its index in the target's list. */
+export function moveTab(
+  fromWorkspaceIdx: number,
+  tabId: string,
+  toWorkspaceIdx: number,
+): Promise<number> {
+  return invoke("move_tab", { fromWorkspaceIdx, tabId, toWorkspaceIdx });
 }
 
 // Git commands
@@ -240,6 +265,81 @@ export function gitStageAll(workspaceIdx: number): Promise<void> {
 
 export function gitUnstageAll(workspaceIdx: number): Promise<void> {
   return invoke("git_unstage_all", { workspaceIdx });
+}
+
+export interface PullResult {
+  /** `[ahead, behind]` before the pull; `null` without an upstream. */
+  before: [number, number] | null;
+  after: [number, number] | null;
+  /** One line for the toast: "Pulled 3 commits" / "Already up to date". */
+  summary: string;
+}
+
+/** `git pull`. Rejects with git's own message on a diverged branch; a pull
+ *  that hits conflicts is aborted server-side and rejects naming the files. */
+export function gitPull(workspaceIdx: number): Promise<PullResult> {
+  return invoke("git_pull", { workspaceIdx });
+}
+
+/** `git commit --amend`; `message = null` keeps the current message. */
+export function gitAmend(
+  workspaceIdx: number,
+  message: string | null,
+): Promise<void> {
+  return invoke("git_amend", { workspaceIdx, message });
+}
+
+export function gitLastCommitMessage(workspaceIdx: number): Promise<string> {
+  return invoke("git_last_commit_message", { workspaceIdx });
+}
+
+/** Discard a file's working-tree changes (`git restore --worktree`), or —
+ *  with `untracked = true`, only for a file the status lists as untracked —
+ *  delete it (`git clean -fd`). Irreversible: confirm first. */
+export function gitDiscardFile(
+  workspaceIdx: number,
+  filePath: string,
+  untracked: boolean,
+): Promise<void> {
+  return invoke("git_discard_file", { workspaceIdx, filePath, untracked });
+}
+
+export interface BranchInfo {
+  /** `main`, or `origin/main` for a remote-tracking branch. */
+  name: string;
+  current: boolean;
+  /** Remote-tracking branch without a local counterpart. */
+  remote: boolean;
+  upstream: string | null;
+}
+
+export interface BranchList {
+  current: string | null;
+  ahead_behind: [number, number] | null;
+  branches: BranchInfo[];
+}
+
+export function gitListBranches(
+  workspaceIdx: number,
+  includeRemotes: boolean,
+): Promise<BranchList> {
+  return invoke("git_list_branches", { workspaceIdx, includeRemotes });
+}
+
+export interface BranchSwitch {
+  branch: string | null;
+  files: ChangedFile[];
+  ahead_behind: [number, number] | null;
+}
+
+/** `git checkout <branch>` (`--track` when `remote`). Never forces — a dirty
+ *  worktree that would be clobbered rejects with git's message. */
+export function gitCheckoutBranch(
+  workspaceIdx: number,
+  branch: string,
+  remote: boolean,
+): Promise<BranchSwitch> {
+  return invoke("git_checkout_branch", { workspaceIdx, branch, remote });
 }
 
 // Diff commands
@@ -361,7 +461,14 @@ export function gitStashDrop(workspaceIdx: number, stashIndex: number): Promise<
 }
 
 // Search commands
-export function fuzzyFileList(workspaceIdx: number): Promise<string[]> {
+export interface FileIndex {
+  /** Workspace-relative paths, sorted; honours .gitignore, `.git` pruned. */
+  files: string[];
+  /** The backend stopped at its cap (50k paths) — the list is incomplete. */
+  truncated: boolean;
+}
+
+export function fuzzyFileList(workspaceIdx: number): Promise<FileIndex> {
   return invoke("fuzzy_file_list", { workspaceIdx });
 }
 
@@ -582,6 +689,51 @@ export function listAgentRows(): Promise<import("./types").AgentRow[]> {
   return invoke("list_agent_rows");
 }
 
+/** Every session the persistent-session daemon holds (Sessions dialog). */
+export function sessionsAvailable(): Promise<boolean> {
+  return invoke("sessions_available");
+}
+export function sessionStatus(): Promise<import("./types").SessionStatus> {
+  return invoke("session_status");
+}
+export function restoreSummary(): Promise<import("./types").RestoreSummary> {
+  return invoke("restore_summary");
+}
+export function quitSummary(): Promise<import("./types").QuitSummary> {
+  return invoke("quit_summary");
+}
+/** Adopt a detached daemon session as a tab of `workspaceIdx`; resolves to
+ *  the new tab's index in that workspace. */
+export function adoptSession(sessionId: string, workspaceIdx: number): Promise<number> {
+  return invoke("adopt_session", { sessionId, workspaceIdx });
+}
+export function listSessions(): Promise<import("./types").SessionsSnapshot> {
+  return invoke("list_sessions");
+}
+export function killSession(sessionId: string): Promise<import("./types").SessionsSnapshot> {
+  return invoke("kill_session", { sessionId });
+}
+export function removeSession(sessionId: string): Promise<import("./types").SessionsSnapshot> {
+  return invoke("remove_session", { sessionId });
+}
+
+export interface ExternalAgentPayload {
+  pid: number;
+  ppid: number;
+  cwd: string | null;
+  cmd: string;
+  provider: string;
+  workspace_idx: number | null;
+  workspace_name: string | null;
+}
+export interface ExternalTreePayload {
+  root: ExternalAgentPayload;
+  children: ExternalAgentPayload[];
+}
+export function listExternalAgents(): Promise<ExternalTreePayload[]> {
+  return invoke("list_external_agents");
+}
+
 export function saveAgent(
   workspaceIdx: number,
   name: string,
@@ -746,20 +898,73 @@ export function setSettings(value: string): Promise<void> {
   return invoke("set_settings", { value });
 }
 
-// Clipboard commands (use system tools, not Tauri plugin — fixes non-ASCII on Wayland)
-export function clipboardCopy(text: string): Promise<void> {
-  return invoke("clipboard_copy", { text });
+/** Settings ▸ General — the cross-frontend overrides (`piki_core::app_settings`). */
+export function getAppSettings(): Promise<import("./types").AppSettingsView> {
+  return invoke("get_app_settings");
 }
 
-export function clipboardPaste(): Promise<string> {
-  return invoke("clipboard_paste");
+/** Store the whole override document; notifications apply live, sessions on restart. */
+export function setAppSettings(
+  overrides: import("./types").AppSettings,
+): Promise<import("./types").AppSettingsView> {
+  return invoke("set_app_settings", { overrides });
+}
+
+// Clipboard commands (use system tools, not Tauri plugin — fixes non-ASCII on Wayland)
+/** System clipboard via `tauri-plugin-clipboard-manager` (the app's own
+ *  process owns the selection — no `wl-copy`/`xclip` child per copy). The
+ *  Rust `clipboard_copy` (system tools) is only the fallback when the plugin
+ *  errors, e.g. a Wayland session without the data-control protocol. */
+export async function clipboardCopy(text: string): Promise<void> {
+  if (!text) return;
+  try {
+    await writeText(text);
+  } catch (err) {
+    console.warn("clipboard plugin write failed, falling back to the system tool:", err);
+    await invoke("clipboard_copy", { text });
+  }
+}
+
+export async function clipboardPaste(): Promise<string> {
+  try {
+    return await readText();
+  } catch (err) {
+    console.warn("clipboard plugin read failed, falling back to the system tool:", err);
+    return invoke("clipboard_paste");
+  }
+}
+
+/** Open an http(s) URL in the default browser (terminal links). The backend
+ *  refuses any other scheme. */
+export function openExternalUrl(url: string): Promise<void> {
+  return invoke("open_url", { url });
 }
 
 // Event listeners
+
+/** The base64 `pty-output` event — only the FALLBACK path now (before the
+ *  raw channel is registered, or when a channel send fails). */
 export function onPtyOutput(
   callback: (event: PtyOutputEvent) => void,
 ): Promise<UnlistenFn> {
   return listen<PtyOutputEvent>("pty-output", (e) => callback(e.payload));
+}
+
+/** Register the raw PTY output channel: binary frames straight from the
+ *  backend's output coalescer (`pty_output.rs`), decoded by `pty-frame.ts`.
+ *  Resolves once the backend holds the channel; register it BEFORE any tab
+ *  spawns so nothing goes through base64. */
+export function registerPtyOutputChannel(
+  callback: (frame: PtyFrame) => void,
+): Promise<void> {
+  const channel = new Channel<unknown>();
+  channel.onmessage = (message) => {
+    const bytes = toBytes(message);
+    const frame = bytes && decodePtyFrame(bytes);
+    if (frame) callback(frame);
+    else console.error("pty channel: malformed frame", message);
+  };
+  return invoke("register_pty_output_channel", { channel });
 }
 
 export function onPtyExit(
@@ -809,6 +1014,14 @@ export function onPtyAgentEvent(
   );
 }
 
+export function onPtyAgentAck(
+  callback: (event: import("./types").PtyAgentAckEvent) => void,
+): Promise<UnlistenFn> {
+  return listen<import("./types").PtyAgentAckEvent>("pty-agent-ack", (e) =>
+    callback(e.payload),
+  );
+}
+
 export function onPtyAttention(
   callback: (event: import("./types").PtyAttentionEvent) => void,
 ): Promise<UnlistenFn> {
@@ -850,7 +1063,7 @@ export function deleteProvider(name: string): Promise<boolean> {
 
 // ── Chat commands ──────────────────────────────────
 
-export type ChatServerType = "Ollama" | "LlamaCpp";
+export type ChatServerType = "Ollama" | "LlamaCpp" | "OpenRouter";
 
 export interface ChatConfig {
   provider: string;
@@ -858,6 +1071,9 @@ export interface ChatConfig {
   model: string;
   base_url: string;
   system_prompt: string | null;
+  api_key?: string | null;
+  /** OpenRouter web-search plugin; ignored by local backends. */
+  web_search: boolean;
 }
 
 export interface ChatMessage {
@@ -881,6 +1097,10 @@ export function chatGetConfig(): Promise<ChatConfig> {
 
 export function chatSetConfig(config: ChatConfig): Promise<void> {
   return invoke("chat_set_config", { config });
+}
+/** Saved per-backend settings from chat-providers.toml (or its defaults). */
+export function chatProviderConfig(serverType: ChatServerType): Promise<ChatConfig> {
+  return invoke("chat_provider_config", { serverType });
 }
 
 export function chatGetMessages(): Promise<ChatMessage[]> {
@@ -909,6 +1129,24 @@ export function chatSetAgentMode(enabled: boolean): Promise<void> {
 
 export function chatGetAgentMode(): Promise<boolean> {
   return invoke("chat_get_agent_mode");
+}
+
+export type ChatApprovalDecision = "allow" | "deny" | "allow_all";
+
+/** Answer a pending write-tool approval (from a `chat-agent-event` of kind `approval-required`). */
+export function chatApprove(toolCallId: string, decision: ChatApprovalDecision): Promise<void> {
+  return invoke("chat_approve", { toolCallId, decision });
+}
+
+/** Structured agent-loop activity for the chat panel's tool cards. */
+export type ChatAgentEvent =
+  | { kind: "tool-calls"; calls: { id: string; name: string; arguments: unknown }[] }
+  | { kind: "tool-executing"; name: string }
+  | { kind: "tool-result"; tool_call_id: string; name: string; result: string; is_error: boolean }
+  | { kind: "approval-required"; tool_call_id: string; tool_name: string; description: string };
+
+export function onChatAgentEvent(callback: (event: ChatAgentEvent) => void): Promise<UnlistenFn> {
+  return listen<ChatAgentEvent>("chat-agent-event", (e) => callback(e.payload));
 }
 
 export function onChatToken(

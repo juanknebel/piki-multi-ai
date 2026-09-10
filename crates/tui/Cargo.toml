@@ -75,3 +75,7 @@ syntect = { version = "5", default-features = false, features = ["default-syntax
 [dev-dependencies]
 tempfile = "3"
 insta = "1"
+
+# Async-signal-safe terminal restoration on SIGTERM/SIGHUP (src/term_guard.rs)
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

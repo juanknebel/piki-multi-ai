@@ -2,16 +2,19 @@ import { appState } from "../state";
 import { fuzzyScore, mruBump, mruRank } from "./fuzzy";
 import * as ipc from "../ipc";
 import { toast } from "./toast";
-import { showConfirm } from "./confirm";
 import {
   showCreateWorktreeDialog,
   showWorkspaceDialog,
   showWorkspaceInfo,
 } from "./dialogs/workspace-dialog";
+import { confirmDeleteWorkspace } from "./dialogs/delete-workspace";
 import { showMergeDialog } from "./dialogs/merge-dialog";
 import { showGitLog } from "./dialogs/gitlog-dialog";
 import { showStashDialog } from "./dialogs/stash-dialog";
 import { showCodeReview } from "./code-review";
+import { focusCommitBox } from "./source-control";
+import { pullWorkspace, pushWorkspace } from "./git-actions";
+import { openBranchPicker } from "./dialogs/branch-picker";
 import { openFuzzySearch } from "./fuzzy-search";
 import { openProjectSearch } from "./project-search";
 import { showSettingsDialog } from "./dialogs/settings-dialog";
@@ -22,17 +25,23 @@ import { showDispatchDialog } from "./dialogs/dispatch-dialog";
 import { showHelpDialog } from "./dialogs/help-dialog";
 import { showDashboard } from "./dialogs/dashboard-dialog";
 import { showSysinfoDialog } from "./dialogs/sysinfo-dialog";
-import { openTerminalSearch } from "./terminal-panel";
+import { clearActiveTerminal, openTerminalSearch, toggleLiteralNext } from "./terminal-panel";
 import { showThemeDialog } from "./dialogs/theme-dialog";
 import { showLogsDialog } from "./dialogs/logs-dialog";
+import { showSessionsDialog } from "./dialogs/sessions-dialog";
+import { jumpToAttention } from "./agents-panel";
 import { showAboutDialog } from "./dialogs/about-dialog";
-import { getProviderLabel, getProviderKey, type AIProvider } from "../types";
-import { openWebPreviewTab } from "./web-preview-panel";
+import { getProviderLabel, type AIProvider } from "../types";
+import { openProvider } from "./open-content";
+import { toggleSidebar } from "./sidebar";
+import { addContextToChat, toggleChatPanel } from "./chat-panel";
+import { closeActiveWsTab, moveActiveWsTabToWorkspace, tearDownAndClosePane } from "./tab-bar";
 import { themeEngine } from "../theme";
 import { revealInFileTree, toggleFileTreeAutoReveal } from "./file-tree";
 import { getCodeEditorFilePath } from "./code-editor-panel";
 import { getMarkdownEditorFilePath } from "./markdown-editor-panel";
 import { getShortcutKey, formatShortcut } from "../shortcuts";
+import { resetZoom, zoomIn, zoomOut } from "../ui-zoom";
 
 interface Command {
   id: string;
@@ -57,7 +66,7 @@ export async function openCommandPalette() {
   backdrop.className = "palette-backdrop";
 
   const palette = document.createElement("div");
-  palette.className = "palette";
+  palette.className = "palette ui-surface";
 
   palette.innerHTML = `
     <input class="palette-input" type="text" placeholder="Type a command..." autofocus />
@@ -99,7 +108,7 @@ export async function openCommandPalette() {
     });
 
     if (filtered.length === 0) {
-      results.innerHTML = '<div class="palette-empty">No matching commands</div>';
+      results.innerHTML = '<div class="ui-empty">No matching commands</div>';
     }
   }
 
@@ -228,21 +237,7 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
       id: "ws-delete",
       label: `Delete "${ws.info.name}"`,
       category: "Workspace",
-      action: () => {
-        showConfirmDialog(
-          `Delete workspace "${ws.info.name}"?`,
-          "This will remove the worktree and branch.",
-          async () => {
-            try {
-              await ipc.deleteWorkspace(wsIdx);
-              appState.removeWorkspace(wsIdx);
-              toast(`Deleted "${ws.info.name}"`, "info");
-            } catch (err) {
-              toast(`Delete failed: ${err}`, "error");
-            }
-          },
-        );
-      },
+      action: () => void confirmDeleteWorkspace(wsIdx),
     });
   }
 
@@ -253,7 +248,7 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
       id: `ws-switch-${i}`,
       label: `Switch to "${w.info.name}"`,
       category: "Switch",
-      keybinding: i < 9 ? String(i + 1) : undefined,
+      keybinding: i < 9 ? formatShortcut(`Alt+${i + 1}`) : undefined,
       action: async () => {
         try {
           const detail = await ipc.switchWorkspace(i);
@@ -282,7 +277,7 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
     label: "Open Web Preview",
     category: "Tab",
     keybinding: getShortcutKey("web-preview"),
-    action: () => openWebPreviewTab(),
+    action: () => void openProvider("WebPreview"),
   });
 
   // Pane layout commands
@@ -314,9 +309,23 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
     keybinding: getShortcutKey("close-pane"),
     action: () => {
       const id = appState.activePaneId;
-      if (id) appState.closePane(id);
+      if (id) void tearDownAndClosePane(id);
     },
   });
+  cmds.push({
+    id: "close-tab",
+    label: "Close Tab",
+    category: "Tab",
+    action: () => closeActiveWsTab(),
+  });
+  if (ws && ws.wsTabs.length > 0 && appState.workspaces.length > 1) {
+    cmds.push({
+      id: "move-tab",
+      label: "Move Tab to Workspace…",
+      category: "Tab",
+      action: () => moveActiveWsTabToWorkspace(),
+    });
+  }
 
   // Git commands
   if (ws) {
@@ -324,25 +333,32 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
       id: "git-commit",
       label: "Commit",
       category: "Git",
-      action: () => {
-        appState.setActiveView("git");
-        setTimeout(() => {
-          document.querySelector<HTMLTextAreaElement>(".sc-commit-input")?.focus();
-        }, 50);
-      },
+      action: () => focusCommitBox(),
+    });
+    cmds.push({
+      id: "git-amend",
+      label: "Amend Last Commit",
+      category: "Git",
+      action: () => focusCommitBox({ amend: true }),
     });
     cmds.push({
       id: "git-push",
       label: "Push",
       category: "Git",
-      action: async () => {
-        try {
-          await ipc.gitPush(wsIdx);
-          toast("Pushed successfully", "success");
-        } catch (err) {
-          toast(`Push failed: ${err}`, "error");
-        }
-      },
+      action: () => pushWorkspace(wsIdx),
+    });
+    cmds.push({
+      id: "git-pull",
+      label: "Pull",
+      category: "Git",
+      action: () => pullWorkspace(wsIdx),
+    });
+    cmds.push({
+      id: "git-switch-branch",
+      label: "Switch Branch…",
+      category: "Git",
+      keybinding: getShortcutKey("switch-branch"),
+      action: () => openBranchPicker(),
     });
     cmds.push({
       id: "git-stage-all",
@@ -432,6 +448,13 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
       action: () => showDispatchDialog(),
     });
   }
+  cmds.push({
+    id: "agent-jump-attention",
+    label: "Jump to Agent Needing Attention",
+    category: "Agents",
+    keybinding: getShortcutKey("jump-attention"),
+    action: () => jumpToAttention(),
+  });
 
   // Undo
   if (ws) {
@@ -537,6 +560,48 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
     action: () => appState.setActiveView("kanban"),
   });
   cmds.push({
+    id: "toggle-sidebar",
+    label: "Toggle Sidebar",
+    category: "View",
+    keybinding: getShortcutKey("toggle-sidebar"),
+    action: () => toggleSidebar(),
+  });
+  cmds.push({
+    id: "toggle-chat",
+    label: "Toggle AI Chat",
+    category: "Chat",
+    keybinding: getShortcutKey("toggle-chat"),
+    action: () => toggleChatPanel(),
+  });
+  cmds.push({
+    id: "add-chat-context",
+    label: "Add Context to Chat",
+    category: "Chat",
+    keybinding: getShortcutKey("add-chat-context"),
+    action: () => void addContextToChat(),
+  });
+  cmds.push({
+    id: "zoom-in",
+    label: "Zoom In",
+    category: "View",
+    keybinding: getShortcutKey("zoom-in"),
+    action: () => zoomIn(),
+  });
+  cmds.push({
+    id: "zoom-out",
+    label: "Zoom Out",
+    category: "View",
+    keybinding: getShortcutKey("zoom-out"),
+    action: () => zoomOut(),
+  });
+  cmds.push({
+    id: "zoom-reset",
+    label: "Reset Zoom",
+    category: "View",
+    keybinding: getShortcutKey("zoom-reset"),
+    action: () => resetZoom(),
+  });
+  cmds.push({
     id: "view-dashboard",
     label: "Dashboard",
     category: "View",
@@ -572,6 +637,20 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
     action: () => openTerminalSearch(),
   });
   cmds.push({
+    id: "terminal-literal-next",
+    label: "Send Next Key to Terminal",
+    category: "Terminal",
+    keybinding: getShortcutKey("literal-next"),
+    action: () => toggleLiteralNext(),
+  });
+  cmds.push({
+    id: "terminal-clear",
+    label: "Clear Terminal",
+    category: "Terminal",
+    keybinding: getShortcutKey("terminal-clear"),
+    action: () => clearActiveTerminal(),
+  });
+  cmds.push({
     id: "api-jq-filter",
     label: "API jq Filter",
     category: "Search",
@@ -594,6 +673,13 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
     category: "View",
     keybinding: getShortcutKey("logs"),
     action: () => showLogsDialog(),
+  });
+  cmds.push({
+    id: "view-sessions",
+    label: "Sessions (persistent)",
+    category: "View",
+    keybinding: getShortcutKey("sessions"),
+    action: () => showSessionsDialog(),
   });
 
   // LSP commands
@@ -654,16 +740,7 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
   return cmds;
 }
 
-async function spawnTabSafe(provider: AIProvider) {
-  if (appState.focusSingletonTab(provider)) return;
-  const wsIdx = appState.activeWorkspace;
-  try {
-    const tabId = await ipc.spawnTab(wsIdx, getProviderKey(provider));
-    appState.addTab(wsIdx, { id: tabId, provider, alive: true });
-  } catch (err) {
-    toast(`Failed to open ${getProviderLabel(provider)}: ${err}`, "error");
-  }
-}
+const spawnTabSafe = (provider: AIProvider) => openProvider(provider);
 
 function highlightMatch(text: string, query: string): string {
   if (!query) return escapeHtml(text);
@@ -680,19 +757,6 @@ function highlightMatch(text: string, query: string): string {
 function scrollToSelected(container: HTMLElement) {
   const selected = container.querySelector(".palette-item.selected");
   selected?.scrollIntoView({ block: "nearest" });
-}
-
-function showConfirmDialog(message: string, hint: string, onConfirm: () => void) {
-  showConfirm({
-    bodyHtml: `
-      <p>${escapeHtml(message)}</p>
-      <p class="ws-delete-hint">${escapeHtml(hint)}</p>
-    `,
-    actions: [
-      { label: "Delete", kind: "danger", isDefault: true, onSelect: () => onConfirm() },
-      { label: "Cancel", kind: "secondary" },
-    ],
-  });
 }
 
 function escapeHtml(text: string): string {

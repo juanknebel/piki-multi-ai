@@ -19,7 +19,7 @@
 
 .terminal-container .xterm-viewport::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb);
-  border-radius: 99px;
+  border-radius: var(--radius-full);
 }
 
 .terminal-container .xterm-viewport::-webkit-scrollbar-thumb:hover {
@@ -30,7 +30,7 @@
 .term-search-bar {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--sp-2);
   padding: 5px 10px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-primary);
@@ -39,48 +39,50 @@
   position: absolute;
   top: 0;
   right: 0;
-  z-index: 10;
+  z-index: var(--z-sticky);
   border-radius: 0 0 0 var(--radius-md);
-  box-shadow: -2px 2px 12px rgba(0, 0, 0, 0.4);
-  animation: search-slide 0.15s var(--ease-out);
+  box-shadow: var(--shadow-sm);
+  animation: search-slide var(--dur-fast) var(--ease-out);
 }
 
-@keyframes search-slide {
-  from { opacity: 0; transform: translateY(-8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
+/* `.term-search-input ui-input` (sm); prev/next/close are ghost icon .ui-btns */
 .term-search-input {
-  padding: 4px 10px;
-  background: var(--bg-input);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-size: 12px;
   width: 200px;
-  transition: border-color var(--transition-fast);
 }
 
-.term-search-input:focus {
-  border-color: var(--accent-primary);
-  box-shadow: 0 0 0 1px var(--accent-muted);
+/* "3/12" (or "No results") — tabular so the digits don't wobble while typing. */
+.term-search-count {
+  min-width: 3.5em;
+  text-align: center;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.term-search-btn {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  font-size: 13px;
+.term-search-count--none {
+  color: var(--error-color);
+}
+
+/* Match-case / regex toggles: ghost sm .ui-btn, accent when pressed. */
+.term-search-toggle {
+  padding: 0 var(--sp-3);
+  border: 1px solid transparent;
+  font-size: var(--fs-xs);
+  font-weight: 600;
   color: var(--text-secondary);
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
 }
 
-.term-search-btn:hover {
+.term-search-toggle:hover {
   background: var(--bg-active);
   color: var(--text-bright);
+}
+
+.term-search-toggle[aria-pressed="true"] {
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 15%, transparent);
 }
 
 /* ── Welcome screen ──────────────────────────────── */
@@ -94,20 +96,15 @@
   flex: 1 1 auto;
   width: 100%;
   height: 100%;
-  gap: 16px;
-  animation: welcome-in 0.4s var(--ease-out);
-}
-
-@keyframes welcome-in {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+  gap: var(--sp-6);
+  animation: welcome-in var(--dur-slow) var(--ease-out);
 }
 
 .terminal-welcome .welcome-logo {
-  font-size: 28px;
+  font-size: var(--fs-display-sm);
   font-weight: 700;
   letter-spacing: 0.06em;
-  background: linear-gradient(135deg, var(--accent-primary), #a78bfa);
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-alt));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -115,7 +112,7 @@
 }
 
 .terminal-welcome .welcome-subtitle {
-  font-size: 12px;
+  font-size: var(--fs-md);
   color: var(--text-secondary);
   letter-spacing: 0.15em;
   text-transform: uppercase;
@@ -123,17 +120,17 @@
 }
 
 .terminal-welcome h2 {
-  font-size: 18px;
+  font-size: var(--fs-3xl);
   font-weight: 400;
   color: var(--text-secondary);
 }
 
 .terminal-welcome p {
-  font-size: 12px;
+  font-size: var(--fs-md);
   color: var(--text-muted);
   max-width: 420px;
   text-align: center;
-  line-height: 1.7;
+  line-height: var(--leading-loose);
 }
 
 .terminal-welcome .welcome-shortcuts {
@@ -147,7 +144,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   color: var(--text-muted);
 }
 
@@ -160,7 +157,7 @@
   background: var(--bg-tertiary);
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-sm);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   font-weight: 500;
 }
@@ -176,6 +173,6 @@
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-sm);
   font-family: inherit;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
 }

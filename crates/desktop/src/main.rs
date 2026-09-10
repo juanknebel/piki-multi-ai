@@ -7,7 +7,9 @@ mod commands;
 mod events;
 mod log_buffer;
 mod lsp;
+mod pty_output;
 mod pty_raw;
+mod session;
 mod state;
 
 use std::sync::Arc;
@@ -30,6 +32,21 @@ fn main() {
     // std::env::vars() as JSON and exit immediately — no Tauri init.
     if std::env::args().any(|a| a == "--printenv") {
         piki_core::shell_env::print_env_and_exit();
+    }
+
+    // Run the persistent-session daemon. MUST happen before Tauri or any
+    // threads exist (daemonizing forks, which is only safe single-threaded).
+    if std::env::args().any(|a| a == "--serve-sessions") {
+        let paths = match parse_data_dir() {
+            Some(dir) => DataPaths::new(dir.into()),
+            None => DataPaths::default_paths(),
+        };
+        let _ = piki_core::session::daemon::run(
+            &paths.daemon_paths(),
+            false,
+            Some(piki_core::cli_agent::sidecar_config()),
+        );
+        std::process::exit(0);
     }
 
     piki_core::notifications::set_appname("piki-desktop");
@@ -55,6 +72,19 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
+        // Remember window size/position/maximized/fullscreen across launches
+        // (saved on close, restored before the first frame). Not VISIBLE /
+        // DECORATIONS: the window is always shown undecorated by config.
+        .plugin(
+            tauri_plugin_window_state::Builder::new()
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::SIZE
+                        | tauri_plugin_window_state::StateFlags::POSITION
+                        | tauri_plugin_window_state::StateFlags::MAXIMIZED
+                        | tauri_plugin_window_state::StateFlags::FULLSCREEN,
+                )
+                .build(),
+        )
         .manage(log_buf)
         .setup(move |app| {
             let app_handle = app.handle().clone();
@@ -66,11 +96,19 @@ fn main() {
             };
             let storage = create_storage(&paths).expect("Failed to initialize storage");
             let storage = Arc::new(storage);
+            // Settings the two frontends share: DB override (Settings ▸
+            // General) > `[sessions]` / `[notifications]` in config.toml >
+            // default — the same merge the TUI's `App::new` does. `delivery =
+            // "off"` silences the desktop, `sound = true` enables the chimes.
+            let effective =
+                piki_core::app_settings::resolve(&paths.config_path(), storage.ui_prefs.as_deref());
+            effective.notifications.apply();
+            let sessions_enabled = effective.sessions_enabled;
             let manager = WorkspaceManager::with_paths(paths.clone());
 
             // Load existing workspaces from storage
             let entries = storage.workspaces.load_all_workspaces();
-            let workspaces: Vec<DesktopWorkspace> = entries
+            let mut workspaces: Vec<DesktopWorkspace> = entries
                 .into_iter()
                 .map(|entry| {
                     let info = entry.into_info();
@@ -84,6 +122,7 @@ fn main() {
                         tabs: Vec::new(),
                         active_tab: 0,
                         watcher,
+                        file_index: None,
                     }
                 })
                 .collect();
@@ -126,6 +165,10 @@ fn main() {
             // Load user-configurable providers from providers.toml
             let provider_manager =
                 piki_core::providers::ProviderManager::load_or_init(&paths.providers_path());
+            let chat_provider_manager =
+                piki_core::chat_providers::ChatProviderManager::load_or_init(
+                    &paths.chat_providers_path(),
+                );
 
             // Load saved chat config from preferences, or use default
             let chat_config = storage
@@ -134,6 +177,21 @@ fn main() {
                 .and_then(|p| p.get_preference("chat_config").ok().flatten())
                 .and_then(|json| serde_json::from_str::<piki_core::chat::ChatConfig>(&json).ok())
                 .unwrap_or_default();
+
+            // Connect to (or launch) the session daemon and re-attach any
+            // sessions that survived a previous run into the loaded
+            // workspaces, before the frontend hydrates their tabs. Falls back
+            // silently to in-process PTYs when the daemon is unavailable.
+            let session_daemon = session::connect_session_daemon(&paths, sessions_enabled);
+            let restore_summary = match session_daemon {
+                Some(ref daemon) => session::reattach_sessions(
+                    &app_handle,
+                    daemon,
+                    &mut workspaces,
+                    &provider_manager,
+                ),
+                None => session::RestoreSummary::default(),
+            };
 
             // Create app state
             let desktop_app = DesktopApp {
@@ -144,10 +202,15 @@ fn main() {
                 manager,
                 sysinfo,
                 provider_manager,
+                session_daemon,
+                sessions_enabled,
+                restore_summary,
+                chat_provider_manager,
                 chat_messages: Vec::new(),
                 chat_config,
                 chat_streaming: false,
                 chat_agent_mode: false,
+                chat_pending_approvals: Default::default(),
             };
 
             // Initialize LSP manager and WebSocket proxy
@@ -202,6 +265,7 @@ fn main() {
             }
 
             app.manage(Mutex::new(desktop_app));
+            app.manage(pty_output::PtyOutputSink::default());
             app.manage(lsp_manager_arc);
 
             Ok(())
@@ -222,10 +286,14 @@ fn main() {
             commands::pty::write_pty,
             commands::pty::resize_pty,
             commands::pty::close_tab,
+            commands::pty::detach_tab,
             commands::pty::set_active_tab,
             commands::pty::rename_tab,
+            commands::pty::move_tab,
             commands::pty::spawn_editor_tab,
             commands::pty::spawn_terminal_at,
+            commands::pty::resync_pty,
+            commands::pty::register_pty_output_channel,
             commands::git::get_changed_files,
             commands::git::get_workspace_git_status,
             commands::git::git_stage,
@@ -238,6 +306,12 @@ fn main() {
             commands::git::git_continue_merge,
             commands::git::git_stage_all,
             commands::git::git_unstage_all,
+            commands::git::git_pull,
+            commands::git::git_amend,
+            commands::git::git_last_commit_message,
+            commands::git::git_discard_file,
+            commands::git::git_list_branches,
+            commands::git::git_checkout_branch,
             commands::diff::get_file_diff,
             commands::diff::get_commit_diff,
             commands::diff::get_side_by_side_diff,
@@ -260,6 +334,8 @@ fn main() {
             commands::search::project_search,
             commands::settings::get_settings,
             commands::settings::set_settings,
+            commands::settings::get_app_settings,
+            commands::settings::set_app_settings,
             commands::agents::list_agents,
             commands::agents::save_agent,
             commands::agents::delete_agent,
@@ -268,6 +344,15 @@ fn main() {
             commands::agents::import_agents,
             commands::agents::dispatch_agent,
             commands::agents::list_agent_rows,
+            commands::session::sessions_available,
+            commands::session::session_status,
+            commands::session::restore_summary,
+            commands::session::quit_summary,
+            commands::session::adopt_session,
+            commands::session::list_sessions,
+            commands::session::kill_session,
+            commands::session::remove_session,
+            commands::agents::list_external_agents,
             commands::providers::list_providers,
             commands::providers::save_provider,
             commands::providers::delete_provider,
@@ -300,9 +385,11 @@ fn main() {
             commands::api::jq_filter,
             commands::clipboard::clipboard_copy,
             commands::clipboard::clipboard_paste,
+            commands::system::open_url,
             commands::chat::chat_send_message,
             commands::chat::chat_get_config,
             commands::chat::chat_set_config,
+            commands::chat::chat_provider_config,
             commands::chat::chat_get_messages,
             commands::chat::chat_clear,
             commands::chat::chat_list_models,
@@ -310,6 +397,7 @@ fn main() {
             commands::chat::chat_send_agent_message,
             commands::chat::chat_set_agent_mode,
             commands::chat::chat_get_agent_mode,
+            commands::chat::chat_approve,
             commands::lsp::lsp_ensure_server,
             commands::lsp::lsp_notify_workspace_focus,
             commands::lsp::lsp_server_status,

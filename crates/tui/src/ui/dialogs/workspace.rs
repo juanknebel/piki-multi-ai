@@ -326,14 +326,19 @@ fn render_create_worktree_load_existing(frame: &mut Frame, area: Rect, app: &App
         return;
     };
 
+    // Cap the popup to the available screen height so a long worktree
+    // list scrolls instead of silently overflowing past the bottom edge.
     let popup_width = area.width * 70 / 100;
-    let height = 8u16.saturating_add(existing.len().min(10) as u16);
+    let max_popup_height = area.height.saturating_sub(4).max(10);
+    let visible_rows = existing.len().clamp(1, 10) as u16;
+    let height = (5u16.saturating_add(visible_rows)).min(max_popup_height);
     let popup = super::clear_popup(frame, area, popup_width.max(40), height);
     let theme = &app.theme.dialog;
     let active_c = theme.new_ws_active;
     let inactive_c = theme.new_ws_inactive;
 
     let mut lines: Vec<Line<'_>> = vec![Line::from("")];
+    let mut selected_line_idx = 0usize;
     if *existing_loading {
         lines.push(Line::from(Span::styled(
             "  Scanning worktrees...",
@@ -347,6 +352,9 @@ fn render_create_worktree_load_existing(frame: &mut Frame, area: Rect, app: &App
     } else {
         for (idx, wt) in existing.iter().enumerate() {
             let is_selected = idx == *existing_selected;
+            if is_selected {
+                selected_line_idx = lines.len();
+            }
             let prefix = if is_selected { "  > " } else { "    " };
             let style = if is_selected {
                 Style::default().fg(active_c).add_modifier(Modifier::BOLD)
@@ -363,10 +371,28 @@ fn render_create_worktree_load_existing(frame: &mut Frame, area: Rect, app: &App
         Style::default().fg(inactive_c),
     )]));
 
-    let text = Paragraph::new(lines).block(super::popup_block(
-        "Load Existing Worktree",
-        theme.new_ws_border,
-    ));
+    let mut block = super::popup_block("Load Existing Worktree", theme.new_ws_border);
+
+    // Auto-scroll so the selected row always stays in view, same idea as
+    // the code-review PR picker above.
+    let total_lines = lines.len() as u16;
+    let inner_height = popup.height.saturating_sub(2);
+    let max_scroll = total_lines.saturating_sub(inner_height);
+    let scroll = (selected_line_idx as u16)
+        .saturating_sub(inner_height.saturating_sub(1))
+        .min(max_scroll);
+    if max_scroll > 0 {
+        block = block.title_bottom(
+            Line::from(format!(
+                " [{}/{}] ",
+                existing_selected.saturating_add(1),
+                existing.len()
+            ))
+            .right_aligned(),
+        );
+    }
+
+    let text = Paragraph::new(lines).block(block).scroll((scroll, 0));
     frame.render_widget(text, popup);
 }
 

@@ -20,6 +20,10 @@ theme = "default"
 # ── Notifications ─────────────────────────────────────────────────────────
 # How background agent events reach you.
 
+# The desktop's Settings ▸ General (Ctrl+,) can set `delivery` and `sound`
+# without editing this file; that choice is stored in piki.db, applies to the
+# TUI as well, and wins over this table until you reset it in the dialog. The
+# sound_*_path entries are file-only.
 # [notifications]
 # delivery: "system"   → OS desktop toast (default)
 #           "terminal" → OSC 9 escape, so the host terminal notifies
@@ -37,6 +41,22 @@ theme = "default"
 #   sound_attention_path  → played when an agent needs you
 # sound_done_path = "~/sounds/done.wav"
 # sound_attention_path = "~/sounds/attention.wav"
+
+# ── Persistent sessions ───────────────────────────────────────────────────
+# When enabled (the default), PTY tabs (shells, agents, lazygit) run inside a
+# background daemon so they survive quitting or crashing the app and are
+# re-attached — screen and scrollback intact — on the next launch. Quitting
+# detaches (sessions keep running); press `k` at the quit prompt to stop the
+# daemon and kill them all. Set enabled = false to run every tab in-process,
+# exactly as before this feature existed.
+
+# [sessions]
+# enabled = true
+#
+# The desktop's Settings ▸ General (Ctrl+,) can switch this — and the
+# [notifications] delivery / sound below — without editing this file. That
+# choice is stored in piki.db, applies to the TUI as well, and wins over this
+# file until you reset it in the dialog.
 
 # ── Kanban board ──────────────────────────────────────────────────────────
 # Backing store for the task board.
@@ -92,6 +112,7 @@ theme = "default"
 # help             = "prefix-?"
 # about            = "prefix-a"
 # dashboard        = "prefix-b"
+# sessions         = "prefix-ctrl-s"
 # command_palette  = "prefix-:"
 # fuzzy_search     = "prefix-/"
 # project_search   = "prefix-t"
@@ -214,6 +235,18 @@ theme = "default"
 # exit = "esc"
 # exit_alt = "b"             # toggle-close (Dashboard opens with prefix-b)
 
+# [keybindings.sessions]
+# down = "j"
+# up = "k"
+# down_alt = "down"
+# up_alt = "up"
+# select = "enter"           # jump to the session's tab, or adopt an orphan
+# kill = "x"                 # kill the process (kept, as exited)
+# remove = "d"               # remove the session from the daemon
+# refresh = "r"
+# exit = "esc"
+# exit_alt = "ctrl-s"        # toggle-close (Sessions opens with prefix-ctrl-s)
+
 # [keybindings.logs]
 # down = "j"
 # up = "k"
@@ -231,3 +264,12 @@ theme = "default"
 # copy_alt = "y"
 # exit = "esc"
 # exit_alt = "ctrl-l"
+
+
+# ── Chat (OpenRouter) ───────────────────────────────────────────────────
+# Remote LLM via OpenRouter (https://openrouter.ai). The key is read from
+# here or from the env var OPENROUTER_API_KEY; the chat panel never prompts
+# for it (it only lives in config).
+# [chat]
+# openrouter_api_key = "sk-or-..."
+# web_search = false  # OpenRouter plugins: web search (Ctrl+W in TUI toggles per-provider)

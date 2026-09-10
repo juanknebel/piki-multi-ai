@@ -453,8 +453,18 @@ pub(super) fn handle_confirm_close_tab_input(app: &mut App, key: KeyEvent) -> Op
 
     match handle_yn_input(key) {
         ConfirmResult::Yes => {
+            // Capture the daemon session id before closing so we can remove it
+            // (a closed tab must not linger as a daemon orphan).
+            let session_id = app
+                .workspaces
+                .get(app.active_workspace)
+                .and_then(|ws| ws.tabs.get(target))
+                .and_then(|t| t.session_id.clone());
             if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
                 ws.close_tab(target);
+            }
+            if let Some(sid) = session_id {
+                crate::helpers::remove_session(app, &sid);
             }
             dismiss_dialog(app);
         }
@@ -467,7 +477,20 @@ pub(super) fn handle_confirm_close_tab_input(app: &mut App, key: KeyEvent) -> Op
 }
 
 pub(super) fn handle_confirm_quit_input(app: &mut App, key: KeyEvent) -> Option<Action> {
-    // Quit also accepts Enter as confirmation
+    // `k` — quit AND kill every persistent session (stop the daemon). The
+    // default (Enter/y) merely detaches, leaving sessions running.
+    if matches!(key.code, KeyCode::Char('k') | KeyCode::Char('K')) {
+        if let Some(daemon) = app.session_daemon.clone() {
+            // A quick, synchronous round-trip is fine — we're quitting anyway.
+            if let Err(e) = daemon.shutdown(true) {
+                tracing::warn!(error = %e, "failed to stop session daemon on quit");
+            }
+        }
+        app.should_quit = true;
+        dismiss_dialog(app);
+        return None;
+    }
+    // Quit also accepts Enter as confirmation (sessions keep running).
     if key.code == KeyCode::Enter {
         app.should_quit = true;
         dismiss_dialog(app);
@@ -738,6 +761,18 @@ pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Actio
 }
 
 pub(super) fn handle_dashboard_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    if !matches!(app.active_dialog, Some(DialogState::Dashboard { .. })) {
+        return None;
+    }
+    let indices = app.dashboard_indices();
+    let count = indices.len();
+    let tab_lens: Vec<usize> = indices
+        .iter()
+        .map(|&idx| app.workspaces[idx].tabs.len())
+        .collect();
+    let ws_first_line =
+        |pos: usize| -> usize { tab_lens.iter().take(pos).map(|&len| 1 + len).sum() };
+    let ws_height = |pos: usize| -> usize { 1 + tab_lens[pos] };
     let Some(DialogState::Dashboard {
         ref mut selected,
         ref mut scroll_offset,
@@ -746,24 +781,10 @@ pub(super) fn handle_dashboard_input(app: &mut App, key: KeyEvent) -> Option<Act
         return None;
     };
 
-    let count = app.workspaces.len();
-    if count == 0 {
-        app.active_dialog = None;
-        app.mode = AppMode::Normal;
-        return None;
-    }
-
-    // Compute the first visual line for each workspace (1 header + max(1, tabs) per ws)
-    let ws_first_line = |idx: usize| -> usize {
-        let mut line = 0;
-        for i in 0..idx {
-            line += 1 + app.workspaces[i].tabs.len().max(1);
-        }
-        line
-    };
-    let ws_height = |idx: usize| -> usize { 1 + app.workspaces[idx].tabs.len().max(1) };
-
     if app.config.matches_dashboard(key, "down") || app.config.matches_dashboard(key, "down_alt") {
+        if count == 0 {
+            return None;
+        }
         if *selected + 1 < count {
             *selected += 1;
         }
@@ -775,15 +796,21 @@ pub(super) fn handle_dashboard_input(app: &mut App, key: KeyEvent) -> Option<Act
         }
     } else if app.config.matches_dashboard(key, "up") || app.config.matches_dashboard(key, "up_alt")
     {
+        if count == 0 {
+            return None;
+        }
         *selected = selected.saturating_sub(1);
         let ws_start = ws_first_line(*selected);
         if ws_start < *scroll_offset {
             *scroll_offset = ws_start;
         }
     } else if app.config.matches_dashboard(key, "select") {
-        let idx = *selected;
+        if count == 0 {
+            return None;
+        }
+        let ws_idx = indices[*selected];
         app.active_dialog = None;
-        app.switch_workspace_and_focus(idx);
+        app.switch_workspace_and_focus(ws_idx);
     } else if app.config.matches_dashboard(key, "exit")
         || app.config.matches_dashboard(key, "exit_alt")
     {
@@ -791,6 +818,97 @@ pub(super) fn handle_dashboard_input(app: &mut App, key: KeyEvent) -> Option<Act
         app.mode = AppMode::Normal;
     }
     None
+}
+
+/// Sessions overlay (`prefix ctrl-s`): j/k navigate, Enter jumps to an
+/// attached session's tab (or adopts an orphan as one), x kills, d removes,
+/// r reloads, Esc closes. Rows are daemon [`SessionInfo`]s loaded
+/// asynchronously; `selected` is clamped against the current list.
+pub(super) fn handle_sessions_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    use crate::input::list_nav::move_selection;
+
+    // Jumping needs `&mut App` beyond the dialog borrow — compute after.
+    enum Step {
+        Stay,
+        Close,
+        Jump(String),
+        Act(Action),
+    }
+
+    let step = {
+        let Some(DialogState::Sessions {
+            ref mut selected,
+            ref mut scroll_offset,
+            ref sessions,
+            ref loading,
+            ..
+        }) = app.active_dialog
+        else {
+            return None;
+        };
+        let count = sessions.len();
+        let visible = 12usize;
+
+        if app.config.matches_sessions(key, "down") || app.config.matches_sessions(key, "down_alt")
+        {
+            move_selection(selected, count, 1, false);
+            if *selected >= *scroll_offset + visible {
+                *scroll_offset = selected.saturating_sub(visible - 1);
+            }
+            Step::Stay
+        } else if app.config.matches_sessions(key, "up")
+            || app.config.matches_sessions(key, "up_alt")
+        {
+            move_selection(selected, count, -1, false);
+            if *selected < *scroll_offset {
+                *scroll_offset = *selected;
+            }
+            Step::Stay
+        } else if app.config.matches_sessions(key, "refresh") {
+            Step::Act(Action::LoadSessions)
+        } else if app.config.matches_sessions(key, "exit")
+            || app.config.matches_sessions(key, "exit_alt")
+        {
+            Step::Close
+        } else if *loading || count == 0 {
+            Step::Stay // row-scoped keys need a row
+        } else if app.config.matches_sessions(key, "select") {
+            Step::Jump(sessions[*selected].id.clone())
+        } else if app.config.matches_sessions(key, "kill") {
+            Step::Act(Action::SessionKill(sessions[*selected].id.clone()))
+        } else if app.config.matches_sessions(key, "remove") {
+            Step::Act(Action::SessionRemove(sessions[*selected].id.clone()))
+        } else {
+            Step::Stay
+        }
+    };
+
+    match step {
+        Step::Stay => None,
+        Step::Close => {
+            dismiss_dialog(app);
+            None
+        }
+        Step::Act(action) => Some(action),
+        Step::Jump(id) => {
+            // Already a tab here? Jump straight to it. Otherwise adopt it.
+            let target = app.workspaces.iter().enumerate().find_map(|(w, ws)| {
+                ws.tabs
+                    .iter()
+                    .position(|t| t.session_id.as_deref() == Some(id.as_str()))
+                    .map(|t| (w, t))
+            });
+            match target {
+                Some((ws_idx, tab_idx)) => {
+                    dismiss_dialog(app);
+                    app.switch_workspace_and_focus(ws_idx);
+                    app.workspaces[ws_idx].active_tab = tab_idx;
+                    None
+                }
+                None => Some(Action::SessionAttach(id)),
+            }
+        }
+    }
 }
 
 pub(super) fn handle_help_input(app: &mut App, key: KeyEvent) -> Option<Action> {
@@ -1981,20 +2099,33 @@ pub(super) fn handle_rename_tab_input(app: &mut App, key: KeyEvent) -> Option<Ac
             // Cap length to 40 chars to avoid blowing up tab bar layout
             let capped: String = trimmed.chars().take(40).collect();
             let ws_idx = app.active_workspace;
+            // The daemon session (if any) to push the new title to, captured
+            // while we hold the tab borrow and applied after it ends.
+            let mut meta_update: Option<(String, Option<String>)> = None;
             if let Some(ws) = app.workspaces.get_mut(ws_idx)
                 && let Some(tab) = ws.tabs.get_mut(ws.active_tab)
             {
-                if capped.is_empty() {
-                    tab.custom_title = None;
-                    app.set_toast("Cleared custom title", crate::app::ToastLevel::Info);
+                let title = if capped.is_empty() {
+                    None
                 } else {
-                    let label = capped.clone();
-                    tab.custom_title = Some(capped);
-                    app.set_toast(
-                        format!("Renamed to \"{}\"", label),
-                        crate::app::ToastLevel::Success,
-                    );
+                    Some(capped.clone())
+                };
+                tab.custom_title = title.clone();
+                if let Some(sid) = tab.session_id.clone() {
+                    meta_update = Some((sid, title));
                 }
+            }
+            if capped.is_empty() {
+                app.set_toast("Cleared custom title", crate::app::ToastLevel::Info);
+            } else {
+                app.set_toast(
+                    format!("Renamed to \"{}\"", capped),
+                    crate::app::ToastLevel::Success,
+                );
+            }
+            // Persist the rename on the daemon so it survives a restart.
+            if let Some((sid, title)) = meta_update {
+                crate::helpers::rename_session(app, &sid, title);
             }
             crate::input::confirm_common::dismiss_dialog(app);
             None

@@ -102,6 +102,8 @@ pub enum AppMode {
     ConfirmQuit,
     /// Workspace dashboard overview
     Dashboard,
+    /// Session-daemon overlay (persistent sessions management)
+    Sessions,
     /// Internal log viewer
     Logs,
     /// Command palette overlay
@@ -288,6 +290,10 @@ pub struct Tab {
     /// Custom title set by the user via rename (takes precedence over
     /// `markdown_label` and `provider.label()`).
     pub custom_title: Option<String>,
+    /// Daemon session id for a persistent (Remote) PTY tab; `None` for
+    /// in-process (Local) tabs, non-PTY tabs, and markdown tabs. Used to
+    /// re-attach on restart and to remove the session on close.
+    pub session_id: Option<String>,
 }
 
 impl Tab {
@@ -316,12 +322,20 @@ impl Tab {
     ) -> Option<(piki_core::cli_agent::CliAgentStatus, bool, Option<String>)> {
         let shell = self.pty_session.as_ref()?.shell()?;
         let guard = shell.lock();
-        let agent = guard.state.cli_agent.as_ref()?;
+        let agent = piki_core::cli_agent::cli_agent_of(&guard.state)?;
         Some((
             agent.status,
             agent.last_attention_at.is_some(),
             agent.last_summary.clone(),
         ))
+    }
+
+    /// How long the tab's agent run has been going (`3m 12s` in the Agents
+    /// pane), if one is in flight.
+    pub fn cli_agent_elapsed(&self) -> Option<std::time::Duration> {
+        let shell = self.pty_session.as_ref()?.shell()?;
+        let guard = shell.lock();
+        piki_core::cli_agent::cli_agent_of(&guard.state)?.elapsed()
     }
 }
 
@@ -448,6 +462,7 @@ impl Workspace {
             markdown_rendered: None,
             api_state: None,
             custom_title: None,
+            session_id: None,
         };
         self.next_tab_id += 1;
         self.tabs.push(tab);
@@ -493,6 +508,7 @@ impl Workspace {
             markdown_rendered: Some(rendered),
             api_state: None,
             custom_title: None,
+            session_id: None,
         };
         self.next_tab_id += 1;
         self.tabs.push(tab);
@@ -875,6 +891,9 @@ pub type FooterCache = (
 
 /// Background result slot for `Action::LoadPrList`.
 pub type PendingPrList = Arc<Mutex<Option<Result<Vec<piki_core::github::PrListItem>, String>>>>;
+/// Background result slot for `Action::LoadSessions` (sessions overlay).
+pub type PendingSessionsList =
+    Arc<Mutex<Option<Result<Vec<piki_core::session::protocol::SessionInfo>, String>>>>;
 /// Background result slot for `Action::OpenPrReview`.
 pub type PendingPrCheckout =
     Arc<Mutex<Option<Result<crate::code_review::ReviewSessionData, String>>>>;
@@ -933,6 +952,8 @@ pub struct App {
     pub terminal_inner_area: Option<Rect>,
     /// Inner area of the API response panel (for mouse hit-testing)
     pub api_response_inner_area: Option<Rect>,
+    /// Inner area of the chat messages panel (for mouse hit-testing)
+    pub chat_messages_inner_area: Option<Rect>,
     /// In-memory log ring buffer for the log viewer overlay
     pub log_buffer: crate::log_buffer::LogBuffer,
     /// Pre-formatted system info string (CPU, RAM, battery, time)
@@ -966,6 +987,10 @@ pub struct App {
     /// Last time passive agent-state detection ran — throttles the
     /// screen-scrape sweep to `PASSIVE_DETECT_INTERVAL`
     pub last_passive_detect: Instant,
+    /// External claude agents discovered via /proc scan (TUI only, no desktop yet)
+    pub external_agents: Vec<piki_core::external_agents::AgentTree>,
+    /// Last time external agent scan ran (throttled to 1s)
+    pub last_external_scan: Instant,
     /// App-wide coalesced "PTY produced output" signal. Cloned into every
     /// spawned session; the event loop sleeps on it instead of polling byte
     /// counters at the tick rate.
@@ -999,6 +1024,8 @@ pub struct App {
     /// Background result slot for `Action::LoadPrList`, polled in
     /// `event_loop.rs`'s tick. `Some` once the spawned task finishes.
     pub pending_pr_list: PendingPrList,
+    /// Background result slot for `Action::LoadSessions` (sessions overlay).
+    pub pending_sessions_list: PendingSessionsList,
     /// Background result slot for `Action::OpenPrReview`.
     pub pending_pr_checkout: PendingPrCheckout,
     /// Background result slot for `Action::LoadRepoPrs`.
@@ -1011,8 +1038,14 @@ pub struct App {
     pub agent_profiles: Vec<piki_core::storage::AgentProfile>,
     /// User-configurable providers loaded from providers.toml
     pub provider_manager: piki_core::providers::ProviderManager,
+    /// Chat LLM providers (Ollama / llama.cpp / OpenRouter) estilo providers.toml
+    pub chat_provider_manager: piki_core::chat_providers::ChatProviderManager,
     /// Data paths for saving config files
     pub paths: piki_core::paths::DataPaths,
+    /// Handle to the persistent-session daemon, when one is reachable. `None`
+    /// means sessions are disabled or the daemon is unavailable — every tab
+    /// then falls back to an in-process (Local) PTY.
+    pub session_daemon: Option<piki_core::session::client::Daemon>,
     /// Global AI chat panel state (persists when overlay is hidden)
     pub chat_panel: ChatPanelState,
     /// Channel for receiving streaming chat tokens from Ollama
@@ -1059,6 +1092,8 @@ pub struct ChatPanelState {
     /// Cached model names from Ollama
     pub models: Vec<String>,
     pub model_selected: usize,
+    /// Filter typed in ModelSelect (live search)
+    pub model_filter: String,
     /// Current sub-mode within the chat overlay
     pub sub_mode: ChatSubMode,
     /// Settings editor: editable base URL
@@ -1100,11 +1135,18 @@ impl App {
             tokio::sync::mpsc::unbounded_channel::<piki_api_client::ChatStreamEvent>();
         let (agent_event_tx, agent_event_rx) =
             tokio::sync::mpsc::unbounded_channel::<piki_agent::AgentEvent>();
-        let config = crate::config::Config::load_from(paths);
+        let mut config = crate::config::Config::load_from(paths);
+        // Fold in the choices made in the desktop's Settings ▸ General tab
+        // (shared SQLite DB, `piki_core::app_settings`): DB override >
+        // config.toml > default. After this line `config.sessions.enabled`
+        // (read by `event_loop::run` before connecting the daemon) and
+        // `config.notifications` are the effective values.
+        let overrides = piki_core::app_settings::AppSettings::load(storage.ui_prefs.as_deref());
+        config.sessions.enabled = overrides.sessions_enabled(config.sessions.enabled);
+        config.notifications = overrides.notifications(config.notifications);
         // Propagate notification prefs to the shared core layer (process
         // globals — the notify_* helpers read them on every event).
-        piki_core::notifications::set_delivery(config.notifications.parsed_delivery());
-        piki_core::sound::set_settings(config.notifications.sound_settings());
+        config.notifications.apply();
         let syntax = crate::syntax::SyntaxHighlighter::new(&config.syntax_theme);
         Self {
             should_quit: false,
@@ -1136,6 +1178,7 @@ impl App {
             selection: None,
             terminal_inner_area: None,
             api_response_inner_area: None,
+            chat_messages_inner_area: None,
             sysinfo: std::sync::Arc::new(parking_lot::Mutex::new(String::new())),
             sidebar_pct: 20,
             left_split_pct: 50,
@@ -1150,6 +1193,8 @@ impl App {
             spinner_frame: 0,
             last_spinner_at: Instant::now(),
             last_passive_detect: Instant::now(),
+            external_agents: Vec::new(),
+            last_external_scan: Instant::now() - std::time::Duration::from_secs(2),
             pty_output: piki_core::pty::PtyOutputSignal::new(),
             config,
             refresh_tx,
@@ -1169,6 +1214,7 @@ impl App {
             last_inactive_pty_check: Instant::now(),
             gh_available: None,
             pending_pr_list: Arc::new(Mutex::new(None)),
+            pending_sessions_list: Arc::new(Mutex::new(None)),
             pending_pr_checkout: Arc::new(Mutex::new(None)),
             pending_repo_prs: Arc::new(Mutex::new(None)),
             pending_review_retry: Arc::new(Mutex::new(None)),
@@ -1177,7 +1223,11 @@ impl App {
             provider_manager: piki_core::providers::ProviderManager::load_or_init(
                 &paths.providers_path(),
             ),
+            chat_provider_manager: piki_core::chat_providers::ChatProviderManager::load_or_init(
+                &paths.chat_providers_path(),
+            ),
             paths: paths.clone(),
+            session_daemon: None,
             chat_panel: ChatPanelState::default(),
             chat_token_tx,
             chat_token_rx,
@@ -1456,6 +1506,10 @@ impl App {
     /// event-loop iteration instead of at every tab-switch site (there are
     /// many; see `sync_agent_selection` for the same reasoning).
     pub fn drop_stale_selection(&mut self) {
+        // Chat panel selection is global (overlay), not tied to a tab - don't drop it while chat is open
+        if self.mode == AppMode::ChatPanel {
+            return;
+        }
         if let Some(ref sel) = self.selection
             && Some(sel.owner) != self.selection_owner_key()
         {
@@ -1523,6 +1577,25 @@ impl App {
                     }
                 }
             })
+            .collect()
+    }
+
+    /// Indices of workspaces that have at least one open tab, ordered with
+    /// worktree families grouped: parent (workspace_type != Worktree) first,
+    /// then its Worktree children below. Uses the same grouping rule as the
+    /// sidebar (`piki_core::workspace::sidebar_rows`) but ignores collapsed
+    /// state so the dashboard always shows the full expanded view. Only
+    /// workspaces with `!tabs.is_empty()` are returned.
+    pub fn dashboard_indices(&self) -> Vec<usize> {
+        let infos: Vec<piki_core::WorkspaceInfo> =
+            self.workspaces.iter().map(|w| w.info.clone()).collect();
+        piki_core::workspace::sidebar_rows(&infos, &std::collections::HashSet::new())
+            .into_iter()
+            .filter_map(|row| match row {
+                piki_core::workspace::SidebarRow::Workspace { index, .. } => Some(index),
+                piki_core::workspace::SidebarRow::PrReviewHeader { .. } => None,
+            })
+            .filter(|&idx| !self.workspaces[idx].tabs.is_empty())
             .collect()
     }
 

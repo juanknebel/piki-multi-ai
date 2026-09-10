@@ -37,6 +37,11 @@ export function registerMarkdownFile(tabId: string, filePath: string) {
   pendingFiles.set(tabId, filePath);
 }
 
+/** A panel (not just a registration) exists for `tabId`. */
+export function hasMarkdownEditorInstance(tabId: string): boolean {
+  return instances.has(tabId);
+}
+
 export function getMarkdownEditorFileName(tabId: string): string | null {
   const fp = instances.get(tabId)?.filePath ?? pendingFiles.get(tabId);
   if (!fp) return null;
@@ -148,7 +153,7 @@ function createPanel(tabId: string, filePath: string): MdEditorInstance {
     <div class="md-editor-toolbar">
       <span class="md-editor-path" title="${esc(filePath)}">${esc(filePath)}</span>
       <div class="mk-toolbar"></div>
-      <button class="api-btn md-editor-save" title="Save (${formatShortcut("Ctrl+S")})">Save</button>
+      <button data-variant="primary" data-size="sm" class="md-editor-save ui-btn" title="Save (${formatShortcut("Ctrl+S")})">Save</button>
     </div>
     <div class="md-editor-body"></div>
   `;

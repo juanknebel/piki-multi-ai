@@ -68,8 +68,8 @@ function createApiPanel(tabId: string, wsIdx: number): ApiInstance {
 
   el.innerHTML = `
     <div class="api-toolbar">
-      <button class="api-btn api-send-btn" title="Send Request (${formatShortcut("Ctrl+S")})">Send</button>
-      <button class="api-btn api-history-btn" title="Request History (${formatShortcut("Ctrl+H")})">History</button>
+      <button data-variant="primary" data-size="sm" class="api-send-btn ui-btn" title="Send Request (${formatShortcut("Ctrl+S")})">Send</button>
+      <button data-variant="secondary" data-size="sm" class="api-history-btn ui-btn" title="Request History (${formatShortcut("Ctrl+H")})">History</button>
       <span class="api-status"></span>
     </div>
     <div class="api-split">
@@ -81,25 +81,25 @@ function createApiPanel(tabId: string, wsIdx: number): ApiInstance {
         <div class="api-pane-header api-response-pane-header">
           <span>Response</span>
           <div class="api-response-actions">
-            <button class="api-resp-btn api-copy-btn" title="Copy body (${formatShortcut("Ctrl+C")})">Copy</button>
-            <button class="api-resp-btn api-search-btn" title="Search (${formatShortcut("Ctrl+F")})">Search</button>
-            <button class="api-resp-btn api-jq-btn" title="jq filter (${getShortcutKey("api-jq-filter")})">jq</button>
+            <button data-variant="ghost" data-size="sm" class="api-resp-btn api-copy-btn ui-btn" title="Copy body (${formatShortcut("Ctrl+C")})">Copy</button>
+            <button data-variant="ghost" data-size="sm" class="api-resp-btn api-search-btn ui-btn" title="Search (${formatShortcut("Ctrl+F")})">Search</button>
+            <button data-variant="ghost" data-size="sm" class="api-resp-btn api-jq-btn ui-btn" title="jq filter (${getShortcutKey("api-jq-filter")})">jq</button>
           </div>
         </div>
         <div class="api-search-bar" style="display:none">
-          <input class="api-search-input" type="text" placeholder="Search in response..." />
+          <input data-size="sm" class="api-search-input ui-input" type="text" placeholder="Search in response..." />
           <span class="api-search-count"></span>
-          <button class="api-search-prev" title="Previous">&uarr;</button>
-          <button class="api-search-next" title="Next">&darr;</button>
-          <button class="api-search-close">&times;</button>
+          <button data-variant="ghost" data-icon class="api-search-prev ui-btn" title="Previous">&uarr;</button>
+          <button data-variant="ghost" data-icon class="api-search-next ui-btn" title="Next">&darr;</button>
+          <button data-variant="ghost" data-icon class="api-search-close ui-btn">&times;</button>
         </div>
         <div class="api-jq-bar" style="display:none">
-          <input class="api-jq-input" type="text" placeholder="jq filter (e.g. .data[] | .name)" />
-          <button class="api-jq-run api-btn">Run</button>
-          <button class="api-jq-reset api-resp-btn">Reset</button>
-          <button class="api-jq-close">&times;</button>
+          <input data-size="sm" class="api-jq-input ui-input" type="text" placeholder="jq filter (e.g. .data[] | .name)" />
+          <button data-variant="secondary" data-size="sm" class="api-jq-run ui-btn">Run</button>
+          <button data-variant="ghost" data-size="sm" class="api-jq-reset api-resp-btn ui-btn">Reset</button>
+          <button data-variant="ghost" data-icon class="api-jq-close ui-btn">&times;</button>
         </div>
-        <div class="api-response-body"><div class="api-response-empty">Send a request to see the response</div></div>
+        <div class="api-response-body"><div class="ui-empty">Send a request to see the response</div></div>
       </div>
     </div>
   `;
@@ -191,14 +191,14 @@ async function sendRequest(inst: ApiInstance) {
   inst.loading = true;
   inst.statusEl.textContent = "Sending...";
   inst.statusEl.className = "api-status api-status-loading";
-  inst.responseEl.innerHTML = '<div class="api-response-loading">Sending request...</div>';
+  inst.responseEl.innerHTML = '<div class="ui-empty" data-tone="loading">Sending request...</div>';
 
   try {
     const results = await ipc.sendApiRequest(inst.wsIdx, text);
     inst.responses = results;
     renderResponses(inst);
   } catch (err) {
-    inst.responseEl.innerHTML = `<div class="api-response-error">Error: ${escapeHtml(String(err))}</div>`;
+    inst.responseEl.innerHTML = `<div class="ui-empty" data-tone="error">Error: ${escapeHtml(String(err))}</div>`;
     inst.statusEl.textContent = "Error";
     inst.statusEl.className = "api-status api-status-error";
   } finally {
@@ -211,7 +211,7 @@ function renderResponses(inst: ApiInstance, bodyOverride?: string) {
   el.innerHTML = "";
 
   if (inst.responses.length === 0) {
-    el.innerHTML = '<div class="api-response-empty">No response</div>';
+    el.innerHTML = '<div class="ui-empty">No response</div>';
     inst.statusEl.textContent = "";
     return;
   }
@@ -485,14 +485,14 @@ async function showHistory(inst: ApiInstance) {
   backdrop.className = "api-history-backdrop";
 
   const dialog = document.createElement("div");
-  dialog.className = "api-history-dialog";
+  dialog.className = "api-history-dialog ui-surface";
 
   dialog.innerHTML = `
-    <div class="api-history-header">
-      <span class="api-history-title">API History</span>
-      <button class="api-history-close">&times;</button>
+    <div class="ui-header">
+      <span class="ui-header-title">API History</span>
+      <button data-variant="ghost" data-icon class="api-history-close ui-btn" title="Close" aria-label="Close">&times;</button>
     </div>
-    <input class="api-history-search" type="text" placeholder="Search history (FTS)..." autofocus />
+    <input class="api-history-search ui-input" type="text" placeholder="Search history (FTS)..." autofocus />
     <div class="api-history-list"></div>
     <div class="api-history-footer">Enter = load | Delete = remove | Esc = close</div>
   `;
@@ -527,7 +527,7 @@ async function showHistory(inst: ApiInstance) {
   function renderEntries() {
     listEl.innerHTML = "";
     if (entries.length === 0) {
-      listEl.innerHTML = '<div class="api-history-empty">No history entries</div>';
+      listEl.innerHTML = '<div class="ui-empty">No history entries</div>';
       return;
     }
 

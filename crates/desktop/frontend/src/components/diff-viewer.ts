@@ -61,13 +61,13 @@ function openOverlay(title: string, renderFn: (container: HTMLElement) => void) 
   backdrop.style.justifyContent = "center";
 
   const viewer = document.createElement("div");
-  viewer.className = "diff-viewer";
+  viewer.className = "diff-viewer ui-surface";
 
   const header = document.createElement("div");
-  header.className = "diff-header";
+  header.className = "ui-header";
   header.innerHTML = `
-    <span class="diff-title">${escapeHtml(title)}</span>
-    <button class="dialog-close diff-close">×</button>
+    <span class="ui-header-title">${escapeHtml(title)}</span>
+    <button data-variant="ghost" data-icon class="dialog-close ui-btn diff-close">×</button>
   `;
   viewer.appendChild(header);
 

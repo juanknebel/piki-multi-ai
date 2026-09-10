@@ -14,6 +14,73 @@ struct ChatTokenPayload {
     done: bool,
 }
 
+/// Structured agent-loop activity for the chat panel's tool cards
+/// (`"chat-agent-event"` Tauri event). Text still streams over
+/// `"chat-token"`; this channel carries what a card needs.
+#[derive(Clone, Serialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+enum ChatAgentEventPayload {
+    /// The LLM asked for these tool calls (args are the parsed JSON).
+    ToolCalls {
+        calls: Vec<piki_core::chat::ToolCall>,
+    },
+    ToolExecuting {
+        name: String,
+    },
+    ToolResult {
+        tool_call_id: String,
+        name: String,
+        result: String,
+        is_error: bool,
+    },
+    /// A write-tool waits for the user; answer with `chat_approve`.
+    ApprovalRequired {
+        tool_call_id: String,
+        tool_name: String,
+        description: String,
+    },
+}
+
+/// A user's answer to `ApprovalRequired`, as the frontend sends it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ApprovalDecision {
+    Allow,
+    Deny,
+    AllowAll,
+}
+
+impl From<ApprovalDecision> for piki_agent::ApprovalResponse {
+    fn from(d: ApprovalDecision) -> Self {
+        match d {
+            ApprovalDecision::Allow => Self::Allow,
+            ApprovalDecision::Deny => Self::Deny,
+            ApprovalDecision::AllowAll => Self::AllowAll,
+        }
+    }
+}
+
+type PendingApprovals =
+    std::collections::HashMap<String, tokio::sync::oneshot::Sender<piki_agent::ApprovalResponse>>;
+
+/// Answer the approval `tool_call_id` is waiting on. Errors when nothing is
+/// pending under that id (already answered, or the loop timed out).
+pub(crate) fn resolve_approval(
+    pending: &mut PendingApprovals,
+    tool_call_id: &str,
+    decision: ApprovalDecision,
+) -> Result<(), String> {
+    let tx = pending
+        .remove(tool_call_id)
+        .ok_or_else(|| format!("No pending approval for tool call {tool_call_id}"))?;
+    tx.send(decision.into())
+        .map_err(|_| "The agent is no longer waiting for this approval".to_string())
+}
+
+/// Longest tool result kept in history (chars); a card shows the rest as
+/// "Show more" up to this, the LLM always got the full text.
+const TOOL_RESULT_HISTORY_CAP: usize = 4000;
+
 #[derive(Serialize, Clone)]
 pub struct ChatModelInfo {
     pub name: String,
@@ -35,7 +102,7 @@ pub async fn chat_send_message(
     state: State<'_, Mutex<DesktopApp>>,
     message: String,
 ) -> Result<(), String> {
-    let (config, messages) = {
+    let (config, messages, paths) = {
         let mut app = state.lock();
 
         if app.chat_streaming {
@@ -51,14 +118,35 @@ pub async fn chat_send_message(
         });
         app.chat_streaming = true;
 
-        (app.chat_config.clone(), app.chat_messages.clone())
+        (
+            app.chat_config.clone(),
+            app.chat_messages.clone(),
+            app.paths.clone(),
+        )
     };
 
     if config.model.is_empty() {
         tracing::warn!("Chat send attempted with no model selected");
         let mut app = state.lock();
         app.chat_streaming = false;
+        if config.server_type == piki_core::chat::ChatServerType::OpenRouter {
+            return Err("No model selected for OpenRouter. Pick a model in chat settings (Tab to list, needs API key).".to_string());
+        }
         return Err("No model selected. Configure a model in the chat panel settings.".to_string());
+    }
+    if config.server_type == piki_core::chat::ChatServerType::OpenRouter
+        && config
+            .effective_api_key_with_paths(&paths)
+            .as_ref()
+            .map(|k| k.trim().is_empty())
+            .unwrap_or(true)
+    {
+        let mut app = state.lock();
+        app.chat_streaming = false;
+        return Err(format!(
+            "No OpenRouter API key. Set [chat] openrouter_api_key in {} or OPENROUTER_API_KEY env.",
+            paths.config_path().display()
+        ));
     }
 
     tracing::info!(
@@ -75,7 +163,13 @@ pub async fn chat_send_message(
 
     // `ChatClient` hides each backend's message format, so this no longer
     // has to know one from the other (see piki_agent::chat_bridge).
-    let client = piki_agent::chat_client_for(config.server_type, &config.base_url);
+    let api_key = config.effective_api_key_with_paths(&paths);
+    let client = piki_agent::chat_client_for_with_key_and_search(
+        config.server_type,
+        &config.base_url,
+        api_key,
+        config.web_search,
+    );
     tokio::spawn(async move {
         if let Err(e) = client.chat_stream(&model, &msgs, None, tx).await {
             tracing::error!(error = %e, "chat_stream failed");
@@ -128,19 +222,41 @@ pub async fn chat_send_message(
                     return;
                 }
                 piki_api_client::ChatStreamEvent::Error(e) => {
+                    // Persist error so it survives reload and is visible even if
+                    // the frontend's streamingEl was already cleared.
+                    let msg = format!("\n\n[Error: {e}]");
                     let _ = handle_for_events.emit(
                         "chat-token",
                         ChatTokenPayload {
-                            content: format!("\n\n[Error: {e}]"),
+                            content: msg.clone(),
                             done: true,
                         },
                     );
                     let managed: tauri::State<'_, Mutex<DesktopApp>> = handle_for_events.state();
                     let mut app = managed.lock();
+                    app.chat_messages.push(ChatMessage {
+                        role: ChatRole::Assistant,
+                        content: msg,
+                        tool_calls: None,
+                        tool_call_id: None,
+                    });
                     app.chat_streaming = false;
                     return;
                 }
             }
+        }
+        // Channel closed without Done/Error (e.g. task hung) — unblock UI
+        let managed: tauri::State<'_, Mutex<DesktopApp>> = handle_for_events.state();
+        let mut app = managed.lock();
+        if app.chat_streaming {
+            app.chat_streaming = false;
+            let _ = handle_for_events.emit(
+                "chat-token",
+                ChatTokenPayload {
+                    content: "\n\n[Error: Stream closed unexpectedly — try again]".to_string(),
+                    done: true,
+                },
+            );
         }
     });
 
@@ -154,21 +270,89 @@ pub async fn chat_get_config(state: State<'_, Mutex<DesktopApp>>) -> Result<Chat
     Ok(app.chat_config.clone())
 }
 
-/// Update the chat configuration and persist it.
+/// The saved per-backend settings for `server_type` from `chat-providers.toml`
+/// (model, base URL, system prompt, web search), or that backend's defaults
+/// when it was never configured. The settings dialog calls this when the
+/// server dropdown changes so switching backends restores what the user last
+/// used there — the same memory the TUI's chat settings read.
+#[tauri::command]
+pub async fn chat_provider_config(
+    state: State<'_, Mutex<DesktopApp>>,
+    server_type: piki_core::chat::ChatServerType,
+) -> Result<ChatConfig, String> {
+    let app = state.lock();
+    Ok(provider_chat_config(
+        &app.chat_provider_manager,
+        server_type,
+    ))
+}
+
+fn provider_chat_config(
+    manager: &piki_core::chat_providers::ChatProviderManager,
+    server_type: piki_core::chat::ChatServerType,
+) -> ChatConfig {
+    let provider = server_type.provider_name().to_string();
+    match manager.get(&provider) {
+        Some(p) => ChatConfig {
+            provider,
+            server_type,
+            model: p.model.clone(),
+            base_url: p.base_url.clone(),
+            system_prompt: p.system_prompt.clone(),
+            api_key: None,
+            web_search: p.web_search,
+        },
+        None => ChatConfig {
+            provider,
+            server_type,
+            model: String::new(),
+            base_url: server_type.default_url().to_string(),
+            system_prompt: None,
+            api_key: None,
+            web_search: false,
+        },
+    }
+}
+
+/// Update the chat configuration and persist it: the active config goes to
+/// the ui-prefs store, and the backend's entry in `chat-providers.toml` is
+/// updated so its model / URL / prompt / web search are remembered per
+/// backend (`provider` is always derived from `server_type`, never trusted
+/// from the frontend).
 #[tauri::command]
 pub async fn chat_set_config(
     state: State<'_, Mutex<DesktopApp>>,
-    config: ChatConfig,
+    mut config: ChatConfig,
 ) -> Result<(), String> {
+    config.provider = config.server_type.provider_name().to_string();
     tracing::info!(
+        provider = %config.provider,
         model = %config.model,
         base_url = %config.base_url,
+        web_search = config.web_search,
         has_system_prompt = config.system_prompt.is_some(),
         "Updating chat config"
     );
 
     let mut app = state.lock();
     app.chat_config = config.clone();
+
+    app.chat_provider_manager
+        .upsert(piki_core::chat_providers::ChatProviderConfig {
+            name: config.provider.clone(),
+            description: String::new(),
+            server_type: config.server_type,
+            base_url: config.base_url.clone(),
+            model: config.model.clone(),
+            system_prompt: config.system_prompt.clone(),
+            web_search: config.web_search,
+        });
+    if let Err(e) = app
+        .chat_provider_manager
+        .save(&app.paths.chat_providers_path())
+    {
+        tracing::warn!(error = %e, "Failed to save chat-providers.toml");
+    }
 
     // Persist to settings
     if let Some(ref prefs) = app.storage.ui_prefs {
@@ -193,6 +377,7 @@ pub async fn chat_get_messages(
 pub async fn chat_clear(state: State<'_, Mutex<DesktopApp>>) -> Result<(), String> {
     let mut app = state.lock();
     app.chat_messages.clear();
+    app.chat_pending_approvals.clear();
     Ok(())
 }
 
@@ -235,6 +420,43 @@ pub async fn chat_list_models(
                 })
                 .collect())
         }
+        piki_core::chat::ChatServerType::OpenRouter => {
+            // Read key from config.toml (via DataPaths) or env; no stored key here since caller has no ChatConfig
+            let paths = piki_core::paths::DataPaths::default_paths();
+            let api_key = piki_core::chat::ChatConfig {
+                provider: String::new(),
+                server_type: piki_core::chat::ChatServerType::OpenRouter,
+                model: String::new(),
+                base_url: base_url.clone(),
+                system_prompt: None,
+                api_key: None,
+                web_search: false,
+            }
+            .effective_api_key_with_paths(&paths);
+            if api_key
+                .as_ref()
+                .map(|k| k.trim().is_empty())
+                .unwrap_or(true)
+            {
+                return Err(format!(
+                    "No OpenRouter API key. Set [chat] openrouter_api_key in {} or OPENROUTER_API_KEY env.",
+                    paths.config_path().display()
+                ));
+            }
+            let client = piki_api_client::OpenRouterClient::new_with_key(&base_url, api_key);
+            let models = client.list_models().await.map_err(|e| {
+                tracing::error!(base_url = %base_url, error = %e, "Failed to list OpenRouter models");
+                format!("Failed to connect to OpenRouter: {e}. Check [chat] openrouter_api_key and base URL https://openrouter.ai/api/v1")
+            })?;
+            Ok(models
+                .into_iter()
+                .map(|m| ChatModelInfo {
+                    name: m.id,
+                    size: 0,
+                    modified_at: String::new(),
+                })
+                .collect())
+        }
     }
 }
 
@@ -243,6 +465,8 @@ pub async fn chat_list_models(
 pub async fn chat_stop(state: State<'_, Mutex<DesktopApp>>) -> Result<(), String> {
     let mut app = state.lock();
     app.chat_streaming = false;
+    // Dropping the senders denies whatever the loop was waiting on.
+    app.chat_pending_approvals.clear();
     Ok(())
 }
 
@@ -253,7 +477,7 @@ pub async fn chat_send_agent_message(
     state: State<'_, Mutex<DesktopApp>>,
     message: String,
 ) -> Result<(), String> {
-    let (config, messages, ws_path) = {
+    let (config, messages, ws_path, paths) = {
         let mut app = state.lock();
 
         if app.chat_streaming {
@@ -267,6 +491,8 @@ pub async fn chat_send_agent_message(
             tool_call_id: None,
         });
         app.chat_streaming = true;
+        // A stale approval from a previous run is answered Deny by the drop.
+        app.chat_pending_approvals.clear();
 
         let ws_path = if !app.workspaces.is_empty() {
             app.workspaces[app.active_workspace].info.path.clone()
@@ -274,13 +500,35 @@ pub async fn chat_send_agent_message(
             std::env::current_dir().unwrap_or_default()
         };
 
-        (app.chat_config.clone(), app.chat_messages.clone(), ws_path)
+        (
+            app.chat_config.clone(),
+            app.chat_messages.clone(),
+            ws_path,
+            app.paths.clone(),
+        )
     };
 
     if config.model.is_empty() {
         let mut app = state.lock();
         app.chat_streaming = false;
+        if config.server_type == piki_core::chat::ChatServerType::OpenRouter {
+            return Err("No model selected for OpenRouter. Pick a model in chat settings (Tab to list, needs API key).".to_string());
+        }
         return Err("No model selected.".to_string());
+    }
+    if config.server_type == piki_core::chat::ChatServerType::OpenRouter
+        && config
+            .effective_api_key_with_paths(&paths)
+            .as_ref()
+            .map(|k| k.trim().is_empty())
+            .unwrap_or(true)
+    {
+        let mut app = state.lock();
+        app.chat_streaming = false;
+        return Err(format!(
+            "No OpenRouter API key. Set [chat] openrouter_api_key in {} or OPENROUTER_API_KEY env.",
+            paths.config_path().display()
+        ));
     }
 
     tracing::info!(
@@ -291,6 +539,7 @@ pub async fn chat_send_agent_message(
         "Desktop: sending agent message"
     );
 
+    let api_key = config.effective_api_key_with_paths(&paths);
     let client: Box<dyn piki_api_client::ChatClient> = match config.server_type {
         piki_core::chat::ChatServerType::Ollama => {
             Box::new(piki_api_client::OllamaClient::new(&config.base_url))
@@ -298,6 +547,10 @@ pub async fn chat_send_agent_message(
         piki_core::chat::ChatServerType::LlamaCpp => {
             Box::new(piki_api_client::LlamaCppClient::new(&config.base_url))
         }
+        piki_core::chat::ChatServerType::OpenRouter => Box::new(
+            piki_api_client::OpenRouterClient::new_with_key(&config.base_url, api_key)
+                .with_web_search(config.web_search),
+        ),
     };
 
     let registry = piki_agent::ToolRegistry::default_all();
@@ -361,7 +614,7 @@ pub async fn chat_send_agent_message(
                         },
                     );
                 }
-                piki_agent::AgentEvent::ToolCallsStarted(_calls) => {
+                piki_agent::AgentEvent::ToolCallsStarted(calls) => {
                     full_content.clear();
                     let _ = handle_for_events.emit(
                         "chat-token",
@@ -370,36 +623,45 @@ pub async fn chat_send_agent_message(
                             done: false,
                         },
                     );
+                    let _ = handle_for_events.emit(
+                        "chat-agent-event",
+                        ChatAgentEventPayload::ToolCalls { calls },
+                    );
                 }
                 piki_agent::AgentEvent::ToolExecuting { name } => {
                     let _ = handle_for_events.emit(
-                        "chat-token",
-                        ChatTokenPayload {
-                            content: format!("\n[Running {name}...]\n"),
-                            done: false,
-                        },
+                        "chat-agent-event",
+                        ChatAgentEventPayload::ToolExecuting { name },
                     );
                 }
                 piki_agent::AgentEvent::ToolResult {
+                    tool_call_id,
                     name,
                     result,
                     is_error,
-                    ..
                 } => {
+                    let _ = handle_for_events.emit(
+                        "chat-agent-event",
+                        ChatAgentEventPayload::ToolResult {
+                            tool_call_id: tool_call_id.clone(),
+                            name: name.clone(),
+                            result: result.clone(),
+                            is_error,
+                        },
+                    );
+                    // History keeps the TUI's `[name] [Error] text` shape
+                    // (chat-context.ts `parseToolMessage` reads it back), cut
+                    // on a char boundary.
                     let prefix = if is_error { "[Error] " } else { "" };
-                    let display = format!("[{name}] {prefix}{result}");
-                    let truncated = if display.len() > 500 {
-                        format!("{}...", &display[..500])
-                    } else {
-                        display
-                    };
+                    let body: String = result.chars().take(TOOL_RESULT_HISTORY_CAP).collect();
+                    let ellipsis = if body.len() < result.len() { "..." } else { "" };
                     let managed: tauri::State<'_, Mutex<DesktopApp>> = handle_for_events.state();
                     let mut app = managed.lock();
                     app.chat_messages.push(ChatMessage {
                         role: ChatRole::Tool,
-                        content: truncated,
+                        content: format!("[{name}] {prefix}{body}{ellipsis}"),
                         tool_calls: None,
-                        tool_call_id: None,
+                        tool_call_id: Some(tool_call_id),
                     });
                 }
                 piki_agent::AgentEvent::Finished => {
@@ -428,14 +690,41 @@ pub async fn chat_send_agent_message(
                     app.chat_streaming = false;
                     return;
                 }
-                piki_agent::AgentEvent::ApprovalRequired(_) => {
-                    // Write-tool approval will be handled in F6
+                piki_agent::AgentEvent::ApprovalRequired(req) => {
+                    // Park the oneshot until `chat_approve` answers it; the
+                    // card renders Approve / Deny from this event.
+                    let managed: tauri::State<'_, Mutex<DesktopApp>> = handle_for_events.state();
+                    {
+                        let mut app = managed.lock();
+                        app.chat_pending_approvals
+                            .insert(req.tool_call_id.clone(), req.response_tx);
+                    }
+                    let _ = handle_for_events.emit(
+                        "chat-agent-event",
+                        ChatAgentEventPayload::ApprovalRequired {
+                            tool_call_id: req.tool_call_id,
+                            tool_name: req.tool_name,
+                            description: req.description,
+                        },
+                    );
                 }
             }
         }
     });
 
     Ok(())
+}
+
+/// Answer a pending write-tool approval (`ApprovalRequired` card).
+#[tauri::command]
+pub async fn chat_approve(
+    state: State<'_, Mutex<DesktopApp>>,
+    tool_call_id: String,
+    decision: ApprovalDecision,
+) -> Result<(), String> {
+    tracing::info!(tool_call_id = %tool_call_id, ?decision, "Chat tool approval answered");
+    let mut app = state.lock();
+    resolve_approval(&mut app.chat_pending_approvals, &tool_call_id, decision)
 }
 
 /// Set agent mode on/off.
@@ -454,4 +743,39 @@ pub async fn chat_set_agent_mode(
 pub async fn chat_get_agent_mode(state: State<'_, Mutex<DesktopApp>>) -> Result<bool, String> {
     let app = state.lock();
     Ok(app.chat_agent_mode)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use piki_agent::ApprovalResponse;
+
+    #[tokio::test]
+    async fn resolve_approval_answers_the_waiting_loop() {
+        let mut pending = PendingApprovals::new();
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        pending.insert("call-1".into(), tx);
+
+        resolve_approval(&mut pending, "call-1", ApprovalDecision::Allow).unwrap();
+        assert!(matches!(rx.await, Ok(ApprovalResponse::Allow)));
+        assert!(pending.is_empty(), "answered approvals leave the map");
+        // A second answer for the same id is an error, not a panic.
+        assert!(resolve_approval(&mut pending, "call-1", ApprovalDecision::Deny).is_err());
+    }
+
+    #[tokio::test]
+    async fn dropping_a_pending_approval_reads_as_deny() {
+        let mut pending = PendingApprovals::new();
+        let (tx, rx) = tokio::sync::oneshot::channel::<ApprovalResponse>();
+        pending.insert("call-2".into(), tx);
+        pending.clear();
+        // agent_loop.rs maps `Err(RecvError)` to Deny.
+        assert!(rx.await.is_err());
+    }
+
+    #[test]
+    fn approval_decision_deserializes_snake_case() {
+        let d: ApprovalDecision = serde_json::from_str("\"allow_all\"").unwrap();
+        assert_eq!(d, ApprovalDecision::AllowAll);
+    }
 }

@@ -8,81 +8,33 @@
 //! ESC ] 777 ; notify ; piki://cli-agent ; <json> BEL
 //! ```
 //!
-//! [`crate::shell_integration::parser::OscParser`] already observes the PTY
-//! stream for OSC 133/7; it grows one extra arm that recognises the
-//! `piki://cli-agent` target, parses the JSON here, and emits a
-//! [`crate::shell_integration::ShellEvent::CliAgent`]. The agent itself stays
-//! a raw PTY passthrough — this layer is purely additive and self-disabling
-//! (the hook is a no-op unless `PIKI_CLI_AGENT` is set in its env).
-//!
-//! JSON payload base shape: `{v, agent, event, session_id, cwd, project,
-//! ...event-specific}`. `v` is a protocol version negotiated as
-//! `min(script_version, piki_version)`; payloads whose major we don't
-//! understand are dropped (the tab falls back to the heuristic idle watcher).
+//! `piki-multiplex` (the terminal-multiplexer engine this crate wraps) knows
+//! nothing about Claude, Codex, or any structured agent-event vocabulary — it
+//! only decodes JSON off an OSC 777 sequence or a per-tab FIFO and hands it,
+//! uninterpreted, to a [`piki_multiplex::shell_integration::SidecarState`]
+//! implementation supplied by the caller. This module *is* that
+//! implementation: [`CliAgentEvent`]/[`CliAgentStatus`]/[`CliAgentState`] are
+//! piki's own event vocabulary, [`parse_cli_agent_payload`] decodes the JSON
+//! shape piki's hook scripts emit, and `impl SidecarState for CliAgentState`
+//! below is the seam that plugs it into the generic engine. Everything else
+//! genuinely piki-specific — which binary bridges to which agent
+//! ([`bridge_for_command`]) and how to install each agent's hooks
+//! ([`install`], [`install_antigravity`]) — also lives here.
 
 use std::path::PathBuf;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
+use piki_multiplex::shell_integration::{SidecarConfig, SidecarFactory, SidecarState};
+
 pub mod install;
 pub mod install_antigravity;
-#[cfg(unix)]
-pub mod sock;
 
-/// Which CLI agent's hook protocol a provider tab speaks, if any.
-///
-/// Both bridges land on the same [`CliAgentEvent`] stream and the same per-tab
-/// FIFO; they differ only in how the hooks get installed (Claude Code takes a
-/// per-spawn `--settings` file, Antigravity needs a plugin in its own config
-/// root — see [`install_antigravity`]).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AgentBridge {
-    Claude,
-    Antigravity,
-}
-
-impl AgentBridge {
-    /// Human-readable agent name, for warnings the user reads.
-    pub fn label(self) -> &'static str {
-        match self {
-            AgentBridge::Claude => "Claude Code",
-            AgentBridge::Antigravity => "Antigravity",
-        }
-    }
-}
-
-/// Pick the bridge for a provider's command, matching on the binary name so a
-/// `command` of `claude`, `/usr/local/bin/claude` or `agy` all resolve.
-/// `None` means "no structured integration" — the tab spawns bare and the
-/// heuristic [`crate::idle_watcher::IdleWatcher`] stays as the fallback.
-pub fn bridge_for_command(command: &str) -> Option<AgentBridge> {
-    let bin = std::path::Path::new(command)
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or(command);
-    match bin {
-        "claude" => Some(AgentBridge::Claude),
-        "agy" | "antigravity" => Some(AgentBridge::Antigravity),
-        _ => None,
-    }
-}
-
-/// External tools a bridge needs that are missing from the user's PATH.
-///
-/// Empty means the tab will get the structured channel. Otherwise the tab still
-/// spawns and works — it just falls back to the byte-silence idle heuristic, so
-/// the Agents pane shows bare liveness instead of running/idle/done. Both hook
-/// bridges build their JSON payloads with `jq`, so that's the whole list today;
-/// frontends warn on a non-empty result rather than blocking the spawn.
-pub fn missing_prerequisites(bridge: AgentBridge) -> Vec<&'static str> {
-    let _ = bridge;
-    if install::jq_available() {
-        Vec::new()
-    } else {
-        vec!["jq"]
-    }
-}
+/// OSC 777 target piki's hook scripts claim. OSC 777 is shared turf (Warp's
+/// `warp://cli-agent`, urxvt `notify`, VTE…); only sequences whose target is
+/// exactly this string are parsed as a cli-agent payload.
+pub const CLI_AGENT_TARGET: &str = "piki://cli-agent";
 
 /// Protocol version this build of piki understands. The hook script sends
 /// `min(its_version, $PIKI_CLI_AGENT_V)`, so a payload with `v` greater than
@@ -91,7 +43,11 @@ pub const CLI_AGENT_PROTOCOL_VERSION: u32 = 1;
 
 /// A single structured lifecycle event decoded from a `piki://cli-agent`
 /// OSC 777 payload.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Serializable because the session daemon forwards it to attached clients
+/// (`session::protocol::Frame::ShellEvent`, carried as an opaque
+/// `serde_json::Value`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CliAgentEvent {
     /// Session started (Claude Code launched / resumed).
     SessionStart {
@@ -167,7 +123,7 @@ impl CliAgentEvent {
 /// Serializes kebab-case (`waiting-permission`) — the vocabulary the desktop
 /// frontend's `CliAgentStatus` TS type already speaks on the
 /// `pty-agent-event` rail.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum CliAgentStatus {
     /// Working (prompt submitted, tool running, just started).
@@ -196,7 +152,8 @@ pub fn status_severity(status: CliAgentStatus, attention: bool) -> u8 {
 }
 
 /// Per-tab state derived from the [`CliAgentEvent`] stream. Mirrors the role
-/// of [`crate::shell_integration::ShellTabState`] for shell tabs.
+/// of `piki_multiplex::shell_integration::ShellTabState` for shell tabs, and
+/// plugs into it via `impl SidecarState for CliAgentState` below.
 #[derive(Debug, Default)]
 pub struct CliAgentState {
     pub session_id: Option<String>,
@@ -207,6 +164,10 @@ pub struct CliAgentState {
     /// Set when the user should look at this tab (permission / idle / done).
     /// Cleared by [`acknowledge`](Self::acknowledge) on focus.
     pub last_attention_at: Option<Instant>,
+    /// When the current run began: the session start or the last prompt
+    /// submit, whichever is later. Cleared on `Stop` so a finished turn
+    /// stops ticking; UIs show [`elapsed`](Self::elapsed) next to the status.
+    pub run_started_at: Option<Instant>,
 }
 
 impl CliAgentState {
@@ -214,15 +175,20 @@ impl CliAgentState {
         Self::default()
     }
 
-    pub fn apply(&mut self, event: &CliAgentEvent) {
+    pub fn apply_event(&mut self, event: &CliAgentEvent) {
         self.session_id = Some(event.session_id().to_string());
         match event {
             CliAgentEvent::SessionStart { .. } => {
                 // A fresh session sits at the prompt waiting for input — it
                 // is not running until a prompt is submitted.
                 self.status = CliAgentStatus::Idle;
+                self.run_started_at = Some(Instant::now());
             }
-            CliAgentEvent::UserPromptSubmit { .. } | CliAgentEvent::PostToolUse { .. } => {
+            CliAgentEvent::UserPromptSubmit { .. } => {
+                self.status = CliAgentStatus::Running;
+                self.run_started_at = Some(Instant::now());
+            }
+            CliAgentEvent::PostToolUse { .. } => {
                 self.status = CliAgentStatus::Running;
             }
             CliAgentEvent::PermissionRequest { summary, .. } => {
@@ -238,6 +204,7 @@ impl CliAgentState {
                 self.status = CliAgentStatus::Done;
                 self.last_summary = response.clone();
                 self.last_attention_at = Some(Instant::now());
+                self.run_started_at = None;
             }
         }
     }
@@ -245,6 +212,139 @@ impl CliAgentState {
     /// Drop the attention marker (e.g. when the user focuses this tab).
     pub fn acknowledge(&mut self) {
         self.last_attention_at = None;
+    }
+
+    /// How long the current run has been going, if one is in flight.
+    pub fn elapsed(&self) -> Option<Duration> {
+        self.run_started_at.map(|t| t.elapsed())
+    }
+}
+
+/// Wire form of [`CliAgentState`] for the daemon's opaque `sidecar` snapshot
+/// slot — `Instant`s become relative durations. Mirrors the shape
+/// `ShellStateSnapshot.sidecar` used to carry natively before the sidecar
+/// channel became generic; kept identical so the wire bytes reaching the
+/// desktop frontend are unchanged.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CliAgentSnapshot {
+    #[serde(default)]
+    session_id: Option<String>,
+    #[serde(default)]
+    status: CliAgentStatus,
+    #[serde(default)]
+    last_summary: Option<String>,
+    #[serde(default)]
+    attention_pending: bool,
+    #[serde(default)]
+    run_for_ms: Option<u64>,
+}
+
+impl SidecarState for CliAgentState {
+    fn apply(&mut self, event: serde_json::Value) {
+        let Some(text) = event.as_str().map(str::to_string).or_else(|| {
+            // OSC 777 hands us an already-parsed Value (it decoded the JSON
+            // itself to check framing); re-serialize so the one parser
+            // (`parse_cli_agent_payload`) stays the single source of truth
+            // for both transports.
+            serde_json::to_string(&event).ok()
+        }) else {
+            return;
+        };
+        if let Some(ev) = parse_cli_agent_payload(&text) {
+            self.apply_event(&ev);
+        }
+    }
+
+    fn snapshot(&self) -> serde_json::Value {
+        let snap = CliAgentSnapshot {
+            session_id: self.session_id.clone(),
+            status: self.status,
+            last_summary: self.last_summary.clone(),
+            attention_pending: self.last_attention_at.is_some(),
+            run_for_ms: self.elapsed().map(|d| d.as_millis() as u64),
+        };
+        serde_json::to_value(snap).unwrap_or(serde_json::Value::Null)
+    }
+
+    fn restore(&mut self, snapshot: serde_json::Value) {
+        let Ok(snap) = serde_json::from_value::<CliAgentSnapshot>(snapshot) else {
+            return;
+        };
+        let now = Instant::now();
+        self.session_id = snap.session_id;
+        self.status = snap.status;
+        self.last_summary = snap.last_summary;
+        self.last_attention_at = snap.attention_pending.then_some(now);
+        self.run_started_at = snap
+            .run_for_ms
+            .map(|ms| now.checked_sub(Duration::from_millis(ms)).unwrap_or(now));
+    }
+
+    fn acknowledge(&mut self) {
+        CliAgentState::acknowledge(self);
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+}
+
+/// [`SidecarConfig`] for piki's own hook integration: claims
+/// [`CLI_AGENT_TARGET`] and builds a fresh [`CliAgentState`] per tab. Every
+/// spawn site that wants the structured channel uses this same config.
+pub fn sidecar_config() -> SidecarConfig {
+    SidecarConfig {
+        osc_target: CLI_AGENT_TARGET.to_string(),
+        factory: cli_agent_sidecar_factory(),
+    }
+}
+
+/// Just the [`SidecarFactory`] half of [`sidecar_config`], for callers that
+/// already track the OSC target separately (none do today, but keeps the two
+/// concerns independently reusable).
+pub fn cli_agent_sidecar_factory() -> SidecarFactory {
+    std::sync::Arc::new(|| Box::new(CliAgentState::new()) as Box<dyn SidecarState>)
+}
+
+/// Downcast a generic sidecar slot back to piki's own [`CliAgentState`]. The
+/// single funnel every call site that reads structured agent state goes
+/// through — never match on `piki_multiplex::shell_integration::ShellTabState`
+/// internals directly.
+pub fn cli_agent_of(
+    state: &piki_multiplex::shell_integration::ShellTabState,
+) -> Option<&CliAgentState> {
+    state
+        .sidecar
+        .as_ref()
+        .and_then(|s| s.as_any().downcast_ref::<CliAgentState>())
+}
+
+/// Mutable counterpart of [`cli_agent_of`] (acknowledge, passive-detection
+/// writes).
+pub fn cli_agent_of_mut(
+    state: &mut piki_multiplex::shell_integration::ShellTabState,
+) -> Option<&mut CliAgentState> {
+    state
+        .sidecar
+        .as_mut()
+        .and_then(|s| s.as_any_mut().downcast_mut::<CliAgentState>())
+}
+
+/// Compact elapsed-time label shared by the TUI Agents pane and (mirrored
+/// in TypeScript) the desktop Agents panel: `45s`, `3m 12s`, `1h 02m`.
+pub fn format_elapsed(d: Duration) -> String {
+    let secs = d.as_secs();
+    let (h, m, s) = (secs / 3600, (secs % 3600) / 60, secs % 60);
+    if h > 0 {
+        format!("{h}h {m:02}m")
+    } else if m > 0 {
+        format!("{m}m {s:02}s")
+    } else {
+        format!("{s}s")
     }
 }
 
@@ -338,6 +438,60 @@ pub fn parse_cli_agent_payload(json: &str) -> Option<CliAgentEvent> {
         }
     };
     Some(event)
+}
+
+/// Which CLI agent's hook protocol a provider tab speaks, if any.
+///
+/// Both bridges land on the same [`CliAgentEvent`] stream and the same per-tab
+/// FIFO; they differ only in how the hooks get installed (Claude Code takes a
+/// per-spawn `--settings` file, Antigravity needs a plugin in its own config
+/// root — see [`install_antigravity`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AgentBridge {
+    Claude,
+    Antigravity,
+}
+
+impl AgentBridge {
+    /// Human-readable agent name, for warnings the user reads.
+    pub fn label(self) -> &'static str {
+        match self {
+            AgentBridge::Claude => "Claude Code",
+            AgentBridge::Antigravity => "Antigravity",
+        }
+    }
+}
+
+/// Pick the bridge for a provider's command, matching on the binary name so a
+/// `command` of `claude`, `/usr/local/bin/claude` or `agy` all resolve.
+/// `None` means "no structured integration" — the tab spawns bare and the
+/// heuristic [`crate::idle_watcher::IdleWatcher`] stays as the fallback.
+pub fn bridge_for_command(command: &str) -> Option<AgentBridge> {
+    let bin = std::path::Path::new(command)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or(command);
+    match bin {
+        "claude" => Some(AgentBridge::Claude),
+        "agy" | "antigravity" => Some(AgentBridge::Antigravity),
+        _ => None,
+    }
+}
+
+/// External tools a bridge needs that are missing from the user's PATH.
+///
+/// Empty means the tab will get the structured channel. Otherwise the tab still
+/// spawns and works — it just falls back to the byte-silence idle heuristic, so
+/// the Agents pane shows bare liveness instead of running/idle/done. Both hook
+/// bridges build their JSON payloads with `jq`, so that's the whole list today;
+/// frontends warn on a non-empty result rather than blocking the spawn.
+pub fn missing_prerequisites(bridge: AgentBridge) -> Vec<&'static str> {
+    let _ = bridge;
+    if install::jq_available() {
+        Vec::new()
+    } else {
+        vec!["jq"]
+    }
 }
 
 #[cfg(test)]
@@ -508,13 +662,13 @@ mod tests {
     #[test]
     fn state_transitions_track_status_and_attention() {
         let mut s = CliAgentState::new();
-        s.apply(&CliAgentEvent::UserPromptSubmit {
+        s.apply_event(&CliAgentEvent::UserPromptSubmit {
             session_id: "s".into(),
         });
         assert_eq!(s.status, CliAgentStatus::Running);
         assert!(s.last_attention_at.is_none());
 
-        s.apply(&CliAgentEvent::PermissionRequest {
+        s.apply_event(&CliAgentEvent::PermissionRequest {
             session_id: "s".into(),
             tool_name: "Bash".into(),
             summary: "Wants to run Bash: ls".into(),
@@ -526,7 +680,7 @@ mod tests {
         s.acknowledge();
         assert!(s.last_attention_at.is_none());
 
-        s.apply(&CliAgentEvent::Stop {
+        s.apply_event(&CliAgentEvent::Stop {
             session_id: "s".into(),
             query: None,
             response: Some("all done".into()),
@@ -535,5 +689,37 @@ mod tests {
         assert_eq!(s.status, CliAgentStatus::Done);
         assert_eq!(s.last_summary.as_deref(), Some("all done"));
         assert_eq!(s.session_id.as_deref(), Some("s"));
+    }
+
+    #[test]
+    fn sidecar_snapshot_round_trips_through_restore() {
+        let mut s = CliAgentState::new();
+        s.apply_event(&CliAgentEvent::PermissionRequest {
+            session_id: "s9".into(),
+            tool_name: "Bash".into(),
+            summary: "Wants to run Bash: ls".into(),
+        });
+        let snap = SidecarState::snapshot(&s);
+
+        let mut restored = CliAgentState::new();
+        restored.restore(snap);
+        assert_eq!(restored.status, CliAgentStatus::WaitingPermission);
+        assert_eq!(restored.session_id.as_deref(), Some("s9"));
+        assert_eq!(
+            restored.last_summary.as_deref(),
+            Some("Wants to run Bash: ls")
+        );
+        assert!(restored.last_attention_at.is_some());
+    }
+
+    #[test]
+    fn sidecar_apply_parses_json_value_same_as_str_payload() {
+        let json = r#"{"v":1,"event":"stop","session_id":"s","response":"done"}"#;
+        let value: serde_json::Value = serde_json::from_str(json).unwrap();
+
+        let mut s = CliAgentState::new();
+        SidecarState::apply(&mut s, value);
+        assert_eq!(s.status, CliAgentStatus::Done);
+        assert_eq!(s.last_summary.as_deref(), Some("done"));
     }
 }

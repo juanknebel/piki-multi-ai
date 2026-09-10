@@ -22,25 +22,25 @@ export async function showStashDialog() {
     if (existing) existing.remove();
 
     const dialog = document.createElement("div");
-    dialog.className = "dialog";
+    dialog.className = "dialog ui-surface";
     dialog.style.maxWidth = "520px";
     dialog.innerHTML = `
-      <div class="dialog-header">
-        <span class="dialog-title">Git Stash</span>
-        <button class="dialog-close" title="Close" aria-label="Close">×</button>
+      <div class="ui-header">
+        <span class="ui-header-title">Git Stash</span>
+        <button data-variant="ghost" data-icon class="dialog-close ui-btn" title="Close" aria-label="Close">×</button>
       </div>
       <div class="dialog-body">
         <div class="dialog-field">
           <label class="dialog-label">Save new stash</label>
           <div style="display:flex;gap:6px">
-            <input class="dialog-input" id="stash-msg" placeholder="Stash message" style="flex:1" />
-            <button class="dialog-btn dialog-btn-primary" id="stash-save">Save</button>
+            <input class="ui-input" id="stash-msg" placeholder="Stash message" style="flex:1" />
+            <button data-variant="primary" class="ui-btn" id="stash-save">Save</button>
           </div>
         </div>
         <div style="margin-top:8px">
           <label class="dialog-label">Stashes (${entries.length})</label>
           <div class="stash-list" style="margin-top:4px;max-height:300px;overflow-y:auto">
-            ${entries.length === 0 ? '<div class="empty-message">No stashes</div>' : ""}
+            ${entries.length === 0 ? '<div class="ui-empty">No stashes</div>' : ""}
             ${entries
               .map(
                 (e) => `
@@ -48,9 +48,9 @@ export async function showStashDialog() {
                 <span class="stash-id">${escapeHtml(e.id)}</span>
                 <span class="stash-msg">${escapeHtml(e.message)}</span>
                 <span class="stash-actions">
-                  <button class="dialog-btn dialog-btn-secondary stash-btn" data-action="pop" title="Pop">Pop</button>
-                  <button class="dialog-btn dialog-btn-secondary stash-btn" data-action="apply" title="Apply">Apply</button>
-                  <button class="dialog-btn dialog-btn-danger stash-btn" data-action="drop" title="Drop" style="padding:3px 6px;font-size:11px">×</button>
+                  <button data-variant="secondary" data-size="sm" class="ui-btn stash-btn" data-action="pop" title="Pop">Pop</button>
+                  <button data-variant="secondary" data-size="sm" class="ui-btn stash-btn" data-action="apply" title="Apply">Apply</button>
+                  <button data-variant="danger" data-size="sm" class="ui-btn stash-btn" data-action="drop" title="Drop">×</button>
                 </span>
               </div>
             `,

@@ -1,19 +1,24 @@
+// Stylesheet order lives in styles/index.css; xterm.css stays last so its
+// base rules are what terminal.css was written against.
+import "./styles/index.css";
 import "@xterm/xterm/css/xterm.css";
 import { appState } from "./state";
 import * as ipc from "./ipc";
 import { toast, reportError } from "./components/toast";
 import { showConfirm } from "./components/confirm";
 import { renderActivityBar } from "./components/activity-bar";
-import { initSidebar } from "./components/sidebar";
-import { initTerminalPanel, openTerminalSearch } from "./components/terminal-panel";
+import { initSidebar, toggleSidebar } from "./components/sidebar";
+import { clearActiveTerminal, initTerminalPanel, openTerminalSearch, toggleLiteralNext } from "./components/terminal-panel";
 import { initKanbanPanel } from "./components/kanban-panel";
 import { initApiPanel } from "./components/api-panel";
 import { initMarkdownEditorPanel } from "./components/markdown-editor-panel";
 import { initCodeEditorPanel } from "./components/code-editor-panel";
-import { initWebPreviewPanel, openWebPreviewTab } from "./components/web-preview-panel";
+import { initWebPreviewPanel } from "./components/web-preview-panel";
+import { installContentRestorer, openProvider } from "./components/open-content";
 import { tearDownAndClosePane } from "./components/tab-bar";
 import { initPaneView } from "./components/pane-view";
 import { bindAction, handleGlobalKeydown, loadShortcuts } from "./shortcuts";
+import { settingsStore } from "./settings";
 import { showSettingsDialog } from "./components/dialogs/settings-dialog";
 import { showProvidersDialog } from "./components/dialogs/providers-dialog";
 import { renderStatusBar } from "./components/status-bar";
@@ -22,6 +27,7 @@ import { openCommandPalette } from "./components/command-palette";
 import { showWorkspaceDialog } from "./components/dialogs/workspace-dialog";
 import { openWorkspaceSwitcher } from "./components/workspace-switcher";
 import { showMergeDialog } from "./components/dialogs/merge-dialog";
+import { openBranchPicker } from "./components/dialogs/branch-picker";
 import { openFuzzySearch } from "./components/fuzzy-search";
 import { openProjectSearch } from "./components/project-search";
 import { showGitLog } from "./components/dialogs/gitlog-dialog";
@@ -34,15 +40,26 @@ import { showDashboard } from "./components/dialogs/dashboard-dialog";
 import { showSysinfoDialog } from "./components/dialogs/sysinfo-dialog";
 import { showThemeDialog } from "./components/dialogs/theme-dialog";
 import { showLogsDialog } from "./components/dialogs/logs-dialog";
-import { initMenuBar, toggleSidebar } from "./components/menu-bar";
-import { initChatPanel, initChatResize, toggleChatPanel } from "./components/chat-panel";
+import { showSessionsDialog } from "./components/dialogs/sessions-dialog";
+import { jumpToAttention, startAgentRowsSync } from "./components/agents-panel";
+import { initMenuBar } from "./components/menu-bar";
+import { addContextToChat, initChatPanel, initChatResize, toggleChatPanel } from "./components/chat-panel";
+import { initUiZoom, resetZoom, zoomIn, zoomOut } from "./ui-zoom";
+import { initDensity } from "./density";
 import { initTooltips } from "./components/tooltip";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { themeEngine } from "./theme";
 
 async function init() {
+  // The settings document backs every persisted UI preference (sidebar
+  // width, shortcuts, pane layouts, …); load it once before anything reads.
+  await settingsStore.load();
   // Load theme before rendering to avoid flash
   await themeEngine.loadFromStorage();
+  // Persisted UI zoom (rem scale + terminal font) — before anything renders.
+  initUiZoom();
+  // Persisted density (`data-density` on <html>; Settings ▸ Appearance).
+  initDensity();
 
   initTooltips();
   initMenuBar(document.getElementById("menu-bar")!);
@@ -61,6 +78,11 @@ async function init() {
   await initChatPanel(document.getElementById("chat-panel")!);
   initChatResize();
 
+  appState.setSessionsAvailable(await ipc.sessionsAvailable().catch(() => false));
+
+  // Editors / previews / boards come back from the layout snapshot; the
+  // restorer must be in place before the first hydration.
+  installContentRestorer();
   try {
     await appState.loadPaneTrees();
     const workspaces = await ipc.listWorkspaces();
@@ -72,6 +94,16 @@ async function init() {
   } catch (err) {
     reportError("Failed to load workspaces", err);
   }
+
+  // Say what the session daemon brought back, and badge the workspaces the
+  // user hasn't looked at yet.
+  ipc.restoreSummary().then((rs) => {
+    if (rs.sessions === 0) return;
+    const n = rs.sessions;
+    const m = rs.workspaces.length;
+    toast(`Restored ${n} session${n === 1 ? "" : "s"} in ${m} workspace${m === 1 ? "" : "s"}`, "info");
+    appState.markRestored(rs.workspaces);
+  }).catch(() => {});
 
   // Notify LSP backend when workspace focus changes
   let lastFocusedWorkspace = -1;
@@ -106,33 +138,46 @@ async function init() {
   ipc.onPtyAgentEvent((event) => {
     appState.applyAgentEvent(event);
   });
+  // The backend acknowledged a tab's agent news (the user is looking at it).
+  ipc.onPtyAgentAck((event) => {
+    appState.applyAgentAck(event.tab_id);
+  });
+  // Every agent signal (Agents panel, rollups, status bar, badge, Alt+A)
+  // reads `appState.agentRows`; keep it in sync from here on.
+  startAgentRowsSync();
 
   // Provider-tab idle notifications (and any other backend "needs attention").
   ipc.onPtyAttention((event) => {
     appState.markWorkspaceAttention(event.workspace_idx);
   });
 
-  // Confirm quit when PTYs are active
+  // Confirm quit when processes are alive. The backend knows which tabs the
+  // daemon keeps and which die with the window; ask it (fast: no I/O) and
+  // word the dialog accordingly.
   let closeConfirmPending = false;
+  let quitApproved = false;
   const win = getCurrentWindow();
   try {
     await win.onCloseRequested((event) => {
-      let activeCount = 0;
-      for (const ws of appState.workspaces) {
-        for (const tab of ws.tabs) {
-          if (tab.alive) activeCount++;
+      if (quitApproved || closeConfirmPending) return;
+      // Cheap local pre-check: if nothing is alive at all, just close.
+      const anyAlive = appState.workspaces.some((ws) => ws.tabs.some((t) => t.alive));
+      if (!anyAlive) return;
+      event.preventDefault();
+      closeConfirmPending = true;
+      ipc.quitSummary().catch(() => ({ persistent: 0, local: 0 })).then((q) => {
+        if (q.persistent === 0 && q.local === 0) {
+          quitApproved = true;
+          win.destroy();
+          return;
         }
-      }
-      if (activeCount > 0 && !closeConfirmPending) {
-        event.preventDefault();
-        closeConfirmPending = true;
-        showCloseConfirm(activeCount, () => {
+        showCloseConfirm(q, () => {
+          quitApproved = true;
           win.destroy();
         }, () => {
           closeConfirmPending = false;
         });
-      }
-      // activeCount === 0: don't preventDefault, window closes normally
+      });
     });
   } catch (err) {
     console.error("Failed to register close handler:", err);
@@ -142,28 +187,40 @@ async function init() {
   bindAction("command-palette", () => openCommandPalette());
   bindAction("new-workspace", () => showWorkspaceDialog({ mode: "create" }));
   bindAction("merge-rebase", () => showMergeDialog());
+  bindAction("switch-branch", () => openBranchPicker());
   bindAction("workspace-switcher", () => openWorkspaceSwitcher());
   bindAction("fuzzy-search", () => openFuzzySearch());
   bindAction("project-search", () => openProjectSearch());
   bindAction("terminal-search", () => openTerminalSearch());
+  bindAction("literal-next", toggleLiteralNext);
+  bindAction("terminal-clear", clearActiveTerminal);
   bindAction("git-log", () => showGitLog());
   bindAction("dashboard", () => showDashboard());
   bindAction("git-stash", () => showStashDialog());
   bindAction("code-review", () => showCodeReview());
   bindAction("agent-manager", () => showAgentManager());
   bindAction("dispatch-agent", () => showDispatchDialog());
-  bindAction("kanban", () => appState.setActiveView("kanban"));
-  bindAction("web-preview", () => openWebPreviewTab());
+  bindAction("jump-attention", () => jumpToAttention());
+  bindAction("kanban", () => void openProvider("Kanban"));
+  bindAction("web-preview", () => void openProvider("WebPreview"));
   bindAction("theme", () => showThemeDialog());
   bindAction("settings", () => showSettingsDialog());
   bindAction("manage-providers", () => showProvidersDialog());
   bindAction("logs", () => showLogsDialog());
+  bindAction("sessions", () => showSessionsDialog());
   bindAction("system-info", () => showSysinfoDialog());
   bindAction("api-jq-filter", () => document.dispatchEvent(new CustomEvent("toggle-jq")));
   bindAction("undo", () => handleUndo());
   bindAction("toggle-sidebar", () => toggleSidebar());
   bindAction("toggle-chat", () => toggleChatPanel());
+  bindAction("add-chat-context", () => void addContextToChat());
   bindAction("help", () => showHelpDialog());
+  bindAction("zoom-in", zoomIn);
+  bindAction("zoom-out", zoomOut);
+  bindAction("zoom-reset", resetZoom);
+  bindAction("zoom-in-terminal", zoomIn);
+  bindAction("zoom-out-terminal", zoomOut);
+  bindAction("zoom-reset-terminal", resetZoom);
   bindAction("new-tab", () => appState.newBlankTab());
   bindAction("split-right", () => appState.splitActivePane("right"));
   bindAction("split-down", () => appState.splitActivePane("down"));
@@ -172,8 +229,8 @@ async function init() {
     if (id) tearDownAndClosePane(id);
   });
 
-  // Load user shortcut overrides from storage
-  await loadShortcuts();
+  // Apply user shortcut overrides (from the settings store)
+  loadShortcuts();
 
   // Tab switching via custom event from shortcut system
   document.addEventListener("switch-tab", ((e: CustomEvent) => {
@@ -181,6 +238,15 @@ async function init() {
     if (!ws || ws.tabs.length <= 1) return;
     const next = (ws.activeTab + e.detail.direction + ws.tabs.length) % ws.tabs.length;
     appState.setActiveTab(next);
+  }) as EventListener);
+
+  // Alt+1…9 from the shortcut system: jump straight to workspace N.
+  document.addEventListener("switch-workspace", ((e: CustomEvent) => {
+    const idx: number = e.detail.index;
+    if (idx === appState.activeWorkspace || idx >= appState.workspaces.length) return;
+    ipc.switchWorkspace(idx).then((detail) => {
+      appState.setActiveWorkspace(idx, detail);
+    }).catch((err) => reportError("Workspace switch failed", err));
   }) as EventListener);
 
   // Global keyboard shortcuts — capture phase so they fire before xterm.js
@@ -210,22 +276,33 @@ async function handleUndo() {
   }
 }
 
-function showCloseConfirm(activeCount: number, onConfirm: () => void, onCancel: () => void) {
-  const label = activeCount === 1 ? "1 terminal session is" : `${activeCount} terminal sessions are`;
+function showCloseConfirm(
+  q: { persistent: number; local: number },
+  onConfirm: () => void,
+  onCancel: () => void,
+) {
+  const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+  const lines: string[] = [];
+  if (q.persistent > 0) {
+    lines.push(`<p>${plural(q.persistent, "session")} keep${q.persistent === 1 ? "s" : ""} running in the background — the session daemon holds ${q.persistent === 1 ? "it" : "them"} and ${q.persistent === 1 ? "it" : "they"} reattach on the next launch.</p>`);
+  }
+  if (q.local > 0) {
+    lines.push(`<p>${plural(q.local, "terminal session")} run${q.local === 1 ? "s" : ""} in-process and will be <strong>terminated</strong>.</p>`);
+  }
+  const destructive = q.local > 0;
   showConfirm({
-    bodyHtml: `
-      <p>${label} still running.</p>
-      <p class="ws-delete-hint">Close anyway?</p>
-    `,
+    bodyHtml: `${lines.join("")}<p class="ws-delete-hint">${destructive ? "Quit anyway?" : "Quit?"}</p>`,
     actions: [
-      { label: "Close", kind: "danger", isDefault: true, onSelect: () => onConfirm() },
+      { label: "Quit", kind: destructive ? "danger" : "primary", isDefault: true, onSelect: () => onConfirm() },
       { label: "Cancel", kind: "secondary", onSelect: () => onCancel() },
     ],
     onDismiss: onCancel,
   });
 }
 
-// Disable browser context menu so the app feels native
+// Disable the webview's native context menu so the app feels native. Widgets
+// that want a menu (file tree, tabs, terminal) open `openContextMenu` from
+// their own contextmenu handler, which runs before this document listener.
 document.addEventListener("contextmenu", (e) => e.preventDefault());
 
 document.addEventListener("DOMContentLoaded", init);

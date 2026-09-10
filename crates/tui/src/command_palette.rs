@@ -118,3 +118,25 @@ pub fn create_state(workspaces: &[Workspace], mru: &[String]) -> CommandPaletteS
         selected: 0,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::all_commands;
+
+    /// Every global catalog action is offered by the palette (it derives from
+    /// the shared catalog), except the palette's own opener. Anchors that the
+    /// Sessions overlay is reachable from the palette in the TUI, mirroring the
+    /// desktop's "Sessions (persistent)" entry.
+    #[test]
+    fn palette_lists_sessions_and_hides_its_own_opener() {
+        let cmds = all_commands();
+        assert!(
+            cmds.iter().any(|c| c.id == "sessions"),
+            "the palette must offer the Sessions overlay"
+        );
+        assert!(
+            cmds.iter().all(|c| c.id != "command_palette"),
+            "the palette must not offer opening itself"
+        );
+    }
+}

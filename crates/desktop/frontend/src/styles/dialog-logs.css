@@ -1,0 +1,24 @@
+/* Application logs dialog (dialogs/logs-dialog.ts). */
+
+/* `.log-search ui-input` sized sm in the header */
+.log-search {
+  width: 220px;
+}
+
+.log-row {
+  padding: 2px 14px;
+  display: flex;
+  gap: var(--sp-4);
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.log-row:hover {
+  background: var(--bg-hover);
+}
+
+.log-row-selected,
+.log-row.log-row-selected:hover {
+  background: var(--bg-active);
+}

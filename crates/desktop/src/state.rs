@@ -21,6 +21,18 @@ pub struct DesktopApp {
     pub manager: WorkspaceManager,
     pub sysinfo: Arc<PlMutex<String>>,
     pub provider_manager: piki_core::providers::ProviderManager,
+    /// Handle to the persistent-session daemon, when reachable. `None` means
+    /// sessions are disabled/unavailable — tabs then run in-process (Local).
+    pub session_daemon: Option<piki_core::session::client::Daemon>,
+    /// Effective `[sessions] enabled` this process started with (precedence:
+    /// DB override, then config.toml, then the default — see
+    /// `piki_core::app_settings`). A change made in Settings ▸ General applies
+    /// on the next launch; `session_status` reports both so the status bar
+    /// can say "restart".
+    pub sessions_enabled: bool,
+    /// What startup re-attach restored; read once by the frontend.
+    pub restore_summary: crate::session::RestoreSummary,
+    pub chat_provider_manager: piki_core::chat_providers::ChatProviderManager,
     /// Global AI chat messages (not tied to any workspace).
     pub chat_messages: Vec<piki_core::chat::ChatMessage>,
     /// Global AI chat configuration (provider, model, base URL).
@@ -29,6 +41,14 @@ pub struct DesktopApp {
     pub chat_streaming: bool,
     /// Whether agent mode (tool-use) is enabled for chat.
     pub chat_agent_mode: bool,
+    /// Write-tool approvals the agent loop is waiting on, by tool call id.
+    /// `chat_approve` answers one; dropping a sender (new message, stop,
+    /// clear) is a Deny for the loop (`agent_loop.rs` treats a closed
+    /// channel like Deny, and times out after 300 s on its own).
+    pub chat_pending_approvals: std::collections::HashMap<
+        String,
+        tokio::sync::oneshot::Sender<piki_agent::ApprovalResponse>,
+    >,
 }
 
 #[allow(dead_code)]
@@ -43,6 +63,11 @@ pub struct DesktopWorkspace {
     pub tabs: Vec<DesktopTab>,
     pub active_tab: usize,
     pub watcher: Option<FileWatcher>,
+    /// Memoised `piki_core::search::list_files` result behind `Ctrl+F`.
+    /// Filled off-lock by `commands::search::fuzzy_file_list`; cleared by
+    /// `events::spawn_git_watcher` when the watcher reports anything other
+    /// than an edit to an already-indexed file, and by `switch_workspace`.
+    pub file_index: Option<Arc<piki_core::search::FileIndex>>,
 }
 
 pub struct DesktopTab {

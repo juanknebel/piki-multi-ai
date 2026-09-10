@@ -80,12 +80,36 @@ pub fn launch_plan(
     paths: &DataPaths,
     shell_override: Option<&str>,
 ) -> Result<LaunchPlan, LaunchError> {
+    launch_plan_for_session(
+        provider,
+        prompt,
+        provider_manager,
+        paths,
+        shell_override,
+        None,
+    )
+}
+
+/// [`launch_plan`] for a tab that lives in the session daemon: `session_id`
+/// names the cli-agent FIFO (`cli-agent-<id>.sock`) so the path is stable
+/// for the life of the session — the daemon, not the frontend that spawned
+/// the tab, owns the FIFO, and a `claude` that keeps running after the
+/// frontend exits keeps reporting through the same path.
+pub fn launch_plan_for_session(
+    provider: &AIProvider,
+    prompt: Option<&str>,
+    provider_manager: Option<&ProviderManager>,
+    paths: &DataPaths,
+    shell_override: Option<&str>,
+    session_id: Option<&str>,
+) -> Result<LaunchPlan, LaunchError> {
     let (command, args) = resolve_command(provider, prompt, provider_manager, shell_override)?;
     if command.is_empty() {
         return Err(LaunchError::NotATerminal(provider.clone()));
     }
 
-    let integration = resolve_integration(provider, &command, paths);
+    let sock_name = session_id.map(cli_agent_sock_name);
+    let integration = resolve_integration(provider, &command, paths, sock_name.as_deref());
     Ok(LaunchPlan {
         command,
         args,
@@ -154,6 +178,11 @@ impl Integration {
     }
 }
 
+/// FIFO file name for a session's cli-agent channel.
+pub fn cli_agent_sock_name(session_id: &str) -> String {
+    format!("cli-agent-{session_id}.sock")
+}
+
 /// Shell tabs get OSC 133/7 shell integration. Provider tabs whose binary has
 /// a hook bridge (Claude Code, Antigravity) get the structured cli-agent
 /// channel. Both ride the same OSC parser, so both enable `integration_on`.
@@ -161,10 +190,16 @@ impl Integration {
 /// Everything else runs bare.
 ///
 /// Every failure here degrades rather than aborts: the tab still spawns, it
-/// just loses rich status.
-fn resolve_integration(provider: &AIProvider, command: &str, paths: &DataPaths) -> Integration {
+/// just loses rich status. `sock_name` pins the cli-agent FIFO file name
+/// (session daemon); `None` picks a process-unique one.
+fn resolve_integration(
+    provider: &AIProvider,
+    command: &str,
+    paths: &DataPaths,
+    sock_name: Option<&str>,
+) -> Integration {
     if *provider == AIProvider::Shell {
-        return shell_integration(command, paths);
+        return shell_integration(command, paths, sock_name);
     }
 
     let bridge = match provider {
@@ -174,7 +209,10 @@ fn resolve_integration(provider: &AIProvider, command: &str, paths: &DataPaths) 
 
     match bridge {
         Some(AgentBridge::Claude) => {
-            match cli_agent_install::setup_for_claude(&paths.claude_hooks_dir()) {
+            match cli_agent_install::setup_for_claude_with_sock(
+                &paths.claude_hooks_dir(),
+                sock_name,
+            ) {
                 Ok(setup) => Integration {
                     cli_agent_sock: setup.sock_path.clone(),
                     env: setup.env.into_iter().collect(),
@@ -190,9 +228,10 @@ fn resolve_integration(provider: &AIProvider, command: &str, paths: &DataPaths) 
         Some(AgentBridge::Antigravity) => {
             // No extra_args: agy discovers the bridge from its own plugins
             // root, so the hooks ride the environment alone.
-            match agy_install::setup_for_antigravity(
+            match agy_install::setup_for_antigravity_with_sock(
                 &paths.antigravity_hooks_dir(),
                 &agy_install::plugins_root(),
+                sock_name,
             ) {
                 Ok(setup) => Integration {
                     cli_agent_sock: setup.sock_path.clone(),
@@ -220,7 +259,7 @@ fn resolve_integration(provider: &AIProvider, command: &str, paths: &DataPaths) 
     }
 }
 
-fn shell_integration(command: &str, paths: &DataPaths) -> Integration {
+fn shell_integration(command: &str, paths: &DataPaths, sock_name: Option<&str>) -> Integration {
     let setup = match shell_install::setup_for(command, &paths.shell_integration_dir()) {
         Ok(Some(setup)) => setup,
         Ok(None) => return Integration::bare(),
@@ -236,16 +275,17 @@ fn shell_integration(command: &str, paths: &DataPaths) -> Integration {
     // environment, and the bridge script wraps `claude` with `--settings`.
     // Only the env is merged — the `--settings` extra_args are claude's
     // arguments, not the shell's.
-    let sock = match cli_agent_install::setup_for_claude(&paths.claude_hooks_dir()) {
-        Ok(agent) => {
-            env.extend(agent.env);
-            agent.sock_path
-        }
-        Err(e) => {
-            tracing::debug!(error = %e, "cli-agent channel skipped for shell tab");
-            None
-        }
-    };
+    let sock =
+        match cli_agent_install::setup_for_claude_with_sock(&paths.claude_hooks_dir(), sock_name) {
+            Ok(agent) => {
+                env.extend(agent.env);
+                agent.sock_path
+            }
+            Err(e) => {
+                tracing::debug!(error = %e, "cli-agent channel skipped for shell tab");
+                None
+            }
+        };
 
     Integration {
         env,
@@ -348,6 +388,31 @@ mod tests {
         for blank in ["", "   "] {
             let plan = launch_plan(&AIProvider::Shell, None, None, &paths(), Some(blank)).unwrap();
             assert_eq!(plan.command, AIProvider::Shell.resolved_command());
+        }
+    }
+
+    /// The session daemon names the FIFO after the session so it survives
+    /// the frontend that spawned the tab.
+    #[test]
+    fn session_id_pins_the_cli_agent_sock_name() {
+        assert_eq!(cli_agent_sock_name("abc-123"), "cli-agent-abc-123.sock");
+        // Shell tabs only get a FIFO when `jq` is installed (hook setup);
+        // either way the plan must not fail, and when present the path is
+        // the session-derived one.
+        let plan = launch_plan_for_session(
+            &AIProvider::Shell,
+            None,
+            None,
+            &paths(),
+            None,
+            Some("abc-123"),
+        )
+        .unwrap();
+        if let Some(sock) = plan.cli_agent_sock {
+            assert_eq!(
+                sock.file_name().unwrap().to_str().unwrap(),
+                "cli-agent-abc-123.sock"
+            );
         }
     }
 

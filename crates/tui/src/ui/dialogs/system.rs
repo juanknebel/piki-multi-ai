@@ -238,11 +238,26 @@ pub(crate) fn render_confirm_close_tab_dialog(frame: &mut Frame, area: Rect, app
 
 pub(crate) fn render_confirm_quit_dialog(frame: &mut Frame, area: Rect, app: &App) {
     let theme = &app.theme.dialog;
+    // Count persistent (daemon-backed) tabs — those keep running after quit.
+    let persistent = app
+        .workspaces
+        .iter()
+        .flat_map(|w| w.tabs.iter())
+        .filter(|t| t.session_id.is_some())
+        .count();
+    let message = if persistent > 0 {
+        format!(
+            "Quit? {persistent} session(s) keep running in the background \
+             (press k to quit and kill them all)."
+        )
+    } else {
+        "Are you sure you want to quit?".to_string()
+    };
     super::render_yn_dialog(
         frame,
         area,
         "Quit",
-        "Are you sure you want to quit?",
+        &message,
         theme.delete_border,
         theme.delete_cancel,
     );

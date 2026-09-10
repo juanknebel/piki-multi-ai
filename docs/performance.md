@@ -137,13 +137,19 @@ permanent fork maintenance. The emulator is load-bearing for rendering,
 scrollback, selection, terminal search, passive-detection scrapes and
 snapshot tests; all paths are invasive.
 
-### 4. Headless client/server architecture (rewrite-scale; a feature, not perf)
+### 4. Headless client/server architecture — IMPLEMENTED (a feature, not perf)
 
 In herdr a headless server owns all PTYs and VT state; the attached TUI
 client is a thin dumb terminal receiving pre-diffed frames, and sessions
-survive detach (tmux-style). This is what makes their retained-frame path
-natural. For piki it would be a structural rewrite whose real value is the
-detach/attach feature — pursue it only if that feature is wanted.
+survive detach (tmux-style). We wanted the detach/attach feature, so this is
+now **shipped** — not for perf, but so PTY tabs survive quitting/crashing the
+app and re-attach on the next launch. Unlike herdr's pre-diffed frames, our
+daemon fans out **raw PTY bytes** (+ a restore buffer generated from a
+daemon-side `vt100` parser) and each client keeps its own emulator, so the
+render/scrollback/selection paths above were untouched. See
+`docs/persistent-sessions.md` and `crates/core/src/session/`. The daemon is
+opt-out via `[sessions] enabled = false`; with it off, tabs run in-process
+exactly as this document's other sections describe.
 
 ### 5. Fully deadline-based loop, no tick (small effort, marginal gain)
 
@@ -169,3 +175,92 @@ ever wanted — dedup by `source_repo` would be the way.
   nothing to fix.
 - **PTY read batching**: both batch reads before locking the parser (piki:
   16KB reads, 64KB batches) — already fine.
+
+## Desktop (Tauri)
+
+The desktop app has no event loop of its own — xterm.js is the emulator and
+the webview renders — so its hot paths are the IPC bridge and the DOM work
+around panes. Phase 16 of the desktop roadmap (2026-08-25) fixed the three
+that showed up in the audit; the invariants below are enforced in code
+(`crates/desktop/src/pty_output.rs` tests, `frontend/src/mount-policy.test.ts`,
+`frontend/src/pty-frame.test.ts`) and documented in `crates/desktop/CLAUDE.md`.
+
+### Invariants
+
+- **PTY output is coalesced adaptively before it crosses the IPC.** Each PTY
+  reader pushes chunks to a per-tab `OutputBatcher`; an emitter thread ships
+  batches whose *rate* — not size — is what matters, because Tauri delivers
+  every channel message via a `webview.eval` on the GTK main thread, at a
+  cost of several ms per message whatever its size. The first chunk after a
+  quiet gap ships within `BATCH_LEAD_WINDOW` (2 ms — keystroke echo);
+  sustained output coalesces to at most one message per `BATCH_WINDOW`
+  (33 ms, ~30 fps — the same steady-state rate the TUI caps renders at) or
+  `BATCH_MAX_BYTES` (64 KB), whichever comes first. A batch never exceeds
+  the cap unless a single `read()` did, bytes stay in order and `pty-exit`
+  is emitted by the same thread *after* the last batch. Same philosophy as
+  the TUI's `PtyOutputSignal`: readers never talk to the UI per read.
+  History: the window was a flat 8 ms until 2026-09-09, which let one
+  streaming agent TUI drive ~120 evals/s and pin the GTK main thread at
+  ~70% of a core (diagnosis on card `TAURI-UI-1788921176615`).
+- **Bytes travel raw.** The batches go over a Tauri `Channel<Vec<u8>>`
+  (`InvokeResponseBody::Raw`; frames ≥ 1 KB ride the binary fetch path)
+  framed as `len(tab_id) · tab_id · bytes`. The base64 JSON `pty-output`
+  event is only the fallback while no channel is registered. Structured
+  events (`pty-shell-event`, `pty-agent-event`) stay JSON events — they are
+  tiny and rare.
+- **Hidden terminals do not parse.** Output for a terminal whose pane is
+  not on screen is queued (`HiddenOutputBuffer`, 2 MB cap after which it is
+  fed to xterm anyway — never dropped) and replayed on the next mount;
+  `fit`/`resizePty` never run for a hidden instance.
+- **A pane click renders nothing.** `setActivePane` emits
+  `active-pane-changed` (highlight toggle + focus) and `active-tab-changed`
+  (tab strip refresh). Only `pane-tree-changed` / `active-workspace-changed`
+  run `render()`, and `render()` reconciles the tree against the DOM by
+  pane id instead of rebuilding it, so a split or close touches only the
+  changed nodes. `resyncPty` (daemon restore) fires once per content, on its
+  first mount; focus lands only on the active pane's content.
+- **One PTY resize per frame.** The `ResizeObserver` refits xterm locally on
+  every frame of a divider drag, but the `resizePty` IPC is skipped when the
+  grid is unchanged and otherwise coalesced to one call per instance per
+  animation frame; the divider's mouseup flushes the exact final size.
+- **Status churn patches, never rebuilds.** Agent events and ticking OSC
+  titles arrive several times a second while an agent streams. A full
+  `innerHTML` rebuild that often flickers and destroys the element a click
+  (or a double-click's second half) is mid-flight on, so the event never
+  lands. Hence: the tab strip is patched in place on status events
+  (`patchWorkspaceTabBar` — label text, agent dot, dead mark; full render
+  only when the tab set changed), `setAgentRows` skips its
+  `agent-rows-changed` emit when the rows are unchanged modulo
+  `elapsed_secs` (the elapsed labels tick in place), pane titles skip
+  no-op `innerHTML` writes, and `setActiveWsTab` no-ops (refocus only)
+  when the tab is already active.
+
+### Reproducible benchmark
+
+Run every step in an isolated instance:
+`target/release/piki-desktop --data-dir /tmp/piki-bench` (build with
+`just frontend && cargo build --release -p piki-desktop`). The debug counters
+need a dev build (`cargo tauri dev`, `import.meta.env.DEV`): open the
+devtools console and read `__pikiPerf.counters` / call `__pikiPerf.reset()`.
+
+| # | Scenario | Steps | Metric |
+|---|----------|-------|--------|
+| 1 | `cat` 50 MB | `head -c 52428800 /dev/urandom \| base64 > /tmp/big.txt` (≈68 MB of printable text; use `head -c 52428800 /tmp/big.txt` for exactly 50 MB), then in a shell tab: `time cat /tmp/big.txt` | wall time reported by `time` (the shell prompt returns only once the PTY drained) + `pty.batch` / `pty.bytes` counters (IPC messages per byte) + does the UI still answer a click on another pane during the stream |
+| 2 | Click between 4 panes | one tab, split right, split down twice → 4 shell panes; `__pikiPerf.reset()`; click each pane in turn, 10 rounds | `pane.render`, `terminal.mount`, `terminal.resync` after 40 clicks |
+| 3 | Drag a divider | same 4-pane tab; `__pikiPerf.reset()`; drag the vertical divider left/right for ~3 s | `terminal.resizePty`, `pane.render` |
+| — | Coalescer micro-bench | `cargo test --release -p piki-desktop bench_ -- --ignored --nocapture` | batches per 3200 reads of 16 KB (50 MB) |
+| — | Decode micro-bench | `cd crates/desktop/frontend && PIKI_BENCH=1 npx vitest run src/pty-frame.test.ts --reporter=verbose` | ms to decode 8 MB per path |
+
+### Numbers (2026-08-25, Linux, release build where noted)
+
+| Scenario | Before | After |
+|----------|--------|-------|
+| Coalescer, 50 MB as 16 KB reads | 3200 IPC messages (one per read, by construction) | **800 batches** (0.25 per read, mean 64 KB) in 74 ms of batching overhead — measured, `bench_coalescer_50mb` |
+| Decode 8 MB in the webview thread | 762.7 ms (`Uint8Array.from(atob(), cb)`, per-byte callback) | **37.6 ms** with the indexed base64 loop (fallback path); **0.1 ms** on the raw channel (a subarray view, no decode) — measured under vitest/node, `pty-frame.test.ts` |
+| IPC messages per 50 MB `cat` | ≈3200+ JSON events, each carrying 4/3× the bytes as base64 and parsed as JSON | ≈800 binary frames, no base64, no JSON parse (derived from the two rows above) |
+| `cat` 50 MB wall time to quiescence | not measured — needs an interactive session (no headless driver for the webview on this machine) | not measured — same; the coalescer and decode rows bound the IPC-side cost |
+| 40 clicks between 4 panes | 40 full renders, 160 `mountTab`, 160 `resyncPty` (every click rebuilt the tree and remounted every pane — reasoning over the old `render()` + `mountTerminalInto`) | **0 renders, 0 mounts, 0 resyncs** by construction (`pane.render` fires only on `pane-tree-changed`; `shouldResync` is false after the first mount — `mount-policy.test.ts`); not counted live — needs an interactive session |
+| 3 s divider drag | one `resizePty` per pane per `ResizeObserver` callback (≈60/s × 2 panes) | ≤ 1 per pane per frame and only when the grid changed, + one exact flush on mouseup; not counted live — needs an interactive session |
+
+Rows marked "not measured" need someone in front of the GUI: run the steps
+above in a dev build and paste the counters here.

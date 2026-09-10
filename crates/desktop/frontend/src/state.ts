@@ -7,8 +7,13 @@ import type {
   WorkspaceStatus,
   CliAgentStatus,
   PtyAgentEvent,
+  AgentRow,
 } from "./types";
+import { isFrontendOnlyProvider } from "./types";
+import { agentEventIsNoop, agentRowsEquivalent } from "./agent-attention";
 import * as ipc from "./ipc";
+import { settingsStore } from "./settings";
+import { mruBump } from "./mru";
 import {
   type PaneNode,
   type PaneId,
@@ -26,6 +31,16 @@ import {
   reconcileWithContents,
   treeContentIds,
 } from "./pane-tree";
+import {
+  type SavedContent,
+  type SavedWsLayout,
+  isFrontendOnlyKind,
+  isRespawnKind,
+  missingSavedContents,
+  parseSavedLayouts,
+  remapContentIds,
+  snapshotContents,
+} from "./layout-snapshot";
 
 export type SidebarView = "explorer" | "files" | "git" | "agents" | "kanban" | "api" | "web-preview";
 // Note: "explorer"/"files"/"git" are real sidebar views; "agents" opens the
@@ -38,6 +53,8 @@ export interface UndoEntry {
 
 const MAX_UNDO = 20;
 const WS_TABS_SETTINGS_KEY = "wsTabsV2";
+/** Workspace paths, most recently visited first — the switcher's ranking. */
+export const WORKSPACE_MRU_KEY = "workspaceMru";
 const LAYOUT_SAVE_DEBOUNCE_MS = 200;
 
 export type StateEvent =
@@ -51,7 +68,8 @@ export type StateEvent =
   | "pane-tree-changed"
   | "active-pane-changed"
   | "tab-shell-state-changed"
-  | "workspace-attention-changed";
+  | "workspace-attention-changed"
+  | "agent-rows-changed";
 
 /** A top-level workspace tab. Each one owns its own pane tree; every pane
  *  (leaf) holds at most one content item from `WorkspaceState.tabs`. */
@@ -80,6 +98,9 @@ interface WorkspaceState {
   /** True when at least one tab in this workspace has fired a `pty-attention`
    *  event the user hasn't acknowledged. Cleared on `setActiveWorkspace`. */
   needsAttention: boolean;
+  /** Startup re-attach put persisted sessions here and the user hasn't
+   *  looked yet. Cleared on `setActiveWorkspace`. */
+  restoredUnvisited: boolean;
 }
 
 /** Per-tab state derived from `pty-shell-event`s / `pty-agent-event`s.
@@ -92,18 +113,32 @@ export interface TabShellState {
   /** Structured Claude Code agent status (Claude tabs only). `undefined`
    *  until the first cli-agent event arrives. */
   agentStatus?: CliAgentStatus;
+  /** Unseen agent news (permission / idle / done the user hasn't looked
+   *  at). Set by `pty-agent-event`, cleared by `pty-agent-ack`. */
+  attention?: boolean;
   /** Last human-relevant agent text: permission preview, or the agent's
    *  final response preview on `done`. */
   agentSummary?: string;
+  /** Window title the program set (OSC 0/2, xterm `onTitleChange`) — the
+   *  tab-label fallback under a user `custom_title` (`getTabLabel`). */
+  title?: string;
 }
 
-interface SavedWsTab {
-  tree: unknown;
-  activePaneId: string;
-}
-interface SavedWsLayout {
-  tabs: SavedWsTab[];
-  activeWsTab: number;
+/** How non-PTY contents cross a restart (installed by
+ *  `components/open-content.ts`; the store itself stays component-free).
+ *  `describe` turns a live content into its snapshot descriptor (null = not
+ *  restorable); `restoreFrontend` re-registers an editor / web preview
+ *  synchronously under the SAME id; `respawn` re-creates a Kanban / API tab
+ *  backend-side and resolves to its NEW id; `verify` says whether a restored
+ *  frontend content is still valid (the file still exists) — false blanks
+ *  the pane instead of opening an editor on nothing. */
+export interface ContentRestorer {
+  describe(tab: TabInfo): SavedContent | null;
+  restoreFrontend(saved: SavedContent, workspaceIdx: number): TabInfo | null;
+  respawn(saved: SavedContent, workspaceIdx: number): Promise<string>;
+  verify(saved: SavedContent, workspaceIdx: number): Promise<boolean>;
+  /** Told about a content the snapshot could not bring back. */
+  onDropped(saved: SavedContent, workspaceIdx: number, reason: unknown): void;
 }
 
 function genWsTabId(): string {
@@ -129,6 +164,11 @@ class AppState extends EventTarget {
   private _layoutLoaded = false;
   private _saveTimer: ReturnType<typeof setTimeout> | null = null;
   private _tabShellStates = new Map<string, TabShellState>();
+  private _restorer: ContentRestorer | null = null;
+
+  setContentRestorer(r: ContentRestorer) {
+    this._restorer = r;
+  }
 
   get workspaces(): readonly WorkspaceState[] {
     return this._workspaces;
@@ -187,6 +227,7 @@ class AppState extends EventTarget {
       wsTabs: [],
       activeWsTab: 0,
       needsAttention: false,
+      restoredUnvisited: false,
     };
   }
 
@@ -218,13 +259,30 @@ class AppState extends EventTarget {
       ws.changedFiles = detail.changed_files;
       ws.aheadBehind = detail.ahead_behind;
       ws.branch = detail.branch;
-      ws.tabs = detail.tabs;
-      this._hydrateLayout(ws, detail.active_tab);
+      // A pending layout save must land before the trees are rebuilt from it.
+      if (this._saveTimer) {
+        clearTimeout(this._saveTimer);
+        this._saveTimer = null;
+        void this._flushSave();
+      }
+      // The backend list replaces ours; the frontend-only contents it never
+      // had (editors, previews) are kept, with their live panels.
+      const frontendOnly = ws.tabs.filter((t) => isFrontendOnlyProvider(t.provider) && !detail.tabs.some((d) => d.id === t.id));
+      ws.tabs = [...detail.tabs, ...frontendOnly];
+      const preferred = detail.tabs[detail.active_tab]?.id;
+      this._hydrateLayout(ws, preferred ? ws.tabs.findIndex((t) => t.id === preferred) : 0);
     }
     const ws = this._workspaces[index];
-    if (ws?.needsAttention) {
+    if (ws?.needsAttention || ws?.restoredUnvisited) {
       ws.needsAttention = false;
+      ws.restoredUnvisited = false;
       this.emit("workspace-attention-changed");
+    }
+    // Every switch path lands here, so this is where the switcher's
+    // most-recently-used order is kept (persisted with the settings).
+    if (ws) {
+      const mru = settingsStore.get<string[]>(WORKSPACE_MRU_KEY) ?? [];
+      settingsStore.patch(WORKSPACE_MRU_KEY, mruBump(mru, String(ws.info.path)));
     }
     this.emit("active-workspace-changed");
     this.emit("files-changed");
@@ -372,13 +430,49 @@ class AppState extends EventTarget {
     this.emit("pane-tree-changed");
     this.emit("active-pane-changed");
     this._scheduleSave();
-    ipc.setActiveTab(this._activeWorkspace, tabIdx).catch(() => {});
+    // The backend only knows its own tabs; an editor / preview has no index there.
+    const backendIdx = content ? this.backendTabIndex(this._activeWorkspace, content.id) : -1;
+    if (backendIdx >= 0) ipc.setActiveTab(this._activeWorkspace, backendIdx).catch(() => {});
   }
 
-  /** Switch the active top-level tab by index. */
+  /** Focus the content the backend calls `backendIdx` in `workspaceIdx`
+   *  (agent rows, session jumps) — must be the active workspace. */
+  setActiveBackendTab(workspaceIdx: number, backendIdx: number) {
+    const idx = this.tabIndexForBackend(workspaceIdx, backendIdx);
+    if (idx >= 0) this.setActiveTab(idx);
+  }
+
+  /** Index of `tabId` in the BACKEND tab list of `workspaceIdx` — `ws.tabs`
+   *  minus the frontend-only contents (editors, web preview), which the
+   *  backend never sees. Every index-based IPC (`close_tab`, `detach_tab`,
+   *  `set_active_tab`) must use this, never the `ws.tabs` index. -1 when
+   *  the content is frontend-only or unknown. */
+  backendTabIndex(workspaceIdx: number, tabId: string): number {
+    const ws = this._workspaces[workspaceIdx];
+    if (!ws) return -1;
+    return ws.tabs.filter((t) => !isFrontendOnlyProvider(t.provider)).findIndex((t) => t.id === tabId);
+  }
+
+  /** Inverse of `backendTabIndex`: the `ws.tabs` index for a backend index. */
+  tabIndexForBackend(workspaceIdx: number, backendIdx: number): number {
+    const ws = this._workspaces[workspaceIdx];
+    if (!ws) return -1;
+    const backend = ws.tabs.filter((t) => !isFrontendOnlyProvider(t.provider));
+    const t = backend[backendIdx];
+    return t ? ws.tabs.findIndex((x) => x.id === t.id) : -1;
+  }
+
+  /** Switch the active top-level tab by index. Already active: only refocus
+   *  the pane — re-emitting the tab events would rebuild the tab strip
+   *  mid-gesture, and a double-click's first click must not destroy the
+   *  element the dblclick lands on. */
   setActiveWsTab(wsTabIdx: number) {
     const ws = this.activeWs;
     if (!ws || wsTabIdx < 0 || wsTabIdx >= ws.wsTabs.length) return;
+    if (ws.activeWsTab === wsTabIdx) {
+      this.emit("active-pane-changed");
+      return;
+    }
     ws.activeWsTab = wsTabIdx;
     this._syncActiveContent(ws);
     this.emit("active-tab-changed");
@@ -435,6 +529,38 @@ class AppState extends EventTarget {
     return ids;
   }
 
+  /** Re-home a whole top-level tab (pane tree + contents) into another
+   *  workspace. The backend must already have moved each content
+   *  (`ipc.moveTab`, which appends to the target's list — mirrored here).
+   *  The layout snapshot is flushed synchronously so a switch to the target
+   *  right after hydrates the moved tab with its split structure intact. */
+  moveWsTab(fromIdx: number, wsTabIdx: number, toIdx: number) {
+    const from = this._workspaces[fromIdx];
+    const to = this._workspaces[toIdx];
+    if (!from || !to || fromIdx === toIdx) return;
+    const wt = from.wsTabs[wsTabIdx];
+    if (!wt) return;
+    const ids = treeContentIds(wt.paneTree);
+    const moved = from.tabs.filter((t) => ids.includes(t.id));
+    from.wsTabs.splice(wsTabIdx, 1);
+    from.tabs = from.tabs.filter((t) => !ids.includes(t.id));
+    this._clampActiveWsTab(from);
+    this._syncActiveContent(from);
+    for (const t of moved) {
+      if (!to.tabs.some((x) => x.id === t.id)) to.tabs.push(t);
+    }
+    to.wsTabs.push(wt);
+    to.activeWsTab = to.wsTabs.length - 1;
+    this._syncActiveContent(to);
+    if (fromIdx === this._activeWorkspace || toIdx === this._activeWorkspace) {
+      this.emit("tabs-changed");
+      this.emit("active-tab-changed");
+      this.emit("pane-tree-changed");
+      this.emit("active-pane-changed");
+    }
+    if (this._layoutLoaded) void this._flushSave();
+  }
+
   private _dropEmptyWsTabs(ws: WorkspaceState) {
     ws.wsTabs = ws.wsTabs.filter((wt) => treeContentIds(wt.paneTree).length > 0);
   }
@@ -458,14 +584,112 @@ class AppState extends EventTarget {
     }
   }
 
+  /** The PTY behind `tabId` exited. Flips `alive` and re-renders the chrome
+   *  that shows it (tab chip, pane head Restart button, status bar) — the
+   *  pane tree itself is unchanged, so `pane-tree-changed` only fires for
+   *  the active workspace, where the chips are on screen. */
   markTabDead(tabId: string) {
-    for (const ws of this._workspaces) {
-      const tab = ws.tabs.find((t) => t.id === tabId);
-      if (tab) {
-        tab.alive = false;
-        break;
+    for (let i = 0; i < this._workspaces.length; i++) {
+      const tab = this._workspaces[i].tabs.find((t) => t.id === tabId);
+      if (!tab) continue;
+      if (!tab.alive) return;
+      tab.alive = false;
+      if (i === this._activeWorkspace) {
+        this.emit("tabs-changed");
+        this.emit("pane-tree-changed");
+      }
+      return;
+    }
+  }
+
+  /** Swap the content of `paneId` in the active workspace tab: `oldContentId`
+   *  leaves `tabs` (its backend tab must already be closed) and `tab` takes
+   *  its pane — or the pane goes blank when `tab` is null. Used by Restart. */
+  replacePaneContent(paneId: PaneId, oldContentId: string, tab: TabInfo | null) {
+    const ws = this.activeWs;
+    const wt = ws ? this._curWsTab(ws) : undefined;
+    if (!ws || !wt) return;
+    ws.tabs = ws.tabs.filter((t) => t.id !== oldContentId);
+    this._tabShellStates.delete(oldContentId);
+    if (tab) {
+      ws.tabs.push(tab);
+      wt.paneTree = setContentTree(wt.paneTree, paneId, tab.id);
+    } else {
+      wt.paneTree = setContentTree(wt.paneTree, paneId, null);
+    }
+    wt.activePaneId = paneId;
+    this._syncActiveContent(ws);
+    this.emit("tabs-changed");
+    this.emit("active-tab-changed");
+    this.emit("pane-tree-changed");
+    this.emit("active-pane-changed");
+    this._scheduleSave();
+  }
+
+  /** Re-parent `contentId` (anywhere in the active workspace) into the BLANK
+   *  pane `paneId` of the active workspace tab — the "Move here" of the
+   *  singleton chooser. The source pane collapses into its sibling; when it
+   *  was its tab's only pane the whole tab goes (same rule as `removeTab`:
+   *  a tab with nothing left in it is dropped). Returns false when the
+   *  target is not a blank leaf or the content is not in this workspace. */
+  moveContentToPane(contentId: string, paneId: PaneId): boolean {
+    const ws = this.activeWs;
+    const target = ws ? this._curWsTab(ws) : undefined;
+    if (!ws || !target) return false;
+    const targetPane = findPane(target.paneTree, paneId);
+    if (!targetPane || targetPane.kind !== "leaf" || targetPane.contentId !== null) return false;
+    const source = ws.wsTabs.find((wt) => findContentPane(wt.paneTree, contentId));
+    if (!source) return false;
+    const sourceLeaf = findContentPane(source.paneTree, contentId)!;
+    const collapsed = closePaneTree(source.paneTree, sourceLeaf.id);
+    if (collapsed.root === null) {
+      // Only pane of another tab: that tab is now empty → drop it.
+      ws.wsTabs = ws.wsTabs.filter((wt) => wt !== source);
+    } else {
+      source.paneTree = collapsed.root;
+      if (!findPane(source.paneTree, source.activePaneId)) {
+        source.activePaneId = collapsed.promotedPaneId ?? allLeaves(source.paneTree)[0].id;
       }
     }
+    // Re-read the target: collapsing inside the same tab replaced its tree.
+    target.paneTree = setContentTree(target.paneTree, paneId, contentId);
+    target.activePaneId = paneId;
+    ws.activeWsTab = ws.wsTabs.indexOf(target);
+    this._syncActiveContent(ws);
+    this.emit("tabs-changed");
+    this.emit("active-tab-changed");
+    this.emit("pane-tree-changed");
+    this.emit("active-pane-changed");
+    this._scheduleSave();
+    return true;
+  }
+
+  /** A restored content turned out unrestorable (file gone, spawn failed):
+   *  forget it and blank its pane — the chooser takes over, the tab stays. */
+  dropContent(workspaceIdx: number, contentId: string) {
+    const ws = this._workspaces[workspaceIdx];
+    if (!ws) return;
+    ws.tabs = ws.tabs.filter((t) => t.id !== contentId);
+    for (const wt of ws.wsTabs) wt.paneTree = removeContentTree(wt.paneTree, contentId);
+    this._syncActiveContent(ws);
+    if (workspaceIdx === this._activeWorkspace) {
+      this.emit("tabs-changed");
+      this.emit("active-tab-changed");
+      this.emit("pane-tree-changed");
+      this.emit("active-pane-changed");
+    }
+    this._scheduleSave();
+  }
+
+  /** Whether tabs spawn inside the persistent-session daemon — decides if
+   *  "Close, keep running" is offered. Set once at startup from
+   *  `sessions_available`. */
+  private _sessionsAvailable = false;
+  get sessionsAvailable(): boolean {
+    return this._sessionsAvailable;
+  }
+  setSessionsAvailable(v: boolean) {
+    this._sessionsAvailable = v;
   }
 
   setSysinfo(formatted: string) {
@@ -493,14 +717,89 @@ class AppState extends EventTarget {
     this.emit("tab-shell-state-changed");
   }
 
+  /** xterm `onTitleChange` for `tabId`: remember the program's title as the
+   *  label fallback. Never touches `custom_title`; control characters are
+   *  stripped and the text capped so a hostile OSC can't blow up the chip. */
+  applyTerminalTitle(tabId: string, title: string) {
+    const clean = title.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 80);
+    const existing = this._tabShellStates.get(tabId) ?? {};
+    if ((existing.title ?? "") === clean) return;
+    const next: TabShellState = { ...existing };
+    if (clean) next.title = clean;
+    else delete next.title;
+    this._tabShellStates.set(tabId, next);
+    this.emit("tab-shell-state-changed");
+  }
+
   applyAgentEvent(event: PtyAgentEvent) {
     const existing = this._tabShellStates.get(event.tab_id) ?? {};
-    const next: TabShellState = { ...existing, agentStatus: event.status };
+    if (agentEventIsNoop(existing, event)) return;
+    const next: TabShellState = { ...existing, agentStatus: event.status, attention: event.attention };
     // Keep the last meaningful summary; transient events (running) carry
     // none and shouldn't wipe a permission/done message already shown.
     if (event.summary) next.agentSummary = event.summary;
     this._tabShellStates.set(event.tab_id, next);
     this.emit("tab-shell-state-changed");
+  }
+
+  /** The backend cleared a tab's attention marker (the user is looking at
+   *  it) — drop the amber "needs you" for that tab everywhere. */
+  applyAgentAck(tabId: string) {
+    const existing = this._tabShellStates.get(tabId);
+    if (!existing?.attention) return;
+    this._tabShellStates.set(tabId, { ...existing, attention: false });
+    this.emit("tab-shell-state-changed");
+  }
+
+  // ── Agent rows (Agents panel / rollups / Alt+A) ───
+
+  private _agentRows: AgentRow[] = [];
+  private _agentRowsFetchedAt = 0;
+
+  /** Live agent tabs across ALL workspaces, from `list_agent_rows` — the
+   *  one source every agent signal reads (Agents panel, workspace-list
+   *  rollup, status-bar segment, activity-bar badge, `Alt+A`). Refreshed
+   *  by `startAgentRowsSync()` in agents-panel.ts. */
+  get agentRows(): AgentRow[] {
+    return this._agentRows;
+  }
+  /** `Date.now()` of the last refresh — elapsed times tick from it. */
+  get agentRowsFetchedAt(): number {
+    return this._agentRowsFetchedAt;
+  }
+  setAgentRows(rows: AgentRow[]) {
+    const prev = this._agentRows;
+    this._agentRows = rows;
+    this._agentRowsFetchedAt = Date.now();
+    // The rows are the backend's truth about per-tab agent state; seed the
+    // tab bar's per-tab view from them so a tab whose events fired before
+    // this window listened (daemon re-attach) still shows its dot.
+    for (const row of rows) {
+      if (!row.status) continue;
+      const existing = this._tabShellStates.get(row.tab_id) ?? {};
+      if (existing.agentStatus === row.status && (existing.attention ?? false) === row.attention) continue;
+      const next: TabShellState = { ...existing, agentStatus: row.status, attention: row.attention };
+      if (row.summary && !existing.agentSummary) next.agentSummary = row.summary;
+      this._tabShellStates.set(row.tab_id, next);
+    }
+    // A refresh that only advanced `elapsed_secs` is not news: emitting
+    // would rebuild the Agents panel and the sidebar rollups for nothing
+    // (and eat any click in flight). The elapsed labels tick in place from
+    // the updated snapshot regardless.
+    if (!agentRowsEquivalent(prev, rows)) this.emit("agent-rows-changed");
+  }
+
+  /** Flag workspaces that received restored sessions at startup (except the
+   *  one being looked at). */
+  markRestored(indices: number[]) {
+    let changed = false;
+    for (const i of indices) {
+      const ws = this._workspaces[i];
+      if (!ws || i === this._activeWorkspace || ws.restoredUnvisited) continue;
+      ws.restoredUnvisited = true;
+      changed = true;
+    }
+    if (changed) this.emit("workspace-attention-changed");
   }
 
   markWorkspaceAttention(workspaceIdx: number) {
@@ -602,14 +901,8 @@ class AppState extends EventTarget {
   // ── Persistence ────────────────────────────────────
 
   async loadPaneTrees(): Promise<void> {
-    try {
-      const raw = await ipc.getSettings();
-      const all = raw ? JSON.parse(raw) : {};
-      const saved = all && typeof all === "object" ? all[WS_TABS_SETTINGS_KEY] : null;
-      this._savedLayouts = saved && typeof saved === "object" ? saved : {};
-    } catch {
-      this._savedLayouts = {};
-    }
+    await settingsStore.load();
+    this._savedLayouts = parseSavedLayouts(settingsStore.get(WS_TABS_SETTINGS_KEY));
     this._layoutLoaded = true;
     for (const ws of this._workspaces) {
       if (ws.tabs.length === 0 && ws.wsTabs.length === 0) continue;
@@ -620,10 +913,96 @@ class AppState extends EventTarget {
   }
 
   /** Build `ws.wsTabs` from the saved layout, or fall back to one tab per
-   *  content. Orphan contents (not in any saved tab) are appended as tabs. */
+   *  content. Orphan contents (not in any saved tab) are appended as tabs.
+   *  `ws.tabs` arrives as the BACKEND list (PTYs, and in-session Kanban /
+   *  API); the non-PTY contents the snapshot describes are added back here:
+   *  editors / previews synchronously under their old id, Kanban / API via
+   *  an async re-spawn that then remaps the id in the trees. */
   private _hydrateLayout(ws: WorkspaceState, preferredActiveContent: number) {
     const knownIds = new Set(ws.tabs.map((t) => t.id));
+    const wsIdx = this._workspaces.indexOf(ws);
+    const pendingRespawn: SavedContent[] = [];
+    const pendingVerify: SavedContent[] = [];
+    if (this._layoutLoaded && this._restorer) {
+      const entry = this._savedLayouts[String(ws.info.path)];
+      const trees = (entry?.tabs ?? []).map((st) => deserializePaneTree(st?.tree)).filter((t): t is PaneNode => !!t);
+      if (entry) {
+        for (const saved of missingSavedContents(entry, trees, knownIds)) {
+          if (isFrontendOnlyKind(saved.kind)) {
+            const tab = this._restorer.restoreFrontend(saved, wsIdx);
+            if (!tab) continue;
+            ws.tabs.push(tab);
+            knownIds.add(tab.id);
+            pendingVerify.push(saved);
+          } else if (isRespawnKind(saved.kind)) {
+            // Placeholder under the old id so the tree keeps its pane; the
+            // backend tab (new id) replaces it when the spawn resolves.
+            ws.tabs.push({ id: saved.id, provider: saved.kind, alive: true, custom_title: saved.title ?? null });
+            knownIds.add(saved.id);
+            pendingRespawn.push(saved);
+          }
+        }
+      }
+    }
+    this._placeContents(ws, knownIds, preferredActiveContent);
+    if (pendingRespawn.length || pendingVerify.length) {
+      void this._finishRestore(wsIdx, pendingRespawn, pendingVerify);
+    }
+  }
 
+  private async _finishRestore(wsIdx: number, respawn: SavedContent[], verify: SavedContent[]) {
+    const r = this._restorer;
+    if (!r) return;
+    for (const saved of verify) {
+      let ok = false;
+      try {
+        ok = await r.verify(saved, wsIdx);
+      } catch (err) {
+        r.onDropped(saved, wsIdx, err);
+        this.dropContent(wsIdx, saved.id);
+        continue;
+      }
+      if (!ok) {
+        r.onDropped(saved, wsIdx, "file not found");
+        this.dropContent(wsIdx, saved.id);
+      }
+    }
+    for (const saved of respawn) {
+      const ws = this._workspaces[wsIdx];
+      if (!ws || !ws.tabs.some((t) => t.id === saved.id)) continue; // closed meanwhile
+      try {
+        const newId = await r.respawn(saved, wsIdx);
+        this._rebindContentId(wsIdx, saved.id, newId);
+      } catch (err) {
+        r.onDropped(saved, wsIdx, err);
+        this.dropContent(wsIdx, saved.id);
+      }
+    }
+  }
+
+  /** Swap a placeholder id for the id the backend assigned; the placeholder
+   *  content moves to the END of `ws.tabs` (where the backend appended it)
+   *  so `backendTabIndex` stays exact. */
+  private _rebindContentId(wsIdx: number, oldId: string, newId: string) {
+    const ws = this._workspaces[wsIdx];
+    if (!ws) return;
+    const old = ws.tabs.find((t) => t.id === oldId);
+    if (!old) return;
+    ws.tabs = ws.tabs.filter((t) => t.id !== oldId);
+    ws.tabs.push({ ...old, id: newId });
+    const map = new Map([[oldId, newId]]);
+    for (const wt of ws.wsTabs) wt.paneTree = remapContentIds(wt.paneTree, map);
+    this._syncActiveContent(ws);
+    if (wsIdx === this._activeWorkspace) {
+      this.emit("tabs-changed");
+      this.emit("active-tab-changed");
+      this.emit("pane-tree-changed");
+      this.emit("active-pane-changed");
+    }
+    this._scheduleSave();
+  }
+
+  private _placeContents(ws: WorkspaceState, knownIds: Set<string>, preferredActiveContent: number) {
     const fallback = () => {
       ws.wsTabs = ws.tabs.map((t) => makeWsTab(t.id));
       ws.activeWsTab = Math.min(
@@ -676,6 +1055,7 @@ class AppState extends EventTarget {
 
   private async _flushSave(): Promise<void> {
     const snapshot: Record<string, SavedWsLayout> = {};
+    const r = this._restorer;
     for (const ws of this._workspaces) {
       snapshot[String(ws.info.path)] = {
         tabs: ws.wsTabs.map((wt) => ({
@@ -683,17 +1063,11 @@ class AppState extends EventTarget {
           activePaneId: wt.activePaneId,
         })),
         activeWsTab: ws.activeWsTab,
+        contents: r ? snapshotContents(ws.tabs, (t) => r.describe(t)) : (this._savedLayouts[String(ws.info.path)]?.contents ?? []),
       };
     }
     this._savedLayouts = snapshot;
-    try {
-      const raw = await ipc.getSettings();
-      const all = raw ? JSON.parse(raw) : {};
-      all[WS_TABS_SETTINGS_KEY] = snapshot;
-      await ipc.setSettings(JSON.stringify(all));
-    } catch {
-      // Best-effort; failure to persist is non-fatal.
-    }
+    settingsStore.patch(WS_TABS_SETTINGS_KEY, snapshot);
   }
 
   on(event: StateEvent, callback: () => void): () => void {

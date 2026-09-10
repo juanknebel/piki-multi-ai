@@ -6,30 +6,38 @@ import { showMergeDialog } from "./dialogs/merge-dialog";
 import { showGitLog } from "./dialogs/gitlog-dialog";
 import { showStashDialog } from "./dialogs/stash-dialog";
 import { showCodeReview } from "./code-review";
+import { focusCommitBox } from "./source-control";
+import { pullWorkspace, pushWorkspace } from "./git-actions";
+import { openBranchPicker } from "./dialogs/branch-picker";
 import { openFuzzySearch } from "./fuzzy-search";
 import { openWorkspaceSwitcher } from "./workspace-switcher";
-import { openTerminalSearch } from "./terminal-panel";
+import { clearActiveTerminal, openTerminalSearch, toggleLiteralNext } from "./terminal-panel";
 import { openProjectSearch } from "./project-search";
 import { showSettingsDialog } from "./dialogs/settings-dialog";
 import { showProvidersDialog } from "./dialogs/providers-dialog";
 import { openCommandPalette } from "./command-palette";
 import { showAgentManager } from "./dialogs/agent-dialog";
 import { showDispatchDialog } from "./dialogs/dispatch-dialog";
+import { jumpToAttention } from "./agents-panel";
 import { showHelpDialog } from "./dialogs/help-dialog";
-import { closeActiveWsTab, tearDownAndClosePane } from "./tab-bar";
+import { closeActiveWsTab, moveActiveWsTabToWorkspace, tearDownAndClosePane } from "./tab-bar";
+import { getCachedProviderTabs, invalidateProviderCache, preloadProviderTabs } from "./provider-cache";
 import { showDashboard } from "./dialogs/dashboard-dialog";
 import { showSysinfoDialog } from "./dialogs/sysinfo-dialog";
 import { showThemeDialog } from "./dialogs/theme-dialog";
 import { showLogsDialog } from "./dialogs/logs-dialog";
+import { showSessionsDialog } from "./dialogs/sessions-dialog";
 import { showAboutDialog } from "./dialogs/about-dialog";
-import { toggleChatPanel } from "./chat-panel";
+import { addContextToChat, toggleChatPanel } from "./chat-panel";
+import { toggleSidebar } from "./sidebar";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { getProviderLabel, getProviderKey, type AIProvider } from "../types";
+import { getProviderLabel, type AIProvider } from "../types";
 import { getShortcutKey, formatShortcut } from "../shortcuts";
-import { openWebPreviewTab } from "./web-preview-panel";
+import { openProvider } from "./open-content";
 import { revealInFileTree, toggleFileTreeAutoReveal } from "./file-tree";
 import { getCodeEditorFilePath } from "./code-editor-panel";
 import { getMarkdownEditorFilePath } from "./markdown-editor-panel";
+import { resetZoom, zoomIn, zoomOut } from "../ui-zoom";
 
 // ── Types ───────────────────────────────────────
 
@@ -51,36 +59,14 @@ interface MenuDefinition {
 
 const noWs = () => !appState.activeWs;
 
-function spawnTab(provider: AIProvider) {
-  if (appState.focusSingletonTab(provider)) return;
-  const wsIdx = appState.activeWorkspace;
-  ipc.spawnTab(wsIdx, getProviderKey(provider)).then((tabId) => {
-    appState.addTab(wsIdx, { id: tabId, provider, alive: true });
-  }).catch((err) => {
-    toast(`Failed to open ${getProviderLabel(provider)}: ${err}`, "error");
-  });
-}
+const spawnTab = (provider: AIProvider) => void openProvider(provider);
 
 const SEP: MenuItem = { label: "", separator: true };
 
-// Cached provider list from providers.toml (loaded lazily, refreshed on providers dialog open)
-let _cachedProviderTabs: AIProvider[] | null = null;
-
-function getProviderTabs(): AIProvider[] {
-  if (!_cachedProviderTabs) {
-    // Trigger async load; return empty list for first render
-    ipc.listProviders().then((list) => {
-      _cachedProviderTabs = list.map((p): AIProvider => ({ Custom: p.name }));
-    }).catch(() => {});
-    return [];
-  }
-  return _cachedProviderTabs;
-}
-
-/** Call after saving/deleting providers to refresh the cached list */
-export function invalidateProviderCache() {
-  _cachedProviderTabs = null;
-}
+// The provider list (providers.toml) is cached in provider-cache.ts, shared
+// with the empty-workspace / blank-pane state and the palette — warmed at
+// menu init so the first hover of File ▸ New Tab already lists them.
+export { preloadProviderTabs, invalidateProviderCache };
 
 // ── Menu definitions ────────────────────────────
 
@@ -93,10 +79,11 @@ const MENUS: MenuDefinition[] = [
         label: "New Tab",
         disabled: noWs,
         submenu: [
-          ...[...getProviderTabs(), "Shell" as AIProvider, "Api" as AIProvider].map(
+          ...[...getCachedProviderTabs(), "Shell" as AIProvider, "Api" as AIProvider].map(
             (p): MenuItem => ({ label: getProviderLabel(p), action: () => spawnTab(p) }),
           ),
-          { label: "Web Preview", shortcut: getShortcutKey("web-preview"), action: () => openWebPreviewTab() },
+          { label: "Web Preview", shortcut: getShortcutKey("web-preview"), action: () => spawnTab("WebPreview") },
+          { label: "Kanban Board", shortcut: getShortcutKey("kanban"), action: () => spawnTab("Kanban") },
         ],
       },
       SEP,
@@ -112,6 +99,14 @@ const MENUS: MenuDefinition[] = [
           return !ws || ws.wsTabs.length === 0;
         },
         action: () => closeActiveWsTab(),
+      },
+      {
+        label: "Move Tab to Workspace…",
+        disabled: () => {
+          const ws = appState.activeWs;
+          return !ws || ws.wsTabs.length === 0 || appState.workspaces.length < 2;
+        },
+        action: () => moveActiveWsTabToWorkspace(),
       },
       SEP,
       {
@@ -167,6 +162,8 @@ const MENUS: MenuDefinition[] = [
       { label: "Find File", shortcut: getShortcutKey("fuzzy-search"), action: () => openFuzzySearch() },
       { label: "Search in Project", shortcut: getShortcutKey("project-search"), action: () => openProjectSearch() },
       { label: "Search in Terminal", shortcut: getShortcutKey("terminal-search"), action: () => openTerminalSearch() },
+      { label: "Send Next Key to Terminal", shortcut: getShortcutKey("literal-next"), action: () => toggleLiteralNext() },
+      { label: "Clear Terminal", shortcut: getShortcutKey("terminal-clear"), action: () => clearActiveTerminal() },
       { label: "API jq Filter", shortcut: getShortcutKey("api-jq-filter"), action: () => document.dispatchEvent(new CustomEvent("toggle-jq")) },
       SEP,
       { label: "Theme Settings", shortcut: getShortcutKey("theme"), action: () => showThemeDialog() },
@@ -201,11 +198,18 @@ const MENUS: MenuDefinition[] = [
       { label: "Source Control", action: () => appState.setActiveView("git") },
       { label: "Kanban Board", shortcut: getShortcutKey("kanban"), action: () => appState.setActiveView("kanban") },
       SEP,
+      { label: "Toggle Sidebar", shortcut: getShortcutKey("toggle-sidebar"), action: () => toggleSidebar() },
+      SEP,
+      { label: "Zoom In", shortcut: getShortcutKey("zoom-in"), action: () => zoomIn() },
+      { label: "Zoom Out", shortcut: getShortcutKey("zoom-out"), action: () => zoomOut() },
+      { label: "Reset Zoom", shortcut: getShortcutKey("zoom-reset"), action: () => resetZoom() },
+      SEP,
       { label: "Command Palette", shortcut: getShortcutKey("command-palette"), action: () => openCommandPalette() },
       { label: "Workspace Switcher", shortcut: getShortcutKey("workspace-switcher"), action: () => openWorkspaceSwitcher() },
       { label: "Dashboard", shortcut: getShortcutKey("dashboard"), action: () => showDashboard() },
       { label: "System Info", shortcut: getShortcutKey("system-info"), action: () => showSysinfoDialog() },
       { label: "Application Logs", shortcut: getShortcutKey("logs"), action: () => showLogsDialog() },
+      { label: "Sessions", shortcut: getShortcutKey("sessions"), action: () => showSessionsDialog() },
       SEP,
       { label: "Next Tab", shortcut: formatShortcut("Ctrl+Tab"), action: () => cycleTab(1) },
       { label: "Previous Tab", shortcut: formatShortcut("Ctrl+Shift+Tab"), action: () => cycleTab(-1) },
@@ -214,26 +218,10 @@ const MENUS: MenuDefinition[] = [
   {
     label: "Git",
     items: () => [
-      {
-        label: "Commit",
-        disabled: noWs,
-        action: () => {
-          appState.setActiveView("git");
-          setTimeout(() => document.querySelector<HTMLTextAreaElement>(".sc-commit-input")?.focus(), 50);
-        },
-      },
-      {
-        label: "Push",
-        disabled: noWs,
-        action: async () => {
-          try {
-            await ipc.gitPush(appState.activeWorkspace);
-            toast("Pushed successfully", "success");
-          } catch (err) {
-            toast(`Push failed: ${err}`, "error");
-          }
-        },
-      },
+      { label: "Commit", disabled: noWs, action: () => focusCommitBox() },
+      { label: "Amend Last Commit", disabled: noWs, action: () => focusCommitBox({ amend: true }) },
+      { label: "Pull", disabled: noWs, action: () => pullWorkspace() },
+      { label: "Push", disabled: noWs, action: () => pushWorkspace() },
       SEP,
       {
         label: "Stage All",
@@ -268,6 +256,7 @@ const MENUS: MenuDefinition[] = [
         },
       },
       SEP,
+      { label: "Switch Branch…", shortcut: getShortcutKey("switch-branch"), disabled: noWs, action: () => openBranchPicker() },
       { label: "Merge / Rebase", shortcut: getShortcutKey("merge-rebase"), disabled: noWs, action: () => showMergeDialog() },
       { label: "Git Log", shortcut: getShortcutKey("git-log"), disabled: noWs, action: () => showGitLog() },
       { label: "Git Stash", shortcut: getShortcutKey("git-stash"), disabled: noWs, action: () => showStashDialog() },
@@ -276,10 +265,18 @@ const MENUS: MenuDefinition[] = [
     ],
   },
   {
+    label: "Chat",
+    items: () => [
+      { label: "Toggle AI Chat", shortcut: getShortcutKey("toggle-chat"), action: () => toggleChatPanel() },
+      { label: "Add Context to Chat", shortcut: getShortcutKey("add-chat-context"), action: () => void addContextToChat() },
+    ],
+  },
+  {
     label: "Agents",
     items: () => [
       { label: "Manage Agents", shortcut: getShortcutKey("agent-manager"), action: () => showAgentManager() },
       { label: "Dispatch Agent", shortcut: getShortcutKey("dispatch-agent"), disabled: noWs, action: () => showDispatchDialog() },
+      { label: "Jump to Agent Needing Attention", shortcut: getShortcutKey("jump-attention"), action: () => jumpToAttention() },
     ],
   },
   {
@@ -299,11 +296,6 @@ function cycleTab(dir: number) {
   appState.setActiveTab(next);
 }
 
-export function toggleSidebar() {
-  const app = document.getElementById("app")!;
-  app.classList.toggle("sidebar-hidden");
-}
-
 // ── State ───────────────────────────────────────
 
 let openIdx: number | null = null;
@@ -315,6 +307,7 @@ let topButtons: HTMLButtonElement[] = [];
 // ── Init ────────────────────────────────────────
 
 export function initMenuBar(container: HTMLElement) {
+  void preloadProviderTabs();
   // Menu items (left side)
   MENUS.forEach((menu, idx) => {
     const btn = document.createElement("button");
@@ -350,7 +343,7 @@ export function initMenuBar(container: HTMLElement) {
   // Panel toggle (before window controls)
   const panelToggle = document.createElement("button");
   panelToggle.className = "wc-btn panel-toggle-btn";
-  panelToggle.title = "Toggle Sidebar (Ctrl+B)";
+  panelToggle.title = `Toggle Sidebar (${getShortcutKey("toggle-sidebar")})`;
   panelToggle.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
     <rect x="1" y="2" width="14" height="12" rx="1" stroke="currentColor" stroke-width="1.2"/>
     <line x1="5.5" y1="2" x2="5.5" y2="14" stroke="currentColor" stroke-width="1.2"/>
@@ -361,7 +354,7 @@ export function initMenuBar(container: HTMLElement) {
   // Chat panel toggle
   const chatToggle = document.createElement("button");
   chatToggle.className = "wc-btn panel-toggle-btn";
-  chatToggle.title = "Toggle AI Chat (Ctrl+Shift+L)";
+  chatToggle.title = `Toggle AI Chat (${getShortcutKey("toggle-chat")})`;
   chatToggle.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
     <path d="M2 3h12a1 1 0 011 1v7a1 1 0 01-1 1H5l-3 3V4a1 1 0 011-1z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
     <circle cx="5.5" cy="7.5" r="0.8" fill="currentColor"/>

@@ -6,7 +6,7 @@ import * as ipc from "../ipc";
 import { appState } from "../state";
 import { toast } from "./toast";
 import { modCtrl, formatShortcut } from "../shortcuts";
-import { registerCodeFile } from "./code-editor-panel";
+import { openFileInEditor } from "./open-content";
 import { buildCmTheme } from "../cm-theme";
 import { themeEngine } from "../theme";
 
@@ -30,17 +30,17 @@ export async function showFileViewer(workspaceIdx: number, path: string) {
   backdrop.className = "file-viewer-backdrop";
 
   const dialog = document.createElement("div");
-  dialog.className = "file-viewer-dialog";
+  dialog.className = "file-viewer-dialog ui-surface";
 
   dialog.innerHTML = `
-    <div class="file-viewer-header">
-      <span class="file-viewer-title" title="${escapeAttr(path)}">${escapeHtml(fileName)}<span class="file-viewer-path">${escapeHtml(path)}</span></span>
+    <div class="ui-header">
+      <span class="ui-header-title" title="${escapeAttr(path)}">${escapeHtml(fileName)}<span class="file-viewer-path">${escapeHtml(path)}</span></span>
       <div class="file-viewer-actions">
-        <button class="file-viewer-btn file-viewer-open-editor" title="Open in Editor Tab">Open in Editor</button>
-        <button class="file-viewer-btn file-viewer-inline-edit" title="Quick Edit (${formatShortcut("Ctrl+I")})">Quick Edit</button>
-        <button class="file-viewer-btn file-viewer-edit" title="Open in $EDITOR (${formatShortcut("Ctrl+E")})">Edit</button>
-        <button class="file-viewer-btn file-viewer-copy" title="Copy to clipboard">Copy</button>
-        <button class="file-viewer-btn file-viewer-close" title="Close" aria-label="Close">&times;</button>
+        <button data-variant="secondary" data-size="sm" class="ui-btn file-viewer-open-editor" title="Open in Editor Tab">Open in Editor</button>
+        <button data-variant="secondary" data-size="sm" class="ui-btn file-viewer-inline-edit" title="Quick Edit (${formatShortcut("Ctrl+I")})">Quick Edit</button>
+        <button data-variant="secondary" data-size="sm" class="ui-btn file-viewer-edit" title="Open in $EDITOR (${formatShortcut("Ctrl+E")})">Edit</button>
+        <button data-variant="secondary" data-size="sm" class="ui-btn file-viewer-copy" title="Copy to clipboard">Copy</button>
+        <button data-variant="ghost" data-icon class="file-viewer-close ui-btn" title="Close" aria-label="Close">&times;</button>
       </div>
     </div>
     <div class="file-viewer-body"></div>
@@ -84,9 +84,7 @@ export async function showFileViewer(workspaceIdx: number, path: string) {
   dialog.querySelector(".file-viewer-close")!.addEventListener("click", close);
 
   function openInEditorTab() {
-    const tabId = crypto.randomUUID();
-    registerCodeFile(tabId, path, workspaceIdx);
-    appState.addTab(workspaceIdx, { id: tabId, provider: "CodeEditor", alive: true });
+    openFileInEditor(workspaceIdx, path, { forceCode: true });
     close();
   }
 
@@ -120,8 +118,8 @@ export async function showFileViewer(workspaceIdx: number, path: string) {
 
     // Swap action buttons
     actionsDiv.innerHTML = `
-      <button class="file-viewer-btn file-viewer-save">Save</button>
-      <button class="file-viewer-btn file-viewer-cancel">Cancel</button>
+      <button data-variant="primary" data-size="sm" class="file-viewer-save ui-btn">Save</button>
+      <button data-variant="secondary" data-size="sm" class="ui-btn file-viewer-cancel">Cancel</button>
     `;
 
     actionsDiv.querySelector(".file-viewer-save")!.addEventListener("click", async () => {
@@ -169,11 +167,11 @@ export async function showFileViewer(workspaceIdx: number, path: string) {
     });
 
     actionsDiv.innerHTML = `
-      <button class="file-viewer-btn file-viewer-open-editor" title="Open in Editor Tab">Open in Editor</button>
-      <button class="file-viewer-btn file-viewer-inline-edit" title="Quick Edit (${formatShortcut("Ctrl+I")})">Quick Edit</button>
-      <button class="file-viewer-btn file-viewer-edit" title="Open in $EDITOR (${formatShortcut("Ctrl+E")})">Edit</button>
-      <button class="file-viewer-btn file-viewer-copy" title="Copy to clipboard">Copy</button>
-      <button class="file-viewer-btn file-viewer-close" title="Close" aria-label="Close">&times;</button>
+      <button data-variant="secondary" data-size="sm" class="ui-btn file-viewer-open-editor" title="Open in Editor Tab">Open in Editor</button>
+      <button data-variant="secondary" data-size="sm" class="ui-btn file-viewer-inline-edit" title="Quick Edit (${formatShortcut("Ctrl+I")})">Quick Edit</button>
+      <button data-variant="secondary" data-size="sm" class="ui-btn file-viewer-edit" title="Open in $EDITOR (${formatShortcut("Ctrl+E")})">Edit</button>
+      <button data-variant="secondary" data-size="sm" class="ui-btn file-viewer-copy" title="Copy to clipboard">Copy</button>
+      <button data-variant="ghost" data-icon class="file-viewer-close ui-btn" title="Close" aria-label="Close">&times;</button>
     `;
 
     actionsDiv.querySelector(".file-viewer-open-editor")!.addEventListener("click", openInEditorTab);

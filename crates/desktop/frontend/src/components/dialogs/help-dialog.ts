@@ -10,34 +10,40 @@ export function showHelpDialog() {
   backdrop.className = "dialog-backdrop help-backdrop";
 
   const dialog = document.createElement("div");
-  dialog.className = "dialog";
+  dialog.className = "dialog ui-surface";
   dialog.style.maxWidth = "480px";
   dialog.style.maxHeight = "80vh";
 
   let html = `
-    <div class="dialog-header">
-      <span class="dialog-title">Keyboard Shortcuts</span>
-      <button class="dialog-close" title="Close" aria-label="Close">×</button>
+    <div class="ui-header">
+      <span class="ui-header-title">Keyboard Shortcuts</span>
+      <button data-variant="ghost" data-icon class="dialog-close ui-btn" title="Close" aria-label="Close">×</button>
     </div>
     <div class="dialog-body" style="overflow-y:auto">
   `;
 
+  let anyOutsideOnly = false;
   for (const group of helpSections()) {
     html += `<div class="shortcut-group">
       <div class="shortcut-group-title">${group.category}</div>`;
-    for (const [key, desc] of group.items) {
+    for (const { key, label, outsideOnly } of group.items) {
+      anyOutsideOnly ||= outsideOnly;
       html += `
         <div class="shortcut-row">
-          <span class="shortcut-row-label">${desc}</span>
+          <span class="shortcut-row-label">${label}${outsideOnly ? '<span class="shortcut-row-note" title="Fires only when focus is outside a terminal or editor">°</span>' : ""}</span>
           <kbd class="shortcut-row-key">${key}</kbd>
         </div>`;
     }
     html += `</div>`;
   }
 
+  if (anyOutsideOnly) {
+    html += `<p class="shortcut-legend">° Fires only when focus is outside a terminal or editor — the terminal keeps every key it can use.</p>`;
+  }
+
   html += `</div>
     <div class="dialog-footer">
-      <button class="dialog-btn dialog-btn-secondary" id="help-close">Close</button>
+      <button data-variant="secondary" class="ui-btn" id="help-close">Close</button>
     </div>`;
 
   dialog.innerHTML = html;

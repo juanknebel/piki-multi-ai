@@ -1,5 +1,5 @@
 use parking_lot::Mutex;
-use tauri::State;
+use tauri::{AppHandle, State};
 
 use piki_core::workspace::watcher::FileWatcher;
 use piki_core::{WorkspaceInfo, WorkspaceStatus};
@@ -27,6 +27,7 @@ pub async fn default_clone_destination(
 
 #[tauri::command]
 pub async fn switch_workspace(
+    app_handle: AppHandle,
     state: State<'_, Mutex<DesktopApp>>,
     index: usize,
 ) -> Result<WorkspaceDetail, String> {
@@ -37,6 +38,9 @@ pub async fn switch_workspace(
             return Err("Workspace index out of range".to_string());
         }
         app.active_workspace = index;
+        // Re-walk on the next Ctrl+F: cheap, and it covers anything the
+        // watcher could not see while the workspace was in the background.
+        app.workspaces[index].file_index = None;
         let path = app.workspaces[index].info.path.clone();
         // Persist the active workspace so the next startup focuses it.
         if let Some(prefs) = app.storage.ui_prefs.as_ref() {
@@ -58,15 +62,20 @@ pub async fn switch_workspace(
         app.workspaces[index].changed_files = files;
         app.workspaces[index].ahead_behind = ahead_behind;
         // The switch makes this workspace's active tab visible — acknowledge
-        // its agent's "unseen news" marker, mirroring the TUI's event loop.
+        // its agent's "unseen news" marker, mirroring the TUI's event loop,
+        // and tell the frontend once the lock is gone.
         let ws = &app.workspaces[index];
-        if let Some(tab) = ws.tabs.get(ws.active_tab)
-            && let Some(shell) = tab.pty.as_ref().and_then(|p| p.shell())
-            && let Some(agent) = shell.lock().state.cli_agent.as_mut()
-        {
-            agent.acknowledge();
+        let acked = ws
+            .tabs
+            .get(ws.active_tab)
+            .filter(|tab| crate::events::acknowledge_agent_attention(tab))
+            .map(|tab| tab.id.clone());
+        let detail = ws.to_detail();
+        drop(app);
+        if let Some(tab_id) = acked {
+            crate::events::emit_agent_ack(&app_handle, &tab_id);
         }
-        Ok(app.workspaces[index].to_detail())
+        Ok(detail)
     } else {
         Err("Workspace removed during switch".to_string())
     }
@@ -146,6 +155,7 @@ pub async fn create_workspace(
         tabs: Vec::new(),
         active_tab: 0,
         watcher,
+        file_index: None,
     });
 
     // Save to storage — use the new workspace's source_repo as the key
@@ -212,6 +222,7 @@ pub async fn create_github_workspace(
         tabs: Vec::new(),
         active_tab: 0,
         watcher,
+        file_index: None,
     });
 
     let all_infos: Vec<WorkspaceInfo> = app.workspaces.iter().map(|ws| ws.info.clone()).collect();
@@ -235,9 +246,24 @@ pub async fn delete_workspace(
             return Err("Workspace index out of range".to_string());
         }
 
-        let ws = app.workspaces.remove(index);
+        let mut ws = app.workspaces.remove(index);
         if app.active_workspace >= app.workspaces.len() && !app.workspaces.is_empty() {
             app.active_workspace = app.workspaces.len() - 1;
+        }
+
+        // End the workspace's processes explicitly (the confirm dialog says
+        // they will be terminated): its worktree is about to be removed, and
+        // a plain drop would only *detach* daemon sessions, leaving orphans
+        // whose cwd no longer exists.
+        let daemon = app.session_daemon.clone();
+        for tab in ws.tabs.iter_mut() {
+            let was_remote = tab.pty.as_ref().is_some_and(|p| p.is_remote());
+            if let Some(pty) = tab.pty.as_mut() {
+                let _ = pty.kill();
+            }
+            if was_remote && let Some(d) = daemon.as_ref() {
+                crate::session::remove_session(d, &tab.id);
+            }
         }
 
         // Save to storage — use the removed workspace's source_repo as the key

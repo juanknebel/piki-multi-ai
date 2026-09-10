@@ -82,14 +82,36 @@ pub(crate) fn open_about(app: &mut App) -> Option<Action> {
 }
 
 pub(crate) fn open_dashboard(app: &mut App) -> Option<Action> {
-    if !app.workspaces.is_empty() {
-        app.active_dialog = Some(DialogState::Dashboard {
-            selected: app.active_workspace,
-            scroll_offset: 0,
-        });
-        app.mode = AppMode::Dashboard;
-    }
+    let indices = app.dashboard_indices();
+    // Always open: workspaces part may be empty (shows nothing), external
+    // agents section below always renders (either rows or “— No external … —”).
+    let selected = indices
+        .iter()
+        .position(|&idx| idx == app.active_workspace)
+        .unwrap_or(0);
+    app.active_dialog = Some(DialogState::Dashboard {
+        selected,
+        scroll_offset: 0,
+    });
+    app.mode = AppMode::Dashboard;
     None
+}
+
+pub(crate) fn open_sessions(app: &mut App) -> Option<Action> {
+    // Daemon pid is read here, at open time — renders must stay pure.
+    let daemon_pid = std::fs::read_to_string(app.paths.session_pid_file())
+        .ok()
+        .and_then(|s| s.trim().parse::<u32>().ok());
+    app.active_dialog = Some(DialogState::Sessions {
+        loading: app.session_daemon.is_some(),
+        error: None,
+        sessions: Vec::new(),
+        selected: 0,
+        scroll_offset: 0,
+        daemon_pid,
+    });
+    app.mode = AppMode::Sessions;
+    Some(Action::LoadSessions)
 }
 
 pub(crate) fn open_logs(app: &mut App) -> Option<Action> {
@@ -407,26 +429,34 @@ pub(crate) fn open_terminal_search(app: &mut App) -> Option<Action> {
 }
 
 pub(crate) fn open_git_tab(app: &mut App) -> Option<Action> {
-    let Some(ws) = app.workspaces.get_mut(app.active_workspace) else {
-        app.set_toast("No active workspace", crate::app::ToastLevel::Info);
-        return None;
-    };
-    if let Some(idx) = ws
-        .tabs
-        .iter()
-        .position(|t| t.provider == piki_core::AIProvider::Git)
+    // Closed dead-Git-tab's daemon session, to remove after the borrow ends.
+    let mut dead_session_id: Option<String> = None;
     {
-        let alive = ws.tabs[idx]
-            .pty_session
-            .as_ref()
-            .is_some_and(|p| p.peek_alive());
-        if alive {
-            ws.active_tab = idx;
-            ws.tabs[idx].term_scroll = 0;
-            app.active_pane = ActivePane::MainPanel;
+        let Some(ws) = app.workspaces.get_mut(app.active_workspace) else {
+            app.set_toast("No active workspace", crate::app::ToastLevel::Info);
             return None;
+        };
+        if let Some(idx) = ws
+            .tabs
+            .iter()
+            .position(|t| t.provider == piki_core::AIProvider::Git)
+        {
+            let alive = ws.tabs[idx]
+                .pty_session
+                .as_ref()
+                .is_some_and(|p| p.peek_alive());
+            if alive {
+                ws.active_tab = idx;
+                ws.tabs[idx].term_scroll = 0;
+                app.active_pane = ActivePane::MainPanel;
+                return None;
+            }
+            dead_session_id = ws.tabs[idx].session_id.clone();
+            ws.close_tab(idx);
         }
-        ws.close_tab(idx);
+    }
+    if let Some(sid) = dead_session_id {
+        crate::helpers::remove_session(app, &sid);
     }
     app.active_pane = ActivePane::MainPanel;
     Some(Action::SpawnTab(piki_core::AIProvider::Git))

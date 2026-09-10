@@ -1,13 +1,38 @@
 import * as ipc from "../ipc";
+import { settingsStore } from "../settings";
+import { activityBarWidth, clampChatWidth, visibleSidebarWidth } from "../layout-budget";
 import { showConfirm } from "./confirm";
 import { toast } from "./toast";
 import { renderMarkdown } from "./markdown-viewer";
 import { createDropdown, type DropdownHandle } from "./dropdown";
+import { openContextMenu } from "./context-menu";
+import { reportError } from "./toast";
+import { icon, type IconName } from "./icons";
+import { appState } from "../state";
+import { allLeaves } from "../pane-tree";
+import { getTabLabel } from "../types";
+import { activeTerminalInstance } from "./terminal-panel";
+import { getCodeEditorFilePath, getCodeEditorSelection } from "./code-editor-panel";
+import { getMarkdownEditorFilePath } from "./markdown-editor-panel";
+import {
+  RESULT_COLLAPSE_LINES,
+  appendToDraft,
+  contextChoices,
+  diffLinesToText,
+  fenceBlock,
+  formatDurationMs,
+  parseToolMessage,
+  prettyJson,
+  type ContextKind,
+  type ToolCard,
+} from "../chat-context";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 
 interface ChatMsg {
   role: "user" | "assistant" | "tool";
   content: string;
+  /** Structured card data for `role: "tool"` (chat-context.ts). */
+  tool?: ToolCard;
 }
 
 let container: HTMLElement;
@@ -18,16 +43,19 @@ let modelDropdown: DropdownHandle | null = null;
 let modelBarEl: HTMLDivElement;
 let streamingEl: HTMLDivElement | null = null;
 let unlistenToken: UnlistenFn | null = null;
+let unlistenAgent: UnlistenFn | null = null;
 let agentToggleBtn: HTMLButtonElement;
 let messages: ChatMsg[] = [];
 let streaming = false;
 let agentMode = false;
+let modelsRequested = false;
 let currentConfig: ipc.ChatConfig = {
   provider: "ollama",
   server_type: "Ollama",
   model: "",
   base_url: "http://localhost:11434",
   system_prompt: null,
+  web_search: false,
 };
 
 export async function initChatPanel(el: HTMLElement) {
@@ -38,13 +66,13 @@ export async function initChatPanel(el: HTMLElement) {
   header.className = "chat-header";
   header.innerHTML = `
     <span class="chat-header-title">AI Chat</span>
-    <button class="chat-header-btn chat-settings-btn" title="Chat settings">
+    <button data-variant="ghost" data-icon class="chat-header-btn ui-btn chat-settings-btn" title="Chat settings">
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
         <path d="M8 10a2 2 0 100-4 2 2 0 000 4z" stroke="currentColor" stroke-width="1.2"/>
         <path d="M13.5 8c0-.3-.2-.6-.4-.8l1-1.6-.8-1.4-1.8.4c-.4-.3-.8-.6-1.3-.7L9.8 2H8.2l-.4 1.9c-.5.1-.9.4-1.3.7l-1.8-.4-.8 1.4 1 1.6c-.2.2-.4.5-.4.8s.2.6.4.8l-1 1.6.8 1.4 1.8-.4c.4.3.8.6 1.3.7l.4 1.9h1.6l.4-1.9c.5-.1.9-.4 1.3-.7l1.8.4.8-1.4-1-1.6c.2-.2.4-.5.4-.8z" stroke="currentColor" stroke-width="1.2"/>
       </svg>
     </button>
-    <button class="chat-header-btn chat-clear-btn" title="Clear conversation">
+    <button data-variant="ghost" data-icon class="chat-header-btn ui-btn chat-clear-btn" title="Clear conversation">
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
         <path d="M2 4h12M5 4V3a1 1 0 011-1h4a1 1 0 011 1v1m2 0v9a1 1 0 01-1 1H4a1 1 0 01-1-1V4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
       </svg>
@@ -52,7 +80,9 @@ export async function initChatPanel(el: HTMLElement) {
   `;
   // Agent mode toggle button
   agentToggleBtn = document.createElement("button");
-  agentToggleBtn.className = "chat-header-btn chat-agent-btn";
+  agentToggleBtn.className = "chat-header-btn chat-agent-btn ui-btn";
+  agentToggleBtn.dataset.variant = "ghost";
+  agentToggleBtn.dataset.size = "sm";
   agentToggleBtn.title = "Toggle Agent mode (tool-use)";
   agentToggleBtn.textContent = "Agent";
   agentToggleBtn.addEventListener("click", toggleAgentMode);
@@ -80,7 +110,9 @@ export async function initChatPanel(el: HTMLElement) {
   modelBarEl.appendChild(modelDropdown.container);
 
   const refreshBtn = document.createElement("button");
-  refreshBtn.className = "chat-model-refresh";
+  refreshBtn.className = "chat-model-refresh ui-btn";
+  refreshBtn.dataset.variant = "ghost";
+  refreshBtn.dataset.icon = "";
   refreshBtn.title = "Refresh models";
   refreshBtn.textContent = "\u21BB";
   refreshBtn.addEventListener("click", loadModels);
@@ -98,8 +130,22 @@ export async function initChatPanel(el: HTMLElement) {
   const inputArea = document.createElement("div");
   inputArea.className = "chat-input-area";
 
+  const addCtxBtn = document.createElement("button");
+  addCtxBtn.className = "chat-add-context-btn ui-btn";
+  addCtxBtn.dataset.variant = "ghost";
+  addCtxBtn.dataset.icon = "";
+  addCtxBtn.dataset.size = "md";
+  addCtxBtn.title = "Add context to chat";
+  addCtxBtn.setAttribute("aria-label", "Add context to chat");
+  addCtxBtn.innerHTML = icon("plus");
+  addCtxBtn.addEventListener("click", () => {
+    const r = addCtxBtn.getBoundingClientRect();
+    openContextChooser(r.left, r.top - 4);
+  });
+  inputArea.appendChild(addCtxBtn);
+
   inputEl = document.createElement("textarea");
-  inputEl.className = "chat-input";
+  inputEl.className = "chat-input ui-input";
   inputEl.placeholder = "Ask a question\u2026";
   inputEl.rows = 1;
   inputEl.addEventListener("keydown", onInputKeydown);
@@ -107,7 +153,10 @@ export async function initChatPanel(el: HTMLElement) {
   inputArea.appendChild(inputEl);
 
   sendBtn = document.createElement("button");
-  sendBtn.className = "chat-send-btn";
+  sendBtn.className = "chat-send-btn ui-btn";
+  sendBtn.dataset.variant = "primary";
+  sendBtn.dataset.icon = "";
+  sendBtn.dataset.size = "md";
   sendBtn.title = "Send (Enter)";
   sendBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
     <path d="M2 8l10-5-3 5 3 5z" fill="currentColor"/>
@@ -115,7 +164,8 @@ export async function initChatPanel(el: HTMLElement) {
   sendBtn.addEventListener("click", () => {
     if (streaming) {
       // The button doubles as Stop while a reply streams.
-      ipc.chatStop().catch(() => {});
+      ipc.chatStop().catch((err) => reportError("Stop failed", err));
+      settlePendingApprovals("denied");
       onStreamEnd();
     } else {
       void sendMessage();
@@ -138,7 +188,7 @@ export async function initChatPanel(el: HTMLElement) {
     for (const msg of existing) {
       if (msg.role === "User" || msg.role === "Assistant" || msg.role === "Tool") {
         const role = msg.role === "User" ? "user" : msg.role === "Tool" ? "tool" : "assistant";
-        messages.push({ role, content: msg.content });
+        messages.push({ role, content: msg.content, tool: role === "tool" ? toolCardFromHistory(msg.content) : undefined });
       }
     }
     if (messages.length > 0) {
@@ -148,8 +198,10 @@ export async function initChatPanel(el: HTMLElement) {
     // No messages
   }
 
-  // Load models in the background — don't block app init
-  loadModels().catch(() => {});
+  // Models are fetched lazily on the first open of the panel (see
+  // `toggleChatPanel`): probing Ollama/llama.cpp at startup logged a
+  // "Failed to list models" error on every launch for users without a
+  // local LLM server, for a panel they had not opened.
 
   // Load agent mode state in the background
   ipc.chatGetAgentMode().then((enabled) => {
@@ -157,11 +209,15 @@ export async function initChatPanel(el: HTMLElement) {
     updateAgentButton();
   }).catch(() => {});
 
-  // Subscribe to streaming tokens
+  // Subscribe to streaming tokens and structured agent activity
   unlistenToken = await ipc.onChatToken(onToken);
+  unlistenAgent = await ipc.onChatAgentEvent(onAgentEvent);
+  void unlistenToken;
+  void unlistenAgent;
 }
 
 async function loadModels() {
+  modelsRequested = true;
   // Remove old dropdown, show placeholder
   replaceDropdown([{ value: "", label: "Loading\u2026" }], "");
 
@@ -190,7 +246,7 @@ async function loadModels() {
 
     replaceDropdown(options, initial);
   } catch {
-    const serverLabel = currentConfig.server_type === "LlamaCpp" ? "llama.cpp" : "Ollama";
+    const serverLabel = currentConfig.server_type === "LlamaCpp" ? "llama.cpp" : currentConfig.server_type === "OpenRouter" ? "OpenRouter" : "Ollama";
     replaceDropdown([{ value: "", label: `${serverLabel} not available` }], "");
   }
 }
@@ -230,6 +286,9 @@ async function sendMessage() {
   }
 
   // Add user message
+  settlePendingApprovals("denied");
+  liveCards.clear();
+  executingQueue = [];
   messages.push({ role: "user", content: text });
   inputEl.value = "";
   autoResize();
@@ -266,19 +325,35 @@ async function sendMessage() {
 
 function onToken(event: { content: string; done: boolean }) {
   if (event.done) {
-    // Finalize the streamed message
+    // Finalize the streamed message — include any error payload in `event.content`
+    // (backend sends 404/privacy errors as `done:true` with content).
     if (streamingEl) {
       const contentEl = streamingEl.querySelector(".chat-msg-content")!;
       const cursor = contentEl.querySelector(".chat-streaming-cursor");
       if (cursor) cursor.remove();
 
+      // If backend attached an error to the done event, append it
+      if (event.content) {
+        const textNode = document.createTextNode(event.content);
+        contentEl.appendChild(textNode);
+      }
       // Add to our local messages
       const text = contentEl.textContent ?? "";
-      messages.push({ role: "assistant", content: text });
+      if (text.trim()) {
+        messages.push({ role: "assistant", content: text });
+      }
+    } else if (event.content) {
+      // No streaming element (error before any token) — still show it
+      messages.push({ role: "assistant", content: event.content });
+      toast(event.content, "error");
     }
     onStreamEnd();
     // Re-render so the finished reply gets its markdown formatting.
     renderMessages();
+    // Surface backend errors that arrived with done:true even when streamingEl existed
+    if (event.content && event.content.includes("[Error")) {
+      toast(event.content, "error");
+    }
     return;
   }
 
@@ -305,6 +380,12 @@ function armWatchdog() {
   if (watchdogTimer) clearTimeout(watchdogTimer);
   watchdogTimer = setTimeout(() => {
     if (!streaming) return;
+    // Waiting on the user, not on the model: the agent loop has its own
+    // 300 s approval timeout (auto-deny), so re-check later instead.
+    if (hasPendingApproval()) {
+      armWatchdog();
+      return;
+    }
     onStreamEnd();
     toast("Chat stream timed out", "error");
   }, STREAM_TIMEOUT_MS);
@@ -340,6 +421,7 @@ function clearChat() {
         kind: "danger",
         isDefault: true,
         onSelect: async () => {
+          settlePendingApprovals("denied");
           messages = [];
           renderEmpty();
           try {
@@ -361,6 +443,10 @@ function renderMessages() {
     return;
   }
   for (const msg of messages) {
+    if (msg.role === "tool") {
+      messagesEl.appendChild(renderToolCard(msg.tool ?? toolCardFromHistory(msg.content)));
+      continue;
+    }
     const el = document.createElement("div");
     el.className = `chat-msg ${msg.role}`;
     const body =
@@ -395,8 +481,8 @@ function addCopyButtons(el: HTMLElement) {
 
 function renderEmpty() {
   messagesEl.innerHTML = `
-    <div class="chat-empty">
-      <div class="chat-empty-icon">\u{1F4AC}</div>
+    <div class="ui-empty" data-fill>
+      <div class="ui-empty-icon">\u{1F4AC}</div>
       <div class="chat-empty-text">
         Chat with a local AI model.<br>
         Select a model above and start typing.
@@ -445,15 +531,15 @@ function showChatSettings() {
   backdrop.className = "dialog-backdrop chat-settings-backdrop";
 
   const dialog = document.createElement("div");
-  dialog.className = "dialog";
+  dialog.className = "dialog ui-surface";
   dialog.style.maxWidth = "480px";
 
   // Header
   const header = document.createElement("div");
-  header.className = "dialog-header";
+  header.className = "ui-header";
   header.innerHTML = `
-    <span class="dialog-title">Chat Settings</span>
-    <button class="dialog-close" title="Close" aria-label="Close">&times;</button>
+    <span class="ui-header-title">Chat Settings</span>
+    <button data-variant="ghost" data-icon class="dialog-close ui-btn" title="Close" aria-label="Close">&times;</button>
   `;
 
   // Body
@@ -468,22 +554,34 @@ function showChatSettings() {
   const serverDefaults: Record<ipc.ChatServerType, string> = {
     Ollama: "http://localhost:11434",
     LlamaCpp: "http://localhost:8080",
+    OpenRouter: "https://openrouter.ai/api/v1",
   };
   const serverDropdown = createDropdown(
     [
       { value: "Ollama", label: "Ollama" },
       { value: "LlamaCpp", label: "llama.cpp" },
+      { value: "OpenRouter", label: "OpenRouter" },
     ],
     currentConfig.server_type,
   );
+  // Switching backends restores what the user last used there (model, URL,
+  // prompt, web search — from chat-providers.toml, shared with the TUI);
+  // a never-configured backend gets its defaults.
+  let providerModel = currentConfig.model;
   serverDropdown.container.addEventListener("change", () => {
     const newType = serverDropdown.value as ipc.ChatServerType;
-    const oldDefault = serverDefaults[currentConfig.server_type];
-    // If URL matches old default, update to new default
-    if (urlInput.value.trim() === oldDefault || urlInput.value.trim() === "") {
+    urlInput.placeholder = serverDefaults[newType];
+    webSearchRow.hidden = newType !== "OpenRouter";
+    void ipc.chatProviderConfig(newType).then((saved) => {
+      if ((serverDropdown.value as ipc.ChatServerType) !== newType) return;
+      urlInput.value = saved.base_url;
+      promptInput.value = saved.system_prompt ?? "";
+      webSearchInput.checked = saved.web_search;
+      providerModel = saved.model;
+    }).catch(() => {
       urlInput.value = serverDefaults[newType];
-      urlInput.placeholder = serverDefaults[newType];
-    }
+      providerModel = "";
+    });
   });
   serverRow.appendChild(serverDropdown.container);
   body.appendChild(serverRow);
@@ -493,7 +591,7 @@ function showChatSettings() {
   urlRow.className = "chat-settings-row";
   urlRow.innerHTML = `<label class="chat-settings-label">Base URL</label>`;
   const urlInput = document.createElement("input");
-  urlInput.className = "dialog-input";
+  urlInput.className = "ui-input";
   urlInput.type = "text";
   urlInput.value = currentConfig.base_url;
   urlInput.placeholder = serverDefaults[currentConfig.server_type];
@@ -505,19 +603,33 @@ function showChatSettings() {
   promptRow.className = "chat-settings-row";
   promptRow.innerHTML = `<label class="chat-settings-label">System prompt</label>`;
   const promptInput = document.createElement("textarea");
-  promptInput.className = "dialog-input chat-settings-textarea";
+  promptInput.className = "ui-input chat-settings-textarea";
   promptInput.value = currentConfig.system_prompt ?? "";
   promptInput.placeholder = "Optional instructions prepended to every conversation";
   promptInput.rows = 4;
   promptRow.appendChild(promptInput);
   body.appendChild(promptRow);
 
+  // Web search (OpenRouter plugin) — meaningless for local backends
+  const webSearchRow = document.createElement("div");
+  webSearchRow.className = "chat-settings-row";
+  webSearchRow.hidden = currentConfig.server_type !== "OpenRouter";
+  const webSearchLabel = document.createElement("label");
+  webSearchLabel.className = "chat-settings-label chat-settings-check";
+  const webSearchInput = document.createElement("input");
+  webSearchInput.type = "checkbox";
+  webSearchInput.checked = currentConfig.web_search;
+  webSearchLabel.appendChild(webSearchInput);
+  webSearchLabel.appendChild(document.createTextNode(" Web search (OpenRouter plugin)"));
+  webSearchRow.appendChild(webSearchLabel);
+  body.appendChild(webSearchRow);
+
   // Footer buttons
   const footer = document.createElement("div");
   footer.className = "dialog-footer";
   footer.innerHTML = `
-    <button class="dialog-btn dialog-btn-secondary chat-settings-cancel">Cancel</button>
-    <button class="dialog-btn dialog-btn-primary chat-settings-save">Save</button>
+    <button data-variant="secondary" class="ui-btn chat-settings-cancel">Cancel</button>
+    <button data-variant="primary" class="ui-btn chat-settings-save">Save</button>
   `;
 
   dialog.appendChild(header);
@@ -544,10 +656,11 @@ function showChatSettings() {
     currentConfig.server_type = newServerType;
     currentConfig.base_url = newUrl || serverDefaults[newServerType];
     currentConfig.system_prompt = newPrompt || null;
+    currentConfig.web_search = newServerType === "OpenRouter" && webSearchInput.checked;
 
     if (serverChanged) {
-      // Clear model since model names differ between servers
-      currentConfig.model = "";
+      // Model names differ between backends: take the one last used there.
+      currentConfig.model = providerModel;
     }
 
     await saveConfig();
@@ -587,8 +700,350 @@ export function toggleChatPanel() {
   const app = document.getElementById("app")!;
   app.classList.toggle("chat-visible");
   if (app.classList.contains("chat-visible")) {
+    if (!modelsRequested) loadModels().catch(() => {});
     inputEl?.focus();
   }
+}
+
+/** Open the panel if it is hidden (below 1000px it floats over the editor —
+ *  same class, `layout.css` decides where it goes). */
+function ensureChatVisible() {
+  const app = document.getElementById("app")!;
+  if (!app.classList.contains("chat-visible")) toggleChatPanel();
+}
+
+// ── Add context ────────────────────────────────────
+
+/** Content id + provider of the active pane's tab, if any. */
+function activeContent(): { id: string; provider: string; label: string } | null {
+  const ws = appState.activeWs;
+  const wt = appState.activeTabTree;
+  if (!ws || !wt) return null;
+  const leaf = allLeaves(wt.paneTree).find((l) => l.id === wt.activePaneId);
+  const id = leaf?.contentId;
+  if (!id) return null;
+  const tab = ws.tabs.find((t) => t.id === id);
+  if (!tab) return null;
+  const provider = typeof tab.provider === "string" ? tab.provider : "Custom";
+  return { id, provider, label: getTabLabel(tab, appState.getTabShellState(id)?.title) };
+}
+
+/** Workspace-relative path of the active editor/markdown tab, or null. */
+function activeFilePath(): string | null {
+  const c = activeContent();
+  if (!c) return null;
+  if (c.provider === "CodeEditor") return getCodeEditorFilePath(c.id);
+  if (c.provider === "Markdown") return getMarkdownEditorFilePath(c.id);
+  return null;
+}
+
+function terminalSelection(): { text: string; label: string } | null {
+  const inst = activeTerminalInstance();
+  const text = inst?.terminal.getSelection() ?? "";
+  if (!inst || text.trim().length === 0) return null;
+  return { text, label: activeContent()?.label ?? "Terminal" };
+}
+
+function editorSelection(): { text: string; path: string; fromLine: number; toLine: number } | null {
+  const c = activeContent();
+  if (!c || c.provider !== "CodeEditor") return null;
+  const path = getCodeEditorFilePath(c.id);
+  const sel = getCodeEditorSelection(c.id);
+  return path && sel ? { path, ...sel } : null;
+}
+
+/** Put a block into the composer (panel opened if needed) and focus it. */
+function injectIntoComposer(block: string) {
+  if (!block) return;
+  ensureChatVisible();
+  inputEl.value = appendToDraft(inputEl.value, block);
+  autoResize();
+  inputEl.focus();
+  inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length);
+}
+
+async function buildContextBlock(kind: ContextKind): Promise<string> {
+  switch (kind) {
+    case "terminal": {
+      const sel = terminalSelection();
+      return sel ? fenceBlock("terminal", { name: sel.label }, sel.text) : "";
+    }
+    case "editor-selection": {
+      const sel = editorSelection();
+      return sel
+        ? fenceBlock("editor-selection", { name: sel.path, lines: { from: sel.fromLine, to: sel.toLine } }, sel.text)
+        : "";
+    }
+    case "file": {
+      const path = activeFilePath();
+      if (!path) return "";
+      // A selection beats the whole file (which is capped at 200 lines anyway).
+      const sel = editorSelection();
+      if (sel) return fenceBlock("file", { name: path, lines: { from: sel.fromLine, to: sel.toLine } }, sel.text);
+      const content = await ipc.readFileContent(appState.activeWorkspace, path);
+      return fenceBlock("file", { name: path }, content);
+    }
+    case "diff": {
+      const path = activeFilePath();
+      if (!path) return "";
+      const lines = await ipc.getFileDiff(appState.activeWorkspace, path, false);
+      const text = diffLinesToText(lines);
+      if (text.trim().length === 0) {
+        toast("No unstaged changes in the active file", "info");
+        return "";
+      }
+      return fenceBlock("diff", { name: path }, text);
+    }
+  }
+}
+
+async function injectContext(kind: ContextKind) {
+  try {
+    const block = await buildContextBlock(kind);
+    if (!block) {
+      toast("Nothing to add", "info");
+      return;
+    }
+    injectIntoComposer(block);
+  } catch (err) {
+    reportError("Add context failed", err);
+  }
+}
+
+function openContextChooser(x: number, y: number) {
+  const rows = contextChoices({
+    terminalSelection: terminalSelection() !== null,
+    activeFile: activeFilePath() !== null,
+    editorSelection: editorSelection() !== null,
+  });
+  openContextMenu(
+    x,
+    y,
+    rows.map((r) => ({ label: r.label, disabled: r.disabled, action: () => void injectContext(r.kind) })),
+  );
+}
+
+/**
+ * "Add Context to Chat" (`Ctrl+Shift+I`, palette, Chat menu, the `+` in the
+ * composer): a terminal selection is injected straight away — select, chord,
+ * done — otherwise a chooser offers the active file, its diff and the editor
+ * selection.
+ */
+export async function addContextToChat() {
+  if (terminalSelection()) {
+    await injectContext("terminal");
+    return;
+  }
+  const r = inputEl.getBoundingClientRect();
+  // The composer may be off-screen while the panel is hidden: open it first
+  // so the chooser anchors to something the user can see.
+  ensureChatVisible();
+  requestAnimationFrame(() => {
+    const rr = inputEl.getBoundingClientRect();
+    openContextChooser(rr.left || r.left, (rr.top || r.top) - 4);
+  });
+}
+
+// ── Tool cards ─────────────────────────────────────
+
+/** Live cards by tool call id (the DOM node re-rendered in place). */
+const liveCards = new Map<string, { card: ToolCard; el: HTMLElement; startedAt: number }>();
+/** Cards created before a result arrives, matched to `tool-executing` by name order. */
+let executingQueue: string[] = [];
+
+function toolCardFromHistory(content: string): ToolCard {
+  const p = parseToolMessage(content);
+  return { id: "", name: p.name, args: "", result: p.result, status: p.isError ? "error" : "ok" };
+}
+
+function hasPendingApproval(): boolean {
+  for (const { card } of liveCards.values()) if (card.status === "approval") return true;
+  return false;
+}
+
+/** Mark every card still waiting on the user as `status` (Stop / Clear / new
+ *  message): the Rust side drops the senders, which the loop reads as Deny. */
+function settlePendingApprovals(status: "denied") {
+  for (const entry of liveCards.values()) {
+    if (entry.card.status === "approval") {
+      entry.card.status = status;
+      refreshToolCard(entry);
+    }
+  }
+}
+
+function onAgentEvent(ev: ipc.ChatAgentEvent) {
+  armWatchdog();
+  switch (ev.kind) {
+    case "tool-calls":
+      for (const c of ev.calls) {
+        const card: ToolCard = { id: c.id, name: c.name, args: prettyJson(c.arguments), result: "", status: "running" };
+        const el = renderToolCard(card);
+        if (streamingEl) messagesEl.insertBefore(el, streamingEl);
+        else messagesEl.appendChild(el);
+        liveCards.set(c.id, { card, el, startedAt: performance.now() });
+        executingQueue.push(c.id);
+      }
+      scrollToBottom();
+      return;
+    case "tool-executing": {
+      // Restart the clock when execution really begins (after an approval).
+      const idx = executingQueue.findIndex((id) => liveCards.get(id)?.card.name === ev.name);
+      if (idx >= 0) {
+        const entry = liveCards.get(executingQueue[idx]);
+        executingQueue.splice(idx, 1);
+        if (entry) entry.startedAt = performance.now();
+      }
+      return;
+    }
+    case "approval-required": {
+      const entry = liveCards.get(ev.tool_call_id);
+      if (!entry) return;
+      entry.card.status = "approval";
+      if (!entry.card.args) entry.card.args = ev.description;
+      refreshToolCard(entry);
+      scrollToBottom();
+      return;
+    }
+    case "tool-result": {
+      const entry = liveCards.get(ev.tool_call_id);
+      const status = ev.is_error ? "error" : "ok";
+      if (entry) {
+        entry.card.result = ev.result;
+        entry.card.status = ev.is_error && entry.card.status === "denied" ? "denied" : status;
+        entry.card.durationMs = performance.now() - entry.startedAt;
+        refreshToolCard(entry);
+        liveCards.delete(ev.tool_call_id);
+        messages.push({ role: "tool", content: ev.result, tool: entry.card });
+      } else {
+        const card: ToolCard = { id: ev.tool_call_id, name: ev.name, args: "", result: ev.result, status };
+        const el = renderToolCard(card);
+        if (streamingEl) messagesEl.insertBefore(el, streamingEl);
+        else messagesEl.appendChild(el);
+        messages.push({ role: "tool", content: ev.result, tool: card });
+      }
+      scrollToBottom();
+      return;
+    }
+  }
+}
+
+function refreshToolCard(entry: { card: ToolCard; el: HTMLElement }) {
+  const next = renderToolCard(entry.card, entry.el.hasAttribute("open"));
+  entry.el.replaceWith(next);
+  entry.el = next;
+}
+
+function statusView(status: ToolCard["status"]): { icon: IconName; label: string } {
+  switch (status) {
+    case "running":
+      return { icon: "clock", label: "running" };
+    case "ok":
+      return { icon: "check", label: "done" };
+    case "error":
+      return { icon: "warning", label: "error" };
+    case "approval":
+      return { icon: "warning", label: "needs approval" };
+    case "approved":
+      return { icon: "play", label: "approved" };
+    case "denied":
+      return { icon: "close", label: "denied" };
+  }
+}
+
+/** Collapsible card for one tool call: name + status + duration in the
+ *  summary, args and result as `<pre>` in the body, long results folded
+ *  behind "Show more", Approve / Deny inline while the loop waits. */
+function renderToolCard(card: ToolCard, open?: boolean): HTMLElement {
+  const details = document.createElement("details");
+  details.className = "chat-msg tool chat-tool-card";
+  details.dataset.status = card.status;
+  if (open ?? card.status === "approval") details.open = true;
+  const v = statusView(card.status);
+  const duration = card.durationMs !== undefined ? `<span class="chat-tool-duration">${formatDurationMs(card.durationMs)}</span>` : "";
+  details.innerHTML = `
+    <summary class="chat-tool-summary">
+      <span class="chat-tool-status" title="${v.label}">${icon(v.icon, { label: v.label })}</span>
+      <span class="chat-tool-name">${escapeHtml(card.name)}</span>
+      <span class="chat-tool-state">${v.label}</span>
+      ${duration}
+    </summary>
+    <div class="chat-tool-body"></div>
+  `;
+  const body = details.querySelector<HTMLElement>(".chat-tool-body")!;
+  if (card.args) body.appendChild(toolSection("Arguments", card.args));
+  if (card.status === "approval") {
+    const row = document.createElement("div");
+    row.className = "chat-tool-approval";
+    const approve = document.createElement("button");
+    approve.className = "ui-btn";
+    approve.dataset.variant = "primary";
+    approve.dataset.size = "sm";
+    approve.textContent = "Approve";
+    const deny = document.createElement("button");
+    deny.className = "ui-btn";
+    deny.dataset.variant = "danger";
+    deny.dataset.size = "sm";
+    deny.textContent = "Deny";
+    approve.addEventListener("click", () => void answerApproval(card.id, "allow"));
+    deny.addEventListener("click", () => void answerApproval(card.id, "deny"));
+    row.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        void answerApproval(card.id, "deny");
+      }
+    });
+    row.append(approve, deny);
+    body.appendChild(row);
+    requestAnimationFrame(() => approve.focus());
+  }
+  if (card.result) body.appendChild(toolSection("Result", card.result));
+  return details;
+}
+
+function toolSection(title: string, text: string): HTMLElement {
+  const wrap = document.createElement("div");
+  wrap.className = "chat-tool-section";
+  const lines = text.split("\n");
+  const long = lines.length > RESULT_COLLAPSE_LINES;
+  const pre = document.createElement("pre");
+  pre.className = "chat-tool-pre";
+  pre.textContent = long ? lines.slice(0, RESULT_COLLAPSE_LINES).join("\n") : text;
+  const label = document.createElement("span");
+  label.className = "chat-tool-section-title";
+  label.textContent = title;
+  wrap.append(label, pre);
+  if (long) {
+    const more = document.createElement("button");
+    more.className = "ui-btn";
+    more.dataset.variant = "ghost";
+    more.dataset.size = "sm";
+    more.textContent = `Show more (${lines.length - RESULT_COLLAPSE_LINES} lines)`;
+    more.addEventListener("click", () => {
+      const expanded = more.dataset.expanded === "1";
+      pre.textContent = expanded ? lines.slice(0, RESULT_COLLAPSE_LINES).join("\n") : text;
+      more.dataset.expanded = expanded ? "0" : "1";
+      more.textContent = expanded ? `Show more (${lines.length - RESULT_COLLAPSE_LINES} lines)` : "Show less";
+    });
+    wrap.appendChild(more);
+  }
+  return wrap;
+}
+
+async function answerApproval(toolCallId: string, decision: ipc.ChatApprovalDecision) {
+  const entry = liveCards.get(toolCallId);
+  if (!entry || entry.card.status !== "approval") return;
+  entry.card.status = decision === "deny" ? "denied" : "approved";
+  if (decision !== "deny") entry.startedAt = performance.now();
+  refreshToolCard(entry);
+  armWatchdog();
+  try {
+    await ipc.chatApprove(toolCallId, decision);
+  } catch (err) {
+    reportError("Approval failed", err);
+  }
+  inputEl.focus();
 }
 
 // ── Chat resize handle ─────────────────────────────
@@ -602,6 +1057,9 @@ export function initChatResize() {
   let startWidth = 0;
   const root = document.documentElement;
 
+  const savedWidth = settingsStore.get<number>("chatPanelWidth");
+  if (savedWidth) root.style.setProperty("--chat-panel-width", `${savedWidth}px`);
+
   handle.addEventListener("mousedown", (e: MouseEvent) => {
     dragging = true;
     startX = e.clientX;
@@ -614,7 +1072,7 @@ export function initChatResize() {
     if (!dragging) return;
     // Chat is on the right, so dragging left increases width
     const delta = startX - e.clientX;
-    const newWidth = Math.max(240, Math.min(800, startWidth + delta));
+    const newWidth = clampChatWidth(startWidth + delta, window.innerWidth, visibleSidebarWidth(), activityBarWidth());
     root.style.setProperty("--chat-panel-width", `${newWidth}px`);
   });
 
@@ -624,12 +1082,6 @@ export function initChatResize() {
     handle.classList.remove("dragging");
     // Persist width
     const width = parseInt(getComputedStyle(root).getPropertyValue("--chat-panel-width"));
-    if (width) {
-      ipc.getSettings().then((raw: string | null) => {
-        const settings = raw ? JSON.parse(raw) : {};
-        settings.chatPanelWidth = width;
-        ipc.setSettings(JSON.stringify(settings)).catch(() => {});
-      }).catch(() => {});
-    }
+    if (width) settingsStore.patch("chatPanelWidth", width);
   });
 }
