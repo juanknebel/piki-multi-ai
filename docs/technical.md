@@ -215,7 +215,8 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 | Pane | Keys |
 |------|------|
 | *Terminal pane* | All keys forwarded to the active tab; `Ctrl+G f` search, `Ctrl+Shift+C` copy visible content, `Ctrl+Shift+V` paste |
-| *Workspace list* | `j`/`k` select, `Enter` switch + focus main panel, `e` edit, `d` delete |
+| *Workspace list — Workspaces tab* | `j`/`k` select (follow-focus: selecting switches), `Enter` switch + focus main panel (or toggle collapse on a family parent), `h`/`l` collapse/expand a worktree family, `Tab` flip to the Projects tab |
+| *Workspace list — Projects tab* | `j`/`k` move, `Enter` expand a project / open or adopt a member, `n`/`e`/`d` new/edit/delete project, `Tab` back to Workspaces |
 | *Agents pane* | `j`/`k` select agent, `Enter` or click to jump to that workspace/tab |
 | *Markdown tab* | `j`/`k` scroll, `Ctrl+d`/`Ctrl+u` page, `g`/`G` top/bottom (read-only) |
 | *Kanban tab* | `h/l/j/k` navigate, `H/L` move card, `n` new card, `e` edit card, `d` delete, `D` dispatch agent, `Enter` details, `r` refresh, `Esc` close modal |
