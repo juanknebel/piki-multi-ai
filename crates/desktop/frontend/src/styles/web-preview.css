@@ -29,7 +29,7 @@
 .web-preview-status-dot[data-status="checking"] {
   background: var(--accent-warm);
   box-shadow: var(--accent-warm-glow);
-  animation: pulse var(--dur-pulse) ease-in-out infinite;
+  animation: pulse var(--dur-pulse) step-end infinite;
 }
 .web-preview-status-dot[data-status="ok"] {
   background: var(--success-color);

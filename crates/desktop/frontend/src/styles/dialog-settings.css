@@ -300,7 +300,7 @@
 .settings-key-btn.recording {
   border-color: var(--accent-warm);
   color: var(--accent-warm);
-  animation: pulse var(--dur-pulse) ease-in-out infinite;
+  animation: pulse var(--dur-pulse) step-end infinite;
 }
 
 .settings-key-btn.modified {

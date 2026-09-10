@@ -69,6 +69,18 @@ fn main() {
         .init();
 
     tauri::Builder::default()
+        // Debug-only diagnostics: PIKI_DIAG_EVAL holds JS evaluated on every
+        // page load, so perf experiments (e.g. measuring compositor cost of an
+        // injected element) can run scripted against an isolated instance
+        // without driving the UI by hand. Never compiled into release builds.
+        .on_page_load(|webview, _payload| {
+            #[cfg(debug_assertions)]
+            if let Ok(js) = std::env::var("PIKI_DIAG_EVAL") {
+                let _ = webview.eval(&js);
+            }
+            #[cfg(not(debug_assertions))]
+            let _ = webview;
+        })
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())

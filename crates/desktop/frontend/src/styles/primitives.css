@@ -177,7 +177,7 @@
 
 .ui-btn:where([aria-busy="true"]) {
   cursor: progress;
-  animation: pulse var(--dur-pulse) ease-in-out infinite;
+  animation: pulse var(--dur-pulse) step-end infinite;
 }
 
 /* Keyboard focus: the ring sits outside the button so it reads on every
@@ -302,5 +302,5 @@
 
 /* A tick-over state (Loading…, Indexing…) pulses instead of sitting still. */
 .ui-empty:where([data-tone="loading"]) {
-  animation: pulse var(--dur-pulse) ease-in-out infinite;
+  animation: pulse var(--dur-pulse) step-end infinite;
 }

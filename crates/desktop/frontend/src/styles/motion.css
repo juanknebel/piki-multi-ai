@@ -32,7 +32,12 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Attention / activity */
+/* Attention / activity.
+   Every `infinite` consumer must animate these with stepped timing
+   (`step-end`), never an interpolating curve: WebKitGTK composites a frame
+   per vblank for as long as a value is interpolating, which burns most of a
+   core on the GTK main thread (css-invariants.test.ts enforces this;
+   measurements in docs/performance.md). */
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }

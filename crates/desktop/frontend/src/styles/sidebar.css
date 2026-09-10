@@ -81,7 +81,7 @@
   padding-left: 32px;
 }
 
-/* Fixed-width leading slot on every row (chevron on parents, pulse dot on
+/* Fixed-width leading slot on every row (chevron on parents, accent dot on
    the active row, empty otherwise) so labels align across the list. */
 .workspace-gutter {
   display: inline-flex;
@@ -109,6 +109,8 @@
   border-left-color: var(--accent-primary);
 }
 
+/* Static on purpose: it marks the active row, it doesn't ask for attention,
+   and a permanent animation would keep WebKitGTK compositing forever. */
 .workspace-active-marker {
   width: 6px;
   height: 6px;
@@ -116,7 +118,6 @@
   background: var(--accent-primary);
   flex-shrink: 0;
   box-shadow: var(--accent-glow);
-  animation: pulse var(--dur-pulse) ease-in-out infinite;
 }
 
 .workspace-name {
@@ -167,7 +168,7 @@
 
 .workspace-status.busy {
   color: var(--accent-primary);
-  animation: pulse var(--dur-pulse) ease-in-out infinite;
+  animation: pulse var(--dur-pulse) step-end infinite;
 }
 
 .workspace-status.done {
@@ -191,7 +192,7 @@
   font-size: var(--fs-xs);
   color: var(--accent-warm);
   text-shadow: var(--accent-warm-glow);
-  animation: pulse var(--dur-pulse) ease-in-out infinite;
+  animation: pulse var(--dur-pulse) step-end infinite;
 }
 
 /* ── Git panel ──────────────────────────────────── */

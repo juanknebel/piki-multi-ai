@@ -261,7 +261,7 @@
 .cr-loading-text {
   color: var(--text-muted);
   font-size: var(--fs-lg);
-  animation: pulse var(--dur-pulse) ease-in-out infinite;
+  animation: pulse var(--dur-pulse) step-end infinite;
 }
 
 .cr-loading-skeleton {
@@ -269,7 +269,7 @@
   height: 8px;
   border-radius: var(--radius-full);
   background: color-mix(in srgb, var(--text-muted) 25%, transparent);
-  animation: pulse var(--dur-pulse) ease-in-out infinite;
+  animation: pulse var(--dur-pulse) step-end infinite;
 }
 
 .cr-loading-skeleton.short {

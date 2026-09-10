@@ -110,6 +110,20 @@ describe("styles/ invariants", () => {
     }
   });
 
+  it("steps every infinite animation (continuous ones composite each vblank on WebKitGTK)", () => {
+    // Measured on TAURI-UI-1788929198451: one 6px dot with a smoothly
+    // interpolated infinite opacity animation costs ~75% of a core on the
+    // GTK main thread (a composite per vblank, forever); the same animation
+    // with step-end timing costs ~2%. Looping pulses must jump, not fade.
+    for (const name of sheets) {
+      for (const m of stripComments(read(name)).matchAll(/animation\s*:\s*([^;]*\binfinite\b[^;]*);/g)) {
+        expect(m[1], `${name}: "animation: ${m[1]}" loops with continuous interpolation`).toMatch(
+          /step-end|step-start|steps\(/,
+        );
+      }
+    }
+  });
+
   it("keeps the font names and the control heights in variables.css only", () => {
     for (const name of sheets) {
       if (name === "variables.css") continue;

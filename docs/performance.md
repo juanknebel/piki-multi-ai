@@ -234,6 +234,40 @@ that showed up in the audit; the invariants below are enforced in code
   `elapsed_secs` (the elapsed labels tick in place), pane titles skip
   no-op `innerHTML` writes, and `setActiveWsTab` no-ops (refocus only)
   when the tab is already active.
+- **Looping animations jump, never fade.** WebKitGTK composites a frame per
+  vblank for as long as any CSS value is interpolating, and each composite
+  is drawn by the UI process's GTK main thread — on a ~120 Hz panel a single
+  smoothly-pulsing 6px dot costs ~75% of a core, forever, with the webview
+  otherwise idle (measured 2026-09-10, card `TAURI-UI-1788929198451`; see
+  the idle-compositing experiment below). Every `infinite` animation
+  therefore uses stepped timing (`step-end`: ~2% for the same dot), and the
+  active-workspace marker doesn't animate at all — it marks a row, it isn't
+  an attention signal. `css-invariants.test.ts` fails on any interpolating
+  `infinite` animation.
+
+### Idle-compositing experiment (2026-09-10)
+
+Method: debug builds evaluate `PIKI_DIAG_EVAL` (arbitrary JS) on page load
+(`crates/desktop/src/main.rs`, `debug_assertions` only), so variants run
+scripted against an isolated instance (`--data-dir` scratch) with no UI
+driving. Metric: GTK main-thread CPU — `utime+stime` deltas from
+`/proc/<pid>/task/<pid>/stat` in 2 s buckets (ptrace is blocked, yama=1).
+Env: KDE Plasma Wayland, ~120 Hz panel, WebKitGTK.
+
+| Variant | Main-thread ticks / 2 s | ≈ core |
+|---------|------------------------|--------|
+| Empty webview | 0–4 | ~1% |
+| + static 6px dot | 0–3 | ~1% |
+| + same dot, `pulse 1.5s ease-in-out infinite` | **145–157** | **~75%** |
+| + same dot, `pulse 1.5s step-end infinite` | 3–5 | ~2% |
+
+This was the residual "GUI slow while an agent runs" cost after the
+adaptive batcher (the sidebar's busy/attention pulses ran the whole time an
+agent streamed) *and* the "one idle visible shell burns ~55%" mystery (the
+always-pulsing active-workspace marker, not xterm — a visible idle terminal
+implies an open workspace and therefore a pulsing marker). Still open:
+xterm's cursor-blink contribution (needs a clean A/B with a real terminal;
+Settings ▸ Terminal ▸ Blink off is the workaround meanwhile).
 
 ### Reproducible benchmark
 
