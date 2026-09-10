@@ -484,15 +484,15 @@ The diff pane shows a **side-by-side split view**: the left panel displays the o
 
 ### Desktop keyboard shortcuts
 
-The terminal owns every key it can use. An app shortcut fires while a terminal, text input or editor has focus **only** if its chord is one the terminal can't receive as bytes — `Alt+…`, `Ctrl+Shift+…` or `Ctrl+Alt+…`. Plain `Ctrl+<letter>` / `Ctrl+Space` shortcuts (marked ° below) work everywhere else — sidebar, tab bar, dialogs — but with a shell focused `Ctrl+B` reaches tmux, `Ctrl+P` walks history and `Ctrl+F` in a CodeMirror editor is CodeMirror's find. Rebinding a terminal-capturing shortcut to a plain `Ctrl+<letter>` demotes it to outside-only (Settings ▸ Shortcuts flags it with `!`).
+The terminal owns every key it can use. An app shortcut fires while a terminal, text input or editor has focus **only** if its chord is one the terminal can't receive as bytes — `Alt+…`, `Ctrl+Shift+…` or `Ctrl+Alt+…`. Plain `Ctrl+<letter>` shortcuts (marked ° below) work everywhere else — sidebar, tab bar, dialogs — but with a shell focused `Ctrl+B` reaches tmux, `Ctrl+P` walks history and `Ctrl+F` in a CodeMirror editor is CodeMirror's find. Rebinding a terminal-capturing shortcut to a plain `Ctrl+<letter>` demotes it to outside-only (Settings ▸ Shortcuts flags it with `!`).
 
 <!-- BEGIN:desktop-shortcuts -->
 | Shortcut | Action |
 |---|---|
 | **General** | |
-| `Ctrl+P` ° | Command Palette |
+| `Ctrl+Shift+P` | Command Palette |
 | `Ctrl+N` ° | New Workspace |
-| `Ctrl+Space` ° | Workspace Switcher |
+| `Alt+W` | Workspace Switcher |
 | `Alt+D` | Dashboard |
 | `?` ° | Keyboard Shortcuts (help dialog, generated from the same registry as this table) |
 | `Ctrl+,` ° | Settings |
@@ -518,7 +518,7 @@ The terminal owns every key it can use. An app shortcut fires while a terminal, 
 | `Ctrl+Shift+L` | Toggle AI Chat |
 | `Ctrl+Shift+I` | Add Context to Chat — a terminal selection goes straight into the composer; otherwise a chooser offers the active file, its diff or the editor selection |
 | **Search** | |
-| `Ctrl+F` ° | Find File (fuzzy; `Enter` opens an editor tab, `Ctrl+E` runs `$EDITOR`) |
+| `Alt+F` | Find File (fuzzy; `Enter` opens an editor tab, `Ctrl+E` runs `$EDITOR`) |
 | `Ctrl+Shift+F` | Search in Project (grep) |
 | `Ctrl+Shift+B` | Search in Terminal |
 | `Ctrl+J` ° | API jq Filter (in API Explorer) |
@@ -585,7 +585,7 @@ Desktop-only preferences (sidebar and chat widths, Agents-panel height, shortcut
 - **Tab bar**: the chips scroll in their own strip; `+` (new blank tab) and `⋯` (all tabs) sit outside it and stay visible with any number of tabs. The `×` is dim on inactive tabs, full on hover/active. Every close path — `×`, middle-click, the menu, `Close Tab` — goes through the same teardown, so a live process always gets the Close / Keep running / Cancel dialog (see [Persistent sessions](#persistent-sessions)). *Move to workspace…* (tab menu, File menu, palette) offers only terminal/agent tabs (editors, boards and previews are bound to their workspace's files): the backend re-parents the tab with its process untouched — a daemon session also gets its `workspace_path` re-pointed so the next launch restores it in the new workspace — and the app switches to the target with the moved tab in front.
 - **Renaming**: double-click a tab (or *Rename* in its menu) for an inline input — Enter commits, Esc cancels, empty clears. A rename always wins over the title a program sets (OSC 0/2), which is otherwise the fallback label; the Agents panel keeps the provider label.
 - **Workspace rows** align their labels behind a fixed leading gutter — the chevron on a worktree family's parent (the whole slot toggles collapse), the pulsing dot on the active row, empty otherwise — a clone shows its branch dimmed after the repo folder name, and worktree children indent one step deeper. Each row carries one `⋯` (plus right-click): Open, Agents, Info, Edit, Create Worktree (GitHub), Merge / Rebase (switches to that workspace first), Delete. The *Delete* confirm is one shared implementation (sidebar and palette): the hint depends on the workspace type (a worktree loses its worktree and branch; a Simple/Project workspace only leaves the list), it counts uncommitted changes, and lists the running agents — which deletion really terminates (their daemon sessions are removed, not left as orphans).
-- **Workspace switcher** (`Ctrl+Space`): with an empty query the most recently used workspace is first (the MRU list is bumped on every switch and persisted with the settings); a query is matched fuzzily across name, repo folder and branch (`wsauth` finds `ws-auth`), best score first with recency as the tie-break. Each row shows the workspace's worst agent state (permission / needs you / running…) or an amber dot for uncommitted changes, `Alt+N` when it has one, and `folder · ⎇ branch`.
+- **Workspace switcher** (`Alt+W`): with an empty query the most recently used workspace is first (the MRU list is bumped on every switch and persisted with the settings); a query is matched fuzzily across name, repo folder and branch (`wsauth` finds `ws-auth`), best score first with recency as the tie-break. Each row shows the workspace's worst agent state (permission / needs you / running…) or an amber dot for uncommitted changes, `Alt+N` when it has one, and `folder · ⎇ branch`.
 - **Branch labels** share one rule everywhere (workspace list, status bar, switcher, dashboard, empty state): middle-truncated at 28 characters, the full name in the tooltip. Collapsible groups share one chevron pair: `▸` collapsed, `▾` expanded.
 - **Empty state**: a workspace with no tabs — or a blank pane — shows `<workspace> · ⎇ <branch>` and buttons for Shell, every configured provider, then *Web Preview* / *Kanban Board* / *API Explorer* and *Open file…* (the fuzzy file finder); the app-wide welcome only appears when there is no workspace at all.
 
@@ -619,7 +619,7 @@ The common git loop runs from the panel, the Git menu or the palette without a s
 
 ### Desktop file finder
 
-- **Opens before it indexes** (`Ctrl+F`): the input is focused on the first frame; the list arrives when the backend answers (the footer says `Indexing…` until then, and the last list seen for that workspace is shown meanwhile). Whatever you type while it is indexing is applied the moment the list lands.
+- **Opens before it indexes** (`Alt+F`): the input is focused on the first frame; the list arrives when the backend answers (the footer says `Indexing…` until then, and the last list seen for that workspace is shown meanwhile). Whatever you type while it is indexing is applied the moment the list lands.
 - **`Enter` edits, `Alt+Enter` views**: `Enter` (or a click) opens the file as an editor tab — CodeMirror for code, the WYSIWYG markdown editor for `.md` — exactly what a click in the file tree does; `Alt+Enter` opens the read-only viewer (rendered markdown for `.md`); `Ctrl+E` runs `$EDITOR` in a new terminal tab. Files whose extension says they are not text (images, archives, fonts, media, compiled and database blobs) stay in the viewer whichever key you press.
 - **What is listed**: the index is a gitignore-aware walk (the `ignore` crate, ripgrep's walker) — `.gitignore`, `.ignore`, `.git/info/exclude` and your global excludes all apply, also in a workspace that is not a git repo; dotfiles and dot-directories (`.github/`, `.cargo/`, `.env.example`) are included, `.git` itself is always pruned, symlinks are not followed. The walk stops at 50 000 paths and the footer then says the index is capped.
 - **Caching**: the backend memoises the list per workspace and drops it when the file watcher reports a create, delete or rename (plain edits of listed files keep it) and when you switch workspace, so the next `Ctrl+F` re-walks only when the tree may have changed.

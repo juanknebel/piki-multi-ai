@@ -81,9 +81,12 @@ export const CATEGORY_ORDER = [
 // focus; everything else is outside-only. The pane ops stay outside-only on
 // purpose so a chord typed at a shell never rearranges the layout.
 const shortcuts: ShortcutDef[] = [
-  { id: "command-palette", label: "Command Palette", category: "General", defaultKey: "Ctrl+P", key: "Ctrl+P", action: () => {} },
+  // Palette and switcher are the two "reach anything" entries, so they carry
+  // terminal-safe chords and capture from a focused shell (Ctrl+P/Ctrl+Space
+  // were outside-only: bare Ctrl combos are real terminal keystrokes).
+  { id: "command-palette", label: "Command Palette", category: "General", defaultKey: "Ctrl+Shift+P", key: "Ctrl+Shift+P", action: () => {}, terminalCapture: true },
   { id: "new-workspace", label: "New Workspace", category: "General", defaultKey: "Ctrl+N", key: "Ctrl+N", action: () => {} },
-  { id: "workspace-switcher", label: "Workspace Switcher", category: "General", defaultKey: "Ctrl+Space", key: "Ctrl+Space", action: () => {} },
+  { id: "workspace-switcher", label: "Workspace Switcher", category: "General", defaultKey: "Alt+W", key: "Alt+W", action: () => {}, terminalCapture: true },
   { id: "dashboard", label: "Dashboard", category: "General", defaultKey: "Alt+D", key: "Alt+D", action: () => {}, terminalCapture: true },
   { id: "help", label: "Keyboard Shortcuts", category: "General", defaultKey: "?", key: "?", action: () => {} },
   // Ctrl+, is the settings key everywhere else (VS Code, GNOME, macOS ⌘+,);
@@ -111,7 +114,7 @@ const shortcuts: ShortcutDef[] = [
   { id: "zoom-in-terminal", label: "Zoom In (terminal-safe)", category: "View & Panels", defaultKey: "Ctrl+Shift+=", key: "Ctrl+Shift+=", action: () => {}, terminalCapture: true },
   { id: "zoom-out-terminal", label: "Zoom Out (terminal-safe)", category: "View & Panels", defaultKey: "Ctrl+Shift+-", key: "Ctrl+Shift+-", action: () => {}, terminalCapture: true },
   { id: "zoom-reset-terminal", label: "Reset Zoom (terminal-safe)", category: "View & Panels", defaultKey: "Ctrl+Shift+0", key: "Ctrl+Shift+0", action: () => {}, terminalCapture: true },
-  { id: "fuzzy-search", label: "Find File", category: "Search", defaultKey: "Ctrl+F", key: "Ctrl+F", action: () => {} },
+  { id: "fuzzy-search", label: "Find File", category: "Search", defaultKey: "Alt+F", key: "Alt+F", action: () => {}, terminalCapture: true },
   { id: "project-search", label: "Search in Project", category: "Search", defaultKey: "Ctrl+Shift+F", key: "Ctrl+Shift+F", action: () => {}, terminalCapture: true },
   { id: "terminal-search", label: "Search in Terminal", category: "Search", defaultKey: "Ctrl+Shift+B", key: "Ctrl+Shift+B", action: () => {}, terminalCapture: true },
   { id: "api-jq-filter", label: "API jq Filter", category: "Search", defaultKey: "Ctrl+J", key: "Ctrl+J", action: () => {} },
