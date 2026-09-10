@@ -963,6 +963,43 @@ mod tests {
     }
 
     #[test]
+    fn test_snapshot_projects_overlay_truncates_long_rows() {
+        let mut terminal = test_terminal(60, 20);
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
+        app.config.platform = crate::config::Platform::Linux;
+        // Name beyond the 28-column field and a member path beyond the popup
+        // width: both must ellipsize instead of clipping at the border.
+        let project = piki_core::projects::Project {
+            id: Some(1),
+            name: "a-project-name-well-beyond-the-28-column-field".to_string(),
+            color: 3,
+            order: 0,
+            members: vec![piki_core::projects::ProjectMember {
+                path: std::path::PathBuf::from(
+                    "/home/user/some/very/deeply/nested/checkout/of/feature/branch-with-a-very-long-name",
+                ),
+            }],
+        };
+        app.active_dialog = Some(DialogState::Projects {
+            projects: vec![project],
+            selected: 0,
+            expanded: std::collections::HashSet::from([1]),
+            scroll_offset: 0,
+        });
+        app.mode = crate::app::AppMode::Projects;
+        terminal
+            .draw(|frame| {
+                super::dialogs::render_projects_overlay(frame, frame.area(), &app);
+            })
+            .unwrap();
+        let content = buffer_to_snapshot(terminal.backend().buffer());
+        insta::assert_snapshot!("projects_overlay_truncated", content);
+    }
+
+    #[test]
     fn test_snapshot_project_edit_dialog() {
         let mut terminal = test_terminal(80, 24);
         let mut app = App::new(

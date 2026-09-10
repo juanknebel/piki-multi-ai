@@ -164,11 +164,14 @@ function render() {
       const label = ws
         ? escapeHtml(ws.info.name)
         : escapeHtml(member.path.replace(/\/+$/, "").split("/").pop() || member.path);
+      // Branch lives INSIDE the name span (workspace-list pattern): the row
+      // ellipsizes as one line, so a long branch truncates before it can
+      // crush the member name or overflow the sidebar.
       const branch = ws?.branch
-        ? `<span class="project-member-branch">${icon("branch")} ${escapeHtml(branchLabel(ws.branch))}</span>`
+        ? ` <span class="project-member-branch">${icon("branch")} ${escapeHtml(branchLabel(ws.branch))}</span>`
         : "";
-      el.innerHTML = `<span class="project-member-name">${label}</span>${branch}`;
-      el.title = member.path;
+      el.innerHTML = `<span class="project-member-name">${label}${branch}</span>`;
+      el.title = ws?.branch ? `${member.path} · ${ws.branch}` : member.path;
       el.addEventListener("click", () => void openMember(member.path));
       makeInteractive(el, "option");
       list.appendChild(el);
