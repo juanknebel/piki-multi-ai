@@ -2,6 +2,7 @@
 // source for every key. A rebind in Settings shows up here automatically;
 // never hand-maintain a key list in this file.
 import { helpSections } from "../../shortcuts";
+import { attachDialogResize } from "../dialog-resize";
 
 export function showHelpDialog() {
   document.querySelector(".help-backdrop")?.remove();
@@ -49,6 +50,7 @@ export function showHelpDialog() {
   dialog.innerHTML = html;
   backdrop.appendChild(dialog);
   document.body.appendChild(backdrop);
+  attachDialogResize(dialog, "help");
 
   const close = () => backdrop.remove();
   dialog.querySelector(".dialog-close")!.addEventListener("click", close);

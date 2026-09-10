@@ -393,7 +393,8 @@ just lint-desktop                           # frontend test + build, then clippy
   component (the old per-caller read-modify-write raced). Keep the store IPC-free (`settings-store.ts`
   takes a `SettingsBackend`; `settings.ts` binds it to Tauri) so it stays unit-testable. Keys in use:
   `shortcuts`, `shell`, `terminal`, `uiZoom`, `appearance.density`, `settingsTab`, `wsTabsV2`,
-  `workspaceMru`, `agentsPanelHeight`, sidebar/chat widths, file-tree state, `chat_config`.
+  `workspaceMru`, `agentsPanelHeight`, `dialogSizes`, sidebar/chat widths, file-tree state,
+  `chat_config`.
 - **Settings dialog** (`dialogs/settings-dialog.ts`) is only the shell: a left rail (`role=tablist`,
   ↑/↓/Home/End) + one panel, last tab remembered as `settingsTab`, footer *Reset <tab>* / *Restore
   Defaults* (`showConfirm`, danger; keeps the shell command + provider binaries — say so in the confirm
@@ -557,7 +558,11 @@ feature-specific modifiers in feature CSS; never re-declare a button/input/surfa
   `.dialog-body` of `.dialog-field` (`.dialog-label` + `.ui-input` / `createDropdown()` /
   `attachPathPicker`); `.dialog-footer` with secondary Cancel first, primary action last; destructive
   flows go through `showConfirm` instead. Escape/Enter and the close button wire up as in
-  `dialogs/stash-dialog.ts`.
+  `dialogs/stash-dialog.ts`. A content-heavy dialog also calls
+  `attachDialogResize(dialog, "<id>")` (`components/dialog-resize.ts`) AFTER the dialog is in the
+  DOM: corner grip, size persisted per id under the `dialogSizes` settings key, double-click resets —
+  and must not rewrite `dialog.innerHTML` after attaching (the grip is a child of the dialog; inner
+  sections re-render their own containers instead).
 
 ## Icons & fonts
 

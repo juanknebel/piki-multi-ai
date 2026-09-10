@@ -21,11 +21,36 @@
   animation: overlay-in var(--dur-fast) var(--ease-out);
 }
 
-/* `.dialog ui-surface` — the surface paints it; this is the size budget. */
+/* `.dialog ui-surface` — the surface paints it; this is the size budget.
+   position anchors the resize grip (components/dialog-resize.ts). */
 .dialog {
+  position: relative;
   width: 560px;
   max-width: 90vw;
   max-height: 70vh;
+}
+
+/* Bottom-right drag grip (components/dialog-resize.ts): three diagonal
+   hairlines, quiet until hovered. Drag resizes, double-click resets. */
+.dialog-resize-grip {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  background: repeating-linear-gradient(
+    135deg,
+    transparent 0 3px,
+    var(--border-primary) 3px 4px
+  );
+  border-bottom-right-radius: var(--radius-md);
+  opacity: 0.55;
+  transition: opacity var(--transition-fast);
+}
+
+.dialog-resize-grip:hover {
+  opacity: 1;
 }
 
 /* Dense dialogs (sessions, logs, help, git log, providers) opt into a

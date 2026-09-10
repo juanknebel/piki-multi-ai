@@ -21,6 +21,7 @@ import { buildGeneralSettingsSection } from "./general-settings-section";
 import { buildAppearanceSettingsSection } from "./appearance-settings-section";
 import { buildShortcutsSettingsSection } from "./shortcuts-settings-section";
 import { settingsHint, settingsSection, type SettingsSection } from "./settings-controls";
+import { attachDialogResize } from "../dialog-resize";
 
 export type SettingsTabId = "general" | "appearance" | "terminal" | "shortcuts";
 
@@ -158,6 +159,7 @@ export async function showSettingsDialog(initialTab?: SettingsTabId) {
   dialog.append(header, body, footer);
   backdrop.appendChild(dialog);
   document.body.appendChild(backdrop);
+  attachDialogResize(dialog, "settings");
 
   const close = () => {
     backdrop.remove();

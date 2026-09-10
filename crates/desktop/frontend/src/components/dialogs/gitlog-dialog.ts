@@ -2,6 +2,7 @@ import { appState } from "../../state";
 import { reportError } from "../toast";
 import * as ipc from "../../ipc";
 import { showCommitDiff } from "../diff-viewer";
+import { attachDialogResize } from "../dialog-resize";
 
 export async function showGitLog() {
   document.querySelector(".gitlog-backdrop")?.remove();
@@ -26,9 +27,8 @@ export async function showGitLog() {
     if (existing) existing.remove();
 
     const dialog = document.createElement("div");
+    // Size comes from the shared .dialog-lg budget (and the user's resize).
     dialog.className = "dialog ui-surface dialog-lg";
-    dialog.style.maxWidth = "700px";
-    dialog.style.maxHeight = "80vh";
     dialog.innerHTML = `
       <div class="ui-header">
         <span class="ui-header-title">Git Log</span>
@@ -70,6 +70,7 @@ export async function showGitLog() {
 
     dialog.querySelector(".dialog-close")!.addEventListener("click", close);
     backdrop.appendChild(dialog);
+    attachDialogResize(dialog, "gitlog");
   }
 
   const close = () => backdrop.remove();

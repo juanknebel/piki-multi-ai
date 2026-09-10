@@ -3,6 +3,7 @@ import { toast } from "../toast";
 import { invalidateProviderCache } from "../menu-bar";
 import { createDropdown, type DropdownHandle } from "../dropdown";
 import { attachPathPicker } from "../path-picker";
+import { attachDialogResize } from "../dialog-resize";
 
 export async function showProvidersDialog() {
   document.querySelector(".providers-backdrop")?.remove();
@@ -27,6 +28,7 @@ export async function showProvidersDialog() {
   dialog.appendChild(body);
   backdrop.appendChild(dialog);
   document.body.appendChild(backdrop);
+  attachDialogResize(dialog, "providers");
 
   const close = () => {
     backdrop.remove();

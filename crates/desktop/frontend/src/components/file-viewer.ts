@@ -9,6 +9,7 @@ import { modCtrl, formatShortcut } from "../shortcuts";
 import { openFileInEditor } from "./open-content";
 import { buildCmTheme } from "../cm-theme";
 import { themeEngine } from "../theme";
+import { attachDialogResize } from "./dialog-resize";
 
 const readOnlyComp = new Compartment();
 
@@ -48,6 +49,7 @@ export async function showFileViewer(workspaceIdx: number, path: string) {
 
   backdrop.appendChild(dialog);
   document.body.appendChild(backdrop);
+  attachDialogResize(dialog, "file-viewer");
 
   const body = dialog.querySelector<HTMLElement>(".file-viewer-body")!;
   const actionsDiv = dialog.querySelector<HTMLElement>(".file-viewer-actions")!;

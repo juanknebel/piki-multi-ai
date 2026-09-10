@@ -585,7 +585,9 @@ The terminal owns every key it can use. An app shortcut fires while a terminal, 
 - **Shortcuts** — grouped by category in the Help dialog's order, a filter box matching action, key or category, the ° outside-only marker, `⚠` when two actions (or an action and a widget key such as `Ctrl+Tab`) share a combo, `!` when a terminal-capturing action was rebound to a chord the terminal owns and therefore fires outside it only. Click the current key, press the new chord (`Esc` cancels); a key already taken is refused with a toast.
 - **Restore Defaults** (confirmed) resets shortcuts, the terminal look, zoom, density and the General overrides; it keeps the shell command and the provider binaries. *Reset <tab>* in the footer does the same for one tab.
 
-Desktop-only preferences (sidebar and chat widths, Agents-panel height, shortcuts, shell, pane layouts, file-tree state, zoom, density, terminal look) live in one JSON settings document in the database; the theme preset and custom colours are stored next to it. Nothing in the dialog writes `config.toml`.
+Content-heavy dialogs — Sessions, Logs, Keyboard Shortcuts, Git Log, Manage Providers, Settings, the Theme editor and the file viewer — are **resizable** from a grip in their bottom-right corner; each remembers the size you gave it, and a double-click on the grip resets it to the default.
+
+Desktop-only preferences (sidebar and chat widths, Agents-panel height, dialog sizes, shortcuts, shell, pane layouts, file-tree state, zoom, density, terminal look) live in one JSON settings document in the database; the theme preset and custom colours are stored next to it. Nothing in the dialog writes `config.toml`.
 
 ### Desktop tabs, sidebar and switcher
 

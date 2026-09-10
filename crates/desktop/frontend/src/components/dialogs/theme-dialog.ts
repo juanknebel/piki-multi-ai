@@ -8,6 +8,7 @@ import {
 import { toast } from "../toast";
 import { createDropdown } from "../dropdown";
 import { icon } from "../icons";
+import { attachDialogResize } from "../dialog-resize";
 
 export function showThemeDialog() {
   document.querySelector(".theme-dialog-backdrop")?.remove();
@@ -182,6 +183,7 @@ export function showThemeDialog() {
   dialog.appendChild(footer);
   backdrop.appendChild(dialog);
   document.body.appendChild(backdrop);
+  attachDialogResize(dialog, "theme");
 
   // ── Event handlers ─────────────────────────────
 

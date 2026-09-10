@@ -6,6 +6,7 @@ import { makeInteractive } from "../a11y";
 import { icon, type IconName } from "../icons";
 import { createDropdown } from "../dropdown";
 import type { SessionRow, SessionsSnapshot } from "../../types";
+import { attachDialogResize } from "../dialog-resize";
 
 /// Sessions dialog: every session the persistent-session daemon holds —
 /// including ones no tab in this window shows (opened in the TUI, or orphaned
@@ -40,6 +41,7 @@ export async function showSessionsDialog() {
 
   backdrop.appendChild(dialog);
   document.body.appendChild(backdrop);
+  attachDialogResize(dialog, "sessions");
 
   const titleEl = dialog.querySelector<HTMLElement>("#sessions-title")!;
   const body = dialog.querySelector<HTMLElement>("#sessions-body")!;
