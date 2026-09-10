@@ -10,6 +10,7 @@ mod agent;
 mod api;
 mod chat;
 mod files;
+mod projects;
 mod review;
 mod sessions;
 mod tabs;
@@ -129,6 +130,16 @@ pub(crate) enum Action {
     /// Adopt an orphan session as a tab (its recorded workspace if loaded,
     /// else the active one) and jump to it.
     SessionAttach(String),
+    /// Upsert a project (id None = create; the handler assigns its display
+    /// order) and reload the Projects overlay from storage.
+    SaveProject(piki_core::projects::Project),
+    /// Delete a project by id, then reload the Projects overlay.
+    DeleteProject(i64),
+    /// Register a project's plain-directory member as a Simple workspace
+    /// (named after its basename) and switch to it.
+    ProjectAdoptDirectory {
+        path: std::path::PathBuf,
+    },
 }
 
 pub(crate) async fn execute_action(
@@ -174,6 +185,11 @@ pub(crate) async fn execute_action(
         | Action::SessionKill(..)
         | Action::SessionRemove(..)
         | Action::SessionAttach(..) => sessions::handle(app, manager, action, terminal).await?,
+        Action::SaveProject(..)
+        | Action::DeleteProject(..)
+        | Action::ProjectAdoptDirectory { .. } => {
+            projects::handle(app, manager, action, terminal).await?
+        }
     }
     Ok(())
 }

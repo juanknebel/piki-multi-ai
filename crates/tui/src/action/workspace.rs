@@ -8,8 +8,10 @@ use piki_core::workspace::{FileWatcher, WorkspaceManager};
 
 /// Push a newly-created/imported workspace onto `app.workspaces`, switch to
 /// it and focus the main panel, start its file watcher, and persist config.
-/// Shared tail of `CreateWorkspace`/`CreateGithubWorkspace`/`ImportExistingWorktree`.
-fn finish_workspace_creation(app: &mut App, mut info: piki_core::WorkspaceInfo) {
+/// Shared tail of `CreateWorkspace`/`CreateGithubWorkspace`/
+/// `ImportExistingWorktree`, and of `ProjectAdoptDirectory` in
+/// `action/projects.rs`.
+pub(super) fn finish_workspace_creation(app: &mut App, mut info: piki_core::WorkspaceInfo) {
     info.order = app
         .workspaces
         .iter()

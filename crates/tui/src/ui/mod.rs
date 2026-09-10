@@ -913,6 +913,103 @@ mod tests {
     }
 
     #[test]
+    fn test_snapshot_projects_overlay_list_with_one_expanded() {
+        let mut terminal = test_terminal(80, 24);
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
+        app.config.platform = crate::config::Platform::Linux;
+        // A registered workspace at /tmp/nightly so the matching member row
+        // resolves to its name; the other member stays a dimmed directory.
+        app.workspaces.push(test_workspace("nightly", 0));
+        let frontend = piki_core::projects::Project {
+            id: Some(1),
+            name: "frontend".to_string(),
+            color: 0,
+            order: 0,
+            members: vec![
+                piki_core::projects::ProjectMember {
+                    path: std::path::PathBuf::from("/tmp/nightly"),
+                },
+                piki_core::projects::ProjectMember {
+                    path: std::path::PathBuf::from("/home/user/notes"),
+                },
+            ],
+        };
+        let backend = piki_core::projects::Project {
+            id: Some(2),
+            name: "backend".to_string(),
+            color: 6,
+            order: 1,
+            members: vec![piki_core::projects::ProjectMember {
+                path: std::path::PathBuf::from("/tmp/api"),
+            }],
+        };
+        app.active_dialog = Some(DialogState::Projects {
+            projects: vec![frontend, backend],
+            selected: 1,
+            expanded: std::collections::HashSet::from([1]),
+            scroll_offset: 0,
+        });
+        app.mode = crate::app::AppMode::Projects;
+        terminal
+            .draw(|frame| {
+                super::dialogs::render_projects_overlay(frame, frame.area(), &app);
+            })
+            .unwrap();
+        let content = buffer_to_snapshot(terminal.backend().buffer());
+        insta::assert_snapshot!("projects_overlay_list", content);
+    }
+
+    #[test]
+    fn test_snapshot_project_edit_dialog() {
+        let mut terminal = test_terminal(80, 24);
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
+        app.config.platform = crate::config::Platform::Linux;
+        app.active_dialog = Some(DialogState::ProjectEdit {
+            editing_id: Some(1),
+            name: "frontend".to_string(),
+            name_cursor: 8,
+            color: 2,
+            order: 0,
+            members: vec![
+                crate::dialog_state::ProjectMemberRow {
+                    path: std::path::PathBuf::from("/tmp/nightly"),
+                    label: "nightly".to_string(),
+                    is_workspace: true,
+                    checked: true,
+                },
+                crate::dialog_state::ProjectMemberRow {
+                    path: std::path::PathBuf::from("/home/user/notes"),
+                    label: "/home/user/notes".to_string(),
+                    is_workspace: false,
+                    checked: true,
+                },
+                crate::dialog_state::ProjectMemberRow {
+                    path: std::path::PathBuf::from("/tmp/api"),
+                    label: "api".to_string(),
+                    is_workspace: true,
+                    checked: false,
+                },
+            ],
+            member_cursor: 2,
+            active_field: crate::dialog_state::ProjectEditField::Members,
+        });
+        app.mode = crate::app::AppMode::Projects;
+        terminal
+            .draw(|frame| {
+                super::dialogs::render_projects_overlay(frame, frame.area(), &app);
+            })
+            .unwrap();
+        let content = buffer_to_snapshot(terminal.backend().buffer());
+        insta::assert_snapshot!("project_edit_dialog", content);
+    }
+
+    #[test]
     fn test_snapshot_new_tab_dialog_agents_menu() {
         let mut terminal = test_terminal(80, 24);
         // Use an isolated `DataPaths` so the snapshot doesn't depend on the

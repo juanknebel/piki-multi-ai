@@ -156,6 +156,15 @@ just lint-desktop                           # frontend test + build, then clippy
   a separate muted `.workspace-branch` span (`rowParts`), never glued to the name, and `.grouped`
   children indent one step past the parent's gutter. Don't reintroduce a leading element that only some
   rows have — it un-aligns the list.
+- **Projects view** (`projects-panel.ts`, activity-bar id `"projects"`, host `#projects-view`): cross-cutting
+  groups from `piki_core::projects` via `ipc.listProjects/saveProject/deleteProject` (`commands/projects.rs`).
+  Listbox pattern like the Agents panel; project rows carry a dot painted `var(--project-swatch-{color+1})`
+  (10 static tokens in `variables.css` — deliberately NOT theme-derived so a project keeps one colour in both
+  frontends), member rows a `--project-stripe` bar. A member path is resolved against `appState.workspaces`
+  at render time: match → workspace row (click switches), no match → directory row (click adopts it as a
+  `Simple` workspace via `ipc.createWorkspace`, then switches). Collapse persisted as `projectsCollapsed`
+  (settings). Create/edit in `dialogs/project-dialog.ts` (10-swatch radio, workspace checkboxes, directory
+  rows through `attachPathPicker`); sheets `projects.css` + `dialog-projects.css`.
 - `workspace-switcher.ts` ranks with the pure `mru.ts` (`mruBump` / `mruRank` / `rankItems`) over the
   `workspaceMru` settings list that `appState.setActiveWorkspace` bumps (the single choke point for
   switches); rows show `statusGlyph` (agent rollup or dirty git).

@@ -87,6 +87,7 @@ struct ThemeToml {
     selection: SelectionToml,
     status: StatusToml,
     diff: DiffToml,
+    projects: ProjectToml,
 }
 
 #[derive(Deserialize, Default)]
@@ -224,6 +225,23 @@ struct StatusToml {
     done: Option<String>,
     error: Option<String>,
     exited: Option<String>,
+}
+
+/// `[projects]` — the ten fixed project label colours (`Project.color` is an
+/// index into them). Shared RGB values with the desktop's project tokens.
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct ProjectToml {
+    c0: Option<String>,
+    c1: Option<String>,
+    c2: Option<String>,
+    c3: Option<String>,
+    c4: Option<String>,
+    c5: Option<String>,
+    c6: Option<String>,
+    c7: Option<String>,
+    c8: Option<String>,
+    c9: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -486,6 +504,42 @@ pub struct StatusTheme {
     pub exited: Color,
 }
 
+/// The ten project label colours. `piki_core::projects::Project.color` stores
+/// an index into this palette (never a colour value), so both frontends — and
+/// any theme file via `[projects]` — decide what the slots look like. The
+/// default RGB values are shared verbatim with the desktop's project tokens.
+pub struct ProjectTheme {
+    pub c0: Color,
+    pub c1: Color,
+    pub c2: Color,
+    pub c3: Color,
+    pub c4: Color,
+    pub c5: Color,
+    pub c6: Color,
+    pub c7: Color,
+    pub c8: Color,
+    pub c9: Color,
+}
+
+impl ProjectTheme {
+    /// Palette slot for a project colour index. Out-of-range indices clamp to
+    /// the last slot (mirrors `Project::clamped_color`).
+    pub fn color(&self, idx: u8) -> Color {
+        match idx {
+            0 => self.c0,
+            1 => self.c1,
+            2 => self.c2,
+            3 => self.c3,
+            4 => self.c4,
+            5 => self.c5,
+            6 => self.c6,
+            7 => self.c7,
+            8 => self.c8,
+            _ => self.c9,
+        }
+    }
+}
+
 pub struct Theme {
     pub border: BorderTheme,
     pub workspace_list: WorkspaceListTheme,
@@ -501,6 +555,7 @@ pub struct Theme {
     pub selection: SelectionTheme,
     pub status: StatusTheme,
     pub diff: DiffTheme,
+    pub projects: ProjectTheme,
     /// The primitive tokens this theme derives from, for one-off semantic
     /// colors that have no dedicated role.
     pub palette: Palette,
@@ -624,6 +679,21 @@ impl Theme {
                 context: p.fg2,
                 hunk: p.info,
                 comment: p.warn,
+            },
+            // Fixed slots, not palette-derived: the same ten RGB values as
+            // the desktop's project tokens, so a project label looks the same
+            // in both frontends.
+            projects: ProjectTheme {
+                c0: rgb(0x4A88E8),
+                c1: rgb(0x3BB8C4),
+                c2: rgb(0x52B788),
+                c3: rgb(0x9BC53D),
+                c4: rgb(0xE8B23A),
+                c5: rgb(0xE8823A),
+                c6: rgb(0xE85A5A),
+                c7: rgb(0xE060A8),
+                c8: rgb(0x9A6AE8),
+                c9: rgb(0x8A93A6),
             },
             palette: *p,
         }
@@ -765,6 +835,18 @@ impl Theme {
                 context: resolve(&t.diff.context, d.diff.context),
                 hunk: resolve(&t.diff.hunk, d.diff.hunk),
                 comment: resolve(&t.diff.comment, d.diff.comment),
+            },
+            projects: ProjectTheme {
+                c0: resolve(&t.projects.c0, d.projects.c0),
+                c1: resolve(&t.projects.c1, d.projects.c1),
+                c2: resolve(&t.projects.c2, d.projects.c2),
+                c3: resolve(&t.projects.c3, d.projects.c3),
+                c4: resolve(&t.projects.c4, d.projects.c4),
+                c5: resolve(&t.projects.c5, d.projects.c5),
+                c6: resolve(&t.projects.c6, d.projects.c6),
+                c7: resolve(&t.projects.c7, d.projects.c7),
+                c8: resolve(&t.projects.c8, d.projects.c8),
+                c9: resolve(&t.projects.c9, d.projects.c9),
             },
             palette: p,
         }

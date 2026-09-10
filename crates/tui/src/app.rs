@@ -104,6 +104,9 @@ pub enum AppMode {
     Dashboard,
     /// Session-daemon overlay (persistent sessions management)
     Sessions,
+    /// Projects overlay (cross-repo groups of workspaces/directories) —
+    /// covers both the list and its edit sub-dialog
+    Projects,
     /// Internal log viewer
     Logs,
     /// Command palette overlay

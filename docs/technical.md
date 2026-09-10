@@ -17,6 +17,7 @@ Companion documents: [persistent sessions design](persistent-sessions.md) ·
 - [Code Review](#code-review)
 - [Desktop application](#desktop-application) — [layout](#desktop-layout) · [shortcuts](#desktop-keyboard-shortcuts) · [Settings](#desktop-settings-dialog) · [tabs](#desktop-tabs-sidebar-and-switcher) · [panes](#desktop-panes-and-content) · [terminal](#desktop-terminal) · [git](#desktop-source-control-panel) · [file finder](#desktop-file-finder) · [chat](#desktop-ai-chat) · [fonts, density, zoom](#desktop-fonts-density-zoom-and-themes)
 - [Workspaces](#workspaces)
+- [Projects](#projects)
 - [Persistent sessions](#persistent-sessions)
 - [Agent integrations](#agent-integrations)
 - [Notifications](#notifications)
@@ -189,6 +190,7 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 | `y` | AI Chat panel |
 | `b` | Workspace dashboard overlay (bird's-eye view of all workspaces and tabs) |
 | `C-s` | Sessions overlay (persistent-session daemon state and management, see below) |
+| `C-p` | Projects overlay (cross-repo groups with a colour; Enter expands or jumps, n/e/d manage) |
 | `o` | Log viewer overlay (last 500 log entries, color-coded, filterable by level) |
 | `m` | Manage agent profiles (create/edit/delete agents for this project) |
 | `v` | Manage providers (add/edit/delete custom AI providers) |
@@ -474,7 +476,7 @@ The diff pane shows a **side-by-side split view**: the left panel displays the o
 ```
 
 - **Menu bar** — File / Edit / View / Git / Agents / Chat / Tools / Help; every entry shows its current shortcut.
-- **Activity bar** — Explorer, Files, Source Control, Agents (opens the agent-profile manager), Settings; an amber badge on the Explorer icon means an agent needs you even when the sidebar is hidden. The Source Control icon carries its own badge: the changed-file count plus `↑N` when local commits haven't been pushed (hover for the breakdown).
+- **Activity bar** — Explorer, Files, Source Control, Projects (see [Projects](#projects)), Agents (opens the agent-profile manager), Settings; an amber badge on the Explorer icon means an agent needs you even when the sidebar is hidden. The Source Control icon carries its own badge: the changed-file count plus `↑N` when local commits haven't been pushed (hover for the breakdown).
 - **Sidebar** — the switchable view (workspace list with `⋯` / right-click menus, file tree with git decorations, Source Control panel) plus the **Agents panel**, always docked at the bottom whatever view is active, listing every running agent across all workspaces with status and elapsed time. Below those rows, an *External* section lists agent CLIs running outside piki (found by scanning `/proc` every 2 s, grouped by process tree, mapped to a workspace by cwd — `Outside` when none matches; the Claude Desktop app, Electron helper processes and browser native-messaging hosts are filtered out as noise) — display-only, except a play button that opens a terminal at the process's cwd. The panel's height is draggable; the workspace list above keeps its header plus at least four rows.
 - **Tab bar** — one strip per workspace: the chips scroll, `+` (new blank tab) and `⋯` (every tab of the workspace, agent status, current one marked) stay put. Tab chips show the shell's ✓/✗ exit badge, an agent dot, a bell flash and a dim `○` when the process exited.
 - **Panes** — each top-level tab is a tree of panes; each pane holds exactly one content (shell, agent, code or markdown editor, web preview, kanban board, API explorer). A blank pane shows the chooser; the pane header shows the title, a split-right / split-down / close set and a *Restart* button once its process has exited. There are no per-pane tab bars.
@@ -682,6 +684,15 @@ Workspace configurations are saved automatically and restored on startup using a
 - Robust de-duplication ensures each workspace is loaded only once.
 - Simple and Project workspaces reference the original directory and are never cleaned up as stale.
 - The **last focused workspace** is remembered across restarts: switching workspaces persists the active path in `ui_preferences`, and on startup the app re-focuses that workspace (falling back to the first one if the saved path no longer exists).
+
+## Projects
+
+A **project** is a user-defined cross-cutting group with a colour — a label, not a place. One project can hold worktrees of different repos, clones and plain directories, and a workspace can belong to several projects. Projects live in the shared SQLite database (`piki_core::projects` + the `ProjectStorage` trait), so one created in the desktop appears in the TUI and vice versa.
+
+- **Members are just paths.** Whether a member renders as a workspace or as a directory is resolved against the registered workspace list at render time: a path with a workspace shows its name (and branch) and jumps on open; any other path shows dimmed as a directory and is **adopted as a `Simple` workspace on first open** (idempotent — once adopted, its rows upgrade by themselves everywhere).
+- **The colour is an index, never a value**: `color: 0..10` into a fixed 10-swatch palette. The desktop paints `var(--project-swatch-N)` (static tokens in `variables.css`, deliberately not theme-derived so the colour matches across frontends); the TUI reads `theme.project` (same RGB defaults, overridable per theme file like any other colour).
+- **Desktop**: the Projects view in the activity bar — project rows (dot, name, member count) expand into member rows carrying a colour stripe; `＋` and the row context menu open the create/edit dialog (name, 10-swatch radio, workspace checkboxes, add-directory path picker); deleting asks for confirmation and never touches the members themselves.
+- **TUI**: the `C-g C-p` overlay — `j`/`k` move, `Enter` expands a project or opens a member, `n`/`e`/`d` create/edit/delete; the editor cycles Name → Colour → Members with `Tab`, picks the colour with `←`/`→` and toggles members with `Space`. Directories are added from the desktop dialog or by adopting; the TUI editor lists them so they can be unchecked.
 
 ## Persistent sessions
 

@@ -1,0 +1,22 @@
+---
+source: crates/tui/src/ui/mod.rs
+assertion_line: 1009
+expression: content
+---
+
+
+
+
+
+
+
+            ╭ Edit Project ────────────────────────────────────────╮
+            │ [Tab] fields [←/→] colour [Space] toggle [Enter] save│
+            │                                                      │
+            │  Name:  frontend                                     │
+            │  Color:  ●  ● [●] ●  ●  ●  ●  ●  ●  ●                │
+            │  Members:                                            │
+            │    [x] nightly                                       │
+            │    [x] /home/user/notes                              │
+            │  > [ ] api                                           │
+            ╰──────────────────────────────────────────────────────╯

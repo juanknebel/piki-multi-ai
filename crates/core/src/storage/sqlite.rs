@@ -822,9 +822,12 @@ mod project_storage_tests {
         assert_eq!(all[0].name, "renamed");
         assert_eq!(all[0].color, 5);
         assert_eq!(all[0].order, 2);
-        assert_eq!(all[0].members, vec![ProjectMember {
-            path: PathBuf::from("/tmp/z")
-        }]);
+        assert_eq!(
+            all[0].members,
+            vec![ProjectMember {
+                path: PathBuf::from("/tmp/z")
+            }]
+        );
     }
 
     #[test]

@@ -15,8 +15,8 @@ use super::dialog::{
     handle_edit_provider_input, handle_edit_workspace_input, handle_help_input,
     handle_import_agents_input, handle_logs_input, handle_manage_agents_input,
     handle_manage_providers_input, handle_missing_prereqs_input, handle_new_tab_input,
-    handle_new_workspace_input, handle_pr_picker_input, handle_sessions_input,
-    handle_workspace_info_input,
+    handle_new_workspace_input, handle_pr_picker_input, handle_projects_input,
+    handle_sessions_input, handle_workspace_info_input,
 };
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField};
@@ -1133,6 +1133,366 @@ fn sessions_enter_on_a_detached_session_asks_to_attach() {
 fn sessions_returns_none_when_dialog_not_active() {
     let mut app = test_app();
     assert!(handle_sessions_input(&mut app, key(KeyCode::Esc)).is_none());
+}
+
+// ── Projects overlay ───────────────────────────────────────────────────
+
+fn test_project(id: i64, name: &str, member_paths: &[&str]) -> piki_core::projects::Project {
+    piki_core::projects::Project {
+        id: Some(id),
+        name: name.to_string(),
+        color: 3,
+        order: id as u32,
+        members: member_paths
+            .iter()
+            .map(|p| piki_core::projects::ProjectMember {
+                path: std::path::PathBuf::from(p),
+            })
+            .collect(),
+    }
+}
+
+fn open_projects_dialog(app: &mut App, projects: Vec<piki_core::projects::Project>) {
+    app.mode = AppMode::Projects;
+    app.active_dialog = Some(DialogState::Projects {
+        projects,
+        selected: 0,
+        expanded: std::collections::HashSet::new(),
+        scroll_offset: 0,
+    });
+}
+
+fn projects_selected(app: &App) -> usize {
+    match &app.active_dialog {
+        Some(DialogState::Projects { selected, .. }) => *selected,
+        _ => panic!("not in Projects dialog"),
+    }
+}
+
+fn projects_expanded(app: &App) -> std::collections::HashSet<i64> {
+    match &app.active_dialog {
+        Some(DialogState::Projects { expanded, .. }) => expanded.clone(),
+        _ => panic!("not in Projects dialog"),
+    }
+}
+
+fn project_edit_field(app: &App) -> crate::dialog_state::ProjectEditField {
+    match &app.active_dialog {
+        Some(DialogState::ProjectEdit { active_field, .. }) => *active_field,
+        _ => panic!("not in ProjectEdit dialog"),
+    }
+}
+
+#[test]
+fn projects_esc_dismisses() {
+    let mut app = test_app();
+    open_projects_dialog(&mut app, vec![test_project(1, "alpha", &[])]);
+
+    let action = handle_projects_input(&mut app, key(KeyCode::Esc));
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+#[test]
+fn projects_nav_moves_and_clamps() {
+    let mut app = test_app();
+    open_projects_dialog(
+        &mut app,
+        vec![test_project(1, "alpha", &[]), test_project(2, "beta", &[])],
+    );
+
+    handle_projects_input(&mut app, key(KeyCode::Char('j')));
+    assert_eq!(projects_selected(&app), 1);
+    handle_projects_input(&mut app, key(KeyCode::Char('j')));
+    assert_eq!(projects_selected(&app), 1, "clamps at the last row");
+    handle_projects_input(&mut app, key(KeyCode::Char('k')));
+    assert_eq!(projects_selected(&app), 0);
+    handle_projects_input(&mut app, key(KeyCode::Char('k')));
+    assert_eq!(projects_selected(&app), 0, "clamps at the first row");
+}
+
+#[test]
+fn projects_enter_toggles_expand_and_members_join_the_rows() {
+    let mut app = test_app();
+    open_projects_dialog(
+        &mut app,
+        vec![test_project(1, "alpha", &["/tmp/a", "/tmp/b"])],
+    );
+
+    handle_projects_input(&mut app, key(KeyCode::Enter));
+    assert!(projects_expanded(&app).contains(&1));
+
+    // The two member rows are now navigable below the project row.
+    handle_projects_input(&mut app, key(KeyCode::Char('j')));
+    handle_projects_input(&mut app, key(KeyCode::Char('j')));
+    assert_eq!(projects_selected(&app), 2);
+    handle_projects_input(&mut app, key(KeyCode::Char('j')));
+    assert_eq!(projects_selected(&app), 2, "clamps past the last member");
+
+    // Enter on the project row again collapses it.
+    handle_projects_input(&mut app, key(KeyCode::Char('k')));
+    handle_projects_input(&mut app, key(KeyCode::Char('k')));
+    handle_projects_input(&mut app, key(KeyCode::Enter));
+    assert!(projects_expanded(&app).is_empty());
+}
+
+#[test]
+fn projects_enter_on_a_workspace_member_jumps_and_closes() {
+    let mut app = test_app();
+    let ws = add_test_workspace(&mut app); // path is /tmp/test
+    open_projects_dialog(&mut app, vec![test_project(1, "alpha", &["/tmp/test"])]);
+
+    handle_projects_input(&mut app, key(KeyCode::Enter)); // expand
+    handle_projects_input(&mut app, key(KeyCode::Char('j'))); // onto the member
+    let action = handle_projects_input(&mut app, key(KeyCode::Enter));
+
+    assert!(action.is_none(), "registered workspace: jump, no action");
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+    assert_eq!(app.active_workspace, ws);
+}
+
+#[test]
+fn projects_enter_on_a_directory_member_adopts_and_closes() {
+    let mut app = test_app();
+    add_test_workspace(&mut app);
+    open_projects_dialog(
+        &mut app,
+        vec![test_project(1, "alpha", &["/tmp/elsewhere"])],
+    );
+
+    handle_projects_input(&mut app, key(KeyCode::Enter)); // expand
+    handle_projects_input(&mut app, key(KeyCode::Char('j'))); // onto the member
+    let action = handle_projects_input(&mut app, key(KeyCode::Enter));
+
+    assert!(matches!(
+        action,
+        Some(Action::ProjectAdoptDirectory { ref path })
+            if path == &std::path::PathBuf::from("/tmp/elsewhere")
+    ));
+    assert!(app.active_dialog.is_none());
+}
+
+#[test]
+fn projects_delete_returns_the_action_for_the_selected_project() {
+    let mut app = test_app();
+    open_projects_dialog(
+        &mut app,
+        vec![test_project(1, "alpha", &[]), test_project(2, "beta", &[])],
+    );
+
+    handle_projects_input(&mut app, key(KeyCode::Char('j')));
+    let action = handle_projects_input(&mut app, key(KeyCode::Char('d')));
+
+    assert!(matches!(action, Some(Action::DeleteProject(2))));
+}
+
+#[test]
+fn projects_new_opens_an_empty_editor_listing_workspaces_unchecked() {
+    let mut app = test_app();
+    add_test_workspace(&mut app);
+    open_projects_dialog(&mut app, Vec::new());
+
+    let action = handle_projects_input(&mut app, key(KeyCode::Char('n')));
+
+    assert!(action.is_none());
+    assert_eq!(app.mode, AppMode::Projects, "same modal, second variant");
+    let Some(DialogState::ProjectEdit {
+        editing_id,
+        ref name,
+        color,
+        ref members,
+        ..
+    }) = app.active_dialog
+    else {
+        panic!("expected ProjectEdit dialog");
+    };
+    assert_eq!(editing_id, None);
+    assert!(name.is_empty());
+    assert_eq!(color, 0);
+    assert_eq!(members.len(), 1);
+    assert!(members[0].is_workspace);
+    assert!(!members[0].checked);
+}
+
+#[test]
+fn projects_edit_prefills_saved_members_first_then_workspaces() {
+    let mut app = test_app();
+    add_test_workspace(&mut app); // /tmp/test
+    open_projects_dialog(
+        &mut app,
+        vec![test_project(7, "alpha", &["/tmp/plain-dir", "/tmp/test"])],
+    );
+
+    handle_projects_input(&mut app, key(KeyCode::Char('e')));
+
+    let Some(DialogState::ProjectEdit {
+        editing_id,
+        ref name,
+        color,
+        order,
+        ref members,
+        ..
+    }) = app.active_dialog
+    else {
+        panic!("expected ProjectEdit dialog");
+    };
+    assert_eq!(editing_id, Some(7));
+    assert_eq!(name, "alpha");
+    assert_eq!(color, 3);
+    assert_eq!(order, 7);
+    // Saved members first, in saved order: the plain directory (kept so it
+    // can be unchecked), then the workspace member; no duplicate row for the
+    // already-member workspace.
+    assert_eq!(members.len(), 2);
+    assert!(!members[0].is_workspace);
+    assert!(members[0].checked);
+    assert_eq!(members[0].path, std::path::PathBuf::from("/tmp/plain-dir"));
+    assert!(members[1].is_workspace);
+    assert!(members[1].checked);
+    assert_eq!(members[1].path, std::path::PathBuf::from("/tmp/test"));
+}
+
+#[test]
+fn project_edit_tab_cycles_fields() {
+    use crate::dialog_state::ProjectEditField;
+    let mut app = test_app();
+    open_projects_dialog(&mut app, Vec::new());
+    handle_projects_input(&mut app, key(KeyCode::Char('n')));
+
+    assert_eq!(project_edit_field(&app), ProjectEditField::Name);
+    handle_projects_input(&mut app, key(KeyCode::Tab));
+    assert_eq!(project_edit_field(&app), ProjectEditField::Color);
+    handle_projects_input(&mut app, key(KeyCode::Tab));
+    assert_eq!(project_edit_field(&app), ProjectEditField::Members);
+    handle_projects_input(&mut app, key(KeyCode::Tab));
+    assert_eq!(project_edit_field(&app), ProjectEditField::Name);
+    handle_projects_input(&mut app, key(KeyCode::BackTab));
+    assert_eq!(project_edit_field(&app), ProjectEditField::Members);
+}
+
+#[test]
+fn project_edit_color_arrows_move_over_the_palette() {
+    let mut app = test_app();
+    open_projects_dialog(&mut app, Vec::new());
+    handle_projects_input(&mut app, key(KeyCode::Char('n')));
+    handle_projects_input(&mut app, key(KeyCode::Tab)); // → Color
+
+    let color = |app: &App| match &app.active_dialog {
+        Some(DialogState::ProjectEdit { color, .. }) => *color,
+        _ => panic!("not in ProjectEdit dialog"),
+    };
+    handle_projects_input(&mut app, key(KeyCode::Right));
+    assert_eq!(color(&app), 1);
+    handle_projects_input(&mut app, key(KeyCode::Left));
+    assert_eq!(color(&app), 0);
+    handle_projects_input(&mut app, key(KeyCode::Left));
+    assert_eq!(
+        color(&app),
+        piki_core::projects::PROJECT_PALETTE_LEN - 1,
+        "wraps around"
+    );
+}
+
+#[test]
+fn project_edit_space_toggles_the_member_under_the_cursor() {
+    let mut app = test_app();
+    add_test_workspace(&mut app);
+    open_projects_dialog(&mut app, Vec::new());
+    handle_projects_input(&mut app, key(KeyCode::Char('n')));
+    handle_projects_input(&mut app, key(KeyCode::Tab)); // → Color
+    handle_projects_input(&mut app, key(KeyCode::Tab)); // → Members
+
+    let checked = |app: &App| match &app.active_dialog {
+        Some(DialogState::ProjectEdit { members, .. }) => members[0].checked,
+        _ => panic!("not in ProjectEdit dialog"),
+    };
+    assert!(!checked(&app));
+    handle_projects_input(&mut app, key(KeyCode::Char(' ')));
+    assert!(checked(&app));
+    handle_projects_input(&mut app, key(KeyCode::Char(' ')));
+    assert!(!checked(&app));
+}
+
+#[test]
+fn project_edit_enter_saves_checked_members_keeping_saved_order() {
+    let mut app = test_app();
+    add_test_workspace(&mut app); // /tmp/test — not yet a member
+    open_projects_dialog(
+        &mut app,
+        vec![test_project(7, "alpha", &["/tmp/plain-dir"])],
+    );
+    handle_projects_input(&mut app, key(KeyCode::Char('e')));
+    // Check the workspace row (row 1, after the saved directory member).
+    handle_projects_input(&mut app, key(KeyCode::Tab)); // → Color
+    handle_projects_input(&mut app, key(KeyCode::Tab)); // → Members
+    handle_projects_input(&mut app, key(KeyCode::Char('j')));
+    handle_projects_input(&mut app, key(KeyCode::Char(' ')));
+
+    let action = handle_projects_input(&mut app, key(KeyCode::Enter));
+
+    let Some(Action::SaveProject(project)) = action else {
+        panic!("expected SaveProject, got {action:?}");
+    };
+    assert_eq!(project.id, Some(7));
+    assert_eq!(project.name, "alpha");
+    assert_eq!(project.order, 7, "existing order preserved");
+    // Saved member kept its position; the newly checked workspace appended.
+    assert_eq!(project.members.len(), 2);
+    assert_eq!(
+        project.members[0].path,
+        std::path::PathBuf::from("/tmp/plain-dir")
+    );
+    assert_eq!(
+        project.members[1].path,
+        std::path::PathBuf::from("/tmp/test")
+    );
+    // The handler swapped back to the list; the action reloads it.
+    assert!(matches!(
+        app.active_dialog,
+        Some(DialogState::Projects { .. })
+    ));
+    assert_eq!(app.mode, AppMode::Projects);
+}
+
+#[test]
+fn project_edit_enter_with_an_empty_name_stays_and_toasts() {
+    let mut app = test_app();
+    open_projects_dialog(&mut app, Vec::new());
+    handle_projects_input(&mut app, key(KeyCode::Char('n')));
+
+    let action = handle_projects_input(&mut app, key(KeyCode::Enter));
+
+    assert!(action.is_none());
+    assert!(matches!(
+        app.active_dialog,
+        Some(DialogState::ProjectEdit { .. })
+    ));
+}
+
+#[test]
+fn project_edit_esc_backs_out_to_the_list_without_saving() {
+    let mut app = test_app();
+    open_projects_dialog(&mut app, Vec::new());
+    handle_projects_input(&mut app, key(KeyCode::Char('n')));
+    handle_projects_input(&mut app, key(KeyCode::Char('x'))); // type a name
+
+    let action = handle_projects_input(&mut app, key(KeyCode::Esc));
+
+    assert!(action.is_none());
+    assert!(matches!(
+        app.active_dialog,
+        Some(DialogState::Projects { .. })
+    ));
+    assert_eq!(app.mode, AppMode::Projects);
+}
+
+#[test]
+fn projects_returns_none_when_dialog_not_active() {
+    let mut app = test_app();
+    assert!(handle_projects_input(&mut app, key(KeyCode::Esc)).is_none());
 }
 
 // ── Logs ───────────────────────────────────────────────────────────────

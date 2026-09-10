@@ -1,0 +1,25 @@
+---
+source: crates/tui/src/ui/mod.rs
+assertion_line: 962
+expression: content
+---
+
+
+
+
+        ╭ Projects ────────────────────────────────────────────────────╮
+        │ [Enter] expand/jump [n] new [e] edit [d] delete [Esc] close  │
+        │                                                              │
+        │ ▾ ● frontend                    2 members                    │
+        │     nightly                                                  │
+        │     /home/user/notes                                         │
+        │ ▸ ● backend                     1 member                     │
+        │                                                              │
+        │                                                              │
+        │                                                              │
+        │                                                              │
+        │                                                              │
+        │                                                              │
+        │                                                              │
+        │                                                              │
+        ╰─────────────────────────────────────────────────────── [2/4] ╯

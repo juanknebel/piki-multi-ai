@@ -113,6 +113,7 @@ theme = "default"
 # about            = "prefix-a"
 # dashboard        = "prefix-b"
 # sessions         = "prefix-ctrl-s"
+# projects         = "prefix-ctrl-p"
 # command_palette  = "prefix-:"
 # fuzzy_search     = "prefix-/"
 # project_search   = "prefix-t"
@@ -246,6 +247,18 @@ theme = "default"
 # refresh = "r"
 # exit = "esc"
 # exit_alt = "ctrl-s"        # toggle-close (Sessions opens with prefix-ctrl-s)
+
+# [keybindings.projects]
+# down = "j"
+# up = "k"
+# down_alt = "down"
+# up_alt = "up"
+# select = "enter"           # expand/collapse a project, or jump to / adopt the member
+# new = "n"
+# edit = "e"
+# delete = "d"               # delete the selected project (immediate, no confirm)
+# exit = "esc"
+# exit_alt = "ctrl-p"        # toggle-close (Projects opens with prefix-ctrl-p)
 
 # [keybindings.logs]
 # down = "j"

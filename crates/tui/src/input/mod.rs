@@ -28,8 +28,8 @@ use self::dialog::{
     handle_edit_agent_role_input, handle_edit_provider_input, handle_edit_workspace_input,
     handle_help_input, handle_import_agents_input, handle_logs_input, handle_manage_agents_input,
     handle_manage_providers_input, handle_missing_prereqs_input, handle_new_tab_input,
-    handle_new_workspace_input, handle_pr_picker_input, handle_rename_tab_input,
-    handle_sessions_input, handle_workspace_info_input,
+    handle_new_workspace_input, handle_pr_picker_input, handle_projects_input,
+    handle_rename_tab_input, handle_sessions_input, handle_workspace_info_input,
 };
 use self::editor_input::handle_inline_edit_input;
 use self::fuzzy_input::handle_fuzzy_search_input;
@@ -222,6 +222,7 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         AppMode::ConfirmQuit => return handle_confirm_quit_input(app, key),
         AppMode::Dashboard => return handle_dashboard_input(app, key),
         AppMode::Sessions => return handle_sessions_input(app, key),
+        AppMode::Projects => return handle_projects_input(app, key),
         AppMode::Logs => return handle_logs_input(app, key),
         AppMode::CommandPalette => return handle_command_palette_input(app, key),
         AppMode::RenameTab => return handle_rename_tab_input(app, key),
@@ -323,6 +324,7 @@ const APP_ACTIONS: &[&str] = &[
     "about",
     "dashboard",
     "sessions",
+    "projects",
     "command_palette",
     "fuzzy_search",
     "project_search",
@@ -377,6 +379,7 @@ fn dispatch_app_action(app: &mut App, action: &str) -> Option<Action> {
         "about" => app_actions::open_about(app),
         "dashboard" => app_actions::open_dashboard(app),
         "sessions" => app_actions::open_sessions(app),
+        "projects" => app_actions::open_projects(app),
         "command_palette" => {
             app.open_command_palette();
             None

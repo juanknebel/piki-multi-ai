@@ -1,6 +1,6 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 787
+assertion_line: 834
 expression: body
 ---
 
@@ -35,6 +35,7 @@ expression: body
       C-g a         About
       C-g o         Logs
       C-g C-s       Sessions (persistent)
+      C-g C-p       Projects
       C-g [         Terminal Scroll Mode
       C-g y         AI Chat
     Focus
@@ -140,6 +141,20 @@ expression: body
     d             Remove the session from the daemon
     r             Reload the list from the daemon
     Esc           Close
+
+  Projects overlay (C-g C-p)
+    j             Select the next row
+    k             Select the previous row
+    Enter         Expand/collapse a project; jump to a member (adopts a directory)
+    n             New project
+    e             Edit the selected project
+    d             Delete the selected project
+    Esc           Close
+    Tab           Cycle fields (in the editor)
+    ←/→           Pick the colour (in the editor)
+    Space         Toggle a member (in the editor)
+    Enter         Save (in the editor)
+    Esc           Back to the list (in the editor)
 
   Logs (C-g o)
     j             Select the next entry

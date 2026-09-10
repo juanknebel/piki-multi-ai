@@ -199,6 +199,35 @@ pub enum DialogState {
         /// Daemon pid read from its pid file at open time (renders are pure).
         daemon_pid: Option<u32>,
     },
+    /// Projects overlay (`prefix ctrl-p`): cross-repo groups of workspaces
+    /// and directories, each with a colour. Loaded from storage at open time
+    /// and reloaded after every save/delete (renders stay pure).
+    Projects {
+        projects: Vec<piki_core::projects::Project>,
+        /// Index into the flattened row list (see [`project_rows`]).
+        selected: usize,
+        /// Ids of the projects whose member rows are shown.
+        expanded: std::collections::HashSet<i64>,
+        scroll_offset: usize,
+    },
+    /// Edit/create a project — the Projects overlay's sub-dialog (same
+    /// `AppMode::Projects`; Esc goes back to the list).
+    ProjectEdit {
+        /// None = creating new, Some(id) = editing existing.
+        editing_id: Option<i64>,
+        name: String,
+        name_cursor: usize,
+        /// Palette index, `0..piki_core::projects::PROJECT_PALETTE_LEN`.
+        color: u8,
+        /// Preserved display order of the edited project. 0 for a new one —
+        /// the save action assigns `max + 1` when creating.
+        order: u32,
+        /// Member checklist; see [`ProjectMemberRow`] for the row order
+        /// contract.
+        members: Vec<ProjectMemberRow>,
+        member_cursor: usize,
+        active_field: ProjectEditField,
+    },
     Logs {
         scroll: u16,
         level_filter: u8,
@@ -296,6 +325,76 @@ pub enum DialogState {
         input: String,
         cursor: usize,
     },
+}
+
+/// One row of the project-edit member checklist. Rows are the project's saved
+/// members first (in saved order — a plain-directory member is kept as a row
+/// too so it can still be unchecked), then every registered workspace that
+/// isn't a member yet. Collecting the checked rows in display order therefore
+/// keeps the saved member order and appends newly checked entries at the end.
+#[derive(Debug, Clone)]
+pub struct ProjectMemberRow {
+    /// The member's identity: workspace path or plain directory.
+    pub path: std::path::PathBuf,
+    /// Workspace name when `path` matches a registered workspace, else the
+    /// path itself (rendered dimmed).
+    pub label: String,
+    pub is_workspace: bool,
+    pub checked: bool,
+}
+
+/// Active field in the ProjectEdit dialog.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProjectEditField {
+    Name,
+    Color,
+    Members,
+}
+
+impl CycleField for ProjectEditField {
+    fn next(self) -> Self {
+        match self {
+            Self::Name => Self::Color,
+            Self::Color => Self::Members,
+            Self::Members => Self::Name,
+        }
+    }
+
+    fn prev(self) -> Self {
+        match self {
+            Self::Name => Self::Members,
+            Self::Color => Self::Name,
+            Self::Members => Self::Color,
+        }
+    }
+}
+
+/// One visible row of the Projects overlay list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProjectRow {
+    /// Index into the dialog's projects vec.
+    Project(usize),
+    /// (project index, member index) of an expanded project's member.
+    Member(usize, usize),
+}
+
+/// Flatten the project list plus its expansion state into the visible rows.
+/// Shared by the input handler and the renderer so `selected` always
+/// addresses exactly what is on screen.
+pub fn project_rows(
+    projects: &[piki_core::projects::Project],
+    expanded: &std::collections::HashSet<i64>,
+) -> Vec<ProjectRow> {
+    let mut rows = Vec::new();
+    for (pi, p) in projects.iter().enumerate() {
+        rows.push(ProjectRow::Project(pi));
+        if p.id.is_some_and(|id| expanded.contains(&id)) {
+            for mi in 0..p.members.len() {
+                rows.push(ProjectRow::Member(pi, mi));
+            }
+        }
+    }
+    rows
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
