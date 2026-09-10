@@ -491,7 +491,7 @@ The terminal owns every key it can use. An app shortcut fires while a terminal, 
 |---|---|
 | **General** | |
 | `Ctrl+Shift+P` | Command Palette |
-| `Ctrl+N` ° | New Workspace |
+| `Alt+N` | New Workspace |
 | `Alt+W` | Workspace Switcher |
 | `Alt+D` | Dashboard |
 | `?` ° | Keyboard Shortcuts (help dialog, generated from the same registry as this table) |
@@ -500,7 +500,7 @@ The terminal owns every key it can use. An app shortcut fires while a terminal, 
 | `Alt+1…9` | Switch to Workspace N |
 | `Right-click workspace` | Workspace menu (open, agents, info, edit, merge, delete) — also the row's `⋯` |
 | **View & Panels** | |
-| `Ctrl+B` ° | Toggle Sidebar |
+| `Alt+S` | Toggle Sidebar |
 | `Alt+K` | Kanban Board |
 | `Alt+Shift+W` | Open Web Preview |
 | `Alt+T` | Theme Settings |
@@ -521,15 +521,15 @@ The terminal owns every key it can use. An app shortcut fires while a terminal, 
 | `Alt+F` | Find File (fuzzy; `Enter` opens an editor tab, `Ctrl+E` runs `$EDITOR`) |
 | `Ctrl+Shift+F` | Search in Project (grep) |
 | `Ctrl+Shift+B` | Search in Terminal |
-| `Ctrl+J` ° | API jq Filter (in API Explorer) |
+| `Alt+J` | API jq Filter (in API Explorer) |
 | `Ctrl+H` | Request History (in API Explorer) |
 | `Alt+Enter` | Open in read-only viewer (in file search; Enter opens an editor tab) |
 | **Git** | |
-| `Ctrl+M` ° | Merge / Rebase |
+| `Alt+M` | Merge / Rebase |
 | `Alt+B` | Switch Branch (also by clicking the branch in the status bar) |
 | `Alt+L` | Git Log |
 | `Ctrl+Shift+S` | Git Stash |
-| `Ctrl+Z` ° | Undo Stage/Unstage |
+| `Alt+Z` | Undo Stage/Unstage |
 | `Ctrl+Shift+R` | Code Review (PR) |
 | `Ctrl+Enter` | Commit (in commit message box) — or amend when *Amend last commit* is ticked |
 | **Agents** | |
@@ -537,10 +537,10 @@ The terminal owns every key it can use. An app shortcut fires while a terminal, 
 | `Ctrl+Shift+D` | Dispatch Agent |
 | `Alt+A` | Jump to Agent Needing Attention (permission first, then unseen news; repeat to walk through them) |
 | **Panes & Tabs** | |
-| `Ctrl+T` ° | New Blank Tab |
-| `Ctrl+\` ° | Split Pane Right |
-| `Ctrl+Shift+\` ° | Split Pane Down |
-| `Ctrl+Shift+Q` ° | Close Active Pane |
+| `Ctrl+Shift+T` | New Blank Tab |
+| `Alt+Shift+R` | Split Pane Right |
+| `Alt+Shift+D` | Split Pane Down |
+| `Ctrl+Shift+Q` | Close Active Pane |
 | `Ctrl+Tab` | Next Tab |
 | `Ctrl+Shift+Tab` | Previous Tab |
 | `Drag divider` | Resize split |
@@ -615,7 +615,7 @@ The common git loop runs from the panel, the Git menu or the palette without a s
 - **Commit / Amend**: *Amend last commit* under the Commit button prefills the message box with the last commit message (unless you had already typed one) and turns the button into *Amend*; it is live with staged changes or a new message — an empty message keeps the current one (`git commit --amend --no-edit`). Unticking restores what you had typed. `Ctrl+Enter` commits or amends.
 - **Discard**: every row in *Changes* has a discard action that throws away the working-tree changes of that file (`git restore --worktree`, the index is untouched) behind a confirm; for an untracked file the action reads *Delete file* and really deletes it (`git clean -fd`). Both are irreversible and say so.
 - **Switch branch** (`Alt+B`, click the branch in the status bar, Git ▸ Switch Branch…, palette): a fuzzy-filterable list of local branches plus remote-tracking branches that have no local counterpart (`remote` tag; picking one creates a tracking branch), the current one marked with its `↑ ↓` counts. Checkout never forces: when uncommitted changes would be overwritten, or the branch is checked out in another worktree, git's refusal is the error toast and nothing changes.
-- **Merge / Rebase** (`Ctrl+M`), **stash** (`Ctrl+Shift+S`), **git log** (`Alt+L`), side-by-side diffs with conflict resolution, and **Code Review** (`Ctrl+Shift+R`) — the review overlay opens immediately with a *Loading PR…* skeleton (closable) while `gh` runs, then *Loading review comments…*; if `gh` is missing or fails, the overlay shows the error with *Retry* / *Close*.
+- **Merge / Rebase** (`Alt+M`), **stash** (`Ctrl+Shift+S`), **git log** (`Alt+L`), side-by-side diffs with conflict resolution, and **Code Review** (`Ctrl+Shift+R`) — the review overlay opens immediately with a *Loading PR…* skeleton (closable) while `gh` runs, then *Loading review comments…*; if `gh` is missing or fails, the overlay shows the error with *Retry* / *Close*.
 
 ### Desktop file finder
 
