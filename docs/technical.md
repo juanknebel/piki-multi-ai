@@ -206,7 +206,7 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 
 > This table is checked against `default_app()` by the `docs_parity` tests: every action key must appear here, and no key may be listed that nothing binds.
 
-**Terminal scroll mode** (`Ctrl+G [`, status bar shows `[SCROLL]`): `j`/`k` scroll by line, `Ctrl+U`/`Ctrl+D` (or `PageUp`/`PageDown`) by page, `g`/`G` top/bottom, `/` opens terminal search, `Esc`/`q` exits and snaps back to the live view. Mouse wheel scrolling works at any time without entering the mode.
+**Terminal scroll mode** (`Ctrl+G [`, status bar shows `[SCROLL]`): `j`/`k` scroll by line, `Ctrl+U`/`Ctrl+D` (or `PageUp`/`PageDown`) by page, `g`/`G` top/bottom, `/` opens terminal search, `Esc`/`q` exits and snaps back to the live view. Mouse wheel scrolling works at any time without entering the mode; typing into the terminal snaps a wheel-scrolled view back to the live bottom (only terminal copy keeps the scrollback position).
 
 **Focused-pane keys** (no prefix needed — keys go straight to the pane):
 
