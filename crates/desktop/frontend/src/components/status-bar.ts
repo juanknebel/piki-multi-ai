@@ -8,7 +8,7 @@ import { getShortcutKey } from "../shortcuts";
 import { branchLabel } from "../labels";
 import { icon } from "./icons";
 import { openBranchPicker } from "./dialogs/branch-picker";
-import { openHomeTerminal } from "./open-content";
+import { toggleDropdownTerminal } from "./dropdown-terminal";
 import * as ipc from "../ipc";
 
 const STAGED_STATUSES: FileStatus[] = ["Staged", "Added", "Renamed", "StagedModified"];
@@ -140,15 +140,15 @@ export function renderStatusBar(container: HTMLElement) {
       addItem(bar, "sysinfo", appState.sysinfo);
     }
 
-    // Home terminal — opens a Shell tab that starts at ~, whatever
-    // workspace is active. The one action button; sits at the corner.
-    const homeTerm = document.createElement("div");
-    homeTerm.className = "status-item clickable status-home-term";
-    homeTerm.dataset.seg = "home-term";
-    homeTerm.innerHTML = icon("terminal", { label: "Open terminal at home" });
-    homeTerm.title = "Open a terminal at ~ (home directory)";
-    homeTerm.addEventListener("click", () => void openHomeTerminal());
-    bar.appendChild(homeTerm);
+    // Drop-down terminal toggle — a single shell rooted at ~, independent
+    // of any workspace. The one action button; sits at the corner.
+    const dropTerm = document.createElement("div");
+    dropTerm.className = "status-item clickable status-home-term";
+    dropTerm.dataset.seg = "drop-term";
+    dropTerm.innerHTML = icon("terminal", { label: "Toggle terminal" });
+    dropTerm.title = `Toggle the drop-down terminal (${getShortcutKey("toggle-terminal")}) — a shell at ~, independent of the workspace`;
+    dropTerm.addEventListener("click", () => void toggleDropdownTerminal());
+    bar.appendChild(dropTerm);
 
     morphChildren(container, bar);
   }

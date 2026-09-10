@@ -198,6 +198,14 @@ pub async fn write_pty(
             }
         }
     }
+    if let Some(tab) = app.scratch_terminal.as_mut().filter(|t| t.id == tab_id) {
+        return match tab.pty {
+            Some(ref mut pty) => pty
+                .write(&bytes)
+                .map_err(|e| format!("PTY write error: {e}")),
+            None => Err("Tab has no PTY session".to_string()),
+        };
+    }
     Err("Tab not found".to_string())
 }
 
@@ -220,6 +228,14 @@ pub async fn resize_pty(
                 return Err("Tab has no PTY session".to_string());
             }
         }
+    }
+    if let Some(tab) = app.scratch_terminal.as_ref().filter(|t| t.id == tab_id) {
+        return match tab.pty {
+            Some(ref pty) => pty
+                .resize(rows, cols)
+                .map_err(|e| format!("PTY resize error: {e}")),
+            None => Err("Tab has no PTY session".to_string()),
+        };
     }
     Err("Tab not found".to_string())
 }
@@ -378,8 +394,7 @@ fn shell_quote(s: &str) -> String {
 }
 
 /// Spawn a Shell tab in `workspace_idx` whose PTY starts in `cwd` (an
-/// absolute directory). Shared tail of `spawn_terminal_at` and
-/// `spawn_home_terminal`.
+/// absolute directory). Tail of `spawn_terminal_at`.
 fn spawn_shell_tab_at(
     app_handle: AppHandle,
     state: &State<'_, Mutex<DesktopApp>>,
@@ -463,20 +478,77 @@ pub async fn spawn_terminal_at(
     spawn_shell_tab_at(app_handle, &state, workspace_idx, cwd)
 }
 
-/// Spawns a Shell tab that always starts in the user's home directory,
-/// whatever workspace hosts it — the status bar's home-terminal button.
+/// State of the global drop-down ("Quake") terminal, returned by
+/// `scratch_terminal_toggle` so the frontend can bind its xterm instance
+/// and know whether to show the overlay.
+#[derive(serde::Serialize)]
+pub struct ScratchTerminalState {
+    /// Present once the shell has been spawned (lazily, on first show).
+    pub tab_id: Option<String>,
+    pub visible: bool,
+}
+
+/// Toggle the global drop-down terminal: a single in-process shell rooted
+/// at `$HOME` that belongs to no workspace. Spawned lazily the first time
+/// it is shown; afterwards this just flips `visible` (the process keeps
+/// running in the background). Its bytes flow through the normal per-tab
+/// output path, and `write_pty` / `resize_pty` accept its `tab_id` too.
 #[tauri::command]
-pub async fn spawn_home_terminal(
+pub async fn scratch_terminal_toggle(
     app_handle: AppHandle,
     state: State<'_, Mutex<DesktopApp>>,
-    workspace_idx: usize,
-) -> Result<String, String> {
-    spawn_shell_tab_at(
-        app_handle,
-        &state,
-        workspace_idx,
-        piki_core::xdg::home_dir(),
-    )
+) -> Result<ScratchTerminalState, String> {
+    let need_spawn = { state.lock().scratch_terminal.is_none() };
+
+    if need_spawn {
+        let mut tab = DesktopTab::new(AIProvider::Shell, None);
+        let tab_id = tab.id.clone();
+        let plan = shell_launch_plan(&state.lock())?;
+        let home = piki_core::xdg::home_dir();
+        let pty = RawPtySession::spawn(
+            app_handle,
+            tab_id,
+            &home,
+            24,
+            80,
+            &plan.command,
+            &plan.args,
+            &plan.env,
+            &plan.extra_args,
+            plan.integration_on,
+            plan.cli_agent_sock,
+        )
+        .map_err(|e| format!("Failed to spawn PTY: {e}"))?;
+        tab.pty = Some(pty);
+        tab.alive = true;
+
+        let mut app = state.lock();
+        app.scratch_terminal = Some(tab);
+        app.scratch_terminal_visible = true;
+    } else {
+        let mut app = state.lock();
+        app.scratch_terminal_visible = !app.scratch_terminal_visible;
+    }
+
+    let app = state.lock();
+    Ok(ScratchTerminalState {
+        tab_id: app.scratch_terminal.as_ref().map(|t| t.id.clone()),
+        visible: app.scratch_terminal_visible,
+    })
+}
+
+/// Kill the drop-down terminal's shell and forget it — the frontend calls
+/// this when the shell process exits so the next toggle spawns a fresh one.
+#[tauri::command]
+pub async fn scratch_terminal_kill(state: State<'_, Mutex<DesktopApp>>) -> Result<(), String> {
+    let mut app = state.lock();
+    if let Some(mut tab) = app.scratch_terminal.take()
+        && let Some(ref mut pty) = tab.pty
+    {
+        let _ = pty.kill();
+    }
+    app.scratch_terminal_visible = false;
+    Ok(())
 }
 
 #[tauri::command]

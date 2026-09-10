@@ -118,23 +118,6 @@ export async function openProvider(provider: AIProvider, target: OpenTarget = {}
   }
 }
 
-/** Open a Shell tab that starts at the user's home directory instead of the
- *  workspace root — the status-bar terminal button, File ▸ New Tab and the
- *  palette. The tab is hosted by the active workspace like any other. */
-export async function openHomeTerminal(target: OpenTarget = {}) {
-  if (!appState.activeWs) {
-    toast("Create a workspace first", "error");
-    return;
-  }
-  const wsIdx = appState.activeWorkspace;
-  try {
-    const tabId = await ipc.spawnHomeTerminal(wsIdx);
-    place({ id: tabId, provider: "Shell", alive: true }, target);
-  } catch (err) {
-    reportError("Open home terminal failed", err);
-  }
-}
-
 /** Open a workspace file in an editor pane/tab: Markdown files get the
  *  markdown editor unless `forceCode`. Same for the file tree, the fuzzy
  *  finder, the file viewer, Source Control and a restored layout. */

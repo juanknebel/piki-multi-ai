@@ -223,6 +223,8 @@ fn main() {
                 chat_streaming: false,
                 chat_agent_mode: false,
                 chat_pending_approvals: Default::default(),
+                scratch_terminal: None,
+                scratch_terminal_visible: false,
             };
 
             // Initialize LSP manager and WebSocket proxy
@@ -304,7 +306,8 @@ fn main() {
             commands::pty::move_tab,
             commands::pty::spawn_editor_tab,
             commands::pty::spawn_terminal_at,
-            commands::pty::spawn_home_terminal,
+            commands::pty::scratch_terminal_toggle,
+            commands::pty::scratch_terminal_kill,
             commands::pty::resync_pty,
             commands::pty::register_pty_output_channel,
             commands::git::get_changed_files,

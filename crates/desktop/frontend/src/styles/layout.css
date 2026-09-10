@@ -212,6 +212,8 @@
   flex-direction: column;
   overflow: hidden;
   background: var(--bg-primary);
+  /* Anchors the absolutely-positioned #dropdown-terminal (Quake terminal). */
+  position: relative;
 }
 
 #main-content {

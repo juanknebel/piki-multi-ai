@@ -15,6 +15,7 @@ import { initMarkdownEditorPanel } from "./components/markdown-editor-panel";
 import { initCodeEditorPanel } from "./components/code-editor-panel";
 import { initWebPreviewPanel } from "./components/web-preview-panel";
 import { installContentRestorer, openProvider } from "./components/open-content";
+import { initDropdownTerminal, toggleDropdownTerminal } from "./components/dropdown-terminal";
 import { tearDownAndClosePane } from "./components/tab-bar";
 import { initPaneView } from "./components/pane-view";
 import { bindAction, handleGlobalKeydown, loadShortcuts } from "./shortcuts";
@@ -73,6 +74,7 @@ async function init() {
   initCodeEditorPanel(mainContentEl);
   initWebPreviewPanel(mainContentEl);
   initPaneView(mainContentEl);
+  initDropdownTerminal();
   renderStatusBar(document.getElementById("status-bar")!);
   initToasts();
   await initChatPanel(document.getElementById("chat-panel")!);
@@ -212,6 +214,7 @@ async function init() {
   bindAction("api-jq-filter", () => document.dispatchEvent(new CustomEvent("toggle-jq")));
   bindAction("undo", () => handleUndo());
   bindAction("toggle-sidebar", () => toggleSidebar());
+  bindAction("toggle-terminal", () => void toggleDropdownTerminal());
   bindAction("toggle-chat", () => toggleChatPanel());
   bindAction("add-chat-context", () => void addContextToChat());
   bindAction("help", () => showHelpDialog());
