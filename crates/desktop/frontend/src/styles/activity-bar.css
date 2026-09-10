@@ -89,7 +89,7 @@
   box-shadow: var(--activity-bar-badge-glow);
 }
 
-/* Agents needing you — amber, on the Explorer icon so a hidden sidebar or
+/* Agents needing you — amber, on the Workspaces icon so a hidden sidebar or
    another view never hides the signal. */
 .activity-badge--attention {
   background: var(--warning-color);

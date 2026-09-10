@@ -76,7 +76,7 @@
   overflow: hidden;
 }
 
-#explorer-view {
+#workspaces-view {
   display: flex;
   flex-direction: column;
   height: 100%;

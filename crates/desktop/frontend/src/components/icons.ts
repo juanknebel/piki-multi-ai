@@ -111,6 +111,18 @@ export const ICONS = {
   locate: ring(8, 8, 3.5) + p("M8 1.5V4M8 12v2.5M1.5 8H4M12 8h2.5"),
   /** file-tree filter */
   search: ring(7, 7, 4.5) + p("M10.5 10.5l4 4"),
+  /** stacked windows — Workspaces, one live worktree each */
+  workspaces: p("M2.5 6.5h8v7h-8z", "M5 6.5V4h8.5v7"),
+  /** archive box — Projects group workspaces across repos */
+  projects: p("M1.5 3.5h13v3h-13z", "M3.5 6.5v7h9v-7", "M6.5 9h3"),
+  /** bot head — the agent-profile manager */
+  agents: p("M4 7.5h8V13H4z", "M8 7.5V4.5") + disc(8, 3.7, 0.8) + disc(6.3, 10.2, 0.8) + disc(9.7, 10.2, 0.8),
+  /** columns of different heights — Kanban Board */
+  kanban: p("M2.5 2.5h3.4v11H2.5z", "M6.6 2.5h3.4v6.5H6.6z", "M10.7 2.5h2.8v9h-2.8z"),
+  /** code brackets — API Explorer */
+  api: p("M5.8 5.5L3 8l2.8 2.5", "M10.2 5.5L13 8l-2.8 2.5"),
+  /** browser window — Web Preview */
+  browser: p("M2 3.5h12v9.5H2z", "M2 6h12") + disc(3.7, 4.75, 0.65) + disc(5.6, 4.75, 0.65),
 } as const;
 
 export const ICON_NAMES = Object.keys(ICONS) as IconName[];

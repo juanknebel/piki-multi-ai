@@ -43,16 +43,16 @@ import {
 } from "./layout-snapshot";
 
 export type SidebarView =
-  | "explorer"
+  | "workspaces"
+  | "projects"
   | "files"
   | "git"
-  | "projects"
   | "agents"
   | "kanban"
   | "api"
   | "web-preview";
-// Note: "explorer"/"files"/"git"/"projects" are real sidebar views; "agents"
-// opens the modal dialog, "kanban"/"api"/"web-preview" open tabs
+// Note: "workspaces"/"projects"/"files"/"git" are real sidebar views;
+// "agents" opens the modal dialog, "kanban"/"api"/"web-preview" open tabs
 
 export interface UndoEntry {
   action: "stage" | "unstage";
@@ -165,7 +165,7 @@ class AppState extends EventTarget {
   private _workspaces: WorkspaceState[] = [];
   private _activeWorkspace = 0;
   private _sysinfo = "";
-  private _activeView: SidebarView = "explorer";
+  private _activeView: SidebarView = "workspaces";
   private _selectedFiles = new Set<string>();
   private _undoStack: UndoEntry[] = [];
   private _savedLayouts: Record<string, SavedWsLayout> = {};
