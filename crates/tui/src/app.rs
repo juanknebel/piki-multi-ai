@@ -389,6 +389,11 @@ pub struct ScratchTerminal {
     pub prefix_pending: bool,
     /// PTY byte counter as of the last render, for the redraw check.
     pub last_bytes_processed: u64,
+    /// Scrollback offset: 0 = live view, N = N lines back (mouse wheel).
+    pub term_scroll: usize,
+    /// Mouse text selection inside the overlay (own field — `App.selection`
+    /// is consumed by `render_main_content` before this overlay renders).
+    pub selection: Option<Selection>,
 }
 
 /// A single workspace backed by a git worktree
@@ -1023,6 +1028,9 @@ pub struct App {
     pub syntax: crate::syntax::SyntaxHighlighter,
     pub selection: Option<Selection>,
     pub terminal_inner_area: Option<Rect>,
+    /// Inner area of the scratch-terminal overlay (for mouse hit-testing),
+    /// set by its render fn.
+    pub scratch_inner_area: Option<Rect>,
     /// Inner area of the API response panel (for mouse hit-testing)
     pub api_response_inner_area: Option<Rect>,
     /// Inner area of the chat messages panel (for mouse hit-testing)
@@ -1259,6 +1267,7 @@ impl App {
             syntax,
             selection: None,
             terminal_inner_area: None,
+            scratch_inner_area: None,
             api_response_inner_area: None,
             chat_messages_inner_area: None,
             sysinfo: std::sync::Arc::new(parking_lot::Mutex::new(String::new())),

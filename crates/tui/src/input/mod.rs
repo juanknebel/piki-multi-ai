@@ -572,10 +572,21 @@ fn handle_scratch_terminal_input(app: &mut App, key: KeyEvent) -> Option<Action>
         }
         return None;
     }
-    // Ctrl+Shift+C: copy the visible scratch screen.
+    // Ctrl+Shift+C: copy the visible scratch screen (or the mouse selection
+    // if one is up).
     if app.config.matches_app_direct(key, "copy") {
         if let Some(ref parser) = app.scratch.pty_parser {
-            let text = parser.lock().screen().contents();
+            let mut guard = parser.lock();
+            guard.screen_mut().set_scrollback(app.scratch.term_scroll);
+            let text = match app.scratch.selection.as_ref() {
+                Some(sel) => {
+                    let (sr, sc, er, ec) = sel.normalized();
+                    guard.screen().contents_between(sr, sc, er, ec + 1)
+                }
+                None => guard.screen().contents(),
+            };
+            guard.screen_mut().set_scrollback(0);
+            drop(guard);
             match crate::clipboard::copy_to_clipboard(&text) {
                 Ok(()) => app.set_toast("Terminal content copied", crate::app::ToastLevel::Success),
                 Err(e) => app.set_toast(format!("Copy failed: {e}"), crate::app::ToastLevel::Error),
@@ -584,6 +595,10 @@ fn handle_scratch_terminal_input(app: &mut App, key: KeyEvent) -> Option<Action>
         return None;
     }
 
+    // Any other key means the user is typing into the shell — snap the view
+    // back to the live bottom and drop any mouse selection.
+    app.scratch.term_scroll = 0;
+    app.scratch.selection = None;
     if let Some(bytes) = crate::pty::input::key_to_bytes(key) {
         scratch_write(app, &bytes);
     }

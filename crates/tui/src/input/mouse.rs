@@ -314,6 +314,78 @@ pub(crate) fn handle_mouse_event(
         }
     }
 
+    // Scratch-terminal overlay — its own scrollback + text selection, before
+    // the workspace-pane handling below (same shape as the chat branch).
+    if app.mode == AppMode::ScratchTerminal
+        && let Some(inner) = app.scratch_inner_area
+    {
+        match mouse.kind {
+            MouseEventKind::ScrollUp => {
+                if rect_contains(inner, col, row)
+                    && let Some(ref parser) = app.scratch.pty_parser
+                {
+                    let max = scrollback_max(parser);
+                    app.scratch.term_scroll = (app.scratch.term_scroll + 3).min(max);
+                }
+            }
+            MouseEventKind::ScrollDown => {
+                app.scratch.term_scroll = app.scratch.term_scroll.saturating_sub(3);
+            }
+            MouseEventKind::Down(MouseButton::Left) => {
+                if rect_contains(inner, col, row) {
+                    app.scratch.selection = Some(app::Selection::new(
+                        row - inner.y,
+                        col - inner.x,
+                        (usize::MAX, usize::MAX),
+                    ));
+                } else {
+                    app.scratch.selection = None;
+                }
+            }
+            MouseEventKind::Drag(MouseButton::Left) => {
+                if let Some(ref mut sel) = app.scratch.selection
+                    && sel.active
+                {
+                    sel.end_row = row
+                        .saturating_sub(inner.y)
+                        .min(inner.height.saturating_sub(1));
+                    sel.end_col = col
+                        .saturating_sub(inner.x)
+                        .min(inner.width.saturating_sub(1));
+                }
+            }
+            MouseEventKind::Up(MouseButton::Left) => {
+                if let Some(ref mut sel) = app.scratch.selection
+                    && sel.active
+                {
+                    sel.active = false;
+                    let (sr, sc, er, ec) = sel.normalized();
+                    if (sr != er || sc != ec)
+                        && let Some(ref parser) = app.scratch.pty_parser
+                    {
+                        let mut guard = parser.lock();
+                        guard.screen_mut().set_scrollback(app.scratch.term_scroll);
+                        let text = guard.screen().contents_between(sr, sc, er, ec + 1);
+                        guard.screen_mut().set_scrollback(0);
+                        drop(guard);
+                        if !text.trim().is_empty() {
+                            match clipboard::copy_to_clipboard(&text) {
+                                Ok(()) => app
+                                    .set_toast("Selection copied", crate::app::ToastLevel::Success),
+                                Err(e) => app.set_toast(
+                                    format!("Copy failed: {e}"),
+                                    crate::app::ToastLevel::Error,
+                                ),
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+        return None;
+    }
+
     match mouse.kind {
         MouseEventKind::ScrollUp => match app.mode {
             AppMode::EditAgentRole => {
@@ -921,6 +993,68 @@ mod tests {
         assert_eq!(app.sidebar_scroll, 0);
         assert_eq!(app.selected_sidebar_row, 0);
         assert_eq!(app.active_workspace, 0);
+    }
+
+    /// The scratch-terminal overlay owns its own wheel scroll and text
+    /// selection while it is up — nothing leaks to the workspace panes.
+    #[test]
+    fn scratch_overlay_wheel_scrolls_its_own_scrollback() {
+        let mut app = test_app();
+        add_test_workspace(&mut app);
+        app.mode = AppMode::ScratchTerminal;
+        let mut parser = vt100::Parser::new(24, 80, 500);
+        // Push well past the screen height so there is scrollback to reach.
+        parser.process(&b"line\r\n".repeat(60));
+        app.scratch.pty_parser = Some(std::sync::Arc::new(parking_lot::Mutex::new(parser)));
+        app.scratch_inner_area = Some(Rect::new(5, 3, 60, 16));
+
+        handle_mouse_event(
+            &mut app,
+            mouse(super::MouseEventKind::ScrollUp, 20, 8),
+            &mut headless_terminal(),
+        );
+        assert_eq!(app.scratch.term_scroll, 3);
+
+        handle_mouse_event(
+            &mut app,
+            mouse(super::MouseEventKind::ScrollDown, 20, 8),
+            &mut headless_terminal(),
+        );
+        assert_eq!(app.scratch.term_scroll, 0);
+        // Workspace-list viewport untouched.
+        assert_eq!(app.sidebar_scroll, 0);
+    }
+
+    #[test]
+    fn scratch_overlay_drag_builds_a_selection() {
+        let mut app = test_app();
+        add_test_workspace(&mut app);
+        app.mode = AppMode::ScratchTerminal;
+        app.scratch.pty_parser = Some(std::sync::Arc::new(parking_lot::Mutex::new(
+            vt100::Parser::new(24, 80, 0),
+        )));
+        app.scratch_inner_area = Some(Rect::new(5, 3, 60, 16));
+
+        handle_mouse_event(
+            &mut app,
+            mouse(super::MouseEventKind::Down(super::MouseButton::Left), 10, 5),
+            &mut headless_terminal(),
+        );
+        handle_mouse_event(
+            &mut app,
+            mouse(super::MouseEventKind::Drag(super::MouseButton::Left), 20, 7),
+            &mut headless_terminal(),
+        );
+        let sel = app.scratch.selection.as_ref().expect("selection started");
+        assert_eq!((sel.anchor_row, sel.anchor_col), (2, 5));
+        assert_eq!((sel.end_row, sel.end_col), (4, 15));
+
+        handle_mouse_event(
+            &mut app,
+            mouse(super::MouseEventKind::Up(super::MouseButton::Left), 20, 7),
+            &mut headless_terminal(),
+        );
+        assert!(!app.scratch.selection.as_ref().unwrap().active);
     }
 
     /// Clicking a workspace row still switches, but focus lands on the list.

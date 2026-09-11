@@ -283,6 +283,7 @@ pub(crate) fn toggle_scratch_terminal(app: &mut App) -> Option<Action> {
     if app.mode == AppMode::ScratchTerminal {
         app.scratch.visible = false;
         app.scratch.prefix_pending = false;
+        app.scratch.selection = None;
         app.mode = AppMode::Normal;
         return None;
     }
