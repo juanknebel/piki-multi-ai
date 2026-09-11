@@ -115,3 +115,8 @@
   font-weight: 600;
   color: var(--accent-primary);
 }
+
+/* Home-terminal button: icon-only, so no icon-to-text gutter. */
+.status-item.status-home-term svg {
+  margin-right: 0;
+}

@@ -135,6 +135,16 @@ pub(super) async fn handle(
                 app.mode = AppMode::MissingPrereqs;
             }
         }
+        Action::ShowScratchTerminal => {
+            if app.scratch.pty_session.is_none() {
+                crate::helpers::spawn_scratch_terminal(app, app.pty_rows, app.pty_cols).await;
+            }
+            if app.scratch.pty_session.is_some() {
+                app.scratch.visible = true;
+                app.scratch.prefix_pending = false;
+                app.mode = AppMode::ScratchTerminal;
+            }
+        }
         Action::OpenMarkdown(path) => match std::fs::read_to_string(&path) {
             Ok(content) => {
                 let label = path

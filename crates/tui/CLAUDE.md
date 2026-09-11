@@ -40,6 +40,8 @@ There are no navigation/interaction modes. Keys always go to the focused pane (`
 7. If async work needed: add `Action` variant in `action/mod.rs` + arm in the matching domain module's `handle()` + routing arm in `execute_action()`
 8. Add unit tests in `input/dialog_tests.rs` using the helpers in `crate::test_support` (see "Testing dialog handlers" below)
 
+A state-carrying overlay that survives being hidden keeps its state in a top-level `App` field instead of `DialogState` (`App.chat_panel: ChatPanelState`, `App.scratch: ScratchTerminal`). The **scratch terminal** (`AppMode::ScratchTerminal`, `prefix C-t`) is the reference for an overlay wrapping a *live PTY*: `helpers::spawn_scratch_terminal` spawns a `$HOME`-rooted in-process `PtySession` (never daemon-backed — no workspace to re-attach to), `input/mod.rs::handle_scratch_terminal_input` mirrors `handle_terminal_interaction` (forward every key via `pty::input::key_to_bytes`) with a tmux mini-prefix so the same chord hides it, `ui/scratch_terminal.rs` draws it centered over everything and resizes the PTY to the popup's inner area from the render fn, and `event_loop.rs::check_scratch_output` + the `poll_workspaces` liveness check give it the same one-atomic-load redraw path and exit handling as a normal tab.
+
 ## Reusable dialog helpers
 
 When implementing a new dialog input handler, prefer these instead of inlining boilerplate. They live in `input/confirm_common.rs`, `input/text_field_common.rs`, `input/list_nav.rs`, and `dialog_state.rs`.

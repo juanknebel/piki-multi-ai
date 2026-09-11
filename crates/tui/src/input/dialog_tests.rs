@@ -4329,6 +4329,86 @@ fn paste_into_edit_provider_command_inserts_text() {
     assert_eq!(command, "/usr/local/bin/my-agent");
 }
 
+// ── Scratch terminal overlay ──────────────────────────────────────────────
+
+fn open_scratch_terminal(app: &mut App) {
+    app.mode = AppMode::ScratchTerminal;
+    app.scratch.visible = true;
+    // A bare parser stands in for the shell (no real PTY in tests).
+    app.scratch.pty_parser = Some(std::sync::Arc::new(parking_lot::Mutex::new(
+        vt100::Parser::new(24, 80, 0),
+    )));
+}
+
+#[test]
+fn prefix_ctrl_t_from_normal_requests_the_overlay() {
+    let mut app = test_app();
+    super::handle_key_event(
+        &mut app,
+        key_with_mods(KeyCode::Char('g'), KeyModifiers::CONTROL),
+    );
+    let action = super::handle_key_event(
+        &mut app,
+        key_with_mods(KeyCode::Char('t'), KeyModifiers::CONTROL),
+    );
+    assert!(matches!(action, Some(Action::ShowScratchTerminal)));
+}
+
+#[test]
+fn same_chord_hides_the_overlay() {
+    let mut app = test_app();
+    open_scratch_terminal(&mut app);
+
+    // The mini prefix: Ctrl+G then Ctrl+T hides it, shell stays.
+    super::handle_key_event(
+        &mut app,
+        key_with_mods(KeyCode::Char('g'), KeyModifiers::CONTROL),
+    );
+    assert!(app.scratch.prefix_pending);
+    let action = super::handle_key_event(
+        &mut app,
+        key_with_mods(KeyCode::Char('t'), KeyModifiers::CONTROL),
+    );
+    assert!(action.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+    assert!(!app.scratch.visible);
+    assert!(app.scratch.pty_parser.is_some(), "shell must keep running");
+}
+
+#[test]
+fn overlay_without_a_shell_drops_to_normal() {
+    let mut app = test_app();
+    app.mode = AppMode::ScratchTerminal;
+    app.scratch.visible = true;
+    let action = super::handle_key_event(&mut app, key(KeyCode::Char('x')));
+    assert!(action.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+    assert!(!app.scratch.visible);
+}
+
+#[test]
+fn ordinary_key_stays_in_the_overlay() {
+    let mut app = test_app();
+    open_scratch_terminal(&mut app);
+    super::handle_key_event(&mut app, key(KeyCode::Char('l')));
+    assert_eq!(app.mode, AppMode::ScratchTerminal);
+    assert!(!app.scratch.prefix_pending);
+}
+
+#[test]
+fn prefix_then_unrelated_key_cancels_the_pending_prefix() {
+    let mut app = test_app();
+    open_scratch_terminal(&mut app);
+    super::handle_key_event(
+        &mut app,
+        key_with_mods(KeyCode::Char('g'), KeyModifiers::CONTROL),
+    );
+    assert!(app.scratch.prefix_pending);
+    super::handle_key_event(&mut app, key(KeyCode::Char('x')));
+    assert!(!app.scratch.prefix_pending);
+    assert_eq!(app.mode, AppMode::ScratchTerminal);
+}
+
 // ── Project content search overlay ─────────────────────────────────────────
 
 mod project_search_tests {

@@ -131,6 +131,24 @@ export function spawnTerminalAt(
   return invoke("spawn_terminal_at", { workspaceIdx, dir });
 }
 
+/** State of the global drop-down terminal (see `dropdown-terminal.ts`). */
+export interface ScratchTerminalState {
+  tab_id: string | null;
+  visible: boolean;
+}
+
+/** Toggle the global drop-down terminal — a single in-process shell at `~`
+ *  owned by no workspace. Spawned lazily on the first show. */
+export function scratchTerminalToggle(): Promise<ScratchTerminalState> {
+  return invoke("scratch_terminal_toggle");
+}
+
+/** Kill the drop-down terminal's shell (called when the process exits so the
+ *  next toggle spawns a fresh one). */
+export function scratchTerminalKill(): Promise<void> {
+  return invoke("scratch_terminal_kill");
+}
+
 export function writePty(tabId: string, data: string): Promise<void> {
   return invoke("write_pty", { tabId, data });
 }

@@ -9,8 +9,9 @@ pub mod layout;
 pub mod markdown;
 mod panels;
 pub mod project_search;
+pub(crate) mod scratch_terminal;
 pub(crate) mod scrollbar;
-mod sidebar;
+pub(crate) mod sidebar;
 pub(crate) mod statusbar;
 pub mod subtabs;
 pub mod terminal;
@@ -963,6 +964,96 @@ mod tests {
     }
 
     #[test]
+    fn test_snapshot_projects_overlay_truncates_long_rows() {
+        let mut terminal = test_terminal(60, 20);
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
+        app.config.platform = crate::config::Platform::Linux;
+        // Name beyond the 28-column field and a member path beyond the popup
+        // width: both must ellipsize instead of clipping at the border.
+        let project = piki_core::projects::Project {
+            id: Some(1),
+            name: "a-project-name-well-beyond-the-28-column-field".to_string(),
+            color: 3,
+            order: 0,
+            members: vec![piki_core::projects::ProjectMember {
+                path: std::path::PathBuf::from(
+                    "/home/user/some/very/deeply/nested/checkout/of/feature/branch-with-a-very-long-name",
+                ),
+            }],
+        };
+        app.active_dialog = Some(DialogState::Projects {
+            projects: vec![project],
+            selected: 0,
+            expanded: std::collections::HashSet::from([1]),
+            scroll_offset: 0,
+        });
+        app.mode = crate::app::AppMode::Projects;
+        terminal
+            .draw(|frame| {
+                super::dialogs::render_projects_overlay(frame, frame.area(), &app);
+            })
+            .unwrap();
+        let content = buffer_to_snapshot(terminal.backend().buffer());
+        insta::assert_snapshot!("projects_overlay_truncated", content);
+    }
+
+    #[test]
+    fn test_snapshot_sidebar_projects_tab() {
+        let mut terminal = test_terminal(30, 12);
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
+        app.config.platform = crate::config::Platform::Linux;
+        // A registered workspace at /tmp/nightly so the matching member row
+        // resolves to its name; the other member stays a dimmed directory.
+        app.workspaces.push(test_workspace("nightly", 0));
+        app.sidebar_view = crate::app::SidebarView::Projects;
+        app.sidebar_projects = vec![
+            piki_core::projects::Project {
+                id: Some(1),
+                name: "frontend".to_string(),
+                color: 0,
+                order: 0,
+                members: vec![
+                    piki_core::projects::ProjectMember {
+                        path: std::path::PathBuf::from("/tmp/nightly"),
+                    },
+                    piki_core::projects::ProjectMember {
+                        path: std::path::PathBuf::from("/home/user/notes"),
+                    },
+                ],
+            },
+            piki_core::projects::Project {
+                id: Some(2),
+                name: "backend".to_string(),
+                color: 6,
+                order: 1,
+                members: vec![piki_core::projects::ProjectMember {
+                    path: std::path::PathBuf::from("/tmp/api"),
+                }],
+            },
+        ];
+        app.projects_expanded = std::collections::HashSet::from([1]);
+        app.selected_project_row = 1;
+        app.ws_list_area = ratatui::layout::Rect::new(0, 0, 30, 12);
+        terminal
+            .draw(|frame| {
+                super::sidebar::render_workspace_list(
+                    frame,
+                    ratatui::layout::Rect::new(0, 0, 30, 12),
+                    &app,
+                );
+            })
+            .unwrap();
+        let content = buffer_to_snapshot(terminal.backend().buffer());
+        insta::assert_snapshot!("sidebar_projects_tab", content);
+    }
+
+    #[test]
     fn test_snapshot_project_edit_dialog() {
         let mut terminal = test_terminal(80, 24);
         let mut app = App::new(
@@ -971,6 +1062,7 @@ mod tests {
         );
         app.config.platform = crate::config::Platform::Linux;
         app.active_dialog = Some(DialogState::ProjectEdit {
+            return_to_list: true,
             editing_id: Some(1),
             name: "frontend".to_string(),
             name_cursor: 8,

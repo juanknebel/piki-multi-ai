@@ -59,6 +59,10 @@ pub(crate) enum Action {
     OpenEditorAt(PathBuf, u32),
     /// Spawn a new tab with the given provider
     SpawnTab(AIProvider),
+    /// Show the global scratch-terminal overlay, spawning its shell on the
+    /// first use. Toggling it off (or on, once spawned) is handled inline in
+    /// `app_actions::toggle_scratch_terminal` and needs no async work.
+    ShowScratchTerminal,
     /// Open a markdown file in a new tab
     OpenMarkdown(PathBuf),
     /// Open a markdown file in external mdr viewer
@@ -168,9 +172,10 @@ pub(crate) async fn execute_action(
         | Action::OpenPrReview(..)
         | Action::LoadRepoPrs(..)
         | Action::RetryReviewCheckout(..) => review::handle(app, manager, action, terminal).await?,
-        Action::SpawnTab(..) | Action::OpenMarkdown(..) | Action::OpenMdr(..) => {
-            tabs::handle(app, manager, action, terminal).await?
-        }
+        Action::SpawnTab(..)
+        | Action::OpenMarkdown(..)
+        | Action::OpenMdr(..)
+        | Action::ShowScratchTerminal => tabs::handle(app, manager, action, terminal).await?,
         Action::SendApiRequest(..) => api::handle(app, manager, action, terminal).await?,
         Action::DispatchAgent { .. }
         | Action::SaveAgent { .. }

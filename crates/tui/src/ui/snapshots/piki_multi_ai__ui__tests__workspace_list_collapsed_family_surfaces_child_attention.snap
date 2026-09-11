@@ -1,9 +1,9 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 474
+assertion_line: 650
 expression: content
 ---
-╭ WORKSPACES ──────────────────────────╮
+╭ WORKSPACES │ PROJECTS ───────────────╮
 │▎▸ ○ src-agent-multi (main) ● 1∆ ↑1 ↓2│
 │                                      │
 │                                      │

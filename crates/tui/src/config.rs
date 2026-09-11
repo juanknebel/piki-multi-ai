@@ -292,6 +292,13 @@ fn default_app() -> HashMap<String, BindingValue> {
     // `t` for "text" — content search across the worktree (ripgrep).
     m.insert("project_search".to_string(), BindingValue::one("prefix-t"));
     m.insert("chat_panel".to_string(), BindingValue::one("prefix-y"));
+    // `ctrl-t` for the scratch terminal — `t` itself is project_search, and
+    // the binding rule prefers prefix-ctrl over a Shift chord (same precedent
+    // as sessions / projects).
+    m.insert(
+        "scratch_terminal".to_string(),
+        BindingValue::one("prefix-ctrl-t"),
+    );
     m.insert("quit".to_string(), BindingValue::one("prefix-q"));
     m.insert("manage_agents".to_string(), BindingValue::one("prefix-m"));
     m.insert(
@@ -371,6 +378,9 @@ fn default_workspaces() -> HashMap<String, String> {
     // Switch to the selected workspace; also toggles collapse when it's a
     // worktree-family parent row.
     m.insert("select".to_string(), "enter".to_string());
+    // Flip the pane between its Workspaces and Projects tabs (both views
+    // check this same binding, so it toggles from either side).
+    m.insert("view".to_string(), "tab".to_string());
     m
 }
 

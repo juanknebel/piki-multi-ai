@@ -44,6 +44,22 @@ pub(crate) fn handle_paste(app: &mut App, text: &str) {
     if app.input_state == InputState::PrefixPending {
         app.input_state = InputState::Normal;
     }
+    // Scratch-terminal overlay: write to its PTY (bracketed-paste aware).
+    if app.mode == AppMode::ScratchTerminal && app.scratch.pty_session.is_some() {
+        let bracketed = app
+            .scratch
+            .pty_parser
+            .as_ref()
+            .map(|p| p.lock().screen().bracketed_paste())
+            .unwrap_or(false);
+        let data = if bracketed {
+            format!("\x1b[200~{text}\x1b[201~")
+        } else {
+            text.to_string()
+        };
+        scratch_write(app, data.as_bytes());
+        return;
+    }
     // Focused terminal: write to PTY
     if app.active_pane == ActivePane::MainPanel
         && app.mode == AppMode::Normal
@@ -241,6 +257,7 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         AppMode::ManageProviders => return handle_manage_providers_input(app, key),
         AppMode::EditProvider => return handle_edit_provider_input(app, key),
         AppMode::ChatPanel => return chat_input::handle_chat_panel_input(app, key),
+        AppMode::ScratchTerminal => return handle_scratch_terminal_input(app, key),
         // Normal mode falls through to the prefix/pane dispatch
         AppMode::Normal => {}
     }
@@ -329,6 +346,7 @@ const APP_ACTIONS: &[&str] = &[
     "fuzzy_search",
     "project_search",
     "chat_panel",
+    "scratch_terminal",
     "quit",
     "manage_agents",
     "manage_providers",
@@ -393,6 +411,7 @@ fn dispatch_app_action(app: &mut App, action: &str) -> Option<Action> {
             None
         }
         "chat_panel" => app_actions::open_chat_panel(app),
+        "scratch_terminal" => app_actions::toggle_scratch_terminal(app),
         "quit" => app_actions::open_confirm_quit(app),
         "manage_agents" => app_actions::open_manage_agents(app),
         "manage_providers" => app_actions::open_manage_providers(app),
@@ -487,6 +506,103 @@ fn send_literal_prefix(app: &mut App) {
     {
         let _ = pty.write(&bytes);
     }
+}
+
+/// Write bytes to the scratch terminal's PTY (no-op when it has no session).
+fn scratch_write(app: &mut App, bytes: &[u8]) {
+    if let Some(ref mut pty) = app.scratch.pty_session {
+        let _ = pty.write(bytes);
+    }
+}
+
+/// Input while the scratch-terminal overlay is up (`AppMode::ScratchTerminal`):
+/// forward every key to its PTY, exactly like the embedded terminal pane, with
+/// a tmux-style mini prefix so `prefix C-t` (the same chord that opened it)
+/// hides it, and `prefix prefix` sends a literal prefix byte.
+fn handle_scratch_terminal_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    if app.scratch.pty_parser.is_none() {
+        // No shell behind the overlay — nothing to talk to.
+        app.scratch.visible = false;
+        app.mode = AppMode::Normal;
+        return None;
+    }
+
+    if std::mem::take(&mut app.scratch.prefix_pending) {
+        if app.config.matches_app_prefix(key, "scratch_terminal") {
+            return app_actions::toggle_scratch_terminal(app); // hide
+        }
+        if app.config.is_prefix_key(key) {
+            // prefix prefix → literal prefix byte to the shell.
+            let bytes = if app.config.keybindings.prefix_key == "ctrl-g" {
+                Some(vec![0x07])
+            } else {
+                crate::config::parse_key_event(&app.config.keybindings.prefix_key)
+                    .and_then(crate::pty::input::key_to_bytes)
+            };
+            if let Some(bytes) = bytes {
+                scratch_write(app, &bytes);
+            }
+            return None;
+        }
+        // Any other key: the pending prefix is cancelled and the keystroke
+        // reaches the shell normally (fall through).
+    } else if app.config.is_prefix_key(key) {
+        app.scratch.prefix_pending = true;
+        return None;
+    }
+
+    // Ctrl+Shift+V: paste from the clipboard (bracketed-paste aware).
+    if app.config.matches_app_direct(key, "paste") {
+        match crate::clipboard::paste_from_clipboard() {
+            Ok(text) => {
+                let bracketed = app
+                    .scratch
+                    .pty_parser
+                    .as_ref()
+                    .map(|p| p.lock().screen().bracketed_paste())
+                    .unwrap_or(false);
+                let data = if bracketed {
+                    format!("\x1b[200~{text}\x1b[201~")
+                } else {
+                    text
+                };
+                scratch_write(app, data.as_bytes());
+            }
+            Err(e) => app.set_toast(format!("Paste failed: {e}"), crate::app::ToastLevel::Error),
+        }
+        return None;
+    }
+    // Ctrl+Shift+C: copy the visible scratch screen (or the mouse selection
+    // if one is up).
+    if app.config.matches_app_direct(key, "copy") {
+        if let Some(ref parser) = app.scratch.pty_parser {
+            let mut guard = parser.lock();
+            guard.screen_mut().set_scrollback(app.scratch.term_scroll);
+            let text = match app.scratch.selection.as_ref() {
+                Some(sel) => {
+                    let (sr, sc, er, ec) = sel.normalized();
+                    guard.screen().contents_between(sr, sc, er, ec + 1)
+                }
+                None => guard.screen().contents(),
+            };
+            guard.screen_mut().set_scrollback(0);
+            drop(guard);
+            match crate::clipboard::copy_to_clipboard(&text) {
+                Ok(()) => app.set_toast("Terminal content copied", crate::app::ToastLevel::Success),
+                Err(e) => app.set_toast(format!("Copy failed: {e}"), crate::app::ToastLevel::Error),
+            }
+        }
+        return None;
+    }
+
+    // Any other key means the user is typing into the shell — snap the view
+    // back to the live bottom and drop any mouse selection.
+    app.scratch.term_scroll = 0;
+    app.scratch.selection = None;
+    if let Some(bytes) = crate::pty::input::key_to_bytes(key) {
+        scratch_write(app, &bytes);
+    }
+    None
 }
 
 /// Terminal scroll mode (`prefix [`): navigate the scrollback of the focused

@@ -151,7 +151,8 @@ just lint-desktop                           # frontend test + build, then clippy
   families aggregate hidden children by `family_key` / `source_repo`) via `types.ts::agentStatusSeverity`
   / `actionableStatusView` (mirrors of `piki_core::cli_agent::status_severity` and the TUI's
   `actionable_status_view` — change all together). Every row starts with a fixed-width
-  `.workspace-gutter` (chevron on a worktree parent — the whole slot toggles collapse —, the static
+  `.workspace-gutter` (chevron on a worktree parent — the whole slot toggles collapse without
+  switching, while a click anywhere else on a parent row toggles AND switches —, the static
   accent dot on the active row, empty otherwise) so labels align whatever the row kind; a clone's branch renders as
   a separate muted `.workspace-branch` span (`rowParts`), never glued to the name, and `.grouped`
   children indent one step past the parent's gutter. Don't reintroduce a leading element that only some
@@ -301,6 +302,15 @@ just lint-desktop                           # frontend test + build, then clippy
   `setting × zoom` (`terminalFontSizeFor(zoom, base)` in `zoom.ts`); `createTerminal` reads the same
   option set. Dialog section: `dialogs/terminal-settings-section.ts` (`buildTerminalSettingsSection()`
   → `{ el, reset }`, styles in `styles/terminal-settings.css`).
+- **Drop-down terminal** (`components/dropdown-terminal.ts`, `styles/dropdown-terminal.css`): one global
+  Quake-style shell rooted at `~`, owned by no workspace. `initDropdownTerminal()` (from `main.ts`, after
+  `initPaneView`) builds `#dropdown-terminal` inside `#editor-area` and wires the top resize grip
+  (height persisted as the `dropdownTerminalHeight` settings key). `toggleDropdownTerminal()` is the ONE
+  entry (status-bar button, `toggle-terminal` shortcut ``Ctrl+Shift+` ``, View menu, palette): it calls
+  `ipc.scratchTerminalToggle` (backend `DesktopApp.scratch_terminal`, in-process, spawned lazily on the
+  first show — `commands/pty.rs`) and mounts/unmounts the xterm via the normal `terminal-panel.ts` API
+  keyed by the id the command returns. `write_pty` / `resize_pty` accept that id too. A `pty-exit` on it
+  calls `ipc.scratchTerminalKill` so the next toggle respawns. Not daemon-backed — it dies with the window.
 
 ## PTY output & perf invariants
 
@@ -392,7 +402,8 @@ just lint-desktop                           # frontend test + build, then clippy
   component (the old per-caller read-modify-write raced). Keep the store IPC-free (`settings-store.ts`
   takes a `SettingsBackend`; `settings.ts` binds it to Tauri) so it stays unit-testable. Keys in use:
   `shortcuts`, `shell`, `terminal`, `uiZoom`, `appearance.density`, `settingsTab`, `wsTabsV2`,
-  `workspaceMru`, `agentsPanelHeight`, sidebar/chat widths, file-tree state, `chat_config`.
+  `workspaceMru`, `agentsPanelHeight`, `dialogSizes`, sidebar/chat widths, file-tree state,
+  `chat_config`.
 - **Settings dialog** (`dialogs/settings-dialog.ts`) is only the shell: a left rail (`role=tablist`,
   ↑/↓/Home/End) + one panel, last tab remembered as `settingsTab`, footer *Reset <tab>* / *Restore
   Defaults* (`showConfirm`, danger; keeps the shell command + provider binaries — say so in the confirm
@@ -550,12 +561,17 @@ feature-specific modifiers in feature CSS; never re-declare a button/input/surfa
     `<select>`): `.dialog-dropdown-trigger` sized like `.ui-input`, list at `--z-popover`.
 - **How to add a dialog**: `backdrop.className = "dialog-backdrop <family>-backdrop"` (open() removes only
   `.<family>-backdrop` — removing bare `.dialog-backdrop` destroys unrelated open dialogs);
-  `dialog.className = "dialog ui-surface"` (+ a `.<family>-dialog` width class in `dialog-<family>.css`
-  if 560px is wrong); `.ui-header` with `.ui-header-title` + `.dialog-close ui-btn` (ghost, `data-icon`);
+  `dialog.className = "dialog ui-surface"` (add `dialog-lg` when the content is long text — paths,
+  commands, tables, log lines: the shared dense budget in `dialog-core.css`, `min(920px, 92vw)` ×
+  `86vh`; a `.<family>-dialog` width class in `dialog-<family>.css` only when neither budget fits); `.ui-header` with `.ui-header-title` + `.dialog-close ui-btn` (ghost, `data-icon`);
   `.dialog-body` of `.dialog-field` (`.dialog-label` + `.ui-input` / `createDropdown()` /
   `attachPathPicker`); `.dialog-footer` with secondary Cancel first, primary action last; destructive
   flows go through `showConfirm` instead. Escape/Enter and the close button wire up as in
-  `dialogs/stash-dialog.ts`.
+  `dialogs/stash-dialog.ts`. A content-heavy dialog also calls
+  `attachDialogResize(dialog, "<id>")` (`components/dialog-resize.ts`) AFTER the dialog is in the
+  DOM: corner grip, size persisted per id under the `dialogSizes` settings key, double-click resets —
+  and must not rewrite `dialog.innerHTML` after attaching (the grip is a child of the dialog; inner
+  sections re-render their own containers instead).
 
 ## Icons & fonts
 
@@ -564,7 +580,8 @@ feature-specific modifiers in feature CSS; never re-declare a button/input/surfa
   markup for `innerHTML` templates (`aria-hidden` unless `label` makes it `role="img"`); `iconEl()`
   returns an `SVGElement`; `IconName` is the union of `ICONS` keys. Names: `check warning folder gear eye
   close pencil undo history refresh more dot circle chevron-right chevron-down arrow-up/down/left/right
-  branch play clock plus split-right split-down locate search`. Rules: one pencil for every edit/rename,
+  branch play clock plus split-right split-down locate search workspaces projects agents kanban api
+  browser terminal`. Rules: one pencil for every edit/rename,
   `refresh` for refresh/reload/restart, `undo` for discard/reset, `history` for "restored from the
   daemon", `dot`/`circle` for alive/exited; an icon-only button keeps `title` + `aria-label`;
   `types.ts` status views (`cliAgentStatusView`, `actionableStatusView`) return an `icon: IconName` and

@@ -6,6 +6,7 @@ import { makeInteractive } from "../a11y";
 import { icon, type IconName } from "../icons";
 import { createDropdown } from "../dropdown";
 import type { SessionRow, SessionsSnapshot } from "../../types";
+import { attachDialogResize } from "../dialog-resize";
 
 /// Sessions dialog: every session the persistent-session daemon holds —
 /// including ones no tab in this window shows (opened in the TUI, or orphaned
@@ -19,7 +20,7 @@ export async function showSessionsDialog() {
   backdrop.className = "dialog-backdrop sessions-dialog-backdrop";
 
   const dialog = document.createElement("div");
-  dialog.className = "dialog ui-surface";
+  dialog.className = "dialog ui-surface dialog-lg";
   dialog.style.maxWidth = "720px";
   dialog.style.maxHeight = "80vh";
   dialog.style.width = "88vw";
@@ -40,6 +41,7 @@ export async function showSessionsDialog() {
 
   backdrop.appendChild(dialog);
   document.body.appendChild(backdrop);
+  attachDialogResize(dialog, "sessions");
 
   const titleEl = dialog.querySelector<HTMLElement>("#sessions-title")!;
   const body = dialog.querySelector<HTMLElement>("#sessions-body")!;
@@ -108,11 +110,14 @@ export async function showSessionsDialog() {
       main.className = "sessions-main";
       main.style.cssText =
         "flex:1;display:flex;align-items:center;gap:10px;min-width:0;padding:4px 12px;border-radius:var(--radius-sm)";
+      // Name and workspace share the row's width 2:1 (both ellipsize with
+      // the full value on hover) so widening the dialog widens the text,
+      // not a fixed column's padding.
       main.innerHTML = `
         <span style="color:${badge.color};width:1em;text-align:center">${icon(badge.icon)}</span>
-        <span style="flex:1;font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(row.name)}</span>
-        <span style="width:130px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(row.workspace)}</span>
-        <span style="width:150px;color:${badge.color}">${badge.text}</span>
+        <span title="${escapeHtml(row.name)}" style="flex:2;min-width:0;font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(row.name)}</span>
+        <span title="${escapeHtml(row.workspace)}" style="flex:1;min-width:80px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(row.workspace)}</span>
+        <span style="width:150px;flex-shrink:0;color:${badge.color}">${badge.text}</span>
       `;
       if (jumpable) {
         main.style.cursor = "pointer";

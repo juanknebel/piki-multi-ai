@@ -1,0 +1,22 @@
+---
+source: crates/tui/src/ui/mod.rs
+assertion_line: 999
+expression: content
+---
+
+
+
+     ╭ Projects ──────────────────────────────────────╮
+     │ [Enter] expand/jump [n] new [e] edit [d] delete│
+     │                                                │
+     │ ▾ ● a-project-name-well-beyond… 1 member       │
+     │     …ut/of/feature/branch-with-a-very-long-name│
+     │                                                │
+     │                                                │
+     │                                                │
+     │                                                │
+     │                                                │
+     │                                                │
+     │                                                │
+     │                                                │
+     ╰───────────────────────────────────────── [1/2] ╯

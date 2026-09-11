@@ -49,6 +49,12 @@ pub struct DesktopApp {
         String,
         tokio::sync::oneshot::Sender<piki_agent::ApprovalResponse>,
     >,
+    /// Global drop-down ("Quake") terminal: a single in-process shell rooted
+    /// at `$HOME`, owned by no workspace. Spawned lazily on the first
+    /// `scratch_terminal_toggle`; hidden/shown by that command without
+    /// killing the process. `write_pty` / `resize_pty` accept its tab id.
+    pub scratch_terminal: Option<DesktopTab>,
+    pub scratch_terminal_visible: bool,
 }
 
 #[allow(dead_code)]

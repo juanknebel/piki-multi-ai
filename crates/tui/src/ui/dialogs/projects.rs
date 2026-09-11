@@ -42,6 +42,7 @@ fn render_projects_list(frame: &mut Frame, area: Rect, app: &App) {
     let inner_height = popup.height.saturating_sub(2) as usize; // borders
     let visible_rows = inner_height.saturating_sub(2).max(1); // hints + blank
 
+    let inner_w = popup.width.saturating_sub(2) as usize; // borders
     let muted = Style::default().fg(theme.palette.fg3);
     let mut lines: Vec<Line<'_>> = vec![
         Line::from(Span::styled(
@@ -88,7 +89,9 @@ fn render_projects_list(frame: &mut Frame, area: Rect, app: &App) {
                                 .bg(bg),
                         ),
                         Span::styled(
-                            format!("{:<28}", p.name),
+                            // Cap at 27 inside the 28-column field so even a
+                            // truncated name keeps a space before the count.
+                            format!("{:<28}", ellipsize_end(&p.name, 27)),
                             Style::default()
                                 .fg(theme.palette.fg0)
                                 .bg(bg)
@@ -103,13 +106,16 @@ fn render_projects_list(frame: &mut Frame, area: Rect, app: &App) {
                     // name (Enter jumps); anything else is a plain directory,
                     // shown dimmed by path (Enter adopts it).
                     let ws = app.workspaces.iter().find(|w| w.info.path == *path);
+                    // Fit to the popup: names lose their tail, paths their
+                    // head (the last segments are the distinctive part).
+                    let avail = inner_w.saturating_sub(5);
                     let (text, style) = match ws {
                         Some(w) => (
-                            w.info.name.clone(),
+                            ellipsize_end(&w.info.name, avail),
                             Style::default().fg(theme.palette.fg1).bg(bg),
                         ),
                         None => (
-                            path.to_string_lossy().into_owned(),
+                            ellipsize_start(&path.to_string_lossy(), avail),
                             Style::default().fg(theme.palette.fg3).bg(bg),
                         ),
                     };
@@ -245,12 +251,19 @@ fn render_project_edit(frame: &mut Frame, area: Rect, app: &App) {
                 // Directory member: dimmed, kept so it can be unchecked.
                 Style::default().fg(theme.palette.fg3)
             };
+            // "  > [x] " prefix is 8 columns; fit the label to what's left.
+            let avail = (popup.width as usize).saturating_sub(2 + 8);
+            let label = if row.is_workspace {
+                ellipsize_end(&row.label, avail)
+            } else {
+                ellipsize_start(&row.label, avail)
+            };
             lines.push(Line::from(vec![
                 Span::styled(
                     format!("  {cursor} {check} "),
                     field(ProjectEditField::Members),
                 ),
-                Span::styled(row.label.clone(), label_style),
+                Span::styled(label, label_style),
             ]));
         }
         if overflow {
@@ -269,4 +282,25 @@ fn render_project_edit(frame: &mut Frame, area: Rect, app: &App) {
     };
     let block = super::popup_block(title, theme.dialog.new_ws_border);
     frame.render_widget(Paragraph::new(lines).block(block), popup);
+}
+
+/// `s` capped to `max` columns (char-count approximation, as elsewhere in
+/// the dialogs) with a trailing ellipsis — for names, whose head matters.
+pub(crate) fn ellipsize_end(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        return s.to_string();
+    }
+    let head: String = s.chars().take(max.saturating_sub(1)).collect();
+    format!("{head}…")
+}
+
+/// Same cap but keeping the tail — for paths, whose last segments are the
+/// distinctive part.
+pub(crate) fn ellipsize_start(s: &str, max: usize) -> String {
+    let count = s.chars().count();
+    if count <= max {
+        return s.to_string();
+    }
+    let tail: String = s.chars().skip(count + 1 - max.max(1)).collect();
+    format!("…{tail}")
 }

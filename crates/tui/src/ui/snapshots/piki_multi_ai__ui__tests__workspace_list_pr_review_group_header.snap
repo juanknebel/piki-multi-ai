@@ -1,9 +1,9 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 356
+assertion_line: 478
 expression: content
 ---
-╭ WORKSPACES ──────────────────────────╮
+╭ WORKSPACES │ PROJECTS ───────────────╮
 │▎▾ pr-review                          │
 │   ◎ owner/repo#1 [PR]                │
 │   ◎ owner/repo#2 [PR]                │

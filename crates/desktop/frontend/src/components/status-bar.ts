@@ -8,6 +8,7 @@ import { getShortcutKey } from "../shortcuts";
 import { branchLabel } from "../labels";
 import { icon } from "./icons";
 import { openBranchPicker } from "./dialogs/branch-picker";
+import { toggleDropdownTerminal } from "./dropdown-terminal";
 import * as ipc from "../ipc";
 
 const STAGED_STATUSES: FileStatus[] = ["Staged", "Added", "Renamed", "StagedModified"];
@@ -25,13 +26,14 @@ export function renderStatusBar(container: HTMLElement) {
     // App name (clickable → About)
     const appName = document.createElement("div");
     appName.className = "status-item clickable status-app-name";
+    appName.dataset.seg = "app";
     appName.textContent = "Piki Desktop";
     appName.addEventListener("click", showAboutDialog);
     bar.appendChild(appName);
 
     // Left side — the branch, shortened by the shared rule (full in the tooltip).
     // Click (or the `switch-branch` key) opens the branch switcher.
-    const branchItem = addItem(bar, "", "clickable");
+    const branchItem = addItem(bar, "branch", "", "clickable");
     branchItem.innerHTML = `${icon("branch")}${escapeText(branchLabel(ws?.branch))}`;
     branchItem.title = ws?.branch
       ? `${ws.branch}\nClick or ${getShortcutKey("switch-branch")} to switch branch`
@@ -42,7 +44,7 @@ export function renderStatusBar(container: HTMLElement) {
       const [ahead, behind] = ws.aheadBehind;
       if (ahead > 0 || behind > 0) {
         const sync = `${ahead > 0 ? "↑" + ahead : ""}${behind > 0 ? " ↓" + behind : ""}`.trim();
-        addItem(bar, sync);
+        addItem(bar, "sync", sync);
       }
     }
 
@@ -57,12 +59,13 @@ export function renderStatusBar(container: HTMLElement) {
       if (stagedCount > 0) {
         parts.push(`${stagedCount} staged`);
       }
-      addItem(bar, parts.join(" · "));
+      addItem(bar, "changes", parts.join(" · "));
     }
 
     // Spacer
     const spacer = document.createElement("div");
     spacer.className = "status-spacer";
+    spacer.dataset.seg = "spacer";
     bar.appendChild(spacer);
 
     // Right side.
@@ -72,6 +75,7 @@ export function renderStatusBar(container: HTMLElement) {
     if (needing.length > 0) {
       const item = document.createElement("div");
       item.className = "status-item clickable status-attention";
+      item.dataset.seg = "attention";
       item.innerHTML = `${icon("dot")}${needing.length} need${needing.length === 1 ? "s" : ""} you`;
       item.title = `${needing.map((r) => `${r.workspace_name} · ${r.label}`).join("\n")}\nClick or ${getShortcutKey("jump-attention")} to jump`;
       item.addEventListener("click", () => jumpToAttention());
@@ -85,7 +89,7 @@ export function renderStatusBar(container: HTMLElement) {
         if (tab.provider === "Shell") {
           const shellState = appState.getTabShellState(tab.id);
           if (shellState?.cwd) {
-            addItem(bar, "", "status-cwd").innerHTML = `${icon("folder")}${escapeText(formatHomeRelative(shellState.cwd))}`;
+            addItem(bar, "cwd", "", "status-cwd").innerHTML = `${icon("folder")}${escapeText(formatHomeRelative(shellState.cwd))}`;
           }
         }
         // Claude agent tabs: structured status glyph + summary preview.
@@ -97,6 +101,7 @@ export function renderStatusBar(container: HTMLElement) {
             : "";
           const item = document.createElement("div");
           item.className = "status-item status-agent";
+          item.dataset.seg = "agent";
           item.style.color = v.color;
           item.innerHTML = `${icon(v.icon)}${escapeText(`${v.label}${sum}`)}`;
           item.title = agentState.agentSummary ?? v.label;
@@ -104,7 +109,7 @@ export function renderStatusBar(container: HTMLElement) {
         }
         const label = getTabLabel(tab, appState.getTabShellState(tab.id)?.title);
         const alive = tab.alive ? "" : " (exited)";
-        addItem(bar, `${label}${alive}`);
+        addItem(bar, "tab", `${label}${alive}`);
       }
     }
 
@@ -113,25 +118,37 @@ export function renderStatusBar(container: HTMLElement) {
     // flicker while the async answer lands.
     const lspItem = document.createElement("div");
     lspItem.className = "status-item status-lsp";
+    lspItem.dataset.seg = "lsp";
     lspItem.textContent = lspCache.text;
     if (lspCache.color) lspItem.style.color = lspCache.color;
     bar.appendChild(lspItem);
 
     const wsName = ws?.info.name ?? "No workspace";
-    addItem(bar, wsName);
+    addItem(bar, "ws", wsName);
 
     // Persistent-session daemon: `sessions N` / `sessions off` /
     // `sessions unavailable`, from the poll cache; click opens the dialog.
     const sessionsItem = document.createElement("div");
     sessionsItem.className = "status-item clickable status-sessions";
+    sessionsItem.dataset.seg = "sessions";
     applySessionsCache(sessionsItem);
     sessionsItem.addEventListener("click", () => void showSessionsDialog());
     bar.appendChild(sessionsItem);
 
     // Sysinfo
     if (appState.sysinfo) {
-      addItem(bar, appState.sysinfo);
+      addItem(bar, "sysinfo", appState.sysinfo);
     }
+
+    // Drop-down terminal toggle — a single shell rooted at ~, independent
+    // of any workspace. The one action button; sits at the corner.
+    const dropTerm = document.createElement("div");
+    dropTerm.className = "status-item clickable status-home-term";
+    dropTerm.dataset.seg = "drop-term";
+    dropTerm.innerHTML = icon("terminal", { label: "Toggle terminal" });
+    dropTerm.title = `Toggle the drop-down terminal (${getShortcutKey("toggle-terminal")}) — a shell at ~, independent of the workspace`;
+    dropTerm.addEventListener("click", () => void toggleDropdownTerminal());
+    bar.appendChild(dropTerm);
 
     morphChildren(container, bar);
   }
@@ -167,21 +184,37 @@ export function renderStatusBar(container: HTMLElement) {
   setInterval(refreshSessions, 3000);
 }
 
-/** Replace only the children of `live` that differ from `next`'s (by
- *  rendered markup); identical segments are left untouched, listeners and
- *  all — a kept element's listeners behave the same as the fresh one's,
- *  every render wires the same handlers. A structural change (segment
- *  count) falls back to the full swap. */
+/** Patch `live`'s children to match `next`'s, keyed by `data-seg`: a
+ *  segment whose markup is unchanged keeps its DOM node — listeners,
+ *  running CSS transitions and all (every render wires the same handlers,
+ *  so a kept element behaves like a fresh one). Conditional segments
+ *  (agent status, needs-you, cwd) appearing or disappearing only insert or
+ *  remove THAT node; the positional morph this replaces fell back to a
+ *  full swap whenever the segment count changed, which while an agent
+ *  streams is several times a second — every node got replaced and the
+ *  whole bar (sessions included) visibly blinked. Relies on render()
+ *  emitting segments in one fixed order. */
 function morphChildren(live: HTMLElement, next: HTMLElement) {
-  const oldKids = Array.from(live.children);
+  const seg = (el: Element) => (el as HTMLElement).dataset.seg ?? "";
   const newKids = Array.from(next.children);
-  if (oldKids.length !== newKids.length) {
-    live.replaceChildren(...newKids);
-    return;
+  const newKeys = new Set(newKids.map(seg));
+  let idx = 0; // cursor into live.children, past the segments already settled
+  for (const n of newKids) {
+    const key = seg(n);
+    // Drop live segments this render no longer has, up to our key.
+    let cur = live.children[idx];
+    while (cur && seg(cur) !== key && !newKeys.has(seg(cur))) {
+      cur.remove();
+      cur = live.children[idx];
+    }
+    if (cur && seg(cur) === key) {
+      if (cur.outerHTML !== n.outerHTML) cur.replaceWith(n);
+    } else {
+      live.insertBefore(n, cur ?? null);
+    }
+    idx++;
   }
-  for (let i = 0; i < newKids.length; i++) {
-    if (oldKids[i].outerHTML !== newKids[i].outerHTML) oldKids[i].replaceWith(newKids[i]);
-  }
+  while (live.children.length > idx) live.children[idx].remove();
 }
 
 const sessionsCache: { text: string; state: string; title: string } = {
@@ -243,9 +276,17 @@ function escapeText(text: string): string {
   return el.innerHTML;
 }
 
-function addItem(container: HTMLElement, text: string, ...classes: string[]): HTMLElement {
+/** Append a `.status-item` carrying `seg` — the stable identity
+ *  `morphChildren` matches renders by. */
+function addItem(
+  container: HTMLElement,
+  seg: string,
+  text: string,
+  ...classes: string[]
+): HTMLElement {
   const item = document.createElement("div");
   item.className = ["status-item", ...classes].join(" ");
+  item.dataset.seg = seg;
   item.textContent = text;
   container.appendChild(item);
   return item;

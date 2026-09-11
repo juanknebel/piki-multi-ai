@@ -6,6 +6,7 @@ import * as ipc from "../../ipc";
 import { appState } from "../../state";
 import type { Project } from "../../types";
 import { icon } from "../icons";
+import { branchLabel } from "../../labels";
 import { attachPathPicker } from "../path-picker";
 import { reportError, toast } from "../toast";
 
@@ -30,7 +31,8 @@ export function showProjectDialog(project: Project | null, onSaved: () => void |
   const workspaceRows = appState.workspaces.map((w) => ({
     path: w.info.path,
     name: w.info.name,
-    sub: `${w.info.workspace_type.toLowerCase()}${w.branch ? ` · ${w.branch}` : ""}`,
+    sub: `${w.info.workspace_type.toLowerCase()}${w.branch ? ` · ${branchLabel(w.branch)}` : ""}`,
+    title: w.branch ? `${w.info.path} · ${w.branch}` : w.info.path,
     checked: (project?.members ?? []).some((m) => m.path === w.info.path),
   }));
 
@@ -115,7 +117,7 @@ export function showProjectDialog(project: Project | null, onSaved: () => void |
     sub.className = "project-member-check-sub";
     sub.textContent = row.sub;
     label.appendChild(sub);
-    label.title = row.path;
+    label.title = row.title;
     wsRowsEl.appendChild(label);
   }
 

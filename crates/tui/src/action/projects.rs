@@ -67,10 +67,12 @@ pub(super) async fn handle(
     Ok(())
 }
 
-/// Refresh the open Projects overlay from storage after a save/delete, so the
-/// list shows what was actually persisted. Drops expansion state of projects
-/// that no longer exist and clamps the selection.
+/// Refresh every projects surface from storage after a save/delete, so both
+/// the open overlay and the sidebar's Projects tab show what was actually
+/// persisted. Drops expansion state of projects that no longer exist and
+/// clamps the selections.
 fn reload_projects(app: &mut App) {
+    app.reload_sidebar_projects();
     let fresh = app
         .storage
         .projects

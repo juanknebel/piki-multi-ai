@@ -118,6 +118,7 @@ theme = "default"
 # fuzzy_search     = "prefix-/"
 # project_search   = "prefix-t"
 # chat_panel       = "prefix-y"
+# scratch_terminal = "prefix-ctrl-t"   # centered shell overlay rooted at ~ (toggle)
 # quit             = "prefix-q"
 # manage_agents    = "prefix-m"
 # manage_providers = "prefix-v"
@@ -176,6 +177,7 @@ theme = "default"
 # expand = "l"                # expand a collapsed worktree family
 # expand_alt = "right"
 # select = "enter"
+# view = "tab"                # flip the pane between its Workspaces and Projects tabs
 
 # [keybindings.markdown]      # markdown reader
 # down = "j"

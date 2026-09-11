@@ -21,11 +21,50 @@
   animation: overlay-in var(--dur-fast) var(--ease-out);
 }
 
-/* `.dialog ui-surface` — the surface paints it; this is the size budget. */
+/* `.dialog ui-surface` — the surface paints it; this is the size budget.
+   position anchors the resize grip (components/dialog-resize.ts). */
 .dialog {
+  position: relative;
   width: 560px;
   max-width: 90vw;
   max-height: 70vh;
+}
+
+/* Bottom-right drag grip (components/dialog-resize.ts): three diagonal
+   hairlines, quiet until hovered. Drag resizes, double-click resets. */
+.dialog-resize-grip {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  background: repeating-linear-gradient(
+    135deg,
+    transparent 0 3px,
+    var(--border-primary) 3px 4px
+  );
+  border-bottom-right-radius: var(--radius-md);
+  opacity: 0.55;
+  transition: opacity var(--transition-fast);
+}
+
+.dialog-resize-grip:hover {
+  opacity: 1;
+}
+
+/* Dense dialogs (sessions, logs, help, git log, providers) opt into a
+   bigger budget: their content is long paths, commands, shortcut tables and
+   log lines, which need width and height more than the centering needs
+   slack. The backdrop pulls its top padding up so the taller box still
+   fits the viewport. */
+.dialog-lg {
+  width: min(920px, 92vw);
+  max-height: 86vh;
+}
+
+.dialog-backdrop:has(.dialog-lg) {
+  padding-top: 6vh;
 }
 
 /* × in a header: a ghost icon .ui-btn that turns red on hover. */
@@ -44,6 +83,9 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
+  /* Long unbroken runs (paths, branches, URLs) wrap instead of pushing the
+     box or clipping — a word only breaks when it cannot fit its line. */
+  overflow-wrap: anywhere;
 }
 
 .dialog-field {
@@ -225,12 +267,15 @@
 }
 
 /* `.ws-delete-dialog ui-surface` — overflow stays visible: a createDropdown
-   list inside the confirm (move tab / card column) must escape the box. */
+   list inside the confirm (move tab / card column) must escape the box.
+   Confirm bodies carry paths and process names: cap the width so the prose
+   stays readable and wrap unbroken runs instead of letting them overflow. */
 .ws-delete-dialog {
   padding: 20px 24px;
   min-width: 300px;
-  max-width: 90vw;
+  max-width: min(640px, 90vw);
   overflow: visible;
+  overflow-wrap: anywhere;
   text-align: center;
 }
 

@@ -133,8 +133,9 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         has_kanban,
         api_footer_state,
         new_tab_menu,
+        app.sidebar_view,
     );
-    let keys = if let Some((ref m, i, p, md, kb, api, ntm, ref cached)) = app.footer_cache {
+    let keys = if let Some((ref m, i, p, md, kb, api, ntm, sv, ref cached)) = app.footer_cache {
         if *m == cache_key.0
             && i == cache_key.1
             && p == cache_key.2
@@ -142,6 +143,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
             && kb == cache_key.4
             && api == cache_key.5
             && ntm == cache_key.6
+            && sv == cache_key.7
         {
             cached.clone()
         } else {
@@ -154,6 +156,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
                 cache_key.4,
                 cache_key.5,
                 cache_key.6,
+                cache_key.7,
                 k.clone(),
             ));
             k
@@ -168,6 +171,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
             cache_key.4,
             cache_key.5,
             cache_key.6,
+            cache_key.7,
             k.clone(),
         ));
         k
@@ -288,6 +292,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         AppMode::SubmitReview => {} // handled by full-screen code review bypass above
         AppMode::ChatPanel => super::chat::render_chat_overlay(frame, area, app),
         AppMode::RenameTab => super::dialogs::render_rename_tab_dialog(frame, area, app),
+        AppMode::ScratchTerminal => super::scratch_terminal::render(frame, area, app),
     }
 
     // Which-key: transient prefix menu while a prefix chord is pending. Only

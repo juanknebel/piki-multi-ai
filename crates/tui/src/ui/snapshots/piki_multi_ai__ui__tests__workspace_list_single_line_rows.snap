@@ -1,9 +1,9 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 287
+assertion_line: 402
 expression: content
 ---
-╭ WORKSPACES ──────────────────────────╮
+╭ WORKSPACES │ PROJECTS ───────────────╮
 │   ⎇ nightly 2∆ ↑1 ↓2                 │
 │▎  ⎇ void-setup                       │
 │   ⎇ x220t                            │

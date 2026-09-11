@@ -23,9 +23,36 @@ function table(): string {
   return text.slice(a + BEGIN.length, b);
 }
 
-/** Every backtick token in the table. */
+/** Every inline-code span in the table. Handles the `` `` `x` `` ``
+ *  double-backtick form a backtick key needs (`` ``Ctrl+Shift+` `` ``), as
+ *  well as plain `` `x` `` — a port of the TUI's `code_spans`. */
 function codeTokens(md: string): string[] {
-  return [...md.matchAll(/`([^`\n]+)`/g)].map((m) => m[1]);
+  const chars = [...md];
+  const spans: string[] = [];
+  let i = 0;
+  while (i < chars.length) {
+    if (chars[i] !== "`") {
+      i++;
+      continue;
+    }
+    const fence = chars[i + 1] === "`" ? 2 : 1;
+    const open = i + fence;
+    let j = open;
+    let close = -1;
+    while (j < chars.length) {
+      let run = 0;
+      while (chars[j + run] === "`") run++;
+      if (run === fence) {
+        close = j;
+        break;
+      }
+      j += run > 0 ? run : 1;
+    }
+    if (close < 0) break;
+    spans.push(chars.slice(open, close).join("").trim());
+    i = close + fence;
+  }
+  return spans;
 }
 
 describe("docs/technical.md desktop shortcut table", () => {

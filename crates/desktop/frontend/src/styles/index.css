@@ -26,6 +26,7 @@
 @import "./pane.css";
 @import "./terminal.css";
 @import "./terminal-settings.css";
+@import "./dropdown-terminal.css";
 @import "./status-bar.css";
 /* The dialog family (was one dialog.css): core first, then per-feature */
 @import "./dialog-core.css";

@@ -46,7 +46,14 @@
   cursor: pointer;
 }
 
+.project-member-check input {
+  flex-shrink: 0;
+}
+
 .project-member-check-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text-primary);
 }
 

@@ -1,6 +1,6 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 334
+assertion_line: 335
 expression: content
 ---
 
@@ -19,7 +19,7 @@ expression: content
 │Tabs       c new  x close  n next  p prev  R rename                           │
 │Search     / find file  t grep  f search                                      │
 │View       : palette  ? all keys  a about  o logs  C-s sessions  C-p projects │
-│           [ scroll  y chat                                                   │
+│           [ scroll  y chat  C-t terminal                                     │
 │Focus      h left  j down  k up  l right                                      │
 │Layout     < sidebar −  > sidebar +  + split +  - split −                     │
 │Agents     m agents                                                           │

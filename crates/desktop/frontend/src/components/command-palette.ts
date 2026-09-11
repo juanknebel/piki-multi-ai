@@ -33,6 +33,7 @@ import { jumpToAttention } from "./agents-panel";
 import { showAboutDialog } from "./dialogs/about-dialog";
 import { getProviderLabel, type AIProvider } from "../types";
 import { openProvider } from "./open-content";
+import { toggleDropdownTerminal } from "./dropdown-terminal";
 import { toggleSidebar } from "./sidebar";
 import { addContextToChat, toggleChatPanel } from "./chat-panel";
 import { closeActiveWsTab, moveActiveWsTabToWorkspace, tearDownAndClosePane } from "./tab-bar";
@@ -279,6 +280,7 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
     keybinding: getShortcutKey("web-preview"),
     action: () => void openProvider("WebPreview"),
   });
+
 
   // Pane layout commands
   cmds.push({
@@ -641,6 +643,13 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
     category: "Search",
     keybinding: getShortcutKey("terminal-search"),
     action: () => openTerminalSearch(),
+  });
+  cmds.push({
+    id: "toggle-terminal",
+    label: "Toggle Drop-down Terminal",
+    category: "Terminal",
+    keybinding: getShortcutKey("toggle-terminal"),
+    action: () => void toggleDropdownTerminal(),
   });
   cmds.push({
     id: "terminal-literal-next",

@@ -198,6 +198,14 @@ pub async fn write_pty(
             }
         }
     }
+    if let Some(tab) = app.scratch_terminal.as_mut().filter(|t| t.id == tab_id) {
+        return match tab.pty {
+            Some(ref mut pty) => pty
+                .write(&bytes)
+                .map_err(|e| format!("PTY write error: {e}")),
+            None => Err("Tab has no PTY session".to_string()),
+        };
+    }
     Err("Tab not found".to_string())
 }
 
@@ -220,6 +228,14 @@ pub async fn resize_pty(
                 return Err("Tab has no PTY session".to_string());
             }
         }
+    }
+    if let Some(tab) = app.scratch_terminal.as_ref().filter(|t| t.id == tab_id) {
+        return match tab.pty {
+            Some(ref pty) => pty
+                .resize(rows, cols)
+                .map_err(|e| format!("PTY resize error: {e}")),
+            None => Err("Tab has no PTY session".to_string()),
+        };
     }
     Err("Tab not found".to_string())
 }
@@ -377,42 +393,25 @@ fn shell_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
 }
 
-/// Spawns a Shell tab whose working directory is `dir` (workspace-relative).
-/// Powers the file tree's "Open in Terminal" action. Rejects paths that
-/// escape the workspace root.
-#[tauri::command]
-pub async fn spawn_terminal_at(
+/// Spawn a Shell tab in `workspace_idx` whose PTY starts in `cwd` (an
+/// absolute directory). Tail of `spawn_terminal_at`.
+fn spawn_shell_tab_at(
     app_handle: AppHandle,
-    state: State<'_, Mutex<DesktopApp>>,
+    state: &State<'_, Mutex<DesktopApp>>,
     workspace_idx: usize,
-    dir: String,
+    cwd: std::path::PathBuf,
 ) -> Result<String, String> {
-    use std::path::{Component, Path};
-
-    let rel = Path::new(&dir);
-    if rel.is_absolute()
-        || rel
-            .components()
-            .any(|c| matches!(c, Component::ParentDir | Component::Prefix(_)))
-    {
-        return Err(format!("Invalid path: {dir}"));
-    }
-
     let mut tab = DesktopTab::new(AIProvider::Shell, None);
     let tab_id = tab.id.clone();
 
-    let (worktree_path, plan) = {
+    let plan = {
         let app = state.lock();
         if workspace_idx >= app.workspaces.len() {
             return Err("Workspace index out of range".to_string());
         }
-        (
-            app.workspaces[workspace_idx].info.path.clone(),
-            shell_launch_plan(&app)?,
-        )
+        shell_launch_plan(&app)?
     };
 
-    let cwd = worktree_path.join(rel);
     let pty = RawPtySession::spawn(
         app_handle,
         tab_id.clone(),
@@ -438,6 +437,118 @@ pub async fn spawn_terminal_at(
     }
 
     Ok(tab_id)
+}
+
+/// Spawns a Shell tab whose working directory is `dir`: workspace-relative
+/// (the file tree's "Open in Terminal", which may not escape the workspace
+/// root) or absolute (the Agents panel's external-agent rows, whose cwd
+/// comes from `/proc` and can point anywhere).
+#[tauri::command]
+pub async fn spawn_terminal_at(
+    app_handle: AppHandle,
+    state: State<'_, Mutex<DesktopApp>>,
+    workspace_idx: usize,
+    dir: String,
+) -> Result<String, String> {
+    use std::path::{Component, Path};
+
+    let requested = Path::new(&dir);
+    let cwd = if requested.is_absolute() {
+        if !requested.is_dir() {
+            return Err(format!("Not a directory: {dir}"));
+        }
+        requested.to_path_buf()
+    } else {
+        if requested
+            .components()
+            .any(|c| matches!(c, Component::ParentDir | Component::Prefix(_)))
+        {
+            return Err(format!("Invalid path: {dir}"));
+        }
+        let worktree_path = {
+            let app = state.lock();
+            if workspace_idx >= app.workspaces.len() {
+                return Err("Workspace index out of range".to_string());
+            }
+            app.workspaces[workspace_idx].info.path.clone()
+        };
+        worktree_path.join(requested)
+    };
+
+    spawn_shell_tab_at(app_handle, &state, workspace_idx, cwd)
+}
+
+/// State of the global drop-down ("Quake") terminal, returned by
+/// `scratch_terminal_toggle` so the frontend can bind its xterm instance
+/// and know whether to show the overlay.
+#[derive(serde::Serialize)]
+pub struct ScratchTerminalState {
+    /// Present once the shell has been spawned (lazily, on first show).
+    pub tab_id: Option<String>,
+    pub visible: bool,
+}
+
+/// Toggle the global drop-down terminal: a single in-process shell rooted
+/// at `$HOME` that belongs to no workspace. Spawned lazily the first time
+/// it is shown; afterwards this just flips `visible` (the process keeps
+/// running in the background). Its bytes flow through the normal per-tab
+/// output path, and `write_pty` / `resize_pty` accept its `tab_id` too.
+#[tauri::command]
+pub async fn scratch_terminal_toggle(
+    app_handle: AppHandle,
+    state: State<'_, Mutex<DesktopApp>>,
+) -> Result<ScratchTerminalState, String> {
+    let need_spawn = { state.lock().scratch_terminal.is_none() };
+
+    if need_spawn {
+        let mut tab = DesktopTab::new(AIProvider::Shell, None);
+        let tab_id = tab.id.clone();
+        let plan = shell_launch_plan(&state.lock())?;
+        let home = piki_core::xdg::home_dir();
+        let pty = RawPtySession::spawn(
+            app_handle,
+            tab_id,
+            &home,
+            24,
+            80,
+            &plan.command,
+            &plan.args,
+            &plan.env,
+            &plan.extra_args,
+            plan.integration_on,
+            plan.cli_agent_sock,
+        )
+        .map_err(|e| format!("Failed to spawn PTY: {e}"))?;
+        tab.pty = Some(pty);
+        tab.alive = true;
+
+        let mut app = state.lock();
+        app.scratch_terminal = Some(tab);
+        app.scratch_terminal_visible = true;
+    } else {
+        let mut app = state.lock();
+        app.scratch_terminal_visible = !app.scratch_terminal_visible;
+    }
+
+    let app = state.lock();
+    Ok(ScratchTerminalState {
+        tab_id: app.scratch_terminal.as_ref().map(|t| t.id.clone()),
+        visible: app.scratch_terminal_visible,
+    })
+}
+
+/// Kill the drop-down terminal's shell and forget it — the frontend calls
+/// this when the shell process exits so the next toggle spawns a fresh one.
+#[tauri::command]
+pub async fn scratch_terminal_kill(state: State<'_, Mutex<DesktopApp>>) -> Result<(), String> {
+    let mut app = state.lock();
+    if let Some(mut tab) = app.scratch_terminal.take()
+        && let Some(ref mut pty) = tab.pty
+    {
+        let _ = pty.kill();
+    }
+    app.scratch_terminal_visible = false;
+    Ok(())
 }
 
 #[tauri::command]

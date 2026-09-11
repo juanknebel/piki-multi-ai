@@ -34,6 +34,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getProviderLabel, type AIProvider } from "../types";
 import { getShortcutKey, formatShortcut } from "../shortcuts";
 import { openProvider } from "./open-content";
+import { toggleDropdownTerminal } from "./dropdown-terminal";
 import { revealInFileTree, toggleFileTreeAutoReveal } from "./file-tree";
 import { getCodeEditorFilePath } from "./code-editor-panel";
 import { getMarkdownEditorFilePath } from "./markdown-editor-panel";
@@ -200,6 +201,7 @@ const MENUS: MenuDefinition[] = [
       { label: "Kanban Board", shortcut: getShortcutKey("kanban"), action: () => appState.setActiveView("kanban") },
       SEP,
       { label: "Toggle Sidebar", shortcut: getShortcutKey("toggle-sidebar"), action: () => toggleSidebar() },
+      { label: "Toggle Terminal", shortcut: getShortcutKey("toggle-terminal"), action: () => void toggleDropdownTerminal() },
       SEP,
       { label: "Zoom In", shortcut: getShortcutKey("zoom-in"), action: () => zoomIn() },
       { label: "Zoom Out", shortcut: getShortcutKey("zoom-out"), action: () => zoomOut() },

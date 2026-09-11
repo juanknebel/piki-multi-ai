@@ -7,11 +7,77 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph};
 
-use crate::app::{ActivePane, App, SidebarItem, Workspace, agent_status_severity};
+use crate::app::{ActivePane, App, SidebarItem, SidebarView, Workspace, agent_status_severity};
 use piki_core::WorkspaceType;
 use piki_core::cli_agent::CliAgentStatus;
 
+use super::dialogs::projects::{ellipsize_end, ellipsize_start};
 use super::layout::{pane_border_style, pane_title_style};
+
+/// Tab labels for the top-left pane (Workspaces | Projects). Both render in
+/// the top border when they fit; a narrow pane shows only the active one.
+const TAB_WORKSPACES: &str = " WORKSPACES ";
+const TAB_PROJECTS: &str = " PROJECTS ";
+const TAB_WORKSPACES_W: u16 = 12;
+const TAB_PROJECTS_W: u16 = 10;
+
+/// Whether the pane's top border has room for both tab labels + separator.
+fn sidebar_tabs_fit(area: Rect) -> bool {
+    area.width.saturating_sub(2) >= TAB_WORKSPACES_W + 1 + TAB_PROJECTS_W
+}
+
+/// The pane title as a tab bar: the active view carries the pane-title
+/// style, the other one recedes; a `│` separates them.
+fn sidebar_tab_title(app: &App, area: Rect) -> Line<'static> {
+    let active = pane_title_style(app, ActivePane::WorkspaceList);
+    let inactive = Style::default().fg(app.theme.palette.fg3);
+    if !sidebar_tabs_fit(area) {
+        let label = match app.sidebar_view {
+            SidebarView::Workspaces => TAB_WORKSPACES,
+            SidebarView::Projects => TAB_PROJECTS,
+        };
+        return Line::from(Span::styled(label, active));
+    }
+    let (ws_style, pr_style) = match app.sidebar_view {
+        SidebarView::Workspaces => (active, inactive),
+        SidebarView::Projects => (inactive, active),
+    };
+    Line::from(vec![
+        Span::styled(TAB_WORKSPACES, ws_style),
+        Span::styled("│", Style::default().fg(app.theme.palette.line)),
+        Span::styled(TAB_PROJECTS, pr_style),
+    ])
+}
+
+/// Which sidebar tab a click at (col, row) lands on, mirroring
+/// `sidebar_tab_title`'s geometry (titles start one cell past the corner).
+/// When the pane is too narrow for both labels, a click on the single title
+/// switches to the other view — the tab bar stays reachable.
+pub(crate) fn sidebar_tab_hit(app: &App, col: u16, row: u16) -> Option<SidebarView> {
+    let area = app.ws_list_area;
+    if area.height == 0 || row != area.y {
+        return None;
+    }
+    let start = area.x + 1;
+    if !sidebar_tabs_fit(area) {
+        let len = match app.sidebar_view {
+            SidebarView::Workspaces => TAB_WORKSPACES_W,
+            SidebarView::Projects => TAB_PROJECTS_W,
+        };
+        let other = match app.sidebar_view {
+            SidebarView::Workspaces => SidebarView::Projects,
+            SidebarView::Projects => SidebarView::Workspaces,
+        };
+        return (col >= start && col < start + len).then_some(other);
+    }
+    if col >= start && col < start + TAB_WORKSPACES_W {
+        Some(SidebarView::Workspaces)
+    } else if col > start + TAB_WORKSPACES_W && col <= start + TAB_WORKSPACES_W + TAB_PROJECTS_W {
+        Some(SidebarView::Projects)
+    } else {
+        None
+    }
+}
 
 /// Icon prefix for a workspace row. A `Simple` workspace pointed at a plain
 /// (non-git) directory gets a distinct folder icon — otherwise it's
@@ -161,11 +227,17 @@ fn right_metadata_spans(
     right
 }
 
-/// Returns the visual height (in lines) of a sidebar item at the given index.
-/// Workspace items that follow another workspace get an extra separator line.
+/// Top-left pane: a tab bar hosting the Workspaces tree and the Projects
+/// list — whichever `app.sidebar_view` says, so the pane always opens on
+/// the view the user prefers.
 pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
     let border_style = pane_border_style(app, ActivePane::WorkspaceList);
     let theme = &app.theme.workspace_list;
+
+    if app.sidebar_view == SidebarView::Projects {
+        render_projects_pane(frame, area, app);
+        return;
+    }
     // Selection has two temperatures: the iris wash where the focus is, a
     // neutral raised surface where it is not — you never lose your place.
     let sel_bg = if app.active_pane == ActivePane::WorkspaceList {
@@ -185,8 +257,7 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
     let guide_fg = app.theme.palette.line;
 
     let block = Block::default()
-        .title(" WORKSPACES ")
-        .title_style(pane_title_style(app, ActivePane::WorkspaceList))
+        .title(sidebar_tab_title(app, area))
         .borders(Borders::ALL)
         .border_type(ratatui::widgets::BorderType::Rounded)
         .border_style(border_style);
@@ -454,6 +525,131 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
         area,
         scroll_offset,
         visual_rows.len(),
+        visible_height,
+        app.theme.general.scrollbar_thumb,
+    );
+}
+
+/// The Projects tab of the top-left pane: the same flattened rows the
+/// Projects overlay shows (projects + their expanded members), compacted to
+/// sidebar width. Enter/click expands a project or jumps to / adopts a
+/// member; n/e/d reuse the overlay's editor and delete.
+fn render_projects_pane(frame: &mut Frame, area: Rect, app: &App) {
+    let is_focused = app.active_pane == ActivePane::WorkspaceList;
+    let theme = &app.theme.workspace_list;
+    let sel_bg = if is_focused {
+        theme.selected_bg
+    } else {
+        app.theme.palette.bg2
+    };
+    let sel_bar_fg = if is_focused {
+        app.theme.palette.iris
+    } else {
+        app.theme.palette.fg3
+    };
+
+    let block = Block::default()
+        .title(sidebar_tab_title(app, area))
+        .borders(Borders::ALL)
+        .border_type(ratatui::widgets::BorderType::Rounded)
+        .border_style(pane_border_style(app, ActivePane::WorkspaceList));
+
+    let rows = app.projects_pane_rows();
+    if rows.is_empty() {
+        let lines = vec![
+            Line::from(""),
+            Line::from(vec![
+                Span::styled(
+                    format!(" [{}]", app.config.get_binding("projects", "new")),
+                    Style::default().fg(app.theme.footer.key),
+                ),
+                Span::styled(" New project", Style::default().fg(theme.empty_text)),
+            ]),
+        ];
+        frame.render_widget(Paragraph::new(lines).block(block), area);
+        return;
+    }
+
+    let selected = app.selected_project_row.min(rows.len() - 1);
+    let visible_height = area.height.saturating_sub(2) as usize;
+    let scroll_offset = app.projects_viewport();
+    let inner_w = area.width.saturating_sub(2) as usize;
+
+    let items: Vec<ListItem> = rows
+        .iter()
+        .skip(scroll_offset)
+        .take(visible_height)
+        .enumerate()
+        .map(|(vis_idx, row)| {
+            let row_idx = vis_idx + scroll_offset;
+            let is_selected = row_idx == selected;
+            let bar = if is_selected {
+                Span::styled("▎", Style::default().fg(sel_bar_fg))
+            } else {
+                Span::raw(" ")
+            };
+            let spans = match *row {
+                crate::dialog_state::ProjectRow::Project(pi) => {
+                    let p = &app.sidebar_projects[pi];
+                    let open = p.id.is_some_and(|id| app.projects_expanded.contains(&id));
+                    let marker = if open { "▾ " } else { "▸ " };
+                    let count = format!(" {}", p.members.len());
+                    // bar(1) + marker(2) + dot(2) + trailing count.
+                    let avail = inner_w.saturating_sub(5 + count.chars().count());
+                    vec![
+                        bar,
+                        Span::styled(
+                            marker,
+                            Style::default()
+                                .fg(theme.name_inactive)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(
+                            "● ",
+                            Style::default().fg(app.theme.projects.color(p.clamped_color())),
+                        ),
+                        Span::styled(
+                            ellipsize_end(&p.name, avail),
+                            Style::default().fg(theme.name_inactive),
+                        ),
+                        Span::styled(count, Style::default().fg(theme.detail_normal)),
+                    ]
+                }
+                crate::dialog_state::ProjectRow::Member(pi, mi) => {
+                    let path = &app.sidebar_projects[pi].members[mi].path;
+                    // Resolve dynamically, like the overlay: a registered
+                    // workspace renders by name (jump on Enter/click), any
+                    // other path is a dimmed directory (adopted on Enter).
+                    let avail = inner_w.saturating_sub(4);
+                    let (text, style) = match app.workspaces.iter().find(|w| w.info.path == *path) {
+                        Some(w) => (
+                            ellipsize_end(&w.info.name, avail),
+                            Style::default().fg(theme.name_inactive),
+                        ),
+                        None => (
+                            ellipsize_start(&path.to_string_lossy(), avail),
+                            Style::default().fg(app.theme.palette.fg3),
+                        ),
+                    };
+                    vec![bar, Span::raw("   "), Span::styled(text, style)]
+                }
+            };
+            let style = if is_selected {
+                Style::default().bg(sel_bg)
+            } else {
+                Style::default()
+            };
+            ListItem::new(vec![Line::from(spans)]).style(style)
+        })
+        .collect();
+
+    frame.render_widget(List::new(items).block(block), area);
+
+    super::scrollbar::render_vertical(
+        frame,
+        area,
+        scroll_offset,
+        rows.len(),
         visible_height,
         app.theme.general.scrollbar_thumb,
     );

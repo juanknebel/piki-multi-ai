@@ -1014,7 +1014,13 @@ fn handle_projects_list_input(app: &mut App, key: KeyEvent) -> Option<Action> {
         }
         Step::Act(action) => Some(action),
         Step::OpenEditor(project_idx) => {
-            open_project_editor(app, project_idx);
+            let project = match (&app.active_dialog, project_idx) {
+                (Some(DialogState::Projects { projects, .. }), Some(pi)) => {
+                    projects.get(pi).cloned()
+                }
+                _ => None,
+            };
+            open_project_editor(app, project, true);
             None
         }
         Step::Jump(path) => {
@@ -1034,19 +1040,30 @@ fn handle_projects_list_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     }
 }
 
-/// Swap the Projects list for its edit sub-dialog. `project_idx` indexes the
-/// list's projects vec (None = create new). The member checklist is built
-/// here, at open time: saved members first (in saved order), then every
-/// registered workspace that isn't a member yet — see [`ProjectMemberRow`]
-/// for the ordering contract. There is deliberately no "add directory" input
-/// in the TUI editor (v1): directories get added from the desktop side, or
-/// arrive by adopting one from the list.
-fn open_project_editor(app: &mut App, project_idx: Option<usize>) {
-    let project = match (&app.active_dialog, project_idx) {
-        (Some(DialogState::Projects { projects, .. }), Some(pi)) => projects.get(pi).cloned(),
-        _ => None,
-    };
+/// Open the project editor from the sidebar's Projects tab: same modal as
+/// the overlay's sub-dialog, but Esc/save land back in Normal mode (the
+/// pane is not a dialog to return to).
+pub(super) fn open_project_editor_modal(
+    app: &mut App,
+    project: Option<piki_core::projects::Project>,
+) {
+    open_project_editor(app, project, false);
+    app.mode = crate::app::AppMode::Projects;
+}
 
+/// Swap in the project edit dialog (None = create new). `return_to_list`
+/// says where Esc/save land — back to the overlay list, or to Normal when
+/// the editor was opened from the sidebar's Projects tab. The member
+/// checklist is built here, at open time: saved members first (in saved
+/// order), then every registered workspace that isn't a member yet — see
+/// [`ProjectMemberRow`] for the ordering contract. There is deliberately no
+/// "add directory" input in the TUI editor (v1): directories get added from
+/// the desktop side, or arrive by adopting one from the list.
+fn open_project_editor(
+    app: &mut App,
+    project: Option<piki_core::projects::Project>,
+    return_to_list: bool,
+) {
     let mut members: Vec<crate::dialog_state::ProjectMemberRow> = Vec::new();
     if let Some(ref p) = project {
         for m in &p.members {
@@ -1075,6 +1092,7 @@ fn open_project_editor(app: &mut App, project_idx: Option<usize>) {
 
     let name = project.as_ref().map(|p| p.name.clone()).unwrap_or_default();
     app.active_dialog = Some(DialogState::ProjectEdit {
+        return_to_list,
         editing_id: project.as_ref().and_then(|p| p.id),
         name_cursor: name.chars().count(),
         name,
@@ -1099,8 +1117,9 @@ fn handle_project_edit_input(app: &mut App, key: KeyEvent) -> Option<Action> {
         Save(Box<piki_core::projects::Project>),
     }
 
-    let step = {
+    let (step, return_to_list) = {
         let Some(DialogState::ProjectEdit {
+            return_to_list,
             ref editing_id,
             ref mut name,
             ref mut name_cursor,
@@ -1115,7 +1134,7 @@ fn handle_project_edit_input(app: &mut App, key: KeyEvent) -> Option<Action> {
         };
         use crate::dialog_state::ProjectEditField;
 
-        match key.code {
+        let step = match key.code {
             KeyCode::Tab => {
                 *active_field = active_field.next();
                 Step::Stay
@@ -1181,9 +1200,20 @@ fn handle_project_edit_input(app: &mut App, key: KeyEvent) -> Option<Action> {
                 }
                 Step::Stay
             }
-        }
+        };
+        (step, return_to_list)
     };
 
+    // Where Back/Save land depends on where the editor was opened from:
+    // the overlay reopens its list, the sidebar's Projects tab returns to
+    // Normal (the pane is not a dialog).
+    let close = |app: &mut App| {
+        if return_to_list {
+            super::app_actions::open_projects(app);
+        } else {
+            dismiss_dialog(app);
+        }
+    };
     match step {
         Step::Stay => None,
         Step::EmptyName => {
@@ -1191,14 +1221,14 @@ fn handle_project_edit_input(app: &mut App, key: KeyEvent) -> Option<Action> {
             None
         }
         Step::Back => {
-            // Back to the list without saving (reloads from storage).
-            super::app_actions::open_projects(app);
+            // Back without saving (the overlay list reloads from storage).
+            close(app);
             None
         }
         Step::Save(project) => {
-            // Swap back to the list now; the action persists and then
-            // reloads it from storage so it reflects what was saved.
-            super::app_actions::open_projects(app);
+            // Swap back now; the action persists and then reloads both the
+            // overlay list and the sidebar's Projects tab from storage.
+            close(app);
             Some(Action::SaveProject(*project))
         }
     }

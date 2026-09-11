@@ -93,6 +93,8 @@
 }
 
 .project-member-name {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -104,8 +106,9 @@
   color: var(--text-muted);
 }
 
+/* Inline inside .project-member-name so the single-line ellipsis eats the
+   branch tail first and the member name stays readable. */
 .project-member-branch {
-  flex-shrink: 0;
   color: var(--text-muted);
   font-size: var(--fs-sm);
 }

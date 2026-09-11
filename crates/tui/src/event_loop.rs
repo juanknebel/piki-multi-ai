@@ -98,6 +98,13 @@ pub(crate) async fn run(
         {
             app.code_review_split_pct = pct.clamp(10, 90);
         }
+        // Which tab the top-left pane opens on (Workspaces | Projects).
+        if let Ok(Some(val)) = ui_prefs.get_preference("sidebar_view") {
+            app.sidebar_view = crate::app::SidebarView::from_str(&val);
+            if app.sidebar_view == crate::app::SidebarView::Projects {
+                app.reload_sidebar_projects();
+            }
+        }
     }
 
     // Load chat config from storage (shared with desktop)
@@ -367,6 +374,7 @@ pub(crate) async fn run(
             _ = pty_output.notified() => {
                 pty_output.take();
                 check_active_tab_output(&mut app);
+                check_scratch_output(&mut app);
             }
 
             result = app.refresh_rx.recv() => {
@@ -762,6 +770,21 @@ fn check_active_tab_output(app: &mut App) {
     }
 }
 
+/// Same one-atomic-load redraw check for the scratch terminal, but only while
+/// its overlay is up (hidden output is replayed from the parser on re-open).
+fn check_scratch_output(app: &mut App) {
+    if !app.scratch.visible {
+        return;
+    }
+    if let Some(ref pty) = app.scratch.pty_session {
+        let current_bytes = pty.bytes_processed();
+        if current_bytes != app.scratch.last_bytes_processed {
+            app.scratch.last_bytes_processed = current_bytes;
+            app.needs_redraw = true;
+        }
+    }
+}
+
 /// Per-tab polling across every workspace: file-watcher drain, PTY byte /
 /// liveness checks, idle detection, passive agent-state detection, shell +
 /// cli-agent OSC drain, API Explorer polling and git-refresh scheduling.
@@ -782,6 +805,23 @@ fn poll_workspaces(app: &mut App, now: Instant) {
 
     // Active workspace — check PTY bytes + is_alive for all tabs
     check_active_tab_output(app);
+    check_scratch_output(app);
+
+    // Scratch terminal: if its shell exited, drop it so the next toggle
+    // spawns a fresh one, and close the overlay if it was showing.
+    if let Some(ref mut pty) = app.scratch.pty_session
+        && !pty.is_alive()
+    {
+        app.scratch.pty_session = None;
+        app.scratch.pty_parser = None;
+        if app.scratch.visible {
+            app.scratch.visible = false;
+            if app.mode == app::AppMode::ScratchTerminal {
+                app.mode = app::AppMode::Normal;
+            }
+            app.needs_redraw = true;
+        }
+    }
     {
         let idx = app.active_workspace;
         if let Some(ws) = app.workspaces.get_mut(idx) {

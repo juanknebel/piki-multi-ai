@@ -123,6 +123,8 @@ export const ICONS = {
   api: p("M5.8 5.5L3 8l2.8 2.5", "M10.2 5.5L13 8l-2.8 2.5"),
   /** browser window — Web Preview */
   browser: p("M2 3.5h12v9.5H2z", "M2 6h12") + disc(3.7, 4.75, 0.65) + disc(5.6, 4.75, 0.65),
+  /** terminal window (prompt chevron + cursor line) — the home-terminal button */
+  terminal: p("M2 3.5h12v9.5H2z", "M4.5 6.5L7 8.5l-2.5 2", "M8.5 10.5H11.5"),
 } as const;
 
 export const ICON_NAMES = Object.keys(ICONS) as IconName[];

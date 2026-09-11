@@ -3,6 +3,7 @@ import { toast } from "../toast";
 import { createDropdown } from "../dropdown";
 import { modCtrl } from "../../shortcuts";
 import type { LogEntry } from "../../ipc";
+import { attachDialogResize } from "../dialog-resize";
 
 const LEVEL_FILTERS = [
   { label: "All", value: "0" },
@@ -36,10 +37,8 @@ export async function showLogsDialog() {
   backdrop.className = "dialog-backdrop logs-dialog-backdrop";
 
   const dialog = document.createElement("div");
-  dialog.className = "dialog ui-surface";
-  dialog.style.maxWidth = "800px";
-  dialog.style.maxHeight = "85vh";
-  dialog.style.width = "90vw";
+  // Size comes from the shared .dialog-lg budget (and the user's resize).
+  dialog.className = "dialog ui-surface dialog-lg";
 
   dialog.innerHTML = `
     <div class="ui-header">
@@ -52,11 +51,12 @@ export async function showLogsDialog() {
         <button data-variant="ghost" data-icon class="dialog-close ui-btn" title="Close" aria-label="Close">×</button>
       </span>
     </div>
-    <div id="log-entries" style="flex:1;overflow-y:auto;padding:0;font-size:11px;line-height:1.6;max-height:70vh"></div>
+    <div id="log-entries" style="flex:1;overflow-y:auto;padding:0;font-size:11px;line-height:1.6"></div>
   `;
 
   backdrop.appendChild(dialog);
   document.body.appendChild(backdrop);
+  attachDialogResize(dialog, "logs");
 
   const levelDropdown = createDropdown(LEVEL_FILTERS, "0", "width:auto;min-width:80px");
   dialog.querySelector("#log-level-slot")!.replaceWith(levelDropdown.container);
