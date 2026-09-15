@@ -163,9 +163,15 @@ just lint-desktop                           # frontend test + build, then clippy
   (10 static tokens in `variables.css` — deliberately NOT theme-derived so a project keeps one colour in both
   frontends), member rows a `--project-stripe` bar. A member path is resolved against `appState.workspaces`
   at render time: match → workspace row (click switches), no match → directory row (click adopts it as a
-  `Simple` workspace via `ipc.createWorkspace`, then switches). Collapse persisted as `projectsCollapsed`
+  `Simple` workspace via `ipc.createWorkspace`, then switches). The active workspace is marked wherever it's a
+  member — `.project-member.active` on every matching row, `.project-row.has-active` + a marker dot on a
+  collapsed project's header so folding it doesn't read as "nothing selected" (a workspace can belong to
+  several projects; each gets its own mark, matched by index against `appState.activeWorkspace`, not by
+  reference). Collapse persisted as `projectsCollapsed`
   (settings). Create/edit in `dialogs/project-dialog.ts` (10-swatch radio, workspace checkboxes, directory
-  rows through `attachPathPicker`); sheets `projects.css` + `dialog-projects.css`.
+  rows through `attachPathPicker`, `attachDialogResize(dialog, "project")` — the member picker is `flex: 1 1
+  auto` so a resized dialog gives it the extra room, not the other fields); sheets `projects.css` +
+  `dialog-projects.css`.
 - `workspace-switcher.ts` ranks with the pure `mru.ts` (`mruBump` / `mruRank` / `rankItems`) over the
   `workspaceMru` settings list that `appState.setActiveWorkspace` bumps (the single choke point for
   switches); rows show `statusGlyph` (agent rollup or dirty git).

@@ -48,8 +48,11 @@ export function openFuzzySearch(opts: { paneId?: PaneId } = {}) {
 
   const palette = document.createElement("div");
   palette.className = "palette ui-surface";
+  // autocomplete/spellcheck off — see command-palette.ts: macOS WKWebView's
+  // native suggestions popover otherwise eats ArrowUp/ArrowDown.
   palette.innerHTML = `
-    <input class="palette-input" type="text" placeholder="${opts.paneId ? "Open a file in this pane…" : "Search files…"}" autofocus />
+    <input class="palette-input" type="text" placeholder="${opts.paneId ? "Open a file in this pane…" : "Search files…"}" autofocus
+           autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
     <div class="palette-results"></div>
     <div class="palette-footer">
       <span class="palette-footer-hint"><span class="palette-key">Enter</span> Edit</span>

@@ -27,11 +27,21 @@
   outline-offset: 2px;
 }
 
+/* The Members field absorbs a resized dialog's extra height — dragging the
+   corner grip (attachDialogResize) taller gives the picker room to show
+   more workspaces instead of leaving blank space below it. */
+.dialog-field:has(.project-member-picker) {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .project-member-picker {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  max-height: 180px;
+  flex: 1 1 100px;
+  min-height: 100px;
+  max-height: none;
   overflow-y: auto;
   padding: 6px 8px;
   border: 1px solid var(--border-subtle);

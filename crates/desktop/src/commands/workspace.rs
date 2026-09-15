@@ -6,6 +6,42 @@ use piki_core::{WorkspaceInfo, WorkspaceStatus};
 
 use crate::state::{DesktopApp, DesktopWorkspace, WorkspaceDetail};
 
+/// Register a freshly-created/imported workspace: assign the next display
+/// order, push it (with its file watcher) onto `app.workspaces`, and persist
+/// the whole list keyed by its `source_repo`. Shared tail of
+/// `create_workspace`, `create_github_workspace` and `import_existing_worktree`.
+fn register_new_workspace(app: &mut DesktopApp, mut info: WorkspaceInfo) -> WorkspaceInfo {
+    let watcher = FileWatcher::new(info.path.clone(), info.name.clone()).ok();
+    let order = app
+        .workspaces
+        .iter()
+        .map(|ws| ws.info.order)
+        .max()
+        .unwrap_or(0)
+        + 1;
+    info.order = order;
+
+    app.workspaces.push(DesktopWorkspace {
+        info: info.clone(),
+        status: WorkspaceStatus::Idle,
+        changed_files: Vec::new(),
+        ahead_behind: None,
+        branch: None,
+        tabs: Vec::new(),
+        active_tab: 0,
+        watcher,
+        file_index: None,
+    });
+
+    let all_infos: Vec<WorkspaceInfo> = app.workspaces.iter().map(|ws| ws.info.clone()).collect();
+    let _ = app
+        .storage
+        .workspaces
+        .save_workspaces(&info.source_repo, &all_infos);
+
+    info
+}
+
 #[tauri::command]
 pub async fn list_workspaces(
     state: State<'_, Mutex<DesktopApp>>,
@@ -93,12 +129,9 @@ pub async fn create_workspace(
     kanban_path: Option<String>,
 ) -> Result<WorkspaceInfo, String> {
     // Extract manager info with scoped lock
-    let (manager, storage) = {
+    let manager = {
         let app = state.lock();
-        let manager =
-            piki_core::workspace::manager::WorkspaceManager::with_paths(app.paths.clone());
-        let storage = std::sync::Arc::clone(&app.storage);
-        (manager, storage)
+        piki_core::workspace::manager::WorkspaceManager::with_paths(app.paths.clone())
     };
 
     let source_repo = std::path::PathBuf::from(&dir);
@@ -131,40 +164,8 @@ pub async fn create_workspace(
             .map_err(|e| e.to_string())?,
     };
 
-    let mut result_info = info.clone();
-
-    let watcher = FileWatcher::new(result_info.path.clone(), result_info.name.clone()).ok();
-
-    // Re-lock to update state
     let mut app = state.lock();
-    let order = app
-        .workspaces
-        .iter()
-        .map(|ws| ws.info.order)
-        .max()
-        .unwrap_or(0)
-        + 1;
-    result_info.order = order;
-
-    app.workspaces.push(DesktopWorkspace {
-        info: result_info.clone(),
-        status: WorkspaceStatus::Idle,
-        changed_files: Vec::new(),
-        ahead_behind: None,
-        branch: None,
-        tabs: Vec::new(),
-        active_tab: 0,
-        watcher,
-        file_index: None,
-    });
-
-    // Save to storage — use the new workspace's source_repo as the key
-    let all_infos: Vec<WorkspaceInfo> = app.workspaces.iter().map(|ws| ws.info.clone()).collect();
-    let _ = storage
-        .workspaces
-        .save_workspaces(&result_info.source_repo, &all_infos);
-
-    Ok(result_info)
+    Ok(register_new_workspace(&mut app, info))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -178,12 +179,9 @@ pub async fn create_github_workspace(
     destination_dir: String,
     kanban_path: Option<String>,
 ) -> Result<WorkspaceInfo, String> {
-    let (manager, storage) = {
+    let manager = {
         let app = state.lock();
-        let manager =
-            piki_core::workspace::manager::WorkspaceManager::with_paths(app.paths.clone());
-        let storage = std::sync::Arc::clone(&app.storage);
-        (manager, storage)
+        piki_core::workspace::manager::WorkspaceManager::with_paths(app.paths.clone())
     };
 
     let destination_path = std::path::PathBuf::from(destination_dir);
@@ -199,38 +197,76 @@ pub async fn create_github_workspace(
         .await
         .map_err(|e| e.to_string())?;
 
-    let mut result_info = info.clone();
+    let mut app = state.lock();
+    Ok(register_new_workspace(&mut app, info))
+}
 
-    let watcher = FileWatcher::new(result_info.path.clone(), result_info.name.clone()).ok();
+/// One entry from `git worktree list`, for the "Load Existing Worktree"
+/// picker in the Create Worktree dialog.
+#[derive(serde::Serialize)]
+pub struct ExistingWorktreeInfo {
+    pub path: String,
+    pub branch: String,
+}
+
+/// List git worktrees for the repo backing `source_repo` (a GitHub-origin
+/// workspace's `source_repo`), excluding ones already registered as
+/// workspaces. Mirrors the TUI's `Action::ListWorktrees`.
+#[tauri::command]
+pub async fn list_worktrees(
+    state: State<'_, Mutex<DesktopApp>>,
+    source_repo: String,
+) -> Result<Vec<ExistingWorktreeInfo>, String> {
+    let (manager, registered) = {
+        let app = state.lock();
+        (
+            piki_core::workspace::manager::WorkspaceManager::with_paths(app.paths.clone()),
+            app.workspaces
+                .iter()
+                .map(|ws| ws.info.path.clone())
+                .collect::<Vec<_>>(),
+        )
+    };
+    let found = manager
+        .list_worktrees(&std::path::PathBuf::from(&source_repo))
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(found
+        .into_iter()
+        .filter(|w| !registered.contains(&w.path))
+        .map(|w| ExistingWorktreeInfo {
+            path: w.path.to_string_lossy().to_string(),
+            branch: w.branch,
+        })
+        .collect())
+}
+
+/// Register an already-existing worktree directory (from `list_worktrees`)
+/// as a new workspace, without shelling out to `git worktree add`. Mirrors
+/// the TUI's `Action::ImportExistingWorktree`.
+#[tauri::command]
+pub async fn import_existing_worktree(
+    state: State<'_, Mutex<DesktopApp>>,
+    source_repo: String,
+    path: String,
+    branch: String,
+) -> Result<WorkspaceInfo, String> {
+    let manager = {
+        let app = state.lock();
+        piki_core::workspace::manager::WorkspaceManager::with_paths(app.paths.clone())
+    };
+    let name = branch.rsplit('/').next().unwrap_or(&branch).to_string();
+    let info = manager
+        .import_existing_worktree(
+            &name,
+            std::path::PathBuf::from(&path),
+            std::path::PathBuf::from(&source_repo),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
 
     let mut app = state.lock();
-    let order = app
-        .workspaces
-        .iter()
-        .map(|ws| ws.info.order)
-        .max()
-        .unwrap_or(0)
-        + 1;
-    result_info.order = order;
-
-    app.workspaces.push(DesktopWorkspace {
-        info: result_info.clone(),
-        status: WorkspaceStatus::Idle,
-        changed_files: Vec::new(),
-        ahead_behind: None,
-        branch: None,
-        tabs: Vec::new(),
-        active_tab: 0,
-        watcher,
-        file_index: None,
-    });
-
-    let all_infos: Vec<WorkspaceInfo> = app.workspaces.iter().map(|ws| ws.info.clone()).collect();
-    let _ = storage
-        .workspaces
-        .save_workspaces(&result_info.source_repo, &all_infos);
-
-    Ok(result_info)
+    Ok(register_new_workspace(&mut app, info))
 }
 
 #[tauri::command]

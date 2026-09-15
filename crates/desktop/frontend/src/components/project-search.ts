@@ -23,8 +23,11 @@ export function openProjectSearch() {
 
   const palette = document.createElement("div");
   palette.className = "palette ui-surface";
+  // autocomplete/spellcheck off — see command-palette.ts: macOS WKWebView's
+  // native suggestions popover otherwise eats ArrowUp/ArrowDown.
   palette.innerHTML = `
-    <input class="palette-input" type="text" placeholder="Search in project (grep)..." autofocus />
+    <input class="palette-input" type="text" placeholder="Search in project (grep)..." autofocus
+           autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
     <div class="palette-results"></div>
   `;
 

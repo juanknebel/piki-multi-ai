@@ -60,6 +60,28 @@ export function defaultCloneDestination(): Promise<string> {
   return invoke("default_clone_destination");
 }
 
+export interface ExistingWorktreeInfo {
+  path: string;
+  branch: string;
+}
+
+/** Worktrees already on disk for `sourceRepo` (a GitHub-origin workspace's
+ *  `source_repo`) that aren't registered as a workspace yet — the "Load
+ *  Existing Worktree" list in the Create Worktree dialog. */
+export function listWorktrees(sourceRepo: string): Promise<ExistingWorktreeInfo[]> {
+  return invoke("list_worktrees", { sourceRepo });
+}
+
+/** Register an existing worktree directory (from `listWorktrees`) as a new
+ *  workspace, without running `git worktree add`. */
+export function importExistingWorktree(
+  sourceRepo: string,
+  path: string,
+  branch: string,
+): Promise<WorkspaceInfo> {
+  return invoke("import_existing_worktree", { sourceRepo, path, branch });
+}
+
 export function deleteWorkspace(index: number): Promise<void> {
   return invoke("delete_workspace", { index });
 }

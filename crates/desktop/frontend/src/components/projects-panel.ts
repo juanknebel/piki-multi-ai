@@ -131,13 +131,23 @@ function render() {
     const isCollapsed = collapsed.has(pid);
     const swatch = projectSwatch(project.color);
 
+    // The same workspace can be a member of several projects at once — mark
+    // it wherever it shows up, not just the first match. A collapsed group
+    // still gets a marker on its header row so it isn't reported as
+    // "nothing selected" just because you can't see the member row.
+    const hasActiveMember = project.members.some((m) => {
+      const i = appState.workspaces.findIndex((w) => w.info.path === m.path);
+      return i >= 0 && i === appState.activeWorkspace;
+    });
+
     const row = document.createElement("div");
-    row.className = "project-row";
+    row.className = `project-row${hasActiveMember ? " has-active" : ""}`;
     row.dataset.projectId = String(pid);
     row.innerHTML = `
       ${icon("chevron-right", { class: `project-chevron${isCollapsed ? "" : " expanded"}` })}
       <span class="project-dot" style="background:${swatch}"></span>
       <span class="project-name">${escapeHtml(project.name)}</span>
+      ${hasActiveMember ? `<span class="project-active-marker" title="Contains the active workspace"></span>` : ""}
       <span class="project-count">${project.members.length}</span>
     `;
     row.addEventListener("click", () => {
@@ -156,9 +166,11 @@ function render() {
 
     if (isCollapsed) continue;
     for (const member of project.members) {
-      const ws = appState.workspaces.find((w) => w.info.path === member.path);
+      const wsIdx = appState.workspaces.findIndex((w) => w.info.path === member.path);
+      const ws = wsIdx >= 0 ? appState.workspaces[wsIdx] : undefined;
+      const isActive = wsIdx >= 0 && wsIdx === appState.activeWorkspace;
       const el = document.createElement("div");
-      el.className = `project-member${ws ? "" : " directory"}`;
+      el.className = `project-member${ws ? "" : " directory"}${isActive ? " active" : ""}`;
       el.dataset.path = member.path;
       el.style.setProperty("--project-stripe", swatch);
       const label = ws

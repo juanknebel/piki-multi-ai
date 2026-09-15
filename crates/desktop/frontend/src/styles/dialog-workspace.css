@@ -20,3 +20,47 @@
   word-break: break-all;
   font-size: var(--fs-md);
 }
+
+/* Create Worktree dialog's "Load Existing" list (dialogs/workspace-dialog.ts
+   showCreateWorktreeDialog) — same bordered-scroll-box shape as the project
+   dialog's member picker, radio rows instead of checkboxes. */
+.wt-existing-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 6px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.wt-existing-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-height: var(--row-height);
+  cursor: pointer;
+}
+
+.wt-existing-row input {
+  flex-shrink: 0;
+}
+
+.wt-existing-branch {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.wt-existing-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}

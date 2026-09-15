@@ -8,6 +8,7 @@ import type { Project } from "../../types";
 import { icon } from "../icons";
 import { branchLabel } from "../../labels";
 import { attachPathPicker } from "../path-picker";
+import { attachDialogResize } from "../dialog-resize";
 import { reportError, toast } from "../toast";
 
 const PALETTE_LEN = 10;
@@ -220,6 +221,7 @@ export function showProjectDialog(project: Project | null, onSaved: () => void |
   backdrop.setAttribute("tabindex", "0");
 
   document.body.appendChild(backdrop);
+  attachDialogResize(dialog, "project");
   attachPathPicker(dirInput, { directory: true, title: "Add directory to project" });
   nameInput.focus();
 }

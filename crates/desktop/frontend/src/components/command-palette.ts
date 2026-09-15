@@ -69,8 +69,13 @@ export async function openCommandPalette() {
   const palette = document.createElement("div");
   palette.className = "palette ui-surface";
 
+  // autocomplete/autocorrect/spellcheck off: on macOS, WKWebView shows its
+  // native text-suggestions popover over a plain <input> and steals
+  // ArrowUp/ArrowDown for it — without this the list filters as you type
+  // but the arrow keys never reach this component's own keydown handler.
   palette.innerHTML = `
-    <input class="palette-input" type="text" placeholder="Type a command..." autofocus />
+    <input class="palette-input" type="text" placeholder="Type a command..." autofocus
+           autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
     <div class="palette-results"></div>
   `;
 

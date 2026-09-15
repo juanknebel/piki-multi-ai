@@ -62,6 +62,23 @@
   font-size: var(--fs-sm);
 }
 
+/* The active workspace's dot, shown on a collapsed project's header row so
+   collapsing it doesn't read as "nothing here is selected" — same static
+   marker as the workspace list's active row (no animation: it doesn't ask
+   for attention, and WebKitGTK would composite a loop forever). */
+.project-active-marker {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  flex-shrink: 0;
+  box-shadow: var(--accent-glow);
+}
+
+.project-row.has-active .project-name {
+  color: var(--text-bright);
+}
+
 .project-member {
   position: relative;
   display: flex;
@@ -104,6 +121,17 @@
 /* A member with no registered workspace yet — a plain directory. */
 .project-member.directory .project-member-name {
   color: var(--text-muted);
+}
+
+/* The workspace you're standing on — highlighted in every project it's a
+   member of, since the same workspace can belong to more than one. */
+.project-member.active {
+  background: var(--sidebar-item-active);
+}
+
+.project-member.active .project-member-name {
+  color: var(--text-bright);
+  font-weight: 500;
 }
 
 /* Inline inside .project-member-name so the single-line ellipsis eats the
