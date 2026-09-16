@@ -152,11 +152,19 @@ just lint-desktop                           # frontend test + build, then clippy
   / `actionableStatusView` (mirrors of `piki_core::cli_agent::status_severity` and the TUI's
   `actionable_status_view` — change all together). Every row starts with a fixed-width
   `.workspace-gutter` (chevron on a worktree parent — the whole slot toggles collapse without
-  switching, while a click anywhere else on a parent row toggles AND switches —, the static
-  accent dot on the active row, empty otherwise) so labels align whatever the row kind; a clone's branch renders as
-  a separate muted `.workspace-branch` span (`rowParts`), never glued to the name, and `.grouped`
-  children indent one step past the parent's gutter. Don't reintroduce a leading element that only some
-  rows have — it un-aligns the list.
+  switching, while a click anywhere else on a parent row toggles AND switches —, empty otherwise) so
+  labels align whatever the row kind; the active row is carried entirely by `.workspace-item.active`'s
+  background tint — no separate dot. A clone's branch renders as a separate muted `.workspace-branch`
+  span (`rowParts`), never glued to the name, and `.grouped` children indent one step past the parent's
+  gutter. Don't reintroduce a leading element that only some rows have — it un-aligns the list.
+  **Worktree family** (`workspace-list.ts::render`, `buildRow` + the indexed loop that groups a parent
+  with its contiguous expanded children): wrapped in `.ws-family` so `.ws-family-rail` — one
+  absolutely-positioned line, `top`/`bottom` set in `row-height-lg` units so it spans parent-center to
+  last-child-center at any density with zero per-child math — draws a `git log --graph`-style trunk
+  connecting them; only built when the parent isn't collapsed and has ≥1 rendered child. The parent also
+  gets `.family-parent` (independent of the wrapper, so it still applies collapsed) → `.workspace-name`
+  goes semibold, the one non-color cue that "this is a hub with branches," never applied to a plain
+  clone.
 - **Projects view** (`projects-panel.ts`, activity-bar id `"projects"`, host `#projects-view`): cross-cutting
   groups from `piki_core::projects` via `ipc.listProjects/saveProject/deleteProject` (`commands/projects.rs`).
   Listbox pattern like the Agents panel; project rows carry a dot painted `var(--project-swatch-{color+1})`

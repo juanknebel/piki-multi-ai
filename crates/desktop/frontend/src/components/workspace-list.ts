@@ -196,28 +196,22 @@ export function renderWorkspaceList(container: HTMLElement) {
       return;
     }
 
-    for (const row of rows) {
-      if (row.type === "prReviewHeader") {
-        const header = document.createElement("div");
-        header.className = "group-header";
-        header.innerHTML = `
-          ${icon("chevron-right", { class: `group-chevron${row.collapsed ? " collapsed" : ""}` })}
-          <span class="group-label">PR Review</span>
-        `;
-        const key = row.family_key;
-        header.addEventListener("click", () => toggleGroup(key));
-        makeInteractive(header);
-        container.appendChild(header);
-        continue;
-      }
-
+    /** Build one `.workspace-item` row, or `null` if its workspace fell out
+     *  of the list mid-fetch (rows are computed async, from the same list
+     *  this renders against). */
+    function buildRow(row: Extract<ipc.SidebarRow, { type: "workspace" }>): HTMLElement | null {
       const idx = row.index;
-      // Rows are built from the same list this renders, but the fetch is
-      // async — skip anything the list no longer has.
-      if (idx >= workspaces.length) continue;
+      if (idx >= workspaces.length) return null;
       const info = workspaces[idx].info;
       const item = document.createElement("div");
-      item.className = `workspace-item${idx === activeIdx ? " active" : ""}${row.kind === "child" ? " grouped" : ""}`;
+      item.className = [
+        "workspace-item",
+        idx === activeIdx && "active",
+        row.kind === "child" && "grouped",
+        row.kind === "parent" && "family-parent",
+      ]
+        .filter(Boolean)
+        .join(" ");
       item.dataset.idx = String(idx);
 
       const ws = workspaces[idx];
@@ -246,13 +240,12 @@ export function renderWorkspaceList(container: HTMLElement) {
         : "";
 
       // Fixed-width gutter on every row so labels line up whether or not a
-      // chevron exists: parents get the chevron, the active row gets its
-      // pulse dot, everything else an empty slot.
+      // chevron exists: parents get the chevron, everything else an empty
+      // slot (the active row is carried entirely by the row highlight —
+      // see `.workspace-item.active` — no separate marker needed).
       const gutter = row.kind === "parent"
         ? icon("chevron-right", { class: `group-chevron${row.collapsed ? " collapsed" : ""}` })
-        : idx === activeIdx
-          ? '<span class="workspace-active-marker"></span>'
-          : "";
+        : "";
 
       const { name, branch } = rowParts(info, ws.branch);
       const branchHtml = branch
@@ -305,7 +298,60 @@ export function renderWorkspaceList(container: HTMLElement) {
       });
 
       makeInteractive(item);
-      container.appendChild(item);
+      return item;
+    }
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (row.type === "prReviewHeader") {
+        const header = document.createElement("div");
+        header.className = "group-header";
+        header.innerHTML = `
+          ${icon("chevron-right", { class: `group-chevron${row.collapsed ? " collapsed" : ""}` })}
+          <span class="group-label">PR Review</span>
+        `;
+        const key = row.family_key;
+        header.addEventListener("click", () => toggleGroup(key));
+        makeInteractive(header);
+        container.appendChild(header);
+        continue;
+      }
+
+      // A worktree family's parent, expanded, is immediately followed by its
+      // children in `rows` (the backend keeps them contiguous) — wrap the
+      // run in `.ws-family` so the CSS rail can connect them with one
+      // absolutely-positioned line instead of per-row plumbing.
+      if (row.kind === "parent" && !row.collapsed && row.family_key) {
+        const parentEl = buildRow(row);
+        if (!parentEl) continue;
+        const familyKey = row.family_key;
+        const childEls: HTMLElement[] = [];
+        let j = i + 1;
+        while (j < rows.length) {
+          const next = rows[j];
+          if (next.type !== "workspace" || next.kind !== "child" || next.family_key !== familyKey) break;
+          const childEl = buildRow(next);
+          if (childEl) childEls.push(childEl);
+          j++;
+        }
+        if (childEls.length > 0) {
+          const family = document.createElement("div");
+          family.className = "ws-family";
+          family.appendChild(parentEl);
+          for (const el of childEls) family.appendChild(el);
+          const rail = document.createElement("div");
+          rail.className = "ws-family-rail";
+          family.appendChild(rail);
+          container.appendChild(family);
+        } else {
+          container.appendChild(parentEl);
+        }
+        i = j - 1;
+        continue;
+      }
+
+      const item = buildRow(row);
+      if (item) container.appendChild(item);
     }
     container.scrollTop = prevScroll;
   }
