@@ -615,6 +615,11 @@ pub(crate) fn term_scroll_bottom(app: &mut App) -> Option<Action> {
 /// process, 5000 for a daemon-backed tab). `vt100::Parser` takes the capacity
 /// at construction and never hands it back, so a clear has to restate it —
 /// keep these two in step with the multiplexer if they ever change there.
+///
+/// Temporary: the fork owes us a real way to do this
+/// (<https://github.com/juanknebel/piki-vt100/issues/1> — `CSI 3 J` is
+/// unhandled and the capacity is unreadable). Once it lands, this action
+/// erases the scrollback in place and both constants go away.
 const LOCAL_SCROLLBACK: usize = 1000;
 const REMOTE_SCROLLBACK: usize = 5000;
 
@@ -645,7 +650,7 @@ pub(crate) fn clear_terminal(app: &mut App) -> Option<Action> {
         let (rows, cols) = guard.screen().size();
         // Same move the session layer makes when it replays a restore: a
         // fresh parser of the current size is the only way to drop the
-        // scrollback (`CSI 3 J` is not implemented).
+        // scrollback today (see the constants above).
         *guard = vt100::Parser::new(rows, cols, scrollback);
     }
     tab.term_scroll = 0;
