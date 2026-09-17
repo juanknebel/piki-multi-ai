@@ -98,6 +98,7 @@ theme = "default"
 # prev_tab  = "prefix-p"
 # rename_tab  = "prefix-R"        # custom tab title (empty clears it)
 # restart_tab = "prefix-ctrl-r"   # re-spawn an exited tab in place
+# move_tab    = "prefix-ctrl-w"   # move the tab to another workspace
 # # Workspaces
 # workspace_switcher    = "prefix-w"
 # next_workspace        = "prefix-}"

@@ -98,6 +98,8 @@ pub enum AppMode {
     WorkspaceInfo,
     /// Confirmation dialog for closing a tab
     ConfirmCloseTab,
+    /// Destination picker for moving a tab to another workspace
+    MoveTab,
     /// Confirmation dialog for quitting the application
     ConfirmQuit,
     /// Workspace dashboard overview
@@ -2035,6 +2037,40 @@ impl App {
         self.mode = AppMode::CommandPalette;
     }
 
+    /// Re-parent a tab into another workspace, keeping its process running.
+    ///
+    /// The PTY is untouched — only which workspace owns the tab changes (the
+    /// shell keeps the cwd it was started in). Tab ids are handed out per
+    /// workspace (`Workspace::next_tab_id`), so the tab is re-stamped on
+    /// arrival or it could collide with an id already in use there. Returns
+    /// the tab's index in the destination, or `None` when the move is not
+    /// possible (same workspace, or either index out of range).
+    pub fn move_tab(&mut self, from: usize, tab_idx: usize, to: usize) -> Option<usize> {
+        if from == to || from >= self.workspaces.len() || to >= self.workspaces.len() {
+            return None;
+        }
+        let mut tab = {
+            let src = &mut self.workspaces[from];
+            if tab_idx >= src.tabs.len() {
+                return None;
+            }
+            let tab = src.tabs.remove(tab_idx);
+            if src.active_tab >= src.tabs.len() && !src.tabs.is_empty() {
+                src.active_tab = src.tabs.len() - 1;
+            }
+            tab
+        };
+        let dst = &mut self.workspaces[to];
+        tab.id = dst.next_tab_id;
+        dst.next_tab_id += 1;
+        // Landing scrolled back would show the tab mid-scrollback on arrival.
+        tab.term_scroll = 0;
+        dst.tabs.push(tab);
+        let idx = dst.tabs.len() - 1;
+        dst.active_tab = idx;
+        Some(idx)
+    }
+
     /// Toggle to the previously active workspace (Alt-Tab equivalent).
     pub fn toggle_previous_workspace(&mut self) {
         if let Some(prev) = self.previous_workspace
@@ -2519,6 +2555,73 @@ mod tests {
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('w')));
         assert_eq!(app.mode, AppMode::Normal);
         assert!(app.workspace_switcher.is_none());
+    }
+
+    // ── Move a tab between workspaces ──
+
+    #[test]
+    fn test_move_tab_reparents_and_restamps_the_id() {
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
+        add_test_workspace(&mut app); // 0
+        add_test_workspace(&mut app); // 1
+        // Ids are handed out per workspace, so the source's first tab and the
+        // destination's first tab are both id 0: moving one across without
+        // re-stamping it would put two tabs with the same id in one workspace.
+        let moved = crate::test_support::add_terminal_tab(&mut app, 0);
+        crate::test_support::add_terminal_tab(&mut app, 0);
+        crate::test_support::add_terminal_tab(&mut app, 1);
+        assert_eq!(
+            app.workspaces[0].tabs[moved].id, app.workspaces[1].tabs[0].id,
+            "ids collide as set up"
+        );
+
+        let new_idx = app.move_tab(0, moved, 1).expect("move should succeed");
+
+        assert_eq!(app.workspaces[0].tabs.len(), 1);
+        assert_eq!(app.workspaces[1].tabs.len(), 2);
+        assert_eq!(new_idx, 1);
+        assert_eq!(app.workspaces[1].active_tab, 1, "the moved tab is in front");
+        let ids: Vec<usize> = app.workspaces[1].tabs.iter().map(|t| t.id).collect();
+        assert_ne!(ids[0], ids[1], "the moved tab got a fresh id");
+    }
+
+    #[test]
+    fn test_move_tab_clamps_the_source_active_tab() {
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
+        add_test_workspace(&mut app);
+        add_test_workspace(&mut app);
+        crate::test_support::add_terminal_tab(&mut app, 0);
+        let last = crate::test_support::add_terminal_tab(&mut app, 0);
+        app.workspaces[0].active_tab = last;
+
+        app.move_tab(0, last, 1).expect("move should succeed");
+
+        assert_eq!(
+            app.workspaces[0].active_tab, 0,
+            "the source must not point past its last tab"
+        );
+    }
+
+    #[test]
+    fn test_move_tab_rejects_impossible_moves() {
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
+        add_test_workspace(&mut app);
+        add_test_workspace(&mut app);
+        crate::test_support::add_terminal_tab(&mut app, 0);
+
+        assert!(app.move_tab(0, 0, 0).is_none(), "same workspace");
+        assert!(app.move_tab(0, 9, 1).is_none(), "tab out of range");
+        assert!(app.move_tab(0, 0, 9).is_none(), "workspace out of range");
+        assert_eq!(app.workspaces[0].tabs.len(), 1, "nothing was taken");
     }
 
     // ── Previous workspace toggle tests ──

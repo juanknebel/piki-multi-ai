@@ -268,6 +268,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         AppMode::ConfirmCloseTab => {
             super::dialogs::render_confirm_close_tab_dialog(frame, area, app)
         }
+        AppMode::MoveTab => super::dialogs::render_move_tab_dialog(frame, area, app),
         AppMode::ConfirmQuit => super::dialogs::render_confirm_quit_dialog(frame, area, app),
         AppMode::Dashboard => super::dialogs::render_dashboard_overlay(frame, area, app),
         AppMode::Sessions => super::dialogs::render_sessions_overlay(frame, area, app),

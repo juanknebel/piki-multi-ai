@@ -446,6 +446,64 @@ fn handle_create_worktree_load_existing(app: &mut App, key: KeyEvent) -> Option<
     None
 }
 
+/// Destination picker for "move tab to another workspace". The move itself is
+/// synchronous state (`App::move_tab`); only the daemon round-trip that
+/// re-points the session at its new workspace is deferred, best-effort.
+pub(super) fn handle_move_tab_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::MoveTab {
+        tab,
+        targets,
+        selected,
+    }) = &mut app.active_dialog
+    else {
+        return None;
+    };
+
+    match key.code {
+        KeyCode::Down | KeyCode::Char('j') => {
+            move_selection(selected, targets.len(), 1, false);
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            move_selection(selected, targets.len(), -1, false);
+        }
+        KeyCode::Enter => {
+            let tab_idx = *tab;
+            let target = *targets.get(*selected)?;
+            dismiss_dialog(app);
+            let from = app.active_workspace;
+            let session_id = app
+                .workspaces
+                .get(from)
+                .and_then(|ws| ws.tabs.get(tab_idx))
+                .and_then(|t| t.session_id.clone());
+            let Some(new_idx) = app.move_tab(from, tab_idx, target) else {
+                app.set_toast("Could not move the tab", crate::app::ToastLevel::Error);
+                return None;
+            };
+            let dest_path = app.workspaces[target].info.path.clone();
+            let dest_name = app.workspaces[target].info.name.clone();
+            if let Some(sid) = session_id {
+                crate::helpers::repoint_session(app, &sid, dest_path);
+            }
+            // Follow the tab, like the desktop: the target workspace comes up
+            // with the moved tab in front.
+            app.switch_workspace_and_focus(target);
+            if let Some(ws) = app.workspaces.get_mut(target) {
+                ws.active_tab = new_idx;
+            }
+            app.set_toast(
+                format!("Moved tab to {dest_name}"),
+                crate::app::ToastLevel::Success,
+            );
+        }
+        _ if is_cancel(key, &app.config) => {
+            dismiss_dialog(app);
+        }
+        _ => {}
+    }
+    None
+}
+
 pub(super) fn handle_confirm_close_tab_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     let Some(DialogState::ConfirmCloseTab { target }) = app.active_dialog else {
         return None;

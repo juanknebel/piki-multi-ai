@@ -402,6 +402,61 @@ pub(crate) fn request_close_tab(app: &mut App) -> Option<Action> {
     None
 }
 
+/// Open the destination picker for moving the active tab to another
+/// workspace — the desktop's *Move to workspace…*.
+///
+/// Only a live terminal or agent tab can move: the process is re-parented
+/// untouched (it keeps the cwd it started in), whereas Kanban / API / Code
+/// Review / markdown tabs render from the workspace's own state and would be
+/// meaningless elsewhere, and the lazygit tab is pinned to its repo. The
+/// initial shell is refused for the same reason `close_tab` refuses it —
+/// moving it away would leave its workspace with no tabs at all.
+pub(crate) fn open_move_tab(app: &mut App) -> Option<Action> {
+    let Some(ws) = app.current_workspace() else {
+        app.set_toast("No active workspace", crate::app::ToastLevel::Info);
+        return None;
+    };
+    let tab_idx = ws.active_tab;
+    let tab = ws.tabs.get(tab_idx)?;
+    let movable = tab.pty_session.is_some()
+        && tab.markdown_content.is_none()
+        && matches!(
+            tab.provider,
+            piki_core::AIProvider::Shell | piki_core::AIProvider::Custom(_)
+        );
+    if !movable {
+        app.set_toast(
+            "Only shell and agent tabs can be moved",
+            crate::app::ToastLevel::Info,
+        );
+        return None;
+    }
+    if !tab.closable {
+        app.set_toast(
+            "Cannot move the initial shell tab",
+            crate::app::ToastLevel::Info,
+        );
+        return None;
+    }
+    let targets: Vec<usize> = (0..app.workspaces.len())
+        .filter(|i| *i != app.active_workspace)
+        .collect();
+    if targets.is_empty() {
+        app.set_toast(
+            "No other workspace to move this tab to",
+            crate::app::ToastLevel::Info,
+        );
+        return None;
+    }
+    app.active_dialog = Some(DialogState::MoveTab {
+        tab: tab_idx,
+        targets,
+        selected: 0,
+    });
+    app.mode = AppMode::MoveTab;
+    None
+}
+
 /// Re-spawn the active tab's process after it exited — the desktop's
 /// pane-header *Restart* button. Only an exited PTY tab can be restarted: a
 /// live one has nothing to fix, and a Kanban / API / markdown tab has no
@@ -698,6 +753,38 @@ mod tests {
         focus_up(&mut app);
 
         assert_eq!(app.active_pane, ActivePane::WorkspaceList);
+    }
+
+    // ── Move a tab to another workspace ──
+
+    #[test]
+    fn move_tab_without_a_workspace_toasts() {
+        let mut app = test_app();
+
+        let action = open_move_tab(&mut app);
+
+        assert!(action.is_none());
+        assert_eq!(app.status_message.as_deref(), Some("No active workspace"));
+        assert_eq!(app.mode, AppMode::Normal);
+    }
+
+    /// A Kanban / API / Code Review tab renders from the workspace's own
+    /// state, so there is nothing to re-parent.
+    #[test]
+    fn move_tab_refuses_a_tab_with_no_process() {
+        let mut app = test_app();
+        crate::test_support::add_test_workspace(&mut app);
+        crate::test_support::add_test_workspace(&mut app);
+        app.workspaces[0].add_tab(piki_core::AIProvider::Kanban, true, None);
+
+        let action = open_move_tab(&mut app);
+
+        assert!(action.is_none());
+        assert_eq!(
+            app.status_message.as_deref(),
+            Some("Only shell and agent tabs can be moved")
+        );
+        assert_eq!(app.mode, AppMode::Normal);
     }
 
     // ── Restart an exited tab ──

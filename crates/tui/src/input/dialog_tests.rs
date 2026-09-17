@@ -3,7 +3,7 @@
 //! `ConfirmQuit`), text dialogs (`NewWorkspace`, `EditWorkspace`), scroll
 //! overlays (`Help`, `About`, `WorkspaceInfo`), and list-navigation dialogs
 //! (`DispatchCardMove`, `Dashboard`, `Logs`, `ImportAgents`, `ManageAgents`,
-//! `ManageProviders`).
+//! `ManageProviders`, `MoveTab`).
 
 use crossterm::event::{KeyCode, KeyModifiers};
 use piki_core::storage::AgentProfile;
@@ -14,9 +14,9 @@ use super::dialog::{
     handle_dispatch_card_move_input, handle_edit_agent_input, handle_edit_agent_role_input,
     handle_edit_provider_input, handle_edit_workspace_input, handle_help_input,
     handle_import_agents_input, handle_logs_input, handle_manage_agents_input,
-    handle_manage_providers_input, handle_missing_prereqs_input, handle_new_tab_input,
-    handle_new_workspace_input, handle_pr_picker_input, handle_projects_input,
-    handle_sessions_input, handle_workspace_info_input,
+    handle_manage_providers_input, handle_missing_prereqs_input, handle_move_tab_input,
+    handle_new_tab_input, handle_new_workspace_input, handle_pr_picker_input,
+    handle_projects_input, handle_sessions_input, handle_workspace_info_input,
 };
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField};
@@ -53,6 +53,15 @@ fn open_edit_workspace(app: &mut App, active_field: EditWorkspaceField) {
 fn open_confirm_close_tab(app: &mut App, target: usize) {
     app.mode = AppMode::ConfirmCloseTab;
     app.active_dialog = Some(DialogState::ConfirmCloseTab { target });
+}
+
+fn open_move_tab(app: &mut App, tab: usize, targets: Vec<usize>) {
+    app.mode = AppMode::MoveTab;
+    app.active_dialog = Some(DialogState::MoveTab {
+        tab,
+        targets,
+        selected: 0,
+    });
 }
 
 fn open_confirm_quit(app: &mut App) {
@@ -549,6 +558,92 @@ fn confirm_close_tab_yes_dismisses_without_panicking_on_empty_workspaces() {
     assert!(action.is_none());
     assert!(app.active_dialog.is_none());
     assert_eq!(app.mode, AppMode::Normal);
+}
+
+// ── MoveTab ──────────────────────────────────────────────────────────────
+
+/// Two workspaces, a tab in each; the dialog moves the source's tab into the
+/// destination, follows it there and puts it in front.
+#[test]
+fn move_tab_enter_moves_the_tab_and_follows_it() {
+    let mut app = test_app();
+    add_test_workspace(&mut app); // 0
+    add_test_workspace(&mut app); // 1
+    add_terminal_tab(&mut app, 0);
+    add_terminal_tab(&mut app, 1);
+    app.active_workspace = 0;
+    open_move_tab(&mut app, 0, vec![1]);
+
+    let action = handle_move_tab_input(&mut app, key(KeyCode::Enter));
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+    assert_eq!(app.workspaces[0].tabs.len(), 0);
+    assert_eq!(app.workspaces[1].tabs.len(), 2);
+    assert_eq!(app.active_workspace, 1, "the view follows the tab");
+    assert_eq!(app.workspaces[1].active_tab, 1);
+}
+
+#[test]
+fn move_tab_navigates_the_destination_list() {
+    let mut app = test_app();
+    for _ in 0..3 {
+        add_test_workspace(&mut app);
+    }
+    add_terminal_tab(&mut app, 0);
+    open_move_tab(&mut app, 0, vec![1, 2]);
+
+    handle_move_tab_input(&mut app, key(KeyCode::Char('j')));
+    assert!(matches!(
+        app.active_dialog,
+        Some(DialogState::MoveTab { selected: 1, .. })
+    ));
+    // Clamped at the last row, then back up.
+    handle_move_tab_input(&mut app, key(KeyCode::Down));
+    assert!(matches!(
+        app.active_dialog,
+        Some(DialogState::MoveTab { selected: 1, .. })
+    ));
+    handle_move_tab_input(&mut app, key(KeyCode::Char('k')));
+    assert!(matches!(
+        app.active_dialog,
+        Some(DialogState::MoveTab { selected: 0, .. })
+    ));
+}
+
+#[test]
+fn move_tab_esc_dismisses_without_moving() {
+    let mut app = test_app();
+    add_test_workspace(&mut app);
+    add_test_workspace(&mut app);
+    add_terminal_tab(&mut app, 0);
+    open_move_tab(&mut app, 0, vec![1]);
+
+    let action = handle_move_tab_input(&mut app, key(KeyCode::Esc));
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+    assert_eq!(app.workspaces[0].tabs.len(), 1, "the tab stayed put");
+}
+
+/// The tab may be gone by the time Enter lands (its process exited and the
+/// user closed it from elsewhere) — say so instead of panicking.
+#[test]
+fn move_tab_with_a_stale_target_reports_the_failure() {
+    let mut app = test_app();
+    add_test_workspace(&mut app);
+    add_test_workspace(&mut app);
+    open_move_tab(&mut app, 4, vec![1]);
+
+    handle_move_tab_input(&mut app, key(KeyCode::Enter));
+
+    assert!(app.active_dialog.is_none());
+    assert_eq!(
+        app.status_message.as_deref(),
+        Some("Could not move the tab")
+    );
 }
 
 #[test]

@@ -1,0 +1,20 @@
+---
+source: crates/tui/src/ui/mod.rs
+assertion_line: 258
+expression: content
+---
+
+
+
+
+
+
+
+
+                ╭ Move Tab to Workspace ───────────────────────╮
+                │  Move Shell to:                              │
+                │                                              │
+                │  > test-ws-1                                 │
+                │                                              │
+                │  [j/k] move  [Enter] move tab  [Esc] cancel  │
+                ╰──────────────────────────────────────────────╯

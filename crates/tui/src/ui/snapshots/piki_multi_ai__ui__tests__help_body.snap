@@ -26,6 +26,7 @@ expression: body
       C-g p         Previous Tab
       C-g R         Rename Tab
       C-g C-r       Restart Tab
+      C-g C-w       Move Tab to Workspace
     Search
       C-g /         Fuzzy File Search
       C-g t         Search in Project (content)

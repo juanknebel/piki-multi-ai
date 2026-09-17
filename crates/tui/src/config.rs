@@ -320,6 +320,9 @@ fn default_app() -> HashMap<String, BindingValue> {
         "restart_tab".to_string(),
         BindingValue::one("prefix-ctrl-r"),
     );
+    // `ctrl-w` for "to workspace" — `w` itself is the workspace switcher, and
+    // the binding rule prefers prefix-ctrl over a Shift chord.
+    m.insert("move_tab".to_string(), BindingValue::one("prefix-ctrl-w"));
 
     // Layout
     m.insert(

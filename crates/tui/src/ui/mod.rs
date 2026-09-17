@@ -235,6 +235,30 @@ mod tests {
     }
 
     #[test]
+    fn test_render_move_tab_dialog() {
+        let mut terminal = test_terminal(80, 24);
+        let mut app = App::new(
+            test_storage(),
+            &piki_core::paths::DataPaths::default_paths(),
+        );
+        crate::test_support::add_test_workspace(&mut app);
+        crate::test_support::add_test_workspace(&mut app);
+        crate::test_support::add_terminal_tab(&mut app, 0);
+        app.active_dialog = Some(crate::dialog_state::DialogState::MoveTab {
+            tab: 0,
+            targets: vec![1],
+            selected: 0,
+        });
+        terminal
+            .draw(|frame| {
+                super::dialogs::render_move_tab_dialog(frame, frame.area(), &app);
+            })
+            .unwrap();
+        let content = buffer_to_snapshot(terminal.backend().buffer());
+        insta::assert_snapshot!("move_tab_dialog", content);
+    }
+
+    #[test]
     fn test_render_new_tab_dialog() {
         let mut terminal = test_terminal(80, 24);
         let app = App::new(

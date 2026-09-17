@@ -199,6 +199,7 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 | `C-a` | Jump to the agent needing you (waiting for permission first, then unseen news; press again to walk through the rest) |
 | `v` | Manage providers (add/edit/delete custom AI providers) |
 | `R` | Rename current tab (custom title, empty to clear; reflected in Agents pane) |
+| `C-w` | Move the current tab to another workspace (shell and agent tabs only; the process keeps running untouched, so it also keeps the cwd it was started in) |
 | `C-r` | Restart the current tab's process after it exited — same provider, same slot in the tab bar, same custom title (the exited daemon session is dropped, not left as an orphan) |
 | `<` / `>` (or `,` / `.`) | Resize sidebar width (±5%) |
 | `+` / `-` (or `=`) | Resize workspace/file split (±10%) |

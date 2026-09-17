@@ -245,6 +245,27 @@ pub(crate) fn rename_session(app: &App, session_id: &str, title: Option<String>)
     });
 }
 
+/// Re-point a moved tab's daemon session at its new workspace, so the next
+/// launch restores it in the workspace it now lives in. Fire-and-forget; the
+/// tab has moved either way (same best-effort rule as the desktop's
+/// `move_tab`).
+pub(crate) fn repoint_session(app: &App, session_id: &str, workspace_path: std::path::PathBuf) {
+    let Some(daemon) = app.session_daemon.clone() else {
+        return;
+    };
+    let req = SetMetaRequest {
+        id: session_id.to_string(),
+        workspace_path: Some(workspace_path),
+        ..Default::default()
+    };
+    let id = session_id.to_string();
+    tokio::task::spawn_blocking(move || {
+        if let Err(e) = daemon.set_meta(req) {
+            tracing::warn!(session = %id, error = %e, "failed to re-point session workspace");
+        }
+    });
+}
+
 /// Tools a provider's hook bridge needs but that aren't on PATH, with the
 /// agent's display name. `None` when the provider has no bridge (nothing to
 /// degrade) or when everything it needs is installed.

@@ -1,5 +1,6 @@
 mod agents;
 mod dashboard;
+mod move_tab;
 pub(crate) mod projects;
 mod providers;
 mod rename;
@@ -13,6 +14,7 @@ pub(crate) use self::agents::{
     render_edit_agent_role_dialog, render_import_agents_dialog, render_manage_agents_dialog,
 };
 pub(crate) use self::dashboard::render_dashboard_overlay;
+pub(crate) use self::move_tab::render_move_tab_dialog;
 pub(crate) use self::projects::render_projects_overlay;
 pub(crate) use self::providers::{render_edit_provider_dialog, render_manage_providers_dialog};
 pub(crate) use self::rename::render_rename_tab_dialog;

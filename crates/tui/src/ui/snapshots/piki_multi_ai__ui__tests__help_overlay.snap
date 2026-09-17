@@ -29,6 +29,7 @@ expression: content
             │      C-g p         Previous Tab                     │
             │      C-g R         Rename Tab                       │
             │      C-g C-r       Restart Tab                      │
+            │      C-g C-w       Move Tab to Workspace            │
             │    Search                                           │
             │      C-g /         Fuzzy File Search                │
             │      C-g t         Search in Project (content)      │
@@ -41,5 +42,4 @@ expression: content
             │      C-g C-s       Sessions (persistent)            │
             │      C-g C-p       Projects                         │
             │      C-g [         Terminal Scroll Mode             │
-            │      C-g y         AI Chat                          │
-            ╰───────────────────────────────────────── [1/218 ↑↓] ╯
+            ╰───────────────────────────────────────── [1/219 ↑↓] ╯

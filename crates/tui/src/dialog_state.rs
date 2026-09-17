@@ -144,6 +144,15 @@ pub enum DialogState {
     ConfirmCloseTab {
         target: usize,
     },
+    /// Destination picker for "move this tab to another workspace". `tab` is
+    /// the index in the SOURCE workspace (the active one when the dialog
+    /// opened) and `targets` the candidate workspace indices — every
+    /// workspace but the source, in sidebar order.
+    MoveTab {
+        tab: usize,
+        targets: Vec<usize>,
+        selected: usize,
+    },
     ConfirmQuit,
     NewTab {
         menu: NewTabMenu,

@@ -369,6 +369,11 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             (cfg.get_binding("dashboard", "exit"), "close"),
         ],
         AppMode::ConfirmCloseTab => vec![("y".to_string(), "close"), ("n".to_string(), "cancel")],
+        AppMode::MoveTab => vec![
+            ("j/k".to_string(), "select"),
+            ("Enter".to_string(), "move tab"),
+            ("Esc".to_string(), "cancel"),
+        ],
         AppMode::ConfirmQuit => vec![("y".to_string(), "quit"), ("n".to_string(), "cancel")],
         AppMode::DispatchCardMove => vec![
             ("↑/↓".to_string(), "select"),
