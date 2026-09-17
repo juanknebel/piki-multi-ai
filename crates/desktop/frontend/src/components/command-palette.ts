@@ -20,6 +20,7 @@ import { openProjectSearch } from "./project-search";
 import { showSettingsDialog } from "./dialogs/settings-dialog";
 import { showProvidersDialog } from "./dialogs/providers-dialog";
 import { openWorkspaceSwitcher } from "./workspace-switcher";
+import { cycleWorkspace, switchToWorkspace, toggleLastWorkspace } from "./workspace-actions";
 import { showAgentManager } from "./dialogs/agent-dialog";
 import { showDispatchDialog } from "./dialogs/dispatch-dialog";
 import { showHelpDialog } from "./dialogs/help-dialog";
@@ -255,16 +256,33 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
       label: `Switch to "${w.info.name}"`,
       category: "Switch",
       keybinding: i < 9 ? formatShortcut(`Alt+${i + 1}`) : undefined,
-      action: async () => {
-        try {
-          const detail = await ipc.switchWorkspace(i);
-          appState.setActiveWorkspace(i, detail);
-        } catch (err) {
-          toast(`Switch failed: ${err}`, "error");
-        }
-      },
+      action: () => void switchToWorkspace(i),
     });
   });
+
+  if (appState.workspaces.length > 1) {
+    cmds.push({
+      id: "ws-next",
+      label: "Next Workspace",
+      category: "Switch",
+      keybinding: getShortcutKey("workspace-next"),
+      action: () => void cycleWorkspace(1),
+    });
+    cmds.push({
+      id: "ws-prev",
+      label: "Previous Workspace",
+      category: "Switch",
+      keybinding: getShortcutKey("workspace-prev"),
+      action: () => void cycleWorkspace(-1),
+    });
+    cmds.push({
+      id: "ws-last",
+      label: "Toggle Last Workspace",
+      category: "Switch",
+      keybinding: getShortcutKey("workspace-last"),
+      action: () => void toggleLastWorkspace(),
+    });
+  }
 
   // Tab commands (only configured providers + built-in tools)
   for (const provider of providerTabs) {

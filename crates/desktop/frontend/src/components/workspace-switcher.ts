@@ -7,8 +7,7 @@
 // dirty-git marker.
 
 import { appState, WORKSPACE_MRU_KEY } from "../state";
-import { reportError } from "./toast";
-import * as ipc from "../ipc";
+import { switchToWorkspace } from "./workspace-actions";
 import { settingsStore } from "../settings";
 import { formatShortcut } from "../shortcuts";
 import { rankItems } from "../mru";
@@ -160,14 +159,9 @@ export function openWorkspaceSwitcher() {
     renderResults();
   }
 
-  async function switchTo(idx: number) {
+  function switchTo(idx: number) {
     closeWorkspaceSwitcher();
-    try {
-      const detail = await ipc.switchWorkspace(idx);
-      appState.setActiveWorkspace(idx, detail);
-    } catch (err) {
-      reportError("Workspace switch failed", err);
-    }
+    void switchToWorkspace(idx);
   }
 
   input.addEventListener("input", filter);

@@ -11,6 +11,7 @@ import { pullWorkspace, pushWorkspace } from "./git-actions";
 import { openBranchPicker } from "./dialogs/branch-picker";
 import { openFuzzySearch } from "./fuzzy-search";
 import { openWorkspaceSwitcher } from "./workspace-switcher";
+import { cycleWorkspace, toggleLastWorkspace } from "./workspace-actions";
 import { clearActiveTerminal, openTerminalSearch, toggleLiteralNext } from "./terminal-panel";
 import { openProjectSearch } from "./project-search";
 import { showSettingsDialog } from "./dialogs/settings-dialog";
@@ -59,6 +60,9 @@ interface MenuDefinition {
 // ── Helpers ─────────────────────────────────────
 
 const noWs = () => !appState.activeWs;
+
+/** Workspace-to-workspace navigation needs at least two of them. */
+const oneWs = () => appState.workspaces.length < 2;
 
 const spawnTab = (provider: AIProvider) => void openProvider(provider);
 
@@ -209,6 +213,9 @@ const MENUS: MenuDefinition[] = [
       SEP,
       { label: "Command Palette", shortcut: getShortcutKey("command-palette"), action: () => openCommandPalette() },
       { label: "Workspace Switcher", shortcut: getShortcutKey("workspace-switcher"), action: () => openWorkspaceSwitcher() },
+      { label: "Next Workspace", shortcut: getShortcutKey("workspace-next"), disabled: oneWs, action: () => void cycleWorkspace(1) },
+      { label: "Previous Workspace", shortcut: getShortcutKey("workspace-prev"), disabled: oneWs, action: () => void cycleWorkspace(-1) },
+      { label: "Toggle Last Workspace", shortcut: getShortcutKey("workspace-last"), disabled: oneWs, action: () => void toggleLastWorkspace() },
       { label: "Dashboard", shortcut: getShortcutKey("dashboard"), action: () => showDashboard() },
       { label: "System Info", shortcut: getShortcutKey("system-info"), action: () => showSysinfoDialog() },
       { label: "Application Logs", shortcut: getShortcutKey("logs"), action: () => showLogsDialog() },

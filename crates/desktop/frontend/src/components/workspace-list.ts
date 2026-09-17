@@ -1,8 +1,8 @@
 import { appState } from "../state";
 import { makeInteractive } from "./a11y";
 import * as ipc from "../ipc";
-import { reportError } from "./toast";
 import { openContextMenu, type CtxItem } from "./context-menu";
+import { switchToWorkspace } from "./workspace-actions";
 import {
   showCreateWorktreeDialog,
   showWorkspaceDialog,
@@ -43,15 +43,6 @@ function rowTitle(info: WorkspaceInfo, branch: string | null): string {
   return `${info.name}${b}\n${info.path}`;
 }
 
-async function switchTo(idx: number) {
-  try {
-    const detail = await ipc.switchWorkspace(idx);
-    appState.setActiveWorkspace(idx, detail);
-  } catch (err) {
-    reportError("Failed to switch workspace", err);
-  }
-}
-
 /** The workspace row menu (right-click, or the row's `⋯`): everything the
  *  old hover buttons did plus Open / Merge, Delete last and red. Actions
  *  that only work on the active workspace (Merge) switch to it first. */
@@ -62,7 +53,7 @@ function workspaceMenuItems(idx: number): CtxItem[] {
   const isActive = idx === appState.activeWorkspace;
   const git = info.workspace_type !== "Simple";
   return [
-    { label: "Open", disabled: isActive, action: () => void switchTo(idx) },
+    { label: "Open", disabled: isActive, action: () => void switchToWorkspace(idx) },
     { separator: true },
     { label: "Agents…", action: () => showAgentManager(idx) },
     { label: "Info", action: () => showWorkspaceInfo(idx) },
@@ -74,7 +65,7 @@ function workspaceMenuItems(idx: number): CtxItem[] {
       label: "Merge / Rebase…",
       disabled: !git,
       action: async () => {
-        if (!isActive) await switchTo(idx);
+        if (!isActive) await switchToWorkspace(idx);
         if (appState.activeWorkspace === idx) showMergeDialog();
       },
     },
@@ -281,7 +272,7 @@ export function renderWorkspaceList(container: HTMLElement) {
         if ((e.target as HTMLElement).closest(".ws-action-btn")) return;
         if (row.kind === "parent" && (e.target as HTMLElement).closest(".workspace-gutter")) return;
         if (row.kind === "parent" && row.family_key) toggleGroup(row.family_key);
-        void switchTo(idx);
+        void switchToWorkspace(idx);
       });
 
       // One menu for every row action: the `⋯` button and right-click.

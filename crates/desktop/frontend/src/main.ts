@@ -27,6 +27,7 @@ import { initToasts } from "./components/toast";
 import { openCommandPalette } from "./components/command-palette";
 import { showWorkspaceDialog } from "./components/dialogs/workspace-dialog";
 import { openWorkspaceSwitcher } from "./components/workspace-switcher";
+import { cycleWorkspace, switchToWorkspace, toggleLastWorkspace } from "./components/workspace-actions";
 import { showMergeDialog } from "./components/dialogs/merge-dialog";
 import { openBranchPicker } from "./components/dialogs/branch-picker";
 import { openFuzzySearch } from "./components/fuzzy-search";
@@ -191,6 +192,9 @@ async function init() {
   bindAction("merge-rebase", () => showMergeDialog());
   bindAction("switch-branch", () => openBranchPicker());
   bindAction("workspace-switcher", () => openWorkspaceSwitcher());
+  bindAction("workspace-next", () => void cycleWorkspace(1));
+  bindAction("workspace-prev", () => void cycleWorkspace(-1));
+  bindAction("workspace-last", () => void toggleLastWorkspace());
   bindAction("fuzzy-search", () => openFuzzySearch());
   bindAction("project-search", () => openProjectSearch());
   bindAction("terminal-search", () => openTerminalSearch());
@@ -247,9 +251,7 @@ async function init() {
   document.addEventListener("switch-workspace", ((e: CustomEvent) => {
     const idx: number = e.detail.index;
     if (idx === appState.activeWorkspace || idx >= appState.workspaces.length) return;
-    ipc.switchWorkspace(idx).then((detail) => {
-      appState.setActiveWorkspace(idx, detail);
-    }).catch((err) => reportError("Workspace switch failed", err));
+    void switchToWorkspace(idx);
   }) as EventListener);
 
   // Global keyboard shortcuts — capture phase so they fire before xterm.js

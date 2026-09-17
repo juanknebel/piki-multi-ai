@@ -91,6 +91,13 @@ const shortcuts: ShortcutDef[] = [
   { id: "new-workspace", label: "New Workspace", category: "General", defaultKey: "Alt+N", key: "Alt+N", action: () => {}, terminalCapture: true },
   { id: "workspace-switcher", label: "Workspace Switcher", category: "General", defaultKey: "Alt+W", key: "Alt+W", action: () => {}, terminalCapture: true },
   { id: "dashboard", label: "Dashboard", category: "General", defaultKey: "Alt+D", key: "Alt+D", action: () => {}, terminalCapture: true },
+  // Workspace navigation without the switcher, in sidebar order (TUI
+  // `prefix }` / `{` / `` ` ``). The bracket pair mirrors the TUI's unshifted
+  // keys; `Alt+`` is the alternate-workspace toggle — some desktop
+  // environments claim it, which is what Settings ▸ Shortcuts is for.
+  { id: "workspace-next", label: "Next Workspace", category: "General", defaultKey: "Alt+]", key: "Alt+]", action: () => {}, terminalCapture: true },
+  { id: "workspace-prev", label: "Previous Workspace", category: "General", defaultKey: "Alt+[", key: "Alt+[", action: () => {}, terminalCapture: true },
+  { id: "workspace-last", label: "Toggle Last Workspace", category: "General", defaultKey: "Alt+`", key: "Alt+`", action: () => {}, terminalCapture: true },
   { id: "help", label: "Keyboard Shortcuts", category: "General", defaultKey: "?", key: "?", action: () => {} },
   // Ctrl+, is the settings key everywhere else (VS Code, GNOME, macOS ⌘+,);
   // bare Ctrl is not terminal-safe so it stays outside-only — the palette,
