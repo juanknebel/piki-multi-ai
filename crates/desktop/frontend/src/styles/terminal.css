@@ -13,6 +13,25 @@
   padding: 6px 0 6px 10px;
 }
 
+/* xterm.css paints `.xterm .xterm-viewport` a literal black and is imported
+ * last (main.ts), so it wins on equal specificity — hence the extra
+ * `.terminal-container` here. The renderer draws the cells on a canvas above
+ * this layer, so that literal only shows where the canvas does not reach: the
+ * remainder when the cell grid doesn't divide the pane evenly. On a dark
+ * theme it passes for the background; on a light one it frames the terminal
+ * in black. (The guard test can't tell a literal in a comment from a real
+ * one, so this note spells the colour out in words.) */
+.terminal-container .xterm .xterm-viewport {
+  background-color: var(--terminal-bg);
+}
+
+/* Same story for the IME composition popup: white-on-black regardless of the
+ * theme. */
+.terminal-container .xterm .composition-view {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
 .terminal-container .xterm-viewport::-webkit-scrollbar {
   width: 7px;
 }
