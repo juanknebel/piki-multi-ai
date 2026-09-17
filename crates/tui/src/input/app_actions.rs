@@ -402,6 +402,36 @@ pub(crate) fn request_close_tab(app: &mut App) -> Option<Action> {
     None
 }
 
+/// Re-spawn the active tab's process after it exited — the desktop's
+/// pane-header *Restart* button. Only an exited PTY tab can be restarted: a
+/// live one has nothing to fix, and a Kanban / API / markdown tab has no
+/// process at all.
+pub(crate) fn request_restart_tab(app: &mut App) -> Option<Action> {
+    let Some(ws) = app.current_workspace() else {
+        app.set_toast("No active workspace", crate::app::ToastLevel::Info);
+        return None;
+    };
+    let target = ws.active_tab;
+    let pty = ws.tabs.get(target).and_then(|t| t.pty_session.as_ref());
+    match pty {
+        None => {
+            app.set_toast(
+                "This tab has no process to restart",
+                crate::app::ToastLevel::Info,
+            );
+            None
+        }
+        Some(pty) if pty.peek_alive() => {
+            app.set_toast(
+                "This tab is still running — close it first",
+                crate::app::ToastLevel::Info,
+            );
+            None
+        }
+        Some(_) => Some(Action::RestartTab(target)),
+    }
+}
+
 // ── Terminal scrollback ──
 
 pub(crate) fn term_scroll_up(app: &mut App, lines: usize) -> Option<Action> {
@@ -668,6 +698,35 @@ mod tests {
         focus_up(&mut app);
 
         assert_eq!(app.active_pane, ActivePane::WorkspaceList);
+    }
+
+    // ── Restart an exited tab ──
+
+    /// Kanban / API / markdown tabs have no process behind them, so the chord
+    /// must say so instead of silently doing nothing.
+    #[test]
+    fn restart_without_a_process_toasts_and_produces_no_action() {
+        let mut app = test_app();
+        crate::test_support::add_test_workspace(&mut app);
+        crate::test_support::add_terminal_tab(&mut app, 0); // no PTY in tests
+
+        let action = request_restart_tab(&mut app);
+
+        assert!(action.is_none());
+        assert_eq!(
+            app.status_message.as_deref(),
+            Some("This tab has no process to restart")
+        );
+    }
+
+    #[test]
+    fn restart_without_a_workspace_toasts() {
+        let mut app = test_app();
+
+        let action = request_restart_tab(&mut app);
+
+        assert!(action.is_none());
+        assert_eq!(app.status_message.as_deref(), Some("No active workspace"));
     }
 
     // ── Jump to the agent needing attention ──

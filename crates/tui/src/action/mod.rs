@@ -59,6 +59,9 @@ pub(crate) enum Action {
     OpenEditorAt(PathBuf, u32),
     /// Spawn a new tab with the given provider
     SpawnTab(AIProvider),
+    /// Re-spawn the exited process of the tab at this index, in place: same
+    /// provider, same slot in the tab bar, same custom title.
+    RestartTab(usize),
     /// Show the global scratch-terminal overlay, spawning its shell on the
     /// first use. Toggling it off (or on, once spawned) is handled inline in
     /// `app_actions::toggle_scratch_terminal` and needs no async work.
@@ -173,6 +176,7 @@ pub(crate) async fn execute_action(
         | Action::LoadRepoPrs(..)
         | Action::RetryReviewCheckout(..) => review::handle(app, manager, action, terminal).await?,
         Action::SpawnTab(..)
+        | Action::RestartTab(..)
         | Action::OpenMarkdown(..)
         | Action::OpenMdr(..)
         | Action::ShowScratchTerminal => tabs::handle(app, manager, action, terminal).await?,

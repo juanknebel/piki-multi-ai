@@ -260,6 +260,7 @@ static CATALOG: &[ActionMeta] = {
         app("next_tab", "Tabs", "Next Tab", "next"),
         app("prev_tab", "Tabs", "Previous Tab", "prev"),
         app("rename_tab", "Tabs", "Rename Tab", "rename"),
+        app("restart_tab", "Tabs", "Restart Tab", "restart"),
         app("fuzzy_search", "Search", "Fuzzy File Search", "find file"),
         app(
             "project_search",

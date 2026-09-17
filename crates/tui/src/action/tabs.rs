@@ -135,6 +135,68 @@ pub(super) async fn handle(
                 app.mode = AppMode::MissingPrereqs;
             }
         }
+        Action::RestartTab(target) => {
+            // The key handler already checked that this tab's process exited;
+            // re-check here because the action runs a turn later.
+            let Some(ws) = app.workspaces.get_mut(app.active_workspace) else {
+                return Ok(());
+            };
+            let Some(tab) = ws.tabs.get(target) else {
+                return Ok(());
+            };
+            if tab.pty_session.as_ref().is_none_or(|p| p.peek_alive()) {
+                return Ok(());
+            }
+            let provider = tab.provider.clone();
+            let title = tab.custom_title.clone();
+            let closable = tab.closable;
+            let dead_session_id = tab.session_id.clone();
+
+            // Drop the dead tab by hand: `close_tab` refuses a non-closable
+            // one (the initial shell), and that is the tab most worth getting
+            // back. Its process is already gone, so there is nothing to kill.
+            ws.tabs.remove(target);
+            let (spawned, spawn_error) = spawn_tab(
+                ws,
+                &provider,
+                app.pty_rows,
+                app.pty_cols,
+                None,
+                Some(&app.provider_manager),
+                &app.paths,
+                app.session_daemon.clone(),
+                app.pty_output.clone(),
+            )
+            .await;
+            // `spawn_tab` appends; put the tab back where it was so the tab
+            // bar doesn't reshuffle under the user, and carry over what the
+            // tab was (custom title, closability).
+            let mut tab = ws.tabs.remove(spawned);
+            tab.custom_title = title.clone();
+            tab.closable = closable;
+            let new_session_id = tab.session_id.clone();
+            ws.tabs.insert(target, tab);
+            ws.active_tab = target;
+            app.active_pane = crate::app::ActivePane::MainPanel;
+
+            // The old session exited; drop it so it can't linger as an orphan
+            // in the sessions overlay, and re-apply the title to the new one
+            // so the rename survives the next restart too.
+            if let Some(sid) = dead_session_id {
+                crate::helpers::remove_session(app, &sid);
+            }
+            if let (Some(sid), Some(_)) = (new_session_id.as_deref(), title.as_deref()) {
+                crate::helpers::rename_session(app, sid, title.clone());
+            }
+
+            match spawn_error {
+                Some(err) => app.set_toast(err, crate::app::ToastLevel::Error),
+                None => app.set_toast(
+                    format!("Restarted {}", provider.label()),
+                    crate::app::ToastLevel::Success,
+                ),
+            }
+        }
         Action::ShowScratchTerminal => {
             if app.scratch.pty_session.is_none() {
                 crate::helpers::spawn_scratch_terminal(app, app.pty_rows, app.pty_cols).await;

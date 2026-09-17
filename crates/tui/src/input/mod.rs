@@ -358,6 +358,7 @@ const APP_ACTIONS: &[&str] = &[
     "split_up",
     "split_down",
     "rename_tab",
+    "restart_tab",
 ];
 
 /// Execute an `[keybindings.app]` action by name.
@@ -424,6 +425,7 @@ fn dispatch_app_action(app: &mut App, action: &str) -> Option<Action> {
         "split_up" => app_actions::split_up(app),
         "split_down" => app_actions::split_down(app),
         "rename_tab" => app_actions::open_rename_tab(app),
+        "restart_tab" => app_actions::request_restart_tab(app),
         _ => None,
     }
 }

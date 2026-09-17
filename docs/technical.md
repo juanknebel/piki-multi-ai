@@ -157,7 +157,7 @@ Internal — set by piki for its child processes; documented so they can be reco
 
 The top-left pane is a **tab bar hosting two views — WORKSPACES and PROJECTS** (both labels show in its border when the pane is wide enough; click one, or press `Tab` with the pane focused, to flip). The Workspaces tab is the tree above; the Projects tab lists the same cross-repo groups as the desktop's Projects view and the `C-g C-p` overlay — `j`/`k` move, `Enter` expands a project or opens/adopts a member, `n`/`e`/`d` create/edit/delete through the same editor dialog. The chosen tab persists across restarts, so the pane always opens on the view you prefer.
 
-The AGENTS pane (bottom-left) lists every running AI agent across all workspaces with its live status (▷ running, ⚠ needs permission, ⏳ waiting, ✓ done, ● alive, ○ exited); `Enter` or a click jumps to that workspace and tab. This includes a `claude` typed manually inside a shell tab: the shell bridge transparently wraps `claude` with piki's hook settings, so it reports status the same way as a dedicated agent tab (listed as `Claude (Shell)` once its first hook event arrives; skipped if you pass your own `--settings`). Such a shell entry drops off the pane as soon as the CLI exits — the shell returns to its prompt and its OSC 133 command-end marker clears the tab's agent state — while the shell itself keeps running; a dedicated agent tab stays listed for as long as the tab is open. Git status details live in the lazygit tab (`Ctrl+G g`).
+The AGENTS pane (bottom-left) lists every running AI agent across all workspaces with its live status (▷ running, ⚠ needs permission, ⏳ waiting, ✓ done, ● alive, ○ exited); `Enter` or a click jumps to that workspace and tab. This includes a `claude` typed manually inside a shell tab: the shell bridge transparently wraps `claude` with piki's hook settings, so it reports status the same way as a dedicated agent tab (listed as `Claude (Shell)` once its first hook event arrives; skipped if you pass your own `--settings`). Such a shell entry drops off the pane as soon as the CLI exits — the shell returns to its prompt and its OSC 133 command-end marker clears the tab's agent state — while the shell itself keeps running; a dedicated agent tab stays listed for as long as the tab is open. Git status details live in the lazygit tab (`Ctrl+G g`). In the tab bar, a tab whose process has exited keeps its slot and is marked with a dim `○` — `Ctrl+G C-r` re-spawns it in place (same provider, same slot, same custom title).
 
 ## TUI keybindings
 
@@ -199,6 +199,7 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 | `C-a` | Jump to the agent needing you (waiting for permission first, then unseen news; press again to walk through the rest) |
 | `v` | Manage providers (add/edit/delete custom AI providers) |
 | `R` | Rename current tab (custom title, empty to clear; reflected in Agents pane) |
+| `C-r` | Restart the current tab's process after it exited — same provider, same slot in the tab bar, same custom title (the exited daemon session is dropped, not left as an orphan) |
 | `<` / `>` (or `,` / `.`) | Resize sidebar width (±5%) |
 | `+` / `-` (or `=`) | Resize workspace/file split (±10%) |
 | `a` | About overlay |

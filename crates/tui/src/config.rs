@@ -314,6 +314,12 @@ fn default_app() -> HashMap<String, BindingValue> {
     m.insert("logs".to_string(), BindingValue::one("prefix-o"));
     m.insert("scroll_mode".to_string(), BindingValue::one("prefix-["));
     m.insert("rename_tab".to_string(), BindingValue::one("prefix-R"));
+    // `ctrl-r` for "restart" — `r` itself is clone_workspace, and the binding
+    // rule prefers prefix-ctrl over a Shift chord.
+    m.insert(
+        "restart_tab".to_string(),
+        BindingValue::one("prefix-ctrl-r"),
+    );
 
     // Layout
     m.insert(
