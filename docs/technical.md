@@ -196,6 +196,7 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 | `C-p` | Projects overlay (cross-repo groups with a colour; Enter expands or jumps, n/e/d manage) |
 | `o` | Log viewer overlay (last 500 log entries, color-coded, filterable by level) |
 | `m` | Manage agent profiles (create/edit/delete agents for this project) |
+| `C-a` | Jump to the agent needing you (waiting for permission first, then unseen news; press again to walk through the rest) |
 | `v` | Manage providers (add/edit/delete custom AI providers) |
 | `R` | Rename current tab (custom title, empty to clear; reflected in Agents pane) |
 | `<` / `>` (or `,` / `.`) | Resize sidebar width (±5%) |

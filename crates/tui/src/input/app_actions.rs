@@ -240,6 +240,71 @@ pub(crate) fn open_delete_workspace(app: &mut App) -> Option<Action> {
     None
 }
 
+/// Severity at or above which an agent "needs you": waiting for permission,
+/// or idle/done carrying news the user hasn't looked at. Mirrors the
+/// desktop's `ATTENTION_SEVERITY` over `piki_core::cli_agent::status_severity`
+/// (4 / 3) — and the states `ui::actionable_status_view` already surfaces as
+/// a glyph in the sidebar, subtab bar and status bar.
+const ATTENTION_SEVERITY: u8 = 3;
+
+/// Order the agents needing attention: worst first, stable within a severity
+/// so the Agents-pane order is the jump order. Pure — the App-reading half is
+/// `attention_targets`.
+fn order_attention_targets(mut rows: Vec<((usize, usize), u8)>) -> Vec<(usize, usize)> {
+    // Stable, so same-severity rows keep the order `agent_rows()` produced.
+    rows.sort_by_key(|(_, severity)| std::cmp::Reverse(*severity));
+    rows.into_iter().map(|(key, _)| key).collect()
+}
+
+/// Where the jump lands: the worst agent needing attention — or, when the
+/// user is already standing on one of them, the next one down the list
+/// (cyclic), so pressing the chord again walks through everything that needs
+/// them. `None` when nothing does. Pure.
+fn pick_attention_target(
+    targets: &[(usize, usize)],
+    current: Option<(usize, usize)>,
+) -> Option<(usize, usize)> {
+    if targets.is_empty() {
+        return None;
+    }
+    let here = current.and_then(|c| targets.iter().position(|t| *t == c));
+    Some(match here {
+        Some(i) => targets[(i + 1) % targets.len()],
+        None => targets[0],
+    })
+}
+
+/// The (workspace, tab) pairs whose agent needs the user, worst first.
+fn attention_targets(app: &App) -> Vec<(usize, usize)> {
+    let rows = app
+        .agent_rows()
+        .into_iter()
+        .filter_map(|(ws_idx, tab_idx)| {
+            let tab = app.workspaces.get(ws_idx)?.tabs.get(tab_idx)?;
+            let (status, attention, _) = tab.cli_agent_snapshot()?;
+            let severity = piki_core::cli_agent::status_severity(status, attention);
+            (severity >= ATTENTION_SEVERITY).then_some(((ws_idx, tab_idx), severity))
+        })
+        .collect();
+    order_attention_targets(rows)
+}
+
+/// Jump to the agent that needs the user (permission first, then unseen
+/// news), cycling through them on repeated presses — the desktop's `Alt+A`.
+/// Looking at the tab is what clears its marker (the event loop acknowledges
+/// the visible tab), so a walk empties the list as it goes.
+pub(crate) fn jump_to_attention(app: &mut App) -> Option<Action> {
+    let targets = attention_targets(app);
+    let current = app
+        .current_workspace()
+        .map(|ws| (app.active_workspace, ws.active_tab));
+    match pick_attention_target(&targets, current) {
+        Some(target) => super::interaction::jump_to_agent(app, target),
+        None => app.set_toast("No agent needs you", crate::app::ToastLevel::Info),
+    }
+    None
+}
+
 pub(crate) fn open_manage_agents(app: &mut App) -> Option<Action> {
     if !app
         .current_workspace()
@@ -603,5 +668,56 @@ mod tests {
         focus_up(&mut app);
 
         assert_eq!(app.active_pane, ActivePane::WorkspaceList);
+    }
+
+    // ── Jump to the agent needing attention ──
+
+    #[test]
+    fn attention_order_is_worst_first_then_pane_order() {
+        // (workspace, tab) keys with their severity, in Agents-pane order.
+        let rows = vec![
+            ((0, 1), 3), // unseen news
+            ((1, 0), 4), // waiting for permission
+            ((0, 2), 3), // unseen news, later in the pane
+        ];
+
+        assert_eq!(
+            order_attention_targets(rows),
+            vec![(1, 0), (0, 1), (0, 2)],
+            "permission first, then pane order within the same severity"
+        );
+    }
+
+    #[test]
+    fn jump_starts_at_the_worst_agent_and_then_cycles() {
+        let targets = [(1, 0), (0, 1), (0, 2)];
+
+        // Standing somewhere else: land on the worst one.
+        assert_eq!(pick_attention_target(&targets, None), Some((1, 0)));
+        assert_eq!(pick_attention_target(&targets, Some((2, 5))), Some((1, 0)));
+
+        // Standing on one of them: walk to the next, wrapping at the end.
+        assert_eq!(pick_attention_target(&targets, Some((1, 0))), Some((0, 1)));
+        assert_eq!(pick_attention_target(&targets, Some((0, 2))), Some((1, 0)));
+    }
+
+    #[test]
+    fn nothing_needing_attention_has_no_target() {
+        assert_eq!(pick_attention_target(&[], None), None);
+        assert_eq!(pick_attention_target(&[], Some((0, 0))), None);
+    }
+
+    /// Without an agent reporting, the chord must say so rather than move the
+    /// user somewhere at random.
+    #[test]
+    fn jump_with_no_agents_toasts_and_stays_put() {
+        let mut app = test_app();
+        crate::test_support::add_test_workspace(&mut app);
+        let before = app.active_workspace;
+
+        jump_to_attention(&mut app);
+
+        assert_eq!(app.active_workspace, before);
+        assert_eq!(app.status_message.as_deref(), Some("No agent needs you"));
     }
 }

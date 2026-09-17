@@ -121,6 +121,7 @@ theme = "default"
 # scratch_terminal = "prefix-ctrl-t"   # centered shell overlay rooted at ~ (toggle)
 # quit             = "prefix-q"
 # manage_agents    = "prefix-m"
+# jump_attention   = "prefix-ctrl-a"   # jump to the agent needing you (repeat to walk them)
 # manage_providers = "prefix-v"
 # logs             = "prefix-o"
 # scroll_mode      = "prefix-["

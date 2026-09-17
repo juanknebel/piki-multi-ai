@@ -298,6 +298,12 @@ static CATALOG: &[ActionMeta] = {
         app("copy", "Clipboard", "Copy Terminal", "copy"),
         app("manage_agents", "Agents", "Manage Agents", "agents"),
         app(
+            "jump_attention",
+            "Agents",
+            "Jump to Agent Needing Attention",
+            "attention",
+        ),
+        app(
             "manage_providers",
             "Providers",
             "Manage Providers",

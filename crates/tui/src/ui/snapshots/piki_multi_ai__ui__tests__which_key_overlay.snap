@@ -22,7 +22,7 @@ expression: content
 │           [ scroll  y chat  C-t terminal                                     │
 │Focus      h left  j down  k up  l right                                      │
 │Layout     < sidebar −  > sidebar +  + split +  - split −                     │
-│Agents     m agents                                                           │
+│Agents     m agents  C-a attention                                            │
 │Providers  v providers                                                        │
 │App        q quit                                                             │
 │1-9 tab   C-g literal   Esc cancel                                            │

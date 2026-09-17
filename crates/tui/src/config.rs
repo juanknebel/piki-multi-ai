@@ -301,6 +301,12 @@ fn default_app() -> HashMap<String, BindingValue> {
     );
     m.insert("quit".to_string(), BindingValue::one("prefix-q"));
     m.insert("manage_agents".to_string(), BindingValue::one("prefix-m"));
+    // `ctrl-a` for "attention" — `a` itself is the about overlay, and the
+    // binding rule prefers prefix-ctrl over a Shift chord.
+    m.insert(
+        "jump_attention".to_string(),
+        BindingValue::one("prefix-ctrl-a"),
+    );
     m.insert(
         "manage_providers".to_string(),
         BindingValue::one("prefix-v"),

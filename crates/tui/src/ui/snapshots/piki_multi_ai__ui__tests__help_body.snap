@@ -54,6 +54,7 @@ expression: body
       C-S-c         Copy Terminal
     Agents
       C-g m         Manage Agents
+      C-g C-a       Jump to Agent Needing Attention
     Providers
       C-g v         Manage Providers
     App
