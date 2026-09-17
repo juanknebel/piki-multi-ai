@@ -1111,6 +1111,37 @@ fn poll_workspaces(app: &mut App, now: Instant) {
         }
     }
 
+    // Poll the jq filter task — same shape as the request above, but the bar
+    // survives a failure so the filter can be corrected in place.
+    if let Some(ws) = app.workspaces.get_mut(app.active_workspace)
+        && let Some(tab) = ws.current_tab_mut()
+        && let Some(ref mut api) = tab.api_state
+        && api.jq.as_ref().is_some_and(|jq| jq.running)
+    {
+        let result = { api.pending_jq.lock().take() };
+        if let Some(result) = result {
+            match result {
+                Ok(output) => {
+                    api.jq_output = Some(output);
+                    api.response_scroll = 0;
+                    if let Some(ref mut jq) = api.jq {
+                        jq.error = None;
+                    }
+                }
+                Err(e) => {
+                    api.jq_output = None;
+                    if let Some(ref mut jq) = api.jq {
+                        jq.error = Some(e);
+                    }
+                }
+            }
+            if let Some(ref mut jq) = api.jq {
+                jq.running = false;
+            }
+            app.needs_redraw = true;
+        }
+    }
+
     // Poll PR picker list load
     {
         let result = { app.pending_pr_list.lock().take() };

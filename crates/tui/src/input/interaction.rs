@@ -935,11 +935,82 @@ pub(super) fn handle_api_interaction(app: &mut App, key: KeyEvent) -> Option<Act
         return None;
     }
 
+    // jq filter bar captures input while open. Ctrl+J/Ctrl+K stay live so the
+    // response can be scrolled without closing the bar first.
+    if api.jq.is_some() {
+        if key.code == KeyCode::Char('j') && has_ctrl(key.modifiers, app.config.platform) {
+            api.response_scroll = api.response_scroll.saturating_add(1);
+            return None;
+        }
+        if key.code == KeyCode::Char('k') && has_ctrl(key.modifiers, app.config.platform) {
+            api.response_scroll = api.response_scroll.saturating_sub(1);
+            return None;
+        }
+        if key.code == KeyCode::Char('u') && has_ctrl(key.modifiers, app.config.platform) {
+            if let Some(ref mut jq) = api.jq {
+                jq.query.clear();
+                jq.cursor = 0;
+                jq.error = None;
+            }
+            return None;
+        }
+        match key.code {
+            KeyCode::Esc => {
+                // Closing drops the filter: the panel goes back to the raw
+                // responses, so what you see always matches what is on screen.
+                api.jq = None;
+                api.jq_output = None;
+                api.response_scroll = 0;
+            }
+            KeyCode::Enter => {
+                let query = api.jq.as_ref().map(|jq| jq.query.clone())?;
+                return Some(Action::RunJqFilter(query));
+            }
+            // A Ctrl/Alt chord the bar doesn't handle is a shortcut, not
+            // text: swallow it rather than typing its letter into the filter.
+            KeyCode::Char(_)
+                if key.modifiers.intersects(
+                    KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SUPER,
+                ) => {}
+            _ => {
+                if let Some(ref mut jq) = api.jq {
+                    let mut query = std::mem::take(&mut jq.query);
+                    let mut cursor = jq.cursor;
+                    crate::input::text_field_common::handle_text_input(
+                        &mut query,
+                        &mut cursor,
+                        key,
+                        |_| true,
+                    );
+                    jq.query = query;
+                    jq.cursor = cursor;
+                }
+            }
+        }
+        return None;
+    }
+
+    // Ctrl+Q (Cmd+Q on macOS): open the jq filter bar over the response
+    if key.code == KeyCode::Char('q')
+        && has_ctrl(key.modifiers, app.config.platform)
+        && !api.responses.is_empty()
+    {
+        api.search = None; // one bar at a time — they share the same row
+        api.jq = Some(crate::app::ApiJqState {
+            query: String::new(),
+            cursor: 0,
+            error: None,
+            running: false,
+        });
+        return None;
+    }
+
     // Ctrl+F (Cmd+F on macOS): open search in response panel
     if key.code == KeyCode::Char('f')
         && has_ctrl(key.modifiers, app.config.platform)
         && !api.responses.is_empty()
     {
+        api.jq = None;
         api.search = Some(crate::app::ApiSearchState {
             query: String::new(),
             cursor: 0,
@@ -1309,5 +1380,138 @@ mod tests {
                 .term_scroll,
             0
         );
+    }
+
+    // ── API Explorer: the jq filter bar ──
+
+    /// An API tab with one response, which is what the jq bar needs to open.
+    fn api_tab_with_response(app: &mut App) -> usize {
+        let ws = add_test_workspace(app);
+        let idx = app.workspaces[ws].add_tab(piki_core::AIProvider::Api, true, None);
+        let mut api = crate::app::ApiTabState::new();
+        api.responses = vec![crate::app::ApiResponseDisplay {
+            status: 200,
+            elapsed_ms: 3,
+            body: "{\"a\":1}".to_string(),
+            headers: String::new(),
+        }];
+        app.workspaces[ws].tabs[idx].api_state = Some(api);
+        app.workspaces[ws].active_tab = idx;
+        ws
+    }
+
+    fn api_of(app: &App) -> &crate::app::ApiTabState {
+        app.workspaces[app.active_workspace]
+            .current_tab()
+            .expect("api tab")
+            .api_state
+            .as_ref()
+            .expect("api state")
+    }
+
+    fn ctrl(c: char) -> KeyEvent {
+        KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL)
+    }
+
+    #[test]
+    fn jq_bar_opens_types_and_runs() {
+        let mut app = test_app();
+        api_tab_with_response(&mut app);
+
+        handle_api_interaction(&mut app, ctrl('q'));
+        assert!(api_of(&app).jq.is_some(), "the bar should be open");
+
+        for c in ".a".chars() {
+            handle_api_interaction(&mut app, key(KeyCode::Char(c)));
+        }
+        assert_eq!(api_of(&app).jq.as_ref().unwrap().query, ".a");
+
+        let action = handle_api_interaction(&mut app, key(KeyCode::Enter));
+        match action {
+            Some(Action::RunJqFilter(filter)) => assert_eq!(filter, ".a"),
+            other => panic!("expected RunJqFilter, got {other:?}"),
+        }
+    }
+
+    /// Esc drops the filter as well as the bar, so what is on screen always
+    /// matches what the panel says it is showing.
+    #[test]
+    fn jq_esc_closes_and_restores_the_raw_response() {
+        let mut app = test_app();
+        api_tab_with_response(&mut app);
+        handle_api_interaction(&mut app, ctrl('q'));
+        app.workspaces[0]
+            .current_tab_mut()
+            .unwrap()
+            .api_state
+            .as_mut()
+            .unwrap()
+            .jq_output = Some(vec!["1".to_string()]);
+
+        handle_api_interaction(&mut app, key(KeyCode::Esc));
+
+        assert!(api_of(&app).jq.is_none());
+        assert!(api_of(&app).jq_output.is_none());
+    }
+
+    #[test]
+    fn jq_ctrl_u_clears_the_query() {
+        let mut app = test_app();
+        api_tab_with_response(&mut app);
+        handle_api_interaction(&mut app, ctrl('q'));
+        handle_api_interaction(&mut app, key(KeyCode::Char('.')));
+
+        handle_api_interaction(&mut app, ctrl('u'));
+
+        let jq = api_of(&app).jq.as_ref().unwrap();
+        assert!(jq.query.is_empty());
+        assert_eq!(jq.cursor, 0);
+    }
+
+    /// The bar owns the keyboard while it is open, but a chord it does not
+    /// implement must not end up typed into the filter.
+    #[test]
+    fn jq_bar_swallows_chords_instead_of_typing_them() {
+        let mut app = test_app();
+        api_tab_with_response(&mut app);
+        handle_api_interaction(&mut app, ctrl('q'));
+
+        handle_api_interaction(&mut app, ctrl('f'));
+
+        assert!(api_of(&app).jq.is_some(), "the bar stays open");
+        assert!(
+            api_of(&app).jq.as_ref().unwrap().query.is_empty(),
+            "ctrl-f must not type an 'f'"
+        );
+        assert!(api_of(&app).search.is_none());
+    }
+
+    /// C-j / C-k keep scrolling the response while the filter bar has focus.
+    #[test]
+    fn jq_bar_leaves_the_scroll_chords_live() {
+        let mut app = test_app();
+        api_tab_with_response(&mut app);
+        handle_api_interaction(&mut app, ctrl('q'));
+
+        handle_api_interaction(&mut app, ctrl('j'));
+        assert_eq!(api_of(&app).response_scroll, 1);
+        handle_api_interaction(&mut app, ctrl('k'));
+        assert_eq!(api_of(&app).response_scroll, 0);
+        assert!(api_of(&app).jq.as_ref().unwrap().query.is_empty());
+    }
+
+    /// Nothing to filter yet: the chord must not open a bar over an empty
+    /// panel.
+    #[test]
+    fn jq_bar_does_not_open_without_a_response() {
+        let mut app = test_app();
+        let ws = add_test_workspace(&mut app);
+        let idx = app.workspaces[ws].add_tab(piki_core::AIProvider::Api, true, None);
+        app.workspaces[ws].tabs[idx].api_state = Some(crate::app::ApiTabState::new());
+        app.workspaces[ws].active_tab = idx;
+
+        handle_api_interaction(&mut app, ctrl('q'));
+
+        assert!(api_of(&app).jq.is_none());
     }
 }

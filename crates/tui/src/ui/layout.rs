@@ -113,6 +113,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         .and_then(|ws| ws.current_tab())
         .and_then(|tab| tab.api_state.as_ref())
     {
+        Some(api) if api.jq.is_some() => 3,
         Some(api) if api.search.is_some() => 2,
         Some(_) => 1,
         None => 0,

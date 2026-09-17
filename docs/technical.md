@@ -226,7 +226,7 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 | *Markdown tab* | `j`/`k` scroll, `Ctrl+d`/`Ctrl+u` page, `g`/`G` top/bottom (read-only) |
 | *Kanban tab* | `h/l/j/k` navigate, `H/L` move card, `n` new card, `e` edit card, `d` delete, `D` dispatch agent, `Enter` details, `r` refresh, `Esc` close modal |
 | *Code Review tab* | Locked mode — see [Code Review](#code-review) below |
-| *API Explorer tab* | `Ctrl+S` send request, `Ctrl+J`/`Ctrl+K` scroll response, `Ctrl+F` search response, `Ctrl+H` API history, `Ctrl+C` copy response, mouse scroll in editor/response |
+| *API Explorer tab* | `Ctrl+S` send request, `Ctrl+J`/`Ctrl+K` scroll response, `Ctrl+F` search response, `Ctrl+Q` jq filter, `Ctrl+H` API history, `Ctrl+C` copy response, mouse scroll in editor/response |
 
 **In kanban card editor** (after pressing `e` or `n`):
 

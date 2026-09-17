@@ -256,6 +256,22 @@ pub struct ApiSearchState {
     pub current_match: usize,
 }
 
+/// Result of one jq run: a filtered body per response, or jq's message.
+pub type JqResult = Result<Vec<String>, String>;
+
+/// jq filter bar over the API response bodies. The raw responses are never
+/// modified — the filtered text lives in `ApiTabState::jq_output` — so
+/// dropping the filter is just forgetting that.
+pub struct ApiJqState {
+    pub query: String,
+    pub cursor: usize,
+    /// jq's own message from the last run (bad filter, missing binary),
+    /// shown in the bar instead of a result.
+    pub error: Option<String>,
+    /// A run is in flight.
+    pub running: bool,
+}
+
 /// State for the API history overlay
 pub struct ApiHistoryState {
     pub entries: Vec<piki_core::storage::ApiHistoryEntry>,
@@ -276,6 +292,15 @@ pub struct ApiTabState {
     pub search: Option<ApiSearchState>,
     /// History overlay (None = closed)
     pub history: Option<ApiHistoryState>,
+    /// jq filter bar (None = closed). Mutually exclusive with `search`:
+    /// both draw over the same row at the bottom of the response panel.
+    pub jq: Option<ApiJqState>,
+    /// Filtered body per response while a jq filter is applied; `None` shows
+    /// the raw responses.
+    pub jq_output: Option<Vec<String>>,
+    /// Slot the jq task writes its result (or error) into, polled by the
+    /// event loop — same shape as `pending_responses`.
+    pub pending_jq: Arc<Mutex<Option<JqResult>>>,
 }
 
 impl ApiTabState {
@@ -288,6 +313,9 @@ impl ApiTabState {
             pending_responses: Arc::new(Mutex::new(None)),
             search: None,
             history: None,
+            jq: None,
+            jq_output: None,
+            pending_jq: Arc::new(Mutex::new(None)),
         }
     }
 }

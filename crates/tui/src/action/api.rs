@@ -6,6 +6,9 @@ use super::Action;
 use crate::app::{self, App, ToastLevel};
 use piki_core::workspace::WorkspaceManager;
 
+/// Cap on one jq run, mirroring the desktop's `jq_filter` command.
+const JQ_TIMEOUT_SECS: u64 = 10;
+
 pub(super) async fn handle(
     app: &mut App,
     _manager: &WorkspaceManager,
@@ -167,7 +170,102 @@ pub(super) async fn handle(
                 });
             }
         }
+        Action::RunJqFilter(filter) => {
+            let Some(api) = app
+                .workspaces
+                .get_mut(app.active_workspace)
+                .and_then(|ws| ws.current_tab_mut())
+                .and_then(|tab| tab.api_state.as_mut())
+            else {
+                return Ok(());
+            };
+            // An empty filter is "show me the responses again".
+            if filter.trim().is_empty() {
+                api.jq_output = None;
+                if let Some(ref mut jq) = api.jq {
+                    jq.error = None;
+                    jq.running = false;
+                }
+                return Ok(());
+            }
+            let bodies: Vec<String> = api.responses.iter().map(|r| r.body.clone()).collect();
+            if bodies.is_empty() {
+                return Ok(());
+            }
+            if let Some(ref mut jq) = api.jq {
+                jq.running = true;
+                jq.error = None;
+            }
+            let slot = Arc::clone(&api.pending_jq);
+            tokio::spawn(async move {
+                let mut out = Vec::with_capacity(bodies.len());
+                let mut failure = None;
+                for body in &bodies {
+                    match run_jq(&filter, body).await {
+                        Ok(text) => out.push(text),
+                        Err(e) => {
+                            failure = Some(e);
+                            break;
+                        }
+                    }
+                }
+                let mut guard = slot.lock();
+                *guard = Some(match failure {
+                    Some(e) => Err(e),
+                    None => Ok(out),
+                });
+            });
+        }
         other => unreachable!("non-api action routed to action::api: {other:?}"),
     }
     Ok(())
+}
+
+/// Pipe `body` through `jq <filter>`, returning its stdout or a message fit
+/// for the filter bar. Goes through `shell_env::command` so `jq` is found
+/// with the user's login PATH, and is capped like the desktop's `jq_filter`
+/// so a pathological filter can't hang the tab.
+async fn run_jq(filter: &str, body: &str) -> Result<String, String> {
+    use tokio::io::AsyncWriteExt;
+
+    let mut child = piki_core::shell_env::command("jq")
+        .arg(filter)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                "jq not found — install jq to filter responses".to_string()
+            } else {
+                format!("could not run jq: {e}")
+            }
+        })?;
+
+    if let Some(mut stdin) = child.stdin.take() {
+        // A filter that reads nothing (`jq -n`-style) closes stdin early;
+        // that is not an error, the exit status below is what counts.
+        let _ = stdin.write_all(body.as_bytes()).await;
+        let _ = stdin.shutdown().await;
+    }
+
+    let output = tokio::time::timeout(
+        std::time::Duration::from_secs(JQ_TIMEOUT_SECS),
+        child.wait_with_output(),
+    )
+    .await
+    .map_err(|_| format!("jq timed out after {JQ_TIMEOUT_SECS}s"))?
+    .map_err(|e| format!("jq failed: {e}"))?;
+
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(stderr
+            .lines()
+            .next()
+            .unwrap_or("jq failed")
+            .trim()
+            .to_string())
+    }
 }

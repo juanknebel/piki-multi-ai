@@ -96,6 +96,9 @@ pub(crate) enum Action {
     RetryReviewCheckout(usize),
     /// Send an API request (raw Hurl text)
     SendApiRequest(String),
+    /// Run a jq filter over the API tab's response bodies. An empty filter
+    /// drops the current one and shows the raw responses again.
+    RunJqFilter(String),
     /// Dispatch an agent to work on a kanban card
     DispatchAgent {
         source_ws: usize,
@@ -180,7 +183,9 @@ pub(crate) async fn execute_action(
         | Action::OpenMarkdown(..)
         | Action::OpenMdr(..)
         | Action::ShowScratchTerminal => tabs::handle(app, manager, action, terminal).await?,
-        Action::SendApiRequest(..) => api::handle(app, manager, action, terminal).await?,
+        Action::SendApiRequest(..) | Action::RunJqFilter(..) => {
+            api::handle(app, manager, action, terminal).await?
+        }
         Action::DispatchAgent { .. }
         | Action::SaveAgent { .. }
         | Action::DeleteAgent(..)

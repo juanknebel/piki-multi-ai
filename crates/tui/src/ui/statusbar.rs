@@ -594,12 +594,19 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                 .and_then(|ws| ws.current_tab())
                 .is_some_and(|tab| tab.api_state.is_some())
             {
-                let has_search = app
+                let api = app
                     .current_workspace()
                     .and_then(|ws| ws.current_tab())
-                    .and_then(|tab| tab.api_state.as_ref())
-                    .is_some_and(|api| api.search.is_some());
-                if has_search {
+                    .and_then(|tab| tab.api_state.as_ref());
+                let has_search = api.is_some_and(|api| api.search.is_some());
+                let has_jq = api.is_some_and(|api| api.jq.is_some());
+                if has_jq {
+                    vec![
+                        ("enter".to_string(), "run filter"),
+                        (cfg.format_binding("ctrl-u"), "clear"),
+                        ("esc".to_string(), "drop filter"),
+                    ]
+                } else if has_search {
                     vec![
                         ("enter".to_string(), "next match"),
                         ("shift-enter".to_string(), "prev match"),
@@ -617,6 +624,7 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                             "scroll",
                         ),
                         (cfg.format_binding("ctrl-f"), "search"),
+                        (cfg.format_binding("ctrl-q"), "jq"),
                         (cfg.format_binding("ctrl-c"), "copy response"),
                         (cfg.prefix_display(), "prefix"),
                     ]
