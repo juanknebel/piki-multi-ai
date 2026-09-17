@@ -77,6 +77,7 @@ export type StateEvent =
   | "active-pane-changed"
   | "tab-shell-state-changed"
   | "workspace-attention-changed"
+  | "workspace-branch-changed"
   | "agent-rows-changed";
 
 /** A top-level workspace tab. Each one owns its own pane tree; every pane
@@ -309,11 +310,20 @@ class AppState extends EventTarget {
     if (!ws) return;
     ws.changedFiles = files;
     ws.aheadBehind = aheadBehind;
+    // A branch change is announced for EVERY workspace, not just the active
+    // one: the sidebar and the Projects view label rows of workspaces the
+    // user isn't standing on, and the git watcher polls them all. It fires
+    // only when the branch really changed, so it stays rare — unlike
+    // `files-changed`, which rides every changed-file poll.
+    const branchChanged = branch !== undefined && ws.branch !== branch;
     if (branch !== undefined) {
       ws.branch = branch;
     }
     if (workspaceIdx === this._activeWorkspace) {
       this.emit("files-changed");
+    }
+    if (branchChanged) {
+      this.emit("workspace-branch-changed");
     }
   }
 

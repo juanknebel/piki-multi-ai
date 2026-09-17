@@ -236,6 +236,8 @@ export function renderProjectsPanel(container: HTMLElement) {
   // live workspace list — re-render when it changes.
   appState.on("workspaces-changed", render);
   appState.on("active-workspace-changed", render);
+  // Member rows carry the workspace's branch — repaint when one moves.
+  appState.on("workspace-branch-changed", render);
   void refreshProjects();
 }
 

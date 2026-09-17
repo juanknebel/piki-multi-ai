@@ -350,6 +350,8 @@ export function renderWorkspaceList(container: HTMLElement) {
   appState.on("workspaces-changed", () => void refreshRows());
   appState.on("active-workspace-changed", render);
   appState.on("workspace-attention-changed", render);
+  // Rows label a clone with its branch and a worktree BY its branch.
+  appState.on("workspace-branch-changed", render);
   // Agent lifecycle events, tab churn and tab switches (which acknowledge
   // attention backend-side) all land in `appState.agentRows`.
   appState.on("agent-rows-changed", render);
