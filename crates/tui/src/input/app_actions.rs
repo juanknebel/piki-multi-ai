@@ -554,6 +554,50 @@ pub(crate) fn term_scroll_bottom(app: &mut App) -> Option<Action> {
     None
 }
 
+/// Scrollback depth of the parser a clear rebuilds, mirroring what
+/// `piki_multiplex::pty::session` gave the original one (1000 rows in
+/// process, 5000 for a daemon-backed tab). `vt100::Parser` takes the capacity
+/// at construction and never hands it back, so a clear has to restate it —
+/// keep these two in step with the multiplexer if they ever change there.
+const LOCAL_SCROLLBACK: usize = 1000;
+const REMOTE_SCROLLBACK: usize = 5000;
+
+/// Clear the active terminal — screen *and* scrollback — the desktop's
+/// `Ctrl+Shift+K`. The process is untouched: this only drops what the
+/// emulator is holding, so a full-screen program (an agent's TUI, vim)
+/// repaints on its next output.
+pub(crate) fn clear_terminal(app: &mut App) -> Option<Action> {
+    let Some(ws) = app.workspaces.get_mut(app.active_workspace) else {
+        app.set_toast("No active workspace", crate::app::ToastLevel::Info);
+        return None;
+    };
+    let tab = ws.tabs.get_mut(ws.active_tab)?;
+    let Some(parser) = tab.pty_parser.as_ref() else {
+        app.set_toast(
+            "This tab has no terminal to clear",
+            crate::app::ToastLevel::Info,
+        );
+        return None;
+    };
+    let scrollback = if tab.pty_session.as_ref().is_some_and(|p| p.is_remote()) {
+        REMOTE_SCROLLBACK
+    } else {
+        LOCAL_SCROLLBACK
+    };
+    {
+        let mut guard = parser.lock();
+        let (rows, cols) = guard.screen().size();
+        // Same move the session layer makes when it replays a restore: a
+        // fresh parser of the current size is the only way to drop the
+        // scrollback (`CSI 3 J` is not implemented).
+        *guard = vt100::Parser::new(rows, cols, scrollback);
+    }
+    tab.term_scroll = 0;
+    // A selection addresses cells that no longer hold anything.
+    app.selection = None;
+    None
+}
+
 /// Enter terminal scroll mode (`prefix [`). Only meaningful when the current
 /// tab is a real terminal; focus moves to the main panel.
 pub(crate) fn enter_term_scroll(app: &mut App) -> Option<Action> {
@@ -753,6 +797,48 @@ mod tests {
         focus_up(&mut app);
 
         assert_eq!(app.active_pane, ActivePane::WorkspaceList);
+    }
+
+    // ── Clear the terminal ──
+
+    #[test]
+    fn clear_terminal_empties_the_screen_and_resets_the_scroll() {
+        let mut app = test_app();
+        crate::test_support::add_test_workspace(&mut app);
+        crate::test_support::add_terminal_tab(&mut app, 0);
+        {
+            let parser = app.workspaces[0].tabs[0].pty_parser.clone().unwrap();
+            let mut guard = parser.lock();
+            for i in 0..50 {
+                guard.process(format!("line {i}\r\n").as_bytes());
+            }
+            assert!(!guard.screen().contents().trim().is_empty());
+        }
+        app.workspaces[0].tabs[0].term_scroll = 5;
+
+        clear_terminal(&mut app);
+
+        let parser = app.workspaces[0].tabs[0].pty_parser.clone().unwrap();
+        assert!(
+            parser.lock().screen().contents().trim().is_empty(),
+            "the screen should be empty after a clear"
+        );
+        assert_eq!(app.workspaces[0].tabs[0].term_scroll, 0);
+    }
+
+    #[test]
+    fn clear_terminal_on_a_tab_without_one_toasts() {
+        let mut app = test_app();
+        crate::test_support::add_test_workspace(&mut app);
+        app.workspaces[0].add_tab(piki_core::AIProvider::Kanban, true, None);
+
+        let action = clear_terminal(&mut app);
+
+        assert!(action.is_none());
+        assert_eq!(
+            app.status_message.as_deref(),
+            Some("This tab has no terminal to clear")
+        );
     }
 
     // ── Move a tab to another workspace ──

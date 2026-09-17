@@ -137,6 +137,7 @@ theme = "default"
 # copy            = "ctrl-shift-c"
 # paste           = "ctrl-shift-v"
 # terminal_search = "prefix-f"
+# clear_terminal  = "prefix-ctrl-k"   # clear the active terminal (screen + scrollback)
 
 # The tables below are pane/mode-local keys — active only while that view is
 # focused, NOT behind the prefix. Each is shown with its default.

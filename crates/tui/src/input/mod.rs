@@ -362,6 +362,7 @@ const APP_ACTIONS: &[&str] = &[
     "rename_tab",
     "restart_tab",
     "move_tab",
+    "clear_terminal",
 ];
 
 /// Execute an `[keybindings.app]` action by name.
@@ -430,6 +431,7 @@ fn dispatch_app_action(app: &mut App, action: &str) -> Option<Action> {
         "rename_tab" => app_actions::open_rename_tab(app),
         "restart_tab" => app_actions::request_restart_tab(app),
         "move_tab" => app_actions::open_move_tab(app),
+        "clear_terminal" => app_actions::clear_terminal(app),
         _ => None,
     }
 }

@@ -189,6 +189,7 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 | `t` | Search in project (ripgrep content search; Enter opens `$EDITOR` at the matched line) |
 | `f` | Search within the active terminal's output |
 | `[` | Terminal scroll mode (see below) |
+| `C-k` | Clear the active terminal — screen and scrollback. The process is untouched, so a full-screen program repaints on its next output |
 | `y` | AI Chat panel |
 | `C-t` | Scratch terminal — a single shell rooted at `~`, tied to no workspace, shown centered on top of everything; press `Ctrl+G C-t` again (or from inside it) to hide, and the shell keeps running |
 | `b` | Workspace dashboard overlay (bird's-eye view of all workspaces and tabs) |

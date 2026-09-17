@@ -323,6 +323,12 @@ fn default_app() -> HashMap<String, BindingValue> {
     // `ctrl-w` for "to workspace" — `w` itself is the workspace switcher, and
     // the binding rule prefers prefix-ctrl over a Shift chord.
     m.insert("move_tab".to_string(), BindingValue::one("prefix-ctrl-w"));
+    // `ctrl-k` for "clear" — mirrors the desktop's Ctrl+Shift+K; `k` itself
+    // is focus_up.
+    m.insert(
+        "clear_terminal".to_string(),
+        BindingValue::one("prefix-ctrl-k"),
+    );
 
     // Layout
     m.insert(

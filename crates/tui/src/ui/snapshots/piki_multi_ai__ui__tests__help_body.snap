@@ -1,6 +1,6 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 835
+assertion_line: 859
 expression: body
 ---
 
@@ -39,6 +39,7 @@ expression: body
       C-g C-s       Sessions (persistent)
       C-g C-p       Projects
       C-g [         Terminal Scroll Mode
+      C-g C-k       Clear Terminal
       C-g y         AI Chat
       C-g C-t       Scratch Terminal (home)
     Focus

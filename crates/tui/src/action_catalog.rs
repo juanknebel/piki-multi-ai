@@ -277,6 +277,7 @@ static CATALOG: &[ActionMeta] = {
         app("sessions", "View", "Sessions (persistent)", "sessions"),
         app("projects", "View", "Projects", "projects"),
         app("scroll_mode", "View", "Terminal Scroll Mode", "scroll"),
+        app("clear_terminal", "View", "Clear Terminal", "clear"),
         app("chat_panel", "View", "AI Chat", "chat"),
         app(
             "scratch_terminal",
