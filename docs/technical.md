@@ -191,6 +191,7 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 | `[` | Terminal scroll mode (see below) |
 | `C-k` | Clear the active terminal — screen and scrollback. The process is untouched, so a full-screen program repaints on its next output |
 | `y` | AI Chat panel |
+| `C-y` | Add the terminal selection to the AI chat (drag-select first; the block lands in the composer and the panel opens) |
 | `C-t` | Scratch terminal — a single shell rooted at `~`, tied to no workspace, shown centered on top of everything; press `Ctrl+G C-t` again (or from inside it) to hide, and the shell keeps running |
 | `b` | Workspace dashboard overlay (bird's-eye view of all workspaces and tabs) |
 | `C-s` | Sessions overlay (persistent-session daemon state and management, see below) |
@@ -338,6 +339,7 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 | `Ctrl+e` | Open in $EDITOR |
 | `Ctrl+v` | Open in inline editor |
 | `Ctrl+o` | Open markdown file in a new tab (`.md` / `.markdown` only) |
+| `Ctrl+y` | Send the selected file to the AI chat as context (fenced block, capped at 200 lines) |
 | `Alt+m` | Open markdown file in external `mdr` viewer |
 | `Esc` | Close search |
 

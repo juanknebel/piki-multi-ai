@@ -19,7 +19,7 @@ expression: content
 │Tabs       c new  x close  n next  p prev  R rename  C-r restart  C-w move    │
 │Search     / find file  t grep  f search                                      │
 │View       : palette  ? all keys  a about  o logs  C-s sessions  C-p projects │
-│           [ scroll  C-k clear  y chat  C-t terminal                          │
+│           [ scroll  C-k clear  y chat  C-y to chat  C-t terminal             │
 │Focus      h left  j down  k up  l right                                      │
 │Layout     < sidebar −  > sidebar +  + split +  - split −                     │
 │Agents     m agents  C-a attention                                            │

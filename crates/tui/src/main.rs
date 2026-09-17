@@ -1,6 +1,7 @@
 mod action;
 mod action_catalog;
 mod app;
+mod chat_context;
 mod clipboard;
 pub(crate) mod code_review;
 mod command_palette;

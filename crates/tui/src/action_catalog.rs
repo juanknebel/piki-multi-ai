@@ -280,6 +280,12 @@ static CATALOG: &[ActionMeta] = {
         app("clear_terminal", "View", "Clear Terminal", "clear"),
         app("chat_panel", "View", "AI Chat", "chat"),
         app(
+            "add_chat_context",
+            "View",
+            "Add Terminal Selection to Chat",
+            "to chat",
+        ),
+        app(
             "scratch_terminal",
             "View",
             "Scratch Terminal (home)",
@@ -428,6 +434,11 @@ static CATALOG: &[ActionMeta] = {
             C::Fuzzy,
             Bind("fuzzy", "mdr"),
             "Open a markdown file in mdr (external)",
+        ),
+        local(
+            C::Fuzzy,
+            Bind("fuzzy", "chat"),
+            "Send the file to the AI chat as context",
         ),
         local(C::Fuzzy, Bind("fuzzy", "exit"), "Close"),
         // ── Project content search ────────────────────────────────────────

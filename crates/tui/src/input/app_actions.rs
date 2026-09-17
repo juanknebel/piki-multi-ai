@@ -340,6 +340,62 @@ pub(crate) fn open_chat_panel(app: &mut App) -> Option<Action> {
     None
 }
 
+/// Text currently selected in the active tab's terminal, if any. The
+/// selection is a plain cell rectangle over the rendered screen, so it is
+/// read back through the parser at the tab's scroll position — the same way
+/// the mouse-release copy does.
+fn terminal_selection_text(app: &App) -> Option<String> {
+    let sel = app.selection.as_ref()?;
+    let (sr, sc, er, ec) = sel.normalized();
+    if sr == er && sc == ec {
+        return None;
+    }
+    let tab = app.current_workspace()?.current_tab()?;
+    let parser = tab.pty_parser.as_ref()?;
+    let mut guard = parser.lock();
+    guard.screen_mut().set_scrollback(tab.term_scroll);
+    let text = guard.screen().contents_between(sr, sc, er, ec + 1);
+    guard.screen_mut().set_scrollback(0);
+    (!text.trim().is_empty()).then_some(text)
+}
+
+/// Put the terminal selection into the chat composer as a fenced block and
+/// open the panel — the desktop's `Ctrl+Shift+I` with a terminal selection
+/// (select, then the chord: two keys, composer ready).
+pub(crate) fn add_chat_context(app: &mut App) -> Option<Action> {
+    let Some(text) = terminal_selection_text(app) else {
+        app.set_toast(
+            "Select text in the terminal first (drag with the mouse)",
+            crate::app::ToastLevel::Info,
+        );
+        return None;
+    };
+    let label = app
+        .current_workspace()
+        .and_then(|ws| ws.current_tab())
+        .map(|tab| tab.display_label().to_string())
+        .unwrap_or_else(|| "terminal".to_string());
+    let block = crate::chat_context::fence_block(
+        &crate::chat_context::ContextKind::Terminal,
+        &label,
+        &text,
+    );
+    push_chat_context(app, block, "Selection added to chat")
+}
+
+/// Append `block` to the chat composer, open the panel and say so. Shared by
+/// every injection entry point.
+pub(crate) fn push_chat_context(app: &mut App, block: String, toast: &str) -> Option<Action> {
+    if block.is_empty() {
+        return None;
+    }
+    app.chat_panel.input = crate::chat_context::append_to_draft(&app.chat_panel.input, &block);
+    app.chat_panel.input_cursor = app.chat_panel.input.chars().count();
+    let action = open_chat_panel(app);
+    app.set_toast(toast.to_string(), crate::app::ToastLevel::Success);
+    action
+}
+
 /// Toggle the global scratch-terminal overlay. Hiding it (from
 /// `AppMode::ScratchTerminal`) just flips the flag and drops back to Normal —
 /// the shell keeps running. Showing it needs the async spawn on first use,
@@ -797,6 +853,65 @@ mod tests {
         focus_up(&mut app);
 
         assert_eq!(app.active_pane, ActivePane::WorkspaceList);
+    }
+
+    // ── Add context to the chat ──
+
+    #[test]
+    fn chat_context_without_a_selection_says_what_to_do() {
+        let mut app = test_app();
+        crate::test_support::add_test_workspace(&mut app);
+        crate::test_support::add_terminal_tab(&mut app, 0);
+
+        let action = add_chat_context(&mut app);
+
+        assert!(action.is_none());
+        assert!(app.chat_panel.input.is_empty());
+        assert_eq!(
+            app.status_message.as_deref(),
+            Some("Select text in the terminal first (drag with the mouse)")
+        );
+    }
+
+    #[test]
+    fn chat_context_injects_the_selection_and_opens_the_panel() {
+        let mut app = test_app();
+        crate::test_support::add_test_workspace(&mut app);
+        crate::test_support::add_terminal_tab(&mut app, 0);
+        {
+            let parser = app.workspaces[0].tabs[0].pty_parser.clone().unwrap();
+            parser.lock().process(b"hello world\r\n");
+        }
+        let owner = app.selection_owner_key().expect("a tab to own it");
+        let mut sel = crate::app::Selection::new(0, 0, owner);
+        sel.end_col = 10;
+        sel.active = false;
+        app.selection = Some(sel);
+
+        add_chat_context(&mut app);
+
+        assert!(
+            app.chat_panel.input.contains("hello world"),
+            "composer: {:?}",
+            app.chat_panel.input
+        );
+        assert!(app.chat_panel.input.starts_with("Terminal selection (tab "));
+        assert_eq!(app.mode, AppMode::ChatPanel);
+        assert_eq!(
+            app.chat_panel.input_cursor,
+            app.chat_panel.input.chars().count()
+        );
+    }
+
+    /// A second block lands under the first, not glued to it.
+    #[test]
+    fn chat_context_appends_below_what_is_already_there() {
+        let mut app = test_app();
+        app.chat_panel.input = "look:".to_string();
+
+        push_chat_context(&mut app, "File: a.rs\n```rs\nx\n```\n".to_string(), "ok");
+
+        assert_eq!(app.chat_panel.input, "look:\n\nFile: a.rs\n```rs\nx\n```\n");
     }
 
     // ── Clear the terminal ──

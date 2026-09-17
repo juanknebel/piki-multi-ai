@@ -363,6 +363,7 @@ const APP_ACTIONS: &[&str] = &[
     "restart_tab",
     "move_tab",
     "clear_terminal",
+    "add_chat_context",
 ];
 
 /// Execute an `[keybindings.app]` action by name.
@@ -432,6 +433,7 @@ fn dispatch_app_action(app: &mut App, action: &str) -> Option<Action> {
         "restart_tab" => app_actions::request_restart_tab(app),
         "move_tab" => app_actions::open_move_tab(app),
         "clear_terminal" => app_actions::clear_terminal(app),
+        "add_chat_context" => app_actions::add_chat_context(app),
         _ => None,
     }
 }

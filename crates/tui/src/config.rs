@@ -329,6 +329,11 @@ fn default_app() -> HashMap<String, BindingValue> {
         "clear_terminal".to_string(),
         BindingValue::one("prefix-ctrl-k"),
     );
+    // `ctrl-y` for "add to chat" — the chat panel itself is `prefix-y`.
+    m.insert(
+        "add_chat_context".to_string(),
+        BindingValue::one("prefix-ctrl-y"),
+    );
 
     // Layout
     m.insert(
@@ -447,6 +452,7 @@ fn default_fuzzy() -> HashMap<String, String> {
     m.insert("inline_edit".to_string(), "ctrl-v".to_string());
     m.insert("markdown".to_string(), "ctrl-o".to_string());
     m.insert("mdr".to_string(), "alt-m".to_string());
+    m.insert("chat".to_string(), "ctrl-y".to_string());
     m.insert("exit".to_string(), "esc".to_string());
     m
 }

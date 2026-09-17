@@ -46,6 +46,36 @@ pub(super) fn handle_fuzzy_search_input(app: &mut App, key: KeyEvent) -> Option<
         return Some(Action::OpenMdr(path));
     }
 
+    // Send the file to the chat composer as a fenced block. Reading it here
+    // is fine: it is one file the user just picked, capped at
+    // `CONTEXT_MAX_LINES` on the way into the block.
+    if cfg.matches_fuzzy(key, "chat") {
+        let path = selected_full_path(app)?;
+        let rel = app
+            .current_workspace()
+            .and_then(|ws| path.strip_prefix(&ws.path).ok())
+            .unwrap_or(path.as_path())
+            .to_string_lossy()
+            .to_string();
+        let contents = match std::fs::read_to_string(&path) {
+            Ok(text) => text,
+            Err(e) => {
+                app.set_toast(
+                    format!("Could not read file: {e}"),
+                    crate::app::ToastLevel::Error,
+                );
+                return None;
+            }
+        };
+        let block = crate::chat_context::fence_block(
+            &crate::chat_context::ContextKind::File,
+            &rel,
+            &contents,
+        );
+        app.fuzzy = None;
+        return super::app_actions::push_chat_context(app, block, "File added to chat");
+    }
+
     // Open in $EDITOR.
     if cfg.matches_fuzzy(key, "editor") {
         return selected_full_path(app).map(Action::OpenEditor);
