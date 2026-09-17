@@ -348,14 +348,18 @@ pub(super) async fn handle(
         }
         Action::ScanRepoAgents => {
             if let Some(ws) = app.current_workspace() {
-                let source_repo = ws.source_repo.clone();
+                // The checkout the user is in, not its `source_repo`: a
+                // worktree is its own working tree, and an agent file written
+                // (or not yet committed) there is absent from the parent's.
+                // The profiles it is compared against stay keyed by the repo.
+                let ws_path = ws.path.clone();
 
                 // Directory list, provider attribution and the
                 // already-imported check all live in core so the desktop
                 // applies the identical rules (see core::agent_scan).
                 let discovered: Vec<(String, String, String, bool)> =
                     piki_core::agent_scan::scan_repo_agents(
-                        &source_repo,
+                        &ws_path,
                         &app.provider_manager,
                         &app.agent_profiles,
                     )
@@ -434,12 +438,16 @@ fn materialize_agent_config(
     provider_manager: Option<&piki_core::providers::ProviderManager>,
 ) -> anyhow::Result<()> {
     let filename = format!("{}.md", agent_name);
+    // `agent_dir_for` falls back to the CLI's conventional directory when the
+    // provider has none configured — Codex, Muse and Antigravity all ship
+    // that way, and used to write nothing at all here while still reporting
+    // a successful sync.
     let dir = if let AIProvider::Custom(name) = provider
         && let Some(mgr) = provider_manager
         && let Some(config) = mgr.get(name)
-        && let Some(agent_dir) = &config.agent_dir
+        && let Some(agent_dir) = piki_core::agent_scan::agent_dir_for(config)
     {
-        agent_dir.clone()
+        agent_dir
     } else {
         return Ok(());
     };

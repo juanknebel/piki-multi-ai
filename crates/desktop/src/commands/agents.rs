@@ -131,7 +131,11 @@ pub async fn sync_agent_to_repo(
     workspace_idx: usize,
     agent_id: i64,
 ) -> Result<(), String> {
-    let (storage, source_repo) = {
+    // Profiles are keyed by `source_repo` (they belong to the repo, shared by
+    // its worktrees); the FILE goes into the checkout the user is standing in
+    // — a worktree is its own working tree, and writing into the parent's
+    // would put the agent somewhere the user isn't.
+    let (storage, source_repo, ws_path) = {
         let app = state.lock();
         if workspace_idx >= app.workspaces.len() {
             return Err("Workspace index out of range".to_string());
@@ -139,6 +143,7 @@ pub async fn sync_agent_to_repo(
         (
             std::sync::Arc::clone(&app.storage),
             app.workspaces[workspace_idx].info.source_repo.clone(),
+            app.workspaces[workspace_idx].info.path.clone(),
         )
     };
 
@@ -157,11 +162,11 @@ pub async fn sync_agent_to_repo(
         let app = state.lock();
         app.provider_manager
             .get(&agent.provider)
-            .and_then(|c| c.agent_dir.clone())
+            .and_then(piki_core::agent_scan::agent_dir_for)
             .ok_or_else(|| format!("Provider '{}' has no agent_dir configured", agent.provider))?
     };
 
-    let agent_dir = source_repo.join(dir);
+    let agent_dir = ws_path.join(dir);
     std::fs::create_dir_all(&agent_dir).map_err(|e| format!("Failed to create directory: {e}"))?;
     std::fs::write(agent_dir.join(format!("{}.md", agent.name)), &agent.role)
         .map_err(|e| format!("Failed to write agent file: {e}"))?;
@@ -176,7 +181,9 @@ pub async fn scan_repo_agents(
     state: State<'_, Mutex<DesktopApp>>,
     workspace_idx: usize,
 ) -> Result<Vec<ScannedAgent>, String> {
-    let (storage, source_repo) = {
+    // Same split as the sync above: profiles by `source_repo`, files from the
+    // checkout the user is in.
+    let (storage, source_repo, ws_path) = {
         let app = state.lock();
         if workspace_idx >= app.workspaces.len() {
             return Err("Workspace index out of range".to_string());
@@ -184,6 +191,7 @@ pub async fn scan_repo_agents(
         (
             std::sync::Arc::clone(&app.storage),
             app.workspaces[workspace_idx].info.source_repo.clone(),
+            app.workspaces[workspace_idx].info.path.clone(),
         )
     };
 
@@ -202,7 +210,7 @@ pub async fn scan_repo_agents(
     // skipped.
     let discovered: Vec<ScannedAgent> = {
         let app = state.lock();
-        piki_core::agent_scan::scan_repo_agents(&source_repo, &app.provider_manager, &existing)
+        piki_core::agent_scan::scan_repo_agents(&ws_path, &app.provider_manager, &existing)
             .into_iter()
             .map(|a| ScannedAgent {
                 name: a.name,
