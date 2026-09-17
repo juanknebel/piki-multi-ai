@@ -247,6 +247,15 @@ async function init() {
     appState.setActiveTab(next);
   }) as EventListener);
 
+  // Ctrl+Shift+1…9 from the shortcut system: jump to the Nth top-level tab
+  // of the active workspace (tabs, not panes — a tab may hold several).
+  document.addEventListener("switch-ws-tab", ((e: CustomEvent) => {
+    const idx: number = e.detail.index;
+    const ws = appState.activeWs;
+    if (!ws || idx >= ws.wsTabs.length) return;
+    appState.setActiveWsTab(idx);
+  }) as EventListener);
+
   // Alt+1…9 from the shortcut system: jump straight to workspace N.
   document.addEventListener("switch-workspace", ((e: CustomEvent) => {
     const idx: number = e.detail.index;

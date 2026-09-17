@@ -6,6 +6,7 @@ import {
   isTerminalSafeCombo,
   keyMatches,
   parseCombo,
+  tabIndexFromCode,
 } from "./shortcuts";
 
 describe("zoom shortcuts", () => {
@@ -34,6 +35,22 @@ describe("zoom shortcuts", () => {
     expect(keyMatches("p", "KeyP", "P")).toBe(true);
     expect(keyMatches("+", "Equal", "-")).toBe(false);
     expect(keyMatches("x", "KeyX", "=")).toBe(false);
+  });
+});
+
+describe("tabIndexFromCode", () => {
+  it("reads the tab number off the physical key, whatever Shift produced", () => {
+    // Ctrl+Shift+1 on a US layout arrives as e.key "!" — only the code is usable.
+    expect(tabIndexFromCode("Digit1")).toBe(0);
+    expect(tabIndexFromCode("Digit9")).toBe(8);
+    expect(tabIndexFromCode("Numpad3")).toBe(2);
+  });
+
+  it("ignores everything that is not a 1–9 digit key", () => {
+    expect(tabIndexFromCode("Digit0")).toBeNull();
+    expect(tabIndexFromCode("KeyA")).toBeNull();
+    expect(tabIndexFromCode("Minus")).toBeNull();
+    expect(tabIndexFromCode("")).toBeNull();
   });
 });
 

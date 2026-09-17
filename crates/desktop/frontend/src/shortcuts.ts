@@ -166,6 +166,7 @@ const fixedShortcuts: FixedShortcut[] = [
   { category: "Search", key: "Ctrl+H", label: "Request History (in API Explorer)" },
   { category: "Search", key: "Alt+Enter", label: "Open in read-only viewer (in file search; Enter opens an editor tab)" },
   { category: "Git", key: "Ctrl+Enter", label: "Commit (in commit message box)" },
+  { category: "Panes & Tabs", key: "Ctrl+Shift+1…9", label: "Switch to Tab N" },
   { category: "Panes & Tabs", key: "Ctrl+Tab", label: "Next Tab" },
   { category: "Panes & Tabs", key: "Ctrl+Shift+Tab", label: "Previous Tab" },
   { category: "Panes & Tabs", key: "Drag divider", label: "Resize split" },
@@ -196,6 +197,7 @@ const RESERVED_COMBOS: { key: string; label: string }[] = [
   { key: "Ctrl+Tab", label: "Next Tab" },
   { key: "Ctrl+Shift+Tab", label: "Previous Tab" },
   ...Array.from({ length: 9 }, (_, i) => ({ key: `Alt+${i + 1}`, label: `Switch to Workspace ${i + 1}` })),
+  ...Array.from({ length: 9 }, (_, i) => ({ key: `Ctrl+Shift+${i + 1}`, label: `Switch to Tab ${i + 1}` })),
 ];
 
 export interface HelpItem {
@@ -371,6 +373,15 @@ export function keyMatches(eventKey: string, eventCode: string, key: string): bo
   return KEY_CODES[key]?.includes(eventCode) ?? false;
 }
 
+/** 0-based tab index for a `Ctrl+Shift+N` chord, from the event's PHYSICAL
+ *  key (`Digit1`…`Digit9` / `Numpad1`…`Numpad9`). Shift rewrites the produced
+ *  character — "1" becomes "!" on a US layout and something else again
+ *  elsewhere — so `e.key` cannot be used here. `null` for anything else. */
+export function tabIndexFromCode(code: string): number | null {
+  const m = /^(?:Digit|Numpad)([1-9])$/.exec(code);
+  return m ? Number(m[1]) - 1 : null;
+}
+
 function matchesEvent(e: KeyboardEvent, combo: string): boolean {
   const c = parseCombo(combo);
   // Printable non-alphanumeric keys (?, {, }, …) may need Shift to produce
@@ -456,6 +467,18 @@ export function handleGlobalKeydown(e: KeyboardEvent) {
     e.stopPropagation();
     const event = new CustomEvent("switch-tab", { detail: { direction: e.shiftKey ? -1 : 1 } });
     document.dispatchEvent(event);
+    return;
+  }
+
+  // Ctrl+Shift+1…9 (Cmd+Shift+1…9 on macOS): jump to the workspace's Nth
+  // top-level tab (not customizable). Matched on the PHYSICAL key: Shift
+  // turns "1" into "!" (and something else again on other layouts), so
+  // `e.key` is useless here — same reason `KEY_CODES` exists for = - 0.
+  const tabIndex = modCtrl(e) && e.shiftKey ? tabIndexFromCode(e.code) : null;
+  if (tabIndex !== null) {
+    e.preventDefault();
+    e.stopPropagation();
+    document.dispatchEvent(new CustomEvent("switch-ws-tab", { detail: { index: tabIndex } }));
     return;
   }
 

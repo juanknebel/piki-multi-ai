@@ -559,6 +559,7 @@ The terminal owns every key it can use. An app shortcut fires while a terminal, 
 | `Alt+Shift+R` | Split Pane Right |
 | `Alt+Shift+D` | Split Pane Down |
 | `Ctrl+Shift+Q` | Close Active Pane |
+| `Ctrl+Shift+1…9` | Switch to Tab N — the workspace's Nth top-level tab (the TUI's `prefix 1..9`); matched on the physical digit, so the layout's shifted character doesn't matter |
 | `Ctrl+Tab` | Next Tab |
 | `Ctrl+Shift+Tab` | Previous Tab |
 | `Drag divider` | Resize split |
