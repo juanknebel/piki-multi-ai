@@ -180,9 +180,17 @@ just lint-desktop                           # frontend test + build, then clippy
   rows through `attachPathPicker`, `attachDialogResize(dialog, "project")` — the member picker is `flex: 1 1
   auto` so a resized dialog gives it the extra room, not the other fields); sheets `projects.css` +
   `dialog-projects.css`.
+- **Branch labels repaint on their own event.** `updateFiles` emits `workspace-branch-changed` for ANY
+  workspace whose branch actually moved (`files-changed` is emitted for the ACTIVE workspace only, and
+  the git watcher polls them all). The workspace list and the Projects panel listen to it; anything new
+  that renders a branch must too, or it shows a stale one until some other event happens to re-render it.
 - `workspace-switcher.ts` ranks with the pure `mru.ts` (`mruBump` / `mruRank` / `rankItems`) over the
   `workspaceMru` settings list that `appState.setActiveWorkspace` bumps (the single choke point for
   switches); rows show `statusGlyph` (agent rollup or dirty git).
+- `components/workspace-actions.ts` is the ONE switch path (`switchToWorkspace`) plus the two navigation
+  actions built on it (`cycleWorkspace` in sidebar order, `toggleLastWorkspace` off the MRU list);
+  ordering logic is the pure `workspace-nav.ts`. The sidebar row, the switcher, the palette and
+  `Alt+1…9` all go through it — never call `ipc.switchWorkspace` from a component again.
 - `labels.ts branchLabel()` / `truncateMiddle()` is the one branch-label rule (28 chars, middle ellipsis,
   full text in `title`) — use it wherever a branch renders.
 - Chevrons: `icon("chevron-right", { class: "group-chevron" })`, rotated 90° by the `.group-chevron` /
@@ -258,9 +266,12 @@ just lint-desktop                           # frontend test + build, then clippy
   (`Alt+…`, `Ctrl+Shift+…`, `Ctrl+Alt+…`) — `tsc` fails on `{ defaultKey: "Ctrl+B", terminalCapture: true }`.
   At runtime `isTerminalSafeCombo(def.key)` re-applies the rule to user rebinds (`isDemotedShortcut`).
 - `fixedShortcuts` rows must be keys that really fire somewhere (copy/paste are platform-aware there);
-  `RESERVED_COMBOS` blocks rebinding onto them. `Alt+1…9` and `Ctrl+Tab` are dispatched from
-  `handleGlobalKeydown` via `switch-workspace` / `switch-tab` DOM events handled in `main.ts`.
-- `KEY_CODES` matches `=` / `-` / `0` on the physical key because Shift changes their character.
+  `RESERVED_COMBOS` blocks rebinding onto them. `Alt+1…9`, `Ctrl+Shift+1…9` and `Ctrl+Tab` are
+  dispatched from `handleGlobalKeydown` via `switch-workspace` / `switch-ws-tab` / `switch-tab` DOM
+  events handled in `main.ts` (`switch-ws-tab` addresses TOP-LEVEL tabs, not panes).
+- `KEY_CODES` matches `=` / `-` / `0` on the physical key because Shift changes their character. Same
+  reason `tabIndexFromCode` reads `Ctrl+Shift+1…9` off `e.code`: Shift turns "1" into "!" (and into
+  something else again on other layouts), so `e.key` is unusable for a digit chord.
 - **Adding a shortcut**: a def in `shortcuts.ts` (pick the `category`; `terminalCapture` only with a
   terminal-safe default), `bindAction(id, …)` in `main.ts`, a menu-bar entry and a palette command, then
   the row in the `docs/technical.md` desktop shortcut table (`docs-parity.test.ts` fails otherwise:
@@ -445,6 +456,13 @@ just lint-desktop                           # frontend test + build, then clippy
 
 ## Stylesheets
 
+- **Third-party sheets are outside the colour guard.** `css-invariants.test.ts` only reads `src/styles/`,
+  so a literal shipped by a dependency passes unnoticed — and `xterm.css`, imported after
+  `index.css` in `main.ts`, wins on equal specificity. It paints `.xterm .xterm-viewport` and
+  `.composition-view` literal black; both are re-pointed at theme tokens from
+  `.terminal-container .xterm …` in `terminal.css` (a light theme framed the terminal in black
+  otherwise). When a vendor sheet paints a colour, override it from a more specific selector with a
+  token — never by editing `node_modules`.
 - `styles/index.css` is the single import (from `main.ts`) and its `@import` order is the cascade — add a
   new sheet there, never as a `<link>` in `index.html`. Foundation order: `fonts` → `variables.css` →
   `reset.css` → `primitives.css` → `motion.css`, then the shell and feature sheets (one per panel).

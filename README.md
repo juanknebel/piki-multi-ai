@@ -47,7 +47,7 @@ Built with Rust and [ratatui](https://ratatui.rs/).
 
 - **Parallel workspaces** — run multiple AI coding sessions simultaneously: isolated git worktrees, existing directories (Simple), or multi-service roots (Project)
 - **Worktree families** — workspaces from the same repo nest automatically under a collapsible parent row, derived from the git worktree structure
-- **Dynamic tabs** — workspaces start empty; open Shell, AI-agent, or Tool tabs on demand from a categorized menu; singletons focus instead of duplicating; any tab can be renamed
+- **Dynamic tabs** — workspaces start empty; open Shell, AI-agent, or Tool tabs on demand from a categorized menu; singletons focus instead of duplicating; any tab can be renamed, moved to another workspace with its process still running, and restarted in place once its process exits (same slot, same title)
 - **Workspace dashboard & switcher** — bird's-eye overview of the workspaces with open tabs (empty ones hidden), grouped by worktree family with the parent first, with status and git info; also lists **external agents** (`claude`, `codex`, `muse`, `agy`/`antigravity`, `gemini` processes started outside piki, found via `/proc`); fuzzy tree switcher and Alt-Tab-style previous-workspace toggle
 - **Command palette** — VS Code-style fuzzy palette over every command, with recently-used ranking and live keybinding hints
 - **SQLite persistence** — workspaces, UI preferences, and API history restore automatically on startup; the last focused workspace is remembered
@@ -57,7 +57,7 @@ Built with Rust and [ratatui](https://ratatui.rs/).
 - **Persistent sessions** — every terminal tab runs inside a lightweight background daemon ("tmux without the UI", designed after [shpool](https://github.com/shell-pool/shpool)): tabs survive quitting or crashing the app and re-attach on the next launch with screen and scrollback restored; shared between TUI and desktop; zero setup, no external dependency; managed in-app (TUI sessions overlay `Ctrl+G Ctrl+S`, desktop Sessions dialog `Alt+Shift+S`) or the `sessions` CLI; closing a running tab in the desktop offers *Keep running* to hand it back to the daemon, the status bar shows `sessions N` (click to manage), and orphan sessions can be adopted as tabs from either frontend
 - **Live terminal rendering** — full ANSI terminal emulation via `vt100` + `tui-term`, with real-time output from every agent
 - **tmux-style prefix keybindings** — keys always go to the focused pane; app actions live behind a one-shot `Ctrl+G` prefix; fully rebindable
-- **Terminal search & scrollback** — search output, scroll mode, mouse-wheel scrollback that also captures inline-TUI transcripts
+- **Terminal search & scrollback** — clear the terminal (screen and scrollback) without touching the process, search output, scroll mode, mouse-wheel scrollback that also captures inline-TUI transcripts
 - **Clipboard & mouse** — drag-to-select with auto-copy, paste, click-to-focus, drag-to-resize, contextual scrolling everywhere (Wayland, X11, macOS, Windows)
 - **Shell integration** — zsh/bash/fish tabs report cwd and per-command exit codes (OSC 133/7), feeding tab badges and notifications; user dotfiles are preserved
 
@@ -65,17 +65,17 @@ Built with Rust and [ratatui](https://ratatui.rs/).
 
 - **Multi-provider tabs** — Claude Code, Gemini, OpenCode, Kilo, Codex out of the box; add your own binaries via `providers.toml`
 - **Structured agent lifecycle** — Claude Code and Antigravity tabs report precise running / needs-permission / idle / done states through hook-driven in-band events (no PTY-silence guessing), with graceful fallback to an idle heuristic
-- **Agents pane** — one pane listing every running agent across all workspaces with live status and elapsed run time (`3m 12s`); jump straight to any of them. In the desktop, an agent that needs you is amber in the tab bar, status bar, Agents panel, workspace list and activity bar at once, and `Alt+A` lands on it from any workspace (permission requests first, then unseen news — press again to walk through them). Agents started outside piki (plain terminals, other apps) are surfaced too: in the TUI dashboard and, in the desktop, in an `External (n)` section of the Agents panel with a one-click terminal at their cwd
+- **Agents pane** — one pane listing every running agent across all workspaces with live status and elapsed run time (`3m 12s`); jump straight to any of them. An agent that needs you is amber wherever it shows (in the desktop: tab bar, status bar, Agents panel, workspace list and activity bar at once), and one key lands on it from any workspace — `Alt+A` in the desktop, `Ctrl+G Ctrl+A` in the TUI — permission requests first, then unseen news, pressing again walks through the rest. Agents started outside piki (plain terminals, other apps) are surfaced too: in the TUI dashboard and, in the desktop, in an `External (n)` section of the Agents panel with a one-click terminal at their cwd
 - **Agent profiles & dispatch** — define named agents per project, sync them to provider-native subagent files, and dispatch them from a kanban card into an auto-created worktree with a composed prompt
 - **OS notifications** — agent-finished / needs-attention / command-finished toasts (or OSC 9 for tmux/ssh), with optional chimes and smart suppression when you're already looking at the tab; one `[notifications]` config serves the TUI and the desktop
-- **AI Chat** — global chat panel backed by local LLMs (Ollama or llama.cpp) or remote via **OpenRouter** (key only in `config.toml` `[chat] openrouter_api_key` or `OPENROUTER_API_KEY` env — never prompted in chat; optional web search plugin), with an agentic tool-use mode that can inspect the active workspace; `Ctrl+Shift+I` (or the composer's `+`) drops what you are looking at — terminal selection, active file, its diff, editor selection — into the composer as a fenced block, and in agent mode every tool call is a collapsible card with inline Approve / Deny for write tools
+- **AI Chat** — global chat panel backed by local LLMs (Ollama or llama.cpp) or remote via **OpenRouter** (key only in `config.toml` `[chat] openrouter_api_key` or `OPENROUTER_API_KEY` env — never prompted in chat; optional web search plugin), with an agentic tool-use mode that can inspect the active workspace; one key drops what you are looking at into the composer as a fenced block — `Ctrl+Shift+I` (or the composer's `+`) in the desktop, for a terminal selection, the active file, its diff or the editor selection; `Ctrl+G Ctrl+Y` in the TUI for a terminal selection, plus `Ctrl+Y` on any hit in the fuzzy file search to send that file, and in agent mode every tool call is a collapsible card with inline Approve / Deny for write tools
 
 ### Built-in tools
 
 - **Git via lazygit** — all git handling delegated to an embedded [lazygit](https://github.com/jesseduffield/lazygit) tab per workspace
 - **Code Review** — pick any GitHub PR relevant to you, get an ephemeral checkout, review side-by-side diffs with inline comment threads, and submit via `gh`
 - **Kanban board** — integrated task board powered by [flow](https://github.com/juanknebel/flow), with agent dispatch from cards
-- **API Explorer** — HTTP client tab with Hurl-like syntax, pretty-printed responses, and searchable per-project history
+- **API Explorer** — HTTP client tab with Hurl-like syntax, pretty-printed responses, a jq filter over the response body (`Alt+J` in the desktop, `Ctrl+Q` in the TUI) and searchable per-project history
 - **File tools** — fuzzy file search ([nucleo](https://github.com/helix-editor/nucleo)), project-wide content search (ripgrep), inline editor with syntax highlighting, `$EDITOR` integration, markdown viewer
 - **Observability** — in-app log viewer, structured file logging, live system status header
 
@@ -91,7 +91,7 @@ Highlights on top of the shared feature set:
 - **Panes with anything in them** — a tab is a tree of split panes (`Ctrl+\` / `Ctrl+Shift+\`); every pane holds one thing — a shell, an agent, a code or markdown editor, the web preview, the kanban board or the API explorer — picked from the blank pane, with *Move here* for the one-per-workspace tools; the layout, editors and previews included, is restored per workspace on the next launch
 - **Tabs and sidebar** — middle-click closes a tab (a running process still gets its Close / Keep running / Cancel prompt), `+` and a `⋯` all-tabs list never scroll away, right-click menus on tabs (rename, split, move to another workspace with the process alive, close) and on workspace rows (open, agents, info, edit, create worktree, merge, delete), inline rename on double-click; deleting a workspace says what it removes, counts uncommitted changes and lists the agents it will stop
 - **Projects** — cross-cutting groups with a colour (10-swatch palette): one project can hold worktrees of different repos, clones and plain directories; a directory member is adopted as a workspace on first open. Desktop: Projects view in the activity bar; TUI: a PROJECTS tab in the sidebar (`Tab` flips Workspaces ⇄ Projects, the choice persists) plus the `Ctrl+G Ctrl+P` overlay; created in one frontend, visible in the other (shared database)
-- **Workspace switcher** (`Alt+W`) ranked by most-recently-used and matched fuzzily (`wsauth` finds `ws-auth`), with an agent / dirty-git glyph per row; `Alt+1…9` jumps directly
+- **Workspace switcher** (`Alt+W`) ranked by most-recently-used and matched fuzzily (`wsauth` finds `ws-auth`), with an agent / dirty-git glyph per row; `Alt+1…9` jumps directly, `Alt+]` / `Alt+[` step through them in sidebar order (a collapsed worktree family is skipped whole) and ``Alt+` `` toggles back to the last one; `Ctrl+Shift+1…9` jumps to the Nth tab of the workspace
 - **Agent signals** — an agent that needs you is amber in the tab bar, status bar, Agents panel, workspace list and activity bar at once; `Alt+A` lands on it from any workspace (permission requests first, then unseen news); elapsed run time per agent
 - **Modern terminal** — xterm.js with WebGL; `Ctrl+click` opens links in the browser, Unicode 11 widths keep emoji and box-drawing aligned, the tab flashes on a bell and takes the shell's title (a rename always wins); copy on select (one clipboard write per selection, switchable), middle-click paste, a right-click menu, a search bar with `n/m` counter, regex and match-case; `Ctrl+Shift+E` sends the next key straight to the terminal past every app shortcut
 - **Editors** — CodeMirror 6 code tabs with LSP support (diagnostics, completion, hover, go-to-definition), WYSIWYG markdown tabs, a read-only viewer with quick-edit; `Alt+F` finds a file (opens instantly, the index honours `.gitignore`) and `Enter` lands straight in an editor tab
@@ -214,7 +214,7 @@ needs_you = "#ebcb8b"
 
 See `themes/piki-dark.toml` in the repo for all available color keys (including the `[status]` agent-state and `[diff]` code-review groups). Colors can be named (`"Red"`, `"DarkGray"`), `"Reset"` (terminal default), or hex (`"#rrggbb"`).
 
-Included themes (copied to the config dir by `install.sh`, never overwriting):
+Included themes. `scripts/install.sh` (source build) copies the ones you don't have yet and never overwrites; the installer inside the release tarball asks up front whether to overwrite the themes already installed:
 
 | Theme | Description |
 |-------|-------------|
@@ -230,7 +230,7 @@ Included themes (copied to the config dir by `install.sh`, never overwriting):
 
 ### Themes (desktop)
 
-The desktop app ships 5 built-in presets and also scans `~/.config/piki-multi/desktop-themes/` for `*.json` files at startup. Any valid file appears in the preset dropdown next to the built-ins, no recompilation needed:
+The desktop app ships 5 built-in presets and also scans `~/.config/piki-multi/desktop-themes/` for `*.json` files at startup. Any valid file appears in the preset dropdown next to the built-ins, no recompilation needed. The repo's `themes/*.desktop.json` (Breeze, Breeze Light, Catppuccin Mocha, Gruvbox Dark, One Dark, Rosé Pine, VS Code Dark) are installed there by `scripts/install-desktop.sh` and by the release tarball's installer:
 
 ```json
 {
