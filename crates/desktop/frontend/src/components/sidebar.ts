@@ -73,7 +73,7 @@ export async function initSidebar() {
   renderAgentsPanel(agentsView);
 
   // Track last sidebar view so we can restore when a non-sidebar action triggers
-  let lastSidebarView: "workspaces" | "projects" | "files" | "git" = "workspaces";
+  let lastSidebarView: "workspaces" | "projects" | "files" | "git" = "projects";
 
   function updateView() {
     const view = appState.activeView;

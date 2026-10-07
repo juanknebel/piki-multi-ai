@@ -1295,11 +1295,11 @@ mod tests {
     #[test]
     fn tab_toggles_sidebar_view_both_ways() {
         let mut app = test_app();
-        assert_eq!(app.sidebar_view, crate::app::SidebarView::Workspaces);
-        handle_workspace_list_interaction(&mut app, key(KeyCode::Tab));
         assert_eq!(app.sidebar_view, crate::app::SidebarView::Projects);
         handle_workspace_list_interaction(&mut app, key(KeyCode::Tab));
         assert_eq!(app.sidebar_view, crate::app::SidebarView::Workspaces);
+        handle_workspace_list_interaction(&mut app, key(KeyCode::Tab));
+        assert_eq!(app.sidebar_view, crate::app::SidebarView::Projects);
     }
 
     /// Enter on a project row expands it; on a member row it jumps to the

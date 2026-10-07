@@ -160,8 +160,8 @@ pub enum ActivePane {
 /// `sidebar_view` ui-pref so the pane always opens on the view you prefer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SidebarView {
-    #[default]
     Workspaces,
+    #[default]
     Projects,
 }
 
@@ -175,8 +175,8 @@ impl SidebarView {
 
     pub fn from_str(s: &str) -> Self {
         match s {
-            "projects" => SidebarView::Projects,
-            _ => SidebarView::Workspaces,
+            "workspaces" => SidebarView::Workspaces,
+            _ => SidebarView::Projects,
         }
     }
 }
@@ -3199,6 +3199,7 @@ mod tests {
         );
         add_test_workspace(&mut app); // index 0 → sidebar row 0
         add_test_workspace(&mut app); // index 1 → sidebar row 1
+        app.sidebar_view = SidebarView::Workspaces;
         app.active_pane = ActivePane::WorkspaceList;
         app.selected_sidebar_row = 0;
 
@@ -3236,6 +3237,7 @@ mod tests {
         let shared_repo = app.workspaces[parent].info.source_repo.clone();
         app.workspaces[child].info.source_repo = shared_repo;
         app.workspaces[child].info.workspace_type = piki_core::WorkspaceType::Worktree;
+        app.sidebar_view = SidebarView::Workspaces;
         app.active_pane = ActivePane::WorkspaceList;
         let fam_key = family_key(&app.workspaces[parent].info);
         // sidebar_items: [Workspace{parent, collapsed:Some(false)}, Workspace{child}]

@@ -971,6 +971,7 @@ mod tests {
         for _ in 0..5 {
             add_test_workspace(&mut app);
         }
+        app.sidebar_view = crate::app::SidebarView::Workspaces;
         app.mode = AppMode::Normal;
         app.ws_list_area = Rect::new(0, 0, 30, 5);
 
@@ -1063,6 +1064,7 @@ mod tests {
         let mut app = test_app();
         add_test_workspace(&mut app);
         add_test_workspace(&mut app);
+        app.sidebar_view = crate::app::SidebarView::Workspaces;
         app.mode = AppMode::Normal;
         app.active_pane = ActivePane::MainPanel;
         app.ws_list_area = Rect::new(0, 0, 30, 10);

@@ -86,7 +86,7 @@ pub(crate) fn agent_tab_indicator(
 
 #[cfg(test)]
 mod tests {
-    use crate::app::App;
+    use crate::app::{App, SidebarView};
     use crate::dialog_state::{DialogState, NewTabMenu};
     use crate::test_support::{buffer_to_snapshot, test_storage, test_terminal};
     use crate::theme::Theme;
@@ -401,6 +401,7 @@ mod tests {
             test_storage(),
             &piki_core::paths::DataPaths::default_paths(),
         );
+        app.sidebar_view = SidebarView::Workspaces;
 
         let mut a = test_workspace("nightly", 0);
         a.changed_files.push(piki_core::ChangedFile {
@@ -438,6 +439,7 @@ mod tests {
             test_storage(),
             &piki_core::paths::DataPaths::default_paths(),
         );
+        app.sidebar_view = SidebarView::Workspaces;
 
         let mut ws = crate::app::Workspace::from_info(piki_core::WorkspaceInfo {
             workspace_type: piki_core::WorkspaceType::Simple,
@@ -472,6 +474,7 @@ mod tests {
             test_storage(),
             &piki_core::paths::DataPaths::default_paths(),
         );
+        app.sidebar_view = SidebarView::Workspaces;
 
         let mut review_a = crate::app::Workspace::from_info(piki_core::WorkspaceInfo {
             name: "owner/repo#1".to_string(),
@@ -513,6 +516,7 @@ mod tests {
             test_storage(),
             &piki_core::paths::DataPaths::default_paths(),
         );
+        app.sidebar_view = SidebarView::Workspaces;
 
         app.workspaces
             .push(crate::app::Workspace::from_info(piki_core::WorkspaceInfo {
@@ -546,6 +550,7 @@ mod tests {
             test_storage(),
             &piki_core::paths::DataPaths::default_paths(),
         );
+        app.sidebar_view = SidebarView::Workspaces;
 
         app.workspaces
             .push(crate::app::Workspace::from_info(piki_core::WorkspaceInfo {
@@ -577,6 +582,7 @@ mod tests {
             test_storage(),
             &piki_core::paths::DataPaths::default_paths(),
         );
+        app.sidebar_view = SidebarView::Workspaces;
 
         let repo_a = std::path::PathBuf::from("/tmp/src-agent-multi");
         let repo_b = std::path::PathBuf::from("/tmp/src-void-setup");
@@ -637,6 +643,7 @@ mod tests {
             test_storage(),
             &piki_core::paths::DataPaths::default_paths(),
         );
+        app.sidebar_view = SidebarView::Workspaces;
 
         let repo = std::path::PathBuf::from("/tmp/src-agent-multi");
 
@@ -1155,6 +1162,7 @@ mod tests {
             test_storage(),
             &piki_core::paths::DataPaths::default_paths(),
         );
+        app.sidebar_view = SidebarView::Workspaces;
         // Force Linux so the snapshot is stable across CI runners.
         app.config.platform = crate::config::Platform::Linux;
         terminal

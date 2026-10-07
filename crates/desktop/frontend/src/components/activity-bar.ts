@@ -3,14 +3,14 @@ import { attentionRows } from "../agent-attention";
 import { getShortcutKey } from "../shortcuts";
 import { icon, type IconName } from "./icons";
 
-// Sidebar views first — Workspaces, then Projects (the container that
-// groups workspaces across repos) — then the workspace-scoped Files and
-// Source Control, then the global tools. Workspaces / Projects / Files /
-// git are switchable sidebar views; Agents opens the profile-manager
-// dialog; Kanban / API / Web Preview open workspace tabs.
+// Sidebar views first — Projects (the primary, cross-cutting view), then
+// Workspaces (secondary) — then the workspace-scoped Files and Source
+// Control, then the global tools. Workspaces / Projects / Files / git are
+// switchable sidebar views; Agents opens the profile-manager dialog;
+// Kanban / API / Web Preview open workspace tabs.
 const ACTIVITIES: { id: SidebarView; label: string; icon: IconName }[] = [
-  { id: "workspaces", label: "Workspaces", icon: "workspaces" },
   { id: "projects", label: "Projects", icon: "projects" },
+  { id: "workspaces", label: "Workspaces", icon: "workspaces" },
   { id: "files", label: "Files", icon: "folder" },
   { id: "git", label: "Source Control", icon: "branch" },
   { id: "agents", label: "Manage Agents", icon: "agents" },

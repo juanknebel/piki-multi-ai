@@ -166,7 +166,7 @@ class AppState extends EventTarget {
   private _workspaces: WorkspaceState[] = [];
   private _activeWorkspace = 0;
   private _sysinfo = "";
-  private _activeView: SidebarView = "workspaces";
+  private _activeView: SidebarView = "projects";
   private _selectedFiles = new Set<string>();
   private _undoStack: UndoEntry[] = [];
   private _savedLayouts: Record<string, SavedWsLayout> = {};
