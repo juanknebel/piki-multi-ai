@@ -12,6 +12,7 @@ import { showAgentManager } from "./dialogs/agent-dialog";
 import { showMergeDialog } from "./dialogs/merge-dialog";
 import { confirmDeleteWorkspace } from "./dialogs/delete-workspace";
 import { branchLabel } from "../labels";
+import { projectsSnapshot, setProjectMembership } from "./projects-panel";
 import { icon } from "./icons";
 import {
   actionableStatusView,
@@ -37,10 +38,29 @@ function rowParts(
   return { name: folder, branch: branch ? branchLabel(branch) : null };
 }
 
-/** Full, untruncated text for the row tooltip. */
+/** Full, untruncated text for the row tooltip: what the row is called on
+ *  the first line, where it lives on the second (the tooltip wraps the path
+ *  instead of eliding it — see styles/tooltip.css). */
 function rowTitle(info: WorkspaceInfo, branch: string | null): string {
   const b = branch ? ` · ${branch}` : "";
   return `${info.name}${b}\n${info.path}`;
+}
+
+/** Membership toggles for every project — the one-click way in and out of a
+ *  project, so adding a repo doesn't mean opening the project dialog. */
+function projectMenuItems(path: string): CtxItem[] {
+  const projects = projectsSnapshot();
+  if (projects.length === 0) return [];
+  return [
+    { separator: true },
+    ...projects.map((project) => {
+      const member = project.members.some((m) => m.path === path);
+      return {
+        label: `${member ? "Remove from" : "Add to"} project "${project.name}"`,
+        action: () => void setProjectMembership(project, path, !member),
+      };
+    }),
+  ];
 }
 
 /** The workspace row menu (right-click, or the row's `⋯`): everything the
@@ -69,6 +89,7 @@ function workspaceMenuItems(idx: number): CtxItem[] {
         if (appState.activeWorkspace === idx) showMergeDialog();
       },
     },
+    ...projectMenuItems(info.path),
     { separator: true },
     { label: "Delete…", danger: true, action: () => void confirmDeleteWorkspace(idx) },
   ];

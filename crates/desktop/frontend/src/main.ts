@@ -49,6 +49,7 @@ import { addContextToChat, initChatPanel, initChatResize, toggleChatPanel } from
 import { initUiZoom, resetZoom, zoomIn, zoomOut } from "./ui-zoom";
 import { initDensity } from "./density";
 import { initTooltips } from "./components/tooltip";
+import { initHomeDir } from "./home-dir";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { themeEngine } from "./theme";
 
@@ -56,6 +57,8 @@ async function init() {
   // The settings document backs every persisted UI preference (sidebar
   // width, shortcuts, pane layouts, …); load it once before anything reads.
   await settingsStore.load();
+  // `~`-abbreviated paths in the chrome (sidebar tooltips, project dialog).
+  await initHomeDir();
   // Load theme before rendering to avoid flash
   await themeEngine.loadFromStorage();
   // Persisted UI zoom (rem scale + terminal font) — before anything renders.

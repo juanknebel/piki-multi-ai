@@ -14,7 +14,7 @@ import { branchLabel } from "../labels";
 import { makeInteractive } from "./a11y";
 import { openContextMenu } from "./context-menu";
 import { showConfirm } from "./confirm";
-import { reportError } from "./toast";
+import { reportError, toast } from "./toast";
 import { showProjectDialog } from "./dialogs/project-dialog";
 
 const COLLAPSED_KEY = "projectsCollapsed";
@@ -43,6 +43,39 @@ export async function refreshProjects() {
     projects = [];
   }
   render();
+}
+
+/** The projects as last loaded — read by the workspace list to offer
+ *  "Add to project" without a second fetch. */
+export function projectsSnapshot(): readonly Project[] {
+  return projects;
+}
+
+/** Add or remove one path from a project and persist it. Used by the
+ *  sidebar menus, so membership can be changed without opening the dialog
+ *  (the dialog remains the place to rename / recolour / reorder). */
+export async function setProjectMembership(
+  project: Project,
+  path: string,
+  member: boolean,
+): Promise<void> {
+  const has = project.members.some((m) => m.path === path);
+  if (has === member) return;
+  const members = member
+    ? [...project.members, { path }]
+    : project.members.filter((m) => m.path !== path);
+  try {
+    await ipc.saveProject({ ...project, members });
+    await refreshProjects();
+    toast(
+      member
+        ? `Added to project "${project.name}"`
+        : `Removed from project "${project.name}"`,
+      "success",
+    );
+  } catch (err) {
+    reportError("Failed to update project", err);
+  }
 }
 
 /** Jump to the member's workspace, adopting the path as a Simple workspace
@@ -150,6 +183,16 @@ function render() {
       ${hasActiveMember ? `<span class="project-active-marker" title="Contains the active workspace"></span>` : ""}
       <span class="project-count">${project.members.length}</span>
     `;
+    // Collapsed or not, the header answers "what is in here?" on hover —
+    // one line per member directory (capped so a huge project still fits).
+    const MAX_TOOLTIP_MEMBERS = 8;
+    const shown = project.members.slice(0, MAX_TOOLTIP_MEMBERS).map((m) => m.path);
+    const rest = project.members.length - shown.length;
+    row.title = [
+      `${project.name} · ${project.members.length} member${project.members.length === 1 ? "" : "s"}`,
+      ...shown,
+      ...(rest > 0 ? [`…and ${rest} more`] : []),
+    ].join("\n");
     row.addEventListener("click", () => {
       const next = collapsedIds();
       if (next.has(pid)) next.delete(pid);
@@ -183,8 +226,25 @@ function render() {
         ? ` <span class="project-member-branch">${icon("branch")} ${escapeHtml(branchLabel(ws.branch))}</span>`
         : "";
       el.innerHTML = `<span class="project-member-name">${label}${branch}</span>`;
-      el.title = ws?.branch ? `${member.path} · ${ws.branch}` : member.path;
+      // Name (and branch) first, the directory on its own line — the custom
+      // tooltip wraps it whole, so this is where "which checkout is this?"
+      // gets answered without opening anything.
+      const named = ws ? ws.info.name : member.path.replace(/\/+$/, "").split("/").pop() || member.path;
+      el.title = `${named}${ws?.branch ? ` · ${ws.branch}` : ""}\n${member.path}`;
       el.addEventListener("click", () => void openMember(member.path));
+      el.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openContextMenu(e.clientX, e.clientY, [
+          { label: ws ? "Open" : "Open (adopt as workspace)", action: () => void openMember(member.path) },
+          { separator: true },
+          {
+            label: `Remove from "${project.name}"`,
+            action: () => void setProjectMembership(project, member.path, false),
+          },
+          { label: "Edit Project…", action: () => showProjectDialog(project, refreshProjects) },
+        ]);
+      });
       makeInteractive(el, "option");
       list.appendChild(el);
     }

@@ -1,17 +1,34 @@
 /** Create / edit a project: name, one of the 10 palette swatches, and the
- *  member list — existing workspaces as checkboxes plus free directories
- *  added through the path picker. Members keep their saved order on edit;
- *  newly ticked workspaces and added directories append at the end. */
+ *  member list.
+ *
+ *  Members are edited as two lists, not as a wall of checkboxes: what is
+ *  already in the project (in order, each with a ✕) on top, and everything
+ *  that could join it — every workspace not yet a member, filtered by a
+ *  search box, plus any directory picked from disk — below. Both lists
+ *  print the member's directory under its name: several workspaces of the
+ *  same repo are told apart by their path and nothing else, so the path
+ *  cannot live in a tooltip alone. */
 import * as ipc from "../../ipc";
 import { appState } from "../../state";
 import type { Project } from "../../types";
 import { icon } from "../icons";
-import { branchLabel } from "../../labels";
-import { attachPathPicker } from "../path-picker";
+import { branchLabel, pathLabel } from "../../labels";
+import { getHomeDir } from "../../home-dir";
+import { pickPath } from "../path-picker";
 import { attachDialogResize } from "../dialog-resize";
 import { reportError, toast } from "../toast";
 
 const PALETTE_LEN = 10;
+
+/** Name / branch / directory for one member path, resolved against the live
+ *  workspace list (a path with no workspace is a plain directory). */
+function describeMember(path: string) {
+  const ws = appState.workspaces.find((w) => w.info.path === path);
+  const name = ws ? ws.info.name : path.replace(/\/+$/, "").split("/").pop() || path;
+  const kind = ws ? ws.info.workspace_type.toLowerCase() : "directory";
+  const branch = ws?.branch ? branchLabel(ws.branch) : null;
+  return { ws, name, kind, branch };
+}
 
 export function showProjectDialog(project: Project | null, onSaved: () => void | Promise<void>) {
   document.querySelector(".projects-backdrop")?.remove();
@@ -23,19 +40,9 @@ export function showProjectDialog(project: Project | null, onSaved: () => void |
   dialog.className = "dialog ui-surface project-dialog";
 
   let color = project ? project.color % PALETTE_LEN : 0;
-  /** Directory members: every saved member path without a registered
-   *  workspace, plus whatever gets added through the picker. */
-  const dirs: string[] = (project?.members ?? [])
-    .map((m) => m.path)
-    .filter((p) => !appState.workspaces.some((w) => w.info.path === p));
-
-  const workspaceRows = appState.workspaces.map((w) => ({
-    path: w.info.path,
-    name: w.info.name,
-    sub: `${w.info.workspace_type.toLowerCase()}${w.branch ? ` · ${branchLabel(w.branch)}` : ""}`,
-    title: w.branch ? `${w.info.path} · ${w.branch}` : w.info.path,
-    checked: (project?.members ?? []).some((m) => m.path === w.info.path),
-  }));
+  /** The project's members, in order — the single source of truth for both
+   *  lists and for what gets saved. */
+  const members: string[] = (project?.members ?? []).map((m) => m.path);
 
   dialog.innerHTML = `
     <div class="ui-header">
@@ -51,11 +58,15 @@ export function showProjectDialog(project: Project | null, onSaved: () => void |
         <span class="dialog-label" id="project-color-label">Color</span>
         <div class="project-swatch-row" role="radiogroup" aria-labelledby="project-color-label"></div>
       </div>
-      <div class="dialog-field">
-        <span class="dialog-label">Members</span>
-        <div class="project-member-picker" id="project-ws-rows"></div>
-        <div class="project-dir-rows" id="project-dir-rows"></div>
-        <input class="ui-input" id="project-dir-input" type="text" placeholder="Add a directory…" />
+      <div class="dialog-field project-members-field">
+        <span class="dialog-label" id="project-members-label">Members <span class="project-count-badge" id="project-member-count"></span></span>
+        <div class="project-member-list" id="project-members" role="list" aria-labelledby="project-members-label"></div>
+      </div>
+      <div class="dialog-field project-add-field">
+        <span class="dialog-label" id="project-add-label">Add</span>
+        <input class="ui-input" id="project-add-filter" type="text" placeholder="Filter workspaces, or type a path…" aria-labelledby="project-add-label" />
+        <div class="project-candidate-list" id="project-candidates" role="list" aria-labelledby="project-add-label"></div>
+        <button data-variant="secondary" data-size="sm" class="ui-btn project-browse-btn" id="project-browse">Browse for a directory…</button>
       </div>
     </div>
     <div class="dialog-footer">
@@ -97,73 +108,164 @@ export function showProjectDialog(project: Project | null, onSaved: () => void |
   }
   renderSwatches();
 
-  // ── Workspace checkboxes ──
-  const wsRowsEl = dialog.querySelector<HTMLElement>("#project-ws-rows")!;
-  if (workspaceRows.length === 0) {
-    wsRowsEl.innerHTML = `<span class="project-picker-hint">No workspaces yet — add directories below.</span>`;
-  }
-  for (const row of workspaceRows) {
-    const label = document.createElement("label");
-    label.className = "project-member-check";
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.checked = row.checked;
-    cb.addEventListener("change", () => (row.checked = cb.checked));
-    label.appendChild(cb);
-    const name = document.createElement("span");
-    name.className = "project-member-check-name";
-    name.textContent = row.name;
-    label.appendChild(name);
-    const sub = document.createElement("span");
-    sub.className = "project-member-check-sub";
-    sub.textContent = row.sub;
-    label.appendChild(sub);
-    label.title = row.title;
-    wsRowsEl.appendChild(label);
-  }
+  // ── Member / candidate rows ──
+  const membersEl = dialog.querySelector<HTMLElement>("#project-members")!;
+  const countEl = dialog.querySelector<HTMLElement>("#project-member-count")!;
+  const candidatesEl = dialog.querySelector<HTMLElement>("#project-candidates")!;
+  const filterInput = dialog.querySelector<HTMLInputElement>("#project-add-filter")!;
 
-  // ── Directory rows ──
-  const dirRowsEl = dialog.querySelector<HTMLElement>("#project-dir-rows")!;
-  function renderDirs() {
-    dirRowsEl.innerHTML = "";
-    for (const dir of dirs) {
-      const row = document.createElement("div");
-      row.className = "project-dir-row";
-      const name = document.createElement("span");
-      name.className = "project-dir-path";
-      name.textContent = dir;
-      name.title = dir;
-      row.appendChild(name);
-      const rm = document.createElement("button");
-      rm.className = "ui-btn";
-      rm.dataset.variant = "ghost";
-      rm.dataset.icon = "";
-      rm.setAttribute("aria-label", `Remove ${dir}`);
-      rm.innerHTML = icon("close");
-      rm.addEventListener("click", () => {
-        dirs.splice(dirs.indexOf(dir), 1);
-        renderDirs();
+  /** One row of either list: name · branch on top, the directory below,
+   *  and a single-purpose button on the right (✕ removes, + adds). */
+  function buildRow(path: string, action: "remove" | "add"): HTMLElement {
+    const { ws, name, kind, branch } = describeMember(path);
+    const row = document.createElement("div");
+    row.className = `project-pick-row${ws ? "" : " directory"}`;
+    row.setAttribute("role", "listitem");
+    row.dataset.path = path;
+
+    const text = document.createElement("div");
+    text.className = "project-pick-text";
+    const head = document.createElement("div");
+    head.className = "project-pick-head";
+    const nameEl = document.createElement("span");
+    nameEl.className = "project-pick-name";
+    nameEl.textContent = name;
+    head.appendChild(nameEl);
+    const meta = document.createElement("span");
+    meta.className = "project-pick-meta";
+    meta.textContent = branch ? `${kind} · ${branch}` : kind;
+    head.appendChild(meta);
+    text.appendChild(head);
+    const pathEl = document.createElement("div");
+    pathEl.className = "project-pick-path";
+    pathEl.textContent = pathLabel(path, getHomeDir());
+    text.appendChild(pathEl);
+    row.appendChild(text);
+    row.title = `${name}${branch ? ` · ${branch}` : ""}\n${path}`;
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "ui-btn";
+    btn.dataset.variant = "ghost";
+    btn.dataset.icon = "";
+    const adding = action === "add";
+    btn.title = adding ? `Add ${name}` : `Remove ${name}`;
+    btn.setAttribute("aria-label", btn.title);
+    btn.innerHTML = icon(adding ? "plus" : "close");
+    btn.addEventListener("click", () => (adding ? addMember(path) : removeMember(path)));
+    row.appendChild(btn);
+
+    // The whole row is the target for adding: a candidate list is a menu of
+    // things to pick, and hunting for a 22px button in it is the fiddly
+    // part this dialog was losing people on.
+    if (adding) {
+      row.classList.add("clickable");
+      row.addEventListener("click", (e) => {
+        if ((e.target as HTMLElement).closest("button")) return;
+        addMember(path);
       });
-      row.appendChild(rm);
-      dirRowsEl.appendChild(row);
     }
+    return row;
   }
-  renderDirs();
 
-  const dirInput = dialog.querySelector<HTMLInputElement>("#project-dir-input")!;
-  function addDir() {
-    const value = dirInput.value.trim();
-    if (!value) return;
-    if (!dirs.includes(value)) dirs.push(value);
-    dirInput.value = "";
-    renderDirs();
+  function addMember(path: string) {
+    const clean = path.replace(/\/+$/, "") || path;
+    if (!members.includes(clean)) members.push(clean);
+    filterInput.value = "";
+    renderMembers();
+    renderCandidates();
   }
-  dirInput.addEventListener("change", addDir);
-  dirInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      e.stopPropagation();
-      addDir();
+
+  function removeMember(path: string) {
+    const i = members.indexOf(path);
+    if (i >= 0) members.splice(i, 1);
+    renderMembers();
+    renderCandidates();
+  }
+
+  function renderMembers() {
+    membersEl.innerHTML = "";
+    countEl.textContent = String(members.length);
+    if (members.length === 0) {
+      const hint = document.createElement("span");
+      hint.className = "project-picker-hint";
+      hint.textContent = "No members yet — add workspaces or a directory below.";
+      membersEl.appendChild(hint);
+      return;
     }
+    for (const path of members) membersEl.appendChild(buildRow(path, "remove"));
+  }
+
+  /** Workspaces that are not members yet, matched against the filter by
+   *  name, branch AND path — the path is how two checkouts of one repo are
+   *  told apart, so it has to be searchable. */
+  function candidatePaths(): string[] {
+    const q = filterInput.value.trim().toLowerCase();
+    return appState.workspaces
+      .map((w) => w.info)
+      .filter((info) => !members.includes(info.path))
+      .filter((info) => {
+        if (!q) return true;
+        const ws = appState.workspaces.find((w) => w.info.path === info.path);
+        return (
+          info.name.toLowerCase().includes(q) ||
+          info.path.toLowerCase().includes(q) ||
+          (ws?.branch ?? "").toLowerCase().includes(q)
+        );
+      })
+      .map((info) => info.path);
+  }
+
+  /** A typed absolute path (or `~/…`) that is not a known workspace can be
+   *  added as a plain directory straight from the filter box. */
+  function typedDirectory(): string | null {
+    const raw = filterInput.value.trim();
+    if (!raw.startsWith("/") && !raw.startsWith("~")) return null;
+    const home = getHomeDir();
+    const path = raw.startsWith("~") && home ? `${home}${raw.slice(1)}` : raw;
+    const clean = path.replace(/\/+$/, "") || path;
+    if (members.includes(clean)) return null;
+    return clean;
+  }
+
+  function renderCandidates() {
+    candidatesEl.innerHTML = "";
+    const typed = typedDirectory();
+    if (typed) candidatesEl.appendChild(buildRow(typed, "add"));
+    const paths = candidatePaths();
+    for (const path of paths) candidatesEl.appendChild(buildRow(path, "add"));
+    if (!typed && paths.length === 0) {
+      const hint = document.createElement("span");
+      hint.className = "project-picker-hint";
+      hint.textContent =
+        appState.workspaces.length === 0
+          ? "No workspaces yet — browse for a directory below."
+          : filterInput.value.trim()
+            ? "No workspace matches — type a full path to add a directory."
+            : "Every workspace is already a member.";
+      candidatesEl.appendChild(hint);
+    }
+  }
+
+  renderMembers();
+  renderCandidates();
+
+  filterInput.addEventListener("input", renderCandidates);
+  filterInput.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    // Enter adds the first row of the list the filter is pointing at, so a
+    // repo can be added without touching the mouse.
+    e.stopPropagation();
+    e.preventDefault();
+    const first = candidatesEl.querySelector<HTMLElement>(".project-pick-row")?.dataset.path;
+    if (first) addMember(first);
+  });
+
+  dialog.querySelector("#project-browse")!.addEventListener("click", () => {
+    void (async () => {
+      const picked = await pickPath({ directory: true, title: "Add directory to project" });
+      if (picked) addMember(picked);
+    })();
   });
 
   // ── Save / close ──
@@ -176,25 +278,12 @@ export function showProjectDialog(project: Project | null, onSaved: () => void |
       nameInput.focus();
       return;
     }
-    addDir();
-    // Saved order first (still-selected members keep their position), new
-    // ticks and directories append at the end.
-    const selected = new Set<string>([
-      ...workspaceRows.filter((r) => r.checked).map((r) => r.path),
-      ...dirs,
-    ]);
-    const members: { path: string }[] = [];
-    for (const m of project?.members ?? []) {
-      if (selected.delete(m.path)) members.push({ path: m.path });
-    }
-    for (const path of selected) members.push({ path });
-
     const payload: Project = {
       id: project?.id ?? null,
       name,
       color,
       order: project?.order ?? 0, // backend assigns max+1 for new projects
-      members,
+      members: members.map((path) => ({ path })),
     };
     try {
       await ipc.saveProject(payload);
@@ -222,6 +311,5 @@ export function showProjectDialog(project: Project | null, onSaved: () => void |
 
   document.body.appendChild(backdrop);
   attachDialogResize(dialog, "project");
-  attachPathPicker(dirInput, { directory: true, title: "Add directory to project" });
   nameInput.focus();
 }

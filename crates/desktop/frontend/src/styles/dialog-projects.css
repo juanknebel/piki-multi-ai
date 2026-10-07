@@ -3,7 +3,9 @@
    rows added through the path picker). */
 
 .project-dialog {
-  max-width: 480px;
+  /* Two-line member rows (name + directory) need more room than the
+     old checkbox list did. */
+  max-width: 560px;
 }
 
 .project-swatch-row {
@@ -27,71 +29,107 @@
   outline-offset: 2px;
 }
 
-/* The Members field absorbs a resized dialog's extra height — dragging the
-   corner grip (attachDialogResize) taller gives the picker room to show
-   more workspaces instead of leaving blank space below it. */
-.dialog-field:has(.project-member-picker) {
+/* ── Member editing ──────────────────────────────────
+   Two lists instead of a checkbox wall: what is in the project (each row
+   with a ✕) above, what could join it (filtered, each row a click away)
+   below. Both absorb a resized dialog's extra height — dragging the corner
+   grip (attachDialogResize) grows the lists, not the blank space. */
+
+.project-members-field,
+.project-add-field {
   flex: 1 1 auto;
   min-height: 0;
 }
 
-.project-member-picker {
+.project-member-list,
+.project-candidate-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  flex: 1 1 100px;
-  min-height: 100px;
-  max-height: none;
+  gap: 1px;
   overflow-y: auto;
-  padding: 6px 8px;
+  padding: 4px;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
 }
 
-.project-member-check {
+.project-member-list {
+  flex: 1 1 120px;
+  min-height: 84px;
+}
+
+.project-candidate-list {
+  flex: 1 1 120px;
+  min-height: 84px;
+}
+
+/* Rows are two lines on purpose: several checkouts of one repo share a
+   name and differ ONLY by directory, so the path is part of the row, not
+   of a tooltip. */
+.project-pick-row {
   display: flex;
   align-items: center;
-  gap: var(--sp-4);
-  min-height: var(--row-height);
+  gap: var(--sp-3);
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.project-pick-row.clickable {
   cursor: pointer;
 }
 
-.project-member-check input {
-  flex-shrink: 0;
+.project-pick-row:hover {
+  background: var(--bg-hover);
 }
 
-.project-member-check-name {
+.project-pick-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.project-pick-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+.project-pick-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-primary);
 }
 
-.project-member-check-sub {
+.project-pick-meta {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.project-pick-path {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-muted);
   font-size: var(--fs-sm);
+}
+
+/* A member with no workspace behind it yet — a plain directory. */
+.project-pick-row.directory .project-pick-name {
+  color: var(--text-secondary);
+}
+
+.project-count-badge {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.project-browse-btn {
+  align-self: flex-start;
 }
 
 .project-picker-hint {
+  padding: 4px 6px;
   color: var(--text-muted);
   font-size: var(--fs-sm);
-}
-
-.project-dir-row {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  min-height: var(--row-height);
-}
-
-.project-dir-path {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-secondary);
-  font-size: var(--fs-md);
 }

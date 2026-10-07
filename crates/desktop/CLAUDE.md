@@ -176,10 +176,16 @@ just lint-desktop                           # frontend test + build, then clippy
   collapsed project's header so folding it doesn't read as "nothing selected" (a workspace can belong to
   several projects; each gets its own mark, matched by index against `appState.activeWorkspace`, not by
   reference). Collapse persisted as `projectsCollapsed`
-  (settings). Create/edit in `dialogs/project-dialog.ts` (10-swatch radio, workspace checkboxes, directory
-  rows through `attachPathPicker`, `attachDialogResize(dialog, "project")` — the member picker is `flex: 1 1
-  auto` so a resized dialog gives it the extra room, not the other fields); sheets `projects.css` +
-  `dialog-projects.css`.
+  (settings). Create/edit in `dialogs/project-dialog.ts`: 10-swatch radio plus TWO member lists — the members in
+  order (each row a ✕) and, below, every non-member workspace narrowed by a filter matching name / branch
+  / path (Enter adds the first row, an absolute or `~/…` path offers itself as a directory member,
+  *Browse for a directory…* calls `path-picker.ts pickPath()`). Rows are two lines (name · kind · branch,
+  then `pathLabel(path, getHomeDir())`) because checkouts of one repo differ only by directory — never put
+  that path in a tooltip alone. `attachDialogResize(dialog, "project")` + both lists `flex: 1 1 auto` so a
+  resized dialog grows the lists. Membership is also editable without the dialog:
+  `projectsSnapshot()` / `setProjectMembership(project, path, on)` (exported by `projects-panel.ts`) back the
+  workspace row menu's `Add to / Remove from project "X"` entries and the member row's own context menu.
+  Sheets `projects.css` + `dialog-projects.css`.
 - **Branch labels repaint on their own event.** `updateFiles` emits `workspace-branch-changed` for ANY
   workspace whose branch actually moved (`files-changed` is emitted for the ACTIVE workspace only, and
   the git watcher polls them all). The workspace list and the Projects panel listen to it; anything new
@@ -192,7 +198,14 @@ just lint-desktop                           # frontend test + build, then clippy
   ordering logic is the pure `workspace-nav.ts`. The sidebar row, the switcher, the palette and
   `Alt+1…9` all go through it — never call `ipc.switchWorkspace` from a component again.
 - `labels.ts branchLabel()` / `truncateMiddle()` is the one branch-label rule (28 chars, middle ellipsis,
-  full text in `title`) — use it wherever a branch renders.
+  full text in `title`) — use it wherever a branch renders. `pathLabel(path, getHomeDir())` /
+  `homeRelative()` is the same rule for a directory (`~/git/x`, 46 chars); the home directory comes from
+  `home-dir.ts` (`initHomeDir()` in `main.ts`, `null` until it resolves — callers then print full paths),
+  kept out of the pure `labels.ts`.
+- **Every row that has a directory says so on hover.** A `title` is `name (· branch)\n<full path>`:
+  `components/tooltip.ts` renders line 1 as the label and the rest muted and WRAPPED
+  (`.custom-tooltip-line`), so a path is never elided — the old single-line, 300px, `text-overflow`
+  tooltip cut exactly the tail that identifies a checkout.
 - Chevrons: `icon("chevron-right", { class: "group-chevron" })`, rotated 90° by the `.group-chevron` /
   `.ft-chevron` / `.theme-group-chevron` CSS when expanded — never add a new glyph.
 - `sidebar.ts maxAgentsPanelHeight()` clamps the Agents panel so ≥4 workspace rows stay visible; it

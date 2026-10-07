@@ -12,10 +12,24 @@ function create() {
   document.body.appendChild(tooltipEl);
 }
 
+/** One `<div>` per line of the title: the first line is the label, the rest
+ *  (a path, as a rule) are muted and allowed to wrap — a directory must be
+ *  readable whole, never clipped to an ellipsis. */
+function fillLines(tip: HTMLElement, text: string) {
+  tip.textContent = "";
+  const lines = text.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = document.createElement("div");
+    line.className = i === 0 ? "custom-tooltip-title" : "custom-tooltip-line";
+    line.textContent = lines[i];
+    tip.appendChild(line);
+  }
+}
+
 function show(target: HTMLElement, text: string) {
   if (!tooltipEl) create();
 
-  tooltipEl!.textContent = text;
+  fillLines(tooltipEl!, text);
   tooltipEl!.style.display = "block";
 
   // Position near the target
