@@ -1029,11 +1029,11 @@ mod tests {
         app.active_pane = ActivePane::MainPanel;
         app.ws_list_area = Rect::new(0, 0, 30, 10);
 
-        // Rows: [bucket, repo-0, ws-0, repo-1, ws-1] under the top border, so
-        // ws-1 is screen row 1 + 4.
+        // Rows: [bucket, ws-0, ws-1] under the top border (each repo has one
+        // checkout, so both are hoisted), so ws-1 is screen row 1 + 2.
         handle_mouse_event(
             &mut app,
-            mouse(super::MouseEventKind::Down(super::MouseButton::Left), 5, 5),
+            mouse(super::MouseEventKind::Down(super::MouseButton::Left), 5, 3),
             &mut headless_terminal(),
         );
 
@@ -1047,20 +1047,24 @@ mod tests {
     fn click_repo_header_collapses_without_switching() {
         let mut app = test_app();
         add_test_workspace(&mut app);
-        add_test_workspace(&mut app);
+        let child = add_test_workspace(&mut app);
+        // Two checkouts of one repo, so the group really has a header (a lone
+        // checkout would be hoisted into a single row instead).
+        app.workspaces[child].info.source_repo = app.workspaces[0].info.source_repo.clone();
+        app.workspaces[child].info.workspace_type = piki_core::WorkspaceType::Worktree;
         app.mode = AppMode::Normal;
         app.active_workspace = 0;
         app.ws_list_area = Rect::new(0, 0, 30, 10);
 
-        // Screen row 1 + 3 is repo-1's header.
+        // Rows: [bucket, repo, ws-0, ws-1]; the header is screen row 1 + 1.
         handle_mouse_event(
             &mut app,
-            mouse(super::MouseEventKind::Down(super::MouseButton::Left), 5, 4),
+            mouse(super::MouseEventKind::Down(super::MouseButton::Left), 5, 2),
             &mut headless_terminal(),
         );
 
         assert_eq!(app.active_workspace, 0, "headers never switch workspace");
-        assert_eq!(app.sidebar_rows().len(), 4, "repo-1's checkout is hidden");
+        assert_eq!(app.sidebar_rows().len(), 2, "both checkouts are hidden");
     }
 
     /// Clicking the Agents pane focuses it, even on an empty click.

@@ -255,6 +255,24 @@ impl SqliteStorage {
             tx.commit()?;
         }
 
+        // v12 seeded projects only when there were none at all, so a database
+        // that already had one hand-made project got nothing: every other
+        // repository fell into the synthetic no-project bucket. The rule is
+        // per-repository now (see `seed_projects_from_workspaces`) — re-run it
+        // so those repos get their project, leaving the hand-made ones alone.
+        if version < 13 {
+            let tx = conn.transaction()?;
+            let created = seed_projects_from_workspaces(&tx)?;
+            if created > 0 {
+                tracing::info!(
+                    projects = created,
+                    "seeded projects for repositories no project covered (schema v13)"
+                );
+            }
+            tx.execute("INSERT INTO schema_version (version) VALUES (13)", [])?;
+            tx.commit()?;
+        }
+
         Ok(())
     }
 
@@ -359,21 +377,36 @@ CREATE TABLE IF NOT EXISTS collapsed_groups (group_name TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS ui_preferences (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 ";
 
-/// Seed one project per distinct `source_repo`, named after the repo
-/// directory, with that repo's non-ephemeral workspaces as `auto` members in
-/// their existing display order. Returns how many projects were created.
+/// Seed one project per repository **no project covers yet**, named after the
+/// repository directory, with that repo's non-ephemeral workspaces as `auto`
+/// members in their existing display order. Returns how many were created.
 ///
-/// Used by the v12 migration, when projects became the only sidebar unit, so
-/// the project tree opens on exactly what the old flat workspace view showed
-/// and the synthetic no-project bucket starts empty. A no-op when `projects`
-/// already has rows: a user who built projects by hand keeps them, and
-/// anything they left out surfaces under that bucket instead of being
-/// duplicated into a second project.
+/// A repository counts as covered when any project already lists one of its
+/// checkouts, or the repository root itself — the tree then shows its other
+/// checkouts there too (every worktree of a member repo belongs to the
+/// project), so a second project for the same repo would only duplicate it.
+///
+/// Projects became the only sidebar unit in v12, and this is what makes the
+/// tree open on exactly what the old flat workspace view showed, with the
+/// synthetic no-project bucket empty. v12 ran it as "all projects, if there
+/// are none at all", which quietly did nothing for anyone who had already
+/// built a project by hand — their other repos landed in the no-project
+/// bucket instead of getting one each. v13 re-runs it with the rule above,
+/// which is per-repository, so hand-made projects are kept AND the repos they
+/// never covered still get theirs.
 fn seed_projects_from_workspaces(tx: &rusqlite::Transaction<'_>) -> anyhow::Result<usize> {
-    let existing: i64 = tx.query_row("SELECT COUNT(*) FROM projects", [], |r| r.get(0))?;
-    if existing > 0 {
-        return Ok(0);
-    }
+    // Repos a project already speaks for, by either kind of member.
+    let covered: HashSet<String> = {
+        let mut stmt = tx.prepare(
+            "SELECT DISTINCT w.source_repo FROM workspaces w
+                 JOIN project_members m ON m.path = w.worktree_path
+             UNION
+             SELECT DISTINCT m.path FROM project_members m",
+        )?;
+        stmt.query_map([], |r| r.get::<_, String>(0))?
+            .filter_map(|r| r.ok())
+            .collect()
+    };
     let rows: Vec<(String, String)> = {
         let mut stmt = tx.prepare(
             "SELECT source_repo, worktree_path FROM workspaces
@@ -383,17 +416,26 @@ fn seed_projects_from_workspaces(tx: &rusqlite::Transaction<'_>) -> anyhow::Resu
             .filter_map(|r| r.ok())
             .collect()
     };
-    // (name, id, member count) per project created so far, in creation order.
+    // New projects go after whatever is already there.
+    let base_order: i64 = tx.query_row(
+        "SELECT COALESCE(MAX(display_order) + 1, 0) FROM projects",
+        [],
+        |r| r.get(0),
+    )?;
+    // (repo, id, member count) per project created so far, in creation order.
     let mut created: Vec<(String, i64, i64)> = Vec::new();
     for (source_repo, worktree_path) in rows {
-        let name = std::path::Path::new(&source_repo)
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| source_repo.clone());
-        let slot = match created.iter().position(|(n, _, _)| *n == name) {
+        if covered.contains(&source_repo) {
+            continue;
+        }
+        let slot = match created.iter().position(|(r, _, _)| *r == source_repo) {
             Some(i) => i,
             None => {
-                let order = created.len() as i64;
+                let name = std::path::Path::new(&source_repo)
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| source_repo.clone());
+                let order = base_order + created.len() as i64;
                 tx.execute(
                     "INSERT INTO projects (name, color, display_order) VALUES (?1, ?2, ?3)",
                     rusqlite::params![
@@ -402,7 +444,7 @@ fn seed_projects_from_workspaces(tx: &rusqlite::Transaction<'_>) -> anyhow::Resu
                         order
                     ],
                 )?;
-                created.push((name, tx.last_insert_rowid(), 0));
+                created.push((source_repo.clone(), tx.last_insert_rowid(), 0));
                 created.len() - 1
             }
         };
@@ -1093,8 +1135,71 @@ mod project_seed_tests {
         );
     }
 
+    /// The bug v13 fixes: a database with ONE hand-made project used to get no
+    /// seeding at all, so every other repository fell into the no-project
+    /// bucket. The rule is per-repository — keep what the user built, give the
+    /// repos it never covered their own project.
     #[test]
-    fn hand_made_projects_are_never_touched() {
+    fn repos_a_hand_made_project_does_not_cover_still_get_one() {
+        let list = [
+            ws("app", "/repos/app", WorkspaceType::Simple, 0),
+            ws("feature", "/repos/app", WorkspaceType::Worktree, 1),
+            ws("lib", "/repos/lib", WorkspaceType::Simple, 2),
+        ];
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Arc::new(SqliteStorage::open(&dir.path().join("db.sqlite")).unwrap());
+        save_all(&storage, &list);
+        // By hand: one project holding only the worktree of /repos/app.
+        storage
+            .save_project(&crate::projects::Project {
+                id: None,
+                name: "mine".into(),
+                color: 0,
+                order: 0,
+                members: vec![crate::projects::ProjectMember::new(PathBuf::from(
+                    "/wt/feature",
+                ))],
+            })
+            .unwrap();
+
+        let created = {
+            let mut conn = storage.conn.lock();
+            let tx = conn.transaction().unwrap();
+            let n = seed_projects_from_workspaces(&tx).unwrap();
+            tx.commit().unwrap();
+            n
+        };
+
+        assert_eq!(created, 1, "only /repos/lib was uncovered");
+        let projects = storage.list_projects();
+        assert_eq!(
+            projects.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(),
+            vec!["mine", "lib"],
+            "the hand-made project is kept, and sorts first (new ones go after)"
+        );
+        assert_eq!(
+            projects[0].members,
+            vec![crate::projects::ProjectMember::new(PathBuf::from(
+                "/wt/feature"
+            ))],
+            "untouched"
+        );
+
+        // And the tree leaves nothing over: /repos/app is covered through its
+        // worktree (the clone joins that project by the repo rule), /repos/lib
+        // through its new project.
+        let rows = project_tree(&projects, &list, &HashSet::new());
+        assert!(
+            !rows.iter().any(|r| r.bucket() == Bucket::Unassigned),
+            "{rows:#?}"
+        );
+    }
+
+    /// A repository the user added as an explicit root counts as covered too —
+    /// otherwise opening a checkout of it later would spawn a second project
+    /// for the same repo.
+    #[test]
+    fn an_explicit_repo_member_covers_its_repository() {
         let list = [ws("app", "/repos/app", WorkspaceType::Simple, 0)];
         let dir = tempfile::tempdir().unwrap();
         let storage = Arc::new(SqliteStorage::open(&dir.path().join("db.sqlite")).unwrap());
@@ -1105,7 +1210,9 @@ mod project_seed_tests {
                 name: "mine".into(),
                 color: 0,
                 order: 0,
-                members: Vec::new(),
+                members: vec![crate::projects::ProjectMember::repo(PathBuf::from(
+                    "/repos/app",
+                ))],
             })
             .unwrap();
 
@@ -1117,9 +1224,7 @@ mod project_seed_tests {
             n
         };
         assert_eq!(created, 0);
-        let projects = storage.list_projects();
-        assert_eq!(projects.len(), 1);
-        assert_eq!(projects[0].name, "mine");
+        assert_eq!(storage.list_projects().len(), 1);
     }
 
     #[test]

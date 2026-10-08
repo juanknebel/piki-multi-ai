@@ -49,13 +49,23 @@ function bucketLabel(bucket: string): string {
 
 /** Name + muted branch for a checkout row. Under a repo group the repo name is
  *  already on the header, so the child says which *branch* it is — that is the
- *  point of the tree. A row that hangs straight off its header (a non-git
- *  workspace, a PR review) keeps its own name with the branch alongside. */
+ *  point of the tree. A **hoisted** row IS its repository (its group had a
+ *  single checkout), so it is named the way the old flat sidebar named a clone:
+ *  the repository folder, with the branch rendered separately and dimmed. Any
+ *  other depth-1 row (a non-git workspace, a PR review) keeps its own name. */
 function checkoutParts(
   info: WorkspaceInfo,
   branch: string | null,
   depth: number,
+  hoisted: boolean,
 ): { name: string; branch: string | null } {
+  if (hoisted) {
+    const folder =
+      info.source_repo.replace(/\/+$/, "").split("/").pop() ||
+      info.source_repo_display ||
+      info.name;
+    return { name: folder, branch: branch ? branchLabel(branch) : null };
+  }
   if (depth === 2) {
     if (branch) return { name: branchLabel(branch), branch: null };
     const leaf = info.path.replace(/\/+$/, "").split("/").pop();
@@ -412,7 +422,7 @@ export function renderProjectTree(container: HTMLElement) {
         ? `<span class="workspace-restored" title="Sessions restored from the daemon — not visited yet">${icon("history")}</span>`
         : "";
 
-      const { name, branch } = checkoutParts(info, ws.branch, row.depth);
+      const { name, branch } = checkoutParts(info, ws.branch, row.depth, row.hoisted);
       const branchHtml = branch
         ? ` <span class="workspace-branch">${escapeHtml(branch)}</span>`
         : "";
@@ -436,6 +446,9 @@ export function renderProjectTree(container: HTMLElement) {
         if ((e.target as HTMLElement).closest(".ws-action-btn")) return;
         void switchToWorkspace(idx);
       });
+      // A hoisted row is also the only row its repository has, so it reads as
+      // the repo: mark it so the CSS can give it the repo's weight.
+      if (row.hoisted) el.classList.add("hoisted-repo");
       const menuBtn = el.querySelector<HTMLButtonElement>('[data-action="menu"]')!;
       menuBtn.addEventListener("click", (e) => {
         e.stopPropagation();

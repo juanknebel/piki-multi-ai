@@ -141,8 +141,7 @@ Internal — set by piki for its child processes; documented so they can be reco
 |   ▾ ⎇ piki       |  AI assistant live terminal output                    |
 |   │ ○ main       |  (Ctrl+G c or click + to open a new tab)              |
 |   │ ⎇ ws-1  3∆ ↑1|                                                       |
-|   ▾ ⎇ api        |                                                       |
-|   │ ○ main       |                                                       |
+|     ⎇ api (main) |   (one checkout → one row: the repo is hoisted)       |
 | ▾ ● no project 1 |                                                       |
 |------------------+                                                       |
 | AGENTS           |-------------------------------------------------------|
@@ -158,6 +157,8 @@ Internal — set by piki for its child processes; documented so they can be reco
 ```
 
 The top-left pane is the **project tree** — the one sidebar view. It has three levels: a **project** (name, colour dot, checkout count), the **repositories** it holds (synthetic rows derived from each checkout's `source_repo`, never stored), and each repository's **checkouts** — its original clone plus every `git worktree` of it, labelled by branch. A member path with no workspace registered at it renders as a dimmed directory row and is adopted as a workspace on `Enter`.
+
+**A repository with a single checkout is hoisted**: a header above it would only repeat the checkout's name and have nothing to collapse, so the checkout stands in for the repo — one row, named after the repository folder with its branch alongside, exactly as the old flat sidebar named a clone. The group re-splits into header + children by itself the moment a second checkout exists (creating a worktree is enough; the tree is derived on every render). So the common case stays as compact as before, and the extra level is spent only where there is a branch tree to show.
 
 One project can hold repositories from different places, and the same repository can belong to several projects — the project is a *view*, never the owner of the layout on disk (worktrees stay under `<data_dir>/worktrees/<repo>/`). Two synthetic groups keep the tree total, so nothing is ever unreachable: **pr-review** collects the ad-hoc PR-review checkouts, and **no project** collects every registered workspace no project claims. Collapsing a project or a repository surfaces what it hides on the header row (idle dot, agent-status glyph, changed-file count, ahead/behind) instead of losing it.
 

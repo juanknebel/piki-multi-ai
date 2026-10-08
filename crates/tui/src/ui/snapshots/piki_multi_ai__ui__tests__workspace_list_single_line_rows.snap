@@ -4,11 +4,11 @@ expression: content
 ---
 ╭ PROJECTS ────────────────────────────╮
 │ ▾ ● no project 3                     │
-│▎ ▾ ⎇ src-nightly                     │
-│  │ ⎇ nightly 2∆ ↑1 ↓2                │
-│  ▾ ⎇ src-void-setup                  │
-│  │ ⎇ void-setup                      │
-│  ▾ ⎇ src-x220t                       │
-│  │ ⎇ x220t                           │
+│▎   ⎇ src-nightly (nightly) 2∆ ↑1 ↓2  │
+│    ⎇ src-void-setup (void-setup)     │
+│    ⎇ src-x220t (x220t)               │
+│                                      │
+│                                      │
+│                                      │
 │                                      │
 ╰──────────────────────────────────────╯

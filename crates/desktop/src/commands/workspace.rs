@@ -450,6 +450,10 @@ pub enum ProjectTreeRowDto {
         kind: &'static str,
         /// 2 under a repo group, 1 when the row hangs off its header.
         depth: u8,
+        /// This row stands in for its whole repository: the group had a single
+        /// checkout, so no header was emitted. Label it by the repository
+        /// folder (branch alongside) and let repository actions apply to it.
+        hoisted: bool,
     },
     /// A member path that is neither a loaded workspace nor a repo root.
     Dir { path: String },
@@ -525,6 +529,7 @@ pub async fn project_tree(
                     workspace_index,
                     kind,
                     depth,
+                    hoisted,
                     ..
                 } => ProjectTreeRowDto::Checkout {
                     index: workspace_index,
@@ -533,6 +538,7 @@ pub async fn project_tree(
                         CheckoutKind::Worktree => "worktree",
                     },
                     depth,
+                    hoisted,
                 },
                 ProjectTreeRow::Dir { path, .. } => ProjectTreeRowDto::Dir {
                     path: path.to_string_lossy().into_owned(),

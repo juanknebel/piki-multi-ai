@@ -1289,19 +1289,19 @@ mod tests {
         let b_path = app.workspaces[b].info.path.clone();
         seed_project(&mut app, vec![b_path]);
 
-        // Rows: [project, repo(b), b, bucket, repo(a), a].
-        assert_eq!(app.sidebar_rows().len(), 6);
+        // Rows: [project, b, bucket, a] — one checkout per repo, both hoisted.
+        assert_eq!(app.sidebar_rows().len(), 4);
         app.selected_sidebar_row = 0;
         assert!(handle_workspace_list_interaction(&mut app, key(KeyCode::Enter)).is_none());
         assert_eq!(
             app.sidebar_rows().len(),
-            4,
-            "the collapsed project hides its repo and checkout"
+            3,
+            "the collapsed project hides its checkout"
         );
 
         // Re-expand, walk onto b's checkout row, open it.
         handle_workspace_list_interaction(&mut app, key(KeyCode::Enter));
-        app.selected_sidebar_row = 2;
+        app.selected_sidebar_row = 1;
         assert!(handle_workspace_list_interaction(&mut app, key(KeyCode::Enter)).is_none());
         assert_eq!(app.active_workspace, b);
     }

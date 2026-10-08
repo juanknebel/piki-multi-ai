@@ -183,7 +183,29 @@ fn right_metadata_spans(app: &App, detail_color: Color, sig: &Signals) -> Vec<Sp
 /// point of the tree. `branch == None` (the background refresh hasn't landed,
 /// or the directory isn't a git repo) must never leave the row blank, so it
 /// falls back to the checkout's own directory name, then its workspace name.
-fn checkout_label(ws: &Workspace, depth: u8) -> String {
+fn checkout_label(ws: &Workspace, depth: u8, hoisted: bool) -> String {
+    // A hoisted row IS its repository (its group had a single checkout), so it
+    // is named the way the old flat sidebar named a clone: the repository
+    // folder, with the branch alongside when one is known.
+    if hoisted {
+        let folder = ws
+            .info
+            .source_repo
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| {
+                if ws.info.source_repo_display.is_empty() {
+                    ws.name.clone()
+                } else {
+                    ws.info.source_repo_display.clone()
+                }
+            });
+        return match &ws.branch {
+            Some(branch) => format!("{folder} ({branch})"),
+            None => folder,
+        };
+    }
     if let Some(branch) = &ws.branch
         && depth == 2
     {
@@ -198,8 +220,8 @@ fn checkout_label(ws: &Workspace, depth: u8) -> String {
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| ws.name.clone());
     }
-    // Depth 1: no repo header above it (a plain-directory workspace, or a PR
-    // review), so the row carries its own identity plus a branch if it has one.
+    // Depth 1 and not hoisted: a plain-directory workspace or a PR review, so
+    // the row carries its own identity plus a branch if it has one.
     match &ws.branch {
         Some(branch) => format!("{} ({branch})", ws.name),
         None => ws.name.clone(),
@@ -366,6 +388,7 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                 ProjectTreeRow::Checkout {
                     workspace_index,
                     depth,
+                    hoisted,
                     ..
                 } => {
                     let ws = &app.workspaces[*workspace_index];
@@ -397,7 +420,7 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                         Style::default().fg(icon_color),
                     ));
                     spans.push(Span::styled(
-                        checkout_label(ws, *depth),
+                        checkout_label(ws, *depth, *hoisted),
                         if is_active {
                             Style::default()
                                 .fg(theme.name_active)

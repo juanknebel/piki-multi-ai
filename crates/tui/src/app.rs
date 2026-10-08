@@ -2847,14 +2847,11 @@ mod tests {
 
         // Follow-focus: j/k don't just move a cursor, they move the workspace
         // every action targets — so `prefix c` right after lands its tab here.
-        // Rows: [bucket, repo-a, a, repo-b, b], so b is two rows past a (its
-        // repo header sits between them and switches nothing).
-        app.select_next_sidebar_row();
+        // Rows: [bucket, a, b] — one checkout per repo, so both are hoisted.
         app.select_next_sidebar_row();
         assert_eq!(app.selected_workspace, b);
         assert_eq!(app.active_workspace, b);
 
-        app.select_prev_sidebar_row();
         app.select_prev_sidebar_row();
         assert_eq!(app.active_workspace, a);
     }
@@ -2876,20 +2873,22 @@ mod tests {
         app.workspaces[child].info.workspace_type = piki_core::WorkspaceType::Worktree;
         app.switch_workspace(a);
 
-        // No projects configured, so everything sits in the no-project bucket:
-        // [bucket, repo(a), a, repo(shared), parent, child].
+        // No projects configured, so everything sits in the no-project bucket.
+        // `a` is the only checkout of its repo, so it is hoisted to one row;
+        // the shared repo keeps its header: [bucket, a, repo, parent, child].
         let rows = app.sidebar_rows();
-        assert_eq!(rows.len(), 6, "{rows:#?}");
+        assert_eq!(rows.len(), 5, "{rows:#?}");
         assert!(matches!(rows[0], ProjectTreeRow::Project { .. }));
-        assert_eq!(rows[2].workspace_index(), Some(a));
-        assert_eq!(rows[4].workspace_index(), Some(parent));
-        assert_eq!(rows[5].workspace_index(), Some(child));
+        assert_eq!(rows[1].workspace_index(), Some(a));
+        assert!(rows[1].is_hoisted());
+        assert_eq!(rows[3].workspace_index(), Some(parent));
+        assert_eq!(rows[4].workspace_index(), Some(child));
 
         // The cursor sits on a's row after switch_workspace(a).
-        assert_eq!(app.selected_sidebar_row, 2);
+        assert_eq!(app.selected_sidebar_row, 1);
         // Next row is the shared repo's header: cursor moves, workspace doesn't.
         app.select_next_sidebar_row();
-        assert_eq!(app.selected_sidebar_row, 3);
+        assert_eq!(app.selected_sidebar_row, 2);
         assert_eq!(app.active_workspace, a);
         // Then the parent checkout, which does switch.
         app.select_next_sidebar_row();
@@ -3079,7 +3078,8 @@ mod tests {
         add_test_workspace(&mut app);
         add_test_workspace(&mut app);
         app.active_pane = ActivePane::WorkspaceList;
-        // Rows: [bucket, repo-0, ws-0, repo-1, ws-1].
+        // Rows: [bucket, ws-0, ws-1] — a single-checkout repo is hoisted, so
+        // each workspace is one row.
         app.selected_sidebar_row = 0;
 
         // Down (j) moves the selection to row 1.
@@ -3090,10 +3090,10 @@ mod tests {
         assert_eq!(app.selected_sidebar_row, 0);
 
         // Walk down to the second workspace's row and open it.
-        for _ in 0..4 {
+        for _ in 0..2 {
             crate::input::handle_key_event(&mut app, key(KeyCode::Down));
         }
-        assert_eq!(app.selected_sidebar_row, 4);
+        assert_eq!(app.selected_sidebar_row, 2);
         crate::input::handle_key_event(&mut app, key(KeyCode::Enter));
         assert_eq!(app.active_workspace, 1);
         assert_eq!(app.active_pane, ActivePane::WorkspaceList);
@@ -3166,7 +3166,7 @@ mod tests {
         );
         assert_eq!(rows[1].depth(), 1, "no repo group above a PR review");
         assert_eq!(rows[3].bucket(), crate::app::Bucket::Unassigned);
-        assert_eq!(rows[5].workspace_index(), Some(plain));
+        assert_eq!(rows[4].workspace_index(), Some(plain));
 
         // Collapsing the bucket hides both review rows but keeps the plain
         // workspace visible.
@@ -3178,7 +3178,7 @@ mod tests {
                 .contains(piki_core::projects::tree::PR_REVIEW_KEY)
         );
         let collapsed = app.sidebar_rows();
-        assert_eq!(collapsed.len(), 4, "{collapsed:#?}");
+        assert_eq!(collapsed.len(), 3, "{collapsed:#?}");
         assert!(matches!(
             collapsed[0],
             ProjectTreeRow::Project {

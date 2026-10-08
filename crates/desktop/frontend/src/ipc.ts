@@ -128,7 +128,15 @@ export type ProjectTreeRow =
       root: string;
       display: string;
     }
-  | { type: "checkout"; index: number; kind: "primary" | "worktree"; depth: number }
+  | {
+      type: "checkout";
+      index: number;
+      kind: "primary" | "worktree";
+      depth: number;
+      /** This row stands in for its whole repository — its group had a single
+       *  checkout, so no header was emitted. */
+      hoisted: boolean;
+    }
   | { type: "dir"; path: string };
 
 /** The sidebar's rows in render order. The grouping rule (which repo a

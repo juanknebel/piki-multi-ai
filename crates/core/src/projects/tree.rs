@@ -5,12 +5,21 @@
 //! ```text
 //! ▾ Piki                        Project row  (depth 0)
 //!   ▾ piki-multi-ai             Repo row     (depth 1, synthetic)
-//!       nightly                 Checkout     (depth 2, Primary)
+//!       main                    Checkout     (depth 2, Primary)
 //!       feat/sidebar            Checkout     (depth 2, Worktree)
-//!   ▾ piki-multiplex            Repo row
-//!       main                    Checkout
+//!     piki-multiplex (main)     Checkout     (depth 1, HOISTED)
 //!     ~/notes                   Dir row      (depth 1)
 //! ```
+//!
+//! A repository with a **single** loaded checkout is *hoisted*: its header
+//! would only repeat the checkout's name and have nothing to collapse, so the
+//! checkout stands in for the repo (`Checkout { hoisted: true }`, named after
+//! the repository folder with its branch alongside). The group re-splits into
+//! header + children by itself as soon as a second checkout exists — the tree
+//! is derived on every render, so creating a worktree is all it takes. That
+//! keeps the common case (one repo, one clone) exactly as compact as the flat
+//! sidebar this replaced, and spends the extra level only where there is
+//! actually a branch tree to show.
 //!
 //! **Repo rows are synthetic**: they are derived from the `source_repo` of the
 //! project's checkout members (plus any explicit [`MemberKind::Repo`] member),
@@ -85,12 +94,20 @@ pub enum ProjectTreeRow {
     },
     /// A loaded workspace: `workspace_index` indexes the slice passed to
     /// [`project_tree`]. `depth` is 2 under a repo group and 1 when the row
-    /// hangs straight off its header (a non-git workspace, or a PR review).
+    /// hangs straight off its header (a hoisted repo, a non-git workspace, or
+    /// a PR review).
     Checkout {
         bucket: Bucket,
         workspace_index: usize,
         kind: CheckoutKind,
         depth: u8,
+        /// This row *is* its repository: the group had a single checkout, so
+        /// emitting a header above it would have cost two rows saying the same
+        /// thing (see [`project_tree`]). Renderers label a hoisted row by the
+        /// repository folder with its branch alongside — the way the old flat
+        /// sidebar named a clone — and repository actions ("new branch") apply
+        /// to it, since there is no header to carry them.
+        hoisted: bool,
     },
     /// A member path that is neither a loaded workspace nor a repo root.
     Dir { bucket: Bucket, path: PathBuf },
@@ -116,6 +133,12 @@ impl ProjectTreeRow {
             } => Some(*workspace_index),
             _ => None,
         }
+    }
+
+    /// Whether this row stands in for its whole repository — see
+    /// [`ProjectTreeRow::Checkout::hoisted`].
+    pub fn is_hoisted(&self) -> bool {
+        matches!(self, ProjectTreeRow::Checkout { hoisted: true, .. })
     }
 
     /// The collapse key of a collapsible row (`Project` and `Repo`).
@@ -187,6 +210,16 @@ fn repo_display(root: &Path, workspaces: &[WorkspaceInfo], members: &[usize]) ->
     root.file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| root.to_string_lossy().to_string())
+}
+
+/// What a checkout is by its own type, for the rows where no sibling decides
+/// it (a hoisted repo, a flat non-git workspace).
+fn checkout_kind(info: &WorkspaceInfo) -> CheckoutKind {
+    if info.workspace_type == WorkspaceType::Worktree {
+        CheckoutKind::Worktree
+    } else {
+        CheckoutKind::Primary
+    }
 }
 
 /// Should this workspace nest under a repo group?
@@ -264,6 +297,21 @@ fn emit_bucket(
 
     for slot in slots {
         match slot {
+            // A repository whose only loaded checkout is one row already: a
+            // header above it would just repeat its name, and there is nothing
+            // to collapse. Hoist the checkout and let it stand for the repo
+            // until a second one shows up (a new worktree re-splits the group
+            // on its own, since the tree is derived every render).
+            Slot::Repo { ref members, .. } if members.len() == 1 => {
+                let index = members[0];
+                rows.push(ProjectTreeRow::Checkout {
+                    bucket,
+                    workspace_index: index,
+                    kind: checkout_kind(&workspaces[index]),
+                    depth: 1,
+                    hoisted: true,
+                });
+            }
             Slot::Repo { root, members } => {
                 let repo_key = repo_collapse_key(&key, &root);
                 let repo_collapsed = collapsed.contains(&repo_key);
@@ -290,6 +338,7 @@ fn emit_bucket(
                         workspace_index: p,
                         kind: CheckoutKind::Primary,
                         depth: 2,
+                        hoisted: false,
                     });
                 }
                 for i in members {
@@ -301,14 +350,16 @@ fn emit_bucket(
                         workspace_index: i,
                         kind: CheckoutKind::Worktree,
                         depth: 2,
+                        hoisted: false,
                     });
                 }
             }
             Slot::Flat(index) => rows.push(ProjectTreeRow::Checkout {
                 bucket,
                 workspace_index: index,
-                kind: CheckoutKind::Primary,
+                kind: checkout_kind(&workspaces[index]),
                 depth: 1,
+                hoisted: false,
             }),
             Slot::Dir(path) => rows.push(ProjectTreeRow::Dir { bucket, path }),
         }
@@ -508,8 +559,13 @@ mod tests {
                     ProjectTreeRow::Checkout {
                         workspace_index,
                         kind,
+                        hoisted,
                         ..
-                    } => format!("{} {kind:?}", workspaces[*workspace_index].name),
+                    } => format!(
+                        "{} {kind:?}{}",
+                        workspaces[*workspace_index].name,
+                        if *hoisted { "*" } else { "" }
+                    ),
                     ProjectTreeRow::Dir { path, .. } => format!("dir {}", path.display()),
                 };
                 format!("{indent}{label}")
@@ -542,8 +598,9 @@ mod tests {
                 ".repo app",
                 "..app Primary",
                 "..feature Worktree",
-                ".repo lib",
-                "..lib Primary",
+                // `lib` has a single checkout, so it is hoisted instead of
+                // getting a header that repeats its name.
+                ".lib Primary*",
             ]
         );
     }
@@ -566,9 +623,10 @@ mod tests {
             sketch(&rows, &list),
             vec![
                 "Project(0)",
-                ".repo api",
-                "..api Primary",
-                // A repo member with nothing loaded still gets its row.
+                // One checkout: hoisted, so the repo costs one row, not two.
+                ".api Primary*",
+                // A repo member with nothing loaded still gets its row — there
+                // is no checkout to hoist in its place.
                 ".repo web",
                 // A non-git workspace has no repo to head a group with.
                 ".notes Primary",
@@ -614,6 +672,76 @@ mod tests {
         );
     }
 
+    /// The rule that keeps the common case (one repo, one clone) as compact as
+    /// the flat sidebar this replaced.
+    #[test]
+    fn a_single_checkout_repo_is_hoisted_instead_of_getting_a_header() {
+        let list = [clone_of("app", "/repos/app")];
+        let projects = [project(
+            1,
+            "Piki",
+            vec![ProjectMember::new(PathBuf::from("/wt/app"))],
+        )];
+        let rows = project_tree(&projects, &list, &none());
+        assert_eq!(sketch(&rows, &list), vec!["Project(0)", ".app Primary*"]);
+        assert!(rows[1].is_hoisted());
+        assert_eq!(rows[1].depth(), 1, "it hangs off the project header");
+        assert!(
+            !rows
+                .iter()
+                .any(|r| matches!(r, ProjectTreeRow::Repo { .. })),
+            "no header row at all: {rows:#?}"
+        );
+    }
+
+    /// ...and the rule undoes itself the moment there is a branch tree worth
+    /// showing. No stored state is involved: the tree is derived every render.
+    #[test]
+    fn a_second_checkout_re_splits_the_hoisted_repo() {
+        let mut list = vec![clone_of("app", "/repos/app")];
+        let projects = [project(
+            1,
+            "Piki",
+            vec![ProjectMember::new(PathBuf::from("/wt/app"))],
+        )];
+        assert!(project_tree(&projects, &list, &none())[1].is_hoisted());
+
+        list.push(worktree("feature", "/repos/app"));
+        let rows = project_tree(&projects, &list, &none());
+        assert_eq!(
+            sketch(&rows, &list),
+            vec![
+                "Project(0)",
+                ".repo app",
+                "..app Primary",
+                "..feature Worktree",
+            ]
+        );
+        assert!(!rows.iter().any(|r| r.is_hoisted()));
+    }
+
+    /// A lone worktree whose clone isn't loaded is still one row for one
+    /// repository — hoisted, and kept honest about being a worktree.
+    #[test]
+    fn a_lone_worktree_is_hoisted_as_a_worktree() {
+        let list = [worktree("feature", "/repos/app")];
+        let rows = project_tree(&[], &list, &none());
+        assert_eq!(
+            sketch(&rows, &list),
+            vec!["Unassigned", ".feature Worktree*"]
+        );
+    }
+
+    /// A hoisted row has no header, so there is nothing to collapse — a stale
+    /// collapse key for that repo must not make its checkout disappear.
+    #[test]
+    fn a_stale_collapse_key_cannot_hide_a_hoisted_checkout() {
+        let list = [clone_of("app", "/repos/app")];
+        let collapsed = HashSet::from([repo_collapse_key(UNASSIGNED_KEY, Path::new("/repos/app"))]);
+        let rows = project_tree(&[], &list, &collapsed);
+        assert_eq!(sketch(&rows, &list), vec!["Unassigned", ".app Primary*"]);
+    }
+
     #[test]
     fn one_repo_can_belong_to_two_projects() {
         let list = [clone_of("app", "/repos/app")];
@@ -624,24 +752,22 @@ mod tests {
         let rows = project_tree(&projects, &list, &none());
         assert_eq!(
             sketch(&rows, &list),
-            vec![
-                "Project(0)",
-                ".repo app",
-                "..app Primary",
-                "Project(1)",
-                ".repo app",
-                "..app Primary",
-            ]
+            vec!["Project(0)", ".app Primary*", "Project(1)", ".app Primary*"]
         );
     }
 
     #[test]
     fn repos_collapse_independently_per_project() {
-        let list = [clone_of("app", "/repos/app")];
-        let projects = [
-            project(1, "A", vec![ProjectMember::new(PathBuf::from("/wt/app"))]),
-            project(2, "B", vec![ProjectMember::new(PathBuf::from("/wt/app"))]),
+        // Two checkouts, so the repo really has a header to collapse.
+        let list = [
+            clone_of("app", "/repos/app"),
+            worktree("feature", "/repos/app"),
         ];
+        let members = vec![
+            ProjectMember::new(PathBuf::from("/wt/app")),
+            ProjectMember::new(PathBuf::from("/wt/feature")),
+        ];
+        let projects = [project(1, "A", members.clone()), project(2, "B", members)];
         let collapsed = HashSet::from([repo_collapse_key("project:1", Path::new("/repos/app"))]);
         let rows = project_tree(&projects, &list, &collapsed);
         assert_eq!(
@@ -652,6 +778,7 @@ mod tests {
                 "Project(1)",
                 ".repo app",
                 "..app Primary",
+                "..feature Worktree",
             ]
         );
     }
@@ -693,11 +820,9 @@ mod tests {
             sketch(&rows, &list),
             vec![
                 "Project(0)",
-                ".repo app",
-                "..app Primary",
+                ".app Primary*",
                 "Unassigned",
-                ".repo x",
-                "..other Primary",
+                ".other Primary*",
             ]
         );
     }
@@ -706,10 +831,7 @@ mod tests {
     fn with_no_projects_at_all_everything_is_unassigned() {
         let list = [clone_of("app", "/repos/app")];
         let rows = project_tree(&[], &list, &none());
-        assert_eq!(
-            sketch(&rows, &list),
-            vec!["Unassigned", ".repo app", "..app Primary"]
-        );
+        assert_eq!(sketch(&rows, &list), vec!["Unassigned", ".app Primary*"]);
     }
 
     #[test]
@@ -743,8 +865,7 @@ mod tests {
                 ".pr-1 Primary",
                 ".pr-2 Primary",
                 "Project(0)",
-                ".repo app",
-                "..app Primary",
+                ".app Primary*",
             ]
         );
     }
