@@ -56,7 +56,7 @@
 //! A workspace that is a member of two projects is emitted under both. Only
 //! the `Unassigned` bucket cares about claims.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use crate::domain::{WorkspaceInfo, WorkspaceType};
@@ -400,6 +400,58 @@ fn emit_bucket(
             Slot::Dir(path) => rows.push(ProjectTreeRow::Dir { bucket, path }),
         }
     }
+}
+
+/// For every collapsible row's key, the workspaces it hides when collapsed.
+///
+/// A collapsed header must still surface its descendants' attention signals —
+/// an agent waiting for permission cannot vanish behind a chevron. The rows
+/// being drawn can't answer that (a collapsed row's descendants are omitted by
+/// construction), and re-deriving it from membership is exactly the kind of
+/// inference the tree no longer does: a repo group holds the member checkouts
+/// of that repo, not every checkout sharing its `source_repo`. So the answer
+/// comes from a second pass over the FULLY EXPANDED tree, where both frontends
+/// read it off the same walk.
+pub fn hidden_checkouts(
+    projects: &[Project],
+    workspaces: &[WorkspaceInfo],
+) -> HashMap<String, Vec<usize>> {
+    let mut out: HashMap<String, Vec<usize>> = HashMap::new();
+    // The header a row is under, as (bucket, key). Tracked by bucket, not just
+    // "the last header seen": the loose repositories that follow the projects
+    // have no header of their own, and would otherwise be counted under
+    // whichever project happened to come last.
+    let mut header: Option<(Bucket, String)> = None;
+    let mut repo_key: Option<String> = None;
+    for row in project_tree(projects, workspaces, &HashSet::new()) {
+        if header.as_ref().is_some_and(|(b, _)| *b != row.bucket()) {
+            header = None;
+            repo_key = None;
+        }
+        match row {
+            ProjectTreeRow::Project { key, bucket, .. } => {
+                header = Some((bucket, key));
+                repo_key = None;
+            }
+            ProjectTreeRow::Repo { key, .. } => repo_key = Some(key),
+            ProjectTreeRow::Checkout {
+                workspace_index,
+                in_group,
+                ..
+            } => {
+                if let Some((_, k)) = &header {
+                    out.entry(k.clone()).or_default().push(workspace_index);
+                }
+                // A row that hangs off the header belongs to no repo group,
+                // even though one may have been emitted just above it.
+                if in_group && let Some(k) = &repo_key {
+                    out.entry(k.clone()).or_default().push(workspace_index);
+                }
+            }
+            ProjectTreeRow::Dir { .. } => {}
+        }
+    }
+    out
 }
 
 /// Build the sidebar's visual rows.
@@ -938,6 +990,59 @@ mod tests {
         let rows = project_tree(&[], &list, &collapsed);
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].bucket(), Bucket::PrReview);
+    }
+
+    /// What a collapsed header hides is its real descendants — not every
+    /// checkout that happens to share a member's repository.
+    #[test]
+    fn hidden_checkouts_follow_membership_not_the_repo() {
+        let list = [
+            clone_of("app", "/repos/app"),
+            worktree("feature", "/repos/app"),
+        ];
+        // Only the worktree is a member.
+        let projects = [project(
+            1,
+            "Piki",
+            vec![ProjectMember::new(PathBuf::from("/wt/feature"))],
+        )];
+        let hidden = hidden_checkouts(&projects, &list);
+        assert_eq!(hidden.get("project:1"), Some(&vec![1]));
+        assert!(
+            !hidden
+                .values()
+                .any(|v| v.contains(&0) && hidden.get("project:1").is_some_and(|p| p.contains(&0))),
+            "the loose clone is not hidden by the project: {hidden:?}"
+        );
+    }
+
+    /// A repo group answers for the checkouts actually under it, and a row
+    /// hanging off the header (a PR review, a non-git workspace) belongs to no
+    /// group even when one was emitted just above it.
+    #[test]
+    fn hidden_checkouts_scope_a_repo_group_to_its_own_children() {
+        let list = [
+            clone_of("app", "/repos/app"),
+            worktree("feature", "/repos/app"),
+            plain_dir_ws("notes"),
+        ];
+        let projects = [project(
+            1,
+            "Piki",
+            vec![
+                ProjectMember::new(PathBuf::from("/wt/app")),
+                ProjectMember::new(PathBuf::from("/wt/feature")),
+                ProjectMember::new(PathBuf::from("/wt/notes")),
+            ],
+        )];
+        let hidden = hidden_checkouts(&projects, &list);
+        let repo = repo_collapse_key("project:1", Path::new("/repos/app"));
+        assert_eq!(hidden.get(&repo), Some(&vec![0, 1]));
+        assert_eq!(
+            hidden.get("project:1"),
+            Some(&vec![0, 1, 2]),
+            "the project hides the plain-directory row too"
+        );
     }
 
     #[test]

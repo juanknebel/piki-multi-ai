@@ -1,8 +1,10 @@
 /** The sidebar: one tree, projects all the way down.
  *
- *  Three levels — project → repository → checkout — plus two synthetic
- *  buckets (PR review, no project) so every registered workspace is reachable
- *  here. There is no separate flat workspace view; this replaced it.
+ *  Three levels — project → repository → checkout — plus the synthetic
+ *  PR-review bucket. A repository in no project is not wrapped in one: it
+ *  renders at the top level after the projects, so every registered workspace
+ *  is reachable without inventing a group for it. There is no separate flat
+ *  workspace view; this replaced it.
  *
  *  Rows come straight from `piki_core::projects::tree::project_tree` through
  *  the `project_tree` command: which repo a checkout belongs to, what is
@@ -42,9 +44,10 @@ import {
 } from "../types";
 
 /** Display label for a synthetic bucket — core only hands back the tag.
- *  Mirrors the TUI's `bucket_label`. */
+ *  Mirrors the TUI's `bucket_label`. Only PR review has a header: loose
+ *  repositories render at the top level with none. */
 function bucketLabel(bucket: string): string {
-  return bucket === "prReview" ? "PR review" : "no project";
+  return bucket === "prReview" ? "PR review" : "";
 }
 
 /** Name + muted branch for a checkout row. Under a repo group the repo name is
@@ -229,35 +232,15 @@ export function renderProjectTree(container: HTMLElement) {
     return best;
   }
 
-  /** The workspace indices a collapsed header is hiding, so its attention
-   *  signals surface instead of vanishing behind the chevron. Derived from the
-   *  rows that WOULD be there — a collapsed row's descendants are omitted from
-   *  `rows` by construction, so this reads the live workspace list instead:
-   *  a repo group hides the checkouts of that repo, a project header hides
-   *  every checkout under its repos. */
-  function hiddenOf(row: ipc.ProjectTreeRow, at: number): (idx: number) => boolean {
-    if (row.type === "repo") {
-      const root = row.root;
-      return (i) => appState.workspaces[i]?.info.source_repo === root;
-    }
-    // A collapsed project: every repo that would render under it. The tree
-    // omits them, so take the repos of its member paths plus their siblings.
-    const project = row.type === "project" && row.project_id !== null ? projectById(row.project_id) : null;
-    if (!project) {
-      // A bucket: unresolvable from membership, so fall back to "nothing
-      // rolled up" rather than guessing — buckets are transient anyway.
-      void at;
-      return () => false;
-    }
-    const repos = new Set(
-      project.members
-        .map((m) => appState.workspaces.find((w) => w.info.path === m.path)?.info.source_repo)
-        .filter((r): r is string => !!r),
-    );
-    return (i) => {
-      const ws = appState.workspaces[i];
-      return !!ws && repos.has(ws.info.source_repo);
-    };
+  /** Worst agent state among the workspaces a collapsed row hides, so an agent
+   *  waiting for permission can't vanish behind a chevron. The backend says
+   *  WHICH workspaces those are (`row.hidden`, from
+   *  `projects::tree::hidden_checkouts`); deriving it here from `source_repo`
+   *  would answer for checkouts nobody put in the project. */
+  function hiddenRollup(hidden: number[]) {
+    if (hidden.length === 0) return null;
+    const set = new Set(hidden);
+    return agentRollup((i) => set.has(i));
   }
 
   async function persistCollapsed() {
@@ -341,7 +324,7 @@ export function renderProjectTree(container: HTMLElement) {
       const el = document.createElement("div");
       const name = row.bucket === "project" ? row.name : bucketLabel(row.bucket);
       const swatch = row.color !== null ? projectSwatch(row.color) : "var(--text-muted)";
-      const rollup = row.collapsed ? agentRollup(hiddenOf(row, 0)) : null;
+      const rollup = row.collapsed ? hiddenRollup(row.hidden) : null;
       const rollupView = rollup && actionableStatusView(rollup.status, rollup.attention);
       el.className = `project-row${row.bucket === "project" ? "" : " bucket"}`;
       if (row.project_id !== null) el.dataset.projectId = String(row.project_id);
@@ -368,9 +351,7 @@ export function renderProjectTree(container: HTMLElement) {
       projectId: number | null,
     ): HTMLElement {
       const el = document.createElement("div");
-      const rollup = row.collapsed
-        ? agentRollup(hiddenOf(row, 0))
-        : null;
+      const rollup = row.collapsed ? hiddenRollup(row.hidden) : null;
       const rollupView = rollup && actionableStatusView(rollup.status, rollup.attention);
       el.className = "repo-row";
       el.dataset.repo = row.root;

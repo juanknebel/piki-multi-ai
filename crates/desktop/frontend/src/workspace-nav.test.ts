@@ -15,6 +15,7 @@ const project = (key: string, collapsed = false): ProjectTreeRow => ({
   type: "project",
   key,
   collapsed,
+  hidden: [],
   project_id: 1,
   name: "proj",
   color: 0,
@@ -29,6 +30,7 @@ const repo = (key: string, collapsed = false): ProjectTreeRow => ({
   root: "/repo",
   display: "repo",
   depth: 1,
+  hidden: [],
 });
 
 describe("visibleWorkspaceIndices", () => {

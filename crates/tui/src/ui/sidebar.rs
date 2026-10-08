@@ -18,13 +18,15 @@ use super::layout::{pane_border_style, pane_title_style};
 const PANE_TITLE: &str = " PROJECTS ";
 
 /// Display label for a synthetic bucket header. Core only hands back the
-/// variant; the wording is the frontend's (the desktop mirrors these two).
+/// variant; the wording is the frontend's (the desktop mirrors it).
+///
+/// Only PR review has a header: loose repositories render at the top level
+/// with none, and a real project shows its own name — both return "" and never
+/// reach a row.
 fn bucket_label(bucket: Bucket) -> &'static str {
     match bucket {
         Bucket::PrReview => "pr-review",
-        Bucket::Unassigned => "no project",
-        // A real project renders its own name, never this.
-        Bucket::Project(_) => "",
+        Bucket::Project(_) | Bucket::Unassigned => "",
     }
 }
 
@@ -92,51 +94,24 @@ impl Signals {
     }
 }
 
-/// Signals per collapse key, rolled up from the FULLY EXPANDED tree so a
-/// collapsed project or repo can surface what it is hiding. Built off a second
-/// `project_tree` pass with nothing collapsed, since the rows actually being
-/// drawn omit their hidden descendants by construction.
+/// Signals per collapse key, so a collapsed project or repo can surface what
+/// it is hiding. Which workspaces each key hides comes from core
+/// (`projects::tree::hidden_checkouts`) — the rows being drawn can't answer it,
+/// and re-deriving it here from `source_repo` would reintroduce exactly the
+/// membership inference the tree dropped.
 fn rollups(app: &App) -> HashMap<String, Signals> {
     let infos: Vec<piki_core::WorkspaceInfo> =
         app.workspaces.iter().map(|w| w.info.clone()).collect();
-    let expanded = piki_core::projects::tree::project_tree(
-        &app.sidebar_projects,
-        &infos,
-        &std::collections::HashSet::new(),
-    );
-    let mut out: HashMap<String, Signals> = HashMap::new();
-    // The header rows a checkout belongs to: its project/bucket, and its repo
-    // group when it has one.
-    let mut project_key: Option<String> = None;
-    let mut repo_key: Option<String> = None;
-    for row in &expanded {
-        match row {
-            ProjectTreeRow::Project { key, .. } => {
-                project_key = Some(key.clone());
-                repo_key = None;
+    piki_core::projects::tree::hidden_checkouts(&app.sidebar_projects, &infos)
+        .into_iter()
+        .map(|(key, indices)| {
+            let mut sig = Signals::default();
+            for i in indices {
+                sig.absorb(Signals::of(&app.workspaces[i]));
             }
-            ProjectTreeRow::Repo { key, .. } => repo_key = Some(key.clone()),
-            ProjectTreeRow::Checkout {
-                workspace_index,
-                depth,
-                ..
-            } => {
-                let sig = Signals::of(&app.workspaces[*workspace_index]);
-                if let Some(k) = &project_key {
-                    out.entry(k.clone()).or_default().absorb(sig);
-                }
-                // A depth-1 checkout hangs off the header, not off the repo
-                // group that happens to precede it.
-                if *depth == 2
-                    && let Some(k) = &repo_key
-                {
-                    out.entry(k.clone()).or_default().absorb(sig);
-                }
-            }
-            ProjectTreeRow::Dir { .. } => {}
-        }
-    }
-    out
+            (key, sig)
+        })
+        .collect()
 }
 
 /// Right-aligned metadata spans (agent status glyph, changed-file count,

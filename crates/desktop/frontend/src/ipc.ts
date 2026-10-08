@@ -112,6 +112,10 @@ export type ProjectTreeRow =
       type: "project";
       key: string;
       collapsed: boolean;
+      /** Workspace indices this row hides while collapsed, so their attention
+       *  signals can roll onto it. Empty when expanded. Decided in core — never
+       *  re-derive it from `source_repo`. */
+      hidden: number[];
       /** `null` for a synthetic bucket (and for an unsaved project). */
       project_id: number | null;
       /** Empty for a bucket — the frontend names those. */
@@ -129,6 +133,8 @@ export type ProjectTreeRow =
       display: string;
       /** 1 under a project header, 0 for a loose repository. */
       depth: number;
+      /** See the project row's `hidden`. */
+      hidden: number[];
     }
   | {
       type: "checkout";

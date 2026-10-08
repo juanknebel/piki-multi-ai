@@ -421,6 +421,9 @@ pub enum ProjectTreeRowDto {
         /// Collapse key.
         key: String,
         collapsed: bool,
+        /// Workspace indices this row hides while collapsed, so the frontend
+        /// can roll their attention signals onto it. Empty when expanded.
+        hidden: Vec<usize>,
         /// `Some(id)` for a real project (`None` for an unsaved one);
         /// `None` for a bucket.
         project_id: Option<i64>,
@@ -443,6 +446,8 @@ pub enum ProjectTreeRowDto {
         display: String,
         /// 1 under a project header, 0 for a loose repository.
         depth: u8,
+        /// See `Project::hidden`.
+        hidden: Vec<usize>,
     },
     /// A loaded workspace: `index` points into `list_workspaces`' order.
     Checkout {
@@ -489,6 +494,11 @@ pub async fn project_tree(
     let infos: Vec<piki_core::WorkspaceInfo> =
         app.workspaces.iter().map(|w| w.info.clone()).collect();
 
+    // What a collapsed row hides is decided in core too: deriving it here from
+    // `source_repo` would reintroduce the membership inference the tree
+    // dropped (a project would answer for checkouts nobody put in it).
+    let mut hidden = piki_core::projects::tree::hidden_checkouts(&projects, &infos);
+
     Ok(
         piki_core::projects::tree::project_tree(&projects, &infos, &collapsed)
             .into_iter()
@@ -507,6 +517,11 @@ pub async fn project_tree(
                         Bucket::Unassigned => (None, String::new(), None, "unassigned"),
                     };
                     ProjectTreeRowDto::Project {
+                        hidden: if collapsed {
+                            hidden.remove(&key).unwrap_or_default()
+                        } else {
+                            Vec::new()
+                        },
                         key,
                         collapsed,
                         project_id,
@@ -524,6 +539,11 @@ pub async fn project_tree(
                     depth,
                     ..
                 } => ProjectTreeRowDto::Repo {
+                    hidden: if collapsed {
+                        hidden.remove(&key).unwrap_or_default()
+                    } else {
+                        Vec::new()
+                    },
                     key,
                     collapsed,
                     checkouts,

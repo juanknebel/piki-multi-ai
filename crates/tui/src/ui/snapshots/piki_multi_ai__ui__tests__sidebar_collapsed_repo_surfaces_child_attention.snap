@@ -3,7 +3,7 @@ source: crates/tui/src/ui/mod.rs
 expression: content
 ---
 ╭ PROJECTS ────────────────────────────╮
-│ ▸ ⎇ src-agent-multi                  │
+│ ▸ ⎇ src-agent-multi ● 1∆ ↑1 ↓2       │
 │                                      │
 │                                      │
 │                                      │
