@@ -974,6 +974,52 @@ pub(super) fn handle_sessions_input(app: &mut App, key: KeyEvent) -> Option<Acti
 pub(super) fn handle_projects_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     match app.active_dialog {
         Some(DialogState::ProjectEdit { .. }) => handle_project_edit_input(app, key),
+        Some(DialogState::ProjectMembership { .. }) => handle_project_membership_input(app, key),
+        _ => None,
+    }
+}
+
+/// The membership picker: j/k pick a project, Enter toggles the row's
+/// membership in it and closes, Esc backs out. One toggle per visit — the
+/// common case is one project, and closing makes the result visible in the
+/// tree immediately.
+fn handle_project_membership_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::ProjectMembership {
+        ref path,
+        ref rows,
+        ref mut selected,
+        ..
+    }) = app.active_dialog
+    else {
+        return None;
+    };
+
+    match key.code {
+        KeyCode::Down | KeyCode::Char('j') => {
+            move_selection(selected, rows.len(), 1, false);
+            None
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            move_selection(selected, rows.len(), -1, false);
+            None
+        }
+        KeyCode::Enter => {
+            let (project, is_member) = rows.get(*selected)?.clone();
+            let path = path.clone();
+            let mut next = project;
+            if is_member {
+                next.members.retain(|m| m.path != path);
+            } else {
+                next.members
+                    .push(piki_core::projects::ProjectMember::new(path));
+            }
+            dismiss_dialog(app);
+            Some(Action::SaveProject(next))
+        }
+        _ if is_cancel(key, &app.config) => {
+            dismiss_dialog(app);
+            None
+        }
         _ => None,
     }
 }

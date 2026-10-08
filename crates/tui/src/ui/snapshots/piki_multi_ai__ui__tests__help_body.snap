@@ -94,7 +94,8 @@ expression: body
     e             Edit the project this row belongs to
     d             Delete the project this row belongs to
     a             Add a repository to this project
-    w             New branch + worktree in this repository
+    w             New branch + worktree in this repository (opens it first if needed)
+    m             Put this row into a project, or take it out
 
   Agents pane
     j             Select the next agent

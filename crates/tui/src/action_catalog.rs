@@ -396,7 +396,12 @@ static CATALOG: &[ActionMeta] = {
         local(
             C::ProjectTree,
             Bind("projects", "new_worktree"),
-            "New branch + worktree in this repository",
+            "New branch + worktree in this repository (opens it first if needed)",
+        ),
+        local(
+            C::ProjectTree,
+            Bind("projects", "membership"),
+            "Put this row into a project, or take it out",
         ),
         // ── Agents pane ───────────────────────────────────────────────────
         local(

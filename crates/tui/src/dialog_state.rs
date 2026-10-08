@@ -208,6 +208,22 @@ pub enum DialogState {
         /// Daemon pid read from its pid file at open time (renders are pure).
         daemon_pid: Option<u32>,
     },
+    /// Put the row under the cursor into a project, or take it out
+    /// (`AppMode::Projects`, the tree's `membership` key). The TUI has no
+    /// context menus, so this is the counterpart of the desktop row menu's
+    /// "Add to / Remove from project X" — without it, moving a loose
+    /// repository into a project meant opening the project editor and
+    /// hunting for it in the member checklist.
+    ProjectMembership {
+        /// The member path being toggled (a checkout's, or a directory's).
+        path: std::path::PathBuf,
+        /// What to call it in the header.
+        label: String,
+        /// Every project, with whether `path` is already a member. Snapshotted
+        /// at open time — renders stay pure.
+        rows: Vec<(piki_core::projects::Project, bool)>,
+        selected: usize,
+    },
     /// Edit/create a project (`AppMode::Projects`), opened from the sidebar
     /// tree. Esc and save both return to Normal — the tree underneath is a
     /// pane, not a list dialog to go back to.

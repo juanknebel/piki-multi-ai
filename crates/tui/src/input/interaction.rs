@@ -1158,8 +1158,65 @@ pub(super) fn handle_workspace_list_interaction(app: &mut App, key: KeyEvent) ->
         }
     } else if cfg.matches_projects(key, "new_worktree") {
         return new_worktree_for_selected_repo(app);
+    } else if cfg.matches_projects(key, "membership") {
+        open_membership_picker(app);
     }
     None
+}
+
+/// `membership`: put the row under the cursor into a project, or take it out.
+/// The TUI has no context menus, so this is the counterpart of the desktop row
+/// menu's "Add to / Remove from project X" — the only other way in was the
+/// project editor's member checklist, which means knowing which project you
+/// want *before* you can act on the row you are looking at.
+fn open_membership_picker(app: &mut App) {
+    let Some(row) = app.sidebar_rows().get(app.selected_sidebar_row).cloned() else {
+        return;
+    };
+    // Whatever the row stands for by path: a checkout, or a directory member.
+    let (path, label) = match &row {
+        ProjectTreeRow::Checkout {
+            workspace_index, ..
+        } => {
+            let ws = &app.workspaces[*workspace_index];
+            (ws.info.path.clone(), ws.info.name.clone())
+        }
+        ProjectTreeRow::Dir { path, .. } => (
+            path.clone(),
+            path.file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| path.to_string_lossy().to_string()),
+        ),
+        _ => {
+            app.set_toast(
+                "Select a checkout or a directory first",
+                crate::app::ToastLevel::Info,
+            );
+            return;
+        }
+    };
+    if app.sidebar_projects.is_empty() {
+        app.set_toast(
+            "No projects yet — create one first",
+            crate::app::ToastLevel::Info,
+        );
+        return;
+    }
+    let rows = app
+        .sidebar_projects
+        .iter()
+        .map(|p| {
+            let member = p.members.iter().any(|m| m.path == path);
+            (p.clone(), member)
+        })
+        .collect();
+    app.active_dialog = Some(DialogState::ProjectMembership {
+        path,
+        label,
+        rows,
+        selected: 0,
+    });
+    app.mode = AppMode::Projects;
 }
 
 /// Shown when a project-scoped key lands on a synthetic bucket header (PR
@@ -1171,6 +1228,13 @@ const NO_PROJECT_HERE: &str = "Not a project row";
 pub(super) fn activate_sidebar_row(app: &mut App) -> Option<Action> {
     let row = app.sidebar_rows().get(app.selected_sidebar_row)?.clone();
     match row {
+        // A repository that is a member but has nothing loaded has no children
+        // to collapse — the useful thing to do with it is open it. Registering
+        // its root picks up its real origin (`create_simple` reads the git
+        // remote), which is what the branch dialog needs.
+        ProjectTreeRow::Repo {
+            checkouts: 0, root, ..
+        } => Some(Action::ProjectAdoptDirectory { path: root }),
         ProjectTreeRow::Project { .. } | ProjectTreeRow::Repo { .. } => {
             app.toggle_selected_group();
             None
@@ -1236,13 +1300,17 @@ fn new_worktree_for_selected_repo(app: &mut App) -> Option<Action> {
         .position(|w| w.info.source_repo == repo && !w.info.ephemeral)
     {
         Some(parent) => super::app_actions::open_create_worktree_for(app, parent),
+        // Nothing of this repo is loaded, so there is no origin or prompt to
+        // branch from yet. Open it — registering its root reads the real git
+        // remote — and say so, instead of refusing and leaving the user to
+        // guess what "open" means here.
         None => {
             app.pending_project_member = None;
             app.set_toast(
-                "Open this repository before branching it",
+                "Opening the repository first — press again to branch it",
                 crate::app::ToastLevel::Info,
             );
-            None
+            Some(Action::ProjectAdoptDirectory { path: repo })
         }
     }
 }
@@ -1348,6 +1416,92 @@ mod tests {
         assert!(handle_workspace_list_interaction(&mut app, key(KeyCode::Char('d'))).is_none());
         assert!(handle_workspace_list_interaction(&mut app, key(KeyCode::Char('e'))).is_none());
         assert!(app.active_dialog.is_none(), "no editor opened");
+    }
+
+    /// The membership picker is the TUI's answer to the desktop row menu's
+    /// "Add to project X": it opens on a checkout and offers every project.
+    #[test]
+    fn membership_picker_opens_on_a_checkout_and_marks_current_members() {
+        let mut app = test_app();
+        let a = add_test_workspace(&mut app);
+        app.workspaces[a].info.path = std::path::PathBuf::from("/wt/a");
+        seed_project(&mut app, vec![std::path::PathBuf::from("/tmp/other")]);
+        // Rows: [project, dir(other), a]. Stand on the loose checkout.
+        app.selected_sidebar_row = 2;
+
+        handle_workspace_list_interaction(&mut app, key(KeyCode::Char('m')));
+
+        let Some(crate::dialog_state::DialogState::ProjectMembership {
+            ref path, ref rows, ..
+        }) = app.active_dialog
+        else {
+            panic!(
+                "expected the membership picker, got {:?}",
+                app.active_dialog
+            );
+        };
+        assert_eq!(path, &std::path::PathBuf::from("/wt/a"));
+        assert_eq!(rows.len(), 1);
+        assert!(!rows[0].1, "not a member yet");
+    }
+
+    /// Enter on the picker toggles membership and hands the save to the
+    /// action layer.
+    #[test]
+    fn membership_picker_enter_adds_the_row_to_the_project() {
+        let mut app = test_app();
+        let a = add_test_workspace(&mut app);
+        app.workspaces[a].info.path = std::path::PathBuf::from("/wt/a");
+        seed_project(&mut app, vec![std::path::PathBuf::from("/tmp/other")]);
+        app.selected_sidebar_row = 2;
+        handle_workspace_list_interaction(&mut app, key(KeyCode::Char('m')));
+
+        let action = super::super::dialog::handle_projects_input(&mut app, key(KeyCode::Enter));
+
+        let Some(Action::SaveProject(project)) = action else {
+            panic!("expected SaveProject, got {action:?}");
+        };
+        assert!(
+            project
+                .members
+                .iter()
+                .any(|m| m.path == std::path::Path::new("/wt/a")),
+            "the checkout joined: {:?}",
+            project.members
+        );
+        assert!(app.active_dialog.is_none(), "the picker closed");
+    }
+
+    /// A member repository with nothing loaded has no origin to branch from.
+    /// Opening it is the useful move, not refusing.
+    #[test]
+    fn an_unopened_repo_row_opens_instead_of_refusing() {
+        let mut app = test_app();
+        app.sidebar_projects = vec![piki_core::projects::Project {
+            id: Some(1),
+            name: "frontend".to_string(),
+            color: 0,
+            order: 0,
+            members: vec![piki_core::projects::ProjectMember::repo(
+                std::path::PathBuf::from("/repos/web"),
+            )],
+        }];
+        // Rows: [project, repo(web, 0 checkouts)].
+        app.selected_sidebar_row = 1;
+
+        // Enter opens it...
+        let action = handle_workspace_list_interaction(&mut app, key(KeyCode::Enter));
+        assert!(matches!(
+            action,
+            Some(Action::ProjectAdoptDirectory { ref path }) if path == std::path::Path::new("/repos/web")
+        ));
+
+        // ...and so does asking for a branch, rather than a dead end.
+        let action = handle_workspace_list_interaction(&mut app, key(KeyCode::Char('w')));
+        assert!(matches!(
+            action,
+            Some(Action::ProjectAdoptDirectory { ref path }) if path == std::path::Path::new("/repos/web")
+        ));
     }
 
     /// `new_worktree` needs a repository under the cursor; on a bucket header

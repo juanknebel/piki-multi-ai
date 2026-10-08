@@ -5,7 +5,7 @@
 
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::Style;
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
@@ -14,9 +14,88 @@ use crate::dialog_state::{DialogState, ProjectEditField};
 use piki_core::projects::PROJECT_PALETTE_LEN;
 
 pub(crate) fn render_projects_overlay(frame: &mut Frame, area: Rect, app: &App) {
-    if matches!(app.active_dialog, Some(DialogState::ProjectEdit { .. })) {
-        render_project_edit(frame, area, app);
+    match app.active_dialog {
+        Some(DialogState::ProjectEdit { .. }) => render_project_edit(frame, area, app),
+        Some(DialogState::ProjectMembership { .. }) => render_project_membership(frame, area, app),
+        _ => {}
     }
+}
+
+/// The membership picker: every project, with a checkbox for whether the row
+/// under the cursor is already in it. Mirrors the desktop row menu's
+/// "Add to / Remove from project X".
+fn render_project_membership(frame: &mut Frame, area: Rect, app: &App) {
+    let Some(DialogState::ProjectMembership {
+        ref label,
+        ref rows,
+        selected,
+        ..
+    }) = app.active_dialog
+    else {
+        return;
+    };
+
+    let popup_width = area.width * 60 / 100;
+    let max_popup_height = area.height.saturating_sub(4).max(10);
+    let visible_rows = rows.len().clamp(1, 10) as u16;
+    let height = (6u16.saturating_add(visible_rows)).min(max_popup_height);
+    let popup = super::clear_popup(frame, area, popup_width.max(40), height);
+    let theme = &app.theme.dialog;
+    let active_c = theme.new_ws_active;
+    let inactive_c = theme.new_ws_inactive;
+
+    let mut lines: Vec<Line<'_>> = vec![
+        Line::from(vec![
+            Span::styled("  Projects for ", Style::default().fg(inactive_c)),
+            Span::styled(label.clone(), Style::default().fg(active_c)),
+            Span::styled(":", Style::default().fg(inactive_c)),
+        ]),
+        Line::from(""),
+    ];
+    let mut selected_line_idx = 0usize;
+    for (row, (project, is_member)) in rows.iter().enumerate() {
+        let is_selected = row == selected;
+        if is_selected {
+            selected_line_idx = lines.len();
+        }
+        let prefix = if is_selected { "  > " } else { "    " };
+        let style = if is_selected {
+            Style::default().fg(active_c).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(inactive_c)
+        };
+        let check = if *is_member { "[x] " } else { "[ ] " };
+        lines.push(Line::from(vec![
+            Span::styled(format!("{prefix}{check}"), style),
+            Span::styled(
+                "● ",
+                Style::default().fg(app.theme.projects.color(project.clamped_color())),
+            ),
+            Span::styled(project.name.clone(), style),
+        ]));
+    }
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![Span::styled(
+        "  [j/k] move  [Enter] add / remove  [Esc] cancel",
+        Style::default().fg(inactive_c),
+    )]));
+
+    let mut block = super::popup_block("Add to Project", theme.new_ws_border);
+
+    let total_lines = lines.len() as u16;
+    let inner_height = popup.height.saturating_sub(2);
+    let max_scroll = total_lines.saturating_sub(inner_height);
+    let scroll = (selected_line_idx as u16)
+        .saturating_sub(inner_height.saturating_sub(1))
+        .min(max_scroll);
+    if max_scroll > 0 {
+        block = block.title_bottom(
+            Line::from(format!(" [{}/{}] ", selected + 1, rows.len())).right_aligned(),
+        );
+    }
+
+    let text = Paragraph::new(lines).block(block).scroll((scroll, 0));
+    frame.render_widget(text, popup);
 }
 
 fn render_project_edit(frame: &mut Frame, area: Rect, app: &App) {

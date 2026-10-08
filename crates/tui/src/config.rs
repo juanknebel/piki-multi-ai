@@ -499,6 +499,8 @@ fn default_projects() -> HashMap<String, String> {
     m.insert("add_repo".to_string(), "a".to_string());
     // Create a branch + worktree in the repo under the cursor.
     m.insert("new_worktree".to_string(), "w".to_string());
+    // Put this row into a project, or take it out ("move to project").
+    m.insert("membership".to_string(), "m".to_string());
     m
 }
 

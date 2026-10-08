@@ -259,6 +259,7 @@ theme = "default"
 # delete = "d"                # delete it (immediate, no confirm)
 # add_repo = "a"              # add a repository to this project (Add Repository dialog)
 # new_worktree = "w"          # new branch + worktree in the repository under the cursor
+# membership = "m"            # put this row into a project, or take it out
 
 # [keybindings.logs]
 # down = "j"
