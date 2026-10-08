@@ -22,7 +22,7 @@ export async function showAgentManager(workspaceIdx?: number) {
   document.querySelector(".agent-manager-backdrop")?.remove();
 
   if (appState.workspaces.length === 0) {
-    showNeedsWorkspace("Agent profiles are stored in a workspace's repository — create one to manage them.");
+    showNeedsWorkspace("Agent profiles are stored in a repository — add one to manage them.");
     return;
   }
   const wsIdx = workspaceIdx ?? appState.activeWorkspace;

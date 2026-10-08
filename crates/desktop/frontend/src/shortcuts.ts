@@ -88,16 +88,16 @@ const shortcuts: ShortcutDef[] = [
   // terminal-safe chords and capture from a focused shell (Ctrl+P/Ctrl+Space
   // were outside-only: bare Ctrl combos are real terminal keystrokes).
   { id: "command-palette", label: "Command Palette", category: "General", defaultKey: "Ctrl+Shift+P", key: "Ctrl+Shift+P", action: () => {}, terminalCapture: true },
-  { id: "new-workspace", label: "New Workspace", category: "General", defaultKey: "Alt+N", key: "Alt+N", action: () => {}, terminalCapture: true },
-  { id: "workspace-switcher", label: "Workspace Switcher", category: "General", defaultKey: "Alt+W", key: "Alt+W", action: () => {}, terminalCapture: true },
+  { id: "new-workspace", label: "Add Repository", category: "General", defaultKey: "Alt+N", key: "Alt+N", action: () => {}, terminalCapture: true },
+  { id: "workspace-switcher", label: "Switch Checkout", category: "General", defaultKey: "Alt+W", key: "Alt+W", action: () => {}, terminalCapture: true },
   { id: "dashboard", label: "Dashboard", category: "General", defaultKey: "Alt+D", key: "Alt+D", action: () => {}, terminalCapture: true },
-  // Workspace navigation without the switcher, in sidebar order (TUI
+  // Checkout navigation without the switcher, in sidebar order (TUI
   // `prefix }` / `{` / `` ` ``). The bracket pair mirrors the TUI's unshifted
   // keys; `Alt+`` is the alternate-workspace toggle — some desktop
   // environments claim it, which is what Settings ▸ Shortcuts is for.
-  { id: "workspace-next", label: "Next Workspace", category: "General", defaultKey: "Alt+]", key: "Alt+]", action: () => {}, terminalCapture: true },
-  { id: "workspace-prev", label: "Previous Workspace", category: "General", defaultKey: "Alt+[", key: "Alt+[", action: () => {}, terminalCapture: true },
-  { id: "workspace-last", label: "Toggle Last Workspace", category: "General", defaultKey: "Alt+`", key: "Alt+`", action: () => {}, terminalCapture: true },
+  { id: "workspace-next", label: "Next Checkout", category: "General", defaultKey: "Alt+]", key: "Alt+]", action: () => {}, terminalCapture: true },
+  { id: "workspace-prev", label: "Previous Checkout", category: "General", defaultKey: "Alt+[", key: "Alt+[", action: () => {}, terminalCapture: true },
+  { id: "workspace-last", label: "Toggle Last Checkout", category: "General", defaultKey: "Alt+`", key: "Alt+`", action: () => {}, terminalCapture: true },
   { id: "help", label: "Keyboard Shortcuts", category: "General", defaultKey: "?", key: "?", action: () => {} },
   // Ctrl+, is the settings key everywhere else (VS Code, GNOME, macOS ⌘+,);
   // bare Ctrl is not terminal-safe so it stays outside-only — the palette,
@@ -162,7 +162,7 @@ const PASTE_KEY = isMac ? "Ctrl+V" : "Ctrl+Shift+V";
  *  Every row must be a key that actually fires somewhere in the app. */
 const fixedShortcuts: FixedShortcut[] = [
   { category: "General", key: "Esc", label: "Close Dialog / Overlay" },
-  { category: "General", key: "Alt+1…9", label: "Switch to Workspace N" },
+  { category: "General", key: "Alt+1…9", label: "Switch to Checkout N" },
   { category: "Search", key: "Ctrl+H", label: "Request History (in API Explorer)" },
   { category: "Search", key: "Alt+Enter", label: "Open in read-only viewer (in file search; Enter opens an editor tab)" },
   { category: "Git", key: "Ctrl+Enter", label: "Commit (in commit message box)" },
@@ -173,7 +173,7 @@ const fixedShortcuts: FixedShortcut[] = [
   { category: "Panes & Tabs", key: "Middle-click tab", label: "Close tab (asks if a process is running)" },
   { category: "Panes & Tabs", key: "Right-click tab", label: "Tab menu (rename, split, move to workspace, close)" },
   { category: "Panes & Tabs", key: "⋯ in tab bar", label: "List every tab of the workspace" },
-  { category: "General", key: "Right-click workspace", label: "Workspace menu (open, agents, info, edit, merge, delete)" },
+  { category: "General", key: "Right-click a row", label: "Row menu (open, agents, info, edit, new branch, merge, delete)" },
   { category: "Terminal", key: COPY_KEY, label: "Copy Selection" },
   { category: "Terminal", key: PASTE_KEY, label: "Paste from Clipboard" },
   { category: "Terminal", key: "Select text", label: "Copy to Clipboard (Settings ▸ Terminal ▸ Copy on select)" },
@@ -196,7 +196,7 @@ const RESERVED_COMBOS: { key: string; label: string }[] = [
   { key: PASTE_KEY, label: "Paste from Clipboard (terminal)" },
   { key: "Ctrl+Tab", label: "Next Tab" },
   { key: "Ctrl+Shift+Tab", label: "Previous Tab" },
-  ...Array.from({ length: 9 }, (_, i) => ({ key: `Alt+${i + 1}`, label: `Switch to Workspace ${i + 1}` })),
+  ...Array.from({ length: 9 }, (_, i) => ({ key: `Alt+${i + 1}`, label: `Switch to Checkout ${i + 1}` })),
   ...Array.from({ length: 9 }, (_, i) => ({ key: `Ctrl+Shift+${i + 1}`, label: `Switch to Tab ${i + 1}` })),
 ];
 

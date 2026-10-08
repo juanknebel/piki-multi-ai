@@ -189,7 +189,7 @@ pub(crate) fn open_create_worktree_for(app: &mut App, parent_idx: usize) -> Opti
             }
             piki_core::WorkspaceOrigin::Local => {
                 app.status_message =
-                    Some("Create Worktree is available only for GitHub workspaces".into());
+                    Some("New Branch is available only for GitHub repositories".into());
             }
         }
     }
@@ -456,7 +456,7 @@ pub(crate) fn request_close_tab(app: &mut App) -> Option<Action> {
 /// moving it away would leave its workspace with no tabs at all.
 pub(crate) fn open_move_tab(app: &mut App) -> Option<Action> {
     let Some(ws) = app.current_workspace() else {
-        app.set_toast("No active workspace", crate::app::ToastLevel::Info);
+        app.set_toast("Nothing open", crate::app::ToastLevel::Info);
         return None;
     };
     let tab_idx = ws.active_tab;
@@ -486,7 +486,7 @@ pub(crate) fn open_move_tab(app: &mut App) -> Option<Action> {
         .collect();
     if targets.is_empty() {
         app.set_toast(
-            "No other workspace to move this tab to",
+            "No other checkout to move this tab to",
             crate::app::ToastLevel::Info,
         );
         return None;
@@ -506,7 +506,7 @@ pub(crate) fn open_move_tab(app: &mut App) -> Option<Action> {
 /// process at all.
 pub(crate) fn request_restart_tab(app: &mut App) -> Option<Action> {
     let Some(ws) = app.current_workspace() else {
-        app.set_toast("No active workspace", crate::app::ToastLevel::Info);
+        app.set_toast("Nothing open", crate::app::ToastLevel::Info);
         return None;
     };
     let target = ws.active_tab;
@@ -616,7 +616,7 @@ const REMOTE_SCROLLBACK: usize = 5000;
 /// repaints on its next output.
 pub(crate) fn clear_terminal(app: &mut App) -> Option<Action> {
     let Some(ws) = app.workspaces.get_mut(app.active_workspace) else {
-        app.set_toast("No active workspace", crate::app::ToastLevel::Info);
+        app.set_toast("Nothing open", crate::app::ToastLevel::Info);
         return None;
     };
     let tab = ws.tabs.get_mut(ws.active_tab)?;
@@ -710,7 +710,7 @@ pub(crate) fn open_git_tab(app: &mut App) -> Option<Action> {
     let mut dead_session_id: Option<String> = None;
     {
         let Some(ws) = app.workspaces.get_mut(app.active_workspace) else {
-            app.set_toast("No active workspace", crate::app::ToastLevel::Info);
+            app.set_toast("Nothing open", crate::app::ToastLevel::Info);
             return None;
         };
         if let Some(idx) = ws
@@ -743,7 +743,7 @@ pub(crate) fn open_git_tab(app: &mut App) -> Option<Action> {
 
 pub(crate) fn open_rename_tab(app: &mut App) -> Option<Action> {
     let Some(ws) = app.workspaces.get(app.active_workspace) else {
-        app.set_toast("No active workspace", crate::app::ToastLevel::Info);
+        app.set_toast("Nothing open", crate::app::ToastLevel::Info);
         return None;
     };
     let Some(tab) = ws.current_tab() else {
@@ -957,7 +957,7 @@ mod tests {
         let action = open_move_tab(&mut app);
 
         assert!(action.is_none());
-        assert_eq!(app.status_message.as_deref(), Some("No active workspace"));
+        assert_eq!(app.status_message.as_deref(), Some("Nothing open"));
         assert_eq!(app.mode, AppMode::Normal);
     }
 
@@ -1006,7 +1006,7 @@ mod tests {
         let action = request_restart_tab(&mut app);
 
         assert!(action.is_none());
-        assert_eq!(app.status_message.as_deref(), Some("No active workspace"));
+        assert_eq!(app.status_message.as_deref(), Some("Nothing open"));
     }
 
     // ── Jump to the agent needing attention ──

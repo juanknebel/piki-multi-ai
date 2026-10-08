@@ -172,7 +172,7 @@ pub(super) async fn handle(
         } => {
             let Some(parent) = app.workspaces.get(parent_idx) else {
                 app.set_toast(
-                    "Parent workspace no longer exists",
+                    "The parent checkout no longer exists",
                     crate::app::ToastLevel::Error,
                 );
                 return Ok(());
@@ -201,7 +201,7 @@ pub(super) async fn handle(
                     let source = ws.source_repo.clone();
                     crate::helpers::persist_workspaces(app, source);
                 }
-                app.set_toast("Workspace updated", ToastLevel::Success);
+                app.set_toast("Checkout updated", ToastLevel::Success);
             }
         }
         Action::DeleteWorkspace(idx, target_column) => {

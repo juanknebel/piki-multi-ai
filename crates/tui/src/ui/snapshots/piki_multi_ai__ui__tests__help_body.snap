@@ -5,17 +5,18 @@ expression: body
 
   Prefix actions
     Press C-g first (tmux-style).
-    Workspace
-      C-g s         New Workspace
-      C-g r         Create Worktree (GitHub-only)
-      C-g e         Edit Workspace
-      C-g d         Delete Workspace
+    Repository
+      C-g s         Add Repository
+      C-g r         New Branch / Worktree (GitHub-only)
+    Checkout
+      C-g e         Edit Checkout
+      C-g d         Delete Checkout
       C-g b         Dashboard
-      C-g i         Workspace Info
-      C-g w         Switch Workspace (fuzzy)
-      C-g }         Next Workspace
-      C-g {         Previous Workspace
-      C-g `         Toggle Last Workspace
+      C-g i         Checkout Info
+      C-g w         Switch Checkout (fuzzy)
+      C-g }         Next Checkout
+      C-g {         Previous Checkout
+      C-g `         Toggle Last Checkout
     Git
       C-g g         Git (lazygit)
     Tabs
@@ -25,7 +26,7 @@ expression: body
       C-g p         Previous Tab
       C-g R         Rename Tab
       C-g C-r       Restart Tab
-      C-g C-w       Move Tab to Workspace
+      C-g C-w       Move Tab to Checkout
     Search
       C-g /         Fuzzy File Search
       C-g t         Search in Project (content)
@@ -129,7 +130,7 @@ expression: body
     Enter         Run the selected command
     Esc           Close
 
-  Workspace switcher (C-g w)
+  Checkout switcher (C-g w)
     Type          Filter workspaces and tabs
     ↑/↓           Select a row
     C-p           Select the previous row

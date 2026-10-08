@@ -129,7 +129,7 @@ describe("shortcut registry", () => {
     const all = helpSections().flatMap((s) => s.items);
     const byLabel = Object.fromEntries(all.map((i) => [i.label, i.outsideOnly]));
     expect(byLabel["Command Palette"]).toBe(false); // Ctrl+Shift+P captures from a shell
-    expect(byLabel["New Workspace"]).toBe(false); // Alt+N captures too
+    expect(byLabel["Add Repository"]).toBe(false); // Alt+N captures too
     expect(byLabel["Settings"]).toBe(true); // Ctrl+, stays outside-only by convention
     expect(byLabel["Zoom In"]).toBe(true); // bare Ctrl+=; its Ctrl+Shift twin captures
     expect(byLabel["Dashboard"]).toBe(false);

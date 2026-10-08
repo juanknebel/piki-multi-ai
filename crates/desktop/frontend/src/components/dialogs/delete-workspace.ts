@@ -20,10 +20,10 @@ function removalHint(type: WorkspaceType): string {
     case "Worktree":
       return "This removes the worktree and its branch.";
     case "Project":
-      return "This removes the project workspace from the list — the directory stays on disk.";
+      return "This removes the project root from the list — the directory stays on disk.";
     case "Simple":
     default:
-      return "This removes the workspace from the list — the directory stays on disk.";
+      return "This removes the checkout from the list — the directory stays on disk.";
   }
 }
 

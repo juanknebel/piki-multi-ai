@@ -7,14 +7,14 @@ const checkout = (index: number, depth = 2): ProjectTreeRow => ({
   index,
   kind: depth === 2 ? "worktree" : "primary",
   depth,
-  hoisted: depth === 1,
+  hoisted: depth < 2,
+  in_group: depth === 2,
 });
 
 const project = (key: string, collapsed = false): ProjectTreeRow => ({
   type: "project",
   key,
   collapsed,
-  checkouts: 0,
   project_id: 1,
   name: "proj",
   color: 0,
@@ -28,6 +28,7 @@ const repo = (key: string, collapsed = false): ProjectTreeRow => ({
   checkouts: 2,
   root: "/repo",
   display: "repo",
+  depth: 1,
 });
 
 describe("visibleWorkspaceIndices", () => {

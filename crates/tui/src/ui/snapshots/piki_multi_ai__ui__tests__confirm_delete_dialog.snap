@@ -1,6 +1,5 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 338
 expression: content
 ---
 
@@ -10,7 +9,7 @@ expression: content
 
 
 
-               ╭ Delete Workspace ──────────────────────────────╮
+               ╭ Delete Checkout ───────────────────────────────╮
                │                                                │
                │  Remove ? ?                                    │
                │                                                │

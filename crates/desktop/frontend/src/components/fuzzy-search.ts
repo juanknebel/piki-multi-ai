@@ -29,7 +29,7 @@ export function openFuzzySearch(opts: { paneId?: PaneId } = {}) {
 
   const ws = appState.activeWs;
   if (!ws) {
-    toast("Open a workspace to find files", "info");
+    toast("Open a checkout to find files", "info");
     return;
   }
   const wsIdx = appState.activeWorkspace;

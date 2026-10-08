@@ -275,7 +275,7 @@ mod tests {
     }
 
     #[test]
-    fn test_render_status_bar_normal_no_workspace() {
+    fn test_render_status_bar_normal_nothing_open() {
         let mut terminal = test_terminal(80, 1);
         let app = App::new(
             test_storage(),
@@ -287,7 +287,7 @@ mod tests {
             })
             .unwrap();
         let content = buffer_to_snapshot(terminal.backend().buffer());
-        insta::assert_snapshot!("status_bar_normal_no_workspace", content);
+        insta::assert_snapshot!("status_bar_normal_nothing_open", content);
     }
 
     #[test]
@@ -568,11 +568,11 @@ mod tests {
     }
 
     #[test]
-    fn test_snapshot_sidebar_bucket_separators() {
-        // A blank line must separate two top-level groups, so a project reads
-        // as its own block rather than running into the next one. With no
-        // projects configured everything lands in the no-project bucket, where
-        // each repo heads its own group.
+    fn test_snapshot_sidebar_loose_repos() {
+        // With no projects configured every repo is loose: it renders at the
+        // top level, with no pseudo-project header above it. A repo with two
+        // checkouts still gets its group; one with a single checkout is hoisted
+        // into one row.
         let mut terminal = test_terminal(40, 12);
         let mut app = App::new(
             test_storage(),
@@ -625,7 +625,7 @@ mod tests {
             })
             .unwrap();
         let content = buffer_to_snapshot(terminal.backend().buffer());
-        insta::assert_snapshot!("sidebar_bucket_separators", content);
+        insta::assert_snapshot!("sidebar_loose_repos", content);
     }
 
     #[test]

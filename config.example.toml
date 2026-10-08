@@ -257,7 +257,7 @@ theme = "default"
 # new = "n"                   # new project
 # edit = "e"                  # edit the project this row belongs to
 # delete = "d"                # delete it (immediate, no confirm)
-# add_repo = "a"              # add a repository to this project (New Workspace dialog)
+# add_repo = "a"              # add a repository to this project (Add Repository dialog)
 # new_worktree = "w"          # new branch + worktree in the repository under the cursor
 
 # [keybindings.logs]

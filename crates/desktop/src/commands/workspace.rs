@@ -415,13 +415,12 @@ pub async fn set_collapsed_groups(
 #[derive(serde::Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum ProjectTreeRowDto {
-    /// A top-level header: a real project, or one of the synthetic buckets.
+    /// A top-level header: a real project, or the synthetic PR-review bucket.
+    /// (Loose repositories get no header — they render at depth 0.)
     Project {
         /// Collapse key.
         key: String,
         collapsed: bool,
-        /// Workspaces underneath it, across all its repos.
-        checkouts: usize,
         /// `Some(id)` for a real project (`None` for an unsaved one);
         /// `None` for a bucket.
         project_id: Option<i64>,
@@ -442,18 +441,25 @@ pub enum ProjectTreeRowDto {
         root: String,
         /// Display name for the root.
         display: String,
+        /// 1 under a project header, 0 for a loose repository.
+        depth: u8,
     },
     /// A loaded workspace: `index` points into `list_workspaces`' order.
     Checkout {
         index: usize,
         /// "primary" (the original clone) | "worktree"
         kind: &'static str,
-        /// 2 under a repo group, 1 when the row hangs off its header.
+        /// Indentation level: one past its repo group's, or its group's own
+        /// when hoisted.
         depth: u8,
         /// This row stands in for its whole repository: the group had a single
         /// checkout, so no header was emitted. Label it by the repository
         /// folder (branch alongside) and let repository actions apply to it.
         hoisted: bool,
+        /// A repo header sits directly above this row. Key the branch-only
+        /// label and the tree rail on THIS, never on `depth` — the same child
+        /// is one level further out under a loose repository.
+        in_group: bool,
     },
     /// A member path that is neither a loaded workspace nor a repo root.
     Dir { path: String },
@@ -491,7 +497,6 @@ pub async fn project_tree(
                     bucket,
                     key,
                     collapsed,
-                    checkouts,
                 } => {
                     let (project_id, name, color, tag) = match bucket {
                         Bucket::Project(i) => {
@@ -504,7 +509,6 @@ pub async fn project_tree(
                     ProjectTreeRowDto::Project {
                         key,
                         collapsed,
-                        checkouts,
                         project_id,
                         name,
                         color,
@@ -517,6 +521,7 @@ pub async fn project_tree(
                     key,
                     collapsed,
                     checkouts,
+                    depth,
                     ..
                 } => ProjectTreeRowDto::Repo {
                     key,
@@ -524,12 +529,14 @@ pub async fn project_tree(
                     checkouts,
                     root: root.to_string_lossy().into_owned(),
                     display,
+                    depth,
                 },
                 ProjectTreeRow::Checkout {
                     workspace_index,
                     kind,
                     depth,
                     hoisted,
+                    in_group,
                     ..
                 } => ProjectTreeRowDto::Checkout {
                     index: workspace_index,
@@ -539,6 +546,7 @@ pub async fn project_tree(
                     },
                     depth,
                     hoisted,
+                    in_group,
                 },
                 ProjectTreeRow::Dir { path, .. } => ProjectTreeRowDto::Dir {
                     path: path.to_string_lossy().into_owned(),

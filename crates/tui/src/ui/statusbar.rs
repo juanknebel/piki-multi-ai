@@ -117,7 +117,7 @@ fn render_normal_status(frame: &mut Frame, area: Rect, app: &App) {
         if !mode_label.is_empty() {
             spans.push(sep.clone());
         }
-        spans.push(Span::styled("No active workspace", text_style));
+        spans.push(Span::styled("Nothing open", text_style));
         let bar = Paragraph::new(Line::from(spans)).style(Style::default().bg(bar_bg));
         frame.render_widget(bar, area);
         return;

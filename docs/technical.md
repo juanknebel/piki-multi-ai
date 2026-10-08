@@ -162,7 +162,7 @@ The top-left pane is the **project tree** — the one sidebar view. It has three
 
 One project can hold repositories from different places, and the same repository can belong to several projects — the project is a *view*, never the owner of the layout on disk (worktrees stay under `<data_dir>/worktrees/<repo>/`). Two synthetic groups keep the tree total, so nothing is ever unreachable: **pr-review** collects the ad-hoc PR-review checkouts, and **no project** collects every registered workspace no project claims. Collapsing a project or a repository surfaces what it hides on the header row (idle dot, agent-status glyph, changed-file count, ahead/behind) instead of losing it.
 
-Keys (`[keybindings.projects]`): `j`/`k` move — follow-focus, so landing on a checkout switches to it while header rows only move the cursor —, `h`/`l` collapse/expand, `Enter` opens the checkout / collapses a group / adopts a directory, `n`/`e`/`d` create/edit/delete a project, `a` adds a repository to the project under the cursor (the New Workspace dialog, with the result joining that project), `w` creates a branch + worktree in the repository under the cursor (it joins the project on its own — every worktree of a member repository is part of it). Collapse state is persisted, so a folded project stays folded across restarts.
+Keys (`[keybindings.projects]`): `j`/`k` move — follow-focus, so landing on a checkout switches to it while header rows only move the cursor —, `h`/`l` collapse/expand, `Enter` opens the checkout / collapses a group / adopts a directory, `n`/`e`/`d` create/edit/delete a project, `a` adds a repository to the project under the cursor (the Add Repository dialog, with the result joining that project), `w` creates a branch + worktree in the repository under the cursor (it joins the project on its own — every worktree of a member repository is part of it). Collapse state is persisted, so a folded project stays folded across restarts.
 
 The AGENTS pane (bottom-left) lists every running AI agent across all workspaces with its live status (▷ running, ⚠ needs permission, ⏳ waiting, ✓ done, ● alive, ○ exited); `Enter` or a click jumps to that workspace and tab. This includes a `claude` typed manually inside a shell tab: the shell bridge transparently wraps `claude` with piki's hook settings, so it reports status the same way as a dedicated agent tab (listed as `Claude (Shell)` once its first hook event arrives; skipped if you pass your own `--settings`). Such a shell entry drops off the pane as soon as the CLI exits — the shell returns to its prompt and its OSC 133 command-end marker clears the tab's agent state — while the shell itself keeps running; a dedicated agent tab stays listed for as long as the tab is open. Git status details live in the lazygit tab (`Ctrl+G g`). In the tab bar, a tab whose process has exited keeps its slot and is marked with a dim `○` — `Ctrl+G C-r` re-spawns it in place (same provider, same slot, same custom title).
 
@@ -182,14 +182,14 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 | `x` | Close current tab (with confirmation dialog) |
 | `n` / `p` | Next / previous tab |
 | `1`..`9` | Jump to tab N |
-| `w` | Workspace switcher (tree of workspaces + tabs; type to filter, Enter to jump) |
+| `w` | Checkout switcher (tree of checkouts + tabs; type to filter, Enter to jump) |
 | `}` / `{` | Next / previous workspace |
 | `` ` `` | Toggle to previous workspace |
-| `s` | Create new workspace |
-| `e` | Edit workspace options (Kanban path, Prompt) |
-| `d` | Delete the selected workspace (with confirmation dialog) |
-| `i` | Workspace info overlay (branch, paths, description, prompt; mouse-copyable) |
-| `r` | Create Worktree (GitHub-only): spawn a new git worktree from the selected GitHub-origin workspace (inheriting prompt/kanban), or load an existing worktree of the repo from a list (clamped to the screen, auto-scrolls to the selection) |
+| `s` | Add a repository (existing folder, or clone from GitHub) |
+| `e` | Edit the checkout's options (Kanban path, Prompt) |
+| `d` | Delete the selected checkout (with confirmation dialog) |
+| `i` | Checkout info overlay (branch, paths, description, prompt; mouse-copyable) |
+| `r` | New Branch (GitHub-only): spawn a new git worktree from the selected GitHub-origin repository (inheriting prompt/kanban), or load an existing worktree of the repo from a list (clamped to the screen, auto-scrolls to the selection) |
 | `g` | Git: open-or-focus the lazygit tab for the current workspace (respawns if the process exited) |
 | `:` | Command palette (fuzzy-searchable list of all commands) |
 | `/` | Fuzzy file search |
@@ -200,7 +200,7 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 | `y` | AI Chat panel |
 | `C-y` | Add the terminal selection to the AI chat (drag-select first; the block lands in the composer and the panel opens) |
 | `C-t` | Scratch terminal — a single shell rooted at `~`, tied to no workspace, shown centered on top of everything; press `Ctrl+G C-t` again (or from inside it) to hide, and the shell keeps running |
-| `b` | Workspace dashboard overlay (bird's-eye view of all workspaces and tabs) |
+| `b` | Dashboard overlay (bird's-eye view of every checkout and its tabs) |
 | `C-s` | Sessions overlay (persistent-session daemon state and management, see below) |
 | `o` | Log viewer overlay (last 500 log entries, color-coded, filterable by level) |
 | `m` | Manage agent profiles (create/edit/delete agents for this project) |
@@ -513,16 +513,16 @@ The terminal owns every key it can use. An app shortcut fires while a terminal, 
 |---|---|
 | **General** | |
 | `Ctrl+Shift+P` | Command Palette |
-| `Alt+N` | New Workspace |
-| `Alt+W` | Workspace Switcher |
+| `Alt+N` | Add Repository |
+| `Alt+W` | Switch Checkout |
 | `Alt+D` | Dashboard |
-| `Alt+]` / `Alt+[` | Next Workspace / Previous Workspace — in sidebar order, wrapping at both ends, with the children of a collapsed worktree family skipped (the TUI's `prefix }` / `{`) |
-| ``Alt+` `` | Toggle Last Workspace — back to the one visited before this one (the TUI's `` prefix ` ``); some desktop environments claim this chord, so rebind it in Settings ▸ Shortcuts if it never arrives |
+| `Alt+]` / `Alt+[` | Next Checkout / Previous Checkout — in sidebar order, wrapping at both ends, with whatever a collapsed project or repository hides skipped (the TUI's `prefix }` / `{`) |
+| ``Alt+` `` | Toggle Last Checkout — back to the one visited before this one (the TUI's `` prefix ` ``); some desktop environments claim this chord, so rebind it in Settings ▸ Shortcuts if it never arrives |
 | `?` ° | Keyboard Shortcuts (help dialog, generated from the same registry as this table) |
 | `Ctrl+,` ° | Settings |
 | `Esc` | Close Dialog / Overlay |
-| `Alt+1…9` | Switch to Workspace N |
-| `Right-click workspace` | Workspace menu (open, agents, info, edit, merge, delete) — also the row's `⋯` |
+| `Alt+1…9` | Switch to Checkout N |
+| `Right-click a row` | Row menu (open, agents, info, edit, new branch, merge, delete) — also the row's `⋯` |
 | **View & Panels** | |
 | `Alt+S` | Toggle Sidebar |
 | ``Ctrl+Shift+` `` | Toggle Drop-down Terminal — a single shell rooted at `~`, independent of any workspace, sliding up over the editor; the same key closes it while it has focus |
@@ -678,9 +678,9 @@ The desktop's view of the persistent-session daemon — the `sessions N / off / 
 
 ### Creating workspaces
 
-Press `Ctrl+G s` (or `a` on a project row in the sidebar tree, which also makes the result a member of that project) to open the New Workspace dialog. Provide:
+Press `Ctrl+G s` (or `a` on a project row in the sidebar tree, which also makes the result a member of that project) to open the Add Repository dialog. Provide:
 
-- **Source:** Toggle between `Local folder` and `GitHub URL` using `Space`, `Left`, or `Right`. Local folder points to any existing directory on disk (git not required); GitHub URL clones a public/private GitHub repo into a destination you choose. The resulting workspace is always a Simple workspace internally; worktrees are spawned later from a GitHub-origin workspace via the "Create Worktree" action.
+- **Source:** Toggle between `Local folder` and `GitHub URL` using `Space`, `Left`, or `Right`. Local folder points to any existing directory on disk (git not required); GitHub URL clones a public/private GitHub repo into a destination you choose. The resulting workspace is always a Simple workspace internally; worktrees are spawned later from a GitHub-origin repository via the "New Branch" action.
 - **Folder / URL:** When Source = Local folder, this is the path to the directory (`~` expands to `$HOME`). When Source = GitHub URL, paste the clone URL (HTTPS, SSH, or `git@github.com:owner/repo.git`).
 - **Clone into:** *(GitHub source only)* Parent directory the repo is cloned into; the clone lands at `<clone-into>/<repo>`. Pre-filled with `<data_dir>/repos` as a hint — that default folder is auto-created on first use, but any other path you type must already exist (`~` expands to `$HOME`). In the desktop app a folder picker is available.
 - **Desc:** (Optional) A brief description of the task. The workspace name is always derived automatically — folder basename for Local, repo name for GitHub.
@@ -716,11 +716,11 @@ Workspace configurations are saved automatically and restored on startup using a
 
 A **project** is the one top-level unit both frontends navigate: a named, coloured group holding repositories (each with its clone and worktrees) and plain directories. It is a *view*, not a place — worktrees still live under `<data_dir>/worktrees/<repo>/`, so the same repository can belong to several projects at once. Projects live in the shared SQLite database (`piki_core::projects` + the `ProjectStorage` trait), so one created in the desktop appears in the TUI and vice versa; the tree both render is built by `piki_core::projects::tree::project_tree` from the project list plus the live workspace list, so the grouping rule exists exactly once.
 
-On first launch after the upgrade, schema v12 seeds one project per distinct `source_repo` (named after the repository directory, with that repo's workspaces as members), so the tree opens on exactly what the old flat workspace list showed and the "no project" group starts empty. Projects you had already created by hand are kept untouched; anything they didn't cover shows up under "no project".
+A repository you have not put in any project is **not** wrapped in one: it renders at the top level, after the projects, as its own repo row (hoisted to a single row while it has one checkout). So the sidebar reads as "my projects, then my loose repositories", and a project only ever exists because you made it. Schema v12/v13 briefly seeded one project per repository; v14 removes exactly that shape again (a project whose members are all the checkouts of one repo and whose name is that repo's folder), leaving anything you built by hand alone.
 
 - **Members are just paths.** Whether a member renders as a workspace or as a directory is resolved against the registered workspace list at render time: a path with a workspace shows its name (and branch) and jumps on open; any other path shows dimmed as a directory and is **adopted as a `Simple` workspace on first open** (idempotent — once adopted, its rows upgrade by themselves everywhere).
 - **The colour is an index, never a value**: `color: 0..10` into a fixed 10-swatch palette. The desktop paints `var(--project-swatch-N)` (static tokens in `variables.css`, deliberately not theme-derived so the colour matches across frontends); the TUI reads `theme.project` (same RGB defaults, overridable per theme file like any other colour).
-- **Desktop**: the Projects tree is the sidebar (there is no separate workspace list) — project headers expand into repository groups, those into checkout rows connected by a `git log --graph`-style rail. The header's two buttons create a project and add a repository; the row context menus carry the rest (new branch / worktree, add repository, edit / delete project, membership toggles). Deleting a project asks for confirmation and never touches what it grouped.
+- **Desktop**: the Projects tree is the sidebar (there is no separate workspace list) — project headers expand into repository groups, those into checkout rows connected by a `git log --graph`-style rail; loose repositories follow at the top level with no header. The header's two buttons create a project and add a repository; the row context menus carry the rest (new branch / worktree, add repository, edit / delete project, membership toggles). Deleting a project asks for confirmation and never touches what it grouped.
 - **Changing membership without the dialog**: right-click a checkout row for `Add to project "X"` / `Remove from project "X"` — one entry per project — or a directory member row for Open / `Remove from "X"` / Edit Project….
 - **The edit dialog** is name, a 10-swatch colour radio and two member lists: the project's members in order, each with a ✕, and below them every workspace that is not a member yet, narrowed by a filter box that matches name, branch **and path** (`Enter` adds the first match). Each row prints its directory under the name — `~`-abbreviated, middle-elided — because two checkouts of one repo differ by nothing else. Typing an absolute path (or `~/…`) offers it as a directory member, and *Browse for a directory…* picks one from disk.
 - **Where a row lives** is always one hover away: the sidebar tooltip prints the name (and branch) on the first line and the **full, unwrapped-to-the-end directory** below it — project headers list their member paths the same way.

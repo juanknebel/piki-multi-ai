@@ -9,6 +9,7 @@
 //!       feat/sidebar            Checkout     (depth 2, Worktree)
 //!     piki-multiplex (main)     Checkout     (depth 1, HOISTED)
 //!     ~/notes                   Dir row      (depth 1)
+//! ⎇ dirb (main)                 Checkout     (depth 0, loose + HOISTED)
 //! ```
 //!
 //! A repository with a **single** loaded checkout is *hoisted*: its header
@@ -29,11 +30,17 @@
 //! project-only sidebar needs no change to how worktrees are stored.
 //!
 //! Two synthetic buckets keep the model total, so killing the flat workspace
-//! view loses nothing: [`Bucket::PrReview`] collects the `ephemeral` PR-review
-//! checkouts (each is its own ad-hoc clone, so repo grouping would emit one
-//! useless header per PR) and [`Bucket::Unassigned`] collects every registered
-//! workspace no project claims. Core only names them by variant — the display
-//! label is the frontend's, so neither string lives here.
+//! view loses nothing. [`Bucket::PrReview`] collects the `ephemeral` PR-review
+//! checkouts under a header of its own (each is its own ad-hoc clone, so repo
+//! grouping would emit one useless header per PR); core names it by variant,
+//! the display label is the frontend's.
+//!
+//! [`Bucket::Unassigned`] — every registered workspace no project claims —
+//! gets **no header at all**: its repositories are emitted at depth 0, after
+//! the projects. A repository you have not grouped with anything is not "in"
+//! some pseudo-project, and wrapping it in one only added a row whose name
+//! repeated the repository's. So the sidebar reads as "my projects, then my
+//! loose repositories", which is what a project being a *choice* means.
 //!
 //! A workspace that is a member of two projects is emitted under both. Only
 //! the `Unassigned` bucket cares about claims.
@@ -73,13 +80,14 @@ pub enum CheckoutKind {
 /// One visual row, in render order.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProjectTreeRow {
-    /// A top-level header. `checkouts` counts the workspaces underneath it
-    /// (across all its repos), so a collapsed header can still show a count.
+    /// A top-level header. Deliberately carries no checkout count: the number
+    /// said nothing a glance at the rows (or at the collapsed group's rolled-up
+    /// attention signals) doesn't, and it competed with them for the one spot
+    /// on the right of the row that matters.
     Project {
         bucket: Bucket,
         key: String,
         collapsed: bool,
-        checkouts: usize,
     },
     /// A repository group. Synthetic — see the module docs. `checkouts` counts
     /// its children; `0` means the repo is a member but nothing of it is
@@ -91,11 +99,14 @@ pub enum ProjectTreeRow {
         key: String,
         collapsed: bool,
         checkouts: usize,
+        /// 1 under a project header, 0 for a loose repository (the no-project
+        /// bucket has no header to sit under).
+        depth: u8,
     },
     /// A loaded workspace: `workspace_index` indexes the slice passed to
-    /// [`project_tree`]. `depth` is 2 under a repo group and 1 when the row
-    /// hangs straight off its header (a hoisted repo, a non-git workspace, or
-    /// a PR review).
+    /// [`project_tree`]. `depth` is one past its repo group's, or its group's
+    /// own when hoisted — so a loose hoisted repository is 0 and a checkout
+    /// under a project's repo group is 2.
     Checkout {
         bucket: Bucket,
         workspace_index: usize,
@@ -108,6 +119,11 @@ pub enum ProjectTreeRow {
         /// sidebar named a clone — and repository actions ("new branch") apply
         /// to it, since there is no header to carry them.
         hoisted: bool,
+        /// There is a [`ProjectTreeRow::Repo`] header directly above this row.
+        /// Renderers key the branch-only label and the tree guide on THIS, not
+        /// on `depth`: the same child sits at depth 2 under a project and at
+        /// depth 1 under a loose repository, and both must read the same.
+        in_group: bool,
     },
     /// A member path that is neither a loaded workspace nor a repo root.
     Dir { bucket: Bucket, path: PathBuf },
@@ -118,8 +134,8 @@ impl ProjectTreeRow {
     pub fn depth(&self) -> u8 {
         match self {
             ProjectTreeRow::Project { .. } => 0,
-            ProjectTreeRow::Repo { .. } | ProjectTreeRow::Dir { .. } => 1,
-            ProjectTreeRow::Checkout { depth, .. } => *depth,
+            ProjectTreeRow::Dir { .. } => 1,
+            ProjectTreeRow::Repo { depth, .. } | ProjectTreeRow::Checkout { depth, .. } => *depth,
         }
     }
 
@@ -133,6 +149,12 @@ impl ProjectTreeRow {
             } => Some(*workspace_index),
             _ => None,
         }
+    }
+
+    /// Whether a repository header sits directly above this row — see
+    /// `Checkout::in_group`.
+    pub fn is_in_group(&self) -> bool {
+        matches!(self, ProjectTreeRow::Checkout { in_group: true, .. })
     }
 
     /// Whether this row stands in for its whole repository — see
@@ -275,25 +297,23 @@ fn emit_bucket(
         }
     }
 
-    let checkouts = slots
-        .iter()
-        .map(|s| match s {
-            Slot::Repo { members, .. } => members.len(),
-            Slot::Flat(_) => 1,
-            Slot::Dir(_) => 0,
-        })
-        .sum();
-
-    let bucket_collapsed = collapsed.contains(&key);
-    rows.push(ProjectTreeRow::Project {
-        bucket,
-        key: key.clone(),
-        collapsed: bucket_collapsed,
-        checkouts,
-    });
-    if bucket_collapsed {
-        return;
+    // The no-project bucket has no header: a repository you have not grouped
+    // with anything is not "in" a pseudo-project, and the header only added a
+    // row repeating the repository's own name. Its rows therefore sit one
+    // level further out than a project's.
+    let headed = bucket != Bucket::Unassigned;
+    if headed {
+        let bucket_collapsed = collapsed.contains(&key);
+        rows.push(ProjectTreeRow::Project {
+            bucket,
+            key: key.clone(),
+            collapsed: bucket_collapsed,
+        });
+        if bucket_collapsed {
+            return;
+        }
     }
+    let base = if headed { 1 } else { 0 };
 
     for slot in slots {
         match slot {
@@ -308,8 +328,9 @@ fn emit_bucket(
                     bucket,
                     workspace_index: index,
                     kind: checkout_kind(&workspaces[index]),
-                    depth: 1,
+                    depth: base,
                     hoisted: true,
+                    in_group: false,
                 });
             }
             Slot::Repo { root, members } => {
@@ -322,6 +343,7 @@ fn emit_bucket(
                     key: repo_key,
                     collapsed: repo_collapsed,
                     checkouts: members.len(),
+                    depth: base,
                 });
                 if repo_collapsed {
                     continue;
@@ -337,8 +359,9 @@ fn emit_bucket(
                         bucket,
                         workspace_index: p,
                         kind: CheckoutKind::Primary,
-                        depth: 2,
+                        depth: base + 1,
                         hoisted: false,
+                        in_group: true,
                     });
                 }
                 for i in members {
@@ -349,8 +372,9 @@ fn emit_bucket(
                         bucket,
                         workspace_index: i,
                         kind: CheckoutKind::Worktree,
-                        depth: 2,
+                        depth: base + 1,
                         hoisted: false,
+                        in_group: true,
                     });
                 }
             }
@@ -358,8 +382,9 @@ fn emit_bucket(
                 bucket,
                 workspace_index: index,
                 kind: checkout_kind(&workspaces[index]),
-                depth: 1,
+                depth: base,
                 hoisted: false,
+                in_group: false,
             }),
             Slot::Dir(path) => rows.push(ProjectTreeRow::Dir { bucket, path }),
         }
@@ -726,10 +751,7 @@ mod tests {
     fn a_lone_worktree_is_hoisted_as_a_worktree() {
         let list = [worktree("feature", "/repos/app")];
         let rows = project_tree(&[], &list, &none());
-        assert_eq!(
-            sketch(&rows, &list),
-            vec!["Unassigned", ".feature Worktree*"]
-        );
+        assert_eq!(sketch(&rows, &list), vec!["feature Worktree*"]);
     }
 
     /// A hoisted row has no header, so there is nothing to collapse — a stale
@@ -739,7 +761,7 @@ mod tests {
         let list = [clone_of("app", "/repos/app")];
         let collapsed = HashSet::from([repo_collapse_key(UNASSIGNED_KEY, Path::new("/repos/app"))]);
         let rows = project_tree(&[], &list, &collapsed);
-        assert_eq!(sketch(&rows, &list), vec!["Unassigned", ".app Primary*"]);
+        assert_eq!(sketch(&rows, &list), vec!["app Primary*"]);
     }
 
     #[test]
@@ -801,14 +823,15 @@ mod tests {
             rows[0],
             ProjectTreeRow::Project {
                 collapsed: true,
-                checkouts: 2,
                 ..
             }
         ));
     }
 
+    /// A repository no project claims is NOT wrapped in a pseudo-project: it
+    /// sits at the top level, after the real projects.
     #[test]
-    fn workspaces_no_project_claims_land_in_the_unassigned_bucket() {
+    fn loose_repos_sit_at_the_top_level_with_no_header() {
         let list = [clone_of("app", "/repos/app"), clone_of("other", "/repos/x")];
         let projects = [project(
             1,
@@ -818,20 +841,41 @@ mod tests {
         let rows = project_tree(&projects, &list, &none());
         assert_eq!(
             sketch(&rows, &list),
-            vec![
-                "Project(0)",
-                ".app Primary*",
-                "Unassigned",
-                ".other Primary*",
-            ]
+            vec!["Project(0)", ".app Primary*", "other Primary*"]
+        );
+        assert_eq!(rows[2].depth(), 0, "no header to indent under");
+        assert_eq!(rows[2].bucket(), Bucket::Unassigned);
+        assert!(
+            !rows
+                .iter()
+                .any(|r| matches!(r, ProjectTreeRow::Project { .. })
+                    && r.bucket() == Bucket::Unassigned),
+            "the no-project bucket emits no header row"
         );
     }
 
+    /// Same at the next level down: a loose repo with two checkouts keeps its
+    /// group, just one indent further out than a project's would be.
     #[test]
-    fn with_no_projects_at_all_everything_is_unassigned() {
+    fn a_loose_repo_group_sits_one_level_further_out() {
+        let list = [
+            clone_of("app", "/repos/app"),
+            worktree("feature", "/repos/app"),
+        ];
+        let rows = project_tree(&[], &list, &none());
+        assert_eq!(
+            sketch(&rows, &list),
+            vec!["repo app", ".app Primary", ".feature Worktree"]
+        );
+        assert_eq!(rows[0].depth(), 0);
+        assert_eq!(rows[1].depth(), 1);
+    }
+
+    #[test]
+    fn with_no_projects_at_all_everything_is_loose() {
         let list = [clone_of("app", "/repos/app")];
         let rows = project_tree(&[], &list, &none());
-        assert_eq!(sketch(&rows, &list), vec!["Unassigned", ".app Primary*"]);
+        assert_eq!(sketch(&rows, &list), vec!["app Primary*"]);
     }
 
     #[test]
@@ -839,10 +883,7 @@ mod tests {
         let projects = [project(1, "Empty", vec![])];
         let rows = project_tree(&projects, &[], &none());
         assert_eq!(rows.len(), 1);
-        assert!(matches!(
-            rows[0],
-            ProjectTreeRow::Project { checkouts: 0, .. }
-        ));
+        assert!(matches!(rows[0], ProjectTreeRow::Project { .. }));
     }
 
     #[test]

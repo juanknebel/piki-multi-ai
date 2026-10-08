@@ -56,7 +56,7 @@ function bucketLabel(bucket: string): string {
 function checkoutParts(
   info: WorkspaceInfo,
   branch: string | null,
-  depth: number,
+  inGroup: boolean,
   hoisted: boolean,
 ): { name: string; branch: string | null } {
   if (hoisted) {
@@ -66,7 +66,7 @@ function checkoutParts(
       info.name;
     return { name: folder, branch: branch ? branchLabel(branch) : null };
   }
-  if (depth === 2) {
+  if (inGroup) {
     if (branch) return { name: branchLabel(branch), branch: null };
     const leaf = info.path.replace(/\/+$/, "").split("/").pop();
     return { name: leaf || info.name, branch: null };
@@ -336,9 +336,8 @@ export function renderProjectTree(container: HTMLElement) {
         <span class="project-dot" style="background:${swatch}"></span>
         <span class="project-name">${escapeHtml(name)}</span>
         ${rollupView ? `<span class="workspace-agent-glyph" style="color:${rollupView.color}" title="Agent ${rollupView.label}">${icon(rollupView.icon)}</span>` : ""}
-        <span class="project-count">${row.checkouts}</span>
       `;
-      el.title = `${name} · ${row.checkouts} checkout${row.checkouts === 1 ? "" : "s"}`;
+      el.title = name;
       el.addEventListener("click", () => toggleGroup(row.key));
       el.addEventListener("contextmenu", (e) => {
         e.preventDefault();
@@ -361,6 +360,7 @@ export function renderProjectTree(container: HTMLElement) {
       const rollupView = rollup && actionableStatusView(rollup.status, rollup.attention);
       el.className = "repo-row";
       el.dataset.repo = row.root;
+      el.dataset.depth = String(row.depth);
       el.innerHTML = `
         <span class="workspace-gutter">${icon("chevron-right", { class: `group-chevron${row.collapsed ? " collapsed" : ""}` })}</span>
         ${icon("branch", { class: "repo-icon" })}
@@ -404,11 +404,16 @@ export function renderProjectTree(container: HTMLElement) {
       el.className = [
         "workspace-item",
         idx === activeIdx && "active",
-        row.depth === 2 && "grouped",
+        // Keyed on in_group, never on depth: the same child is one level
+        // further out under a loose repository.
+        row.in_group && "grouped",
+        // A hoisted row IS its repository, so it carries the repo's shape.
+        row.hoisted && "hoisted-repo",
       ]
         .filter(Boolean)
         .join(" ");
       el.dataset.idx = String(idx);
+      el.dataset.depth = String(row.depth);
 
       const rollup = agentRollup((wi) => wi === idx);
       const rollupView = rollup && actionableStatusView(rollup.status, rollup.attention);
@@ -422,14 +427,17 @@ export function renderProjectTree(container: HTMLElement) {
         ? `<span class="workspace-restored" title="Sessions restored from the daemon — not visited yet">${icon("history")}</span>`
         : "";
 
-      const { name, branch } = checkoutParts(info, ws.branch, row.depth, row.hoisted);
+      const { name, branch } = checkoutParts(info, ws.branch, row.in_group, row.hoisted);
       const branchHtml = branch
         ? ` <span class="workspace-branch">${escapeHtml(branch)}</span>`
         : "";
-      // The gutter stays on every row so labels line up whatever the kind;
-      // a checkout has nothing to collapse, so its slot is empty.
+      // The gutter stays on every row so labels line up whatever the kind; a
+      // checkout has nothing to collapse, so its slot is empty. A hoisted row
+      // takes the repo icon instead — it is the repository, and reading as one
+      // thing in the group above and another below would be a lie.
       el.innerHTML = `
         <span class="workspace-gutter"></span>
+        ${row.hoisted ? icon("branch", { class: "repo-icon" }) : ""}
         <span class="workspace-name">${escapeHtml(name)}${branchHtml}</span>
         ${info.ephemeral ? `<span class="workspace-pr">PR</span>` : ""}
         ${agentGlyph}
@@ -446,9 +454,6 @@ export function renderProjectTree(container: HTMLElement) {
         if ((e.target as HTMLElement).closest(".ws-action-btn")) return;
         void switchToWorkspace(idx);
       });
-      // A hoisted row is also the only row its repository has, so it reads as
-      // the repo: mark it so the CSS can give it the repo's weight.
-      if (row.hoisted) el.classList.add("hoisted-repo");
       const menuBtn = el.querySelector<HTMLButtonElement>('[data-action="menu"]')!;
       menuBtn.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -473,6 +478,7 @@ export function renderProjectTree(container: HTMLElement) {
       const el = document.createElement("div");
       el.className = "project-member directory";
       el.dataset.path = row.path;
+      el.dataset.depth = "1";
       const leaf = row.path.replace(/\/+$/, "").split("/").pop() || row.path;
       el.innerHTML = `<span class="project-member-name">${escapeHtml(leaf)}</span>`;
       el.title = `${leaf}\n${row.path}`;
@@ -525,7 +531,7 @@ export function renderProjectTree(container: HTMLElement) {
       let j = i + 1;
       while (j < rows.length) {
         const next = rows[j];
-        if (next.type !== "checkout" || next.depth !== 2) break;
+        if (next.type !== "checkout" || !next.in_group) break;
         const childEl = buildCheckoutRow(next);
         if (childEl) children.push(childEl);
         j++;
@@ -537,6 +543,9 @@ export function renderProjectTree(container: HTMLElement) {
         for (const el of children) family.appendChild(el);
         const rail = document.createElement("div");
         rail.className = "ws-family-rail";
+        // The trunk hangs under the repo row's chevron, wherever its depth put
+        // it (a loose repository sits one level further out than a project's).
+        family.style.setProperty("--rail-left", `${25 + 14 * row.depth}px`);
         family.appendChild(rail);
         list.appendChild(family);
       } else {

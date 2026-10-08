@@ -242,7 +242,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                     format!("[{}]", app.config.get_binding("app", "new_workspace")),
                     key_style,
                 ),
-                Span::styled(" Create your first workspace", desc_style),
+                Span::styled(" Add your first repository", desc_style),
             ]),
             Line::from(vec![
                 Span::styled("  2. ", desc_style),
@@ -250,7 +250,7 @@ pub(super) fn render_main_content(frame: &mut Frame, area: Rect, app: &mut App) 
                     format!("[{}]", app.config.get_binding("app", "workspace_switcher")),
                     key_style,
                 ),
-                Span::styled(" Switch between workspaces", desc_style),
+                Span::styled(" Switch between checkouts", desc_style),
             ]),
             Line::from(vec![
                 Span::styled("  3. ", desc_style),

@@ -128,7 +128,7 @@ pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
     ]);
 
     let text =
-        Paragraph::new(lines).block(super::popup_block("New Workspace", theme.new_ws_border));
+        Paragraph::new(lines).block(super::popup_block("Add Repository", theme.new_ws_border));
     frame.render_widget(text, popup);
 }
 
@@ -183,7 +183,7 @@ pub(crate) fn render_edit_workspace_dialog(frame: &mut Frame, area: Rect, app: &
     ];
 
     let text =
-        Paragraph::new(lines).block(super::popup_block("Edit Workspace", theme.new_ws_border));
+        Paragraph::new(lines).block(super::popup_block("Edit Checkout", theme.new_ws_border));
     frame.render_widget(text, popup);
 }
 
@@ -231,8 +231,7 @@ fn render_create_worktree_choose_source(frame: &mut Frame, area: Rect, app: &App
         Style::default().fg(inactive_c),
     )]));
 
-    let text =
-        Paragraph::new(lines).block(super::popup_block("Create Worktree", theme.new_ws_border));
+    let text = Paragraph::new(lines).block(super::popup_block("New Branch", theme.new_ws_border));
     frame.render_widget(text, popup);
 }
 
@@ -310,8 +309,7 @@ fn render_create_worktree_create_new(frame: &mut Frame, area: Rect, app: &App) {
         )]),
     ];
 
-    let text =
-        Paragraph::new(lines).block(super::popup_block("Create Worktree", theme.new_ws_border));
+    let text = Paragraph::new(lines).block(super::popup_block("New Branch", theme.new_ws_border));
     frame.render_widget(text, popup);
 }
 
@@ -560,7 +558,7 @@ pub(crate) fn render_confirm_delete_dialog(frame: &mut Frame, area: Rect, app: &
     )));
 
     let text =
-        Paragraph::new(lines).block(super::popup_block("Delete Workspace", theme.delete_border));
+        Paragraph::new(lines).block(super::popup_block("Delete Checkout", theme.delete_border));
     frame.render_widget(text, popup);
 }
 

@@ -3,8 +3,8 @@ source: crates/tui/src/ui/mod.rs
 expression: content
 ---
 ╭ PROJECTS ────────────────────────────╮
-│▎▾ ● no project 1                     │
-│    🗁 scratch-notes                   │
+│▎  🗁 scratch-notes                    │
+│                                      │
 │                                      │
 │                                      │
 ╰──────────────────────────────────────╯

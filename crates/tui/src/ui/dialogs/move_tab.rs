@@ -74,7 +74,7 @@ pub(crate) fn render_move_tab_dialog(frame: &mut Frame, area: Rect, app: &App) {
         Style::default().fg(inactive_c),
     )]));
 
-    let mut block = super::popup_block("Move Tab to Workspace", theme.new_ws_border);
+    let mut block = super::popup_block("Move Tab to Checkout", theme.new_ws_border);
 
     let total_lines = lines.len() as u16;
     let inner_height = popup.height.saturating_sub(2);

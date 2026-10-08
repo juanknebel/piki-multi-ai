@@ -1289,13 +1289,14 @@ mod tests {
         let b_path = app.workspaces[b].info.path.clone();
         seed_project(&mut app, vec![b_path]);
 
-        // Rows: [project, b, bucket, a] — one checkout per repo, both hoisted.
-        assert_eq!(app.sidebar_rows().len(), 4);
+        // Rows: [project, b, a] — one checkout per repo (both hoisted), and
+        // `a` is loose so it sits at the top level with no header.
+        assert_eq!(app.sidebar_rows().len(), 3);
         app.selected_sidebar_row = 0;
         assert!(handle_workspace_list_interaction(&mut app, key(KeyCode::Enter)).is_none());
         assert_eq!(
             app.sidebar_rows().len(),
-            3,
+            2,
             "the collapsed project hides its checkout"
         );
 
@@ -1336,7 +1337,7 @@ mod tests {
     fn project_keys_are_inert_on_a_synthetic_bucket() {
         let mut app = test_app();
         add_test_workspace(&mut app);
-        // No projects: row 0 is the no-project bucket.
+        // No projects: row 0 is a loose repo, which belongs to no project.
         app.selected_sidebar_row = 0;
         assert!(handle_workspace_list_interaction(&mut app, key(KeyCode::Char('d'))).is_none());
         assert!(handle_workspace_list_interaction(&mut app, key(KeyCode::Char('e'))).is_none());

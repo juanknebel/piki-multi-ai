@@ -1873,7 +1873,7 @@ impl App {
         let worktree_path = match self.current_workspace() {
             Some(ws) => ws.info.path.clone(),
             None => {
-                self.set_toast("No active workspace", ToastLevel::Info);
+                self.set_toast("Nothing open", ToastLevel::Info);
                 return;
             }
         };
@@ -1912,7 +1912,7 @@ impl App {
         let root = match self.current_workspace() {
             Some(ws) => ws.info.path.clone(),
             None => {
-                self.set_toast("No active workspace", ToastLevel::Info);
+                self.set_toast("Nothing open", ToastLevel::Info);
                 return;
             }
         };
@@ -2847,7 +2847,7 @@ mod tests {
 
         // Follow-focus: j/k don't just move a cursor, they move the workspace
         // every action targets — so `prefix c` right after lands its tab here.
-        // Rows: [bucket, a, b] — one checkout per repo, so both are hoisted.
+        // Rows: [a, b] — one checkout per repo, so both are hoisted and loose.
         app.select_next_sidebar_row();
         assert_eq!(app.selected_workspace, b);
         assert_eq!(app.active_workspace, b);
@@ -2873,22 +2873,23 @@ mod tests {
         app.workspaces[child].info.workspace_type = piki_core::WorkspaceType::Worktree;
         app.switch_workspace(a);
 
-        // No projects configured, so everything sits in the no-project bucket.
-        // `a` is the only checkout of its repo, so it is hoisted to one row;
-        // the shared repo keeps its header: [bucket, a, repo, parent, child].
+        // No projects configured, so every repo is loose and sits at the top
+        // level with no header. `a` is the only checkout of its repo, so it is
+        // hoisted to one row; the shared repo keeps its group:
+        // [a, repo, parent, child].
         let rows = app.sidebar_rows();
-        assert_eq!(rows.len(), 5, "{rows:#?}");
-        assert!(matches!(rows[0], ProjectTreeRow::Project { .. }));
-        assert_eq!(rows[1].workspace_index(), Some(a));
-        assert!(rows[1].is_hoisted());
-        assert_eq!(rows[3].workspace_index(), Some(parent));
-        assert_eq!(rows[4].workspace_index(), Some(child));
+        assert_eq!(rows.len(), 4, "{rows:#?}");
+        assert_eq!(rows[0].workspace_index(), Some(a));
+        assert!(rows[0].is_hoisted());
+        assert_eq!(rows[0].depth(), 0);
+        assert_eq!(rows[2].workspace_index(), Some(parent));
+        assert_eq!(rows[3].workspace_index(), Some(child));
 
         // The cursor sits on a's row after switch_workspace(a).
-        assert_eq!(app.selected_sidebar_row, 1);
+        assert_eq!(app.selected_sidebar_row, 0);
         // Next row is the shared repo's header: cursor moves, workspace doesn't.
         app.select_next_sidebar_row();
-        assert_eq!(app.selected_sidebar_row, 2);
+        assert_eq!(app.selected_sidebar_row, 1);
         assert_eq!(app.active_workspace, a);
         // Then the parent checkout, which does switch.
         app.select_next_sidebar_row();
@@ -3078,8 +3079,8 @@ mod tests {
         add_test_workspace(&mut app);
         add_test_workspace(&mut app);
         app.active_pane = ActivePane::WorkspaceList;
-        // Rows: [bucket, ws-0, ws-1] — a single-checkout repo is hoisted, so
-        // each workspace is one row.
+        // Rows: [ws-0, ws-1] — each repo has one checkout, so both are hoisted
+        // and, with no project to sit under, they are top-level rows.
         app.selected_sidebar_row = 0;
 
         // Down (j) moves the selection to row 1.
@@ -3089,11 +3090,9 @@ mod tests {
         crate::input::handle_key_event(&mut app, key(KeyCode::Up));
         assert_eq!(app.selected_sidebar_row, 0);
 
-        // Walk down to the second workspace's row and open it.
-        for _ in 0..2 {
-            crate::input::handle_key_event(&mut app, key(KeyCode::Down));
-        }
-        assert_eq!(app.selected_sidebar_row, 2);
+        // Down to the second workspace's row and open it.
+        crate::input::handle_key_event(&mut app, key(KeyCode::Down));
+        assert_eq!(app.selected_sidebar_row, 1);
         crate::input::handle_key_event(&mut app, key(KeyCode::Enter));
         assert_eq!(app.active_workspace, 1);
         assert_eq!(app.active_pane, ActivePane::WorkspaceList);
@@ -3115,9 +3114,9 @@ mod tests {
         app.workspaces[child].info.source_repo = shared_repo;
         app.workspaces[child].info.workspace_type = piki_core::WorkspaceType::Worktree;
         app.active_pane = ActivePane::WorkspaceList;
-        // Rows: [bucket, repo, parent, child]. Stand on the repo group.
-        app.selected_sidebar_row = 1;
-        let repo_key = app.sidebar_rows()[1]
+        // Rows: [repo, parent, child]. Stand on the repo group.
+        app.selected_sidebar_row = 0;
+        let repo_key = app.sidebar_rows()[0]
             .collapse_key()
             .expect("repo rows are collapsible")
             .to_string();
@@ -3125,11 +3124,11 @@ mod tests {
         // h collapses the repo, hiding both checkouts.
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('h')));
         assert!(app.collapsed_groups.contains(&repo_key));
-        assert_eq!(app.sidebar_rows().len(), 2);
+        assert_eq!(app.sidebar_rows().len(), 1);
         // l re-expands it.
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('l')));
         assert!(!app.collapsed_groups.contains(&repo_key));
-        assert_eq!(app.sidebar_rows().len(), 4);
+        assert_eq!(app.sidebar_rows().len(), 3);
         // Arrow Left collapses again.
         crate::input::handle_key_event(&mut app, key(KeyCode::Left));
         assert!(app.collapsed_groups.contains(&repo_key));
@@ -3165,8 +3164,11 @@ mod tests {
             vec![Some(review_a), Some(review_b)]
         );
         assert_eq!(rows[1].depth(), 1, "no repo group above a PR review");
+        // The loose workspace follows at the top level, with no header of its
+        // own — only the review bucket gets one.
         assert_eq!(rows[3].bucket(), crate::app::Bucket::Unassigned);
-        assert_eq!(rows[4].workspace_index(), Some(plain));
+        assert_eq!(rows[3].workspace_index(), Some(plain));
+        assert_eq!(rows[3].depth(), 0);
 
         // Collapsing the bucket hides both review rows but keeps the plain
         // workspace visible.
@@ -3178,7 +3180,7 @@ mod tests {
                 .contains(piki_core::projects::tree::PR_REVIEW_KEY)
         );
         let collapsed = app.sidebar_rows();
-        assert_eq!(collapsed.len(), 3, "{collapsed:#?}");
+        assert_eq!(collapsed.len(), 2, "{collapsed:#?}");
         assert!(matches!(
             collapsed[0],
             ProjectTreeRow::Project {

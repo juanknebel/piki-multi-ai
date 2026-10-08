@@ -218,8 +218,24 @@
 
 /* A checkout that stands in for its whole repository (its group had a single
    checkout, so no header was emitted): it carries the repo's identity, so it
-   gets the repo row's weight — otherwise the same thing reads lighter or
-   heavier depending on whether a second worktree happens to exist. */
+   gets the repo row's icon and weight — otherwise the same thing reads
+   differently depending on whether a second worktree happens to exist. */
 .workspace-item.hoisted-repo .workspace-name {
   font-size: var(--fs-base);
+}
+
+/* Indentation is driven by the row's own depth, not by its kind: a loose
+   repository sits one level further out than one inside a project, and its
+   checkouts follow it. 14px per step = the width of the `.workspace-gutter`,
+   so each level lines up with the glyph of the row heading it. */
+.projects-list [data-depth="0"] {
+  padding-left: 18px;
+}
+
+.projects-list [data-depth="1"] {
+  padding-left: 32px;
+}
+
+.projects-list [data-depth="2"] {
+  padding-left: 46px;
 }

@@ -1,6 +1,5 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 258
 expression: content
 ---
 
@@ -11,7 +10,7 @@ expression: content
 
 
 
-                ╭ Move Tab to Workspace ───────────────────────╮
+                ╭ Move Tab to Checkout ────────────────────────╮
                 │  Move Shell to:                              │
                 │                                              │
                 │  > test-ws-1                                 │

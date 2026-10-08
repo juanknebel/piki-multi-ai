@@ -3,10 +3,10 @@ source: crates/tui/src/ui/mod.rs
 expression: content
 ---
 ╭ PROJECTS ────────────────────────────╮
-│▎▾ ● pr-review 2                      │
+│▎▾ ● pr-review                        │
 │    ◎ owner/repo#1 [PR]               │
 │    ◎ owner/repo#2 [PR]               │
+│   ⎇ src-plain-ws (plain-ws)          │
 │                                      │
-│ ▾ ● no project 1                     │
-│    ⎇ src-plain-ws (plain-ws)         │
+│                                      │
 ╰──────────────────────────────────────╯

@@ -210,8 +210,8 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
   // Workspace commands
   cmds.push({
     id: "ws-create",
-    label: "Create Workspace",
-    category: "Workspace",
+    label: "Add Repository",
+    category: "Checkout",
     keybinding: getShortcutKey("new-workspace"),
     action: () => showWorkspaceDialog({ mode: "create" }),
   });
@@ -223,27 +223,27 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
     cmds.push({
       id: "ws-edit",
       label: `Edit "${ws.info.name}"`,
-      category: "Workspace",
+      category: "Checkout",
       action: () => showWorkspaceDialog({ mode: "edit", editIndex: wsIdx }),
     });
     cmds.push({
       id: "ws-info",
       label: `Info "${ws.info.name}"`,
-      category: "Workspace",
+      category: "Checkout",
       action: () => showWorkspaceInfo(wsIdx),
     });
     if (ws.info.origin?.kind === "GitHub") {
       cmds.push({
         id: "ws-create-worktree",
         label: `Create Worktree from "${ws.info.name}"`,
-        category: "Workspace",
+        category: "Checkout",
         action: () => showCreateWorktreeDialog(ws.info),
       });
     }
     cmds.push({
       id: "ws-delete",
       label: `Delete "${ws.info.name}"`,
-      category: "Workspace",
+      category: "Checkout",
       action: () => void confirmDeleteWorkspace(wsIdx),
     });
   }
@@ -263,21 +263,21 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
   if (appState.workspaces.length > 1) {
     cmds.push({
       id: "ws-next",
-      label: "Next Workspace",
+      label: "Next Checkout",
       category: "Switch",
       keybinding: getShortcutKey("workspace-next"),
       action: () => void cycleWorkspace(1),
     });
     cmds.push({
       id: "ws-prev",
-      label: "Previous Workspace",
+      label: "Previous Checkout",
       category: "Switch",
       keybinding: getShortcutKey("workspace-prev"),
       action: () => void cycleWorkspace(-1),
     });
     cmds.push({
       id: "ws-last",
-      label: "Toggle Last Workspace",
+      label: "Toggle Last Checkout",
       category: "Switch",
       keybinding: getShortcutKey("workspace-last"),
       action: () => void toggleLastWorkspace(),
@@ -346,7 +346,7 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
   if (ws && ws.wsTabs.length > 0 && appState.workspaces.length > 1) {
     cmds.push({
       id: "move-tab",
-      label: "Move Tab to Workspace…",
+      label: "Move Tab to Checkout…",
       category: "Tab",
       action: () => moveActiveWsTabToWorkspace(),
     });
@@ -526,7 +526,7 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
   });
   cmds.push({
     id: "search-workspace",
-    label: "Switch Workspace",
+    label: "Switch Checkout",
     category: "Search",
     keybinding: getShortcutKey("workspace-switcher"),
     action: () => openWorkspaceSwitcher(),

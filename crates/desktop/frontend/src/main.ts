@@ -98,7 +98,7 @@ async function init() {
       appState.setActiveWorkspace(0, detail);
     }
   } catch (err) {
-    reportError("Failed to load workspaces", err);
+    reportError("Failed to load the project tree", err);
   }
 
   // Say what the session daemon brought back, and badge the workspaces the
@@ -107,7 +107,7 @@ async function init() {
     if (rs.sessions === 0) return;
     const n = rs.sessions;
     const m = rs.workspaces.length;
-    toast(`Restored ${n} session${n === 1 ? "" : "s"} in ${m} workspace${m === 1 ? "" : "s"}`, "info");
+    toast(`Restored ${n} session${n === 1 ? "" : "s"} in ${m} checkout${m === 1 ? "" : "s"}`, "info");
     appState.markRestored(rs.workspaces);
   }).catch(() => {});
 

@@ -41,10 +41,10 @@ export function showWorkspaceDialog(opts: DialogOptions) {
   const prefill = cloneFrom || editWs;
   const title =
     mode === "create"
-      ? "New Workspace"
+      ? "Add Repository"
       : mode === "edit"
-        ? "Edit Workspace"
-        : "Clone Workspace";
+        ? "Edit Checkout"
+        : "Clone Repository";
 
   const backdrop = document.createElement("div");
   backdrop.className = "dialog-backdrop workspace-backdrop";
@@ -115,7 +115,7 @@ export function showWorkspaceDialog(opts: DialogOptions) {
 
   // Attach native folder pickers to path inputs
   const dirInput = backdrop.querySelector<HTMLInputElement>("#ws-dir");
-  if (dirInput) attachPathPicker(dirInput, { title: "Select workspace directory" });
+  if (dirInput) attachPathPicker(dirInput, { title: "Select the repository folder" });
   const kanbanInput = backdrop.querySelector<HTMLInputElement>("#ws-kanban");
   if (kanbanInput) attachPathPicker(kanbanInput, { title: "Select kanban directory" });
   const cloneDestInput = backdrop.querySelector<HTMLInputElement>("#ws-clone-dest");
@@ -237,7 +237,7 @@ async function submitCreate(
       );
       appState.addWorkspace(info);
       await joinProject(addToProject, info.path);
-      toast(`Workspace "${info.name}" cloned`, "success");
+      toast(`Cloned "${info.name}"`, "success");
       backdrop.remove();
     } catch (err) {
       toast(`Failed to clone: ${err}`, "error");
@@ -256,7 +256,7 @@ async function submitCreate(
   }
   const finalName = name || basenameFromPath(dir);
   if (!finalName) {
-    toast("Could not derive workspace name from folder", "error");
+    toast("Could not derive a name from the folder", "error");
     return;
   }
   btn.disabled = true;
@@ -273,10 +273,10 @@ async function submitCreate(
     );
     appState.addWorkspace(info);
     await joinProject(addToProject, info.path);
-    toast(`Workspace "${info.name}" created`, "success");
+    toast(`Added "${info.name}"`, "success");
     backdrop.remove();
   } catch (err) {
-    toast(`Failed to create workspace: ${err}`, "error");
+    toast(`Failed to add it: ${err}`, "error");
     btn.disabled = false;
     btn.textContent = "Create";
   }
@@ -328,7 +328,7 @@ async function submitEdit(backdrop: HTMLElement, index: number) {
       if (kanban !== undefined)
         ws.info.kanban_path = kanban === "" ? null : kanban;
     }
-    toast("Workspace updated", "success");
+    toast("Checkout updated", "success");
     backdrop.remove();
   } catch (err) {
     toast(`Failed to update: ${err}`, "error");
@@ -349,7 +349,7 @@ export function showWorkspaceInfo(index: number) {
   backdrop.innerHTML = `
     <div class="dialog ui-surface" style="max-width:500px">
       <div class="ui-header">
-        <span class="ui-header-title">Workspace Info</span>
+        <span class="ui-header-title">Checkout Info</span>
         <button data-variant="ghost" data-icon class="dialog-close ui-btn" title="Close" aria-label="Close">×</button>
       </div>
       <div class="dialog-body">
@@ -414,7 +414,7 @@ export function showCreateWorktreeDialog(parent: WorkspaceInfo) {
   document.querySelector(".workspace-backdrop")?.remove();
 
   if (parent.origin?.kind !== "GitHub") {
-    toast("Create Worktree is available only for GitHub workspaces", "error");
+    toast("New Branch is available only for GitHub repositories", "error");
     return;
   }
 

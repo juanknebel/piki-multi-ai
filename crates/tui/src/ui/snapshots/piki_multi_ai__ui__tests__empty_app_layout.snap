@@ -6,13 +6,13 @@ expression: content
 ╭ PROJECTS ────╮
 │              │────────────────────────────────────────────────────────────────
 │ [n] New proje│╭ piki-multi-ai ───────────────────────────────────────────────╮
-│ [C-g s] New w││                                                              │
+│ [C-g s] Add r││                                                              │
 │              ││  Welcome to piki-multi-ai                                    │
 │              ││                                                              │
 │              ││  Quick Start:                                                │
 │              ││                                                              │
-│              ││  1. [C-g s] Create your first workspace                      │
-│              ││  2. [C-g w] Switch between workspaces                        │
+│              ││  1. [C-g s] Add your first repository                        │
+│              ││  2. [C-g w] Switch between checkouts                         │
 ╰──────────────╯│  3. [Enter] Interact with the terminal                       │
 ╭ AGENTS ──────╮│  4. [C-g ?] Full help                                        │
 │  No agents ru││                                                              │
@@ -24,5 +24,5 @@ expression: content
 │              ││                                                              │
 │              ││                                                              │
 │              │╰──────────────────────────────────────────────────────────────╯
-╰──────────────╯ No active workspace
+╰──────────────╯ Nothing open
  [n] new project  [C-g s] new ws

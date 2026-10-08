@@ -3,16 +3,16 @@ source: crates/tui/src/ui/mod.rs
 expression: content
 ---
 ╭ PROJECTS ──────────────────╮
-│ ▾ ● frontend 2             │
+│ ▾ ● frontend               │
 │  ▾ ⎇ piki                  │
-│▎ │ ○ nightly               │
-│  │ ⎇ feat/sidebar          │
+│▎  │ ○ nightly              │
+│   │ ⎇ feat/sidebar         │
 │  🗁 /home/user/notes        │
 │                            │
-│ ▾ ● backend 1              │
+│ ▾ ● backend                │
 │    ⎇ api (main)            │
+│   ⎇ loose (loose)          │
 │                            │
-│ ▾ ● no project 1           │
-│    ⎇ loose (loose)         │
+│                            │
 │                            │
 ╰────────────────────────────╯

@@ -3,14 +3,14 @@ source: crates/tui/src/ui/mod.rs
 expression: content
 ---
 ╭ PROJECTS ────────────────────────────╮
-│▎▾ ● no project 6                     │
-│    ⎇ src-flow (flow)                 │
-│  ▾ ⎇ src-agent-multi                 │
+│▎  ⎇ src-flow (flow)                  │
+│ ▾ ⎇ src-agent-multi                  │
 │  │ ○ main                            │
 │  │ ⎇ nightly                         │
-│    ⎇ src-ferrum-trade (ferrum-trade) │
-│  ▾ ⎇ src-void-setup                  │
+│   ⎇ src-ferrum-trade (ferrum-trade)  │
+│ ▾ ⎇ src-void-setup                   │
 │  │ ○ main                            │
 │  │ ⎇ x220t                           │
+│                                      │
 │                                      │
 ╰──────────────────────────────────────╯

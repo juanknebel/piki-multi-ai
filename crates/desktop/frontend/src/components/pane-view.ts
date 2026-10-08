@@ -419,7 +419,7 @@ function renderEmptyState(
     <div class="pane-chooser-title">${escapeHtml(title)}</div>
     <div class="pane-chooser-list"><span class="pane-chooser-loading">…</span></div>
     <div class="pane-chooser-list pane-chooser-tools"></div>
-    <div class="pane-empty-hint">${escapeHtml(getShortcutKey("command-palette"))} command palette · ${escapeHtml(getShortcutKey("workspace-switcher"))} switch workspace</div>`;
+    <div class="pane-empty-hint">${escapeHtml(getShortcutKey("command-palette"))} command palette · ${escapeHtml(getShortcutKey("workspace-switcher"))} switch checkout</div>`;
   host.appendChild(box);
   const list = box.querySelector<HTMLElement>(".pane-chooser-list")!;
   const tools = box.querySelector<HTMLElement>(".pane-chooser-tools")!;
@@ -483,9 +483,9 @@ function renderWelcome(container: HTMLElement) {
     <div class="welcome-subtitle">Multi-Agent Workspace</div>
     <p>Select a workspace or open a tab to begin.</p>
     <div class="welcome-shortcuts">
-      <div class="shortcut-item"><span class="shortcut-key">${getShortcutKey("new-workspace")}</span><span class="shortcut-label">New workspace</span></div>
+      <div class="shortcut-item"><span class="shortcut-key">${getShortcutKey("new-workspace")}</span><span class="shortcut-label">Add repository</span></div>
       <div class="shortcut-item"><span class="shortcut-key">${getShortcutKey("command-palette")}</span><span class="shortcut-label">Command palette</span></div>
-      <div class="shortcut-item"><span class="shortcut-key">${getShortcutKey("workspace-switcher")}</span><span class="shortcut-label">Switch workspace</span></div>
+      <div class="shortcut-item"><span class="shortcut-key">${getShortcutKey("workspace-switcher")}</span><span class="shortcut-label">Switch checkout</span></div>
       <div class="shortcut-item"><span class="shortcut-key">${getShortcutKey("help")}</span><span class="shortcut-label">All shortcuts</span></div>
     </div>
   `;

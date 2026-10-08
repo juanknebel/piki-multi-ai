@@ -183,7 +183,7 @@ fn right_metadata_spans(app: &App, detail_color: Color, sig: &Signals) -> Vec<Sp
 /// point of the tree. `branch == None` (the background refresh hasn't landed,
 /// or the directory isn't a git repo) must never leave the row blank, so it
 /// falls back to the checkout's own directory name, then its workspace name.
-fn checkout_label(ws: &Workspace, depth: u8, hoisted: bool) -> String {
+fn checkout_label(ws: &Workspace, in_group: bool, hoisted: bool) -> String {
     // A hoisted row IS its repository (its group had a single checkout), so it
     // is named the way the old flat sidebar named a clone: the repository
     // folder, with the branch alongside when one is known.
@@ -207,11 +207,11 @@ fn checkout_label(ws: &Workspace, depth: u8, hoisted: bool) -> String {
         };
     }
     if let Some(branch) = &ws.branch
-        && depth == 2
+        && in_group
     {
         return branch.clone();
     }
-    if depth == 2 {
+    if in_group {
         return ws
             .info
             .path
@@ -220,8 +220,8 @@ fn checkout_label(ws: &Workspace, depth: u8, hoisted: bool) -> String {
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| ws.name.clone());
     }
-    // Depth 1 and not hoisted: a plain-directory workspace or a PR review, so
-    // the row carries its own identity plus a branch if it has one.
+    // No repo header above it and not hoisted: a plain-directory workspace or
+    // a PR review, so the row carries its own identity plus a branch if any.
     match &ws.branch {
         Some(branch) => format!("{} ({branch})", ws.name),
         None => ws.name.clone(),
@@ -282,7 +282,7 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                     format!(" [{}]", app.config.get_binding("app", "new_workspace")),
                     key_style,
                 ),
-                Span::styled(" New workspace", desc_style),
+                Span::styled(" Add repository", desc_style),
             ]),
         ];
         frame.render_widget(Paragraph::new(lines).block(block), area);
@@ -329,7 +329,6 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                     bucket,
                     key,
                     collapsed,
-                    checkouts,
                 } => {
                     let (name, dot_color) = match bucket {
                         Bucket::Project(pi) => {
@@ -338,15 +337,13 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                         }
                         other => (bucket_label(*other).to_string(), app.theme.palette.fg3),
                     };
-                    let count = format!(" {checkouts}");
-                    // bar(1) + chevron(2) + dot(2) + trailing count.
-                    let avail = inner_w.saturating_sub(5 + count.chars().count());
+                    // bar(1) + chevron(2) + dot(2).
+                    let avail = inner_w.saturating_sub(5);
                     let mut spans = vec![
                         bar,
                         chevron(*collapsed),
                         Span::styled("● ", Style::default().fg(dot_color)),
                         Span::styled(ellipsize_end(&name, avail), header_style),
-                        Span::styled(count, Style::default().fg(detail_color)),
                     ];
                     // Collapsed: surface what's hidden underneath.
                     if *collapsed && let Some(sig) = rollups.get(key) {
@@ -359,19 +356,24 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                     key,
                     collapsed,
                     checkouts,
+                    depth,
                     ..
                 } => {
                     let avail = inner_w.saturating_sub(7);
-                    let mut spans = vec![
-                        bar,
-                        Span::raw(" "),
+                    let mut spans = vec![bar];
+                    // A loose repo has no project header above it, so it sits
+                    // one level further out.
+                    if *depth > 0 {
+                        spans.push(Span::raw(" "));
+                    }
+                    spans.extend([
                         chevron(*collapsed),
                         Span::styled("⎇ ", Style::default().fg(theme.detail_normal)),
                         Span::styled(
                             ellipsize_end(display, avail),
                             Style::default().fg(theme.name_inactive),
                         ),
-                    ];
+                    ]);
                     // A repo nobody has opened yet: say so instead of looking
                     // like an empty group.
                     if *checkouts == 0 {
@@ -389,6 +391,7 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                     workspace_index,
                     depth,
                     hoisted,
+                    in_group,
                     ..
                 } => {
                     let ws = &app.workspaces[*workspace_index];
@@ -404,12 +407,17 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                     } else {
                         app.theme.palette.fg3
                     };
-                    let mut spans = vec![bar];
-                    if *depth == 2 {
-                        spans.push(Span::raw(" "));
+                    // Indent by depth so the type icon lands on the same
+                    // column as the glyph heading this row's level (a
+                    // project's ●, a repo group's ⎇). A row under a repo
+                    // header swaps the last two columns for the tree guide —
+                    // keyed on `in_group`, not on the depth, since the same
+                    // child sits one level further out under a loose repo.
+                    let mut spans = vec![bar, Span::raw(" ".repeat(*depth as usize))];
+                    if *in_group {
                         spans.push(Span::styled("│ ", Style::default().fg(guide_fg)));
                     } else {
-                        spans.push(Span::raw("   "));
+                        spans.push(Span::raw("  "));
                     }
                     spans.push(Span::styled(
                         workspace_type_icon(
@@ -420,7 +428,7 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                         Style::default().fg(icon_color),
                     ));
                     spans.push(Span::styled(
-                        checkout_label(ws, *depth, *hoisted),
+                        checkout_label(ws, *in_group, *hoisted),
                         if is_active {
                             Style::default()
                                 .fg(theme.name_active)

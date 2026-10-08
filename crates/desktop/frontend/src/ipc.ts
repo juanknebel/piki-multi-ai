@@ -112,12 +112,12 @@ export type ProjectTreeRow =
       type: "project";
       key: string;
       collapsed: boolean;
-      checkouts: number;
       /** `null` for a synthetic bucket (and for an unsaved project). */
       project_id: number | null;
       /** Empty for a bucket — the frontend names those. */
       name: string;
       color: number | null;
+      /** Loose repositories get no header row, so never "unassigned" here. */
       bucket: "project" | "prReview" | "unassigned";
     }
   | {
@@ -127,6 +127,8 @@ export type ProjectTreeRow =
       checkouts: number;
       root: string;
       display: string;
+      /** 1 under a project header, 0 for a loose repository. */
+      depth: number;
     }
   | {
       type: "checkout";
@@ -136,6 +138,9 @@ export type ProjectTreeRow =
       /** This row stands in for its whole repository — its group had a single
        *  checkout, so no header was emitted. */
       hoisted: boolean;
+      /** A repo header sits directly above it. Key the branch-only label and
+       *  the rail on this, never on `depth`. */
+      in_group: boolean;
     }
   | { type: "dir"; path: string };
 

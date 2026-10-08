@@ -101,7 +101,7 @@ async function resolveSingleton(provider: AIProvider, target: OpenTarget): Promi
  *  sidebar icons, the empty workspace and the blank pane. */
 export async function openProvider(provider: AIProvider, target: OpenTarget = {}) {
   if (!appState.activeWs) {
-    toast("Create a workspace first", "error");
+    toast("Add a repository first", "error");
     return;
   }
   if ((await resolveSingleton(provider, target)) === "done") return;

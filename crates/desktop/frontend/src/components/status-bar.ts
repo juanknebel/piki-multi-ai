@@ -123,7 +123,7 @@ export function renderStatusBar(container: HTMLElement) {
     if (lspCache.color) lspItem.style.color = lspCache.color;
     bar.appendChild(lspItem);
 
-    const wsName = ws?.info.name ?? "No workspace";
+    const wsName = ws?.info.name ?? "Nothing open";
     addItem(bar, "ws", wsName);
 
     // Persistent-session daemon: `sessions N` / `sessions off` /
@@ -146,7 +146,7 @@ export function renderStatusBar(container: HTMLElement) {
     dropTerm.className = "status-item clickable status-home-term";
     dropTerm.dataset.seg = "drop-term";
     dropTerm.innerHTML = icon("terminal", { label: "Toggle terminal" });
-    dropTerm.title = `Toggle the drop-down terminal (${getShortcutKey("toggle-terminal")}) — a shell at ~, independent of the workspace`;
+    dropTerm.title = `Toggle the drop-down terminal (${getShortcutKey("toggle-terminal")}) — a shell at ~, independent of what is open`;
     dropTerm.addEventListener("click", () => void toggleDropdownTerminal());
     bar.appendChild(dropTerm);
 

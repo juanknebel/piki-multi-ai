@@ -940,9 +940,9 @@ mod tests {
             &mut headless_terminal(),
         );
 
-        // 11 tree rows (bucket + a repo group and checkout per workspace) in
-        // a 3-line viewport, so a 3-line wheel step is not clamped.
-        assert_eq!(app.sidebar_scroll, 3);
+        // 5 tree rows (one hoisted loose repo per workspace) in a 3-line
+        // viewport, so the 3-line wheel step clamps to 2.
+        assert_eq!(app.sidebar_scroll, 2);
         assert_eq!(app.selected_sidebar_row, 0);
         assert_eq!(app.active_workspace, 0);
 
@@ -1029,11 +1029,11 @@ mod tests {
         app.active_pane = ActivePane::MainPanel;
         app.ws_list_area = Rect::new(0, 0, 30, 10);
 
-        // Rows: [bucket, ws-0, ws-1] under the top border (each repo has one
-        // checkout, so both are hoisted), so ws-1 is screen row 1 + 2.
+        // Rows: [ws-0, ws-1] under the top border (each repo has one checkout,
+        // so both are hoisted and loose), so ws-1 is screen row 1 + 1.
         handle_mouse_event(
             &mut app,
-            mouse(super::MouseEventKind::Down(super::MouseButton::Left), 5, 3),
+            mouse(super::MouseEventKind::Down(super::MouseButton::Left), 5, 2),
             &mut headless_terminal(),
         );
 
@@ -1056,15 +1056,15 @@ mod tests {
         app.active_workspace = 0;
         app.ws_list_area = Rect::new(0, 0, 30, 10);
 
-        // Rows: [bucket, repo, ws-0, ws-1]; the header is screen row 1 + 1.
+        // Rows: [repo, ws-0, ws-1]; the header is screen row 1 + 0.
         handle_mouse_event(
             &mut app,
-            mouse(super::MouseEventKind::Down(super::MouseButton::Left), 5, 2),
+            mouse(super::MouseEventKind::Down(super::MouseButton::Left), 5, 1),
             &mut headless_terminal(),
         );
 
         assert_eq!(app.active_workspace, 0, "headers never switch workspace");
-        assert_eq!(app.sidebar_rows().len(), 2, "both checkouts are hidden");
+        assert_eq!(app.sidebar_rows().len(), 1, "both checkouts are hidden");
     }
 
     /// Clicking the Agents pane focuses it, even on an empty click.
