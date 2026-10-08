@@ -114,26 +114,6 @@ pub(crate) fn open_sessions(app: &mut App) -> Option<Action> {
     Some(Action::LoadSessions)
 }
 
-pub(crate) fn open_projects(app: &mut App) -> Option<Action> {
-    // Loaded from storage here, at open time — renders must stay pure. The
-    // list also reloads through this function after every save/delete and
-    // when the edit sub-dialog backs out.
-    let projects = app
-        .storage
-        .projects
-        .as_ref()
-        .map(|s| s.list_projects())
-        .unwrap_or_default();
-    app.active_dialog = Some(DialogState::Projects {
-        projects,
-        selected: 0,
-        expanded: std::collections::HashSet::new(),
-        scroll_offset: 0,
-    });
-    app.mode = AppMode::Projects;
-    None
-}
-
 pub(crate) fn open_logs(app: &mut App) -> Option<Action> {
     app.active_dialog = Some(DialogState::Logs {
         scroll: u16::MAX,
@@ -177,15 +157,22 @@ pub(crate) fn open_edit_workspace(app: &mut App) -> Option<Action> {
 }
 
 pub(crate) fn open_clone_workspace(app: &mut App) -> Option<Action> {
+    open_create_worktree_for(app, app.selected_workspace)
+}
+
+/// Open the Create Worktree dialog against `parent_idx`'s repository. Reached
+/// from the `clone_workspace` chord (the selected workspace) and from the
+/// sidebar's `new_worktree` key on a repo row (any loaded checkout of it).
+pub(crate) fn open_create_worktree_for(app: &mut App, parent_idx: usize) -> Option<Action> {
     // Layer 3: the former "Clone workspace" action is now "Create Worktree",
-    // available only when the selected workspace has a GitHub origin.
-    if let Some(ws) = app.workspaces.get(app.selected_workspace) {
+    // available only when the parent workspace has a GitHub origin.
+    if let Some(ws) = app.workspaces.get(parent_idx) {
         match &ws.info.origin {
             piki_core::WorkspaceOrigin::GitHub { .. } => {
                 let kanban = ws.kanban_path.clone().unwrap_or_default();
                 let prompt = ws.prompt.clone();
                 app.active_dialog = Some(crate::dialog_state::DialogState::CreateWorktree {
-                    parent_idx: app.selected_workspace,
+                    parent_idx,
                     mode: crate::dialog_state::CreateWorktreeMode::ChooseSource,
                     name: String::new(),
                     name_cursor: 0,

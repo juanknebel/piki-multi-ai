@@ -208,25 +208,10 @@ pub enum DialogState {
         /// Daemon pid read from its pid file at open time (renders are pure).
         daemon_pid: Option<u32>,
     },
-    /// Projects overlay (`prefix ctrl-p`): cross-repo groups of workspaces
-    /// and directories, each with a colour. Loaded from storage at open time
-    /// and reloaded after every save/delete (renders stay pure).
-    Projects {
-        projects: Vec<piki_core::projects::Project>,
-        /// Index into the flattened row list (see [`project_rows`]).
-        selected: usize,
-        /// Ids of the projects whose member rows are shown.
-        expanded: std::collections::HashSet<i64>,
-        scroll_offset: usize,
-    },
-    /// Edit/create a project — the Projects overlay's sub-dialog (same
-    /// `AppMode::Projects`; Esc goes back to the list). Also opened by the
-    /// sidebar's Projects tab, in which case Esc/save return to Normal.
+    /// Edit/create a project (`AppMode::Projects`), opened from the sidebar
+    /// tree. Esc and save both return to Normal — the tree underneath is a
+    /// pane, not a list dialog to go back to.
     ProjectEdit {
-        /// Where Esc/save land: back to the Projects overlay list (opened
-        /// from the overlay) or straight to Normal (opened from the
-        /// sidebar's Projects tab, which is not a dialog).
-        return_to_list: bool,
         /// None = creating new, Some(id) = editing existing.
         editing_id: Option<i64>,
         name: String,
@@ -381,34 +366,6 @@ impl CycleField for ProjectEditField {
             Self::Members => Self::Color,
         }
     }
-}
-
-/// One visible row of the Projects overlay list.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ProjectRow {
-    /// Index into the dialog's projects vec.
-    Project(usize),
-    /// (project index, member index) of an expanded project's member.
-    Member(usize, usize),
-}
-
-/// Flatten the project list plus its expansion state into the visible rows.
-/// Shared by the input handler and the renderer so `selected` always
-/// addresses exactly what is on screen.
-pub fn project_rows(
-    projects: &[piki_core::projects::Project],
-    expanded: &std::collections::HashSet<i64>,
-) -> Vec<ProjectRow> {
-    let mut rows = Vec::new();
-    for (pi, p) in projects.iter().enumerate() {
-        rows.push(ProjectRow::Project(pi));
-        if p.id.is_some_and(|id| expanded.contains(&id)) {
-            for mi in 0..p.members.len() {
-                rows.push(ProjectRow::Member(pi, mi));
-            }
-        }
-    }
-    rows
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -405,35 +405,64 @@ pub async fn set_collapsed_groups(
         .map_err(|e| format!("Failed to save collapsed groups: {e}"))
 }
 
-/// Serializable view of `core::workspace::SidebarRow` for the frontend.
+/// Serializable view of one `piki_core::projects::tree::ProjectTreeRow`.
 ///
-/// The frontend used to compute this itself, in TypeScript, and had never
-/// implemented the PR-review group — so review workspaces rendered ungrouped
-/// here while the TUI grouped them. Grouping is now decided in one place.
+/// Flattened on purpose: the frontend renders rows, it does not re-derive the
+/// tree. Grouping (which repo a checkout belongs to, what is collapsed, where
+/// the synthetic buckets go) is decided once, in core, so this app and the TUI
+/// cannot drift apart — the way they did when the family rule lived in
+/// TypeScript too and the PR-review group was never implemented here.
 #[derive(serde::Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
-pub enum SidebarRowDto {
-    /// Header for the synthetic PR-review group. Carries its own collapse key
-    /// so the frontend never has to hardcode one.
-    PrReviewHeader { collapsed: bool, family_key: String },
-    /// A real workspace: `index` points into `list_workspaces`' order.
-    Workspace {
-        index: usize,
-        /// "standalone" | "parent" | "child"
-        kind: &'static str,
-        /// Collapse key — present on parents only.
-        family_key: Option<String>,
-        /// Whether this parent's children are hidden — parents only.
-        collapsed: Option<bool>,
+pub enum ProjectTreeRowDto {
+    /// A top-level header: a real project, or one of the synthetic buckets.
+    Project {
+        /// Collapse key.
+        key: String,
+        collapsed: bool,
+        /// Workspaces underneath it, across all its repos.
+        checkouts: usize,
+        /// `Some(id)` for a real project (`None` for an unsaved one);
+        /// `None` for a bucket.
+        project_id: Option<i64>,
+        /// Project name, or "" for a bucket (the frontend names those).
+        name: String,
+        /// Palette index of a real project; `None` for a bucket.
+        color: Option<u8>,
+        /// "project" | "prReview" | "unassigned"
+        bucket: &'static str,
     },
+    /// A repository group. Synthetic — derived from its checkouts'
+    /// `source_repo`, never stored.
+    Repo {
+        key: String,
+        collapsed: bool,
+        checkouts: usize,
+        /// Absolute repository root.
+        root: String,
+        /// Display name for the root.
+        display: String,
+    },
+    /// A loaded workspace: `index` points into `list_workspaces`' order.
+    Checkout {
+        index: usize,
+        /// "primary" (the original clone) | "worktree"
+        kind: &'static str,
+        /// 2 under a repo group, 1 when the row hangs off its header.
+        depth: u8,
+    },
+    /// A member path that is neither a loaded workspace nor a repo root.
+    Dir { path: String },
 }
 
-/// Visual sidebar rows in render order, with families and the PR-review group
-/// already resolved against the saved collapse state.
+/// The sidebar's rows in render order: the project tree, with collapse state
+/// already applied. The ONE sidebar model — there is no flat workspace view.
 #[tauri::command]
-pub async fn sidebar_rows(
+pub async fn project_tree(
     state: State<'_, Mutex<DesktopApp>>,
-) -> Result<Vec<SidebarRowDto>, String> {
+) -> Result<Vec<ProjectTreeRowDto>, String> {
+    use piki_core::projects::tree::{Bucket, CheckoutKind, ProjectTreeRow};
+
     let app = state.lock();
     let collapsed = app
         .storage
@@ -441,40 +470,74 @@ pub async fn sidebar_rows(
         .as_ref()
         .and_then(|p| p.get_collapsed_groups().ok())
         .unwrap_or_default();
+    let projects = app
+        .storage
+        .projects
+        .as_ref()
+        .map(|s| s.list_projects())
+        .unwrap_or_default();
     let infos: Vec<piki_core::WorkspaceInfo> =
         app.workspaces.iter().map(|w| w.info.clone()).collect();
 
-    Ok(piki_core::workspace::sidebar_rows(&infos, &collapsed)
-        .into_iter()
-        .map(|row| match row {
-            piki_core::workspace::SidebarRow::PrReviewHeader { collapsed } => {
-                SidebarRowDto::PrReviewHeader {
+    Ok(
+        piki_core::projects::tree::project_tree(&projects, &infos, &collapsed)
+            .into_iter()
+            .map(|row| match row {
+                ProjectTreeRow::Project {
+                    bucket,
+                    key,
                     collapsed,
-                    family_key: piki_core::workspace::PR_REVIEW_GROUP_KEY.to_string(),
-                }
-            }
-            piki_core::workspace::SidebarRow::Workspace { index, kind } => match kind {
-                piki_core::workspace::RowKind::Parent { key, collapsed } => {
-                    SidebarRowDto::Workspace {
-                        index,
-                        kind: "parent",
-                        family_key: Some(key),
-                        collapsed: Some(collapsed),
+                    checkouts,
+                } => {
+                    let (project_id, name, color, tag) = match bucket {
+                        Bucket::Project(i) => {
+                            let p = &projects[i];
+                            (p.id, p.name.clone(), Some(p.clamped_color()), "project")
+                        }
+                        Bucket::PrReview => (None, String::new(), None, "prReview"),
+                        Bucket::Unassigned => (None, String::new(), None, "unassigned"),
+                    };
+                    ProjectTreeRowDto::Project {
+                        key,
+                        collapsed,
+                        checkouts,
+                        project_id,
+                        name,
+                        color,
+                        bucket: tag,
                     }
                 }
-                piki_core::workspace::RowKind::Child => SidebarRowDto::Workspace {
-                    index,
-                    kind: "child",
-                    family_key: None,
-                    collapsed: None,
+                ProjectTreeRow::Repo {
+                    root,
+                    display,
+                    key,
+                    collapsed,
+                    checkouts,
+                    ..
+                } => ProjectTreeRowDto::Repo {
+                    key,
+                    collapsed,
+                    checkouts,
+                    root: root.to_string_lossy().into_owned(),
+                    display,
                 },
-                piki_core::workspace::RowKind::Standalone => SidebarRowDto::Workspace {
-                    index,
-                    kind: "standalone",
-                    family_key: None,
-                    collapsed: None,
+                ProjectTreeRow::Checkout {
+                    workspace_index,
+                    kind,
+                    depth,
+                    ..
+                } => ProjectTreeRowDto::Checkout {
+                    index: workspace_index,
+                    kind: match kind {
+                        CheckoutKind::Primary => "primary",
+                        CheckoutKind::Worktree => "worktree",
+                    },
+                    depth,
                 },
-            },
-        })
-        .collect())
+                ProjectTreeRow::Dir { path, .. } => ProjectTreeRowDto::Dir {
+                    path: path.to_string_lossy().into_owned(),
+                },
+            })
+            .collect(),
+    )
 }

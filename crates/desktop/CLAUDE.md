@@ -146,46 +146,8 @@ just lint-desktop                           # frontend test + build, then clippy
 
 ## Sidebar, switcher, labels
 
-- `workspace-list.ts` rows have a single `⋯` + right-click → `workspaceMenuItems(idx)`; its ⚙ opens
-  `showAgentManager(idx)` for THAT row's workspace. Per-row agent rollup glyph (collapsed worktree
-  families aggregate hidden children by `family_key` / `source_repo`) via `types.ts::agentStatusSeverity`
-  / `actionableStatusView` (mirrors of `piki_core::cli_agent::status_severity` and the TUI's
-  `actionable_status_view` — change all together). Every row starts with a fixed-width
-  `.workspace-gutter` (chevron on a worktree parent — the whole slot toggles collapse without
-  switching, while a click anywhere else on a parent row toggles AND switches —, empty otherwise) so
-  labels align whatever the row kind; the active row is carried entirely by `.workspace-item.active`'s
-  background tint — no separate dot. A clone's branch renders as a separate muted `.workspace-branch`
-  span (`rowParts`), never glued to the name, and `.grouped` children indent one step past the parent's
-  gutter. Don't reintroduce a leading element that only some rows have — it un-aligns the list.
-  **Worktree family** (`workspace-list.ts::render`, `buildRow` + the indexed loop that groups a parent
-  with its contiguous expanded children): wrapped in `.ws-family` so `.ws-family-rail` — one
-  absolutely-positioned line, `top`/`bottom` set in `row-height-lg` units so it spans parent-center to
-  last-child-center at any density with zero per-child math — draws a `git log --graph`-style trunk
-  connecting them; only built when the parent isn't collapsed and has ≥1 rendered child. The parent also
-  gets `.family-parent` (independent of the wrapper, so it still applies collapsed) → `.workspace-name`
-  goes semibold, the one non-color cue that "this is a hub with branches," never applied to a plain
-  clone.
-- **Projects view** (`projects-panel.ts`, activity-bar id `"projects"`, host `#projects-view`): cross-cutting
-  groups from `piki_core::projects` via `ipc.listProjects/saveProject/deleteProject` (`commands/projects.rs`).
-  Listbox pattern like the Agents panel; project rows carry a dot painted `var(--project-swatch-{color+1})`
-  (10 static tokens in `variables.css` — deliberately NOT theme-derived so a project keeps one colour in both
-  frontends), member rows a `--project-stripe` bar. A member path is resolved against `appState.workspaces`
-  at render time: match → workspace row (click switches), no match → directory row (click adopts it as a
-  `Simple` workspace via `ipc.createWorkspace`, then switches). The active workspace is marked wherever it's a
-  member — `.project-member.active` on every matching row, `.project-row.has-active` + a marker dot on a
-  collapsed project's header so folding it doesn't read as "nothing selected" (a workspace can belong to
-  several projects; each gets its own mark, matched by index against `appState.activeWorkspace`, not by
-  reference). Collapse persisted as `projectsCollapsed`
-  (settings). Create/edit in `dialogs/project-dialog.ts`: 10-swatch radio plus TWO member lists — the members in
-  order (each row a ✕) and, below, every non-member workspace narrowed by a filter matching name / branch
-  / path (Enter adds the first row, an absolute or `~/…` path offers itself as a directory member,
-  *Browse for a directory…* calls `path-picker.ts pickPath()`). Rows are two lines (name · kind · branch,
-  then `pathLabel(path, getHomeDir())`) because checkouts of one repo differ only by directory — never put
-  that path in a tooltip alone. `attachDialogResize(dialog, "project")` + both lists `flex: 1 1 auto` so a
-  resized dialog grows the lists. Membership is also editable without the dialog:
-  `projectsSnapshot()` / `setProjectMembership(project, path, on)` (exported by `projects-panel.ts`) back the
-  workspace row menu's `Add to / Remove from project "X"` entries and the member row's own context menu.
-  Sheets `projects.css` + `dialog-projects.css`.
+- `project-tree.ts` renders the ONE sidebar view: the project tree (project → repository → checkout, plus the `pr-review` / `no project` buckets), from rows the `project_tree` command returns (`piki_core::projects::tree`, serialized as `ProjectTreeRowDto` → `ipc.ProjectTreeRow`). There is no flat workspace list any more — `workspace-list.ts` and the separate Projects view are gone. **Never re-derive the grouping in TypeScript**: which repo a checkout belongs to, what is collapsed and where the buckets go are decided in core (the family rule used to live here too, and the PR-review group was never implemented, so the two frontends silently disagreed). Row kinds: `.project-row` (header; `.bucket` for a synthetic one) with a dot painted `var(--project-swatch-{color+1})`, `.repo-row` (synthetic group; `⋯` + right-click → new branch / add repository), `.workspace-item` (checkout — the same row CSS as before, `.grouped` at depth 2) and `.project-member.directory` (a member path with no workspace, click adopts it). A repo group plus its contiguous checkouts is wrapped in `.ws-family` so `.ws-family-rail` draws one `git log --graph`-style trunk (`left: 25px` = the row's 18px inset + half its 14px gutter — keep repo and checkout geometry in step or the rail misses). Per-row agent rollup glyph via `types.ts::agentStatusSeverity` / `actionableStatusView` (mirrors of `piki_core::cli_agent::status_severity` and the TUI's `actionable_status_view` — change all together); a **collapsed** header surfaces what it hides, derived from the live workspace list (its rows are absent by construction). Collapse state is the shared `collapsed_groups` ui-pref (`ipc.getCollapsedGroups` / `setCollapsedGroups`, awaited before re-fetching — the backend resolves collapse from storage, so refetching first renders the old state). Checkout rows carry `⋯` + right-click → the full workspace menu (open, agents, info, edit, new branch, merge, project membership, delete).
+- **Project state** (`projects-panel.ts`) is no longer a view: it holds the project-list cache plus the mutations the tree and the menus call — `refreshProjects()` (reloads and raises `projects-changed` via `appState.notifyProjectsChanged()`, the one event an outside module may emit), `projectsSnapshot()`, `projectById()`, `setProjectMembership(project, path, on)`, `adoptDirectory(path)` and `confirmDeleteProject(project)`. Projects themselves come from `piki_core::projects` via `ipc.listProjects/saveProject/deleteProject` (`commands/projects.rs`); `ProjectMember` carries a `kind` (`"Auto"` | `"Repo"`). Create/edit in `dialogs/project-dialog.ts`: 10-swatch radio plus TWO member lists — the members in order (each row a ✕) and, below, every non-member workspace narrowed by a filter matching name / branch / path (Enter adds the first row, an absolute or `~/…` path offers itself as a directory member, *Browse for a directory…* calls `path-picker.ts pickPath()`). Rows are two lines (name · kind · branch, then `pathLabel(path, getHomeDir())`) because checkouts of one repo differ only by directory — never put that path in a tooltip alone. `attachDialogResize(dialog, "project")` + both lists `flex: 1 1 auto` so a resized dialog grows the lists. "Add Repository…" (tree header, project row, repo row) opens `showWorkspaceDialog({ mode: "create", addToProject })`, whose `joinProject()` makes the created workspace a member — one gesture instead of create-then-edit-membership. Sheets `projects.css` + `dialog-projects.css`.
 - **Branch labels repaint on their own event.** `updateFiles` emits `workspace-branch-changed` for ANY
   workspace whose branch actually moved (`files-changed` is emitted for the ACTIVE workspace only, and
   the git watcher polls them all). The workspace list and the Projects panel listen to it; anything new
@@ -211,7 +173,7 @@ just lint-desktop                           # frontend test + build, then clippy
 - `sidebar.ts maxAgentsPanelHeight()` clamps the Agents panel so ≥4 workspace rows stay visible; it
   measures a live `.workspace-item` (never assume px).
 - Full re-renders must preserve UI state: keep `scrollTop`, input caret/focus across `innerHTML` rebuilds
-  (see workspace-list, file-tree, source-control for the pattern), and prefer patching in place (the status
+  (see project-tree, file-tree, source-control for the pattern), and prefer patching in place (the status
   bar morphs only changed segments — `status-bar.ts morphChildren`; kanban search, pane titles) over
   rebuilding.
 
@@ -232,8 +194,8 @@ just lint-desktop                           # frontend test + build, then clippy
   debounced fetch, and `setAgentRows` seeds per-tab shell state so a daemon-restored tab shows its dot;
   never fetch rows from a component. `setAgentRows` skips the `agent-rows-changed` emit when the rows
   are unchanged modulo `elapsed_secs` (`agent-attention.ts agentRowsEquivalent`) — elapsed advances on
-  every fetch and ticks in place, so a refresh that only moved it must not rebuild the panels. Consumers: Agents panel, `workspace-list.ts` rollup, `status-bar.ts`
-  `● N need you` segment, `activity-bar.ts` amber badge on the Explorer icon, and `jumpToAttention()`
+  every fetch and ticks in place, so a refresh that only moved it must not rebuild the panels. Consumers: Agents panel, `project-tree.ts` rollup, `status-bar.ts`
+  `● N need you` segment, `activity-bar.ts` amber badge on the Projects icon, and `jumpToAttention()`
   (`Alt+A`, palette, Agents menu) built on the pure `agent-attention.ts` (`attentionRows`,
   `pickAttentionTarget` — severity order + cyclic walk —, `liveElapsedSecs`).
 - `AgentRow.elapsed_secs` comes from `CliAgentState::run_started_at`; `formatElapsed` (`types.ts`) mirrors

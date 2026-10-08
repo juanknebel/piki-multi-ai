@@ -135,13 +135,15 @@ Internal — set by piki for its child processes; documented so they can be reco
 ```
  [CPU] 12%  [RAM] 4.2/16.0G  [BAT] 85%  [TIME] 2026-03-07 14:32
 +------------------+-------------------------------------------------------+
-| WORKSPACES       | [▸ Claude Code ×] [$ Shell ×] +   (tab blocks + new)  |
+| PROJECTS         | [▸ Claude Code ×] [$ Shell ×] +   (tab blocks + new)  |
 |                  |-------------------------------------------------------|
-|  ▼ frontend (2)  |                                                       |
-|  ▶ ⎇ ws-1  3∆ ↑1 |  AI assistant live terminal output                    |
-|    ⎇ ws-2        |  (Ctrl+G c or click + to open a new tab)              |
-|  ▸ backend (1)   |                                                       |
-|                  |                                                       |
+| ▾ ● frontend 3   |                                                       |
+|   ▾ ⎇ piki       |  AI assistant live terminal output                    |
+|   │ ○ main       |  (Ctrl+G c or click + to open a new tab)              |
+|   │ ⎇ ws-1  3∆ ↑1|                                                       |
+|   ▾ ⎇ api        |                                                       |
+|   │ ○ main       |                                                       |
+| ▾ ● no project 1 |                                                       |
 |------------------+                                                       |
 | AGENTS           |-------------------------------------------------------|
 | ▷ ws-1 · Claude  | branch: ws-1 | 3 files | ↑1 unpushed | Claude: busy  |
@@ -150,12 +152,16 @@ Internal — set by piki for its child processes; documented so they can be reco
 |                  |
 +------------------+--------------------------------------------------------+
   Footer keys change per focused pane. Examples:
-  Workspace list: [k/j] select [enter] open [e] edit ws [d] delete ws [C-g] prefix
+  Projects tree:  [k/j] select [enter] open [a] add repo [w] new branch [C-g] prefix
   Agents:         [k/j] navigate [enter] jump to agent [C-g] prefix
   Main panel:     [ctrl-shift-f] search [C-g [] scroll [C-g ?] help [C-g] prefix
 ```
 
-The top-left pane is a **tab bar hosting two views — WORKSPACES and PROJECTS** (both labels show in its border when the pane is wide enough; click one, or press `Tab` with the pane focused, to flip). The Workspaces tab is the tree above; the Projects tab lists the same cross-repo groups as the desktop's Projects view and the `C-g C-p` overlay — `j`/`k` move, `Enter` expands a project or opens/adopts a member, `n`/`e`/`d` create/edit/delete through the same editor dialog. The chosen tab persists across restarts, so the pane always opens on the view you prefer.
+The top-left pane is the **project tree** — the one sidebar view. It has three levels: a **project** (name, colour dot, checkout count), the **repositories** it holds (synthetic rows derived from each checkout's `source_repo`, never stored), and each repository's **checkouts** — its original clone plus every `git worktree` of it, labelled by branch. A member path with no workspace registered at it renders as a dimmed directory row and is adopted as a workspace on `Enter`.
+
+One project can hold repositories from different places, and the same repository can belong to several projects — the project is a *view*, never the owner of the layout on disk (worktrees stay under `<data_dir>/worktrees/<repo>/`). Two synthetic groups keep the tree total, so nothing is ever unreachable: **pr-review** collects the ad-hoc PR-review checkouts, and **no project** collects every registered workspace no project claims. Collapsing a project or a repository surfaces what it hides on the header row (idle dot, agent-status glyph, changed-file count, ahead/behind) instead of losing it.
+
+Keys (`[keybindings.projects]`): `j`/`k` move — follow-focus, so landing on a checkout switches to it while header rows only move the cursor —, `h`/`l` collapse/expand, `Enter` opens the checkout / collapses a group / adopts a directory, `n`/`e`/`d` create/edit/delete a project, `a` adds a repository to the project under the cursor (the New Workspace dialog, with the result joining that project), `w` creates a branch + worktree in the repository under the cursor (it joins the project on its own — every worktree of a member repository is part of it). Collapse state is persisted, so a folded project stays folded across restarts.
 
 The AGENTS pane (bottom-left) lists every running AI agent across all workspaces with its live status (▷ running, ⚠ needs permission, ⏳ waiting, ✓ done, ● alive, ○ exited); `Enter` or a click jumps to that workspace and tab. This includes a `claude` typed manually inside a shell tab: the shell bridge transparently wraps `claude` with piki's hook settings, so it reports status the same way as a dedicated agent tab (listed as `Claude (Shell)` once its first hook event arrives; skipped if you pass your own `--settings`). Such a shell entry drops off the pane as soon as the CLI exits — the shell returns to its prompt and its OSC 133 command-end marker clears the tab's agent state — while the shell itself keeps running; a dedicated agent tab stays listed for as long as the tab is open. Git status details live in the lazygit tab (`Ctrl+G g`). In the tab bar, a tab whose process has exited keeps its slot and is marked with a dim `○` — `Ctrl+G C-r` re-spawns it in place (same provider, same slot, same custom title).
 
@@ -170,7 +176,7 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 <!-- BEGIN:prefix-keys -->
 | Key | Action |
 |-----|--------|
-| `h` / `j` / `k` / `l` (or arrows) | Move focus between panes (`h` from main panel goes to workspace list) |
+| `h` / `j` / `k` / `l` (or arrows) | Move focus between panes (`h` from main panel goes to the project tree) |
 | `c` | New tab (opens category menu: 1=Shell, 2=AI Agents →, 3=Tools →) |
 | `x` | Close current tab (with confirmation dialog) |
 | `n` / `p` | Next / previous tab |
@@ -195,7 +201,6 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 | `C-t` | Scratch terminal — a single shell rooted at `~`, tied to no workspace, shown centered on top of everything; press `Ctrl+G C-t` again (or from inside it) to hide, and the shell keeps running |
 | `b` | Workspace dashboard overlay (bird's-eye view of all workspaces and tabs) |
 | `C-s` | Sessions overlay (persistent-session daemon state and management, see below) |
-| `C-p` | Projects overlay (cross-repo groups with a colour; Enter expands or jumps, n/e/d manage) |
 | `o` | Log viewer overlay (last 500 log entries, color-coded, filterable by level) |
 | `m` | Manage agent profiles (create/edit/delete agents for this project) |
 | `C-a` | Jump to the agent needing you (waiting for permission first, then unseen news; press again to walk through the rest) |
@@ -221,8 +226,7 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 | Pane | Keys |
 |------|------|
 | *Terminal pane* | All keys forwarded to the active tab; `Ctrl+G f` search, `Ctrl+Shift+C` copy visible content, `Ctrl+Shift+V` paste |
-| *Workspace list — Workspaces tab* | `j`/`k` select (follow-focus: selecting switches), `Enter` switch + focus main panel (or toggle collapse on a family parent), `h`/`l` collapse/expand a worktree family, `Tab` flip to the Projects tab |
-| *Workspace list — Projects tab* | `j`/`k` move, `Enter` expand a project / open or adopt a member, `n`/`e`/`d` new/edit/delete project, `Tab` back to Workspaces |
+| *Projects pane (sidebar tree)* | `j`/`k` move (follow-focus: landing on a checkout switches to it), `Enter` open the checkout / collapse a project or repo / adopt a directory member, `h`/`l` collapse/expand, `n`/`e`/`d` new/edit/delete project, `a` add a repository to this project, `w` new branch + worktree in this repository |
 | *Agents pane* | `j`/`k` select agent, `Enter` or click to jump to that workspace/tab |
 | *Markdown tab* | `j`/`k` scroll, `Ctrl+d`/`Ctrl+u` page, `g`/`G` top/bottom (read-only) |
 | *Kanban tab* | `h/l/j/k` navigate, `H/L` move card, `n` new card, `e` edit card, `d` delete, `D` dispatch agent, `Enter` details, `r` refresh, `Esc` close modal |
@@ -355,15 +359,17 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 
 | Action | Effect |
 |--------|--------|
-| Click workspace list | Switch to the clicked workspace (focus moves to the main panel; empty click just focuses the main panel) |
+| Click a checkout row | Switch to that workspace (focus stays on the tree) |
+| Click a project / repository header | Collapse or expand it — headers carry no workspace, so nothing switches |
+| Click a directory member row | Adopt it as a workspace and open it |
 | Click agents pane | Jump to the clicked agent's workspace/tab (focus moves to the main panel; empty click just focuses the main panel) |
 | Click main panel | Focus pane and start text selection |
 | Click tab | Switch to that tab |
 | Click × on tab | Close that tab (with confirmation) |
 | Click + after the tabs | Open the New Tab dialog |
-| Scroll in workspace list | Scroll the list viewport (selection — and workspace — never move) |
+| Scroll in the project tree | Scroll the viewport (selection — and workspace — never move) |
 | Scroll in agents pane | Scroll the pane viewport (selection never moves) |
-| Click in workspace list / agents pane | Perform the row action and focus that pane |
+| Click in the project tree / agents pane | Perform the row action and focus that pane |
 | Click on subtab | Switch tab and focus the main panel |
 | Scroll in main panel | Scroll terminal scrollback/markdown (includes inline-TUI transcripts like Codex); forwarded as escape sequences to alt-screen TUI apps |
 | Scroll in Help overlay | Scroll overlay content |
@@ -471,25 +477,25 @@ The diff pane shows a **side-by-side split view**: the left panel displays the o
 +-------------------------------------------------------------------------------+
 | File  Edit  View  Git  Agents  Chat  Tools  Help                     menu bar |
 +---+----------------------+----------------------------------------+-----------+
-| E | WORKSPACES      ⋯    | [$ zsh ✓] [▸ Claude ●] [main.rs] + ⋯   |           |
-| x |  ▾ frontend (2)      |----------------------------------------|  AI Chat  |
-| p |   ⎇ ws-1  3∆ ↑1  ●   | pane: shell        | pane: Claude Code |  (toggle, |
-| l |   ⎇ ws-2             |                    |                   |   floats  |
-| F |  ▸ backend (1)       |                    |                   |   under   |
-| i |----------------------|--------------------+-------------------|   1000px) |
-| l | AGENTS               | pane: blank → Shell / providers /      |           |
-| e |  ▷ ws-1 · Claude 3m  |       Web Preview / Kanban / API /     |           |
-| s |  ✓ api · Claude      |       Open file…                       |           |
-| S |                      |                                        |           |
-| C |                      |                                        |           |
+| P | PROJECTS       ● +   | [$ zsh ✓] [▸ Claude ●] [main.rs] + ⋯   |           |
+| r | ▾ ● frontend     3   |----------------------------------------|  AI Chat  |
+| o |   ▾ ⎇ piki           | pane: shell        | pane: Claude Code |  (toggle, |
+| j |   │ ○ main           |                    |                   |   floats  |
+| F |   │ ⎇ ws-1 3∆ ↑1 ●   |                    |                   |   under   |
+| i |   ▾ ⎇ api            |                    |                   |   1000px) |
+| l |   │ ○ main           |                    |                   |           |
+| e |----------------------|--------------------+-------------------|           |
+| s | AGENTS               | pane: blank → Shell / providers /      |           |
+| S |  ▷ ws-1 · Claude 3m  |       Web Preview / Kanban / API /     |           |
+| C |  ✓ api · Claude      |       Open file…                       |           |
 +---+----------------------+----------------------------------------+-----------+
 | ⎇ ws-1  3 files ↑1 · ~/git/frontend · Claude: running · ● 1 need you · sessions 4 · LSP |
 +-------------------------------------------------------------------------------+
 ```
 
 - **Menu bar** — File / Edit / View / Git / Agents / Chat / Tools / Help; every entry shows its current shortcut.
-- **Activity bar** — Workspaces, Projects (see [Projects](#projects)), Files, Source Control, Agents (opens the agent-profile manager), Kanban, API Explorer, Web Preview; an amber badge on the Workspaces icon means an agent needs you even when the sidebar is hidden. The Source Control icon carries its own badge: the changed-file count plus `↑N` when local commits haven't been pushed (hover for the breakdown).
-- **Sidebar** — the switchable view (workspace list with `⋯` / right-click menus, file tree with git decorations, Source Control panel) plus the **Agents panel**, always docked at the bottom whatever view is active, listing every running agent across all workspaces with status and elapsed time. Below those rows, an *External* section lists agent CLIs running outside piki (found by scanning `/proc` every 2 s, grouped by process tree, mapped to a workspace by cwd — `Outside` when none matches; the Claude Desktop app, Electron helper processes and browser native-messaging hosts are filtered out as noise) — display-only, except a play button that opens a terminal at the process's cwd. The panel's height is draggable; the workspace list above keeps its header plus at least four rows.
+- **Activity bar** — Projects (the sidebar tree, see [Projects](#projects)), Files, Source Control, Agents (opens the agent-profile manager), Kanban, API Explorer, Web Preview; an amber badge on the Projects icon means an agent needs you even when the sidebar is hidden. The Source Control icon carries its own badge: the changed-file count plus `↑N` when local commits haven't been pushed (hover for the breakdown).
+- **Sidebar** — the switchable view (the project tree with `⋯` / right-click menus per row, file tree with git decorations, Source Control panel) plus the **Agents panel**, always docked at the bottom whatever view is active, listing every running agent across all workspaces with status and elapsed time. Below those rows, an *External* section lists agent CLIs running outside piki (found by scanning `/proc` every 2 s, grouped by process tree, mapped to a workspace by cwd — `Outside` when none matches; the Claude Desktop app, Electron helper processes and browser native-messaging hosts are filtered out as noise) — display-only, except a play button that opens a terminal at the process's cwd. The panel's height is draggable; the tree above keeps its header plus at least four rows.
 - **Tab bar** — one strip per workspace: the chips scroll, `+` (new blank tab) and `⋯` (every tab of the workspace, agent status, current one marked) stay put. Tab chips show the shell's ✓/✗ exit badge, an agent dot, a bell flash and a dim `○` when the process exited.
 - **Panes** — each top-level tab is a tree of panes; each pane holds exactly one content (shell, agent, code or markdown editor, web preview, kanban board, API explorer). A blank pane shows the chooser; the pane header shows the title, a split-right / split-down / close set and a *Restart* button once its process has exited. There are no per-pane tab bars.
 - **Status bar** — branch (click to switch), changed files and ahead/behind, the active shell's cwd, the active agent's status, `● N need you`, the `sessions N` segment (click to manage), LSP state, and a terminal button at the right corner that toggles the drop-down terminal (see below). Segments ellipsize instead of overflowing.
@@ -608,7 +614,7 @@ Desktop-only preferences (sidebar and chat widths, Agents-panel height, dialog s
 - **Workspace rows** align their labels behind a fixed leading gutter — the chevron on a worktree family's parent, empty otherwise; the active row is carried by its own background tint, no separate marker. Clicking anywhere on a parent row toggles its family's collapse (and switches to the parent); the chevron slot toggles without switching — a clone shows its branch dimmed after the repo folder name, and worktree children indent one step deeper. An expanded family also draws a thin connector line (`git log --graph` style) from the parent's chevron down through its worktree children, and the parent's name goes semibold — the two together mark "this is a hub with branches" at a glance, distinct from a plain clone sitting on its default branch. Each row carries one `⋯` (plus right-click): Open, Agents, Info, Edit, Create Worktree (GitHub-only — a Source dropdown picks *Create New* (spawns a worktree, inheriting the parent's prompt/kanban, mirroring `git worktree add`) or *Load Existing* (lists worktrees already on disk for the repo via `git worktree list`, filtered to ones with no workspace registered yet, and registers the picked one without touching git — same choice as the TUI's `prefix r`)), Merge / Rebase (switches to that workspace first), Delete. The *Delete* confirm is one shared implementation (sidebar and palette): the hint depends on the workspace type (a worktree loses its worktree and branch; a Simple/Project workspace only leaves the list), it counts uncommitted changes, and lists the running agents — which deletion really terminates (their daemon sessions are removed, not left as orphans).
 - **Workspace navigation without the switcher**: `Alt+]` / `Alt+[` step to the next / previous workspace in the order the sidebar shows them — a collapsed worktree family is skipped whole, because its children are not rows — wrapping at both ends; ``Alt+` `` jumps back to the workspace visited before the current one. The last-workspace target is the most recently used workspace that still exists (the same MRU list the switcher ranks with), so deleting a workspace doesn't break the toggle. All three are also in View ▸ and the palette, and are disabled with fewer than two workspaces.
 - **Workspace switcher** (`Alt+W`): with an empty query the most recently used workspace is first (the MRU list is bumped on every switch and persisted with the settings); a query is matched fuzzily across name, repo folder and branch (`wsauth` finds `ws-auth`), best score first with recency as the tie-break. Each row shows the workspace's worst agent state (permission / needs you / running…) or an amber dot for uncommitted changes, `Alt+N` when it has one, and `folder · ⎇ branch`.
-- **Branch labels** share one rule everywhere (workspace list, status bar, switcher, dashboard, empty state): middle-truncated at 28 characters, the full name in the tooltip. Collapsible groups share one chevron pair: `▸` collapsed, `▾` expanded.
+- **Branch labels** share one rule everywhere (project tree, status bar, switcher, dashboard, empty state): middle-truncated at 28 characters, the full name in the tooltip. Collapsible groups share one chevron pair: `▸` collapsed, `▾` expanded.
 - **Empty state**: a workspace with no tabs — or a blank pane — shows `<workspace> · ⎇ <branch>` and buttons for Shell, every configured provider, then *Web Preview* / *Kanban Board* / *API Explorer* and *Open file…* (the fuzzy file finder); the app-wide welcome only appears when there is no workspace at all.
 
 ### Desktop panes and content
@@ -671,7 +677,7 @@ The desktop's view of the persistent-session daemon — the `sessions N / off / 
 
 ### Creating workspaces
 
-Press `Ctrl+G s` (or `n` in the workspace list) to open the New Workspace dialog. Provide:
+Press `Ctrl+G s` (or `a` on a project row in the sidebar tree, which also makes the result a member of that project) to open the New Workspace dialog. Provide:
 
 - **Source:** Toggle between `Local folder` and `GitHub URL` using `Space`, `Left`, or `Right`. Local folder points to any existing directory on disk (git not required); GitHub URL clones a public/private GitHub repo into a destination you choose. The resulting workspace is always a Simple workspace internally; worktrees are spawned later from a GitHub-origin workspace via the "Create Worktree" action.
 - **Folder / URL:** When Source = Local folder, this is the path to the directory (`~` expands to `$HOME`). When Source = GitHub URL, paste the clone URL (HTTPS, SSH, or `git@github.com:owner/repo.git`).
@@ -707,12 +713,14 @@ Workspace configurations are saved automatically and restored on startup using a
 
 ## Projects
 
-A **project** is a user-defined cross-cutting group with a colour — a label, not a place. One project can hold worktrees of different repos, clones and plain directories, and a workspace can belong to several projects. Projects live in the shared SQLite database (`piki_core::projects` + the `ProjectStorage` trait), so one created in the desktop appears in the TUI and vice versa.
+A **project** is the one top-level unit both frontends navigate: a named, coloured group holding repositories (each with its clone and worktrees) and plain directories. It is a *view*, not a place — worktrees still live under `<data_dir>/worktrees/<repo>/`, so the same repository can belong to several projects at once. Projects live in the shared SQLite database (`piki_core::projects` + the `ProjectStorage` trait), so one created in the desktop appears in the TUI and vice versa; the tree both render is built by `piki_core::projects::tree::project_tree` from the project list plus the live workspace list, so the grouping rule exists exactly once.
+
+On first launch after the upgrade, schema v12 seeds one project per distinct `source_repo` (named after the repository directory, with that repo's workspaces as members), so the tree opens on exactly what the old flat workspace list showed and the "no project" group starts empty. Projects you had already created by hand are kept untouched; anything they didn't cover shows up under "no project".
 
 - **Members are just paths.** Whether a member renders as a workspace or as a directory is resolved against the registered workspace list at render time: a path with a workspace shows its name (and branch) and jumps on open; any other path shows dimmed as a directory and is **adopted as a `Simple` workspace on first open** (idempotent — once adopted, its rows upgrade by themselves everywhere).
 - **The colour is an index, never a value**: `color: 0..10` into a fixed 10-swatch palette. The desktop paints `var(--project-swatch-N)` (static tokens in `variables.css`, deliberately not theme-derived so the colour matches across frontends); the TUI reads `theme.project` (same RGB defaults, overridable per theme file like any other colour).
-- **Desktop**: the Projects view in the activity bar — project rows (dot, name, member count) expand into member rows carrying a colour stripe; `＋` and the row context menu open the create/edit dialog; deleting asks for confirmation and never touches the members themselves.
-- **Changing membership without the dialog**: right-click a workspace row (Workspaces view) for `Add to project "X"` / `Remove from project "X"` — one entry per project —, or right-click a member row (Projects view) for Open / `Remove from "X"` / Edit Project….
+- **Desktop**: the Projects tree is the sidebar (there is no separate workspace list) — project headers expand into repository groups, those into checkout rows connected by a `git log --graph`-style rail. The header's two buttons create a project and add a repository; the row context menus carry the rest (new branch / worktree, add repository, edit / delete project, membership toggles). Deleting a project asks for confirmation and never touches what it grouped.
+- **Changing membership without the dialog**: right-click a checkout row for `Add to project "X"` / `Remove from project "X"` — one entry per project — or a directory member row for Open / `Remove from "X"` / Edit Project….
 - **The edit dialog** is name, a 10-swatch colour radio and two member lists: the project's members in order, each with a ✕, and below them every workspace that is not a member yet, narrowed by a filter box that matches name, branch **and path** (`Enter` adds the first match). Each row prints its directory under the name — `~`-abbreviated, middle-elided — because two checkouts of one repo differ by nothing else. Typing an absolute path (or `~/…`) offers it as a directory member, and *Browse for a directory…* picks one from disk.
 - **Where a row lives** is always one hover away: the sidebar tooltip prints the name (and branch) on the first line and the **full, unwrapped-to-the-end directory** below it — project headers list their member paths the same way.
 - **TUI**: two surfaces, same keys. The sidebar's **PROJECTS tab** (press `Tab` in the top-left pane, or click the tab label, to flip Workspaces ⇄ Projects — the choice persists across restarts) shows the groups inline: `j`/`k` move, `Enter` expands a project or opens/adopts a member, `n`/`e`/`d` create/edit/delete. The `C-g C-p` overlay is the same list as a popup. Both open the same editor: it cycles Name → Colour → Members with `Tab`, picks the colour with `←`/`→` and toggles members with `Space`. Directories are added from the desktop dialog or by adopting; the TUI editor lists them so they can be unchecked.

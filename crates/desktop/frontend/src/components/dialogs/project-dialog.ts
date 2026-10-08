@@ -283,7 +283,7 @@ export function showProjectDialog(project: Project | null, onSaved: () => void |
       name,
       color,
       order: project?.order ?? 0, // backend assigns max+1 for new projects
-      members: members.map((path) => ({ path })),
+      members: members.map((path) => ({ path, kind: "Auto" as const })),
     };
     try {
       await ipc.saveProject(payload);

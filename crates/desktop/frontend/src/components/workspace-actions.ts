@@ -28,7 +28,7 @@ export async function switchToWorkspace(idx: number): Promise<void> {
 async function cycleOrder(): Promise<number[]> {
   let visible: number[] = [];
   try {
-    visible = visibleWorkspaceIndices(await ipc.sidebarRows());
+    visible = visibleWorkspaceIndices(await ipc.projectTree());
   } catch (err) {
     console.error("Failed to load sidebar rows for cycling:", err);
   }

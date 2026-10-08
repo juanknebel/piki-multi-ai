@@ -63,6 +63,12 @@ export interface Project {
 
 export interface ProjectMember {
   path: string;
+  /** How the member renders: `Auto` resolves against the live workspace list
+   *  (a workspace at this path becomes a checkout row, anything else a
+   *  directory row); `Repo` is an explicit repository root, so it heads a repo
+   *  group even with no checkout loaded. Mirrors
+   *  `piki_core::projects::MemberKind`. */
+  kind: "Auto" | "Repo";
 }
 
 export interface WorkspaceInfo {
@@ -79,6 +85,10 @@ export interface WorkspaceInfo {
   dispatch_source_kanban: string | null;
   dispatch_agent_name: string | null;
   origin: WorkspaceOrigin;
+  /** Ad-hoc PR-review checkout: grouped under the synthetic PR-review bucket
+   *  and deleted from disk when closed. Optional because older callers build
+   *  this type by hand; the backend always sends it. */
+  ephemeral?: boolean;
 }
 
 export interface TabInfo {

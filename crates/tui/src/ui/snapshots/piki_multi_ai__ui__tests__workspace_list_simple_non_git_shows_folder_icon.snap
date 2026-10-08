@@ -1,11 +1,10 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 542
 expression: content
 ---
-╭ WORKSPACES │ PROJECTS ───────────────╮
-│▎  🗁 scratch-notes                    │
-│                                      │
+╭ PROJECTS ────────────────────────────╮
+│▎▾ ● no project 1                     │
+│    🗁 scratch-notes                   │
 │                                      │
 │                                      │
 ╰──────────────────────────────────────╯

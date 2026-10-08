@@ -297,7 +297,7 @@ fn main() {
             commands::workspace::list_project_subdirs,
             commands::workspace::get_collapsed_groups,
             commands::workspace::set_collapsed_groups,
-            commands::workspace::sidebar_rows,
+            commands::workspace::project_tree,
             commands::pty::spawn_tab,
             commands::pty::write_pty,
             commands::pty::resize_pty,

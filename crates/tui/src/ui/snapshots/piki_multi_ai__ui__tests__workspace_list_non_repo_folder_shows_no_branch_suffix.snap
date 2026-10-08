@@ -1,11 +1,10 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 508
 expression: content
 ---
-╭ WORKSPACES │ PROJECTS ───────────────╮
-│▎  ▣ plain-folder                     │
-│                                      │
-│                                      │
+╭ PROJECTS ────────────────────────────╮
+│▎▾ ● no project 1                     │
+│  ▾ ⎇ plain-folder                    │
+│  │ ▣ typed-nickname                  │
 │                                      │
 ╰──────────────────────────────────────╯

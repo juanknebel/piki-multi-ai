@@ -134,7 +134,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         has_kanban,
         api_footer_state,
         new_tab_menu,
-        app.sidebar_view,
+        app.sidebar_row_kind(),
     );
     let keys = if let Some((ref m, i, p, md, kb, api, ntm, sv, ref cached)) = app.footer_cache {
         if *m == cache_key.0

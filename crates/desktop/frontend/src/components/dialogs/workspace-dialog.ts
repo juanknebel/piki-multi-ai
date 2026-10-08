@@ -6,6 +6,7 @@ import { attachPathPicker } from "../path-picker";
 import { attachDialogResize } from "../dialog-resize";
 import type { WorkspaceInfo } from "../../types";
 import type { ExistingWorktreeInfo } from "../../ipc";
+import { projectById, setProjectMembership } from "../projects-panel";
 
 type Mode = "create" | "edit" | "clone";
 
@@ -22,6 +23,10 @@ interface DialogOptions {
   cloneFrom?: WorkspaceInfo;
   /** Optional prefill for create mode (e.g. when launching from a Project sub-dir) */
   prefill?: WorkspacePrefill;
+  /** Project the created workspace joins (create mode): the sidebar tree's
+   *  "Add Repository…" opens this dialog, and the repo is only really *in* the
+   *  project once it is a member. */
+  addToProject?: number | null;
 }
 
 export function showWorkspaceDialog(opts: DialogOptions) {
@@ -179,12 +184,16 @@ export function showWorkspaceDialog(opts: DialogOptions) {
     if (mode === "edit" && editIndex !== undefined) {
       await submitEdit(backdrop, editIndex);
     } else {
-      await submitCreate(backdrop, sourceDropdown?.value ?? "local");
+      await submitCreate(backdrop, sourceDropdown?.value ?? "local", opts.addToProject ?? null);
     }
   });
 }
 
-async function submitCreate(backdrop: HTMLElement, source: string) {
+async function submitCreate(
+  backdrop: HTMLElement,
+  source: string,
+  addToProject: number | null,
+) {
   const name =
     backdrop.querySelector<HTMLInputElement>("#ws-name")?.value.trim() ?? "";
   const desc =
@@ -227,6 +236,7 @@ async function submitCreate(backdrop: HTMLElement, source: string) {
         kanban || null,
       );
       appState.addWorkspace(info);
+      await joinProject(addToProject, info.path);
       toast(`Workspace "${info.name}" cloned`, "success");
       backdrop.remove();
     } catch (err) {
@@ -262,6 +272,7 @@ async function submitCreate(backdrop: HTMLElement, source: string) {
       kanban || null,
     );
     appState.addWorkspace(info);
+    await joinProject(addToProject, info.path);
     toast(`Workspace "${info.name}" created`, "success");
     backdrop.remove();
   } catch (err) {
@@ -269,6 +280,17 @@ async function submitCreate(backdrop: HTMLElement, source: string) {
     btn.disabled = false;
     btn.textContent = "Create";
   }
+}
+
+/** Make the freshly created workspace a member of the project the dialog was
+ *  opened from (`addToProject`). A no-op for every other creation path — the
+ *  workspace then shows up under the no-project bucket, where it can be
+ *  dragged into a project later. */
+async function joinProject(projectId: number | null, path: string) {
+  if (projectId === null) return;
+  const project = projectById(projectId);
+  if (!project) return;
+  await setProjectMembership(project, path, true);
 }
 
 /** Mirrors `piki_core::workspace::manager::parse_github_repo_name`. Extracts

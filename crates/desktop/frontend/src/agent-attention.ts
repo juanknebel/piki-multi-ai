@@ -48,7 +48,7 @@ export function liveElapsedSecs(row: AgentRow, fetchedAtMs: number, nowMs: numbe
  *  only `elapsed_secs` may differ (it advances on every fetch and the
  *  panel ticks it in place). Used to skip `agent-rows-changed` when a
  *  refresh brought nothing new: each emit rebuilds the Agents panel, the
- *  workspace-list rollups and the tab strip, and during a streaming agent
+ *  project-tree rollups and the tab strip, and during a streaming agent
  *  those rebuilds eat in-flight clicks. */
 /** True when a `pty-agent-event` would leave the tab's shell state exactly
  *  as it already is: same status, same attention, and no new summary (a

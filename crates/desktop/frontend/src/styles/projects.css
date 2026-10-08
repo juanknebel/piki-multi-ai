@@ -1,9 +1,11 @@
-/* Projects sidebar view (projects-panel.ts): project rows with a palette
-   dot, member rows carrying the project colour as a thin leading stripe.
+/* The sidebar tree (project-tree.ts): project headers with a palette dot,
+   repository groups under them, and checkouts under those (checkout rows reuse
+   `.workspace-item` from sidebar.css, including the `.ws-family` rail).
    Row heights reuse the density-scaled tokens. */
 
 #projects-view {
   height: 100%;
+  min-height: 0;
 }
 
 .projects-list {
@@ -139,4 +141,77 @@
 .project-member-branch {
   color: var(--text-muted);
   font-size: var(--fs-sm);
+}
+
+/* A synthetic bucket header (PR review / no project): same shape as a project
+   header, but it names a category rather than something the user made — so its
+   label recedes and its dot is muted (set inline). */
+.project-row.bucket .project-name {
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* A repository group: synthetic, derived from its checkouts' source_repo.
+   Geometry matches `.workspace-item` (18px inset + a 14px gutter) so the
+   `.ws-family-rail` at left: 25px lands on its chevron's center. */
+.repo-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-height: var(--row-height-lg);
+  padding: 0 14px 0 18px;
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  transition: background var(--transition-fast);
+}
+
+.repo-row:hover {
+  background: var(--sidebar-item-hover);
+}
+
+.repo-icon {
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.repo-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-base);
+  color: var(--text-primary);
+}
+
+/* A repository that is a project member but has no checkout loaded — say so,
+   so an empty group doesn't read as a bug. */
+.repo-empty {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  font-style: italic;
+}
+
+/* The row menu button only appears on hover, like the workspace rows'. */
+.repo-row .workspace-actions {
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.repo-row:hover .workspace-actions,
+.repo-row:focus-visible .workspace-actions {
+  opacity: 1;
+}
+
+/* An ad-hoc PR-review checkout: transient in a way no other row is. */
+.workspace-pr {
+  flex-shrink: 0;
+  font-size: var(--fs-2xs);
+  letter-spacing: 0.04em;
+  padding: 0 4px;
+  border-radius: var(--radius-xs);
+  color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 16%, transparent);
 }

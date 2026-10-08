@@ -105,22 +105,37 @@ export function setCollapsedGroups(groups: string[]): Promise<void> {
   return invoke("set_collapsed_groups", { groups });
 }
 
-/** One visual sidebar row, already grouped by the backend. */
-export type SidebarRow =
-  | { type: "prReviewHeader"; collapsed: boolean; family_key: string }
+/** One row of the sidebar's project tree, already grouped by the backend.
+ *  Mirrors `commands::workspace::ProjectTreeRowDto`. */
+export type ProjectTreeRow =
   | {
-      type: "workspace";
-      index: number;
-      kind: "standalone" | "parent" | "child";
-      family_key: string | null;
-      collapsed: boolean | null;
-    };
+      type: "project";
+      key: string;
+      collapsed: boolean;
+      checkouts: number;
+      /** `null` for a synthetic bucket (and for an unsaved project). */
+      project_id: number | null;
+      /** Empty for a bucket — the frontend names those. */
+      name: string;
+      color: number | null;
+      bucket: "project" | "prReview" | "unassigned";
+    }
+  | {
+      type: "repo";
+      key: string;
+      collapsed: boolean;
+      checkouts: number;
+      root: string;
+      display: string;
+    }
+  | { type: "checkout"; index: number; kind: "primary" | "worktree"; depth: number }
+  | { type: "dir"; path: string };
 
-/** Sidebar rows in render order. The grouping rule (worktree families, the
- *  PR-review group, collapse state) lives in `core::workspace::sidebar_rows`
- *  so this app and the TUI can't drift apart again. */
-export function sidebarRows(): Promise<SidebarRow[]> {
-  return invoke("sidebar_rows");
+/** The sidebar's rows in render order. The grouping rule (which repo a
+ *  checkout belongs to, the synthetic buckets, collapse state) lives in
+ *  `core::projects::tree` so this app and the TUI can't drift apart again. */
+export function projectTree(): Promise<ProjectTreeRow[]> {
+  return invoke("project_tree");
 }
 
 export function switchWorkspace(index: number): Promise<WorkspaceDetail> {

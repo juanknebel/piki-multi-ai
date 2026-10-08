@@ -1,6 +1,5 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 859
 expression: body
 ---
 
@@ -37,7 +36,6 @@ expression: body
       C-g a         About
       C-g o         Logs
       C-g C-s       Sessions (persistent)
-      C-g C-p       Projects
       C-g [         Terminal Scroll Mode
       C-g C-k       Clear Terminal
       C-g y         AI Chat
@@ -85,13 +83,17 @@ expression: body
     Mouse scroll  Scroll the terminal
     Mouse drag    Select text (copies on release)
 
-  Workspace list pane
-    j             Select the next workspace
-    k             Select the previous workspace
-    h             Collapse a worktree family
-    l             Expand a worktree family
-    Enter         Switch to it / toggle collapse
-    Tab           Toggle the Workspaces ⇄ Projects tab
+  Projects pane (the sidebar tree)
+    j             Select the next row
+    k             Select the previous row
+    h             Collapse a project or repository
+    l             Expand a project or repository
+    Enter         Open the checkout / collapse a group / adopt a directory
+    n             New project
+    e             Edit the project this row belongs to
+    d             Delete the project this row belongs to
+    a             Add a repository to this project
+    w             New branch + worktree in this repository
 
   Agents pane
     j             Select the next agent
@@ -150,19 +152,12 @@ expression: body
     r             Reload the list from the daemon
     Esc           Close
 
-  Projects overlay (C-g C-p)
-    j             Select the next row
-    k             Select the previous row
-    Enter         Expand/collapse a project; jump to a member (adopts a directory)
-    n             New project
-    e             Edit the selected project
-    d             Delete the selected project
-    Esc           Close
-    Tab           Cycle fields (in the editor)
-    ←/→           Pick the colour (in the editor)
-    Space         Toggle a member (in the editor)
-    Enter         Save (in the editor)
-    Esc           Back to the list (in the editor)
+  Project editor
+    Tab           Cycle fields
+    ←/→           Pick the colour
+    Space         Toggle a member
+    Enter         Save
+    Esc           Cancel
 
   Logs (C-g o)
     j             Select the next entry

@@ -227,6 +227,34 @@ impl SqliteStorage {
             tx.commit()?;
         }
 
+        // Projects become the ONE sidebar unit (`projects::tree`), so every
+        // workspace has to be reachable through one. Two parts:
+        //
+        //  * `project_members.kind` distinguishes an explicit repository-root
+        //    member (`'repo'`, renders a repo group even with no checkout
+        //    loaded) from the dynamically-resolved default (`'auto'`).
+        //  * seed one project per distinct `source_repo` so the new tree opens
+        //    on exactly what the old flat workspace view showed. Only when
+        //    `projects` is still empty: a user who already built projects by
+        //    hand keeps them, and anything they left out shows up under the
+        //    synthetic no-project bucket rather than being duplicated.
+        if version < 12 {
+            let tx = conn.transaction()?;
+            tx.execute_batch(
+                "ALTER TABLE project_members
+                     ADD COLUMN kind TEXT NOT NULL DEFAULT 'auto';",
+            )?;
+            let created = seed_projects_from_workspaces(&tx)?;
+            if created > 0 {
+                tracing::info!(
+                    projects = created,
+                    "seeded projects from existing workspaces (schema v12)"
+                );
+            }
+            tx.execute("INSERT INTO schema_version (version) VALUES (12)", [])?;
+            tx.commit()?;
+        }
+
         Ok(())
     }
 
@@ -330,6 +358,64 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_api_history_natural_key
 CREATE TABLE IF NOT EXISTS collapsed_groups (group_name TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS ui_preferences (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 ";
+
+/// Seed one project per distinct `source_repo`, named after the repo
+/// directory, with that repo's non-ephemeral workspaces as `auto` members in
+/// their existing display order. Returns how many projects were created.
+///
+/// Used by the v12 migration, when projects became the only sidebar unit, so
+/// the project tree opens on exactly what the old flat workspace view showed
+/// and the synthetic no-project bucket starts empty. A no-op when `projects`
+/// already has rows: a user who built projects by hand keeps them, and
+/// anything they left out surfaces under that bucket instead of being
+/// duplicated into a second project.
+fn seed_projects_from_workspaces(tx: &rusqlite::Transaction<'_>) -> anyhow::Result<usize> {
+    let existing: i64 = tx.query_row("SELECT COUNT(*) FROM projects", [], |r| r.get(0))?;
+    if existing > 0 {
+        return Ok(0);
+    }
+    let rows: Vec<(String, String)> = {
+        let mut stmt = tx.prepare(
+            "SELECT source_repo, worktree_path FROM workspaces
+             WHERE ephemeral = 0 ORDER BY display_order, id",
+        )?;
+        stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .filter_map(|r| r.ok())
+            .collect()
+    };
+    // (name, id, member count) per project created so far, in creation order.
+    let mut created: Vec<(String, i64, i64)> = Vec::new();
+    for (source_repo, worktree_path) in rows {
+        let name = std::path::Path::new(&source_repo)
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| source_repo.clone());
+        let slot = match created.iter().position(|(n, _, _)| *n == name) {
+            Some(i) => i,
+            None => {
+                let order = created.len() as i64;
+                tx.execute(
+                    "INSERT INTO projects (name, color, display_order) VALUES (?1, ?2, ?3)",
+                    rusqlite::params![
+                        name,
+                        order % crate::projects::PROJECT_PALETTE_LEN as i64,
+                        order
+                    ],
+                )?;
+                created.push((name, tx.last_insert_rowid(), 0));
+                created.len() - 1
+            }
+        };
+        let (_, project_id, position) = created[slot];
+        tx.execute(
+            "INSERT OR IGNORE INTO project_members (project_id, path, position, kind)
+             VALUES (?1, ?2, ?3, 'auto')",
+            rusqlite::params![project_id, worktree_path, position],
+        )?;
+        created[slot].2 += 1;
+    }
+    Ok(created.len())
+}
 
 fn workspace_type_str(wt: WorkspaceType) -> &'static str {
     match wt {
@@ -697,7 +783,7 @@ impl super::ProjectStorage for Arc<SqliteStorage> {
                 .filter_map(|r| r.ok())
                 .collect();
             let mut member_stmt = conn.prepare(
-                "SELECT path FROM project_members WHERE project_id = ?1 ORDER BY position",
+                "SELECT path, kind FROM project_members WHERE project_id = ?1 ORDER BY position",
             )?;
             for project in &mut projects {
                 project.color = project.clamped_color();
@@ -705,6 +791,9 @@ impl super::ProjectStorage for Arc<SqliteStorage> {
                     .query_map([project.id.unwrap_or_default()], |row| {
                         Ok(crate::projects::ProjectMember {
                             path: PathBuf::from(row.get::<_, String>(0)?),
+                            kind: crate::projects::MemberKind::from_sql(
+                                &row.get::<_, String>(1).unwrap_or_default(),
+                            ),
                         })
                     })?
                     .filter_map(|r| r.ok())
@@ -739,9 +828,14 @@ impl super::ProjectStorage for Arc<SqliteStorage> {
         tx.execute("DELETE FROM project_members WHERE project_id = ?1", [id])?;
         for (position, member) in project.members.iter().enumerate() {
             tx.execute(
-                "INSERT OR IGNORE INTO project_members (project_id, path, position)
-                 VALUES (?1, ?2, ?3)",
-                rusqlite::params![id, member.path.to_string_lossy(), position as i64],
+                "INSERT OR IGNORE INTO project_members (project_id, path, position, kind)
+                 VALUES (?1, ?2, ?3, ?4)",
+                rusqlite::params![
+                    id,
+                    member.path.to_string_lossy(),
+                    position as i64,
+                    member.kind.tag()
+                ],
             )?;
         }
         tx.commit()?;
@@ -772,9 +866,7 @@ mod project_storage_tests {
             order,
             members: paths
                 .iter()
-                .map(|p| ProjectMember {
-                    path: PathBuf::from(p),
-                })
+                .map(|p| ProjectMember::new(PathBuf::from(p)))
                 .collect(),
         }
     }
@@ -824,9 +916,7 @@ mod project_storage_tests {
         assert_eq!(all[0].order, 2);
         assert_eq!(
             all[0].members,
-            vec![ProjectMember {
-                path: PathBuf::from("/tmp/z")
-            }]
+            vec![ProjectMember::new(PathBuf::from("/tmp/z"))]
         );
     }
 
@@ -880,6 +970,181 @@ mod project_storage_tests {
             .unwrap();
         let all = storage.list_projects();
         assert_eq!(all[0].members.len(), 2);
+    }
+
+    #[test]
+    fn member_kind_survives_a_roundtrip() {
+        use crate::projects::MemberKind;
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Arc::new(SqliteStorage::open(&dir.path().join("db.sqlite")).unwrap());
+        let mut p = project("mixed", 0, 0, &["/wt/app"]);
+        p.members
+            .push(ProjectMember::repo(PathBuf::from("/repos/web")));
+        storage.save_project(&p).unwrap();
+
+        let members = &storage.list_projects()[0].members;
+        assert_eq!(members[0].kind, MemberKind::Auto);
+        assert_eq!(members[1].kind, MemberKind::Repo);
+    }
+
+    /// A member row written before v12 (or by hand) has no usable kind: it
+    /// must load as `Auto`, which only ever costs it a repo header.
+    #[test]
+    fn unknown_member_kind_falls_back_to_auto() {
+        use crate::projects::MemberKind;
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Arc::new(SqliteStorage::open(&dir.path().join("db.sqlite")).unwrap());
+        let id = storage.save_project(&project("raw", 0, 0, &[])).unwrap();
+        storage
+            .conn
+            .lock()
+            .execute(
+                "INSERT INTO project_members (project_id, path, position, kind)
+                 VALUES (?1, '/wt/app', 0, 'something-else')",
+                [id],
+            )
+            .unwrap();
+        assert_eq!(storage.list_projects()[0].members[0].kind, MemberKind::Auto);
+    }
+}
+
+/// The v12 seeding — projects became the only sidebar unit, so every existing
+/// workspace has to land in one.
+#[cfg(test)]
+mod project_seed_tests {
+    use super::*;
+    use crate::projects::tree::{Bucket, project_tree};
+    use crate::storage::{ProjectStorage, WorkspaceStorage};
+
+    fn ws(name: &str, repo: &str, kind: WorkspaceType, order: u32) -> WorkspaceInfo {
+        let mut info = WorkspaceInfo::new(
+            name.to_string(),
+            String::new(),
+            String::new(),
+            None,
+            PathBuf::from(format!("/wt/{name}")),
+            PathBuf::from(repo),
+        );
+        info.workspace_type = kind;
+        info.order = order;
+        info
+    }
+
+    /// `save_workspaces` is scoped to one `source_repo` per call.
+    fn save_all(storage: &Arc<SqliteStorage>, workspaces: &[WorkspaceInfo]) {
+        let mut repos: Vec<&PathBuf> = workspaces.iter().map(|w| &w.source_repo).collect();
+        repos.dedup();
+        for repo in repos {
+            storage.save_workspaces(repo, workspaces).unwrap();
+        }
+    }
+
+    /// Open a database, write workspaces, then run the seeding as the
+    /// migration does (the migration itself has already run on this fresh
+    /// file, with nothing to seed).
+    fn seeded(workspaces: &[WorkspaceInfo]) -> (tempfile::TempDir, Arc<SqliteStorage>, usize) {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Arc::new(SqliteStorage::open(&dir.path().join("db.sqlite")).unwrap());
+        save_all(&storage, workspaces);
+        let created = {
+            let mut conn = storage.conn.lock();
+            let tx = conn.transaction().unwrap();
+            let n = seed_projects_from_workspaces(&tx).unwrap();
+            tx.commit().unwrap();
+            n
+        };
+        (dir, storage, created)
+    }
+
+    #[test]
+    fn one_project_per_repo_in_display_order() {
+        let list = [
+            ws("app", "/repos/app", WorkspaceType::Simple, 0),
+            ws("feature", "/repos/app", WorkspaceType::Worktree, 1),
+            ws("lib", "/repos/lib", WorkspaceType::Simple, 2),
+        ];
+        let (_dir, storage, created) = seeded(&list);
+        assert_eq!(created, 2);
+
+        let projects = storage.list_projects();
+        assert_eq!(
+            projects.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(),
+            vec!["app", "lib"]
+        );
+        assert_eq!(projects[0].members.len(), 2, "the worktree joins its repo");
+        assert_eq!(projects[0].order, 0);
+        assert_eq!(projects[1].order, 1);
+    }
+
+    /// The seeded tree must reproduce the old flat view with nothing left in
+    /// the synthetic no-project bucket.
+    #[test]
+    fn every_workspace_ends_up_inside_a_project() {
+        let list = [
+            ws("app", "/repos/app", WorkspaceType::Simple, 0),
+            ws("feature", "/repos/app", WorkspaceType::Worktree, 1),
+            ws("lib", "/repos/lib", WorkspaceType::Simple, 2),
+        ];
+        let (_dir, storage, _) = seeded(&list);
+        let rows = project_tree(&storage.list_projects(), &list, &HashSet::new());
+        assert!(
+            !rows.iter().any(|r| r.bucket() == Bucket::Unassigned),
+            "{rows:#?}"
+        );
+    }
+
+    #[test]
+    fn hand_made_projects_are_never_touched() {
+        let list = [ws("app", "/repos/app", WorkspaceType::Simple, 0)];
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Arc::new(SqliteStorage::open(&dir.path().join("db.sqlite")).unwrap());
+        save_all(&storage, &list);
+        storage
+            .save_project(&crate::projects::Project {
+                id: None,
+                name: "mine".into(),
+                color: 0,
+                order: 0,
+                members: Vec::new(),
+            })
+            .unwrap();
+
+        let created = {
+            let mut conn = storage.conn.lock();
+            let tx = conn.transaction().unwrap();
+            let n = seed_projects_from_workspaces(&tx).unwrap();
+            tx.commit().unwrap();
+            n
+        };
+        assert_eq!(created, 0);
+        let projects = storage.list_projects();
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].name, "mine");
+    }
+
+    #[test]
+    fn seeding_is_idempotent() {
+        let list = [ws("app", "/repos/app", WorkspaceType::Simple, 0)];
+        let (_dir, storage, first) = seeded(&list);
+        let second = {
+            let mut conn = storage.conn.lock();
+            let tx = conn.transaction().unwrap();
+            let n = seed_projects_from_workspaces(&tx).unwrap();
+            tx.commit().unwrap();
+            n
+        };
+        assert_eq!((first, second), (1, 0));
+        assert_eq!(storage.list_projects().len(), 1);
+    }
+
+    #[test]
+    fn pr_review_checkouts_are_not_seeded() {
+        let mut review = ws("pr-1", "/pr/pr-1", WorkspaceType::Simple, 0);
+        review.ephemeral = true;
+        let list = [review, ws("app", "/repos/app", WorkspaceType::Simple, 1)];
+        let (_dir, storage, created) = seeded(&list);
+        assert_eq!(created, 1);
+        assert_eq!(storage.list_projects()[0].name, "app");
     }
 }
 

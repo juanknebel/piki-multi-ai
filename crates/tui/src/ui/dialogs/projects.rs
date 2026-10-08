@@ -1,152 +1,22 @@
-//! Projects overlay (`prefix ctrl-p`): cross-repo groups of workspaces and
-//! directories, each with a colour. Pure render — the project list lives in
-//! [`DialogState::Projects`], loaded from storage at open time; the edit
-//! sub-dialog renders from [`DialogState::ProjectEdit`]. Member rows resolve
-//! dynamically against the registered workspace list, so a directory adopted
-//! as a workspace upgrades its row with no stored state.
+//! The project editor dialog, opened from the sidebar tree: name, colour and
+//! a member checklist. Pure render — its state lives in
+//! [`DialogState::ProjectEdit`], built at open time. The project *list* is the
+//! sidebar tree itself (`ui/sidebar.rs`), not a dialog.
 
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
 use crate::app::App;
-use crate::dialog_state::{DialogState, ProjectEditField, ProjectRow, project_rows};
+use crate::dialog_state::{DialogState, ProjectEditField};
 use piki_core::projects::PROJECT_PALETTE_LEN;
 
 pub(crate) fn render_projects_overlay(frame: &mut Frame, area: Rect, app: &App) {
-    match &app.active_dialog {
-        Some(DialogState::Projects { .. }) => render_projects_list(frame, area, app),
-        Some(DialogState::ProjectEdit { .. }) => render_project_edit(frame, area, app),
-        _ => {}
+    if matches!(app.active_dialog, Some(DialogState::ProjectEdit { .. })) {
+        render_project_edit(frame, area, app);
     }
-}
-
-fn render_projects_list(frame: &mut Frame, area: Rect, app: &App) {
-    let Some(DialogState::Projects {
-        ref projects,
-        selected,
-        ref expanded,
-        scroll_offset,
-    }) = app.active_dialog
-    else {
-        return;
-    };
-
-    let theme = &app.theme;
-    let width = area.width * 80 / 100;
-    let height = area.height * 70 / 100;
-    let popup = super::clear_popup(frame, area, width.max(50), height.max(9));
-
-    let inner_height = popup.height.saturating_sub(2) as usize; // borders
-    let visible_rows = inner_height.saturating_sub(2).max(1); // hints + blank
-
-    let inner_w = popup.width.saturating_sub(2) as usize; // borders
-    let muted = Style::default().fg(theme.palette.fg3);
-    let mut lines: Vec<Line<'_>> = vec![
-        Line::from(Span::styled(
-            " [Enter] expand/jump [n] new [e] edit [d] delete [Esc] close",
-            muted,
-        )),
-        Line::from(""),
-    ];
-
-    let rows = project_rows(projects, expanded);
-    if rows.is_empty() {
-        lines.push(Line::from(Span::styled(
-            " no projects — press n to create one",
-            muted,
-        )));
-    } else {
-        let mut rendered: Vec<Line<'_>> = Vec::with_capacity(rows.len());
-        for (i, row) in rows.iter().enumerate() {
-            let bg = if i == selected {
-                theme.workspace_list.selected_bg
-            } else {
-                Color::Reset
-            };
-            match *row {
-                ProjectRow::Project(pi) => {
-                    let p = &projects[pi];
-                    let open = p.id.is_some_and(|id| expanded.contains(&id));
-                    let marker = if open { "▾" } else { "▸" };
-                    let count = p.members.len();
-                    let count_text = if count == 1 {
-                        "1 member".to_string()
-                    } else {
-                        format!("{count} members")
-                    };
-                    rendered.push(Line::from(vec![
-                        Span::styled(
-                            format!(" {marker} "),
-                            Style::default().fg(theme.palette.fg2).bg(bg),
-                        ),
-                        Span::styled(
-                            "● ",
-                            Style::default()
-                                .fg(theme.projects.color(p.clamped_color()))
-                                .bg(bg),
-                        ),
-                        Span::styled(
-                            // Cap at 27 inside the 28-column field so even a
-                            // truncated name keeps a space before the count.
-                            format!("{:<28}", ellipsize_end(&p.name, 27)),
-                            Style::default()
-                                .fg(theme.palette.fg0)
-                                .bg(bg)
-                                .add_modifier(Modifier::BOLD),
-                        ),
-                        Span::styled(count_text, Style::default().fg(theme.palette.fg3).bg(bg)),
-                    ]));
-                }
-                ProjectRow::Member(pi, mi) => {
-                    let path = &projects[pi].members[mi].path;
-                    // Resolve dynamically: a registered workspace renders by
-                    // name (Enter jumps); anything else is a plain directory,
-                    // shown dimmed by path (Enter adopts it).
-                    let ws = app.workspaces.iter().find(|w| w.info.path == *path);
-                    // Fit to the popup: names lose their tail, paths their
-                    // head (the last segments are the distinctive part).
-                    let avail = inner_w.saturating_sub(5);
-                    let (text, style) = match ws {
-                        Some(w) => (
-                            ellipsize_end(&w.info.name, avail),
-                            Style::default().fg(theme.palette.fg1).bg(bg),
-                        ),
-                        None => (
-                            ellipsize_start(&path.to_string_lossy(), avail),
-                            Style::default().fg(theme.palette.fg3).bg(bg),
-                        ),
-                    };
-                    rendered.push(Line::from(vec![
-                        Span::styled("     ", Style::default().bg(bg)),
-                        Span::styled(text, style),
-                    ]));
-                }
-            }
-        }
-        // Auto-scroll: start from the handler's offset but always keep the
-        // selected row inside the window (mandatory for unbounded lists).
-        let mut scroll = scroll_offset;
-        if selected < scroll {
-            scroll = selected;
-        }
-        if selected >= scroll + visible_rows {
-            scroll = selected + 1 - visible_rows;
-        }
-        scroll = scroll.min(rendered.len().saturating_sub(visible_rows));
-        lines.extend(rendered.into_iter().skip(scroll).take(visible_rows));
-    }
-
-    let counter = if rows.is_empty() {
-        String::new()
-    } else {
-        format!(" [{}/{}] ", selected + 1, rows.len())
-    };
-    let block = super::popup_block("Projects", theme.help.border)
-        .title_bottom(Line::from(counter).right_aligned());
-    frame.render_widget(Paragraph::new(lines).block(block), popup);
 }
 
 fn render_project_edit(frame: &mut Frame, area: Rect, app: &App) {

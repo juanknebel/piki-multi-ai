@@ -38,6 +38,44 @@ pub(super) fn finish_workspace_creation(app: &mut App, mut info: piki_core::Work
 
     let source = app.workspaces[new_idx].source_repo.clone();
     crate::helpers::persist_workspaces(app, source);
+    adopt_into_pending_project(app, new_idx);
+}
+
+/// Make the freshly created workspace a member of the project the sidebar's
+/// `add_repo` key was invoked on (`App::pending_project_member`). A no-op for
+/// every other creation path, and the flag is cleared either way so a later
+/// unrelated creation can't inherit it.
+fn adopt_into_pending_project(app: &mut App, new_idx: usize) {
+    let Some(project_id) = app.pending_project_member.take() else {
+        return;
+    };
+    let Some(store) = app.storage.projects.as_ref() else {
+        return;
+    };
+    let path = app.workspaces[new_idx].info.path.clone();
+    let Some(mut project) = store
+        .list_projects()
+        .into_iter()
+        .find(|p| p.id == Some(project_id))
+    else {
+        return;
+    };
+    if project.members.iter().any(|m| m.path == path) {
+        return;
+    }
+    project
+        .members
+        .push(piki_core::projects::ProjectMember::new(path));
+    let name = project.name.clone();
+    if let Err(e) = store.save_project(&project) {
+        app.set_toast(
+            format!("could not add to project: {e}"),
+            crate::app::ToastLevel::Error,
+        );
+    } else {
+        app.set_toast(format!("Added to {name}"), crate::app::ToastLevel::Success);
+    }
+    app.reload_sidebar_projects();
 }
 
 pub(super) async fn handle(

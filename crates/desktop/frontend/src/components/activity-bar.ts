@@ -10,7 +10,6 @@ import { icon, type IconName } from "./icons";
 // Kanban / API / Web Preview open workspace tabs.
 const ACTIVITIES: { id: SidebarView; label: string; icon: IconName }[] = [
   { id: "projects", label: "Projects", icon: "projects" },
-  { id: "workspaces", label: "Workspaces", icon: "workspaces" },
   { id: "files", label: "Files", icon: "folder" },
   { id: "git", label: "Source Control", icon: "branch" },
   { id: "agents", label: "Manage Agents", icon: "agents" },
@@ -71,10 +70,10 @@ export function renderActivityBar(container: HTMLElement) {
     }
   }
 
-  // Badge for the Workspaces icon: agents needing you (all workspaces) — the
+  // Badge for the Projects icon: agents needing you (all workspaces) — the
   // Agents panel lives in the sidebar, so this keeps the signal visible
   // while the sidebar is hidden or another view is up.
-  const workspacesBtn = buttons.get("workspaces")!;
+  const workspacesBtn = buttons.get("projects")!;
   const attentionBadge = document.createElement("span");
   attentionBadge.className = "activity-badge activity-badge--attention";
   attentionBadge.style.display = "none";

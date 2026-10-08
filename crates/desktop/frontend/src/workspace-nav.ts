@@ -1,19 +1,29 @@
 // Workspace navigation order as pure list operations — the impure half
 // (IPC + switching) lives in `components/workspace-actions.ts`. Cycling walks
-// the VISUAL order: the rows `core::workspace::sidebar_rows` produces, which
-// is what the sidebar renders, so a collapsed worktree family is skipped
-// because its children are not rows at all. Same rule as the TUI's
+// the VISUAL order: the rows `core::projects::tree` produces, which is what
+// the sidebar renders, so the checkouts of a collapsed project or repo are
+// skipped because they are not rows at all. Same rule as the TUI's
 // `App::next_workspace` / `prev_workspace`. No DOM, no IPC; covered by
 // workspace-nav.test.ts.
 
-import type { SidebarRow } from "./ipc";
+import type { ProjectTreeRow } from "./ipc";
 
-type WorkspaceRow = Extract<SidebarRow, { type: "workspace" }>;
+type CheckoutRow = Extract<ProjectTreeRow, { type: "checkout" }>;
 
-/** Workspace indices in sidebar order — group headers dropped, children of a
- *  collapsed family already absent from `rows`. */
-export function visibleWorkspaceIndices(rows: readonly SidebarRow[]): number[] {
-  return rows.filter((r): r is WorkspaceRow => r.type === "workspace").map((r) => r.index);
+/** Workspace indices in sidebar order — headers dropped, hidden checkouts
+ *  already absent from `rows`. A workspace that belongs to two projects has a
+ *  row under each; it is visited once, at its first row. */
+export function visibleWorkspaceIndices(rows: readonly ProjectTreeRow[]): number[] {
+  const seen = new Set<number>();
+  const out: number[] = [];
+  for (const row of rows) {
+    if (row.type !== "checkout") continue;
+    const r = row as CheckoutRow;
+    if (seen.has(r.index)) continue;
+    seen.add(r.index);
+    out.push(r.index);
+  }
+  return out;
 }
 
 /** The workspace `delta` steps from `active` along `visible`, wrapping at both

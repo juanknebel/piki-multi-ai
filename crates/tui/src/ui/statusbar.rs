@@ -538,26 +538,44 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             ),
         ],
         _ => {
-            if app.active_pane == ActivePane::WorkspaceList
-                && app.sidebar_view == crate::app::SidebarView::Projects
-            {
-                // The pane's Projects tab: overlay keys, in place.
-                vec![
-                    (cfg.get_binding("projects", "select"), "expand/open"),
-                    (cfg.get_binding("projects", "new"), "new"),
-                    (cfg.get_binding("projects", "edit"), "edit"),
-                    (cfg.get_binding("projects", "delete"), "delete"),
-                    (cfg.get_binding("workspaces", "view"), "workspaces"),
-                ]
-            } else if app.active_pane == ActivePane::WorkspaceList {
-                // Display-only pane: everything goes through the prefix.
-                vec![
-                    (cfg.get_binding("app", "workspace_switcher"), "workspaces"),
-                    (cfg.get_binding("app", "new_workspace"), "new ws"),
-                    (cfg.get_binding("app", "edit_workspace"), "edit ws"),
-                    (cfg.get_binding("app", "delete_workspace"), "delete ws"),
-                    (cfg.get_binding("workspaces", "view"), "projects"),
-                ]
+            if app.active_pane == ActivePane::WorkspaceList {
+                // The project tree. Each row kind offers different actions, so
+                // the hints follow the cursor (the footer cache key carries
+                // `sidebar_row_kind` for exactly this).
+                use crate::app::SidebarRowKind as K;
+                match app.sidebar_row_kind() {
+                    K::None => vec![
+                        (cfg.get_binding("projects", "new"), "new project"),
+                        (cfg.get_binding("app", "new_workspace"), "new ws"),
+                    ],
+                    K::Project => vec![
+                        (cfg.get_binding("projects", "select"), "collapse"),
+                        (cfg.get_binding("projects", "add_repo"), "add repo"),
+                        (cfg.get_binding("projects", "new"), "new"),
+                        (cfg.get_binding("projects", "edit"), "edit"),
+                        (cfg.get_binding("projects", "delete"), "delete"),
+                    ],
+                    // A synthetic bucket has no stored project to edit.
+                    K::Bucket => vec![
+                        (cfg.get_binding("projects", "select"), "collapse"),
+                        (cfg.get_binding("projects", "new"), "new project"),
+                    ],
+                    K::Repo => vec![
+                        (cfg.get_binding("projects", "select"), "collapse"),
+                        (cfg.get_binding("projects", "new_worktree"), "new branch"),
+                        (cfg.get_binding("projects", "add_repo"), "add repo"),
+                    ],
+                    K::Checkout => vec![
+                        (cfg.get_binding("projects", "select"), "open"),
+                        (cfg.get_binding("app", "new_tab"), "new tab"),
+                        (cfg.get_binding("app", "edit_workspace"), "edit ws"),
+                        (cfg.get_binding("app", "delete_workspace"), "delete ws"),
+                    ],
+                    K::Dir => vec![
+                        (cfg.get_binding("projects", "select"), "adopt"),
+                        (cfg.get_binding("projects", "edit"), "edit project"),
+                    ],
+                }
             } else if app.active_pane == ActivePane::Agents {
                 vec![
                     (

@@ -1,34 +1,66 @@
 import { describe, expect, it } from "vitest";
-import type { SidebarRow } from "./ipc";
+import type { ProjectTreeRow } from "./ipc";
 import { pickLastWorkspace, stepWorkspace, visibleWorkspaceIndices } from "./workspace-nav";
 
-const ws = (index: number, kind: "standalone" | "parent" | "child" = "standalone"): SidebarRow => ({
-  type: "workspace",
+const checkout = (index: number, depth = 2): ProjectTreeRow => ({
+  type: "checkout",
   index,
-  kind,
-  family_key: kind === "standalone" ? null : "/repo",
-  collapsed: kind === "parent" ? false : null,
+  kind: depth === 2 ? "worktree" : "primary",
+  depth,
+});
+
+const project = (key: string, collapsed = false): ProjectTreeRow => ({
+  type: "project",
+  key,
+  collapsed,
+  checkouts: 0,
+  project_id: 1,
+  name: "proj",
+  color: 0,
+  bucket: "project",
+});
+
+const repo = (key: string, collapsed = false): ProjectTreeRow => ({
+  type: "repo",
+  key,
+  collapsed,
+  checkouts: 2,
+  root: "/repo",
+  display: "repo",
 });
 
 describe("visibleWorkspaceIndices", () => {
-  it("keeps sidebar order and drops group headers", () => {
-    const rows: SidebarRow[] = [
-      { type: "prReviewHeader", collapsed: false, family_key: "pr-review" },
-      ws(3),
-      ws(0, "parent"),
-      ws(1, "child"),
-      ws(2),
+  it("keeps sidebar order and drops every header row", () => {
+    const rows: ProjectTreeRow[] = [
+      project("project:1"),
+      repo("project:1|repo:/repo"),
+      checkout(3),
+      checkout(0),
+      { type: "dir", path: "/notes" },
+      checkout(1, 1),
     ];
-    expect(visibleWorkspaceIndices(rows)).toEqual([3, 0, 1, 2]);
+    expect(visibleWorkspaceIndices(rows)).toEqual([3, 0, 1]);
   });
 
-  it("skips a collapsed family's children — they are not rows", () => {
-    // What `sidebar_rows` emits for a collapsed parent: the parent only.
-    const rows: SidebarRow[] = [
-      { type: "workspace", index: 0, kind: "parent", family_key: "/repo", collapsed: true },
-      ws(3),
+  it("skips what a collapsed group hides — those are not rows at all", () => {
+    // What `project_tree` emits for a collapsed repo: the header only.
+    const rows: ProjectTreeRow[] = [
+      project("project:1"),
+      repo("project:1|repo:/repo", true),
+      checkout(3, 1),
     ];
-    expect(visibleWorkspaceIndices(rows)).toEqual([0, 3]);
+    expect(visibleWorkspaceIndices(rows)).toEqual([3]);
+  });
+
+  it("visits a workspace in two projects only once", () => {
+    const rows: ProjectTreeRow[] = [
+      project("project:1"),
+      checkout(0, 1),
+      project("project:2"),
+      checkout(0, 1),
+      checkout(1, 1),
+    ];
+    expect(visibleWorkspaceIndices(rows)).toEqual([0, 1]);
   });
 
   it("is empty for no rows", () => {

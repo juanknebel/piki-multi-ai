@@ -170,8 +170,6 @@ pub struct Keybindings {
     pub scroll: HashMap<String, String>,
     #[serde(default = "default_agents")]
     pub agents: HashMap<String, String>,
-    #[serde(default = "default_workspaces")]
-    pub workspaces: HashMap<String, String>,
     #[serde(default = "default_markdown")]
     pub markdown: HashMap<String, String>,
     #[serde(default = "default_about")]
@@ -203,7 +201,6 @@ impl Default for Keybindings {
             app: default_app(),
             scroll: default_scroll(),
             agents: default_agents(),
-            workspaces: default_workspaces(),
             markdown: default_markdown(),
             about: default_about(),
             workspace_info: default_workspace_info(),
@@ -284,9 +281,8 @@ fn default_app() -> HashMap<String, BindingValue> {
     // `ctrl-s` for "sessions" — every mnemonic lowercase letter is taken, and
     // the binding rule prefers prefix-ctrl over a Shift chord.
     m.insert("sessions".to_string(), BindingValue::one("prefix-ctrl-s"));
-    // `ctrl-p` for "projects" — `p` itself is prev_tab, and the binding rule
-    // prefers prefix-ctrl over a Shift chord (same precedent as sessions).
-    m.insert("projects".to_string(), BindingValue::one("prefix-ctrl-p"));
+    // There is deliberately no "projects" app action: the sidebar IS the
+    // project tree, so there is no overlay to open.
     m.insert("command_palette".to_string(), BindingValue::one("prefix-:"));
     m.insert("fuzzy_search".to_string(), BindingValue::one("prefix-/"));
     // `t` for "text" — content search across the worktree (ripgrep).
@@ -390,26 +386,6 @@ fn default_agents() -> HashMap<String, String> {
     m
 }
 
-fn default_workspaces() -> HashMap<String, String> {
-    let mut m = HashMap::new();
-    m.insert("down".to_string(), "j".to_string());
-    m.insert("up".to_string(), "k".to_string());
-    m.insert("down_alt".to_string(), "down".to_string());
-    m.insert("up_alt".to_string(), "up".to_string());
-    // Tree-style horizontal keys: collapse / expand a worktree family.
-    m.insert("collapse".to_string(), "h".to_string());
-    m.insert("collapse_alt".to_string(), "left".to_string());
-    m.insert("expand".to_string(), "l".to_string());
-    m.insert("expand_alt".to_string(), "right".to_string());
-    // Switch to the selected workspace; also toggles collapse when it's a
-    // worktree-family parent row.
-    m.insert("select".to_string(), "enter".to_string());
-    // Flip the pane between its Workspaces and Projects tabs (both views
-    // check this same binding, so it toggles from either side).
-    m.insert("view".to_string(), "tab".to_string());
-    m
-}
-
 fn default_markdown() -> HashMap<String, String> {
     let mut m = HashMap::new();
     m.insert("down".to_string(), "j".to_string());
@@ -508,15 +484,21 @@ fn default_projects() -> HashMap<String, String> {
     m.insert("up".to_string(), "k".to_string());
     m.insert("down_alt".to_string(), "down".to_string());
     m.insert("up_alt".to_string(), "up".to_string());
-    // Expand/collapse a project row, or jump to / adopt the member under the
-    // cursor.
+    // Tree-style horizontal keys: collapse / expand a project or repo row.
+    m.insert("collapse".to_string(), "h".to_string());
+    m.insert("collapse_alt".to_string(), "left".to_string());
+    m.insert("expand".to_string(), "l".to_string());
+    m.insert("expand_alt".to_string(), "right".to_string());
+    // Collapse/expand a header or repo row; open the checkout under the
+    // cursor; adopt a plain-directory member.
     m.insert("select".to_string(), "enter".to_string());
     m.insert("new".to_string(), "n".to_string());
     m.insert("edit".to_string(), "e".to_string());
     m.insert("delete".to_string(), "d".to_string());
-    m.insert("exit".to_string(), "esc".to_string());
-    // Toggle-close matches the open chord's bare key.
-    m.insert("exit_alt".to_string(), "ctrl-p".to_string());
+    // Add a repository to the project under the cursor.
+    m.insert("add_repo".to_string(), "a".to_string());
+    // Create a branch + worktree in the repo under the cursor.
+    m.insert("new_worktree".to_string(), "w".to_string());
     m
 }
 
@@ -718,15 +700,6 @@ impl Config {
         self.matches_ctx(&self.keybindings.agents, default_agents, event, action)
     }
 
-    pub fn matches_workspaces(&self, event: KeyEvent, action: &str) -> bool {
-        self.matches_ctx(
-            &self.keybindings.workspaces,
-            default_workspaces,
-            event,
-            action,
-        )
-    }
-
     pub fn matches_markdown(&self, event: KeyEvent, action: &str) -> bool {
         self.matches_ctx(&self.keybindings.markdown, default_markdown, event, action)
     }
@@ -818,12 +791,6 @@ impl Config {
                 .get(action)
                 .cloned()
                 .or_else(|| default_agents().get(action).cloned()),
-            "workspaces" => self
-                .keybindings
-                .workspaces
-                .get(action)
-                .cloned()
-                .or_else(|| default_workspaces().get(action).cloned()),
             "markdown" => self
                 .keybindings
                 .markdown
@@ -1258,7 +1225,6 @@ mod tests {
         let sections: Vec<(&str, &HashMap<String, String>)> = vec![
             ("scroll", &cfg.keybindings.scroll),
             ("agents", &cfg.keybindings.agents),
-            ("workspaces", &cfg.keybindings.workspaces),
             ("fuzzy", &cfg.keybindings.fuzzy),
             ("editor", &cfg.keybindings.editor),
             ("new_tab", &cfg.keybindings.new_tab),

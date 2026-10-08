@@ -43,7 +43,6 @@ import {
 } from "./layout-snapshot";
 
 export type SidebarView =
-  | "workspaces"
   | "projects"
   | "files"
   | "git"
@@ -51,7 +50,7 @@ export type SidebarView =
   | "kanban"
   | "api"
   | "web-preview";
-// Note: "workspaces"/"projects"/"files"/"git" are real sidebar views;
+// Note: "projects"/"files"/"git" are real sidebar views;
 // "agents" opens the modal dialog, "kanban"/"api"/"web-preview" open tabs
 
 export interface UndoEntry {
@@ -78,7 +77,8 @@ export type StateEvent =
   | "tab-shell-state-changed"
   | "workspace-attention-changed"
   | "workspace-branch-changed"
-  | "agent-rows-changed";
+  | "agent-rows-changed"
+  | "projects-changed";
 
 /** A top-level workspace tab. Each one owns its own pane tree; every pane
  *  (leaf) holds at most one content item from `WorkspaceState.tabs`. */
@@ -775,7 +775,7 @@ class AppState extends EventTarget {
   private _agentRowsFetchedAt = 0;
 
   /** Live agent tabs across ALL workspaces, from `list_agent_rows` — the
-   *  one source every agent signal reads (Agents panel, workspace-list
+   *  one source every agent signal reads (Agents panel, project-tree
    *  rollup, status-bar segment, activity-bar badge, `Alt+A`). Refreshed
    *  by `startAgentRowsSync()` in agents-panel.ts. */
   get agentRows(): AgentRow[] {
@@ -1095,6 +1095,14 @@ class AppState extends EventTarget {
 
   private emit(event: StateEvent) {
     this.dispatchEvent(new Event(event));
+  }
+
+  /** Announce that the project list changed. The projects live in storage, not
+   *  in this store (the sidebar tree is derived in core from them plus the
+   *  workspace list), so `projects-panel.ts` raises this after a save/delete
+   *  and the tree re-fetches. The only event an outside module may emit. */
+  notifyProjectsChanged() {
+    this.emit("projects-changed");
   }
 }
 

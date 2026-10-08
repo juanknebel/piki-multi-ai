@@ -969,158 +969,25 @@ pub(super) fn handle_sessions_input(app: &mut App, key: KeyEvent) -> Option<Acti
     }
 }
 
-/// Projects overlay (`prefix ctrl-p`). `AppMode::Projects` covers both the
-/// list and its edit sub-dialog — route on the active `DialogState` variant.
+/// The project editor (`AppMode::Projects`), opened from the sidebar tree —
+/// there is no separate projects overlay any more, the tree IS the list.
 pub(super) fn handle_projects_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     match app.active_dialog {
-        Some(DialogState::Projects { .. }) => handle_projects_list_input(app, key),
         Some(DialogState::ProjectEdit { .. }) => handle_project_edit_input(app, key),
         _ => None,
     }
 }
 
-/// The list: j/k navigate the flattened rows, Enter expands/collapses a
-/// project or jumps to (or adopts) a member, n/e/d manage projects, Esc
-/// closes. `d` is the sessions-style immediate one-key delete — the overlay
-/// house pattern, no confirm step.
-fn handle_projects_list_input(app: &mut App, key: KeyEvent) -> Option<Action> {
-    // Jumping/adopting needs `&mut App` beyond the dialog borrow — defer.
-    enum Step {
-        Stay,
-        Close,
-        OpenEditor(Option<usize>),
-        Jump(PathBuf),
-        Act(Action),
-    }
-
-    let step = {
-        let Some(DialogState::Projects {
-            ref projects,
-            ref mut selected,
-            ref mut expanded,
-            ref mut scroll_offset,
-        }) = app.active_dialog
-        else {
-            return None;
-        };
-        let rows = crate::dialog_state::project_rows(projects, expanded);
-        let count = rows.len();
-        let visible = 12usize;
-
-        // The project a row belongs to: a member row acts on its parent.
-        let row_project = |row: &crate::dialog_state::ProjectRow| match *row {
-            crate::dialog_state::ProjectRow::Project(pi)
-            | crate::dialog_state::ProjectRow::Member(pi, _) => pi,
-        };
-
-        if app.config.matches_projects(key, "down") || app.config.matches_projects(key, "down_alt")
-        {
-            move_selection(selected, count, 1, false);
-            if *selected >= *scroll_offset + visible {
-                *scroll_offset = selected.saturating_sub(visible - 1);
-            }
-            Step::Stay
-        } else if app.config.matches_projects(key, "up")
-            || app.config.matches_projects(key, "up_alt")
-        {
-            move_selection(selected, count, -1, false);
-            if *selected < *scroll_offset {
-                *scroll_offset = *selected;
-            }
-            Step::Stay
-        } else if app.config.matches_projects(key, "new") {
-            Step::OpenEditor(None)
-        } else if app.config.matches_projects(key, "exit")
-            || app.config.matches_projects(key, "exit_alt")
-            || is_cancel(key, &app.config)
-        {
-            Step::Close
-        } else if count == 0 {
-            Step::Stay // row-scoped keys need a row
-        } else if app.config.matches_projects(key, "select") {
-            match rows[*selected] {
-                crate::dialog_state::ProjectRow::Project(pi) => {
-                    // Toggle expand/collapse (id is always Some once stored).
-                    if let Some(id) = projects[pi].id
-                        && !expanded.remove(&id)
-                    {
-                        expanded.insert(id);
-                    }
-                    Step::Stay
-                }
-                crate::dialog_state::ProjectRow::Member(pi, mi) => {
-                    Step::Jump(projects[pi].members[mi].path.clone())
-                }
-            }
-        } else if app.config.matches_projects(key, "edit") {
-            Step::OpenEditor(Some(row_project(&rows[*selected])))
-        } else if app.config.matches_projects(key, "delete") {
-            match projects[row_project(&rows[*selected])].id {
-                Some(id) => Step::Act(Action::DeleteProject(id)),
-                None => Step::Stay,
-            }
-        } else {
-            Step::Stay
-        }
-    };
-
-    match step {
-        Step::Stay => None,
-        Step::Close => {
-            dismiss_dialog(app);
-            None
-        }
-        Step::Act(action) => Some(action),
-        Step::OpenEditor(project_idx) => {
-            let project = match (&app.active_dialog, project_idx) {
-                (Some(DialogState::Projects { projects, .. }), Some(pi)) => {
-                    projects.get(pi).cloned()
-                }
-                _ => None,
-            };
-            open_project_editor(app, project, true);
-            None
-        }
-        Step::Jump(path) => {
-            // Members resolve dynamically: a registered workspace by that
-            // path → jump to it; otherwise it's a plain directory → adopt it
-            // as a Simple workspace. Either way the overlay closes.
-            let ws_idx = app.workspaces.iter().position(|w| w.info.path == path);
-            dismiss_dialog(app);
-            match ws_idx {
-                Some(idx) => {
-                    app.switch_workspace_and_focus(idx);
-                    None
-                }
-                None => Some(Action::ProjectAdoptDirectory { path }),
-            }
-        }
-    }
-}
-
-/// Open the project editor from the sidebar's Projects tab: same modal as
-/// the overlay's sub-dialog, but Esc/save land back in Normal mode (the
-/// pane is not a dialog to return to).
+/// Open the project editor (`None` = create new) over the sidebar tree; Esc
+/// and save both land back in Normal mode. The member checklist is built here,
+/// at open time: saved members first (in saved order), then every registered
+/// workspace that isn't a member yet — see [`ProjectMemberRow`] for the
+/// ordering contract. There is deliberately no "add directory" input in the
+/// TUI editor: a repository is added with the tree's `add_repo` key, and a
+/// directory arrives by adopting one.
 pub(super) fn open_project_editor_modal(
     app: &mut App,
     project: Option<piki_core::projects::Project>,
-) {
-    open_project_editor(app, project, false);
-    app.mode = crate::app::AppMode::Projects;
-}
-
-/// Swap in the project edit dialog (None = create new). `return_to_list`
-/// says where Esc/save land — back to the overlay list, or to Normal when
-/// the editor was opened from the sidebar's Projects tab. The member
-/// checklist is built here, at open time: saved members first (in saved
-/// order), then every registered workspace that isn't a member yet — see
-/// [`ProjectMemberRow`] for the ordering contract. There is deliberately no
-/// "add directory" input in the TUI editor (v1): directories get added from
-/// the desktop side, or arrive by adopting one from the list.
-fn open_project_editor(
-    app: &mut App,
-    project: Option<piki_core::projects::Project>,
-    return_to_list: bool,
 ) {
     let mut members: Vec<crate::dialog_state::ProjectMemberRow> = Vec::new();
     if let Some(ref p) = project {
@@ -1150,7 +1017,6 @@ fn open_project_editor(
 
     let name = project.as_ref().map(|p| p.name.clone()).unwrap_or_default();
     app.active_dialog = Some(DialogState::ProjectEdit {
-        return_to_list,
         editing_id: project.as_ref().and_then(|p| p.id),
         name_cursor: name.chars().count(),
         name,
@@ -1160,7 +1026,7 @@ fn open_project_editor(
         member_cursor: 0,
         active_field: crate::dialog_state::ProjectEditField::Name,
     });
-    // app.mode stays AppMode::Projects — same modal, second variant.
+    app.mode = crate::app::AppMode::Projects;
 }
 
 /// The edit sub-dialog: Tab/BackTab cycle Name → Color → Members, ←/→ pick
@@ -1175,9 +1041,8 @@ fn handle_project_edit_input(app: &mut App, key: KeyEvent) -> Option<Action> {
         Save(Box<piki_core::projects::Project>),
     }
 
-    let (step, return_to_list) = {
+    let step = {
         let Some(DialogState::ProjectEdit {
-            return_to_list,
             ref editing_id,
             ref mut name,
             ref mut name_cursor,
@@ -1192,7 +1057,7 @@ fn handle_project_edit_input(app: &mut App, key: KeyEvent) -> Option<Action> {
         };
         use crate::dialog_state::ProjectEditField;
 
-        let step = match key.code {
+        match key.code {
             KeyCode::Tab => {
                 *active_field = active_field.next();
                 Step::Stay
@@ -1217,9 +1082,7 @@ fn handle_project_edit_input(app: &mut App, key: KeyEvent) -> Option<Action> {
                         members: members
                             .iter()
                             .filter(|r| r.checked)
-                            .map(|r| piki_core::projects::ProjectMember {
-                                path: r.path.clone(),
-                            })
+                            .map(|r| piki_core::projects::ProjectMember::new(r.path.clone()))
                             .collect(),
                     }))
                 }
@@ -1258,20 +1121,12 @@ fn handle_project_edit_input(app: &mut App, key: KeyEvent) -> Option<Action> {
                 }
                 Step::Stay
             }
-        };
-        (step, return_to_list)
-    };
-
-    // Where Back/Save land depends on where the editor was opened from:
-    // the overlay reopens its list, the sidebar's Projects tab returns to
-    // Normal (the pane is not a dialog).
-    let close = |app: &mut App| {
-        if return_to_list {
-            super::app_actions::open_projects(app);
-        } else {
-            dismiss_dialog(app);
         }
     };
+
+    // Back/Save always land in Normal: the sidebar tree underneath is a pane,
+    // not a dialog to return to.
+    let close = dismiss_dialog;
     match step {
         Step::Stay => None,
         Step::EmptyName => {
@@ -1279,7 +1134,7 @@ fn handle_project_edit_input(app: &mut App, key: KeyEvent) -> Option<Action> {
             None
         }
         Step::Back => {
-            // Back without saving (the overlay list reloads from storage).
+            // Back without saving; the tree re-derives from storage.
             close(app);
             None
         }

@@ -116,7 +116,6 @@ theme = "default"
 # about            = "prefix-a"
 # dashboard        = "prefix-b"
 # sessions         = "prefix-ctrl-s"
-# projects         = "prefix-ctrl-p"
 # command_palette  = "prefix-:"
 # fuzzy_search     = "prefix-/"
 # project_search   = "prefix-t"
@@ -172,18 +171,6 @@ theme = "default"
 # down_alt = "down"
 # up_alt = "up"
 # select = "enter"
-
-# [keybindings.workspaces]    # Workspaces pane (top-left tree)
-# down = "j"                  # select = switch workspace, or toggle collapse on a worktree-family parent row
-# up = "k"
-# down_alt = "down"
-# up_alt = "up"
-# collapse = "h"              # collapse a worktree family (only on its parent row)
-# collapse_alt = "left"
-# expand = "l"                # expand a collapsed worktree family
-# expand_alt = "right"
-# select = "enter"
-# view = "tab"                # flip the pane between its Workspaces and Projects tabs
 
 # [keybindings.markdown]      # markdown reader
 # down = "j"
@@ -257,17 +244,21 @@ theme = "default"
 # exit = "esc"
 # exit_alt = "ctrl-s"        # toggle-close (Sessions opens with prefix-ctrl-s)
 
-# [keybindings.projects]
-# down = "j"
+# [keybindings.projects]     # the sidebar: the project tree (projects > repos > checkouts)
+# down = "j"                  # follow-focus: landing on a checkout switches to it
 # up = "k"
 # down_alt = "down"
 # up_alt = "up"
-# select = "enter"           # expand/collapse a project, or jump to / adopt the member
-# new = "n"
-# edit = "e"
-# delete = "d"               # delete the selected project (immediate, no confirm)
-# exit = "esc"
-# exit_alt = "ctrl-p"        # toggle-close (Projects opens with prefix-ctrl-p)
+# collapse = "h"              # collapse the project or repository under the cursor
+# collapse_alt = "left"
+# expand = "l"
+# expand_alt = "right"
+# select = "enter"            # open the checkout / collapse a group / adopt a directory member
+# new = "n"                   # new project
+# edit = "e"                  # edit the project this row belongs to
+# delete = "d"                # delete it (immediate, no confirm)
+# add_repo = "a"              # add a repository to this project (New Workspace dialog)
+# new_worktree = "w"          # new branch + worktree in the repository under the cursor
 
 # [keybindings.logs]
 # down = "j"

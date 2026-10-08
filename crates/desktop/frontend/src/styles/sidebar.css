@@ -1,5 +1,5 @@
-/* ── Workspace list ──────────────────────────────── */
-#workspace-list {
+/* ── The sidebar tree (projects → repos → checkouts) ── */
+#projects-view {
   background: var(--sidebar-bg);
 }
 

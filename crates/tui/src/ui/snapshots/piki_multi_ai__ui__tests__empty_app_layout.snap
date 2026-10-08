@@ -1,13 +1,12 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 1141
 expression: content
 ---
 
-╭ WORKSPACES ──╮
+╭ PROJECTS ────╮
 │              │────────────────────────────────────────────────────────────────
-│ [C-g s] New w│╭ piki-multi-ai ───────────────────────────────────────────────╮
-│              ││                                                              │
+│ [n] New proje│╭ piki-multi-ai ───────────────────────────────────────────────╮
+│ [C-g s] New w││                                                              │
 │              ││  Welcome to piki-multi-ai                                    │
 │              ││                                                              │
 │              ││  Quick Start:                                                │
@@ -23,7 +22,7 @@ expression: content
 │              ││                                                              │
 │              ││                                                              │
 │              ││                                                              │
+│              ││                                                              │
 │              │╰──────────────────────────────────────────────────────────────╯
 ╰──────────────╯ No active workspace
- [C-g w] workspaces  [C-g s] new ws  [C-g e] edit ws
- [C-g d] delete ws  [Tab] projects
+ [n] new project  [C-g s] new ws

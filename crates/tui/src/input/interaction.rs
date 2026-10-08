@@ -1,7 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::action::Action;
-use crate::app::{App, AppMode};
+use crate::app::{App, AppMode, ProjectTreeRow};
 use crate::clipboard;
 use crate::config::has_ctrl;
 use crate::dialog_state::DialogState;
@@ -1114,145 +1114,131 @@ pub(super) fn handle_agents_interaction(app: &mut App, key: KeyEvent) -> Option<
     None
 }
 
-/// Keyboard navigation for the focused top-left pane. The pane hosts two
-/// tab views — Workspaces and Projects — and `workspaces.view` (default
-/// Tab) flips between them from either side; everything else routes to the
-/// active view's handler.
+/// Keyboard navigation for the focused top-left pane: the project tree.
+///
+/// One row model, one handler — `[keybindings.projects]` holds every key. The
+/// vertical keys move the cursor (follow-focus: landing on a checkout switches
+/// to it), the horizontal ones collapse/expand a header or repo group, and the
+/// row-scoped keys act on whatever the cursor stands on.
 pub(super) fn handle_workspace_list_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    if app.config.matches_workspaces(key, "view") {
-        app.toggle_sidebar_view();
-        return None;
-    }
-    if app.sidebar_view == crate::app::SidebarView::Projects {
-        return handle_projects_pane_interaction(app, key);
-    }
-    handle_workspaces_view_interaction(app, key)
-}
-
-/// The Projects tab: mirrors the Projects overlay's list keys (same
-/// `[keybindings.projects]` table) against the pane's own state — j/k move,
-/// Enter expands a project or jumps to / adopts a member, n/e/d manage
-/// projects through the same modal editor the overlay uses.
-fn handle_projects_pane_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    let rows = app.projects_pane_rows();
-    if app.config.matches_projects(key, "down") || app.config.matches_projects(key, "down_alt") {
-        crate::input::list_nav::move_selection(&mut app.selected_project_row, rows.len(), 1, false);
-        app.reveal_projects_selection();
-    } else if app.config.matches_projects(key, "up") || app.config.matches_projects(key, "up_alt") {
-        crate::input::list_nav::move_selection(
-            &mut app.selected_project_row,
-            rows.len(),
-            -1,
-            false,
-        );
-        app.reveal_projects_selection();
-    } else if app.config.matches_projects(key, "new") {
+    let cfg = &app.config;
+    if cfg.matches_projects(key, "down") || cfg.matches_projects(key, "down_alt") {
+        app.select_next_sidebar_row();
+    } else if cfg.matches_projects(key, "up") || cfg.matches_projects(key, "up_alt") {
+        app.select_prev_sidebar_row();
+    } else if cfg.matches_projects(key, "collapse") || cfg.matches_projects(key, "collapse_alt") {
+        app.collapse_selected_group();
+    } else if cfg.matches_projects(key, "expand") || cfg.matches_projects(key, "expand_alt") {
+        app.expand_selected_group();
+    } else if cfg.matches_projects(key, "new") {
         super::dialog::open_project_editor_modal(app, None);
-    } else if rows.is_empty() {
-        // Row-scoped keys need a row.
-    } else if app.config.matches_projects(key, "select") {
-        return activate_project_row(app, rows[app.selected_project_row.min(rows.len() - 1)]);
-    } else if app.config.matches_projects(key, "edit") {
-        let pi = project_row_project(&rows[app.selected_project_row.min(rows.len() - 1)]);
-        let project = app.sidebar_projects.get(pi).cloned();
-        super::dialog::open_project_editor_modal(app, project);
-    } else if app.config.matches_projects(key, "delete") {
-        let pi = project_row_project(&rows[app.selected_project_row.min(rows.len() - 1)]);
-        if let Some(id) = app.sidebar_projects.get(pi).and_then(|p| p.id) {
-            return Some(Action::DeleteProject(id));
+    } else if cfg.matches_projects(key, "select") {
+        return activate_sidebar_row(app);
+    } else if cfg.matches_projects(key, "edit") {
+        let project = app.selected_project().cloned();
+        match project {
+            Some(p) => super::dialog::open_project_editor_modal(app, Some(p)),
+            None => app.set_toast(NO_PROJECT_HERE, crate::app::ToastLevel::Info),
         }
+    } else if cfg.matches_projects(key, "delete") {
+        match app.selected_project().and_then(|p| p.id) {
+            Some(id) => return Some(Action::DeleteProject(id)),
+            None => app.set_toast(NO_PROJECT_HERE, crate::app::ToastLevel::Info),
+        }
+    } else if cfg.matches_projects(key, "add_repo") {
+        // The New Workspace dialog does the work (local folder or GitHub
+        // clone); the project it lands in is remembered until creation
+        // finishes — see `App::pending_project_member`.
+        match app.selected_project().and_then(|p| p.id) {
+            Some(id) => {
+                app.pending_project_member = Some(id);
+                return super::app_actions::open_new_workspace(app);
+            }
+            None => app.set_toast(NO_PROJECT_HERE, crate::app::ToastLevel::Info),
+        }
+    } else if cfg.matches_projects(key, "new_worktree") {
+        return new_worktree_for_selected_repo(app);
     }
     None
 }
 
-/// The project a pane row acts on: a member row targets its parent.
-fn project_row_project(row: &crate::dialog_state::ProjectRow) -> usize {
-    match *row {
-        crate::dialog_state::ProjectRow::Project(pi)
-        | crate::dialog_state::ProjectRow::Member(pi, _) => pi,
-    }
-}
+/// Shown when a project-scoped key lands on a synthetic bucket header (PR
+/// review / no project), which has no stored project behind it.
+const NO_PROJECT_HERE: &str = "Not a project row";
 
-/// Enter/click on a Projects-tab row: toggle a project's expansion, jump to
-/// a member's workspace, or adopt a plain-directory member — the overlay's
-/// semantics, minus closing anything (the pane stays).
-pub(super) fn activate_project_row(
-    app: &mut App,
-    row: crate::dialog_state::ProjectRow,
-) -> Option<Action> {
+/// `select` (Enter) on the row under the cursor: collapse/expand a header or
+/// repo group, open a checkout, or adopt a plain-directory member.
+pub(super) fn activate_sidebar_row(app: &mut App) -> Option<Action> {
+    let row = app.sidebar_rows().get(app.selected_sidebar_row)?.clone();
     match row {
-        crate::dialog_state::ProjectRow::Project(pi) => {
-            if let Some(id) = app.sidebar_projects.get(pi).and_then(|p| p.id)
-                && !app.projects_expanded.remove(&id)
+        ProjectTreeRow::Project { .. } | ProjectTreeRow::Repo { .. } => {
+            app.toggle_selected_group();
+            None
+        }
+        ProjectTreeRow::Checkout {
+            workspace_index: idx,
+            ..
+        } => {
+            // A checkout with tabs open takes the focus with it; an empty one
+            // just becomes active, so the user can open a tab in it.
+            if app
+                .workspaces
+                .get(idx)
+                .is_some_and(|ws| !ws.tabs.is_empty())
             {
-                app.projects_expanded.insert(id);
+                app.switch_workspace_and_focus(idx);
+            } else {
+                app.switch_workspace(idx);
+            }
+            if app.workspaces.get(idx).is_some_and(|ws| ws.review_broken) {
+                return Some(Action::RetryReviewCheckout(idx));
             }
             None
         }
-        crate::dialog_state::ProjectRow::Member(pi, mi) => {
-            let path = app.sidebar_projects.get(pi)?.members.get(mi)?.path.clone();
-            match app.workspaces.iter().position(|w| w.info.path == path) {
-                Some(idx) => {
-                    app.switch_workspace_and_focus(idx);
-                    None
-                }
-                None => Some(Action::ProjectAdoptDirectory { path }),
-            }
-        }
+        // Membership stores only the path, so adopting the directory as a
+        // workspace upgrades this row in place with no migration.
+        ProjectTreeRow::Dir { path, .. } => Some(Action::ProjectAdoptDirectory { path }),
     }
 }
 
-/// The Workspaces tab (top-left tree). Mirrors the mouse behaviour in
-/// `mouse.rs`: up/down move the selection over the flattened sidebar rows
-/// (which always switches — every row is a real workspace), and `select`
-/// (Enter) additionally toggles collapse when the selection is a
-/// worktree-family parent row.
-fn handle_workspaces_view_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
-    if app.config.matches_workspaces(key, "down") || app.config.matches_workspaces(key, "down_alt")
+/// `new_worktree`: create a branch + worktree in the repository under the
+/// cursor. Works from a repo row and from any checkout of that repo, since
+/// both identify the same repository; the new worktree joins the project on
+/// its own (the tree adopts every worktree of a member repo).
+fn new_worktree_for_selected_repo(app: &mut App) -> Option<Action> {
+    let row = app.sidebar_rows().get(app.selected_sidebar_row)?.clone();
+    let repo = match &row {
+        ProjectTreeRow::Repo { root, .. } => root.clone(),
+        ProjectTreeRow::Checkout {
+            workspace_index, ..
+        } => app
+            .workspaces
+            .get(*workspace_index)?
+            .info
+            .source_repo
+            .clone(),
+        _ => {
+            app.set_toast("Select a repository first", crate::app::ToastLevel::Info);
+            return None;
+        }
+    };
+    // The create-worktree dialog works off a loaded checkout of the repo (it
+    // reads its origin, prompt and kanban path), so a repo nobody has opened
+    // yet has nothing to branch from.
+    match app
+        .workspaces
+        .iter()
+        .position(|w| w.info.source_repo == repo && !w.info.ephemeral)
     {
-        app.select_next_sidebar_row();
-    } else if app.config.matches_workspaces(key, "up")
-        || app.config.matches_workspaces(key, "up_alt")
-    {
-        app.select_prev_sidebar_row();
-    } else if app.config.matches_workspaces(key, "collapse")
-        || app.config.matches_workspaces(key, "collapse_alt")
-    {
-        app.collapse_selected_group();
-    } else if app.config.matches_workspaces(key, "expand")
-        || app.config.matches_workspaces(key, "expand_alt")
-    {
-        app.expand_selected_group();
-    } else if app.config.matches_workspaces(key, "select") {
-        match app.sidebar_items().get(app.selected_sidebar_row) {
-            Some(crate::app::SidebarItem::Workspace { index, collapsed }) => {
-                let idx = *index;
-                let is_parent = collapsed.is_some();
-                if is_parent {
-                    app.switch_workspace(idx);
-                    app.toggle_selected_group();
-                } else if app
-                    .workspaces
-                    .get(idx)
-                    .is_some_and(|ws| !ws.tabs.is_empty())
-                {
-                    app.switch_workspace_and_focus(idx);
-                } else {
-                    app.switch_workspace(idx);
-                }
-                if app.workspaces.get(idx).is_some_and(|ws| ws.review_broken) {
-                    return Some(Action::RetryReviewCheckout(idx));
-                }
-            }
-            // Synthetic pr-review header has no backing workspace — just
-            // toggle collapse, same as Enter on a worktree-family parent.
-            Some(crate::app::SidebarItem::GroupHeader { .. }) => {
-                app.toggle_selected_group();
-            }
-            None => {}
+        Some(parent) => super::app_actions::open_create_worktree_for(app, parent),
+        None => {
+            app.set_toast(
+                "Open this repository before branching it",
+                crate::app::ToastLevel::Info,
+            );
+            None
         }
     }
-    None
 }
 
 /// Focus the given (workspace, tab) pair from the Agents pane.
@@ -1274,10 +1260,9 @@ mod tests {
     use super::*;
     use crate::test_support::{add_terminal_tab, add_test_workspace, key, test_app};
 
-    /// Seed the sidebar's Projects tab directly (the JSON test storage has
-    /// no project backend, so `reload_sidebar_projects` would clear it).
-    fn seed_projects_pane(app: &mut App, member_paths: Vec<std::path::PathBuf>) {
-        app.sidebar_view = crate::app::SidebarView::Projects;
+    /// Seed the sidebar's project list directly (the JSON test storage has no
+    /// project backend, so `reload_sidebar_projects` would clear it).
+    fn seed_project(app: &mut App, member_paths: Vec<std::path::PathBuf>) {
         app.sidebar_projects = vec![piki_core::projects::Project {
             id: Some(1),
             name: "frontend".to_string(),
@@ -1285,56 +1270,49 @@ mod tests {
             order: 0,
             members: member_paths
                 .into_iter()
-                .map(|path| piki_core::projects::ProjectMember { path })
+                .map(piki_core::projects::ProjectMember::new)
                 .collect(),
         }];
     }
 
-    /// `workspaces.view` (Tab) flips the top-left pane between its
-    /// Workspaces and Projects tabs from either side.
+    /// Enter on a project header collapses it; on a checkout it opens that
+    /// workspace.
     #[test]
-    fn tab_toggles_sidebar_view_both_ways() {
-        let mut app = test_app();
-        assert_eq!(app.sidebar_view, crate::app::SidebarView::Projects);
-        handle_workspace_list_interaction(&mut app, key(KeyCode::Tab));
-        assert_eq!(app.sidebar_view, crate::app::SidebarView::Workspaces);
-        handle_workspace_list_interaction(&mut app, key(KeyCode::Tab));
-        assert_eq!(app.sidebar_view, crate::app::SidebarView::Projects);
-    }
-
-    /// Enter on a project row expands it; on a member row it jumps to the
-    /// member's workspace when one is registered at that path.
-    #[test]
-    fn projects_pane_enter_expands_then_jumps() {
+    fn enter_collapses_a_project_then_opens_a_checkout() {
         let mut app = test_app();
         let a = add_test_workspace(&mut app);
         let b = add_test_workspace(&mut app);
         app.active_workspace = a;
-        // The shared fixture gives every workspace the same path — the pane
-        // resolves members BY path, so give b its own.
+        // The shared fixture gives every workspace the same path — members
+        // resolve BY path, so give b its own.
         app.workspaces[b].info.path = std::path::PathBuf::from("/tmp/test-b");
         let b_path = app.workspaces[b].info.path.clone();
-        seed_projects_pane(&mut app, vec![b_path]);
+        seed_project(&mut app, vec![b_path]);
 
-        // Row 0 is the project: Enter expands it (member row appears).
+        // Rows: [project, repo(b), b, bucket, repo(a), a].
+        assert_eq!(app.sidebar_rows().len(), 6);
+        app.selected_sidebar_row = 0;
         assert!(handle_workspace_list_interaction(&mut app, key(KeyCode::Enter)).is_none());
-        assert!(app.projects_expanded.contains(&1));
-        assert_eq!(app.projects_pane_rows().len(), 2);
+        assert_eq!(
+            app.sidebar_rows().len(),
+            4,
+            "the collapsed project hides its repo and checkout"
+        );
 
-        // Down to the member, Enter switches to its workspace.
-        handle_workspace_list_interaction(&mut app, key(KeyCode::Char('j')));
+        // Re-expand, walk onto b's checkout row, open it.
+        handle_workspace_list_interaction(&mut app, key(KeyCode::Enter));
+        app.selected_sidebar_row = 2;
         assert!(handle_workspace_list_interaction(&mut app, key(KeyCode::Enter)).is_none());
         assert_eq!(app.active_workspace, b);
     }
 
-    /// Enter on a member with no registered workspace adopts the directory
-    /// (same action the Projects overlay dispatches).
+    /// Enter on a plain-directory member adopts it as a workspace.
     #[test]
-    fn projects_pane_enter_adopts_unregistered_directory() {
+    fn enter_adopts_an_unregistered_directory_member() {
         let mut app = test_app();
-        seed_projects_pane(&mut app, vec![std::path::PathBuf::from("/tmp/free-dir")]);
-        app.projects_expanded.insert(1);
-        app.selected_project_row = 1;
+        seed_project(&mut app, vec![std::path::PathBuf::from("/tmp/free-dir")]);
+        // Rows: [project, dir].
+        app.selected_sidebar_row = 1;
         let action = handle_workspace_list_interaction(&mut app, key(KeyCode::Enter));
         assert!(matches!(
             action,
@@ -1342,16 +1320,38 @@ mod tests {
         ));
     }
 
-    /// Delete on any row targets the row's project; a member row acts on
-    /// its parent.
+    /// Delete on any row targets the project that row belongs to.
     #[test]
-    fn projects_pane_delete_targets_parent_project() {
+    fn delete_targets_the_rows_project() {
         let mut app = test_app();
-        seed_projects_pane(&mut app, vec![std::path::PathBuf::from("/tmp/free-dir")]);
-        app.projects_expanded.insert(1);
-        app.selected_project_row = 1;
+        seed_project(&mut app, vec![std::path::PathBuf::from("/tmp/free-dir")]);
+        app.selected_sidebar_row = 1; // the member row, not the header
         let action = handle_workspace_list_interaction(&mut app, key(KeyCode::Char('d')));
         assert!(matches!(action, Some(Action::DeleteProject(1))));
+    }
+
+    /// A synthetic bucket has no stored project, so the project-scoped keys
+    /// say so instead of acting on whatever happens to be nearby.
+    #[test]
+    fn project_keys_are_inert_on_a_synthetic_bucket() {
+        let mut app = test_app();
+        add_test_workspace(&mut app);
+        // No projects: row 0 is the no-project bucket.
+        app.selected_sidebar_row = 0;
+        assert!(handle_workspace_list_interaction(&mut app, key(KeyCode::Char('d'))).is_none());
+        assert!(handle_workspace_list_interaction(&mut app, key(KeyCode::Char('e'))).is_none());
+        assert!(app.active_dialog.is_none(), "no editor opened");
+    }
+
+    /// `new_worktree` needs a repository under the cursor; on a bucket header
+    /// it is a no-op rather than guessing one.
+    #[test]
+    fn new_worktree_needs_a_repository_row() {
+        let mut app = test_app();
+        add_test_workspace(&mut app);
+        app.selected_sidebar_row = 0;
+        assert!(handle_workspace_list_interaction(&mut app, key(KeyCode::Char('w'))).is_none());
+        assert!(app.active_dialog.is_none());
     }
 
     /// Typing into the terminal snaps a wheel-scrolled view back to live:

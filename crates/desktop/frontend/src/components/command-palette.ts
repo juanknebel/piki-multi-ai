@@ -534,12 +534,6 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
 
   // View commands
   cmds.push({
-    id: "view-workspaces",
-    label: "Show Workspaces",
-    category: "View",
-    action: () => appState.setActiveView("workspaces"),
-  });
-  cmds.push({
     id: "view-projects",
     label: "Show Projects",
     category: "View",

@@ -343,7 +343,6 @@ const APP_ACTIONS: &[&str] = &[
     "about",
     "dashboard",
     "sessions",
-    "projects",
     "command_palette",
     "fuzzy_search",
     "project_search",
@@ -404,7 +403,6 @@ fn dispatch_app_action(app: &mut App, action: &str) -> Option<Action> {
         "about" => app_actions::open_about(app),
         "dashboard" => app_actions::open_dashboard(app),
         "sessions" => app_actions::open_sessions(app),
-        "projects" => app_actions::open_projects(app),
         "command_palette" => {
             app.open_command_palette();
             None

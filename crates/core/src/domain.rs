@@ -252,9 +252,9 @@ pub struct WorkspaceInfo {
     pub is_git_repo: bool,
     /// Ad-hoc workspace created to review a single PR (e.g. via
     /// `WorkspaceManager::create_review_workspace`). Persisted like any other
-    /// workspace, but: grouped under one synthetic "pr-review" sidebar group
-    /// instead of by `source_repo` (see `family_key`/`sidebar_items` in
-    /// `crates/tui/src/app.rs`), has no user-editable name (no dialog exposes
+    /// workspace, but: collected under the synthetic PR-review bucket instead
+    /// of grouped by `source_repo` (see `projects::tree::project_tree`), has
+    /// no user-editable name (no dialog exposes
     /// a name field for any workspace today — if one is ever added, guard it
     /// here), and closing it deletes `path` from disk instead of just
     /// detaching it.

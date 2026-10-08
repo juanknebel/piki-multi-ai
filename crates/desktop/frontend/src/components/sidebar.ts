@@ -1,10 +1,10 @@
 import { appState } from "../state";
 import { settingsStore } from "../settings";
 import { activityBarWidth, clampSidebarWidth, visibleChatWidth } from "../layout-budget";
-import { renderWorkspaceList } from "./workspace-list";
 import { renderFileTree } from "./file-tree";
 import { renderSourceControl } from "./source-control";
-import { renderProjectsPanel } from "./projects-panel";
+import { renderProjectTree } from "./project-tree";
+import { refreshProjects } from "./projects-panel";
 import { renderAgentsPanel } from "./agents-panel";
 import { showAgentManager } from "./dialogs/agent-dialog";
 import { openProvider } from "./open-content";
@@ -56,24 +56,23 @@ export async function initSidebar() {
   const agentsPanelHeight = settingsStore.get<number>("agentsPanelHeight");
   if (agentsPanelHeight) applyAgentsPanelHeight(agentsPanelHeight);
 
-  const workspacesView = document.getElementById("workspaces-view")!;
-  const workspaceList = document.getElementById("workspace-list")!;
   const filesView = document.getElementById("files-view")!;
   const scView = document.getElementById("source-control-view")!;
   const projectsView = document.getElementById("projects-view")!;
   const agentsView = document.getElementById("agents-view")!;
 
-  renderWorkspaceList(workspaceList);
   renderFileTree(filesView);
   renderSourceControl(scView);
-  renderProjectsPanel(projectsView);
+  // The ONE sidebar tree: projects -> repositories -> checkouts.
+  renderProjectTree(projectsView);
+  void refreshProjects();
   // Agents panel docked at the bottom of the sidebar, below whichever view
   // is active (same layout as the TUI's bottom-left pane) — ALWAYS visible,
   // never a switchable view.
   renderAgentsPanel(agentsView);
 
   // Track last sidebar view so we can restore when a non-sidebar action triggers
-  let lastSidebarView: "workspaces" | "projects" | "files" | "git" = "projects";
+  let lastSidebarView: "projects" | "files" | "git" = "projects";
 
   function updateView() {
     const view = appState.activeView;
@@ -97,15 +96,15 @@ export async function initSidebar() {
     }
 
     if (view === "agents") {
-      // The live panel lives in Workspaces; the activity icon opens the
+      // The live panel is docked under the tree; the activity icon opens the
       // profile manager dialog, like before.
       showAgentManager();
       appState.setActiveView(lastSidebarView);
       return;
     }
 
-    lastSidebarView = view;
-    workspacesView.style.display = view === "workspaces" ? "flex" : "none";
+    // "agents"/"kanban"/... returned above; what's left is a sidebar view.
+    lastSidebarView = view as typeof lastSidebarView;
     filesView.style.display = view === "files" ? "flex" : "none";
     scView.style.display = view === "git" ? "flex" : "none";
     projectsView.style.display = view === "projects" ? "flex" : "none";

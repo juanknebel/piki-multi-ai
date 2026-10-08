@@ -16,7 +16,7 @@ const EXTERNAL_POLL_MS = 2000;
 
 /** Keep `appState.agentRows` fresh: one debounced `list_agent_rows` fetch
  *  per burst of agent/tab events (they arrive per tool call), feeding every
- *  agent signal at once — this panel, the workspace-list rollup, the
+ *  agent signal at once — this panel, the project-tree rollup, the
  *  status-bar segment, the activity-bar badge and `Alt+A`. Backend-sourced
  *  because the frontend only hydrates a workspace's tab list on first
  *  visit — agents dispatched into never-visited workspaces must still

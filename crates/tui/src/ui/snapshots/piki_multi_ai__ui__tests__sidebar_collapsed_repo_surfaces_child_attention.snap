@@ -1,11 +1,10 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 650
 expression: content
 ---
-╭ WORKSPACES │ PROJECTS ───────────────╮
-│▎▸ ○ src-agent-multi (main) ● 1∆ ↑1 ↓2│
-│                                      │
+╭ PROJECTS ────────────────────────────╮
+│ ▾ ● no project 2                     │
+│▎ ▸ ⎇ src-agent-multi ● 1∆ ↑1 ↓2      │
 │                                      │
 │                                      │
 ╰──────────────────────────────────────╯

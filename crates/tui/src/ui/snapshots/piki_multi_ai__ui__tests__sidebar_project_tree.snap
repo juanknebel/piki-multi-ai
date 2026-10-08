@@ -1,0 +1,18 @@
+---
+source: crates/tui/src/ui/mod.rs
+expression: content
+---
+╭ PROJECTS ──────────────────▐
+│ ▾ ● frontend 2             ▐
+│  ▾ ⎇ piki                  ▐
+│▎ │ ○ nightly               ▐
+│  │ ⎇ feat/sidebar          ▐
+│  🗁 /home/user/notes        ▐
+│                            ▐
+│ ▾ ● backend 1              │
+│  ▾ ⎇ api                   │
+│  │ ⎇ main                  │
+│                            │
+│ ▾ ● no project 1           │
+│  ▾ ⎇ loose                 │
+╰────────────────────────────╯

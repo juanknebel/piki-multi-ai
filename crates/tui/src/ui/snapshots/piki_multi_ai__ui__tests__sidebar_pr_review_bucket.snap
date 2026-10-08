@@ -1,0 +1,12 @@
+---
+source: crates/tui/src/ui/mod.rs
+expression: content
+---
+╭ PROJECTS ────────────────────────────▐
+│▎▾ ● pr-review 2                      ▐
+│    ◎ owner/repo#1 [PR]               ▐
+│    ◎ owner/repo#2 [PR]               ▐
+│                                      │
+│ ▾ ● no project 1                     │
+│  ▾ ⎇ src-plain-ws                    │
+╰──────────────────────────────────────╯
