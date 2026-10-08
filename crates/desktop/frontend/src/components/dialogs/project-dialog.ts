@@ -5,14 +5,15 @@
  *  already in the project (in order, each with a ✕) on top, and everything
  *  that could join it — every workspace not yet a member, filtered by a
  *  search box, plus any directory picked from disk — below. Both lists
- *  print the member's directory under its name: several workspaces of the
- *  same repo are told apart by their path and nothing else, so the path
- *  cannot live in a tooltip alone. */
+ *  print the member's directory under its name, in FULL (wrapped if it
+ *  has to be): several workspaces of the same repo are told apart by
+ *  their path and nothing else, so the path can neither live in a tooltip
+ *  alone nor be cut short. */
 import * as ipc from "../../ipc";
 import { appState } from "../../state";
 import type { Project } from "../../types";
 import { icon } from "../icons";
-import { branchLabel, pathLabel } from "../../labels";
+import { branchLabel, homeRelative } from "../../labels";
 import { getHomeDir } from "../../home-dir";
 import { pickPath } from "../path-picker";
 import { attachDialogResize } from "../dialog-resize";
@@ -138,7 +139,12 @@ export function showProjectDialog(project: Project | null, onSaved: () => void |
     text.appendChild(head);
     const pathEl = document.createElement("div");
     pathEl.className = "project-pick-path";
-    pathEl.textContent = pathLabel(path, getHomeDir());
+    // The FULL path (only `~`-shortened), never a character-capped label:
+    // the row wraps it instead, so a deep worktree
+    // (`~/.local/share/piki-multi/worktrees/…`) is readable to its last
+    // segment — that tail is the only thing telling two checkouts apart,
+    // and a fixed cap elided it even in a dialog with room to spare.
+    pathEl.textContent = homeRelative(path, getHomeDir());
     text.appendChild(pathEl);
     row.appendChild(text);
     row.title = `${name}${branch ? ` · ${branch}` : ""}\n${path}`;

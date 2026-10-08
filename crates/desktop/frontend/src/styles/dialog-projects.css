@@ -4,8 +4,10 @@
 
 .project-dialog {
   /* Two-line member rows (name + directory) need more room than the
-     old checkbox list did. */
-  max-width: 560px;
+     old checkbox list did — and the directory is a full path, so this
+     dialog is wider than the shared budget. */
+  width: 640px;
+  max-width: 92vw;
 }
 
 .project-swatch-row {
@@ -106,10 +108,12 @@
   font-size: var(--fs-sm);
 }
 
+/* The path wraps instead of being cut: its LAST segment is what tells two
+   checkouts of one repo apart, and that is exactly what an ellipsis — on
+   either end — eats first. A long path costs a second line, nothing else. */
 .project-pick-path {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
   color: var(--text-muted);
   font-size: var(--fs-sm);
 }

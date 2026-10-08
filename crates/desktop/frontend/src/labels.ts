@@ -24,8 +24,11 @@ export function branchLabel(branch: string | null | undefined, max = BRANCH_LABE
   return truncateMiddle(branch, max);
 }
 
-/** Longest directory label painted in chrome (dialog member rows, menus);
- *  the middle is elided beyond it so the root and the leaf stay visible. */
+/** Longest directory label painted where the chrome is a fixed-width,
+ *  single-line slot (menus, one-line rows); the middle is elided beyond it
+ *  so the root and the leaf stay visible. A surface with room to wrap —
+ *  the project dialog's member rows — prints `homeRelative` instead: a
+ *  character cap there elides the tail even when the width allows it. */
 export const PATH_LABEL_MAX = 46;
 
 /** `path` rewritten relative to `home` (`/home/zero/git/x` → `~/git/x`).
