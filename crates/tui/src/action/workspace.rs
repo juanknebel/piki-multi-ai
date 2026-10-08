@@ -41,10 +41,12 @@ pub(super) fn finish_workspace_creation(app: &mut App, mut info: piki_core::Work
     adopt_into_pending_project(app, new_idx);
 }
 
-/// Make the freshly created workspace a member of the project the sidebar's
-/// `add_repo` key was invoked on (`App::pending_project_member`). A no-op for
-/// every other creation path, and the flag is cleared either way so a later
-/// unrelated creation can't inherit it.
+/// Make the freshly created checkout a member of the project the sidebar was
+/// standing in (`App::pending_project_member`) — set by `add_repo` and by
+/// `new_worktree`. Membership is never inferred from a shared repository (see
+/// `piki_core::projects::tree`), so these two are the only places that spare
+/// the user the bookkeeping. A no-op for every other creation path, and the
+/// flag is cleared either way so a later unrelated creation can't inherit it.
 fn adopt_into_pending_project(app: &mut App, new_idx: usize) {
     let Some(project_id) = app.pending_project_member.take() else {
         return;

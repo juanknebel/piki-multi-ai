@@ -282,10 +282,10 @@ async function submitCreate(
   }
 }
 
-/** Make the freshly created workspace a member of the project the dialog was
+/** Make the freshly created checkout a member of the project the dialog was
  *  opened from (`addToProject`). A no-op for every other creation path — the
- *  workspace then shows up under the no-project bucket, where it can be
- *  dragged into a project later. */
+ *  checkout then shows up as a loose repository at the top level, where it can
+ *  be put into a project later. */
 async function joinProject(projectId: number | null, path: string) {
   if (projectId === null) return;
   const project = projectById(projectId);
@@ -410,7 +410,14 @@ function escapeAttr(text: string): string {
  *  - **Load Existing** — lists worktrees already on disk for this repo
  *    (`git worktree list`, filtered to ones with no workspace yet) and
  *    registers the picked one without touching git. */
-export function showCreateWorktreeDialog(parent: WorkspaceInfo) {
+/** `addToProject`: the project the tree row was in. A branch created from
+ *  inside a project joins it — membership is never inferred from a shared
+ *  repository (see `piki_core::projects::tree`), so this is the one place that
+ *  spares the user the bookkeeping. */
+export function showCreateWorktreeDialog(
+  parent: WorkspaceInfo,
+  addToProject: number | null = null,
+) {
   document.querySelector(".workspace-backdrop")?.remove();
 
   if (parent.origin?.kind !== "GitHub") {
@@ -563,10 +570,11 @@ export function showCreateWorktreeDialog(parent: WorkspaceInfo) {
           selectedExisting.branch,
         );
         appState.addWorkspace(info);
-        toast(`Worktree "${info.name}" loaded`, "success");
+        await joinProject(addToProject, info.path);
+        toast(`Loaded branch "${info.name}"`, "success");
         backdrop.remove();
       } catch (err) {
-        toast(`Failed to load worktree: ${err}`, "error");
+        toast(`Failed to load the branch: ${err}`, "error");
         submitBtn.disabled = false;
         submitBtn.textContent = "Import";
       }
@@ -597,10 +605,11 @@ export function showCreateWorktreeDialog(parent: WorkspaceInfo) {
         kanban || null,
       );
       appState.addWorkspace(info);
-      toast(`Worktree "${info.name}" created`, "success");
+      await joinProject(addToProject, info.path);
+      toast(`Created branch "${info.name}"`, "success");
       backdrop.remove();
     } catch (err) {
-      toast(`Failed to create worktree: ${err}`, "error");
+      toast(`Failed to create the branch: ${err}`, "error");
       submitBtn.disabled = false;
       submitBtn.textContent = "Create";
     }

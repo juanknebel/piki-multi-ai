@@ -8,6 +8,7 @@ import {
   showWorkspaceInfo,
 } from "./dialogs/workspace-dialog";
 import { confirmDeleteWorkspace } from "./dialogs/delete-workspace";
+import { projectsSnapshot } from "./projects-panel";
 import { showMergeDialog } from "./dialogs/merge-dialog";
 import { showGitLog } from "./dialogs/gitlog-dialog";
 import { showStashDialog } from "./dialogs/stash-dialog";
@@ -235,9 +236,18 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
     if (ws.info.origin?.kind === "GitHub") {
       cmds.push({
         id: "ws-create-worktree",
-        label: `Create Worktree from "${ws.info.name}"`,
+        label: `New Branch from "${ws.info.name}"`,
         category: "Checkout",
-        action: () => showCreateWorktreeDialog(ws.info),
+        // Joins whichever project the active checkout is in, like the tree's
+        // own entry — `projectOfWorkspace` lives there, so resolve it the same
+        // way from the cached project list.
+        action: () =>
+          showCreateWorktreeDialog(
+            ws.info,
+            projectsSnapshot().find((p) =>
+              p.members.some((m) => m.path === ws.info.path),
+            )?.id ?? null,
+          ),
       });
     }
     cmds.push({

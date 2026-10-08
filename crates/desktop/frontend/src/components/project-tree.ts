@@ -102,6 +102,15 @@ function projectMenuItems(path: string): CtxItem[] {
 /** The checkout row menu (right-click, or the row's `⋯`): Open / Merge, then
  *  membership, Delete last and red. Actions that only work on the active
  *  workspace (Merge) switch to it first. */
+/** The project a checkout row sits under, so a branch created from it joins
+ *  the same project. `null` when the row is a loose repository. */
+function projectOfWorkspace(idx: number): number | null {
+  const path = appState.workspaces[idx]?.info.path;
+  if (!path) return null;
+  const owner = projectsSnapshot().find((p) => p.members.some((m) => m.path === path));
+  return owner?.id ?? null;
+}
+
 function checkoutMenuItems(idx: number): CtxItem[] {
   const ws = appState.workspaces[idx];
   if (!ws) return [];
@@ -115,7 +124,12 @@ function checkoutMenuItems(idx: number): CtxItem[] {
     { label: "Info", action: () => showWorkspaceInfo(idx) },
     { label: "Edit…", action: () => showWorkspaceDialog({ mode: "edit", editIndex: idx }) },
     ...(info.origin?.kind === "GitHub"
-      ? [{ label: "New Branch / Worktree…", action: () => showCreateWorktreeDialog(info) }]
+      ? [
+          {
+            label: "New Branch / Worktree…",
+            action: () => showCreateWorktreeDialog(info, projectOfWorkspace(idx)),
+          },
+        ]
       : []),
     {
       label: "Merge / Rebase…",
@@ -143,7 +157,7 @@ function repoMenuItems(root: string, projectId: number | null): CtxItem[] {
     {
       label: "New Branch / Worktree…",
       disabled: !checkout || !github,
-      action: () => checkout && showCreateWorktreeDialog(checkout.info),
+      action: () => checkout && showCreateWorktreeDialog(checkout.info, projectId),
     },
     {
       label: "Add Repository…",

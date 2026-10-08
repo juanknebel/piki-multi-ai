@@ -42,6 +42,17 @@
 //! repeated the repository's. So the sidebar reads as "my projects, then my
 //! loose repositories", which is what a project being a *choice* means.
 //!
+//! **A project holds exactly the checkouts you put in it.** Membership is
+//! never inferred: two worktrees of one repository can live in different
+//! projects, or one in a project and the other nowhere, because which *branch*
+//! belongs to a piece of work is the user's call and not something a shared
+//! `source_repo` can answer. An earlier version pulled in every sibling
+//! checkout of a member repository "so creating a branch needs no
+//! bookkeeping"; it silently dragged a repo's main clone into a project that
+//! had only been given one worktree. The convenience is paid for explicitly
+//! instead: creating a branch from inside a project adds it as a member there
+//! (see the frontends' `pending_project_member`).
+//!
 //! A workspace that is a member of two projects is emitted under both. Only
 //! the `Unassigned` bucket cares about claims.
 
@@ -455,30 +466,6 @@ pub fn project_tree(
                 (MemberKind::Auto, None) => entries.push(Entry::Dir(member.path.clone())),
             }
         }
-        // Worktrees of a member repo are part of the project even when only
-        // the clone was added by hand — that is what makes "create a branch in
-        // this project" need no bookkeeping. Appended after the explicit
-        // members so hand-set order still leads.
-        let repos: Vec<PathBuf> = entries
-            .iter()
-            .filter_map(|e| match e {
-                Entry::Checkout { repo: Some(r), .. } => Some(r.clone()),
-                Entry::Repo(r) => Some(r.clone()),
-                _ => None,
-            })
-            .collect();
-        for (i, w) in workspaces.iter().enumerate() {
-            if w.ephemeral || claimed.contains(&i) {
-                continue;
-            }
-            if repos.contains(&w.source_repo) && repo_of(w).is_some() {
-                claimed.insert(i);
-                entries.push(Entry::Checkout {
-                    index: i,
-                    repo: Some(w.source_repo.clone()),
-                });
-            }
-        }
         emit_bucket(
             &mut rows,
             Bucket::Project(pi),
@@ -668,37 +655,35 @@ mod tests {
         ));
     }
 
-    /// The whole point of the model: a worktree created in a member repo shows
-    /// up in the project without anyone adding it as a member.
+    /// Membership is never inferred from a shared `source_repo`: putting one
+    /// worktree in a project must not drag its siblings in. Which branch
+    /// belongs to a piece of work is the user's call.
     #[test]
-    fn worktrees_of_a_member_repo_join_the_project_automatically() {
+    fn a_sibling_checkout_does_not_join_the_project_by_itself() {
         let list = [
             clone_of("app", "/repos/app"),
             worktree("feature", "/repos/app"),
         ];
+        // Only the worktree was added.
         let projects = [project(
             1,
             "Piki",
-            vec![ProjectMember::new(PathBuf::from("/wt/app"))],
+            vec![ProjectMember::new(PathBuf::from("/wt/feature"))],
         )];
         let rows = project_tree(&projects, &list, &none());
         assert_eq!(
             sketch(&rows, &list),
             vec![
                 "Project(0)",
-                ".repo app",
-                "..app Primary",
-                "..feature Worktree"
+                // The project shows the branch it was given, hoisted — one
+                // checkout of that repo is in it.
+                ".feature Worktree*",
+                // ...and the clone stays loose, at the top level.
+                "app Primary*",
             ]
-        );
-        assert!(
-            !rows.iter().any(|r| r.bucket() == Bucket::Unassigned),
-            "nothing is left over"
         );
     }
 
-    /// The rule that keeps the common case (one repo, one clone) as compact as
-    /// the flat sidebar this replaced.
     #[test]
     fn a_single_checkout_repo_is_hoisted_instead_of_getting_a_header() {
         let list = [clone_of("app", "/repos/app")];
@@ -731,7 +716,16 @@ mod tests {
         )];
         assert!(project_tree(&projects, &list, &none())[1].is_hoisted());
 
+        // Both checkouts have to be members: nothing is inferred.
         list.push(worktree("feature", "/repos/app"));
+        let projects = [project(
+            1,
+            "Piki",
+            vec![
+                ProjectMember::new(PathBuf::from("/wt/app")),
+                ProjectMember::new(PathBuf::from("/wt/feature")),
+            ],
+        )];
         let rows = project_tree(&projects, &list, &none());
         assert_eq!(
             sketch(&rows, &list),
@@ -806,7 +800,7 @@ mod tests {
     }
 
     #[test]
-    fn collapsing_a_project_hides_everything_under_it_but_keeps_the_count() {
+    fn collapsing_a_project_hides_everything_under_it() {
         let list = [
             clone_of("app", "/repos/app"),
             worktree("feature", "/repos/app"),
@@ -814,7 +808,10 @@ mod tests {
         let projects = [project(
             1,
             "Piki",
-            vec![ProjectMember::new(PathBuf::from("/wt/app"))],
+            vec![
+                ProjectMember::new(PathBuf::from("/wt/app")),
+                ProjectMember::new(PathBuf::from("/wt/feature")),
+            ],
         )];
         let collapsed = HashSet::from(["project:1".to_string()]);
         let rows = project_tree(&projects, &list, &collapsed);

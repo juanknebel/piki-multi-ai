@@ -979,9 +979,14 @@ mod tests {
                 name: "frontend".to_string(),
                 color: 0,
                 order: 0,
+                // Both checkouts of the repo are members: nothing joins a
+                // project on its own (see `projects::tree`).
                 members: vec![
                     piki_core::projects::ProjectMember::new(std::path::PathBuf::from(
                         "/tmp/nightly",
+                    )),
+                    piki_core::projects::ProjectMember::new(std::path::PathBuf::from(
+                        "/tmp/feature",
                     )),
                     piki_core::projects::ProjectMember::new(std::path::PathBuf::from(
                         "/home/user/notes",

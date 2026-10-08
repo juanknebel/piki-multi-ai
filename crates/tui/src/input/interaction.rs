@@ -1222,6 +1222,11 @@ fn new_worktree_for_selected_repo(app: &mut App) -> Option<Action> {
             return None;
         }
     };
+    // A branch created from inside a project joins it. Membership is never
+    // inferred from a shared repo (see `projects::tree`), so this is the one
+    // place that spares the user the bookkeeping — and only when they really
+    // were standing in a project.
+    app.pending_project_member = app.selected_project().and_then(|p| p.id);
     // The create-worktree dialog works off a loaded checkout of the repo (it
     // reads its origin, prompt and kanban path), so a repo nobody has opened
     // yet has nothing to branch from.
@@ -1232,6 +1237,7 @@ fn new_worktree_for_selected_repo(app: &mut App) -> Option<Action> {
     {
         Some(parent) => super::app_actions::open_create_worktree_for(app, parent),
         None => {
+            app.pending_project_member = None;
             app.set_toast(
                 "Open this repository before branching it",
                 crate::app::ToastLevel::Info,
