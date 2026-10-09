@@ -134,6 +134,19 @@ just lint-desktop                           # frontend test + build, then clippy
   `pty.rs::move_tab(from_workspace_idx, tab_id, to_workspace_idx) -> new_idx` re-parents a `DesktopTab`
   WITHOUT dropping it (no Detach/Kill; the xterm stays bound to the same id) and re-points a daemon
   session's `workspace_path` via `Daemon::set_meta` off-lock.
+- **A hidden panel loses its scroll, and the unmount is too late to read it.** `unmount*` sets
+  `display: none` and `pane-view.ts detachPanelElements` parks the element in `#pane-holding`; either
+  one drops the layout box, and the browser zeroes every `scrollTop` inside it. Capturing inside the
+  panel's own hide path does NOT work: on a top-level tab switch `render()` runs `detachPanelElements`
+  over the outgoing tab's panes BEFORE `syncMounts` calls `unmountTab`, so the capture faithfully
+  records a zero (measured — the first attempt at this shipped that bug). **Record the position while
+  the panel is visible instead**: `code-editor-panel.ts` stores `EditorView.scrollSnapshot()` (a
+  document position, so a pane resized while the tab was away still lands right) on the scroller's
+  `scroll` event, `markdown-editor-panel.ts` stores `.ProseMirror`'s `scrollTop` the same way, and the
+  mount re-applies it once the element has a layout box again. A `scroll` event cannot fire while the
+  element is detached, so the last recorded value is always one the user actually read at. The
+  scroll-listener + round trip is verified in a headless Chromium replay of that exact order.
+  `api-panel.ts` and `kanban-panel.ts` have the same hide shape and are NOT covered yet.
 - **Dead tabs**: `markTabDead` (on `pty-exit`) emits `tabs-changed` + `pane-tree-changed` so the
   `.ws-tab--dead` chip, the pane-head Restart button (`restartPaneContent`: `ipc.closeTab` the exited tab →
   `ipc.spawnTab` same provider → `appState.replacePaneContent` into the same pane, custom title carried

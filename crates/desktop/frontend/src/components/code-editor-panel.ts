@@ -58,6 +58,18 @@ interface CodeEditorInstance {
   element: HTMLDivElement;
   editorView: EditorView | null;
   originalContent: string;
+  /** Reading position, recorded on every scroll while the panel is VISIBLE
+   *  and re-applied by the next mount. A hidden element — `display: none`,
+   *  or parked in `#pane-holding` — has no layout box and reports
+   *  `scrollTop` 0, which is why this is not captured on the way out:
+   *  `pane-view.ts render()` runs `detachPanelElements` on the outgoing
+   *  tab's panes BEFORE `syncMounts` calls the panel's own unmount, so a
+   *  capture there would faithfully record a zero. Recording while the user
+   *  is reading is immune to the order of any teardown path.
+   *
+   *  CodeMirror's snapshot restores a document position rather than a pixel
+   *  offset, so a pane resized while the tab was away still lands right. */
+  scrollBack: ReturnType<EditorView["scrollSnapshot"]> | null;
 }
 
 const instances = new Map<string, CodeEditorInstance>();
@@ -145,10 +157,15 @@ export function getCodeEditorSelection(
   };
 }
 
+/** The ONE way a panel goes invisible. It deliberately does NOT read the
+ *  scroll position — by the time any unmount runs the element may already be
+ *  detached and reporting 0 (see `scrollBack`). */
+function hidePanel(inst: CodeEditorInstance) {
+  inst.element.style.display = "none";
+}
+
 export function hideCodeEditorPanels() {
-  for (const inst of instances.values()) {
-    inst.element.style.display = "none";
-  }
+  for (const inst of instances.values()) hidePanel(inst);
 }
 
 export function destroyCodeEditorPanel(tabId: string) {
@@ -174,17 +191,21 @@ export function mountCodeEditorInto(tabId: string, host: HTMLElement) {
     instances.set(tabId, inst);
     pendingFiles.delete(tabId);
   }
-  if (inst.element.parentElement !== host) {
-    host.appendChild(inst.element);
-    // Force CodeMirror to recompute its viewport for the new host size.
-    inst.editorView?.requestMeasure();
-  }
+  if (inst.element.parentElement !== host) host.appendChild(inst.element);
   inst.element.style.display = "flex";
+  // Now that the element has a layout box again: put the reading position
+  // back (see `scrollBack`), then let CodeMirror recompute its viewport for
+  // the host's size.
+  if (inst.scrollBack && inst.editorView) {
+    inst.editorView.dispatch({ effects: inst.scrollBack });
+    inst.scrollBack = null;
+  }
+  inst.editorView?.requestMeasure();
 }
 
 export function unmountCodeEditor(tabId: string) {
   const inst = instances.get(tabId);
-  if (inst) inst.element.style.display = "none";
+  if (inst) hidePanel(inst);
 }
 
 async function getLanguageExtension(filePath: string): Promise<Extension | null> {
@@ -351,6 +372,7 @@ function createPanel(tabId: string, filePath: string, workspaceIdx: number): Cod
     element: el,
     editorView: null,
     originalContent: "",
+    scrollBack: null,
   };
 
   ipc.readFileContent(workspaceIdx, filePath).then(async (content) => {
@@ -402,6 +424,12 @@ function createPanel(tabId: string, filePath: string, workspaceIdx: number): Cod
     });
 
     inst.editorView = new EditorView({ state, parent: bodyEl });
+
+    // See `scrollBack`: the reading position is recorded here, while the
+    // panel is on screen, never on the way out.
+    inst.editorView.scrollDOM.addEventListener("scroll", () => {
+      if (inst.editorView) inst.scrollBack = inst.editorView.scrollSnapshot();
+    });
 
     // Save button
     el.querySelector(".code-editor-save")!.addEventListener("click", async () => {
