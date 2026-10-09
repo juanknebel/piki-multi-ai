@@ -124,8 +124,12 @@ export function openProjectSearch() {
   }
 
   function selectMatch(m: SearchMatch) {
+    const query = input.value.trim();
     closeProjectSearch();
-    showFileViewer(wsIdx, m.path);
+    // The hit's own line and the term it matched — the viewer lands on the
+    // line and opens its find bar pre-filled, so the other hits in that file
+    // are one Enter away.
+    showFileViewer(wsIdx, m.path, { line: m.line_num, query: query || undefined });
   }
 
   async function editMatch(m: SearchMatch) {

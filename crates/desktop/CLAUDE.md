@@ -394,6 +394,21 @@ just lint-desktop                           # frontend test + build, then clippy
   pure) decides which files never get an editor tab.
 - `components/fuzzy.ts` — `fuzzyScore` / `fuzzyScorePath` for palette-style overlays (command palette,
   fuzzy file search, branch picker, switcher).
+- `components/file-viewer.ts showFileViewer(wsIdx, path, target?)` — the read-only overlay. **Focus goes
+  to the CodeMirror view, never to the backdrop**: `Ctrl+F`'s find bar (`basicSetup`'s `searchKeymap` plus
+  `search({ top: true })` for the panel state `setSearchQuery` writes into), vim's `/` and the arrows are
+  all CodeMirror's, and a focused backdrop swallowed every one of them. The backdrop keeps its `tabindex`
+  so a click on the dialog chrome still reaches the viewer's own `Escape` / `Ctrl+I` / `Ctrl+E` handler,
+  which steps aside for keys typed inside `.cm-panels` (Escape there closes the find bar, not the viewer).
+  `FileViewerTarget { line?, query? }` is how a caller says where to land — `project-search.ts` passes the
+  hit's `line_num` and the query, and the viewer centres that line and opens the find bar pre-filled.
+  Without a target it restores the remembered reading position. One close path (`closeOpenViewer`), so a
+  second open saves the first file's position and destroys its editor.
+- `file-position.ts` (pure, `file-position.test.ts`) — the session cache behind that: `positionKey`,
+  `rememberFilePosition` / `recallFilePosition` (capped at `POSITION_CAP`, `mru.ts`-style), and
+  `clampPosition` / `clampLine`, which pull a stale offset or line inside the document the file has
+  since become — CodeMirror throws on a selection past the end of the doc. In memory on purpose: reading
+  state, not a preference, so it never reaches the settings document.
 
 ## Settings & shared app settings
 

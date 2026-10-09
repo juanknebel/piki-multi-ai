@@ -589,7 +589,7 @@ The terminal owns every key it can use. An app shortcut fires while a terminal, 
 | `Ctrl+I` | Quick Edit (in file viewer) |
 | `Ctrl+E` | Open in $EDITOR (in file viewer / search results) |
 | `Ctrl+S` | Save file (in editor) |
-| `Ctrl+F` | Find in file (CodeMirror) |
+| `Ctrl+F` | Find in file (editor tab / file viewer) — CodeMirror's find bar; `Enter` / `Shift+Enter` walk the matches |
 <!-- END:desktop-shortcuts -->
 
 ° = outside-only (see above). On macOS every `Ctrl`/`Alt` above is `⌘`, and copy/paste are `⌘+C` / `⌘+V`. The rows from `Esc` downwards in each group that never appear in Settings ▸ Shortcuts (`Esc`, `Alt+1…9`, `Ctrl+Tab`, copy/paste, `Ctrl+H`, `Ctrl+Enter`, the editor keys, the mouse gestures) are fixed widget bindings; everything else is editable at runtime in Settings ▸ Shortcuts. This table is checked against the shortcut registry by the frontend's `docs-parity.test.ts`: every default key and action name must appear here, and no `Ctrl+…` / `Alt+…` key may be listed that nothing defines.
@@ -652,6 +652,15 @@ The common git loop runs from the panel, the Git menu or the palette without a s
 - **`Enter` edits, `Alt+Enter` views**: `Enter` (or a click) opens the file as an editor tab — CodeMirror for code, the WYSIWYG markdown editor for `.md` — exactly what a click in the file tree does; `Alt+Enter` opens the read-only viewer (rendered markdown for `.md`); `Ctrl+E` runs `$EDITOR` in a new terminal tab. Files whose extension says they are not text (images, archives, fonts, media, compiled and database blobs) stay in the viewer whichever key you press.
 - **What is listed**: the index is a gitignore-aware walk (the `ignore` crate, ripgrep's walker) — `.gitignore`, `.ignore`, `.git/info/exclude` and your global excludes all apply, also in a workspace that is not a git repo; dotfiles and dot-directories (`.github/`, `.cargo/`, `.env.example`) are included, `.git` itself is always pruned, symlinks are not followed. The walk stops at 50 000 paths and the footer then says the index is capped.
 - **Caching**: the backend memoises the list per workspace and drops it when the file watcher reports a create, delete or rename (plain edits of listed files keep it) and when you switch workspace, so the next `Ctrl+F` re-walks only when the tree may have changed.
+
+### Desktop file viewer
+
+The read-only overlay (`Alt+Enter` in the file finder, `Enter` on a *Search in Project* hit, and any file whose extension says it is not editable text) is a CodeMirror buffer, so it reads like the editor tab rather than a text dump:
+
+- **Find in file**: `Ctrl+F` — or the *Find* button in the header — opens CodeMirror's find bar; `Enter` / `Shift+Enter` walk the matches and `Esc` closes the bar (a second `Esc` closes the viewer). Focus starts in the buffer, so vim's `/`, the arrows and `PgUp`/`PgDn` work too.
+- **A search hit opens where it matched**: coming from *Search in Project* (`Ctrl+Shift+F`), the viewer lands with the cursor on the matched line, centred, and its find bar already filled with the term you searched for — the other hits in that file are one `Enter` away. (The TUI's `t` does the same by opening `$EDITOR` at the line.)
+- **It remembers where you were reading**: scroll position and cursor are kept per file for the rest of the session, so reopening a file — after a click outside closed the overlay, or after opening something else in between — comes back to where you left off instead of to line 1. The positions live in memory only; they are reading state, not a preference, and are gone on the next launch.
+- `Ctrl+I` quick-edits in place (`Ctrl+S` saves, `Esc` asks before discarding), `Ctrl+E` opens `$EDITOR` in a terminal tab, and *Open in Editor* promotes the file to a real editor tab.
 
 ### Desktop sessions status
 

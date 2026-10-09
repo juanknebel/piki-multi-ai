@@ -186,7 +186,7 @@ const fixedShortcuts: FixedShortcut[] = [
   { category: "Code Editor", key: "Ctrl+I", label: "Quick Edit (in file viewer)" },
   { category: "Code Editor", key: "Ctrl+E", label: "Open in $EDITOR (in file viewer / search results)" },
   { category: "Code Editor", key: "Ctrl+S", label: "Save file (in editor)" },
-  { category: "Code Editor", key: "Ctrl+F", label: "Find in file (CodeMirror)" },
+  { category: "Code Editor", key: "Ctrl+F", label: "Find in file (editor tab / file viewer)" },
 ];
 
 /** Keys a rebind may not claim: they belong to a widget or a hardcoded

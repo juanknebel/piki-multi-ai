@@ -1,6 +1,7 @@
 import { EditorView, basicSetup } from "codemirror";
 import { showConfirm } from "./confirm";
-import { EditorState, Compartment, Extension } from "@codemirror/state";
+import { EditorState, EditorSelection, Compartment, Extension } from "@codemirror/state";
+import { search, openSearchPanel, setSearchQuery, SearchQuery } from "@codemirror/search";
 import { vim } from "@replit/codemirror-vim";
 import * as ipc from "../ipc";
 import { appState } from "../state";
@@ -10,12 +11,38 @@ import { openFileInEditor } from "./open-content";
 import { buildCmTheme } from "../cm-theme";
 import { themeEngine } from "../theme";
 import { attachDialogResize } from "./dialog-resize";
+import {
+  clampLine,
+  clampPosition,
+  positionKey,
+  recallFilePosition,
+  rememberFilePosition,
+} from "../file-position";
 
 const readOnlyComp = new Compartment();
 
-export async function showFileViewer(workspaceIdx: number, path: string) {
-  // Remove existing viewer
-  document.querySelector(".file-viewer-backdrop")?.remove();
+/** Where a caller wants the viewer to land. A project-search hit knows both
+ *  (`project-search.ts` passes the match's line and the query it was found
+ *  by); the file explorer knows neither and gets the remembered reading
+ *  position instead. */
+export interface FileViewerTarget {
+  /** 1-based line to put the cursor on, centred in the viewport. */
+  line?: number;
+  /** Find query to pre-fill the search panel with. */
+  query?: string;
+}
+
+/** The open viewer's close path. A second open runs it instead of just
+ *  dropping the node, so the first file's reading position is saved and its
+ *  editor destroyed rather than orphaned. */
+let closeOpenViewer: (() => void) | null = null;
+
+export async function showFileViewer(
+  workspaceIdx: number,
+  path: string,
+  target: FileViewerTarget = {},
+) {
+  closeOpenViewer?.();
 
   let content: string;
   try {
@@ -26,6 +53,7 @@ export async function showFileViewer(workspaceIdx: number, path: string) {
   }
 
   const fileName = path.split("/").pop() || path;
+  const posKey = positionKey(workspaceIdx, path);
 
   const backdrop = document.createElement("div");
   backdrop.className = "file-viewer-backdrop";
@@ -36,13 +64,7 @@ export async function showFileViewer(workspaceIdx: number, path: string) {
   dialog.innerHTML = `
     <div class="ui-header">
       <span class="ui-header-title" title="${escapeAttr(path)}">${escapeHtml(fileName)}<span class="file-viewer-path">${escapeHtml(path)}</span></span>
-      <div class="file-viewer-actions">
-        <button data-variant="secondary" data-size="sm" class="ui-btn file-viewer-open-editor" title="Open in Editor Tab">Open in Editor</button>
-        <button data-variant="secondary" data-size="sm" class="ui-btn file-viewer-inline-edit" title="Quick Edit (${formatShortcut("Ctrl+I")})">Quick Edit</button>
-        <button data-variant="secondary" data-size="sm" class="ui-btn file-viewer-edit" title="Open in $EDITOR (${formatShortcut("Ctrl+E")})">Edit</button>
-        <button data-variant="secondary" data-size="sm" class="ui-btn file-viewer-copy" title="Copy to clipboard">Copy</button>
-        <button data-variant="ghost" data-icon class="file-viewer-close ui-btn" title="Close" aria-label="Close">&times;</button>
-      </div>
+      <div class="file-viewer-actions"></div>
     </div>
     <div class="file-viewer-body"></div>
   `;
@@ -63,6 +85,9 @@ export async function showFileViewer(workspaceIdx: number, path: string) {
       extensions: [
         vim(),
         basicSetup,
+        // basicSetup carries searchKeymap already; this adds the panel state
+        // `setSearchQuery` writes into, and pins the find bar to the top.
+        search({ top: true }),
         ...(langExt ? [langExt] : []),
         buildCmTheme(
           (k) => themeEngine.getEffectiveColor(k),
@@ -77,22 +102,43 @@ export async function showFileViewer(workspaceIdx: number, path: string) {
   let editing = false;
 
   const close = () => {
+    rememberFilePosition(posKey, {
+      top: editorView.scrollDOM.scrollTop,
+      anchor: editorView.state.selection.main.anchor,
+      head: editorView.state.selection.main.head,
+    });
+    closeOpenViewer = null;
     editorView.destroy();
     backdrop.remove();
   };
+  closeOpenViewer = close;
+
+  // ── Where to land ──────────────────────────
+  // An explicit line from a search hit wins over the remembered position.
+
+  if (target.line !== undefined) {
+    const doc = editorView.state.doc;
+    const at = doc.line(clampLine(target.line, doc.lines)).from;
+    editorView.dispatch({
+      selection: EditorSelection.cursor(at),
+      effects: EditorView.scrollIntoView(at, { y: "center" }),
+    });
+  } else {
+    const back = clampPosition(recallFilePosition(posKey), editorView.state.doc.length);
+    if (back) {
+      editorView.dispatch({ selection: EditorSelection.range(back.anchor, back.head) });
+      editorView.scrollDOM.scrollTop = back.top;
+    }
+  }
 
   // ── View mode actions ──────────────────────
-
-  dialog.querySelector(".file-viewer-close")!.addEventListener("click", close);
 
   function openInEditorTab() {
     openFileInEditor(workspaceIdx, path, { forceCode: true });
     close();
   }
 
-  dialog.querySelector(".file-viewer-open-editor")!.addEventListener("click", openInEditorTab);
-
-  dialog.querySelector(".file-viewer-edit")!.addEventListener("click", async () => {
+  async function openExternalEditor() {
     close();
     try {
       const tabId = await ipc.spawnEditorTab(workspaceIdx, path);
@@ -100,11 +146,34 @@ export async function showFileViewer(workspaceIdx: number, path: string) {
     } catch (err) {
       toast(`Failed to open editor: ${err}`, "error");
     }
-  });
+  }
 
-  dialog.querySelector(".file-viewer-copy")!.addEventListener("click", () => {
+  function copyToClipboard() {
     ipc.clipboardCopy(content).then(() => toast("Copied to clipboard", "success")).catch(() => {});
-  });
+  }
+
+  /** The view-mode header row. One definition — edit mode swaps the row out
+   *  and `exitEditMode` asks for it back. */
+  function renderViewActions() {
+    actionsDiv.innerHTML = `
+      <button data-variant="secondary" data-size="sm" class="ui-btn file-viewer-open-editor" title="Open in Editor Tab">Open in Editor</button>
+      <button data-variant="secondary" data-size="sm" class="ui-btn file-viewer-find" title="Find in file (${formatShortcut("Ctrl+F")})">Find</button>
+      <button data-variant="secondary" data-size="sm" class="ui-btn file-viewer-inline-edit" title="Quick Edit (${formatShortcut("Ctrl+I")})">Quick Edit</button>
+      <button data-variant="secondary" data-size="sm" class="ui-btn file-viewer-edit" title="Open in $EDITOR (${formatShortcut("Ctrl+E")})">Edit</button>
+      <button data-variant="secondary" data-size="sm" class="ui-btn file-viewer-copy" title="Copy to clipboard">Copy</button>
+      <button data-variant="ghost" data-icon class="file-viewer-close ui-btn" title="Close" aria-label="Close">&times;</button>
+    `;
+    actionsDiv.querySelector(".file-viewer-open-editor")!.addEventListener("click", openInEditorTab);
+    actionsDiv.querySelector(".file-viewer-find")!.addEventListener("click", () => {
+      openSearchPanel(editorView);
+    });
+    actionsDiv.querySelector(".file-viewer-inline-edit")!.addEventListener("click", enterEditMode);
+    actionsDiv.querySelector(".file-viewer-edit")!.addEventListener("click", openExternalEditor);
+    actionsDiv.querySelector(".file-viewer-copy")!.addEventListener("click", copyToClipboard);
+    actionsDiv.querySelector(".file-viewer-close")!.addEventListener("click", close);
+  }
+
+  renderViewActions();
 
   // ── Inline edit mode ──────────────────────
 
@@ -168,34 +237,9 @@ export async function showFileViewer(workspaceIdx: number, path: string) {
       effects: readOnlyComp.reconfigure(EditorState.readOnly.of(true)),
     });
 
-    actionsDiv.innerHTML = `
-      <button data-variant="secondary" data-size="sm" class="ui-btn file-viewer-open-editor" title="Open in Editor Tab">Open in Editor</button>
-      <button data-variant="secondary" data-size="sm" class="ui-btn file-viewer-inline-edit" title="Quick Edit (${formatShortcut("Ctrl+I")})">Quick Edit</button>
-      <button data-variant="secondary" data-size="sm" class="ui-btn file-viewer-edit" title="Open in $EDITOR (${formatShortcut("Ctrl+E")})">Edit</button>
-      <button data-variant="secondary" data-size="sm" class="ui-btn file-viewer-copy" title="Copy to clipboard">Copy</button>
-      <button data-variant="ghost" data-icon class="file-viewer-close ui-btn" title="Close" aria-label="Close">&times;</button>
-    `;
-
-    actionsDiv.querySelector(".file-viewer-open-editor")!.addEventListener("click", openInEditorTab);
-    actionsDiv.querySelector(".file-viewer-inline-edit")!.addEventListener("click", enterEditMode);
-    actionsDiv.querySelector(".file-viewer-edit")!.addEventListener("click", async () => {
-      close();
-      try {
-        const tabId = await ipc.spawnEditorTab(workspaceIdx, path);
-        appState.addTab(workspaceIdx, { id: tabId, provider: "Shell", alive: true });
-      } catch (err) {
-        toast(`Failed to open editor: ${err}`, "error");
-      }
-    });
-    actionsDiv.querySelector(".file-viewer-copy")!.addEventListener("click", () => {
-      ipc.clipboardCopy(content).then(() => toast("Copied to clipboard", "success")).catch(() => {});
-    });
-    actionsDiv.querySelector(".file-viewer-close")!.addEventListener("click", close);
-
-    backdrop.focus();
+    renderViewActions();
+    editorView.focus();
   }
-
-  dialog.querySelector(".file-viewer-inline-edit")!.addEventListener("click", enterEditMode);
 
   // ── Keyboard shortcuts ──────────────────────
 
@@ -203,7 +247,14 @@ export async function showFileViewer(workspaceIdx: number, path: string) {
     if (e.target === backdrop && !editing) close();
   });
 
+  /** Keys typed inside CodeMirror's own panel (the find bar) belong to
+   *  CodeMirror: Escape there closes the panel, not the viewer. */
+  const inCmPanel = (e: KeyboardEvent) =>
+    !!(e.target as HTMLElement | null)?.closest(".cm-panels");
+
   backdrop.addEventListener("keydown", (e) => {
+    if (inCmPanel(e)) return;
+
     if (editing) {
       if (e.key === "s" && modCtrl(e)) {
         e.preventDefault();
@@ -223,17 +274,24 @@ export async function showFileViewer(workspaceIdx: number, path: string) {
     }
     if (e.key === "e" && modCtrl(e)) {
       e.preventDefault();
-      close();
-      ipc.spawnEditorTab(workspaceIdx, path).then((tabId) => {
-        appState.addTab(workspaceIdx, { id: tabId, provider: "Shell", alive: true });
-      }).catch((err) => {
-        toast(`Failed to open editor: ${err}`, "error");
-      });
+      openExternalEditor();
     }
   });
 
+  // A click on the dialog's chrome lands here, so the shortcuts above keep
+  // working — but the initial focus goes to the editor, never the backdrop:
+  // every key the viewer offers (Ctrl+F's find panel, vim's `/`, the arrows,
+  // PageDown) is CodeMirror's, and a focused backdrop swallowed all of them.
   backdrop.setAttribute("tabindex", "0");
-  backdrop.focus();
+
+  if (target.query) {
+    editorView.dispatch({
+      effects: setSearchQuery.of(new SearchQuery({ search: target.query })),
+    });
+    openSearchPanel(editorView); // focuses its own input, pre-filled
+  } else {
+    editorView.focus();
+  }
 }
 
 async function getLanguageExtension(filePath: string): Promise<Extension | null> {
