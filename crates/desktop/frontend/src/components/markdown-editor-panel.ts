@@ -17,18 +17,16 @@ import { listener, listenerCtx } from "@milkdown/kit/plugin/listener";
 import { clipboard } from "@milkdown/kit/plugin/clipboard";
 import { callCommand } from "@milkdown/kit/utils";
 import "@milkdown/kit/prose/view/style/prosemirror.css";
+import { applyScroll, trackScroll, type ScrollPos } from "./scroll-memory";
 
 interface MdEditorInstance {
   tabId: string;
   filePath: string;
   element: HTMLDivElement;
   editor: Editor | null;
-  /** Reading position, recorded on every scroll while the panel is VISIBLE
-   *  and re-applied by the next mount. A hidden element has no layout box
-   *  and reports `scrollTop` 0, and `pane-view.ts render()` detaches the
-   *  outgoing tab's panes before the panel's own unmount runs — so capturing
-   *  on the way out would faithfully record a zero. */
-  scrollTop: number;
+  /** Reading position, recorded while the panel is visible — see
+   *  scroll-memory.ts. */
+  scroll: Map<string, ScrollPos>;
 }
 
 const instances = new Map<string, MdEditorInstance>();
@@ -68,7 +66,7 @@ function scrollerOf(inst: MdEditorInstance): HTMLElement | null {
 
 /** The ONE way a panel goes invisible. It deliberately does NOT read the
  *  scroll position — by the time any unmount runs the element may already be
- *  detached and reporting 0 (see `scrollTop`). */
+ *  detached and reporting 0 (see scroll-memory.ts). */
 function hidePanel(inst: MdEditorInstance) {
   inst.element.style.display = "none";
 }
@@ -104,12 +102,8 @@ export function mountMarkdownEditorInto(tabId: string, host: HTMLElement) {
     host.appendChild(inst.element);
   }
   inst.element.style.display = "flex";
-  // The element has a layout box again, so the scroller will take an offset
-  // (see `scrollTop`).
-  if (inst.scrollTop > 0) {
-    const scroller = scrollerOf(inst);
-    if (scroller) scroller.scrollTop = inst.scrollTop;
-  }
+  // The element has a layout box again, so the scroller will take an offset.
+  applyScroll(scrollerOf(inst), inst.scroll.get("doc"));
 }
 
 export function unmountMarkdownEditor(tabId: string) {
@@ -184,7 +178,11 @@ function createPanel(tabId: string, filePath: string): MdEditorInstance {
 
   mainContent.appendChild(el);
 
-  const inst: MdEditorInstance = { tabId, filePath, element: el, editor: null, scrollTop: 0 };
+  const inst: MdEditorInstance = { tabId, filePath, element: el, editor: null, scroll: new Map() };
+
+  // On the panel root, so it is already listening when milkdown mounts
+  // `.ProseMirror` (the scroller) asynchronously below.
+  trackScroll(el, inst.scroll, (t) => (t.classList.contains("ProseMirror") ? "doc" : null));
 
   const wsIdx = appState.activeWorkspace;
   ipc.readFileContent(wsIdx, filePath).then(async (content) => {
@@ -206,13 +204,6 @@ function createPanel(tabId: string, filePath: string): MdEditorInstance {
       .create();
 
     inst.editor = editor;
-
-    // See `scrollTop`: recorded here, while the panel is on screen, never on
-    // the way out. `.ProseMirror` only exists once milkdown has mounted.
-    const scroller = scrollerOf(inst);
-    scroller?.addEventListener("scroll", () => {
-      inst.scrollTop = scroller.scrollTop;
-    });
 
     buildToolbar(el, editor);
 

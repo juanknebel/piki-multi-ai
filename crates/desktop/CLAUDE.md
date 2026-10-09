@@ -146,7 +146,13 @@ just lint-desktop                           # frontend test + build, then clippy
   mount re-applies it once the element has a layout box again. A `scroll` event cannot fire while the
   element is detached, so the last recorded value is always one the user actually read at. The
   scroll-listener + round trip is verified in a headless Chromium replay of that exact order.
-  `api-panel.ts` and `kanban-panel.ts` have the same hide shape and are NOT covered yet.
+  Every non-CodeMirror panel goes through `components/scroll-memory.ts` (`trackScroll` /
+  `applyScroll`): ONE capture-phase `scroll` listener on the panel's stable root — `scroll` does not
+  bubble but does reach ancestors on the way down — keyed per scroller, so it keeps recording across
+  the re-renders that replace the scrollers underneath. That is what lets the kanban board rebuild
+  every column on mount and still come back to the same place (and keeps a search / sort / filter
+  from jumping the board to the top). Covered: code editor, markdown editor, the API explorer's
+  request editor and response pane, the kanban board and each of its columns.
 - **Dead tabs**: `markTabDead` (on `pty-exit`) emits `tabs-changed` + `pane-tree-changed` so the
   `.ws-tab--dead` chip, the pane-head Restart button (`restartPaneContent`: `ipc.closeTab` the exited tab →
   `ipc.spawnTab` same provider → `appState.replacePaneContent` into the same pane, custom title carried
@@ -596,6 +602,9 @@ feature-specific modifiers in feature CSS; never re-declare a button/input/surfa
     `CtxItem { label, action, danger, disabled, separator }`, styles in `context-menu.css`).
   - `components/dropdown.ts createDropdown(options, initial)` — the only select (never a native
     `<select>`): `.dialog-dropdown-trigger` sized like `.ui-input`, list at `--z-popover`.
+  - `components/scroll-memory.ts trackScroll(root, into, keyOf)` / `applyScroll(el, pos)` — any panel
+    that hides itself on a tab switch and has something to scroll (see *A hidden panel loses its
+    scroll* above).
 - **How to add a dialog**: `backdrop.className = "dialog-backdrop <family>-backdrop"` (open() removes only
   `.<family>-backdrop` — removing bare `.dialog-backdrop` destroys unrelated open dialogs);
   `dialog.className = "dialog ui-surface"` (add `dialog-lg` when the content is long text — paths,

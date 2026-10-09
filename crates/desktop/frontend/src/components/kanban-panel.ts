@@ -5,6 +5,7 @@ import { showDispatchDialog } from "./dialogs/dispatch-dialog";
 import { createDropdown } from "./dropdown";
 import type { KanbanBoard, KanbanCard } from "../types";
 import { PRIORITY_CSS } from "../types";
+import { applyScroll, trackScroll, type ScrollPos } from "./scroll-memory";
 
 const PRIORITY_OPTIONS = [
   { value: "Bug", label: "Bug" },
@@ -24,6 +25,20 @@ interface KanbanInstance {
   searchQuery: string;
   sortOrder: SortOrder;
   projectFilter: string[]; // empty = show all
+  /** Where the board and each column were scrolled, recorded while the panel
+   *  is visible — see scroll-memory.ts. `renderBoard` rebuilds every
+   *  scroller, so this also survives a search / sort / filter. */
+  scroll: Map<string, ScrollPos>;
+}
+
+/** The board scrolls sideways, each column scrolls on its own. */
+function kanbanScrollKey(el: Element): string | null {
+  if (el.classList.contains("kanban-columns")) return "board";
+  if (el.classList.contains("kanban-cards")) {
+    const id = (el as HTMLElement).dataset.colId;
+    return id ? `col:${id}` : null;
+  }
+  return null;
 }
 
 // ── Column colors ────────────────────────────────
@@ -83,8 +98,11 @@ export async function mountKanbanInto(tabId: string, host: HTMLElement) {
     const el = document.createElement("div");
     el.className = "kanban-board";
     host.appendChild(el);
-    inst = { tabId, element: el, board: null, allProjects: [], searchQuery: "", sortOrder: "none", projectFilter: [] };
+    inst = { tabId, element: el, board: null, allProjects: [], searchQuery: "", sortOrder: "none", projectFilter: [], scroll: new Map() };
     instances.set(tabId, inst);
+    // Recorded while the panel is on screen, never on the way out
+    // (scroll-memory.ts).
+    trackScroll(el, inst.scroll, kanbanScrollKey);
   } else if (inst.element.parentElement !== host) {
     host.appendChild(inst.element);
   }
@@ -300,6 +318,8 @@ function renderColumns(inst: KanbanInstance) {
     // Cards container
     const cardsEl = document.createElement("div");
     cardsEl.className = "kanban-cards";
+    cardsEl.dataset.colId = col.id; // keys this column's remembered scroll
+
 
     col.cards.forEach((card) => {
       const cardEl = renderCard(inst, card, colIdx, board);
@@ -339,6 +359,14 @@ function renderColumns(inst: KanbanInstance) {
 
   el.querySelector(".kanban-columns")?.remove();
   el.appendChild(colsContainer);
+
+  // The scrollers were just rebuilt — put the remembered positions back, so
+  // a tab switch, a search or a sort all keep your place on the board.
+  applyScroll(colsContainer, inst.scroll.get("board"));
+  colsContainer.querySelectorAll<HTMLElement>(".kanban-cards").forEach((cards) => {
+    const key = kanbanScrollKey(cards);
+    if (key) applyScroll(cards, inst.scroll.get(key));
+  });
 }
 
 function renderCard(
