@@ -618,7 +618,7 @@ The terminal owns every key it can use. An app shortcut fires while a terminal, 
 | `Ctrl+I` | Quick Edit (in file viewer) |
 | `Ctrl+E` | Open in $EDITOR (in file viewer / search results) |
 | `Ctrl+S` | Save file (in editor) |
-| `Ctrl+F` | Find in file (editor tab / file viewer) — CodeMirror's find bar; `Enter` / `Shift+Enter` walk the matches |
+| `Ctrl+F` | Find in file (editor tab / file viewer) — CodeMirror's find bar; `Enter` / `Shift+Enter` walk the matches. The markdown viewer has its own `<mark>` find bar with the same keys |
 <!-- END:desktop-shortcuts -->
 
 ° = outside-only (see above). On macOS every `Ctrl`/`Alt` above is `⌘`, and copy/paste are `⌘+C` / `⌘+V`. The rows from `Esc` downwards in each group that never appear in Settings ▸ Shortcuts (`Esc`, `Alt+1…9`, `Ctrl+Tab`, copy/paste, `Ctrl+H`, `Ctrl+Enter`, the editor keys, the mouse gestures) are fixed widget bindings; everything else is editable at runtime in Settings ▸ Shortcuts. This table is checked against the shortcut registry by the frontend's `docs-parity.test.ts`: every default key and action name must appear here, and no `Ctrl+…` / `Alt+…` key may be listed that nothing defines.

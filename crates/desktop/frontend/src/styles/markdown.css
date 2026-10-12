@@ -412,3 +412,40 @@
 .md-editor-body .ProseMirror-selectednode {
   outline: 2px solid var(--text-accent);
 }
+
+/* ── Find in file (viewer) ───────────────────────
+   Same roles as the API panel's `.api-search-*`: bar under the header,
+   a count, `<mark>` hits with the current one outlined. Token-only. */
+
+.md-search-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 4px 8px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-primary);
+  flex-shrink: 0;
+}
+
+.md-search-input {
+  flex: 1;
+  font-family: var(--font-mono);
+}
+
+.md-search-count {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  min-width: 60px;
+  text-align: center;
+}
+
+.md-find-hit {
+  background: color-mix(in srgb, var(--warning-color) 30%, transparent);
+  border-radius: var(--radius-xs);
+  color: inherit;
+}
+
+.md-find-current {
+  background: color-mix(in srgb, var(--warning-color) 70%, transparent);
+  outline: 1px solid var(--warning-color);
+}

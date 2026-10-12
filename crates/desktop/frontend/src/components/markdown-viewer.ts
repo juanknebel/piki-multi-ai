@@ -54,10 +54,93 @@ export async function showMarkdown(filePath: string) {
   const close = () => { overlayEl?.remove(); overlayEl = null; };
   let editing = false;
 
+  // ── Find in file ──────────────────────────────────────────────
+  // Same keys as the file viewer (Ctrl+F, Enter/Shift+Enter, Esc):
+  // a bar under the header, `<mark>` hits over the rendered HTML.
+  let findOpen = false;
+  let hits: HTMLElement[] = [];
+  let hitIdx = 0;
+  let baseHtml = "";
+
+  function mdContent(): HTMLElement | null {
+    return viewer.querySelector(".md-content");
+  }
+
+  function clearMarks() {
+    const el = mdContent();
+    if (el) el.innerHTML = baseHtml;
+    hits = [];
+    hitIdx = 0;
+    findCount.textContent = "";
+  }
+
+  function showHit() {
+    const el = mdContent();
+    if (!el || hits.length === 0) return;
+    el.querySelector(".md-find-current")?.classList.remove("md-find-current");
+    const hit = hits[hitIdx];
+    hit.classList.add("md-find-current");
+    hit.scrollIntoView({ block: "center" });
+    findCount.textContent = `${hitIdx + 1}/${hits.length}`;
+  }
+
+  function runFind() {
+    clearMarks();
+    const query = findInput.value;
+    if (!query) return;
+    const el = mdContent();
+    if (!el) return;
+    // Snapshot the text nodes first — wrapping mutates the tree live.
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    const nodes: Text[] = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode as Text);
+    for (let node of nodes) {
+      for (;;) {
+        const text = node.textContent ?? "";
+        const at = text.toLowerCase().indexOf(query.toLowerCase());
+        if (at < 0) break;
+        const matchPart = node.splitText(at);
+        const rest = matchPart.splitText(query.length);
+        const mark = document.createElement("mark");
+        mark.className = "md-find-hit";
+        matchPart.parentNode!.replaceChild(mark, matchPart);
+        mark.appendChild(matchPart);
+        hits.push(mark);
+        node = rest;
+        if (!node.textContent) break;
+      }
+    }
+    if (hits.length > 0) showHit();
+    else findCount.textContent = "0/0";
+  }
+
+  function stepFind(dir: 1 | -1) {
+    if (hits.length === 0) return;
+    hitIdx = (hitIdx + dir + hits.length) % hits.length;
+    showHit();
+  }
+
+  function openFind() {
+    if (editing) return;
+    findOpen = true;
+    findBar.hidden = false;
+    findInput.focus();
+    findInput.select();
+    runFind();
+  }
+
+  function closeFind() {
+    findOpen = false;
+    findBar.hidden = true;
+    clearMarks();
+  }
+
   function renderViewMode() {
+    closeFind();
     header.innerHTML = `
       <span class="ui-header-title">${esc(fileName)}<span style="color:var(--text-muted);font-weight:400;margin-left:8px;font-size:11px">${esc(filePath)}</span></span>
       <div style="display:flex;gap:4px;align-items:center">
+        <button data-variant="secondary" data-size="sm" class="ui-btn md-find" title="Find in file (${formatShortcut("Ctrl+F")})">Find</button>
         <button data-variant="secondary" data-size="sm" class="ui-btn md-quick-edit" title="Quick Edit (${formatShortcut("Ctrl+I")})">Quick Edit</button>
         <button data-variant="secondary" data-size="sm" class="ui-btn md-edit" title="Open in $EDITOR (${formatShortcut("Ctrl+E")})">Edit</button>
         <button data-variant="secondary" data-size="sm" class="ui-btn md-copy" title="Copy to clipboard">Copy</button>
@@ -67,12 +150,14 @@ export async function showMarkdown(filePath: string) {
 
     const body = viewer.querySelector(".md-body") as HTMLElement;
     body.innerHTML = "";
-    const mdContent = document.createElement("div");
-    mdContent.className = "md-content";
-    mdContent.innerHTML = renderMarkdown(content);
-    body.appendChild(mdContent);
+    const contentEl = document.createElement("div");
+    contentEl.className = "md-content";
+    baseHtml = renderMarkdown(content);
+    contentEl.innerHTML = baseHtml;
+    body.appendChild(contentEl);
 
     header.querySelector(".dialog-close")!.addEventListener("click", close);
+    header.querySelector(".md-find")!.addEventListener("click", openFind);
     header.querySelector(".md-quick-edit")!.addEventListener("click", enterEditMode);
     header.querySelector(".md-edit")!.addEventListener("click", () => {
       close();
@@ -145,6 +230,39 @@ export async function showMarkdown(filePath: string) {
 
   viewer.appendChild(header);
 
+  const findBar = document.createElement("div");
+  findBar.className = "md-search-bar";
+  findBar.hidden = true;
+  findBar.innerHTML = `
+    <input class="ui-input md-search-input" placeholder="Find in file" aria-label="Find in file" />
+    <span class="md-search-count"></span>
+    <button data-variant="ghost" data-size="sm" class="ui-btn md-find-prev" title="Previous match (Shift+Enter)" aria-label="Previous match">↑</button>
+    <button data-variant="ghost" data-size="sm" class="ui-btn md-find-next" title="Next match (Enter)" aria-label="Next match">↓</button>
+    <button data-variant="ghost" data-icon class="ui-btn md-find-close" title="Close find bar" aria-label="Close find bar">×</button>
+  `;
+  viewer.appendChild(findBar);
+  const findInput = findBar.querySelector(".md-search-input") as HTMLInputElement;
+  const findCount = findBar.querySelector(".md-search-count") as HTMLElement;
+  findInput.addEventListener("input", runFind);
+  findInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      e.stopPropagation();
+      stepFind(e.shiftKey ? -1 : 1);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      closeFind();
+      backdrop.focus();
+    }
+  });
+  findBar.querySelector(".md-find-prev")!.addEventListener("click", () => stepFind(-1));
+  findBar.querySelector(".md-find-next")!.addEventListener("click", () => stepFind(1));
+  findBar.querySelector(".md-find-close")!.addEventListener("click", () => {
+    closeFind();
+    backdrop.focus();
+  });
+
   const body = document.createElement("div");
   body.className = "md-body";
   body.style.cssText = "flex:1;overflow:auto;min-height:0";
@@ -166,7 +284,12 @@ export async function showMarkdown(filePath: string) {
       if (e.key === "Escape") { e.preventDefault(); requestExitEditMode(); }
       return;
     }
-    if (e.key === "Escape") close();
+    if (e.key === "Escape") {
+      // The open find bar eats the first Escape; the second closes.
+      if (findOpen) { e.preventDefault(); closeFind(); return; }
+      close();
+    }
+    if (e.key === "f" && modCtrl(e)) { e.preventDefault(); openFind(); }
     if (e.key === "i" && modCtrl(e)) { e.preventDefault(); enterEditMode(); }
     if (e.key === "e" && modCtrl(e)) {
       e.preventDefault();
@@ -178,6 +301,22 @@ export async function showMarkdown(filePath: string) {
   });
   backdrop.setAttribute("tabindex", "0");
   backdrop.focus();
+}
+
+/** Case-insensitive offsets of every non-overlapping `query` hit in `text`.
+ *  Pure helper behind the viewer's find bar (the DOM wrapping is thin). */
+export function findMatchOffsets(text: string, query: string): number[] {
+  if (!query) return [];
+  const lower = text.toLowerCase();
+  const q = query.toLowerCase();
+  const out: number[] = [];
+  let from = 0;
+  for (;;) {
+    const at = lower.indexOf(q, from);
+    if (at < 0) return out;
+    out.push(at);
+    from = at + q.length;
+  }
 }
 
 /** Render markdown source to HTML via marked (GFM) + highlight.js fences.
