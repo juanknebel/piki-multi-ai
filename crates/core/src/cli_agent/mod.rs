@@ -62,6 +62,15 @@ pub enum CliAgentEvent {
         session_id: String,
         tool_name: Option<String>,
     },
+    /// A tool call started. Refreshes Running so long tool chains can't look
+    /// idle; carries no attention. The Antigravity bridge also uses this as
+    /// the fail-safe outcome of its PreToolUse prediction (see
+    /// `install_antigravity`): only a predicted permission prompt becomes a
+    /// `PermissionRequest`.
+    PreToolUse {
+        session_id: String,
+        tool_name: Option<String>,
+    },
     /// The agent wants to run a tool and needs the user's approval.
     PermissionRequest {
         session_id: String,
@@ -90,6 +99,7 @@ impl CliAgentEvent {
             CliAgentEvent::SessionStart { session_id, .. }
             | CliAgentEvent::UserPromptSubmit { session_id }
             | CliAgentEvent::PostToolUse { session_id, .. }
+            | CliAgentEvent::PreToolUse { session_id, .. }
             | CliAgentEvent::PermissionRequest { session_id, .. }
             | CliAgentEvent::Notification { session_id, .. }
             | CliAgentEvent::Stop { session_id, .. } => session_id,
@@ -112,6 +122,7 @@ impl CliAgentEvent {
             CliAgentEvent::Stop { response, .. } => Some(("stop", response.as_deref())),
             CliAgentEvent::SessionStart { .. }
             | CliAgentEvent::UserPromptSubmit { .. }
+            | CliAgentEvent::PreToolUse { .. }
             | CliAgentEvent::PostToolUse { .. } => None,
         }
     }
@@ -190,6 +201,15 @@ impl CliAgentState {
             }
             CliAgentEvent::PostToolUse { .. } => {
                 self.status = CliAgentStatus::Running;
+            }
+            CliAgentEvent::PreToolUse { .. } => {
+                // A tool started: still working. Deliberately does NOT clear
+                // a WaitingPermission set by an earlier prediction — only the
+                // tool's completion (or the user's approval + completion)
+                // proves the prompt is gone.
+                if self.status != CliAgentStatus::WaitingPermission {
+                    self.status = CliAgentStatus::Running;
+                }
             }
             CliAgentEvent::PermissionRequest { summary, .. } => {
                 self.status = CliAgentStatus::WaitingPermission;
@@ -417,6 +437,10 @@ pub fn parse_cli_agent_payload(json: &str) -> Option<CliAgentEvent> {
             session_id,
             tool_name: non_empty(raw.tool_name),
         },
+        "tool_started" => CliAgentEvent::PreToolUse {
+            session_id,
+            tool_name: non_empty(raw.tool_name),
+        },
         "permission_request" => CliAgentEvent::PermissionRequest {
             session_id,
             tool_name: raw.tool_name.unwrap_or_default(),
@@ -567,6 +591,13 @@ mod tests {
                 },
             ),
             (
+                "tool_started",
+                CliAgentEvent::PreToolUse {
+                    session_id: "s".into(),
+                    tool_name: None,
+                },
+            ),
+            (
                 "notification",
                 CliAgentEvent::Notification {
                     session_id: "s".into(),
@@ -657,6 +688,46 @@ mod tests {
             .attention(),
             None
         );
+        assert_eq!(
+            CliAgentEvent::PreToolUse {
+                session_id: "s".into(),
+                tool_name: None,
+            }
+            .attention(),
+            None
+        );
+    }
+
+    #[test]
+    fn pre_tool_use_refreshes_running_but_keeps_predicted_permission() {
+        let mut s = CliAgentState::new();
+        s.apply_event(&CliAgentEvent::PreToolUse {
+            session_id: "s".into(),
+            tool_name: Some("run_command".into()),
+        });
+        assert_eq!(s.status, CliAgentStatus::Running);
+        assert!(s.last_attention_at.is_none());
+
+        // A predicted prompt survives later tool starts: only the tool's
+        // completion proves the user approved and the run moved on.
+        s.apply_event(&CliAgentEvent::PermissionRequest {
+            session_id: "s".into(),
+            tool_name: "run_command".into(),
+            summary: "Wants to run run_command: rm".into(),
+        });
+        assert_eq!(s.status, CliAgentStatus::WaitingPermission);
+        s.apply_event(&CliAgentEvent::PreToolUse {
+            session_id: "s".into(),
+            tool_name: Some("run_command".into()),
+        });
+        assert_eq!(s.status, CliAgentStatus::WaitingPermission);
+
+        // ...while completion always clears it back to Running.
+        s.apply_event(&CliAgentEvent::PostToolUse {
+            session_id: "s".into(),
+            tool_name: Some("run_command".into()),
+        });
+        assert_eq!(s.status, CliAgentStatus::Running);
     }
 
     #[test]

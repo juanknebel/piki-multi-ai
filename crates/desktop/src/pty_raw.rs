@@ -679,6 +679,7 @@ fn cli_agent_view(ev: &CliAgentEvent) -> (&'static str, &'static str, Option<Str
         CliAgentEvent::SessionStart { .. } => ("running", "session_start", None, false),
         CliAgentEvent::UserPromptSubmit { .. } => ("running", "prompt_submit", None, false),
         CliAgentEvent::PostToolUse { .. } => ("running", "tool_complete", None, false),
+        CliAgentEvent::PreToolUse { .. } => ("running", "tool_started", None, false),
         CliAgentEvent::PermissionRequest { summary, .. } => (
             "waiting-permission",
             "permission_request",

@@ -9,11 +9,11 @@ use crossterm::event::{KeyCode, KeyModifiers};
 use piki_core::storage::AgentProfile;
 
 use super::dialog::{
-    handle_about_input, handle_confirm_close_tab_input, handle_confirm_delete_input,
-    handle_confirm_quit_input, handle_dashboard_input, handle_dispatch_agent_input,
-    handle_dispatch_card_move_input, handle_edit_agent_input, handle_edit_agent_role_input,
-    handle_edit_provider_input, handle_edit_workspace_input, handle_help_input,
-    handle_import_agents_input, handle_logs_input, handle_manage_agents_input,
+    handle_about_input, handle_broadcast_input, handle_confirm_close_tab_input,
+    handle_confirm_delete_input, handle_confirm_quit_input, handle_dashboard_input,
+    handle_dispatch_agent_input, handle_dispatch_card_move_input, handle_edit_agent_input,
+    handle_edit_agent_role_input, handle_edit_provider_input, handle_edit_workspace_input,
+    handle_help_input, handle_import_agents_input, handle_logs_input, handle_manage_agents_input,
     handle_manage_providers_input, handle_missing_prereqs_input, handle_move_tab_input,
     handle_new_tab_input, handle_new_workspace_input, handle_pr_picker_input,
     handle_projects_input, handle_sessions_input, handle_workspace_info_input,
@@ -232,6 +232,9 @@ fn open_edit_provider(app: &mut App) {
         dispatchable: true,
         agent_dir: String::new(),
         agent_dir_cursor: 0,
+        idle_threshold: String::new(),
+        idle_threshold_cursor: 0,
+        idle_notify: true,
         active_field: EditProviderField::Name,
     });
 }
@@ -1777,7 +1780,7 @@ fn manage_providers_returns_none_when_dialog_not_active() {
 // ── EditProvider ───────────────────────────────────────────────────────
 
 #[test]
-fn edit_provider_tab_cycles_eight_fields_forward() {
+fn edit_provider_tab_cycles_ten_fields_forward() {
     let mut app = test_app();
     open_edit_provider(&mut app);
 
@@ -1789,6 +1792,8 @@ fn edit_provider_tab_cycles_eight_fields_forward() {
         EditProviderField::PromptFlag,
         EditProviderField::Dispatchable,
         EditProviderField::AgentDir,
+        EditProviderField::IdleThreshold,
+        EditProviderField::IdleNotify,
         EditProviderField::Name, // wrap
     ];
     for expected in sequence {
@@ -1805,13 +1810,13 @@ fn edit_provider_back_tab_cycles_in_reverse() {
     handle_edit_provider_input(&mut app, key(KeyCode::BackTab));
     assert_eq!(
         edit_provider_active_field(&app),
-        EditProviderField::AgentDir
+        EditProviderField::IdleNotify
     );
 
     handle_edit_provider_input(&mut app, key(KeyCode::BackTab));
     assert_eq!(
         edit_provider_active_field(&app),
-        EditProviderField::Dispatchable
+        EditProviderField::IdleThreshold
     );
 }
 
@@ -1915,6 +1920,107 @@ fn edit_provider_dispatchable_arrow_keys_also_toggle() {
     handle_edit_provider_input(&mut app, key(KeyCode::Right));
     let (_, _, _, after_right) = edit_provider_field_state(&app);
     assert_eq!(after_right, initial);
+}
+
+#[test]
+fn edit_provider_idle_threshold_accepts_only_digits() {
+    let mut app = test_app();
+    open_edit_provider(&mut app);
+    // Move to IdleThreshold (Tab x8: Name → ... → IdleThreshold)
+    for _ in 0..8 {
+        handle_edit_provider_input(&mut app, key(KeyCode::Tab));
+    }
+    assert_eq!(
+        edit_provider_active_field(&app),
+        EditProviderField::IdleThreshold
+    );
+
+    for c in "12a3b".chars() {
+        handle_edit_provider_input(&mut app, key(KeyCode::Char(c)));
+    }
+
+    match &app.active_dialog {
+        Some(DialogState::EditProvider {
+            idle_threshold,
+            idle_threshold_cursor,
+            ..
+        }) => {
+            assert_eq!(idle_threshold, "123");
+            assert_eq!(*idle_threshold_cursor, 3);
+        }
+        _ => panic!("not in EditProvider dialog"),
+    }
+}
+
+#[test]
+fn edit_provider_idle_notify_space_toggles() {
+    let mut app = test_app();
+    open_edit_provider(&mut app);
+    // Move to IdleNotify (Tab x9)
+    for _ in 0..9 {
+        handle_edit_provider_input(&mut app, key(KeyCode::Tab));
+    }
+    assert_eq!(
+        edit_provider_active_field(&app),
+        EditProviderField::IdleNotify
+    );
+
+    handle_edit_provider_input(&mut app, key(KeyCode::Char(' ')));
+    match &app.active_dialog {
+        Some(DialogState::EditProvider { idle_notify, .. }) => {
+            assert!(!idle_notify);
+        }
+        _ => panic!("not in EditProvider dialog"),
+    }
+}
+
+#[test]
+fn edit_provider_ctrl_s_persists_idle_config() {
+    // Uses isolated paths because Ctrl+S persists providers.toml to disk.
+    let (mut app, _tmp) = test_app_isolated();
+    open_edit_provider(&mut app);
+    // Fill name
+    for c in "idle-pilot".chars() {
+        handle_edit_provider_input(&mut app, key(KeyCode::Char(c)));
+    }
+    // Tab to Command (Name → Desc → Cmd)
+    handle_edit_provider_input(&mut app, key(KeyCode::Tab));
+    handle_edit_provider_input(&mut app, key(KeyCode::Tab));
+    for c in "/usr/bin/echo".chars() {
+        handle_edit_provider_input(&mut app, key(KeyCode::Char(c)));
+    }
+    // Tab to IdleThreshold (Cmd → Args → PromptFormat → Flag → Dispatchable
+    // → AgentDir → IdleThreshold)
+    for _ in 0..6 {
+        handle_edit_provider_input(&mut app, key(KeyCode::Tab));
+    }
+    assert_eq!(
+        edit_provider_active_field(&app),
+        EditProviderField::IdleThreshold
+    );
+    for c in "12".chars() {
+        handle_edit_provider_input(&mut app, key(KeyCode::Char(c)));
+    }
+    // Tab to IdleNotify and switch it off
+    handle_edit_provider_input(&mut app, key(KeyCode::Tab));
+    handle_edit_provider_input(&mut app, key(KeyCode::Char(' ')));
+
+    let action = handle_edit_provider_input(
+        &mut app,
+        key_with_mods(KeyCode::Char('s'), KeyModifiers::CONTROL),
+    );
+
+    assert!(action.is_none());
+    assert_eq!(app.mode, AppMode::ManageProviders);
+    let saved = app
+        .provider_manager
+        .all()
+        .iter()
+        .find(|p| p.name == "idle-pilot")
+        .expect("provider saved")
+        .clone();
+    assert_eq!(saved.idle_threshold_secs, Some(12));
+    assert!(!saved.idle_notify);
 }
 
 #[test]
@@ -2825,10 +2931,14 @@ fn edit_agent_role_returns_none_when_dialog_not_active() {
 
 // ── DispatchAgent ─────────────────────────────────────────────────────────
 //
-// Two-step dialog. Step 0 cycles `agent_idx` through `agents.len() +
-// dispatchable_providers.len()` entries (Left/Right/Tab). Enter on step 0
-// advances to step 1. Step 1 toggles `use_current_ws` via Left/Right/Tab,
-// Enter dispatches an Action::DispatchAgent, Esc returns to step 0.
+// Three-step dialog. Step 0 is a multi-select checklist over `agents.len() +
+// dispatchable_providers.len()` entries (j/k/Up/Down/Left/Right/Tab move,
+// Space toggles, `a` all/none). Enter on step 0 advances to step 1.
+// Step 1 types the additional prompt, Enter advances to step 2. Step 2
+// toggles `use_current_ws` via Left/Right/Tab; Enter dispatches a single
+// Action::DispatchAgent when nothing is checked, or Action::DispatchAgents
+// with one target per checked entry. Esc backs out one step (or dismisses
+// from step 0).
 
 fn sample_dispatch_agents() -> Vec<(String, String, String)> {
     vec![
@@ -2852,6 +2962,25 @@ fn open_dispatch_agent(
     agent_idx: usize,
     use_current_ws: bool,
 ) {
+    let total = agents.len() + app.dispatchable_provider_list().len();
+    open_dispatch_agent_selected(
+        app,
+        agents,
+        step,
+        agent_idx,
+        use_current_ws,
+        vec![false; total],
+    );
+}
+
+fn open_dispatch_agent_selected(
+    app: &mut App,
+    agents: Vec<(String, String, String)>,
+    step: u8,
+    agent_idx: usize,
+    use_current_ws: bool,
+    selected: Vec<bool>,
+) {
     app.mode = AppMode::DispatchAgent;
     app.active_dialog = Some(DialogState::DispatchAgent {
         source_ws: 0,
@@ -2862,11 +2991,19 @@ fn open_dispatch_agent(
         card_project: "piki".to_string(),
         agent_idx,
         agents,
+        selected,
         additional_prompt: String::new(),
         additional_prompt_cursor: 0,
         step,
         use_current_ws,
     });
+}
+
+fn dispatch_selected(app: &App) -> Vec<bool> {
+    match app.active_dialog {
+        Some(DialogState::DispatchAgent { ref selected, .. }) => selected.clone(),
+        _ => panic!("expected DispatchAgent dialog"),
+    }
 }
 
 fn current_dispatch_state(app: &App) -> (u8, usize, bool, String) {
@@ -2924,9 +3061,76 @@ fn dispatch_step0_left_cycles_backward_with_wrap() {
 }
 
 #[test]
-fn dispatch_step0_typed_chars_append_to_additional_prompt() {
+fn dispatch_step0_j_k_move_highlight_with_wrap() {
+    let (mut app, _tmp) = test_app_isolated();
+    let total = sample_dispatch_agents().len() + app.dispatchable_provider_list().len();
+    open_dispatch_agent(&mut app, sample_dispatch_agents(), 0, 0, false);
+
+    handle_dispatch_agent_input(&mut app, key(KeyCode::Char('j')));
+    assert_eq!(current_dispatch_state(&app).1, 1);
+    handle_dispatch_agent_input(&mut app, key(KeyCode::Char('k')));
+    assert_eq!(current_dispatch_state(&app).1, 0);
+    // Wrap backward from first to last
+    handle_dispatch_agent_input(&mut app, key(KeyCode::Char('k')));
+    assert_eq!(current_dispatch_state(&app).1, total - 1);
+}
+
+#[test]
+fn dispatch_step0_space_toggles_check_and_advances() {
     let (mut app, _tmp) = test_app_isolated();
     open_dispatch_agent(&mut app, sample_dispatch_agents(), 0, 0, false);
+
+    handle_dispatch_agent_input(&mut app, key(KeyCode::Char(' ')));
+    let selected = dispatch_selected(&app);
+    assert!(selected[0]);
+    // Highlight advanced to the next entry
+    assert_eq!(current_dispatch_state(&app).1, 1);
+
+    // Toggle entry 1 on, move back onto it, toggle it back off
+    handle_dispatch_agent_input(&mut app, key(KeyCode::Char(' ')));
+    assert!(dispatch_selected(&app)[1]);
+    handle_dispatch_agent_input(&mut app, key(KeyCode::Up));
+    handle_dispatch_agent_input(&mut app, key(KeyCode::Char(' ')));
+    let selected = dispatch_selected(&app);
+    assert!(selected[0]);
+    assert!(!selected[1]);
+}
+
+#[test]
+fn dispatch_step0_a_selects_all_then_clears() {
+    let (mut app, _tmp) = test_app_isolated();
+    let total = sample_dispatch_agents().len() + app.dispatchable_provider_list().len();
+    open_dispatch_agent(&mut app, sample_dispatch_agents(), 0, 0, false);
+
+    handle_dispatch_agent_input(&mut app, key(KeyCode::Char('a')));
+    assert_eq!(dispatch_selected(&app), vec![true; total]);
+
+    handle_dispatch_agent_input(&mut app, key(KeyCode::Char('a')));
+    assert_eq!(dispatch_selected(&app), vec![false; total]);
+}
+
+#[test]
+fn dispatch_step0_typed_chars_are_ignored() {
+    // Step 0 is a checklist now; the prompt lives on step 1. Typing there
+    // must not move the highlight or change the selection.
+    let (mut app, _tmp) = test_app_isolated();
+    open_dispatch_agent(&mut app, sample_dispatch_agents(), 0, 0, false);
+
+    for c in "hi!".chars() {
+        let action = handle_dispatch_agent_input(&mut app, key(KeyCode::Char(c)));
+        assert!(action.is_none());
+    }
+
+    let (_, idx, _, prompt) = current_dispatch_state(&app);
+    assert_eq!(idx, 0);
+    assert_eq!(prompt, "");
+    assert!(dispatch_selected(&app).iter().all(|&s| !s));
+}
+
+#[test]
+fn dispatch_step1_typed_chars_append_to_additional_prompt() {
+    let (mut app, _tmp) = test_app_isolated();
+    open_dispatch_agent(&mut app, sample_dispatch_agents(), 1, 0, false);
 
     for c in "hi!".chars() {
         handle_dispatch_agent_input(&mut app, key(KeyCode::Char(c)));
@@ -2934,6 +3138,20 @@ fn dispatch_step0_typed_chars_append_to_additional_prompt() {
 
     let (_, _, _, prompt) = current_dispatch_state(&app);
     assert_eq!(prompt, "hi!");
+}
+
+#[test]
+fn dispatch_step1_enter_advances_to_step2_esc_backs_to_step0() {
+    let (mut app, _tmp) = test_app_isolated();
+    open_dispatch_agent(&mut app, sample_dispatch_agents(), 1, 0, false);
+
+    let action = handle_dispatch_agent_input(&mut app, key(KeyCode::Enter));
+    assert!(action.is_none());
+    assert_eq!(current_dispatch_state(&app).0, 2);
+
+    let action = handle_dispatch_agent_input(&mut app, key(KeyCode::Esc));
+    assert!(action.is_none());
+    assert_eq!(current_dispatch_state(&app).0, 1);
 }
 
 #[test]
@@ -2960,9 +3178,9 @@ fn dispatch_step0_esc_dismisses() {
 }
 
 #[test]
-fn dispatch_step1_left_right_tab_toggle_use_current_ws() {
+fn dispatch_step2_left_right_tab_toggle_use_current_ws() {
     let (mut app, _tmp) = test_app_isolated();
-    open_dispatch_agent(&mut app, sample_dispatch_agents(), 1, 0, false);
+    open_dispatch_agent(&mut app, sample_dispatch_agents(), 2, 0, false);
 
     handle_dispatch_agent_input(&mut app, key(KeyCode::Right));
     assert!(current_dispatch_state(&app).2);
@@ -2973,11 +3191,11 @@ fn dispatch_step1_left_right_tab_toggle_use_current_ws() {
 }
 
 #[test]
-fn dispatch_step1_enter_with_agent_dispatches_with_resolved_name_and_role() {
+fn dispatch_step2_enter_with_agent_dispatches_with_resolved_name_and_role() {
     let (mut app, _tmp) = test_app_isolated();
     let agents = sample_dispatch_agents();
     // Select the second agent (idx=1: "beta", Gemini, role-b)
-    open_dispatch_agent(&mut app, agents, 1, 1, true);
+    open_dispatch_agent(&mut app, agents, 2, 1, true);
 
     let action = handle_dispatch_agent_input(&mut app, key(KeyCode::Enter));
 
@@ -3011,14 +3229,49 @@ fn dispatch_step1_enter_with_agent_dispatches_with_resolved_name_and_role() {
 }
 
 #[test]
-fn dispatch_step1_enter_with_provider_only_dispatches_without_name_or_role() {
+fn dispatch_step2_enter_with_checked_entries_dispatches_all_targets() {
+    let (mut app, _tmp) = test_app_isolated();
+    let agents = sample_dispatch_agents();
+    let agent_count = agents.len();
+    let total = agent_count + app.dispatchable_provider_list().len();
+    // Check the first agent and the first raw provider
+    let mut selected = vec![false; total];
+    selected[0] = true;
+    selected[agent_count] = true;
+    open_dispatch_agent_selected(&mut app, agents, 2, 0, false, selected);
+
+    let action = handle_dispatch_agent_input(&mut app, key(KeyCode::Enter));
+
+    match action {
+        Some(Action::DispatchAgents {
+            card_id,
+            targets,
+            use_current_ws,
+            ..
+        }) => {
+            assert_eq!(card_id, "CARD-7");
+            assert_eq!(targets.len(), 2);
+            assert_eq!(targets[0].1, Some("alpha".to_string()));
+            assert_eq!(targets[0].2, Some("role-a".to_string()));
+            assert_eq!(targets[1].1, None);
+            assert_eq!(targets[1].2, None);
+            assert!(!use_current_ws);
+        }
+        other => panic!("expected DispatchAgents, got {other:?}"),
+    }
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+#[test]
+fn dispatch_step2_enter_with_provider_only_dispatches_without_name_or_role() {
     let (mut app, _tmp) = test_app_isolated();
     let agents = sample_dispatch_agents();
     let agent_count = agents.len();
     let providers = app.dispatchable_provider_list();
     let first_provider = providers[0].clone();
     // Select the first provider entry (idx == agent_count)
-    open_dispatch_agent(&mut app, agents, 1, agent_count, false);
+    open_dispatch_agent(&mut app, agents, 2, agent_count, false);
 
     let action = handle_dispatch_agent_input(&mut app, key(KeyCode::Enter));
 
@@ -3040,17 +3293,176 @@ fn dispatch_step1_enter_with_provider_only_dispatches_without_name_or_role() {
 }
 
 #[test]
-fn dispatch_step1_esc_returns_to_step0() {
+fn dispatch_step2_esc_returns_to_step1() {
     let (mut app, _tmp) = test_app_isolated();
-    open_dispatch_agent(&mut app, sample_dispatch_agents(), 1, 0, true);
+    open_dispatch_agent(&mut app, sample_dispatch_agents(), 2, 0, true);
 
     let action = handle_dispatch_agent_input(&mut app, key(KeyCode::Esc));
 
     assert!(action.is_none());
     let (step, _, use_current_ws, _) = current_dispatch_state(&app);
-    assert_eq!(step, 0);
+    assert_eq!(step, 1);
     // use_current_ws is NOT reset when going back
     assert!(use_current_ws);
+}
+
+// ── Broadcast ─────────────────────────────────────────────────────────────
+//
+// Two-step dialog over the Agents pane rows. Step 0 is a multi-select
+// checklist (j/k/Up/Down move, Space toggles, `a` all/none). Enter advances
+// to step 1. Step 1 types the line, Tab toggles append-Enter, Enter sends a
+// single Action::BroadcastInput (checked rows, or the highlighted row when
+// nothing is checked). Esc backs out one step (or dismisses from step 0).
+
+fn sample_broadcast_rows() -> Vec<(usize, usize)> {
+    vec![(0, 0), (0, 1), (1, 0)]
+}
+
+fn open_broadcast(
+    app: &mut App,
+    rows: Vec<(usize, usize)>,
+    step: u8,
+    cursor: usize,
+    selected: Vec<bool>,
+) {
+    app.mode = AppMode::Broadcast;
+    app.active_dialog = Some(DialogState::Broadcast {
+        rows,
+        selected,
+        cursor,
+        input: String::new(),
+        input_cursor: 0,
+        step,
+        append_enter: true,
+    });
+}
+
+fn broadcast_state(app: &App) -> (u8, usize, Vec<bool>, String, bool) {
+    match app.active_dialog {
+        Some(DialogState::Broadcast {
+            step,
+            cursor,
+            ref selected,
+            ref input,
+            append_enter,
+            ..
+        }) => (step, cursor, selected.clone(), input.clone(), append_enter),
+        _ => panic!("expected Broadcast dialog"),
+    }
+}
+
+#[test]
+fn broadcast_step0_space_toggles_and_advances() {
+    let (mut app, _tmp) = test_app_isolated();
+    let rows = sample_broadcast_rows();
+    open_broadcast(&mut app, rows, 0, 0, vec![false; 3]);
+
+    handle_broadcast_input(&mut app, key(KeyCode::Char(' ')));
+    let (_, cursor, selected, _, _) = broadcast_state(&app);
+    assert_eq!(selected, vec![true, false, false]);
+    assert_eq!(cursor, 1);
+
+    // `a` checks everything, `a` again clears
+    handle_broadcast_input(&mut app, key(KeyCode::Char('a')));
+    assert_eq!(broadcast_state(&app).2, vec![true; 3]);
+    handle_broadcast_input(&mut app, key(KeyCode::Char('a')));
+    assert_eq!(broadcast_state(&app).2, vec![false; 3]);
+}
+
+#[test]
+fn broadcast_step0_j_k_move_with_wrap() {
+    let (mut app, _tmp) = test_app_isolated();
+    open_broadcast(&mut app, sample_broadcast_rows(), 0, 0, vec![false; 3]);
+
+    handle_broadcast_input(&mut app, key(KeyCode::Char('j')));
+    assert_eq!(broadcast_state(&app).1, 1);
+    handle_broadcast_input(&mut app, key(KeyCode::Char('k')));
+    assert_eq!(broadcast_state(&app).1, 0);
+    handle_broadcast_input(&mut app, key(KeyCode::Char('k')));
+    assert_eq!(broadcast_state(&app).1, 2);
+}
+
+#[test]
+fn broadcast_step0_enter_advances_esc_dismisses() {
+    let (mut app, _tmp) = test_app_isolated();
+    open_broadcast(&mut app, sample_broadcast_rows(), 0, 0, vec![false; 3]);
+
+    assert!(handle_broadcast_input(&mut app, key(KeyCode::Enter)).is_none());
+    assert_eq!(broadcast_state(&app).0, 1);
+
+    assert!(handle_broadcast_input(&mut app, key(KeyCode::Esc)).is_none());
+    assert_eq!(broadcast_state(&app).0, 0);
+
+    assert!(handle_broadcast_input(&mut app, key(KeyCode::Esc)).is_none());
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+#[test]
+fn broadcast_step1_typing_tab_and_send() {
+    let (mut app, _tmp) = test_app_isolated();
+    open_broadcast(
+        &mut app,
+        sample_broadcast_rows(),
+        1,
+        0,
+        vec![true, false, true],
+    );
+
+    for c in "/stop".chars() {
+        handle_broadcast_input(&mut app, key(KeyCode::Char(c)));
+    }
+    assert_eq!(broadcast_state(&app).3, "/stop");
+
+    // Tab flips append_enter off and on
+    handle_broadcast_input(&mut app, key(KeyCode::Tab));
+    assert!(!broadcast_state(&app).4);
+    handle_broadcast_input(&mut app, key(KeyCode::Tab));
+    assert!(broadcast_state(&app).4);
+
+    let action = handle_broadcast_input(&mut app, key(KeyCode::Enter));
+    match action {
+        Some(Action::BroadcastInput {
+            targets,
+            text,
+            append_enter,
+        }) => {
+            assert_eq!(targets, vec![(0, 0), (1, 0)]);
+            assert_eq!(text, "/stop");
+            assert!(append_enter);
+        }
+        other => panic!("expected BroadcastInput, got {other:?}"),
+    }
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+#[test]
+fn broadcast_step1_enter_with_nothing_checked_sends_to_highlight() {
+    let (mut app, _tmp) = test_app_isolated();
+    open_broadcast(&mut app, sample_broadcast_rows(), 1, 2, vec![false; 3]);
+
+    for c in "hi".chars() {
+        handle_broadcast_input(&mut app, key(KeyCode::Char(c)));
+    }
+
+    match handle_broadcast_input(&mut app, key(KeyCode::Enter)) {
+        Some(Action::BroadcastInput { targets, .. }) => {
+            assert_eq!(targets, vec![(1, 0)]);
+        }
+        other => panic!("expected BroadcastInput, got {other:?}"),
+    }
+}
+
+#[test]
+fn broadcast_step1_enter_with_empty_input_is_noop() {
+    let (mut app, _tmp) = test_app_isolated();
+    open_broadcast(&mut app, sample_broadcast_rows(), 1, 0, vec![true; 3]);
+
+    let action = handle_broadcast_input(&mut app, key(KeyCode::Enter));
+    assert!(action.is_none());
+    // Still on step 1
+    assert_eq!(broadcast_state(&app).0, 1);
 }
 
 #[test]

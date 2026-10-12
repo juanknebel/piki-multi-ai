@@ -22,14 +22,14 @@ use crate::app::{ActivePane, App, AppMode, InputState};
 
 use self::command_palette_input::handle_command_palette_input;
 use self::dialog::{
-    handle_about_input, handle_confirm_close_tab_input, handle_confirm_delete_input,
-    handle_confirm_quit_input, handle_create_worktree_input, handle_dashboard_input,
-    handle_dispatch_agent_input, handle_dispatch_card_move_input, handle_edit_agent_input,
-    handle_edit_agent_role_input, handle_edit_provider_input, handle_edit_workspace_input,
-    handle_help_input, handle_import_agents_input, handle_logs_input, handle_manage_agents_input,
-    handle_manage_providers_input, handle_missing_prereqs_input, handle_move_tab_input,
-    handle_new_tab_input, handle_new_workspace_input, handle_pr_picker_input,
-    handle_projects_input, handle_rename_tab_input, handle_sessions_input,
+    handle_about_input, handle_broadcast_input, handle_confirm_close_tab_input,
+    handle_confirm_delete_input, handle_confirm_quit_input, handle_create_worktree_input,
+    handle_dashboard_input, handle_dispatch_agent_input, handle_dispatch_card_move_input,
+    handle_edit_agent_input, handle_edit_agent_role_input, handle_edit_provider_input,
+    handle_edit_workspace_input, handle_help_input, handle_import_agents_input, handle_logs_input,
+    handle_manage_agents_input, handle_manage_providers_input, handle_missing_prereqs_input,
+    handle_move_tab_input, handle_new_tab_input, handle_new_workspace_input,
+    handle_pr_picker_input, handle_projects_input, handle_rename_tab_input, handle_sessions_input,
     handle_workspace_info_input,
 };
 use self::editor_input::handle_inline_edit_input;
@@ -251,6 +251,7 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
         AppMode::SubmitReview => return code_review_input::handle_submit_review_input(app, key),
         AppMode::PrPicker => return handle_pr_picker_input(app, key),
         AppMode::DispatchAgent => return handle_dispatch_agent_input(app, key),
+        AppMode::Broadcast => return handle_broadcast_input(app, key),
         AppMode::ManageAgents => return handle_manage_agents_input(app, key),
         AppMode::EditAgent => return handle_edit_agent_input(app, key),
         AppMode::EditAgentRole => return handle_edit_agent_role_input(app, key),

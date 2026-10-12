@@ -171,6 +171,7 @@ theme = "default"
 # down_alt = "down"
 # up_alt = "up"
 # select = "enter"
+# broadcast = "b"               # open the broadcast-to-agents dialog
 
 # [keybindings.markdown]      # markdown reader
 # down = "j"

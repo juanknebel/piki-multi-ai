@@ -125,6 +125,8 @@ export const ICONS = {
   browser: p("M2 3.5h12v9.5H2z", "M2 6h12") + disc(3.7, 4.75, 0.65) + disc(5.6, 4.75, 0.65),
   /** terminal window (prompt chevron + cursor line) — the home-terminal button */
   terminal: p("M2 3.5h12v9.5H2z", "M4.5 6.5L7 8.5l-2.5 2", "M8.5 10.5H11.5"),
+  /** paper plane — broadcast one line to many agents */
+  send: p("M14.5 1.5L7.5 8.5", "M14.5 1.5L10 14.5 7.5 8.5 1.5 6 14.5 1.5z"),
 } as const;
 
 export const ICON_NAMES = Object.keys(ICONS) as IconName[];

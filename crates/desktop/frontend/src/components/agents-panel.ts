@@ -7,6 +7,7 @@ import { attentionRows, liveElapsedSecs, pickAttentionTarget } from "../agent-at
 import { getShortcutKey } from "../shortcuts";
 import { icon } from "./icons";
 import { showAgentManager } from "./dialogs/agent-dialog";
+import { showBroadcastDialog } from "./dialogs/broadcast-dialog";
 import { showDispatchDialog } from "./dialogs/dispatch-dialog";
 
 const ROWS_DEBOUNCE_MS = 100;
@@ -86,6 +87,7 @@ export function renderAgentsPanel(container: HTMLElement) {
       <span>Agents <span class="agents-attention-count" hidden></span></span>
       <span class="agents-header-actions">
         <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn" id="agents-dispatch-btn" title="Dispatch Agent" aria-label="Dispatch Agent">${icon("plus")}</button>
+        <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn" id="agents-broadcast-btn" title="Broadcast to Agents" aria-label="Broadcast to Agents">${icon("send")}</button>
         <button data-variant="ghost" data-size="sm" class="sc-header-btn ui-btn" id="agents-manage-btn" title="Manage Agents" aria-label="Manage Agents">${icon("gear")}</button>
       </span>
     </div>
@@ -112,6 +114,7 @@ export function renderAgentsPanel(container: HTMLElement) {
   }
   container.querySelector("#agents-manage-btn")!.addEventListener("click", () => showAgentManager());
   container.querySelector("#agents-dispatch-btn")!.addEventListener("click", () => showDispatchDialog());
+  container.querySelector("#agents-broadcast-btn")!.addEventListener("click", () => showBroadcastDialog());
 
   // ↑/↓/Home/End move focus between rows; Enter/Space activate (makeInteractive).
   list.addEventListener("keydown", (e) => {

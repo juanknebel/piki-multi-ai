@@ -248,6 +248,7 @@ pub(super) fn handle_chat_panel_input(app: &mut App, key: KeyEvent) -> Option<Ac
                 app.chat_panel.last_stream_activity = None;
                 app.chat_panel.messages.clear();
                 app.chat_panel.current_response.clear();
+                app.chat_panel.usage = Default::default();
                 app.chat_panel.scroll = 0;
             } else {
                 app.chat_panel.pending_clear = true;

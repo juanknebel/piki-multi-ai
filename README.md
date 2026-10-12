@@ -68,7 +68,7 @@ Built with Rust and [ratatui](https://ratatui.rs/).
 - **Agents pane** — one pane listing every running agent across all workspaces with live status and elapsed run time (`3m 12s`); jump straight to any of them. An agent that needs you is amber wherever it shows (in the desktop: tab bar, status bar, Agents panel, workspace list and activity bar at once), and one key lands on it from any workspace — `Alt+A` in the desktop, `Ctrl+G Ctrl+A` in the TUI — permission requests first, then unseen news, pressing again walks through the rest. Agents started outside piki (plain terminals, other apps) are surfaced too: in the TUI dashboard and, in the desktop, in an `External (n)` section of the Agents panel with a one-click terminal at their cwd
 - **Agent profiles & dispatch** — define named agents per project, sync them to provider-native subagent files, and dispatch them from a kanban card into an auto-created worktree with a composed prompt
 - **OS notifications** — agent-finished / needs-attention / command-finished toasts (or OSC 9 for tmux/ssh), with optional chimes and smart suppression when you're already looking at the tab; one `[notifications]` config serves the TUI and the desktop
-- **AI Chat** — global chat panel backed by local LLMs (Ollama or llama.cpp) or remote via **OpenRouter** (key only in `config.toml` `[chat] openrouter_api_key` or `OPENROUTER_API_KEY` env — never prompted in chat; optional web search plugin), with an agentic tool-use mode that can inspect the active workspace; one key drops what you are looking at into the composer as a fenced block — `Ctrl+Shift+I` (or the composer's `+`) in the desktop, for a terminal selection, the active file, its diff or the editor selection; `Ctrl+G Ctrl+Y` in the TUI for a terminal selection, plus `Ctrl+Y` on any hit in the fuzzy file search to send that file, and in agent mode every tool call is a collapsible card with inline Approve / Deny for write tools
+- **AI Chat** — global chat panel backed by local LLMs (Ollama or llama.cpp) or remote via **OpenRouter** (key only in `config.toml` `[chat] openrouter_api_key` or `OPENROUTER_API_KEY` env — never prompted in chat; optional web search plugin), with an agentic tool-use mode that can inspect the active workspace; one key drops what you are looking at into the composer as a fenced block — `Ctrl+Shift+I` (or the composer's `+`) in the desktop, for a terminal selection, the active file, its diff or the editor selection; `Ctrl+G Ctrl+Y` in the TUI for a terminal selection, plus `Ctrl+Y` on any hit in the fuzzy file search to send that file, and in agent mode every tool call is a collapsible card with inline Approve / Deny for write tools; OpenRouter / llama.cpp chats show running token totals (`tokens 12.4k in · 4.1k out`)
 
 ### Built-in tools
 
@@ -276,6 +276,8 @@ value = "--task"
 | `prompt_format` | How prompts are passed: `Positional`, `Flag`, or `None` |
 | `dispatchable` | Whether this provider appears in agent dispatch menus |
 | `agent_dir` | Repo subdirectory for agent config files (e.g. `.claude/agents`) |
+| `idle_threshold_secs` | Seconds of PTY silence before the agent counts as idle (empty = default); editable in the Providers dialog |
+| `idle_notify` | Whether going idle raises a notification; editable in the Providers dialog |
 
 Custom providers appear alongside built-in providers in the New Tab menu and in agent dispatch dialogs, in both the TUI and the desktop app. Providers can also be managed in-app (`Ctrl+G v` in the TUI, Tools → Providers in the desktop).
 

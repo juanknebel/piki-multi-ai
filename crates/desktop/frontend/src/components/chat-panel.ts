@@ -45,6 +45,7 @@ let streamingEl: HTMLDivElement | null = null;
 let unlistenToken: UnlistenFn | null = null;
 let unlistenAgent: UnlistenFn | null = null;
 let agentToggleBtn: HTMLButtonElement;
+let usageEl: HTMLSpanElement;
 let messages: ChatMsg[] = [];
 let streaming = false;
 let agentMode = false;
@@ -78,6 +79,11 @@ export async function initChatPanel(el: HTMLElement) {
       </svg>
     </button>
   `;
+  // Running token totals (OpenRouter / llama.cpp only; hidden otherwise)
+  usageEl = document.createElement("span");
+  usageEl.className = "chat-usage";
+  usageEl.style.display = "none";
+  header.insertBefore(usageEl, header.querySelector(".chat-settings-btn")!);
   // Agent mode toggle button
   agentToggleBtn = document.createElement("button");
   agentToggleBtn.className = "chat-header-btn chat-agent-btn ui-btn";
@@ -423,6 +429,8 @@ function clearChat() {
         onSelect: async () => {
           settlePendingApprovals("denied");
           messages = [];
+          usageEl.textContent = "";
+          usageEl.style.display = "none";
           renderEmpty();
           try {
             await ipc.chatClear();
@@ -872,6 +880,13 @@ function settlePendingApprovals(status: "denied") {
   }
 }
 
+/** Compact `12.4k` / `2.0M` token rendering (mirrors ChatUsage::compact). */
+function compact(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return `${n}`;
+}
+
 function onAgentEvent(ev: ipc.ChatAgentEvent) {
   armWatchdog();
   switch (ev.kind) {
@@ -903,6 +918,13 @@ function onAgentEvent(ev: ipc.ChatAgentEvent) {
       if (!entry.card.args) entry.card.args = ev.description;
       refreshToolCard(entry);
       scrollToBottom();
+      return;
+    }
+    case "usage": {
+      // Backend already accumulates the conversation total; display it.
+      usageEl.textContent = `tokens ${compact(ev.prompt_tokens)} in · ${compact(ev.completion_tokens)} out`;
+      usageEl.style.display = "";
+      usageEl.title = `${ev.prompt_tokens} prompt tokens · ${ev.completion_tokens} completion tokens`;
       return;
     }
     case "tool-result": {

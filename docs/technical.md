@@ -78,6 +78,14 @@ piki-multi-ai sessions stop            # stop the daemon (kills every session)
 
 The desktop binary exposes the same daemon entry point as `piki-desktop --serve-sessions` (parsed before Tauri starts). Both frontends launch it automatically; which binary happens to serve is irrelevant — they speak the same protocol against the same socket.
 
+#### `doctor`
+
+Read-only health check for scripting and bug reports: startup dependencies (`git`, `lazygit`, `claude`, `jq`), optional extras (`gh`, `rg`), the session daemon (running + session count, or politely absent), the SQLite database (`integrity_check` when the file exists), the `providers.toml` parse, and data/worktree directory writability. Prints one `[ok|warn|err]` line per check plus a summary; exits non-zero only on errors:
+
+```bash
+piki-multi-ai doctor
+```
+
 ## On-disk layout
 
 All paths are centralized in `piki-core::paths::DataPaths`. Two roots exist: the **data dir** (`$XDG_DATA_HOME/piki-multi`, i.e. `~/.local/share/piki-multi`) and the **config dir** (`~/.config/piki-multi`). With `--data-dir <PATH>`, *both* resolve under that path, giving a fully isolated instance (own database, own worktrees, own config, own session daemon).
@@ -228,7 +236,7 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 |------|------|
 | *Terminal pane* | All keys forwarded to the active tab; `Ctrl+G f` search, `Ctrl+Shift+C` copy visible content, `Ctrl+Shift+V` paste |
 | *Projects pane (sidebar tree)* | `j`/`k` move (follow-focus: landing on a checkout switches to it), `Enter` open the checkout / collapse a project or repo / adopt a directory member / open an unopened repository, `h`/`l` collapse/expand, `n`/`e`/`d` new/edit/delete project, `a` add a repository to this project, `w` new branch + worktree in this repository, `m` add this row to a project (or remove it) |
-| *Agents pane* | `j`/`k` select agent, `Enter` or click to jump to that workspace/tab |
+| *Agents pane* | `j`/`k` select agent, `Enter` or click to jump to that workspace/tab, `b` broadcast one input line to several agents |
 | *Markdown tab* | `j`/`k` scroll, `Ctrl+d`/`Ctrl+u` page, `g`/`G` top/bottom (read-only) |
 | *Kanban tab* | `h/l/j/k` navigate, `H/L` move card, `n` new card, `e` edit card, `d` delete, `D` dispatch agent, `Enter` details, `r` refresh, `Esc` close modal |
 | *Code Review tab* | Locked mode — see [Code Review](#code-review) below |
@@ -247,13 +255,34 @@ The UI uses a **tmux-style prefix model**: keys always go to the focused pane (t
 
 **In dispatch agent dialog** (after pressing `D` on a kanban card):
 
+Step 0 — agent/provider multi-select checklist:
+
 | Key | Action |
 |-----|--------|
-| `Left` / `Right` | Cycle agent/provider; includes `(None)` option when agents are configured |
-| `Tab` | Next agent/provider |
+| `j` / `k`, `Up` / `Down`, `Left` / `Right`, `Tab` | Move highlight through agents then raw providers |
+| `Space` | Toggle checkbox on highlighted entry |
+| `a` | Select all / select none |
+| `Enter` | Next (additional prompt) |
+| `Esc` | Cancel |
+
+Step 1 — additional prompt:
+
+| Key | Action |
+|-----|--------|
 | Any text | Type additional prompt (appended to card description) |
-| `Enter` | With agent: dispatch to new worktree. With `(None)` or raw provider: choose workspace destination (New/Current) |
-| `Esc` | Cancel (step 1) or Back (step 2) |
+| `Enter` | Next (workspace destination) |
+| `Esc` | Back to checklist |
+
+Step 2 — workspace destination (New/Current):
+
+| Key | Action |
+|-----|--------|
+| `Enter` | Dispatch. Nothing checked: dispatch the highlighted entry alone. Checked entries: dispatch one agent per entry, each into its own worktree (`<type>/<card-id>-<agent>`) or its own tab when Current is selected |
+| `Esc` | Back to prompt |
+
+**In broadcast dialog** (after pressing `b` in the Agents pane — same in the desktop Agents panel, which sends via `write_pty` per tab):
+
+Step 0 — agent multi-select checklist (`Space` toggle, `a` all/none, `j`/`k` move, `Enter` next, `Esc` cancel). Step 1 — type the line (`Tab` toggles append-Enter, default on; `Enter` sends, `Esc` back). Nothing checked sends to the highlighted agent alone. The text is written to each tab's PTY verbatim, so `/stop` stops every selected agent at once.
 
 **In manage agents overlay** (after pressing `A`):
 
@@ -766,7 +795,7 @@ Claude Code agent tabs get a precise lifecycle channel instead of guessing from 
 
 ### Structured Antigravity integration
 
-Antigravity (`agy`) tabs get the same lifecycle channel, so the Agents pane shows running / done instead of a bare "alive". agy has no `--settings` equivalent — its hooks are only discovered from a **plugin** — so piki materializes one shared, self-contained plugin at `~/.gemini/config/plugins/piki-multi-bridge/` (`plugin.json` + `hooks.json` + scripts; no `agy plugin install` needed, the directory alone is enough) and maps `PreInvocation` → `prompt_submit`, `PostToolUse` → `tool_complete`, `Stop` → `stop` (with query/response previews read from agy's transcript). The per-tab FIFO path rides the environment (`PIKI_CLI_AGENT_SOCK`), which agy passes down to its hook children, so one static plugin serves every tab and nothing per-spawn is written into your agy config. Like the Claude bridge it is self-disabling — the handlers no-op (printing `{}`) unless `PIKI_CLI_AGENT` is set, so a plain `agy` run outside piki is unaffected. `PreToolUse` is deliberately not registered: agy fires it before every tool step whether or not you'll be asked to approve it, so Antigravity tabs have no `waiting-permission` state; everything else is at parity. Lives in `crates/core/src/cli_agent/install_antigravity.rs`; requires `jq`.
+Antigravity (`agy`) tabs get the same lifecycle channel, so the Agents pane shows running / waiting-permission / done instead of a bare "alive". agy has no `--settings` equivalent — its hooks are only discovered from a **plugin** — so piki materializes one shared, self-contained plugin at `~/.gemini/config/plugins/piki-multi-bridge/` (`plugin.json` + `hooks.json` + scripts; no `agy plugin install` needed, the directory alone is enough) and maps `PreInvocation` → `prompt_submit`, `PreToolUse` → `permission_request` (predicted) or `tool_started`, `PostToolUse` → `tool_complete`, `Stop` → `stop` (with query/response previews read from agy's transcript). The per-tab FIFO path rides the environment (`PIKI_CLI_AGENT_SOCK`), which agy passes down to its hook children, so one static plugin serves every tab and nothing per-spawn is written into your agy config. Like the Claude bridge it is self-disabling — the handlers no-op (printing `{}`) unless `PIKI_CLI_AGENT` is set, so a plain `agy` run outside piki is unaffected. `PreToolUse` needs a prediction step because agy fires it before every tool step whether or not you'll be asked to approve it (and exposes no permission hook event): a `run_command` the `permissions.allow` list doesn't cover, outside `trustedWorkspaces`, under a default `toolPermission` mode becomes `permission_request` (amber `waiting-permission`, like Claude); everything else becomes `tool_started` (plain running). Anything unknown fails safe to `tool_started`, and a mispredicted amber is corrected by the follow-up `tool_complete`. The hook always prints `{}` and never overrides agy's own policy. Lives in `crates/core/src/cli_agent/install_antigravity.rs`; requires `jq`.
 
 ### Passive status detection (Codex, Muse)
 
@@ -786,7 +815,7 @@ Configure named agents per project (`A` key, Simple workspaces only) with a two-
 
 ### Agent dispatch
 
-Select a kanban card, press `D` to dispatch a configured agent or raw provider: the agent selector includes a `(None)` option to dispatch without a profile; when no agent is selected, a second step asks whether to create a new worktree workspace or use the current one; with an agent selected, automatically creates a git worktree with a convention-based branch (`feature/`, `bug/`, or `spike/` based on card priority), nesting it under its parent's worktree family in the sidebar; inherits the parent's kanban board, and launches the agent with an auto-composed prompt (`Use the <agent> agent to plan and then implement the task: <card title>` + card description + optional additional prompt); the agent's role is materialized as a provider-native subagent file in the worktree; card moves to "in progress" with assignee set to agent name; deleting the agent workspace moves the card back to "todo" and clears the assignee.
+Select a kanban card, press `D` to dispatch one or more configured agents or raw providers. Step 0 is a multi-select checklist (`Space` toggles, `a` all/none; nothing checked dispatches the highlighted entry alone); step 1 types an optional additional prompt; step 2 asks whether to create new worktree workspace(s) or use the current one. Each dispatched target automatically gets a git worktree with a convention-based branch (`feature/`, `bug/`, or `spike/` based on card priority, suffixed with `-<agent>` when several are dispatched at once), nesting it under its parent's worktree family in the sidebar; inherits the parent's kanban board, and launches the agent with an auto-composed prompt (`Use the <agent> agent to plan and then implement the task: <card title>` + card description + optional additional prompt); the agent's role is materialized as a provider-native subagent file in the worktree; card moves to "in progress" with assignee set to the agent name(s); deleting the agent workspace moves the card back to "todo" and clears the assignee.
 
 ## Notifications
 
@@ -1059,7 +1088,8 @@ GUI launches (`.desktop` / `.app`) inherit a stripped environment, so `shell_env
 
 Three crates cooperate:
 
-- **`piki-api-client`** — transport. `ChatClient` trait unifies two local-LLM backends: `OllamaClient` (`GET /api/tags`, streaming `POST /api/chat`) and `LlamaCppClient` (OpenAI-compatible `GET /v1/models`, SSE `POST /v1/chat/completions`). Streaming is delivered token-by-token over `mpsc` channels as `ChatStreamEvent` (`Token` / `Done` / `ToolCalls` / `Error`). The same crate holds the Hurl-like parser and `HttpClient` used by the API Explorer.
+- **`piki-api-client`** — transport. `ChatClient` trait unifies two local-LLM backends: `OllamaClient` (`GET /api/tags`, streaming `POST /api/chat`) and `LlamaCppClient` (OpenAI-compatible `GET /v1/models`, SSE `POST /v1/chat/completions`). Streaming is delivered token-by-token over `mpsc` channels as `ChatStreamEvent` (`Token` / `Done` / `ToolCalls` / `Usage` / `Error`). The same crate holds the Hurl-like parser and `HttpClient` used by the API Explorer.
+- **Token usage** — the OpenAI-compatible backends request `stream_options.include_usage` and forward the server's trailing usage chunk as `ChatStreamEvent::Usage` (`ChatUsage { prompt_tokens, completion_tokens }`, informational — never terminal). The agent loop re-emits each report as `AgentEvent::Usage`; both frontends accumulate per-conversation totals (`ChatPanelState.usage` in the TUI, `DesktopApp.chat_usage`, reset on clear) and render them in the chat footer/header (`tokens 12.4k in · 4.1k out`). Ollama never reports usage, so the counter stays hidden there. Token counts only — no cost: per-model pricing isn't tracked.
 - **`piki-core::chat`** — domain types shared by both frontends (`ChatMessage`, `ChatRole` incl. `Tool`, `ChatConfig`, `ChatServerType`, tool-use types).
 - **`piki-agent`** — the agentic loop. `AgentLoop` sends messages with tool definitions, executes requested tools, feeds results back, and repeats until the LLM answers with text only (max 20 iterations). Built-in read-only tools: `git_status`, `read_file` (path-sandboxed), `list_files`, `search_code`. Progress reaches the UI as `AgentEvent`s. A 60s no-token watchdog in both frontends unlocks the panel if a stream dies.
 

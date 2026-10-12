@@ -207,6 +207,8 @@ pub(crate) fn handle_bulk_insert(app: &mut crate::app::App, text: &str) {
                 flag_cursor,
                 agent_dir,
                 agent_dir_cursor,
+                idle_threshold,
+                idle_threshold_cursor,
                 active_field,
                 ..
             }) = &mut app.active_dialog
@@ -219,7 +221,13 @@ pub(crate) fn handle_bulk_insert(app: &mut crate::app::App, text: &str) {
                     EditProviderField::DefaultArgs => bulk_insert(default_args, args_cursor, text),
                     EditProviderField::PromptFlag => bulk_insert(prompt_flag, flag_cursor, text),
                     EditProviderField::AgentDir => bulk_insert(agent_dir, agent_dir_cursor, text),
-                    EditProviderField::PromptFormat | EditProviderField::Dispatchable => {}
+                    EditProviderField::IdleThreshold => {
+                        let digits: String = text.chars().filter(|c| c.is_ascii_digit()).collect();
+                        bulk_insert(idle_threshold, idle_threshold_cursor, &digits);
+                    }
+                    EditProviderField::PromptFormat
+                    | EditProviderField::Dispatchable
+                    | EditProviderField::IdleNotify => {}
                 }
             }
         }
@@ -240,6 +248,17 @@ pub(crate) fn handle_bulk_insert(app: &mut crate::app::App, text: &str) {
             }) = app.active_dialog
             {
                 bulk_insert(additional_prompt, additional_prompt_cursor, text);
+            }
+        }
+        AppMode::Broadcast => {
+            if let Some(DialogState::Broadcast {
+                ref mut input,
+                ref mut input_cursor,
+                step: 1,
+                ..
+            }) = app.active_dialog
+            {
+                bulk_insert(input, input_cursor, text);
             }
         }
         _ => {}

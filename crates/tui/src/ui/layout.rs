@@ -278,6 +278,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         AppMode::CommandPalette => super::command_palette::render(frame, area, app),
         AppMode::WorkspaceSwitcher => super::workspace_switcher::render(frame, area, app),
         AppMode::DispatchAgent => super::dialogs::render_dispatch_agent_dialog(frame, area, app),
+        AppMode::Broadcast => super::dialogs::render_broadcast_dialog(frame, area, app),
         AppMode::ManageAgents => super::dialogs::render_manage_agents_dialog(frame, area, app),
         AppMode::EditAgent => super::dialogs::render_edit_agent_dialog(frame, area, app),
         AppMode::EditAgentRole => super::dialogs::render_edit_agent_role_dialog(frame, area, app),

@@ -79,6 +79,9 @@ pub(crate) fn render_edit_provider_dialog(frame: &mut Frame, area: Rect, app: &A
         dispatchable,
         ref agent_dir,
         agent_dir_cursor,
+        ref idle_threshold,
+        idle_threshold_cursor,
+        idle_notify,
         active_field,
     }) = app.active_dialog
     else {
@@ -86,7 +89,7 @@ pub(crate) fn render_edit_provider_dialog(frame: &mut Frame, area: Rect, app: &A
     };
 
     let popup_width = (area.width * 60 / 100).max(55);
-    let popup = super::clear_popup(frame, area, popup_width, 18);
+    let popup = super::clear_popup(frame, area, popup_width, 20);
     let active_c = app.theme.dialog.new_ws_active;
     let inactive_c = app.theme.dialog.new_ws_inactive;
 
@@ -168,6 +171,17 @@ pub(crate) fn render_edit_provider_dialog(frame: &mut Frame, area: Rect, app: &A
             agent_dir,
             agent_dir_cursor,
             EditProviderField::AgentDir,
+        ),
+        text_field(
+            "Idle Secs:",
+            idle_threshold,
+            idle_threshold_cursor,
+            EditProviderField::IdleThreshold,
+        ),
+        selector(
+            "Idle Notify:",
+            if idle_notify { "Yes" } else { "No" },
+            EditProviderField::IdleNotify,
         ),
         Line::from(""),
         Line::from(vec![

@@ -418,6 +418,8 @@ export interface ProviderInfo {
   command: string;
   dispatchable: boolean;
   agent_dir: string | null;
+  idle_threshold_secs: number | null;
+  idle_notify: boolean;
 }
 
 // Keep old exports for backwards compatibility with existing code that uses them

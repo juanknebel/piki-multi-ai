@@ -260,15 +260,18 @@ pub enum DialogState {
         card_description: String,
         card_priority: flow_core::Priority,
         card_project: String,
-        /// When agents exist: index into agents vec. When empty: index into dispatchable provider list
+        /// Highlight cursor into the combined agents + dispatchable providers list
         agent_idx: usize,
         /// Snapshot of configured agents (name, provider, role). Empty = fallback to raw providers
         agents: Vec<(String, String, String)>,
+        /// Multi-select checkboxes, one per combined agents + providers entry.
+        /// Empty selection on confirm = dispatch the highlighted entry alone.
+        selected: Vec<bool>,
         additional_prompt: String,
         additional_prompt_cursor: usize,
-        /// 0 = agent/provider select, 1 = workspace destination select
+        /// 0 = agent/provider checklist, 1 = additional prompt, 2 = workspace destination select
         step: u8,
-        /// When step==1: false = new worktree, true = use current workspace
+        /// When step==2: false = new worktree, true = use current workspace
         use_current_ws: bool,
     },
     ManageAgents {
@@ -303,6 +306,24 @@ pub enum DialogState {
         selected: Vec<bool>,
         cursor: usize,
     },
+    /// Broadcast one input line to several agent tabs at once (e.g. `/stop`).
+    /// Snapshot of [`App::agent_rows`] taken when the dialog opens.
+    Broadcast {
+        /// Every agent (workspace, tab) pair listed.
+        rows: Vec<(usize, usize)>,
+        /// Multi-select checkboxes, one per row. Empty on confirm =
+        /// send to the highlighted row alone.
+        selected: Vec<bool>,
+        /// Highlight cursor into `rows`.
+        cursor: usize,
+        /// Text to send.
+        input: String,
+        input_cursor: usize,
+        /// 0 = agent checklist, 1 = text input.
+        step: u8,
+        /// Append Enter after the text (execute it) instead of typing it raw.
+        append_enter: bool,
+    },
     /// Choose which kanban column to move a dispatched card to when deleting a workspace
     DispatchCardMove {
         /// Workspace index being deleted
@@ -334,6 +355,10 @@ pub enum DialogState {
         dispatchable: bool,
         agent_dir: String,
         agent_dir_cursor: usize,
+        /// Idle threshold in seconds as typed (empty = provider default).
+        idle_threshold: String,
+        idle_threshold_cursor: usize,
+        idle_notify: bool,
         active_field: EditProviderField,
     },
     RenameTab {
@@ -394,6 +419,8 @@ pub enum EditProviderField {
     PromptFlag,
     Dispatchable,
     AgentDir,
+    IdleThreshold,
+    IdleNotify,
 }
 
 impl CycleField for EditProviderField {
@@ -406,13 +433,15 @@ impl CycleField for EditProviderField {
             Self::PromptFormat => Self::PromptFlag,
             Self::PromptFlag => Self::Dispatchable,
             Self::Dispatchable => Self::AgentDir,
-            Self::AgentDir => Self::Name,
+            Self::AgentDir => Self::IdleThreshold,
+            Self::IdleThreshold => Self::IdleNotify,
+            Self::IdleNotify => Self::Name,
         }
     }
 
     fn prev(self) -> Self {
         match self {
-            Self::Name => Self::AgentDir,
+            Self::Name => Self::IdleNotify,
             Self::Description => Self::Name,
             Self::Command => Self::Description,
             Self::DefaultArgs => Self::Command,
@@ -420,6 +449,8 @@ impl CycleField for EditProviderField {
             Self::PromptFlag => Self::PromptFormat,
             Self::Dispatchable => Self::PromptFlag,
             Self::AgentDir => Self::Dispatchable,
+            Self::IdleThreshold => Self::AgentDir,
+            Self::IdleNotify => Self::IdleThreshold,
         }
     }
 }

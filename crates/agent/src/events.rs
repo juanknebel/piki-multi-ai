@@ -19,6 +19,9 @@ pub enum AgentEvent {
     },
     /// A write-tool requires user approval before execution.
     ApprovalRequired(ApprovalRequest),
+    /// Token counts for one server completion. Forwarded as-is from the
+    /// stream: add it to your running total, don't replace.
+    Usage(piki_api_client::ChatUsage),
     /// The agent loop finished (all tool calls resolved, final answer delivered).
     Finished,
     /// An error occurred.

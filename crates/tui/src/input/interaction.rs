@@ -259,6 +259,7 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
                 .iter()
                 .map(|a| (a.name.clone(), a.provider.clone(), a.role.clone()))
                 .collect();
+            let selected = vec![false; agents.len() + app.dispatchable_provider_list().len()];
             app.active_dialog = Some(DialogState::DispatchAgent {
                 source_ws,
                 card_id,
@@ -268,6 +269,7 @@ pub(super) fn handle_kanban_interaction(app: &mut App, key: KeyEvent) -> Option<
                 card_project,
                 agent_idx: 0,
                 agents,
+                selected,
                 additional_prompt: String::new(),
                 additional_prompt_cursor: 0,
                 step: 0,
@@ -1110,6 +1112,19 @@ pub(super) fn handle_agents_interaction(app: &mut App, key: KeyEvent) -> Option<
         app.reveal_agent_selection();
     } else if app.config.matches_agents(key, "select") {
         jump_to_agent(app, rows[app.selected_agent_row]);
+    } else if app.config.matches_agents(key, "broadcast") {
+        let count = rows.len();
+        let cursor = app.selected_agent_row.min(count.saturating_sub(1));
+        app.active_dialog = Some(DialogState::Broadcast {
+            rows,
+            selected: vec![false; count],
+            cursor,
+            input: String::new(),
+            input_cursor: 0,
+            step: 0,
+            append_enter: true,
+        });
+        app.mode = AppMode::Broadcast;
     }
     None
 }

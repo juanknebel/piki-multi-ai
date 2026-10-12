@@ -48,6 +48,7 @@ pub enum Context {
     Sessions,
     ProjectEdit,
     Logs,
+    Broadcast,
 }
 
 impl Context {
@@ -59,6 +60,7 @@ impl Context {
             Context::Terminal => "Terminal pane",
             Context::Chat => "AI Chat overlay",
             Context::AgentsPane => "Agents pane",
+            Context::Broadcast => "Broadcast to agents dialog",
             Context::ProjectTree => "Projects pane (the sidebar tree)",
             Context::Fuzzy => "Fuzzy file search",
             Context::ProjectSearch => "Project content search",
@@ -118,6 +120,7 @@ pub const HELP_ORDER: &[Context] = &[
     Context::Chat,
     Context::Kanban,
     Context::Dispatch,
+    Context::Broadcast,
     Context::DispatchCardMove,
     Context::ManageAgents,
     Context::AgentRole,
@@ -424,6 +427,28 @@ static CATALOG: &[ActionMeta] = {
             Fixed("Click"),
             "Jump to that workspace and tab",
         ),
+        local(
+            C::AgentsPane,
+            Bind("agents", "broadcast"),
+            "Broadcast one input line to several agents",
+        ),
+        // ── Broadcast to agents dialog ──────────────────────────────────
+        local(
+            C::Broadcast,
+            Fixed("j/k/↑/↓"),
+            "Step 0: move through agents",
+        ),
+        local(C::Broadcast, Fixed("Space"), "Step 0: check one agent"),
+        local(C::Broadcast, Fixed("a"), "Step 0: check all / none"),
+        local(
+            C::Broadcast,
+            Fixed("Enter"),
+            "Step 0: continue to the input",
+        ),
+        local(C::Broadcast, Fixed("Type"), "Step 1: the line to send"),
+        local(C::Broadcast, Fixed("Tab"), "Step 1: toggle append Enter"),
+        local(C::Broadcast, Fixed("Enter"), "Step 1: send"),
+        local(C::Broadcast, Fixed("Esc"), "Back a step, or cancel"),
         // ── Fuzzy file search ─────────────────────────────────────────────
         local(C::Fuzzy, Fixed("Type"), "Filter files"),
         local(C::Fuzzy, Bind("fuzzy", "down"), "Select the next result"),
@@ -615,8 +640,15 @@ static CATALOG: &[ActionMeta] = {
         // ── Dispatch agent dialog ─────────────────────────────────────────
         local(
             C::Dispatch,
-            Fixed("←/→/Tab"),
-            "Step 1: cycle the agent / provider",
+            Fixed("j/k/↑/↓/←/→/Tab"),
+            "Step 0: move through agents / providers",
+        ),
+        local(C::Dispatch, Fixed("Space"), "Step 0: check one agent"),
+        local(C::Dispatch, Fixed("a"), "Step 0: check all / none"),
+        local(
+            C::Dispatch,
+            Fixed("Enter"),
+            "Step 0: continue to the prompt",
         ),
         local(
             C::Dispatch,
@@ -631,7 +663,7 @@ static CATALOG: &[ActionMeta] = {
         local(
             C::Dispatch,
             Fixed("←/→/Tab"),
-            "Step 2: new worktree or current workspace",
+            "Step 2: new worktree(s) or current workspace",
         ),
         local(C::Dispatch, Fixed("Enter"), "Step 2: dispatch"),
         local(C::Dispatch, Fixed("Esc"), "Back a step, or cancel"),

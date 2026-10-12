@@ -1,5 +1,6 @@
 ---
 source: crates/tui/src/ui/mod.rs
+assertion_line: 846
 expression: content
 ---
             ╭ Help ───────────────────────────────────────────────╮
@@ -41,4 +42,4 @@ expression: content
             │      C-g o         Logs                             │
             │      C-g C-s       Sessions (persistent)            │
             │      C-g [         Terminal Scroll Mode             │
-            ╰───────────────────────────────────────── [1/220 ↑↓] ╯
+            ╰───────────────────────────────────────── [1/234 ↑↓] ╯

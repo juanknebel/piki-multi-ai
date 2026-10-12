@@ -23,18 +23,28 @@
 //!
 //! Mapping onto piki's protocol (see [`super::CliAgentEvent`]):
 //!
-//! | agy hook       | piki event      | resulting status |
-//! |----------------|-----------------|------------------|
-//! | `PreInvocation`| `prompt_submit` | `Running`        |
-//! | `PostToolUse`  | `tool_complete` | `Running`        |
-//! | `Stop`         | `stop`          | `Done`           |
+//! | agy hook        | piki event           | resulting status    |
+//! |-----------------|------------------------|---------------------|
+//! | `PreInvocation` | `prompt_submit`      | `Running`           |
+//! | `PreToolUse`    | `permission_request` | `WaitingPermission` |
+//! |                 | or `tool_started`    | or `Running`        |
+//! | `PostToolUse`   | `tool_complete`      | `Running`           |
+//! | `Stop`          | `stop`               | `Done`              |
 //!
-//! `PreToolUse` is deliberately NOT registered: agy fires it before *every*
-//! tool step regardless of whether the user will actually be asked to approve
-//! it, so it carries no permission signal — wiring it up would paint tabs as
-//! `WaitingPermission` on every auto-approved tool call. Antigravity tabs
-//! therefore never show the permission state that Claude tabs do; everything
-//! else is at parity.
+//! `PreToolUse` needs a prediction step: agy fires it before *every* tool step
+//! regardless of whether the user will actually be asked to approve it, and
+//! agy 1.2.5 exposes no permission hook event (its embedded `hooks.json` docs
+//! list exactly `PreToolUse`, `PostToolUse`, `PreInvocation`,
+//! `PostInvocation` and `Stop`). So the handler predicts the permission gate
+//! from the on-disk signals agy documents in `settings.json` — a `run_command`
+//! the `permissions.allow` list doesn't cover, outside `trustedWorkspaces`,
+//! and under a default `toolPermission` mode becomes `permission_request`
+//! (amber `WaitingPermission`, like Claude tabs); everything else becomes
+//! `tool_started` (plain `Running`). Anything unknown fails safe to
+//! `tool_started` — never amber without evidence — and a mispredicted amber
+//! is corrected by the follow-up `tool_complete`, which always resets to
+//! `Running`. The hook is a pure observer: it always prints `{}` and never
+//! overrides agy's own permission policy.
 
 use std::collections::HashMap;
 use std::io;
@@ -45,6 +55,7 @@ use super::install::{jq_available, set_executable, unique_sock_name};
 
 const SCRIPT_PAYLOAD: &str = include_str!("scripts/agy-payload.sh");
 const SCRIPT_PRE_INVOCATION: &str = include_str!("scripts/agy-on-pre-invocation.sh");
+const SCRIPT_PRE_TOOL_USE: &str = include_str!("scripts/agy-on-pre-tool-use.sh");
 const SCRIPT_POST_TOOL_USE: &str = include_str!("scripts/agy-on-post-tool-use.sh");
 const SCRIPT_STOP: &str = include_str!("scripts/agy-on-stop.sh");
 
@@ -113,9 +124,10 @@ fn materialize(
     std::fs::create_dir_all(&plugin_dir)?;
 
     // Overwritten on every spawn so the scripts stay in sync with the binary.
-    let scripts: [(&str, &str, bool); 4] = [
+    let scripts: [(&str, &str, bool); 5] = [
         ("agy-payload.sh", SCRIPT_PAYLOAD, false),
         ("agy-on-pre-invocation.sh", SCRIPT_PRE_INVOCATION, true),
+        ("agy-on-pre-tool-use.sh", SCRIPT_PRE_TOOL_USE, true),
         ("agy-on-post-tool-use.sh", SCRIPT_POST_TOOL_USE, true),
         ("agy-on-stop.sh", SCRIPT_STOP, true),
     ];
@@ -194,6 +206,7 @@ fn hooks_json(plugin_dir: &Path) -> String {
     let v = serde_json::json!({
         PLUGIN_NAME: {
             "PreInvocation": handler("agy-on-pre-invocation.sh"),
+            "PreToolUse": handler_matched("agy-on-pre-tool-use.sh"),
             "PostToolUse": handler_matched("agy-on-post-tool-use.sh"),
             "Stop": handler("agy-on-stop.sh"),
         }
@@ -221,6 +234,7 @@ mod tests {
             "hooks.json",
             "agy-payload.sh",
             "agy-on-pre-invocation.sh",
+            "agy-on-pre-tool-use.sh",
             "agy-on-post-tool-use.sh",
             "agy-on-stop.sh",
         ] {
@@ -229,7 +243,7 @@ mod tests {
     }
 
     #[test]
-    fn hooks_json_registers_the_three_lifecycle_events() {
+    fn hooks_json_registers_the_four_lifecycle_events() {
         let (_sock_base, plugins, _setup) = materialized();
         let dir = plugins.path().join(PLUGIN_NAME);
         let raw = std::fs::read_to_string(dir.join("hooks.json")).unwrap();
@@ -239,17 +253,22 @@ mod tests {
             .and_then(|s| s.as_object())
             .expect("spec");
 
-        for key in ["PreInvocation", "PostToolUse", "Stop"] {
+        for key in ["PreInvocation", "PreToolUse", "PostToolUse", "Stop"] {
             assert!(spec.contains_key(key), "missing hook {key}");
         }
-        // PreToolUse would fire on every tool step, permission or not — see the
-        // module docs. Registering it would mis-paint tabs as WaitingPermission.
-        assert!(!spec.contains_key("PreToolUse"));
 
         // Flat events take a bare handler list; tool events need the wrapper.
         let stop = spec["Stop"][0]["command"].as_str().unwrap();
         assert!(stop.starts_with("sh '"));
         assert!(stop.contains("agy-on-stop.sh"));
+        // PreToolUse fires on every tool step, so it is registered as an
+        // observer whose script predicts the permission gate (see module
+        // docs) — the matcher wrapper is what makes it a tool event.
+        assert_eq!(spec["PreToolUse"][0]["matcher"], "*");
+        let pre = spec["PreToolUse"][0]["hooks"][0]["command"]
+            .as_str()
+            .unwrap();
+        assert!(pre.contains("agy-on-pre-tool-use.sh"));
         assert_eq!(spec["PostToolUse"][0]["matcher"], "*");
         let post = spec["PostToolUse"][0]["hooks"][0]["command"]
             .as_str()
@@ -309,6 +328,110 @@ mod tests {
         assert!(contents.contains("piki cli-agent `stop` event"));
     }
 
+    /// The PreToolUse prediction, driven end to end: fake `$HOME` carries a
+    /// `settings.json`, a real FIFO captures the payload, crafted stdin feeds
+    /// the tool call. Only an uncovered, untrusted `run_command` under a
+    /// default mode predicts a prompt — everything else fails safe to
+    /// `tool_started`.
+    #[cfg(unix)]
+    #[test]
+    fn pre_tool_use_predicts_permission_from_settings() {
+        let (_sock_base, plugins, _setup) = materialized();
+        let dir = plugins.path().join(PLUGIN_NAME);
+
+        let home = tempfile::tempdir().unwrap();
+        let settings_dir = home.path().join(".gemini/antigravity-cli");
+        std::fs::create_dir_all(&settings_dir).unwrap();
+        std::fs::write(
+            settings_dir.join("settings.json"),
+            r#"{"permissions": {"allow": ["command(git status)", "command(cargo test)"]},
+                "trustedWorkspaces": ["/trusted/ws"]}"#,
+        )
+        .unwrap();
+
+        let fifo_dir = tempfile::tempdir().unwrap();
+        let fifo = fifo_dir.path().join("fifo");
+        let mkfifo = std::process::Command::new("mkfifo")
+            .arg(&fifo)
+            .status()
+            .expect("mkfifo runs");
+        assert!(mkfifo.success());
+
+        let run = |stdin: &str| -> serde_json::Value {
+            let script = dir.join("agy-on-pre-tool-use.sh");
+            let fifo_clone = fifo.clone();
+            let reader = std::thread::spawn(move || {
+                std::fs::read_to_string(&fifo_clone).expect("fifo read")
+            });
+            let out = std::process::Command::new("sh")
+                .arg(&script)
+                .env("HOME", home.path())
+                .env("PIKI_CLI_AGENT", "1")
+                .env("PIKI_CLI_AGENT_V", "1")
+                .env("PIKI_CLI_AGENT_SOCK", &fifo)
+                .env("PIKI_CLI_AGENT_TARGET", super::super::CLI_AGENT_TARGET)
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
+                .spawn()
+                .expect("hook script runs");
+            let mut child = out;
+            use std::io::Write as _;
+            child
+                .stdin
+                .as_mut()
+                .unwrap()
+                .write_all(stdin.as_bytes())
+                .unwrap();
+            drop(child.stdin.take());
+            let finished = child.wait_with_output().expect("hook exits");
+            assert!(finished.status.success());
+            // Observer only: stdout stays the empty approval object.
+            assert_eq!(String::from_utf8_lossy(&finished.stdout).trim(), "{}");
+            let line = reader.join().expect("reader joins");
+            serde_json::from_str(line.trim()).expect("payload is JSON")
+        };
+
+        let tool_stdin = |ws: &str, name: &str, args: &str| -> String {
+            format!(
+                r#"{{"conversationId":"c","workspacePaths":["{ws}"],"toolCall":{{"name":"{name}","args":{args}}}}}"#
+            )
+        };
+
+        // Covered by the allow list (word-prefix): no prompt coming.
+        let v = run(&tool_stdin(
+            "/other/ws",
+            "run_command",
+            r#"{"CommandLine":"cargo test --lib foo"}"#,
+        ));
+        assert_eq!(v["event"], "tool_started");
+
+        // Same prefix as a word, but not the same words: prompt coming.
+        let v = run(&tool_stdin(
+            "/other/ws",
+            "run_command",
+            r#"{"CommandLine":"cargo testing foo"}"#,
+        ));
+        assert_eq!(v["event"], "permission_request");
+        assert!(
+            v["summary"]
+                .as_str()
+                .unwrap()
+                .starts_with("Wants to run run_command")
+        );
+
+        // Uncovered command, but the checkout is trusted: no prompt.
+        let v = run(&tool_stdin(
+            "/trusted/ws/sub",
+            "run_command",
+            r#"{"CommandLine":"rm -rf /tmp/x"}"#,
+        ));
+        assert_eq!(v["event"], "tool_started");
+
+        // A tool piki can't build a permission string for: fail safe.
+        let v = run(&tool_stdin("/other/ws", "view_file", r#"{"Path":"/x"}"#));
+        assert_eq!(v["event"], "tool_started");
+    }
+
     /// Every handler must print a JSON object on stdout even when piki isn't
     /// driving it — agy treats a handler that prints nothing as failed, and the
     /// plugin lives in the user's global agy config, so a bare `agy` run in a
@@ -319,6 +442,7 @@ mod tests {
         let dir = plugins.path().join(PLUGIN_NAME);
         for script in [
             "agy-on-pre-invocation.sh",
+            "agy-on-pre-tool-use.sh",
             "agy-on-post-tool-use.sh",
             "agy-on-stop.sh",
         ] {

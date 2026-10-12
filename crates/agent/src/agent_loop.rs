@@ -100,6 +100,9 @@ impl AgentLoop {
                         tool_calls = calls;
                         break;
                     }
+                    ChatStreamEvent::Usage(usage) => {
+                        let _ = event_tx.send(AgentEvent::Usage(usage));
+                    }
                     ChatStreamEvent::Error(e) => {
                         let _ = event_tx.send(AgentEvent::Error(e.clone()));
                         return Err(anyhow::anyhow!(e));

@@ -113,6 +113,28 @@ pub(crate) enum Action {
         additional_prompt: String,
         use_current_ws: bool,
     },
+    /// Dispatch several agents to work on the same kanban card at once.
+    /// Each target is (provider, agent name, agent role); each gets its own
+    /// worktree (or its own tab when `use_current_ws` is set).
+    DispatchAgents {
+        source_ws: usize,
+        card_id: String,
+        card_title: String,
+        card_description: String,
+        card_priority: flow_core::Priority,
+        card_project: String,
+        targets: Vec<(AIProvider, Option<String>, Option<String>)>,
+        additional_prompt: String,
+        use_current_ws: bool,
+    },
+    /// Write one input line to several agent tabs at once. Each target is a
+    /// (workspace, tab) pair; the text (+ Enter when `append_enter` is set)
+    /// is written to each tab's PTY verbatim.
+    BroadcastInput {
+        targets: Vec<(usize, usize)>,
+        text: String,
+        append_enter: bool,
+    },
     /// Save an agent profile to storage
     SaveAgent {
         source_repo: std::path::PathBuf,
@@ -187,6 +209,8 @@ pub(crate) async fn execute_action(
             api::handle(app, manager, action, terminal).await?
         }
         Action::DispatchAgent { .. }
+        | Action::DispatchAgents { .. }
+        | Action::BroadcastInput { .. }
         | Action::SaveAgent { .. }
         | Action::DeleteAgent(..)
         | Action::SyncAgentToRepo(..)

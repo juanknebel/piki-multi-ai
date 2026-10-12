@@ -1122,6 +1122,8 @@ export interface ProviderDetail {
   prompt_flag: string;
   dispatchable: boolean;
   agent_dir: string | null;
+  idle_threshold_secs: number | null;
+  idle_notify: boolean;
 }
 
 export function listProviders(): Promise<ProviderDetail[]> {
@@ -1218,7 +1220,8 @@ export type ChatAgentEvent =
   | { kind: "tool-calls"; calls: { id: string; name: string; arguments: unknown }[] }
   | { kind: "tool-executing"; name: string }
   | { kind: "tool-result"; tool_call_id: string; name: string; result: string; is_error: boolean }
-  | { kind: "approval-required"; tool_call_id: string; tool_name: string; description: string };
+  | { kind: "approval-required"; tool_call_id: string; tool_name: string; description: string }
+  | { kind: "usage"; prompt_tokens: number; completion_tokens: number };
 
 export function onChatAgentEvent(callback: (event: ChatAgentEvent) => void): Promise<UnlistenFn> {
   return listen<ChatAgentEvent>("chat-agent-event", (e) => callback(e.payload));

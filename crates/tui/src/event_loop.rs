@@ -473,6 +473,10 @@ pub(crate) async fn run(
                             app.chat_panel.streaming = false;
                             app.needs_redraw = true;
                         }
+                        piki_api_client::ChatStreamEvent::Usage(usage) => {
+                            app.chat_panel.usage.add(usage);
+                            app.needs_redraw = true;
+                        }
                         piki_api_client::ChatStreamEvent::Error(e) => {
                             app.set_toast(format!("Chat error: {e}"), app::ToastLevel::Error);
                             app.chat_panel.streaming = false;
@@ -535,6 +539,10 @@ pub(crate) async fn run(
                                 tool_call_id: None,
                             });
                             app.chat_panel.agent_tool_status = None;
+                            app.needs_redraw = true;
+                        }
+                        piki_agent::AgentEvent::Usage(usage) => {
+                            app.chat_panel.usage.add(usage);
                             app.needs_redraw = true;
                         }
                         piki_agent::AgentEvent::Finished => {

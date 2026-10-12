@@ -375,7 +375,8 @@ fn default_scroll() -> HashMap<String, String> {
     m
 }
 
-/// Agents pane (bottom-left): navigate active agents and jump to them.
+/// Agents pane (bottom-left): navigate active agents, jump to them, and
+/// broadcast one input line to several at once.
 fn default_agents() -> HashMap<String, String> {
     let mut m = HashMap::new();
     m.insert("down".to_string(), "j".to_string());
@@ -383,6 +384,7 @@ fn default_agents() -> HashMap<String, String> {
     m.insert("down_alt".to_string(), "down".to_string());
     m.insert("up_alt".to_string(), "up".to_string());
     m.insert("select".to_string(), "enter".to_string());
+    m.insert("broadcast".to_string(), "b".to_string());
     m
 }
 

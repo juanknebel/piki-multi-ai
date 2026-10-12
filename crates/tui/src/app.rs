@@ -122,6 +122,8 @@ pub enum AppMode {
     WorkspaceSwitcher,
     /// Dispatch agent dialog
     DispatchAgent,
+    /// Broadcast input to agent tabs dialog
+    Broadcast,
     /// Manage agent profiles overlay
     ManageAgents,
     /// Edit/create agent profile dialog (step 1: name + provider)
@@ -1199,6 +1201,9 @@ pub struct ChatPanelState {
     /// One-shot confirm: first Ctrl+L arms, the second clears. Any other key
     /// disarms.
     pub pending_clear: bool,
+    /// Running token totals for this conversation (OpenRouter / llama.cpp
+    /// only — other backends never report usage). Reset on clear.
+    pub usage: piki_api_client::ChatUsage,
 }
 
 impl App {

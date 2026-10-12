@@ -41,6 +41,49 @@ pub struct RawToolCall {
     pub arguments: String,
 }
 
+/// Token counts for one chat completion, as reported by the server.
+/// Only OpenAI-compatible backends (OpenRouter, llama.cpp) report it, via
+/// `stream_options.include_usage`; Ollama never emits `Usage`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChatUsage {
+    pub prompt_tokens: u64,
+    pub completion_tokens: u64,
+}
+
+impl ChatUsage {
+    pub fn total(self) -> u64 {
+        self.prompt_tokens.saturating_add(self.completion_tokens)
+    }
+
+    /// Accumulate another report into this running total.
+    pub fn add(&mut self, other: ChatUsage) {
+        self.prompt_tokens = self.prompt_tokens.saturating_add(other.prompt_tokens);
+        self.completion_tokens = self
+            .completion_tokens
+            .saturating_add(other.completion_tokens);
+    }
+
+    /// Compact `12.3k` / `1.2M` rendering for status lines.
+    pub fn compact(n: u64) -> String {
+        if n >= 1_000_000 {
+            format!("{:.1}M", n as f64 / 1_000_000.0)
+        } else if n >= 1_000 {
+            format!("{:.1}k", n as f64 / 1_000.0)
+        } else {
+            format!("{n}")
+        }
+    }
+
+    /// `12.3k in · 4.1k out` rendering for the chat footer.
+    pub fn summary(self) -> String {
+        format!(
+            "{} in · {} out",
+            Self::compact(self.prompt_tokens),
+            Self::compact(self.completion_tokens)
+        )
+    }
+}
+
 /// Events emitted during a streaming chat response.
 #[derive(Debug, Clone)]
 pub enum ChatStreamEvent {
@@ -50,6 +93,10 @@ pub enum ChatStreamEvent {
     Done(String),
     /// The LLM requested tool calls instead of (or in addition to) content.
     ToolCalls(Vec<RawToolCall>),
+    /// Token counts for the just-finished completion. May arrive before
+    /// `Done`/`ToolCalls` (usage chunks come last in the SSE stream but are
+    /// forwarded immediately); accumulate, don't treat as terminal.
+    Usage(ChatUsage),
     /// An error occurred during streaming.
     Error(String),
 }
@@ -350,6 +397,26 @@ struct TagsResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_chat_usage_accumulates_and_renders() {
+        let mut total = ChatUsage::default();
+        total.add(ChatUsage {
+            prompt_tokens: 12_300,
+            completion_tokens: 4_120,
+        });
+        total.add(ChatUsage {
+            prompt_tokens: 100,
+            completion_tokens: 8,
+        });
+        assert_eq!(total.prompt_tokens, 12_400);
+        assert_eq!(total.completion_tokens, 4_128);
+        assert_eq!(total.total(), 16_528);
+        assert_eq!(ChatUsage::compact(999), "999");
+        assert_eq!(ChatUsage::compact(12_400), "12.4k");
+        assert_eq!(ChatUsage::compact(2_000_000), "2.0M");
+        assert_eq!(total.summary(), "12.4k in · 4.1k out");
+    }
 
     #[test]
     fn test_parse_stream_response() {

@@ -1483,6 +1483,7 @@ pub(super) fn handle_dispatch_agent_input(app: &mut App, key: KeyEvent) -> Optio
         ref card_project,
         ref mut agent_idx,
         ref agents,
+        ref mut selected,
         ref mut additional_prompt,
         ref mut additional_prompt_cursor,
         ref mut step,
@@ -1514,7 +1515,7 @@ pub(super) fn handle_dispatch_agent_input(app: &mut App, key: KeyEvent) -> Optio
         }
     };
 
-    if *step == 1 {
+    if *step == 2 {
         // Step 2: workspace destination selection
         match key.code {
             KeyCode::Left | KeyCode::Right | KeyCode::Tab => {
@@ -1522,54 +1523,63 @@ pub(super) fn handle_dispatch_agent_input(app: &mut App, key: KeyEvent) -> Optio
                 None
             }
             KeyCode::Enter => {
-                let (provider, agent_name, agent_role) = resolve_selection(*agent_idx);
-                let action = Action::DispatchAgent {
-                    source_ws,
-                    card_id: card_id.clone(),
-                    card_title: card_title.clone(),
-                    card_description: card_description.clone(),
-                    card_priority,
-                    card_project: card_project.clone(),
-                    provider,
-                    agent_name,
-                    agent_role,
-                    additional_prompt: additional_prompt.clone(),
-                    use_current_ws: *use_current_ws,
+                let checked: Vec<usize> = selected
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, s)| **s && *i < total)
+                    .map(|(i, _)| i)
+                    .collect();
+                let action = if checked.is_empty() {
+                    // No checkboxes: dispatch the highlighted entry alone
+                    let (provider, agent_name, agent_role) = resolve_selection(*agent_idx);
+                    Action::DispatchAgent {
+                        source_ws,
+                        card_id: card_id.clone(),
+                        card_title: card_title.clone(),
+                        card_description: card_description.clone(),
+                        card_priority,
+                        card_project: card_project.clone(),
+                        provider,
+                        agent_name,
+                        agent_role,
+                        additional_prompt: additional_prompt.clone(),
+                        use_current_ws: *use_current_ws,
+                    }
+                } else {
+                    let targets = checked.into_iter().map(&resolve_selection).collect();
+                    Action::DispatchAgents {
+                        source_ws,
+                        card_id: card_id.clone(),
+                        card_title: card_title.clone(),
+                        card_description: card_description.clone(),
+                        card_priority,
+                        card_project: card_project.clone(),
+                        targets,
+                        additional_prompt: additional_prompt.clone(),
+                        use_current_ws: *use_current_ws,
+                    }
                 };
                 app.active_dialog = None;
                 app.mode = AppMode::Normal;
                 Some(action)
             }
             _ if is_cancel(key, &app.config) => {
-                // Back to step 0
-                *step = 0;
+                // Back to step 1 (prompt)
+                *step = 1;
                 None
             }
             _ => None,
         }
-    } else {
-        // Step 0: agent/provider selection
-        if total == 0 {
-            return None;
-        }
-
+    } else if *step == 1 {
+        // Step 1: additional prompt (free text)
         match key.code {
-            KeyCode::Left => {
-                *agent_idx = (*agent_idx + total - 1) % total;
-                None
-            }
-            KeyCode::Right | KeyCode::Tab => {
-                *agent_idx = (*agent_idx + 1) % total;
-                None
-            }
             KeyCode::Enter => {
-                // Always advance to workspace destination selection
-                *step = 1;
+                *step = 2;
                 None
             }
             _ if is_cancel(key, &app.config) => {
-                app.active_dialog = None;
-                app.mode = AppMode::Normal;
+                // Back to step 0 (checklist)
+                *step = 0;
                 None
             }
             _ => {
@@ -1578,6 +1588,168 @@ pub(super) fn handle_dispatch_agent_input(app: &mut App, key: KeyEvent) -> Optio
                 });
                 None
             }
+        }
+    } else {
+        // Step 0: agent/provider multi-select checklist
+        if total == 0 {
+            return None;
+        }
+
+        match key.code {
+            KeyCode::Char('j') | KeyCode::Down | KeyCode::Right | KeyCode::Tab => {
+                *agent_idx = (*agent_idx + 1) % total;
+                None
+            }
+            KeyCode::Char('k') | KeyCode::Up | KeyCode::Left => {
+                *agent_idx = (*agent_idx + total - 1) % total;
+                None
+            }
+            KeyCode::Char(' ') => {
+                if selected.len() < total {
+                    selected.resize(total, false);
+                }
+                if let Some(slot) = selected.get_mut(*agent_idx) {
+                    *slot = !*slot;
+                }
+                if *agent_idx + 1 < total {
+                    *agent_idx += 1;
+                }
+                None
+            }
+            KeyCode::Char('a') => {
+                if selected.len() < total {
+                    selected.resize(total, false);
+                }
+                let all_selected = selected.iter().take(total).all(|&s| s);
+                for s in selected.iter_mut().take(total) {
+                    *s = !all_selected;
+                }
+                None
+            }
+            KeyCode::Enter => {
+                // Advance to the additional-prompt step
+                *step = 1;
+                None
+            }
+            _ if is_cancel(key, &app.config) => {
+                app.active_dialog = None;
+                app.mode = AppMode::Normal;
+                None
+            }
+            _ => None,
+        }
+    }
+}
+
+pub(super) fn handle_broadcast_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::Broadcast {
+        ref rows,
+        ref mut selected,
+        ref mut cursor,
+        ref mut input,
+        ref mut input_cursor,
+        ref mut step,
+        ref mut append_enter,
+    }) = app.active_dialog
+    else {
+        return None;
+    };
+
+    let total = rows.len();
+    if total == 0 {
+        app.active_dialog = None;
+        app.mode = AppMode::Normal;
+        return None;
+    }
+    if *cursor >= total {
+        *cursor = total - 1;
+    }
+
+    if *step == 1 {
+        // Step 1: type the line to send
+        match key.code {
+            KeyCode::Enter => {
+                if input.trim().is_empty() {
+                    return None;
+                }
+                let checked: Vec<(usize, usize)> = selected
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, s)| **s && *i < total)
+                    .map(|(i, _)| rows[i])
+                    .collect();
+                // Nothing checked: send to the highlighted row alone.
+                let targets = if checked.is_empty() {
+                    vec![rows[*cursor]]
+                } else {
+                    checked
+                };
+                let action = Action::BroadcastInput {
+                    targets,
+                    text: input.clone(),
+                    append_enter: *append_enter,
+                };
+                app.active_dialog = None;
+                app.mode = AppMode::Normal;
+                Some(action)
+            }
+            KeyCode::Tab => {
+                *append_enter = !*append_enter;
+                None
+            }
+            _ if is_cancel(key, &app.config) => {
+                // Back to step 0 (checklist)
+                *step = 0;
+                None
+            }
+            _ => {
+                handle_text_input(input, input_cursor, key, |c| !c.is_control());
+                None
+            }
+        }
+    } else {
+        // Step 0: agent multi-select checklist
+        match key.code {
+            KeyCode::Char('j') | KeyCode::Down => {
+                *cursor = (*cursor + 1) % total;
+                None
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                *cursor = (*cursor + total - 1) % total;
+                None
+            }
+            KeyCode::Char(' ') => {
+                if selected.len() < total {
+                    selected.resize(total, false);
+                }
+                if let Some(slot) = selected.get_mut(*cursor) {
+                    *slot = !*slot;
+                }
+                if *cursor + 1 < total {
+                    *cursor += 1;
+                }
+                None
+            }
+            KeyCode::Char('a') => {
+                if selected.len() < total {
+                    selected.resize(total, false);
+                }
+                let all_selected = selected.iter().take(total).all(|&s| s);
+                for s in selected.iter_mut().take(total) {
+                    *s = !all_selected;
+                }
+                None
+            }
+            KeyCode::Enter => {
+                *step = 1;
+                None
+            }
+            _ if is_cancel(key, &app.config) => {
+                app.active_dialog = None;
+                app.mode = AppMode::Normal;
+                None
+            }
+            _ => None,
         }
     }
 }
@@ -2005,6 +2177,9 @@ pub(super) fn handle_manage_providers_input(app: &mut App, key: KeyEvent) -> Opt
                 dispatchable: true,
                 agent_dir: String::new(),
                 agent_dir_cursor: 0,
+                idle_threshold: String::new(),
+                idle_threshold_cursor: 0,
+                idle_notify: true,
                 active_field: EditProviderField::Name,
             });
             app.mode = AppMode::EditProvider;
@@ -2027,6 +2202,10 @@ pub(super) fn handle_manage_providers_input(app: &mut App, key: KeyEvent) -> Opt
                 let name = config.name.clone();
                 let desc = config.description.clone();
                 let cmd = config.command.clone();
+                let idle_threshold = config
+                    .idle_threshold_secs
+                    .map(|s| s.to_string())
+                    .unwrap_or_default();
                 app.active_dialog = Some(DialogState::EditProvider {
                     original_name: Some(name.clone()),
                     name_cursor: name.len(),
@@ -2043,6 +2222,9 @@ pub(super) fn handle_manage_providers_input(app: &mut App, key: KeyEvent) -> Opt
                     dispatchable: config.dispatchable,
                     agent_dir_cursor: agent_dir.len(),
                     agent_dir,
+                    idle_threshold_cursor: idle_threshold.len(),
+                    idle_threshold,
+                    idle_notify: config.idle_notify,
                     active_field: EditProviderField::Name,
                 });
                 app.mode = AppMode::EditProvider;
@@ -2094,6 +2276,8 @@ pub(super) fn handle_edit_provider_input(app: &mut App, key: KeyEvent) -> Option
             ref prompt_flag,
             dispatchable,
             ref agent_dir,
+            ref idle_threshold,
+            idle_notify,
             ..
         }) = app.active_dialog
         {
@@ -2114,17 +2298,28 @@ pub(super) fn handle_edit_provider_input(app: &mut App, key: KeyEvent) -> Option
             } else {
                 default_args.split_whitespace().map(String::from).collect()
             };
+            // Empty = provider default (None); digits = explicit seconds.
+            let idle_threshold_secs = if idle_threshold.trim().is_empty() {
+                None
+            } else {
+                match idle_threshold.trim().parse::<u64>() {
+                    Ok(s) => Some(s),
+                    Err(_) => {
+                        app.set_toast(
+                            "Idle threshold must be seconds (digits) or empty for default",
+                            crate::app::ToastLevel::Error,
+                        );
+                        return None;
+                    }
+                }
+            };
             let old_name = original_name.clone();
-            // Preserve fields the dialog form doesn't expose today — blindly
-            // resetting them would wipe Claude's ✦ / Gemini's ✧ icon and any
-            // per-provider idle config (`idle_threshold_secs` / `idle_notify`
-            // from providers.toml) on every save.
+            // Preserve the icon the dialog form doesn't expose — blindly
+            // resetting it would wipe Claude's ✦ / Gemini's ✧ on every save.
             let prev = old_name
                 .as_deref()
                 .and_then(|n| app.provider_manager.get(n));
             let preserved_icon = prev.and_then(|c| c.icon.clone());
-            let preserved_idle_threshold = prev.and_then(|c| c.idle_threshold_secs);
-            let preserved_idle_notify = prev.map(|c| c.idle_notify).unwrap_or(true);
             Some((
                 old_name,
                 piki_core::providers::ProviderConfig {
@@ -2139,8 +2334,8 @@ pub(super) fn handle_edit_provider_input(app: &mut App, key: KeyEvent) -> Option
                     } else {
                         Some(agent_dir.clone())
                     },
-                    idle_threshold_secs: preserved_idle_threshold,
-                    idle_notify: preserved_idle_notify,
+                    idle_threshold_secs,
+                    idle_notify,
                     icon: preserved_icon,
                 },
             ))
@@ -2196,6 +2391,9 @@ pub(super) fn handle_edit_provider_input(app: &mut App, key: KeyEvent) -> Option
         ref mut dispatchable,
         ref mut agent_dir,
         ref mut agent_dir_cursor,
+        ref mut idle_threshold,
+        ref mut idle_threshold_cursor,
+        ref mut idle_notify,
         ref mut active_field,
         ..
     }) = app.active_dialog
@@ -2245,6 +2443,17 @@ pub(super) fn handle_edit_provider_input(app: &mut App, key: KeyEvent) -> Option
         EditProviderField::AgentDir => {
             handle_text_input(agent_dir, agent_dir_cursor, key, accept_any);
         }
+        EditProviderField::IdleThreshold => {
+            handle_text_input(idle_threshold, idle_threshold_cursor, key, |c| {
+                c.is_ascii_digit()
+            });
+        }
+        EditProviderField::IdleNotify => match key.code {
+            KeyCode::Left | KeyCode::Right | KeyCode::Char(' ') => {
+                *idle_notify = !*idle_notify;
+            }
+            _ => {}
+        },
     }
     None
 }

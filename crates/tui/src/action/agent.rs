@@ -14,6 +14,238 @@ pub(super) async fn handle(
     _terminal: &mut DefaultTerminal,
 ) -> anyhow::Result<()> {
     match action {
+        Action::BroadcastInput {
+            targets,
+            text,
+            append_enter,
+        } => {
+            let mut payload = text.into_bytes();
+            if append_enter {
+                payload.push(b'\n');
+            }
+            let mut done = 0;
+            for (ws_idx, tab_idx) in targets {
+                let wrote = app
+                    .workspaces
+                    .get_mut(ws_idx)
+                    .and_then(|ws| ws.tabs.get_mut(tab_idx))
+                    .and_then(|tab| tab.pty_session.as_mut())
+                    .map(|pty| pty.write(&payload).is_ok())
+                    .unwrap_or(false);
+                if wrote {
+                    done += 1;
+                }
+            }
+            app.set_toast(format!("Broadcast to {done} agent(s)"), ToastLevel::Success);
+        }
+        Action::DispatchAgents {
+            source_ws,
+            card_id,
+            card_title,
+            card_description,
+            card_priority,
+            card_project,
+            targets,
+            additional_prompt,
+            use_current_ws,
+        } => {
+            if targets.is_empty() {
+                return Ok(());
+            }
+            // One kanban update for the whole batch: assignees joined.
+            let assignee_label = targets
+                .iter()
+                .map(|(provider, name, _)| name.as_deref().unwrap_or(provider.label()).to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            let card = DispatchCard {
+                source_ws,
+                id: &card_id,
+                title: &card_title,
+                description: &card_description,
+                priority: card_priority,
+                project: &card_project,
+            };
+            if let Some(e) = sync_dispatch_card(app, &card, &assignee_label) {
+                app.set_toast(
+                    format!("Kanban card sync failed: {e}"),
+                    crate::app::ToastLevel::Error,
+                );
+            }
+
+            let type_prefix = match card_priority {
+                flow_core::Priority::Bug => "bug",
+                flow_core::Priority::Wishlist => "spike",
+                _ => "feature",
+            };
+            let sanitized_id: String = card_id
+                .chars()
+                .map(|c| {
+                    if c.is_alphanumeric() || c == '-' || c == '_' || c == '.' {
+                        c
+                    } else {
+                        '-'
+                    }
+                })
+                .collect();
+
+            let mut done = 0;
+            let mut first_new_ws: Option<usize> = None;
+            for (i, (provider, agent_name, agent_role)) in targets.into_iter().enumerate() {
+                let task_prompt = compose_task_prompt(
+                    &card_title,
+                    &card_description,
+                    &agent_name,
+                    &additional_prompt,
+                );
+                if use_current_ws {
+                    let ws = &mut app.workspaces[source_ws];
+                    let (idx, spawn_error) = spawn_tab(
+                        ws,
+                        &provider,
+                        app.pty_rows,
+                        app.pty_cols,
+                        Some(&task_prompt),
+                        Some(&app.provider_manager),
+                        &app.paths,
+                        app.session_daemon.clone(),
+                        app.pty_output.clone(),
+                    )
+                    .await;
+                    ws.active_tab = idx;
+                    if spawn_error.is_none() {
+                        done += 1;
+                    }
+                } else {
+                    // Unique branch per target so worktrees never collide.
+                    let slug: String = agent_name
+                        .as_deref()
+                        .unwrap_or(provider.label())
+                        .chars()
+                        .map(|c| {
+                            if c.is_alphanumeric() {
+                                c.to_ascii_lowercase()
+                            } else {
+                                '-'
+                            }
+                        })
+                        .collect::<String>()
+                        .trim_matches('-')
+                        .to_string();
+                    let slug = if slug.is_empty() {
+                        format!("{i}")
+                    } else {
+                        slug
+                    };
+                    let ws_name = format!("{type_prefix}/{sanitized_id}-{slug}");
+                    let source_dir = match app.workspaces.get(source_ws) {
+                        Some(ws) => ws.source_repo.clone(),
+                        None => {
+                            app.set_toast(
+                                "Source workspace not found",
+                                crate::app::ToastLevel::Info,
+                            );
+                            return Ok(());
+                        }
+                    };
+                    let kanban_path = app
+                        .workspaces
+                        .get(source_ws)
+                        .and_then(|ws| ws.kanban_path.clone());
+                    match manager
+                        .create(
+                            &ws_name,
+                            &card_title,
+                            &task_prompt,
+                            kanban_path.clone(),
+                            &source_dir,
+                        )
+                        .await
+                    {
+                        Ok(mut info) => {
+                            info.dispatch_card_id = Some(card_id.clone());
+                            info.dispatch_source_kanban = kanban_path;
+                            info.dispatch_agent_name = agent_name.clone();
+                            info.order = app
+                                .workspaces
+                                .iter()
+                                .map(|w| w.info.order)
+                                .max()
+                                .map(|m| m + 1)
+                                .unwrap_or(0);
+                            if let (Some(name), Some(role)) = (&agent_name, &agent_role) {
+                                let _ = materialize_agent_config(
+                                    &info.path,
+                                    name,
+                                    &provider,
+                                    role,
+                                    Some(&app.provider_manager),
+                                );
+                            }
+                            app.workspaces.push(app::Workspace::from_info(info));
+                            let new_idx = app.workspaces.len() - 1;
+                            if first_new_ws.is_none() {
+                                first_new_ws = Some(new_idx);
+                            }
+                            let ws = &mut app.workspaces[new_idx];
+                            match FileWatcher::new(ws.path.clone(), ws.name.clone()) {
+                                Ok(watcher) => ws.watcher = Some(watcher),
+                                Err(e) => {
+                                    app.set_toast(
+                                        format!("Watcher error: {}", e),
+                                        crate::app::ToastLevel::Error,
+                                    );
+                                }
+                            }
+                            let ws = &mut app.workspaces[new_idx];
+                            let (idx, spawn_error) = spawn_tab(
+                                ws,
+                                &provider,
+                                app.pty_rows,
+                                app.pty_cols,
+                                Some(&task_prompt),
+                                Some(&app.provider_manager),
+                                &app.paths,
+                                app.session_daemon.clone(),
+                                app.pty_output.clone(),
+                            )
+                            .await;
+                            ws.active_tab = idx;
+                            if spawn_error.is_none() {
+                                done += 1;
+                            } else if let Some(err) = spawn_error {
+                                app.set_toast(err, ToastLevel::Error);
+                            }
+                        }
+                        Err(e) => {
+                            app.set_toast(
+                                format!("Dispatch failed: {}", e),
+                                crate::app::ToastLevel::Error,
+                            );
+                        }
+                    }
+                }
+            }
+
+            if !use_current_ws {
+                let source = app
+                    .workspaces
+                    .get(source_ws)
+                    .map(|ws| ws.source_repo.clone());
+                if let Some(source) = source {
+                    crate::helpers::persist_workspaces(app, source);
+                }
+                if let Some(idx) = first_new_ws {
+                    app.switch_workspace_and_focus(idx);
+                }
+            } else {
+                app.active_pane = crate::app::ActivePane::MainPanel;
+            }
+            app.set_toast(
+                format!("Dispatched {done} agent(s): {}", card_title),
+                ToastLevel::Success,
+            );
+        }
         Action::DispatchAgent {
             source_ws,
             card_id,
@@ -427,6 +659,77 @@ pub(super) async fn handle(
         other => unreachable!("non-agent action routed to action::agent: {other:?}"),
     }
     Ok(())
+}
+
+/// Compose the task prompt an agent receives when dispatched from a kanban card.
+fn compose_task_prompt(
+    card_title: &str,
+    card_description: &str,
+    agent_name: &Option<String>,
+    additional_prompt: &str,
+) -> String {
+    if let Some(name) = agent_name {
+        let mut parts = vec![format!(
+            "Use the {} agent to plan and then implement the task: {}",
+            name, card_title
+        )];
+        if !card_description.is_empty() {
+            parts.push(card_description.to_string());
+        }
+        if !additional_prompt.trim().is_empty() {
+            parts.push(additional_prompt.trim().to_string());
+        }
+        parts.join("\n\n")
+    } else {
+        let mut parts = vec![card_title.to_string()];
+        if !card_description.is_empty() {
+            parts.push(card_description.to_string());
+        }
+        if !additional_prompt.trim().is_empty() {
+            parts.push(additional_prompt.trim().to_string());
+        }
+        parts.join("\n\n")
+    }
+}
+
+/// Card identity + content shared by single and multi dispatch.
+struct DispatchCard<'a> {
+    source_ws: usize,
+    id: &'a str,
+    title: &'a str,
+    description: &'a str,
+    priority: flow_core::Priority,
+    project: &'a str,
+}
+
+/// Point the dispatched card at its agent(s): set assignee, move to
+/// in-progress and reload the board. Returns the sync error, if any.
+fn sync_dispatch_card(app: &mut App, card: &DispatchCard, assignee_label: &str) -> Option<String> {
+    let mut kanban_err: Option<String> = None;
+    if let Some(src_ws) = app.workspaces.get_mut(card.source_ws)
+        && let Some(ref mut kp) = src_ws.kanban_provider
+    {
+        if let Err(e) = kp.update_card(
+            card.id,
+            card.title,
+            card.description,
+            card.priority,
+            assignee_label,
+            card.project,
+        ) {
+            kanban_err = Some(e.to_string());
+        }
+        if let Err(e) = kp.move_card(card.id, "in_progress") {
+            kanban_err = Some(e.to_string());
+        }
+        if let Some(ref mut ka) = src_ws.kanban_app
+            && let Ok(board) = kp.load_board()
+        {
+            ka.board = board;
+            ka.clamp();
+        }
+    }
+    kanban_err
 }
 
 /// Write agent role/instructions to the provider's standard subagent config path in the worktree.

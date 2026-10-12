@@ -39,6 +39,12 @@ enum ChatAgentEventPayload {
         tool_name: String,
         description: String,
     },
+    /// Token counts for one server completion (running conversation total
+    /// after the backend accumulates it).
+    Usage {
+        prompt_tokens: u64,
+        completion_tokens: u64,
+    },
 }
 
 /// A user's answer to `ApprovalRequired`, as the frontend sends it.
@@ -221,6 +227,20 @@ pub async fn chat_send_message(
                     app.chat_streaming = false;
                     return;
                 }
+                piki_api_client::ChatStreamEvent::Usage(usage) => {
+                    let managed: tauri::State<'_, Mutex<DesktopApp>> = handle_for_events.state();
+                    let mut app = managed.lock();
+                    app.chat_usage.add(usage);
+                    let total = app.chat_usage;
+                    drop(app);
+                    let _ = handle_for_events.emit(
+                        "chat-agent-event",
+                        ChatAgentEventPayload::Usage {
+                            prompt_tokens: total.prompt_tokens,
+                            completion_tokens: total.completion_tokens,
+                        },
+                    );
+                }
                 piki_api_client::ChatStreamEvent::Error(e) => {
                     // Persist error so it survives reload and is visible even if
                     // the frontend's streamingEl was already cleared.
@@ -378,6 +398,7 @@ pub async fn chat_clear(state: State<'_, Mutex<DesktopApp>>) -> Result<(), Strin
     let mut app = state.lock();
     app.chat_messages.clear();
     app.chat_pending_approvals.clear();
+    app.chat_usage = Default::default();
     Ok(())
 }
 
@@ -663,6 +684,20 @@ pub async fn chat_send_agent_message(
                         tool_calls: None,
                         tool_call_id: Some(tool_call_id),
                     });
+                }
+                piki_agent::AgentEvent::Usage(usage) => {
+                    let managed: tauri::State<'_, Mutex<DesktopApp>> = handle_for_events.state();
+                    let mut app = managed.lock();
+                    app.chat_usage.add(usage);
+                    let total = app.chat_usage;
+                    drop(app);
+                    let _ = handle_for_events.emit(
+                        "chat-agent-event",
+                        ChatAgentEventPayload::Usage {
+                            prompt_tokens: total.prompt_tokens,
+                            completion_tokens: total.completion_tokens,
+                        },
+                    );
                 }
                 piki_agent::AgentEvent::Finished => {
                     let _ = handle_for_events.emit(

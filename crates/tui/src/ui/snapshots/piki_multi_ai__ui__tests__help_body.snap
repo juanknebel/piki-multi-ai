@@ -1,5 +1,6 @@
 ---
 source: crates/tui/src/ui/mod.rs
+assertion_line: 861
 expression: body
 ---
 
@@ -102,6 +103,7 @@ expression: body
     k             Select the previous agent
     Enter         Jump to that workspace and tab
     Click         Jump to that workspace and tab
+    b             Broadcast one input line to several agents
 
   Fuzzy file search (C-g /)
     Type          Filter files
@@ -198,11 +200,24 @@ expression: body
     Esc           Close
 
   Dispatch agent dialog
-    ←/→/Tab       Step 1: cycle the agent / provider
+    j/k/↑/↓/←/→/Tab Step 0: move through agents / providers
+    Space         Step 0: check one agent
+    a             Step 0: check all / none
+    Enter         Step 0: continue to the prompt
     Type          Step 1: add extra prompt instructions
     Enter         Step 1: continue to the destination
-    ←/→/Tab       Step 2: new worktree or current workspace
+    ←/→/Tab       Step 2: new worktree(s) or current workspace
     Enter         Step 2: dispatch
+    Esc           Back a step, or cancel
+
+  Broadcast to agents dialog
+    j/k/↑/↓       Step 0: move through agents
+    Space         Step 0: check one agent
+    a             Step 0: check all / none
+    Enter         Step 0: continue to the input
+    Type          Step 1: the line to send
+    Tab           Step 1: toggle append Enter
+    Enter         Step 1: send
     Esc           Back a step, or cancel
 
   Move dispatched card (after confirming delete)

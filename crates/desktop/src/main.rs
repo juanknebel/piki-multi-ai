@@ -221,6 +221,7 @@ fn main() {
                 chat_messages: Vec::new(),
                 chat_config,
                 chat_streaming: false,
+                chat_usage: Default::default(),
                 chat_agent_mode: false,
                 chat_pending_approvals: Default::default(),
                 scratch_terminal: None,

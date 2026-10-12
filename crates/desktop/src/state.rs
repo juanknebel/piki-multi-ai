@@ -39,6 +39,9 @@ pub struct DesktopApp {
     pub chat_config: piki_core::chat::ChatConfig,
     /// Whether a chat response is currently being streamed.
     pub chat_streaming: bool,
+    /// Running token totals for this conversation (OpenRouter / llama.cpp
+    /// only). Reset by `chat_clear`.
+    pub chat_usage: piki_api_client::ChatUsage,
     /// Whether agent mode (tool-use) is enabled for chat.
     pub chat_agent_mode: bool,
     /// Write-tool approvals the agent loop is waiting on, by tool call id.
