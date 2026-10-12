@@ -44,9 +44,12 @@ if [ "$TOOL" = "run_command" ]; then
         if [ -z "$MODE" ] || [ "$MODE" = "default" ]; then
             # An allow entry `command(cargo test)` covers `cargo test --lib`
             # (word-prefix on the inner command) but not `cargo testing`.
+            # Deliberately no `capture` with named groups here: only
+            # startswith/endswith/slicing, which every jq >= 1.5 handles.
             ALLOWED=$(jq -r --arg c "$CMD" \
                 '[.permissions.allow // []
-                  | .[] | capture("^command\\((?<rule>.*)\\)$")?.rule as $rule
+                  | .[] | select(startswith("command(") and endswith(")"))
+                  | .[8:-1] as $rule
                   | select($c == $rule or ($c | startswith($rule + " ")))] | length' \
                 "$SETTINGS" 2>/dev/null)
             TRUSTED=$(jq -r --arg w "$WS" \

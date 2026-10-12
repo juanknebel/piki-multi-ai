@@ -336,6 +336,14 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn pre_tool_use_predicts_permission_from_settings() {
+        // The hook shell-outs to jq: fail loudly when it is missing instead
+        // of false-passing (an empty jq result reads as "no evidence").
+        let jq = std::process::Command::new("jq")
+            .arg("--version")
+            .output()
+            .expect("jq is required for hook tests");
+        assert!(jq.status.success());
+
         let (_sock_base, plugins, _setup) = materialized();
         let dir = plugins.path().join(PLUGIN_NAME);
 
