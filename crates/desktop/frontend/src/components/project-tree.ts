@@ -265,8 +265,11 @@ export function renderProjectTree(container: HTMLElement) {
     const workspaces = appState.workspaces;
     const activeIdx = appState.activeWorkspace;
 
-    // Frequent agent events rebuild the list; keep the scroll position.
-    const prevScroll = container.scrollTop;
+    // Frequent agent events rebuild the list; keep the scroll position. The
+    // scroller is the `.projects-list` inside (it owns `overflow-y: auto`) —
+    // the container has no overflow and always reports scrollTop 0, so
+    // reading it here would reset the panel to the top on every click.
+    const prevScroll = container.querySelector(".projects-list")?.scrollTop ?? 0;
     container.innerHTML = "";
 
     const header = document.createElement("div");
@@ -570,7 +573,7 @@ export function renderProjectTree(container: HTMLElement) {
     });
 
     container.appendChild(list);
-    container.scrollTop = prevScroll;
+    list.scrollTop = prevScroll;
   }
 
   async function adoptAndOpen(path: string) {
