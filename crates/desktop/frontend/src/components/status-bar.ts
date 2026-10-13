@@ -184,10 +184,57 @@ export function renderStatusBar(container: HTMLElement) {
   setInterval(refreshSessions, 3000);
 }
 
+/** Structural view of a segment for `sameSegmentShape` — the DOM-free
+ *  shape the unit test builds by hand (`shapeOf` reads it off an element). */
+export interface SegmentShape {
+  innerHTML: string;
+  /** `title` attribute (`null` when absent — the tooltip steals it on hover). */
+  title: string | null;
+  /** `data-title`: where the tooltip stashes the stolen text. Freshly built
+   *  segments never carry it. */
+  dataTitle: string | null;
+  /** Every other attribute, sorted by name. */
+  attrs: Array<readonly [name: string, value: string]>;
+}
+
+/** Read the compared shape off an element. */
+export function shapeOf(el: Element): SegmentShape {
+  const names = el
+    .getAttributeNames()
+    .filter((n) => n !== "title" && n !== "data-title")
+    .sort();
+  return {
+    innerHTML: el.innerHTML,
+    title: el.getAttribute("title"),
+    dataTitle: el.getAttribute("data-title"),
+    attrs: names.map((n) => [n, el.getAttribute(n) ?? ""] as const),
+  };
+}
+
+/** Whether the live segment already shows what the fresh one would — the
+ *  comparison `morphChildren` keeps nodes by. It is `outerHTML` equality
+ *  with ONE exception: hovering a segment makes the tooltip (`tooltip.ts`)
+ *  steal its `title` into `data-title` (same text, different attribute),
+ *  and that must not count as a change. A raw `outerHTML` compare sees the
+ *  hovered node as different on EVERY render, so while an agent streams
+ *  the node under the cursor is replaced several times a second: the icon
+ *  visibly blinks and clicks land split across node generations and never
+ *  fire. A genuinely different title still replaces. */
+export function sameSegmentShape(live: SegmentShape, next: SegmentShape): boolean {
+  if (live.innerHTML !== next.innerHTML) return false;
+  const liveTitle = live.title ?? live.dataTitle;
+  const nextTitle = next.title ?? next.dataTitle;
+  if (liveTitle !== nextTitle) return false;
+  if (live.attrs.length !== next.attrs.length) return false;
+  return live.attrs.every(([n, v], i) => next.attrs[i][0] === n && next.attrs[i][1] === v);
+}
+
 /** Patch `live`'s children to match `next`'s, keyed by `data-seg`: a
  *  segment whose markup is unchanged keeps its DOM node — listeners,
  *  running CSS transitions and all (every render wires the same handlers,
- *  so a kept element behaves like a fresh one). Conditional segments
+ *  so a kept element behaves like a fresh one). The comparison is
+ *  `sameSegmentShape`, which sees through the tooltip's stolen `title` so
+ *  a hovered segment is not rebuilt under the cursor. Conditional segments
  *  (agent status, needs-you, cwd) appearing or disappearing only insert or
  *  remove THAT node; the positional morph this replaces fell back to a
  *  full swap whenever the segment count changed, which while an agent
@@ -208,7 +255,7 @@ function morphChildren(live: HTMLElement, next: HTMLElement) {
       cur = live.children[idx];
     }
     if (cur && seg(cur) === key) {
-      if (cur.outerHTML !== n.outerHTML) cur.replaceWith(n);
+      if (!sameSegmentShape(shapeOf(cur), shapeOf(n))) cur.replaceWith(n);
     } else {
       live.insertBefore(n, cur ?? null);
     }
