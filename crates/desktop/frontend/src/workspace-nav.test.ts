@@ -2,13 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { ProjectTreeRow } from "./ipc";
 import { pickLastWorkspace, stepWorkspace, visibleWorkspaceIndices } from "./workspace-nav";
 
-const checkout = (index: number, depth = 2): ProjectTreeRow => ({
+const checkout = (index: number, depth = 1): ProjectTreeRow => ({
   type: "checkout",
   index,
-  kind: depth === 2 ? "worktree" : "primary",
+  kind: "worktree",
   depth,
-  hoisted: depth < 2,
-  in_group: depth === 2,
+  hoisted: true,
 });
 
 const project = (key: string, collapsed = false): ProjectTreeRow => ({
@@ -22,36 +21,32 @@ const project = (key: string, collapsed = false): ProjectTreeRow => ({
   bucket: "project",
 });
 
-const repo = (key: string, collapsed = false): ProjectTreeRow => ({
+const repo = (root = "/repo"): ProjectTreeRow => ({
   type: "repo",
-  key,
-  collapsed,
-  checkouts: 2,
-  root: "/repo",
+  root,
   display: "repo",
   depth: 1,
-  hidden: [],
 });
 
 describe("visibleWorkspaceIndices", () => {
   it("keeps sidebar order and drops every header row", () => {
     const rows: ProjectTreeRow[] = [
       project("project:1"),
-      repo("project:1|repo:/repo"),
+      repo(),
       checkout(3),
       checkout(0),
       { type: "dir", path: "/notes" },
-      checkout(1, 1),
+      checkout(1),
     ];
     expect(visibleWorkspaceIndices(rows)).toEqual([3, 0, 1]);
   });
 
-  it("skips what a collapsed group hides — those are not rows at all", () => {
-    // What `project_tree` emits for a collapsed repo: the header only.
+  it("skips what a collapsed project hides — those are not rows at all", () => {
+    // What `project_tree` emits for a collapsed project: the header only.
     const rows: ProjectTreeRow[] = [
-      project("project:1"),
-      repo("project:1|repo:/repo", true),
-      checkout(3, 1),
+      project("project:1", true),
+      project("project:2"),
+      checkout(3),
     ];
     expect(visibleWorkspaceIndices(rows)).toEqual([3]);
   });
@@ -59,10 +54,10 @@ describe("visibleWorkspaceIndices", () => {
   it("visits a workspace in two projects only once", () => {
     const rows: ProjectTreeRow[] = [
       project("project:1"),
-      checkout(0, 1),
+      checkout(0),
       project("project:2"),
-      checkout(0, 1),
-      checkout(1, 1),
+      checkout(0),
+      checkout(1),
     ];
     expect(visibleWorkspaceIndices(rows)).toEqual([0, 1]);
   });

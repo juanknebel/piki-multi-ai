@@ -368,17 +368,17 @@ static CATALOG: &[ActionMeta] = {
         local(
             C::ProjectTree,
             Bind("projects", "collapse"),
-            "Collapse a project or repository",
+            "Collapse a project",
         ),
         local(
             C::ProjectTree,
             Bind("projects", "expand"),
-            "Expand a project or repository",
+            "Expand a project",
         ),
         local(
             C::ProjectTree,
             Bind("projects", "select"),
-            "Open the checkout / collapse a group / adopt a directory",
+            "Open the checkout / collapse a project / adopt a repo or directory",
         ),
         local(C::ProjectTree, Bind("projects", "new"), "New project"),
         local(

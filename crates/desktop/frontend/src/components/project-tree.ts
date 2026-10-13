@@ -1,15 +1,17 @@
 /** The sidebar: one tree, projects all the way down.
  *
- *  Three levels — project → repository → checkout — plus the synthetic
- *  PR-review bucket. A repository in no project is not wrapped in one: it
- *  renders at the top level after the projects, so every registered workspace
- *  is reachable without inventing a group for it. There is no separate flat
- *  workspace view; this replaced it.
+ *  Two levels — a collapsible project header, then one flat row per member —
+ *  plus the synthetic PR-review bucket. Every loaded checkout is its own row
+ *  (repository folder, branch alongside); a second worktree adds a second
+ *  row, never a nested group. A repository in no project is not wrapped in
+ *  one: it renders at the top level after the projects, so every registered
+ *  workspace is reachable without inventing a group for it. There is no
+ *  separate flat workspace view; this replaced it.
  *
  *  Rows come straight from `piki_core::projects::tree::project_tree` through
- *  the `project_tree` command: which repo a checkout belongs to, what is
- *  collapsed and where the buckets go are decided once, in core, so this app
- *  and the TUI cannot drift apart. Only the text and the DOM are decided here.
+ *  the `project_tree` command: the member order, what is collapsed and where
+ *  the buckets go are decided once, in core, so this app and the TUI cannot
+ *  drift apart. Only the text and the DOM are decided here.
  */
 import { appState } from "../state";
 import { makeInteractive } from "./a11y";
@@ -50,16 +52,14 @@ function bucketLabel(bucket: string): string {
   return bucket === "prReview" ? "PR review" : "";
 }
 
-/** Name + muted branch for a checkout row. Under a repo group the repo name is
- *  already on the header, so the child says which *branch* it is — that is the
- *  point of the tree. A **hoisted** row IS its repository (its group had a
- *  single checkout), so it is named the way the old flat sidebar named a clone:
- *  the repository folder, with the branch rendered separately and dimmed. Any
- *  other depth-1 row (a non-git workspace, a PR review) keeps its own name. */
+/** Name + muted branch for a checkout row. A **hoisted** row IS its
+ *  repository — every git checkout is its own row — so it is named the way
+ *  the old flat sidebar named a clone: the repository folder, with the branch
+ *  rendered separately and dimmed. Any other row (a non-git workspace, a PR
+ *  review) keeps its own name. */
 function checkoutParts(
   info: WorkspaceInfo,
   branch: string | null,
-  inGroup: boolean,
   hoisted: boolean,
 ): { name: string; branch: string | null } {
   if (hoisted) {
@@ -68,11 +68,6 @@ function checkoutParts(
       info.source_repo_display ||
       info.name;
     return { name: folder, branch: branch ? branchLabel(branch) : null };
-  }
-  if (inGroup) {
-    if (branch) return { name: branchLabel(branch), branch: null };
-    const leaf = info.path.replace(/\/+$/, "").split("/").pop();
-    return { name: leaf || info.name, branch: null };
   }
   return { name: info.name, branch: branch ? branchLabel(branch) : null };
 }
@@ -145,28 +140,6 @@ function checkoutMenuItems(idx: number): CtxItem[] {
     ...projectMenuItems(info.path),
     { separator: true },
     { label: "Delete…", danger: true, action: () => void confirmDeleteWorkspace(idx) },
-  ];
-}
-
-/** The repo row menu: branch off it, or add another repository to the project
- *  the group sits in. A repo with no checkout loaded can't be branched (the
- *  worktree dialog reads a loaded checkout's origin and prompt). */
-function repoMenuItems(root: string, projectId: number | null): CtxItem[] {
-  const checkout = appState.workspaces.find(
-    (w) => w.info.source_repo === root && !w.info.ephemeral,
-  );
-  const github = checkout?.info.origin?.kind === "GitHub";
-  return [
-    {
-      label: "New Branch / Worktree…",
-      disabled: !checkout || !github,
-      action: () => checkout && showCreateWorktreeDialog(checkout.info, projectId),
-    },
-    {
-      label: "Add Repository…",
-      disabled: projectId === null,
-      action: () => showWorkspaceDialog({ mode: "create", addToProject: projectId }),
-    },
   ];
 }
 
@@ -348,42 +321,58 @@ export function renderProjectTree(container: HTMLElement) {
       return el;
     }
 
-    /** A repository group — synthetic, so the only state it owns is collapse. */
+    /** A repository with nothing loaded — an explicit repo member. Like a
+     *  directory row it adopts on click (registering its root picks up its
+     *  real origin); it is never a group, so there is no chevron and nothing
+     *  to collapse. */
     function buildRepoRow(
       row: Extract<ipc.ProjectTreeRow, { type: "repo" }>,
       projectId: number | null,
     ): HTMLElement {
       const el = document.createElement("div");
-      const rollup = row.collapsed ? hiddenRollup(row.hidden) : null;
-      const rollupView = rollup && actionableStatusView(rollup.status, rollup.attention);
       el.className = "repo-row";
       el.dataset.repo = row.root;
       el.dataset.depth = String(row.depth);
       el.innerHTML = `
-        <span class="workspace-gutter">${icon("chevron-right", { class: `group-chevron${row.collapsed ? " collapsed" : ""}` })}</span>
+        <span class="workspace-gutter"></span>
         ${icon("branch", { class: "repo-icon" })}
         <span class="repo-name">${escapeHtml(row.display)}</span>
-        ${row.checkouts === 0 ? `<span class="repo-empty">not open</span>` : ""}
-        ${rollupView ? `<span class="workspace-agent-glyph" style="color:${rollupView.color}" title="Agent ${rollupView.label}">${icon(rollupView.icon)}</span>` : ""}
+        <span class="repo-empty">not open</span>
         <span class="workspace-actions">
           <button data-variant="ghost" data-icon class="ws-action-btn ui-btn" data-action="menu" title="Repository menu" aria-label="Repository menu" aria-haspopup="menu">${icon("more")}</button>
         </span>
       `;
       el.title = `${row.display}\n${row.root}`;
+      const menu = (): CtxItem[] => {
+        const project = projectId === null ? null : projectById(projectId);
+        return [
+          { label: "Open (adopt as workspace)", action: () => void adoptAndOpen(row.root) },
+          ...(project
+            ? [
+                { separator: true },
+                {
+                  label: `Remove from "${project.name}"`,
+                  action: () => void setProjectMembership(project, row.root, false),
+                },
+                { label: "Edit Project…", action: () => showProjectDialog(project, refreshProjects) },
+              ]
+            : []),
+        ];
+      };
       el.addEventListener("click", (e) => {
         if ((e.target as HTMLElement).closest(".ws-action-btn")) return;
-        toggleGroup(row.key);
+        void adoptAndOpen(row.root);
       });
       const menuBtn = el.querySelector<HTMLButtonElement>('[data-action="menu"]')!;
       menuBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         const r = menuBtn.getBoundingClientRect();
-        openContextMenu(r.left, r.bottom + 2, repoMenuItems(row.root, projectId));
+        openContextMenu(r.left, r.bottom + 2, menu());
       });
       el.addEventListener("contextmenu", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        openContextMenu(e.clientX, e.clientY, repoMenuItems(row.root, projectId));
+        openContextMenu(e.clientX, e.clientY, menu());
       });
       makeInteractive(el, "option");
       return el;
@@ -402,9 +391,6 @@ export function renderProjectTree(container: HTMLElement) {
       el.className = [
         "workspace-item",
         idx === activeIdx && "active",
-        // Keyed on in_group, never on depth: the same child is one level
-        // further out under a loose repository.
-        row.in_group && "grouped",
         // A hoisted row IS its repository, so it carries the repo's shape.
         row.hoisted && "hoisted-repo",
       ]
@@ -425,14 +411,13 @@ export function renderProjectTree(container: HTMLElement) {
         ? `<span class="workspace-restored" title="Sessions restored from the daemon — not visited yet">${icon("history")}</span>`
         : "";
 
-      const { name, branch } = checkoutParts(info, ws.branch, row.in_group, row.hoisted);
+      const { name, branch } = checkoutParts(info, ws.branch, row.hoisted);
       const branchHtml = branch
         ? ` <span class="workspace-branch">${escapeHtml(branch)}</span>`
         : "";
       // The gutter stays on every row so labels line up whatever the kind; a
       // checkout has nothing to collapse, so its slot is empty. A hoisted row
-      // takes the repo icon instead — it is the repository, and reading as one
-      // thing in the group above and another below would be a lie.
+      // takes the repo icon instead — it is the repository.
       el.innerHTML = `
         <span class="workspace-gutter"></span>
         ${row.hoisted ? icon("branch", { class: "repo-icon" }) : ""}
@@ -503,53 +488,21 @@ export function renderProjectTree(container: HTMLElement) {
       return el;
     }
 
-    // Walk the rows. A repo group and its contiguous checkouts are wrapped in
-    // `.ws-family` so the CSS rail can connect them with one absolutely
-    // positioned line (`git log --graph` style) instead of per-row plumbing.
+    // Walk the rows in order. Every row stands alone — checkouts never nest,
+    // so there is nothing to group.
     let projectId: number | null = null;
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
+    for (const row of rows) {
       if (row.type === "project") {
         projectId = row.project_id;
         list.appendChild(buildProjectRow(row));
-        continue;
-      }
-      if (row.type === "dir") {
+      } else if (row.type === "dir") {
         list.appendChild(buildDirRow(row, projectId));
-        continue;
-      }
-      if (row.type === "checkout") {
+      } else if (row.type === "checkout") {
         const el = buildCheckoutRow(row);
         if (el) list.appendChild(el);
-        continue;
-      }
-      // repo
-      const repoEl = buildRepoRow(row, projectId);
-      const children: HTMLElement[] = [];
-      let j = i + 1;
-      while (j < rows.length) {
-        const next = rows[j];
-        if (next.type !== "checkout" || !next.in_group) break;
-        const childEl = buildCheckoutRow(next);
-        if (childEl) children.push(childEl);
-        j++;
-      }
-      if (children.length > 0) {
-        const family = document.createElement("div");
-        family.className = "ws-family";
-        family.appendChild(repoEl);
-        for (const el of children) family.appendChild(el);
-        const rail = document.createElement("div");
-        rail.className = "ws-family-rail";
-        // The trunk hangs under the repo row's chevron, wherever its depth put
-        // it (a loose repository sits one level further out than a project's).
-        family.style.setProperty("--rail-left", `${25 + 14 * row.depth}px`);
-        family.appendChild(rail);
-        list.appendChild(family);
       } else {
-        list.appendChild(repoEl);
+        list.appendChild(buildRepoRow(row, projectId));
       }
-      i = j - 1;
     }
 
     list.addEventListener("keydown", (e) => {

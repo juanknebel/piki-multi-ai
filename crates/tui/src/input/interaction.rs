@@ -1133,7 +1133,7 @@ pub(super) fn handle_agents_interaction(app: &mut App, key: KeyEvent) -> Option<
 ///
 /// One row model, one handler — `[keybindings.projects]` holds every key. The
 /// vertical keys move the cursor (follow-focus: landing on a checkout switches
-/// to it), the horizontal ones collapse/expand a header or repo group, and the
+/// to it), the horizontal ones collapse/expand a project header, and the
 /// row-scoped keys act on whatever the cursor stands on.
 pub(super) fn handle_workspace_list_interaction(app: &mut App, key: KeyEvent) -> Option<Action> {
     let cfg = &app.config;
@@ -1188,7 +1188,8 @@ fn open_membership_picker(app: &mut App) {
     let Some(row) = app.sidebar_rows().get(app.selected_sidebar_row).cloned() else {
         return;
     };
-    // Whatever the row stands for by path: a checkout, or a directory member.
+    // Whatever the row stands for by path: a checkout, an unopened repo, or
+    // a directory member.
     let (path, label) = match &row {
         ProjectTreeRow::Checkout {
             workspace_index, ..
@@ -1196,15 +1197,15 @@ fn open_membership_picker(app: &mut App) {
             let ws = &app.workspaces[*workspace_index];
             (ws.info.path.clone(), ws.info.name.clone())
         }
-        ProjectTreeRow::Dir { path, .. } => (
-            path.clone(),
-            path.file_name()
+        ProjectTreeRow::Repo { root, .. } | ProjectTreeRow::Dir { path: root, .. } => (
+            root.clone(),
+            root.file_name()
                 .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| path.to_string_lossy().to_string()),
+                .unwrap_or_else(|| root.to_string_lossy().to_string()),
         ),
         _ => {
             app.set_toast(
-                "Select a checkout or a directory first",
+                "Select a checkout, a repo or a directory first",
                 crate::app::ToastLevel::Info,
             );
             return;
@@ -1238,19 +1239,18 @@ fn open_membership_picker(app: &mut App) {
 /// review / no project), which has no stored project behind it.
 const NO_PROJECT_HERE: &str = "Not a project row";
 
-/// `select` (Enter) on the row under the cursor: collapse/expand a header or
-/// repo group, open a checkout, or adopt a plain-directory member.
+/// `select` (Enter) on the row under the cursor: collapse/expand a project
+/// header, open a checkout, or adopt an unopened repo / plain-directory
+/// member.
 pub(super) fn activate_sidebar_row(app: &mut App) -> Option<Action> {
     let row = app.sidebar_rows().get(app.selected_sidebar_row)?.clone();
     match row {
-        // A repository that is a member but has nothing loaded has no children
-        // to collapse — the useful thing to do with it is open it. Registering
-        // its root picks up its real origin (`create_simple` reads the git
-        // remote), which is what the branch dialog needs.
-        ProjectTreeRow::Repo {
-            checkouts: 0, root, ..
-        } => Some(Action::ProjectAdoptDirectory { path: root }),
-        ProjectTreeRow::Project { .. } | ProjectTreeRow::Repo { .. } => {
+        // A repository that is a member but has nothing loaded: the useful
+        // thing to do with it is open it. Registering its root picks up its
+        // real origin (`create_simple` reads the git remote), which is what
+        // the branch dialog needs.
+        ProjectTreeRow::Repo { root, .. } => Some(Action::ProjectAdoptDirectory { path: root }),
+        ProjectTreeRow::Project { .. } => {
             app.toggle_selected_group();
             None
         }
@@ -1501,7 +1501,7 @@ mod tests {
                 std::path::PathBuf::from("/repos/web"),
             )],
         }];
-        // Rows: [project, repo(web, 0 checkouts)].
+        // Rows: [project, repo(web)] — the repo has nothing loaded.
         app.selected_sidebar_row = 1;
 
         // Enter opens it...

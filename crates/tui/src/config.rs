@@ -486,13 +486,13 @@ fn default_projects() -> HashMap<String, String> {
     m.insert("up".to_string(), "k".to_string());
     m.insert("down_alt".to_string(), "down".to_string());
     m.insert("up_alt".to_string(), "up".to_string());
-    // Tree-style horizontal keys: collapse / expand a project or repo row.
+    // Tree-style horizontal keys: collapse / expand a project header.
     m.insert("collapse".to_string(), "h".to_string());
     m.insert("collapse_alt".to_string(), "left".to_string());
     m.insert("expand".to_string(), "l".to_string());
     m.insert("expand_alt".to_string(), "right".to_string());
-    // Collapse/expand a header or repo row; open the checkout under the
-    // cursor; adopt a plain-directory member.
+    // Collapse/expand a project header; open the checkout under the
+    // cursor; adopt an unopened repo / plain-directory member.
     m.insert("select".to_string(), "enter".to_string());
     m.insert("new".to_string(), "n".to_string());
     m.insert("edit".to_string(), "e".to_string());

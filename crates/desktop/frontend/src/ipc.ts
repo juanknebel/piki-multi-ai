@@ -105,7 +105,7 @@ export function setCollapsedGroups(groups: string[]): Promise<void> {
   return invoke("set_collapsed_groups", { groups });
 }
 
-/** One row of the sidebar's project tree, already grouped by the backend.
+/** One row of the sidebar's project tree, already ordered by the backend.
  *  Mirrors `commands::workspace::ProjectTreeRowDto`. */
 export type ProjectTreeRow =
   | {
@@ -126,27 +126,21 @@ export type ProjectTreeRow =
     }
   | {
       type: "repo";
-      key: string;
-      collapsed: boolean;
-      checkouts: number;
       root: string;
       display: string;
       /** 1 under a project header, 0 for a loose repository. */
       depth: number;
-      /** See the project row's `hidden`. */
-      hidden: number[];
     }
   | {
       type: "checkout";
       index: number;
       kind: "primary" | "worktree";
       depth: number;
-      /** This row stands in for its whole repository — its group had a single
-       *  checkout, so no header was emitted. */
+      /** This row stands in for its whole repository: every git checkout is
+       *  its own row, named after the repository folder (branch alongside).
+       *  `false` only for rows with no repository to name (a plain-directory
+       *  workspace, a PR review). */
       hoisted: boolean;
-      /** A repo header sits directly above it. Key the branch-only label and
-       *  the rail on this, never on `depth`. */
-      in_group: boolean;
     }
   | { type: "dir"; path: string };
 

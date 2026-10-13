@@ -569,10 +569,9 @@ mod tests {
 
     #[test]
     fn test_snapshot_sidebar_loose_repos() {
-        // With no projects configured every repo is loose: it renders at the
-        // top level, with no pseudo-project header above it. A repo with two
-        // checkouts still gets its group; one with a single checkout is hoisted
-        // into one row.
+        // With no projects configured every checkout is loose: each renders
+        // as its own row at the top level, with no pseudo-project header
+        // above it and no repo group around siblings.
         let mut terminal = test_terminal(40, 12);
         let mut app = App::new(
             test_storage(),
@@ -629,9 +628,9 @@ mod tests {
     }
 
     #[test]
-    fn test_snapshot_sidebar_collapsed_repo_surfaces_child_attention() {
-        // Collapsing a repo group must not hide its checkouts' attention — the
-        // repo row surfaces the aggregated idle dot / changed-file count /
+    fn test_snapshot_sidebar_collapsed_project_surfaces_child_attention() {
+        // Collapsing a project must not hide its checkouts' attention — the
+        // header surfaces the aggregated idle dot / changed-file count /
         // ahead-behind instead of losing them behind the chevron.
         let mut terminal = test_terminal(40, 6);
         let mut app = App::new(
@@ -662,14 +661,23 @@ mod tests {
         child.has_idle_notification = true;
         app.workspaces.push(child);
 
+        app.sidebar_projects = vec![piki_core::projects::Project {
+            id: Some(1),
+            name: "Piki".to_string(),
+            color: 0,
+            order: 0,
+            members: vec![
+                piki_core::projects::ProjectMember::new(std::path::PathBuf::from(
+                    "/tmp/agent-multi",
+                )),
+                piki_core::projects::ProjectMember::new(std::path::PathBuf::from("/tmp/nightly")),
+            ],
+        }];
+
         app.active_workspace = 0;
-        // Rows: [bucket, repo, agent-multi, nightly]; collapse the repo group.
-        app.selected_sidebar_row = 1;
-        app.collapsed_groups
-            .insert(piki_core::projects::tree::repo_collapse_key(
-                piki_core::projects::tree::UNASSIGNED_KEY,
-                &repo,
-            ));
+        // Rows: [project, agent-multi, nightly]; collapse the project.
+        app.selected_sidebar_row = 0;
+        app.collapsed_groups.insert("project:1".to_string());
 
         terminal
             .draw(|frame| {
@@ -677,7 +685,10 @@ mod tests {
             })
             .unwrap();
         let content = buffer_to_snapshot(terminal.backend().buffer());
-        insta::assert_snapshot!("sidebar_collapsed_repo_surfaces_child_attention", content);
+        insta::assert_snapshot!(
+            "sidebar_collapsed_project_surfaces_child_attention",
+            content
+        );
     }
 
     #[test]
@@ -939,7 +950,7 @@ mod tests {
         insta::assert_snapshot!("sessions_overlay", content);
     }
 
-    /// The sidebar tree: two projects, their repo groups and checkouts, plus a
+    /// The sidebar tree: two projects, their flat checkout rows, plus a
     /// plain-directory member and the no-project bucket.
     #[test]
     fn test_snapshot_sidebar_project_tree() {

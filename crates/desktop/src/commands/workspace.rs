@@ -434,37 +434,30 @@ pub enum ProjectTreeRowDto {
         /// "project" | "prReview" | "unassigned"
         bucket: &'static str,
     },
-    /// A repository group. Synthetic — derived from its checkouts'
-    /// `source_repo`, never stored.
+    /// A repository with nothing loaded — an explicit repo member, rendered
+    /// as a single "not open" row the frontend adopts on open. The only repo
+    /// row there is: loaded checkouts never get a header above them.
     Repo {
-        key: String,
-        collapsed: bool,
-        checkouts: usize,
         /// Absolute repository root.
         root: String,
         /// Display name for the root.
         display: String,
         /// 1 under a project header, 0 for a loose repository.
         depth: u8,
-        /// See `Project::hidden`.
-        hidden: Vec<usize>,
     },
-    /// A loaded workspace: `index` points into `list_workspaces`' order.
+    /// A loaded workspace: `index` points into `list_workspaces`' order. One
+    /// flat row per checkout — siblings never nest.
     Checkout {
         index: usize,
         /// "primary" (the original clone) | "worktree"
         kind: &'static str,
-        /// Indentation level: one past its repo group's, or its group's own
-        /// when hoisted.
+        /// Indentation level: 1 under a project header, 0 when loose.
         depth: u8,
-        /// This row stands in for its whole repository: the group had a single
-        /// checkout, so no header was emitted. Label it by the repository
+        /// This row stands in for its repository: label it by the repository
         /// folder (branch alongside) and let repository actions apply to it.
+        /// `false` only for rows with no repository to name (a plain-directory
+        /// workspace, a PR review).
         hoisted: bool,
-        /// A repo header sits directly above this row. Key the branch-only
-        /// label and the tree rail on THIS, never on `depth` — the same child
-        /// is one level further out under a loose repository.
-        in_group: bool,
     },
     /// A member path that is neither a loaded workspace nor a repo root.
     Dir { path: String },
@@ -533,20 +526,9 @@ pub async fn project_tree(
                 ProjectTreeRow::Repo {
                     root,
                     display,
-                    key,
-                    collapsed,
-                    checkouts,
                     depth,
                     ..
                 } => ProjectTreeRowDto::Repo {
-                    hidden: if collapsed {
-                        hidden.remove(&key).unwrap_or_default()
-                    } else {
-                        Vec::new()
-                    },
-                    key,
-                    collapsed,
-                    checkouts,
                     root: root.to_string_lossy().into_owned(),
                     display,
                     depth,
@@ -556,7 +538,6 @@ pub async fn project_tree(
                     kind,
                     depth,
                     hoisted,
-                    in_group,
                     ..
                 } => ProjectTreeRowDto::Checkout {
                     index: workspace_index,
@@ -566,7 +547,6 @@ pub async fn project_tree(
                     },
                     depth,
                     hoisted,
-                    in_group,
                 },
                 ProjectTreeRow::Dir { path, .. } => ProjectTreeRowDto::Dir {
                     path: path.to_string_lossy().into_owned(),

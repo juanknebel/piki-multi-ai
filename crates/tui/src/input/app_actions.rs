@@ -162,7 +162,7 @@ pub(crate) fn open_clone_workspace(app: &mut App) -> Option<Action> {
 
 /// Open the Create Worktree dialog against `parent_idx`'s repository. Reached
 /// from the `clone_workspace` chord (the selected workspace) and from the
-/// sidebar's `new_worktree` key on a repo row (any loaded checkout of it).
+/// sidebar's `new_worktree` key on a checkout row.
 pub(crate) fn open_create_worktree_for(app: &mut App, parent_idx: usize) -> Option<Action> {
     // Layer 3: the former "Clone workspace" action is now "Create Worktree",
     // available only when the parent workspace has a GitHub origin.

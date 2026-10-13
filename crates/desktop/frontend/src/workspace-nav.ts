@@ -1,8 +1,8 @@
 // Workspace navigation order as pure list operations — the impure half
 // (IPC + switching) lives in `components/workspace-actions.ts`. Cycling walks
 // the VISUAL order: the rows `core::projects::tree` produces, which is what
-// the sidebar renders, so the checkouts of a collapsed project or repo are
-// skipped because they are not rows at all. Same rule as the TUI's
+// the sidebar renders, so the checkouts of a collapsed project are skipped
+// because they are not rows at all. Same rule as the TUI's
 // `App::next_workspace` / `prev_workspace`. No DOM, no IPC; covered by
 // workspace-nav.test.ts.
 

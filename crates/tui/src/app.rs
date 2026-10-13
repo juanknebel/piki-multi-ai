@@ -199,7 +199,7 @@ pub enum SidebarRowKind {
     Project,
     /// A synthetic bucket header (PR review / no project): no project to edit.
     Bucket,
-    /// A repo group — the row "new worktree" and "add repo" act on.
+    /// An unopened repo member — adopted on open, like a directory row.
     Repo,
     /// A loaded workspace.
     Checkout,
@@ -978,10 +978,9 @@ pub struct App {
     agent_focus_key: Option<(usize, usize)>,
     /// Active dialog state — None means no dialog is open
     pub active_dialog: Option<DialogState>,
-    /// Collapsed keys of the sidebar tree: project/bucket headers and repo
-    /// groups alike (`Project::collapse_key`, `tree::repo_collapse_key`,
-    /// `PR_REVIEW_KEY`, `UNASSIGNED_KEY`). Persisted, so a collapsed project
-    /// stays collapsed across restarts.
+    /// Collapsed keys of the sidebar tree's project headers
+    /// (`Project::collapse_key`, `PR_REVIEW_KEY`). Persisted, so a collapsed
+    /// project stays collapsed across restarts.
     pub collapsed_groups: std::collections::HashSet<String>,
     /// Cursor over `sidebar_rows()` — the project tree's rows.
     pub selected_sidebar_row: usize,
@@ -1674,7 +1673,7 @@ impl App {
 
     /// Map a sidebar row to a workspace index. Returns `None` when `row` is
     /// out of range or lands on a row with no workspace behind it (a project
-    /// or bucket header, a repo group, a plain-directory member).
+    /// or bucket header, an unopened repo, a plain-directory member).
     pub fn sidebar_row_to_workspace(&self, row: usize) -> Option<usize> {
         self.sidebar_rows().get(row)?.workspace_index()
     }
@@ -1724,8 +1723,9 @@ impl App {
     /// same thing. Without it the two drift apart — the cursor sits on one
     /// workspace while `prefix c` opens its tab in whichever workspace the main
     /// panel still shows — and every workspace-scoped action becomes a coin
-    /// flip. Header rows (project, bucket, repo) carry no workspace, so they
-    /// move the cursor and leave the active workspace where it was.
+    /// flip. Rows without a workspace behind them (project/bucket headers, an
+    /// unopened repo, a directory member) move the cursor and leave the active
+    /// workspace where it was.
     fn follow_sidebar_row(&mut self, row: usize) {
         self.selected_sidebar_row = row;
         self.reveal_sidebar_selection();
@@ -1804,17 +1804,16 @@ impl App {
         self.reveal_sidebar_selection();
     }
 
-    /// If the selected row is collapsible (a project/bucket header or a repo
-    /// group), its collapse key and current state.
+    /// If the selected row is collapsible (a project/bucket header), its
+    /// collapse key and current state.
     fn selected_collapsible(&self) -> Option<(String, bool)> {
         match self.sidebar_rows().get(self.selected_sidebar_row)? {
-            ProjectTreeRow::Project { key, collapsed, .. }
-            | ProjectTreeRow::Repo { key, collapsed, .. } => Some((key.clone(), *collapsed)),
+            ProjectTreeRow::Project { key, collapsed, .. } => Some((key.clone(), *collapsed)),
             _ => None,
         }
     }
 
-    /// Toggle collapse on the selected row if it's a header or a repo group.
+    /// Toggle collapse on the selected row if it's a project header.
     /// No-op otherwise.
     pub fn toggle_selected_group(&mut self) {
         let Some((key, collapsed)) = self.selected_collapsible() else {
@@ -1834,8 +1833,8 @@ impl App {
         }
     }
 
-    /// Collapse the selected row's group. Tree-style `←` behaviour; a no-op
-    /// unless the selection is on an expanded header or repo row.
+    /// Collapse the selected row's project. Tree-style `←` behaviour; a no-op
+    /// unless the selection is on an expanded header.
     pub fn collapse_selected_group(&mut self) {
         let Some((key, collapsed)) = self.selected_collapsible() else {
             return;
@@ -1846,8 +1845,8 @@ impl App {
         }
     }
 
-    /// Expand the selected row's group. Tree-style `→` behaviour; a no-op
-    /// unless the selection is on a collapsed header or repo row.
+    /// Expand the selected row's project. Tree-style `→` behaviour; a no-op
+    /// unless the selection is on a collapsed header.
     pub fn expand_selected_group(&mut self) {
         let Some((key, collapsed)) = self.selected_collapsible() else {
             return;
@@ -2863,9 +2862,9 @@ mod tests {
 
     #[test]
     fn sidebar_cursor_follows_onto_checkouts_and_rests_on_headers() {
-        // The tree has header rows with no workspace behind them (the bucket,
-        // each repo group). Walking the cursor over those leaves the active
-        // workspace alone; landing on a checkout switches to it.
+        // The tree has header rows with no workspace behind them (the project
+        // header). Walking the cursor over those leaves the active workspace
+        // alone; landing on a checkout switches to it.
         let mut app = App::new(
             test_storage(),
             &piki_core::paths::DataPaths::default_paths(),
@@ -2876,27 +2875,46 @@ mod tests {
         let shared_repo = app.workspaces[parent].info.source_repo.clone();
         app.workspaces[child].info.source_repo = shared_repo.clone();
         app.workspaces[child].info.workspace_type = piki_core::WorkspaceType::Worktree;
+        // Members resolve by path, so give each workspace its own.
+        for (i, ws) in app.workspaces.iter_mut().enumerate() {
+            ws.info.path = std::path::PathBuf::from(format!("/tmp/seed-{i}"));
+        }
+        let paths = app
+            .workspaces
+            .iter()
+            .map(|w| w.info.path.clone())
+            .collect::<Vec<_>>();
+        app.sidebar_projects = vec![piki_core::projects::Project {
+            id: Some(1),
+            name: "Piki".to_string(),
+            color: 0,
+            order: 0,
+            members: paths
+                .into_iter()
+                .map(piki_core::projects::ProjectMember::new)
+                .collect(),
+        }];
         app.switch_workspace(a);
 
-        // No projects configured, so every repo is loose and sits at the top
-        // level with no header. `a` is the only checkout of its repo, so it is
-        // hoisted to one row; the shared repo keeps its group:
-        // [a, repo, parent, child].
+        // Rows: [project, a, parent, child] — every checkout its own flat
+        // row, the clone leading its worktree.
         let rows = app.sidebar_rows();
         assert_eq!(rows.len(), 4, "{rows:#?}");
-        assert_eq!(rows[0].workspace_index(), Some(a));
-        assert!(rows[0].is_hoisted());
-        assert_eq!(rows[0].depth(), 0);
+        assert_eq!(rows[1].workspace_index(), Some(a));
+        assert!(rows[1].is_hoisted());
+        assert_eq!(rows[1].depth(), 1);
         assert_eq!(rows[2].workspace_index(), Some(parent));
         assert_eq!(rows[3].workspace_index(), Some(child));
 
         // The cursor sits on a's row after switch_workspace(a).
-        assert_eq!(app.selected_sidebar_row, 0);
-        // Next row is the shared repo's header: cursor moves, workspace doesn't.
-        app.select_next_sidebar_row();
         assert_eq!(app.selected_sidebar_row, 1);
+        // Previous row is the project header: cursor moves, workspace doesn't.
+        app.select_prev_sidebar_row();
+        assert_eq!(app.selected_sidebar_row, 0);
         assert_eq!(app.active_workspace, a);
-        // Then the parent checkout, which does switch.
+        // Then the checkouts, which do switch.
+        app.select_next_sidebar_row();
+        assert_eq!(app.active_workspace, a);
         app.select_next_sidebar_row();
         assert_eq!(app.active_workspace, parent);
         app.select_next_sidebar_row();
@@ -3106,9 +3124,9 @@ mod tests {
     }
 
     #[test]
-    fn test_workspace_list_collapse_expand_group() {
-        // Side arrows (or h/l) collapse/expand the repo group the cursor is on,
-        // hiding its checkouts.
+    fn test_workspace_list_collapse_expand_project() {
+        // Side arrows (or h/l) collapse/expand the project header the cursor
+        // is on, hiding its checkouts.
         let mut app = App::new(
             test_storage(),
             &piki_core::paths::DataPaths::default_paths(),
@@ -3118,28 +3136,47 @@ mod tests {
         let shared_repo = app.workspaces[parent].info.source_repo.clone();
         app.workspaces[child].info.source_repo = shared_repo;
         app.workspaces[child].info.workspace_type = piki_core::WorkspaceType::Worktree;
+        // Members resolve by path, so give each workspace its own.
+        for (i, ws) in app.workspaces.iter_mut().enumerate() {
+            ws.info.path = std::path::PathBuf::from(format!("/tmp/seed-{i}"));
+        }
+        let paths = app
+            .workspaces
+            .iter()
+            .map(|w| w.info.path.clone())
+            .collect::<Vec<_>>();
+        app.sidebar_projects = vec![piki_core::projects::Project {
+            id: Some(1),
+            name: "Piki".to_string(),
+            color: 0,
+            order: 0,
+            members: paths
+                .into_iter()
+                .map(piki_core::projects::ProjectMember::new)
+                .collect(),
+        }];
         app.active_pane = ActivePane::WorkspaceList;
-        // Rows: [repo, parent, child]. Stand on the repo group.
+        // Rows: [project, parent, child]. Stand on the header.
         app.selected_sidebar_row = 0;
-        let repo_key = app.sidebar_rows()[0]
+        let project_key = app.sidebar_rows()[0]
             .collapse_key()
-            .expect("repo rows are collapsible")
+            .expect("project headers are collapsible")
             .to_string();
 
-        // h collapses the repo, hiding both checkouts.
+        // h collapses the project, hiding both checkouts.
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('h')));
-        assert!(app.collapsed_groups.contains(&repo_key));
+        assert!(app.collapsed_groups.contains(&project_key));
         assert_eq!(app.sidebar_rows().len(), 1);
         // l re-expands it.
         crate::input::handle_key_event(&mut app, key(KeyCode::Char('l')));
-        assert!(!app.collapsed_groups.contains(&repo_key));
+        assert!(!app.collapsed_groups.contains(&project_key));
         assert_eq!(app.sidebar_rows().len(), 3);
         // Arrow Left collapses again.
         crate::input::handle_key_event(&mut app, key(KeyCode::Left));
-        assert!(app.collapsed_groups.contains(&repo_key));
+        assert!(app.collapsed_groups.contains(&project_key));
         // Arrow Right expands.
         crate::input::handle_key_event(&mut app, key(KeyCode::Right));
-        assert!(!app.collapsed_groups.contains(&repo_key));
+        assert!(!app.collapsed_groups.contains(&project_key));
     }
 
     #[test]
@@ -3159,7 +3196,7 @@ mod tests {
 
         let rows = app.sidebar_rows();
         // The review bucket leads, then its two flat children, then the
-        // no-project bucket with the plain workspace under its repo.
+        // plain workspace as its own loose row.
         assert_eq!(rows[0].bucket(), crate::app::Bucket::PrReview);
         assert_eq!(
             rows[1..3]

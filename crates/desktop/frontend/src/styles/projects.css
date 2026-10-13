@@ -1,7 +1,6 @@
 /* The sidebar tree (project-tree.ts): project headers with a palette dot,
-   repository groups under them, and checkouts under those (checkout rows reuse
-   `.workspace-item` from sidebar.css, including the `.ws-family` rail).
-   Row heights reuse the density-scaled tokens. */
+   then one flat row per member (checkout rows reuse `.workspace-item` from
+   sidebar.css). Row heights reuse the density-scaled tokens. */
 
 #projects-view {
   height: 100%;
@@ -151,9 +150,9 @@
   color: var(--text-muted);
 }
 
-/* A repository group: synthetic, derived from its checkouts' source_repo.
-   Geometry matches `.workspace-item` (18px inset + a 14px gutter) so the
-   `.ws-family-rail` at left: 25px lands on its chevron's center. */
+/* A repository with nothing loaded (an explicit repo member): one row,
+   adopted on click. Geometry matches `.workspace-item` (18px inset + a 14px
+   gutter) so labels align across the list whatever the row kind. */
 .repo-row {
   display: flex;
   align-items: center;
@@ -216,26 +215,21 @@
   background: color-mix(in srgb, var(--accent-primary) 16%, transparent);
 }
 
-/* A checkout that stands in for its whole repository (its group had a single
-   checkout, so no header was emitted): it carries the repo's identity, so it
-   gets the repo row's icon and weight — otherwise the same thing reads
-   differently depending on whether a second worktree happens to exist. */
+/* A checkout that stands in for its whole repository (every git checkout is
+   its own row): it carries the repo's identity, so it gets the repo row's
+   icon and weight. */
 .workspace-item.hoisted-repo .workspace-name {
   font-size: var(--fs-base);
 }
 
-/* Indentation is driven by the row's own depth, not by its kind: a loose
-   repository sits one level further out than one inside a project, and its
-   checkouts follow it. 14px per step = the width of the `.workspace-gutter`,
-   so each level lines up with the glyph of the row heading it. */
+/* Indentation is driven by the row's own depth: under a project header is
+   one step in, a loose row sits at the top level. 14px per step = the width
+   of the `.workspace-gutter`, so each level lines up with the glyph of the
+   row heading it. */
 .projects-list [data-depth="0"] {
   padding-left: 18px;
 }
 
 .projects-list [data-depth="1"] {
   padding-left: 32px;
-}
-
-.projects-list [data-depth="2"] {
-  padding-left: 46px;
 }

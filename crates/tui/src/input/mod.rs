@@ -675,7 +675,7 @@ fn handle_pane_key(app: &mut App, key: KeyEvent) -> Option<Action> {
             }
         }
         // When focused, the workspace list is keyboard-navigable (up/down to
-        // move the selection, Enter to switch workspace / toggle a group).
+        // move the selection, Enter to switch workspace / toggle a project).
         // The heavier workspace actions still live behind the prefix.
         ActivePane::WorkspaceList => handle_workspace_list_interaction(app, key),
         ActivePane::Agents => handle_agents_interaction(app, key),

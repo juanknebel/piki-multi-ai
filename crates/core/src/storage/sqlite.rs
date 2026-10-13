@@ -231,8 +231,8 @@ impl SqliteStorage {
         // workspace has to be reachable through one. Two parts:
         //
         // `project_members.kind` distinguishes an explicit repository-root
-        // member (`'repo'`, renders a repo group even with no checkout loaded)
-        // from the dynamically-resolved default (`'auto'`).
+        // member (`'repo'`, renders a single repo row even with no checkout
+        // loaded) from the dynamically-resolved default (`'auto'`).
         //
         // This migration also used to seed one project per `source_repo`. That
         // was a mistake twice over — it did nothing when any hand-made project

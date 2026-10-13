@@ -673,20 +673,18 @@ pub(crate) fn handle_mouse_event(
                             && let Some(kind) = rows.get(clicked).cloned()
                         {
                             app.selected_sidebar_row = clicked;
-                            // Chevron glyph column, mirroring ui/sidebar.rs:
-                            // rail at inner_x, then the row's indent, then the
-                            // chevron — depth 0 at +1, depth 1 (repo) at +2.
-                            let inner_x = app.ws_list_area.x + 1;
-                            let chevron_at = inner_x + 1 + u16::from(kind.depth());
-                            let on_chevron = col == chevron_at || col == chevron_at + 1;
                             match kind {
-                                crate::app::ProjectTreeRow::Project { .. }
-                                | crate::app::ProjectTreeRow::Repo { .. } => {
+                                crate::app::ProjectTreeRow::Project { .. } => {
                                     // Headers collapse from anywhere on the row
                                     // — there is no workspace to switch to, so a
                                     // plain click has nothing else to do.
-                                    let _ = on_chevron;
                                     app.toggle_selected_group();
+                                }
+                                crate::app::ProjectTreeRow::Repo { root, .. } => {
+                                    // An unopened repo adopts on click, like a
+                                    // directory row (see `activate_sidebar_row`).
+                                    app.active_pane = ActivePane::WorkspaceList;
+                                    return Some(Action::ProjectAdoptDirectory { path: root });
                                 }
                                 crate::app::ProjectTreeRow::Checkout {
                                     workspace_index, ..
@@ -1041,22 +1039,39 @@ mod tests {
         assert_eq!(app.active_pane, ActivePane::WorkspaceList);
     }
 
-    /// Clicking a repo header collapses it instead of switching anywhere —
-    /// there is no workspace behind a header row.
+    /// Clicking a project header collapses it instead of switching anywhere
+    /// — there is no workspace behind a header row.
     #[test]
-    fn click_repo_header_collapses_without_switching() {
+    fn click_project_header_collapses_without_switching() {
         let mut app = test_app();
         add_test_workspace(&mut app);
         let child = add_test_workspace(&mut app);
-        // Two checkouts of one repo, so the group really has a header (a lone
-        // checkout would be hoisted into a single row instead).
         app.workspaces[child].info.source_repo = app.workspaces[0].info.source_repo.clone();
         app.workspaces[child].info.workspace_type = piki_core::WorkspaceType::Worktree;
+        // Members resolve by path, so give each workspace its own.
+        for (i, ws) in app.workspaces.iter_mut().enumerate() {
+            ws.info.path = std::path::PathBuf::from(format!("/tmp/seed-{i}"));
+        }
+        let paths = app
+            .workspaces
+            .iter()
+            .map(|w| w.info.path.clone())
+            .collect::<Vec<_>>();
+        app.sidebar_projects = vec![piki_core::projects::Project {
+            id: Some(1),
+            name: "Piki".to_string(),
+            color: 0,
+            order: 0,
+            members: paths
+                .into_iter()
+                .map(piki_core::projects::ProjectMember::new)
+                .collect(),
+        }];
         app.mode = AppMode::Normal;
         app.active_workspace = 0;
         app.ws_list_area = Rect::new(0, 0, 30, 10);
 
-        // Rows: [repo, ws-0, ws-1]; the header is screen row 1 + 0.
+        // Rows: [project, ws-0, ws-1]; the header is screen row 1 + 0.
         handle_mouse_event(
             &mut app,
             mouse(super::MouseEventKind::Down(super::MouseButton::Left), 5, 1),
@@ -1065,6 +1080,39 @@ mod tests {
 
         assert_eq!(app.active_workspace, 0, "headers never switch workspace");
         assert_eq!(app.sidebar_rows().len(), 1, "both checkouts are hidden");
+    }
+
+    /// Clicking an unopened repo row adopts it, like a directory row.
+    #[test]
+    fn click_unopened_repo_row_adopts_it() {
+        let mut app = test_app();
+        app.sidebar_projects = vec![piki_core::projects::Project {
+            id: Some(1),
+            name: "Piki".to_string(),
+            color: 0,
+            order: 0,
+            members: vec![piki_core::projects::ProjectMember::repo(
+                std::path::PathBuf::from("/repos/ghost"),
+            )],
+        }];
+        app.mode = AppMode::Normal;
+        app.ws_list_area = Rect::new(0, 0, 30, 10);
+
+        // Rows: [project, repo]; the repo row is screen row 1 + 1.
+        let action = handle_mouse_event(
+            &mut app,
+            mouse(super::MouseEventKind::Down(super::MouseButton::Left), 5, 2),
+            &mut headless_terminal(),
+        );
+
+        assert!(
+            matches!(
+                action,
+                Some(crate::input::Action::ProjectAdoptDirectory { ref path })
+                    if path == std::path::Path::new("/repos/ghost")
+            ),
+            "clicking the repo row adopts it: {action:?}"
+        );
     }
 
     /// Clicking the Agents pane focuses it, even on an empty click.

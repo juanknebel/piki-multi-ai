@@ -75,9 +75,8 @@
   border-left: 2px solid transparent;
 }
 
-/* Indentation now comes from the row's `data-depth` (see projects.css):
-   `.grouped` only marks "a repo header sits directly above me", which drives
-   the rail and the branch-only label. */
+/* Indentation comes from each row's `data-depth` (see projects.css) —
+   every row stands alone, so there is no grouping mark. */
 
 /* Fixed-width leading slot on every row (chevron on parents, empty
    otherwise) so labels align across the list whatever the row kind. */
@@ -107,31 +106,8 @@
   border-left-color: var(--accent-primary);
 }
 
-/* A worktree family: the parent row followed by its (expanded) children,
-   wrapped so `.ws-family-rail` can connect them with one line instead of
-   the parent reaching into each child's markup. */
-.ws-family {
-  position: relative;
-}
-
-/* git-log-graph-style trunk: one line from the parent's gutter center down
-   to the last child's, positioned in row-height units so it holds at any
-   density and needs no per-child bookkeeping — `top`/`bottom` land on the
-   vertical center of the first/last row purely from the family's own
-   height, however many children it has. 25px = the gutter's fixed 18px
-   left inset + half its 14px width, matching the parent's chevron. */
-.ws-family-rail {
-  position: absolute;
-  left: var(--rail-left, 25px);
-  top: calc(var(--row-height-lg) / 2);
-  bottom: calc(var(--row-height-lg) / 2);
-  width: 1.5px;
-  background: color-mix(in srgb, var(--text-muted) 45%, transparent);
-  pointer-events: none;
-}
-
 /* The hub of a worktree family stands out from a plain clone at a glance —
-   no icon or badge, just weight (paired with the rail above). */
+   no icon or badge, just weight. */
 .workspace-item.family-parent .workspace-name {
   font-weight: 600;
 }

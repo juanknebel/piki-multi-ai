@@ -94,8 +94,8 @@ impl Signals {
     }
 }
 
-/// Signals per collapse key, so a collapsed project or repo can surface what
-/// it is hiding. Which workspaces each key hides comes from core
+/// Signals per collapse key, so a collapsed project can surface what it is
+/// hiding. Which workspaces each key hides comes from core
 /// (`projects::tree::hidden_checkouts`) — the rows being drawn can't answer it,
 /// and re-deriving it here from `source_repo` would reintroduce exactly the
 /// membership inference the tree dropped.
@@ -153,15 +153,14 @@ fn right_metadata_spans(app: &App, detail_color: Color, sig: &Signals) -> Vec<Sp
     right
 }
 
-/// Label for a checkout row. Under a repo group the repo name is already on
-/// the header, so the child says which *branch* it is — that is the whole
-/// point of the tree. `branch == None` (the background refresh hasn't landed,
-/// or the directory isn't a git repo) must never leave the row blank, so it
-/// falls back to the checkout's own directory name, then its workspace name.
-fn checkout_label(ws: &Workspace, in_group: bool, hoisted: bool) -> String {
-    // A hoisted row IS its repository (its group had a single checkout), so it
-    // is named the way the old flat sidebar named a clone: the repository
-    // folder, with the branch alongside when one is known.
+/// Label for a checkout row. A hoisted row IS its repository — every git
+/// checkout is its own row — so it is named the way the old flat sidebar
+/// named a clone: the repository folder, with the branch alongside when one
+/// is known. A non-hoisted row (a plain-directory workspace, a PR review) has
+/// no repository to name, so it carries its own identity plus a branch if
+/// any. `branch == None` (the background refresh hasn't landed, or the
+/// directory isn't a git repo) must never leave the row blank.
+fn checkout_label(ws: &Workspace, hoisted: bool) -> String {
     if hoisted {
         let folder = ws
             .info
@@ -181,32 +180,16 @@ fn checkout_label(ws: &Workspace, in_group: bool, hoisted: bool) -> String {
             None => folder,
         };
     }
-    if let Some(branch) = &ws.branch
-        && in_group
-    {
-        return branch.clone();
-    }
-    if in_group {
-        return ws
-            .info
-            .path
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| ws.name.clone());
-    }
-    // No repo header above it and not hoisted: a plain-directory workspace or
-    // a PR review, so the row carries its own identity plus a branch if any.
     match &ws.branch {
         Some(branch) => format!("{} ({branch})", ws.name),
         None => ws.name.clone(),
     }
 }
 
-/// Top-left pane: the project tree — projects, their repositories, and each
-/// repository's checkouts (main clone + worktrees). The only sidebar view:
-/// every registered workspace is reachable here, under a project or under one
-/// of the two synthetic buckets (see `piki_core::projects::tree`).
+/// Top-left pane: the project tree — a collapsible project header, then one
+/// flat row per member. The only sidebar view: every registered workspace is
+/// reachable here, under a project or loose at the top level (see
+/// `piki_core::projects::tree`).
 pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
     let border_style = pane_border_style(app, ActivePane::WorkspaceList);
     let theme = &app.theme.workspace_list;
@@ -226,8 +209,6 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
     } else {
         app.theme.palette.fg3
     };
-    // Muted vertical guide that ties a checkout back to its repo.
-    let guide_fg = app.theme.palette.line;
     let header_style = Style::default()
         .fg(theme.name_inactive)
         .add_modifier(Modifier::BOLD);
@@ -326,14 +307,7 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                     }
                     spans
                 }
-                ProjectTreeRow::Repo {
-                    display,
-                    key,
-                    collapsed,
-                    checkouts,
-                    depth,
-                    ..
-                } => {
+                ProjectTreeRow::Repo { display, depth, .. } => {
                     let avail = inner_w.saturating_sub(7);
                     let mut spans = vec![bar];
                     // A loose repo has no project header above it, so it sits
@@ -342,39 +316,33 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                         spans.push(Span::raw(" "));
                     }
                     spans.extend([
-                        chevron(*collapsed),
+                        Span::raw("  "),
                         Span::styled("⎇ ", Style::default().fg(theme.detail_normal)),
                         Span::styled(
                             ellipsize_end(display, avail),
                             Style::default().fg(theme.name_inactive),
                         ),
                     ]);
-                    // A repo nobody has opened yet: say so instead of looking
-                    // like an empty group.
-                    if *checkouts == 0 {
-                        spans.push(Span::styled(
-                            " (not open)",
-                            Style::default().fg(app.theme.palette.fg3),
-                        ));
-                    }
-                    if *collapsed && let Some(sig) = rollups.get(key) {
-                        append_signals(&mut spans, app, detail_color, sig);
-                    }
+                    // Nobody has opened this repo yet: say so, and Enter
+                    // adopts it (see `activate_sidebar_row`).
+                    spans.push(Span::styled(
+                        " (not open)",
+                        Style::default().fg(app.theme.palette.fg3),
+                    ));
                     spans
                 }
                 ProjectTreeRow::Checkout {
                     workspace_index,
                     depth,
                     hoisted,
-                    in_group,
                     ..
                 } => {
                     let ws = &app.workspaces[*workspace_index];
                     let is_active = *workspace_index == app.active_workspace;
                     // Icon brightness carries a second signal: the active
-                    // checkout stays at full brightness, the rest recede to the
-                    // same muted token the tree guide uses — so scanning the
-                    // list, only where you are pops.
+                    // checkout stays at full brightness, the rest recede to a
+                    // muted token — so scanning the list, only where you are
+                    // pops.
                     let icon_color = if is_selected {
                         theme.detail_selected
                     } else if is_active {
@@ -384,16 +352,9 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                     };
                     // Indent by depth so the type icon lands on the same
                     // column as the glyph heading this row's level (a
-                    // project's ●, a repo group's ⎇). A row under a repo
-                    // header swaps the last two columns for the tree guide —
-                    // keyed on `in_group`, not on the depth, since the same
-                    // child sits one level further out under a loose repo.
-                    let mut spans = vec![bar, Span::raw(" ".repeat(*depth as usize))];
-                    if *in_group {
-                        spans.push(Span::styled("│ ", Style::default().fg(guide_fg)));
-                    } else {
-                        spans.push(Span::raw("  "));
-                    }
+                    // project's ●). Every row stands alone — nothing nests.
+                    let mut spans =
+                        vec![bar, Span::raw(" ".repeat(*depth as usize)), Span::raw("  ")];
                     spans.push(Span::styled(
                         workspace_type_icon(
                             ws.info.workspace_type,
@@ -403,7 +364,7 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                         Style::default().fg(icon_color),
                     ));
                     spans.push(Span::styled(
-                        checkout_label(ws, *in_group, *hoisted),
+                        checkout_label(ws, *hoisted),
                         if is_active {
                             Style::default()
                                 .fg(theme.name_active)

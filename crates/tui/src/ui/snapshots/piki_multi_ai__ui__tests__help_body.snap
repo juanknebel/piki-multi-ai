@@ -1,6 +1,6 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 861
+assertion_line: 872
 expression: body
 ---
 
@@ -88,9 +88,9 @@ expression: body
   Projects pane (the sidebar tree)
     j             Select the next row
     k             Select the previous row
-    h             Collapse a project or repository
-    l             Expand a project or repository
-    Enter         Open the checkout / collapse a group / adopt a directory
+    h             Collapse a project
+    l             Expand a project
+    Enter         Open the checkout / collapse a project / adopt a repo or directory
     n             New project
     e             Edit the project this row belongs to
     d             Delete the project this row belongs to

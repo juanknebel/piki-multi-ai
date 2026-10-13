@@ -59,14 +59,13 @@ pub struct ProjectMember {
 /// adopting a directory as a workspace a zero-migration upgrade.
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub enum MemberKind {
-    /// Resolve dynamically: a registered workspace at this path renders as a
-    /// checkout (nested under its `source_repo`), anything else as a plain
-    /// directory row.
+    /// Resolve dynamically: a registered workspace at this path renders as
+    /// its own checkout row, anything else as a plain directory row.
     #[default]
     Auto,
-    /// The user added this path as a repository root. It heads a repo group
-    /// even when none of its checkouts are loaded, so a project can list a
-    /// repo it hasn't opened yet.
+    /// The user added this path as a repository root. It renders a single
+    /// repo row even when none of its checkouts are loaded, so a project can
+    /// list a repo it hasn't opened yet.
     Repo,
 }
 

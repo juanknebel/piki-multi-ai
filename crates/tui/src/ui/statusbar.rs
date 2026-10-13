@@ -560,10 +560,11 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                         (cfg.get_binding("projects", "select"), "collapse"),
                         (cfg.get_binding("projects", "new"), "new project"),
                     ],
+                    // An unopened repo: Enter adopts it (a first "new branch"
+                    // adopts it too, then branches on the second press).
                     K::Repo => vec![
-                        (cfg.get_binding("projects", "select"), "collapse"),
+                        (cfg.get_binding("projects", "select"), "adopt"),
                         (cfg.get_binding("projects", "new_worktree"), "new branch"),
-                        (cfg.get_binding("projects", "add_repo"), "add repo"),
                     ],
                     K::Checkout => vec![
                         (cfg.get_binding("projects", "select"), "open"),

@@ -1,43 +1,39 @@
 //! The project tree — the single sidebar model, shared by both frontends.
 //!
-//! Three levels, top to bottom:
+//! Two levels, top to bottom: a collapsible project header, then one flat row
+//! per member. Every loaded checkout is its own row — there is deliberately
+//! no repo-with-children nesting: a second worktree adds a second row, never
+//! a header that splits out from under the first.
 //!
 //! ```text
 //! ▾ Piki                        Project row  (depth 0)
-//!   ▾ piki-multi-ai             Repo row     (depth 1, synthetic)
-//!       main                    Checkout     (depth 2, Primary)
-//!       feat/sidebar            Checkout     (depth 2, Worktree)
-//!     piki-multiplex (main)     Checkout     (depth 1, HOISTED)
+//!     piki-multi-ai (main)      Checkout     (depth 1, Primary)
+//!     piki-multi-ai (nightly)   Checkout     (depth 1, Worktree)
+//!     piki-multiplex (main)     Checkout     (depth 1, Primary)
 //!     ~/notes                   Dir row      (depth 1)
-//! ⎇ dirb (main)                 Checkout     (depth 0, loose + HOISTED)
+//! ⎇ dirb (main)                 Checkout     (depth 0, loose)
 //! ```
 //!
-//! A repository with a **single** loaded checkout is *hoisted*: its header
-//! would only repeat the checkout's name and have nothing to collapse, so the
-//! checkout stands in for the repo (`Checkout { hoisted: true }`, named after
-//! the repository folder with its branch alongside). The group re-splits into
-//! header + children by itself as soon as a second checkout exists — the tree
-//! is derived on every render, so creating a worktree is all it takes. That
-//! keeps the common case (one repo, one clone) exactly as compact as the flat
-//! sidebar this replaced, and spends the extra level only where there is
-//! actually a branch tree to show.
+//! Each git checkout stands in for its repository (`Checkout { hoisted: true }`,
+//! named after the repository folder with its branch alongside) — the way the
+//! old flat sidebar named a clone. Within one repository the original clone
+//! leads its worktrees, as that sidebar did; the rest keep member order.
 //!
-//! **Repo rows are synthetic**: they are derived from the `source_repo` of the
-//! project's checkout members (plus any explicit [`MemberKind::Repo`] member),
-//! never persisted. That is the same grouping rule the old flat workspace
-//! sidebar applied globally via `workspace::sidebar_rows` — this function just
-//! scopes it to one project's members, which is why switching to a
-//! project-only sidebar needs no change to how worktrees are stored.
+//! The one row that still names a repository without a checkout behind it is
+//! an explicit [`MemberKind::Repo`] member with nothing loaded: it renders a
+//! single [`ProjectTreeRow::Repo`] row ("not open") that the frontends adopt
+//! on open. Repo roots are derived from `source_repo`, never persisted —
+//! which is why a project can hold several repos and a repo can belong to
+//! several projects without touching where worktrees live on disk.
 //!
 //! Two synthetic buckets keep the model total, so killing the flat workspace
 //! view loses nothing. [`Bucket::PrReview`] collects the `ephemeral` PR-review
-//! checkouts under a header of its own (each is its own ad-hoc clone, so repo
-//! grouping would emit one useless header per PR); core names it by variant,
-//! the display label is the frontend's.
+//! checkouts under a header of its own (each is its own ad-hoc clone);
+//! core names it by variant, the display label is the frontend's.
 //!
 //! [`Bucket::Unassigned`] — every registered workspace no project claims —
-//! gets **no header at all**: its repositories are emitted at depth 0, after
-//! the projects. A repository you have not grouped with anything is not "in"
+//! gets **no header at all**: its rows are emitted at depth 0, after the
+//! projects. A repository you have not grouped with anything is not "in"
 //! some pseudo-project, and wrapping it in one only added a row whose name
 //! repeated the repository's. So the sidebar reads as "my projects, then my
 //! loose repositories", which is what a project being a *choice* means.
@@ -100,41 +96,34 @@ pub enum ProjectTreeRow {
         key: String,
         collapsed: bool,
     },
-    /// A repository group. Synthetic — see the module docs. `checkouts` counts
-    /// its children; `0` means the repo is a member but nothing of it is
-    /// loaded, which is the row a "open / create worktree" action targets.
+    /// A repository with nothing loaded — an explicit [`MemberKind::Repo`]
+    /// member, rendered as a single row ("not open"). This is the only `Repo`
+    /// row there is: loaded checkouts never get a header above them. It is not
+    /// collapsible (there is nothing under it to hide); the frontends adopt it
+    /// on open.
     Repo {
         bucket: Bucket,
         root: PathBuf,
         display: String,
-        key: String,
-        collapsed: bool,
-        checkouts: usize,
         /// 1 under a project header, 0 for a loose repository (the no-project
         /// bucket has no header to sit under).
         depth: u8,
     },
     /// A loaded workspace: `workspace_index` indexes the slice passed to
-    /// [`project_tree`]. `depth` is one past its repo group's, or its group's
-    /// own when hoisted — so a loose hoisted repository is 0 and a checkout
-    /// under a project's repo group is 2.
+    /// [`project_tree`]. One flat row per checkout at its bucket's base depth
+    /// (1 under a project header, 0 when loose) — siblings never nest.
     Checkout {
         bucket: Bucket,
         workspace_index: usize,
         kind: CheckoutKind,
         depth: u8,
-        /// This row *is* its repository: the group had a single checkout, so
-        /// emitting a header above it would have cost two rows saying the same
-        /// thing (see [`project_tree`]). Renderers label a hoisted row by the
-        /// repository folder with its branch alongside — the way the old flat
-        /// sidebar named a clone — and repository actions ("new branch") apply
-        /// to it, since there is no header to carry them.
+        /// This row *is* its repository: every git checkout carries the repo
+        /// folder with its branch alongside — the way the old flat sidebar
+        /// named a clone. `false` only for rows with no repository to name
+        /// (a plain-directory workspace, a PR review), which render under
+        /// their own name instead. Repository actions ("new branch") apply to
+        /// a hoisted row directly, since there is no header to carry them.
         hoisted: bool,
-        /// There is a [`ProjectTreeRow::Repo`] header directly above this row.
-        /// Renderers key the branch-only label and the tree guide on THIS, not
-        /// on `depth`: the same child sits at depth 2 under a project and at
-        /// depth 1 under a loose repository, and both must read the same.
-        in_group: bool,
     },
     /// A member path that is neither a loaded workspace nor a repo root.
     Dir { bucket: Bucket, path: PathBuf },
@@ -162,22 +151,17 @@ impl ProjectTreeRow {
         }
     }
 
-    /// Whether a repository header sits directly above this row — see
-    /// `Checkout::in_group`.
-    pub fn is_in_group(&self) -> bool {
-        matches!(self, ProjectTreeRow::Checkout { in_group: true, .. })
-    }
-
     /// Whether this row stands in for its whole repository — see
     /// [`ProjectTreeRow::Checkout::hoisted`].
     pub fn is_hoisted(&self) -> bool {
         matches!(self, ProjectTreeRow::Checkout { hoisted: true, .. })
     }
 
-    /// The collapse key of a collapsible row (`Project` and `Repo`).
+    /// The collapse key of a collapsible row. Only project headers collapse —
+    /// a `Repo` row has nothing under it, so it carries no key.
     pub fn collapse_key(&self) -> Option<&str> {
         match self {
-            ProjectTreeRow::Project { key, .. } | ProjectTreeRow::Repo { key, .. } => Some(key),
+            ProjectTreeRow::Project { key, .. } => Some(key),
             _ => None,
         }
     }
@@ -191,12 +175,6 @@ impl ProjectTreeRow {
             | ProjectTreeRow::Dir { bucket, .. } => *bucket,
         }
     }
-}
-
-/// Collapse key for a repo group. Scoped by the bucket's own key so collapsing
-/// a repo inside one project leaves the same repo expanded in another.
-pub fn repo_collapse_key(bucket_key: &str, root: &Path) -> String {
-    format!("{bucket_key}|repo:{}", root.to_string_lossy())
 }
 
 /// Collapse key for a bucket's header row.
@@ -245,8 +223,8 @@ fn repo_display(root: &Path, workspaces: &[WorkspaceInfo], members: &[usize]) ->
         .unwrap_or_else(|| root.to_string_lossy().to_string())
 }
 
-/// What a checkout is by its own type, for the rows where no sibling decides
-/// it (a hoisted repo, a flat non-git workspace).
+/// What a flat non-git checkout is by its own type. (Git checkouts get theirs
+/// from the primary-first ordering in [`emit_bucket`].)
 fn checkout_kind(info: &WorkspaceInfo) -> CheckoutKind {
     if info.workspace_type == WorkspaceType::Worktree {
         CheckoutKind::Worktree
@@ -255,11 +233,11 @@ fn checkout_kind(info: &WorkspaceInfo) -> CheckoutKind {
     }
 }
 
-/// Should this workspace nest under a repo group?
-///
-/// A `Simple` workspace pointed at a plain directory has no repository to head
-/// a group with (`is_git_repo == false`), so it renders flat under its project
-/// instead of inventing a one-row repo header for itself.
+/// The repository root this workspace belongs to, if it has one. Git
+/// checkouts resolve one (their rows carry the repo folder, ordered
+/// clone-first within the repo); a `Simple` workspace pointed at a plain
+/// directory has no repository (`is_git_repo == false`), so it renders flat
+/// under its own name instead.
 fn repo_of(info: &WorkspaceInfo) -> Option<PathBuf> {
     info.is_git_repo.then(|| info.source_repo.clone())
 }
@@ -328,38 +306,20 @@ fn emit_bucket(
 
     for slot in slots {
         match slot {
-            // A repository whose only loaded checkout is one row already: a
-            // header above it would just repeat its name, and there is nothing
-            // to collapse. Hoist the checkout and let it stand for the repo
-            // until a second one shows up (a new worktree re-splits the group
-            // on its own, since the tree is derived every render).
-            Slot::Repo { ref members, .. } if members.len() == 1 => {
-                let index = members[0];
-                rows.push(ProjectTreeRow::Checkout {
-                    bucket,
-                    workspace_index: index,
-                    kind: checkout_kind(&workspaces[index]),
-                    depth: base,
-                    hoisted: true,
-                    in_group: false,
-                });
-            }
             Slot::Repo { root, members } => {
-                let repo_key = repo_collapse_key(&key, &root);
-                let repo_collapsed = collapsed.contains(&repo_key);
-                rows.push(ProjectTreeRow::Repo {
-                    bucket,
-                    display: repo_display(&root, workspaces, &members),
-                    root,
-                    key: repo_key,
-                    collapsed: repo_collapsed,
-                    checkouts: members.len(),
-                    depth: base,
-                });
-                if repo_collapsed {
+                if members.is_empty() {
+                    // An explicit repo member with nothing loaded: a single
+                    // "not open" row the frontends adopt on open.
+                    rows.push(ProjectTreeRow::Repo {
+                        bucket,
+                        display: repo_display(&root, workspaces, &members),
+                        root,
+                        depth: base,
+                    });
                     continue;
                 }
-                // The original clone leads its worktrees, as the flat sidebar
+                // One flat row per checkout — siblings never nest. The
+                // original clone leads its worktrees, as the flat sidebar
                 // did; the rest keep member order.
                 let primary = members
                     .iter()
@@ -370,9 +330,8 @@ fn emit_bucket(
                         bucket,
                         workspace_index: p,
                         kind: CheckoutKind::Primary,
-                        depth: base + 1,
-                        hoisted: false,
-                        in_group: true,
+                        depth: base,
+                        hoisted: true,
                     });
                 }
                 for i in members {
@@ -383,9 +342,8 @@ fn emit_bucket(
                         bucket,
                         workspace_index: i,
                         kind: CheckoutKind::Worktree,
-                        depth: base + 1,
-                        hoisted: false,
-                        in_group: true,
+                        depth: base,
+                        hoisted: true,
                     });
                 }
             }
@@ -395,60 +353,46 @@ fn emit_bucket(
                 kind: checkout_kind(&workspaces[index]),
                 depth: base,
                 hoisted: false,
-                in_group: false,
             }),
             Slot::Dir(path) => rows.push(ProjectTreeRow::Dir { bucket, path }),
         }
     }
 }
 
-/// For every collapsible row's key, the workspaces it hides when collapsed.
+/// For every project header's key, the workspaces it hides when collapsed.
 ///
 /// A collapsed header must still surface its descendants' attention signals —
 /// an agent waiting for permission cannot vanish behind a chevron. The rows
 /// being drawn can't answer that (a collapsed row's descendants are omitted by
 /// construction), and re-deriving it from membership is exactly the kind of
-/// inference the tree no longer does: a repo group holds the member checkouts
-/// of that repo, not every checkout sharing its `source_repo`. So the answer
-/// comes from a second pass over the FULLY EXPANDED tree, where both frontends
-/// read it off the same walk.
+/// inference the tree must not do. So the answer comes from a second pass over
+/// the FULLY EXPANDED tree, where both frontends read it off the same walk.
 pub fn hidden_checkouts(
     projects: &[Project],
     workspaces: &[WorkspaceInfo],
 ) -> HashMap<String, Vec<usize>> {
     let mut out: HashMap<String, Vec<usize>> = HashMap::new();
     // The header a row is under, as (bucket, key). Tracked by bucket, not just
-    // "the last header seen": the loose repositories that follow the projects
-    // have no header of their own, and would otherwise be counted under
-    // whichever project happened to come last.
+    // "the last header seen": the loose rows that follow the projects have no
+    // header of their own, and would otherwise be counted under whichever
+    // project happened to come last.
     let mut header: Option<(Bucket, String)> = None;
-    let mut repo_key: Option<String> = None;
     for row in project_tree(projects, workspaces, &HashSet::new()) {
         if header.as_ref().is_some_and(|(b, _)| *b != row.bucket()) {
             header = None;
-            repo_key = None;
         }
         match row {
             ProjectTreeRow::Project { key, bucket, .. } => {
                 header = Some((bucket, key));
-                repo_key = None;
             }
-            ProjectTreeRow::Repo { key, .. } => repo_key = Some(key),
             ProjectTreeRow::Checkout {
-                workspace_index,
-                in_group,
-                ..
+                workspace_index, ..
             } => {
                 if let Some((_, k)) = &header {
                     out.entry(k.clone()).or_default().push(workspace_index);
                 }
-                // A row that hangs off the header belongs to no repo group,
-                // even though one may have been emitted just above it.
-                if in_group && let Some(k) = &repo_key {
-                    out.entry(k.clone()).or_default().push(workspace_index);
-                }
             }
-            ProjectTreeRow::Dir { .. } => {}
+            ProjectTreeRow::Repo { .. } | ProjectTreeRow::Dir { .. } => {}
         }
     }
     out
@@ -461,9 +405,10 @@ pub fn hidden_checkouts(
 /// bucket with nothing in it is omitted entirely, header included — except a
 /// real project, which always shows so it can be filled.
 ///
-/// `collapsed` holds collapsed keys: [`Project::collapse_key`],
-/// [`repo_collapse_key`], [`PR_REVIEW_KEY`] and [`UNASSIGNED_KEY`]. Hidden
-/// rows are omitted, so the result is exactly what should be drawn.
+/// `collapsed` holds collapsed project-header keys ([`Project::collapse_key`]
+/// and [`PR_REVIEW_KEY`]). Stale per-repo keys from before the flattening
+/// match nothing and are inert. Hidden rows are omitted, so the result is
+/// exactly what should be drawn.
 pub fn project_tree(
     projects: &[Project],
     workspaces: &[WorkspaceInfo],
@@ -638,13 +583,14 @@ mod tests {
     }
 
     #[test]
-    fn a_project_groups_its_checkouts_under_synthetic_repo_rows() {
+    fn a_project_lists_each_checkout_as_its_own_row() {
         let list = [
             worktree("feature", "/repos/app"),
             clone_of("app", "/repos/app"),
             clone_of("lib", "/repos/lib"),
         ];
-        // Declared out of order on purpose: the clone still leads its repo.
+        // Declared out of order on purpose: the clone still leads its repo's
+        // rows — but there is no header above them either way.
         let projects = [project(
             1,
             "Piki",
@@ -659,13 +605,16 @@ mod tests {
             sketch(&rows, &list),
             vec![
                 "Project(0)",
-                ".repo app",
-                "..app Primary",
-                "..feature Worktree",
-                // `lib` has a single checkout, so it is hoisted instead of
-                // getting a header that repeats its name.
+                ".app Primary*",
+                ".feature Worktree*",
                 ".lib Primary*",
             ]
+        );
+        assert!(
+            !rows
+                .iter()
+                .any(|r| matches!(r, ProjectTreeRow::Repo { .. })),
+            "loaded checkouts never get a repo header: {rows:#?}"
         );
     }
 
@@ -701,10 +650,10 @@ mod tests {
             .iter()
             .find(|r| matches!(r, ProjectTreeRow::Repo { display, .. } if display == "web"))
             .unwrap();
-        assert!(matches!(
-            unloaded,
-            ProjectTreeRow::Repo { checkouts: 0, .. }
-        ));
+        assert!(
+            matches!(unloaded, ProjectTreeRow::Repo { .. }),
+            "an unloaded repo member keeps its single row: {rows:#?}"
+        );
     }
 
     /// Membership is never inferred from a shared `source_repo`: putting one
@@ -756,10 +705,11 @@ mod tests {
         );
     }
 
-    /// ...and the rule undoes itself the moment there is a branch tree worth
-    /// showing. No stored state is involved: the tree is derived every render.
+    /// ...and a second checkout is just another flat row — no header splits
+    /// out from under it. No stored state is involved: the tree is derived
+    /// every render.
     #[test]
-    fn a_second_checkout_re_splits_the_hoisted_repo() {
+    fn a_second_checkout_is_just_another_flat_row() {
         let mut list = vec![clone_of("app", "/repos/app")];
         let projects = [project(
             1,
@@ -781,14 +731,15 @@ mod tests {
         let rows = project_tree(&projects, &list, &none());
         assert_eq!(
             sketch(&rows, &list),
-            vec![
-                "Project(0)",
-                ".repo app",
-                "..app Primary",
-                "..feature Worktree",
-            ]
+            vec!["Project(0)", ".app Primary*", ".feature Worktree*",]
         );
-        assert!(!rows.iter().any(|r| r.is_hoisted()));
+        assert!(rows.iter().filter_map(|r| r.workspace_index()).count() == 2);
+        assert!(
+            !rows
+                .iter()
+                .any(|r| matches!(r, ProjectTreeRow::Repo { .. })),
+            "no header splits out: {rows:#?}"
+        );
     }
 
     /// A lone worktree whose clone isn't loaded is still one row for one
@@ -800,14 +751,20 @@ mod tests {
         assert_eq!(sketch(&rows, &list), vec!["feature Worktree*"]);
     }
 
-    /// A hoisted row has no header, so there is nothing to collapse — a stale
-    /// collapse key for that repo must not make its checkout disappear.
+    /// A stale collapse key from the old repo-group days names a header that no
+    /// longer exists — it must not hide anything.
     #[test]
-    fn a_stale_collapse_key_cannot_hide_a_hoisted_checkout() {
-        let list = [clone_of("app", "/repos/app")];
-        let collapsed = HashSet::from([repo_collapse_key(UNASSIGNED_KEY, Path::new("/repos/app"))]);
+    fn a_stale_repo_collapse_key_hides_nothing() {
+        let list = [
+            clone_of("app", "/repos/app"),
+            worktree("feature", "/repos/app"),
+        ];
+        let collapsed = HashSet::from(["project:1|repo:/repos/app".to_string()]);
         let rows = project_tree(&[], &list, &collapsed);
-        assert_eq!(sketch(&rows, &list), vec!["app Primary*"]);
+        assert_eq!(
+            sketch(&rows, &list),
+            vec!["app Primary*", "feature Worktree*"]
+        );
     }
 
     #[test]
@@ -825,8 +782,7 @@ mod tests {
     }
 
     #[test]
-    fn repos_collapse_independently_per_project() {
-        // Two checkouts, so the repo really has a header to collapse.
+    fn projects_collapse_independently() {
         let list = [
             clone_of("app", "/repos/app"),
             worktree("feature", "/repos/app"),
@@ -836,17 +792,15 @@ mod tests {
             ProjectMember::new(PathBuf::from("/wt/feature")),
         ];
         let projects = [project(1, "A", members.clone()), project(2, "B", members)];
-        let collapsed = HashSet::from([repo_collapse_key("project:1", Path::new("/repos/app"))]);
+        let collapsed = HashSet::from(["project:1".to_string()]);
         let rows = project_tree(&projects, &list, &collapsed);
         assert_eq!(
             sketch(&rows, &list),
             vec![
                 "Project(0)",
-                ".repo app",
                 "Project(1)",
-                ".repo app",
-                "..app Primary",
-                "..feature Worktree",
+                ".app Primary*",
+                ".feature Worktree*",
             ]
         );
     }
@@ -903,10 +857,10 @@ mod tests {
         );
     }
 
-    /// Same at the next level down: a loose repo with two checkouts keeps its
-    /// group, just one indent further out than a project's would be.
+    /// Same with no project at all: a loose repo with two checkouts is two
+    /// flat rows at the top level, no header.
     #[test]
-    fn a_loose_repo_group_sits_one_level_further_out() {
+    fn a_loose_repo_with_two_checkouts_is_two_flat_rows() {
         let list = [
             clone_of("app", "/repos/app"),
             worktree("feature", "/repos/app"),
@@ -914,10 +868,10 @@ mod tests {
         let rows = project_tree(&[], &list, &none());
         assert_eq!(
             sketch(&rows, &list),
-            vec!["repo app", ".app Primary", ".feature Worktree"]
+            vec!["app Primary*", "feature Worktree*"]
         );
         assert_eq!(rows[0].depth(), 0);
-        assert_eq!(rows[1].depth(), 1);
+        assert_eq!(rows[1].depth(), 0);
     }
 
     #[test]
@@ -1016,11 +970,10 @@ mod tests {
         );
     }
 
-    /// A repo group answers for the checkouts actually under it, and a row
-    /// hanging off the header (a PR review, a non-git workspace) belongs to no
-    /// group even when one was emitted just above it.
+    /// Only project headers hide anything: the map answers for the project key
+    /// alone — no per-repo entries exist any more.
     #[test]
-    fn hidden_checkouts_scope_a_repo_group_to_its_own_children() {
+    fn hidden_checkouts_answers_only_for_project_headers() {
         let list = [
             clone_of("app", "/repos/app"),
             worktree("feature", "/repos/app"),
@@ -1036,8 +989,7 @@ mod tests {
             ],
         )];
         let hidden = hidden_checkouts(&projects, &list);
-        let repo = repo_collapse_key("project:1", Path::new("/repos/app"));
-        assert_eq!(hidden.get(&repo), Some(&vec![0, 1]));
+        assert_eq!(hidden.len(), 1, "no repo keys: {hidden:?}");
         assert_eq!(
             hidden.get("project:1"),
             Some(&vec![0, 1, 2]),
