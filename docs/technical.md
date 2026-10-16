@@ -497,7 +497,7 @@ The diff pane shows a **side-by-side split view**: the left panel displays the o
 
 ## Desktop application
 
-`piki-desktop` is the Tauri v2 GUI over the same `piki-core` and SQLite database as the TUI. This section is the user-facing reference for it; the implementation rules live in `crates/desktop/CLAUDE.md` and the internals in [Desktop internals](#desktop-internals).
+`piki-desktop` is the Tauri v2 GUI over the same `piki-core` and SQLite database as the TUI. This section is the user-facing reference for it; the implementation rules live in `crates/desktop/AGENTS.md` and the internals in [Desktop internals](#desktop-internals).
 
 ### Desktop layout
 
@@ -1093,7 +1093,7 @@ Three crates cooperate:
 
 ### Desktop internals
 
-The desktop backend wraps `piki-core` behind Tauri IPC commands (`crates/desktop/src/commands/`, one module per domain); the frontend is vanilla TypeScript (`crates/desktop/frontend/src/`). Terminals use `RawPtySession` — raw PTY bytes streamed to xterm.js, no server-side `vt100` (xterm.js *is* the emulator; the persistent-session daemon still keeps a vt100 mirror server-side for restores). The implementation rules — one opener, one close path, one settings store, the shortcut registry, the token layer — are in `crates/desktop/CLAUDE.md`.
+The desktop backend wraps `piki-core` behind Tauri IPC commands (`crates/desktop/src/commands/`, one module per domain); the frontend is vanilla TypeScript (`crates/desktop/frontend/src/`). Terminals use `RawPtySession` — raw PTY bytes streamed to xterm.js, no server-side `vt100` (xterm.js *is* the emulator; the persistent-session daemon still keeps a vt100 mirror server-side for restores). The implementation rules — one opener, one close path, one settings store, the shortcut registry, the token layer — are in `crates/desktop/AGENTS.md`.
 
 **PTY event path**: each reader (local or daemon attachment) pushes its chunks to a per-tab coalescer (`pty_output.rs`) whose emitter thread batches adaptively — the first chunk after a quiet gap ships within 2 ms (keystroke echo), sustained output at most one message per 33 ms (~30 fps) or 64 KB — over a raw Tauri IPC channel (binary frame `len(tab_id) · tab_id · bytes`, decoded by `frontend/src/pty-frame.ts`) that the frontend registers once at startup; the base64 `pty-output` event is only the fallback while no channel is registered. `pty-exit` goes out from the same emitter, after the last batch. Structured payloads (`pty-shell-event`, `pty-agent-event`, `pty-attention`) stay on Tauri events. Frontend side: a terminal whose pane is hidden queues its output (2 MB cap, then fed to xterm anyway) and replays it on the next mount; PTY resizes are coalesced to one IPC per frame per terminal and skipped when the grid is unchanged; a pane click renders nothing — the pane tree is reconciled against the DOM by pane id only when it changes. Invariants and numbers: [performance.md](performance.md#desktop-tauri).
 

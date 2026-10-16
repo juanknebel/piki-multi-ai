@@ -27,9 +27,20 @@ cd crates/desktop/frontend && npm test && npx tsc --noEmit    # vitest green, 0 
 
 Do **not** commit code that introduces new warnings or type errors. Fix all warnings before committing.
 
+### Branch flow
+
+`main` only receives merges from `nightly` when cutting a release (via `scripts/release.sh <version>` or the equivalent manual flow). Intermediate work — bugfixes, refactors, dependency bumps, CI changes — stays on `nightly` and rides along with the next release merge.
+
+- Push fixes to `origin/nightly` only.
+- Do NOT `git merge nightly` into `main` mid-cycle.
+- The change reaches `main` when `release.sh` runs the `--no-ff` merge as part of the release flow.
+- The `Clean Main` ruleset on `main` blocks branch deletion and non-fast-forward pushes; merge commits from the release flow are allowed.
+
 ## What is this?
 
 agent-multi is a Rust TUI application for running multiple Claude Code instances in parallel, each in its own isolated git worktree. Built with ratatui + crossterm for the UI, portable-pty for PTY management, and tokio for async.
+
+Each crate has its own `AGENTS.md` with module-level rules — read the one for the crate you are touching.
 
 ## Build & Test Commands
 
@@ -53,13 +64,41 @@ The frontend vitest suite tests pure modules (registries, scoring, stores, state
 
 Requires Rust >= 1.85 (edition 2024). Runtime deps: `claude` CLI in PATH, git >= 2.20, `lazygit` for the git tab, optionally `gh` CLI for the code review feature, optionally `mdr` for the external markdown viewer.
 
+## CI parity check
+
+Before pushing, run what GitHub Actions runs:
+
+```bash
+just ci
+```
+
+That is the single source of truth for the parity list — the recipes live in the `justfile` at the repo root (`cargo install just`). It expands to:
+
+```bash
+# nightly.yml::test — push to nightly + every PR (matrix: ubuntu + macos)
+cargo fmt --all -- --check                    # ubuntu leg only in CI
+cargo clippy --workspace --exclude piki-desktop --all-targets -- -D warnings
+cargo test --workspace --exclude piki-desktop
+
+# nightly.yml::build-desktop — push to nightly only; builds the desktop bundle
+cd crates/desktop/frontend && npm test && npm run build   # vitest, then tsc && vite build
+```
+
+Notes:
+- The `test` job excludes `piki-desktop` because `tauri-build` needs `frontend/dist` to exist. Its Rust *is* linted and tested, in `build-desktop`, after the frontend build (`just lint-desktop` locally).
+- The frontend's TypeScript is only typechecked via `npm run build`, and its vitest suite only runs via `npm test`, in `nightly.yml::build-desktop`; the `test` job does not touch it.
+- Everything must be clean before pushing to `nightly`. PRs run the `test` job too; `build`/`build-desktop`/`release` are gated on `github.event_name == 'push'` so a PR never publishes artifacts.
+- The `build` and `build-desktop` jobs have `needs: test`, so a failing test blocks the nightly artifacts from publishing.
+- `.github/workflows/audit.yml` runs `cargo audit` weekly and on any dependency change. Advisories we cannot act on are ignored in `.cargo/audit.toml`, each with a reason and the condition that clears it — add entries there, never by silencing the job.
+- The `cargo fmt` baseline commit is listed in `.git-blame-ignore-revs`; run `git config blame.ignoreRevsFile .git-blame-ignore-revs` once so local blame skips it.
+
 ## Architecture
 
 **Event loop** (`main.rs`): Single tokio async loop, event-driven — input, PTY output (coalesced `PtyOutputSignal` wakeups from reader threads) and background channels wake it; a 250ms fallback tick gates all O(workspaces × tabs) polling (external `/proc` agent scan throttled to 1s), and renders are capped at ~30fps. Key events produce `Action` variants, which are executed asynchronously. File watcher events are polled on tick with 500ms debounce. Performance invariants live in `docs/performance.md` — read it before touching event-loop timing.
 
 **App state** (`app.rs`): Centralized state in the `App` struct. Modal UI with `AppMode` (Normal/NewWorkspace/Help/WorkspaceSwitcher/etc.). `Tab { custom_title: Option<String> }` with `display_label()` (`custom_title` > `markdown_label` > `provider.label()`, trim, cap 40, empty clears) drives the subtab bar, Agents pane, dashboard and workspace switcher; TUI rename via `prefix R` (`AppMode::RenameTab`/`DialogState::RenameTab` + `ui/dialogs/rename.rs`, palette "Rename Tab"), desktop via `DesktopTab/TabInfo.custom_title` + `getTabLabel()` + `rename_tab` Tauri command (dblclick/context-menu on the top tab bar opens an inline input in the tab chip). A tab can also **move** to another workspace with its process untouched (`App::move_tab` re-stamps its id — ids are per workspace — and re-points the daemon session's `workspace_path`; TUI `prefix C-w` via `DialogState::MoveTab`, desktop `moveWsTabToWorkspace` → `pty.rs::move_tab`) and **restart** in place once its process exits, keeping slot and custom title (TUI `prefix C-r` → `Action::RestartTab`, desktop `restartPaneContent`); an exited tab is marked with a dim `○` in both tab bars (the TUI counts that glyph in `subtabs::block_width`, the single source for rendering AND mouse hit-testing).
 
-There are **no navigation/interaction modes**. Keys always go to the focused pane (`app.active_pane`) and the embedded terminal gets full PTY passthrough; app-level actions live behind a tmux-style **one-shot prefix** (default `Ctrl+G`), tracked by `InputState { Normal, PrefixPending, TermScroll, Resize }`. See `crates/tui/CLAUDE.md` for the keybinding model and the rules for adding an action — it is the authority, and this file defers to it.
+There are **no navigation/interaction modes**. Keys always go to the focused pane (`app.active_pane`) and the embedded terminal gets full PTY passthrough; app-level actions live behind a tmux-style **one-shot prefix** (default `Ctrl+G`), tracked by `InputState { Normal, PrefixPending, TermScroll, Resize }`. See `crates/tui/AGENTS.md` for the keybinding model and the rules for adding an action — it is the authority, and this file defers to it.
 
 **External agents** (`crates/core/src/external_agents.rs`): Linux `/proc` scan for `claude`/`codex`/`muse`/`agy`/`gemini` (case-insensitive substring on `comm` + full `cmdline` to cover `node` wrappers), mapped to workspace by longest `cwd` prefix, tree by `ppid` (subagents as children). `App { external_agents: Vec<AgentTree>, last_external_scan: Instant }` refreshed on the 250ms tick throttled to 1s (`event_loop.rs`). TUI Dashboard (`prefix b`, `DialogState::Dashboard`) always opens even with no open workspaces and renders the `External agents` section below the workspace list (`Provider #pid cwd ↳ N sub`). Desktop exposes the same scan via Tauri `list_external_agents` (`crates/desktop/src/commands/agents.rs`) and the `Agents` panel (`crates/desktop/frontend/src/components/agents-panel.ts`, poll 2s) with a `⎘` button that `spawnTerminalAt(workspace_idx, cwd)`.
 
@@ -85,7 +124,7 @@ Three panes: `WorkspaceList` (top-left — **the project tree**, the ONE sidebar
 
 **Syntax highlighting** (`syntax.rs`): `SyntaxHighlighter` wraps `syntect` for ratatui integration. Provides `find_syntax(path)` (by file extension), `find_syntax_by_name(name)` (by language token), `highlighter_for(syntax)`, and `highlight_line(hl, line, base_style) -> Vec<Span>`. Stored on `App` as `app.syntax`. Integrated in three rendering surfaces: code review diffs (`ui/code_review.rs` — per-line highlighting merged with add/delete base styles), inline editor (`ui/editor.rs` — with cursor overlay splitting), and markdown fenced code blocks (`ui/markdown.rs` — language hint extraction from opening fence). Theme configurable via `syntax_theme` in `config.toml` (default: `base16-ocean.dark`).
 
-**Desktop app** (`crates/desktop/`): Tauri v2 desktop GUI (`piki-desktop`). Rust backend in `src/` wraps `piki-core` via Tauri IPC commands; web frontend in `frontend/` uses vanilla TypeScript with xterm.js for terminal rendering and CodeMirror 6 for code editing. Uses `RawPtySession` (streams raw bytes to xterm.js, no `vt100`) instead of core's `PtySession`. Shares the same SQLite database as the TUI. LSP module (`src/lsp/`) provides a WebSocket proxy that spawns language servers as child processes and bridges JSON-RPC to the frontend; `LspManager` handles server lifecycle with TTL-based idle shutdown and max concurrent server cap; configuration in `lsp.toml`. Frontend code editor (`components/code-editor-panel.ts`) uses `codemirror-languageserver` to connect to the proxy for diagnostics, completion, and hover. Build with `cargo build -p piki-desktop` (requires `cd crates/desktop/frontend && npm install` first). The conventions for working on this crate — one opener, one close path, the settings store, the shortcut registry, the CSS token layer, how to add a dialog / shortcut / setting / icon — are in `crates/desktop/CLAUDE.md`. The desktop `Agents` panel polls `list_external_agents` every 2s and renders `External (n)` with the same provider mapping as the TUI.
+**Desktop app** (`crates/desktop/`): Tauri v2 desktop GUI (`piki-desktop`). Rust backend in `src/` wraps `piki-core` via Tauri IPC commands; web frontend in `frontend/` uses vanilla TypeScript with xterm.js for terminal rendering and CodeMirror 6 for code editing. Uses `RawPtySession` (streams raw bytes to xterm.js, no `vt100`) instead of core's `PtySession`. Shares the same SQLite database as the TUI. LSP module (`src/lsp/`) provides a WebSocket proxy that spawns language servers as child processes and bridges JSON-RPC to the frontend; `LspManager` handles server lifecycle with TTL-based idle shutdown and max concurrent server cap; configuration in `lsp.toml`. Frontend code editor (`components/code-editor-panel.ts`) uses `codemirror-languageserver` to connect to the proxy for diagnostics, completion, and hover. Build with `cargo build -p piki-desktop` (requires `cd crates/desktop/frontend && npm install` first). The conventions for working on this crate — one opener, one close path, the settings store, the shortcut registry, the CSS token layer, how to add a dialog / shortcut / setting / icon — are in `crates/desktop/AGENTS.md`. The desktop `Agents` panel polls `list_external_agents` every 2s and renders `External (n)` with the same provider mapping as the TUI.
 
 **API client** (`crates/api-client/`): Independent crate (`piki-api-client`) for HTTP API calls. `ApiClient` trait abstracts the transport layer; `HttpClient` implements it via `reqwest`. Includes a Hurl-like syntax parser (`parser.rs`) that converts `METHOD URL\nHeaders\n\nBody` text into `ParsedRequest` structs. `Protocol` enum (`protocol.rs`) prepared for future gRPC support. `OllamaClient` (`ollama.rs`) provides Ollama HTTP API integration: `list_models()` via `GET /api/tags`, `chat_stream()` and `chat_stream_with_tools()` for streaming `POST /api/chat` with token-by-token delivery through `mpsc` channels, and `chat()` for non-streaming requests. `LlamaCppClient` (`llamacpp.rs`) provides llama.cpp server integration via the OpenAI-compatible API: `list_models()` via `GET /v1/models`, `chat_stream()` and `chat_stream_with_tools()` for streaming `POST /v1/chat/completions` with SSE token delivery. `OpenRouterClient` (`openrouter.rs`) provides OpenRouter integration via `GET /models` / `POST /chat/completions` with `Authorization: Bearer <key>` + `HTTP-Referer`/`X-Title` (same SSE parsing as llama.cpp). `ChatClient` trait (`chat_client.rs`) provides a unified async interface over all backends with tool-use support; `ChatWireMessage` is the provider-agnostic wire format. `ChatStreamEvent` includes `Token`, `Done`, `ToolCalls`, and `Error` variants. `RawToolCall` carries parsed tool invocations. Does not depend on `piki-core` or `piki-tui`. Chat providers persisted via `piki_core::chat_providers::ChatProviderManager` in `~/.config/piki-multi/chat-providers.toml`.
 

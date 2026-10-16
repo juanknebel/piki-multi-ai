@@ -55,7 +55,7 @@ pub async fn build_system_prompt(
     }
     parts.push(ws_context);
 
-    // Project documentation snippet (CLAUDE.md > README.md)
+    // Project documentation snippet (AGENTS.md > CLAUDE.md > README.md)
     if let Some(snippet) = read_project_snippet(&ctx.workspace_path).await {
         parts.push(format!("Project documentation:\n{snippet}"));
     }
@@ -102,10 +102,10 @@ async fn detect_project_type(workspace: &std::path::Path) -> String {
     types.join(", ")
 }
 
-/// Read a project documentation snippet from CLAUDE.md or README.md.
+/// Read a project documentation snippet from AGENTS.md, CLAUDE.md or README.md.
 async fn read_project_snippet(workspace: &std::path::Path) -> Option<String> {
-    // Prefer CLAUDE.md (project-specific instructions)
-    for name in ["CLAUDE.md", "README.md"] {
+    // Prefer AGENTS.md (project-specific instructions), then CLAUDE.md, then README.md
+    for name in ["AGENTS.md", "CLAUDE.md", "README.md"] {
         let path = workspace.join(name);
         if let Ok(content) = tokio::fs::read_to_string(&path).await {
             if content.is_empty() {
