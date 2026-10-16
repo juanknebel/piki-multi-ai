@@ -87,7 +87,7 @@ pub struct DesktopTab {
     /// Custom title set by user (takes precedence over provider label).
     pub custom_title: Option<String>,
     /// Idle watcher for provider tabs (`AIProvider::Custom(_)`). Polled by
-    /// the background tick loop in `main.rs`. `None` for Shell, Kanban, etc.
+    /// the background tick loop in `main.rs`. `None` for Shell, Api, etc.
     pub idle_watcher: Option<piki_core::idle_watcher::IdleWatcher>,
 }
 

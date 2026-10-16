@@ -275,6 +275,28 @@ impl SqliteStorage {
             tx.commit()?;
         }
 
+        // A per-workspace board-path setting existed briefly; it was
+        // removed again. Drop the column.
+        if version < 15 {
+            let tx = conn.transaction()?;
+            tx.execute_batch("ALTER TABLE workspaces DROP COLUMN kanban_path;")?;
+            tx.execute("INSERT INTO schema_version (version) VALUES (15)", [])?;
+            tx.commit()?;
+        }
+
+        // The task board is gone entirely, so the dispatch-from-card
+        // bookkeeping goes with it. Drop the columns.
+        if version < 16 {
+            let tx = conn.transaction()?;
+            tx.execute_batch(
+                "ALTER TABLE workspaces DROP COLUMN dispatch_card_id;
+                 ALTER TABLE workspaces DROP COLUMN dispatch_source_kanban;
+                 ALTER TABLE workspaces DROP COLUMN dispatch_agent_name;",
+            )?;
+            tx.execute("INSERT INTO schema_version (version) VALUES (16)", [])?;
+            tx.commit()?;
+        }
+
         Ok(())
     }
 
@@ -288,20 +310,16 @@ impl SqliteStorage {
 
         for entry in &entries {
             let rows = tx.execute(
-                "INSERT OR IGNORE INTO workspaces (project_root, name, description, prompt, kanban_path, worktree_path, source_repo, workspace_type, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name, origin, origin_github_url, is_git_repo, ephemeral, pr_repo_nwo, pr_number) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+                "INSERT OR IGNORE INTO workspaces (project_root, name, description, prompt, worktree_path, source_repo, workspace_type, display_order, origin, origin_github_url, is_git_repo, ephemeral, pr_repo_nwo, pr_number) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
                 rusqlite::params![
                     entry.source_repo.to_string_lossy(),
                     entry.name,
                     entry.description,
                     entry.prompt,
-                    entry.kanban_path,
                     entry.worktree_path.to_string_lossy(),
                     entry.source_repo.to_string_lossy(),
                     workspace_type_str(entry.workspace_type),
                     entry.order,
-                    entry.dispatch_card_id,
-                    entry.dispatch_source_kanban,
-                    entry.dispatch_agent_name,
                     entry.origin.tag(),
                     entry.origin.github_url(),
                     entry.is_git_repo,
@@ -500,25 +518,21 @@ fn detect_github_origin(source_repo: &str) -> Option<String> {
 }
 
 fn row_to_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkspaceEntry> {
-    let origin_tag: String = row.get(11)?;
-    let origin_url: Option<String> = row.get(12)?;
+    let origin_tag: String = row.get(7)?;
+    let origin_url: Option<String> = row.get(8)?;
     Ok(WorkspaceEntry {
         name: row.get(0)?,
         description: row.get(1)?,
         prompt: row.get(2)?,
-        kanban_path: row.get(3)?,
-        worktree_path: PathBuf::from(row.get::<_, String>(4)?),
-        source_repo: PathBuf::from(row.get::<_, String>(5)?),
-        workspace_type: parse_workspace_type(&row.get::<_, String>(6)?),
-        order: row.get(7)?,
-        dispatch_card_id: row.get(8)?,
-        dispatch_source_kanban: row.get(9)?,
-        dispatch_agent_name: row.get(10)?,
+        worktree_path: PathBuf::from(row.get::<_, String>(3)?),
+        source_repo: PathBuf::from(row.get::<_, String>(4)?),
+        workspace_type: parse_workspace_type(&row.get::<_, String>(5)?),
+        order: row.get(6)?,
         origin: crate::domain::WorkspaceOrigin::from_sql(&origin_tag, origin_url),
-        is_git_repo: row.get(13)?,
-        ephemeral: row.get(14)?,
-        pr_repo_nwo: row.get(15)?,
-        pr_number: row.get::<_, Option<i64>>(16)?.map(|n| n as u64),
+        is_git_repo: row.get(9)?,
+        ephemeral: row.get(10)?,
+        pr_repo_nwo: row.get(11)?,
+        pr_number: row.get::<_, Option<i64>>(12)?.map(|n| n as u64),
     })
 }
 
@@ -553,20 +567,16 @@ impl WorkspaceStorage for Arc<SqliteStorage> {
 
         for ws in workspaces.iter().filter(|ws| ws.source_repo == git_root) {
             tx.execute(
-                "INSERT INTO workspaces (project_root, name, description, prompt, kanban_path, worktree_path, source_repo, workspace_type, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name, origin, origin_github_url, is_git_repo, ephemeral, pr_repo_nwo, pr_number) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+                "INSERT INTO workspaces (project_root, name, description, prompt, worktree_path, source_repo, workspace_type, display_order, origin, origin_github_url, is_git_repo, ephemeral, pr_repo_nwo, pr_number) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
                 rusqlite::params![
                     git_root_str,
                     ws.name,
                     ws.description,
                     ws.prompt,
-                    ws.kanban_path,
                     ws.path.to_string_lossy(),
                     ws.source_repo.to_string_lossy(),
                     workspace_type_str(ws.workspace_type),
                     ws.order,
-                    ws.dispatch_card_id,
-                    ws.dispatch_source_kanban,
-                    ws.dispatch_agent_name,
                     ws.origin.tag(),
                     ws.origin.github_url(),
                     ws.is_git_repo,
@@ -585,7 +595,7 @@ impl WorkspaceStorage for Arc<SqliteStorage> {
         let conn = self.conn.lock();
         let git_root_str = git_root.to_string_lossy();
         let mut stmt = conn.prepare(
-            "SELECT name, description, prompt, kanban_path, worktree_path, source_repo, workspace_type, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name, origin, origin_github_url, is_git_repo, ephemeral, pr_repo_nwo, pr_number FROM workspaces WHERE source_repo = ?1 ORDER BY display_order",
+            "SELECT name, description, prompt, worktree_path, source_repo, workspace_type, display_order, origin, origin_github_url, is_git_repo, ephemeral, pr_repo_nwo, pr_number FROM workspaces WHERE source_repo = ?1 ORDER BY display_order",
         )?;
 
         // Review-checkout (`ephemeral`) entries are kept even if
@@ -604,7 +614,7 @@ impl WorkspaceStorage for Arc<SqliteStorage> {
     fn load_all_workspaces(&self) -> Vec<WorkspaceEntry> {
         let conn = self.conn.lock();
         let mut stmt = match conn.prepare(
-            "SELECT name, description, prompt, kanban_path, worktree_path, source_repo, workspace_type, display_order, dispatch_card_id, dispatch_source_kanban, dispatch_agent_name, origin, origin_github_url, is_git_repo, ephemeral, pr_repo_nwo, pr_number FROM workspaces ORDER BY display_order",
+            "SELECT name, description, prompt, worktree_path, source_repo, workspace_type, display_order, origin, origin_github_url, is_git_repo, ephemeral, pr_repo_nwo, pr_number FROM workspaces ORDER BY display_order",
         ) {
             Ok(s) => s,
             Err(_) => return Vec::new(),
@@ -1061,7 +1071,6 @@ mod project_cleanup_tests {
             name.to_string(),
             String::new(),
             String::new(),
-            None,
             PathBuf::from(format!("/wt/{name}")),
             PathBuf::from(repo),
         );
@@ -1217,7 +1226,6 @@ mod review_workspace_tests {
             "owner/repo#7".to_string(),
             "Some PR".to_string(),
             "".to_string(),
-            None,
             missing_checkout,
             git_root.clone(),
         );
@@ -1254,7 +1262,6 @@ mod review_workspace_tests {
             "regular-ws".to_string(),
             "".to_string(),
             "".to_string(),
-            None,
             git_root.join("does-not-exist"),
             git_root.clone(),
         );

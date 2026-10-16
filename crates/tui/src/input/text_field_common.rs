@@ -158,19 +158,12 @@ pub(crate) fn handle_bulk_insert(app: &mut crate::app::App, text: &str) {
         }
         AppMode::EditWorkspace => {
             if let Some(DialogState::EditWorkspace {
-                kanban,
-                kanban_cursor,
                 prompt,
                 prompt_cursor,
-                active_field,
                 ..
             }) = &mut app.active_dialog
             {
-                use crate::dialog_state::EditWorkspaceField;
-                match active_field {
-                    EditWorkspaceField::KanbanPath => bulk_insert(kanban, kanban_cursor, text),
-                    EditWorkspaceField::Prompt => bulk_insert(prompt, prompt_cursor, text),
-                }
+                bulk_insert(prompt, prompt_cursor, text);
             }
         }
         AppMode::CreateWorktree => {
@@ -179,8 +172,6 @@ pub(crate) fn handle_bulk_insert(app: &mut crate::app::App, text: &str) {
                 name_cursor,
                 prompt,
                 prompt_cursor,
-                kanban,
-                kanban_cursor,
                 active_field,
                 ..
             }) = &mut app.active_dialog
@@ -189,7 +180,6 @@ pub(crate) fn handle_bulk_insert(app: &mut crate::app::App, text: &str) {
                 match active_field {
                     CreateWorktreeField::Name => bulk_insert(name, name_cursor, text),
                     CreateWorktreeField::Prompt => bulk_insert(prompt, prompt_cursor, text),
-                    CreateWorktreeField::KanbanPath => bulk_insert(kanban, kanban_cursor, text),
                 }
             }
         }
@@ -238,16 +228,6 @@ pub(crate) fn handle_bulk_insert(app: &mut crate::app::App, text: &str) {
             }) = &mut app.active_dialog
             {
                 bulk_insert(buf, cursor, text);
-            }
-        }
-        AppMode::DispatchAgent => {
-            if let Some(DialogState::DispatchAgent {
-                ref mut additional_prompt,
-                ref mut additional_prompt_cursor,
-                ..
-            }) = app.active_dialog
-            {
-                bulk_insert(additional_prompt, additional_prompt_cursor, text);
             }
         }
         AppMode::Broadcast => {

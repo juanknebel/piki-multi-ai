@@ -7,13 +7,12 @@ import { icon, type IconName } from "./icons";
 // Workspaces (secondary) — then the workspace-scoped Files and Source
 // Control, then the global tools. Workspaces / Projects / Files / git are
 // switchable sidebar views; Agents opens the profile-manager dialog;
-// Kanban / API / Web Preview open workspace tabs.
+// API / Web Preview open workspace tabs.
 const ACTIVITIES: { id: SidebarView; label: string; icon: IconName }[] = [
   { id: "projects", label: "Projects", icon: "projects" },
   { id: "files", label: "Files", icon: "folder" },
   { id: "git", label: "Source Control", icon: "branch" },
   { id: "agents", label: "Manage Agents", icon: "agents" },
-  { id: "kanban", label: "Kanban Board", icon: "kanban" },
   { id: "api", label: "API Explorer", icon: "api" },
   { id: "web-preview", label: "Web Preview", icon: "browser" },
 ];

@@ -58,13 +58,6 @@ theme = "default"
 # choice is stored in piki.db, applies to the TUI as well, and wins over this
 # file until you reset it in the dialog.
 
-# ── Kanban board ──────────────────────────────────────────────────────────
-# Backing store for the task board.
-
-# [kanban]
-# provider = "local"
-# path = "~/.config/flow/boards/default"
-
 # ── Keybindings ───────────────────────────────────────────────────────────
 # The app uses a tmux-style one-shot prefix: press the prefix, then a key.
 # Pressing the prefix twice sends it literally to the focused terminal.

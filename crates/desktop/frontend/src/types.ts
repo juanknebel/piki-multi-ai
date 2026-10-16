@@ -2,7 +2,6 @@ import type { IconName } from "./components/icons";
 
 export type AIProvider =
   | "Shell"
-  | "Kanban"
   | "CodeReview"
   | "Api"
   | "Markdown"
@@ -75,15 +74,11 @@ export interface WorkspaceInfo {
   name: string;
   description: string;
   prompt: string;
-  kanban_path: string | null;
   path: string;
   source_repo: string;
   source_repo_display: string;
   workspace_type: WorkspaceType;
   order: number;
-  dispatch_card_id: string | null;
-  dispatch_source_kanban: string | null;
-  dispatch_agent_name: string | null;
   origin: WorkspaceOrigin;
   /** Ad-hoc PR-review checkout: grouped under the synthetic PR-review bucket
    *  and deleted from disk when closed. Optional because older callers build
@@ -352,7 +347,6 @@ export interface PtyAttentionEvent {
 // Built-in provider labels (Custom providers use their name)
 const BUILTIN_PROVIDER_LABELS: Record<string, string> = {
   Shell: "Shell",
-  Kanban: "Kanban Board",
   CodeReview: "Code Review",
   Api: "API Explorer",
   Markdown: "Markdown",
@@ -362,7 +356,6 @@ const BUILTIN_PROVIDER_LABELS: Record<string, string> = {
 
 const BUILTIN_PROVIDER_ICONS: Record<string, string> = {
   Shell: "$",
-  Kanban: "B",
   CodeReview: "R",
   Api: "A",
   Markdown: "M",
@@ -433,32 +426,7 @@ export interface ProviderInfo {
 export const PROVIDER_LABELS = BUILTIN_PROVIDER_LABELS;
 export const PROVIDER_ICONS = BUILTIN_PROVIDER_ICONS;
 
-// Kanban types
-export interface KanbanCard {
-  id: string;
-  title: string;
-  description: string;
-  priority: string;
-  assignee: string;
-  project: string;
-}
 
-export interface KanbanColumn {
-  id: string;
-  cards: KanbanCard[];
-}
-
-export interface KanbanBoard {
-  columns: KanbanColumn[];
-}
-
-export const PRIORITY_CSS: Record<string, string> = {
-  Bug: "priority-bug",
-  High: "priority-high",
-  Medium: "priority-medium",
-  Low: "priority-low",
-  Wishlist: "priority-wishlist",
-};
 
 export const FILE_STATUS_LABELS: Record<FileStatus, string> = {
   Modified: "M",

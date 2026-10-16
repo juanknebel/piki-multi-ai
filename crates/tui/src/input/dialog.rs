@@ -7,7 +7,7 @@ use crate::app::{ActivePane, App, AppMode, DialogField, NewWorkspaceSource};
 use crate::config::has_ctrl;
 use crate::dialog_state::{
     CreateWorktreeField, CreateWorktreeMode, CycleField, DialogState, EditAgentField,
-    EditProviderField, EditWorkspaceField, NewTabMenu, RepoBrowse,
+    EditProviderField, NewTabMenu, RepoBrowse,
 };
 use piki_core::workspace::manager::parse_github_repo_name;
 use piki_core::{AIProvider, WorkspaceType};
@@ -27,46 +27,19 @@ pub(super) fn handle_edit_workspace_input(app: &mut App, key: KeyEvent) -> Optio
         Submit(Box<Action>),
     }
 
-    let trim_some = |s: &str| -> Option<String> {
-        let t = s.trim();
-        if t.is_empty() {
-            None
-        } else {
-            Some(t.to_string())
-        }
-    };
-
     let step = with_dialog_mut!(app, EditWorkspace {
         target,
-        kanban,
-        kanban_cursor,
         prompt,
         prompt_cursor,
-        active_field,
     } => {
         match key.code {
-            KeyCode::Tab => {
-                *active_field = active_field.next();
-                Some(Step::Stay)
-            }
-            KeyCode::BackTab => {
-                *active_field = active_field.prev();
-                Some(Step::Stay)
-            }
             KeyCode::Enter => Some(Step::Submit(Box::new(Action::EditWorkspace(
                 *target,
-                trim_some(kanban),
                 prompt.clone(),
             )))),
             _ if is_cancel(key, &app.config) => Some(Step::Cancel),
             _ => {
-                let (buf, cursor) = match *active_field {
-                    EditWorkspaceField::KanbanPath => {
-                        (kanban as &mut String, kanban_cursor as &mut usize)
-                    }
-                    EditWorkspaceField::Prompt => (prompt, prompt_cursor),
-                };
-                handle_text_input(buf, cursor, key, |c| !c.is_control());
+                handle_text_input(prompt, prompt_cursor, key, |c| !c.is_control());
                 Some(Step::Stay)
             }
         }
@@ -95,8 +68,6 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
         ref mut desc_cursor,
         ref mut prompt,
         ref mut prompt_cursor,
-        ref mut kanban,
-        ref mut kanban_cursor,
         ref mut source,
         ref mut active_field,
     }) = app.active_dialog
@@ -117,7 +88,6 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
             let dir_raw = dir.trim().to_string();
             let description = desc.clone();
             let prompt_val = prompt.clone();
-            let kanban_path = opt_trimmed(kanban);
             let source_val = *source;
 
             if dir_raw.is_empty() {
@@ -168,7 +138,6 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
                         ws_name,
                         description,
                         prompt_val,
-                        kanban_path,
                         dir_path,
                         WorkspaceType::Simple,
                     ));
@@ -208,7 +177,6 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
                         ws_name,
                         description,
                         prompt_val,
-                        kanban_path,
                         url,
                         dest_path,
                     ));
@@ -247,7 +215,6 @@ pub(super) fn handle_new_workspace_input(app: &mut App, key: KeyEvent) -> Option
         DialogField::Destination => (destination, destination_cursor),
         DialogField::Description => (desc, desc_cursor),
         DialogField::Prompt => (prompt, prompt_cursor),
-        DialogField::KanbanPath => (kanban, kanban_cursor),
         DialogField::Source => return None,
     };
     let validator = |c: char| -> bool { !c.is_control() };
@@ -320,8 +287,6 @@ fn handle_create_worktree_create_new(app: &mut App, key: KeyEvent) -> Option<Act
         ref mut name_cursor,
         ref mut prompt,
         ref mut prompt_cursor,
-        ref mut kanban,
-        ref mut kanban_cursor,
         ref mut active_field,
         ..
     }) = app.active_dialog
@@ -345,7 +310,6 @@ fn handle_create_worktree_create_new(app: &mut App, key: KeyEvent) -> Option<Act
                 return None;
             }
             let prompt_val = prompt.clone();
-            let kanban_opt = opt_trimmed(kanban);
             let Some(parent) = app.workspaces.get(parent_idx) else {
                 app.set_toast(
                     "Parent workspace no longer exists",
@@ -364,15 +328,14 @@ fn handle_create_worktree_create_new(app: &mut App, key: KeyEvent) -> Option<Act
                 branch,
                 String::new(),
                 prompt_val,
-                kanban_opt,
                 parent_dir,
                 WorkspaceType::Worktree,
             ));
         }
         _ if is_cancel(key, &app.config) => {
-            // Back one step to ChooseSource (like the dispatch dialogs), not a
-            // full teardown — the user typed into Name/Prompt/Kanban to get
-            // here and can still cancel from the chooser.
+            // Back one step to ChooseSource, not a full teardown — the user
+            // typed into Name/Prompt to get here and can still cancel
+            // from the chooser.
             if let Some(DialogState::CreateWorktree { ref mut mode, .. }) = app.active_dialog {
                 *mode = CreateWorktreeMode::ChooseSource;
             }
@@ -385,7 +348,6 @@ fn handle_create_worktree_create_new(app: &mut App, key: KeyEvent) -> Option<Act
     let (buf, cursor) = match field {
         CreateWorktreeField::Name => (name as &mut String, name_cursor as &mut usize),
         CreateWorktreeField::Prompt => (prompt, prompt_cursor),
-        CreateWorktreeField::KanbanPath => (kanban, kanban_cursor),
     };
     let validator = |c: char| -> bool {
         match field {
@@ -585,22 +547,8 @@ pub(super) fn handle_confirm_delete_input(app: &mut App, key: KeyEvent) -> Optio
 
     match handle_yn_input(key) {
         ConfirmResult::Yes => {
-            // If this is a dispatched workspace, show column picker instead of deleting immediately
-            let is_dispatched = app
-                .workspaces
-                .get(target)
-                .is_some_and(|ws| ws.info.dispatch_card_id.is_some());
-            if is_dispatched && let Some(columns) = get_dispatch_board_columns(app, target) {
-                app.active_dialog = Some(DialogState::DispatchCardMove {
-                    target,
-                    columns,
-                    selected: 0,
-                });
-                app.mode = AppMode::DispatchCardMove;
-                return None;
-            }
             dismiss_dialog_to_pane(app, ActivePane::WorkspaceList);
-            Some(Action::DeleteWorkspace(target, None))
+            Some(Action::DeleteWorkspace(target))
         }
         ConfirmResult::No if is_ephemeral => {
             dismiss_dialog_to_pane(app, ActivePane::WorkspaceList);
@@ -615,61 +563,6 @@ pub(super) fn handle_confirm_delete_input(app: &mut App, key: KeyEvent) -> Optio
             None
         }
         ConfirmResult::NotHandled => None,
-    }
-}
-
-/// Load the board columns from the source kanban for a dispatched workspace.
-fn get_dispatch_board_columns(app: &mut App, ws_idx: usize) -> Option<Vec<(String, String)>> {
-    let ws = app.workspaces.get(ws_idx)?;
-    let kanban_path = ws.info.dispatch_source_kanban.as_ref()?;
-    let source_ws_idx = app.workspaces.iter().position(|w| {
-        w.kanban_path.as_deref() == Some(kanban_path.as_str()) && w.kanban_provider.is_some()
-    })?;
-    let src_ws = &mut app.workspaces[source_ws_idx];
-    let kp = src_ws.kanban_provider.as_mut()?;
-    let board = kp.load_board().ok()?;
-    let columns: Vec<(String, String)> = board
-        .columns
-        .iter()
-        .map(|c| (c.id.clone(), c.title.clone()))
-        .collect();
-    if columns.is_empty() {
-        None
-    } else {
-        Some(columns)
-    }
-}
-
-pub(super) fn handle_dispatch_card_move_input(app: &mut App, key: KeyEvent) -> Option<Action> {
-    let Some(DialogState::DispatchCardMove {
-        target,
-        ref columns,
-        ref mut selected,
-    }) = app.active_dialog
-    else {
-        return None;
-    };
-    let num_columns = columns.len();
-
-    match key.code {
-        KeyCode::Up | KeyCode::Char('k') => {
-            move_selection(selected, num_columns, -1, false);
-            None
-        }
-        KeyCode::Down | KeyCode::Char('j') => {
-            move_selection(selected, num_columns, 1, false);
-            None
-        }
-        KeyCode::Enter => {
-            let col_id = columns[*selected].0.clone();
-            dismiss_dialog_to_pane(app, ActivePane::WorkspaceList);
-            Some(Action::DeleteWorkspace(target, Some(col_id)))
-        }
-        KeyCode::Esc => {
-            dismiss_dialog_to_pane(app, ActivePane::WorkspaceList);
-            None
-        }
-        _ => None,
     }
 }
 
@@ -764,11 +657,6 @@ pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Actio
         }
         NewTabMenu::Tools => match key.code {
             KeyCode::Char('1') => {
-                app.active_dialog = None;
-                app.mode = AppMode::Normal;
-                Some(Action::SpawnTab(AIProvider::Kanban))
-            }
-            KeyCode::Char('2') => {
                 // Standing on a review workspace already? Reopen its tab
                 // directly instead of routing through the PR search panel.
                 if let Some(ws) = app.workspaces.get(app.active_workspace)
@@ -797,12 +685,12 @@ pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Actio
                 app.mode = AppMode::PrPicker;
                 Some(Action::LoadPrList)
             }
-            KeyCode::Char('3') => {
+            KeyCode::Char('2') => {
                 app.active_dialog = None;
                 app.mode = AppMode::Normal;
                 Some(Action::SpawnTab(AIProvider::Api))
             }
-            KeyCode::Char('4') => {
+            KeyCode::Char('3') => {
                 app.active_dialog = None;
                 app.mode = AppMode::Normal;
                 Some(Action::SpawnTab(AIProvider::Git))
@@ -1470,177 +1358,6 @@ pub(super) fn handle_workspace_info_input(app: &mut App, key: KeyEvent) -> Optio
     None
 }
 
-pub(super) fn handle_dispatch_agent_input(app: &mut App, key: KeyEvent) -> Option<Action> {
-    // Pre-compute provider list before mutably borrowing dialog state
-    let dispatchable_providers = app.dispatchable_provider_list();
-
-    let Some(DialogState::DispatchAgent {
-        source_ws,
-        ref card_id,
-        ref card_title,
-        ref card_description,
-        card_priority,
-        ref card_project,
-        ref mut agent_idx,
-        ref agents,
-        ref mut selected,
-        ref mut additional_prompt,
-        ref mut additional_prompt_cursor,
-        ref mut step,
-        ref mut use_current_ws,
-    }) = app.active_dialog
-    else {
-        return None;
-    };
-
-    let agent_count = agents.len();
-    let provider_count = dispatchable_providers.len();
-    let total = agent_count + provider_count;
-
-    let resolve_selection = |idx: usize| -> (AIProvider, Option<String>, Option<String>) {
-        if idx < agent_count {
-            let (name, prov_str, role) = &agents[idx];
-            (
-                AIProvider::from_label(prov_str),
-                Some(name.clone()),
-                Some(role.clone()),
-            )
-        } else {
-            let prov_idx = idx - agent_count;
-            let p = dispatchable_providers
-                .get(prov_idx)
-                .cloned()
-                .unwrap_or_else(|| AIProvider::Custom(String::new()));
-            (p, None, None)
-        }
-    };
-
-    if *step == 2 {
-        // Step 2: workspace destination selection
-        match key.code {
-            KeyCode::Left | KeyCode::Right | KeyCode::Tab => {
-                *use_current_ws = !*use_current_ws;
-                None
-            }
-            KeyCode::Enter => {
-                let checked: Vec<usize> = selected
-                    .iter()
-                    .enumerate()
-                    .filter(|(i, s)| **s && *i < total)
-                    .map(|(i, _)| i)
-                    .collect();
-                let action = if checked.is_empty() {
-                    // No checkboxes: dispatch the highlighted entry alone
-                    let (provider, agent_name, agent_role) = resolve_selection(*agent_idx);
-                    Action::DispatchAgent {
-                        source_ws,
-                        card_id: card_id.clone(),
-                        card_title: card_title.clone(),
-                        card_description: card_description.clone(),
-                        card_priority,
-                        card_project: card_project.clone(),
-                        provider,
-                        agent_name,
-                        agent_role,
-                        additional_prompt: additional_prompt.clone(),
-                        use_current_ws: *use_current_ws,
-                    }
-                } else {
-                    let targets = checked.into_iter().map(&resolve_selection).collect();
-                    Action::DispatchAgents {
-                        source_ws,
-                        card_id: card_id.clone(),
-                        card_title: card_title.clone(),
-                        card_description: card_description.clone(),
-                        card_priority,
-                        card_project: card_project.clone(),
-                        targets,
-                        additional_prompt: additional_prompt.clone(),
-                        use_current_ws: *use_current_ws,
-                    }
-                };
-                app.active_dialog = None;
-                app.mode = AppMode::Normal;
-                Some(action)
-            }
-            _ if is_cancel(key, &app.config) => {
-                // Back to step 1 (prompt)
-                *step = 1;
-                None
-            }
-            _ => None,
-        }
-    } else if *step == 1 {
-        // Step 1: additional prompt (free text)
-        match key.code {
-            KeyCode::Enter => {
-                *step = 2;
-                None
-            }
-            _ if is_cancel(key, &app.config) => {
-                // Back to step 0 (checklist)
-                *step = 0;
-                None
-            }
-            _ => {
-                handle_text_input(additional_prompt, additional_prompt_cursor, key, |c| {
-                    !c.is_control()
-                });
-                None
-            }
-        }
-    } else {
-        // Step 0: agent/provider multi-select checklist
-        if total == 0 {
-            return None;
-        }
-
-        match key.code {
-            KeyCode::Char('j') | KeyCode::Down | KeyCode::Right | KeyCode::Tab => {
-                *agent_idx = (*agent_idx + 1) % total;
-                None
-            }
-            KeyCode::Char('k') | KeyCode::Up | KeyCode::Left => {
-                *agent_idx = (*agent_idx + total - 1) % total;
-                None
-            }
-            KeyCode::Char(' ') => {
-                if selected.len() < total {
-                    selected.resize(total, false);
-                }
-                if let Some(slot) = selected.get_mut(*agent_idx) {
-                    *slot = !*slot;
-                }
-                if *agent_idx + 1 < total {
-                    *agent_idx += 1;
-                }
-                None
-            }
-            KeyCode::Char('a') => {
-                if selected.len() < total {
-                    selected.resize(total, false);
-                }
-                let all_selected = selected.iter().take(total).all(|&s| s);
-                for s in selected.iter_mut().take(total) {
-                    *s = !all_selected;
-                }
-                None
-            }
-            KeyCode::Enter => {
-                // Advance to the additional-prompt step
-                *step = 1;
-                None
-            }
-            _ if is_cancel(key, &app.config) => {
-                app.active_dialog = None;
-                app.mode = AppMode::Normal;
-                None
-            }
-            _ => None,
-        }
-    }
-}
-
 pub(super) fn handle_broadcast_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     let Some(DialogState::Broadcast {
         ref rows,
@@ -2054,17 +1771,6 @@ fn char_count(text: &str) -> usize {
         text.len()
     } else {
         text.chars().count()
-    }
-}
-
-/// Trim a dialog buffer; return `None` when empty, `Some(trimmed)` otherwise.
-/// Used by the new-workspace handler to skip a blank `kanban` field.
-fn opt_trimmed(buf: &str) -> Option<String> {
-    let trimmed = buf.trim();
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed.to_string())
     }
 }
 

@@ -1,6 +1,6 @@
 ---
 source: crates/tui/src/ui/mod.rs
-assertion_line: 872
+assertion_line: 862
 expression: body
 ---
 
@@ -185,31 +185,6 @@ expression: body
     C-l           Clear the conversation (press twice)
     Esc           Hide (keeps state)
 
-  Kanban board
-    h/l/j/k       Navigate columns and cards
-    H/L           Move the card left/right
-    n / a         New card
-    e             Edit the selected card
-    d             Delete the card
-    D             Dispatch an agent (branch + AI)
-    Enter         Toggle card details
-    r             Refresh the board
-    s             Toggle sort by priority
-    /             Search cards
-    p             Filter by project
-    Esc           Close
-
-  Dispatch agent dialog
-    j/k/↑/↓/←/→/Tab Step 0: move through agents / providers
-    Space         Step 0: check one agent
-    a             Step 0: check all / none
-    Enter         Step 0: continue to the prompt
-    Type          Step 1: add extra prompt instructions
-    Enter         Step 1: continue to the destination
-    ←/→/Tab       Step 2: new worktree(s) or current workspace
-    Enter         Step 2: dispatch
-    Esc           Back a step, or cancel
-
   Broadcast to agents dialog
     j/k/↑/↓       Step 0: move through agents
     Space         Step 0: check one agent
@@ -219,11 +194,6 @@ expression: body
     Tab           Step 1: toggle append Enter
     Enter         Step 1: send
     Esc           Back a step, or cancel
-
-  Move dispatched card (after confirming delete)
-    j/k           Select the target kanban column
-    Enter         Move the card and delete the workspace
-    Esc           Cancel
 
   Manage agents (C-g m)
     j/k           Navigate the agent list

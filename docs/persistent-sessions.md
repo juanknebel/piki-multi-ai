@@ -52,7 +52,7 @@ Goals:
 Non-goals (for now):
 
 - Remote (ssh) sessions, multi-user, systemd socket activation.
-- Persisting non-PTY tabs' *content* (Kanban/API Explorer state). Their
+- Persisting non-PTY tabs' *content* (API Explorer state). Their
   presence in the tab bar is restored; state is not.
 - Surviving a daemon crash: the daemon holds the PTY masters, so daemon death
   means SIGHUP for every child — same blast radius as a tmux server. The
@@ -232,7 +232,7 @@ emits the same Tauri events as today (`pty-output`, `pty-exit`,
   `workspace_path` matches a workspace, create the tab (order from meta) and
   attach. Sessions with no matching workspace are left running and listed in
   the sessions dialog (never killed silently).
-- Non-PTY tabs (Kanban/API/markdown) and the active tab index are restored
+- Non-PTY tabs (API/markdown) and the active tab index are restored
   from a per-workspace UI pref (`tui_tabs:<path>`), written on every tab
   change; PTY entries in it are reconciled against the daemon list (a PTY
   entry whose session is gone becomes a *dead* tab with a restart hint).
@@ -294,7 +294,7 @@ Reconciliation on startup (both frontends):
 | PTY, present | missing | dead tab, "not running — Enter to restart" |
 | absent | live/exited, workspace matches | adopt (append, ordered by meta) |
 | absent | live/exited, no workspace | left alone; visible in the sessions dialog |
-| non-PTY | — | recreated empty (Kanban/API); CodeReview/markdown skipped |
+| non-PTY | — | recreated empty (API); CodeReview/markdown skipped |
 
 ## Lifecycle semantics
 

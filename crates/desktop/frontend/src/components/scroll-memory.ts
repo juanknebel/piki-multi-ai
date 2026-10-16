@@ -38,7 +38,7 @@ export function applyScroll(el: Element | null | undefined, pos: ScrollPos | und
  *  One listener on the panel's own root, in the CAPTURE phase: `scroll` does
  *  not bubble, but it does reach ancestors on the way down, so this keeps
  *  working across the re-renders that replace the scrollers underneath —
- *  which is why the kanban board can rebuild its columns and still come back
+ *  which is why a panel can rebuild its list and still come back
  *  to the same place. */
 export function trackScroll(
   root: HTMLElement,

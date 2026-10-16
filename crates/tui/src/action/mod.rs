@@ -19,28 +19,13 @@ mod workspace;
 /// Async actions triggered by key events
 #[derive(Debug)]
 pub(crate) enum Action {
-    CreateWorkspace(
-        String,
-        String,
-        String,
-        Option<String>,
-        PathBuf,
-        WorkspaceType,
-    ),
+    CreateWorkspace(String, String, String, PathBuf, WorkspaceType),
     /// Clone a GitHub URL into a user-chosen destination directory and
     /// register as Simple. Args:
-    /// (name, description, prompt, kanban_path, github_url, destination_dir)
-    CreateGithubWorkspace(
-        String,
-        String,
-        String,
-        Option<String>,
-        String,
-        std::path::PathBuf,
-    ),
-    EditWorkspace(usize, Option<String>, String),
-    /// Second field: optional target kanban column for dispatched cards
-    DeleteWorkspace(usize, Option<String>),
+    /// (name, description, prompt, github_url, destination_dir)
+    CreateGithubWorkspace(String, String, String, String, std::path::PathBuf),
+    EditWorkspace(usize, String),
+    DeleteWorkspace(usize),
     /// Scan disk (via `git worktree list`) for worktrees of the parent
     /// workspace's repo that aren't already registered, for the
     /// CreateWorktree dialog's "Load existing worktree" flow.
@@ -99,34 +84,6 @@ pub(crate) enum Action {
     /// Run a jq filter over the API tab's response bodies. An empty filter
     /// drops the current one and shows the raw responses again.
     RunJqFilter(String),
-    /// Dispatch an agent to work on a kanban card
-    DispatchAgent {
-        source_ws: usize,
-        card_id: String,
-        card_title: String,
-        card_description: String,
-        card_priority: flow_core::Priority,
-        card_project: String,
-        provider: AIProvider,
-        agent_name: Option<String>,
-        agent_role: Option<String>,
-        additional_prompt: String,
-        use_current_ws: bool,
-    },
-    /// Dispatch several agents to work on the same kanban card at once.
-    /// Each target is (provider, agent name, agent role); each gets its own
-    /// worktree (or its own tab when `use_current_ws` is set).
-    DispatchAgents {
-        source_ws: usize,
-        card_id: String,
-        card_title: String,
-        card_description: String,
-        card_priority: flow_core::Priority,
-        card_project: String,
-        targets: Vec<(AIProvider, Option<String>, Option<String>)>,
-        additional_prompt: String,
-        use_current_ws: bool,
-    },
     /// Write one input line to several agent tabs at once. Each target is a
     /// (workspace, tab) pair; the text (+ Enter when `append_enter` is set)
     /// is written to each tab's PTY verbatim.
@@ -208,9 +165,7 @@ pub(crate) async fn execute_action(
         Action::SendApiRequest(..) | Action::RunJqFilter(..) => {
             api::handle(app, manager, action, terminal).await?
         }
-        Action::DispatchAgent { .. }
-        | Action::DispatchAgents { .. }
-        | Action::BroadcastInput { .. }
+        Action::BroadcastInput { .. }
         | Action::SaveAgent { .. }
         | Action::DeleteAgent(..)
         | Action::SyncAgentToRepo(..)

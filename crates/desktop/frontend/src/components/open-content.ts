@@ -3,7 +3,7 @@
 // (the chooser a blank pane shows). Every opener takes an optional
 // `{ paneId }`; without it the behaviour is the classic "new tab".
 //
-// Singletons (Kanban, API Explorer, Web Preview): when one already exists in
+// Singletons (API Explorer, Web Preview): when one already exists in
 // the workspace and the user picks it for a pane, the confirm offers
 // *Move here* (re-parent it — `appState.moveContentToPane`) / *Go there* /
 // Cancel. Without a pane target the existing one is simply focused
@@ -48,7 +48,7 @@ export async function getPaneProviderChoices(): Promise<AIProvider[]> {
 }
 
 /** The non-process contents every chooser offers, in display order. */
-export const TOOL_CHOICES: readonly AIProvider[] = ["WebPreview", "Kanban", "Api"];
+export const TOOL_CHOICES: readonly AIProvider[] = ["WebPreview", "Api"];
 
 /** Place `tab` per `target`: into the pane, or as a new top-level tab. */
 function place(tab: TabInfo, target: OpenTarget) {
@@ -96,7 +96,7 @@ async function resolveSingleton(provider: AIProvider, target: OpenTarget): Promi
   return "done";
 }
 
-/** Open a backend-spawned provider (Shell, an agent, Kanban, API) or the Web
+/** Open a backend-spawned provider (Shell, an agent, API) or the Web
  *  Preview. The one entry point for File ▸ New Tab, the palette, the
  *  sidebar icons, the empty workspace and the blank pane. */
 export async function openProvider(provider: AIProvider, target: OpenTarget = {}) {

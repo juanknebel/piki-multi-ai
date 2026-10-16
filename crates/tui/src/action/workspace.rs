@@ -87,21 +87,17 @@ pub(super) async fn handle(
     _terminal: &mut DefaultTerminal,
 ) -> anyhow::Result<()> {
     match action {
-        Action::CreateWorkspace(name, description, prompt, kanban_path, dir, ws_type) => {
+        Action::CreateWorkspace(name, description, prompt, dir, ws_type) => {
             let result = match ws_type {
                 WorkspaceType::Simple => {
                     manager
-                        .create_simple(&name, &description, &prompt, kanban_path, &dir)
+                        .create_simple(&name, &description, &prompt, &dir)
                         .await
                 }
-                WorkspaceType::Worktree => {
-                    manager
-                        .create(&name, &description, &prompt, kanban_path, &dir)
-                        .await
-                }
+                WorkspaceType::Worktree => manager.create(&name, &description, &prompt, &dir).await,
                 WorkspaceType::Project => {
                     manager
-                        .create_project(&name, &description, &prompt, kanban_path, &dir)
+                        .create_project(&name, &description, &prompt, &dir)
                         .await
                 }
             };
@@ -112,23 +108,9 @@ pub(super) async fn handle(
                 }
             }
         }
-        Action::CreateGithubWorkspace(
-            name,
-            description,
-            prompt,
-            kanban_path,
-            github_url,
-            destination_dir,
-        ) => {
+        Action::CreateGithubWorkspace(name, description, prompt, github_url, destination_dir) => {
             let result = manager
-                .create_from_github(
-                    &name,
-                    &description,
-                    &prompt,
-                    kanban_path,
-                    &github_url,
-                    &destination_dir,
-                )
+                .create_from_github(&name, &description, &prompt, &github_url, &destination_dir)
                 .await;
             match result {
                 Ok(info) => finish_workspace_creation(app, info),
@@ -191,13 +173,8 @@ pub(super) async fn handle(
                 }
             }
         }
-        Action::EditWorkspace(idx, kanban_path, prompt) => {
+        Action::EditWorkspace(idx, prompt) => {
             if let Some(ws) = app.workspaces.get_mut(idx) {
-                if ws.kanban_path != kanban_path {
-                    ws.kanban_app = None;
-                    ws.kanban_provider = None;
-                }
-                ws.kanban_path = kanban_path;
                 ws.prompt = prompt;
                 {
                     let source = ws.source_repo.clone();
@@ -206,61 +183,8 @@ pub(super) async fn handle(
                 app.set_toast("Checkout updated", ToastLevel::Success);
             }
         }
-        Action::DeleteWorkspace(idx, target_column) => {
+        Action::DeleteWorkspace(idx) => {
             if idx < app.workspaces.len() {
-                // If this was a dispatched agent, move card to the chosen column
-                let dispatch_info = app.workspaces[idx]
-                    .info
-                    .dispatch_card_id
-                    .clone()
-                    .zip(app.workspaces[idx].info.dispatch_source_kanban.clone());
-                if let Some((card_id, kanban_path)) = dispatch_info
-                    && let Some(target_col) = target_column
-                {
-                    let source_ws_idx = app.workspaces.iter().position(|w| {
-                        w.kanban_path.as_deref() == Some(kanban_path.as_str())
-                            && w.kanban_provider.is_some()
-                    });
-                    let mut kanban_err: Option<String> = None;
-                    if let Some(src_idx) = source_ws_idx {
-                        let src_ws = &mut app.workspaces[src_idx];
-                        if let Some(ref mut kp) = src_ws.kanban_provider {
-                            if let Ok(board) = kp.load_board() {
-                                for col in &board.columns {
-                                    if let Some(card) = col.cards.iter().find(|c| c.id == card_id) {
-                                        if let Err(e) = kp.update_card(
-                                            &card_id,
-                                            &card.title,
-                                            &card.description,
-                                            card.priority,
-                                            "",
-                                            &card.project,
-                                        ) {
-                                            kanban_err = Some(e.to_string());
-                                        }
-                                        break;
-                                    }
-                                }
-                            }
-                            if let Err(e) = kp.move_card(&card_id, &target_col) {
-                                kanban_err = Some(e.to_string());
-                            }
-                            if let Ok(board) = kp.load_board()
-                                && let Some(ref mut ka) = src_ws.kanban_app
-                            {
-                                ka.board = board;
-                                ka.clamp();
-                            }
-                        }
-                    }
-                    if let Some(e) = kanban_err {
-                        app.set_toast(
-                            format!("Kanban card move failed: {e}"),
-                            crate::app::ToastLevel::Error,
-                        );
-                    }
-                }
-
                 let is_worktree =
                     app.workspaces[idx].info.workspace_type == WorkspaceType::Worktree;
                 let is_ephemeral = app.workspaces[idx].info.ephemeral;

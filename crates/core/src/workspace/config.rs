@@ -12,20 +12,12 @@ pub struct WorkspaceEntry {
     pub description: String,
     #[serde(default)]
     pub prompt: String,
-    #[serde(default)]
-    pub kanban_path: Option<String>,
     pub worktree_path: PathBuf,
     pub source_repo: PathBuf,
     #[serde(default)]
     pub workspace_type: WorkspaceType,
     #[serde(default)]
     pub order: u32,
-    #[serde(default)]
-    pub dispatch_card_id: Option<String>,
-    #[serde(default)]
-    pub dispatch_source_kanban: Option<String>,
-    #[serde(default)]
-    pub dispatch_agent_name: Option<String>,
     #[serde(default)]
     pub origin: WorkspaceOrigin,
     #[serde(default = "crate::domain::default_is_git_repo")]
@@ -45,15 +37,11 @@ impl WorkspaceEntry {
             self.name,
             self.description,
             self.prompt,
-            self.kanban_path,
             self.worktree_path,
             self.source_repo,
         );
         info.workspace_type = self.workspace_type;
         info.order = self.order;
-        info.dispatch_card_id = self.dispatch_card_id;
-        info.dispatch_source_kanban = self.dispatch_source_kanban;
-        info.dispatch_agent_name = self.dispatch_agent_name;
         info.origin = self.origin;
         info.is_git_repo = self.is_git_repo;
         info.ephemeral = self.ephemeral;
@@ -93,14 +81,10 @@ pub fn save(git_root: &Path, workspaces: &[WorkspaceInfo]) -> anyhow::Result<()>
             name: ws.name.clone(),
             description: ws.description.clone(),
             prompt: ws.prompt.clone(),
-            kanban_path: ws.kanban_path.clone(),
             worktree_path: ws.path.clone(),
             source_repo: ws.source_repo.clone(),
             workspace_type: ws.workspace_type,
             order: ws.order,
-            dispatch_card_id: ws.dispatch_card_id.clone(),
-            dispatch_source_kanban: ws.dispatch_source_kanban.clone(),
-            dispatch_agent_name: ws.dispatch_agent_name.clone(),
             origin: ws.origin.clone(),
             is_git_repo: ws.is_git_repo,
             ephemeral: ws.ephemeral,

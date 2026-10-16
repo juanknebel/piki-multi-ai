@@ -77,12 +77,6 @@ export async function initSidebar() {
   function updateView() {
     const view = appState.activeView;
 
-    if (view === "kanban") {
-      void openProvider("Kanban");
-      appState.setActiveView(lastSidebarView);
-      return;
-    }
-
     if (view === "api") {
       void openProvider("Api");
       appState.setActiveView(lastSidebarView);
@@ -103,7 +97,7 @@ export async function initSidebar() {
       return;
     }
 
-    // "agents"/"kanban"/... returned above; what's left is a sidebar view.
+    // "agents"/"api"/... returned above; what's left is a sidebar view.
     lastSidebarView = view as typeof lastSidebarView;
     filesView.style.display = view === "files" ? "flex" : "none";
     scView.style.display = view === "git" ? "flex" : "none";

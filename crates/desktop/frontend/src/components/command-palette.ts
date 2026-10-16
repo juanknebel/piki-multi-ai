@@ -588,13 +588,6 @@ function buildCommands(providerTabs: AIProvider[]): Command[] {
     action: () => appState.setActiveView("git"),
   });
   cmds.push({
-    id: "view-kanban",
-    label: "Show Kanban Board",
-    category: "View",
-    keybinding: getShortcutKey("kanban"),
-    action: () => appState.setActiveView("kanban"),
-  });
-  cmds.push({
     id: "toggle-sidebar",
     label: "Toggle Sidebar",
     category: "View",

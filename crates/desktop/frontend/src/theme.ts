@@ -386,7 +386,7 @@ class ThemeEngine {
     const tone = themeTone(effective);
     root.dataset.themeTone = tone;
 
-    // Apply derived colors (glows, on-accent, selection, file icons, kanban, …)
+    // Apply derived colors (glows, on-accent, selection, file icons, …)
     const derived = computeDerived(effective, tone === "dark");
     for (const [key, value] of Object.entries(derived)) {
       root.style.setProperty(`--${key}`, value);

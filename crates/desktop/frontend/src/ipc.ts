@@ -13,7 +13,6 @@ import type {
   PtyExitEvent,
   GitRefreshEvent,
   ToastEvent,
-  KanbanBoard,
 } from "./types";
 
 // Workspace commands
@@ -27,7 +26,6 @@ export function createWorkspace(
   prompt: string,
   dir: string,
   wsType: string,
-  kanbanPath: string | null = null,
 ): Promise<WorkspaceInfo> {
   return invoke("create_workspace", {
     name,
@@ -35,7 +33,6 @@ export function createWorkspace(
     prompt,
     dir,
     wsType,
-    kanbanPath,
   });
 }
 
@@ -45,7 +42,6 @@ export function createGithubWorkspace(
   prompt: string,
   githubUrl: string,
   destinationDir: string,
-  kanbanPath: string | null = null,
 ): Promise<WorkspaceInfo> {
   return invoke("create_github_workspace", {
     name,
@@ -53,7 +49,6 @@ export function createGithubWorkspace(
     prompt,
     githubUrl,
     destinationDir,
-    kanbanPath,
   });
 }
 
@@ -91,9 +86,8 @@ export function updateWorkspace(
   index: number,
   prompt?: string,
   description?: string,
-  kanbanPath?: string,
 ): Promise<void> {
-  return invoke("update_workspace", { index, prompt, description, kanbanPath });
+  return invoke("update_workspace", { index, prompt, description });
 }
 
 // Worktree-family collapse state (keyed by source_repo path), mirrors the
@@ -842,20 +836,8 @@ export function dispatchAgent(
   prompt: string,
   createWorktree: boolean,
   wsName?: string,
-  dispatchCardId?: string,
-  dispatchSourceKanban?: string,
-  dispatchAgentName?: string,
-  dispatchCardTitle?: string,
 ): Promise<string> {
-  return invoke("dispatch_agent", { workspaceIdx, provider, prompt, createWorktree, wsName, dispatchCardId, dispatchSourceKanban, dispatchAgentName, dispatchCardTitle });
-}
-
-export function kanbanLoadBoardByPath(boardPath: string): Promise<KanbanBoard> {
-  return invoke("kanban_load_board_by_path", { boardPath });
-}
-
-export function kanbanMoveCardByPath(boardPath: string, cardId: string, toColumnId: string): Promise<void> {
-  return invoke("kanban_move_card_by_path", { boardPath, cardId, toColumnId });
+  return invoke("dispatch_agent", { workspaceIdx, provider, prompt, createWorktree, wsName });
 }
 
 // Log commands
@@ -931,35 +913,6 @@ export interface SysInfoSnapshot {
 
 export function getSysinfoDetailed(): Promise<SysInfoSnapshot> {
   return invoke("get_sysinfo_detailed");
-}
-
-// Kanban commands
-export function kanbanLoadBoard(workspaceIdx: number, sort?: string, projectFilter?: string[]): Promise<KanbanBoard> {
-  return invoke("kanban_load_board", { workspaceIdx, sort: sort ?? null, projectFilter: projectFilter ?? null });
-}
-
-export function kanbanCreateCard(workspaceIdx: number, columnId: string, project: string): Promise<string> {
-  return invoke("kanban_create_card", { workspaceIdx, columnId, project });
-}
-
-export function kanbanUpdateCard(
-  workspaceIdx: number,
-  cardId: string,
-  title: string,
-  description: string,
-  priority: string,
-  assignee: string,
-  project: string,
-): Promise<void> {
-  return invoke("kanban_update_card", { workspaceIdx, cardId, title, description, priority, assignee, project });
-}
-
-export function kanbanMoveCard(workspaceIdx: number, cardId: string, toColumnId: string): Promise<void> {
-  return invoke("kanban_move_card", { workspaceIdx, cardId, toColumnId });
-}
-
-export function kanbanDeleteCard(workspaceIdx: number, cardId: string): Promise<void> {
-  return invoke("kanban_delete_card", { workspaceIdx, cardId });
 }
 
 // Settings commands

@@ -321,7 +321,7 @@ function paneTitle(leaf: LeafNode): string {
   if (!leaf.contentId || !ws) return "Empty";
   const c = ws.tabs.find((t) => t.id === leaf.contentId);
   if (c) return contentLabel(c);
-  // Known to the layout but not (yet) to us: a Kanban / API board being
+  // Known to the layout but not (yet) to us: an API board being
   // re-spawned after a restart.
   return "Restoring…";
 }
@@ -398,7 +398,7 @@ function renderChooser(host: HTMLElement, paneId: PaneId) {
 /** The per-workspace empty state, shared by a workspace with no tabs and a
  *  blank pane: "<workspace> · <branch>", then Shell / every configured
  *  provider (the list File ▸ New Tab preloads), then the tools — Web
- *  Preview / Kanban / API — and "Open file…". `open` / `openFile` say where
+ *  Preview / API — and "Open file…". `open` / `openFile` say where
  *  a pick goes (new tab vs. this pane). */
 function renderEmptyState(
   host: HTMLElement,

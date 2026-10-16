@@ -55,7 +55,7 @@ pub(super) async fn handle(
                 .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_else(|| path.to_string_lossy().into_owned());
-            match manager.create_simple(&name, "", "", None, &path).await {
+            match manager.create_simple(&name, "", "", &path).await {
                 Ok(info) => super::workspace::finish_workspace_creation(app, info),
                 Err(e) => app.set_toast(format!("Error: {e}"), ToastLevel::Error),
             }

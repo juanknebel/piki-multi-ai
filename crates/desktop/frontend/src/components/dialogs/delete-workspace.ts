@@ -3,13 +3,12 @@
 // workspace type (a Simple workspace has no worktree or branch to remove),
 // counts the uncommitted changes, and lists the agents still running there
 // (from `appState.agentRows`, backend-sourced so never-visited workspaces
-// count too). Dispatch-created workspaces also offer to move their card.
+// count too).
 
 import { appState } from "../../state";
 import * as ipc from "../../ipc";
 import { toast, reportError } from "../toast";
 import { showConfirm, escapeHtml } from "../confirm";
-import { createDropdown } from "../dropdown";
 import { cliAgentStatusView, type WorkspaceType } from "../../types";
 
 /** What deletion removes, by workspace type (mirrors
@@ -32,32 +31,6 @@ export async function confirmDeleteWorkspace(idx: number) {
   if (!ws) return;
   const info = ws.info;
   const name = info.name;
-  const cardId = info.dispatch_card_id;
-  const boardPath = info.dispatch_source_kanban;
-
-  // Dispatch-created workspace: offer to move its kanban card.
-  let colDropdown: ReturnType<typeof createDropdown> | null = null;
-  if (cardId && boardPath) {
-    try {
-      const board = await ipc.kanbanLoadBoardByPath(boardPath);
-      const COL_LABELS: Record<string, string> = {
-        todo: "To Do",
-        in_progress: "In Progress",
-        in_review: "In Review",
-        done: "Done",
-      };
-      colDropdown = createDropdown(
-        [
-          { value: "", label: "(Leave where it is)" },
-          ...board.columns.map((col) => ({ value: col.id, label: COL_LABELS[col.id] ?? col.id })),
-        ],
-        "",
-      );
-    } catch (err) {
-      // The card move is optional; deletion still proceeds without it.
-      console.error("Kanban board unavailable for card move:", err);
-    }
-  }
 
   const changes = ws.changedFiles.length;
   const agents = appState.agentRows.filter((r) => r.workspace_idx === idx && r.alive);
@@ -79,12 +52,11 @@ export async function confirmDeleteWorkspace(idx: number) {
     );
   }
 
-  const { overlay } = showConfirm({
+  showConfirm({
     bodyHtml: `
       <p>Delete <strong>${escapeHtml(name)}</strong>?</p>
       <p class="ws-delete-hint">${removalHint(info.workspace_type)}</p>
       ${warnings.join("")}
-      ${colDropdown ? '<div class="ws-delete-card-move"><label class="dialog-label">Move task card to:</label><span id="ws-delete-col-slot"></span></div>' : ""}
     `,
     actions: [
       {
@@ -92,13 +64,6 @@ export async function confirmDeleteWorkspace(idx: number) {
         kind: "danger",
         isDefault: true,
         onSelect: async () => {
-          if (cardId && boardPath && colDropdown?.value) {
-            try {
-              await ipc.kanbanMoveCardByPath(boardPath, cardId, colDropdown.value);
-            } catch (err) {
-              reportError("Move task card failed", err);
-            }
-          }
           try {
             await ipc.deleteWorkspace(idx);
             appState.removeWorkspace(idx);
@@ -111,8 +76,4 @@ export async function confirmDeleteWorkspace(idx: number) {
       { label: "Cancel", kind: "secondary" },
     ],
   });
-
-  if (colDropdown) {
-    overlay.querySelector("#ws-delete-col-slot")?.replaceWith(colDropdown.container);
-  }
 }

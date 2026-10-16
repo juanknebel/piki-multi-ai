@@ -50,7 +50,7 @@ just lint-desktop                           # frontend test + build, then clippy
   for async spawns), `proxy.rs` (WebSocket server bridging JSON-RPC to child processes).
 - `commands/` — one module per IPC domain: `workspace.rs`, `pty.rs`, `git.rs`, `diff.rs`, `gitlog.rs`,
   `stash.rs`, `agents.rs`, `review.rs`, `theme.rs`, `logs.rs`, `search.rs`, `markdown.rs`, `fs.rs`,
-  `kanban.rs`, `api.rs`, `providers.rs`, `system.rs`, `clipboard.rs`, `chat.rs`, `lsp.rs`,
+  `api.rs`, `providers.rs`, `system.rs`, `clipboard.rs`, `chat.rs`, `lsp.rs`,
   `session.rs`, `settings.rs`. Details per area below.
 - **Locking**: all Tauri commands lock `Mutex<DesktopApp>` — scope the guard in a `{ }` block and drop it
   before any `.await` or `spawn_blocking`.
@@ -66,9 +66,9 @@ just lint-desktop                           # frontend test + build, then clippy
 - **Backend indices**: `ws.tabs` holds contents the backend list does not — every index-based IPC
   (`close_tab`, `detach_tab`, `set_active_tab`) MUST use `appState.backendTabIndex(wsIdx, tabId)`; a backend
   index coming in (agent rows, session jumps) goes through `appState.setActiveBackendTab(wsIdx, backendIdx)`
-  / `tabIndexForBackend`. Kanban / API contents have a PTY-less backend tab: closing them calls
+  / `tabIndexForBackend`. API contents have a PTY-less backend tab: closing them calls
   `ipc.closeTab` too (`tab-bar.ts releaseBackendOnly`) so the lists stay aligned.
-- Singletons (`appState.isSingletonProvider`: Kanban, Api, WebPreview) picked for a pane while open
+- Singletons (`appState.isSingletonProvider`: Api, WebPreview) picked for a pane while open
   elsewhere get a `showConfirm` *Move here* (`appState.moveContentToPane(contentId, paneId)`: target must
   be a blank leaf; the source pane collapses into its sibling, and when it was its tab's only pane that
   tab is dropped — same rule as `removeTab`) / *Go there* (`focusSingletonTab`) / Cancel.
@@ -82,8 +82,8 @@ just lint-desktop                           # frontend test + build, then clippy
   `open-content.ts installContentRestorer()` in `main.ts` BEFORE `loadPaneTrees` — is how the store
   reaches the panels without importing them: `_hydrateLayout` re-registers editors / previews
   synchronously under their OLD id (`hasCodeEditorInstance` / `hasMarkdownEditorInstance` /
-  `registerWebPreview` + `getWebPreviewUrl`), places a placeholder for Kanban / API and `_finishRestore`
-  re-spawns them (`ipc.spawnTab`, new id → `_rebindContentId` remaps the trees) and `verify`s
+  `registerWebPreview` + `getWebPreviewUrl`), places a placeholder for API and `_finishRestore`
+  re-spawns it (`ipc.spawnTab`, new id → `_rebindContentId` remaps the trees) and `verify`s
   cold-restored editor files (missing → `appState.dropContent`: pane blank, toast). `setActiveWorkspace`
   keeps the frontend-only contents the backend list never had and flushes a pending layout save before
   re-hydrating.
@@ -91,7 +91,7 @@ just lint-desktop                           # frontend test + build, then clippy
 ## Opening content
 
 - `components/open-content.ts` is the ONE opener: `openProvider(provider, { paneId? })` (Shell / agents /
-  Kanban / API via `ipc.spawnTab`, `WebPreview` via `openWebPreviewTab({ paneId, url? })`),
+  API via `ipc.spawnTab`, `WebPreview` via `openWebPreviewTab({ paneId, url? })`),
   `openFileInEditor(wsIdx, path, { paneId?, forceCode? })` (`registerCodeFile` / `registerMarkdownFile`
   + `addTab` or `setPaneContent`), `openFileInExternalEditor`, `contentLabel(c)` (editors show their file
   name), `getPaneProviderChoices()` + `TOOL_CHOICES`. The menu bar, palette, sidebar icons, file tree,
@@ -149,10 +149,10 @@ just lint-desktop                           # frontend test + build, then clippy
   Every non-CodeMirror panel goes through `components/scroll-memory.ts` (`trackScroll` /
   `applyScroll`): ONE capture-phase `scroll` listener on the panel's stable root — `scroll` does not
   bubble but does reach ancestors on the way down — keyed per scroller, so it keeps recording across
-  the re-renders that replace the scrollers underneath. That is what lets the kanban board rebuild
-  every column on mount and still come back to the same place (and keeps a search / sort / filter
-  from jumping the board to the top). Covered: code editor, markdown editor, the API explorer's
-  request editor and response pane, the kanban board and each of its columns.
+  the re-renders that replace the scrollers underneath. That is what lets a panel rebuild
+  its list on mount and still come back to the same place (and keeps a search / sort / filter
+  from jumping it to the top). Covered: code editor, markdown editor, the API explorer's
+  request editor and response pane.
 - **Dead tabs**: `markTabDead` (on `pty-exit`) emits `tabs-changed` + `pane-tree-changed` so the
   `.ws-tab--dead` chip, the pane-head Restart button (`restartPaneContent`: `ipc.closeTab` the exited tab →
   `ipc.spawnTab` same provider → `appState.replacePaneContent` into the same pane, custom title carried
@@ -195,7 +195,7 @@ just lint-desktop                           # frontend test + build, then clippy
   measures a live `.workspace-item` (never assume px).
 - Full re-renders must preserve UI state: keep `scrollTop`, input caret/focus across `innerHTML` rebuilds
   (see project-tree, file-tree, source-control for the pattern), and prefer patching in place (the status
-  bar morphs only changed segments — `status-bar.ts morphChildren`; kanban search, pane titles) over
+  bar morphs only changed segments — `status-bar.ts morphChildren`; pane titles) over
   rebuilding.
 
 ## Agent signals
@@ -519,7 +519,7 @@ on where it is used, consume via `var(--…)`, and if TS needs the literal go th
   (1.5s); `--transition-fast/normal/slow`. Never `transition: all`.
 - **Derived colours**: `computeDerived()` in `theme-derive.ts` (pure) recomputes on every theme apply:
   glows/muted tints, `--on-accent` and `--activity-bar-badge-fg` (WCAG luminance), `--selection-bg`,
-  `--activity-bar-badge-glow`, the twelve `--icon-*` file-type colours, the kanban palette.
+  `--activity-bar-badge-glow`, the twelve `--icon-*` file-type colours.
   `variables.css` keeps a static Obsidian default for each so the first paint is right. A preset colour
   must be in `ThemeColors` + `COLOR_GROUPS` + all five presets; don't add a key the CSS never consumes
   (`--statusbar-no-folder` paints the status bar with no workspace via `#app:not(:has(.workspace-item))`,
@@ -530,9 +530,8 @@ on where it is used, consume via `var(--…)`, and if TS needs the literal go th
   backdrops) / `--scrim-strong` (in-panel overlays) / `--scrim-soft` (palette); elevation is
   `--shadow-sm/md/lg`; a hairline is `var(--border-subtle)`; text over `--error-color` is `--on-error`;
   the secondary hue is `--accent-alt`; the iframe canvas is `--web-preview-canvas`; semantic aliases
-  `--success-color` / `--error-color` / `--warning-color` and `--on-accent`. Kanban column colours are
-  `--kanban-col-todo/in-progress/in-review/done`, swatches `--kanban-swatch-1…16` (`kanban-panel.ts`
-  stores the `var()` string). A glyph that must follow the text colour is a text glyph or a
+  `--success-color` / `--error-color` / `--warning-color` and `--on-accent`.
+  A glyph that must follow the text colour is a text glyph or a
   `currentColor` gradient, never an SVG data-URI with a baked fill. Never import a shipped
   `highlight.js/styles/*.css`: `hljs-theme.ts` generates the `.hljs-*` block from the palette and
   `applyTheme` injects it as `<style id="hljs-theme">`.
@@ -570,7 +569,7 @@ feature-specific modifiers in feature CSS; never re-declare a button/input/surfa
 
 - `.ui-surface` — floating shell (bg, border, radius, `--shadow-lg`, flex column, `dialog-enter`). The
   caller owns the size: `<div class="dialog ui-surface">` (`.dialog` = width/max-height only); also
-  `.palette`, `.diff-viewer`, `.kanban-edit-modal`, `.ws-delete-dialog`.
+  `.palette`, `.diff-viewer`, `.ws-delete-dialog`.
 - `.ui-header` — title row (`min-height: var(--header-height)`) with `.ui-header-title` (ellipsis) and an
   optional `.ui-header-actions` slot (right-aligned, never shrinks).
 - `.ui-btn` — `data-variant="primary|secondary|ghost|danger"`, `data-size="sm|md"` (md =
@@ -588,7 +587,7 @@ feature-specific modifiers in feature CSS; never re-declare a button/input/surfa
   as an inset outline on any `:focus-visible` element; `.ui-btn` moves it outside; text fields use the
   border + halo; full-pane editors (`.api-editor`, `.file-viewer-textarea`, the markdown `.ProseMirror`)
   use `--focus-ring-inset`. Not migrated on purpose (chrome, not controls): `.pane-btn`,
-  `.ws-tab-close/-add/-more`, `.wc-btn`, `.mk-toolbar-btn`, `.chat-code-copy`, `.kanban-color-swatch`,
+  `.ws-tab-close/-add/-more`, `.wc-btn`, `.mk-toolbar-btn`, `.chat-code-copy`,
   menu/activity/status bars — they get the global ring.
 - Shared components — use these, never re-implement them:
   - `components/confirm.ts showConfirm()` — every destructive/confirm overlay (`.ws-delete-confirm`
@@ -626,7 +625,7 @@ feature-specific modifiers in feature CSS; never re-declare a button/input/surfa
   markup for `innerHTML` templates (`aria-hidden` unless `label` makes it `role="img"`); `iconEl()`
   returns an `SVGElement`; `IconName` is the union of `ICONS` keys. Names: `check warning folder gear eye
   close pencil undo history refresh more dot circle chevron-right chevron-down arrow-up/down/left/right
-  branch play clock plus split-right split-down locate search workspaces projects agents kanban api
+  branch play clock plus split-right split-down locate search workspaces projects agents api
   browser terminal`. Rules: one pencil for every edit/rename,
   `refresh` for refresh/reload/restart, `undo` for discard/reset, `history` for "restored from the
   daemon", `dot`/`circle` for alive/exited; an icon-only button keeps `title` + `aria-label`;

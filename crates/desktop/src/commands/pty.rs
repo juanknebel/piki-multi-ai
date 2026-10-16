@@ -50,8 +50,8 @@ pub async fn spawn_tab(
     let ai_provider = parse_provider(&provider)?;
 
     // Non-PTY providers don't need a terminal session
-    if ai_provider == AIProvider::Kanban || ai_provider == AIProvider::Api {
-        // Kanban/Api: never a Custom provider, so no idle config applies.
+    if ai_provider == AIProvider::Api {
+        // Api: never a Custom provider, so no idle config applies.
         let mut tab = DesktopTab::new(ai_provider, None);
         let tab_id = tab.id.clone();
         tab.alive = true;
@@ -675,7 +675,6 @@ pub async fn rename_tab(
 fn parse_provider(s: &str) -> Result<AIProvider, String> {
     match s {
         "Shell" => Ok(AIProvider::Shell),
-        "Kanban" => Ok(AIProvider::Kanban),
         "CodeReview" => Ok(AIProvider::CodeReview),
         "Api" => Ok(AIProvider::Api),
         other => Ok(AIProvider::Custom(other.to_string())),

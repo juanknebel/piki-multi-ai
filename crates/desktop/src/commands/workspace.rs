@@ -161,7 +161,6 @@ pub async fn switch_workspace(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn create_workspace(
     state: State<'_, Mutex<DesktopApp>>,
@@ -170,7 +169,6 @@ pub async fn create_workspace(
     prompt: String,
     dir: String,
     ws_type: String,
-    kanban_path: Option<String>,
 ) -> Result<WorkspaceInfo, String> {
     // Extract manager info with scoped lock
     let manager = {
@@ -183,27 +181,15 @@ pub async fn create_workspace(
     // Async workspace creation (no lock held)
     let info = match ws_type.as_str() {
         "Simple" => manager
-            .create_simple(
-                &name,
-                &description,
-                &prompt,
-                kanban_path.clone(),
-                &source_repo,
-            )
+            .create_simple(&name, &description, &prompt, &source_repo)
             .await
             .map_err(|e| e.to_string())?,
         "Project" => manager
-            .create_project(
-                &name,
-                &description,
-                &prompt,
-                kanban_path.clone(),
-                &source_repo,
-            )
+            .create_project(&name, &description, &prompt, &source_repo)
             .await
             .map_err(|e| e.to_string())?,
         _ => manager
-            .create(&name, &description, &prompt, kanban_path, &source_repo)
+            .create(&name, &description, &prompt, &source_repo)
             .await
             .map_err(|e| e.to_string())?,
     };
@@ -212,7 +198,6 @@ pub async fn create_workspace(
     Ok(register_new_workspace(&mut app, info))
 }
 
-#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn create_github_workspace(
     state: State<'_, Mutex<DesktopApp>>,
@@ -221,7 +206,6 @@ pub async fn create_github_workspace(
     prompt: String,
     github_url: String,
     destination_dir: String,
-    kanban_path: Option<String>,
 ) -> Result<WorkspaceInfo, String> {
     let manager = {
         let app = state.lock();
@@ -230,14 +214,7 @@ pub async fn create_github_workspace(
 
     let destination_path = std::path::PathBuf::from(destination_dir);
     let info = manager
-        .create_from_github(
-            &name,
-            &description,
-            &prompt,
-            kanban_path,
-            &github_url,
-            &destination_path,
-        )
+        .create_from_github(&name, &description, &prompt, &github_url, &destination_path)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -386,7 +363,6 @@ pub async fn update_workspace(
     index: usize,
     prompt: Option<String>,
     description: Option<String>,
-    kanban_path: Option<String>,
 ) -> Result<(), String> {
     let mut app = state.lock();
     if index >= app.workspaces.len() {
@@ -399,9 +375,6 @@ pub async fn update_workspace(
     }
     if let Some(d) = description {
         ws.info.description = d;
-    }
-    if let Some(k) = kanban_path {
-        ws.info.kanban_path = if k.is_empty() { None } else { Some(k) };
     }
 
     // Persist — use the updated workspace's source_repo as the key

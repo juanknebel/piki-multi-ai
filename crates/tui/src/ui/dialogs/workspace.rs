@@ -5,9 +5,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
 use crate::app::{App, DialogField, NewWorkspaceSource, WorkspaceType};
-use crate::dialog_state::{
-    CreateWorktreeField, CreateWorktreeMode, DialogState, EditWorkspaceField, RepoBrowse,
-};
+use crate::dialog_state::{CreateWorktreeField, CreateWorktreeMode, DialogState, RepoBrowse};
 
 pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
     let Some(DialogState::NewWorkspace {
@@ -19,8 +17,6 @@ pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
         desc_cursor,
         ref prompt,
         prompt_cursor,
-        ref kanban,
-        kanban_cursor,
         source,
         active_field,
     }) = app.active_dialog
@@ -30,10 +26,10 @@ pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
 
     let popup_width = area.width * 70 / 100;
     // Layout: Source, Directory/URL, [Destination (GitHub only)],
-    // Desc, Prompt, Kanban → 5 fields for Local (14 lines), 6 for
-    // GitHub (16 lines including the extra "Clone into" row).
+    // Desc, Prompt → 4 fields for Local (12 lines), 5 for
+    // GitHub (14 lines including the extra "Clone into" row).
     let is_github = source == NewWorkspaceSource::GitHub;
-    let popup_height: u16 = if is_github { 16 } else { 14 };
+    let popup_height: u16 = if is_github { 14 } else { 12 };
     let popup = super::clear_popup(frame, area, popup_width.max(40), popup_height);
     let theme = &app.theme.dialog;
 
@@ -47,7 +43,6 @@ pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
     let destination_active = active_field == DialogField::Destination;
     let desc_active = active_field == DialogField::Description;
     let prompt_active = active_field == DialogField::Prompt;
-    let kanban_active = active_field == DialogField::KanbanPath;
 
     let source_text = match source {
         NewWorkspaceSource::Local => "[Local folder]  GitHub URL",
@@ -112,15 +107,6 @@ pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
             super::field_style(prompt_active, active_c, inactive_c),
         ),
         Line::from(""),
-        super::render_text_field(
-            "  Kanban: ",
-            kanban,
-            kanban_active,
-            kanban_cursor,
-            fmax,
-            super::field_style(kanban_active, active_c, inactive_c),
-        ),
-        Line::from(""),
         Line::from(vec![Span::styled(
             "  [Esc] cancel",
             Style::default().fg(theme.new_ws_inactive),
@@ -134,11 +120,8 @@ pub(crate) fn render_new_workspace_dialog(frame: &mut Frame, area: Rect, app: &A
 
 pub(crate) fn render_edit_workspace_dialog(frame: &mut Frame, area: Rect, app: &App) {
     let Some(DialogState::EditWorkspace {
-        ref kanban,
-        kanban_cursor,
         ref prompt,
         prompt_cursor,
-        active_field,
         ..
     }) = app.active_dialog
     else {
@@ -146,7 +129,7 @@ pub(crate) fn render_edit_workspace_dialog(frame: &mut Frame, area: Rect, app: &
     };
 
     let popup_width = area.width * 70 / 100;
-    let popup = super::clear_popup(frame, area, popup_width.max(40), 10);
+    let popup = super::clear_popup(frame, area, popup_width.max(40), 8);
     let theme = &app.theme.dialog;
 
     let active_c = theme.new_ws_active;
@@ -154,26 +137,14 @@ pub(crate) fn render_edit_workspace_dialog(frame: &mut Frame, area: Rect, app: &
     let label_width = 10_u16;
     let fmax = popup.width.saturating_sub(label_width + 2) as usize;
 
-    let kanban_active = active_field == EditWorkspaceField::KanbanPath;
-    let prompt_active = active_field == EditWorkspaceField::Prompt;
-
     let lines = vec![
-        super::render_text_field(
-            "  Kanban: ",
-            kanban,
-            kanban_active,
-            kanban_cursor,
-            fmax,
-            super::field_style(kanban_active, active_c, inactive_c),
-        ),
-        Line::from(""),
         super::render_text_field(
             "  Prompt: ",
             prompt,
-            prompt_active,
+            true,
             prompt_cursor,
             fmax,
-            super::field_style(prompt_active, active_c, inactive_c),
+            super::field_style(true, active_c, inactive_c),
         ),
         Line::from(""),
         Line::from(vec![Span::styled(
@@ -242,8 +213,6 @@ fn render_create_worktree_create_new(frame: &mut Frame, area: Rect, app: &App) {
         name_cursor,
         ref prompt,
         prompt_cursor,
-        ref kanban,
-        kanban_cursor,
         active_field,
         ..
     }) = app.active_dialog
@@ -252,7 +221,7 @@ fn render_create_worktree_create_new(frame: &mut Frame, area: Rect, app: &App) {
     };
 
     let popup_width = area.width * 70 / 100;
-    let popup = super::clear_popup(frame, area, popup_width.max(40), 12);
+    let popup = super::clear_popup(frame, area, popup_width.max(40), 10);
     let theme = &app.theme.dialog;
 
     let active_c = theme.new_ws_active;
@@ -262,7 +231,6 @@ fn render_create_worktree_create_new(frame: &mut Frame, area: Rect, app: &App) {
 
     let name_active = active_field == CreateWorktreeField::Name;
     let prompt_active = active_field == CreateWorktreeField::Prompt;
-    let kanban_active = active_field == CreateWorktreeField::KanbanPath;
 
     let parent_label = app
         .workspaces
@@ -292,15 +260,6 @@ fn render_create_worktree_create_new(frame: &mut Frame, area: Rect, app: &App) {
             prompt_cursor,
             fmax,
             super::field_style(prompt_active, active_c, inactive_c),
-        ),
-        Line::from(""),
-        super::render_text_field(
-            "  Kanban: ",
-            kanban,
-            kanban_active,
-            kanban_cursor,
-            fmax,
-            super::field_style(kanban_active, active_c, inactive_c),
         ),
         Line::from(""),
         Line::from(vec![Span::styled(
@@ -429,14 +388,6 @@ pub(crate) fn render_workspace_info_overlay(frame: &mut Frame, area: Rect, app: 
         Line::from(vec![
             Span::styled(" Path:    ", label_style),
             Span::raw(ws.path.to_string_lossy().to_string()),
-        ]),
-        Line::from(vec![
-            Span::styled(" Kanban:  ", label_style),
-            Span::raw(
-                ws.kanban_path
-                    .clone()
-                    .unwrap_or_else(|| "default".to_string()),
-            ),
         ]),
         Line::from(vec![
             Span::styled(" Type:    ", label_style),

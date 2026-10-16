@@ -74,7 +74,7 @@ export async function adoptDirectory(path: string): Promise<number | null> {
   const existing = appState.workspaces.findIndex((w) => w.info.path === path);
   if (existing >= 0) return existing;
   const name = path.replace(/\/+$/, "").split("/").pop() || path;
-  const info = await ipc.createWorkspace(name, "", "", path, "Simple", null);
+  const info = await ipc.createWorkspace(name, "", "", path, "Simple");
   appState.addWorkspace(info);
   const idx = appState.workspaces.findIndex((w) => w.info.path === info.path);
   return idx >= 0 ? idx : null;

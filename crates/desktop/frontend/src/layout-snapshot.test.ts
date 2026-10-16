@@ -15,7 +15,6 @@ const tabs: TabInfo[] = [
   { id: "web", provider: "WebPreview", alive: true },
   { id: "ed", provider: "CodeEditor", alive: true, custom_title: "notes" },
   { id: "md", provider: "Markdown", alive: true },
-  { id: "kb", provider: "Kanban", alive: true },
   { id: "api", provider: "Api", alive: true },
   { id: "lost", provider: "CodeEditor", alive: true },
 ];
@@ -35,10 +34,9 @@ function setLeaf(root: PaneNode, id: string, contentId: string): PaneNode {
 describe("layout snapshot", () => {
   it("describes every non-PTY content and skips PTYs / unknown paths", () => {
     const saved = snapshotContents(tabs, (t) => describeContent(t, pathOf, urlOf));
-    expect(saved.map((c) => c.id)).toEqual(["web", "ed", "md", "kb", "api"]);
+    expect(saved.map((c) => c.id)).toEqual(["web", "ed", "md", "api"]);
     expect(saved.find((c) => c.id === "web")).toEqual({ id: "web", kind: "WebPreview", url: "http://localhost:3000" });
     expect(saved.find((c) => c.id === "ed")).toEqual({ id: "ed", kind: "CodeEditor", path: "src/a.ts", title: "notes" });
-    expect(saved.find((c) => c.id === "kb")).toEqual({ id: "kb", kind: "Kanban" });
   });
 
   it("round-trips claude-left + web-right through JSON and finds what to restore", () => {
@@ -50,7 +48,7 @@ describe("layout snapshot", () => {
     };
     const parsed = parseSavedLayouts(JSON.parse(JSON.stringify({ "/ws": entry })));
     const back = parsed["/ws"];
-    expect(back.contents?.length).toBe(5);
+    expect(back.contents?.length).toBe(4);
     const restored = deserialize(back.tabs[0].tree)!;
     expect(treeContentIds(restored)).toEqual(["claude", "web"]);
     // After a restart the daemon brings the PTY back; the preview must be re-created.

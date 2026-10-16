@@ -25,21 +25,6 @@ impl Platform {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct KanbanConfig {
-    pub provider: String,
-    pub path: Option<String>,
-}
-
-impl Default for KanbanConfig {
-    fn default() -> Self {
-        Self {
-            provider: "local".to_string(),
-            path: Some("~/.config/flow/boards/default".to_string()),
-        }
-    }
-}
-
 /// `[notifications]` — shared with the desktop, which reads the same table
 /// from `config.toml` on its own. See `piki_core::notifications`.
 pub use piki_core::notifications::NotificationsConfig;
@@ -58,8 +43,6 @@ pub struct Config {
     pub syntax_theme: String,
     #[serde(default)]
     pub keybindings: Keybindings,
-    #[serde(default)]
-    pub kanban: KanbanConfig,
     #[serde(default)]
     pub notifications: NotificationsConfig,
     #[serde(default)]
@@ -87,7 +70,6 @@ impl Default for Config {
             theme: "default".to_string(),
             syntax_theme: default_syntax_theme(),
             keybindings: Keybindings::default(),
-            kanban: KanbanConfig::default(),
             notifications: NotificationsConfig::default(),
             sessions: SessionsConfig::default(),
             chat: ChatFileConfig::default(),

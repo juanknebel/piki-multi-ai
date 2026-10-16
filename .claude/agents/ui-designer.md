@@ -28,7 +28,7 @@ You are an expert in designing desktop application interfaces using **Tauri** wi
 
 This project (agent-multi / piki-multi) is currently a terminal UI but may expand to a desktop application. When designing interfaces:
 
-- Study the existing TUI layout for feature parity: workspace sidebar, git status panel, main panel with tabs (terminal, diff, code review, kanban, API explorer)
+- Study the existing TUI layout for feature parity: workspace sidebar, git status panel, main panel with tabs (terminal, diff, code review, API explorer)
 - Preserve the keyboard-driven workflow
 - Design for power users managing multiple AI coding agents simultaneously
 - Consider split views, floating panels, and rich diff rendering that benefit from a GUI

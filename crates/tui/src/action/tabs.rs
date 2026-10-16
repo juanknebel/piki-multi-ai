@@ -16,83 +16,9 @@ pub(super) async fn handle(
     match action {
         Action::SpawnTab(provider) => {
             if let Some(ws) = app.workspaces.get_mut(app.active_workspace) {
-                if provider == AIProvider::Kanban && ws.kanban_app.is_none() {
-                    // Initialize Kanban app if it doesn't exist yet for this workspace
-                    let kanban_path_opt = ws.kanban_path.clone();
-
-                    let mut kanban_provider = if app.config.kanban.provider == "jira" {
-                        Box::new(flow_core::provider_jira::JiraProvider::from_env())
-                            as Box<dyn flow_core::provider::Provider>
-                    } else {
-                        let default_path = kanban_path_opt
-                            .map(std::path::PathBuf::from)
-                            .unwrap_or_else(|| {
-                                app.config
-                                    .kanban
-                                    .path
-                                    .clone()
-                                    .map(std::path::PathBuf::from)
-                                    .unwrap_or_else(|| {
-                                        piki_core::xdg::home_dir()
-                                            .join(".config/flow/boards/default")
-                                    })
-                            });
-
-                        let expanded_path = if let Some(rest) = default_path
-                            .to_str()
-                            .and_then(|path_str| path_str.strip_prefix("~/"))
-                        {
-                            if let Ok(home) = std::env::var("HOME") {
-                                std::path::PathBuf::from(home).join(rest)
-                            } else {
-                                default_path
-                            }
-                        } else {
-                            default_path
-                        };
-
-                        // Initialize if board.txt doesn't exist
-                        let board_txt = expanded_path.join("board.txt");
-                        if !board_txt.exists() {
-                            if let Err(e) = std::fs::create_dir_all(&expanded_path) {
-                                app.status_message =
-                                    Some(format!("Failed to create kanban dir: {}", e));
-                            } else {
-                                let board_content = "col todo \"TO DO\"\ncol in_progress \"IN PROGRESS\"\ncol in_review \"IN REVIEW\"\ncol done \"DONE\"\n";
-                                if let Err(e) = std::fs::write(&board_txt, board_content) {
-                                    app.status_message =
-                                        Some(format!("Failed to write board.txt: {}", e));
-                                } else {
-                                    for col in &["todo", "in_progress", "in_review", "done"] {
-                                        let col_dir = expanded_path.join("cols").join(col);
-                                        let _ = std::fs::create_dir_all(&col_dir);
-                                        let _ = std::fs::write(col_dir.join("order.txt"), "");
-                                    }
-                                }
-                            }
-                        }
-
-                        Box::new(flow_core::provider_local::LocalProvider::new(expanded_path))
-                            as Box<dyn flow_core::provider::Provider>
-                    };
-
-                    let board = kanban_provider
-                        .load_board()
-                        .unwrap_or_else(|_e| flow_core::Board { columns: vec![] });
-                    let mut kanban = flow_tui::App::new(board);
-                    if kanban.board.columns.is_empty() {
-                        kanban.banner =
-                            Some("Load failed or empty board. Check board.txt.".to_string());
-                    }
-                    ws.kanban_app = Some(kanban);
-                    ws.kanban_provider = Some(kanban_provider);
-                }
-
-                // Singleton guard: Kanban, Api and Git tabs must not be duplicated
-                if matches!(
-                    provider,
-                    AIProvider::Kanban | AIProvider::Api | AIProvider::Git
-                ) && let Some(idx) = ws.tabs.iter().position(|t| t.provider == provider)
+                // Singleton guard: Api and Git tabs must not be duplicated
+                if matches!(provider, AIProvider::Api | AIProvider::Git)
+                    && let Some(idx) = ws.tabs.iter().position(|t| t.provider == provider)
                 {
                     ws.active_tab = idx;
                     app.active_pane = crate::app::ActivePane::MainPanel;

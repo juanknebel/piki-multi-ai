@@ -137,8 +137,6 @@ pub enum AppMode {
     PrPicker,
     /// Fuzzy workspace switcher overlay
     WorkspaceSwitcher,
-    /// Dispatch agent dialog
-    DispatchAgent,
     /// Broadcast input to agent tabs dialog
     Broadcast,
     /// Manage agent profiles overlay
@@ -149,8 +147,6 @@ pub enum AppMode {
     EditAgentRole,
     /// Import agents from repo files overlay
     ImportAgents,
-    /// Choose kanban column for dispatched card on workspace deletion
-    DispatchCardMove,
     /// Manage custom providers overlay
     ManageProviders,
     /// Edit/create a custom provider
@@ -185,7 +181,6 @@ pub enum DialogField {
     Destination,
     Description,
     Prompt,
-    KanbanPath,
 }
 
 /// Source mode for the New Workspace dialog. Drives whether the dialog asks
@@ -437,10 +432,6 @@ pub struct Workspace {
     /// `None` until the first refresh completes, or if the workspace isn't a
     /// git repo / is in detached HEAD.
     pub branch: Option<String>,
-    /// Kanban app state
-    pub kanban_app: Option<flow_tui::App>,
-    /// Kanban provider
-    pub kanban_provider: Option<Box<dyn flow_core::provider::Provider>>,
     /// Code review state
     pub code_review: Option<crate::code_review::CodeReviewState>,
     /// True when at least one tab in this workspace has emitted an idle
@@ -488,8 +479,6 @@ impl Workspace {
             last_refresh: None,
             ahead_behind: None,
             branch: None,
-            kanban_app: None,
-            kanban_provider: None,
             code_review: None,
             has_idle_notification: false,
             review_broken: false,
@@ -511,7 +500,7 @@ impl Workspace {
     /// `provider_cfg` is the matching `providers.toml` entry for `Custom`
     /// providers (resolved by the caller); its per-provider idle knobs
     /// (`idle_threshold_secs` / `idle_notify`) drive the tab's `IdleWatcher`.
-    /// Pass `None` for built-in providers (Shell/Kanban/Api/…).
+    /// Pass `None` for built-in providers (Shell/Api/…).
     pub fn add_tab(
         &mut self,
         provider: AIProvider,
@@ -931,7 +920,7 @@ pub struct TermSearchState {
 /// is active. Only consulted in `AppMode::Normal` / `AppMode::Diff`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum InputState {
-    /// Passthrough: keys go to the focused pane (PTY, kanban, lists, ...).
+    /// Passthrough: keys go to the focused pane (PTY, lists, ...).
     #[default]
     Normal,
     /// The prefix key was pressed; the next key is looked up in the app table.
@@ -944,7 +933,7 @@ pub enum InputState {
     Resize,
 }
 
-/// Cached footer keys: (mode, input_state, active_pane, has_markdown, has_kanban, api_footer_state, new_tab_menu, sidebar_row_kind, keys)
+/// Cached footer keys: (mode, input_state, active_pane, has_markdown, api_footer_state, new_tab_menu, sidebar_row_kind, keys)
 /// api_footer_state: 0 = no API tab, 1 = API tab, 2 = API tab with search open
 /// new_tab_menu: 0 = N/A, 1 = Main, 2 = Agents, 3 = Tools
 /// sidebar_row_kind: what the sidebar cursor stands on, since the project tree
@@ -953,7 +942,6 @@ pub type FooterCache = (
     AppMode,
     InputState,
     ActivePane,
-    bool,
     bool,
     u8,
     u8,
@@ -1357,15 +1345,6 @@ impl App {
     pub fn new_tab_agent_list(&self) -> Vec<AIProvider> {
         self.provider_manager
             .all()
-            .iter()
-            .map(|config| AIProvider::Custom(config.name.clone()))
-            .collect()
-    }
-
-    /// Providers from providers.toml that are marked `dispatchable`.
-    pub fn dispatchable_provider_list(&self) -> Vec<AIProvider> {
-        self.provider_manager
-            .dispatchable()
             .iter()
             .map(|config| AIProvider::Custom(config.name.clone()))
             .collect()
@@ -2252,9 +2231,6 @@ mod tests {
 
         crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
         assert_eq!(get_field(&app), DialogField::Prompt);
-
-        crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
-        assert_eq!(get_field(&app), DialogField::KanbanPath);
 
         crate::input::handle_key_event(&mut app, key(KeyCode::Tab));
         assert_eq!(get_field(&app), DialogField::Source);

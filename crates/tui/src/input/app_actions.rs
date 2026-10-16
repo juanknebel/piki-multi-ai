@@ -7,7 +7,7 @@
 
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField, InputState};
-use crate::dialog_state::{DialogState, EditWorkspaceField};
+use crate::dialog_state::DialogState;
 use crate::helpers::{resize_all_ptys, scrollback_max};
 
 // ── Focus movement between panes ──
@@ -141,15 +141,11 @@ pub(crate) fn open_workspace_info(app: &mut App) -> Option<Action> {
 pub(crate) fn open_edit_workspace(app: &mut App) -> Option<Action> {
     if !app.workspaces.is_empty() {
         let ws = &app.workspaces[app.selected_workspace];
-        let kanban = ws.kanban_path.clone().unwrap_or_default();
         let prompt = ws.prompt.clone();
         app.active_dialog = Some(DialogState::EditWorkspace {
             target: app.selected_workspace,
-            kanban_cursor: kanban.chars().count(),
-            kanban,
             prompt_cursor: prompt.chars().count(),
             prompt,
-            active_field: EditWorkspaceField::KanbanPath,
         });
         app.mode = AppMode::EditWorkspace;
     }
@@ -169,7 +165,6 @@ pub(crate) fn open_create_worktree_for(app: &mut App, parent_idx: usize) -> Opti
     if let Some(ws) = app.workspaces.get(parent_idx) {
         match &ws.info.origin {
             piki_core::WorkspaceOrigin::GitHub { .. } => {
-                let kanban = ws.kanban_path.clone().unwrap_or_default();
                 let prompt = ws.prompt.clone();
                 app.active_dialog = Some(crate::dialog_state::DialogState::CreateWorktree {
                     parent_idx,
@@ -178,8 +173,6 @@ pub(crate) fn open_create_worktree_for(app: &mut App, parent_idx: usize) -> Opti
                     name_cursor: 0,
                     prompt_cursor: prompt.chars().count(),
                     prompt,
-                    kanban_cursor: kanban.chars().count(),
-                    kanban,
                     active_field: crate::dialog_state::CreateWorktreeField::Name,
                     existing: Vec::new(),
                     existing_selected: 0,
@@ -208,8 +201,6 @@ pub(crate) fn open_new_workspace(app: &mut App) -> Option<Action> {
         desc_cursor: 0,
         prompt: String::new(),
         prompt_cursor: 0,
-        kanban: String::new(),
-        kanban_cursor: 0,
         source: crate::app::NewWorkspaceSource::default(),
         active_field: DialogField::Source,
     });
@@ -449,7 +440,7 @@ pub(crate) fn request_close_tab(app: &mut App) -> Option<Action> {
 /// workspace — the desktop's *Move to workspace…*.
 ///
 /// Only a live terminal or agent tab can move: the process is re-parented
-/// untouched (it keeps the cwd it started in), whereas Kanban / API / Code
+/// untouched (it keeps the cwd it started in), whereas API / Code
 /// Review / markdown tabs render from the workspace's own state and would be
 /// meaningless elsewhere, and the lazygit tab is pinned to its repo. The
 /// initial shell is refused for the same reason `close_tab` refuses it —
@@ -502,7 +493,7 @@ pub(crate) fn open_move_tab(app: &mut App) -> Option<Action> {
 
 /// Re-spawn the active tab's process after it exited — the desktop's
 /// pane-header *Restart* button. Only an exited PTY tab can be restarted: a
-/// live one has nothing to fix, and a Kanban / API / markdown tab has no
+/// live one has nothing to fix, and an API / markdown tab has no
 /// process at all.
 pub(crate) fn request_restart_tab(app: &mut App) -> Option<Action> {
     let Some(ws) = app.current_workspace() else {
@@ -682,7 +673,7 @@ pub(crate) fn exit_term_scroll(app: &mut App) -> Option<Action> {
 /// terminal emulator's own `Ctrl+Shift+*` bindings (e.g. ghostty).
 ///
 /// No-op (with a toast) unless the active tab is actually a live terminal:
-/// searching only makes sense over PTY output, not over a chat, kanban board,
+/// searching only makes sense over PTY output, not over a chat,
 /// markdown viewer, or a "command not found" placeholder — all of which render
 /// in the MainPanel without a `pty_parser`.
 pub(crate) fn open_terminal_search(app: &mut App) -> Option<Action> {
@@ -937,7 +928,7 @@ mod tests {
     fn clear_terminal_on_a_tab_without_one_toasts() {
         let mut app = test_app();
         crate::test_support::add_test_workspace(&mut app);
-        app.workspaces[0].add_tab(piki_core::AIProvider::Kanban, true, None);
+        app.workspaces[0].add_tab(piki_core::AIProvider::Api, true, None);
 
         let action = clear_terminal(&mut app);
 
@@ -961,14 +952,14 @@ mod tests {
         assert_eq!(app.mode, AppMode::Normal);
     }
 
-    /// A Kanban / API / Code Review tab renders from the workspace's own
+    /// An API / Code Review tab renders from the workspace's own
     /// state, so there is nothing to re-parent.
     #[test]
     fn move_tab_refuses_a_tab_with_no_process() {
         let mut app = test_app();
         crate::test_support::add_test_workspace(&mut app);
         crate::test_support::add_test_workspace(&mut app);
-        app.workspaces[0].add_tab(piki_core::AIProvider::Kanban, true, None);
+        app.workspaces[0].add_tab(piki_core::AIProvider::Api, true, None);
 
         let action = open_move_tab(&mut app);
 
@@ -982,7 +973,7 @@ mod tests {
 
     // ── Restart an exited tab ──
 
-    /// Kanban / API / markdown tabs have no process behind them, so the chord
+    /// API / markdown tabs have no process behind them, so the chord
     /// must say so instead of silently doing nothing.
     #[test]
     fn restart_without_a_process_toasts_and_produces_no_action() {

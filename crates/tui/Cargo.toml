@@ -62,10 +62,6 @@ clap = { version = "4", features = ["derive"] }
 tui-markdown = "0.3"
 chrono = "0.4.44"
 
-# Kanban board
-flow-core = { git = "https://github.com/juanknebel/flow", tag = "0.6.0" }
-flow-tui = { git = "https://github.com/juanknebel/flow", tag = "0.6.0" }
-
 # LRU cache
 lru = "0.18"
 

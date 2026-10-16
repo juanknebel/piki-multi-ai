@@ -13,7 +13,6 @@ fn test_save_and_load_config() {
         "ws-config-test".to_string(),
         "test workspace".to_string(),
         "".to_string(),
-        None,
         repo_path.join("ws-config-test"),
         repo_path.clone(),
     )];
@@ -49,7 +48,6 @@ fn test_stale_entries_filtered() {
         "stale-ws".to_string(),
         "stale".to_string(),
         "".to_string(),
-        None,
         stale_path,
         repo_path.clone(),
     )];
@@ -77,7 +75,6 @@ fn test_review_workspace_survives_missing_checkout() {
         "owner/repo#42".to_string(),
         "Some PR".to_string(),
         "".to_string(),
-        None,
         missing_checkout,
         repo_path.clone(),
     );

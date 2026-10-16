@@ -10,7 +10,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AIProvider {
     Shell,
-    Kanban,
     CodeReview,
     Api,
     /// Git management via lazygit running in a PTY tab.
@@ -26,7 +25,6 @@ impl AIProvider {
     pub fn command(&self) -> &str {
         match self {
             AIProvider::Shell => "/bin/sh",
-            AIProvider::Kanban => "",
             AIProvider::CodeReview => "gh",
             AIProvider::Api => "",
             AIProvider::Git => "lazygit",
@@ -47,7 +45,6 @@ impl AIProvider {
     pub fn icon(&self) -> &str {
         match self {
             AIProvider::Shell => "▸",
-            AIProvider::Kanban => "▦",
             AIProvider::CodeReview => "⊙",
             AIProvider::Api => "⚡",
             AIProvider::Git => "⎇",
@@ -60,7 +57,6 @@ impl AIProvider {
     pub fn label(&self) -> &str {
         match self {
             AIProvider::Shell => "Shell",
-            AIProvider::Kanban => "Kanban Board",
             AIProvider::CodeReview => "Code Review",
             AIProvider::Api => "API Explorer",
             AIProvider::Git => "Git",
@@ -70,12 +66,7 @@ impl AIProvider {
 
     /// Built-in providers in display order (does not include Custom).
     pub fn all() -> &'static [AIProvider] {
-        &[
-            AIProvider::Shell,
-            AIProvider::Kanban,
-            AIProvider::CodeReview,
-            AIProvider::Api,
-        ]
+        &[AIProvider::Shell, AIProvider::CodeReview, AIProvider::Api]
     }
 
     /// Parse a provider from its label string.
@@ -83,7 +74,6 @@ impl AIProvider {
     pub fn from_label(label: &str) -> AIProvider {
         match label {
             "Shell" => AIProvider::Shell,
-            "Kanban Board" => AIProvider::Kanban,
             "Code Review" => AIProvider::CodeReview,
             "API Explorer" => AIProvider::Api,
             "Git" => AIProvider::Git,
@@ -219,7 +209,6 @@ pub struct WorkspaceInfo {
     pub name: String,
     pub description: String,
     pub prompt: String,
-    pub kanban_path: Option<String>,
     pub path: PathBuf,
     /// Git root of the source repository this workspace was created from
     pub source_repo: PathBuf,
@@ -231,15 +220,6 @@ pub struct WorkspaceInfo {
     /// Persistent display order (lower values appear first)
     #[serde(default)]
     pub order: u32,
-    /// Card ID from the kanban board that triggered this workspace dispatch
-    #[serde(default)]
-    pub dispatch_card_id: Option<String>,
-    /// Kanban board path of the source workspace (for card lifecycle management)
-    #[serde(default)]
-    pub dispatch_source_kanban: Option<String>,
-    /// Name of the agent profile used for dispatch
-    #[serde(default)]
-    pub dispatch_agent_name: Option<String>,
     /// Where the workspace files originated (local folder vs github clone).
     /// Drives source-control panel visibility and worktree-action availability.
     #[serde(default)]
@@ -279,7 +259,6 @@ impl WorkspaceInfo {
         name: String,
         description: String,
         prompt: String,
-        kanban_path: Option<String>,
         path: PathBuf,
         source_repo: PathBuf,
     ) -> Self {
@@ -291,15 +270,11 @@ impl WorkspaceInfo {
             name,
             description,
             prompt,
-            kanban_path,
             path,
             source_repo,
             source_repo_display,
             workspace_type: WorkspaceType::default(),
             order: 0,
-            dispatch_card_id: None,
-            dispatch_source_kanban: None,
-            dispatch_agent_name: None,
             origin: WorkspaceOrigin::default(),
             is_git_repo: true,
             ephemeral: false,

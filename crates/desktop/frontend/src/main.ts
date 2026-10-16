@@ -9,7 +9,6 @@ import { showConfirm } from "./components/confirm";
 import { renderActivityBar } from "./components/activity-bar";
 import { initSidebar, toggleSidebar } from "./components/sidebar";
 import { clearActiveTerminal, initTerminalPanel, openTerminalSearch, toggleLiteralNext } from "./components/terminal-panel";
-import { initKanbanPanel } from "./components/kanban-panel";
 import { initApiPanel } from "./components/api-panel";
 import { initMarkdownEditorPanel } from "./components/markdown-editor-panel";
 import { initCodeEditorPanel } from "./components/code-editor-panel";
@@ -72,7 +71,6 @@ async function init() {
   initSidebar();
   const mainContentEl = document.getElementById("main-content")!;
   await initTerminalPanel(mainContentEl);
-  initKanbanPanel(mainContentEl);
   initApiPanel(mainContentEl);
   initMarkdownEditorPanel(mainContentEl);
   initCodeEditorPanel(mainContentEl);
@@ -210,7 +208,6 @@ async function init() {
   bindAction("agent-manager", () => showAgentManager());
   bindAction("dispatch-agent", () => showDispatchDialog());
   bindAction("jump-attention", () => jumpToAttention());
-  bindAction("kanban", () => void openProvider("Kanban"));
   bindAction("web-preview", () => void openProvider("WebPreview"));
   bindAction("theme", () => showThemeDialog());
   bindAction("settings", () => showSettingsDialog());

@@ -48,11 +48,10 @@ export type SidebarView =
   | "files"
   | "git"
   | "agents"
-  | "kanban"
   | "api"
   | "web-preview";
 // Note: "projects"/"files"/"git" are real sidebar views;
-// "agents" opens the modal dialog, "kanban"/"api"/"web-preview" open tabs
+// "agents" opens the modal dialog, "api"/"web-preview" open tabs
 
 export interface UndoEntry {
   action: "stage" | "unstage";
@@ -138,7 +137,7 @@ export interface TabShellState {
  *  `components/open-content.ts`; the store itself stays component-free).
  *  `describe` turns a live content into its snapshot descriptor (null = not
  *  restorable); `restoreFrontend` re-registers an editor / web preview
- *  synchronously under the SAME id; `respawn` re-creates a Kanban / API tab
+ *  synchronously under the SAME id; `respawn` re-creates an API tab
  *  backend-side and resolves to its NEW id; `verify` says whether a restored
  *  frontend content is still valid (the file still exists) — false blanks
  *  the pane instead of opening an editor on nothing. */
@@ -377,7 +376,7 @@ class AppState extends EventTarget {
     this._scheduleSave();
   }
 
-  /** Singletons (Kanban/API/Web Preview) also open as their own top-level
+  /** Singletons (API/Web Preview) also open as their own top-level
    *  tab; dedup is handled by `focusSingletonTab`. Kept as a named alias so
    *  call sites read intentionally. */
   addTabToRoot(workspaceIdx: number, tab: TabInfo) {
@@ -419,7 +418,7 @@ class AppState extends EventTarget {
   }
 
   isSingletonProvider(provider: AIProvider): boolean {
-    return provider === "Kanban" || provider === "Api" || provider === "WebPreview";
+    return provider === "Api" || provider === "WebPreview";
   }
 
   /** If a singleton tab for `provider` is already open in the active
@@ -939,9 +938,9 @@ class AppState extends EventTarget {
 
   /** Build `ws.wsTabs` from the saved layout, or fall back to one tab per
    *  content. Orphan contents (not in any saved tab) are appended as tabs.
-   *  `ws.tabs` arrives as the BACKEND list (PTYs, and in-session Kanban /
-   *  API); the non-PTY contents the snapshot describes are added back here:
-   *  editors / previews synchronously under their old id, Kanban / API via
+   *  `ws.tabs` arrives as the BACKEND list (PTYs, and in-session API);
+   *  the non-PTY contents the snapshot describes are added back here:
+   *  editors / previews synchronously under their old id, API via
    *  an async re-spawn that then remaps the id in the trees. */
   private _hydrateLayout(ws: WorkspaceState, preferredActiveContent: number) {
     const knownIds = new Set(ws.tabs.map((t) => t.id));

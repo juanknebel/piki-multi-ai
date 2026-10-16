@@ -346,8 +346,8 @@ pub(crate) async fn spawn_tab(
         None
     };
     let idx = ws.add_tab(provider.clone(), true, provider_cfg);
-    // Kanban / CodeReview / Api render from app state, not a PTY.
-    if *provider == AIProvider::Kanban || *provider == AIProvider::CodeReview {
+    // CodeReview / Api render from app state, not a PTY.
+    if *provider == AIProvider::CodeReview {
         return (idx, None);
     }
     if *provider == AIProvider::Api {
@@ -865,7 +865,7 @@ mod tests {
         );
     }
 
-    /// Kanban/CodeReview/Api tabs render from app state and never spawn a
+    /// CodeReview/Api tabs render from app state and never spawn a
     /// PTY — they must not be reported as failures.
     #[tokio::test]
     async fn spawn_tab_succeeds_for_ptyless_providers() {
@@ -873,7 +873,7 @@ mod tests {
         let ws_idx = add_test_workspace(&mut app);
         let paths = piki_core::paths::DataPaths::default_paths();
 
-        for provider in [AIProvider::Kanban, AIProvider::CodeReview, AIProvider::Api] {
+        for provider in [AIProvider::CodeReview, AIProvider::Api] {
             let (_idx, err) = spawn_tab(
                 &mut app.workspaces[ws_idx],
                 &provider,

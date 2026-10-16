@@ -10,9 +10,8 @@ mod workspace;
 
 // Re-export all dialog render functions
 pub(crate) use self::agents::{
-    render_broadcast_dialog, render_dispatch_agent_dialog, render_dispatch_card_move_dialog,
-    render_edit_agent_dialog, render_edit_agent_role_dialog, render_import_agents_dialog,
-    render_manage_agents_dialog,
+    render_broadcast_dialog, render_edit_agent_dialog, render_edit_agent_role_dialog,
+    render_import_agents_dialog, render_manage_agents_dialog,
 };
 pub(crate) use self::dashboard::render_dashboard_overlay;
 pub(crate) use self::move_tab::render_move_tab_dialog;

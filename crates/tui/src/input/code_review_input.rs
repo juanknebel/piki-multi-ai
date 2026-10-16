@@ -560,7 +560,6 @@ mod confirm_close_tests {
             "o/r#1".to_string(),
             String::new(),
             String::new(),
-            None,
             std::path::PathBuf::from("/tmp/review"),
             std::path::PathBuf::from("/tmp/review"),
         );

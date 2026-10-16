@@ -109,7 +109,6 @@ const shortcuts: ShortcutDef[] = [
   // chat-panel.ts addContextToChat(): a terminal selection goes straight into
   // the composer (select + this chord = two keys), otherwise a chooser opens.
   { id: "add-chat-context", label: "Add Context to Chat", category: "Chat", defaultKey: "Ctrl+Shift+I", key: "Ctrl+Shift+I", action: () => {}, terminalCapture: true },
-  { id: "kanban", label: "Kanban Board", category: "View & Panels", defaultKey: "Alt+K", key: "Alt+K", action: () => {}, terminalCapture: true },
   { id: "web-preview", label: "Open Web Preview", category: "View & Panels", defaultKey: "Alt+Shift+W", key: "Alt+Shift+W", action: () => {}, terminalCapture: true },
   { id: "theme", label: "Theme Settings", category: "View & Panels", defaultKey: "Alt+T", key: "Alt+T", action: () => {}, terminalCapture: true },
   { id: "manage-providers", label: "Manage Providers", category: "View & Panels", defaultKey: "Alt+P", key: "Alt+P", action: () => {}, terminalCapture: true },

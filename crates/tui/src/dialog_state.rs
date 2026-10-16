@@ -1,7 +1,7 @@
 use crate::app::{DialogField, NewWorkspaceSource};
 
 /// Field-cycling behavior for tab-navigation in multi-field dialogs.
-/// Implemented by per-dialog field enums (`EditWorkspaceField`,
+/// Implemented by per-dialog field enums (`CreateWorktreeField`,
 /// `EditProviderField`, `EditAgentField`, `DialogField`) so handlers can
 /// call `*active_field = active_field.next()` instead of hard-coding match
 /// arms.
@@ -17,19 +17,17 @@ impl CycleField for DialogField {
             Self::Directory => Self::Destination,
             Self::Destination => Self::Description,
             Self::Description => Self::Prompt,
-            Self::Prompt => Self::KanbanPath,
-            Self::KanbanPath => Self::Source,
+            Self::Prompt => Self::Source,
         }
     }
 
     fn prev(self) -> Self {
         match self {
-            Self::Source => Self::KanbanPath,
+            Self::Source => Self::Prompt,
             Self::Directory => Self::Source,
             Self::Destination => Self::Directory,
             Self::Description => Self::Destination,
             Self::Prompt => Self::Description,
-            Self::KanbanPath => Self::Prompt,
         }
     }
 }
@@ -103,27 +101,22 @@ pub enum DialogState {
         desc_cursor: usize,
         prompt: String,
         prompt_cursor: usize,
-        kanban: String,
-        kanban_cursor: usize,
         source: NewWorkspaceSource,
         active_field: DialogField,
     },
     EditWorkspace {
         target: usize,
-        kanban: String,
-        kanban_cursor: usize,
         prompt: String,
         prompt_cursor: usize,
-        active_field: EditWorkspaceField,
     },
     /// Create a git worktree from a GitHub-origin parent workspace, or load
     /// one that already exists on disk (via `git worktree list`). The parent
     /// is identified by index.
-    /// `mode` selects between the two flows; `name`/`prompt`/`kanban`/
+    /// `mode` selects between the two flows; `name`/`prompt`/
     /// `active_field` are only meaningful when `mode == CreateNew` (they
-    /// capture the worktree branch name plus optional overrides, pre-filled
-    /// from the parent). `existing`/`existing_selected`/`existing_loading`
-    /// are only meaningful when `mode == LoadExisting`.
+    /// capture the worktree branch name plus an optional prompt override,
+    /// pre-filled from the parent). `existing`/`existing_selected`/
+    /// `existing_loading` are only meaningful when `mode == LoadExisting`.
     CreateWorktree {
         parent_idx: usize,
         mode: CreateWorktreeMode,
@@ -131,8 +124,6 @@ pub enum DialogState {
         name_cursor: usize,
         prompt: String,
         prompt_cursor: usize,
-        kanban: String,
-        kanban_cursor: usize,
         active_field: CreateWorktreeField,
         existing: Vec<piki_core::workspace::ExistingWorktree>,
         existing_selected: usize,
@@ -253,27 +244,6 @@ pub enum DialogState {
         search_cursor: usize,
         auto_refresh: bool,
     },
-    DispatchAgent {
-        source_ws: usize,
-        card_id: String,
-        card_title: String,
-        card_description: String,
-        card_priority: flow_core::Priority,
-        card_project: String,
-        /// Highlight cursor into the combined agents + dispatchable providers list
-        agent_idx: usize,
-        /// Snapshot of configured agents (name, provider, role). Empty = fallback to raw providers
-        agents: Vec<(String, String, String)>,
-        /// Multi-select checkboxes, one per combined agents + providers entry.
-        /// Empty selection on confirm = dispatch the highlighted entry alone.
-        selected: Vec<bool>,
-        additional_prompt: String,
-        additional_prompt_cursor: usize,
-        /// 0 = agent/provider checklist, 1 = additional prompt, 2 = workspace destination select
-        step: u8,
-        /// When step==2: false = new worktree, true = use current workspace
-        use_current_ws: bool,
-    },
     ManageAgents {
         selected: usize,
     },
@@ -323,15 +293,6 @@ pub enum DialogState {
         step: u8,
         /// Append Enter after the text (execute it) instead of typing it raw.
         append_enter: bool,
-    },
-    /// Choose which kanban column to move a dispatched card to when deleting a workspace
-    DispatchCardMove {
-        /// Workspace index being deleted
-        target: usize,
-        /// Available columns: (id, title)
-        columns: Vec<(String, String)>,
-        /// Currently selected column index
-        selected: usize,
     },
     /// Manage custom providers overlay
     ManageProviders {
@@ -475,34 +436,12 @@ impl CycleField for EditAgentField {
     }
 }
 
-/// Active field in the EditWorkspace dialog. Restricted to the three editable
-/// fields (the workspace's name/dir/type are immutable at edit time).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EditWorkspaceField {
-    KanbanPath,
-    Prompt,
-}
-
-impl CycleField for EditWorkspaceField {
-    fn next(self) -> Self {
-        match self {
-            Self::KanbanPath => Self::Prompt,
-            Self::Prompt => Self::KanbanPath,
-        }
-    }
-
-    fn prev(self) -> Self {
-        // Two-variant cycle: prev == next.
-        self.next()
-    }
-}
-
 /// Which step of the CreateWorktree dialog is currently shown.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CreateWorktreeMode {
     /// Pick "Create new worktree" vs "Load existing worktree".
     ChooseSource,
-    /// Today's text-field flow: branch name + optional prompt/kanban.
+    /// Today's text-field flow: branch name + optional prompt.
     CreateNew,
     /// Pick from worktrees discovered on disk via `git worktree list`.
     LoadExisting,
@@ -513,23 +452,18 @@ pub enum CreateWorktreeMode {
 pub enum CreateWorktreeField {
     Name,
     Prompt,
-    KanbanPath,
 }
 
 impl CycleField for CreateWorktreeField {
     fn next(self) -> Self {
         match self {
             Self::Name => Self::Prompt,
-            Self::Prompt => Self::KanbanPath,
-            Self::KanbanPath => Self::Name,
+            Self::Prompt => Self::Name,
         }
     }
 
     fn prev(self) -> Self {
-        match self {
-            Self::Name => Self::KanbanPath,
-            Self::Prompt => Self::Name,
-            Self::KanbanPath => Self::Prompt,
-        }
+        // Two-variant cycle: prev == next.
+        self.next()
     }
 }

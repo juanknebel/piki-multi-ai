@@ -96,10 +96,6 @@ export function showWorkspaceDialog(opts: DialogOptions) {
           <input class="ui-input" id="ws-desc" placeholder="Brief description" value="${escapeAttr(prefill?.description ?? "")}" />
         </div>
         <div class="dialog-field">
-          <label class="dialog-label">Kanban Path</label>
-          <input class="ui-input" id="ws-kanban" placeholder="Path to .board directory (optional)" value="${escapeAttr(prefill?.kanban_path ?? "")}" />
-        </div>
-        <div class="dialog-field">
           <label class="dialog-label">Prompt</label>
           <textarea class="ui-input" id="ws-prompt" placeholder="Initial prompt for AI tabs" rows="3">${escapeHtml(prefill?.prompt ?? "")}</textarea>
         </div>
@@ -116,8 +112,6 @@ export function showWorkspaceDialog(opts: DialogOptions) {
   // Attach native folder pickers to path inputs
   const dirInput = backdrop.querySelector<HTMLInputElement>("#ws-dir");
   if (dirInput) attachPathPicker(dirInput, { title: "Select the repository folder" });
-  const kanbanInput = backdrop.querySelector<HTMLInputElement>("#ws-kanban");
-  if (kanbanInput) attachPathPicker(kanbanInput, { title: "Select kanban directory" });
   const cloneDestInput = backdrop.querySelector<HTMLInputElement>("#ws-clone-dest");
   if (cloneDestInput) {
     attachPathPicker(cloneDestInput, { title: "Select clone destination" });
@@ -198,8 +192,6 @@ async function submitCreate(
     backdrop.querySelector<HTMLInputElement>("#ws-name")?.value.trim() ?? "";
   const desc =
     backdrop.querySelector<HTMLInputElement>("#ws-desc")?.value.trim() ?? "";
-  const kanban =
-    backdrop.querySelector<HTMLInputElement>("#ws-kanban")?.value.trim() ?? "";
   const prompt =
     backdrop.querySelector<HTMLTextAreaElement>("#ws-prompt")?.value.trim() ??
     "";
@@ -233,7 +225,6 @@ async function submitCreate(
         prompt,
         url,
         destinationDir,
-        kanban || null,
       );
       appState.addWorkspace(info);
       await joinProject(addToProject, info.path);
@@ -269,7 +260,6 @@ async function submitCreate(
       prompt,
       dir,
       "Simple",
-      kanban || null,
     );
     appState.addWorkspace(info);
     await joinProject(addToProject, info.path);
@@ -309,8 +299,6 @@ function basenameFromPath(path: string): string {
 async function submitEdit(backdrop: HTMLElement, index: number) {
   const desc =
     backdrop.querySelector<HTMLInputElement>("#ws-desc")?.value.trim();
-  const kanban =
-    backdrop.querySelector<HTMLInputElement>("#ws-kanban")?.value.trim();
   const prompt =
     backdrop.querySelector<HTMLTextAreaElement>("#ws-prompt")?.value.trim();
 
@@ -319,14 +307,12 @@ async function submitEdit(backdrop: HTMLElement, index: number) {
   btn.textContent = "Saving...";
 
   try {
-    await ipc.updateWorkspace(index, prompt, desc, kanban);
+    await ipc.updateWorkspace(index, prompt, desc);
     // Update local state
     const ws = appState.workspaces[index];
     if (ws) {
       if (prompt !== undefined) ws.info.prompt = prompt;
       if (desc !== undefined) ws.info.description = desc;
-      if (kanban !== undefined)
-        ws.info.kanban_path = kanban === "" ? null : kanban;
     }
     toast("Checkout updated", "success");
     backdrop.remove();
@@ -358,7 +344,6 @@ export function showWorkspaceInfo(index: number) {
         ${infoRow("Branch", ws.branch ?? "—")}
         ${infoRow("Path", String(info.path))}
         ${infoRow("Source Repo", info.source_repo_display)}
-        ${infoRow("Kanban Path", info.kanban_path || "—")}
         ${infoRow("Description", info.description || "—")}
         ${infoRow("Prompt", info.prompt || "—")}
       </div>
@@ -406,7 +391,7 @@ function escapeAttr(text: string): string {
  *  worktree workspace anchored at the parent's source_repo, picked with the
  *  dropdown at the top (mirrors the TUI's `prefix r` flow):
  *  - **Create New** — only the branch name is required; `git worktree add`
- *    runs under the hood, prompt/kanban default to the parent's values.
+ *    runs under the hood, prompt defaults to the parent's value.
  *  - **Load Existing** — lists worktrees already on disk for this repo
  *    (`git worktree list`, filtered to ones with no workspace yet) and
  *    registers the picked one without touching git. */
@@ -451,10 +436,6 @@ export function showCreateWorktreeDialog(
             <label class="dialog-label">Prompt</label>
             <textarea class="ui-input" id="wt-prompt" placeholder="Initial prompt for AI tabs" rows="3">${escapeHtml(parent.prompt ?? "")}</textarea>
           </div>
-          <div class="dialog-field">
-            <label class="dialog-label">Kanban Path</label>
-            <input class="ui-input" id="wt-kanban" placeholder="Path to .board directory (optional)" value="${escapeAttr(parent.kanban_path ?? "")}" />
-          </div>
         </div>
         <div id="wt-existing-fields" style="display:none">
           <div class="dialog-field">
@@ -479,9 +460,6 @@ export function showCreateWorktreeDialog(
   const existingFields = backdrop.querySelector<HTMLElement>("#wt-existing-fields")!;
   const existingListEl = backdrop.querySelector<HTMLElement>("#wt-existing-list")!;
   const submitBtn = backdrop.querySelector<HTMLButtonElement>("#wt-submit")!;
-
-  const kanbanInput = backdrop.querySelector<HTMLInputElement>("#wt-kanban");
-  if (kanbanInput) attachPathPicker(kanbanInput, { title: "Select kanban directory" });
 
   let selectedExisting: ExistingWorktreeInfo | null = null;
   let existingLoaded = false;
@@ -585,8 +563,6 @@ export function showCreateWorktreeDialog(
       backdrop.querySelector<HTMLInputElement>("#wt-name")?.value.trim() ?? "";
     const prompt =
       backdrop.querySelector<HTMLTextAreaElement>("#wt-prompt")?.value.trim() ?? "";
-    const kanban =
-      backdrop.querySelector<HTMLInputElement>("#wt-kanban")?.value.trim() ?? "";
 
     if (!name) {
       toast("Branch name is required", "error");
@@ -602,7 +578,6 @@ export function showCreateWorktreeDialog(
         prompt,
         parent.source_repo,
         "Worktree",
-        kanban || null,
       );
       appState.addWorkspace(info);
       await joinProject(addToProject, info.path);

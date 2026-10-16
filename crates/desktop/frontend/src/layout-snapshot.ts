@@ -1,6 +1,6 @@
 // Pure helpers for the per-workspace layout snapshot (`wsTabsV2` in the
 // settings document). Besides the pane trees, the snapshot carries a
-// descriptor per NON-PTY content so editors, web previews, the kanban board
+// descriptor per NON-PTY content so editors, web previews
 // and the API explorer come back after a restart: PTY contents are
 // re-attached by the session daemon, everything else is re-created from
 // here (`appState._hydrateLayout` + the `ContentRestorer` in
@@ -11,7 +11,7 @@ import { allLeaves, treeContentIds } from "./pane-tree";
 import type { AIProvider, TabInfo } from "./types";
 
 /** Non-PTY content kinds the snapshot can bring back. */
-export type SavedContentKind = "CodeEditor" | "Markdown" | "WebPreview" | "Kanban" | "Api";
+export type SavedContentKind = "CodeEditor" | "Markdown" | "WebPreview" | "Api";
 
 export interface SavedContent {
   id: string;
@@ -35,7 +35,7 @@ export interface SavedWsLayout {
   contents?: SavedContent[];
 }
 
-const SAVED_KINDS: readonly string[] = ["CodeEditor", "Markdown", "WebPreview", "Kanban", "Api"];
+const SAVED_KINDS: readonly string[] = ["CodeEditor", "Markdown", "WebPreview", "Api"];
 
 export function isSavedContentKind(p: unknown): p is SavedContentKind {
   return typeof p === "string" && SAVED_KINDS.includes(p);
@@ -50,7 +50,7 @@ export function isFrontendOnlyKind(kind: SavedContentKind): boolean {
 /** Kinds backed by a backend `DesktopTab` without a PTY: gone after a
  *  restart, re-spawned with a NEW id (`ipc.spawnTab`) and remapped. */
 export function isRespawnKind(kind: SavedContentKind): boolean {
-  return kind === "Kanban" || kind === "Api";
+  return kind === "Api";
 }
 
 /** Descriptor for a content, or null when the snapshot cannot bring it back

@@ -104,10 +104,6 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         .current_workspace()
         .and_then(|ws| ws.current_tab())
         .is_some_and(|tab| tab.markdown_content.is_some());
-    let has_kanban = app
-        .current_workspace()
-        .and_then(|ws| ws.current_tab())
-        .is_some_and(|tab| tab.provider == piki_core::AIProvider::Kanban);
     let api_footer_state: u8 = match app
         .current_workspace()
         .and_then(|ws| ws.current_tab())
@@ -131,20 +127,18 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         app.input_state,
         app.active_pane,
         has_markdown,
-        has_kanban,
         api_footer_state,
         new_tab_menu,
         app.sidebar_row_kind(),
     );
-    let keys = if let Some((ref m, i, p, md, kb, api, ntm, sv, ref cached)) = app.footer_cache {
+    let keys = if let Some((ref m, i, p, md, api, ntm, sv, ref cached)) = app.footer_cache {
         if *m == cache_key.0
             && i == cache_key.1
             && p == cache_key.2
             && md == cache_key.3
-            && kb == cache_key.4
-            && api == cache_key.5
-            && ntm == cache_key.6
-            && sv == cache_key.7
+            && api == cache_key.4
+            && ntm == cache_key.5
+            && sv == cache_key.6
         {
             cached.clone()
         } else {
@@ -157,7 +151,6 @@ pub fn render(frame: &mut Frame, app: &mut App) {
                 cache_key.4,
                 cache_key.5,
                 cache_key.6,
-                cache_key.7,
                 k.clone(),
             ));
             k
@@ -172,7 +165,6 @@ pub fn render(frame: &mut Frame, app: &mut App) {
             cache_key.4,
             cache_key.5,
             cache_key.6,
-            cache_key.7,
             k.clone(),
         ));
         k
@@ -243,7 +235,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
     );
     app.terminal_inner_area = Some(terminal_inner);
 
-    // Right center: main content (PTY, kanban, markdown, API)
+    // Right center: main content (PTY, markdown, API)
     super::panels::render_main_content(frame, main_area, app);
 
     // Right bottom: status bar
@@ -277,15 +269,11 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         AppMode::Logs => super::dialogs::render_logs_overlay(frame, area, app),
         AppMode::CommandPalette => super::command_palette::render(frame, area, app),
         AppMode::WorkspaceSwitcher => super::workspace_switcher::render(frame, area, app),
-        AppMode::DispatchAgent => super::dialogs::render_dispatch_agent_dialog(frame, area, app),
         AppMode::Broadcast => super::dialogs::render_broadcast_dialog(frame, area, app),
         AppMode::ManageAgents => super::dialogs::render_manage_agents_dialog(frame, area, app),
         AppMode::EditAgent => super::dialogs::render_edit_agent_dialog(frame, area, app),
         AppMode::EditAgentRole => super::dialogs::render_edit_agent_role_dialog(frame, area, app),
         AppMode::ImportAgents => super::dialogs::render_import_agents_dialog(frame, area, app),
-        AppMode::DispatchCardMove => {
-            super::dialogs::render_dispatch_card_move_dialog(frame, area, app)
-        }
         AppMode::ManageProviders => {
             super::dialogs::render_manage_providers_dialog(frame, area, app)
         }

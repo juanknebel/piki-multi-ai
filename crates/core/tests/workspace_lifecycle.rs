@@ -8,7 +8,7 @@ async fn test_create_and_remove_workspace() {
     let manager = WorkspaceManager::new();
 
     let ws = manager
-        .create("test-ws-create", "desc", "", None, &repo_path)
+        .create("test-ws-create", "desc", "", &repo_path)
         .await
         .expect("create should succeed");
 
@@ -33,13 +33,11 @@ async fn test_create_duplicate_fails() {
     let manager = WorkspaceManager::new();
 
     manager
-        .create("test-ws-dup", "desc", "", None, &repo_path)
+        .create("test-ws-dup", "desc", "", &repo_path)
         .await
         .expect("first create should succeed");
 
-    let result = manager
-        .create("test-ws-dup", "desc", "", None, &repo_path)
-        .await;
+    let result = manager.create("test-ws-dup", "desc", "", &repo_path).await;
 
     assert!(result.is_err(), "duplicate create should fail");
 
@@ -67,13 +65,7 @@ async fn test_create_simple_accepts_non_git_folder() {
     let manager = WorkspaceManager::new();
 
     let info = manager
-        .create_simple(
-            "plain-folder-ws",
-            "desc",
-            "",
-            None,
-            &dir.path().to_path_buf(),
-        )
+        .create_simple("plain-folder-ws", "desc", "", &dir.path().to_path_buf())
         .await
         .expect("create_simple should accept a non-git folder");
 
@@ -89,7 +81,7 @@ async fn test_create_simple_in_git_folder_no_remote_is_local() {
     let manager = WorkspaceManager::new();
 
     let info = manager
-        .create_simple("git-no-remote-ws", "desc", "", None, &repo_path)
+        .create_simple("git-no-remote-ws", "desc", "", &repo_path)
         .await
         .expect("create_simple should accept a git folder with no remote");
 
@@ -132,7 +124,7 @@ async fn test_create_from_github_clones_into_chosen_destination() {
     std::fs::create_dir_all(&chosen_dest).expect("create chosen_dest");
 
     let info = manager
-        .create_from_github("clone-ws", "desc", "", None, &url, &chosen_dest)
+        .create_from_github("clone-ws", "desc", "", &url, &chosen_dest)
         .await
         .expect("create_from_github should clone successfully");
 
@@ -166,7 +158,7 @@ async fn test_create_from_github_rejects_missing_destination() {
     // only path the manager auto-creates.
     let bogus = data_dir.path().join("nope-not-there");
     let err = manager
-        .create_from_github("clone-ws", "", "", None, &url, &bogus)
+        .create_from_github("clone-ws", "", "", &url, &bogus)
         .await
         .expect_err("should reject missing user-chosen destination");
     assert!(
@@ -192,7 +184,7 @@ async fn test_create_from_github_auto_creates_default_repos_dir() {
     assert!(!default_dest.exists(), "test precondition");
 
     let info = manager
-        .create_from_github("clone-ws", "", "", None, &url, &default_dest)
+        .create_from_github("clone-ws", "", "", &url, &default_dest)
         .await
         .expect("default destination should auto-create");
 
@@ -206,11 +198,11 @@ async fn test_list_worktrees_excludes_main_checkout() {
     let manager = WorkspaceManager::new();
 
     let ws_a = manager
-        .create("list-ws-a", "", "", None, &repo_path)
+        .create("list-ws-a", "", "", &repo_path)
         .await
         .expect("create a should succeed");
     let ws_b = manager
-        .create("list-ws-b", "", "", None, &repo_path)
+        .create("list-ws-b", "", "", &repo_path)
         .await
         .expect("create b should succeed");
 
@@ -244,7 +236,7 @@ async fn test_import_existing_worktree_registers_without_git_worktree_add() {
     let manager = WorkspaceManager::new();
 
     let created = manager
-        .create("import-ws", "", "", None, &repo_path)
+        .create("import-ws", "", "", &repo_path)
         .await
         .expect("create should succeed");
 

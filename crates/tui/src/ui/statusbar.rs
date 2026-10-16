@@ -375,22 +375,12 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             ("Esc".to_string(), "cancel"),
         ],
         AppMode::ConfirmQuit => vec![("y".to_string(), "quit"), ("n".to_string(), "cancel")],
-        AppMode::DispatchCardMove => vec![
-            ("↑/↓".to_string(), "select"),
-            ("Enter".to_string(), "confirm"),
-            ("Esc".to_string(), "cancel"),
-        ],
         // ── Modal overlays: the footer shows the modal's keys, never stale
         // terminal hints underneath it ──
         AppMode::ConfirmDelete => vec![
             ("y".to_string(), "delete"),
             ("n".to_string(), "keep"),
             ("Esc".to_string(), "cancel"),
-        ],
-        AppMode::DispatchAgent => vec![
-            ("j/k".to_string(), "select"),
-            ("Enter".to_string(), "dispatch"),
-            ("Esc".to_string(), "back"),
         ],
         AppMode::ManageAgents => vec![
             ("j/k".to_string(), "select"),
@@ -589,23 +579,6 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
                     ),
                     (cfg.get_binding("agents", "select"), "jump to agent"),
                     ("click".to_string(), "jump"),
-                    (cfg.prefix_display(), "prefix"),
-                ]
-            } else if app
-                .current_workspace()
-                .and_then(|ws| ws.current_tab())
-                .is_some_and(|tab| tab.provider == piki_core::AIProvider::Kanban)
-            {
-                // The kanban board speaks flow_tui's own pane-local keys, not
-                // app chords — surface them (dispatch especially, the one
-                // reason to be here) so the footer stops showing terminal hints.
-                vec![
-                    ("h/l/j/k".to_string(), "navigate"),
-                    ("n".to_string(), "new"),
-                    ("D".to_string(), "dispatch"),
-                    ("e".to_string(), "edit"),
-                    ("d".to_string(), "delete"),
-                    ("Enter".to_string(), "details"),
                     (cfg.prefix_display(), "prefix"),
                 ]
             } else if app

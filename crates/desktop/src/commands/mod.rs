@@ -6,7 +6,6 @@ pub mod diff;
 pub mod fs;
 pub mod git;
 pub mod gitlog;
-pub mod kanban;
 pub mod logs;
 pub mod lsp;
 pub mod markdown;
