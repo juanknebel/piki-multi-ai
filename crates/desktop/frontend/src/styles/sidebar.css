@@ -178,6 +178,16 @@
   color: var(--accent-primary);
 }
 
+/* Parent of worktrees in this group: an explicit badge next to the other
+   row glyphs, so the hub never depends on font weight alone to read apart
+   from a plain clone. */
+.workspace-parent {
+  flex-shrink: 0;
+  margin-left: 6px;
+  font-size: var(--fs-sm);
+  color: var(--accent-primary);
+}
+
 .workspace-attention {
   flex-shrink: 0;
   margin-left: 6px;

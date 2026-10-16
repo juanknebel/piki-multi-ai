@@ -5,10 +5,10 @@ expression: content
 ---
 ╭ PROJECTS ────────────────────────────╮
 │▎  ⎇ src-flow (flow)                  │
-│   ○ src-agent-multi (main)           │
+│   ◉ src-agent-multi (main)           │
 │   ⎇ src-agent-multi (nightly)        │
 │   ⎇ src-ferrum-trade (ferrum-trade)  │
-│   ○ src-void-setup (main)            │
+│   ◉ src-void-setup (main)            │
 │   ⎇ src-void-setup (x220t)           │
 │                                      │
 │                                      │

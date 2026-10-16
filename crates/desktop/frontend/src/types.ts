@@ -110,6 +110,13 @@ export interface WorkspaceDetail {
   active_tab: number;
 }
 
+/** One entry of `list_workspaces`: the workspace plus its current branch,
+ *  resolved warm so the first paint already shows every repo's branch. */
+export interface WorkspaceListEntry {
+  info: WorkspaceInfo;
+  branch: string | null;
+}
+
 export interface PtyOutputEvent {
   tab_id: string;
   data: string; // base64

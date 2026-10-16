@@ -445,10 +445,9 @@ pub(crate) async fn spawn_tab(
             Some(format!("Could not start '{cmd}': {e}"))
         }
     };
-    // A tool (shell/agent/git) just activated for this workspace — that's
-    // the trigger for inferring its branch (never persisted, see
-    // `ws.branch`), so kick the background refresh loop immediately instead
-    // of waiting for its next periodic tick.
+    // A tool (shell/agent/git) just activated for this workspace — kick the
+    // background refresh loop immediately instead of waiting for its next
+    // periodic tick, so the sidebar counts pick up the new tab's workspace.
     ws.dirty = true;
     ws.last_refresh = None;
     (idx, spawn_error)

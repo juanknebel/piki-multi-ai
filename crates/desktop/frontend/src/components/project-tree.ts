@@ -393,6 +393,10 @@ export function renderProjectTree(container: HTMLElement) {
         idx === activeIdx && "active",
         // A hoisted row IS its repository, so it carries the repo's shape.
         row.hoisted && "hoisted-repo",
+        // The hub of a worktree family stands out from a plain clone —
+        // semibold, via the long-dormant `family-parent` rule in
+        // sidebar.css (no icon or badge, just weight).
+        row.is_parent && "family-parent",
       ]
         .filter(Boolean)
         .join(" ");
@@ -410,6 +414,12 @@ export function renderProjectTree(container: HTMLElement) {
       const restoredMark = ws.restoredUnvisited
         ? `<span class="workspace-restored" title="Sessions restored from the daemon — not visited yet">${icon("history")}</span>`
         : "";
+      // Explicit parent badge: the hub of a worktree family must read without
+      // depending on font weight alone. The stacked-windows glyph is the one
+      // that already means "worktrees" in the icon set.
+      const parentBadge = row.is_parent
+        ? `<span class="workspace-parent" title="Parent — this repo has worktrees in this group">${icon("workspaces")}</span>`
+        : "";
 
       const { name, branch } = checkoutParts(info, ws.branch, row.hoisted);
       const branchHtml = branch
@@ -426,6 +436,7 @@ export function renderProjectTree(container: HTMLElement) {
         ${agentGlyph}
         ${attentionDot}
         ${restoredMark}
+        ${parentBadge}
         <span class="workspace-actions">
           <button data-variant="ghost" data-icon class="ws-action-btn ui-btn" data-action="menu" title="Workspace menu" aria-label="Workspace menu" aria-haspopup="menu">${icon("more")}</button>
         </span>

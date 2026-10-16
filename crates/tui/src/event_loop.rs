@@ -154,8 +154,8 @@ pub(crate) async fn run(
     // Connect to the session daemon (launching it if needed) and re-attach any
     // sessions that survived a previous run — each becomes its tab again with
     // screen + scrollback restored. Falls back silently to in-process PTYs if
-    // the daemon is unavailable. Runs before the refresh loop below so a
-    // re-attached tab counts toward `has_tab` (branch inference).
+    // the daemon is unavailable. Runs before the refresh loop below so the
+    // first frame already knows which workspaces have live tabs.
     if app.config.sessions.enabled {
         let session_t0 = Instant::now();
         app.session_daemon = crate::helpers::connect_session_daemon(&paths);
@@ -204,26 +204,12 @@ pub(crate) async fn run(
     // sidebar counts as they land. (Harmless no-op for non-git directories.)
     for (idx, ws) in app.workspaces.iter().enumerate() {
         let path = ws.info.path.clone();
-        // Branch is inferred, never persisted (see `Workspace::branch`) — and
-        // only inferred once some tool (shell/agent/git) has actually run in
-        // this workspace, i.e. it has a tab. Startup itself doesn't count,
-        // so a workspace with no tabs yet shows no branch until one opens.
-        let has_tab = !ws.tabs.is_empty();
+        // Branch is inferred, never persisted (see `Workspace::branch`) — for
+        // every workspace, with or without tabs: it is a property of the
+        // directory, so a repo row shows it from the first paint.
         let tx = app.refresh_tx.clone();
         tokio::spawn(async move {
-            let files = app::get_changed_files(&path).await.unwrap_or_default();
-            let ab = app::get_ahead_behind(&path).await;
-            let branch = if has_tab {
-                app::get_current_branch(&path).await
-            } else {
-                None
-            };
-            let _ = tx.send(app::RefreshResult {
-                workspace_idx: idx,
-                changed_files: files,
-                ahead_behind: ab,
-                branch,
-            });
+            let _ = tx.send(app::refresh_git_state(idx, &path).await);
         });
     }
     if !app.workspaces.is_empty() {
@@ -1347,26 +1333,10 @@ fn poll_workspaces(app: &mut App, now: Instant) {
             };
             if should_refresh && !app.refresh_pending {
                 let path = ws.info.path.clone();
-                // See the startup loop above: branch is only inferred
-                // once a tool has actually run in this workspace.
-                let has_tab = !ws.tabs.is_empty();
                 let tx = app.refresh_tx.clone();
                 app.refresh_pending = true;
                 tokio::spawn(async move {
-                    // Non-git dirs (Project workspaces) yield an empty list
-                    let files = app::get_changed_files(&path).await.unwrap_or_default();
-                    let ab = app::get_ahead_behind(&path).await;
-                    let branch = if has_tab {
-                        app::get_current_branch(&path).await
-                    } else {
-                        None
-                    };
-                    let _ = tx.send(app::RefreshResult {
-                        workspace_idx: idx,
-                        changed_files: files,
-                        ahead_behind: ab,
-                        branch,
-                    });
+                    let _ = tx.send(app::refresh_git_state(idx, &path).await);
                 });
             }
         }

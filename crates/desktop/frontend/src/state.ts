@@ -2,6 +2,7 @@ import type {
   AIProvider,
   WorkspaceInfo,
   WorkspaceDetail,
+  WorkspaceListEntry,
   ChangedFile,
   TabInfo,
   WorkspaceStatus,
@@ -240,8 +241,14 @@ class AppState extends EventTarget {
     };
   }
 
-  setWorkspaces(infos: WorkspaceInfo[]) {
-    this._workspaces = infos.map((info) => this._blankWs(info));
+  setWorkspaces(entries: WorkspaceListEntry[]) {
+    this._workspaces = entries.map((entry) => {
+      const ws = this._blankWs(entry.info);
+      // Warm from `list_workspaces`: every repo row paints its branch on
+      // the first frame, without waiting for the git watcher's first poll.
+      ws.branch = entry.branch;
+      return ws;
+    });
     this.emit("workspaces-changed");
   }
 

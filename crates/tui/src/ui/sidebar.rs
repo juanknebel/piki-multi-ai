@@ -35,12 +35,22 @@ fn bucket_label(bucket: Bucket) -> &'static str {
 /// indistinguishable from a git-backed one until its branch happens to
 /// resolve (see `Workspace::branch`). An ephemeral PR review checkout gets
 /// its own icon regardless of type, since it's transient in a way none of
-/// the other workspace kinds are.
-fn workspace_type_icon(ws_type: WorkspaceType, is_git_repo: bool, ephemeral: bool) -> &'static str {
+/// the other workspace kinds are. A parent — the original clone of a repo
+/// group with worktree rows beside it — gets a filled disc, so it reads
+/// apart from lone checkouts (○) and from its own children (⎇).
+fn workspace_type_icon(
+    ws_type: WorkspaceType,
+    is_git_repo: bool,
+    ephemeral: bool,
+    is_parent: bool,
+) -> &'static str {
     if ephemeral {
         // Ad-hoc PR review checkout — never persisted, deleted on close.
         // Distinct from every other icon so it reads as "throwaway" at a glance.
         return "◎ ";
+    }
+    if is_parent {
+        return "◉ ";
     }
     match ws_type {
         WorkspaceType::Worktree => "⎇ ",
@@ -335,6 +345,7 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                     workspace_index,
                     depth,
                     hoisted,
+                    is_parent,
                     ..
                 } => {
                     let ws = &app.workspaces[*workspace_index];
@@ -360,6 +371,7 @@ pub(super) fn render_workspace_list(frame: &mut Frame, area: Rect, app: &App) {
                             ws.info.workspace_type,
                             ws.info.is_git_repo,
                             ws.info.ephemeral,
+                            *is_parent,
                         ),
                         Style::default().fg(icon_color),
                     ));
@@ -559,22 +571,41 @@ mod tests {
         // An ephemeral review checkout is visually distinct regardless of
         // its underlying WorkspaceType, so it never gets mistaken for a
         // regular worktree/project/simple workspace in the sidebar.
-        let ephemeral_icon = workspace_type_icon(WorkspaceType::Simple, true, true);
+        let ephemeral_icon = workspace_type_icon(WorkspaceType::Simple, true, true, false);
         assert_ne!(
             ephemeral_icon,
-            workspace_type_icon(WorkspaceType::Simple, true, false)
+            workspace_type_icon(WorkspaceType::Simple, true, false, false)
         );
         assert_ne!(
             ephemeral_icon,
-            workspace_type_icon(WorkspaceType::Worktree, true, false)
+            workspace_type_icon(WorkspaceType::Worktree, true, false, false)
         );
         assert_ne!(
             ephemeral_icon,
-            workspace_type_icon(WorkspaceType::Project, true, false)
+            workspace_type_icon(WorkspaceType::Project, true, false, false)
         );
         assert_eq!(
             ephemeral_icon,
-            workspace_type_icon(WorkspaceType::Worktree, true, true)
+            workspace_type_icon(WorkspaceType::Worktree, true, true, false)
+        );
+    }
+
+    #[test]
+    fn parent_icon_reads_apart_from_lone_checkout_and_children() {
+        // The parent's filled disc differs from a lone primary's hollow one
+        // and from a worktree's branch — while staying one cell wide, like
+        // every other row icon.
+        use unicode_width::UnicodeWidthChar;
+        let parent = workspace_type_icon(WorkspaceType::Simple, true, false, true);
+        assert_eq!(parent, "◉ ");
+        assert_eq!('◉'.width(), Some(1));
+        assert_ne!(
+            parent,
+            workspace_type_icon(WorkspaceType::Simple, true, false, false)
+        );
+        assert_ne!(
+            parent,
+            workspace_type_icon(WorkspaceType::Worktree, true, false, false)
         );
     }
 }

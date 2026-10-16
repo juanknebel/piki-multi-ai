@@ -8,6 +8,7 @@ const checkout = (index: number, depth = 1): ProjectTreeRow => ({
   kind: "worktree",
   depth,
   hoisted: true,
+  is_parent: false,
 });
 
 const project = (key: string, collapsed = false): ProjectTreeRow => ({

@@ -6,6 +6,7 @@ import type {
   Project,
   WorkspaceInfo,
   WorkspaceDetail,
+  WorkspaceListEntry,
   ChangedFile,
   DirEntry,
   PtyOutputEvent,
@@ -16,7 +17,7 @@ import type {
 } from "./types";
 
 // Workspace commands
-export function listWorkspaces(): Promise<WorkspaceInfo[]> {
+export function listWorkspaces(): Promise<WorkspaceListEntry[]> {
   return invoke("list_workspaces");
 }
 
@@ -141,6 +142,9 @@ export type ProjectTreeRow =
        *  `false` only for rows with no repository to name (a plain-directory
        *  workspace, a PR review). */
       hoisted: boolean;
+      /** The primary of a repo group with worktree rows beside it — the
+       *  "parent" the tree highlights (`family-parent`). */
+      is_parent: boolean;
     }
   | { type: "dir"; path: string };
 

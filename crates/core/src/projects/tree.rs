@@ -124,6 +124,13 @@ pub enum ProjectTreeRow {
         /// their own name instead. Repository actions ("new branch") apply to
         /// a hoisted row directly, since there is no header to carry them.
         hoisted: bool,
+        /// The primary (original clone) of a repo group with at least one
+        /// sibling row rendered beside it as a worktree — the "parent" the
+        /// frontends highlight so it reads apart from its children. Only
+        /// ever true for a primary, and only siblings in the same group
+        /// count: a highlight must explain the rows around it, not rows
+        /// sitting in another project.
+        is_parent: bool,
     },
     /// A member path that is neither a loaded workspace nor a repo root.
     Dir { bucket: Bucket, path: PathBuf },
@@ -332,6 +339,10 @@ fn emit_bucket(
                         kind: CheckoutKind::Primary,
                         depth: base,
                         hoisted: true,
+                        // Every other member renders as a worktree row beside
+                        // it (see the loop below), so more than one member
+                        // means this primary is a parent.
+                        is_parent: members.len() > 1,
                     });
                 }
                 for i in members {
@@ -344,6 +355,7 @@ fn emit_bucket(
                         kind: CheckoutKind::Worktree,
                         depth: base,
                         hoisted: true,
+                        is_parent: false,
                     });
                 }
             }
@@ -353,6 +365,7 @@ fn emit_bucket(
                 kind: checkout_kind(&workspaces[index]),
                 depth: base,
                 hoisted: false,
+                is_parent: false,
             }),
             Slot::Dir(path) => rows.push(ProjectTreeRow::Dir { bucket, path }),
         }
@@ -1008,5 +1021,82 @@ mod tests {
         let rows = project_tree(&[], &list, &none());
         let addressed: Vec<usize> = rows.iter().filter_map(|r| r.workspace_index()).collect();
         assert_eq!(addressed, vec![0]);
+    }
+
+    /// The primary of a repo group with worktree rows beside it is a parent —
+    /// the row the frontends highlight. A lone primary is not.
+    #[test]
+    fn primary_with_worktree_sibling_is_a_parent() {
+        let list = [
+            clone_of("app", "/repos/app"),
+            worktree("feature", "/repos/app"),
+            clone_of("lib", "/repos/lib"),
+        ];
+        let projects = [project(
+            1,
+            "Piki",
+            vec![
+                ProjectMember::new(PathBuf::from("/wt/app")),
+                ProjectMember::new(PathBuf::from("/wt/feature")),
+                ProjectMember::new(PathBuf::from("/wt/lib")),
+            ],
+        )];
+        let rows = project_tree(&projects, &list, &none());
+        let is_parent = |name: &str| -> bool {
+            rows.iter()
+                .find_map(|r| match r {
+                    ProjectTreeRow::Checkout {
+                        workspace_index,
+                        is_parent,
+                        ..
+                    } if list[*workspace_index].name == name => Some(*is_parent),
+                    _ => None,
+                })
+                .unwrap()
+        };
+        assert!(
+            is_parent("app"),
+            "primary with a worktree sibling: {rows:#?}"
+        );
+        assert!(
+            !is_parent("feature"),
+            "a worktree is never a parent: {rows:#?}"
+        );
+        assert!(
+            !is_parent("lib"),
+            "a lone primary is not a parent: {rows:#?}"
+        );
+    }
+
+    /// Only siblings in the same group count: a clone whose worktree lives in
+    /// another bucket is not highlighted there — the highlight must explain
+    /// the rows around it.
+    #[test]
+    fn worktree_in_another_bucket_does_not_make_a_parent() {
+        let list = [
+            clone_of("app", "/repos/app"),
+            worktree("feature", "/repos/app"),
+        ];
+        // Only the clone is a member; the worktree stays loose.
+        let projects = [project(
+            1,
+            "Piki",
+            vec![ProjectMember::new(PathBuf::from("/wt/app"))],
+        )];
+        let rows = project_tree(&projects, &list, &none());
+        assert_eq!(
+            sketch(&rows, &list),
+            vec!["Project(0)", ".app Primary*", "feature Worktree*",]
+        );
+        assert!(
+            rows.iter().all(|r| !matches!(
+                r,
+                ProjectTreeRow::Checkout {
+                    is_parent: true,
+                    ..
+                }
+            )),
+            "no parent anywhere: {rows:#?}"
+        );
     }
 }

@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use parking_lot::Mutex;
 use tauri::{AppHandle, State};
 
@@ -42,12 +44,54 @@ fn register_new_workspace(app: &mut DesktopApp, mut info: WorkspaceInfo) -> Work
     info
 }
 
+/// One entry of `list_workspaces`: the workspace plus its current branch,
+/// resolved warm so the first paint already shows every repo's branch.
+#[derive(serde::Serialize)]
+pub struct WorkspaceListEntry {
+    pub info: WorkspaceInfo,
+    /// Current git branch; `None` for a non-git directory / detached HEAD.
+    pub branch: Option<String>,
+}
+
+/// Resolve the current branch for each path, in order. One cheap `git` call
+/// per workspace — no lock held across these.
+async fn resolve_branches(paths: &[PathBuf]) -> Vec<Option<String>> {
+    let mut out = Vec::with_capacity(paths.len());
+    for path in paths {
+        out.push(piki_core::git::get_current_branch(path).await);
+    }
+    out
+}
+
 #[tauri::command]
 pub async fn list_workspaces(
     state: State<'_, Mutex<DesktopApp>>,
-) -> Result<Vec<WorkspaceInfo>, String> {
-    let app = state.lock();
-    Ok(app.workspaces.iter().map(|ws| ws.info.clone()).collect())
+) -> Result<Vec<WorkspaceListEntry>, String> {
+    let infos: Vec<WorkspaceInfo> = {
+        let app = state.lock();
+        app.workspaces.iter().map(|ws| ws.info.clone()).collect()
+    };
+    // Resolved fresh (not from the cache): at boot the git watcher hasn't
+    // polled yet, and this list is what the frontend paints first. Changed
+    // files / ahead-behind stay on the watcher — they are slow on big trees.
+    let paths: Vec<PathBuf> = infos.iter().map(|i| i.path.clone()).collect();
+    let branches = resolve_branches(&paths).await;
+    // Store what was resolved so later `switch_workspace` details agree with
+    // what the list already told the frontend (matched by path: the list may
+    // have shifted if a workspace was added or removed mid-call).
+    {
+        let mut app = state.lock();
+        for (info, branch) in infos.iter().zip(branches.iter()) {
+            if let Some(ws) = app.workspaces.iter_mut().find(|w| w.info.path == info.path) {
+                ws.branch = branch.clone();
+            }
+        }
+    }
+    Ok(infos
+        .into_iter()
+        .zip(branches)
+        .map(|(info, branch)| WorkspaceListEntry { info, branch })
+        .collect())
 }
 
 /// Returns the suggested default destination folder for a GitHub clone:
@@ -458,6 +502,9 @@ pub enum ProjectTreeRowDto {
         /// `false` only for rows with no repository to name (a plain-directory
         /// workspace, a PR review).
         hoisted: bool,
+        /// The primary of a repo group with worktree rows beside it — the
+        /// "parent" the tree highlights (`family-parent`).
+        is_parent: bool,
     },
     /// A member path that is neither a loaded workspace nor a repo root.
     Dir { path: String },
@@ -538,6 +585,7 @@ pub async fn project_tree(
                     kind,
                     depth,
                     hoisted,
+                    is_parent,
                     ..
                 } => ProjectTreeRowDto::Checkout {
                     index: workspace_index,
@@ -547,6 +595,7 @@ pub async fn project_tree(
                     },
                     depth,
                     hoisted,
+                    is_parent,
                 },
                 ProjectTreeRow::Dir { path, .. } => ProjectTreeRowDto::Dir {
                     path: path.to_string_lossy().into_owned(),
@@ -554,4 +603,73 @@ pub async fn project_tree(
             })
             .collect(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The checkout row's wire shape: the frontend reads `is_parent` in
+    /// snake_case (like `project_id`) — a serde rename would silently drop
+    /// the parent highlight, so lock the field names here.
+    #[test]
+    fn test_checkout_dto_serializes_parent_flag() {
+        let row = ProjectTreeRowDto::Checkout {
+            index: 2,
+            kind: "primary",
+            depth: 1,
+            hoisted: true,
+            is_parent: true,
+        };
+        let json = serde_json::to_value(&row).unwrap();
+        assert_eq!(json["type"], "checkout");
+        assert_eq!(json["is_parent"], true);
+    }
+
+    /// `resolve_branches` answers one entry per path, in order: the branch
+    /// for a git checkout, `None` for a plain directory. This is what
+    /// `list_workspaces` paints on the first frame.
+    #[tokio::test]
+    async fn test_resolve_branches_git_and_plain_dir() {
+        if std::process::Command::new("git")
+            .arg("--version")
+            .output()
+            .is_err()
+        {
+            eprintln!("git not installed; skipping");
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_path_buf();
+        let git = |args: &[&str]| {
+            let out = std::process::Command::new("git")
+                .args(args)
+                .current_dir(&root)
+                // Isolate from the developer's global config (signing, hooks…).
+                .env("HOME", &root)
+                .env("GIT_CONFIG_NOSYSTEM", "1")
+                .env("GIT_AUTHOR_NAME", "t")
+                .env("GIT_AUTHOR_EMAIL", "t@t")
+                .env("GIT_COMMITTER_NAME", "t")
+                .env("GIT_COMMITTER_EMAIL", "t@t")
+                .output()
+                .expect("run git");
+            assert!(
+                out.status.success(),
+                "git {args:?} failed: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+        };
+        git(&["init", "-q"]);
+        git(&["checkout", "-q", "-b", "main"]);
+        git(&["commit", "-q", "--allow-empty", "-m", "init"]);
+
+        let plain = tempfile::tempdir().unwrap();
+        let plain_root = plain.path().to_path_buf();
+
+        let branches = resolve_branches(&[root, plain_root]).await;
+        assert_eq!(branches.len(), 2);
+        assert_eq!(branches[0].as_deref(), Some("main"));
+        assert_eq!(branches[1], None);
+    }
 }

@@ -67,6 +67,23 @@ pub struct WatcherResult {
     pub watcher: anyhow::Result<piki_core::workspace::FileWatcher>,
 }
 
+/// Fresh git state for one workspace directory: changed files, ahead/behind,
+/// and — for a git checkout — the current branch. The branch is a property
+/// of the directory, so it resolves for every workspace unconditionally: a
+/// repo row shows its branch whether or not it has tabs open.
+pub async fn refresh_git_state(workspace_idx: usize, path: &PathBuf) -> RefreshResult {
+    // Non-git dirs yield an empty list and no branch — harmless.
+    let files = get_changed_files(path).await.unwrap_or_default();
+    let ab = get_ahead_behind(path).await;
+    let branch = get_current_branch(path).await;
+    RefreshResult {
+        workspace_idx,
+        changed_files: files,
+        ahead_behind: ab,
+        branch,
+    }
+}
+
 /// Main application mode
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AppMode {
@@ -2040,6 +2057,56 @@ mod tests {
         assert_eq!(app.input_state, InputState::Normal);
         assert!(!app.should_quit);
         assert!(app.workspaces.is_empty());
+    }
+
+    /// `refresh_git_state` resolves the branch for a git checkout with no
+    /// tabs involved — a repo row shows its branch from the first paint —
+    /// and `None` for a plain directory.
+    #[tokio::test]
+    async fn test_refresh_git_state_resolves_branch_unconditionally() {
+        if std::process::Command::new("git")
+            .arg("--version")
+            .output()
+            .is_err()
+        {
+            eprintln!("git not installed; skipping");
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_path_buf();
+        let git = |args: &[&str]| {
+            let out = std::process::Command::new("git")
+                .args(args)
+                .current_dir(&root)
+                // Isolate from the developer's global config (signing, hooks…).
+                .env("HOME", &root)
+                .env("GIT_CONFIG_NOSYSTEM", "1")
+                .env("GIT_AUTHOR_NAME", "t")
+                .env("GIT_AUTHOR_EMAIL", "t@t")
+                .env("GIT_COMMITTER_NAME", "t")
+                .env("GIT_COMMITTER_EMAIL", "t@t")
+                .output()
+                .expect("run git");
+            assert!(
+                out.status.success(),
+                "git {args:?} failed: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+        };
+        git(&["init", "-q"]);
+        git(&["checkout", "-q", "-b", "main"]);
+        git(&["commit", "-q", "--allow-empty", "-m", "init"]);
+
+        let result = refresh_git_state(3, &root).await;
+        assert_eq!(result.workspace_idx, 3);
+        assert_eq!(result.branch.as_deref(), Some("main"));
+        assert!(result.changed_files.is_empty());
+
+        let plain = tempfile::tempdir().unwrap();
+        let plain_root = plain.path().to_path_buf();
+        let result = refresh_git_state(0, &plain_root).await;
+        assert_eq!(result.branch, None);
+        assert!(result.changed_files.is_empty());
     }
 
     #[test]
