@@ -79,7 +79,6 @@ pub fn emit_agent_ack(app_handle: &AppHandle, tab_id: &str) {
     );
 }
 
-#[allow(dead_code)]
 #[derive(Serialize, Clone)]
 pub struct ToastPayload {
     pub message: String,
@@ -362,7 +361,6 @@ pub fn spawn_git_watcher(app_handle: AppHandle) {
 }
 
 /// Emit a toast notification.
-#[allow(dead_code)]
 pub fn emit_toast(app_handle: &AppHandle, message: &str, level: &str) {
     let _ = app_handle.emit(
         "toast",

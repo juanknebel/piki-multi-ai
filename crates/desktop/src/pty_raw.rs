@@ -319,7 +319,6 @@ impl RawLocalPty {
         Ok(())
     }
 
-    #[allow(dead_code)]
     pub fn is_alive(&mut self) -> bool {
         matches!(self.child.try_wait(), Ok(None))
     }
@@ -585,7 +584,6 @@ impl RawPtySession {
         }
     }
 
-    #[allow(dead_code)]
     pub fn is_alive(&mut self) -> bool {
         match self {
             RawPtySession::Local(l) => l.is_alive(),

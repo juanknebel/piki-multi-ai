@@ -220,7 +220,6 @@ pub enum SidebarRowKind {
 }
 
 /// Response data for the API Explorer tab
-#[allow(dead_code)]
 pub struct ApiResponseDisplay {
     pub status: u16,
     pub elapsed_ms: u128,

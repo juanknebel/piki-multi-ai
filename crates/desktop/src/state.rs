@@ -12,7 +12,6 @@ use piki_core::{AIProvider, ChangedFile, WorkspaceInfo, WorkspaceStatus};
 
 use crate::pty_raw::RawPtySession;
 
-#[allow(dead_code)]
 pub struct DesktopApp {
     pub workspaces: Vec<DesktopWorkspace>,
     pub active_workspace: usize,
@@ -60,7 +59,6 @@ pub struct DesktopApp {
     pub scratch_terminal_visible: bool,
 }
 
-#[allow(dead_code)]
 pub struct DesktopWorkspace {
     pub info: WorkspaceInfo,
     pub status: WorkspaceStatus,
