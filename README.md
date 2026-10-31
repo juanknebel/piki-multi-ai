@@ -337,4 +337,4 @@ The workflow piki automates is also packaged as a standalone [agent skill](skill
 
 ## License
 
-GPL-2.0 — See [LICENSE](LICENSE) for details.
+GPL-2.0 — See [LICENSE](LICENSE) for details. The agent skills under `skills/` are MIT — see [skills/LICENSE](skills/LICENSE).

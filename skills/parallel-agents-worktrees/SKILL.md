@@ -1,5 +1,6 @@
 ---
 name: parallel-agents-worktrees
+license: MIT
 description: Run several AI coding agents in parallel on one repo, one git worktree per task, then review and merge. Use when the user wants to split work across agents, parallelize tasks, or isolate an agent's changes from the main checkout.
 ---
 
