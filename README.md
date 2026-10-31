@@ -1,4 +1,4 @@
-# agent-multi
+# piki-multi-ai
 
 [![Nightly](https://github.com/juanknebel/piki-multi-ai/actions/workflows/nightly.yml/badge.svg)](https://github.com/juanknebel/piki-multi-ai/actions/workflows/nightly.yml)
 
@@ -329,6 +329,12 @@ web_search = false   # OpenRouter web-search plugin (TUI: Ctrl+W toggles it per 
 - [docs/persistent-sessions.md](docs/persistent-sessions.md) — persistent-session daemon design and wire protocol
 - [docs/performance.md](docs/performance.md) — event-loop performance model and invariants
 
+## Agent skills
+
+The workflow piki automates is also packaged as a standalone [agent skill](skills/) — usable from Claude Code, Codex, Cursor and other `SKILL.md`-compatible agents, with or without piki:
+
+- [`parallel-agents-worktrees`](skills/parallel-agents-worktrees/SKILL.md) — split work into independent tasks and run one AI coding agent per git worktree, then review and merge
+
 ## License
 
-GPL-2.0 — See [LICENSE](LICENSE) for details.
+GPL-2.0 — See [LICENSE](LICENSE) for details. The agent skills under `skills/` are MIT — see [skills/LICENSE](skills/LICENSE).
