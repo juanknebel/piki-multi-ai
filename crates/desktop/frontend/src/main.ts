@@ -13,7 +13,7 @@ import { initApiPanel } from "./components/api-panel";
 import { initMarkdownEditorPanel } from "./components/markdown-editor-panel";
 import { initCodeEditorPanel } from "./components/code-editor-panel";
 import { initWebPreviewPanel } from "./components/web-preview-panel";
-import { installContentRestorer, openProvider } from "./components/open-content";
+import { installContentRestorer, openProvider, openFileInEditor } from "./components/open-content";
 import { initDropdownTerminal, toggleDropdownTerminal } from "./components/dropdown-terminal";
 import { tearDownAndClosePane } from "./components/tab-bar";
 import { initPaneView } from "./components/pane-view";
@@ -141,6 +141,20 @@ async function init() {
   // ones, so here we only update per-tab state.
   ipc.onPtyAgentEvent((event) => {
     appState.applyAgentEvent(event);
+  });
+
+  // `piki-ctl open ...` run inside a tab by whichever agent is in it
+  // (any of them — this rail doesn't care which). Resolve the requesting
+  // tab back to its workspace and open the target the same way the file
+  // tree / fuzzy finder would.
+  ipc.onPtyOpenRequest((event) => {
+    const wsIdx = appState.workspaceIndexForTab(event.tab_id);
+    if (wsIdx < 0) return;
+    if (event.target_kind === "file") {
+      openFileInEditor(wsIdx, event.path);
+    } else {
+      toast(`piki-ctl: unsupported target kind "${event.target_kind}"`, "error");
+    }
   });
   // The backend acknowledged a tab's agent news (the user is looking at it).
   ipc.onPtyAgentAck((event) => {

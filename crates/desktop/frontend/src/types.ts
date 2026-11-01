@@ -172,6 +172,17 @@ export interface PtyAgentEvent {
   attention: boolean;
 }
 
+/** An imperative `open` UI action requested from inside a tab — e.g.
+ *  `piki-ctl open file <path>` run by whichever coding agent is in that
+ *  tab. Not a status change: rides its own `pty-open-request` rail rather
+ *  than `PtyAgentEvent`. */
+export interface PtyOpenRequest {
+  tab_id: string;
+  /** `file` today; more kinds land here as support grows. */
+  target_kind: string;
+  path: string;
+}
+
 /** The backend cleared a tab's agent attention marker — the user is looking
  *  at it (tab switch, workspace switch, or news landing on the visible
  *  tab). Mirrors `events::PtyAgentAckPayload`. */

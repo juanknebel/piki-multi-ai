@@ -3957,6 +3957,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "piki-ctl"
+version = "3.3.0-nightly"
+dependencies = [
+ "piki-core",
+ "serde_json",
+]
+
+[[package]]
 name = "piki-desktop"
 version = "3.3.0-nightly"
 dependencies = [

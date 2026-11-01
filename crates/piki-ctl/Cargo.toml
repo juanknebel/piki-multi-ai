@@ -1,0 +1,22 @@
+[package]
+name = "piki-ctl"
+version.workspace = true
+edition = "2024"
+description = "Agent-agnostic CLI piki installs into every tab's PATH, letting any coding agent (Claude Code, Codex, muse-cli, ...) ask the piki UI to act — no per-agent integration required."
+
+[[bin]]
+name = "piki-ctl"
+path = "src/main.rs"
+
+# Deliberately minimal: this binary is meant to be vendored/distributed on
+# its own (see module docs in src/main.rs), so it does not depend on
+# piki-core's much heavier dependency graph (tokio, tauri, etc.) — only a
+# small, fast-compiling JSON writer for correct escaping of arbitrary paths.
+[dependencies]
+serde_json = "1"
+
+# Round-trips `piki-ctl`'s own output through piki-core's real OSC 777
+# parser so protocol drift is caught at test time, without piki-core ever
+# becoming a runtime dependency of the shipped binary.
+[dev-dependencies]
+piki-core = { path = "../core" }

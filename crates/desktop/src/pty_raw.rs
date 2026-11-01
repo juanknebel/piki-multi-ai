@@ -73,6 +73,18 @@ struct PtyAgentEventPayload {
     attention: bool,
 }
 
+/// Tauri event payload for an `open` UI action (`piki-ctl open file ...`,
+/// or any future agent-agnostic action-emitting tool). Not a status change —
+/// rides its own `pty-open-request` rail rather than `pty-agent-event`.
+#[derive(Serialize, Clone, Debug)]
+struct PtyOpenRequestPayload {
+    tab_id: String,
+    /// `file` today; more kinds (`url`, `diff`, ...) land here as the
+    /// frontend grows to handle them — see `cli_agent::open_action`.
+    target_kind: String,
+    path: String,
+}
+
 pub struct RawLocalPty {
     child: Box<dyn portable_pty::Child + Send>,
     writer: Box<dyn Write + Send>,
@@ -686,6 +698,9 @@ fn cli_agent_view(ev: &CliAgentEvent) -> (&'static str, &'static str, Option<Str
         ),
         CliAgentEvent::Notification { .. } => ("idle", "notification", None, true),
         CliAgentEvent::Stop { response, .. } => ("done", "stop", response.clone(), true),
+        // Never reached: `handle_cli_agent` intercepts `Open` before calling
+        // this. Kept here only so the match stays exhaustive.
+        CliAgentEvent::Open { .. } => ("running", "open", None, false),
     }
 }
 
@@ -708,6 +723,24 @@ struct LocatedTab {
 /// active). News landing on the tab on screen is acknowledged immediately,
 /// so the amber "needs you" only ever points somewhere the user isn't.
 fn handle_cli_agent(app_handle: &AppHandle, tab_id: &str, ev: &CliAgentEvent) {
+    // `Open` is an imperative UI action, not a lifecycle status change —
+    // dispatch it on its own `pty-open-request` rail and stop, before it
+    // ever reaches the status-tracking match below.
+    if let CliAgentEvent::Open {
+        target_kind, path, ..
+    } = ev
+    {
+        let _ = app_handle.emit(
+            "pty-open-request",
+            PtyOpenRequestPayload {
+                tab_id: tab_id.to_string(),
+                target_kind: target_kind.clone(),
+                path: path.clone(),
+            },
+        );
+        return;
+    }
+
     let (status, kind, summary, needs_attention) = cli_agent_view(ev);
 
     // Workspace lookup walks `DesktopApp.workspaces` by `tab_id`; a tab that

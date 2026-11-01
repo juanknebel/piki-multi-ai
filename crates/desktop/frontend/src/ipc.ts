@@ -1040,6 +1040,14 @@ export function onPtyAgentEvent(
   );
 }
 
+export function onPtyOpenRequest(
+  callback: (event: import("./types").PtyOpenRequest) => void,
+): Promise<UnlistenFn> {
+  return listen<import("./types").PtyOpenRequest>("pty-open-request", (e) =>
+    callback(e.payload),
+  );
+}
+
 export function onPtyAgentAck(
   callback: (event: import("./types").PtyAgentAckEvent) => void,
 ): Promise<UnlistenFn> {

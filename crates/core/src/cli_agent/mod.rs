@@ -30,6 +30,7 @@ use piki_multiplex::shell_integration::{SidecarConfig, SidecarFactory, SidecarSt
 
 pub mod install;
 pub mod install_antigravity;
+pub mod open_action;
 
 /// OSC 777 target piki's hook scripts claim. OSC 777 is shared turf (Warp's
 /// `warp://cli-agent`, urxvt `notify`, VTE…); only sequences whose target is
@@ -91,6 +92,19 @@ pub enum CliAgentEvent {
         response: Option<String>,
         transcript_path: Option<PathBuf>,
     },
+    /// An imperative UI action, not a lifecycle status change — "open this in
+    /// your own UI". Emitted by `piki-ctl` (or any future action-emitting
+    /// tool) running inside a tab, agnostic of which coding agent is driving
+    /// that tab. See [`open_action`] for the wire vocabulary. `session_id` is
+    /// carried only for shape-symmetry with the other variants and is
+    /// typically empty — piki-ctl has no agent session of its own; dispatch
+    /// resolves "which tab" from the byte stream the OSC arrived on, not
+    /// from this field.
+    Open {
+        session_id: String,
+        target_kind: String,
+        path: String,
+    },
 }
 
 impl CliAgentEvent {
@@ -102,7 +116,8 @@ impl CliAgentEvent {
             | CliAgentEvent::PreToolUse { session_id, .. }
             | CliAgentEvent::PermissionRequest { session_id, .. }
             | CliAgentEvent::Notification { session_id, .. }
-            | CliAgentEvent::Stop { session_id, .. } => session_id,
+            | CliAgentEvent::Stop { session_id, .. }
+            | CliAgentEvent::Open { session_id, .. } => session_id,
         }
     }
 
@@ -123,7 +138,10 @@ impl CliAgentEvent {
             CliAgentEvent::SessionStart { .. }
             | CliAgentEvent::UserPromptSubmit { .. }
             | CliAgentEvent::PreToolUse { .. }
-            | CliAgentEvent::PostToolUse { .. } => None,
+            | CliAgentEvent::PostToolUse { .. }
+            // Not a status change — the UI handles `Open` on its own
+            // dedicated rail (see `open_action`), not the attention badge.
+            | CliAgentEvent::Open { .. } => None,
         }
     }
 }
@@ -226,6 +244,9 @@ impl CliAgentState {
                 self.last_attention_at = Some(Instant::now());
                 self.run_started_at = None;
             }
+            // Doesn't change run/attention status — handled separately by
+            // the caller on its own dedicated rail (see `open_action`).
+            CliAgentEvent::Open { .. } => {}
         }
     }
 
@@ -395,6 +416,10 @@ struct RawPayload {
     response: Option<String>,
     #[serde(default)]
     transcript_path: Option<String>,
+    #[serde(default)]
+    target_kind: Option<String>,
+    #[serde(default)]
+    path: Option<String>,
 }
 
 fn non_empty(s: Option<String>) -> Option<String> {
@@ -455,6 +480,11 @@ pub fn parse_cli_agent_payload(json: &str) -> Option<CliAgentEvent> {
             query: non_empty(raw.query),
             response: non_empty(raw.response),
             transcript_path: non_empty(raw.transcript_path).map(PathBuf::from),
+        },
+        open_action::OPEN_EVENT => CliAgentEvent::Open {
+            session_id,
+            target_kind: raw.target_kind.unwrap_or_default(),
+            path: raw.path.unwrap_or_default(),
         },
         other => {
             tracing::debug!(event = other, "cli-agent: unknown event, ignoring");
