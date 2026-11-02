@@ -385,6 +385,8 @@ fn main() {
             commands::review::get_pr_review_comments,
             commands::review::submit_review_reply,
             commands::markdown::read_markdown_file,
+            commands::repo_skills::sync_and_list_pending_skill_offers,
+            commands::repo_skills::respond_to_skill_offers,
             commands::system::get_sysinfo,
             commands::system::get_sysinfo_detailed,
             commands::theme::get_theme,

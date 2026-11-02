@@ -730,6 +730,25 @@ export function readMarkdownFile(workspaceIdx: number, filePath: string): Promis
   return invoke("read_markdown_file", { workspaceIdx, filePath });
 }
 
+// Repo-skills commands (AGENTS.md skill offers — piki-ctl etc.)
+export interface SkillOffer {
+  id: string;
+  title: string;
+  markdown: string;
+}
+
+export function syncAndListPendingSkillOffers(workspaceIdx: number): Promise<SkillOffer[]> {
+  return invoke("sync_and_list_pending_skill_offers", { workspaceIdx });
+}
+
+export function respondToSkillOffers(
+  workspaceIdx: number,
+  accepted: string[],
+  declined: string[],
+): Promise<void> {
+  return invoke("respond_to_skill_offers", { workspaceIdx, accepted, declined });
+}
+
 // Agent commands
 export interface AgentInfo {
   id: number | null;

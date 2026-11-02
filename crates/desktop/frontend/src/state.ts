@@ -78,7 +78,8 @@ export type StateEvent =
   | "workspace-attention-changed"
   | "workspace-branch-changed"
   | "agent-rows-changed"
-  | "projects-changed";
+  | "projects-changed"
+  | "workspace-added";
 
 /** A top-level workspace tab. Each one owns its own pane tree; every pane
  *  (leaf) holds at most one content item from `WorkspaceState.tabs`. */
@@ -254,6 +255,10 @@ class AppState extends EventTarget {
   addWorkspace(info: WorkspaceInfo) {
     this._workspaces.push(this._blankWs(info));
     this.emit("workspaces-changed");
+    // Distinct from "workspaces-changed" (also fired by the bulk restore at
+    // startup) — listeners that only care about a freshly created/imported
+    // workspace (e.g. the piki-skills offer prompt) want this one.
+    this.emit("workspace-added");
   }
 
   removeWorkspace(index: number) {

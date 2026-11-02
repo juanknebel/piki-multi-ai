@@ -2013,6 +2013,7 @@ mod tests {
             ui_prefs: None,
             agent_profiles: None,
             projects: None,
+            repo_skills: None,
         })
     }
 

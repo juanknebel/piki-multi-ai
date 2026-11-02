@@ -12,6 +12,7 @@ pub mod markdown;
 pub mod projects;
 pub mod providers;
 pub mod pty;
+pub mod repo_skills;
 pub mod review;
 pub mod search;
 pub mod session;

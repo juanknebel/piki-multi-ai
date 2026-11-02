@@ -14,6 +14,7 @@ import { initMarkdownEditorPanel } from "./components/markdown-editor-panel";
 import { initCodeEditorPanel } from "./components/code-editor-panel";
 import { initWebPreviewPanel } from "./components/web-preview-panel";
 import { installContentRestorer, openProvider, openFileInEditor } from "./components/open-content";
+import { offerSkillsIfPending } from "./components/skill-offers";
 import { initDropdownTerminal, toggleDropdownTerminal } from "./components/dropdown-terminal";
 import { tearDownAndClosePane } from "./components/tab-bar";
 import { initPaneView } from "./components/pane-view";
@@ -118,6 +119,13 @@ async function init() {
     }
     ipc.lspNotifyWorkspaceFocus(newIdx, true).catch(() => {});
     lastFocusedWorkspace = newIdx;
+  });
+
+  // A workspace was just created/imported (not the bulk restore at
+  // startup) — offer piki's AGENTS.md skills for it, if anything's
+  // undecided for its repo.
+  appState.on("workspace-added", () => {
+    offerSkillsIfPending(appState.workspaces.length - 1);
   });
 
   ipc.onGitRefresh((event) => {

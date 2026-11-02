@@ -297,6 +297,28 @@ impl SqliteStorage {
             tx.commit()?;
         }
 
+        // Per-repo adoption state for piki's agent-skills injection
+        // (AGENTS.md block offering piki-ctl etc. to a repo's coding
+        // agents — see `crate::repo_skills`). Tracks whether a given skill
+        // was offered/accepted/declined for a `source_repo`, and at which
+        // skill version, so a later skill-content change can be re-offered
+        // without re-prompting for ones the user already decided on.
+        if version < 17 {
+            let tx = conn.transaction()?;
+            tx.execute_batch(
+                "CREATE TABLE IF NOT EXISTS repo_skill_offers (
+                    source_repo   TEXT NOT NULL,
+                    skill_id      TEXT NOT NULL,
+                    skill_version INTEGER NOT NULL,
+                    status        TEXT NOT NULL,
+                    updated_at    TEXT NOT NULL,
+                    PRIMARY KEY (source_repo, skill_id)
+                );",
+            )?;
+            tx.execute("INSERT INTO schema_version (version) VALUES (17)", [])?;
+            tx.commit()?;
+        }
+
         Ok(())
     }
 
@@ -814,6 +836,58 @@ impl super::AgentProfileStorage for Arc<SqliteStorage> {
     }
 }
 
+impl super::RepoSkillStorage for Arc<SqliteStorage> {
+    fn get_skill_offer(
+        &self,
+        source_repo: &Path,
+        skill_id: &str,
+    ) -> anyhow::Result<Option<(u32, String)>> {
+        let conn = self.conn.lock();
+        let row = conn
+            .query_row(
+                "SELECT skill_version, status FROM repo_skill_offers
+                 WHERE source_repo = ?1 AND skill_id = ?2",
+                rusqlite::params![source_repo.to_string_lossy().as_ref(), skill_id],
+                |row| Ok((row.get::<_, i64>(0)? as u32, row.get::<_, String>(1)?)),
+            )
+            .ok();
+        Ok(row)
+    }
+
+    fn set_skill_offer(
+        &self,
+        source_repo: &Path,
+        skill_id: &str,
+        skill_version: u32,
+        status: &str,
+    ) -> anyhow::Result<()> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "INSERT INTO repo_skill_offers (source_repo, skill_id, skill_version, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+             ON CONFLICT(source_repo, skill_id) DO UPDATE SET
+                 skill_version = ?3, status = ?4, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')",
+            rusqlite::params![
+                source_repo.to_string_lossy().as_ref(),
+                skill_id,
+                skill_version,
+                status
+            ],
+        )?;
+        Ok(())
+    }
+
+    fn list_accepted_skills(&self, source_repo: &Path) -> anyhow::Result<Vec<String>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT skill_id FROM repo_skill_offers
+             WHERE source_repo = ?1 AND status = 'accepted' ORDER BY skill_id",
+        )?;
+        let rows = stmt.query_map([source_repo.to_string_lossy().as_ref()], |row| row.get(0))?;
+        Ok(rows.filter_map(|r| r.ok()).collect())
+    }
+}
+
 impl super::ProjectStorage for Arc<SqliteStorage> {
     fn list_projects(&self) -> Vec<crate::projects::Project> {
         let conn = self.conn.lock();
@@ -1056,6 +1130,87 @@ mod project_storage_tests {
             )
             .unwrap();
         assert_eq!(storage.list_projects()[0].members[0].kind, MemberKind::Auto);
+    }
+}
+
+#[cfg(test)]
+mod repo_skill_storage_tests {
+    use super::*;
+    use crate::storage::RepoSkillStorage;
+
+    #[test]
+    fn unasked_skill_has_no_offer_recorded() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Arc::new(SqliteStorage::open(&dir.path().join("db.sqlite")).unwrap());
+        let repo = PathBuf::from("/repo/a");
+
+        assert_eq!(storage.get_skill_offer(&repo, "x").unwrap(), None);
+        assert_eq!(
+            storage.list_accepted_skills(&repo).unwrap(),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn set_then_get_round_trips_version_and_status() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Arc::new(SqliteStorage::open(&dir.path().join("db.sqlite")).unwrap());
+        let repo = PathBuf::from("/repo/a");
+
+        storage.set_skill_offer(&repo, "x", 1, "accepted").unwrap();
+        assert_eq!(
+            storage.get_skill_offer(&repo, "x").unwrap(),
+            Some((1, "accepted".to_string()))
+        );
+        assert_eq!(
+            storage.list_accepted_skills(&repo).unwrap(),
+            vec!["x".to_string()]
+        );
+    }
+
+    #[test]
+    fn a_second_set_overwrites_the_first_for_the_same_repo_and_skill() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Arc::new(SqliteStorage::open(&dir.path().join("db.sqlite")).unwrap());
+        let repo = PathBuf::from("/repo/a");
+
+        storage.set_skill_offer(&repo, "x", 1, "declined").unwrap();
+        storage.set_skill_offer(&repo, "x", 2, "accepted").unwrap();
+        assert_eq!(
+            storage.get_skill_offer(&repo, "x").unwrap(),
+            Some((2, "accepted".to_string()))
+        );
+    }
+
+    #[test]
+    fn decisions_are_scoped_per_repo() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Arc::new(SqliteStorage::open(&dir.path().join("db.sqlite")).unwrap());
+        let repo_a = PathBuf::from("/repo/a");
+        let repo_b = PathBuf::from("/repo/b");
+
+        storage
+            .set_skill_offer(&repo_a, "x", 1, "accepted")
+            .unwrap();
+        assert_eq!(storage.get_skill_offer(&repo_b, "x").unwrap(), None);
+        assert_eq!(
+            storage.list_accepted_skills(&repo_b).unwrap(),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn list_accepted_skills_excludes_declined_ones() {
+        let dir = tempfile::tempdir().unwrap();
+        let storage = Arc::new(SqliteStorage::open(&dir.path().join("db.sqlite")).unwrap());
+        let repo = PathBuf::from("/repo/a");
+
+        storage.set_skill_offer(&repo, "x", 1, "accepted").unwrap();
+        storage.set_skill_offer(&repo, "y", 1, "declined").unwrap();
+        assert_eq!(
+            storage.list_accepted_skills(&repo).unwrap(),
+            vec!["x".to_string()]
+        );
     }
 }
 
