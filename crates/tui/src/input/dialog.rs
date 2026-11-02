@@ -566,6 +566,44 @@ pub(super) fn handle_confirm_delete_input(app: &mut App, key: KeyEvent) -> Optio
     }
 }
 
+pub(super) fn handle_skill_offers_input(app: &mut App, key: KeyEvent) -> Option<Action> {
+    let Some(DialogState::SkillOffers {
+        workspace_idx,
+        skills,
+    }) = &app.active_dialog
+    else {
+        return None;
+    };
+    let workspace_idx = *workspace_idx;
+    let ids: Vec<&'static str> = skills.iter().map(|s| s.id).collect();
+
+    match handle_yn_input(key) {
+        ConfirmResult::Yes => {
+            dismiss_dialog(app);
+            Some(Action::RespondToSkillOffers {
+                workspace_idx,
+                accepted: ids,
+                declined: Vec::new(),
+            })
+        }
+        ConfirmResult::No => {
+            dismiss_dialog(app);
+            Some(Action::RespondToSkillOffers {
+                workspace_idx,
+                accepted: Vec::new(),
+                declined: ids,
+            })
+        }
+        // Ask again next time a workspace is added for this repo — unlike
+        // No, Cancel/Esc never records a decision.
+        ConfirmResult::Cancel => {
+            dismiss_dialog(app);
+            None
+        }
+        ConfirmResult::NotHandled => None,
+    }
+}
+
 pub(super) fn handle_new_tab_input(app: &mut App, key: KeyEvent) -> Option<Action> {
     let menu = match app.active_dialog {
         Some(DialogState::NewTab { ref menu }) => menu.clone(),

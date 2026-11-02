@@ -16,7 +16,7 @@ use super::dialog::{
     handle_manage_agents_input, handle_manage_providers_input, handle_missing_prereqs_input,
     handle_move_tab_input, handle_new_tab_input, handle_new_workspace_input,
     handle_pr_picker_input, handle_projects_input, handle_sessions_input,
-    handle_workspace_info_input,
+    handle_skill_offers_input, handle_workspace_info_input,
 };
 use crate::action::Action;
 use crate::app::{ActivePane, App, AppMode, DialogField};
@@ -42,6 +42,14 @@ fn open_edit_workspace(app: &mut App) {
         target: 0,
         prompt: String::new(),
         prompt_cursor: 0,
+    });
+}
+
+fn open_skill_offers(app: &mut App, workspace_idx: usize) {
+    app.mode = AppMode::SkillOffers;
+    app.active_dialog = Some(DialogState::SkillOffers {
+        workspace_idx,
+        skills: piki_core::repo_skills::SKILLS.iter().collect(),
     });
 }
 
@@ -257,6 +265,70 @@ fn current_edit_cursor(app: &App) -> usize {
         Some(DialogState::EditWorkspace { prompt_cursor, .. }) => prompt_cursor,
         _ => panic!("not in EditWorkspace dialog"),
     }
+}
+
+// ── SkillOffers ───────────────────────────────────────────────────────────
+
+#[test]
+fn skill_offers_yes_emits_accept_and_dismisses() {
+    let mut app = test_app();
+    open_skill_offers(&mut app, 2);
+
+    let action = handle_skill_offers_input(&mut app, key(KeyCode::Char('y')));
+
+    let ids: Vec<&'static str> = piki_core::repo_skills::SKILLS
+        .iter()
+        .map(|s| s.id)
+        .collect();
+    assert!(matches!(
+        action,
+        Some(Action::RespondToSkillOffers { workspace_idx: 2, ref accepted, ref declined })
+            if *accepted == ids && declined.is_empty()
+    ));
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+#[test]
+fn skill_offers_no_emits_decline_and_dismisses() {
+    let mut app = test_app();
+    open_skill_offers(&mut app, 0);
+
+    let action = handle_skill_offers_input(&mut app, key(KeyCode::Char('n')));
+
+    let ids: Vec<&'static str> = piki_core::repo_skills::SKILLS
+        .iter()
+        .map(|s| s.id)
+        .collect();
+    assert!(matches!(
+        action,
+        Some(Action::RespondToSkillOffers { workspace_idx: 0, ref accepted, ref declined })
+            if accepted.is_empty() && *declined == ids
+    ));
+    assert!(app.active_dialog.is_none());
+}
+
+#[test]
+fn skill_offers_escape_cancels_without_recording_a_decision() {
+    let mut app = test_app();
+    open_skill_offers(&mut app, 0);
+
+    let action = handle_skill_offers_input(&mut app, key(KeyCode::Esc));
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_none());
+    assert_eq!(app.mode, AppMode::Normal);
+}
+
+#[test]
+fn skill_offers_unrelated_key_leaves_dialog_open() {
+    let mut app = test_app();
+    open_skill_offers(&mut app, 0);
+
+    let action = handle_skill_offers_input(&mut app, key(KeyCode::Char('x')));
+
+    assert!(action.is_none());
+    assert!(app.active_dialog.is_some());
 }
 
 // ── ConfirmDelete ─────────────────────────────────────────────────────────

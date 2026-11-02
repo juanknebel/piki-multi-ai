@@ -252,6 +252,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         AppMode::CreateWorktree => super::dialogs::render_create_worktree_dialog(frame, area, app),
         AppMode::Help => super::dialogs::render_help_overlay(frame, area, app),
         AppMode::ConfirmDelete => super::dialogs::render_confirm_delete_dialog(frame, area, app),
+        AppMode::SkillOffers => super::dialogs::render_skill_offers_dialog(frame, area, app),
         AppMode::FuzzySearch => super::fuzzy::render(frame, area, app),
         AppMode::ProjectSearch => super::project_search::render(frame, area, app),
         AppMode::NewTab => super::dialogs::render_new_tab_dialog(frame, area, app),

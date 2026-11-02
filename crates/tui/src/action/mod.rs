@@ -129,6 +129,14 @@ pub(crate) enum Action {
     ProjectAdoptDirectory {
         path: std::path::PathBuf,
     },
+    /// Record the user's decision on each listed skill id for this
+    /// workspace's `source_repo`, then resync the injected AGENTS.md block
+    /// from the full accepted set (see `piki_core::repo_skills`).
+    RespondToSkillOffers {
+        workspace_idx: usize,
+        accepted: Vec<&'static str>,
+        declined: Vec<&'static str>,
+    },
 }
 
 pub(crate) async fn execute_action(
@@ -144,7 +152,8 @@ pub(crate) async fn execute_action(
         | Action::DeleteWorkspace(..)
         | Action::RemoveFromList(..)
         | Action::ListWorktrees(..)
-        | Action::ImportExistingWorktree { .. } => {
+        | Action::ImportExistingWorktree { .. }
+        | Action::RespondToSkillOffers { .. } => {
             workspace::handle(app, manager, action, terminal).await?
         }
         Action::OpenEditor(..) | Action::OpenEditorAt(..) => {

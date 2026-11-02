@@ -1012,6 +1012,7 @@ fn poll_workspaces(app: &mut App, now: Instant) {
         let active_ws = app.active_workspace;
         let mut command_end_events: Vec<CommandEndNotice> = Vec::new();
         let mut cli_agent_events: Vec<CliAgentNotice> = Vec::new();
+        let mut open_requests: Vec<(usize, String, String)> = Vec::new();
         for (ws_idx, ws) in app.workspaces.iter_mut().enumerate() {
             let ws_name = ws.info.name.clone();
             let active_tab = ws.active_tab;
@@ -1039,6 +1040,23 @@ fn poll_workspaces(app: &mut App, now: Instant) {
                             else {
                                 continue;
                             };
+                            // `piki-ctl open file ...` (or any future
+                            // agent-agnostic action-emitting tool) — an
+                            // imperative UI action, not a status change, so
+                            // it's queued here and applied after this loop
+                            // (can't touch `app` as a whole while `ws` is
+                            // still borrowed from `app.workspaces.iter_mut()`
+                            // — same reason command/cli-agent notices defer
+                            // below) rather than via `a.attention()`.
+                            if let piki_core::cli_agent::CliAgentEvent::Open {
+                                target_kind,
+                                path,
+                                ..
+                            } = &a
+                            {
+                                open_requests.push((ws_idx, target_kind.clone(), path.clone()));
+                                continue;
+                            }
                             if let Some((kind, summary)) = a.attention() {
                                 cli_agent_events.push(CliAgentNotice {
                                     workspace_idx: ws_idx,
@@ -1082,6 +1100,44 @@ fn poll_workspaces(app: &mut App, now: Instant) {
                 icon.as_deref(),
                 n.from_active_view,
             );
+        }
+        // The TUI's only in-app file viewer today is the markdown tab (see
+        // `input::fuzzy_input`'s own "open markdown" shortcut); anything
+        // else gets an honest toast rather than silently doing nothing.
+        for (ws_idx, target_kind, path) in open_requests {
+            if target_kind != "file" {
+                app.set_toast(
+                    format!("piki-ctl: unsupported target kind \"{target_kind}\""),
+                    crate::app::ToastLevel::Error,
+                );
+                continue;
+            }
+            if !crate::input::is_markdown(std::path::Path::new(&path)) {
+                app.set_toast(
+                    "piki-ctl: only markdown files can be previewed in the TUI".to_string(),
+                    crate::app::ToastLevel::Error,
+                );
+                continue;
+            }
+            match std::fs::read_to_string(&path) {
+                Ok(content) => {
+                    let label = std::path::Path::new(&path)
+                        .file_name()
+                        .map(|f| f.to_string_lossy().to_string())
+                        .unwrap_or_else(|| "markdown".to_string());
+                    if let Some(ws) = app.workspaces.get_mut(ws_idx) {
+                        ws.add_markdown_tab(label.clone(), content, Some(&app.syntax));
+                    }
+                    app.active_pane = crate::app::ActivePane::MainPanel;
+                    app.active_workspace = ws_idx;
+                    app.set_toast(format!("Opened {label}"), crate::app::ToastLevel::Success);
+                    app.needs_redraw = true;
+                }
+                Err(e) => app.set_toast(
+                    format!("piki-ctl: failed to read file: {e}"),
+                    crate::app::ToastLevel::Error,
+                ),
+            }
         }
     }
 

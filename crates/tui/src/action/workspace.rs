@@ -39,6 +39,34 @@ pub(super) fn finish_workspace_creation(app: &mut App, mut info: piki_core::Work
     let source = app.workspaces[new_idx].source_repo.clone();
     crate::helpers::persist_workspaces(app, source);
     adopt_into_pending_project(app, new_idx);
+    offer_skills_if_pending(app, new_idx);
+}
+
+/// Silently re-apply whatever piki skills were already accepted for this
+/// repo (so a second worktree of an already-decided repo picks them up too,
+/// without re-prompting), then open `DialogState::SkillOffers` for anything
+/// still undecided. No-op when skill storage is unavailable or nothing is
+/// pending — never blocks workspace creation on this.
+fn offer_skills_if_pending(app: &mut App, workspace_idx: usize) {
+    let Some(storage) = app.storage.repo_skills.as_deref() else {
+        return;
+    };
+    let Some(ws) = app.workspaces.get(workspace_idx) else {
+        return;
+    };
+    let source_repo = ws.source_repo.clone();
+    let agents_md_path = ws.path.join("AGENTS.md");
+    let _ = piki_core::repo_skills::sync_accepted_skills(storage, &source_repo, &agents_md_path);
+
+    let pending = piki_core::repo_skills::pending_offers(storage, &source_repo);
+    if pending.is_empty() {
+        return;
+    }
+    app.active_dialog = Some(DialogState::SkillOffers {
+        workspace_idx,
+        skills: pending,
+    });
+    app.mode = app::AppMode::SkillOffers;
 }
 
 /// Make the freshly created checkout a member of the project the sidebar was
@@ -293,6 +321,50 @@ pub(super) async fn handle(
 
                 // Persist config
                 crate::helpers::persist_workspaces(app, source_repo.clone());
+            }
+        }
+        Action::RespondToSkillOffers {
+            workspace_idx,
+            accepted,
+            declined,
+        } => {
+            let Some(storage) = app.storage.repo_skills.as_deref() else {
+                return Ok(());
+            };
+            let Some(ws) = app.workspaces.get(workspace_idx) else {
+                return Ok(());
+            };
+            let source_repo = ws.source_repo.clone();
+            let agents_md_path = ws.path.join("AGENTS.md");
+
+            for id in accepted.iter().chain(declined.iter()) {
+                let Some(skill) = piki_core::repo_skills::SKILLS.iter().find(|s| s.id == *id)
+                else {
+                    continue;
+                };
+                let status = if accepted.contains(id) {
+                    "accepted"
+                } else {
+                    "declined"
+                };
+                let _ = storage.set_skill_offer(&source_repo, skill.id, skill.version, status);
+            }
+            match piki_core::repo_skills::sync_accepted_skills(
+                storage,
+                &source_repo,
+                &agents_md_path,
+            ) {
+                Ok(()) if !accepted.is_empty() => {
+                    app.set_toast(
+                        "Added piki skills to AGENTS.md".to_string(),
+                        ToastLevel::Success,
+                    );
+                }
+                Err(e) => app.set_toast(
+                    format!("Failed to update AGENTS.md: {e}"),
+                    ToastLevel::Error,
+                ),
+                _ => {}
             }
         }
         other => unreachable!("non-workspace action routed to action::workspace: {other:?}"),

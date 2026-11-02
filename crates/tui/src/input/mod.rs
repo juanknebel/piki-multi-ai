@@ -9,6 +9,7 @@ mod dialog_tests;
 mod editor_input;
 pub(crate) mod fuzzy_common;
 mod fuzzy_input;
+pub(crate) use fuzzy_input::is_markdown;
 mod interaction;
 pub(crate) mod list_nav;
 pub(crate) mod mouse;
@@ -30,7 +31,7 @@ use self::dialog::{
     handle_manage_providers_input, handle_missing_prereqs_input, handle_move_tab_input,
     handle_new_tab_input, handle_new_workspace_input, handle_pr_picker_input,
     handle_projects_input, handle_rename_tab_input, handle_sessions_input,
-    handle_workspace_info_input,
+    handle_skill_offers_input, handle_workspace_info_input,
 };
 use self::editor_input::handle_inline_edit_input;
 use self::fuzzy_input::handle_fuzzy_search_input;
@@ -248,6 +249,7 @@ pub(crate) fn handle_key_event(app: &mut App, key: KeyEvent) -> Option<Action> {
             return workspace_switcher_input::handle_workspace_switcher_input(app, key);
         }
         AppMode::ConfirmDelete => return handle_confirm_delete_input(app, key),
+        AppMode::SkillOffers => return handle_skill_offers_input(app, key),
         AppMode::SubmitReview => return code_review_input::handle_submit_review_input(app, key),
         AppMode::PrPicker => return handle_pr_picker_input(app, key),
         AppMode::Broadcast => return handle_broadcast_input(app, key),

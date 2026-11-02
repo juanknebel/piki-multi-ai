@@ -23,6 +23,7 @@ use std::path::Path;
 
 use crate::storage::RepoSkillStorage;
 
+#[derive(Debug)]
 pub struct Skill {
     /// Stable id — the primary key `RepoSkillStorage` tracks decisions
     /// under. Never reuse an id for different content; bump `version`

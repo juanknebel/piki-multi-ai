@@ -513,6 +513,26 @@ pub(crate) fn render_confirm_delete_dialog(frame: &mut Frame, area: Rect, app: &
     frame.render_widget(text, popup);
 }
 
+pub(crate) fn render_skill_offers_dialog(frame: &mut Frame, area: Rect, app: &App) {
+    let theme = &app.theme.dialog;
+    let skills: &[&piki_core::repo_skills::Skill] = match &app.active_dialog {
+        Some(DialogState::SkillOffers { skills, .. }) => skills,
+        _ => &[],
+    };
+    let message = match skills {
+        [one] => format!("Add \"{}\" to this repo's AGENTS.md?", one.title),
+        many => format!("Add {} piki skills to this repo's AGENTS.md?", many.len()),
+    };
+    super::render_yn_dialog(
+        frame,
+        area,
+        "piki skills",
+        &message,
+        theme.delete_border,
+        theme.delete_cancel,
+    );
+}
+
 pub(crate) fn render_pr_picker_dialog(frame: &mut Frame, area: Rect, app: &App) {
     let Some(DialogState::PrPicker {
         loading,

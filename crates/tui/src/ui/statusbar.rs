@@ -375,6 +375,11 @@ pub(crate) fn footer_keys(app: &App) -> Vec<(String, &'static str)> {
             ("Esc".to_string(), "cancel"),
         ],
         AppMode::ConfirmQuit => vec![("y".to_string(), "quit"), ("n".to_string(), "cancel")],
+        AppMode::SkillOffers => vec![
+            ("y".to_string(), "add"),
+            ("n".to_string(), "not now"),
+            ("Esc".to_string(), "ask later"),
+        ],
         // ── Modal overlays: the footer shows the modal's keys, never stale
         // terminal hints underneath it ──
         AppMode::ConfirmDelete => vec![

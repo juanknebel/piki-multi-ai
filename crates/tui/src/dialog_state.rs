@@ -145,6 +145,16 @@ pub enum DialogState {
         selected: usize,
     },
     ConfirmQuit,
+    /// Offers injecting piki's agent-skills block into this repo's
+    /// AGENTS.md, opened right after a workspace is added/created. `skills`
+    /// is only ever the subset still undecided for this `workspace_idx`'s
+    /// `source_repo` (see `piki_core::repo_skills::pending_offers`) —
+    /// already-accepted skills are silently resynced before this dialog
+    /// would even open, never re-offered.
+    SkillOffers {
+        workspace_idx: usize,
+        skills: Vec<&'static piki_core::repo_skills::Skill>,
+    },
     NewTab {
         menu: NewTabMenu,
     },

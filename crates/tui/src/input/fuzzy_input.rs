@@ -12,7 +12,7 @@ fn selected_full_path(app: &App) -> Option<std::path::PathBuf> {
     Some(app.current_workspace()?.path.join(rel))
 }
 
-fn is_markdown(path: &std::path::Path) -> bool {
+pub(crate) fn is_markdown(path: &std::path::Path) -> bool {
     matches!(
         path.extension().and_then(|e| e.to_str()),
         Some("md" | "markdown")

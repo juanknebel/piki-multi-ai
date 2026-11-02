@@ -119,6 +119,8 @@ pub enum AppMode {
     MoveTab,
     /// Confirmation dialog for quitting the application
     ConfirmQuit,
+    /// Offer to inject piki's AGENTS.md skills block for a freshly added repo
+    SkillOffers,
     /// Workspace dashboard overview
     Dashboard,
     /// Session-daemon overlay (persistent sessions management)
