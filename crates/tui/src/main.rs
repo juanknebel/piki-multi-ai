@@ -114,7 +114,8 @@ fn main() -> anyhow::Result<()> {
                         &paths.daemon_paths(),
                         *foreground,
                         Some(piki_core::cli_agent::sidecar_config()),
-                    );
+                    )
+                    .map_err(anyhow::Error::from);
                 }
                 #[cfg(not(unix))]
                 {

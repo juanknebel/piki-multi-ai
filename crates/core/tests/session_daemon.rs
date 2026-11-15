@@ -85,7 +85,8 @@ fn text_of(frames: &[Frame]) -> String {
     let mut out = Vec::new();
     for f in frames {
         match f {
-            Frame::Output(b) | Frame::Restore(b) => out.extend_from_slice(b),
+            Frame::Output(b) => out.extend_from_slice(b),
+            Frame::Restore(b) => out.extend_from_slice(b),
             _ => {}
         }
     }

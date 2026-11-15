@@ -430,9 +430,17 @@ impl RawRemotePty {
                 .spawn(move || {
                     loop {
                         match read_frame(&mut read) {
-                            Ok(Frame::Restore(b)) | Ok(Frame::Output(b)) => {
+                            Ok(Frame::Restore(b)) => {
                                 bytes.fetch_add(b.len() as u64, Ordering::Relaxed);
                                 if out_tx.send(OutMsg::Data(b)).is_err() {
+                                    break;
+                                }
+                            }
+                            Ok(Frame::Output(b)) => {
+                                bytes.fetch_add(b.len() as u64, Ordering::Relaxed);
+                                // Output is Bytes since multiplex 0.5 (shared
+                                // fan-out); the batcher takes Vec.
+                                if out_tx.send(OutMsg::Data(b.to_vec())).is_err() {
                                     break;
                                 }
                             }
