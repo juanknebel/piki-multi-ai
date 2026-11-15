@@ -297,7 +297,9 @@ just lint-desktop                           # frontend test + build, then clippy
   plugin errors. `copy-on-select.ts createSelectionCopier()` is the pure "dirty on every
   `onSelectionChange`, ONE write on mouse-up" machine; the flush runs on a `setTimeout(0)` after a
   document-level mouseup because xterm's own mouseup fires after ours. Auto-copy is silent; only explicit
-  Copy toasts. Gate it on `getTerminalSettings().copyOnSelect`. Middle-click: `mousedown(1)` arms, a
+  Copy toasts. Gate it on `getTerminalSettings().copyOnSelect`. An explicit Copy with no selection toasts
+  guidance (`emptyCopyHint` in `copy-on-select.ts`) instead of staying silent — Shift+drag selects past a
+  mouse-tracking program (mirror's TUI), Select All from the menu is the macOS way out. Middle-click: `mousedown(1)` arms, a
   native `paste` event (WebKitGTK primary selection) is consumed by the capture-phase paste handler,
   `auxclick(1)` falls back to `ipc.clipboardPaste()` after `MIDDLE_PASTE_GRACE_MS` when no native paste
   arrived; nothing while `terminal.modes.mouseTrackingMode !== "none"`. The custom key handler

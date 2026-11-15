@@ -10,7 +10,7 @@ import { toast, reportError } from "./toast";
 import { cssToken, themeEngine } from "../theme";
 import { getShortcutKey, isMac, modCtrl } from "../shortcuts";
 import { getTerminalSettings, xtermOptionsFor } from "../terminal-settings";
-import { createSelectionCopier, type SelectionCopier } from "../copy-on-select";
+import { createSelectionCopier, emptyCopyHint, type SelectionCopier } from "../copy-on-select";
 import { armLiteralNext, disarmLiteralNext, isLiteralNextArmed, isLiteralPass, literalNextTab } from "../literal-next";
 import { openContextMenu, type CtxItem } from "./context-menu";
 import { icon } from "./icons";
@@ -135,7 +135,15 @@ export function activeTerminalInstance(): TerminalInstance | undefined {
  *  and not even one. */
 function copySelection(instance: TerminalInstance, explicit: boolean) {
   const sel = instance.terminal.getSelection();
-  if (!sel) return;
+  if (!sel) {
+    // An explicit Copy that silently does nothing reads as a broken
+    // keybinding — and with a mouse-tracking program (mirror's TUI) the
+    // user can drag all day while xterm still sees no selection. Say why.
+    if (explicit) {
+      toast(emptyCopyHint(instance.terminal.modes.mouseTrackingMode !== "none", isMac), "info");
+    }
+    return;
+  }
   ipc.clipboardCopy(sel)
     .then(() => {
       if (explicit) toast("Copied to clipboard", "success");

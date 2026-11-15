@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createSelectionCopier } from "./copy-on-select";
+import { createSelectionCopier, emptyCopyHint } from "./copy-on-select";
 
 describe("createSelectionCopier", () => {
   it("selecting 40 rows is one clipboard write", () => {
@@ -45,5 +45,24 @@ describe("createSelectionCopier", () => {
     expect(c.mouseUp()).toBe(true);
     expect(c.mouseUp()).toBe(false);
     expect(c.flush("x")).toBe("x");
+  });
+});
+
+describe("emptyCopyHint", () => {
+  it("tells a plain empty copy to select first", () => {
+    expect(emptyCopyHint(false, false)).toBe("Nothing selected — drag to select text first");
+    expect(emptyCopyHint(false, true)).toBe("Nothing selected — drag to select text first");
+  });
+
+  it("points at Shift+drag when the app tracks the mouse", () => {
+    expect(emptyCopyHint(true, false)).toBe(
+      "This app tracks the mouse — hold Shift while dragging to select, then copy again",
+    );
+  });
+
+  it("points at Select All on macOS, where Shift does not bypass mouse tracking", () => {
+    expect(emptyCopyHint(true, true)).toBe(
+      "This app tracks the mouse — use Select All from the right-click menu, then copy",
+    );
   });
 });
