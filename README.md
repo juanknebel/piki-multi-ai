@@ -108,7 +108,7 @@ The desktop layout, every shortcut and each panel are documented in [docs/techni
 
 Required:
 
-- [Rust](https://rustup.rs/) >= 1.85 (edition 2024)
+- [Rust](https://rustup.rs/) >= 1.95 (edition 2024)
 - [git](https://git-scm.com/) >= 2.20 (worktree support)
 - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (`claude` in PATH)
 

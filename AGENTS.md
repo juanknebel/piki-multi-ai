@@ -62,7 +62,7 @@ The frontend vitest suite tests pure modules (registries, scoring, stores, state
 
 **TUI Snapshot tests** (`crates/tui/src/ui/mod.rs`): Use `insta` crate for visual snapshot testing of rendered UI. Snapshots live in `crates/tui/src/ui/snapshots/`. When adding new UI tests, render to a `TestBackend` buffer and call `insta::assert_snapshot!`. After first run, accept new snapshots with `cargo insta review` or rename `.snap.new` files to `.snap`.
 
-Requires Rust >= 1.85 (edition 2024). Runtime deps: `claude` CLI in PATH, git >= 2.20, `lazygit` for the git tab, optionally `gh` CLI for the code review feature, optionally `mdr` for the external markdown viewer.
+Requires Rust >= 1.95 (edition 2024). Runtime deps: `claude` CLI in PATH, git >= 2.20, `lazygit` for the git tab, optionally `gh` CLI for the code review feature, optionally `mdr` for the external markdown viewer.
 
 ## CI parity check
 
