@@ -10,7 +10,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "agent-multi"
-version = "3.3.0"
+version = "3.4.0-nightly"
 dependencies = [
  "ansi-to-tui",
  "anyhow",
@@ -3931,7 +3931,7 @@ dependencies = [
 
 [[package]]
 name = "piki-agent"
-version = "3.3.0"
+version = "3.4.0-nightly"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3945,7 +3945,7 @@ dependencies = [
 
 [[package]]
 name = "piki-api-client"
-version = "3.3.0"
+version = "3.4.0-nightly"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3960,7 +3960,7 @@ dependencies = [
 
 [[package]]
 name = "piki-core"
-version = "3.3.0"
+version = "3.4.0-nightly"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3983,7 +3983,7 @@ dependencies = [
 
 [[package]]
 name = "piki-ctl"
-version = "3.3.0"
+version = "3.4.0-nightly"
 dependencies = [
  "piki-core",
  "serde_json",
@@ -3991,7 +3991,7 @@ dependencies = [
 
 [[package]]
 name = "piki-desktop"
-version = "3.3.0"
+version = "3.4.0-nightly"
 dependencies = [
  "anyhow",
  "base64 0.23.1",
